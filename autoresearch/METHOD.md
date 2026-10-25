@@ -55,7 +55,7 @@ Gate G2 (hand-over ready, checked by the referee): a falsifiable statement, a me
 - **Variant** (a configuration of existing code): experiment file -> the launcher runs every arm and seed (commit + tag per run) -> the evaluation entry point writes a metric card per run -> the decision tool applies the rule clauses to the cards (KEEP / CUT / TIE / INCONCLUSIVE; INCONCLUSIVE adds a seed) -> one summary line in the experiment file. No detail planner, no coder.
 - **Block** (new code): `ar-planner` writes the detail plan (section 2 of `experiment.md`) -> `ar-coder` implements the change with its spec test; a change of shared code gets `ar-reviewer` (mode code) -> then as a variant -> summary (section 3).
 
-Wake-up routine: read HANDOVER + schedule + ledger -> reconcile (done, failed, stalled) -> start the ready items within the resource slots -> write schedule, ledger notes, plan status, HANDOVER -> next wake-up. Nothing else is state.
+Wake-up routine: read HANDOVER -> `tools/tick.py --handover` (reconcile the run records: done, failed, stalled; start the ready schedule items within the GPU / CPU slots; write the status block into HANDOVER) -> do what it lists as "needs the lead" (detail plan, code, decide, summary) -> ledger notes, plan status, HANDOVER -> next wake-up. Nothing else is state.
 
 Gate G3 (per experiment): every number comes from a metric card or a run record; the rule was applied as written; the summary has open points and next steps.
 
