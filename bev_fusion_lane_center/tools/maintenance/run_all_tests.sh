@@ -14,7 +14,7 @@ run "grid metric reproduces stored numbers" lane_grid/selftest.py
 run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "connectivity / duplicate / range metrics" topo_metrics.py
 run "metric response to controlled errors"  test_metric_response.py
-run "evaluate.py reproduces the champion card" evaluate.py champion --tag selftest --expect S=0.7694 F1@1.0=0.8696 J=0.4092 lanes_found=0.6948
+run "evaluate.py reproduces the golden numbers (cached, all registry names)" evaluate.py --golden check --cached-only
 run "builder spec tests (18)"               test_p16_spec.py
 run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
 run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py

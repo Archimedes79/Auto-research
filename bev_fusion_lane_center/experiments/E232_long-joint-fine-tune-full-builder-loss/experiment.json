@@ -1,0 +1,10 @@
+{"id": "E232", "card": "", "title": "long joint fine-tune: route loss through the builder (a) against the detached control (c) on the failure series (re-encoded)",
+ "kind": "variant", "metric": "route_fail", "direction": "higher", "band": 0.010,
+ "prediction": {"value": 0.03, "vs": "c"},
+ "arms": {"a": {"cards": {"night": "runs/e18/e232_table.json#res/dark_maxdecay_0.95|a0", "blur": "runs/e18/e232_table.json#res/blur_maxdecay_0.95|a0", "cam3": "runs/e18/e232_table.json#res/cam_front3_off_maxdecay_0.95|a0"}, "run_ids": ["E232.a0"]},
+          "c": {"cards": {"night": "runs/e18/e232_table.json#res/dark_maxdecay_0.95|c0", "blur": "runs/e18/e232_table.json#res/blur_maxdecay_0.95|c0", "cam3": "runs/e18/e232_table.json#res/cam_front3_off_maxdecay_0.95|c0"}, "run_ids": ["E232.c0"]}},
+ "control": "c",
+ "rule": [{"metric": "route_fail", "min_effect": 0.03, "subsets": ["night", "blur", "cam3"], "at_least": 2, "note": "failure-half route success"},
+          {"metric": "S_fail", "max_loss": 0.005, "subsets": ["night", "blur", "cam3"], "note": "graph S of the failure half not lower by more than 0.005"}],
+ "budget_gpu_h": 2, "kill": "", "evaluate": {"split": "val", "compare": "c"},
+ "recorded_decision": "CUT: a - c -0.036 / -0.036 / 0.000, third negative joint result; the joint E2E line stops"}

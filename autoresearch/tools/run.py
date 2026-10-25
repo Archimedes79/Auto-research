@@ -1,22 +1,29 @@
 """Experiment launcher: one command, one run record, one code tag.  Standard library only (works in any python of the WSL or Windows).
 
     python autoresearch/tools/run.py --id E240.a --hyp "..." --pred "Q >= 0.745" --rule "keep if > control + 0.010 on 2 seeds" --basis E219 --seed 0 \
-           [--after E239.a,E239.c] [--gpu-max-mb 9000 --wait-gpu 30] [--retries 2] [--split test] [--result <metrics.json>] -- <command ...>
+           [--after E239.a,E239.c] [--gpu-max-mb 9000 --wait-gpu 30] [--timeout 180] [--retries 2] [--split test] [--result <metrics.json>] -- <command ...>
 
 What it does (paths from the problem's project.json, see project.py):
-  * run record  <run_records>/<id>/run.json  (command, start / end, host, env, seed, status, exit code, duration, commit, tag, last log lines)
-  * full log    <run_records>/<id>/run.log   (stdout + stderr of the command)
-  * ledger row  <ledger>                     (one row per run id; render with ledger.py)
+  * run record  <run_records>/<id>/run.json  (command, start / end, host, driver, env, seed, pid, status, exit code, duration, commit, tag, last log lines)
+  * full log    <run_records>/<id>/run.log   (stdout + stderr of the command); heartbeat file <run_records>/<id>/heartbeat touched every 15 s
+  * ledger row  <ledger>                     (one row per run id; written under a lock with an atomic replace; render with ledger.py)
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
   * card check  warns when --hyp / --pred / --rule are missing (--require-card refuses)
-  * code        commits the current code (the repository's whitelist decides what is code) and tags it <tag_prefix>/<id>; a resumed id keeps its
-                first tag. --no-git skips this. The commit is written into the run record and the ledger.
-  * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed); waiting is not counted as run time
+  * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
+                on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
+                user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger
+  * id reuse    an id that is still running (fresh heartbeat) or finished with exit 0 is refused (a new id, or --again for a deliberate repeat);
+                a failed / blocked / stalled id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
+                and a note "code changed since attempt 1" (when the fingerprint differs) go into the record
+  * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed or stalled); waiting is not counted as run time
   * TEST guard  --split test is refused unless the run id appears in the problem's TEST log
-  * GPU guard   waits until the GPU memory in use is below --gpu-max-mb (max --wait-gpu minutes)
-  * retry       a run that dies with a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
-  * resume      the same --id again keeps the previous attempt as run.<n>.log
-Exit code = exit code of the command (1 if the GPU never became free, 2 if refused, 3 if a dependency failed).
+  * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under <run_records>/.gpu_slots taken
+                with an atomic mkdir, a slot whose owner is dead or whose run is over is reclaimed); --gpu-max-mb additionally waits until the GPU
+                memory in use is below the limit; max --wait-gpu minutes, then status gpu_busy (exit 1)
+  * timeout     --timeout <minutes>: the command is killed after the limit (status timeout, exit 124)
+  * retry       a run whose LAST attempt printed a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
+  * stalled     a record in state running whose heartbeat is older than AR_STALE_S seconds (default 300) counts as stalled for --after and schedule.py
+Exit code = exit code of the command (1 if the GPU never became free, 2 if refused, 3 if a dependency failed, 124 on timeout).
 """
 import argparse
 import csv
@@ -26,14 +33,19 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 
 COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", "basis", "seed", "command", "result", "decision", "notes", "prediction", "rule", "code_hash", "split", "commit"]
+STALE_S = int(os.environ.get("AR_STALE_S", "300"))
+HEARTBEAT_S = 15
+CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
 
 
 def now():
@@ -58,33 +70,72 @@ def code_hash(root, cfg):
     return h.hexdigest()[:12]
 
 
-def git(root, *args):
-    return subprocess.run(["git", "-c", "safe.directory=*", "-C", root, *args], capture_output=True, text=True, timeout=120)
+def git(root, *args, env=None):
+    return subprocess.run(["git", "-c", "safe.directory=*", "-C", root, *args], capture_output=True, text=True, timeout=120, env=env)
 
 
-def git_snapshot(root, prefix, run_id, msg):
-    """commit the code (whitelist of the repository) and tag it prefix/run_id; returns (commit, tag, note)"""
+def git_identity_error(root):
+    """'' when git can commit here, else git's own message (no user.name / user.email, not a repository ...)"""
+    if git(root, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
+        return ""  # no repository: the snapshot is skipped, not an error
+    r = git(root, "var", "GIT_COMMITTER_IDENT")
+    return "" if r.returncode == 0 else (r.stderr.strip() or "git var GIT_COMMITTER_IDENT failed")[:160]
+
+
+def git_snapshot(root, cfg, prefix, run_id, msg):
+    """commit the code through a temporary index (shared index and branches untouched) and tag it prefix/run_id; returns (commit, tag, note)"""
+    idx = None
     try:
         if git(root, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
             return "no-git", "", ""
+        top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
         tag = f"{prefix}/{run_id}"
-        if git(root, "rev-parse", "-q", "--verify", f"refs/tags/{tag}").returncode == 0:  # resumed id: keep the first tag
-            return git(root, "rev-list", "-n", "1", tag).stdout.strip()[:10], tag, "tag existed (resume)"
-        for attempt in range(3):
-            top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
-            git(top, "add", "-A")
-            if git(top, "diff", "--cached", "--quiet").returncode != 0:
-                c = git(top, "commit", "-q", "-m", f"{run_id}: {msg}"[:200])
-                if c.returncode != 0:
-                    time.sleep(2)
-                    continue
-            t = git(top, "tag", "-a", tag, "-m", msg[:200] or run_id)
-            if t.returncode == 0:
-                return git(top, "rev-parse", "--short=10", "HEAD").stdout.strip(), tag, ""
-            time.sleep(2)
-        return "git-error", "", "commit / tag failed (index lock?)"
+        rel = os.path.relpath(root, top).replace("\\", "/")
+        rel = "" if rel == "." else rel + "/"
+        spec = [rel + d for d in cfg["code_dirs"]] + [rel + x for x in cfg["fingerprint_extra"]]
+        ar = os.path.relpath(P.AR, top).replace("\\", "/")
+        if not ar.startswith(".."):  # the research system itself, when it lives in the same repository
+            spec.append(ar)
+        spec = [s for s in spec if os.path.exists(os.path.join(top, s))]
+        head = git(top, "rev-parse", "-q", "--verify", "HEAD").stdout.strip()
+        fd, idx = tempfile.mkstemp(prefix="ar_index_")
+        os.close(fd)
+        os.remove(idx)
+        env = dict(os.environ, GIT_INDEX_FILE=idx)
+        if head:
+            r = git(top, "read-tree", "HEAD", env=env)
+            if r.returncode != 0:
+                return "git-error", "", "read-tree: " + r.stderr.strip()[:120]
+        r = git(top, "add", "-A", "--", *spec, env=env)
+        if r.returncode != 0:
+            return "git-error", "", "add: " + r.stderr.strip()[:120]
+        tree = git(top, "write-tree", env=env).stdout.strip()
+        if head and tree == git(top, "rev-parse", "HEAD^{tree}").stdout.strip():
+            commit = head
+        else:
+            args = ["commit-tree", tree, "-m", f"{run_id}: {msg}"[:200]] + (["-p", head] if head else [])
+            r = git(top, *args, env=env)
+            if r.returncode != 0:
+                return "git-error", "", "commit-tree: " + r.stderr.strip()[:120]
+            commit = r.stdout.strip()
+        note = ""
+        if git(top, "rev-parse", "-q", "--verify", f"refs/tags/{tag}").returncode == 0:
+            first = git(top, "rev-list", "-n", "1", tag).stdout.strip()[:10]
+            note = f"tag existed (resume): tag {tag} is attempt 1 ({first}), this attempt ran {commit[:10]}"
+        else:
+            for attempt in range(3):
+                t = git(top, "tag", "-a", tag, "-m", msg[:200] or run_id, commit)
+                if t.returncode == 0:
+                    break
+                time.sleep(2)
+            else:
+                return commit[:10], "", "tag failed: " + t.stderr.strip()[:120]
+        return commit[:10], tag, note
     except Exception as e:
         return "git-error", "", repr(e)[:120]
+    finally:
+        if idx and os.path.exists(idx):
+            os.remove(idx)
 
 
 def gpu_used_mb():
@@ -95,19 +146,62 @@ def gpu_used_mb():
         return None
 
 
+def gpu_info():
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"], capture_output=True, text=True, timeout=20).stdout
+        return out.strip().splitlines()[0] if out.strip() else ""
+    except Exception:
+        return ""
+
+
+def pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def heartbeat_age(d):
+    try:
+        return time.time() - os.path.getmtime(os.path.join(d, "heartbeat"))
+    except OSError:
+        return float("inf")
+
+
+def record(d):
+    try:
+        return json.load(open(os.path.join(d, "run.json")))
+    except Exception:
+        return {}
+
+
+def state_of(d):
+    """done | ok | failed | blocked | gpu_busy | timeout | running | stalled | '' from a run directory"""
+    if os.path.exists(os.path.join(d, "done")):
+        return "done"
+    st = record(d).get("status", "")
+    if st in ("running", "waiting"):
+        return "stalled" if heartbeat_age(d) > STALE_S else "running"
+    return st
+
+
 def ledger_write(ledger, row):
-    rows = []
-    if os.path.exists(ledger):
-        with open(ledger, newline="", encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-    old = next((r for r in rows if r["id"] == row["id"]), {})  # a planned row keeps what was written before the run
-    row = {**old, **{k: v for k, v in row.items() if v not in ("", None)}}
-    rows = [r for r in rows if r["id"] != row["id"]] + [row]
-    os.makedirs(os.path.dirname(ledger), exist_ok=True)
-    with open(ledger, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=COLS, extrasaction="ignore")  # unknown keys never break the write (loop-18 lesson)
+    with P.locked(ledger):
+        rows = []
+        if os.path.exists(ledger):
+            with open(ledger, newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+        old = next((r for r in rows if r["id"] == row["id"]), {})  # a planned row keeps what was written before the run
+        row = {**old, **{k: v for k, v in row.items() if v not in ("", None)}}
+        rows = [r for r in rows if r["id"] != row["id"]] + [row]
+        os.makedirs(os.path.dirname(ledger), exist_ok=True)
+        import io
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore")  # unknown keys never break the write (loop-18 lesson)
         w.writeheader()
         w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
+        P.atomic_write(ledger, buf.getvalue())
 
 
 def wait_after(records, ids, minutes):
@@ -116,14 +210,10 @@ def wait_after(records, ids, minutes):
     while True:
         missing = []
         for i in ids:
-            d = os.path.join(records, i)
-            if os.path.exists(os.path.join(d, "done")):
+            st = state_of(os.path.join(records, i))
+            if st == "done":
                 continue
-            try:
-                st = json.load(open(os.path.join(d, "run.json"))).get("status", "")
-            except Exception:
-                st = ""
-            if st in ("failed", "gpu_busy", "blocked"):
+            if st in ("failed", "gpu_busy", "blocked", "timeout", "stalled"):
                 return f"dependency {i} {st}"
             missing.append(i)
         if not missing:
@@ -131,6 +221,69 @@ def wait_after(records, ids, minutes):
         if time.time() - t0 > minutes * 60:
             return f"dependencies not done after {minutes} min: {', '.join(missing)}"
         time.sleep(30)
+
+
+class GpuSlot:
+    """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead or stalled is reclaimed"""
+
+    def __init__(self, records, n, run_id, run_dir):
+        self.base, self.n, self.id, self.run_dir, self.held = os.path.join(records, ".gpu_slots"), n, run_id, run_dir, None
+
+    def try_take(self):
+        os.makedirs(self.base, exist_ok=True)
+        for i in range(self.n):
+            s = os.path.join(self.base, str(i))
+            try:
+                os.mkdir(s)
+            except FileExistsError:
+                o = record(s) if os.path.exists(os.path.join(s, "run.json")) else {}
+                owner = o.get("run_dir", "")
+                if o and (not pid_alive(o.get("pid")) or (owner and os.path.isdir(owner) and state_of(owner) not in ("running",))):
+                    shutil.rmtree(s, ignore_errors=True)  # stale: owner gone or its run is over
+                    try:
+                        os.mkdir(s)
+                    except FileExistsError:
+                        continue
+                else:
+                    continue
+            json.dump(dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now()), open(os.path.join(s, "run.json"), "w"))
+            self.held = s
+            return True
+        return False
+
+    def release(self):
+        if self.held:
+            shutil.rmtree(self.held, ignore_errors=True)
+            self.held = None
+
+
+def run_once(cmd, cwd, log_path, hb_path, timeout_s):
+    """one attempt: returns (exit code, text the attempt wrote); the heartbeat is touched while the command runs"""
+    start = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+    with open(log_path, "a", encoding="utf-8", errors="replace") as lg:
+        lg.write(f"=== attempt {now()}: {' '.join(cmd)}\n")
+        lg.flush()
+        p = subprocess.Popen(cmd, cwd=cwd, stdout=lg, stderr=subprocess.STDOUT)
+        t0, last = time.time(), 0
+        rc = None
+        while rc is None:
+            if time.time() - last >= HEARTBEAT_S:
+                open(hb_path, "w").write(f"{now()} pid {p.pid}\n")
+                last = time.time()
+            if timeout_s and time.time() - t0 > timeout_s:
+                p.kill()
+                p.wait()
+                rc = 124
+                lg.write(f"=== killed after {timeout_s / 60:.0f} min (timeout)\n")
+                break
+            try:
+                rc = p.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                rc = None
+    with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+        f.seek(start)
+        out = f.read()
+    return rc, out, p.pid
 
 
 def main():
@@ -147,11 +300,15 @@ def main():
     ap.add_argument("--seed", default="")
     ap.add_argument("--after", default="", help="comma list of run ids whose done flags this run waits for")
     ap.add_argument("--wait-after", type=int, default=720, help="minutes to wait for --after")
-    ap.add_argument("--gpu-max-mb", type=int, default=0, help="start only when GPU memory used is below this (0 = no guard)")
+    ap.add_argument("--gpu", action="store_true", help="GPU job: start only when one of the GPU slots is free")
+    ap.add_argument("--gpu-max-mb", type=int, default=0, help="GPU job: additionally wait until the GPU memory in use is below this (implies --gpu)")
+    ap.add_argument("--gpu-slots", type=int, default=int(cfg.get("gpu_slots", 2)), help="number of GPU slots on this machine")
     ap.add_argument("--wait-gpu", type=int, default=30)
+    ap.add_argument("--timeout", type=float, default=0, help="minutes after which the command is killed (0 = none)")
     ap.add_argument("--retries", type=int, default=2)
+    ap.add_argument("--again", action="store_true", help="repeat an id that finished with exit 0 (otherwise refused)")
     ap.add_argument("--result", default="", help="json file the command writes its metrics to; embedded in the ledger when it exists")
-    ap.add_argument("--no-git", action="store_true", help="do not commit and tag the code")
+    ap.add_argument("--no-git", action="store_true", help="do not snapshot and tag the code")
     ap.add_argument("--cwd", default=root, help="working directory of the command (default: problem folder)")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
@@ -168,7 +325,23 @@ def main():
         if not re.search(r"(?<![\w.])" + re.escape(a.id) + r"(?![\w.])", log):  # the whole id, not a prefix of a longer id
             print(f"[{a.id}] refused: split=test but {a.id} is not named in {os.path.relpath(test_log, root)} (log it first, with the person's OK)")
             return 2
+    if not a.no_git:
+        err = git_identity_error(root)
+        if err:
+            print(f"[{a.id}] refused: git cannot commit the snapshot here ({err}); set user.name / user.email in the repository, or --no-git")
+            return 2
     d = os.path.join(records, a.id)
+    prev = record(d)
+    notes = []
+    if prev:
+        st = state_of(d)
+        if st == "running":
+            print(f"[{a.id}] refused: this id is still running (pid {prev.get('pid')}, heartbeat {heartbeat_age(d):.0f} s old); use a new id")
+            return 2
+        if st in ("done", "ok") and not a.again:
+            print(f"[{a.id}] refused: this id finished with exit 0 on {prev.get('ended')}; use a new id (the record would be overwritten) or --again")
+            return 2
+        notes.append(f"attempt after {st}")
     os.makedirs(d, exist_ok=True)
     if os.path.exists(os.path.join(d, "done")):
         os.remove(os.path.join(d, "done"))
@@ -177,8 +350,13 @@ def main():
         n += 1
     if os.path.exists(os.path.join(d, "run.log")):
         os.rename(os.path.join(d, "run.log"), os.path.join(d, f"run.{n}.log"))
+    hb = os.path.join(d, "heartbeat")
+    open(hb, "w").write(now() + "\n")
     rec = dict(id=a.id, hypothesis=a.hyp, prediction=a.pred, rule=a.rule, split=a.split, basis=a.basis, seed=a.seed, command=" ".join(cmd), cwd=a.cwd,
-               host=platform.node(), python=sys.version.split()[0], conda_env=os.environ.get("CONDA_DEFAULT_ENV", ""), created=now(), status="waiting", after=a.after)
+               host=platform.node(), python=sys.version.split()[0], conda_env=os.environ.get("CONDA_DEFAULT_ENV", ""), gpu=gpu_info(), launcher_pid=os.getpid(),
+               created=now(), status="waiting", after=a.after, timeout_min=a.timeout)
+    if prev.get("code_hash"):
+        rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
     json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
     if a.after:
         why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after)
@@ -188,50 +366,60 @@ def main():
             ledger_write(ledger, dict(rec, exit=3, duration_s=0))
             print(f"[{a.id}] blocked: {why}")
             return 3
-    if a.gpu_max_mb:
-        t0 = time.time()
-        while True:
-            u = gpu_used_mb()
-            if u is None or u < a.gpu_max_mb:
+    slot = GpuSlot(records, a.gpu_slots, a.id, d) if (a.gpu or a.gpu_max_mb) else None
+    try:
+        if slot:
+            t0 = time.time()
+            while True:
+                open(hb, "w").write(now() + " waiting for the GPU\n")
+                u = gpu_used_mb() if a.gpu_max_mb else None
+                if (u is None or u < a.gpu_max_mb) and slot.try_take():
+                    break
+                if time.time() - t0 > a.wait_gpu * 60:
+                    rec.update(status="gpu_busy", ended=now(), notes=f"GPU memory {u} MB in use or all {a.gpu_slots} slots taken for {a.wait_gpu} min")
+                    json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+                    ledger_write(ledger, dict(rec, exit=1, duration_s=0))
+                    print("GPU did not become free:", rec["notes"])
+                    return 1
+                time.sleep(30)
+        ch = code_hash(root, cfg)
+        if prev.get("code_hash") and prev["code_hash"] != ch:
+            notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")
+        commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
+        if gnote:
+            notes.append(gnote)
+        rec.update(status="running", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
+        json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+        t1 = time.time()
+        rc, attempt, tail = 1, 0, ""
+        while attempt <= a.retries:
+            attempt += 1
+            rc, out, pid = run_once(cmd, a.cwd, os.path.join(d, "run.log"), hb, a.timeout * 60)
+            rec["pid"] = pid
+            tail = out[-3000:]
+            if rc == 0 or rc == 124 or not CUDA_RETRY.search(out):
                 break
-            if time.time() - t0 > a.wait_gpu * 60:
-                rec.update(status="gpu_busy", ended=now(), notes=f"GPU memory {u} MB in use for {a.wait_gpu} min")
-                json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-                ledger_write(ledger, dict(rec, exit=1, duration_s=0))
-                print("GPU did not become free:", rec["notes"])
-                return 1
-            time.sleep(30)
-    commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
-    rec.update(status="running", started=now(), code_hash=code_hash(root, cfg), commit=commit, tag=tag, git_note=gnote)
-    json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-    t1 = time.time()
-    rc, attempt, tail = 1, 0, ""
-    while attempt <= a.retries:
-        attempt += 1
-        with open(os.path.join(d, "run.log"), "a", encoding="utf-8", errors="replace") as lg:
-            lg.write(f"=== attempt {attempt} {now()}: {' '.join(cmd)}\n")
-            lg.flush()
-            p = subprocess.run(cmd, cwd=a.cwd, stdout=lg, stderr=subprocess.STDOUT)
-        rc = p.returncode
-        tail = open(os.path.join(d, "run.log"), encoding="utf-8", errors="replace").read()[-3000:]
-        if rc == 0 or "CUDA error" not in tail:
-            break
-        if attempt <= a.retries:
-            time.sleep(15)
-    dur = round(time.time() - t1)
+            if attempt <= a.retries:
+                time.sleep(15)
+        dur = round(time.time() - t1)
+    finally:
+        if slot:
+            slot.release()
     res = ""
     if a.result and os.path.exists(a.result):
         try:
             res = json.dumps(json.load(open(a.result)))[:400]
         except Exception:
             res = "(result file unreadable)"
-    rec.update(status="ok" if rc == 0 else "failed", exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
+    status = "ok" if rc == 0 else "timeout" if rc == 124 else "failed"
+    rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
     json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
     if rc == 0:
         open(os.path.join(d, "done"), "w").write(rec["ended"] + "\n")
-    notes = "; ".join(x for x in (f"{attempt} attempt(s)" if attempt > 1 else "", gnote) if x)
-    ledger_write(ledger, dict(rec, result=res, notes=notes))
-    print(f"[{a.id}] {rec['status']} (exit {rc}, {dur} s, {attempt} attempt(s)), code {commit} {tag}; log {os.path.join(d, 'run.log')}")
+    if attempt > 1:
+        notes.insert(0, f"{attempt} attempt(s)")
+    ledger_write(ledger, dict(rec, result=res, notes="; ".join(notes)))
+    print(f"[{a.id}] {status} (exit {rc}, {dur} s, {attempt} attempt(s)), code {commit} {rec['tag']}; log {os.path.join(d, 'run.log')}")
     return rc
 
 

@@ -25,12 +25,15 @@ def load():
 
 
 def save(rows):
+    """whole-file write under the ledger lock (take P.locked yourself when you load, change and save: see main)"""
+    import io
     p = P.path("ledger")
     os.makedirs(os.path.dirname(p), exist_ok=True)
-    with open(p, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=COLS, extrasaction="ignore")
-        w.writeheader()
-        w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore")
+    w.writeheader()
+    w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
+    P.atomic_write(p, buf.getvalue())
 
 
 def render():
@@ -56,16 +59,17 @@ def main():
     a = ap.parse_args()
     if a.cmd == "render":
         return render()
-    rows = load()
-    row = next((r for r in rows if r["id"] == a.id), None)
-    if row is None:
-        row = dict(id=a.id, status="planned")
-        rows.append(row)
-    for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"), ("notes", "notes"),
-                   ("status", "status"), ("pred", "prediction"), ("rule", "rule")):
-        if getattr(a, k) is not None:
-            row[col] = getattr(a, k)
-    save(rows)
+    with P.locked(P.path("ledger")):  # read, change and write as one step: two chats noting at once lose nothing
+        rows = load()
+        row = next((r for r in rows if r["id"] == a.id), None)
+        if row is None:
+            row = dict(id=a.id, status="planned")
+            rows.append(row)
+        for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"), ("notes", "notes"),
+                       ("status", "status"), ("pred", "prediction"), ("rule", "rule")):
+            if getattr(a, k) is not None:
+                row[col] = getattr(a, k)
+        save(rows)
     render()
 
 

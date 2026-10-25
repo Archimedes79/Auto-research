@@ -1,4 +1,4 @@
-"""The schedule of a loop: one row per work item (templates/schedule.csv). It says what happens next, so a disrupted loop resumes from it.
+"""The schedule of a loop: one row per work item (columns below). It says what happens next, so a disrupted loop resumes from it.
 
     python autoresearch/tools/schedule.py show                     # all items, grouped by state
     python autoresearch/tools/schedule.py next [--resource gpu]    # ready items: state planned/ready and every dependency done
@@ -30,12 +30,16 @@ def load(path=None):
 
 
 def save(rows, path=None):
+    """whole-file write under the schedule lock with an atomic replace"""
+    import io
     path = path or P.path("schedule")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=COLS, extrasaction="ignore")
-        w.writeheader()
-        w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore")
+    w.writeheader()
+    w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
+    with P.locked(path):
+        P.atomic_write(path, buf.getvalue())
 
 
 def ready(rows, resource=None):
@@ -52,17 +56,9 @@ def reconcile(rows, records=None):
         ids = [x for x in (r.get("run_ids") or "").split(";") if x]
         if not ids or r["state"] in ("done", "cancelled"):
             continue
-        st = []
-        for i in ids:
-            d = os.path.join(records, i)
-            if os.path.exists(os.path.join(d, "done")):
-                st.append("done")
-                continue
-            try:
-                s = json.load(open(os.path.join(d, "run.json"))).get("status", "")
-            except Exception:
-                s = ""
-            st.append({"running": "running", "waiting": "running", "failed": "failed", "gpu_busy": "failed", "blocked": "blocked"}.get(s, ""))
+        import run as RUN  # state_of: done flag, status, heartbeat (stalled)
+        st = [{"done": "done", "ok": "done", "running": "running", "failed": "failed", "gpu_busy": "failed", "timeout": "failed", "stalled": "failed", "blocked": "blocked"}.get(RUN.state_of(os.path.join(records, i)), "")
+              for i in ids]
         new = "done" if st and all(s == "done" for s in st) else "failed" if "failed" in st else "blocked" if "blocked" in st else "running" if "running" in st else r["state"]
         if new != r["state"]:
             changed.append((r["item"], r["state"], new))

@@ -1,0 +1,8 @@
+{"id": "E219", "card": "", "title": "twice the fine-tune budget at weight 1 (j1eq8) against j1eq (re-encoded)",
+ "kind": "variant", "metric": "Q", "direction": "higher", "band": 0.010,
+ "prediction": {"value": 0.003, "vs": "c"},
+ "arms": {"a": {"cards": ["runs/e18/rc_eval/j1eq8.json"], "run_ids": ["E219.j1eq8"]}, "c": {"cards": ["runs/e18/rc_eval/j1eq.json"], "run_ids": ["E219.j1eq"]}},
+ "control": "c",
+ "rule": [{"metric": "Q", "min_effect": 0.005}, {"metric": "lanes_found", "max_loss": 0.01}],
+ "budget_gpu_h": 1, "kill": "", "evaluate": {"split": "val", "compare": "c"},
+ "recorded_decision": "rule not met (Q 0.731 vs 0.735): extra fine-tuning saturates at 4 u, j1eq stays"}

@@ -1,0 +1,125 @@
+{
+ "_about": "Golden numbers of evaluate.py: one entry per (name, split, subset, fresh). `evaluate.py --golden check` must reproduce every entry within its tolerance; an entry changes only together with a ledger row that says why.",
+ "entries": [
+  {
+   "name": "champion",
+   "split": "val",
+   "subset": "",
+   "fresh": false,
+   "frames": 873,
+   "tol": 0.0005,
+   "commit": "no-git",
+   "date": "2026-10-25 13:54",
+   "metrics": {
+    "S": 0.7694,
+    "Q": 0.735,
+    "F1@1.0": 0.8696,
+    "J": 0.4092,
+    "topo_F1": 0.7413,
+    "lanes_found": 0.6948,
+    "R@1_far": 0.7087,
+    "vert100": 14.8301
+   }
+  },
+  {
+   "name": "champion_noprune",
+   "split": "val",
+   "subset": "",
+   "fresh": false,
+   "frames": 873,
+   "tol": 0.0005,
+   "commit": "no-git",
+   "date": "2026-10-25 13:55",
+   "metrics": {
+    "S": 0.7458,
+    "Q": 0.7009,
+    "F1@1.0": 0.8695,
+    "J": 0.2647,
+    "topo_F1": 0.7204,
+    "lanes_found": 0.6948,
+    "R@1_far": 0.7086,
+    "vert100": 13.5439
+   }
+  },
+  {
+   "name": "control",
+   "split": "val",
+   "subset": "",
+   "fresh": false,
+   "frames": 873,
+   "tol": 0.0005,
+   "commit": "no-git",
+   "date": "2026-10-25 13:58",
+   "metrics": {
+    "S": 0.7249,
+    "Q": 0.7371,
+    "F1@1.0": 0.8831,
+    "J": 0.408,
+    "topo_F1": 0.7632,
+    "lanes_found": 0.7999,
+    "R@1_far": 0.8111,
+    "vert100": 21.7917
+   }
+  },
+  {
+   "name": "fast",
+   "split": "val",
+   "subset": "",
+   "fresh": false,
+   "frames": 873,
+   "tol": 0.0005,
+   "commit": "no-git",
+   "date": "2026-10-25 13:56",
+   "metrics": {
+    "S": 0.762,
+    "Q": 0.7281,
+    "F1@1.0": 0.8607,
+    "J": 0.3942,
+    "topo_F1": 0.7345,
+    "lanes_found": 0.6708,
+    "R@1_far": 0.6766,
+    "vert100": 14.989
+   }
+  },
+  {
+   "name": "fast_recall",
+   "split": "val",
+   "subset": "",
+   "fresh": false,
+   "frames": 873,
+   "tol": 0.0005,
+   "commit": "no-git",
+   "date": "2026-10-25 13:57",
+   "metrics": {
+    "S": 0.7715,
+    "Q": 0.7392,
+    "F1@1.0": 0.8658,
+    "J": 0.4469,
+    "topo_F1": 0.7369,
+    "lanes_found": 0.7364,
+    "R@1_far": 0.7275,
+    "vert100": 14.9773
+   }
+  },
+  {
+   "name": "recall",
+   "split": "val",
+   "subset": "",
+   "fresh": false,
+   "frames": 873,
+   "tol": 0.0005,
+   "commit": "no-git",
+   "date": "2026-10-25 13:57",
+   "metrics": {
+    "S": 0.7675,
+    "Q": 0.7404,
+    "F1@1.0": 0.877,
+    "J": 0.4277,
+    "topo_F1": 0.7423,
+    "lanes_found": 0.7673,
+    "R@1_far": 0.7714,
+    "vert100": 15.5305
+   }
+  }
+ ]
+}

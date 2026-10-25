@@ -8,15 +8,18 @@ One place for how results are measured. Rule: **do not write a private metric - 
 wsl bash tools/env/_py14.sh evaluate.py --list
 wsl bash tools/env/_py14.sh evaluate.py champion --compare control
 wsl bash tools/env/_py14.sh evaluate.py recall --asm fork_prune=0.3 --tag p03
+wsl bash tools/env/_py14.sh evaluate.py --golden check --cached-only     # layer 1: every golden number reproduced (also in run_all_tests.sh)
+wsl bash tools/env/_py14.sh evaluate.py --golden check --fresh-only      # the network path: champion re-inferred on VAL250 without the cache (idle GPU)
 ```
 
-`evaluate.py <name>` takes a name from `../models/registry.json` (checkpoint + config + the standard assembly settings), runs it on VAL (873 frames; `--split test` only with a `--test-id` logged in `TEST_USAGE_LOG.md`) and writes `runs/eval/<name>/<split>.json` with all metrics, the settings, the cache file and the code commit. Network outputs are cached once per checkpoint and split (`~/exp_gcar_b123/eval_cache/`), so settings are re-scored on the CPU in about a minute. `--compare <name>` adds the paired scene bootstrap. A new model gets a registry entry, not a new evaluation script. Network timing stays in `drivers/p17_latency.py`. The per-loop drivers below are kept for reproducing old numbers.
+`evaluate.py <name>` takes a name from `../models/registry.json` (checkpoint + config + the standard assembly settings), runs it on VAL (873 frames; `--split test` only with a `--test-id` logged in `TEST_USAGE_LOG.md`) and writes `runs/eval/<name>/<split>.json` with all metrics, the settings, the cache file and the code commit. Network outputs are cached once per checkpoint and split (`~/exp_gcar_b123/eval_cache/`), so settings are re-scored on the CPU in about a minute. `--compare <name>` adds the paired scene bootstrap. A new model gets a registry entry, not a new evaluation script. `golden.json` holds the golden numbers (one entry per registry name on VAL from the cache, plus the champion re-inferred on the 250-frame subset `--subset val250 --fresh`); `--golden check` reproduces them or exits 1, `--golden write <name>` changes an entry (only together with a ledger row that says why). Network timing stays in `drivers/p17_latency.py`. The per-loop drivers below are kept for reproducing old numbers.
 
 Headline metrics (see `PROTOCOL.md`): **Q** at <= 14.3 vertices per 100 m, **topo F1** (connectivity), **lanes found**, **R@1 far** (beyond 40 m), route success, ms per frame; S stays for comparison with the history; FL and dup_frac as checks.
 
 | folder / file | for what |
 |---|---|
 | `evaluate.py` | the one entry point above |
+| `golden.json` | golden numbers of `evaluate.py --golden check` (layer 1 of the protocol; written by `--golden write`) |
 | [sparse_lanes/](sparse_lanes/README.md) | sparse lane graphs: `graph_eval.py` (geometry, lanes, junctions, route), `sparse_metrics.py` (vertices per 100 m, composite S, quality Q, `card`, `card_any`), `topo_metrics.py` (connectivity topo P / R / F1, parallel duplicates, recall / precision by range), `bootstrap.py` (scene-bootstrap intervals and **paired comparison of two systems with a verdict against the noise band**), `selftest.py` |
 | [lane_grid/](lane_grid/README.md) | dense (grid) heads: `grid_eval.py` (maps -> skeleton -> points -> P / R / F1), `selftest.py` reproduces the stored numbers of `e37_final` |
 | `drivers/` | general, reusable entry points, found by name by `tools/env/_py14.sh`: `p16_final_eval.py` (builder on a split, threshold sweep, card), `p16_eval.py`, `p16_fast_val.py`, `p16_fast_check.py` (fast path == reference graphs), `p16_pipeline_eval.py` (deployed chain), `p16_timing.py`, `p17_latency.py`, `p16_pareto.py` (time against quality), `p16_route_check.py`, `boot_eval.py` (scene bootstrap of any system), `oracle_vertices.py`; loop 18: `p18_asm_check.py`, `p18_fork_prune_eval.py`, `p18_regis_eval.py` |

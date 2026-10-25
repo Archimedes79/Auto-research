@@ -23,9 +23,11 @@ Problems using it: `../bev_fusion_lane_center/` (lane-centre-line graph from cam
 
 ## Tools in one line each
 ```
-python tools/run.py --id E240.a --hyp "..." --pred "..." --rule "..." [--split test] [--after E239.a] -- <command>   # commits + tags lcr/E240.a
+python tools/run.py --id E240.a --hyp "..." --pred "..." --rule "..." [--split test] [--after E239.a] [--gpu | --gpu-max-mb 9000] [--timeout 180] -- <command>   # snapshot + tag lcr/E240.a, heartbeat, GPU slot
 python tools/ledger.py add|note|render ...
-python tools/decide.py --variant 0.746,0.741 --control 0.725,0.722 --id E240.a --write
+python tools/decide.py --experiment E240 [--write]          # the rule clauses of experiments/E240_*/experiment.json on the metric cards -> KEEP / CUT / TIE / INCONCLUSIVE
+python tools/decide.py --variant 0.746,0.741 --control 0.725,0.722 --id E240.a --write   # typed per-seed scores (old interface)
+python tools/experiment.py check E240 | show E240 | check --all   # gate G2 as code for experiment.json (schema: schemas/experiment.schema.json)
 python tools/schedule.py show|next|set|reconcile|add
 python tools/check_numbers.py <report> <sources ...>
 python tools/check_structure.py
