@@ -13,7 +13,7 @@ General and problem-independent: the method (`METHOD.md`), seven agent roles (`a
 | `config.json` | the default problem folder |
 
 ## Plug in a problem
-1. Make a folder with `PROBLEM.md` (from `templates/problem.md`) and `project.json` (paths: ledger, schedule, runs, TEST log, code folders, tag prefix, scratch folder, structure rules).
+1. Make a folder with `PROBLEM.md` (from `templates/problem.md`) and `project.json` (paths: ledger, schedule, runs, holdout log and `holdout_split`, code folders, tag prefix, scratch folder, structure rules, `headline_metrics`, `cards`). Give it one evaluator that writes a metric card per named system and split as in `schemas/card.schema.json` (an ML model on a validation split, or a code system benchmarked by a script: the loop is the same).
 2. Set it as default in `config.json` or export `AR_PROJECT=<folder>` for the tools.
 3. Set a git identity in the repository's own config (both the Windows and the WSL git use it): `git config user.name ...`, `git config user.email ...`.
 4. `python tools/install_agents.py` copies the agents into the workspace's `.claude/agents/` (`--check` tells when the copies drift).
@@ -31,6 +31,7 @@ python tools/guard_hook.py grant ../autoresearch/tools/ --decision D8 --hours 12
 python tools/decide.py --experiment E240 [--write]          # the rule clauses of experiments/E240_*/experiment.json on the metric cards -> KEEP / CUT / TIE / INCONCLUSIVE
 python tools/decide.py --variant 0.746,0.741 --control 0.725,0.722 --id E240.a --write   # typed per-seed scores (old interface)
 python tools/experiment.py check E240 | show E240 | check --all   # gate G2 as code for experiment.json (schema: schemas/experiment.schema.json)
+python tools/card.py check --all | check <card.json> | show <card.json>   # the evaluator contract (schemas/card.schema.json): every metric card decide.py reads
 python tools/schedule.py show|next|set|reconcile|add [--command "..."]
 python tools/tick.py [--dry-run] [--handover]           # the inner loop: reconcile the run records, start the ready items within the GPU / CPU slots, status block (into HANDOVER.md between <!-- tick --> markers)
 python tools/check_numbers.py <report> <sources ...> [--strict]   # --strict: exit 1 when a number is missing from the sources

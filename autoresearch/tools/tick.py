@@ -106,8 +106,8 @@ def launch_args(root, cfg, ledger, item, run_id):
     if exp is not None:
         if not cmd:
             cmd = (arm.get("command") or "").strip()
-        if exp.get("evaluate", {}).get("split") == "test":
-            return None, "TEST run: needs the lead and a logged id (never started by the tick)"
+        if str(exp.get("evaluate", {}).get("split", "")).strip().lower() == str(cfg.get("holdout_split", "test")).lower():
+            return None, f"holdout run ({cfg.get('holdout_split', 'test')}): needs the lead and a logged id (never started by the tick)"
         row = RUN.ledger_row(ledger, run_id)  # the planned row wins; the experiment file fills what it lacks
         pred = exp.get("prediction") if isinstance(exp.get("prediction"), dict) else {}
         pred_txt = f"{pred['value']} vs {pred['vs']} on {exp.get('metric', '')}" if "value" in pred and "vs" in pred else ""

@@ -23,7 +23,8 @@ What it does (paths from the problem's project.json, see project.py):
                 and a note "code changed since attempt 1" (when the fingerprint differs) go into the record; result and decision of the earlier
                 attempt are cleared in the ledger row
   * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed or stalled); waiting is not counted as run time
-  * TEST guard  --split test is refused unless the run id appears in the problem's TEST log
+  * holdout     --split <holdout> (project.json holdout_split, default test) is refused unless the run id appears in the problem's holdout log
+                (project.json test_log)
   * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under <run_records>/.gpu_slots taken
                 with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed); --gpu-max-mb
                 additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes, then status gpu_busy (exit 1). The
@@ -373,7 +374,7 @@ def main():
     ap.add_argument("--hyp", default="", help="one-sentence hypothesis")
     ap.add_argument("--pred", default="", help="prediction written BEFORE the run, a number (e.g. 'Q >= 0.745')")
     ap.add_argument("--rule", default="", help="decision rule written BEFORE the run")
-    ap.add_argument("--split", default="val", choices=["val", "test"], help="'test' needs a row naming this id in the TEST log")
+    ap.add_argument("--split", default="val", help=f"the split or benchmark set of the run; the holdout split ('{cfg.get('holdout_split', 'test')}', project.json holdout_split) needs a row naming this id in the holdout log")
     card = ap.add_mutually_exclusive_group()
     card.add_argument("--require-card", action="store_true", help="(default) refuse to start without a card: --hyp, --pred and --rule, or a planned ledger row with them")
     card.add_argument("--no-card", action="store_true", help="start without a card (smoke tests, data preparation); the ledger row says 'no card'")
@@ -404,10 +405,14 @@ def main():
         if not a.no_card:
             print(f"[{a.id}] refused: a run needs its card (--no-card for a smoke test or data preparation)")
             return 2
-    if a.split == "test":
+    a.split = a.split.strip().lower()
+    if cfg.get("splits") and a.split not in [s.lower() for s in cfg["splits"]]:
+        print(f"[{a.id}] refused: split {a.split} is not one of the project's splits {cfg['splits']}")
+        return 2
+    if a.split == str(cfg.get("holdout_split", "test")).lower():
         log = open(test_log, encoding="utf-8").read() if os.path.exists(test_log) else ""
         if not re.search(r"(?<![\w.])" + re.escape(a.id) + r"(?![\w.])", log):  # the whole id, not a prefix of a longer id
-            print(f"[{a.id}] refused: split=test but {a.id} is not named in {os.path.relpath(test_log, root)} (log it first, with the person's OK)")
+            print(f"[{a.id}] refused: split={a.split} is the holdout split but {a.id} is not named in {os.path.relpath(test_log, root)} (log it first, with the person's OK)")
             return 2
     if not a.no_git:
         err = git_identity_error(root)

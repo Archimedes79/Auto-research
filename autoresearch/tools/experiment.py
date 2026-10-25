@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 from decide import LOWER  # noqa: E402
+import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
 TYPES = {"str": str, "number": (int, float), "dict": dict, "list": list, "bool": bool}
@@ -69,7 +70,8 @@ def arm_cards(exp, letter, root=None):
     split, sub = ev.get("split", "val"), ev.get("subset", "")
     out = {}
     if "names" in arm:
-        out[""] = [card_ref(f"runs/eval/{n}/{split}{'_' + sub if sub else ''}.json", root) for n in arm["names"]]
+        folder = P.cfg_of(root).get("cards", "runs/eval")  # where this problem's evaluator writes its cards
+        out[""] = [card_ref(f"{folder}/{n}/{split}{'_' + sub if sub else ''}.json", root) for n in arm["names"]]
     cards = arm.get("cards")
     if isinstance(cards, list):
         out[""] = out.get("", []) + [card_ref(c, root) for c in cards]
@@ -119,8 +121,8 @@ def check(exp, path):
             bad.append(f"clause {i}: subsets must be a list")
     if not any(c["metric"] == exp["metric"] for c in exp["rule"] if isinstance(c, dict)):
         bad.append(f"no clause on the headline metric {exp['metric']}")
-    if exp["evaluate"].get("split") not in ("val", "test", "confirm"):
-        bad.append("evaluate.split must be val | test | confirm")
+    if not isinstance(exp["evaluate"].get("split"), str) or not exp["evaluate"]["split"].strip():
+        bad.append("evaluate.split must name the split or benchmark set (val | test | confirm | <benchmark>)")
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path)))) if "experiments" in path.replace("\\", "/") else P.root()
     for a in arms:
         try:
@@ -129,7 +131,9 @@ def check(exp, path):
             bad.append(f"arm {a}: {e}")
             continue
         for s, lst in cards.items():
-            for m, _, ref in lst:
+            for m, full, ref in lst:
+                if full is not None:  # a full card follows the evaluator contract (legacy cards without the schema field pass); a bare metrics dict is accepted as is
+                    bad += [f"arm {a}: card {ref}: {b}" for b in CARD.validate(full, P.cfg_of(root).get("headline_metrics", []))]
                 for c in exp["rule"]:
                     if isinstance(c, dict) and c.get("metric") and c["metric"] not in m and (not c.get("subsets") or s in c["subsets"]):
                         bad.append(f"arm {a}{' ' + s if s else ''}: card {ref} has no metric {c['metric']}")

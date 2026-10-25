@@ -17,7 +17,7 @@ What it does
     triage rungs (p16_common.val_subset)
   * graphs: stored graphs of a system that is not re-run (the control E94)
   * metrics: sparse_metrics.card_any(extra=True) - S, Q, F1, J, FL, vertices per 100 m, lanes found, topo P / R / F1, dup_frac, recall by range
-  * card: runs/eval/<name>/<split>[_<subset>][_fresh][_<tag>].json with the registry entry, overrides, frames, cache file, code commit, metrics, assembly ms per frame
+  * card: runs/eval/<name>/<split>[_<subset>][_fresh][_<tag>].json (the contract ../autoresearch/schemas/card.schema.json, schema 1) with the registry entry, overrides, frames, cache file, code commit, metrics, assembly ms per frame
   * golden: evaluation/golden.json holds one entry per (name, split, subset, fresh) with the metrics of GOLD_KEYS rounded to 4 decimals, the
     commit and the tolerance; `--golden check` re-evaluates every entry and compares (the check writes cards with the tag `golden_check`, which git
     ignores; `--golden write` writes the committed `golden` card, never the standard card); a golden entry changes only together with a ledger row that says why (a metric fix, a new champion)
@@ -156,7 +156,11 @@ def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=Fal
     t0 = time.time()
     m = SM.card_any(g, gts, extra=True)
     info["metric_s"] = time.time() - t0
-    card = dict(name=name, split=split, subset=subset or "", fresh=bool(fresh), frames=len(gts), registry=reg[name], overrides=dict(asm=over, tau=tau),
+    nan = [k for k, v in m.items() if isinstance(v, float) and v != v]
+    if nan:  # the contract wants numbers: a metric without a value is named in info, not written as NaN
+        info["nan_metrics"] = nan
+        m = {k: v for k, v in m.items() if k not in nan}
+    card = dict(schema=1, name=name, split=split, subset=subset or "", fresh=bool(fresh), frames=len(gts), registry=reg[name], overrides=dict(asm=over, tau=tau),
                 info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m)
     if compare:
         import bootstrap as SB

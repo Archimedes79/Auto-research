@@ -34,6 +34,15 @@ def root():
     return os.path.normpath(p if os.path.isabs(p) else os.path.join(AR, p))
 
 
+def cfg_of(problem_root):
+    """the project.json of a given problem folder, with the defaults (cfg() is the same for the default / AR_PROJECT problem)"""
+    c = dict(DEFAULTS)
+    f = os.path.join(problem_root, "project.json")
+    if os.path.exists(f):
+        c.update({k: v for k, v in json.load(open(f, encoding="utf-8")).items() if not k.startswith("_")})
+    return c
+
+
 def cfg():
     c = dict(DEFAULTS)
     f = os.path.join(root(), "project.json")
