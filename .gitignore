@@ -1,0 +1,61 @@
+# One repository for the research system and the code of its problems. CODE ONLY (autoresearch/METHOD.md "Code and git"):
+# everything is ignored unless listed here. Never: data, checkpoints, caches, results, reports, literature notes, state, wsl/.
+/*
+!/.gitignore
+!/CLAUDE.md
+
+# the general research system
+!/autoresearch/
+
+# problem: lane-centre-line graph + SD map (tag prefix lcr)
+!/bev_fusion_lane_center/
+/bev_fusion_lane_center/*
+!/bev_fusion_lane_center/CLAUDE.md
+!/bev_fusion_lane_center/README.md
+!/bev_fusion_lane_center/PROBLEM.md
+!/bev_fusion_lane_center/project.json
+!/bev_fusion_lane_center/training/
+!/bev_fusion_lane_center/evaluation/
+!/bev_fusion_lane_center/tools/
+!/bev_fusion_lane_center/reports/
+/bev_fusion_lane_center/reports/*
+!/bev_fusion_lane_center/reports/build/
+!/bev_fusion_lane_center/models/
+/bev_fusion_lane_center/models/*
+!/bev_fusion_lane_center/models/registry.json
+!/bev_fusion_lane_center/models/README.md
+# scratch: only the scripts (a run's tag keeps them after the loop's clean-up)
+!/bev_fusion_lane_center/temp/
+/bev_fusion_lane_center/temp/**
+!/bev_fusion_lane_center/temp/**/
+!/bev_fusion_lane_center/temp/**/*.py
+!/bev_fusion_lane_center/temp/**/*.sh
+!/bev_fusion_lane_center/temp/README.md
+/bev_fusion_lane_center/temp/literature_backup_*/
+
+# results and records inside the code folders
+bev_fusion_lane_center/evaluation/examples/
+bev_fusion_lane_center/evaluation/METRIC_RESPONSE.md
+bev_fusion_lane_center/evaluation/TEST_USAGE_LOG.md
+bev_fusion_lane_center/tools/maintenance/CLEANUP_LIST.md
+
+# never, anywhere
+__pycache__/
+*.py[cod]
+*.pt
+*.pth
+*.ckpt
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.h5
+*.png
+*.jpg
+*.mp4
+*.gif
+*.pdf
+*.pptx
+*.html
+~$*
+*.tmp

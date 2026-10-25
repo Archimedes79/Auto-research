@@ -1,0 +1,4 @@
+{
+  "default_project": "../bev_fusion_lane_center",
+  "_about": "The tools find the problem folder from the environment variable AR_PROJECT, else from default_project (relative to this folder). The problem's project.json says where its ledger, schedule, runs and rules live."
+}

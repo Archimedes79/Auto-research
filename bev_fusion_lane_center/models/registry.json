@@ -1,0 +1,21 @@
+{
+  "_about": "Named models with their standard settings: evaluation/evaluate.py <name> uses exactly these. kind builder = checkpoint runs/e123/<run>/model.pt + config runs/e123_ladder/cards/<run>.json; kind graphs = stored graphs of a system that is not re-run. Change a setting only together with a ledger row that justifies it.",
+  "_asm_note": "assembly settings of loop 18: cov_r 0.5, vtx_r 1.5, junc_thr 0.5, reloc_thr 0.4, reloc_shift 12, reloc_tol 1.6, fork_prune 0.3 (0.4 for the recall variants, K190), fast 2 (numba union, bit-identical graphs, E216); tau 0.7",
+  "champion": {"kind": "builder", "design": "D7", "run": "e123_D7_r3_f1", "set": {"M": 288, "K0": 144}, "tau": 0.7,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.3, "fast": 2},
+               "what": "loop 16 champion D7 + junction head + time recursion, with fork pruning (loop 18, E215)"},
+  "champion_noprune": {"kind": "builder", "design": "D7", "run": "e123_D7_r3_f1", "set": {"M": 288, "K0": 144}, "tau": 0.7,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.0, "fast": 2},
+               "what": "the loop 16 champion as reported before fork pruning (history)"},
+  "fast": {"kind": "builder", "design": "D7", "run": "e123_D7_r3_j1", "set": {"M": 192, "K0": 96}, "tau": 0.7,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.3, "fast": 2},
+               "what": "fast deployment setting j1 192 / 96 with fork pruning"},
+  "fast_recall": {"kind": "builder", "design": "D7", "run": "e18_D7_j1rc", "set": {"M": 192, "K0": 96}, "tau": 0.7,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "j1 fine-tuned with recall weight 3 (loop 18, VAL only, two seeds)"},
+  "recall": {"kind": "builder", "design": "D7", "run": "e123_D7_r3_rc1", "set": {"M": 288, "K0": 144}, "tau": 0.7,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "recall variant rc1 (recall weight 3) with fork pruning 0.4"},
+  "control": {"kind": "graphs", "files": {"val": "runs/e94_a/graphs_val_clean.pkl", "test": "runs/e94_a/graphs_test_clean.pkl"},
+               "what": "control arm: stored graphs of the learned trace network E94 (loop 10), the reference of loops 16-18"}
+}

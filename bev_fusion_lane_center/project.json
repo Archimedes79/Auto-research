@@ -1,0 +1,25 @@
+{
+  "_about": "Machine-readable part of PROBLEM.md for the tools in ../autoresearch/tools (paths relative to this folder).",
+  "name": "lane-centre-line graph + SD-map assignment (lcr)",
+  "tag_prefix": "lcr",
+  "ledger": "experiment_execution/LEDGER.csv",
+  "ledger_md": "experiment_execution/LEDGER.md",
+  "run_records": "experiment_execution/runs",
+  "schedule": "experiment_execution/schedule.csv",
+  "test_log": "evaluation/TEST_USAGE_LOG.md",
+  "code_dirs": ["training", "evaluation", "tools", "reports/build", "temp"],
+  "fingerprint_extra": ["data/splits.json"],
+  "scratch": "temp",
+  "live_code": ["training", "evaluation", "tools", "reports/build"],
+  "trash": "_to_delete",
+  "structure": {
+    "root_files": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "project.json"],
+    "root_dirs": ["data", "evaluation", "experiment_execution", "experiments", "literature", "models", "reports", "runs", "temp", "tools", "training", "_to_delete"],
+    "folders_with_readme": ["data", "evaluation", "evaluation/sparse_lanes", "evaluation/lane_grid", "experiment_execution", "experiments", "literature", "models", "reports", "reports/build", "runs", "temp", "tools", "training", "_to_delete"],
+    "living": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "data", "evaluation", "experiment_execution", "models", "reports", "runs", "temp", "tools", "training", "experiments/README.md", "literature/README.md", "literature/OVERVIEW.md"],
+    "skip_parts": ["CLEANUP_LIST.md", "/history/", "/logs/", "/runs/", "/plans/", "/_to_delete/", "/papers/", "/__pycache__/", "/literature_backup", "METRIC_RESPONSE.md", "LEDGER.md", "STRUCTURE.md", "/source/", "register.md", "CATALOGUE.md"],
+    "index_dirs": ["training", "evaluation", "tools", "reports", "temp", "experiment_execution", "models", "literature", "experiments"],
+    "extra_bases": ["runs", "runs/e17"],
+    "strip_prefixes": ["/mnt/c/ML-Experiment/bev_fusion_lane_center/", "C:/ML-Experiment/bev_fusion_lane_center/"]
+  }
+}

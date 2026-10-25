@@ -1,0 +1,44 @@
+"""Find the problem folder and read its project.json (standard library only; imported by every tool of autoresearch).
+
+The problem folder comes from the environment variable AR_PROJECT, else from autoresearch/config.json (default_project, relative to
+autoresearch/). Paths in project.json are relative to the problem folder; P.path("ledger") returns an absolute path.
+"""
+import json
+import os
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+AR = os.path.dirname(HERE)
+
+DEFAULTS = {
+    "tag_prefix": "exp",
+    "ledger": "LEDGER.csv",
+    "ledger_md": "LEDGER.md",
+    "run_records": "runs_records",
+    "schedule": "schedule.csv",
+    "test_log": "TEST_USAGE_LOG.md",
+    "code_dirs": [],
+    "fingerprint_extra": [],
+    "scratch": "temp",
+    "live_code": [],
+    "trash": "_to_delete",
+    "structure": {},
+}
+
+
+def root():
+    p = os.environ.get("AR_PROJECT")
+    if not p:
+        p = json.load(open(os.path.join(AR, "config.json"), encoding="utf-8"))["default_project"]
+    return os.path.normpath(p if os.path.isabs(p) else os.path.join(AR, p))
+
+
+def cfg():
+    c = dict(DEFAULTS)
+    f = os.path.join(root(), "project.json")
+    if os.path.exists(f):
+        c.update({k: v for k, v in json.load(open(f, encoding="utf-8")).items() if not k.startswith("_")})
+    return c
+
+
+def path(key):
+    return os.path.join(root(), cfg()[key])
