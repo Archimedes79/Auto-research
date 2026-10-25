@@ -199,7 +199,7 @@ class FrontCameraEncoder(nn.Module):
     def load_pretrained(self, path):
         """Load img_backbone., img_neck., img_view_transformer.depth_net. from a DualBEV checkpoint; returns a report
         (loaded, missing, unexpected-with-prefix, shape mismatches)."""
-        ck = torch.load(path, map_location="cpu", weights_only=False)
+        ck = torch.load(path, map_location="cpu", weights_only=True)   # third-party file: tensors only, no code
         sd = ck.get("state_dict", ck)
         mine = self.state_dict()
         take, mism, unexp = {}, [], []
