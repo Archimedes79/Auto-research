@@ -336,7 +336,8 @@ Measured (`temp/checks/occluded_map_stats.py`, nuScenes mini, 135 keyframes, 0.5
 
 **Tests (known answers, before any training)**: BCE on soft targets = the analytic value; the dilated Dice is 0 for a 1-cell shift and > 0 for 3 cells; Huber zero for the exact field; cells with weight 0 give exactly zero gradient; doubling the map area leaves every normalised term unchanged; the Kendall weights stay inside the clamp; the total is finite and decreases when overfitting one synthetic scene
 
-**Decisions needed from Mirko**: (1) weight of occluded map cells (0 / 0.5 / 1); (2) keep the dense object coverage in the semantic head or only the object head; (3) is the drivable-area-edge + parked-object proxy acceptable as the radar stationary target; (4) registration: tolerance only first, estimator later, or estimate-and-shift now; (5) w(dt) = 1 / 0.5 / 0.25 and the warm-up; (6) learned (Kendall) or fixed weights between the four groups
+**Decided (Mirko, 2026-10-26)**: (1) occluded map cells are weighted DOWN: 0.5 (Mirko: "a primitive solution, but weighting down is a good answer"); arms 1.0 and 0; a smoother variant as an optional arm: the weight falls from 1 at the visible edge to 0.25 over 10 m behind the occluder (cells just behind a car are inferable by continuity, cells deep inside a hidden area are not); visible and occluded cells are reported separately.
+**Decisions still needed from Mirko**: (2) keep the dense object coverage in the semantic head or only the object head; (3) is the drivable-area-edge + parked-object proxy acceptable as the radar stationary target; (4) registration: tolerance only first, estimator later, or estimate-and-shift now; (5) w(dt) = 1 / 0.5 / 0.25 and the warm-up; (6) learned (Kendall) or fixed weights between the four groups
 
 ## 9. Ground truth: how it is made and how you can look at it
 
