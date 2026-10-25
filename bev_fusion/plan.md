@@ -300,6 +300,8 @@ Why: before this section the losses were scattered (the object head's complete i
 | unknown at the target time (splat mass < 0.5, dt != 0) | supervised with weight 0.5 (this is what teaches the refine block to fill in); reported separately | same |
 | interpolated labels (12 Hz sweeps, training only) | map exact: weight 1 | boxes: weight 0.5; evaluation only on keyframes |
 
+Measured (`temp/checks/occluded_map_stats.py`, nuScenes mini, 135 keyframes, 0.5 m front grid): of the cells the front camera reaches, 37.6 % are occluded by a GT box (9.5 % at 0-20 m, 33.0 % at 20-40 m, 44.2 % at 40-60 m); among the map layers 36.6 % of the drivable area, 33.2 % of the lane dividers, 18.8 % of the road dividers and 28.6 % of the centre-lines. (The column "in radar coverage" is 100 % because the approximate radar fan of `gt_bev.py`, half angle 60 deg to 70 m from memory, covers the whole grid: that mask does not discriminate yet.)
+
 **Losses per output**
 | output (head) | loss | note |
 |---|---|---|
@@ -426,7 +428,7 @@ Order per block: synthetic gate passes -> the same probe on real data -> only th
 | stage | content | control |
 |---|---|---|
 | S0 | GT generation + viewer + GT checks; geometry tables with their unit tests | - |
-| S1 | camera only: lift PD (pull with depth weight; variants PD-G, learned elevations), seg head | P (pull without depth, Simple-BEV-like), S (splat, LSS-like) |
+| S1 | camera only: lift PD (pull with depth weight; variants PD-G, learned elevations), seg head; first experiment S1a = PD vs P with the frozen DualBEV heads on VAL by range, preceded by a synthetic unit test of the same pipeline (`experiments/s1a_lift_pd_vs_p/experiment.md`, plan 2026-10-26) | P (pull without depth, Simple-BEV-like), S (splat, LSS-like) |
 | S2 | radar only: learned density g, reconstruction test, aux heads | point / pillar (R0), fixed polar Gaussian (R1) |
 | S3 | fusion | S1, S2 |
 | S4 | temporal: ego warp, stationary memory, moving memory with flow | single frame; memory without flow |
