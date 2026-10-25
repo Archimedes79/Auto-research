@@ -72,6 +72,10 @@
 !/bev_fusion_lane_center/temp/README.md
 /bev_fusion_lane_center/temp/literature_backup_*/
 
+# not in git: wsl/ (the WSL disk image) and datasets/ (raw datasets shared by the problems, with their download tools)
+# problem 2: camera + radar BEV (for now a discussion folder: plan, literature, one-off scripts)
+!/bev_fusion/
+
 # never, anywhere: caches, checkpoints, arrays, binaries
 __pycache__/
 *.py[cod]

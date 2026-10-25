@@ -1,6 +1,7 @@
 # Data
 
 ## In this folder
+- Raw nuScenes (what is on disk, download and check tools) is described once for all problems in `../../datasets/NuScenes/README.md`; this file lists only this problem's own additions. Since 2026-10-25 this problem's CRN info files and filtered radar live in `~/data/nuscenes_additions/lcr_crn/` (symlinked from their old paths in `~/data/nuscenes_full`, so configs keep working).
 - No nuscenes folder any more (removed 2026-10-25): the Windows copy of nuScenes mini duplicated `~/data/nuscenes` in the WSL home, which the code reads.
 - `splits.json` - TRAIN / VAL / TEST scene lists of the full runs (scene-disjoint).
 - The raw nuScenes archives (`v1.0-mini.tgz`, map expansion, `v1.0-trainval_meta.tgz`, radar parts 1-3) were unpacked into the WSL home (see below); the archives were removed on 2026-10-25 (purged from _to_delete); the camera archives were not kept. Radar parts 4-6 were downloaded on 2026-10-25 (decision D1; public bucket `motional-nuscenes`, AWS Open Data, no login; verified by S3 ETag; archives in `~/downloads/nuscenes_radar_456/`). nuScenes is licensed for non-commercial use; re-download only with the user's OK.
