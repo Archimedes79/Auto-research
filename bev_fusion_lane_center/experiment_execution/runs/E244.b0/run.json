@@ -14,7 +14,12 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 11553,
  "created": "2026-10-25T21:52:25",
- "status": "waiting",
+ "status": "running",
  "after": "E237.a1",
- "timeout_min": 0
+ "timeout_min": 0,
+ "started": "2026-10-25T23:24:56",
+ "code_hash": "c83c64d4598d",
+ "commit": "50cf7b9d49",
+ "tag": "lcr/E244.b0",
+ "git_note": ""
 }

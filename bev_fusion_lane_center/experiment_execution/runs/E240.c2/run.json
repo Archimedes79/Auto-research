@@ -14,12 +14,27 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 10643,
  "created": "2026-10-25T21:47:25",
- "status": "running",
+ "status": "ok",
  "after": "E240.a2",
  "timeout_min": 0,
  "started": "2026-10-25T22:13:32",
  "code_hash": "06e0d6e361fd",
  "commit": "8bcb6a03fc",
  "tag": "lcr/E240.c2",
- "git_note": ""
+ "git_note": "",
+ "pid": 26576,
+ "exit": 0,
+ "duration_s": 1160,
+ "attempts": 1,
+ "ended": "2026-10-25T22:32:52",
+ "last_lines": [
+  "=== attempt 2026-10-25T22:13:32: bash temp/loop19/train_j1.sh e24_D7_j1eqs2 2 1.0 e24_j1eq_s2",
+  "env: LCR_DIST_DIR=default P19_REC_CLAMP=3.0 P18_FAR_W=0",
+  "it 4800/4800 995s share 0.00 seed_pos 0.225 seed_dir 0.071 seed_val 0.040 ver 0.203 pos 0.457 val 0.176 cov 0.000 prec 0.464 rec 0.310 dup 0.297 link 0.152 junc 0.161 aux_seed 0.534 aux_dir 0.086 ver_pos 0.247 child_ok 0.171 child_near 0.251 link_pos 0.106 tot 3.078 gn 5.538",
+  "e24_D7_j1eqs2 S 0.7262 tau 0.7 F1@1 0.8674 F1@.5 0.6967 J 0.188 Sp 0.959 v100 14.9 FL 0.033",
+  "_py14.sh: evaluation/evaluate.py",
+  "e24_j1eq_s2 on val (873 frames), commit 2c33523+dirty, assembly 9.4 ms per frame (CPU), metrics 21 s",
+  "  S 0.768  Q 0.733  F1@1.0 0.864  J 0.410  topo_F1 0.740  lanes_found 0.683  R@1_far 0.688  false_len_frac 0.042  dup_frac 0.047  vert100 14.813",
+  "card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e24_j1eq_s2/val.json"
+ ]
 }

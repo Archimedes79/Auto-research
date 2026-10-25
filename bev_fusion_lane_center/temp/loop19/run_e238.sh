@@ -14,6 +14,6 @@ for k in 1 2; do
   echo "== draw $k: unregistered U2"
   $E --map_mode exact --map_sigma 2 --suffix _U2_d$k
   echo "== draw $k: registered R2 (hard trust 0.62)"
-  $E --map_mode exact --map_sigma 2 --reg runs/e18/regis_eval_a_d$k --reg_trust hard --reg_thr 0.62 --suffix _R62_d$k
+  $E --map_mode exact --map_sigma 2 --reg $PWD/runs/e18/regis_eval_a_d$k --reg_trust hard --reg_thr 0.62 --suffix _R62_d$k
 done
 echo "E238 evaluations done"

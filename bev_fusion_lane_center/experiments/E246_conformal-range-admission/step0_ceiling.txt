@@ -1,0 +1,29 @@
+_py14.sh: temp/loop19/e246_step0.py
+fast_recall: base tau 0.7 -> Q 0.7392 R@1_far 0.7275 false_len 0.0565 vert100 14.98 lanes_found 0.736
+  far  tau 0.3: R@1_far 0.7330 Q 0.7385 false_len 0.0583 vert100 15.04 R@1_mid 0.8871 R@1_near 0.9398
+  far  tau 0.4: R@1_far 0.7320 Q 0.7388 false_len 0.0579 vert100 15.02 R@1_mid 0.8871 R@1_near 0.9398
+  far  tau 0.5: R@1_far 0.7309 Q 0.7390 false_len 0.0575 vert100 15.01 R@1_mid 0.8870 R@1_near 0.9398
+  far  tau 0.6: R@1_far 0.7292 Q 0.7389 false_len 0.0571 vert100 15.00 R@1_mid 0.8869 R@1_near 0.9398
+  far  tau 0.7: R@1_far 0.7275 Q 0.7392 false_len 0.0565 vert100 14.98 R@1_mid 0.8868 R@1_near 0.9398
+  far  tau 0.8: R@1_far 0.7242 Q 0.7397 false_len 0.0557 vert100 14.95 R@1_mid 0.8868 R@1_near 0.9398
+  far  tau 0.9: R@1_far 0.7133 Q 0.7405 false_len 0.0536 vert100 14.90 R@1_mid 0.8863 R@1_near 0.9397
+  -> best far: taus (0.7, 0.7, 0.3) R@1_far 0.7330
+  mid  tau 0.3: R@1_far 0.7334 Q 0.7382 false_len 0.0590 vert100 15.07 R@1_mid 0.8888 R@1_near 0.9398
+  mid  tau 0.4: R@1_far 0.7333 Q 0.7385 false_len 0.0587 vert100 15.06 R@1_mid 0.8886 R@1_near 0.9398
+  mid  tau 0.5: R@1_far 0.7332 Q 0.7386 false_len 0.0585 vert100 15.05 R@1_mid 0.8882 R@1_near 0.9398
+  mid  tau 0.6: R@1_far 0.7331 Q 0.7386 false_len 0.0584 vert100 15.04 R@1_mid 0.8878 R@1_near 0.9398
+  mid  tau 0.7: R@1_far 0.7330 Q 0.7385 false_len 0.0583 vert100 15.04 R@1_mid 0.8871 R@1_near 0.9398
+  mid  tau 0.8: R@1_far 0.7330 Q 0.7385 false_len 0.0580 vert100 15.02 R@1_mid 0.8864 R@1_near 0.9398
+  mid  tau 0.9: R@1_far 0.7325 Q 0.7386 false_len 0.0573 vert100 14.99 R@1_mid 0.8840 R@1_near 0.9397
+  -> best mid: taus (0.7, 0.3, 0.3) R@1_far 0.7334
+  near tau 0.3: R@1_far 0.7334 Q 0.7378 false_len 0.0592 vert100 15.09 R@1_mid 0.8894 R@1_near 0.9417
+  near tau 0.4: R@1_far 0.7334 Q 0.7379 false_len 0.0592 vert100 15.08 R@1_mid 0.8892 R@1_near 0.9414
+  near tau 0.5: R@1_far 0.7334 Q 0.7378 false_len 0.0591 vert100 15.08 R@1_mid 0.8892 R@1_near 0.9408
+  near tau 0.6: R@1_far 0.7334 Q 0.7380 false_len 0.0591 vert100 15.07 R@1_mid 0.8890 R@1_near 0.9402
+  near tau 0.7: R@1_far 0.7334 Q 0.7382 false_len 0.0590 vert100 15.07 R@1_mid 0.8888 R@1_near 0.9398
+  near tau 0.8: R@1_far 0.7334 Q 0.7383 false_len 0.0589 vert100 15.07 R@1_mid 0.8885 R@1_near 0.9394
+  near tau 0.9: R@1_far 0.7334 Q 0.7384 false_len 0.0584 vert100 15.05 R@1_mid 0.8881 R@1_near 0.9378
+  -> best near: taus (0.7, 0.3, 0.3) R@1_far 0.7334
+
+CEILING (in-sample, VAL 873): taus near/mid/far (0.7, 0.3, 0.3): R@1_far 0.7334 (+0.0059), Q 0.7382 (-0.0009), false_len 0.0590 (+0.0025), vert100 15.07 (+0.09)
+GATE (+0.015 R@1_far): KILL

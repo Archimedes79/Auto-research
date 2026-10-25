@@ -12,11 +12,9 @@
  "python": "3.10.12",
  "conda_env": "",
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
- "launcher_pid": 26516,
- "created": "2026-10-25T22:13:22",
- "status": "blocked",
+ "launcher_pid": 37741,
+ "created": "2026-10-25T23:26:16",
+ "status": "waiting",
  "after": "E244.a0",
- "timeout_min": 0,
- "ended": "2026-10-25T22:13:22",
- "notes": "dependency E244.a0 blocked"
+ "timeout_min": 0
 }

@@ -1,11 +1,67 @@
-{"id": "E237", "card": "", "title": "j1 equal-budget fine-tune (4 u, recall weight 1) on the CPU-exact distance map against the stored TF32 map (D10 option a)",
- "kind": "variant", "deterministic": false, "metric": "Q", "direction": "higher", "band": 0.010,
- "prediction": {"value": 0.002, "vs": "c"},
- "arms": {"a": {"recipe": "p16_train.py --design D7 --name e19_D7_j1ex --u 4 --seed S --init e123_D7_r3_j1 --lr 0.0005 --stem_lr 0.3 --workers 4 --w rec=1.0 --warm_frac 0.4 (set of _run_j1eq.sh); the loader reads the exact distance file", "base": "e123_D7_r3_j1", "seeds": [0, 1], "run_ids": ["E237.x0", "E237.x1"], "note": "evaluate with p18_variant_prune.py --M 192 --K0 96 --weight 1 --thr 0.3,0.4 --json_thr 0.4"},
-          "c": {"cards": ["runs/e18/rc_eval/j1eq.json", "runs/e18/rc_eval/j1eqs1.json"], "run_ids": ["E219.j1eq", "E219.j1eqs1"], "note": "the same recipe on the stored map, seeds 0 / 1"}},
+{
+ "id": "E237",
+ "card": "",
+ "title": "j1 equal-budget fine-tune (4 u, recall weight 1) on the CPU-exact distance map against the stored TF32 map (D10 option a)",
+ "kind": "variant",
+ "deterministic": false,
+ "metric": "Q",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.002,
+  "vs": "c"
+ },
+ "arms": {
+  "a": {
+   "recipe": "p16_train.py --design D7 --name e19_D7_j1ex --u 4 --seed S --init e123_D7_r3_j1 --lr 0.0005 --stem_lr 0.3 --workers 4 --w rec=1.0 --warm_frac 0.4 (set of _run_j1eq.sh); the loader reads the exact distance file",
+   "base": "e123_D7_r3_j1",
+   "seeds": [
+    0,
+    1
+   ],
+   "run_ids": [
+    "E237.x0",
+    "E237.x1"
+   ],
+   "note": "evaluate with p18_variant_prune.py --M 192 --K0 96 --weight 1 --thr 0.3,0.4 --json_thr 0.4",
+   "names": [
+    "e24_j1ex_s0",
+    "e24_j1ex_s1"
+   ]
+  },
+  "c": {
+   "run_ids": [
+    "E219.j1eq",
+    "E219.j1eqs1"
+   ],
+   "note": "the same recipe on the stored map, seeds 0 / 1",
+   "names": [
+    "e24_j1eq_s0",
+    "e24_j1eq_s1"
+   ]
+  }
+ },
  "control": "c",
- "rule": [{"metric": "Q", "min_effect": 0.005, "note": "exact targets matter"},
-          {"metric": "F1@1.0", "max_loss": 0.005}],
- "seeds": [0, 1],
- "budget_gpu_h": 0.9, "kill": "loader test with the stored file fails, or arm Q on val250 below j1eq - 0.02 at the end of seed 0: do not start seed 1",
- "evaluate": {"split": "val", "compare": "c"}}
+ "rule": [
+  {
+   "metric": "Q",
+   "min_effect": 0.005,
+   "note": "exact targets matter (clause band 0.005 set explicitly, referee finding: decide.py raises a headline clause to the experiment band otherwise)",
+   "band": 0.005
+  },
+  {
+   "metric": "F1@1.0",
+   "max_loss": 0.005
+  }
+ ],
+ "seeds": [
+  0,
+  1
+ ],
+ "budget_gpu_h": 0.9,
+ "kill": "loader test with the stored file fails, or arm Q on val250 below j1eq - 0.02 at the end of seed 0: do not start seed 1",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}
