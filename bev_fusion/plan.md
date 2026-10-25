@@ -32,42 +32,63 @@ radars ──> time alignment ──> point encoder ──> learned density f(ce
 ```
 Block diagrams of draft 2 were shown in the chat; the drawing will be redrawn for this draft after the discussion.
 
-## 2. Camera: frustums from pixel groups (perspective space)
+## 2. Camera: image backbone + lift through lookup tables, height kept as channels (Mirko, 2026-10-25)
 
-### 2.1 What it does, in plain words
-1. The backbone turns the image into a feature map; each feature cell sees a group of pixels (e.g. 8 x 8 or 16 x 16 pixels at the backbone stride).
-2. From the camera model and the calibration, each pixel group is a frustum in vehicle coordinates: the four rays through the corners of its image rectangle, apex at the camera centre. This works for any camera, any mounting (roll, pitch, yaw included), and for fisheye by swapping the unprojection; nothing is warped, the image stays as it is.
-3. The network predicts, per pixel group, a distribution over depth bins (depth z along the optical axis, the natural coordinate of a projection; plus a ground hypothesis, 2.3).
-4. A depth bin [z_k, z_k+1] cuts the frustum into a slab (narrow near, wide far); the feature times the bin's probability is spread over the BEV cells the slab covers, weighted by the covered share.
-5. Steps 2 and 4 are pure geometry: for a given calibration they are computed once into a sparse table (pixel group, depth bin) -> (BEV cells, weights). Because it is precomputed, the overlap can be exact (polygon clipping of the slab's ground footprint against the cells), no Gaussian approximation is needed. At run time the lift is one sparse matrix product. When the calibration changes (another vehicle, an online re-calibration), the table is rebuilt (milliseconds).
+Mirko's proposals are the two standard lift families of the literature; both are built, on the same backbone and the same output interface, and compared.
 
-### 2.2 Why frustums and not rays
-A single ray through each pixel-group centre leaves gaps between rays at range (at 50 m two neighbouring stride-16 columns at 1600 px width are about 0.6 m apart, more than a cell) and hits cells unevenly; the frustum covers the ground without gaps and splits mass by area, so far cells get the right share. It also gives the lateral uncertainty for free: the frustum's width is the angular resolution of the feature map.
+### 2.1 Common parts
+- Image backbone, ImageNet-pretrained (ResNet-34 default; ResNet-18 / EfficientNet-B0 as speed variants), FPN to one feature map at stride 8 of the half-resolution image (decided: 60 m, no horizon strip).
+- Output interface of every lift: a voxel feature volume V[x_car, y_car, z_car, C] in vehicle coordinates - 0.5 m cells, x 0..60 m, y -26..26 m, z_car from -1 to 3 m in 8 slices of 0.5 m - then height into channels: reshape to BEV[x, y, Z * C] and a 1 x 1 conv to C ("feat[z_car]"; Simple-BEV 2206.07959 and Fast-BEV 2301.12511 do this; FlashOcc 2311.12058 is the same reshape in the other direction).
+- All geometry is a lookup table computed once from the calibration (intrinsics + extrinsics in vehicle coordinates), rebuilt in milliseconds when the calibration changes; the network only reads the table.
 
-### 2.3 Ground hypothesis
-For a frustum that points below the horizon, its lower and upper edge rays meet the road plane (z = 0 in vehicle coordinates) at d_near and d_far (capped when the upper edge looks above the horizon); this interval, widened by the pitch uncertainty (sigma_d ~ d^2 sigma_theta / h), is a fixed distribution over the depth bins, precomputed per calibration. A learned ground probability p_g mixes this sharp hypothesis with the learned range distribution: road surface and markings take the ground hypothesis, raised objects the learned bins. Dynamic pitch (braking, bumps) and slope changes enter only r_g and sigma_theta.
+### 2.2 Lift P ("pull", backward): world points at elevations, projected into the image
+1. For every BEV cell (x, y) and every elevation z_k: the 3D point (x, y, z_k) in vehicle coordinates is projected into the camera with the calibration -> image position (u, v) on the feature map, plus a valid flag (in front of the camera and inside the image).
+2. Lookup table: for every voxel (x, y, k) its (u, v) - a sampling grid of size 120 x 104 x 8.
+3. Run time: bilinear sampling of the feature map at those positions (grid_sample) -> V[x, y, k, C]; then height into channels.
+4. Learned elevations (Mirko): the 8 heights z_k are learnable parameters (initialised at the slice centres); the projection is then recomputed in every forward pass (a 100 k-point matrix product, negligible), so the gradient moves the heights. A later variant: per-cell height offsets predicted by the network (the deformable reference points of BEVFormer 2203.17270, without its attention stack).
+- What it does not know: depth - a feature is copied to every voxel on its ray; the stack of heights and the trunk must sort out where along the ray the content is (radar helps most here).
+- Basis: OFT 1811.08188 (orthographic feature transform, the first pull lift), Simple-BEV 2206.07959 (parameter-free bilinear sampling at multiple heights, height reshaped into channels; argues that resolution and batch size matter more than the lift; camera + radar 55.8 vs camera 47.6 mean IoU on its README (digest)), Fast-BEV 2301.12511 (the table as a gather: view transform 0.006 ms on CUDA at 256 x 704; uniform fill along the ray), BEVFormer (learned sampling offsets).
+- Code: aharley/simple_bev (MIT) - the closest match, readable plain PyTorch; Fast-BEV (licence not stated: ideas only).
 
-### 2.4 Paper and code basis
-| piece | paper (what we take) | code (licence) |
-|---|---|---|
-| lift by a learned depth distribution along camera rays, splat to BEV | LSS 2008.05711 (lit): per-pixel categorical depth times feature, sum into BEV | nv-tlabs/lift-splat-shoot (NVIDIA Source Code License, research only: re-implement, never copy) |
-| categorical depth with depth supervision | CaDDN 2103.01100 (lit: LID bins, focal depth loss), BEVDepth 2206.10092 (lit: camera-aware depth gate, lidar depth loss) | OpenPCDet / CaDDN (Apache-2.0), BEVDepth (MIT) |
-| parameter-free point sampling (a control) | Simple-BEV 2206.07959 (lit) | aharley/simple_bev (MIT) |
-| precomputed indices / lift as one sparse matrix | BEVPoolV2 2211.17111 (lit), MatrixVT 2211.10593 (lit), Fast-BEV 2301.12511 (lit: table lift 0.006 ms) | BEVDet `bev_pool_v2` (Apache-2.0), MatrixVT (MIT); our own sparse matrix in plain PyTorch |
-| footprint of a pixel region instead of a ray | exact: frustum-slab footprint by polygon clipping in the precomputed table (our own, plain geometry); Gaussian approximation as a cheaper variant or reference: Mip-NeRF 2103.13415 (lit): the pixel cone (radius = pixel width x 2/sqrt(12)) between two depths t0, t1 has a closed-form Gaussian (mean, covariance); its xy block is the BEV footprint of one (pixel group, range bin). Zip-NeRF 2304.06706 (lit): the mass of a Gaussian inside one cell by erf - the per-cell weight of the table. Mip-Splatting 2311.16493 (abstract): a cell-sized filter against aliasing of sub-cell splats | google/mipnerf (Apache-2.0, JAX, archived: formulas only); Zip-NeRF: no official code |
-| depth variance sets the footprint width; one splat interface for camera and radar | GaussianLSS 2504.01957 (lit), GaussianCaR 2602.08784 (lit: camera and radar Gaussians in one rasteriser, 0.5 m, 75.6 ms on an RTX 4090; its Gaussian size is depth std x 0.5 - we replace it by the frustum-slab footprint) | GaussianLSS (MIT), GaussianCaR (Apache-2.0; already cloned in WSL `~/work/gaussiancar`) |
-| novelty | the scout found no published BEV lift that uses a pixel-region (frustum / cone) footprint integral (three searches, 2026-10-25): the frustum lift is our own combination of Mip-NeRF geometry with an LSS / CaDDN depth head | - |
-| ground prior | OFT 1811.08188 (lit), Cam2BEV 2005.04078 (lit: IPM breaks on raised objects - hence the mixture) | Gen-LaneNet homography utils (Apache-2.0) for cross-checks |
+### 2.3 Lift S ("splat", forward): each feature pixel along its ray, with Mirko's intermediate coordinates
+1. For every feature pixel (u, v) and every depth bin d: the point in camera coordinates is P_cam = z_d * K^-1 [u, v, 1] = (x_n z_d, y_n z_d, z_d) - the "stretched" coordinates (x_cam * z_cam, y_cam * z_cam, z_cam); then P_car = R P_cam + t with the calibration, and its voxel index (ix, iy, iz) in the volume above, plus a valid flag.
+2. Lookup table: for every (u, v, d) its voxel index.
+3. Run time: the network predicts per feature pixel a feature c (C channels) and a depth distribution alpha over the D bins; each (u, v, d) adds alpha_d * c into its voxel (scatter-add with the precomputed index, no frustum tensor kept: the BEVPoolV2 idea in plain PyTorch); then height into channels.
+- Depth bins: D bins over 1-60 m (linear-increasing width, CaDDN 2103.01100); depth supervision possible later (lidar, not downloaded; BEVDepth 2206.10092: the depth loss alone +2.2 mAP) and a camera-aware gate on the depth head (BEVDepth: intrinsics / extrinsics through an MLP as a squeeze-excitation gate - needed for "any rig").
+- Basis: LSS 2008.05711 (frustum points, categorical depth, sum pooling; nuScenes: vehicles 32.07 vs OFT 30.05 IoU, drivable 72.94 vs 71.69, lane boundary 19.96 vs 18.07), BEVDepth (camera-aware depth, depth loss), BEVPoolV2 2211.17111 (precomputed indices, no frustum tensor).
+- Code: BEVDepth (MIT) for the depth head and its camera-aware gate; LSS (NVIDIA research-only licence: re-implemented, never copied); our own scatter-add with the table.
 
-### 2.5 Tests (what it must do -> how we prove it)
+### 2.4 Lift PD ("pull with depth weight"): keeps the uncertainty and is a pure gather (recommended, Mirko 2026-10-25: "what maintains uncertainty and is fast")
+| lift | keeps the distance uncertainty | inference cost | gaps at far range |
+|---|---|---|---|
+| P (pull, Simple-BEV) | no: the feature is copied to every voxel on its ray | one gather per voxel | none (every voxel samples) |
+| S (splat, LSS) | yes: a depth distribution per pixel | scatter-add over pixels x bins (atomics); fast only with a custom kernel (BEVPoolV2 0.82 ms at 640 x 1600, GPU not named) | yes: one voxel per (pixel, bin), far voxels between rays stay empty |
+| PD (pull with depth weight) | yes: the same depth distribution as S | two gathers per voxel and a product | none |
+1. The image head predicts per feature pixel a feature c (C channels) and a depth distribution over the D bins (categorical, as S; it can be supervised like BEVDepth).
+2. Lookup table per voxel (x, y, z_k): its image position (u, v) AND its depth along the optical axis z_cam, expressed as a fractional bin index - pure geometry from the calibration.
+3. Run time: V(x, y, z_k) = c(u, v) * p(z_cam | u, v) - bilinear gather of the feature and linear interpolation of the depth probability at the voxel's own depth. Then height into channels.
+- The depth distribution is the explicit distance uncertainty: a voxel receives the feature only as far as the pixel believes its content lies at that depth. A multi-modal distribution (road behind a car top) is kept.
+- Cost for one camera: 120 x 104 x 8 = 100 k voxels x 64 channels, about 6 M multiply-adds plus the gathers - well below a millisecond (estimate, to be measured), no scatter, no custom CUDA, easy to export (TensorRT has grid sample).
+- Learned elevations (Mirko's proposal) work unchanged: the table is then recomputed per forward pass from the learned z_k.
+- Parametric variant PD-G: the depth distribution as a mean and a variance per pixel (or a mixture of two Gaussians: ground and object), so p(z_cam | u, v) = N(z_cam; mu, sigma) is evaluated analytically at the voxel's depth - fewer outputs, a continuous sigma as the distance uncertainty (the GaussianLSS 2504.01957 idea, without its rasteriser).
+- Basis: the pull-with-depth combination is published as depth-aware backward projection, e.g. FB-BEV (forward-backward view transform, ICCV 2023; arXiv id from memory, to be verified by a scout) and depth-weighted feature aggregation (DFA3D, to be verified); the pieces are LSS / CaDDN / BEVDepth (depth head), Simple-BEV / Fast-BEV (gather table), GaussianLSS (variance as the footprint).
+
+### 2.5 Which one, and what the literature says
+- In the literature the families are close for segmentation (LSS vs OFT: +2.0 vehicles, +1.3 drivable, +1.9 lane boundary for the splat); Simple-BEV argues that the parameter-free pull is enough once resolution, batch size and radar are right.
+- Plan: S1 compares PD (recommended), P (no depth: the null of the depth weight) and S (splat: the classic) on the same backbone, trunk, head and budget; PD-G and learned elevations as variants of PD; the cheaper wins a tie.
+- Shelved for later (draft 3): the frustum-slab footprint (exact area weights instead of one voxel per point) and the ground hypothesis; they are refinements of S and come back only if S wins and far range is the weak point.
+
+### 2.6 Tests (what it must do -> how we prove it)
 | requirement | test |
 |---|---|
-| the table is geometrically right | synthetic: a point at a known (x, y, z) projected into the image; its pixel group's frustum at the true depth bin must cover the cell of (x, y); for every calibration of the dataset and for random synthetic rigs |
-| mass is conserved | the weights of each (group, bin) inside the grid sum to its covered area fraction; a uniform image gives the analytic coverage map |
-| rig independence | move the camera 1 m forward in the calibration and shift the scene accordingly: the lifted BEV moves by 2 cells and is otherwise identical; rotate the camera (roll / pitch) with a synthetic image rendered for that pose: same BEV |
-| the lift can carry the truth (oracle) | feed one-hot depth from a known depth (lidar if downloaded, else rendered synthetic scenes) and the GT semantics of the image: the lifted BEV must reproduce the GT BEV layers up to the frustum resolution; this gives the upper bound of the lift |
-| it is differentiable | torch.autograd.gradcheck on a small table; gradient reaches the depth head and the backbone |
-| it is fast | ms per frame, batch 1, idle GPU, against Fast-BEV's table lift as the reference |
+| the tables are geometrically right | synthetic: a point at a known (x, y, z) in vehicle coordinates; P: its voxel's (u, v) must equal the projection of the point; S: the pixel of its projection at its true depth bin must index its voxel; for every calibration and for random synthetic rigs (roll, pitch, yaw, height, other intrinsics) |
+| P, PD and S agree on geometry | a one-hot depth and a feature map that is 1 at one pixel: S's voxel must be the voxel where PD is non-zero, and one of those where P samples that pixel |
+| the depth weight is right | PD with a uniform depth distribution must equal P / D; with a one-hot depth at a known bin only the voxels at that depth receive the feature |
+| rig independence | move the camera 1 m forward in the calibration and shift the scene: the BEV moves 2 cells, otherwise identical; rotate the camera with a synthetic image rendered for that pose: same BEV |
+| the lift can carry the truth (oracle) | S with one-hot depth from a known depth (lidar if downloaded, else rendered synthetic scenes) and the GT semantics of the image: the lifted BEV must reproduce the GT layers; this is the upper bound of the lift |
+| learned heights learn | the gradient reaches z_k (non-zero, finite); on a synthetic scene with content at one height the heights move towards it |
+| differentiable | torch.autograd.gradcheck on small tables; the gradient reaches the depth head and the backbone |
+| fast | ms per frame per lift, batch 1, idle GPU; Fast-BEV's 0.006 ms gather as the reference for P |
 
 ## 3. Radar: a learned density per detection
 
@@ -160,7 +181,7 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 | stage | content | control |
 |---|---|---|
 | S0 | GT generation + viewer + GT checks; geometry tables with their unit tests | - |
-| S1 | camera only: frustums + learned depth distribution (+ ground hypothesis), seg head | ray-point lift (LSS-like), uniform along the frustum (Fast-BEV-like) |
+| S1 | camera only: lift PD (pull with depth weight; variants PD-G, learned elevations), seg head | P (pull without depth, Simple-BEV-like), S (splat, LSS-like) |
 | S2 | radar only: learned density g, reconstruction test, aux heads | point / pillar (R0), fixed polar Gaussian (R1) |
 | S3 | fusion | S1, S2 |
 | S4 | temporal: ego warp, stationary memory, moving memory with flow | single frame; memory without flow |
@@ -173,9 +194,11 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - no horizon strip for now: one image stream, half resolution, stride 8 (pixel groups of 16 x 16 full-resolution pixels); the full-resolution horizon strip (stride 4 over the rows whose ground lies at 15-100 m) stays a later option
 - what that means (geometry for a camera like CAM_FRONT, f ~ 1266 px, h ~ 1.5 m): across the frustum is 0.25 m wide at 20 m and 0.76 m at 60 m (fine for 0.5 m cells); along the range a group covers 3.4 m of road at 20 m, 10 m at 35 m, 21 m at 50 m - beyond about 20 m single-frame road positions come from the learned depth distribution inside the frustum and from temporal fusion (each far cell is seen again closer), which section 7 must therefore deliver and the per-range evaluation must show
 
+- camera lift: image backbone + lookup tables, height kept as channels (feat[z_car]); lifts P / S / PD compared in S1, PD recommended because it keeps the depth uncertainty and is a pure gather (section 2)
+
 ### Proposed, not yet objected to
 - depth bins: 80, 1-60 m, linear-increasing spacing (CaDDN LID: a few cm near, about 1.5 m at 60 m)
-- ground hypothesis in S1 as its own arm: fixed per-calibration interval from the frustum's edge rays on the road plane z = 0, widened by sigma_d ~ d^2 sigma_theta / h with one learned global sigma_theta; one learned ground probability per group mixes it with the free depth distribution; a per-frame pitch / road-plane input later, if the slope errors show up
+- shelved for now (Mirko chose the lift families of section 2): the frustum-slab footprint and the ground hypothesis as an S1 arm; previously proposed as: fixed per-calibration interval from the frustum's edge rays on the road plane z = 0, widened by sigma_d ~ d^2 sigma_theta / h with one learned global sigma_theta; one learned ground probability per group mixes it with the free depth distribution; a per-frame pitch / road-plane input later, if the slope errors show up
 
 ### Open
 3. Radar support window and the form of g (MLP on offsets, or a categorical over a polar window as in draft 2); the sensor prior.
