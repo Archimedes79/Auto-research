@@ -195,6 +195,7 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - what that means (geometry for a camera like CAM_FRONT, f ~ 1266 px, h ~ 1.5 m): across the frustum is 0.25 m wide at 20 m and 0.76 m at 60 m (fine for 0.5 m cells); along the range a group covers 3.4 m of road at 20 m, 10 m at 35 m, 21 m at 50 m - beyond about 20 m single-frame road positions come from the learned depth distribution inside the frustum and from temporal fusion (each far cell is seen again closer), which section 7 must therefore deliver and the per-range evaluation must show
 
 - camera lift: image backbone + lookup tables, height kept as channels (feat[z_car]); lifts P / S / PD compared in S1, PD recommended because it keeps the depth uncertainty and is a pure gather (section 2)
+- first building block FIXED (Mirko, 2026-10-25): the camera block produces the world voxel map with lift PD (pull with depth weight); P and S stay in S1 only as controls; the next design topic is the radar
 
 ### Proposed, not yet objected to
 - depth bins: 80, 1-60 m, linear-increasing spacing (CaDDN LID: a few cm near, about 1.5 m at 60 m)
