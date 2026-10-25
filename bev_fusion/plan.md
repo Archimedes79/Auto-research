@@ -135,9 +135,11 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 | rig independence | move a radar in the calibration and transform its detections consistently: the radar BEV is unchanged; drop a radar: only its area changes |
 | it helps | radar-only aux heads above the null; fusion above camera-only (section 4) |
 
-## 4. Fusion
-- Per cell gate from both BEVs and their confidence channels (camera: mass, range variance; radar: support weight, Doppler observability, age); modality dropout; radar-only auxiliary heads so the radar branch must learn on its own.
-- Basis: BEVFusion-style concat + conv (lit, SN20 of the lane project), gated / confidence-aware fusion in CRN and RCBEVDet (lit); modality dropout as in robust fusion papers (to collect).
+## 4. Fusion (after the temporal fusion of each branch, at camera time; Mirko, 2026-10-25)
+- Main: concatenation of [camera planes (t_c); radar planes moved to t_c; their mass and dt channels] -> 3 x 3 conv (the BEVFusion ConvFuser style); modality dropout; radar-only auxiliary heads so the radar branch must learn on its own.
+- Fallback 1 (proven camera-radar fusion, GaussianCaR, Apache-2.0, `literature/code/gaussiancar_fusion.md`): its FeatureRectifyModule - per-channel and per-cell sigmoid cross-gates between the camera and radar maps (about 30 lines of plain torch) - instead of the plain concat; our mass / dt channels as an extra input of the gate as the ablation.
+- Fallback 2 (strong reference, CRN, MIT, `literature/code/crn_fusion.md`): deformable cross-attention between camera and radar BEV (multi-modal feature aggregation), ported with grid_sample.
+- Basis: BEVFusion-style concat + conv (lit, SN20 of the lane project), GaussianCaR CMX fusion (lane divider 50.1 / drivable 82.9 IoU on nuScenes val, 75.6 ms whole network on an RTX 4090), CRN (fusion 6.8 of 44 ms); comparison table `literature/code/fusion_blocks_comparison.md`.
 - Tests: camera off -> radar-only result, radar off -> camera-only result (no collapse); shuffled radar (from another frame) -> the gain over camera-only disappears (null control); gate maps plotted over range (radar should dominate far, camera near).
 
 ## 5. Sensor timing
@@ -147,13 +149,22 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - Tests: the time-alignment tests of 3.3; a camera test with a synthetic static scene and a time offset; latency budget per block.
 
 ## 6. BEV network
-- Grid around the vehicle (front-only first: x 0..60 m, y -26..26 m, 120 x 104 cells; full surround, also to 60 m, once all cameras are used), 0.5 m; coordinate channels (x, y, range, azimuth per sensor coverage) appended; ResNet / FPN trunk.
-- Basis: BEVFusion / CVT decoders (lit), CenterPoint trunk (lit, MIT).
+- Grid around the vehicle (front-only first: x 0..60 m, y -26..26 m, 120 x 104 cells; full surround, also to 60 m, once all cameras are used), 0.5 m; coordinate channels (x, y, range, azimuth per sensor coverage) appended.
+- Main trunk after the fusion (standard, as the best camera(-radar) BEV papers - BEVDet / BEVDepth / CRN / DualBEV): a ResNet-style BEV encoder with 3 stages (strides 2, 4, 8: 0.5 m -> 1, 2, 4 m; channels 2C, 4C, 8C, BasicBlocks) and an FPN_LSS-style decoder (the two deepest scales upsampled and concatenated, convs, upsampled back to 0.5 m), then the semantic head (section 8). The grid divides cleanly: 120 x 104 -> 60 x 52 -> 30 x 26 -> 15 x 13. Option: initialise it from DualBEV's pre-trained `img_bev_encoder_backbone.` / `img_bev_encoder_neck.` (in our checkpoint, 80 input channels: a 1 x 1 projection of the fused map to 80 channels in front; pre-trained on detection, so an ablation, not a given).
+- Fallback (proven camera-radar trunk, GaussianCaR): its 4-stage two-stream fuser (FeatureRectify + cross-attention fusion at each of 4 scales, stride-2 convs + ResBlocks between them) and its DPT-style decoder over the 4 fused scales - fusion inside the pyramid instead of once before it; pure torch except its rasteriser, which we do not need (our inputs are already BEV maps).
+- Basis: BEVDet / CRN / DualBEV BEV encoders (CustomResNet + FPN_LSS; `literature/code/dualbev.md`, `crn_fusion.md`), GaussianCaR fuser + DPT head (`gaussiancar_fusion.md`), BEVFusion / CVT decoders (lit), CenterPoint trunk (lit, MIT).
 - Tests: overfit one scene to near-perfect IoU (wiring); ms per frame.
 
 ## 7. Temporal fusion (ego motion, stationary environment, moving targets)
 ### 7.1 Main design T2: temporal fusion per branch, one splat function (Mirko, 2026-10-25)
 - camera branch, own time axis (frames t_k, 12 Hz): past camera BEVs -> current camera time t_c; radar branch, own time axis (sweeps t_j of all radars): past detections / radar BEVs -> radar time t_r (the newest sweep), radar memory and radar-only aux heads there; then the radar BEV hops from t_r into t_c; finally [camera planes (t_c); radar planes (t_c); mass and dt channels] are concatenated -> fusion convs
+- three prediction steps, all with the same splat (ego speed v and yaw rate omega as inputs: a vehicle reports them, for nuScenes `ego_speed_yawrate()` derives them from consecutive poses):
+  1. vision: the camera temporal state of the previous camera frame -> t_c, dt_v = t_c - t_c,prev (about 1/12 s)
+  2. radar: the radar temporal state of the previous sweep -> t_r, dt_r = t_r - t_r,prev (per radar sweep; or per detection at point level)
+  3. radar to vision: the radar temporal state at the newest radar time -> t_c, dt = t_c - t_r,last (either sign)
+  each branch then fuses its own current planes with its predicted state (concat + conv; ConvGRU as the variant), the result is the new state of that branch and feeds the next frame (recurrent, frame by frame)
+- block diagrams: the splat function and this chain were shown in the chat of 2026-10-25 (to be saved as the architecture drawing of the S4 card)
+- fallback for the temporal part (proven): FIERY's ego warp (pull by the SE(2) of the poses, `literature/code/fiery_ego_warp.md`) + a ConvGRU per branch = arm A
 - one function for all three moves (`training/splat.py`): v_hat = f_theta(F(x, y)) - a per-cell MLP as 1 x 1 convs with 2 outputs (object velocity, m/s, source axes; last layer zero-initialised, so training starts as pure ego compensation; bounded by v_max tanh); position p' = R(-omega dt) (p + v_hat dt - d), d = (v dt, 1/2 v omega dt^2) - ego speed v and yaw rate omega (what a vehicle reports), translation first order in omega (no division by omega), rotation exact (one cos / sin per frame); dt either sign
   - accuracy (`temp/setup/check_ctrv_taylor.py`, static points up to 60 m): a first-order ROTATION would cost distance x (omega dt)^2 / 2 - chained over camera frames 0.30 m in a city turn (8 m/s, 0.5 rad/s, 0.5 s), 1.24 m in a tight turn; with the exact rotation the rest is of order v omega^2 dt^3 (millimetres per frame); long histories are carried frame by frame
 - the splat: forward warp of each source (grid cell or radar detection) to the 4 cells around p', bilinear, normalised, optional importance z (softmax splatting: the more important source wins a collision); mass = sum of the kernel weights is the confidence channel (0 where nothing landed)

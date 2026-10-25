@@ -55,6 +55,16 @@ def splat_positions(p, dt, v, omega, v_obj=None):
     return torch.stack([c * qx + s * qy, -s * qx + c * qy], -1)
 
 
+def ego_speed_yawrate(T_src, T_tgt, dt):
+    """Ego speed v and yaw rate omega between two ego poses (4x4, ego -> world; batch (B, 4, 4) or single) over dt,
+    consistent with splat_positions: omega = heading change / dt, v = forward displacement in the source frame / dt.
+    A vehicle reports v and omega directly (wheel speed, yaw-rate sensor); nuScenes gives poses, hence this helper."""
+    rel = torch.linalg.inv(T_src) @ T_tgt                       # target ego pose in the source ego frame
+    dth = torch.atan2(rel[..., 1, 0], rel[..., 0, 0])
+    dt = torch.as_tensor(dt, dtype=rel.dtype, device=rel.device)
+    return rel[..., 0, 3] / dt, dth / dt
+
+
 class VelocityHead(nn.Module):
     """f_theta: per-cell MLP as 1x1 convs, feature (B, C, ...) -> object velocity (B, 2, ...) in m/s, source axes.
 
@@ -206,6 +216,20 @@ def _selftest():
     v_used = 40.0 * math.tanh(8.0 / 40.0)
     assert abs(cx_v - (30.25 + v_used * 0.5)) < 1e-6, "moving blob with velocity"
     assert abs(_centroid(_point_mass(bev, grid, None), grid)[0] - 30.25) < 1e-9, "without velocity it stays (lags)"
+    # 9 speed and yaw rate from poses: an exact constant-turn-rate drive is recovered (v within the first-order
+    #   translation model, omega exactly), and the splat with them moves static points like the poses do
+    v_true, w_true, dt = 12.0, 0.4, 1 / 12
+    th = w_true * dt
+    T0 = torch.eye(4, dtype=dt64)
+    T1 = torch.eye(4, dtype=dt64)
+    T1[:2, :2] = torch.tensor([[math.cos(th), -math.sin(th)], [math.sin(th), math.cos(th)]], dtype=dt64)
+    T1[0, 3], T1[1, 3] = v_true / w_true * math.sin(th), v_true / w_true * (1 - math.cos(th))
+    v_est, w_est = ego_speed_yawrate(T0, T1, dt)
+    assert abs(w_est.item() - w_true) < 1e-12 and abs(v_est.item() - v_true) < v_true * th * th / 6 + 1e-12
+    pw = torch.tensor([[[35.0, -6.0]]], dtype=dt64)              # static point in frame 0
+    via_pose = (torch.linalg.inv(T1) @ torch.tensor([35.0, -6.0, 0.0, 1.0], dtype=dt64))[:2]
+    via_splat = splat_positions(pw, dt, v_est, w_est)[0, 0]
+    assert (via_splat - via_pose).norm() < 1e-3, "splat with v, omega from poses = pose transform"
     print("splat selftest ok: exact 2-cell shift, landing point = formula (vs exact CTRV within v w^2 dt^3), "
           "object velocity, forward-back, mass conservation, collision by importance, gradcheck, velocity head learns, "
           "moving blob")
