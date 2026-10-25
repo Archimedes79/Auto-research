@@ -11,11 +11,12 @@ Columns
   runs / failed   ledger rows that ran / of them failed, timed out, stalled or refused (gpu_busy)
   GPU h           sum of the durations in hours (before the tick of ROADMAP P2 a chained run's duration includes its wait: an upper bound)
   exps            distinct experiment numbers with a run
-  decisions       decide.py verdicts (decision.json, one per experiment arm pair) and written decisions of rows without one: KEEP / CUT / TIE /
+  decisions       decide.py verdicts (one per decision*.json file) and the written decisions of the other rows: KEEP / CUT / TIE /
                   INC(onclusive) / other; a written "rule met" counts as KEEP, "rule not met" as CUT, everything else written ("confirmed",
-                  "fixed", ...) as other; "reference" rows are controls and not counted
-  pred hit        predictions met / predictions judged: decision.json (|error| inside the experiment's band) and written "prediction ... met /
-                  missed" (a row with any "missed" counts as missed)
+                  "fixed", ...) as other; "reference" rows are controls and not counted; a row whose decision carries "decide.py" is counted
+                  through its decision file only
+  pred hit        written predictions met / judged ("prediction ... met"; any "missed" or "not met" after the word counts as missed): the
+                  person or lead who wrote it knew the prediction's own tolerance, the decision files do not, so they give only the error
   mean err        mean absolute prediction error of the decision files (in the headline metric)
   TEST            rows of the TEST log that name the loop and used TEST
 Written decisions are read with simple patterns; `-v` lists every row with its class, so a person can check the count.
@@ -58,7 +59,7 @@ def written(text):
     i = t.find("prediction")
     if i >= 0:
         seg = t[i:]
-        p = "missed" if re.search(r"\bmissed\b", seg) else "met" if re.search(r"\bmet\b", seg) else None
+        p = "missed" if re.search(r"\bmissed\b|\bnot met\b", seg) else "met" if re.search(r"\bmet\b", seg) else None
     return v, p
 
 
@@ -73,31 +74,27 @@ def collect(root=None, cfg=None):
     decisions = []
     for d in glob.glob(os.path.join(root, "experiments", "*", "decision*.json")):
         try:
-            decisions.append(json.load(open(d, encoding="utf-8")))
-        except ValueError:
-            pass
+            d = json.load(open(d, encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(d, dict):
+            decisions.append(d)
     test_log = os.path.join(root, cfg.get("test_log", ""))
     test_rows = open(test_log, encoding="utf-8").read().splitlines() if os.path.isfile(test_log) else []
     out = {name: dict(loop=name, runs=0, failed=0, gpu_s=0.0, exps=set(), KEEP=0, CUT=0, TIE=0, INCONCLUSIVE=0, other=0, keep2=0,
                       pred_met=0, pred_n=0, errs=[], test=0, detail=[]) for name in loops}
-    with_file = set()
     for d in decisions:
-        L = out.get(loop_of(number(d.get("id")), loops))
+        L = out.get(loop_of(number(str(d.get("id"))), loops))
         if L is None:
             continue
-        with_file.add(number(d.get("id")))
         v = d.get("verdict", "")
         L[v if v in VERDICTS else "other"] += 1
         if v == "KEEP" and len(d.get("diffs") or []) >= 2:
             L["keep2"] += 1
-        m = re.search(r"error ([-+]?\d+\.\d+)", d.get("prediction") or "")
+        m = re.search(r"error ([-+]?\d+\.\d+)", str(d.get("prediction") or ""))
         if m:
-            err = abs(float(m.group(1)))
-            L["errs"].append(err)
-            L["pred_n"] += 1
-            band = float(d.get("band") or 0.010)
-            L["pred_met"] += err <= band
-        L["detail"].append(f"  {d.get('id')}.{d.get('variant')} vs {d.get('control')}: decision.json {v} ({(d.get('prediction') or '')[:70]})")
+            L["errs"].append(abs(float(m.group(1))))
+        L["detail"].append(f"  {d.get('id')}.{d.get('variant')} vs {d.get('control')}: decision file {v} ({str(d.get('prediction') or '')[:70]})")
     for r in rows:
         n = number(r["id"])
         L = out.get(loop_of(n, loops))
@@ -112,8 +109,8 @@ def collect(root=None, cfg=None):
         L["exps"].add(n)
         dec = r.get("decision") or ""
         v, pr = written(dec.split(" | decide.py")[0] if "decide.py" in dec else dec)
-        if n in with_file and "decide.py" in dec:
-            v = None  # counted through its decision file
+        if "decide.py" in dec:
+            v = None  # the verdict of this arm is counted through its decision file
         if v in VERDICTS + ("other",):
             L[v] += 1
         if pr:
@@ -166,7 +163,9 @@ def selftest():
     assert (L["runs"], L["failed"], len(L["exps"])) == (4, 1, 2), L
     assert abs(L["gpu_s"] - 7200) < 1e-6
     assert (L["KEEP"], L["CUT"], L["other"], L["keep2"]) == (1, 1, 0, 1), L
-    assert (L["pred_met"], L["pred_n"]) == (1, 2), L
+    assert (L["pred_met"], L["pred_n"]) == (0, 1) and L["errs"] == [0.005], L
+    assert written("prediction lanes found >= 0.74 not met") == ("other", "missed")
+    assert written("rule (Q >= 0.7) not met: prediction met") == ("CUT", "met")
     assert L["test"] == 1 and out["2"]["test"] == 0 and out["2"]["other"] == 1 and out["2"]["pred_met"] == 1
     assert "| 1 | 4 | 1 | 2.0 | 2 | 1 | 1 |" in table(out, md=True)
     shutil.rmtree(root)

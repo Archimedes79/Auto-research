@@ -40,9 +40,13 @@ def save(rows):
 def render():
     rows = load()
     lines = ["# Run ledger", "", "Generated from the csv by `autoresearch/tools/ledger.py render` - edit the csv (or use `ledger.py note`), not this file.", ""]
-    import metrics  # the loop table (ROADMAP P3) at the head: how much each loop ran, decided and predicted
+    try:  # the loop table (ROADMAP P3) at the head: how much each loop ran, decided and predicted; it never stops a render
+        import metrics
+        loops = metrics.table(metrics.collect(), md=True)
+    except Exception as e:  # noqa: BLE001
+        loops = f"(metrics.py failed: {e!r})"
     lines += ["## Loops", "", "From `autoresearch/tools/metrics.py` (columns explained there; `-v` shows how each row was counted).", "",
-              metrics.table(metrics.collect(), md=True), "", "## Runs", ""]
+              loops, "", "## Runs", ""]
     lines += ["| id | status | hypothesis | prediction | rule | basis | seed | result | decision | started | min | commit |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: r.get("started") or "~"):
         mins = f"{float(r['duration_s']) / 60:.0f}" if r.get("duration_s") not in ("", None) else ""
@@ -50,7 +54,7 @@ def render():
         lines.append(f"| {c(r['id'])} | {c(r.get('status'))} | {c(r.get('hypothesis'))} | {c(r.get('prediction'))} | {c(r.get('rule'))} | {c(r.get('basis'))} | {c(r.get('seed'))} | "
                      f"{c(r.get('result'))[:120]} | {c(r.get('decision'))} | {c(r.get('started'))[:16]} | {mins} | {c(r.get('commit'))} |")
     md = P.path("ledger_md")
-    open(md, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    P.atomic_write(md, "\n".join(lines) + "\n")
     print(md, len(rows), "rows")
 
 
@@ -58,7 +62,10 @@ def tail(loop=None, n=15):
     import metrics
     rows = load()
     if loop:
-        lo, hi = P.cfg().get("loops", {})[loop]
+        loops = P.cfg().get("loops", {})
+        if loop not in loops:
+            sys.exit(f"loop {loop} is not in project.json 'loops' ({', '.join(loops) or 'none'})")
+        lo, hi = loops[loop]
         rows = [r for r in rows if (k := metrics.number(r["id"])) is not None and lo <= k and (hi is None or k <= hi)]
     rows = sorted(rows, key=lambda r: r.get("started") or "~")[-n:]
     for r in rows:

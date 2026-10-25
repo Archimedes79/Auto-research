@@ -1,2 +1,4 @@
 granted,until,path,decision,note
 2026-10-25T15:56,2026-10-26T03:56,../autoresearch/tools/,D8,"D8 tool work: loop-18 lead (P2, P8) and the data chat (P3, P4, P7, small items)"
+2026-10-25T16:16,2026-10-25T17:16,../.claude/settings.json,D8,"D8 P4 review fix: hook command fails open (|| true), refusal as JSON"
+2026-10-25T16:16,2026-10-25T17:16,project.json,D8,D8 P4 review fix: protect settings.local.json and the champion / control config cards
