@@ -1,0 +1,247 @@
+"""Lift PD ("pull with depth weight"): camera features -> world voxel volume -> BEV with height as channels.
+
+For every voxel (x, y, z_k) of a grid in vehicle coordinates the lookup table holds its image position and its depth
+along the optical axis; the lift gathers the image feature there and multiplies it by the predicted depth probability
+at the voxel's own depth:
+
+    V(x, y, z_k) = feature(u, v) * p(z_cam | u, v)
+
+Both gathers are grid_sample calls (bilinear in the image, trilinear in image x depth), so the lift is two gathers and a
+product: no scatter, no custom CUDA, exportable. The depth distribution is kept, so the distance uncertainty is kept.
+Basis: DualBEV 2403.05402 (HeightTrans, probability sampling), FastBEV++ 2512.08237 (pure-gather form), FB-BEV
+2308.02236 (interpolation between adjacent depth bins) - re-implemented here, nothing copied.
+See bev_fusion/plan.md section 2.
+
+Conventions
+- vehicle frame: x forward, y left, z up (metres); camera frame: x right, y down, z forward (OpenCV)
+- T_cam_car: 4x4, maps vehicle points to camera points; K: 3x3 intrinsics of the ORIGINAL image; ida: 3x3 image
+  augmentation (resize / crop / flip) applied after K, so pixel = ida @ K @ P_cam / z
+- pixel coordinates have the centre of pixel i at i (OpenCV); the feature map covers the (augmented) image, so the
+  normalised sampling coordinate is 2 (u + 0.5) / W_img - 1 for any stride
+- depth bins: a 1-D tensor of bin centres (metres, increasing), the same bins the depth head predicts
+
+Run the self-test: python training/lift_pd.py   (CPU is enough; prints the timing on CUDA if available)
+"""
+from dataclasses import dataclass
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+@dataclass
+class Grid:
+    """Voxel grid in vehicle coordinates (cell centres); defaults: front camera, 60 m, 0.5 m cells, 8 height slices."""
+    x_min: float = 0.0
+    x_max: float = 60.0
+    y_min: float = -26.0
+    y_max: float = 26.0
+    res: float = 0.5
+    z_levels: tuple = (-0.75, -0.25, 0.25, 0.75, 1.25, 1.75, 2.25, 2.75)
+
+    @property
+    def nx(self):
+        return int(round((self.x_max - self.x_min) / self.res))
+
+    @property
+    def ny(self):
+        return int(round((self.y_max - self.y_min) / self.res))
+
+    def xy_centres(self, device=None, dtype=torch.float32):
+        xs = self.x_min + (torch.arange(self.nx, device=device, dtype=dtype) + 0.5) * self.res
+        ys = self.y_min + (torch.arange(self.ny, device=device, dtype=dtype) + 0.5) * self.res
+        return xs, ys
+
+
+def build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida=None):
+    """Lookup table of lift PD for one camera.
+
+    z_levels: tensor (Z,) of heights (may require grad: learned elevations); K, T_cam_car, ida: tensors (3x3, 4x4, 3x3);
+    image_hw: (H, W) of the augmented image the feature map covers; depth_centres: tensor (D,).
+    Returns dict: grid2d (X*Y*Z, 2) normalised image coordinates, grid3d (X*Y*Z, 3) with the normalised depth-bin
+    coordinate added, valid (X*Y*Z,) float mask; voxel order is x-major, then y, then z.
+    """
+    dev, dt = z_levels.device, z_levels.dtype
+    xs, ys = grid.xy_centres(dev, dt)
+    X, Y, Z = len(xs), len(ys), len(z_levels)
+    gx = xs.view(X, 1, 1).expand(X, Y, Z)
+    gy = ys.view(1, Y, 1).expand(X, Y, Z)
+    gz = z_levels.view(1, 1, Z).expand(X, Y, Z)
+    pts = torch.stack([gx, gy, gz, torch.ones_like(gx)], -1).reshape(-1, 4)          # (N, 4) vehicle frame
+    pc = pts @ T_cam_car.to(dt).T                                                       # (N, 4) camera frame
+    z = pc[:, 2]
+    zs = z.clamp(min=1e-3)
+    uv1 = torch.stack([pc[:, 0] / zs, pc[:, 1] / zs, torch.ones_like(zs)], -1) @ K.to(dt).T
+    if ida is not None:
+        uv1 = uv1 @ ida.to(dt).T
+    H, W = image_hw
+    xn = 2 * (uv1[:, 0] + 0.5) / W - 1
+    yn = 2 * (uv1[:, 1] + 0.5) / H - 1
+    dc = depth_centres.to(dev, dt)
+    D = len(dc)
+    # fractional bin index of the voxel's depth: piecewise linear between bin centres
+    i1 = torch.searchsorted(dc, z.detach().contiguous()).clamp(1, D - 1)
+    i0 = i1 - 1
+    frac = i0.to(dt) + (z - dc[i0]) / (dc[i1] - dc[i0])
+    dn = (2 * frac + 1) / D - 1                                                         # align_corners=False
+    valid = (z > 1e-3) & (xn.abs() <= 1) & (yn.abs() <= 1) & (z >= dc[0]) & (z <= dc[-1])
+    return {"grid2d": torch.stack([xn, yn], -1), "grid3d": torch.stack([xn, yn, dn], -1),
+            "valid": valid.to(dt), "shape": (X, Y, Z)}
+
+
+def lift_pd(feat, depth_prob, table, use_depth=True):
+    """feat (B, C, Hf, Wf), depth_prob (B, D, Hf, Wf) (softmax over D) -> volume (B, C, X, Y, Z).
+
+    use_depth=False gives lift P (pull without depth weight) on the same table.
+    """
+    B, C = feat.shape[:2]
+    X, Y, Z = table["shape"]
+    n = X * Y * Z
+    g2 = table["grid2d"].view(1, n, 1, 2).expand(B, n, 1, 2).to(feat.dtype)
+    f = F.grid_sample(feat, g2, mode="bilinear", padding_mode="border", align_corners=False)     # (B, C, N, 1)
+    v = f[..., 0] * table["valid"].to(feat.dtype)
+    if use_depth:
+        g3 = table["grid3d"].view(1, n, 1, 1, 3).expand(B, n, 1, 1, 3).to(depth_prob.dtype)
+        p = F.grid_sample(depth_prob.unsqueeze(1), g3, mode="bilinear", padding_mode="border", align_corners=False)
+        v = v * p[:, 0, :, 0, 0].unsqueeze(1)                                                    # (B, 1, N)
+    return v.view(B, C, X, Y, Z)
+
+
+def height_to_channels(vol):
+    """(B, C, X, Y, Z) -> (B, Z*C, X, Y): feat[z_car] as channels (Simple-BEV / Fast-BEV style)."""
+    B, C, X, Y, Z = vol.shape
+    return vol.permute(0, 4, 1, 2, 3).reshape(B, Z * C, X, Y)
+
+
+class LiftPD(nn.Module):
+    """Lift PD for one camera with optional learned elevations; the table is cached unless the heights are learned."""
+
+    def __init__(self, grid, depth_centres, learn_heights=False, use_depth=True):
+        super().__init__()
+        self.grid, self.use_depth = grid, use_depth
+        self.register_buffer("depth_centres", torch.as_tensor(depth_centres, dtype=torch.float32))
+        z = torch.tensor(grid.z_levels, dtype=torch.float32)
+        if learn_heights:
+            self.z_levels = nn.Parameter(z)
+        else:
+            self.register_buffer("z_levels", z)
+        self._cache = None
+
+    def forward(self, feat, depth_prob, K, T_cam_car, image_hw, ida=None):
+        learned = isinstance(self.z_levels, nn.Parameter)
+        key = (tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(image_hw),
+               None if ida is None else tuple(ida.flatten().tolist()))
+        if learned or self._cache is None or self._cache[0] != key:
+            table = build_table(self.grid, self.z_levels, K, T_cam_car, image_hw, self.depth_centres, ida)
+            if not learned:
+                table = {k: (t.detach() if torch.is_tensor(t) else t) for k, t in table.items()}
+                self._cache = (key, table)
+        else:
+            table = self._cache[1]
+        return height_to_channels(lift_pd(feat, depth_prob, table, self.use_depth))
+
+
+# ----------------------------------------------------------------------------------------------- self-test
+def _front_camera(dtype=torch.float64, x0=0.0):
+    """A synthetic front camera: 1.5 m high, looking along +x, f = 633 px on an 800 x 448 image (half resolution)."""
+    K = torch.tensor([[633.0, 0, 399.5], [0, 633.0, 223.5], [0, 0, 1]], dtype=dtype)
+    R = torch.tensor([[0.0, -1, 0], [0, 0, -1], [1, 0, 0]], dtype=dtype)                # car -> cam axes
+    t = -R @ torch.tensor([x0, 0.0, 1.5], dtype=dtype)
+    T = torch.eye(4, dtype=dtype)
+    T[:3, :3], T[:3, 3] = R, t
+    return K, T, (448, 800)
+
+
+def _selftest():
+    torch.manual_seed(0)
+    dt = torch.float64
+    grid = Grid()
+    dc = torch.arange(1.0, 60.01, 0.5, dtype=dt)                                       # 119 bins (any bins work)
+    D = len(dc)
+    K, T, hw = _front_camera(dt)
+    zl = torch.tensor(grid.z_levels, dtype=dt)
+    tab = build_table(grid, zl, K, T, hw, dc)
+    X, Y, Z = tab["shape"]
+    assert (X, Y, Z) == (120, 104, 8)
+
+    # 1 geometry: the voxel straight ahead at camera height projects to the principal point, depth = its x
+    xs, ys = grid.xy_centres(dtype=dt)
+    ix, iy, iz = 39, 52, 4                                    # x = 19.75 m, y = +0.25 m, z = 1.25 m
+    i = (ix * Y + iy) * Z + iz
+    x, y, z = xs[ix].item(), ys[iy].item(), zl[iz].item()
+    u_exp = 399.5 + 633.0 * (-y) / x
+    v_exp = 223.5 + 633.0 * (1.5 - z) / x
+    xn, yn, dn = tab["grid3d"][i].tolist()
+    assert abs((xn + 1) * 800 / 2 - 0.5 - u_exp) < 1e-9 and abs((yn + 1) * 448 / 2 - 0.5 - v_exp) < 1e-9
+    frac = ((dn + 1) * D - 1) / 2
+    assert abs(dc[0].item() + 0.5 * frac - x) < 1e-9, "depth bin index"
+    assert tab["valid"][i] == 1
+
+    # 2 uniform depth: PD = P / D
+    feat = torch.randn(1, 4, 56, 100, dtype=dt)
+    uni = torch.full((1, D, 56, 100), 1.0 / D, dtype=dt)
+    vp = lift_pd(feat, uni, tab, use_depth=False)
+    vpd = lift_pd(feat, uni, tab, use_depth=True)
+    m = tab["valid"].view(X, Y, Z).bool()
+    assert torch.allclose(vpd[0, :, m], vp[0, :, m] / D, atol=1e-12), "uniform depth"
+
+    # 3 one-hot depth at bin b: only voxels within one bin of depth dc[b] receive the feature, weight 1 at dc[b]
+    b = 38                                                     # 20.0 m
+    one = torch.zeros(1, D, 56, 100, dtype=dt)
+    one[:, b] = 1
+    ones = torch.ones(1, 1, 56, 100, dtype=dt)
+    v1 = lift_pd(ones, one, tab)[0, 0]
+    depth = xs.view(X, 1, 1).expand(X, Y, Z)                  # depth along the optical axis = x for this camera
+    hit = v1 > 1e-9
+    assert hit.any() and (depth[hit] - dc[b]).abs().max() < 0.5 + 1e-9, "one-hot depth support"
+    near = (depth - dc[b]).abs() < 1e-9
+    assert torch.allclose(v1[near & m], torch.ones_like(v1[near & m])), "one-hot depth peak"
+
+    # 4 rig independence: camera 1 m further forward, same image -> BEV shifted by 2 cells
+    K2, T2, _ = _front_camera(dt, x0=1.0)
+    tab2 = build_table(grid, zl, K2, T2, hw, dc)
+    a = lift_pd(feat, uni, tab, use_depth=False)
+    c = lift_pd(feat, uni, tab2, use_depth=False)
+    assert torch.allclose(c[:, :, 2:], a[:, :, :-2], atol=1e-12), "rig shift"
+
+    # 5 gradients reach the feature, the depth distribution and learned heights (gradcheck on a tiny grid)
+    small = Grid(x_min=4, x_max=8, y_min=-1, y_max=1, res=1.0, z_levels=(0.0, 1.0))
+    f_s = torch.randn(1, 2, 7, 12, dtype=dt, requires_grad=True)
+    p_s = torch.softmax(torch.randn(1, 6, 7, 12, dtype=dt), 1).requires_grad_(True)
+    dc_s = torch.linspace(3.0, 9.0, 6, dtype=dt)
+    z_s = torch.tensor([0.3, 1.1], dtype=dt, requires_grad=True)
+    Ks = torch.tensor([[10.0, 0, 5.5], [0, 10.0, 3.0], [0, 0, 1]], dtype=dt)
+
+    def run(f, p, zz):
+        tb = build_table(small, zz, Ks, T, (7, 12), dc_s)
+        return lift_pd(f, p, tb)
+    assert torch.autograd.gradcheck(run, (f_s, p_s, z_s), eps=1e-6, atol=1e-5), "gradcheck"
+
+    # 6 module: height into channels, table cache, learned heights get a gradient
+    mod = LiftPD(grid, dc.float(), learn_heights=True)
+    out = mod(feat.float(), uni.float(), K.float(), T.float(), hw)
+    assert out.shape == (1, 8 * 4, 120, 104)
+    out.sum().backward()
+    assert mod.z_levels.grad is not None and torch.isfinite(mod.z_levels.grad).all()
+    print("lift_pd selftest ok: geometry, uniform = P / D, one-hot depth, rig shift, gradcheck, module")
+
+    if torch.cuda.is_available():
+        import time
+        dev = "cuda"
+        mod = LiftPD(grid, dc.float()).to(dev)
+        f = torch.randn(1, 64, 56, 100, device=dev)
+        p = torch.softmax(torch.randn(1, D, 56, 100, device=dev), 1)
+        Kc, Tc = K.float().to(dev), T.float().to(dev)
+        for _ in range(10):
+            mod(f, p, Kc, Tc, hw)
+        torch.cuda.synchronize()
+        t0 = time.perf_counter()
+        for _ in range(100):
+            mod(f, p, Kc, Tc, hw)
+        torch.cuda.synchronize()
+        print(f"lift PD on {torch.cuda.get_device_name(0)}: {(time.perf_counter() - t0) * 10:.3f} ms per frame "
+              f"(1 camera, C=64, D={D}, 120 x 104 x 8 voxels; GPU may be shared - not a timing number)")
+
+
+if __name__ == "__main__":
+    _selftest()
