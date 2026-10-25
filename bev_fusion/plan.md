@@ -152,9 +152,16 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - Tests: overfit one scene to near-perfect IoU (wiring); ms per frame.
 
 ## 7. Temporal fusion (ego motion, stationary environment, moving targets)
-- Ego-motion warp of the previous state; a long stationary memory with a confidence-gated update (lane markings sharpen as the car approaches); a short moving memory with a flow warp (flow from Doppler where observable, else a flow head); a learned moving mask supervised by box velocities.
-- Basis: BEVDet4D, VideoBEV 2303.05970, FIERY 2104.10490 (temporal block in plain PyTorch, MIT), MemFusionMap 2409.18737 (lit).
-- Tests: a static scene driven through: the memory must not smear (warp test against the GT map in world coordinates); a moving target: the flow warp must keep it in place, the control without flow must lag; gain per range bin (far range should gain most).
+Design agreed with Mirko (2026-10-25): three BEV maps with their own times are fused in the camera time - the camera BEV (t_cam, the reference), the radar BEV (t_radar; per cell its mean age) and the past state (t_past); each first gets its own 3 x 3 conv. The past yields the pull positions:
+- per cell of the reference grid and per source s: x_s = T_ego(t_s <- t_cam) x - v(x) (t_cam - t_s); grid_sample pulls the source at x_s (a gather like lift PD: fast, differentiable)
+- ego motion is exact (poses); the object motion v (2 channels per cell, plus a moving probability and its uncertainty) comes from a motion estimator on the ego-aligned past state and the current sensors (incl. the radar's Doppler channels); order: ego-align the past -> estimate v -> pull
+- no double counting: the radar encoder already moves each detection to t_cam by the ego motion and its radial Doppler part; the BEV pull adds only the remaining object motion, with the cell's mean radar age as its dt
+- static memory: ego warp only, long, confidence-gated update (lane markings sharpen as the car approaches); moving memory: ego + flow, short
+- every pulled source carries a confidence (age, moving probability, flow uncertainty); the fusion gates by it (holes and ghosts where content moves)
+- training signal for v: GT box velocities rasterised per cell; a consistency term between the pulled past and the current BEV
+- arms: B (this design, main) against A (ego warp only + ConvGRU, the control); later options: C (learned deformable pull offsets, BEVFormer temporal self-attention) if an explicit v does not learn, D (event-driven filter: the state predicted to each sensor's own time and updated there) if the time alignment is the weak point; E (static memory + tracked objects) not planned
+- Basis: CRT-Fusion 2411.03013 (camera + radar + time: per-cell velocity and occupancy from a motion feature estimator, past features shifted by v dt above 1 m/s, recurrent; R50 nuScenes val 57.2 NDS vs CRN 56.0, night 33.0 vs 30.4 mAP; 14.5 FPS on an RTX 3090 - code extraction running), FIERY 2104.10490 (exact ego warp, ego-motion channels, spatial GRU; MIT, plain PyTorch), BEVDet4D 2203.17054 (alignment matters), VideoBEV 2303.05970, MemFusionMap 2409.18737 (lit).
+- Tests: pure ego motion over a static scene: the pulled past must align exactly with the current map (warp test against the GT map in world coordinates); a target moving at known v must land at x + v dt (the control A must lag); radar with a known age: pulled to t_cam once, not twice; holes and ghosts carry low confidence; gain per range bin (far range should gain most).
 
 ## 8. Semantic head
 - Multi-label at 0.5 m: areas (drivable, ped crossing, walkway, stop line), lines (lane divider, road divider, lane centre-line) with a truncated 2D distance-field target (a cheap BEV SDF for thin lines), objects (vehicle, pedestrian, two-wheeler), auxiliary moving mask and flow; masked losses; uncertainty weighting 1705.07115 (lit).
