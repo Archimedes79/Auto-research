@@ -244,7 +244,7 @@ try:
     assert "started  S.ta" in t1.stdout and states()["S.ta"]["state"] == "running" and "waiting  E1.a" in t1.stdout and "S.tb" not in t1.stdout, t1.stdout + t1.stderr  # S.tb waits for S.ta: not ready, not listed
     assert wait_done("S.ta"), open(f"{T}/runs/S.ta/launcher.log").read()
     t2 = tick()
-    assert "reconciled S.ta: running -> done" in t2.stdout and "started  S.tb" in t2.stdout and "started  E1.a" in t2.stdout, t2.stdout + t2.stderr
+    assert "reconcile S.ta: running -> done" in t2.stdout and "started  S.tb" in t2.stdout and "started  E1.a" in t2.stdout, t2.stdout + t2.stderr
     assert wait_done("S.tb", "E1.a"), open(f"{T}/runs/E1.a/launcher.log").read()
     assert RUN.record(f"{T}/runs/E1.a")["hypothesis"] == exp["title"] and "t/S.tb" in tags(), "the arm's card and the gpu run's tag"
     t3 = tick("--handover")
@@ -257,6 +257,45 @@ try:
     assert "<!-- tick -->" in hv and "lead     S.sum" in hv and "<!-- /tick -->" in hv
     t4 = tick("--handover")
     assert open(f"{T}/HANDOVER.md", encoding="utf-8").read().count("<!-- tick -->") == 1, "the block is replaced, not appended"
+    # a prose mention of the marker stays; a dependent gpu item waits while the first one has not taken its slot yet (gpu_slots 1)
+    hv = open(f"{T}/HANDOVER.md", encoding="utf-8").read().replace("# HANDOVER", "# HANDOVER\nthe block sits between <!-- tick --> markers (prose)", 1)
+    open(f"{T}/HANDOVER.md", "w", encoding="utf-8").write(hv)
+    tick("--handover")
+    hv = open(f"{T}/HANDOVER.md", encoding="utf-8").read()
+    assert "markers (prose)" in hv and hv.count("<!-- /tick -->") == 1, hv[:400]
+    pj = json.load(open(f"{T}/project.json"))
+    pj["gpu_slots"] = 1
+    json.dump(pj, open(f"{T}/project.json", "w"))
+    exp2 = json.load(open(f"{T}/experiments/E1_x/experiment.json"))
+    exp2.pop("prediction", None)
+    exp2["arms"]["c"]["command"] = "bash -c 'echo arm c'"
+    json.dump(exp2, open(f"{T}/experiments/E1_x/experiment.json", "w"))
+    SC.save([dict(item="S.g1", kind="train", state="planned", resource="gpu", priority="1", command="bash -c 'sleep 3; echo g1'"),
+             dict(item="S.g2", kind="train", state="planned", resource="gpu", priority="2", command="bash -c 'echo g2'"),
+             dict(item="E1.c", kind="train", state="planned", resource="cpu", priority="3", run_ids="E1.c"),
+             dict(item="S.nores", kind="evaluate", state="planned", priority="4", command="bash -c 'echo nores'")], f"{T}/schedule.csv")
+    for rid in ("S.g1", "S.g2"):
+        subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", rid, "--hyp", "tick", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
+    t5 = tick()
+    st = states()
+    assert st["S.g1"]["state"] == "running" and "waiting  S.g2: no free GPU slot" in t5.stdout, t5.stdout + t5.stderr
+    assert st["E1.c"]["state"] == "blocked" and "launcher exit 2" in st["E1.c"]["note"], "an experiment file without a prediction gives no card"
+    assert st["S.nores"]["state"] == "blocked" and "cpu slot busy" not in t5.stdout or st["S.nores"]["state"] in ("running", "done"), st["S.nores"]
+    assert wait_done("S.g1"), open(f"{T}/runs/S.g1/launcher.log").read()
+    t6 = tick()
+    assert "started  S.g2" in t6.stdout, t6.stdout
+    assert wait_done("S.g2")
+    # a launcher that leaves no record: the row becomes blocked, not running forever
+    SC.save([dict(item="S.ghost", kind="train", state="running", resource="cpu", priority="1", run_ids="S.ghost", command="bash -c 'echo x'")], f"{T}/schedule.csv")
+    t7 = tick()
+    assert states()["S.ghost"]["state"] == "blocked" and "reconcile S.ghost: running -> blocked" in t7.stdout, t7.stdout
+    # a tick with the acceptance window at 0 reports "no run record" instead of trusting the start
+    SC.save([dict(item="S.quick", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'echo q'")], f"{T}/schedule.csv")
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.quick", "--hyp", "tick", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
+    t8 = subprocess.run([sys.executable, f"{HERE}/tick.py"], capture_output=True, text=True, env=dict(env, AR_ACCEPT_S="0"))
+    assert "no run record after 0 s" in states()["S.quick"]["note"], (t8.stdout, states()["S.quick"])
+    import tick as TK
+    assert TK.budget_minutes("40m") == 40 and TK.budget_minutes("1.5 h") == 90 and TK.budget_minutes("90") == 90 and TK.budget_minutes("2 d") == 2880 and TK.budget_minutes("soon") is None
     # check_numbers
     open(f"{T}/doc.md", "w").write("S 0.746 and 0.99 here")
     open(f"{T}/src.json", "w").write('{"S": 0.74612}')

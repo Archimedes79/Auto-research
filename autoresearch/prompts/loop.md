@@ -5,7 +5,7 @@ STOP_AT: <day time> (a work window: keep going until then) | SHUTDOWN: <yes / no
 Problem folder: <path>. Loop <NN>. Plan, schedule, ledger, decisions: as named in `HANDOVER.md`. Method: `autoresearch/METHOD.md` P3 and P4. This chat is the lead and owns the code for the loop (say so in `HANDOVER.md`). Do not re-plan; a change of direction goes through `ar-planner` as a new schedule version.
 
 Every wake-up (when a run record changes, else every 20-25 min)
-- `autoresearch/tools/tick.py --handover`: it reconciles the run records, starts the ready train / evaluate items within the GPU and CPU slots (their commands come from the schedule's `command` column or the experiment file's arm) and writes the "what runs" block into HANDOVER; read its output, `ledger.py tail --loop <NN>` and the open decisions
+- `wsl python3 ../autoresearch/tools/tick.py --handover` (in the WSL, the namespace of the launchers): it reconciles the run records, starts the ready train / evaluate items within the GPU and CPU slots (their commands come from the schedule's `command` column or the experiment file's arm) and writes the "what runs" block into HANDOVER; read its output, `ledger.py tail --loop <NN>` and the open decisions
 - do by hand what the tick lists as "needs the lead": detail plan (`ar-planner`), code (`ar-coder`; `ar-reviewer` mode code for shared code), decide (`tools/decide.py --experiment E<id> --write` when the cards of an experiment are complete), summary (section 3 of the card's `experiment.md`); a run needs its card (experiment file or planned ledger row), run.py refuses otherwise
 - at most <n> GPU jobs; checkpoint and resume; never kill another chat's jobs
 - write schedule, ledger notes, plan status, HANDOVER (<= 3 KB, rewrite); next wake-up

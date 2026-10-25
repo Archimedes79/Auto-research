@@ -101,7 +101,8 @@ def main():
             print(f"{item}: {old} -> {new}")
         save(rows)
     elif a.cmd == "add":
-        rows.append(dict(item=a.item, node=a.node, kind=a.kind, state="planned", depends_on=a.depends, resource=a.resource or "", budget=a.budget,
+        res = a.resource or {"train": "gpu", "evaluate": "cpu"}.get(a.kind, "agent")  # an empty resource follows the kind
+        rows.append(dict(item=a.item, node=a.node, kind=a.kind, state="planned", depends_on=a.depends, resource=res, budget=a.budget,
                          priority=a.priority or "5", owner=a.owner, run_ids=a.runs or (a.item if a.kind == "train" else ""), note=a.note, command=a.command))
         save(rows)
 
