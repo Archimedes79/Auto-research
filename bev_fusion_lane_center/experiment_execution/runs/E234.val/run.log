@@ -1,0 +1,20 @@
+=== attempt 1 2026-10-25T14:55:18: bash training/data/prep/run_gcar.sh gcar_tools.py extract --split b456 --workers 2 --part val
+Gewichte geladen: 1654 Eintraege, fehlend 0, unerwartet 0
+nuScenes geladen (28 s), Samples 1567
+b456 val [0:1567] 100/1567 (53 s, 0.53 s/Sample)
+b456 val [0:1567] 200/1567 (95 s, 0.48 s/Sample)
+b456 val [0:1567] 300/1567 (137 s, 0.46 s/Sample)
+b456 val [0:1567] 400/1567 (180 s, 0.45 s/Sample)
+b456 val [0:1567] 500/1567 (222 s, 0.44 s/Sample)
+b456 val [0:1567] 600/1567 (264 s, 0.44 s/Sample)
+b456 val [0:1567] 700/1567 (307 s, 0.44 s/Sample)
+b456 val [0:1567] 800/1567 (351 s, 0.44 s/Sample)
+b456 val [0:1567] 900/1567 (393 s, 0.44 s/Sample)
+b456 val [0:1567] 1000/1567 (436 s, 0.44 s/Sample)
+b456 val [0:1567] 1100/1567 (478 s, 0.43 s/Sample)
+b456 val [0:1567] 1200/1567 (523 s, 0.44 s/Sample)
+b456 val [0:1567] 1300/1567 (568 s, 0.44 s/Sample)
+b456 val [0:1567] 1400/1567 (612 s, 0.44 s/Sample)
+b456 val [0:1567] 1500/1567 (656 s, 0.44 s/Sample)
+b456 val [0:1567] 1567/1567 (684 s, 0.44 s/Sample)
+FERTIG b456 val 0 1567 684 s

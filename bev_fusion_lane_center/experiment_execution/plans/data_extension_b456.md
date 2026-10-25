@@ -30,7 +30,16 @@ Recommendation: **keep TRAIN / VAL / TEST exactly as they are** (18 loops of his
 
   Reading: today's pipeline reproduces the stored **odd** TRAIN rows at the rasteriser's noise level; the even rows and VAL / TEST differ slightly more. That fits the history: the extraction code was rewritten after the rollback of 2026-10-14 (checked then on the logits only) and the odd TRAIN rows were extracted with the rewritten code, the even rows and VAL / TEST before. So half of TRAIN already comes from today's pipeline, and the b456 features are in distribution with it. The gate "correlation >= 0.999" of this plan was too strict for dec32; the criterion that holds is "today == stored odd rows at noise level", and it is met. Caveat: CONFIRM (today's pipeline) and VAL (original pipeline) differ at this small level, so CONFIRM is used only for paired comparisons on its own frames.
 
-- **step 4 running** (since 2026-10-25 about 13:45): `temp/loop19/run_b456_extract.sh` -> E234.tr0 (train rows 0-4365) and E234.tr1 (rows 4366-8730) in parallel, E234.val (CONFIRM, 1,567 rows) after E234.tr0; 2 workers each; first speeds 0.7 - 1.05 s per frame and process, so about 1.5 - 2 hours in all. Code tags `lcr/E234.tr0` / `tr1` were set by hand at 07a4bad (the WSL git had no identity at the start, see DECISIONS D9; their run records will say `git-error` and are corrected after the runs end); E234.val tags itself.
+- **step 4 done** (2026-10-25 13:40 - 15:08): `temp/loop19/run_b456_extract.sh` -> E234.tr0 (train rows 0-4365, 73 min) and E234.tr1 (rows 4366-8730, 74 min) in parallel, then E234.val (CONFIRM, 1,567 rows, 13 min at 0.44 s per frame on its own); all exit 0 with done flags. Post-check `temp/loop19/check_b456_features.py`: **PASS** - every row written, finite, std ratio against b123 within the 20 % gate:
+
+| part | rows | dec32 | logit7 | fused32 |
+|---|---|---|---|---|
+| train (TRAIN2 new + UNSEEN) | 8,731 | 0.982 | 0.975 | 0.943 |
+| val (CONFIRM) | 1,567 | 0.945 | 1.041 | 0.982 |
+
+  Records: E234.tr0 / tr1 started while the WSL git had no identity (DECISIONS D9), so run.py wrote `commit: git-error`; their tags `lcr/E234.tr0` / `tr1` were set by hand at 07a4bad and the ledger rows and run.json were corrected afterwards (`temp/loop19/fix_e234_records.py`); E234.val tagged itself (7db6b83, `lcr/E234.val`). Commit d03b6a2 in between is the literature chat's own commit, not part of E234.
+- The radar archives stay in `~/downloads/nuscenes_radar_456/` (632 MB) until step 5 has used the data once; then they can go to `_to_delete/` (a decision for D5).
+- **Open: steps 5-7** (ground truth, route and map, loader) touch the shared data code, so they wait for the loop lead's M0 / M1 work and the roadmap step `lcr.paths`; nothing of b456 is used by a run before step 7.
 
 ## Pipeline for the new scenes (set `b456`, written to new folders only; nothing of b123 is touched)
 

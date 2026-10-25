@@ -12,6 +12,29 @@
  "python": "3.10.12",
  "conda_env": "",
  "created": "2026-10-25T13:39:49",
- "status": "waiting",
- "after": "E234.tr0"
+ "status": "ok",
+ "after": "E234.tr0",
+ "started": "2026-10-25T14:55:17",
+ "code_hash": "573476dea870",
+ "commit": "7db6b83ee0",
+ "tag": "lcr/E234.val",
+ "git_note": "",
+ "exit": 0,
+ "duration_s": 773,
+ "attempts": 1,
+ "ended": "2026-10-25T15:08:11",
+ "last_lines": [
+  "b456 val [0:1567] 600/1567 (264 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 700/1567 (307 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 800/1567 (351 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 900/1567 (393 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 1000/1567 (436 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 1100/1567 (478 s, 0.43 s/Sample)",
+  "b456 val [0:1567] 1200/1567 (523 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 1300/1567 (568 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 1400/1567 (612 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 1500/1567 (656 s, 0.44 s/Sample)",
+  "b456 val [0:1567] 1567/1567 (684 s, 0.44 s/Sample)",
+  "FERTIG b456 val 0 1567 684 s"
+ ]
 }

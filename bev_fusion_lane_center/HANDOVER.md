@@ -1,20 +1,20 @@
-# HANDOVER - 2026-10-25 17:40
+# HANDOVER - 2026-10-25 15:20
 
 New chat: start in the repository folder (parent of autoresearch/ and this folder) or in this folder, say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB).
 
 ## Where we are
-- Loop 18 is CLOSED (10:55). Report: reports/weekly/Loop18_Fork_Pruning_Localisation_Report_EN.pdf (mailed twice). Results per node: experiment_execution/PLAN.md; every run: LEDGER.md; folders experiments/E209-E233. Headline: fork pruning closes the J gap (0.265 -> 0.409), chain 17.5 ms, joint E2E negative three times, recall weight buys lanes found not Q, TEST once (E230, S 0.748 vs 0.702).
-- Decision D8 (a) is being carried out by the loop-18 lead chat ("BEV lane loop 18", owner of autoresearch/tools and evaluation/ until the commit "M0 + P5 + P1"): M0 golden numbers (`evaluate.py --golden write|check`, evaluation/golden.json: 6 registry names on VAL from the cache; the uncached champion entry on VAL250 waits for an idle GPU), P5 launcher hygiene (run.py: locked atomic ledger / schedule writes, snapshot through a temporary git index, no git identity -> refused, heartbeat / stalled, --timeout, GPU slots, id reuse refused, precise CUDA retry; selftest.py covers it), P1 experiment file (autoresearch/schemas/experiment.schema.json, tools/experiment.py check, `decide.py --experiment` reads the metric cards; five loop-18 experiments re-encoded in experiments/E215, E219, E232 give the recorded verdicts). Status: committed (4435cab, review fixes 9a3723e, 22 findings worked through), self-test passes, golden.json carries the commit.
-- Data extension D7 (b) runs under the other chat ("BEV Fusion Spurmitte"): GaussianCaR features of the 255 new scenes, runs E234.tr0 / tr1 / val (2 GPU processes; ends about 17:30). Until that chat says "ledger free + GPU idle": no GPU job, no ledger writes, no change of the ledger format (its launchers rewrite the ledger when they end).
-- The research system was simplified today (7 agents, 5 templates, prompts/research_steps.md; roadmap and the three reviews in ../autoresearch/ROADMAP.md).
+- Loop 18 is CLOSED (10:55). Report: reports/weekly/Loop18_Fork_Pruning_Localisation_Report_EN.pdf. Results per node: experiment_execution/PLAN.md; every run: LEDGER.md; folders experiments/E209-E233. Headline: fork pruning closes the J gap (0.265 -> 0.409), chain 17.5 ms, joint E2E negative three times, TEST once (E230, S 0.748 vs 0.702).
+- D8 (a) is carried out by the loop-18 lead chat ("BEV lane loop 18", owner of autoresearch/tools and evaluation/): M0 golden numbers (evaluation/golden.json), P5 launcher hygiene (locked atomic records, snapshot via a temporary index, git identity check, heartbeat, timeout, GPU slots), P1 experiment.json + `decide.py --experiment`; committed 4435cab / 9a3723e / ef5fe86, self-test passes.
+- Data extension D7 (b) is DONE (15:08): GaussianCaR features of the 255 new scenes in `~/exp_gcar_b456/feats/` (E234.tr0 / tr1 / val, exit 0, post-check PASS); split file data/splits_b456.json (TRAIN2 new 7,961, UNSEEN 770, CONFIRM 1,567 frames). Ledger is free and the GPU idle. Steps 5-7 (ground truth, route / map, loader) are open: plan experiment_execution/plans/data_extension_b456.md.
+- The research system was simplified today (7 agents, 5 templates, prompts/research_steps.md; roadmap and reviews in ../autoresearch/ROADMAP.md). No experiment of loop 19 has started (the user: system refinement first).
 
 ## Next step
-1. When E234.val is done and the ledger is free: `evaluate.py --golden write champion --subset val250 --fresh --tol <measured>` (two runs to measure the tolerance), `decide.py --experiment ... --write` for the five re-encoded experiments, `tools/maintenance/run_all_tests.sh`.
-2. Then P2 (`ar tick`: reconcile + start ready schedule items within the GPU slots), P4 (hooks on the protected files), P3 (`ar metrics` with loop 18 as the baseline); order in DECISIONS D8.
-3. Research cycle 19 by hand from `../autoresearch/prompts/research_steps.md` (P1 on the gaps of PROBLEM.md, P2 -> PLAN.md + schedule.csv); loop 19's GPU runs wait for the safety work.
+1. Loop-18 lead: `evaluate.py --golden write champion --subset val250 --fresh --tol <measured>` (two runs for the tolerance), `decide.py --experiment ... --write` for the five re-encoded experiments, `tools/maintenance/run_all_tests.sh`.
+2. Then P2 (`ar tick`), P4 (hooks on the protected files), P3 (`ar metrics`, loop 18 as baseline); order in DECISIONS D8. b456 steps 5-7 come with M1 / `lcr.paths` (shared data code, ar-reviewer mode code).
+3. Research cycle 19 by hand from `../autoresearch/prompts/research_steps.md`; its GPU runs wait for the safety work and the user's go.
 
 ## Decisions waiting for the user
-In `experiment_execution/DECISIONS.md`: D3 folder rename, D4 fast deployment variant (champion decision with its TEST check), D5 purge of `_to_delete/`, D9 launcher identity check (done in P5, to be ticked).
+In experiment_execution/DECISIONS.md: D3 folder rename, D4 fast deployment variant, D5 purge of `_to_delete/` (also the radar archives in `~/downloads/nuscenes_radar_456/`, 632 MB, after b456 step 5), D9 launcher identity check (done in P5, to be ticked).
 
 ## Pointers
-Problem: PROBLEM.md; method: ../autoresearch/METHOD.md; closed questions: experiment_execution/closed_questions.md; literature: literature/OVERVIEW.md; old state: experiment_execution/history/; git: one repository (parent of this folder), code and text records, a tag per run (`lcr/<id>`), remote `origin` = github.com/Archimedes79/Auto-research-lmc (pushes only on request); golden numbers: evaluation/golden.json; experiment files: experiments/E<id>_*/experiment.json next to experiment.md.
+Problem: PROBLEM.md; method: ../autoresearch/METHOD.md; closed questions: experiment_execution/closed_questions.md; literature: literature/OVERVIEW.md; old state: experiment_execution/history/; git: one repository (parent of this folder), code and text records, a tag per run (`lcr/<id>`), remote `origin` = github.com/Archimedes79/Auto-research-lmc (pushes only on request).
