@@ -9,9 +9,12 @@ PRED="every row of the part written, finite, value range like b123 (dec32 std ab
 RULE="b456 is used for TRAIN2 / CONFIRM / UNSEEN only if the post-check passes (row count, finite, std within 20 % of b123)"
 nohup sleep 14400 >/dev/null 2>&1 &                       # keeps the WSL alive while the jobs run
 $RUN --id E234.tr0 --hyp "$HYP" --pred "$PRED" --rule "$RULE" --basis E27 --retries 1 -- $X --part train --start 0 --end 4366 > /tmp/E234.tr0.out 2>&1 &
+p0=$!
 sleep 20
 $RUN --id E234.tr1 --hyp "$HYP" --pred "$PRED" --rule "$RULE" --basis E27 --retries 1 -- $X --part train --start 4366 --end 8731 > /tmp/E234.tr1.out 2>&1 &
+p1=$!
 sleep 20
 $RUN --id E234.val --hyp "$HYP" --pred "$PRED" --rule "$RULE" --basis E27 --retries 1 --after E234.tr0 -- $X --part val > /tmp/E234.val.out 2>&1 &
-wait
+p2=$!
+wait $p0 $p1 $p2                                          # not the keep-alive sleep
 tail -n 2 /tmp/E234.tr0.out /tmp/E234.tr1.out /tmp/E234.val.out
