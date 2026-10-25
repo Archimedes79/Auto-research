@@ -26,6 +26,21 @@ Doppler, measured (`temp/radar/doppler_stats.py`, 213,276 detections of 400 rand
 - the same circular code for the static residual r_s = wrap(v_r - v_static(u_original)) (wrap into [-v_max, v_max)) and for the tangential component of (vx, vy) (linear, since it is the sensor's own estimate, not a folded measurement).
 - the other inputs: range (linear, scaled), RCS, the quality codes x_rms / y_rms / vx_rms and the states dyn_prop / invalid_state / ambig_state as embeddings, dt, sensor id.
 
+### 1b. The input vector per detection: simple, yet complete (Mirko: "simple, easy, yet complete values")
+Everything a nuScenes detection carries, each value once, in the frame where it is simple; dropped only what carries nothing (z = 0 always, vy_rms constant, the cluster id) or what is derivable (vx_comp / vy_comp: replaced by the static residual).
+| group | values | encoding | dims |
+|---|---|---|---|
+| where (sensor frame) | range r; azimuth phi_s | r / 60 (linear); cos phi_s, sin phi_s | 3 |
+| where (vehicle frame, measurement time) | direction of the line of sight; sensor position | cos phi_v, sin phi_v; x_s / 10, y_s / 10 | 4 |
+| radial velocity (measured) | v_r = (vx, vy) . u | circular sin / cos of k pi v_r / v_max, k = 1, 2, 4, 8; plus v_r / v_max linear | 9 |
+| tangential velocity (sensor estimate) | v_t = (vx, vy) x u | v_t / v_max linear | 1 |
+| static residual (moving or not) | r_s = wrap(v_r - v_static(u)) with v_static from the ego motion | circular sin / cos of k pi r_s / v_max, k = 1, 2; plus linear | 5 |
+| strength | RCS (dBsm) | RCS / 20 | 1 |
+| age | dt = t_ref - t_measurement | dt / 0.5 s | 1 |
+| quality and state (categorical) | x_rms, y_rms, vx_rms codes (0 = missing); dyn_prop; ambig_state; invalid_state | one learned embedding of 2-4 dims each | about 18 |
+| total | | | about 42 |
+v_max: from the sensor model (section 1a); for nuScenes a value above the observed range of the unambiguous states (30 m/s) until a specification is known. This vector is the input of both options: the point encoder of A, and the per-cell channels of the polar image in B (averaged per cell, plus the count and the sub-cell offsets).
+
 ## 1. Mirko's idea: a feature per detection and a decoder around it
 f_j = E(r_j, phi_j, data_j) per detection; a decoder g(f_j, x + l, y + m) gives the values of the cells around the detection (l, m in -1..1).
 
