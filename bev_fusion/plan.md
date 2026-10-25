@@ -114,7 +114,7 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - Tests: the time-alignment tests of 3.3; a camera test with a synthetic static scene and a time offset; latency budget per block.
 
 ## 6. BEV network
-- Grid around the vehicle (front-only first: x 0..60 m, y -26..26 m; full surround once all cameras are used), 0.5 m; coordinate channels (x, y, range, azimuth per sensor coverage) appended; ResNet / FPN trunk.
+- Grid around the vehicle (front-only first: x 0..60 m, y -26..26 m, 120 x 104 cells; full surround, also to 60 m, once all cameras are used), 0.5 m; coordinate channels (x, y, range, azimuth per sensor coverage) appended; ResNet / FPN trunk.
 - Basis: BEVFusion / CVT decoders (lit), CenterPoint trunk (lit, MIT).
 - Tests: overfit one scene to near-perfect IoU (wiring); ms per frame.
 
@@ -166,9 +166,18 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 | S4 | temporal: ego warp, stationary memory, moving memory with flow | single frame; memory without flow |
 | S5 | detection head | S4 seg only |
 
-## 12. Open questions for the discussion
-1. Pixel-group size (stride 8 or 16) and whether a finer vertical stride is needed for far range.
-2. Range bins: how many, spacing (uniform in inverse range?), the ground hypothesis in or out of S1.
+## 12. Decided and open questions
+
+### Decided (Mirko, 2026-10-25)
+- range: the system is built for 60 m (grid and depth bins end at 60 m)
+- no horizon strip for now: one image stream, half resolution, stride 8 (pixel groups of 16 x 16 full-resolution pixels); the full-resolution horizon strip (stride 4 over the rows whose ground lies at 15-100 m) stays a later option
+- what that means (geometry for a camera like CAM_FRONT, f ~ 1266 px, h ~ 1.5 m): across the frustum is 0.25 m wide at 20 m and 0.76 m at 60 m (fine for 0.5 m cells); along the range a group covers 3.4 m of road at 20 m, 10 m at 35 m, 21 m at 50 m - beyond about 20 m single-frame road positions come from the learned depth distribution inside the frustum and from temporal fusion (each far cell is seen again closer), which section 7 must therefore deliver and the per-range evaluation must show
+
+### Proposed, not yet objected to
+- depth bins: 80, 1-60 m, linear-increasing spacing (CaDDN LID: a few cm near, about 1.5 m at 60 m)
+- ground hypothesis in S1 as its own arm: fixed per-calibration interval from the frustum's edge rays on the road plane z = 0, widened by sigma_d ~ d^2 sigma_theta / h with one learned global sigma_theta; one learned ground probability per group mixes it with the free depth distribution; a per-frame pitch / road-plane input later, if the slope errors show up
+
+### Open
 3. Radar support window and the form of g (MLP on offsets, or a categorical over a polar window as in draft 2); the sensor prior.
 4. What "time" enters g: dt only, or dt and the ego speed / moving probability.
 5. Front-only first or all six cameras from the start (the download brings all six).
