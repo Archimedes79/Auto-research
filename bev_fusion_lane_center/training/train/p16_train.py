@@ -71,6 +71,7 @@ def main():
     ap.add_argument("--warm_frac", type=float, default=0.4)
     ap.add_argument("--eval", default="val250", help="val250 | val | none")
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--save_at", default="", help="comma list of fractions of the run (e.g. 0.25,0.5,0.75): also save <run>/model_at<percent>.pt there (E241 early-kill replay); default off")
     a = ap.parse_args()
     torch.manual_seed(a.seed)
     np.random.seed(a.seed)
@@ -90,6 +91,8 @@ def main():
         miss = net.load_state_dict(sd, strict=False)
         print("init from", a.init, "missing", len(miss.missing_keys), "unexpected", len(miss.unexpected_keys), flush=True)
     iters = max(10, int(a.u * IT_PER_U)) if not a.smoke else 20
+    save_its = {int(round(float(f) * iters)): int(round(100 * float(f))) for f in a.save_at.split(",") if f.strip()}
+    assert len(save_its) == len([f for f in a.save_at.split(",") if f.strip()]) and all(0 < i < iters for i in save_its), f"--save_at {a.save_at}: fractions must be in (0, 1) and give distinct iterations"
     stem_ps = [p for n, p in net.named_parameters() if n.startswith("stem.")]
     rest = [p for n, p in net.named_parameters() if not n.startswith("stem.")]
     opt = torch.optim.AdamW([dict(params=rest, lr=a.lr), dict(params=stem_ps, lr=a.lr * a.stem_lr)], weight_decay=1e-2)
@@ -128,6 +131,8 @@ def main():
                 if np.isfinite(v):
                     run[k] = 0.97 * run.get(k, v) + 0.03 * v
             it += 1
+            if it in save_its:
+                torch.save(net.state_dict(), f"{od}/model_at{save_its[it]}.pt")
             if it % 100 == 0 or it == 1:
                 msg = f"it {it}/{iters} {time.time() - t0:.0f}s share {share:.2f} " + " ".join(f"{k} {v:.3f}" for k, v in run.items())
                 print(msg, flush=True)
@@ -139,7 +144,8 @@ def main():
             break
     torch.save(net.state_dict(), f"{od}/model.pt")
     train_sec = time.time() - t0
-    card = dict(run=a.name, kind="design", design=a.design, cfg=cfg.asdict(), u=a.u, iters=iters, seed=a.seed, init=a.init, args=vars(a), status=status, train_seconds=train_sec, final_loss={k: float(v) for k, v in run.items()})
+    card = dict(run=a.name, kind="design", design=a.design, cfg=cfg.asdict(), u=a.u, iters=iters, seed=a.seed, init=a.init, args=vars(a),
+                env=dict(dist_dir=PD.DIST_DIR, rec_clamp=PL.REC_CLAMP, far_w=PL.FAR_W), status=status, train_seconds=train_sec, final_loss={k: float(v) for k, v in run.items()})
     if a.eval != "none" and status == "ok":
         t1 = time.time()
         if a.eval == "val250":

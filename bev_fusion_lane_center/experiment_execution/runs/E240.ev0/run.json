@@ -1,0 +1,20 @@
+{
+ "id": "E240.ev0",
+ "hypothesis": "E240: the recall weight 3 gain of j1rc over the equal-budget j1eq is measured on four paired seeds with every headline metric (seed noise = measurement floor)",
+ "prediction": "reproduce the stored seeds 0 / 1: evaluate.py cards of e24_j1rc_s0/s1 and e24_j1eq_s0/s1 match the E219 numbers (Q 0.739 / 0.743 and 0.735 / 0.731)",
+ "rule": "layer 1: stored numbers reproduced within 0.002; then decide.py --experiment E240",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c for n in e24_j1rc_s0 e24_j1rc_s1 e24_j1eq_s0 e24_j1eq_s1; do bash tools/env/_py14.sh evaluate.py $n 2>&1 | tail -n 12; done",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 10725,
+ "created": "2026-10-25T21:47:35",
+ "status": "waiting",
+ "after": "E240.c3",
+ "timeout_min": 0
+}

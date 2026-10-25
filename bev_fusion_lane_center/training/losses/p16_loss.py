@@ -165,6 +165,7 @@ def level_losses(lv, b, pat, hazard=True, mcl=False, eps_mcl=0.1, dup_label=Fals
 
 
 FAR_W = float(os.environ.get("P18_FAR_W", "0"))  # loop 18: range-weighted recall term (0 = off, identical to loop 16)
+REC_CLAMP = float(os.environ.get("P19_REC_CLAMP", "3.0"))  # loop 19 (E244 arm b): clamp (m) of the soft minimum of the recall term; 3.0 = identical to loops 16-18, 8.0 removes the dead zone
 
 
 def graph_losses(res, b, pos_key="pos"):
@@ -191,7 +192,7 @@ def graph_losses(res, b, pos_key="pos"):
     price = 2.0 * (1.0 - pi.clamp(0, 1))
     sd = sd + price[:, None, :]
     sd = sd.masked_fill(~has[:, None, :], 1e9)
-    dg_ = sd.min(-1).values.clamp(max=3.0)
+    dg_ = sd.min(-1).values.clamp(max=REC_CLAMP)
     gwt = gm * (gp.abs().max(-1).values < 48.0)
     if FAR_W > 0:  # loop 18: extra weight on ground-truth points beyond 25 m (smooth ramp to 40 m): the recall gap to the control lies there
         rg = gp.norm(dim=-1)

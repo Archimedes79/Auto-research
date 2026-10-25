@@ -21,6 +21,9 @@ import p8_lib as L  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
+# folder of <part>_gt_dist_exact.npy (the seed / direction / builder target); default = the stored b123 map (made with TF32 matrix products, D10).
+# LCR_DIST_DIR=$HOME/exp_gcar_b123x/feats selects the CPU-exact rebuild (E251); the choice is part of the run command, so the ledger records it.
+DIST_DIR = os.environ.get("LCR_DIST_DIR") or f"{HOME}/exp_crn_b123/feats"
 OUT = BP.RUNS
 UNREACH = 65535
 DG_CAP = 40.0
@@ -71,7 +74,7 @@ class BuilderData(torch.utils.data.Dataset):
         if self.mm is not None:
             return
         self.mm = [np.load(f"{D}/feats/{self.part}_{g}.npy", mmap_mode="r") for g in ("dec32", "logit7")]
-        self.gd = np.load(f"{HOME}/exp_crn_b123/feats/{self.part}_gt_dist_exact.npy", mmap_mode="r")
+        self.gd = np.load(f"{DIST_DIR}/{self.part}_gt_dist_exact.npy", mmap_mode="r")
         self.gdir = np.load(f"{D}/dir_{self.part}.npy", mmap_mode="r")
         if self.split == "train":
             self.oof, self.row2 = {}, {}

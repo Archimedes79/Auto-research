@@ -1,0 +1,33 @@
+# E236 Q at a matched setting and a matched vertex budget: does the recall variant's Q edge survive?
+
+## 0. What the tools run (the fields of `experiment.json`)
+| field | value |
+|---|---|
+| id / card / title | E236 / - / Q at matched fork pruning and matched 14.3 vertices per 100 m: recall (rc1) against the pruned champion |
+| kind | variant (evaluate.py with `--tau` / `--asm` overrides on the cached VAL network outputs; no training) |
+| deterministic | true (arms share cached network outputs per checkpoint; the paired scene bootstrap decides) |
+| metric, direction, band | Q, higher, 0.010 |
+| prediction | +0.002, against arm c (variant minus champion; the native edge is +0.0054) |
+| arms | a: `recall` at fork_prune 0.4 and tau tuned to vert100 = 14.3 +- 0.15; c: `champion` at fork_prune 0.4 and tau tuned to the same; d: `champion` as registered (0.3, vert100 14.83), n: `champion_noprune` (13.54); e: `fast_recall` and f: `fast` at the same two-step matching (report only) |
+| control | c |
+| rule | Q a - c >= +0.005 (the edge survives); lanes_found a - c >= +0.04 (sanity: the recall gain is still there) |
+| budget_gpu_h, kill | 0 (CPU only, about 20 evaluations of 30 s) ; see card |
+| evaluate | val (873 frames), compare c |
+
+## 1. Card
+| | |
+|---|---|
+| lens | past critic |
+| group | A9 (evaluation) / A3 |
+| sources | E215 (asm_grid.log, table.md), E219 (rc1, rc1s1, f1eq, j1rc, j1eq), `runs/eval/{champion,recall,fast,fast_recall,control}/val.json`, `evaluation/sparse_lanes/sparse_metrics.py` (`quality`), `evaluation/METRIC_RESPONSE.md`, PROBLEM.md headline table |
+| status | proposed |
+
+- **Statement**: At the same fork-pruning threshold (0.4) and the same 14.3 +- 0.15 vertices per 100 m on VAL 873, the recall variant `recall` (rc1) has a Q advantage over the pruned champion of less than +0.005 (the headline table shows +0.0054 at 15.53 against 14.83 vertices, and pruning 0.4 against 0.3).
+- **Mechanism (why the stored comparison is not matched)**: (1) PROBLEM.md says "Q at <= 14.3 vertices per 100 m", but Q (`quality()`) has no vertex term and nothing enforces the budget: champion 14.83, recall 15.53, fast 14.99, fast_recall 14.98, control 21.79, champion_noprune 13.54 (metric cards). (2) The champion row uses pruning 0.3, the recall rows 0.4; pruning 0.4 itself adds Q: in the E215 grid the champion at 0.4 has Q 0.737 and 15.0 vertices (0.3: 0.735, 14.8), which alone shrinks the edge to about +0.003. (3) Q rises with fork_prune because J rises; the whole pruning gain in Q (0.7009 -> 0.7350 = +0.0341) equals 0.20/0.85 x the J gain (+0.1445 -> +0.0340), and it came with +1.3 vertices per 100 m, i.e. the budget was left. A comparison with the vertices held fixed removes this confound. The same applies to the "Q tie with the control": the control sits at 21.8 vertices, the pruned champion at 14.8, and nobody has asked what the control's Q is at 14.3 (not testable here: its graphs are stored; reported as unmatched).
+- **Prediction**: VAL 873, Q(recall, 0.4, 14.3) - Q(champion, 0.4, 14.3) = +0.002 (interval inside [-0.004, +0.008]); lanes_found difference stays >= +0.06 (native +0.072). The fast pair (e - f) is reported without a prediction (native +0.011).
+- **Decision rule**: KEEP (edge survives, the loop-18 Q ranking stands) only if Q a - c >= +0.005 AND lanes_found a - c >= +0.04; TIE if |Q a - c| < 0.010 and < 0.005: the Q ranking of the recall variants is not supported and PROBLEM.md's table / D4 must quote them with their vertices per 100 m and pruning value and say "Q tie, lanes found +0.07"; CUT if Q a - c < -0.005 (the edge was bought with vertices). Noise band 0.010 (S / Q protocol); the paired scene bootstrap (`evaluate.py --compare`) interval is reported, not used to override the band. If vert100 cannot be brought to 14.3 +- 0.15 by tau for a model (e.g. the sweep is not monotone), the knob `vtx_r` is used and named; if neither reaches it, the arm is reported at the nearest point and marked unmatched.
+- **Test design**: Step 1 (null / sanity): re-evaluate `champion` and `recall` at their registered settings: cards identical to `runs/eval/*/val.json` (layer 1, tolerance 0.0005). Step 2: champion at fork_prune 0.4 untouched (matched setting only; expect Q 0.737, 15.0 vertices). Step 3: tau sweep {0.55 ... 0.9, step 0.05} x fork_prune 0.4 for champion and recall; read the points with vert100 in 14.3 +- 0.15 (interpolate between sweep points only to choose the next tau, the card is a real evaluation). Controls: matched reference = champion on the same frames; null = `champion_noprune` (13.54, within budget); equal budget = same vert100 for both arms; seed twin = `recall` second seed (rc1s1) as a second variant row (rc1s1 needs a registry entry or the `p18_variant_prune.py` path; same sweep). No new training. Fidelity rung: layer 3-4 (VAL 873, paired scene bootstrap). VAL is not a new set: this re-reads loop-18 numbers, it selects nothing.
+- **Cost**: 0 GPU hours (cached raw outputs, CPU assembly, numba); about 1 h of work. Risk: low.
+- **Kill criterion**: stop if step 1 does not reproduce the stored cards (a changed cache or code; repair before anything else).
+- **Inputs**: ready: registry names champion, champion_noprune, recall, fast, fast_recall; caches `raw_val873*.pkl` in the WSL home; `--tau`, `--asm` overrides in evaluate.py. To build: nothing (cards go to `runs/eval/<name>/val_<tag>.json` with `--tag`).
+- **Referee** (2026-10-25, ar-referee): REVISE (minor, 15 min, then run first; CPU only). Good card: the vertex budget really is not enforced by Q (PROBLEM.md says "Q at <= 14.3", cards show 13.5 - 21.8), E215 table confirms champion at 0.4 = Q 0.737 / 15.0 vertices, so the headline edge is already about +0.003 at matched pruning; cheap and decisive for what PROBLEM.md may quote. Fix before launch: (1) the Statement ("edge < +0.005") and the rule (KEEP if edge >= +0.005) point in opposite directions, and the TIE clause ("|dQ| < 0.010 and < 0.005") is garbled: write one hypothesis and three outcomes; (2) decide.py raises a Q min_effect to the band (max(0.005, 0.010) = 0.010), so KEEP is effectively +0.010 and the predicted +0.002 is a designed TIE: say so, or set the clause band; (3) add rc1s1 (seed twin) as an arm of its own and report Q-versus-vert100 curves (all sweep points, 14 - 16) for both models, not only the single 14.3 point (a steep part of the curve would fake an edge); (4) arms need `names`/`cards` (runs/eval/<name>/val_v143.json) once produced, otherwise decide.py cannot read them. The tau sweep is tuning on VAL for both arms equally; label it so. Reuse: the matched-vertex tau helper is needed by E244 / E245 / E246 (compare training variants at equal vert100, not at equal tau).
