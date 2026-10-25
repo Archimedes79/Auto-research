@@ -1,5 +1,5 @@
 """Schleife 5 / E60: Soll-Waermekarte der Route (Gauss sigma 0,75 m um die Mittellinien der Routenstuecke) je Sample -> ~/exp_gcar_b123/route_heat_<teil>.npy (uint8 = 255 * Waerme) und route_pts_<teil>.pkl (dichte Soll-Punkte der Route, 1 m, Fahrzeugsystem).
-Raster wie die uebrigen Soll-Karten: Zeile = x (nach rechts), Spalte = y (nach vorn), 0,5 m, +-50 m.  Aufruf (gcar): make_route_heat.py"""
+Raster wie die uebrigen Soll-Karten: Zeile = x (nach rechts), Spalte = y (nach vorn), 0,5 m, +-50 m.  Aufruf (gcar): make_route_heat.py [<tag>]   (tag: b123 by default; b456 or a check set: ~/exp_gcar_<tag>/)"""
 import os
 import pickle
 import sys
@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import assoc_lib as AL  # noqa: E402
 
 HOME = os.path.expanduser("~")
-D = f"{HOME}/exp_gcar_b123"
+D = f"{HOME}/exp_gcar_{sys.argv[1] if len(sys.argv) > 1 else 'b123'}"
 SIGMA = 0.75
 
 

@@ -3,7 +3,8 @@
 Quelle: nuScenes-Karte (Spuren 'lane' + Spurverbinder 'lane_connector', Mittellinien als Kreisbogen-Pfade, auf 0,5 m abgetastet) und deren Konnektivitaet ('outgoing'/'incoming' je Spur).
 Je Spur werden die Stuecke innerhalb des Fensters behalten (Reihenfolge = Fahrtrichtung); Kanten i -> j nur, wenn das Ende von i und der Anfang von j im Fenster liegen
 (offene Enden am Fensterrand tragen keine Kante). Splits = Spur mit >= 2 Nachfolgern, Merges = Spur mit >= 2 Vorgaengern.
-Ausgabe: <exp>/graph_gt_<part>.pkl (Liste je Sample von dict(tokens, kind, pts, start_open, end_open, edges)); Aufruf: make_graph_gt.py <b123|mini>
+Ausgabe: <exp>/graph_gt_<part>.pkl (Liste je Sample von dict(tokens, kind, pts, start_open, end_open, edges)); Aufruf: make_graph_gt.py <b123|mini|b456|...>
+Any other tag (b456, a check set) reads ~/exp_gcar_<tag>/feats/<part>_tokens.json (nuScenes trainval) and writes to ~/exp_gcar_<tag>/.
 """
 import json
 import os
@@ -78,7 +79,7 @@ def sample_graph(M, t, R):
                 edges.append((i, j))
     return dict(tokens=toks, kind=kinds, pts=pts, start_open=so, end_open=eo, edges=edges)
 def main(tag):
-    c = CFG[tag]
+    c = CFG.get(tag) or dict(root=f"{HOME}/data/nuscenes_full", version="v1.0-trainval", exp=f"{HOME}/exp_gcar_{tag}", out=f"{HOME}/exp_gcar_{tag}")
     t0 = time.time()
     nusc = NuScenes(version=c["version"], dataroot=c["root"], verbose=False)
     print(f"nuScenes geladen ({time.time() - t0:.0f} s)", flush=True)

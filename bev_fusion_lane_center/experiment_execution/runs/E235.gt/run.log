@@ -1,0 +1,30 @@
+=== attempt 2026-10-25T16:36:24: bash temp/loop19/run_b456_gt.sh b456
+== 16:36:24 graph + poses + exact distance
+==> /home/ml/exp_gcar_b456/log_graph.txt <==
+val 1000 1567 56 s
+val: 1567 Samples, Spuren-Stuecke je Sample 33.2, Kanten 30.9, Splits 4.72, Merges 4.64
+
+==> /home/ml/exp_gcar_b456/log_poses.txt <==
+val 1567 mit Vorgaenger 1528 Szenen 39 dt-Median 0.5
+fertig
+
+==> /home/ml/exp_gcar_b456/log_dist.txt <==
+val 0 1567
+val: 1567 Samples, mittlere Punktzahl Soll 1384
+== 16:49:16 direction arrays + route
+==> /home/ml/exp_gcar_b456/log_arrays.txt <==
+train: 8731 Samples, Stuecke je Sample im Mittel 41.1 (max 111, verworfen 162), Kanten 39.7
+val: 1567 Samples, Stuecke je Sample im Mittel 53.4 (max 109, verworfen 52), Kanten 51.1
+
+==> /home/ml/exp_gcar_b456/log_route.txt <==
+val 0 1567
+val: 1567 Samples, Route vorhanden 1405 (89.7 %), Stuecke je Route 1.95, Pfadlaenge 30.8 m
+== 16:53:16 route heat + SD map
+==> /home/ml/exp_gcar_b456/log_heat.txt <==
+val 0 1567
+val fertig 1405 mit Route
+
+==> /home/ml/exp_gcar_b456/log_sd.txt <==
+val 1567 1405 41 s
+train 8731 7912 139 s
+== 16:56:23 FERTIG b456

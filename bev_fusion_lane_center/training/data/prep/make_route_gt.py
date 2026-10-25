@@ -2,7 +2,7 @@
 Die Karte (Soll-Graph graph_gt_<teil>.pkl: Stuecke mit Karten-Token) enthaelt das Navigationsziel; hier wird die Route so nachgebildet, wie ein Router sie liefern wuerde: die Folge der Karten-Spuren, die das Fahrzeug in den naechsten Sekunden tatsaechlich befaehrt
 (Zukunftspositionen der folgenden Schluesselbilder derselben Szene, 2 Hz, bis 6 s), im Fenster +-50 m.
 Je Sample: dict(route=[Stueck-Indizes in Fahrtreihenfolge], path=[M,2] Zukunftspfad im Fahrzeugsystem (1 m abgetastet, nur im Fenster), goal=(x, y) letzter Pfadpunkt im Fenster, v0 Geschwindigkeit (m/s, aus dem Vorgaenger), n_future Zahl der Folgebilder)  oder None (kein Folgebild / Pfad ausserhalb jeder Spur).
-Ausgabe: ~/exp_gcar_b123/route_gt_<teil>.pkl.  Aufruf (gcar): make_route_gt.py"""
+Ausgabe: ~/exp_gcar_b123/route_gt_<teil>.pkl.  Aufruf (gcar): make_route_gt.py [<tag>]   (tag: b123 by default; b456 or a check set: ~/exp_gcar_<tag>/)"""
 import os
 import pickle
 import sys
@@ -11,7 +11,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 HOME = os.path.expanduser("~")
-D = f"{HOME}/exp_gcar_b123"
+D = f"{HOME}/exp_gcar_{sys.argv[1] if len(sys.argv) > 1 else 'b123'}"
 K_FUT = 12  # Folgebilder (6 s)
 HALF = 50.0
 

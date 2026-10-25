@@ -1,0 +1,72 @@
+=== attempt 2026-10-25T16:50:07: bash -c bash temp/loop19/run_b456_gt.sh gtchk && bash tools/env/_py14.sh temp/loop19/check_b456_gt_repro.py compare
+== 16:50:07 graph + poses + exact distance
+==> /home/ml/exp_gcar_gtchk/log_graph.txt <==
+val 0 119 129 s
+val: 119 Samples, Spuren-Stuecke je Sample 20.3, Kanten 17.6, Splits 2.35, Merges 2.56
+
+==> /home/ml/exp_gcar_gtchk/log_poses.txt <==
+val 119 mit Vorgaenger 116 Szenen 3 dt-Median 0.5
+fertig
+
+==> /home/ml/exp_gcar_gtchk/log_dist.txt <==
+val 0 119
+val: 119 Samples, mittlere Punktzahl Soll 936
+== 16:53:16 direction arrays + route
+==> /home/ml/exp_gcar_gtchk/log_arrays.txt <==
+train: 119 Samples, Stuecke je Sample im Mittel 37.9 (max 69, verworfen 0), Kanten 37.0
+val: 119 Samples, Stuecke je Sample im Mittel 35.1 (max 51, verworfen 0), Kanten 32.5
+
+==> /home/ml/exp_gcar_gtchk/log_route.txt <==
+val 0 119
+val: 119 Samples, Route vorhanden 116 (97.5 %), Stuecke je Route 2.03, Pfadlaenge 46.2 m
+== 16:53:25 route heat + SD map
+==> /home/ml/exp_gcar_gtchk/log_heat.txt <==
+val 0 119
+val fertig 116 mit Route
+
+==> /home/ml/exp_gcar_gtchk/log_sd.txt <==
+val 119 116 4 s
+train 119 116 6 s
+== 16:53:46 FERTIG gtchk
+_py14.sh: temp/loop19/check_b456_gt_repro.py
+train: 119 frames in 3 scenes, reversed order
+  graph_gt_train.pkl           identical
+  route_gt_train.pkl           identical
+  sd_train.pkl                 identical
+  route_pts_train.pkl          identical
+  poses.t                      identical
+  poses.R                      identical
+  poses.loc                    identical
+  poses.dt                     identical
+  poses.ts                     identical
+  poses.prev (re-indexed)      identical
+  poses.scene (re-numbered)    identical
+  gtK.pts                      identical
+  gtK.valid                    identical
+  gtK.adj                      identical
+  gtK.orig                     identical
+  dir_train.npy                identical
+  route_heat_train.npy         identical
+  gt_pts_exact                 identical
+  gt_dist_exact                new map over the 0.5 m-point bound by at most 0.0000 px (all 119 frames); max |new - float64 truth| 0.0000 px (frames [0, 39, 78, 118]) -> ok;  stored b123 map differs by > 0.05 px in 52 of 119 frames (TF32)
+val: 119 frames in 3 scenes, reversed order
+  graph_gt_val.pkl             identical
+  route_gt_val.pkl             identical
+  sd_val.pkl                   identical
+  route_pts_val.pkl            identical
+  poses.t                      identical
+  poses.R                      identical
+  poses.loc                    identical
+  poses.dt                     identical
+  poses.ts                     identical
+  poses.prev (re-indexed)      identical
+  poses.scene (re-numbered)    identical
+  gtK.pts                      identical
+  gtK.valid                    identical
+  gtK.adj                      identical
+  gtK.orig                     identical
+  dir_val.npy                  identical
+  route_heat_val.npy           identical
+  gt_pts_exact                 identical
+  gt_dist_exact                new map over the 0.5 m-point bound by at most 0.0000 px (all 119 frames); max |new - float64 truth| 0.0000 px (frames [0, 39, 78, 118]) -> ok;  stored b123 map differs by > 0.05 px in 26 of 119 frames (TF32)
+PASS

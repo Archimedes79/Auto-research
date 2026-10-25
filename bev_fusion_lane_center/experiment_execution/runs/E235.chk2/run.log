@@ -1,0 +1,72 @@
+=== attempt 2026-10-25T16:31:25: bash -c bash temp/loop19/run_b456_gt.sh gtchk && bash tools/env/_py14.sh temp/loop19/check_b456_gt_repro.py compare
+== 16:31:25 graph + poses + exact distance
+==> /home/ml/exp_gcar_gtchk/log_graph.txt <==
+val 0 40 46 s
+val: 40 Samples, Spuren-Stuecke je Sample 24.3, Kanten 23.0, Splits 3.85, Merges 3.25
+
+==> /home/ml/exp_gcar_gtchk/log_poses.txt <==
+val 40 mit Vorgaenger 39 Szenen 1 dt-Median 0.5
+fertig
+
+==> /home/ml/exp_gcar_gtchk/log_dist.txt <==
+val 0 40
+val: 40 Samples, mittlere Punktzahl Soll 901
+== 16:32:31 direction arrays + route
+==> /home/ml/exp_gcar_gtchk/log_arrays.txt <==
+train: 39 Samples, Stuecke je Sample im Mittel 42.8 (max 69, verworfen 0), Kanten 42.1
+val: 40 Samples, Stuecke je Sample im Mittel 36.5 (max 49, verworfen 0), Kanten 35.2
+
+==> /home/ml/exp_gcar_gtchk/log_route.txt <==
+val 0 40
+val: 40 Samples, Route vorhanden 39 (97.5 %), Stuecke je Route 2.77, Pfadlaenge 47.3 m
+== 16:32:36 route heat + SD map
+==> /home/ml/exp_gcar_gtchk/log_heat.txt <==
+val 0 40
+val fertig 39 mit Route
+
+==> /home/ml/exp_gcar_gtchk/log_sd.txt <==
+val 40 39 1 s
+train 39 38 2 s
+== 16:32:44 FERTIG gtchk
+_py14.sh: temp/loop19/check_b456_gt_repro.py
+train: 39 frames (b123 rows 120-158)
+  graph_gt_train.pkl           identical
+  route_gt_train.pkl           identical
+  sd_train.pkl                 identical
+  route_pts_train.pkl          identical
+  poses.t                      identical
+  poses.R                      identical
+  poses.loc                    identical
+  poses.dt                     identical
+  poses.ts                     identical
+  poses.prev (re-indexed)      identical
+  poses.scene (one scene)      identical
+  gtK.pts                      identical
+  gtK.valid                    identical
+  gtK.adj                      identical
+  gtK.orig                     identical
+  dir_train.npy                identical
+  route_heat_train.npy         identical
+  gt_pts_exact                 identical
+  gt_dist_exact (CPU vs GPU)   max |diff| 4.4648 px, identical pixels 91.39 %, mean |diff| 0.03062 px -> FAIL
+val: 40 frames (b123 rows 39-78)
+  graph_gt_val.pkl             identical
+  route_gt_val.pkl             identical
+  sd_val.pkl                   identical
+  route_pts_val.pkl            identical
+  poses.t                      identical
+  poses.R                      identical
+  poses.loc                    identical
+  poses.dt                     identical
+  poses.ts                     identical
+  poses.prev (re-indexed)      identical
+  poses.scene (one scene)      identical
+  gtK.pts                      identical
+  gtK.valid                    identical
+  gtK.adj                      identical
+  gtK.orig                     identical
+  dir_val.npy                  identical
+  route_heat_val.npy           identical
+  gt_pts_exact                 identical
+  gt_dist_exact (CPU vs GPU)   max |diff| 4.0156 px, identical pixels 90.92 %, mean |diff| 0.03294 px -> FAIL
+FAIL

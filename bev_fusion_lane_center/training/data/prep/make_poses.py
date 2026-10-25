@@ -1,7 +1,8 @@
 """Ego-Posen je Sample fuer Karten-Vorwissen (E34) und Zeitverfolgung (E35).
 Je Teil (train/val) in ~/exp_gcar_<tag>/poses_<part>.npz: t [N,2] globale Lage der Hinterachse zum CAM_FRONT-Zeitpunkt (m), R [N,2,2] mit  p_global = t + R @ p_fahrzeug  (Fahrzeug-System: x rechts, y vorn),
 loc [N] Index in LOCS, scene [N] laufende Szenen-Nr. im Teil, prev [N] Zeile des Vorgaenger-Samples derselben Szene im selben Teil (-1 = keins), dt [N] Zeitabstand dazu (s), ts [N] Zeitstempel (s).
-Aufruf: make_poses.py <b123|mini>   (Umgebung bev)"""
+Aufruf: make_poses.py <b123|mini|b456|...>   (Umgebung bev)
+Any other tag (b456, a check set) reads ~/exp_gcar_<tag>/feats/<part>_tokens.json (nuScenes trainval) and writes to ~/exp_gcar_<tag>/."""
 import json
 import os
 import sys
@@ -17,7 +18,7 @@ LOCS = ["boston-seaport", "singapore-onenorth", "singapore-hollandvillage", "sin
 
 
 def main(tag):
-    c = CFG[tag]
+    c = CFG.get(tag) or dict(root=f"{HOME}/data/nuscenes_full", version="v1.0-trainval", exp=f"{HOME}/exp_gcar_{tag}", out=f"{HOME}/exp_gcar_{tag}")
     nusc = NuScenes(version=c["version"], dataroot=c["root"], verbose=False)
     for part in ("train", "val"):
         toks = json.load(open(f"{c['exp']}/feats/{part}_tokens.json"))
