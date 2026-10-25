@@ -39,8 +39,9 @@ def grid_points(grid, device=None, dtype=torch.float32):
     return torch.stack([gx.reshape(-1), gy.reshape(-1)], -1)
 
 
-def splat_positions(p, dt, v, omega, v_obj=None):
-    """p (B, N, 2) source positions; dt, v, omega: (B,) or (B, N); v_obj (B, N, 2) or None -> p' (B, N, 2)."""
+def splat_positions(p, dt, v, omega, v_obj=None, delta=None):
+    """p (B, N, 2) source positions; dt, v, omega: (B,) or (B, N); v_obj (B, N, 2) or None; delta (B, N, 2) a learned
+    correction in the target frame (CorrectionHead) or None -> p' (B, N, 2)."""
     def col(t):
         t = torch.as_tensor(t, dtype=p.dtype, device=p.device)
         return t.view(-1, 1) if t.dim() <= 1 else t
@@ -52,7 +53,8 @@ def splat_positions(p, dt, v, omega, v_obj=None):
         qy = qy + v_obj[..., 1] * dt
     th = omega * dt
     c, s = torch.cos(th), torch.sin(th)
-    return torch.stack([c * qx + s * qy, -s * qx + c * qy], -1)
+    out = torch.stack([c * qx + s * qy, -s * qx + c * qy], -1)
+    return out if delta is None else out + delta
 
 
 def ego_speed_yawrate(T_src, T_tgt, dt):
@@ -86,6 +88,35 @@ class VelocityHead(nn.Module):
         return out.squeeze(-1) if squeeze else out
 
 
+class CorrectionHead(nn.Module):
+    """g_phi: a small learned correction of the target position (Mirko, 2026-10-25), on top of the geometric model:
+    delta = d_max tanh(raw / d_max), raw = MLP([feature; v; omega; dt; v dt; omega dt; x / x_scale; y / y_scale]) as
+    1x1 convs, 2 outputs in metres (target frame). Bounded to d_max (default 1 m = 2 cells: the range in which the
+    bilinear splat gives a usable position gradient) and zero at the start (pure geometric model). It can absorb what
+    the model leaves out: lag and blur of chained splats, acceleration, odometry / time-stamp / model errors."""
+
+    N_EGO = 7
+
+    def __init__(self, cin, hidden=32, d_max=1.0, x_scale=60.0, y_scale=26.0):
+        super().__init__()
+        self.net = nn.Sequential(nn.Conv2d(cin + self.N_EGO, hidden, 1), nn.ReLU(),
+                                 nn.Conv2d(hidden, hidden, 1), nn.ReLU(), nn.Conv2d(hidden, 2, 1))
+        nn.init.zeros_(self.net[4].weight)
+        nn.init.zeros_(self.net[4].bias)
+        self.d_max, self.x_scale, self.y_scale = d_max, x_scale, y_scale
+
+    def forward(self, feat, pos, dt, v, omega):
+        """feat (B, C, N) and pos (B, N, 2) source positions; dt, v, omega (B,) or scalars -> delta (B, N, 2)."""
+        B, C, N = feat.shape
+
+        def col(t):
+            return torch.as_tensor(t, dtype=feat.dtype, device=feat.device).reshape(-1, 1).expand(B, N)
+        dt, v, omega = col(dt), col(v), col(omega)
+        ego = torch.stack([v, omega, dt, v * dt, omega * dt, pos[..., 0] / self.x_scale, pos[..., 1] / self.y_scale], 1)
+        raw = self.net(torch.cat([feat, ego], 1).unsqueeze(-1))[..., 0]          # (B, 2, N)
+        return (self.d_max * torch.tanh(raw / self.d_max)).permute(0, 2, 1)
+
+
 def splat(feat, pos, grid, importance=None, eps=1e-6):
     """feat (B, C, N), pos (B, N, 2) target positions in metres, importance (B, N) or None -> (out (B, C, X, Y),
     mass (B, 1, X, Y)). Bilinear kernel on the cell centres; sources whose 4 corners all fall outside are dropped."""
@@ -117,14 +148,16 @@ def splat(feat, pos, grid, importance=None, eps=1e-6):
     return out.view(B, C, X, Y), mass.view(B, 1, X, Y)
 
 
-def splat_bev(bev, grid, dt, v, omega, head=None, importance=None):
+def splat_bev(bev, grid, dt, v, omega, head=None, importance=None, corr=None):
     """Move a BEV map (B, C, X, Y) of the source time to the target time: positions of the cell centres by
-    splat_positions with v_hat = head(bev) (or 0), then splat. Returns (out, mass, v_hat or None)."""
+    splat_positions with v_hat = head(bev) (or 0) and the correction corr(...) (or none), then splat.
+    Returns (out, mass, v_hat or None)."""
     B, C, X, Y = bev.shape
     p = grid_points(grid, bev.device, bev.dtype).unsqueeze(0).expand(B, -1, -1)
     v_hat = head(bev) if head is not None else None
     v_obj = v_hat.permute(0, 2, 3, 1).reshape(B, X * Y, 2) if v_hat is not None else None
-    pos = splat_positions(p, dt, v, omega, v_obj)
+    delta = corr(bev.reshape(B, C, X * Y), p, dt, v, omega) if corr is not None else None
+    pos = splat_positions(p, dt, v, omega, v_obj, delta)
     imp = importance.reshape(B, X * Y) if importance is not None else None
     out, mass = splat(bev.reshape(B, C, X * Y), pos, grid, imp)
     return out, mass, v_hat
@@ -230,6 +263,20 @@ def _selftest():
     via_pose = (torch.linalg.inv(T1) @ torch.tensor([35.0, -6.0, 0.0, 1.0], dtype=dt64))[:2]
     via_splat = splat_positions(pw, dt, v_est, w_est)[0, 0]
     assert (via_splat - via_pose).norm() < 1e-3, "splat with v, omega from poses = pose transform"
+    # 10 correction head: zero at the start (no change), bounded by d_max, and it gets a gradient through the splat
+    corr = CorrectionHead(cin=3, d_max=1.0).double()
+    bev = torch.randn(1, 3, grid.nx, grid.ny, dtype=dt64)
+    a, _, _ = splat_bev(bev, grid, 0.3, 10.0, 0.2)
+    b, _, _ = splat_bev(bev, grid, 0.3, 10.0, 0.2, corr=corr)
+    assert torch.allclose(a, b), "correction starts at zero"
+    nn.init.normal_(corr.net[4].weight, std=50.0)
+    pts = grid_points(grid, dtype=dt64)[None]
+    d = corr(bev.reshape(1, 3, -1), pts, 0.3, 10.0, 0.2)
+    assert d.abs().max() <= 1.0 + 1e-12 and d.abs().max() > 0.5, "bounded by d_max"
+    nn.init.normal_(corr.net[4].weight, std=1e-2)
+    out, _, _ = splat_bev(bev, grid, 0.3, 10.0, 0.2, corr=corr)
+    (out[:, 0] * torch.randn_like(out[:, 0])).sum().backward()
+    assert corr.net[4].weight.grad is not None and corr.net[4].weight.grad.abs().sum() > 0, "gradient reaches g_phi"
     print("splat selftest ok: exact 2-cell shift, landing point = formula (vs exact CTRV within v w^2 dt^3), "
           "object velocity, forward-back, mass conservation, collision by importance, gradcheck, velocity head learns, "
           "moving blob")
