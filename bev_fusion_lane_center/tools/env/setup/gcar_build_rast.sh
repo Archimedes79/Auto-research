@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # Schritt 2 der Umgebung 'gcar': nvcc (conda-forge) installieren, Gauss-Rasterizer bauen, Umgebung pruefen. Protokoll: out/gcar_env2.log
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
 echo "=== $(date +%H:%M:%S) nvcc installieren"
-bash /mnt/c/ML-Experiment/bev_fusion_lane_center/scripts/gcar_nvcc.sh
+bash $BFLC/scripts/gcar_nvcc.sh
 conda activate gcar
 SP=$(python -c "import site; print(site.getsitepackages()[0])")
 export CUDA_HOME="$CONDA_PREFIX" TORCH_CUDA_ARCH_LIST="8.6" MAX_JOBS=6

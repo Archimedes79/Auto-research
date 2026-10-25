@@ -1,4 +1,4 @@
-# ML-Experiment (workspace root)
+# Research repository (workspace root; the folder name is free: no file in it depends on it)
 
 Two things live here, and one git repository holds the code of both (whitelist in `.gitignore`):
 

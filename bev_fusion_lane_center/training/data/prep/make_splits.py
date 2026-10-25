@@ -1,6 +1,7 @@
 """Splits fuer die Graph-Extraktion (E27 ff.): scene-disjunkt, nach den offiziellen nuScenes-Szenen.
 TRAIN = offizielle Train-Szenen der Teile 1-3 (212 Szenen, 8.414 Samples); VAL und TEST = offizielle Val-Szenen (43 Szenen), abwechselnd je Ort auf VAL (Abstimmung, Modellwahl) und TEST (nur Endwerte) verteilt.
 Zusaetzlich TRAIN_EVAL = jedes 8. Trainings-Sample (Obergrenzen-/Ueberanpassungs-Diagnose). Ausgabe: ~/exp_gcar_b123/splits.json (Indizes in die Token-Listen train_tokens.json / val_tokens.json) und loop2/splits.json."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 
@@ -32,5 +33,5 @@ out = dict(
     note="Indizes: train/train_eval in train_tokens.json, val/test in val_tokens.json (offizielle Val-Szenen, scene-disjunkt)")
 os.makedirs(f"{home}/exp_gcar_b123", exist_ok=True)
 json.dump(out, open(f"{home}/exp_gcar_b123/splits.json", "w"), indent=1)
-json.dump(out, open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json", "w"), indent=1)
+json.dump(out, open(BP.ROOT + "/data/splits.json", "w"), indent=1)
 print(out["n"], "Szenen:", {k: len(v) for k, v in out["scenes"].items()}, "Orte:", out["locations"])

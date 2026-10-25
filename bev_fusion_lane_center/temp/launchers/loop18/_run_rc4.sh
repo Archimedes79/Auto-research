@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E219.rc4: recall-weighted fine-tune with an extra weight on ground-truth points beyond 25 m (P18_FAR_W = 3: weight 1 + 3 x ramp(25 -> 40 m)); recall weight 3 as rc1
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 export P18_FAR_W=3.0
 python3 $R/tools/experiment/run.py --id E219.rc4 --gpu-max-mb 9000 --retries 1 --basis E219,E217 --seed 0 \
   --hyp "a recall weight that grows with the range closes the far-range recall gap with less precision loss than a uniform weight" \

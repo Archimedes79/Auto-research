@@ -1,12 +1,13 @@
 """Charts for the weekly PowerPoint (matplotlib, large fonts, one palette). Run in gcar: tools/env/_py14.sh make_deck_charts.py
 Numbers: reports/source/weekly/digest_week1.md and digest_week2.md (same values as the two reports)."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/reports/source/weekly/deck"
+OUT = BP.ROOT + "/reports/source/weekly/deck"
 os.makedirs(OUT, exist_ok=True)
 NAVY, BLUE, ORANGE, GREEN, GREY, AMBER, RED, LB = "#14213D", "#1D4EA3", "#C85F00", "#1A7F3C", "#8A939D", "#9A6A00", "#B3261E", "#9DB8E8"
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 15, "axes.spines.top": False, "axes.spines.right": False,

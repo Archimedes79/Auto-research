@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # equal-budget controls, two jobs in parallel: E219.f1eq (control of rc1: f1 + the same 4 u fine-tune at the default recall weight 1) and E219.j1eqs1 (seed 1 of the j1 control j1eq); each is evaluated pruned on VAL after its training
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 SETJ=(reach=null spf2=false temporal=false stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 M=192 K0=96 seed_gscale=1.0 tolerant=false local_r=12.0 junc=true)
 SETF=(reach=null spf2=false junc=true temporal=true stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 seed_gscale=1.0 tolerant=false local_r=12.0 M=288 K0=144)
 (

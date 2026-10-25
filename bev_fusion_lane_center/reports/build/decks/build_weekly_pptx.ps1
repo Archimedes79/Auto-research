@@ -1,10 +1,11 @@
 # Builds the two-week PowerPoint (weeks 1 and 2 of the lane-graph project) with PowerPoint COM (no downloads). ASCII only (special characters via [char]).
 # Usage: powershell -File build_weekly_pptx.ps1 [out.pptx]
 # Inputs: reports\source\figures\*.png, reports\source\weekly\deck\c*.png (made by make_deck_charts.py). Numbers: digest_week1.md / digest_week2.md.
-param([string]$Out = "C:\ML-Experiment\bev_fusion_lane_center\reports\weekly\Weeks1-2_LaneGraph_Presentation_EN.pptx")
+param([string]$Out = ([System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\weekly\Weeks1-2_LaneGraph_Presentation_EN.pptx")))
 $ErrorActionPreference = "Stop"
-$FIG = "C:\ML-Experiment\bev_fusion_lane_center\reports\source\figures"
-$DECK = "C:\ML-Experiment\bev_fusion_lane_center\reports\source\weekly\deck"
+$PROJ = [System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\..")  # the problem folder, from the location of this script
+$FIG = Join-Path $PROJ "reports\source\figures"
+$DECK = Join-Path $PROJ "reports\source\weekly\deck"
 $AR = [string][char]0x2192; $MI = [string][char]0x2212; $TI = [string][char]0x00D7; $PM = [string][char]0x00B1; $GE = [string][char]0x2265; $LE = [string][char]0x2264; $DOT = [string][char]0x00B7
 
 function C([string]$hex) { $r = [Convert]::ToInt32($hex.Substring(0, 2), 16); $g = [Convert]::ToInt32($hex.Substring(2, 2), 16); $b = [Convert]::ToInt32($hex.Substring(4, 2), 16); return ($r + 256 * $g + 65536 * $b) }

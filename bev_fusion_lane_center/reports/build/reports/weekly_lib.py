@@ -8,6 +8,7 @@
 Images are resized once into a temp cache (/tmp/weekly_img_cache) (max 1000 px, JPEG for photos, PNG for line art) and embedded
 as base64, so the HTML is a single file.
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import base64
 import hashlib
 import html
@@ -16,7 +17,7 @@ import os
 
 from PIL import Image
 
-ROOT = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+ROOT = BP.ROOT
 CACHE = "/tmp/weekly_img_cache"  # regenerated on each build
 esc = html.escape
 

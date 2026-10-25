@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # TEST re-run of the j1 finalist (E230.j1 failed in its resample step: a concurrent edit of p16_loss.py had a missing import for one minute; settings unchanged), after the recall-variant run
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 L=$R/temp/launchers/loop18
 X=$R/experiment_execution/runs
 until [ -f $X/E230.rc/done ]; do sleep 30; done

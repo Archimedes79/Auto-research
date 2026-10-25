@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # deployed-path rows for j1rcs1 on the idle machine, then the paired bootstrap with all systems
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 P=$R/tools/env/_py14.sh
 for s in 0 1; do
   bash $P p16_pipeline_eval.py --name e18_D7_j1rcs1 --M 192 --K0 96 --route p16_f2hr_route_s$s --fork_prune 0.4 --tag _final_s${s}_fp0.4

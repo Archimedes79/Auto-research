@@ -14,6 +14,7 @@ The script refuses while `training/`, `evaluation/`, `tools/` or `reports/build/
 | `analysis/loop18`, `launchers/loop18` | scratch and launchers of loop 18 (older layout: by type, then loop; new loops use `temp/loopNN/`) |
 | `launchers/loop17` | wrappers of loop 17, still named in HANDOVER.md until its report is final |
 | `literature_backup_2026-10-24/` | safety copy made by the literature chat; remove when that work is filed |
+| `rename_repo_folder.ps1` | one-off (2026-10-25): renames the repository folder and re-registers the WSL disk; run once with the Claude app closed, then remove |
 | `STRUCTURE.md` | folder map with sizes, on demand (`tools/maintenance/make_structure.py`) |
 
 History: on 2026-10-25 the analysis of loops 8 - 16, the archive of 472 historic scripts and the doc backup were staged in `_to_delete/`; modules that live code still imports were copied to `training/legacy/`, `training/data/prep/` and `training/search/`. The launchers of loops 15 and 16 are in `../experiment_execution/history/launchers/`.

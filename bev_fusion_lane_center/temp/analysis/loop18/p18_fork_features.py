@@ -2,6 +2,7 @@
 Features of every predicted split vertex of the champion graphs (873 VAL frames): junction-head heat at the vertex (3 x 3 maximum), fork angle, length of the shorter branch, distance to the ego, number of successors.
 Prints AUROC per feature and the precision / recall obtained by thresholding the best one. Merge vertices are treated the same way with the merge heat.
 Usage (gcar): p18_fork_features.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import pickle
 import sys
@@ -86,7 +87,7 @@ for kind, nm in ((0, "split"), (1, "merge")):
             keep = A[:, k] >= th
             out.append(f"{fn}>={th}: keep {keep.mean():.2f} precision {A[keep, 5].mean():.2f} recall-share {A[keep, 5].sum() / A[:, 5].sum():.2f}")
         print("   " + " | ".join(out))
-od = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e18/fork_prune_val"
+od = BP.ROOT + "/runs/e18/fork_prune_val"
 os.makedirs(od, exist_ok=True)
 np.savez(f"{od}/fork_features.npz", k0=np.array(rows[0]), k1=np.array(rows[1]), columns=np.array(["heat", "angle", "shorter_branch", "range", "successors", "true"]))
 print("saved", f"{od}/fork_features.npz")

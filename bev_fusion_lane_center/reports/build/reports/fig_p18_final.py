@@ -1,5 +1,6 @@
 """Loop 18 figure: the systems on the validation frames side by side (S, Q, J, lanes found) - control E94, champion f1, champion + fork pruning, single-frame j1 + pruning, recall variants rc1 / rc2 (+ pruning).
 Reads evaluation/examples/result.json, runs/e18/fork_prune_val/results.json, runs/e18/rc_eval/*.json.  Writes reports/source/figures/p18_final_val.png.  Usage (gcar): fig_p18_final.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 
@@ -9,7 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 ex = json.load(open(f"{R}/evaluation/examples/result.json"))
 fp = json.load(open(f"{R}/runs/e18/fork_prune_val/results.json"))["cards"]
 rcd = {n: json.load(open(f"{R}/runs/e18/rc_eval/{n}.json")) for n in ("rc1", "rc2", "j1p", "rc4") if os.path.exists(f"{R}/runs/e18/rc_eval/{n}.json")}

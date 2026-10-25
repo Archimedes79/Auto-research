@@ -1,7 +1,8 @@
 # Shared PowerPoint COM helpers (dot-source from a deck script; the script must create $app, $pres, set $TOTAL and $FOOT). ASCII only.
 $ErrorActionPreference = "Stop"
-$FIG = "C:\ML-Experiment\bev_fusion_lane_center\reports\source\figures"
-$DECK = "C:\ML-Experiment\bev_fusion_lane_center\reports\source\weekly\deck"
+$PROJ = [System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\..")  # the problem folder, from the location of this script
+$FIG = Join-Path $PROJ "reports\source\figures"
+$DECK = Join-Path $PROJ "reports\source\weekly\deck"
 $AR = [string][char]0x2192; $MI = [string][char]0x2212; $TI = [string][char]0x00D7; $PM = [string][char]0x00B1; $GE = [string][char]0x2265; $LE = [string][char]0x2264; $DOT = [string][char]0x00B7
 
 function C([string]$hex) { $r = [Convert]::ToInt32($hex.Substring(0, 2), 16); $g = [Convert]::ToInt32($hex.Substring(2, 2), 16); $b = [Convert]::ToInt32($hex.Substring(4, 2), 16); return ($r + 256 * $g + 65536 * $b) }

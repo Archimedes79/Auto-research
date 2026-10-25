@@ -2,6 +2,7 @@
 Data: dense heat / direction of the out-of-fold dense heads (clean TRAIN frames) and of the real failure rows (7 perturbation types, p17_dense_train.py maps); SD map as drawn by the loop-17 simulator
 (scene-constant pose error sigma in {0.5, 1, 1.5, 2, 3} m, yaw 2 sigma deg; 25 % maps of another place = wrong, 5 % no map). Loss: Huber of the pose (m, deg) on right maps, BCE of the trust.
 Usage (gcar, GPU, < 2 GB): p18_regis_train.py --name regis_a --its 1500 [--fail_perts dark,blur,...]   -> runs/e18/<name>/{regis.pt, log.txt, status.json}"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -18,7 +19,7 @@ import sd_lib as SL  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 ALL_PERTS = "dark,blur,cam_front3_off,fog,radar_off,extr3,cam_front_off"
 
 

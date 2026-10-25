@@ -1,6 +1,7 @@
 """Loop 16 harness: shared constants, graph conversion and the metric card (one definition for every run, control and designs).
 Graph format = graph_eval format: dict(pts=[(n,2) polylines in travel direction], edges=[(i, j)], nodes=[vertex ids per polyline]).
 Usage: imported by p16_ctrl.py / p16_train.py / p16_diag.py / p16_triage.py."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import sys
@@ -10,7 +11,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import graph_eval as GE  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 LADDER = f"{OUT}/e123_ladder"
 HOME = os.path.expanduser("~")
 D_FEAT = f"{HOME}/exp_gcar_b123"

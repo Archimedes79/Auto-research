@@ -5,6 +5,7 @@ series input (channels 39 heat, 40-41 direction of the 42-channel cache, i.e. af
 Prints pose errors per phase (single frame, accumulated, no correction) and the trust of right / wrong maps; writes runs/e18/<out>/<tag>_<cond>.npz with the corrections and the trust that
 p18_regis.RegMapWrap (builder evaluation, p17_eval.py --reg) reads.
 Usage (gcar, GPU < 2 GB): p18_regis_eval.py --regis regis_a --out regis_eval_a --tags dark_maxdecay_0.95,blur_maxdecay_0.95 --sigmas 1,2,3 [--wrong 1]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -21,7 +22,7 @@ import sd_lib as SL  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 
 
 def auroc(pos, neg):

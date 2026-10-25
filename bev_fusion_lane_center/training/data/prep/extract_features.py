@@ -7,7 +7,7 @@
 
 Zeilen = x_lidar, Spalten = y_lidar. Zellmitte i: -half + (i + 0.5) * res.
 Aufruf (in WSL, Umgebung 'bev', Arbeitsverzeichnis ~/work/bevfusion):
-    python /mnt/c/ML-Experiment/bev_fusion_lane_center/training/data/prep/extract_features.py ~/exp/feats
+    python <problem folder>/training/data/prep/extract_features.py ~/exp/feats
 """
 import json
 import os

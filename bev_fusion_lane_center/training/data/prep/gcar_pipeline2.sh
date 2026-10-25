@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E27 Schritt 2: Teile 1-3: zuerst Validierung (alle 1.706) und jedes 2. Trainings-Sample (gerade Zeilen, alle Szenen), danach die ungeraden Trainings-Samples.
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center/training/data/prep/run_gcar.sh
-L=/mnt/c/ML-Experiment/out
+R=$BFLC/training/data/prep/run_gcar.sh
+L=$REPO/out
 echo "== $(date +%H:%M:%S) Validierung + Training gerade (parallel)"
 bash $R gcar_tools.py extract --split b123 --part val --workers 3 > $L/gcar_extract_val.log 2>&1 &
 bash $R gcar_tools.py extract --split b123 --part train --start 0 --stride 2 --workers 3 > $L/gcar_extract_tr_even.log 2>&1 &

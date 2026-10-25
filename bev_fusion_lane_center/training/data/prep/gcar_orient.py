@@ -1,5 +1,6 @@
 """Orientierung und Rahmen der GaussianCaR-Karten-Vorhersage gegen unser Soll pruefen (Mini-Validierung) und ein Bild schreiben.
 Aufruf: gcar_orient.py   (liest ~/work/gcar_probe/probe_mini_val.npz aus 'gcar_tools.py probe' und ~/exp_crn_mini/feats/val_gt_raster.npy; schreibt out/crn/viz_gcar_orientierung.png)"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import sys
 
@@ -57,5 +58,5 @@ for k, i in enumerate([0, 2, 4, 6][: min(4, n)]):
         ax.set_yticks([])
 fig.suptitle(f"GaussianCaR (Karten-Gewichte), BEV-Rahmen = Hinterachse zum Zeitpunkt von CAM_FRONT: Vorhersage gegen unsere Soll-Mittellinien; Orientierung '{D4_NAME[best]}'", fontsize=10)
 fig.tight_layout()
-fig.savefig("/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/_loop1_crn/viz_gcar_orientierung.png", dpi=85)
+fig.savefig(BP.ROOT + "/runs/_loop1_crn/viz_gcar_orientierung.png", dpi=85)
 print("Bild geschrieben")

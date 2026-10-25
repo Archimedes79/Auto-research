@@ -1,6 +1,7 @@
 #!/bin/bash
-# Run every self-test of the project (about 10 minutes, uses the GPU for four of them). Usage: wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/maintenance/run_all_tests.sh
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"; REPO="$(dirname "$BFLC")"
+# Run every self-test of the project (about 10 minutes, uses the GPU for four of them). Usage (from the problem folder): wsl bash tools/maintenance/run_all_tests.sh
+R=$BFLC
 P="bash $R/tools/env/_py14.sh"
 fail=0
 run() {
@@ -16,8 +17,8 @@ run "metric response to controlled errors"  test_metric_response.py
 run "evaluate.py reproduces the champion card" evaluate.py champion --tag selftest --expect S=0.7694 F1@1.0=0.8696 J=0.4092 lanes_found=0.6948
 run "builder spec tests (18)"               test_p16_spec.py
 run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
-run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" /mnt/c/ML-Experiment/autoresearch/tools/selftest.py
-run "structure and documents (check_structure)" /mnt/c/ML-Experiment/autoresearch/tools/check_structure.py --selftest
+run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
+run "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest
 run "images + video tools"                  viz/selftest.py
 run "champion fast path == reference graphs" p16_fast_check.py --n 10
 run "registration K188 (synthetic shifts, gradient)" p18_regis.py

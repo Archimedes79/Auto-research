@@ -1,5 +1,6 @@
 """Loop 10: training of the learned trace network by imitation of the ground-truth graph (noisy states, corrective expert actions, ring-limited context).
 Usage (gcar, GPU slot): p10_train.py --name e94_a --iters 12000 [--no_cov] [--no_ptr] [--no_range] [--p_neg 0.2] [--seed 0]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import math
@@ -16,7 +17,7 @@ import p10_data as PD  # noqa: E402
 import p10_expert as EX  # noqa: E402
 import p10_net as PN  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 EV_W = torch.tensor([1.0, 2.0, 3.0, 3.0, 2.0])
 
 

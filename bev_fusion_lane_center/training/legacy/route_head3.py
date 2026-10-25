@@ -12,6 +12,7 @@ What is new compared with route_head.py (E60 / E65d):
 Call (environment gcar):  run_gcar.sh route_head2.py --name e73_x --init_from e60_main --steps 1500 --lr 2e-4 --pert_train dark,cam_front_off,fog --dev 1
 Output: out/loop2/<name>/{model.pt, [model_ema.pt], dev.json, [test.json], log.txt}
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import copy
 import json
@@ -53,7 +54,7 @@ def sd_maps(part):
         _SDM[part] = pickle.load(open(f"{D}/sd_{part}.pkl", "rb"))
     return _SDM[part]
 PERTS = ["dark", "cam_front_off", "fog", "cam_front3_off", "blur", "extr3", "radar_off"]
-SP = json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))
+SP = json.load(open(BP.ROOT + "/data/splits.json"))
 LEVER_M = 20.0  # lever arm of a yaw error for the map-trust label
 TRUST_ERR_M = 1.0  # a map is 'usable' when the displacement of its points at 20 m ahead is <= 1 m
 

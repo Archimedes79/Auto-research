@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # Graph metrics + navigation attribute (route head along the edges: original heads s0 / s1 and the heads trained on failure frames c0 / c1 of E214) of a builder with fork pruning, on one split (val_clean for the dry run, test_clean for the one TEST use)
 # usage: _pipeline18.sh <split> <tag> <builder run name> <M> <K0> <fork_prune> <short id>
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 split=$1; tag=$2; name=$3; M=$4; K0=$5; fp=$6; id=$7
 O=$R/runs/diag_$tag
 mkdir -p $O

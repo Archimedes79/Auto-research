@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E218: fork pruning (0.3) under failure; and the best chain (B + gate + registration + trust + pruning) against the same chain without pruning
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 M=tables/e218.md
 rm -f $R/runs/e17/$M
 for p in dark blur cam_front3_off; do

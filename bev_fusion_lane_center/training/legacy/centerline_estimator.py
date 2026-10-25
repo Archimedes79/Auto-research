@@ -8,6 +8,7 @@ Das Soll (Karte) wird nur zum Training und zur Auswertung benutzt.
 Auswertung: Praezision / Ausbeute / F1 der geschaetzten Mittellinien gegen die Karten-Mittellinien bei Toleranz
 0.5 / 1.0 / 1.5 m (Chamfer-artig, wie bei Online-Karten ueblich), Validierung (81 Samples) und Training.
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import sys
@@ -26,8 +27,8 @@ import align_train as A  # noqa: E402
 import heat_align as H  # noqa: E402
 
 dev = "cuda"
-O = "/mnt/c/ML-Experiment/out/align"
-OUT = "/mnt/c/ML-Experiment/out/estimator"
+O = BP.REPO + "/out/align"
+OUT = BP.REPO + "/out/estimator"
 PATHS = [f"{O}/v5dist/heatnet.pt"] + [f"{O}/v7s{s}/heatnet.pt" for s in (1, 2, 3)]
 
 

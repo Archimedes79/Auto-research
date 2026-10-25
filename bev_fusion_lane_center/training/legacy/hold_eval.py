@@ -10,6 +10,7 @@ Verfahren, die Karten-Route ins Fahrzeugsystem zu bringen:
   gt          wahre Ausrichtung (Untergrenze)
 Metriken: verankerter Querfehler nach 1/2/3 s (wie E62 'regmap': Weglaenge der wahren Fahrt, Anfangsversatz klingt mit Skala 15 m ab) und Registrierungsfehler (Versatz m, Gier Grad); getrennt nach sauberer Phase und Ausfallphase, nach Bildern seit dem Ausfall binniert; Szenen-Bootstrap.
 Aufruf (gcar): hold_eval.py --conds dark,cam_front3_off,blur --sigma 1.0 --out e67_s1"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import multiprocessing as mp
@@ -40,7 +41,7 @@ def scene_folds(S, P):
     rows_of = {}
     for c in S:
         if c == "stored":
-            rows_of[c] = np.array(json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))["test"])
+            rows_of[c] = np.array(json.load(open(BP.ROOT + "/data/splits.json"))["test"])
         else:
             rows_of[c] = np.load(f"{D}/pert/{c}/test_rows.npy")
     scenes = sorted({int(P["scene"][r]) for c in rows_of for r in rows_of[c]})

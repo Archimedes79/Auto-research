@@ -1,5 +1,6 @@
 """Loop 18 result figures from the stored result files (no GPU): E209, registration + trust (E213), fork pruning (E215), route head with failure frames / joint fine-tune (E214).
 Writes reports/source/figures/p18_*.png.  Usage (gcar): fig_p18_results.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import pickle
@@ -10,7 +11,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 E17 = f"{R}/runs/e17"
 FIG = f"{R}/reports/source/figures"
 C = dict(base="#8a8f98", unreg="#d9a441", reg="#1f5fa8", exact="#2a9d4a", none="#6b7a8f", wrong="#a85f9e", a="#1f5fa8", c="#2a9d4a")

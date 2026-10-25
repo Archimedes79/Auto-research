@@ -1,5 +1,6 @@
 #!/bin/bash
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
+R=$BFLC
 L=$R/temp/launchers/loop18
 bash $L/_run_j3.sh a 0 &
 bash $L/_run_j3.sh c 0 &

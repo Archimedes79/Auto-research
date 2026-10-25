@@ -83,7 +83,7 @@ def main():
                     lines.append(f"  {sub + '/':24s} {fmt(s2):>8s} {n2:>6d} files   {PURPOSE[key]}")
         else:
             lines.append(f"{t:26s} {fmt(os.path.getsize(p)):>8s}               {PURPOSE.get(t, '')}")
-    lines += ["```", "", "Not inside this folder: the WSL distribution disk `C:\\ML-Experiment\\wsl` (Ubuntu ext4 image) and, in the WSL home, the cached feature arrays and the clones of the foundation code - see `data/README.md`.", ""]
+    lines += ["```", "", "Not inside this folder: the WSL distribution disk `wsl/` in the repository folder, the parent of this folder (Ubuntu ext4 image) and, in the WSL home, the cached feature arrays and the clones of the foundation code - see `data/README.md`.", ""]
     open(os.path.join(ROOT, "temp", "STRUCTURE.md"), "w", encoding="utf-8").write("\n".join(lines))
     print("temp/STRUCTURE.md written")
     # checkpoint registry

@@ -1,13 +1,14 @@
 """Loop 18 architecture drawing: the chain from cached camera + radar features to the planner, with the blocks added in loop 17 (gate, map-conditioned builder) and loop 18 (registration, trust, fork pruning, numba union).
 No red blocks. Colours: grey = frozen / cached, blue = learned and differentiable, green = memory, orange = new in loop 18, hatched = discrete step without parameters (assembly).
 Writes reports/source/figures/p18_arch.png.  Usage (gcar): fig_p18_arch.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 fig, ax = plt.subplots(figsize=(15, 6.6))
 ax.set_xlim(0, 15)
 ax.set_ylim(0, 6.6)

@@ -1,5 +1,6 @@
 """Loop 18 / WP4 (one-off): does the recall weight close the far-range recall gap to the control? Recall@1 m of the ground-truth points (every 0.5 m, |x|,|y| < 48) per range bin for j1, j1eq, j1rc, j1rc6, f1 + pruning, rc1 and the control E94 (fork pruning 0.4 for the recall / control variants, 0.3 for the champion and j1 as in the final table; cached raw builder outputs).
 Usage (gcar): p18_range_recall.py   -> prints the table and writes runs/e18/range_recall.json"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import pickle
@@ -13,7 +14,7 @@ import graph_eval as GE  # noqa: E402
 import p16_infer as PI  # noqa: E402
 import p16_timing as TM  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 H = os.path.expanduser("~/exp_gcar_b123/p18")
 ctrl = pickle.load(open(f"{R}/runs/e94_a/graphs_val_clean.pkl", "rb"))["preds"]
 SYS = [("j1 (0.4)", "e123_D7_r3_j1", 192, 96, "raw_val873_e123_D7_r3_j1_192.pkl", 0.4), ("j1eq", "e18_D7_j1eq", 192, 96, "raw_val873_e18_D7_j1eq_192.pkl", 0.4),

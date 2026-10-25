@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E136: joint end-to-end fine-tune (builder + route head along the edges, route loss through the node tokens), three arms, then route evaluation on failure series
-S=/mnt/c/ML-Experiment/scripts
-L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+S=$REPO/scripts
+L=$REPO/out/loop2/e17/logs
 bash $S/_py14.sh p17_joint.py --name e17_joint_a --iters 600 --bs 4 --lam 1.0 > $L/e136_a.log 2>&1
 bash $S/_py14.sh p17_joint.py --name e17_joint_b --iters 600 --bs 4 --lam 0.05 > $L/e136_b.log 2>&1
 bash $S/_py14.sh p17_joint.py --name e17_joint_c --iters 600 --bs 4 --lam 0.05 --no_builder_grad > $L/e136_c.log 2>&1

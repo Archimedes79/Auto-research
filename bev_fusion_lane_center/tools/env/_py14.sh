@@ -1,7 +1,8 @@
 #!/bin/bash
 # run a project script in the gcar env:  _py14.sh <script.py | folder/script.py> [args...]
 # the script is found by name in training/ evaluation/ tools/ reports/build/ temp/ (a relative or absolute path works too); cwd = the folder of the script
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"  # the problem folder, from the location of this script (the repository can be renamed or moved)
+export BFLC_ROOT="$R"
 s="$1"; shift
 if [ ! -f "$s" ]; then
   n="${s##*../}"

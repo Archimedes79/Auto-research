@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-D = sys.argv[1] if len(sys.argv) > 1 else "/mnt/c/ML-Experiment/bev_fusion_lane_center/literature/sources/lit16"
+D = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "literature", "sources", "lit16")
 SKIP = {"PROJECT_CONTEXT.md", "SCHEMA.md", "eval_data_code.md", "cards_index.md", "cards_stats.md"}
 FIELDS = ["id", "name", "cluster", "papers", "depth", "stage", "idea", "formulation", "input", "output", "training", "differentiable", "sensors_data", "results", "compute", "code", "fit_to_us",
           "compat_needs", "compat_conflicts", "tried_before", "verified"]

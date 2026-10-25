@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # numbers-review follow-ups on the idle machine: (1) loop-16b and loop-18 f1 timings repeated next to each other, j1 timed at the same pruning threshold as j1rc; (2) deployed-path rows of j1 with pruning 0.4 (the comparison base of j1rc)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 P=$R/tools/env/_py14.sh
 for k in a b; do
   bash $P p18_latency.py --name e123_D7_r3_f1 --M 288 --K0 144 --rec 0 --union 1 --fork_prune 0 --tag _f1_loop16b_re$k > /dev/null 2>&1

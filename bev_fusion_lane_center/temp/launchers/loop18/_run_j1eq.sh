@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E219.j1eq: equal-budget control of j1rc - the same 4 u fine-tune of j1 192 / 96 (same recipe, seed 0, warm_frac 0.4) with the DEFAULT recall weight 1; separates the recall weight from the extra fine-tune steps. Evaluation chained below.
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 SETJ=(reach=null spf2=false temporal=false stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 M=192 K0=96 seed_gscale=1.0 tolerant=false local_r=12.0 junc=true)
 python3 $R/tools/experiment/run.py --id E219.j1eq --gpu-max-mb 9000 --retries 1 --basis E219.j1rc --seed 0 \
   --hyp "the gain of j1rc comes from the recall weight, not from the extra fine-tune steps: j1 fine-tuned for the same 4 u at recall weight 1 gains much less" \

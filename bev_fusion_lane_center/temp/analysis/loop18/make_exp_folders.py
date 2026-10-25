@@ -1,11 +1,12 @@
 """Loop 18 (one-off): experiment folders E209 (rerun) and E213 - E222, E230 with README, small results and figures (the scheme of experiments/: README.md, results/, figures/).
 Usage (any python): python3 make_exp_folders.py   (run after the numbers are final; overwrites the READMEs of these folders)"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import glob
 import os
 import re
 import shutil
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 EX = f"{R}/experiments"
 E17, E18, FIG = f"{R}/runs/e17", f"{R}/runs/e18", f"{R}/reports/source/figures"
 T = "T11 - Fork pruning, map localisation and failure-trained navigation (loop 18)"

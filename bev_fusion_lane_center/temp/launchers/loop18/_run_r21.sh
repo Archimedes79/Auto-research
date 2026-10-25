@@ -1,8 +1,9 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # R2.1 / E213: map-conditioned builder B (e17_map_b, E139) on the VAL failure series with the SD map after rough localisation (K145) and trust gate (K146).
 # registration output: runs/e18/regis_eval_a (p18_regis_eval.py, regis_a); builder results: runs/e17/e18_r21/<pert>_maxdecay_0.95<suffix>.pkl
 # baselines without registration are in runs/e17/e139_b (_m0 exact, _m2 sigma 2, _mnone, _mwrong)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 RG=$R/runs/e18/regis_eval_a
 P=dark,blur,cam_front3_off
 V=maxdecay:0.95

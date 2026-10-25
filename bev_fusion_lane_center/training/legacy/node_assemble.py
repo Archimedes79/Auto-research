@@ -5,6 +5,7 @@ Schritte (Parameter auf VAL gewaehlt):
   create : Schluesselpunkt ohne Knoten in der Naehe: laeuft ein Stueck in < d_c daran vorbei und beginnt / endet ein anderes in < r_b mit passendem Kurs, wird das Stueck am Punkt geteilt und verbunden
   prune  : Knoten ohne Schluesselpunkt in < r_prune verlieren ihre schwaechsten Zusatzkanten (Kurs)
 Aufruf (gcar): node_assemble.py --graphs e43/graphs_rule_e41_A --nodes e44_nodes --sets val,test --sweep 1   (schreibt out/loop2/<out>/assemble.json und Graph-Pickles)"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import itertools
 import json
@@ -19,7 +20,7 @@ import graph_eval as GE  # noqa: E402
 import graph_from_dense as GD  # noqa: E402
 import node_head as NH  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 
 
 # ------------------------------------------------------------------ Geometrie

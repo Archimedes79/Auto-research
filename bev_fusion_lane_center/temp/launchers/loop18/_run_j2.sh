@@ -1,8 +1,9 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # R2.2 / E214: longer joint fine-tune (2400 steps = 2 u, bs 4) of builder + route head along the edges with REAL failure frames in half of the batches (7 types), route loss through the node tokens.
 # arm a = route loss reaches the builder (builder loss x 0.05), arm c = control (tokens detached: only the route head learns), both from the same start; route-head seeds 0 / 1 (init p16_f2hr_route_s0 / s1).
 # usage: _run_j2.sh <arm a|c> <seed 0|1>
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 arm=$1; s=$2
 X=$R/experiment_execution/runs
 until [ -f $X/E209.c2/done ]; do sleep 30; done

@@ -1,6 +1,7 @@
 """Does the metric respond the way it should?  Controlled errors are applied to ground-truth graphs (they play the 'prediction'); every metric of the card is measured.
 Checks (assertions) + a table: how much S changes per kind and size of error, and how large an error is worth the noise band of 0.010.
 Writes evaluation/METRIC_RESPONSE.md.   Run: tools/env/_py14.sh test_metric_response.py [--n 150]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -12,7 +13,7 @@ import graph_eval as GE
 import sparse_metrics as SM
 import bootstrap as SB
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 HOME = os.path.expanduser("~")
 ap = argparse.ArgumentParser()
 ap.add_argument("--n", type=int, default=150)

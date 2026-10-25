@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E140 (E207 in the report): learned gated memory trained BEHIND the map-conditioned builder of E139 (arm B, frozen), two folds, then the held-out series fused with the model that did not see them, evaluated with exact / 2 m / no / wrong map
-S=/mnt/c/ML-Experiment/scripts
-L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+S=$REPO/scripts
+L=$REPO/out/loop2/e17/logs
 until [ -f $L/e137.done ]; do sleep 20; done
 for k in 0 1; do
   bash $S/_py14.sh p17_gate.py train --fold $k --folds 2 --name e17_gateB_k$k --steps 1500 --mapnet e17_map_b > $L/e140_train_k$k.log 2>&1 &

@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # R2.6 / E219: recall-weighted fine-tune of the champion re-opened under fork pruning (loop 16b run rc1: weight 3, S 0.731 / J 0.182 / lanes found 0.768; the J loss was false forks, which pruning removes).
 # usage: _run_rc.sh <name suffix> <rec weight>   -> runs/e123/e18_D7_<suffix>/model.pt, same recipe as rc1 (4 u from the champion f1, lr 5e-4, stem lr 0.3, beam 288 / 144)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 sfx=$1; w=$2
 python3 $R/tools/experiment/run.py --id E219.$sfx --gpu-max-mb 9000 --retries 2 --basis E184,E215 --seed 0 \
   --hyp "recall weight $w during the fine-tune lifts lanes found and Q once pruning removes the false forks" -- \

@@ -1,5 +1,6 @@
 """Loop 18: paired scene bootstrap (VAL, 873 frames, 22 scenes) of the final systems against the control E94 and against each other: S, Q, J, lanes found, F1@1, vertices per 100 m. Cached raw outputs; fork pruning 0.3 (f1, j1) / 0.4 (rc1, rc2, rc4, rc1s1, j1p4, j1rc).
 Writes runs/e18/final_boot.json and prints a table. Usage (gcar): p18_final_boot.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import pickle
@@ -12,7 +13,7 @@ import bootstrap as SB  # noqa: E402
 import p16_infer as PI  # noqa: E402
 import p16_timing as TM  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 H = os.path.expanduser("~/exp_gcar_b123/p18")
 sp = json.load(open(f"{R}/data/splits.json"))
 scene = np.load(os.path.expanduser("~/exp_gcar_b123/poses_val.npz"))["scene"][np.array(sp["val"])]

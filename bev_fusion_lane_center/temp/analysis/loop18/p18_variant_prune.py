@@ -1,5 +1,6 @@
 """Loop 18 (one-off): fork pruning on another trained builder of loop 16 (default rc1 = the recall-weighted fine-tune of the champion, which paid for recall with J 0.18). Raw outputs cached in ~/exp_gcar_b123/p18/raw_val873_<name>.pkl.
 Usage (gcar): p18_variant_prune.py --name e123_D7_r3_rc1 [--M 288 --K0 144]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import os
 import pickle
@@ -35,7 +36,7 @@ for t in a.thr.split(","):
     m = SM.card_any(gs, gts)
     print(f"{a.name} {a.M}/{a.K0} prune {t}: S {m['S']:.3f} Q {SM.quality(m):.3f} J {m['J']:.3f} (split P {m['split6_P']:.2f} R {m['split6_R']:.2f}) F1@1 {m['F1@1.0']:.3f} R@1 {m['R@1.0']:.3f} P@1 {m['P@1.0']:.3f} found {m['lanes_found']:.3f} FL {m['false_len_frac']:.3f} v100 {m['vert100']:.1f}", flush=True)
     if abs(float(t) - a.json_thr) < 1e-9:
-        od = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e18/rc_eval"
+        od = BP.ROOT + "/runs/e18/rc_eval"
         os.makedirs(od, exist_ok=True)
         import json
         json.dump(dict(name=a.name, weight=a.weight, thr=float(t), **{k: float(m[k]) for k in ("S", "J", "F1@1.0", "R@1.0", "P@1.0", "lanes_found", "false_len_frac", "vert100", "split6_P", "split6_R", "merge6_P", "merge6_R")}, Q=float(SM.quality(m))), open(f"{od}/{a.tag}.json", "w"), indent=1)

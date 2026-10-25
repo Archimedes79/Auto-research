@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # smoke test of the resume patch of p17_mapft.py: 24 steps with a checkpoint every 10, then a second start that must resume from step 20
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 N=e18_smoke_mapft
 rm -rf $R/runs/e123/$N
 FP=cam_front3_off,fog,radar_off,extr3,cam_front_off

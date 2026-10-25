@@ -1,6 +1,7 @@
 """Regression test of grid_eval against the numbers that dense_head.py stored when the dense head e37_final was evaluated (runs/e37_final/metrics.json, validation rows):
 the full validation prediction maps are re-scored and must reproduce the stored P/R/F1 (and 1:1 F1) at every tested threshold.
 Run: scripts/_py14.sh ../evaluation/lane_grid/selftest.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 
 import numpy as np
@@ -8,7 +9,7 @@ import torch
 
 import grid_eval as GR
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 prob = torch.from_numpy(np.load(f"{R}/runs/e37_final/prob_val.npy"))
 ids = np.load(f"{R}/runs/e37_final/ids_val.npy")
 stored = json.load(open(f"{R}/runs/e37_final/metrics.json"))["val"]

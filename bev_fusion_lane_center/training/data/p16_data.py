@@ -4,6 +4,7 @@ the exact distance and direction fields of the ground truth (verification target
   g05 [Gm,2] dense lane points every 0.5 m (|x|,|y| < 48), t05 [Gm,2] travel tangent, n05 [Gm] index of the nearest 1 m point;
   g1 [Hm,2] lane points every 1 m with the directed point graph of graph_eval, dg [Hm,Hm] uint16 directed shortest-path distance in 0.1 m (65535 = unreachable, cap 40 m).
 Usage: imported by p16_train.py / p16_gate.py / p16_diag.py."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import pickle
 import sys
@@ -20,7 +21,7 @@ import p8_lib as L  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 UNREACH = 65535
 DG_CAP = 40.0
 

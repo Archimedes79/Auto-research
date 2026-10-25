@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E219.j1rcs1: seed-1 replicate of j1rc (the adopted fast recall variant had one training seed); evaluation chained below
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 SETJ=(reach=null spf2=false temporal=false stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 M=192 K0=96 seed_gscale=1.0 tolerant=false local_r=12.0 junc=true)
 python3 $R/tools/experiment/run.py --id E219.j1rcs1 --gpu-max-mb 9000 --retries 1 --basis E219.j1rc --seed 1 \
   --hyp "the fast recall variant j1rc is reproducible: a second fine-tune seed gives the same gains over j1" \

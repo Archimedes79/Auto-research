@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E231.a after the two equal-budget controls are trained and evaluated: failure series of the j1 family through run.py (ledger row, done flag)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 until [ -f $R/runs/e18/rc_eval/f1eq.json ] && [ -f $R/runs/e18/rc_eval/j1eqs1.json ]; do sleep 20; done
 sleep 10
 python3 $R/tools/experiment/run.py --id E231.a --gpu-max-mb 9000 --retries 1 --basis E219,E218 --seed 0 \

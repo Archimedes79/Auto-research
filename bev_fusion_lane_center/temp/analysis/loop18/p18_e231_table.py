@@ -1,5 +1,6 @@
 """Loop 18 / E231.a (one-off): the j1 family on the loop-17 failure series (VAL, 22 scenes, 291 rows per series, fork pruning 0.4, no time recursion): failure-phase and clean-phase Q, lanes found, J, F1@1, S per model, and paired scene bootstraps of the failure-phase frames for j1rc / j1rcs1 against the equal-budget controls j1eq / j1eqs1 (and j1eq / j1eqs1 against j1).
 Usage (gcar): p18_e231_table.py   -> prints the tables and writes runs/e18/e231_table.json"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import pickle
@@ -11,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bootstrap as SB  # noqa: E402
 import sparse_metrics as SM  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 D = f"{R}/runs/e17/e18_j1fam"
 MODELS = ["j1", "j1eq", "j1eqs1", "j1rc", "j1rcs1"]
 PERTS = [("dark", "night"), ("blur", "blur"), ("cam_front3_off", "three cameras off")]

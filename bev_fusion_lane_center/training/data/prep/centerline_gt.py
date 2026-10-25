@@ -11,8 +11,8 @@ LoadBEVSegmentation gemessen: 100 % der Mittellinien liegen in dessen 'drivable_
 x_lidar zeigt nach rechts vom Auto, y_lidar nach vorn (Lidar-System, ca. 0.94 m vor der Hinterachse).
 
 Aufruf in WSL (Conda-Umgebung mit nuscenes-devkit, opencv-python, pyquaternion):
-    python centerline_gt.py --dataroot /mnt/c/ML-Experiment/bev_fusion_lane_center/data/nuscenes \
-        --version v1.0-mini --out /mnt/c/ML-Experiment/out/centerline_gt --debug 8
+    python centerline_gt.py --dataroot <problem folder>/data/nuscenes \
+        --version v1.0-mini --out <repository folder>/out/centerline_gt --debug 8
 
 STATUS: lauffaehig (Mini: 404 Samples), Orientierung geprueft. Die --debug-Bilder zeigen die roten
 Mittellinien in der grauen befahrbaren Flaeche.

@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # TEST (once), loop 18: graph metrics + route head along the edges (original heads and failure-trained heads) of f1 / j1 with fork pruning 0.3, and of the control. Started only after E219 / E220 have finished.
 # usage: _run_test18.sh [rc <run name> <M> <K0> <fork_prune>]   (the recall variant is added when it has been selected on VAL)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 L=$R/temp/launchers/loop18
 X=$R/experiment_execution/runs
 until [ -f $X/E220.a/done ] && { [ -f $X/E219.rc2/done ] || [ -f $X/E219.rc2/give_up ]; }; do sleep 30; done

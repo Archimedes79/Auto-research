@@ -1,8 +1,9 @@
 """Loop 18 / WP4 (literature gap 3: nobody measures the calibration of per-fork probabilities): reliability of the junction-head heat at predicted fork vertices as a probability that the fork is true (a ground-truth fork within 6 m).
 Expected calibration error (10 bins) raw and after an isotonic recalibration fitted on the first half of the forks and applied to the second half (frames are in scene order, so the halves hold different scenes). Usage (gcar): p18_fork_calibration.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import numpy as np
 
-z = np.load("/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e18/fork_prune_val/fork_features.npz")
+z = np.load(BP.ROOT + "/runs/e18/fork_prune_val/fork_features.npz")
 
 
 def ece(p, y, bins=10):

@@ -1,4 +1,5 @@
 """Hilfen fuer die Berichte E27-E30 (dichte Laeufe aus dense_head.py): Kennzahlen je Lauf/Menge, Auswahl des Schwellwerts auf VAL, Bilder (Heatmap-Ueberlagerung, PR-Kurven, Balken, Lernkurven)."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import pickle
@@ -9,7 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 HOME = os.path.expanduser("~")
 SETS = ("train_eval", "val", "test")
 NICE = {"train_eval": "TRAIN (eval subset)", "val": "VAL", "test": "TEST"}

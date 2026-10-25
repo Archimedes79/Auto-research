@@ -30,8 +30,8 @@
 - images, videos, tables, reports: tools/viz/render.py, tools/video/make_video.py, tools/catalogue/build_experiment_table.py, reports/build/
 
 ## Run
-- `wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p16_fast_check.py --n 20` (fast path = reference graphs, 2 min)
-- `wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh sparse_lanes/selftest.py` (metric self-tests)
+- `wsl bash tools/env/_py14.sh p16_fast_check.py --n 20` (fast path = reference graphs, 2 min)
+- `wsl bash tools/env/_py14.sh sparse_lanes/selftest.py` (metric self-tests)
 
 ## Setting of all numbers
 - exact poses, simulated ADASIS-like SD map

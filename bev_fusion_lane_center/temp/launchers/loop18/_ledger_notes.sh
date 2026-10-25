@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # fill result / decision of the loop-18 ledger rows (numbers: LOOP18_STATE.md ledger section; run records are the source of the other columns)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 cd $R
 sed -i 's/K145/K188/g; s/K146/K189/g' experiment_execution/LEDGER.csv
 n() { python3 tools/experiment/ledger.py note "$1" --result "$2" --decision "$3"; }

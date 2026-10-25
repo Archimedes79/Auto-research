@@ -1,6 +1,7 @@
 """Loop 10: training data of the learned trace network. One item = one frame: the 39 frozen BEV channels, the (out-of-fold) heat / direction map of the dense head, the ground-truth
 distance and direction fields (seed / auxiliary targets) and NS training states drawn from the ground-truth graph with the corrective expert (noisy positions / headings, ring-limited context).
 Usage: imported by p10_train.py."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import math
 import os
 import pickle
@@ -16,7 +17,7 @@ import p10_expert as EX  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 M_CV = 160
 NS = 32
 RING = 12.5

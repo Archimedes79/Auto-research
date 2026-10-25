@@ -1,11 +1,12 @@
 """Loop 18 / E214 (one-off): table of the joint fine-tune arms: route success (clean half / failure half) and graph quality of the failure series with the spatial hold, base route heads and builder (no fine-tune) against arm a (route loss reaches the builder)
 and arm c (control: only the route head learns), route-head seeds 0 / 1. Usage (gcar): p18_j2_table.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import pickle
 
 import numpy as np
 
-E17 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"
+E17 = BP.ROOT + "/runs/e17"
 arms = [("base s0", "base", "p16_f2hr_route_s0"), ("base s1", "base", "p16_f2hr_route_s1"), ("c0", "c0", "e18_joint_c0"), ("a0", "a0", "e18_joint_a0"), ("c1", "c1", "e18_joint_c1"), ("a1", "a1", "e18_joint_a1")]
 tags = ("dark_maxdecay_0.95", "blur_maxdecay_0.95", "cam_front3_off_maxdecay_0.95")
 res = {}

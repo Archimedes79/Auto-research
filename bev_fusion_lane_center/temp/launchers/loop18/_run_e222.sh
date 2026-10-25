@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E222: planner-level effect (consumer path error at 20 m, failure half) of fork pruning and of the failure-trained route head in the best chain (map builder B + learned gate, exact map); three consumer seeds
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 X=$R/experiment_execution/runs
 until [ -f $X/E220.a/done ]; do sleep 30; done
 A0="cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6"

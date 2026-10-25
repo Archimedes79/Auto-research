@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # idle-GPU stage times of the controls and weight-6 variant (alternating j1 / j1eq / j1rc / j1rc6, two rounds), pruning 0.4; run only when no other job runs
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 P=$R/tools/env/_py14.sh
 for k in a b; do
   for pair in e123_D7_r3_j1:j1 e18_D7_j1eq:j1eq e18_D7_j1rc:j1rc e18_D7_j1rc6:j1rc6; do

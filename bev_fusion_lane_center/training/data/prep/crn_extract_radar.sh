@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # Radar-Archive (blobs_radar) und nur die Radar-Dateien aus den Keyframe-Archiven in ~/data/nuscenes_full entpacken.
-# Aufruf: bash crn_extract_radar.sh 01 02 03     (Archive in /mnt/c/ML-Experiment/bev_fusion_lane_center/downloads)
-D=/mnt/c/ML-Experiment/bev_fusion_lane_center/downloads
+# Aufruf: bash crn_extract_radar.sh 01 02 03     (Archive in <problem folder>/downloads)
+D=$BFLC/downloads
 R=~/data/nuscenes_full
 cd $R || exit 1
 for N in "$@"; do

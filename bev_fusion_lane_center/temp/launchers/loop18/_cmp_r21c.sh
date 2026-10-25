@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E213.c: cost of the registration + trust gate on an exact map (failure half)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 M=tables/e213c.md
 rm -f $R/runs/e17/$M
 for p in dark blur cam_front3_off; do

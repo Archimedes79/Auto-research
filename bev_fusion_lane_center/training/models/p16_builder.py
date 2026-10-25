@@ -4,6 +4,7 @@ B pattern 'fixed' (E94-like fan, expectation read-out, one child) | 'teardrop' (
 C seeds 'lattice' | 'anchors'     D dedup 'geo' | 'learned' (pair head)     E context 'local' | 'global'     F warm start (scheduled expert states)     G revisit (E120-style layers)
 Input: frozen cached BEV channels (42) -> stem (initialised from E94) -> pyramid. Output (dict): nodes with position, validity, path validity, parent, level, flag, token; edges parent -> child; seeds; links.
 Forbidden on the training path: argmax / hard top-k / NMS on predicted quantities except in the functions marked SELECTION (index choice; the gradient flows through the selected items and their scores)."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import math
 
 import torch
@@ -168,7 +169,7 @@ class Builder(nn.Module):
         d = c.d
         self.stem = PN.Stem()
         if stem_from:
-            sd = torch.load(f"/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/{stem_from}/model.pt", map_location="cpu")
+            sd = torch.load(f"{BP.ROOT}/runs/{stem_from}/model.pt", map_location="cpu")
             self.stem.load_state_dict({k[5:]: v for k, v in sd.items() if k.startswith("stem.")})
         self.pr = nn.ModuleList([nn.Conv2d(67, 32, 1), nn.Conv2d(96, 32, 1), nn.Conv2d(128, 16, 1)])
         self.nf = 80

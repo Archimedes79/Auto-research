@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E219.j1eq8: the plain fine-tune of j1 at twice the budget (8 u = 9600 steps, recall weight 1): does extra training keep helping the plain fast variant? Evaluation chained.
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 SETJ=(reach=null spf2=false temporal=false stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 M=192 K0=96 seed_gscale=1.0 tolerant=false local_r=12.0 junc=true)
 python3 $R/tools/experiment/run.py --id E219.j1eq8 --gpu-max-mb 9000 --retries 1 --basis E219.j1eq --seed 0 \
   --hyp "extra fine-tuning keeps helping the plain fast variant: j1 fine-tuned at weight 1 for 8 u gains Q over the 4 u control j1eq" \

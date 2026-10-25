@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # after E219.j1rc and E219.rc1s1 finish: fork-pruned VAL evaluation of both (json in runs/e18/rc_eval), plus the j1 base at the same thresholds for the comparison
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 ev() { # name M K0 weight tag
   until [ -f $R/runs/e123/$1/model.pt ] && [ -f $R/runs/e123/$1/status.json ]; do sleep 10; done
   sleep 5

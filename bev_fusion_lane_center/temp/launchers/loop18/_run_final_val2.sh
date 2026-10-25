@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # deployed-path VAL rows (route success along the edges, ms per frame) for the two E219 additions, on an idle machine: j1rc (fast recall variant) and rc1s1 (seed-1 replicate of rc1), fork pruning 0.4, route heads s0 / s1; then the stage times of j1rc
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 P=$R/tools/env/_py14.sh
 set -e
 for s in 0 1; do

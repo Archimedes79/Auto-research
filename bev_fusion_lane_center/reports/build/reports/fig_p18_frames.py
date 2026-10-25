@@ -1,6 +1,7 @@
 """Loop 18 figure: validation frames with ground truth, control (E94), champion and champion + fork pruning (K190), ego frame +-50 m (x right, y forward).
 Frames: the three with the largest reduction of the fork-count error by pruning, one typical frame, and the one where pruning hurt most.  Writes reports/source/figures/p18_frames_forkprune.png
 Usage (gcar): fig_p18_frames.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import pickle
 import sys
@@ -13,7 +14,7 @@ import p16_infer as PI  # noqa: E402
 import p16_timing as TM  # noqa: E402
 import render as RN  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 raw, gts = pickle.load(open(os.path.expanduser("~/exp_gcar_b123/p18/raw_val873.pkl"), "rb"))
 net, cfg = TM.load_builder(288, 144)
 ctrl = pickle.load(open(f"{R}/runs/e94_a/graphs_val_clean.pkl", "rb"))["preds"]

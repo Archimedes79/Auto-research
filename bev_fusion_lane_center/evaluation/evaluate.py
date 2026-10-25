@@ -14,6 +14,7 @@ What it does
   * card: runs/eval/<name>/<split>[_<tag>].json with the registry entry, overrides, frames, cache file, code commit, metrics, assembly ms per frame
 Timing of the network (ms per frame on an idle GPU) is not measured here: evaluation/drivers/p17_latency.py (protocol in PROTOCOL.md).
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -24,7 +25,7 @@ import time
 
 import numpy as np
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 HOME = os.path.expanduser("~")
 CACHE = f"{HOME}/exp_gcar_b123/eval_cache"
 SPLITS = {"val": ("val_clean", "val"), "test": ("test_clean", "test")}

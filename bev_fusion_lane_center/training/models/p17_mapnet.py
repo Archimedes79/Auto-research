@@ -2,6 +2,7 @@
 (new input weights start at zero, so the widened network starts as the champion). Training (p17_mapft.py) shows the network three map situations (as E87: a map with a scene-constant pose error sigma in {0, 1, 2, 3} m, a wrong map 10 %, no map 10 %)
 and loses perception on purpose in 40 % of the frames (global attenuation of heat / direction / features, or rectangles without any evidence) so that the map has something to add; the real failure series are never seen in training.
 Usage: imported by p17_mapft.py / p17_eval.py."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import sys
 import zlib
@@ -119,7 +120,7 @@ class MapWrap(torch.utils.data.Dataset):
 class RealFail(torch.utils.data.Dataset):
     """real failure frames of the TRAIN rows (perturbed foundation features of the seven failure types, p17_dense_train.py maps from the out-of-fold dense heads): items of the clean TRAIN dataset with x replaced"""
 
-    def __init__(self, base, perts, e17="/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"):
+    def __init__(self, base, perts, e17=BP.ROOT + "/runs/e17"):
         home = os.path.expanduser("~")
         self.base, self.pairs, self.data = base, [], {}
         for pn in perts:

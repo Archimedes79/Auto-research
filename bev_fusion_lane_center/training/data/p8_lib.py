@@ -2,6 +2,7 @@
 Frames: everything the network sees is in the ego (vehicle) frame, x forward, y left, metres. The SD map carries a rigid pose error (translation d, yaw); the rough localisation estimates the correction,
 the corrected SD map is expressed in the ego frame, and the SD-relative piece features are computed there.
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import pickle
 import sys
@@ -17,7 +18,7 @@ import sd_lib as SL  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 LANE_W = 3.5
 KPT = 6  # sampled points per piece
 _C = {}

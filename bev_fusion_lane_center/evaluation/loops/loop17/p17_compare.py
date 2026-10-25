@@ -1,6 +1,7 @@
 """Loop 17: table of failure-series results (clean phase / failure phase) of builder runs and of the E94 control graphs of loops 13 / 14, with paired scene bootstraps of F1@1 m between entries.
 Entries: label=builder:<out>/<pert>_<variant>   (p17_eval.py result)   or   label=control:<variant>  (runs/e116_valfail/graphs_<pert>_<variant>.pkl; variant as in the file name, e.g. maxdecay_0.95)
 Usage (gcar): p17_compare.py --pert dark --entries champ=builder:e130_champion/dark_single ctrl=control:single --boot champ,ctrl [--md tables/e130.md]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import os
 import pickle
@@ -14,7 +15,7 @@ import p11_eval as E  # noqa: E402
 import p16_common as C  # noqa: E402
 import p8_lib as L  # noqa: E402
 
-E17 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"
+E17 = BP.ROOT + "/runs/e17"
 OUT = L.OUT
 _GT = None
 

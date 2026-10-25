@@ -13,6 +13,7 @@ What it adds to a plain loop (each of these was missing in a run that was lost):
   * guard against loss spikes and NaN: non-finite steps are skipped and counted; a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import itertools
 import json
 import math
@@ -24,7 +25,7 @@ import traceback
 import numpy as np
 import torch
 
-RUNS = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+RUNS = BP.RUNS
 
 
 class Run:

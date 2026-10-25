@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # evaluation of E214: route success (p17_route) and graph quality (p17_eval) on the VAL failure series with the spatial hold, M 192 / K0 96, no time recursion, route-head seeds 0 / 1
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 X=$R/experiment_execution/runs
 for a in a0 c0 a1 c1; do until [ -f $X/E214.$a/done ]; do sleep 30; done; done
 SER=dark_maxdecay_0.95,blur_maxdecay_0.95,cam_front3_off_maxdecay_0.95

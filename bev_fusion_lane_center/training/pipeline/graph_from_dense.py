@@ -7,6 +7,7 @@ Gemeinsam (assemble): jede Polylinie nach der Richtungskarte orientieren (mittle
 wenn nah genug und Kurswinkel passt. Alles in Pixeln (Zeile = x, Spalte = y, 0,5 m je Pixel), Ausgabe in Metern.
 Aufruf als Programm: graph_from_dense.py --name <dichter Lauf> --set val --variant trace [--oracle]  (Umgebung gcar oder bev)
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -24,7 +25,7 @@ import line_tracer as LT  # noqa: E402
 PX = 0.5
 SIGMA_M = 0.75
 HOME = os.path.expanduser("~")
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 NB = np.ones((3, 3), np.uint8)
 NB[1, 1] = 0
 S8 = np.ones((3, 3), bool)
@@ -399,7 +400,7 @@ def main():
     part = "train" if a.set in ("train", "train_eval", "oof") else "val"
     params, asm = json.loads(a.params), json.loads(a.asm)
     if a.oracle:
-        sp = json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json")) if a.split == "b123" else None
+        sp = json.load(open(BP.ROOT + "/data/splits.json")) if a.split == "b123" else None
         ids = np.array(sp[a.set] if sp else list(range(81)))
         if a.n:
             ids = ids[: a.n]

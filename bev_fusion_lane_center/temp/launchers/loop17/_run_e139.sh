@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E139: map-conditioned builder trained on REAL failure frames (TRAIN rows, seven types, out-of-fold dense maps) + clean frames; arm B with the map, arm C (control) with the map always zero; then evaluation on the VAL failure series
-S=/mnt/c/ML-Experiment/scripts
-L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+S=$REPO/scripts
+L=$REPO/out/loop2/e17/logs
 until [ -f $L/e139_dense.done ]; do sleep 20; done
 bash $S/_py14.sh p17_mapft.py --name e17_map_b --init_ckpt e17_map_a --real_fail 1 --share 0.5 --u 4 --lr 3e-4 --p_degrade 0.2 > $L/e139_train_b.log 2>&1 &
 bash $S/_py14.sh p17_mapft.py --name e17_map_c --init_ckpt e17_map_a --real_fail 1 --share 0.5 --u 4 --lr 3e-4 --p_degrade 0.2 --p_none 1.0 --p_wrong 0.0 > $L/e139_train_c.log 2>&1 &

@@ -2,6 +2,7 @@
 Graphen des Systems (Standard: e44_cons_p/graphs_<menge>.pkl) gegen die Karte (Soll-Graph mit Token, ggf. gestoert) und die Route (route_gt_val.pkl).
 Aufruf (gcar): assoc_eval.py --sets val,test --graphs e44_cons_p/graphs --sigma 0 --drop 0 --reg 1 --out e59_a  [--oracle 1] [--nomap 1] [--protect 1] [--workers 10]
 Ausgabe: out/loop2/<out>/metrics.json (je Menge: Zuordnungs-Genauigkeit, Routen-F1 je Punkt, Routen-Abdeckung / -Praezision @1,5 m, Erfolgsrate, Registrierungsfehler, Erkennung 'nicht in der Karte')"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import multiprocessing as mp
@@ -17,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import assoc_lib as AL  # noqa: E402
 
 HOME = os.path.expanduser("~")
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 D = f"{HOME}/exp_gcar_b123"
 _G = {}
 

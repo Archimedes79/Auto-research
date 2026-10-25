@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E215b / E218: fork pruning (K190, 0.3) under sensor failure and in the best chain of loop 18 (map builder B + learned gate + registration + trust gate + fork pruning); failure series, VAL
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 RG=$R/runs/e18/regis_eval_a
 ASM="cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6 fork_prune=0.3"
 set -e

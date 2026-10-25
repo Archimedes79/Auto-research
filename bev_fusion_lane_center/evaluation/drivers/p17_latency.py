@@ -1,6 +1,7 @@
 """Loop 17 / E137 (copy of p16_pipeline.py): the whole chain per frame, plus the memory stage (warp + learned gate) and the option of the time recursion on / off. Original text: the whole chain per frame, fast (reference implementation of the deployment path) and its stage times.
 frame features -> builder (CUDA graph) -> assembly (CPU) -> route input (vertex tokens, points every <= 4 m) -> route head along the edges (CUDA graphs per padded size) -> planner consumer (CUDA graph).
 Usage (gcar, GPU, idle machine): p16_pipeline.py --name e123_D7_r3_f1 [--n 60]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -186,8 +187,8 @@ def main():
     res["memory"] = dict(median_ms=float(np.median(tm)) * 1e3, p90_ms=float(np.percentile(tm, 90)) * 1e3)
     res["rec"] = a.rec
     print(json.dumps(res, indent=1))
-    os.makedirs("/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17/latency", exist_ok=True)
-    json.dump(res, open(f"/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17/latency/latency_M{a.M}_rec{a.rec}.json", "w"), indent=1)
+    os.makedirs(BP.ROOT + "/runs/e17/latency", exist_ok=True)
+    json.dump(res, open(f"{BP.ROOT}/runs/e17/latency/latency_M{a.M}_rec{a.rec}.json", "w"), indent=1)
 
 
 if __name__ == "__main__":

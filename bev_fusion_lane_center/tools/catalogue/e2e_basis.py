@@ -255,6 +255,6 @@ EXP_BASIS = {
 import json as _json
 import os as _os
 
-_P16 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e123_ladder/catalogue16.json"
+_P16 = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", "runs", "e123_ladder", "catalogue16.json")
 if _os.path.exists(_P16):
     EXP_BASIS.update({_k: _e(" ".join(_v["bb"]), " ".join(_v["k"]), " ".join(_v["sp"])) for _k, _v in _json.load(open(_P16, encoding="utf-8"))["basis"].items()})

@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import e2e_basis as B  # noqa: E402
 import e2e_catalogue as C  # noqa: E402
 
-ROOT = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))  # the problem folder
 PLAN = f"{ROOT}/experiment_execution/plans/Loop16_Triage_Plan_EN.md"
 OUT_MD = f"{ROOT}/experiment_execution/plans/Experiment_Table_EN.md"
 

@@ -1,7 +1,8 @@
 """E220 summary: route success of the best chain (map builder B + gate, exact map, fork pruning 0.3) with the original and the failure-trained route heads, map error 0 / 2 m, clean and failure half. Usage: p18_e220_table.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 
-D = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17/e18_route_best"
+D = BP.ROOT + "/runs/e17/e18_route_best"
 for tg in ("dark_gateB", "blur_gateB", "cam_front3_off_gateB"):
     j = json.load(open(f"{D}/route_{tg}.json"))
     print("==", tg)

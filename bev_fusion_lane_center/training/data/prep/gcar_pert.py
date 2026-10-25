@@ -7,6 +7,7 @@ Stoerungen (--pert):
   extr1 / extr3      Kamera-Extrinsik: zufaellige Drehung (sigma 1 bzw. 3 Grad je Achse, je Kamera und Sample)
   night_radar        dark + radar_drop90
 Aufruf (Umgebung gcar):  gcar_pert.py --pert dark [--workers 3]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -123,7 +124,7 @@ def main():
         rows = np.arange(0, len(tokens), max(a.stride, 1))
     else:
         tokens = json.load(open(f"{d}/val_tokens.json"))
-        rows = np.array(json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))["val" if a.part == "val" else "test"])[:: a.stride]
+        rows = np.array(json.load(open(BP.ROOT + "/data/splits.json"))["val" if a.part == "val" else "test"])[:: a.stride]
     if a.n:
         rows = rows[: a.n]
     pca = np.load(f"{HOME}/exp_gcar_b123/pca_gcar.npz")

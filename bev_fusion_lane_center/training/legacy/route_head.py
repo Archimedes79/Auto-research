@@ -2,6 +2,7 @@
 Eingaben: eingefrorene Merkmale (39) + Karten-Raster der Spurmitten (4 Kanaele: Route, alle Karten-Spuren, Spurrichtung dx, dy) mit Pose-Rauschen / veralteter Karte / fehlender Karte / falscher Karte (Training zufaellig, Auswertung fest je Sample).
 Ausgaben: Spur-Waermekarte + Richtung (wie bisher) und ROUTEN-Waermekarte (die Spuren, die zum Navigationsziel fuehren). Start aus e37_final (neue Kanaele null-initialisiert).
 Aufruf (gcar): route_head.py --name e60_main --steps 4000 [--init_from e37_final] [--maps route+lanes|route|none] ...   Ausgabe wie dense_head: out/loop2/<name>/{model.pt, metrics.json, prob_*.npy (Spur), rprob_*.npy (Route), dir_*.npy, ids_*.npy}"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import copy
 import json
@@ -251,7 +252,7 @@ def main():
         log.flush()
 
     P("==", time.strftime("%H:%M:%S"), vars(a))
-    sp = json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))
+    sp = json.load(open(BP.ROOT + "/data/splits.json"))
     RTtr = pickle.load(open(f"{D}/route_gt_train.pkl", "rb"))
     tr_idx = np.array([i for i in range(sp["n"]["train"]) if RTtr[i] is not None])
     cfg = dict(maps=a.maps, noise_train=a.noise_train, p_wrong=a.p_wrong, p_none=a.p_none, eval_sxy=0.0, eval_drop=0.0, eval_wrong=False, eval_none=False, pert=a.pert, pert_train=a.pert_train, p_use_pert=a.p_use_pert)

@@ -54,6 +54,6 @@ TEST (once, E230): champion S 0.748, J 0.422, lanes found 0.653 against the cont
 
 ## Problem-specific workflow (deviations from METHOD.md)
 - Folders: research = `literature/` (papers.csv -> `tools/literature/catalogue.py all` regenerates CATALOGUE / OVERVIEW); training = `training/`; evaluation = `evaluation/`; experiment summaries = `experiments/E<id>_<slug>/` and `reports/weekly/`; execution state = `HANDOVER.md`, `experiment_execution/PLAN.md`, `experiment_execution/schedule.csv`, `experiment_execution/LEDGER.csv`; scratch = `temp/loopNN/`; data and checkpoints = `data/`, `runs/`, `~/exp_gcar_b123` (WSL).
-- Python of the product: `wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh <script> ...`; runs: `wsl python3 /mnt/c/ML-Experiment/autoresearch/tools/run.py --id ... -- bash tools/env/_py14.sh <script> ...` (tags the code `lcr/<id>`).
+- Python of the product: `wsl bash tools/env/_py14.sh <script> ...` (from this folder); runs: `wsl python3 ../autoresearch/tools/run.py --id ... -- bash tools/env/_py14.sh <script> ...` (tags the code `lcr/<id>`).
 - Every comparison: matched reference on the same frames, paired scene bootstrap, 2 seeds for route heads; an optimisation must reproduce the reference graphs; timing only on an idle GPU.
 - Closed questions: `experiment_execution/closed_questions.md`.

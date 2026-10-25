@@ -5,6 +5,7 @@ Block: je Punkt quer zur Linie (Normale) die Merkmalskarten an 7 seitlichen Vers
 Verlust (ohne Zuordnung): Soll-Abstandsfeld an den verschobenen Punkten abtasten (differenzierbar) = Abstand zur wahren Mittellinie; Existenz (wahr, wenn Punkt <= 1 m vom Soll) mit Falschalarm-Gewicht lam_fp;
   Orientierung je Stueck (Soll-Richtungsfeld); Abstands-/Glattheits-Regularisierung. Aufruf: siehe main().
 Inferenz -> verfeinerte Stuecke -> Graph (Orientierung, Schnitt bei geringer Existenz, Verbindungen) -> graph_eval."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -22,7 +23,7 @@ import graph_eval as GE  # noqa: E402
 import graph_from_dense as GD  # noqa: E402
 
 HOME = os.path.expanduser("~")
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 PMAX, NMAX = int(os.environ.get("REF_PMAX", 48)), 100
 OFFS = (-2.5, -1.5, -0.75, 0.0, 0.75, 1.5, 2.5)
 COFFS = (-6.0, -3.0, 0.0, 3.0, 6.0)

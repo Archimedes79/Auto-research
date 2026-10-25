@@ -1,10 +1,11 @@
 """Loop 18 / E232 (one-off): table of the long joint fine-tune (4800 steps, builder loss at full weight): route success (clean half / failure half) and graph quality of the failure series with the spatial hold, base route head s0 and base builder (E214 evaluation) against arm c (control: only the route head learns) and arm a (the route loss reaches the builder), route seed 0.
 Usage (gcar): p18_j3_table.py   -> prints and writes runs/e18/e232_table.json"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import pickle
 
-E17 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"
-R18 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e18"
+E17 = BP.ROOT + "/runs/e17"
+R18 = BP.ROOT + "/runs/e18"
 arms = [("base s0", "e18_j2", "e18_j2_route", "base", "p16_f2hr_route_s0"), ("c0", "e18_j3", "e18_j3_route", "c0", "e18_joint2_c0"), ("a0", "e18_j3", "e18_j3_route", "a0", "e18_joint2_a0")]
 tags = ("dark_maxdecay_0.95", "blur_maxdecay_0.95", "cam_front3_off_maxdecay_0.95")
 names = {"dark_maxdecay_0.95": "night", "blur_maxdecay_0.95": "blur", "cam_front3_off_maxdecay_0.95": "three cameras off"}

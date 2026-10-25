@@ -2,6 +2,7 @@
 make_report2(exp_id, title, question, setup, tables=[(caption, head, rows)], images=[(path, caption)], findings, limits, arch=None, status='completed')
 arch: Funktion ax -> None (Blockdiagramm, siehe report_lib.blocks_arch / rows_arch) oder Pfad zu einem PNG.
 Ausgabe: reports/loop2/<exp_id>.{json,md,html} und assets/."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import base64
 import html
 import json
@@ -13,7 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/reports/loop2"
+OUT = BP.ROOT + "/reports/loop2"
 
 CSS = """
 body{font-family:'Segoe UI',Arial,sans-serif;max-width:1050px;margin:0 auto;padding:24px 28px;color:#202124;line-height:1.5;font-size:14.5px}

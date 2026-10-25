@@ -8,6 +8,7 @@
  - route_labels:   Knoten auf dem tatsaechlich gefahrenen Pfad der naechsten Sekunden ("Navigationsziel"-Ersatz)
  - lane_assoc:     Spurzuordnung der ausgerichteten Karten-Knoten (liegt der Knoten auf seiner eigenen Spur?)
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import pickle
 import sys
@@ -56,7 +57,7 @@ def load_poses(infos_pkl, tokens, n_prev=4, n_future=6, frame="ego"):
     fut [S,n_future,2] (Zukunftspositionen im Raster-System des Samples), fut_ok [S,n_future].
     frame='ego': Hinterachse zum Kamera-Zeitpunkt (Kamera-Radar); frame='lidar': Lidar-Sensor (Vergleichsrechnung mit BEVFusion; nur Metadaten)."""
     # Zwischenspeicher: die CRN-Infos belegen beim Laden mehrere GB RAM; die kleinen Pose-Arrays werden einmal berechnet und wiederverwendet
-    cache = f"/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/_loop1_crn/poses_{frame}_{len(tokens)}_{tokens[0][:8]}_{tokens[-1][:8]}_{n_prev}_{n_future}.npz"
+    cache = f"{BP.ROOT}/runs/_loop1_crn/poses_{frame}_{len(tokens)}_{tokens[0][:8]}_{tokens[-1][:8]}_{n_prev}_{n_future}.npz"
     if os.path.exists(cache):
         z = np.load(cache)
         return {k: z[k] for k in z.files}

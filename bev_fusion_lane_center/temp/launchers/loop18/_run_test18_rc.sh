@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # TEST (once) of the recall variant selected on VAL (rc1 + fork pruning 0.4: Q 0.740 is the best of rc1 / rc2); starts after the control run of the TEST chain
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 L=$R/temp/launchers/loop18
 X=$R/experiment_execution/runs
 until [ -f $X/E230.ctrl/done ]; do sleep 30; done

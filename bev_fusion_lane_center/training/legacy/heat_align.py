@@ -10,6 +10,7 @@
       wiederholen.
    Dasselbe zum Vergleich mit der perfekten Heatmap (Soll-Raster = Obergrenze des Verfahrens).
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import math
@@ -32,7 +33,7 @@ HALF = 50.0
 
 
 def load_gt(split, fdir, root=None):
-    root = root or os.environ.get("GT_ROOT", "/mnt/c/ML-Experiment/out/centerline_gt")
+    root = root or os.environ.get("GT_ROOT", BP.REPO + "/out/centerline_gt")
     cache = f"{fdir}/{split}_gt_raster.npy"
     if not os.path.exists(cache):
         tokens = json.load(open(f"{fdir}/{split}_tokens.json"))

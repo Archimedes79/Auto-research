@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E231.a: the j1 family (j1, equal-budget control j1eq / j1eqs1, recall variants j1rc / j1rcs1) on the loop-17 failure series (night, blur, three cameras off; single frame and spatial hold), fork pruning 0.4, no time recursion; VAL, 22 scenes
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 ASM="cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6 fork_prune=0.4"
 set -e
 for pair in j1:e123_D7_r3_j1 j1eq:e18_D7_j1eq j1rc:e18_D7_j1rc j1rcs1:e18_D7_j1rcs1 j1eqs1:e18_D7_j1eqs1; do

@@ -1,5 +1,6 @@
 """Loop 17 / E138b: does the map-conditioned builder use the map at all? VAL frames (the 250-frame subset) with the same synthetic loss of perception as in its training (a fixed draw per frame), with an exact SD map (pose error 0 / 2 m), no map, a wrong map;
 the champion (42 channels) on the same degraded frames as reference. Also the clean frames. Usage (gcar, GPU): p17_mapdiag.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import sys
@@ -44,4 +45,4 @@ for name, net, mode, sigma, deg, drop in (
     c = C.card(graphs, gts)
     rows.append(dict(name=name, **{k: float(c[k]) for k in ("S", "F1@1.0", "F1@0.5", "J", "vert100", "false_len_frac", "lanes_found")}))
     print(f"{name:42s} S {c['S']:.3f} F1@1 {c['F1@1.0']:.3f} J {c['J']:.3f} found {c['lanes_found']:.2f} FL {c['false_len_frac']:.3f} v100 {c['vert100']:.1f}", flush=True)
-json.dump(rows, open("/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17/e138b_mapdiag.json", "w"), indent=1)
+json.dump(rows, open(BP.ROOT + "/runs/e17/e138b_mapdiag.json", "w"), indent=1)

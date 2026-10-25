@@ -3,6 +3,7 @@ Per ground-truth point (every 0.5 m, |x|,|y| < 48): found = a predicted point wi
 near a ground-truth junction (< 8 m), short lane piece (ground-truth polyline shorter than 20 m inside the window).
 Prints recall by category for both systems and the number of points only the control finds / only the champion finds.
 Usage (gcar): p18_missing_lanes.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import os
 import pickle
 import sys
@@ -19,7 +20,7 @@ RAWP = sys.argv[1] if len(sys.argv) > 1 else "~/exp_gcar_b123/p18/raw_val873.pkl
 FP = float(sys.argv[2]) if len(sys.argv) > 2 else 0.3
 raw, gts = pickle.load(open(os.path.expanduser(RAWP), "rb"))
 net, cfg = TM.load_builder(288, 144, sys.argv[3] if len(sys.argv) > 3 else "e123_D7_r3_f1")
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 ctrl = pickle.load(open(f"{R}/runs/e94_a/graphs_val_clean.pkl", "rb"))["preds"]
 champ = [PI.assemble(r, None, 0.7, cfg, fast=2, fork_prune=FP, **TM.ASM) for r in raw]
 rows = []

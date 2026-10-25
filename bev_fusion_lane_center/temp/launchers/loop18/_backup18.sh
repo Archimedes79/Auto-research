@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # copy of everything loop 18 wrote or changed (rollback hazard: files made with Write / Edit can disappear with a conversation rollback; a shell copy survives)
-R=/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 B=$R/experiment_execution/loop18_backup
 mkdir -p $B
 cd $R

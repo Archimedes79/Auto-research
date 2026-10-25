@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # evaluation part of E209: night and blur series, single frame and spatial hold
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 V=single,maxdecay:0.95
 set -e
 bash $R/tools/env/_pyr.sh p17_eval.py --out e142 --perts dark,blur --mapnet 1 --ckpt e17_map_b2 --map_mode exact --map_sigma 0 --suffix _B2m0 --variants $V

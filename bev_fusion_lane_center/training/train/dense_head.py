@@ -4,6 +4,7 @@ Aufruf (Umgebung gcar):  dense_head.py --name e27_gcar --fg gcar --feats dec32,l
   --fg crn: CRN-Merkmale (PCA 32, 128 x 128, auf 200 x 200 hochgerechnet), --fg gcar: GaussianCaR-Gruppen aus --feats (dec32, fused32, logit7).
 Ergebnisse: out/loop2/<name>/{model.pt, metrics.json, log.txt}
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import copy
 import json
@@ -20,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import graph_eval as GE  # noqa: E402
 
 HOME = os.path.expanduser("~")
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 SIGMA_M = 0.75  # Gauss-Breite des Soll-Heatmaps (m)
 
 
@@ -242,7 +243,7 @@ def main():
     P("==", time.strftime("%H:%M:%S"), vars(a))
     groups = a.feats.split(",")
     if a.split == "b123":
-        sp = json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))
+        sp = json.load(open(BP.ROOT + "/data/splits.json"))
         tr_idx = np.arange(sp["n"]["train"])
         sets = {"train_eval": ("train", sp["train_eval"]), "val": ("val", sp["val"]), "test": ("val", sp["test"])}
     else:  # Mini: Erprobung

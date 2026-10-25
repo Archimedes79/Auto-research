@@ -2,7 +2,7 @@
 # Usage: powershell -File build_research_workflow_pptx.ps1 [out.pptx]
 # Inputs: helpers in ppt_lib.ps1, chart reports\source\weekly\deck\s_noise.png (make_systematics_charts.py).
 # Numbers: HANDOVER.md (17 loops, ~200 experiments, chain 31 ms vs 628 ms); external figures: slide 4 and notes.
-param([string]$Out = "C:\ML-Experiment\bev_fusion_lane_center\reports\weekly\Automated_Research_Workflow_short_EN.pptx")
+param([string]$Out = ([System.IO.Path]::GetFullPath("$PSScriptRoot\..\..\weekly\Automated_Research_Workflow_short_EN.pptx")))
 . "$PSScriptRoot\ppt_lib.ps1"
 $app = New-Object -ComObject PowerPoint.Application
 $pres = $app.Presentations.Add(0)

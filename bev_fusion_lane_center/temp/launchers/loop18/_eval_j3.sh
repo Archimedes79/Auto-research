@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # evaluation of E232 on the VAL failure series (spatial hold), M 192 / K0 96, no time recursion, route seed 0: base head vs arm c vs arm a
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 X=$R/experiment_execution/runs
 for a in a0 c0; do until [ -f $X/E232.$a/done ]; do sleep 30; done; done
 SER=dark_maxdecay_0.95,blur_maxdecay_0.95,cam_front3_off_maxdecay_0.95

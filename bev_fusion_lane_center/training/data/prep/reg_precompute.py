@@ -4,6 +4,7 @@ For the TEST rows (and VAL rows) and the map-pose noise levels sigma in {0.5, 1,
 (out/loop2/e44_cons_p/graphs_<set>.pkl, no map input) with graph-ICP (assoc_lib.register): x_map = R x_ex + t.
 Output: ~/exp_gcar_b123/reg_val.pkl = {sigma: {row: (R, t, score)}}   (rows index the val list: VAL + TEST rows)
 Usage (gcar):  reg_precompute.py [--sets test,val] [--workers 6]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import multiprocessing as mp
 import os
@@ -19,7 +20,7 @@ import assoc_lib as AL  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 SIGMAS = (0.5, 1.0, 2.0, 3.0)
 _G = {}
 

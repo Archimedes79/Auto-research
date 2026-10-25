@@ -1,7 +1,8 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E137: time per frame of the whole chain on an IDLE GPU: waits for the E139 chain (its evaluation uses the GPU), then four configurations
-S=/mnt/c/ML-Experiment/scripts
-L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+S=$REPO/scripts
+L=$REPO/out/loop2/e17/logs
 until [ -f $L/e139.done ]; do sleep 30; done
 sleep 20
 for cfg in "288 144 1" "288 144 0" "192 96 0" "192 96 1"; do

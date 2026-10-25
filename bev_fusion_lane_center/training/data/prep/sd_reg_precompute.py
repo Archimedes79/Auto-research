@@ -1,6 +1,7 @@
 """E78: registration of the (degraded, pose-disturbed) SD map to the extracted lane graph (graph-ICP of assoc_lib), precomputed like reg_precompute.py for the HD map.
 Same random draws as route_head3.EvalSet / build_maps_sd: rng = RandomState(crc32('val<row>') + 17); d = randn(2) sigma; yaw = randn() 2 sigma deg; degrade_sd(sd, rng, drop=0).
 Output ~/exp_gcar_b123/reg_sd_val.pkl = {sigma: {row: (R, t, score)}}  (x_map = R x_ex + t)."""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import multiprocessing as mp
 import os
@@ -17,7 +18,7 @@ import sd_lib as SL  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 SIGMAS = (0.5, 1.0, 2.0, 3.0)
 _G = {}
 

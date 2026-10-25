@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E219.j1rc6: recall weight 6 (instead of 3) on the fast j1 192 / 96, seed 0, fork pruning 0.4 at evaluation; starts when the two equal-budget controls are finished (runs next to E231.a)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 SETJ=(reach=null spf2=false temporal=false stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 M=192 K0=96 seed_gscale=1.0 tolerant=false local_r=12.0 junc=true)
 until [ -f $R/runs/e18/rc_eval/f1eq.json ] && [ -f $R/runs/e18/rc_eval/j1eqs1.json ]; do sleep 20; done
 sleep 30

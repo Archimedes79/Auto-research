@@ -3,6 +3,7 @@ Protocol of E79 / E105 / E114 (p13_temporal_val.py): rows of a scene in time ord
 For every perturbation and input variant (single = no fusion, maxdecay:a = spatial hold, ema_hold_mon:a = EMA + heat-monitor hold) the 42-channel builder input of every frame is written to
 ~/exp_gcar_b123/p17/<pert>_<variant>.npy (fp16 [N, 42, 200, 200]) with <pert>_<variant>.meta.npz (rows, scene, phase 0 = clean / 1 = failure, pos, prev = index of the previous frame of the scene or -1, flag).
 Usage (gcar, GPU): p17_series.py --perts dark,blur,cam_front3_off --variants single,maxdecay:0.95,ema_hold_mon:0.5"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import os
 import sys
@@ -20,7 +21,7 @@ D = L.D
 OUTD = f"{os.path.expanduser('~')}/exp_gcar_b123/p17"
 
 
-E17 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"
+E17 = BP.ROOT + "/runs/e17"
 
 
 class PertReaderD(TV.PertReader):

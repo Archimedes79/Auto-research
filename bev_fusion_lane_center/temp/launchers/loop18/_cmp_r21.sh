@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E213 / R2.1 comparison tables (failure series, hold variant): exact map, unregistered 1-3 m error, registered + trust gate, no map, wrong map (gated and not)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 M=tables/e213.md
 rm -f $R/runs/e17/$M
 for p in dark blur cam_front3_off; do

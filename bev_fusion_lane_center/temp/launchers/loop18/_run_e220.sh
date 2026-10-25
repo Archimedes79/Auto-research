@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E220: route heads trained with real failure frames (arm c of E214: route head only learns) in the best chain of loop 18 (map builder B + learned gate, exact map, fork pruning 0.3), failure series night / blur / three cameras off, hold + gate
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 ASM="cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6 fork_prune=0.3"
 python3 $R/tools/experiment/run.py --id E220.a --gpu-max-mb 9500 --retries 2 --basis E214,E207,E215 --seed 0 \
   --hyp "route heads trained on real failure frames lift the route success of the best chain under night / blur / lost cameras" \

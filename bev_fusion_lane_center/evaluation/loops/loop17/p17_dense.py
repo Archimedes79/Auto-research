@@ -1,6 +1,7 @@
 """Loop 17: dense maps (heat + direction) of one dense head on the clean VAL features and on the perturbed VAL series, for the builder input (p17_series.py --dense <tag>).
 Writes runs/e17/dense_<tag>/clean_{ids,prob,dir}.npy (all VAL rows) and <pert>_{ids,prob,dir}.npy (the 291 rows of the series).
 Usage (gcar, GPU): p17_dense.py --head e65_ftall --tag ftall --perts dark,blur,cam_front3_off"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -12,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import eval_pert_val as EV  # noqa: E402
 
 HOME = os.path.expanduser("~")
-E17 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"
+E17 = BP.ROOT + "/runs/e17"
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--head", required=True)
@@ -22,7 +23,7 @@ a = ap.parse_args()
 out = f"{E17}/dense_{a.tag}"
 os.makedirs(out, exist_ok=True)
 net, mean, std = EV.load_net(a.head)
-rows = np.array(json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))["val"])
+rows = np.array(json.load(open(BP.ROOT + "/data/splits.json"))["val"])
 d = f"{HOME}/exp_gcar_b123/feats"
 dec, lg = np.load(f"{d}/val_dec32.npy", mmap_mode="r")[rows], np.load(f"{d}/val_logit7.npy", mmap_mode="r")[rows]
 prob, dirf = EV.infer(net, mean, std, dec, lg)

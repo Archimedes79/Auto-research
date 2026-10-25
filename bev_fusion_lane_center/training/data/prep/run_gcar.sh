@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # Skript in der Umgebung 'gcar' ausfuehren: run_gcar.sh <skript.py> [argumente]   (Protokoll auf stdout; Rasterizer-Ordner im Suchpfad)
 # GPU-Auftraege (Training/Inferenz) belegen einen von GPU_SLOTS (Standard 5) Plaetzen (flock), damit die 12 GB der Grafikkarte nicht ueberlaufen; GPU_PRIO=low darf nur die ersten GPU_SLOTS-2 Plaetze belegen.
 source "$HOME/miniconda3/etc/profile.d/conda.sh"
@@ -16,12 +17,12 @@ if [ "$GPU" = 1 ] && [ -z "$NO_SLOT" ]; then
   [ "$GPU_PRIO" = "low" ] && MAXI=$((NSLOT-2))
   while true; do
     for i in $(seq 0 $((MAXI-1))); do
-      flock -n -E 99 /tmp/gpuslot.$i python "/mnt/c/ML-Experiment/bev_fusion_lane_center/scripts/$f" "$@" 2>&1
+      flock -n -E 99 /tmp/gpuslot.$i python "$BFLC/scripts/$f" "$@" 2>&1
       rc=$?
       if [ $rc -ne 99 ]; then exit $rc; fi
     done
     sleep $((4 + RANDOM % 6))
   done
 else
-  python "/mnt/c/ML-Experiment/bev_fusion_lane_center/scripts/$f" "$@" 2>&1
+  python "$BFLC/scripts/$f" "$@" 2>&1
 fi

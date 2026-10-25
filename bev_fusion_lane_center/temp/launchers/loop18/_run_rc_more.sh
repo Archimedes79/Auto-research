@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E219.j1rc: recall-weighted fine-tune (weight 3, 4 u) of the single-frame fast configuration j1 192 / 96; E219.rc1s1: seed-1 replicate of rc1 (noise of the recall variant)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 SETJ=(reach=null spf2=false temporal=false stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 M=192 K0=96 seed_gscale=1.0 tolerant=false local_r=12.0 junc=true)
 SETF=(reach=null spf2=false junc=true temporal=true stage_b=false stage_c=true b=3 mcl=true 'ver_mode="survival"' 'link_mode="learned"' 'pi_mode="min"' detach_pos=false 'dedup="geo"' 'ctx="global"' 'pattern="teardrop"' 'seeds="lattice"' warm=true revisit=false 'constr="L"' D=1 seed_gscale=1.0 tolerant=false local_r=12.0 M=288 K0=144)
 python3 $R/tools/experiment/run.py --id E219.j1rc --gpu-max-mb 9000 --retries 1 --basis E219,E215 --seed 0 \

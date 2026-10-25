@@ -1,8 +1,9 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E209 (internal e142) RERUN with checkpoints: UNSEEN failure types. Map builder B2 and no-map control C2 are trained on real perturbed TRAIN rows of
 # fog, radar_off, extr3, cam_front_off, cam_front3_off ONLY (night and blur held out), then evaluated on the VAL failure series of night and blur.
 # One training at a time (two trainings used 11.6 of 12 GB and the first run died with a CUDA unknown error); every training resumes from runs/e123/<name>/ckpt.pt.
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 L=$R/runs/e17/logs
 FP=cam_front3_off,fog,radar_off,extr3,cam_front_off
 RUN="python3 $R/tools/experiment/run.py --gpu-max-mb 9000 --retries 3 --basis E206,E139"

@@ -2,6 +2,7 @@
 other branches start / end at a copy of the vertex - geometry unchanged). Evaluation on all validation frames with the shared metric code (sparse_lanes) and the paired scene bootstrap against the unpruned champion.
 The raw node outputs of the 873 VAL frames are cached by p18_asm_check.py (~/exp_gcar_b123/p18/raw_val873.pkl; champion f1, M 288 / K0 144). Nothing is selected on TEST.
 Usage (gcar): p18_fork_prune_eval.py [--thr 0.1,0.2,0.3,0.4,0.5] [--pairs 0.3:0.2,0.2:0.3] [--out fork_prune_val]   -> runs/e18/<out>/table.md, results.json"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -16,7 +17,7 @@ import p16_infer as PI  # noqa: E402
 import p16_timing as TM  # noqa: E402
 import sparse_metrics as SM  # noqa: E402
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 ap = argparse.ArgumentParser()
 ap.add_argument("--thr", default="0.1,0.2,0.3,0.4,0.5")
 ap.add_argument("--pairs", default="0.3:0.2,0.2:0.3,0.4:0.3")

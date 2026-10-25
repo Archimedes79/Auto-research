@@ -2,6 +2,7 @@
 U-Netz (wie der dichte Kopf) -> 2 Kanaele: Split-Knoten (Ende von Stuecken mit >= 2 Nachfolgern), Merge-Knoten (Anfang von Stuecken mit >= 2 Vorgaengern); Soll aus make_node_gt.py.
 Verlust: fokale gewichtete BCE (Falschalarm-Seite lam, Verpasst-Seite wpos; Knoten sind selten -> wpos hoeher). Auswertung: Spitzen (3,5 m Mindestabstand) ueber Schwelle -> Ortsabgleich mit den Soll-Knoten (3 m / 6 m).
 Aufruf (gcar): node_head.py --name e44_nodes --steps 5000 [--feats dec32,logit7] [--eval train_eval,val,test]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -111,7 +112,7 @@ def main():
 
     P("==", time.strftime("%H:%M:%S"), vars(a))
     groups = a.feats.split(",")
-    sp = json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))
+    sp = json.load(open(BP.ROOT + "/data/splits.json"))
     tr_idx = np.arange(sp["n"]["train"])[:: a.train_stride]
     sets = {"train_eval": ("train", sp["train_eval"]), "val": ("val", sp["val"]), "test": ("val", sp["test"])}
     ds = NodeData("gcar", groups, "train", tr_idx)

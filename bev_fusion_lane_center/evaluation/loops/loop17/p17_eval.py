@@ -2,6 +2,7 @@
 Writes runs/e17/<out>/<pert>_<variant>.pkl (graphs, gts, rows, scene, phase, per-frame metric components for scene bootstraps) and prints one line per phase.
 Usage (gcar, GPU): p17_eval.py --out e130_champion --perts dark,blur,cam_front3_off --variants single --name e123_D7_r3_f1 --set M=288 K0=144 --tau 0.7
   --asm cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6   (the champion settings; nothing is selected on the failure series)"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -21,7 +22,7 @@ import p16_train as PT  # noqa: E402
 
 HOME = os.path.expanduser("~")
 OUTD = f"{HOME}/exp_gcar_b123/p17"
-E17 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/e17"
+E17 = BP.ROOT + "/runs/e17"
 CHAMP_ASM = dict(cov_r=0.5, vtx_r=1.5, junc_thr=0.5, reloc_thr=0.4, reloc_shift=12, reloc_tol=1.6)
 
 

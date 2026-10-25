@@ -1,12 +1,13 @@
 """Rebuild experiment_execution/LEDGER.csv from the run records (run.json) after the ledger was truncated on 2026-10-25 00:01 (an old run.py met the new ledger columns).
 Rows are written with the writer of tools/experiment/run.py (current columns); rows of the ledger that are not in a run record are kept. Usage (any python of the WSL): python3 _rebuild_ledger.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import csv
 import glob
 import importlib.util
 import json
 import os
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center"
+R = BP.ROOT
 spec = importlib.util.spec_from_file_location("run_mod", f"{R}/tools/experiment/run.py")
 run_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(run_mod)

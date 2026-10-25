@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # back-to-back idle timing of j1 and j1rc (same architecture, different weights), alternating, to see whether the 21 ms of the first j1rc timing was machine state
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 P=$R/tools/env/_py14.sh
 for k in a b; do
   bash $P p18_latency.py --name e123_D7_r3_j1 --M 192 --K0 96 --rec 0 --union 2 --fork_prune 0.3 --tag _j1_pair$k > /dev/null 2>&1

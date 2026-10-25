@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # TEST (once): control E94 with the route head along the edges (graph metrics of the control on TEST: loop 16, S 0.702)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 O=$R/runs/diag_test18
 mkdir -p $O
 export NMAXV=560

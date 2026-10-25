@@ -1,6 +1,7 @@
 """Loop 17 / E139: dense maps (heat + direction) of the perturbed TRAIN rows (all seven failure types, 842 rows each), made by the cross-fitted dense head of the fold that did NOT train on the row (e37_fold0 - 2, as the clean training frames),
 so the builder is trained on real failure frames with maps that look like those of unseen scenes. Writes runs/e17/dense_trainoof/<pert>_{ids,prob,dir}.npy (order of pert/<pert>/train_rows.npy).
 Usage (gcar, GPU): p17_dense_train.py [--perts dark,blur,...]"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import os
 import sys
@@ -11,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import eval_pert_val as EV  # noqa: E402
 
 HOME = os.path.expanduser("~")
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 ap = argparse.ArgumentParser()
 ap.add_argument("--perts", default="dark,blur,cam_front3_off,fog,radar_off,extr3,cam_front_off")
 a = ap.parse_args()

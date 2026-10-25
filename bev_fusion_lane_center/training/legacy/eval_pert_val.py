@@ -1,6 +1,7 @@
 """Schleife 5 / E57: Dichter Kopf (Standard e37_final, trainiert auf sauberen Merkmalen) auf gestoerten Merkmalen der TEST-Zeilen (gcar_pert.py): Pixel-F1 bei festen tau (auf sauberem VAL gewaehlt) + Graph (strenger Tracer + Zusammenbau).
 Schreibt out/loop2/e57_<stoerung>/{prob_val.npy, dir_val.npy, ids_val.npy, metrics.json} (wie ein dichter Lauf; damit laeuft auch das Gesamtsystem final_system.py --dense e57_<stoerung>).
 Aufruf (gcar): eval_pert.py --pert dark|...|stored  [--head e37_final] [--workers 6]    stored = gespeicherte saubere Merkmale (Referenz)"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
@@ -49,7 +50,7 @@ def main():
     ap.add_argument("--stride", type=int, default=1, help="nur fuer 'stored': jede k-te TEST-Zeile (Vergleichsmenge der halbierten Stoerungen)")
     a = ap.parse_args()
     t0 = time.time()
-    rows = np.array(json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/data/splits.json"))["val"])
+    rows = np.array(json.load(open(BP.ROOT + "/data/splits.json"))["val"])
     stride = a.stride
     if a.pert != "stored":
         d = f"{HOME}/exp_gcar_b123/pert/{a.pert}"

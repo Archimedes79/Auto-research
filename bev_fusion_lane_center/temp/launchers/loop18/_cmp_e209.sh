@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # E209 tables: builders trained WITHOUT night / blur rows (B2 with the map, C2 without), evaluated on night and blur; references: champion without recursion, builders trained WITH all seven failure types (E139 B / C)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 M=tables/e209.md
 rm -f $R/runs/e17/$M
 for p in dark blur; do

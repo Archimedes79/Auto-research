@@ -1,6 +1,7 @@
 """Szenen-Bootstrap (Schleife 4, E54): gepaarte 95-%-Intervalle der Kopfzahlen und ihrer Differenzen.
 Je System und Menge werden die Einzelergebnisse (GE.eval_sample, wie evaluate_parallel) berechnet und gepuffert (out/loop2/e54_boot/cache_<name>_<menge>.pkl); danach 2000 Ziehungen der Szenen mit Zuruecklegen (dieselbe Ziehung fuer alle Systeme)
 -> Intervalle der Metriken F1@1 m, Route F, Split-/Merge-F1 (6 m), Richtung sowie der Differenzen zu einem Bezugssystem.  Aufruf (gcar): boot_eval.py [--sets val,test] [--draws 2000] [--workers 6]   Ausgabe: out/loop2/e54_boot/boot.json"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import multiprocessing as mp
@@ -14,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import graph_eval as GE  # noqa: E402
 import graph_from_dense as GD  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 HOME = os.path.expanduser("~")
 B = f"{OUT}/e54_boot"
 

@@ -6,6 +6,7 @@ Soll: gtK_<part>.npz aus make_gt_arrays.py (Spuren in <= 20 m lange Teilstuecke,
 Aufruf (Umgebung gcar):  lane_former.py --name e32_main --steps 12000 --lam_fp 3        Mini-Probe: --split mini --steps 300
 Ergebnisse: out/loop2/<name>/{model.pt, metrics.json, log.txt, pred_<set>.npz}
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import math
@@ -27,7 +28,7 @@ import graph_eval as GE  # noqa: E402
 import lf_inputs as LI  # noqa: E402
 
 HOME = os.path.expanduser("~")
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+OUT = BP.RUNS
 K, MMAX = 11, 96
 
 
@@ -568,7 +569,7 @@ def main():
     logit_off = sum(sizes[g] for g in groups[: groups.index("logit7")]) if "logit7" in groups else 0
     cfg = dict(align=bool(a.align), logit_off=logit_off, temporal=a.temporal if a.temporal == "A" else "")
     if a.split == "b123":
-        sp = json.load(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/_to_delete/recon/sb/loop2/splits.json"))
+        sp = json.load(open(BP.ROOT + "/_to_delete/recon/sb/loop2/splits.json"))
         tr_idx = np.arange(sp["n"]["train"])
         sets = {"train_eval": ("train", sp["train_eval"]), "val": ("val", sp["val"]), "test": ("val", sp["test"])}
     else:

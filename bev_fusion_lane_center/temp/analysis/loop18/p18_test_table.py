@@ -1,9 +1,10 @@
 """Loop 18: collect the TEST results of the loop-18 chain (E230.*) into runs/e18/test18_table.json: graph card (final-eval card), route success of the route heads along the edges (exact map and 1 / 2 / 3 m error), per finalist.
 Usage (any python): python3 p18_test_table.py"""
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 
-R = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+R = BP.RUNS
 LAD = f"{R}/e123_ladder/cards"
 out = {}
 fin = [("f1p", "e123_D7_r3_f1", "champion f1 288 / 144 + fork pruning 0.3"), ("j1p", "e123_D7_r3_j1", "single-frame j1 192 / 96 + fork pruning 0.3"), ("rcp", "e123_D7_r3_rc1", "recall variant rc1 + fork pruning 0.4")]

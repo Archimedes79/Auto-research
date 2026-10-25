@@ -24,9 +24,11 @@ EXT = r"\.(py|sh|ps1|md|csv|json|txt|yml|pdf|pptx|png)$"
 
 def rules():
     s = P.cfg()["structure"]
+    here = P.root().replace("\\", "/")  # absolute spellings of the problem folder (WSL and Windows) are stripped too, wherever the repository lives
+    here_win = re.sub(r"^/mnt/([a-z])/", lambda m: m.group(1).upper() + ":/", here)
     return dict(root_files=set(s.get("root_files", [])) | {".gitignore"}, root_dirs=set(s.get("root_dirs", [])), readme=s.get("folders_with_readme", []),
                 living=s.get("living", []), skip=tuple(s.get("skip_parts", [])), index=s.get("index_dirs", []), bases=s.get("extra_bases", []),
-                strip=s.get("strip_prefixes", []))
+                strip=list(s.get("strip_prefixes", [])) + [here + "/", here_win + "/"])
 
 
 def code_index(root, R):

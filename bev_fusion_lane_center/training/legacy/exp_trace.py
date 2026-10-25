@@ -8,6 +8,7 @@ Arme: Skelett (Standard 0,5 m), Skelett (fein abgestimmt, E19), Verfolger (Stand
 Abstimmung der Verfolger-Parameter auf den geraden Samples (wie E19 beim Skelett); berichtet wird auf den ungeraden (ungesehen) und auf allen.
 Aufruf: exp_trace.py <quelle>   -> out/crn/exp_trace_<quelle>.json, out/crn/trace_ex_<quelle>.pkl
 """
+import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import os
 import pickle
@@ -26,7 +27,7 @@ import centerline_estimator as CE  # noqa: E402
 import field_tools as FT  # noqa: E402
 import line_tracer as LT  # noqa: E402
 
-OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs/_loop1_crn"
+OUT = BP.ROOT + "/runs/_loop1_crn"
 home = os.path.expanduser("~")
 SRC = {
     "crn_orakel": dict(name=None, exp="exp_crn_b123", gtd="val_gt_dist_exact.npy", est="unet64"),

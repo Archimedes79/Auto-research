@@ -1,6 +1,7 @@
 #!/bin/bash
+BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../../.." && pwd)}"; REPO="$(dirname "$BFLC")"
 # R2.1b / E213.b: the same registration + trust gate in front of the best chain of loop 17 (map builder B + learned gate, E140 "gateB" series); baselines in runs/e17/e140_gateB (_m0 exact, _m1, _m2, _mnone, _mwrong)
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
+R=$BFLC
 X=$R/experiment_execution/runs
 until [ -f $X/E213.a/done ]; do sleep 30; done
 RG=$R/runs/e18/regis_eval_a

@@ -5,9 +5,9 @@ One place for how results are measured. Rule: **do not write a private metric - 
 ## Evaluate a model: one command
 
 ```
-wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh evaluate.py --list
-wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh evaluate.py champion --compare control
-wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh evaluate.py recall --asm fork_prune=0.3 --tag p03
+wsl bash tools/env/_py14.sh evaluate.py --list
+wsl bash tools/env/_py14.sh evaluate.py champion --compare control
+wsl bash tools/env/_py14.sh evaluate.py recall --asm fork_prune=0.3 --tag p03
 ```
 
 `evaluate.py <name>` takes a name from `../models/registry.json` (checkpoint + config + the standard assembly settings), runs it on VAL (873 frames; `--split test` only with a `--test-id` logged in `TEST_USAGE_LOG.md`) and writes `runs/eval/<name>/<split>.json` with all metrics, the settings, the cache file and the code commit. Network outputs are cached once per checkpoint and split (`~/exp_gcar_b123/eval_cache/`), so settings are re-scored on the CPU in about a minute. `--compare <name>` adds the paired scene bootstrap. A new model gets a registry entry, not a new evaluation script. Network timing stays in `drivers/p17_latency.py`. The per-loop drivers below are kept for reproducing old numbers.

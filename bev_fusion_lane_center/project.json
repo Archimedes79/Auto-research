@@ -19,7 +19,6 @@
     "living": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "data", "evaluation", "experiment_execution", "models", "reports", "runs", "temp", "tools", "training", "experiments/README.md", "literature/README.md", "literature/OVERVIEW.md"],
     "skip_parts": ["CLEANUP_LIST.md", "/history/", "/logs/", "/runs/", "/plans/", "/_to_delete/", "/papers/", "/__pycache__/", "/literature_backup", "METRIC_RESPONSE.md", "LEDGER.md", "STRUCTURE.md", "/source/", "register.md", "CATALOGUE.md"],
     "index_dirs": ["training", "evaluation", "tools", "reports", "temp", "experiment_execution", "models", "literature", "experiments"],
-    "extra_bases": ["runs", "runs/e17"],
-    "strip_prefixes": ["/mnt/c/ML-Experiment/bev_fusion_lane_center/", "C:/ML-Experiment/bev_fusion_lane_center/"]
+    "extra_bases": ["runs", "runs/e17"]
   }
 }
