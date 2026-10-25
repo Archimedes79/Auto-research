@@ -32,5 +32,5 @@ Fast j1rc (recall weight 3 on j1 192 / 96): lanes found 0.671 -> 0.736, J 0.398 
 - `results/j1rc6.json`
 - `results/j1p4.json`
 - `results/final_boot.json`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `../../temp/launchers/loop18/`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
 - raw outputs (arrays, checkpoints): `../../runs/`

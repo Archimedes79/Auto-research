@@ -16,5 +16,5 @@ Failure-half route success a - c: night -0.036, blur -0.036, three cameras off 0
 ## Data
 
 - `results/e232_table.json`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `../../temp/launchers/loop18/`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
 - raw outputs (arrays, checkpoints): `../../runs/`

@@ -11,7 +11,7 @@ The script refuses while `training/`, `evaluation/`, `tools/` or `reports/build/
 
 | folder | what |
 |---|---|
-| `analysis/loop18`, `launchers/loop18` | scratch and launchers of loop 18 (older layout: by type, then loop; new loops use `temp/loopNN/`) |
+| `launchers/loop17` | wrappers of loop 17, still named in HANDOVER.md until its report is final |
 | `literature_backup_2026-10-24/` | safety copy made by the literature chat; remove when that work is filed |
 | `STRUCTURE.md` | folder map with sizes, on demand (`tools/maintenance/make_structure.py`) |
 

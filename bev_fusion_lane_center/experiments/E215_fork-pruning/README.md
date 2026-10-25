@@ -25,5 +25,5 @@ VAL 873 frames, threshold 0.3: S 0.746 -> 0.769, Q 0.701 -> 0.735, J 0.265 -> 0.
 - `results/asm_grid.log`
 - `figures/p18_forkprune.png`
 - `figures/p18_frames_forkprune.png`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `../../temp/launchers/loop18/`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
 - raw outputs (arrays, checkpoints): `../../runs/`

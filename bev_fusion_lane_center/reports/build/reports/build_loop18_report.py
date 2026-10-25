@@ -511,7 +511,7 @@ d.table([
     ["E233", "18", "range-binned recall of the recall variants", INFO("the weight lifts every range bin; rc1 closes 54 %, rc2 76 %, j1rc 32 % of the far gap; prediction met for j1rc only")],
 ], header=["id", "loop", "what", "outcome"], widths=[None, None, None, None])
 d.p("Techniques: K188 pose-grid soft-argmax registration with causal world-frame accumulation; K189 map trust gate (evidence share, peak margin); K190 fork pruning by junction-head support; K191 numba kernels of the union. "
-    "Code: <code>training/models/p18_regis.py</code>, <code>p18_regmap.py</code>, <code>training/pipeline/p18_union_nb.py</code>, <code>p16_infer.prune_forks</code>; launchers in <code>temp/launchers/loop18/</code>; state <code>experiment_execution/indexes/LOOP18_STATE.md</code>.", "small")
+    "Code: <code>training/models/p18_regis.py</code>, <code>p18_regmap.py</code>, <code>training/pipeline/p18_union_nb.py</code>, <code>p16_infer.prune_forks</code>; launchers in <code>experiments/E2xx_*/code/</code> (original layout: git tag <code>lcr/loop18-scratch</code>); state <code>experiment_execution/indexes/LOOP18_STATE.md</code>.", "small")
 
 d.save(OUT)
 if PENDING:

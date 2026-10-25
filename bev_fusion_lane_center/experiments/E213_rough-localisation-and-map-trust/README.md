@@ -25,5 +25,5 @@ Pose error of the map 2.55 m -> 0.82 m (night failure half, sigma 2 m); failure-
 - `results/regis_train_status.json`
 - `figures/p18_registration.png`
 - `figures/p18_arch.png`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `../../temp/launchers/loop18/`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
 - raw outputs (arrays, checkpoints): `../../runs/`

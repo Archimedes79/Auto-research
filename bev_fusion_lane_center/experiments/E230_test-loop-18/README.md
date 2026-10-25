@@ -16,5 +16,5 @@ TEST (833 frames): f1 + pruning S 0.748, Q 0.718, J 0.422, lanes found 0.653, ro
 ## Data
 
 - `results/test18_table.json`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `../../temp/launchers/loop18/`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
 - raw outputs (arrays, checkpoints): `../../runs/`

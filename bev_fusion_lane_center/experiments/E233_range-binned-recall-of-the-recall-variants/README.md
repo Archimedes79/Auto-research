@@ -16,5 +16,5 @@ Beyond 40 m: j1 0.677, j1eq 0.688, j1rc 0.727, j1rc6 0.746; f1 0.709, f1eq 0.724
 ## Data
 
 - `results/range_recall.json`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `../../temp/launchers/loop18/`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
 - raw outputs (arrays, checkpoints): `../../runs/`
