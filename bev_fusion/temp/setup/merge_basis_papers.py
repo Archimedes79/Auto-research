@@ -8,7 +8,10 @@ main = "literature/papers.csv"
 with open(main, newline="", encoding="utf-8") as f:
     reader = csv.DictReader(f)
     fields, rows = reader.fieldnames, list(reader)
-with open("temp/scout_tables/papers_new_basis.csv", newline="", encoding="utf-8") as f:
+import sys  # noqa: E402
+
+src = sys.argv[1] if len(sys.argv) > 1 else "temp/scout_tables/papers_new_basis.csv"
+with open(src, newline="", encoding="utf-8") as f:
     new = list(csv.DictReader(f))
 bad = [r for r in new if set(r) != set(fields) or None in r]
 if bad:
