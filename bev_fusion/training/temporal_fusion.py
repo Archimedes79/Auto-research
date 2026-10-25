@@ -116,7 +116,8 @@ def rotate_explicit(x, theta, vec2=(), sym2=()):
     if not len(vec2) and not len(sym2):
         return x
     x = x.clone()
-    c, s = torch.cos(theta).view(1, -1, 1, 1), torch.sin(theta).view(1, -1, 1, 1)              # R(-theta) = [[c, s], [-s, c]]
+    shape = (1, -1, 1, 1) if theta.dim() == 1 else (theta.shape[0], theta.shape[1], 1, 1)       # (K,) or per sample (B, K)
+    c, s = torch.cos(theta).view(shape), torch.sin(theta).view(shape)                           # R(-theta) = [[c, s], [-s, c]]
     for i in vec2:
         vx, vy = x[:, :, i].clone(), x[:, :, i + 1].clone()
         x[:, :, i], x[:, :, i + 1] = c * vx + s * vy, -s * vx + c * vy
@@ -157,10 +158,12 @@ class TemporalFusion(nn.Module):
         return {k: v.detach() for k, v in state.items()}
 
     def aggregate(self, out_w, mass_w, ages):
-        """out_w (B, K, C, X, Y), mass_w (B, K, 1, X, Y), ages (K,) seconds -> agg (B, C, X, Y), summed mass, mean age."""
+        """out_w (B, K, C, X, Y), mass_w (B, K, 1, X, Y), ages (K,) or per sample (B, K) seconds -> agg (B, C, X, Y),
+        summed mass, mean age."""
         B, K, C, X, Y = out_w.shape
         rel = torch.sigmoid(self.relevance(out_w.reshape(B * K, C, X, Y))).reshape(B, K, 1, X, Y)
-        age = ages.to(out_w).view(1, K, 1, 1, 1)
+        ages = ages.to(out_w)
+        age = ages.view(1, K, 1, 1, 1) if ages.dim() == 1 else ages.view(B, K, 1, 1, 1)
         m = mass_w.clamp(max=1.0)
         a = m * torch.exp(-age / torch.exp(self.log_tau)) * rel
         den = a.sum(1)
@@ -180,9 +183,12 @@ class TemporalFusion(nn.Module):
         static = torch.exp(-v_hat.pow(2).sum(1, keepdim=True) / self.v_static ** 2)
         if len(past):
             out_w, mass_w = splat_window(list(past), self.grid, head=self.head, mass_gate=True)
-            ages = torch.tensor([abs(sum(float(s[0]) for s in steps)) for _, steps in past])
-            theta = torch.tensor([sum(float(s[0]) * float(s[2]) for s in steps) for _, steps in past])
-            out_w = rotate_explicit(out_w, theta.to(out_w), self.vec2, self.sym2)
+            # step values may be python scalars or per-sample (B,) tensors (nuScenes batches): ages / rotations (B, K)
+            def per_sample(fn):
+                return torch.stack([sum(fn(s) for s in steps) * cur.new_ones(B) for _, steps in past], 1)
+            ages = per_sample(lambda s: _col(s[0], cur)).abs()
+            theta = per_sample(lambda s: _col(s[0], cur) * _col(s[2], cur))
+            out_w = rotate_explicit(out_w, theta, self.vec2, self.sym2)
             agg, msum, age_mean = self.aggregate(out_w, mass_w, ages)
         else:
             agg, msum, age_mean = torch.zeros_like(cur), cur.new_zeros(B, 1, X, Y), cur.new_zeros(B, 1, X, Y)
@@ -197,8 +203,8 @@ class TemporalFusion(nn.Module):
             feats = torch.cat([cur[:, :Cm].reshape(B, Cm, -1), static.reshape(B, 1, -1), om.reshape(B, 1, -1)], 1)
             sp, mass = splat(feats, ego_to_memory(pose, self.ego_pts), self.mem_grid)
             w_new = mass.clamp(max=1.0) * sp[:, Cm:Cm + 1] * sp[:, Cm + 1:Cm + 2]
-            dt = abs(float(step[0])) if step is not None and not torch.is_tensor(step[0]) else 0.0
-            Wd = W * math.exp(-dt / self.mem_tau)
+            dt = _col(step[0], cur).abs().expand(B) if step is not None else cur.new_zeros(B)       # scalar or (B,)
+            Wd = W * torch.exp(-dt / self.mem_tau).view(B, 1, 1, 1)
             Wt = Wd + w_new
             M = (M * Wd + sp[:, :Cm] * w_new) / (Wt + 1e-6)
             W = Wt.clamp(max=self.w_max)
@@ -391,6 +397,34 @@ def _selftest():
         # the camera is the same class with n_explicit = 0: the rotation is the identity
         assert torch.equal(rotate_explicit(out_w, torch.tensor([th])), out_w)
 
+    # 10 per-sample steps (nuScenes batches: different ego speed, yaw rate and dt per sample as (B,) tensors): one batched call
+    #    equals one call per sample (ages, rotations, memory decay and the pose all follow the sample)
+    mod = TemporalFusion(2, 8, grid, mem_cells=(128, 96)).eval()
+    vs, oms, dts = torch.tensor([6.0, 12.0]), torch.tensor([0.0, 0.4]), torch.tensor([1 / 12, 1 / 6])
+
+    def drive_batch(idx):
+        n = len(idx)
+        v_, om_, dt_ = vs[idx], oms[idx], dts[idx]
+        st_, pose_, origin, out_ = None, torch.zeros(n, 3), [], None
+        for t in range(4):
+            step_ = (dt_, v_, om_) if t else None
+            if t:
+                pose_ = advance_pose(pose_, *step_)
+            cur_, _, mask = _observe(pose_, pts, 4.0)
+            cur_ = cur_.view(n, 2, X, Y)
+            pw_ = [(origin[j], [(dt_, v_, om_)] * (t - j)) for j in range(t)][-2:]
+            with torch.no_grad():
+                out_, st_, _ = mod(cur_, pw_, st_, step_, mask.view(1, 1, X, Y).expand(n, 1, X, Y))
+            origin.append(cur_)
+        return out_, st_
+
+    out_b, st_b = drive_batch([0, 1])
+    for i in (0, 1):
+        out_i, st_i = drive_batch([i])
+        assert torch.allclose(out_b[i], out_i[0], atol=1e-5), f"batched vs single sample {i}"
+        assert torch.allclose(st_b["W"][i], st_i["W"][0], atol=1e-5), f"memory confidence of sample {i}"
+    assert not torch.allclose(st_b["W"][0], st_b["W"][1]), "the samples really differ"
+
     # 8 empty inputs: no past, no memory content -> finite output, zero mass channels in the input of the conv
     mod = TemporalFusion(2, 8, grid, mem_cells=(96, 64)).eval()
     with torch.no_grad():
@@ -400,7 +434,7 @@ def _selftest():
           f"(straight corr {c14:.3f} -> {c36:.3f}, coverage {log[35][1]:.2f}; turning corr >= "
           f"{min(c for c, _, _ in logt[8:25]):.3f} over frames 8-24), no ghost trail with the velocity head "
           f"({ghost_h:.3f} vs {ghost_o:.3f} without), window sources, gradients, explicit channels rotated and kept out "
-          f"of the memory (same class for radar), empty inputs")
+          f"of the memory (same class for radar), per-sample steps = one batched call, empty inputs")
 
     try:
         from torch.utils.flop_counter import FlopCounterMode
