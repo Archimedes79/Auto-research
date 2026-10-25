@@ -166,6 +166,15 @@ if __name__ == "__main__":
         lr = lanes_by_range[(name, stride)]
         bands = " / ".join(f"{sum(x[i] for x in lr) / len(lr):.2f}" for i in range(3))
         print(f"{name:30s} | {stride} | " + " | ".join(cols) + f" || {bands}")
+    # gate (plan 10.1): the recommended lift (oversampling x4 + histogram depth) at stride 8
+    key = ("oversampling x4, depth histogram", 8)
+    runs, lr = acc[key], lanes_by_range[key]
+    lane_rec = sum(r[1][0] for r in runs) / len(runs)
+    veh_rec = sum(r[2][0] for r in runs) / len(runs)
+    far = sum(x[2] for x in lr) / len(lr)
+    ok = lane_rec >= 0.9 and veh_rec >= 0.9 and far >= 0.7
+    print(f"GATE oracle lift ({key[0]}, stride 8): lanes {lane_rec:.2f} (>= 0.9), vehicles {veh_rec:.2f} (>= 0.9), "
+          f"lanes 40-60 m {far:.2f} (>= 0.7) -> {'PASS' if ok else 'FAIL'}")
     if len(sys.argv) > 1:
         import matplotlib
         matplotlib.use("Agg")
@@ -186,3 +195,5 @@ if __name__ == "__main__":
         fig.tight_layout()
         fig.savefig(sys.argv[1], dpi=90)
         print("saved", sys.argv[1])
+    print(f"GATE oracle lift -> {'PASS' if ok else 'FAIL'}")
+    sys.exit(0 if ok else 1)

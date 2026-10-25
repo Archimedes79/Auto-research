@@ -148,7 +148,7 @@ def camera(scene, K, T_cam_car, hw):
 
 
 def radar(scene, pose=(3.5, 0.0, 0.0), fov_deg=60.0, max_range=80.0, points_per_box=3, clutter_per_lane=6,
-          sigma_r=0.1, sigma_phi_deg=0.5, rng=None):
+          sigma_r=0.1, sigma_phi_deg=0.5, sigma_d=0.0, rng=None):
     """Detections as a dict of tensors: xy (N, 2) vehicle frame, range, azimuth (sensor frame), doppler (ego-compensated
     radial velocity, m/s), rcs, box (index or -1 for clutter)."""
     rng = rng or random.Random(0)
@@ -167,7 +167,7 @@ def radar(scene, pose=(3.5, 0.0, 0.0), fov_deg=60.0, max_range=80.0, points_per_
         out["xy"].append((sx + r_m * math.cos(az_m + syaw), sy + r_m * math.sin(az_m + syaw)))
         out["range"].append(r_m)
         out["azimuth"].append(az_m)
-        out["doppler"].append(vx * ux + vy * uy)
+        out["doppler"].append(vx * ux + vy * uy + (rng.gauss(0, sigma_d) if sigma_d > 0 else 0.0))
         out["rcs"].append(rcs + rng.gauss(0, 2.0))
         out["box"].append(k)
     for k, b in enumerate(scene.boxes):
