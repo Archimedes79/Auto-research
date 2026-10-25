@@ -111,3 +111,4 @@ __pycache__/
 heartbeat
 .gpu_slots/
 ledger_row.json
+*_golden_check.json

@@ -19,8 +19,8 @@ What it does
   * metrics: sparse_metrics.card_any(extra=True) - S, Q, F1, J, FL, vertices per 100 m, lanes found, topo P / R / F1, dup_frac, recall by range
   * card: runs/eval/<name>/<split>[_<subset>][_fresh][_<tag>].json with the registry entry, overrides, frames, cache file, code commit, metrics, assembly ms per frame
   * golden: evaluation/golden.json holds one entry per (name, split, subset, fresh) with the metrics of GOLD_KEYS rounded to 4 decimals, the
-    commit and the tolerance; `--golden check` re-evaluates every entry and compares (the check writes cards with the tag `golden`, never the
-    standard card); a golden entry changes only together with a ledger row that says why (a metric fix, a new champion)
+    commit and the tolerance; `--golden check` re-evaluates every entry and compares (the check writes cards with the tag `golden_check`, which git
+    ignores; `--golden write` writes the committed `golden` card, never the standard card); a golden entry changes only together with a ledger row that says why (a metric fix, a new champion)
 Timing of the network (ms per frame on an idle GPU) is not measured here: evaluation/drivers/p17_latency.py (protocol in PROTOCOL.md).
 """
 import bflc_paths as BP  # project paths from the location of this checkout
@@ -233,7 +233,7 @@ def golden_check(reg, cached_only=False, fresh_only=False, test_id=""):
             print(f"skip  {label} (TEST: pass a --test-id logged in TEST_USAGE_LOG.md)")
             continue
         try:
-            card = evaluate(ent["name"], reg, ent["split"], subset=ent["subset"] or None, fresh=ent["fresh"], tag="golden", require_cache=cached_only)
+            card = evaluate(ent["name"], reg, ent["split"], subset=ent["subset"] or None, fresh=ent["fresh"], tag="golden_check", require_cache=cached_only)  # the check never rewrites the committed golden card
         except RuntimeError as e:
             bad.append(f"{label}: {e}")
             print(f"MISS  {label}: {e}")
