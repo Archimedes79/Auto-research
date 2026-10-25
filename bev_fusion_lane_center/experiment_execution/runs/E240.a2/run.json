@@ -14,12 +14,27 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 10612,
  "created": "2026-10-25T21:47:23",
- "status": "running",
+ "status": "ok",
  "after": "E243.timing",
  "timeout_min": 0,
  "started": "2026-10-25T21:48:01",
  "code_hash": "f83a48e5e962",
- "commit": "git-error",
- "tag": "",
- "git_note": "read-tree: BUG: tempfile.c:230: get_tempfile_path() called for inactive object"
+ "commit": "750d29f0d1",
+ "tag": "lcr/E240.a2",
+ "git_note": "snapshot race of launchers started in the same second (read-tree BUG tempfile.c); tagged by hand at the commit that holds the code of the start",
+ "pid": 10891,
+ "exit": 0,
+ "duration_s": 1525,
+ "attempts": 1,
+ "ended": "2026-10-25T22:13:26",
+ "last_lines": [
+  "=== attempt 2026-10-25T21:48:01: bash temp/loop19/train_j1.sh e24_D7_j1rcs2 2 3.0 e24_j1rc_s2",
+  "env: LCR_DIST_DIR=default P19_REC_CLAMP=3.0 P18_FAR_W=0",
+  "it 4800/4800 1356s share 0.00 seed_pos 0.230 seed_dir 0.075 seed_val 0.044 ver 0.206 pos 0.465 val 0.273 cov 0.000 prec 0.477 rec 0.215 dup 0.307 link 0.155 junc 0.162 aux_seed 0.534 aux_dir 0.086 ver_pos 0.246 child_ok 0.168 child_near 0.251 link_pos 0.104 tot 3.559 gn 6.434",
+  "e24_D7_j1rcs2 S 0.7252 tau 0.9 F1@1 0.8683 F1@.5 0.6908 J 0.182 Sp 0.976 v100 14.7 FL 0.042",
+  "_py14.sh: evaluation/evaluate.py",
+  "e24_j1rc_s2 on val (873 frames), commit 1b43092+dirty, assembly 12.3 ms per frame (CPU), metrics 28 s",
+  "  S 0.767  Q 0.735  F1@1.0 0.867  J 0.429  topo_F1 0.736  lanes_found 0.736  R@1_far 0.734  false_len_frac 0.054  dup_frac 0.072  vert100 15.153",
+  "card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e24_j1rc_s2/val.json"
+ ]
 }

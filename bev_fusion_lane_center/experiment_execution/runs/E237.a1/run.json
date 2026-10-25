@@ -1,0 +1,20 @@
+{
+ "id": "E237.a1",
+ "hypothesis": "E237: the j1 equal-budget fine-tune (4 u, recall weight 1) trained on the CPU-exact distance map (D10 a) gives a different Q than on the stored TF32 map",
+ "prediction": "Q(exact) - Q(stored) = +0.002 (mean of 2 seeds), F1@1.0 +0.003; step 0 exposure: 8.7 % of the supervised pixels damaged (E237 step 0)",
+ "rule": "KEEP (D10 option b: exact targets for all training) if Q a - c >= +0.010 (tool band) with both seeds on the same side and F1@1.0 not lower by more than 0.005; CUT if Q a - c <= -0.005 (look for a loader error first); else TIE (keep the stored map for the history, D10 option c)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "env LCR_DIST_DIR=/home/ml/exp_gcar_b123x/feats bash temp/loop19/train_j1.sh e24_D7_j1exs1 1 1.0 e24_j1ex_s1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 11544,
+ "created": "2026-10-25T21:52:22",
+ "status": "waiting",
+ "after": "E237.a0",
+ "timeout_min": 0
+}

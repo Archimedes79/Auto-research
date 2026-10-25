@@ -21,10 +21,10 @@ def card(m, tag):
     return json.load(open(p))["metrics"] if os.path.exists(p) else None
 
 
-def sweep(m):
+def sweep(m, kind="vx"):
     out = []
-    for p in sorted(glob.glob(f"{R}/{m}/val_sw*.json")):
-        tau = float(os.path.basename(p)[len("val_sw"):-len(".json")])
+    for p in sorted(glob.glob(f"{R}/{m}/val_{kind}*.json")):
+        tau = float(os.path.basename(p)[len("val_" + kind):-len(".json")])
         out.append((tau, json.load(open(p))["metrics"]))
     return sorted(out)
 
@@ -35,7 +35,7 @@ def pick():
         if not s:
             print(f"# {m}: no sweep cards")
             continue
-        print(f"# {m}: " + "  ".join(f"t{t:.2f}:{x['vert100']:.2f}/Q{x['Q']:.4f}" for t, x in s))
+        print(f"# {m}: " + "  ".join(f"v{t:.1f}:{x['vert100']:.2f}/Q{x['Q']:.4f}" for t, x in s))
         t, x = min(s, key=lambda a: abs(a[1]["vert100"] - TARGET))
         print(f"PICK {m} {t:.2f}   # vert100 {x['vert100']:.2f} Q {x['Q']:.4f} lanes_found {x['lanes_found']:.3f} " + ("matched" if abs(x["vert100"] - TARGET) <= TOL else "UNMATCHED"))
 

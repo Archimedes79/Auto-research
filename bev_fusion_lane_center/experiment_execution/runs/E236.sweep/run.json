@@ -14,12 +14,21 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 8412,
  "created": "2026-10-25T21:38:14",
- "status": "running",
+ "status": "ok",
  "after": "",
  "timeout_min": 90.0,
  "started": "2026-10-25T21:38:41",
  "code_hash": "916de39bb9fe",
  "commit": "2c9de55ad4",
  "tag": "lcr/E236.sweep",
- "git_note": ""
+ "git_note": "",
+ "pid": 8467,
+ "exit": 0,
+ "duration_s": 856,
+ "attempts": 1,
+ "ended": "2026-10-25T21:52:57",
+ "last_lines": [
+  "=== attempt 2026-10-25T21:38:41: bash temp/loop19/run_e236.sh sweep",
+  "sweep done"
+ ]
 }

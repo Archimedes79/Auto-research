@@ -201,6 +201,32 @@ def graph_losses(res, b, pos_key="pos"):
     return l_prec, l_rec
 
 
+PHD_SIGMA, PHD_GAMMA, PHD_MIX, PHD_EPS, PHD_RHO = 0.6, 2.0, 0.8, 1e-3, 1.0  # loop 19 (E244, K193): cross-track density 0.8 Gaussian (0.6 m) + 0.2 Cauchy (2 m), 1 point per m
+
+
+def phd_loss(res, b, pos_key="pos"):
+    """K193 (loop 19, E244): matching-free Poisson / PHD set likelihood of the ground-truth lane points under the intensity of the valid edges.
+    lambda(x) = rho * sum_i pi_i k(d_i(x)) over edges (parent -> node) with k = 0.8 Gaussian(0.6 m) + 0.2 Cauchy(2 m) of the distance d_i to the segment;
+    L = [ rho * sum_i pi_i l_i  -  sum_j log(lambda(g_j) + eps) ] / n_gt  with l_i the edge length, g_j every 2nd 0.5 m ground-truth point (1 per m).
+    A log of a sum, not a minimum: every edge within about 10 m of a point gets a gradient (no clamp dead zone); pi becomes the supported fraction of the edge
+    length, and two duplicate edges share their mass. No argmax, no matching; gradient reaches pi and the node positions."""
+    pos, par, pi, valid = res[pos_key].float(), res["parent"], res["pi"].float(), res["valid"]
+    has = (par >= 0) & (valid > 0)
+    a = pos.gather(1, par.clamp(min=0)[..., None].expand(-1, -1, 2))
+    ab = pos - a
+    L2 = (ab * ab).sum(-1).clamp(min=1e-6)
+    gp, gm = b["g05"][:, ::2].float(), b["m05"][:, ::2].float()
+    w = gm * (gp.abs().max(-1).values < 48.0)
+    t = (((gp[:, :, None, :] - a[:, None]) * ab[:, None]).sum(-1) / L2[:, None]).clamp(0, 1)
+    d = (gp[:, :, None, :] - (a[:, None] + t[..., None] * ab[:, None])).norm(dim=-1)  # [B,G,Nn]
+    k = PHD_MIX * torch.exp(-0.5 * (d / PHD_SIGMA) ** 2) / (PHD_SIGMA * math.sqrt(2 * math.pi)) + (1 - PHD_MIX) / (math.pi * PHD_GAMMA * (1 + (d / PHD_GAMMA) ** 2))
+    pv = pi.clamp(0, 1) * has.float()
+    lam = PHD_RHO * (k * pv[:, None, :]).sum(-1)  # [B,G]
+    mass = PHD_RHO * (pv * L2.sqrt()).sum(-1)  # [B]
+    n = w.sum(-1).clamp(min=1.0)
+    return ((mass - (torch.log(lam + PHD_EPS) * w).sum(-1)) / n).mean()
+
+
 def junc_loss(res, b, sig=2.5):
     """split / merge heat maps against Gaussians (sigma 2.5 m) at the ground-truth landmarks; weighted like the seed heat map (positives x 10)"""
     lg = res["junc_logit"].float()
@@ -297,6 +323,10 @@ def total_loss(builder, res, b, w=None):
     l_prec, l_rec = graph_losses(res, b)
     tot = tot + w["prec"] * l_prec + w["rec"] * l_rec
     parts.update(prec=l_prec, rec=l_rec)
+    if w.get("phd", 0.0) > 0:  # loop 19 (E244 arm a): Poisson set likelihood of the lane points under the edge intensity; default off
+        l_phd = phd_loss(res, b)
+        tot = tot + w["phd"] * l_phd
+        parts["phd"] = l_phd
     if w["vc"] > 0:
         l_vc, dens = vc_penalty(res, b)
         tot = tot + w["vc"] * l_vc

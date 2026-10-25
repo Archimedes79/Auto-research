@@ -19,7 +19,7 @@
 |---|---|
 | lens | past critic |
 | group | A6 / A8 (map assignment, robustness; known gap 4) |
-| sources | E213.a / b / c (`experiments/E213*/results/e213b.md`), `temp/launchers/loop18/_run_r21b.sh`, `training/data/sd_lib.py` line 183 (the scene bias draw), PROBLEM.md gap 4, PLAN R2.1 |
+| sources | E213.a / b / c (`experiments/E213*/results/e213b.md`), `experiments/E213_rough-localisation-and-map-trust/code/_run_r21b.sh`, `training/data/sd_lib.py` line 183 (the scene bias draw), PROBLEM.md gap 4, PLAN R2.1 |
 | status | proposed |
 
 - **Statement**: Re-drawn twice, the scene-constant 2 m map error leaves the benefit of registration + trust intact: in at least two of the three failure types, registered minus unregistered F1@1 (failure half, VAL failure series) is >= +0.015, and registered minus no map is >= +0.015.

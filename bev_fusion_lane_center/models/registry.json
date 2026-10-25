@@ -49,6 +49,15 @@
   "recall_s1": {"kind": "builder", "design": "D7", "run": "e18_D7_rc1s1", "set": {"M": 288, "K0": 144}, "tau": 0.7,
                "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
                "what": "seed twin of the recall variant rc1 (E219.rc1s1), fork pruning 0.4"},
+  "e24_j1cl8_s0": {"kind": "builder", "design": "D7", "run": "e24_D7_j1cl8s0", "set": {"M": 192, "K0": 96}, "tau": 0.7,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "E244 arm b: j1eq recipe with the recall clamp lifted from 3 m to 8 m, seed 0"},
+  "e24_j1phd_s0": {"kind": "builder", "design": "D7", "run": "e24_D7_j1phds0", "set": {"M": 192, "K0": 96}, "tau": 0.5,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "E244 arm a: j1 4 u fine-tune with the Poisson set likelihood (phd 0.3, rec 0), tau 0.5 declared before the run, seed 0"},
+  "e24_j1phd_s1": {"kind": "builder", "design": "D7", "run": "e24_D7_j1phds1", "set": {"M": 192, "K0": 96}, "tau": 0.5,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "E244 arm a: j1 4 u fine-tune with the Poisson set likelihood (phd 0.3, rec 0), tau 0.5 declared before the run, seed 1"},
   "control": {"kind": "graphs", "files": {"val": "runs/e94_a/graphs_val_clean.pkl", "test": "runs/e94_a/graphs_test_clean.pkl"},
                "what": "control arm: stored graphs of the learned trace network E94 (loop 10), the reference of loops 16-18"}
 }

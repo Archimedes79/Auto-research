@@ -1,0 +1,12 @@
+== j1
+  near <25 m   hits (node within 1 m of a lane)   58531  rejected (pi < 0.7)  14.8 %  of the rejected, distance in (0.6, 1.0] m:  30.1 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 39980 / 12395 / 6156, mean pi 0.91 / 0.79 / 0.58
+  mid 25-40 m  hits (node within 1 m of a lane)   34808  rejected (pi < 0.7)  21.0 %  of the rejected, distance in (0.6, 1.0] m:  31.6 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 19470 / 9735 / 5603, mean pi 0.87 / 0.76 / 0.60
+  far >40 m    hits (node within 1 m of a lane)   24884  rejected (pi < 0.7)  22.8 %  of the rejected, distance in (0.6, 1.0] m:  36.3 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 10469 / 8349 / 6066, mean pi 0.84 / 0.77 / 0.67
+== j1eq
+  near <25 m   hits (node within 1 m of a lane)   58613  rejected (pi < 0.7)  14.1 %  of the rejected, distance in (0.6, 1.0] m:  27.7 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 40457 / 12225 / 5931, mean pi 0.91 / 0.81 / 0.63
+  mid 25-40 m  hits (node within 1 m of a lane)   34598  rejected (pi < 0.7)  20.5 %  of the rejected, distance in (0.6, 1.0] m:  31.5 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 19620 / 9519 / 5459, mean pi 0.87 / 0.77 / 0.61
+  far >40 m    hits (node within 1 m of a lane)   24693  rejected (pi < 0.7)  21.5 %  of the rejected, distance in (0.6, 1.0] m:  37.6 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 10671 / 8025 / 5997, mean pi 0.85 / 0.79 / 0.68
+== j1rc
+  near <25 m   hits (node within 1 m of a lane)   58581  rejected (pi < 0.7)  11.7 %  of the rejected, distance in (0.6, 1.0] m:  27.5 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 39797 / 12907 / 5877, mean pi 0.93 / 0.84 / 0.68
+  mid 25-40 m  hits (node within 1 m of a lane)   34875  rejected (pi < 0.7)  15.1 %  of the rejected, distance in (0.6, 1.0] m:  32.7 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 19520 / 9756 / 5599, mean pi 0.91 / 0.83 / 0.69
+  far >40 m    hits (node within 1 m of a lane)   24864  rejected (pi < 0.7)  17.0 %  of the rejected, distance in (0.6, 1.0] m:  37.4 %  | hits by distance 0-0.3 / 0.3-0.6 / 0.6-1.0 m: 10761 / 8174 / 5929, mean pi 0.88 / 0.83 / 0.74

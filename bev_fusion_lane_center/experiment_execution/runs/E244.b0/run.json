@@ -1,0 +1,20 @@
+{
+ "id": "E244.b0",
+ "hypothesis": "E244 arm b: lifting the clamp of the soft minimum of the recall term from 3 m to 8 m (recall weight 1) removes the gradient dead zone and lifts lanes found of the plain fine-tune",
+ "prediction": "lanes found between j1eq (0.674) and j1rc (0.736), Q within +-0.005 of j1eq",
+ "rule": "if lanes found of b >= j1eq + 0.04 the dead zone is part of the lever (build the phd loss); if b equals j1eq the clamp is not the lever; Q judged against the band 0.010",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env P19_REC_CLAMP=8.0 bash temp/loop19/train_j1.sh e24_D7_j1cl8s0 0 1.0 e24_j1cl8_s0",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 11553,
+ "created": "2026-10-25T21:52:25",
+ "status": "waiting",
+ "after": "E237.a1",
+ "timeout_min": 0
+}

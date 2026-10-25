@@ -180,7 +180,10 @@ def scene_pose_error(scene, sigma):
     """scene-constant WORLD-frame pose error of the SD map: translation N(0, sigma^2) per axis (m) and yaw N(0, (2 sigma)^2) (deg); returns (w [2], theta_deg)"""
     import zlib
 
-    rs = np.random.RandomState((zlib.crc32(f"scenebias{scene}".encode()) + 3) % (2 ** 32))
+    import os
+
+    # P19_MAP_SEED (loop 19, E238): another draw of the scene-constant map error; 0 (default) = the stored draw of loops 11-18, bit-identical
+    rs = np.random.RandomState((zlib.crc32(f"scenebias{scene}".encode()) + 3 + int(os.environ.get("P19_MAP_SEED", "0"))) % (2 ** 32))
     return rs.randn(2) * sigma, rs.randn() * 2.0 * sigma
 
 
