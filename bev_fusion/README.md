@@ -5,6 +5,7 @@ For now this folder only holds the discussion of a new BEV system (camera pixel-
 | file / folder | content |
 |---|---|
 | `plan.md` | the current plan (draft 3) with the paper and code basis per block, the GT generation and viewer, and the tests |
+| `radar_encoding.md` | radar grid encoding ideas (measured nuScenes radar statistics, Mirko's per-detection decoder, the symmetric polar radar image + table pull, comparison, tests); discussed separately until one is chosen |
 | `plan_draft2.md` | the previous draft (front camera, virtual upright camera, sigma points), kept for the record |
 | `training/` | code (plain PyTorch, self-tests): `lift_pd.py` (camera lift) - see `training/README.md` |
 | `literature/papers.csv`, `literature/papers/` | the papers of the scans of 2026-10-25 (lift, radar, temporal, heads, SDF, polar radar; 68 notes), moved here from `../bev_fusion_lane_center/literature/` |
