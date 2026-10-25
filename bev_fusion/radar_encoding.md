@@ -119,6 +119,23 @@ Hypothesis: the uncertainty need not be decoded by a heavy network if the featur
 - Measured resolution of the nuScenes radar (`temp/radar/radar_resolution.py`): the smallest spacing between detections at the same azimuth is 0.20 m in range (all radars: a range step of about 0.2 m); the azimuth spacing reaches 0.03-0.2 deg at the 1 % quantile and 0.3-0.85 deg at 5 % (so azimuth is a continuous estimate, not a coarse bin); the typical neighbour spacing is much wider (25 % quantile 3-8 deg, 3 m in range). Consequence: polar bins of 0.5 m x 1 deg are coarser than the sensor's own steps, the exact sub-cell offsets are therefore part of the features (nothing is lost by binning), and a footprint of 3 x 3 bins is enough.
 - Test that decides it (cheap, synthetic, minutes): targets rendered with sensor noise that grows with range (sigma_r, sigma_phi as in the specification, quality codes as inputs), detections sampled; each variant is trained to output the true target occupancy: (i) Cartesian hard raster + two 3 x 3, (ii) Cartesian hard raster + four 3 x 3, (iii) polar hard raster + two 3 x 3 + gather, (iv) polar soft raster (B-lite) + two 3 x 3 + gather. Prediction: (iv) >= (iii) > (ii) > (i) in IoU beyond 30 m. If (iv) wins by little, the soft rasterisation is dropped; if (i) is as good, polar is not needed.
 
+### 3b. Result of the synthetic test (2026-10-25; `temp/radar/polar_vs_cartesian_synth.py`, output `polar_vs_cartesian_synth_result.txt`)
+1,500 steps x batch 16, 2 seeds, 512 fresh scenes, point reflectors, noise growing with range; AP / best-threshold IoU by the range of the target cell (RTX 3060, shared):
+| variant | writes per detection | 0-20 m | 20-40 m | 40-60 m | ms per scene (rasteriser + net, launch-bound) |
+|---|---|---|---|---|---|
+| C2 Cartesian, hard, 2 convs | 1 | 0.876 / 0.604 | 0.703 / 0.454 | 0.418 / 0.298 | 2.2 |
+| C4 Cartesian, hard, 4 convs | 1 | 0.883 / 0.619 | 0.731 / 0.477 | 0.456 / 0.315 | 3.5 |
+| CS2 Cartesian, soft footprint, 2 convs | 121 | 0.875 / 0.618 | 0.722 / 0.455 | 0.474 / 0.329 | 6.1 |
+| P2 polar, hard, 2 convs + gather | 1 | 0.643 / 0.480 | 0.665 / 0.425 | 0.451 / 0.313 | 2.5 |
+| PS2 polar, soft (B-lite), 2 convs + gather | 15 | 0.705 / 0.524 | 0.680 / 0.436 | 0.465 / 0.324 | 4.6 |
+Seed spread of the AP: 0.000-0.004 for the Cartesian variants, 0.012-0.016 for the polar ones (far range).
+Reading (prediction PS2 >= P2 > C4 > C2 beyond 30 m was only partly right):
+- the soft analytic footprint helps in both domains: +0.056 AP (CS2 vs C2) and +0.014 (PS2 vs P2) at 40-60 m, +0.019 / +0.015 at 20-40 m; it matters more than two additional hard-raster convolutions (C4 +0.038 at 40-60 m, but CS2 beats C4 at that range with half the layers)
+- the polar domain is NOT better here: Cartesian soft is as good or better at every range (40-60 m: CS2 0.474 vs PS2 0.465, within the seed spread; 20-40 m: 0.722 vs 0.680; 0-20 m: 0.875 vs 0.705); the near-range deficit of both polar variants is large and probably comes from the gather (0.5 m range bins) - the literature advice (one Cartesian convolution after the pull, a range channel, Cartesian loss) was not tested
+- the soft footprint of CS2 and PS2 is evaluated in the sensor's own polar offsets (dr, dphi) - the formulation of the plan section 3.1: w = g(r(cell; calib) - r_d, phi(cell; calib) - phi_d, ...) at Cartesian cells; in CS2 this is done directly at the cells of the BEV grid, so no polar image and no gather are needed
+- limits of the test: synthetic; one radar at one pose (the rig independence that polar promises is not tested); point targets (no extent, no Doppler); the footprint uses exactly the noise model of the generator (the real sigma has to come from a learned table indexed by the quality codes, so the real gain is smaller than here); timings are launch-bound single-scene numbers
+- the cost of CS2: an 11 x 11 window (121 cells) per detection because the lateral spread at 50 m is several cells; 750 detections x 121 = 91 k writes per frame, small; a window that follows the +-3 sigma ellipse (sensor-aligned rectangle) would cut it to the cells that matter
+
 ## 4. Option A: sparse per-detection decoder (Mirko's idea with the refinements) - the control
 1. Encoder over the detections of all radars and sweeps (point MLP + local attention among neighbours within a few metres): f_j from (r_j, phi_j, RCS, v_r, static residual, quality codes, states, dt, sensor id / mount).
 2. Window per detection: the BEV cells within +-k range bins and +-k azimuth bins of the detection, in its sensor's polar frame (computed per detection from the calibration).
