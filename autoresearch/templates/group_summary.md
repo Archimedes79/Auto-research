@@ -1,6 +1,9 @@
 # Group summary - <group id> <group> (date)
 
-Built from the notes of this group only (list of ids at the end); regenerate rather than edit by hand.
+Built from the notes of this group only (ids at the end); regenerate rather than edit by hand.
+
+**Digest** (the three impulses a planner should take from this group, one line each, with why now):
+1. ...
 
 ## State of the art (best methods, best numbers, on which data)
 | method | idea | best number | data / metric | code | note |

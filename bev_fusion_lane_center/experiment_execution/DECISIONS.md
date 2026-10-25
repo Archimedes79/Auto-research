@@ -23,7 +23,7 @@ The only channel for decisions that are yours (agreed 2026-10-25): **promoting a
 | 2026-10-25 | single-file records (ledger, decisions, closed questions, plan) stay complete; agents read experiment folders of the last two loops in full, older loops through loop / weekly summaries | rule in `CLAUDE.md` and `autoresearch/METHOD.md` |
 | 2026-10-25 | decisions come to Mirko through this file, not as file edits | champion promotion, problem changes, tool / gate changes, permissions |
 | 2026-10-25 | TEST is not decided separately: one TEST check belongs to a champion promotion, for the candidate and the current champion only | the guard in the tools follows when M1 / M7 are built |
-| 2026-10-25 | the outer loop (research cycle P1 / P2) is started by hand, step by step; the inner loop P3 runs autonomously | `autoresearch/prompts/research_cycle.md` to be split into steps |
+| 2026-10-25 | the outer loop (research cycle P1 / P2) is started by hand, step by step; the inner loop P3 runs autonomously | done: `autoresearch/prompts/research_steps.md` (four steps started by hand) |
 | 2026-10-25 | statistics: 2 seeds for screening, 3 seeds + scene-bootstrap interval before a champion proposal | `decide` rule in M1 / M6 |
 | 2026-10-25 | no VAL split now (data is limited); see D1 | |
 | 2026-10-25 | one lead chat per loop owns the code; other chats work in `literature/` or `reports/` or read; `HANDOVER.md` names the owner | |

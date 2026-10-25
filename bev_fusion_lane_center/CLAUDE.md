@@ -24,7 +24,7 @@
 - never: data, checkpoints, caches, binaries (images, videos, pdf, pptx, html), third-party code (the per-repository code extractions literature/code/<repo>.md are extracted on the fly by the process in literature/code/README.md)
 - git history is the long-term memory: nothing committed is rolled away; what rolls is only what an agent reads (rule above)
 - `run.py` commits the code when a run starts and tags it `lcr/<run id>` (the ledger and run.json record the commit); `clean_temp.py` commits and tags the scratch (`lcr/loopNN-scratch`) before it removes it, so experiment code is never lost
-- main = the reviewed core bundle; a change of shared code gets an `ar-code-reviewer` pass; one lead chat per loop owns the code (named in HANDOVER.md), other chats work in literature/ or reports/ or only read (separate worktrees need roadmap step M7 first)
+- main = the reviewed core bundle; a change of shared code gets an `ar-reviewer` pass (mode code); one lead chat per loop owns the code (named in HANDOVER.md), other chats work in literature/ or reports/ or only read (separate worktrees need roadmap step M7 first)
 
 ## Layout rules
 - keep it simple: for a one-time purpose a throw-away script and temporary files are better than general code. Scratch goes to temp/loopNN/; when the loop is filed run `wsl python3 ../autoresearch/tools/clean_temp.py loopNN` (dry run, then --move to _to_delete/ or --delete; it refuses if live code still imports a module from there). Build a reusable tool only when it is used a second time
@@ -32,7 +32,7 @@
 - metrics live in evaluation/: extend them, never write a private metric; after changes in a code folder run tools/maintenance/run_all_tests.sh
 - keep the structure: a move or a new file in a folder means updating that folder's README.md in the same step; at the end of every loop run `wsl python3 ../autoresearch/tools/check_structure.py` (root files, README per folder, dead paths in the living documents; rules in project.json) and fix what it reports; open cleanup items live in tools/maintenance/CLEANUP_LIST.md
 - evaluation/: metric libraries (sparse_lanes, lane_grid), drivers/ = general scripts, loops/loopNN/ = scripts of one loop; training/legacy/ = old modules that live code still imports; temp/ holds only the running loop's scratch
-- experiment_execution/PLAN.md = the experiment tree of the loop (written in P2 from `../autoresearch/templates/experiment_plan.md`); details of each experiment in experiments/E<id>_<slug>/ (card, detail plan, summary from the templates)
+- experiment_execution/PLAN.md = the experiment tree of the loop (written in P2 from `../autoresearch/templates/plan.md`); each experiment has one growing file experiments/E<id>_<slug>/experiment.md (card -> detail plan -> summary, from `../autoresearch/templates/experiment.md`)
 - nothing is deleted: move to _to_delete/ and list it there; never delete raw data or checkpoints
 
 ## Names and ids
@@ -65,7 +65,7 @@
 - statistics: at least 2 seeds (route-head spread up to 0.03 on clean frames, 0.05-0.09 under failure), noise band 0.010 in S, paired scene bootstrap (evaluation/sparse_lanes/bootstrap.py); inside the band it is a tie; S rewards sparsity, so report Q (S without the sparsity term) next to it
 - numbers come from result files (metrics.json), never typed by hand; every table says VAL or TEST and its denominator; never mix VAL and TEST in one comparison
 - TEST (21 scenes): select and tune on VAL only; TEST only once per finished design (winner + control), with the user's OK or a grant in the loop prompt, logged in evaluation/TEST_USAGE_LOG.md before reporting; anything fitted or chosen on TEST is in-sample and must be labelled so; failure, memory and ablation variants are compared on VAL; index test rows with data/splits.json['test']
-- before a report is final: `autoresearch/tools/check_numbers.py <report> <card.json / LEDGER.csv ...>` and fix or explain every number it lists; then one fresh `ar-numbers-reviewer` (primary sources, not the author's digest)
+- before a report is final: `autoresearch/tools/check_numbers.py <report> <card.json / LEDGER.csv ...>` and fix or explain every number it lists; then one fresh `ar-reviewer` in mode numbers (primary sources, not the author's digest)
 - after a change in autoresearch/tools run `wsl python3 ../autoresearch/tools/selftest.py` (it works in a throw-away project; the real ledger is not touched)
 - before you believe a number: which split, rows, denominator? tuned or selected on this set? harness self-tested and a stored number reproduced? null baseline? is the oracle really a bound? matched reference? seeds and noise band? interval excludes 0 and exceeds the band? metric gameable? how many comparisons were made? traceable to a run record? reviewed?
 

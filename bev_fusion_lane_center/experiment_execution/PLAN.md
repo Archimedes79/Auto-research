@@ -27,4 +27,4 @@ Can the failure-robust chain (champion D7 + hold + gate + map builder, 31 ms) ke
 - report S together with Q (S without the sparsity term) and ms per frame; paired scene bootstrap for graph metrics
 
 ## End of loop
-Update this table, `LEDGER.md`, `HANDOVER.md` (done 2026-10-25 10:55); next loop starts from a new plan (from `../../autoresearch/templates/experiment_plan.md`); this file then moves to the plans folder of history/ as PLAN_loop18.md.
+Update this table, `LEDGER.md`, `HANDOVER.md` (done 2026-10-25 10:55); next loop starts from a new plan (from `../../autoresearch/templates/plan.md`); this file then moves to the plans folder of history/ as PLAN_loop18.md.

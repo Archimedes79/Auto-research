@@ -1,7 +1,0 @@
-item,node,kind,state,depends_on,resource,budget,priority,owner,run_ids,note
-E240.plan,R1,detail_plan,ready,,agent,30m,1,lead,,detail plan of card H19.1
-E240.code,R1,code,planned,E240.plan,agent,2h,1,ar-coder,,block + spec test
-E240.a,R1,train,planned,E240.code,gpu,40m,1,lead,E240.a,arm a (seed 0)
-E240.c,R1,train,planned,E240.code,gpu,40m,1,lead,E240.c,equal-budget control (seed 0)
-E240.eval,R1,evaluate,planned,E240.a;E240.c,cpu,10m,1,lead,,evaluate.py + decide.py
-E240.sum,R1,summary,planned,E240.eval,agent,20m,1,lead,,experiment summary

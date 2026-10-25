@@ -14,7 +14,7 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
   - TEST used once (E230): pruned champion S 0.748 vs control 0.702
 
 ## Next step
-Research cycle 19 with the new system (`../autoresearch/`, prompt `autoresearch/prompts/research_cycle.md`): P1 research on the gaps of PROBLEM.md (coverage at range, connectivity, planner-level metric, map error 1-3 m) and the foundation topics F1-F3, then P2 hypothesis cards -> PLAN.md + schedule.csv for loop 19. Evaluate with `tools/env/_py14.sh evaluate.py <name>` (models/registry.json; new metrics topo F1, R@1 far: champion vs control -0.022 / -0.102).
+Research cycle 19 with the new system (`../autoresearch/`, steps started by hand from `autoresearch/prompts/research_steps.md`): P1 research on the gaps of PROBLEM.md (coverage at range, connectivity, planner-level metric, map error 1-3 m) and the foundation topics F1-F3, then P2 hypothesis cards -> PLAN.md + schedule.csv for loop 19. Evaluate with `tools/env/_py14.sh evaluate.py <name>` (models/registry.json; new metrics topo F1, R@1 far: champion vs control -0.022 / -0.102).
 
 ## Decisions waiting for the user
 All in `experiment_execution/DECISIONS.md` (the only channel): D1 radar parts 4-6 (doubles the data), D3 folder rename to C:\Auto-research-lmc (script prepared: `temp/rename_repo_folder.ps1`), D4 fast deployment variant (champion decision with its TEST check), D5 purge of `_to_delete/`, D6 start of roadmap M0 + M1. Owner of the code (lead chat): none while no loop runs.
