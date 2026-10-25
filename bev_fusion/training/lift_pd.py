@@ -116,9 +116,14 @@ def height_to_channels(vol):
 class LiftPD(nn.Module):
     """Lift PD for one camera with optional learned elevations; the table is cached unless the heights are learned."""
 
-    def __init__(self, grid, depth_centres, learn_heights=False, use_depth=True):
+    def __init__(self, grid, depth_centres, learn_heights=False, use_depth=True, oversample=1, slice_height=0.5):
+        """oversample = n > 1: every height slice is the mean of n sub-heights spread over its slice_height - a
+        numerical integration over the slice, so thin surfaces between slice centres (the road at z = 0) are not
+        missed; synthetic oracle (tests/test_oracle_lift.py, stride 8, depth histogram): lane-line recall 0-20 / 20-40
+        / 40-60 m from 0.90 / 0.08 / 0.00 (n = 1) to 1.00 / 1.00 / 0.81 (n = 4)."""
         super().__init__()
         self.grid, self.use_depth = grid, use_depth
+        self.oversample, self.slice_height = oversample, slice_height
         self.register_buffer("depth_centres", torch.as_tensor(depth_centres, dtype=torch.float32))
         z = torch.tensor(grid.z_levels, dtype=torch.float32)
         if learn_heights:
@@ -131,14 +136,23 @@ class LiftPD(nn.Module):
         learned = isinstance(self.z_levels, nn.Parameter)
         key = (tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(image_hw),
                None if ida is None else tuple(ida.flatten().tolist()))
+        n = self.oversample
         if learned or self._cache is None or self._cache[0] != key:
-            table = build_table(self.grid, self.z_levels, K, T_cam_car, image_hw, self.depth_centres, ida)
+            z = self.z_levels
+            if n > 1:
+                off = ((torch.arange(n, dtype=z.dtype, device=z.device) + 0.5) / n - 0.5) * self.slice_height
+                z = (z.view(-1, 1) + off.view(1, -1)).reshape(-1)
+            table = build_table(self.grid, z, K, T_cam_car, image_hw, self.depth_centres, ida)
             if not learned:
                 table = {k: (t.detach() if torch.is_tensor(t) else t) for k, t in table.items()}
                 self._cache = (key, table)
         else:
             table = self._cache[1]
-        return height_to_channels(lift_pd(feat, depth_prob, table, self.use_depth))
+        vol = lift_pd(feat, depth_prob, table, self.use_depth)
+        if n > 1:
+            B, C, X, Y, Zn = vol.shape
+            vol = vol.view(B, C, X, Y, Zn // n, n).mean(-1)
+        return height_to_channels(vol)
 
 
 # ----------------------------------------------------------------------------------------------- self-test
@@ -223,7 +237,17 @@ def _selftest():
     assert out.shape == (1, 8 * 4, 120, 104)
     out.sum().backward()
     assert mod.z_levels.grad is not None and torch.isfinite(mod.z_levels.grad).all()
-    print("lift_pd selftest ok: geometry, uniform = P / D, one-hot depth, rig shift, gradcheck, module")
+
+    # 7 vertical oversampling = the mean over the sub-heights of each slice (checked against explicit sub-slices)
+    n = 4
+    mod4 = LiftPD(grid, dc.float(), oversample=n)
+    o4 = mod4(feat.float(), uni.float(), K.float(), T.float(), hw)
+    off = ((torch.arange(n) + 0.5) / n - 0.5) * 0.5
+    zsub = (torch.tensor(grid.z_levels).view(-1, 1) + off.view(1, -1)).reshape(-1)
+    ref = lift_pd(feat.float(), uni.float(), build_table(grid, zsub, K.float(), T.float(), hw, dc.float()))
+    ref = height_to_channels(ref.view(1, 4, 120, 104, 8, n).mean(-1))
+    assert o4.shape == out.shape and torch.allclose(o4, ref, atol=1e-6), "oversampling"
+    print("lift_pd selftest ok: geometry, uniform = P / D, one-hot depth, rig shift, gradcheck, module, oversampling")
 
     if torch.cuda.is_available():
         import time

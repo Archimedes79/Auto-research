@@ -241,6 +241,22 @@ Design agreed with Mirko (2026-10-25): three BEV maps with their own times are f
 | 5 comparison on VAL | each stage against its control with two seeds and the noise band | S1 lift arms, S2 radar arms, ... |
 | 6 speed | ms per block, batch 1, idle GPU | |
 
+### 10.1 Synthetic gates per block (Mirko, 2026-10-25: "make sure steps are synthetically testable before we build a black box")
+No block is chained to the next before its synthetic test with a known answer passes. The tests share one synthetic world (`tests/synthetic_world.py`): a BEV scene (lane lines, boxes with heading and velocity, ego speed and yaw rate) from which the camera image, its exact depth map, the radar detections (position, Doppler = object velocity on the line of sight, RCS) and the GT layers are all generated consistently, frame by frame.
+| block | synthetic test (known answer) | gate | status |
+|---|---|---|---|
+| lift PD (camera -> world) | `training/lift_pd.py` self-test; oracle: the synthetic camera image + its exact depth (one-hot) lifted -> the BEV must reproduce the scene's footprints at the right cells | geometry exact; oracle recall / precision of road, lane lines, vehicles high at all ranges | self-test passes. Oracle `tests/test_oracle_lift.py` (6 scenes, recall / precision; lane recall at 0-20 / 20-40 / 40-60 m), results 2026-10-25: (1) with the slices of Grid (-0.75 .. 2.75 m) the lift MISSES THE ROAD: road and lanes 0.00 at full resolution (the samples are points at the slice centres, the road at z = 0 lies between them); (2) at stride 8 a single (minimum) depth per pixel group, the BEVDepth / DualBEV GT recipe, loses far range: lanes 0.89 / 0.21 / 0.08; (3) stride 8 with the depth HISTOGRAM of the group + vertical oversampling x4 (LiftPD(oversample=4): mean over 4 sub-heights per slice): road 1.00 / 1.00, lanes 0.99 / 0.85, vehicles 1.00 / 0.97, lanes by range 1.00 / 1.00 / 0.81 - the information is there, it was lost by depth representation and point sampling. Consequences: use oversample=4; the frozen DualBEV depth head was trained on minimum depth (sharp at the nearest pixel of a group), so far range is limited until the depth head is fine-tuned on soft (histogram) depth targets (needs lidar depth, or the 1/z mixture of 2.4) |
+| camera encoder | shapes, weight names, one camera alone; depth plausibility on a real image | depth increases towards the horizon, loads 0 missing | passes |
+| radar encoder | slot raster: exact round trip; learned encoder: reconstruction of the detection cloud | slots 100 % round trip; reconstruction rate against the raster | passes (slots 95 % recoverable, learned 46 % after 4000 steps: open) |
+| splat (one step) | landing points vs exact motion, mass, collisions, gradcheck; synthetic scenes with own velocities | within a fraction of a cell | passes (0.02-0.21 m) |
+| temporal: velocity / flow from data | two consecutive synthetic frames (no velocity in the features) -> the velocity head must recover each object's velocity, (a) supervised by GT velocity, (b) self-supervised: the past frame predicted to t must match the observed frame at t; flow rigid within an object | mean velocity error small on held-out sequences; (b) close to (a) | to build |
+| radar Doppler consistency | synthetic detections with Doppler = v . u: the radar velocity head's radial component must equal the Doppler; the tangential part from two sweeps | radial error ~0; tangential error small | to build |
+| prediction from originals (not chained) | each of the last K frames predicted once to t | within a fraction of a cell (chained: 0.74 m lag, from originals: 0.14 m) | measured; design consequence in 7.1 |
+| radar -> camera hop | small dt, either sign | within a fraction of a cell | passes (splat tests) |
+| fusion | complementary synthetic sensors (one class only the camera sees, one only the radar sees): the fused head must predict both; camera-off / radar-off fall back to one | both classes found; graceful drop-out | to build |
+| BEV trunk + semantic head | synthetic BEV inputs -> GT masks: overfit one scene (IoU ~1), then held-out synthetic scenes | IoU near 1 / high held-out | shapes and DualBEV weights pass; learning test to build |
+| end to end (synthetic world) | rendered camera images + radar + motion -> the whole chain trains -> BEV map | high IoU on held-out synthetic sequences before any real data | to build |
+
 ## 11. Stages
 | stage | content | control |
 |---|---|---|
