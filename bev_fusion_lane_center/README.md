@@ -1,4 +1,4 @@
-# bev_fusion_lane_center
+﻿# bev_fusion_lane_center
 
 - Lane centre-line graph from camera + radar BEV features (nuScenes)
 - Fully differentiable chain: image -> sparse lane graph -> time -> SD-map route -> planner
@@ -9,7 +9,7 @@
 - Folder tree with sizes on demand: `tools/maintenance/make_structure.py` (writes `temp/STRUCTURE.md`); structure and document check: `../autoresearch/tools/check_structure.py`
 
 ## Folders (by role in the method)
-- research - literature/ : OVERVIEW.md (why, nine axes, findings, gaps), CATALOGUE.md (the one reference for 456 papers), papers.csv (the one table to edit), papers/ (404 notes), deep/ + code/ (extractions), register.md (K ids)
+- research - literature/ : OVERVIEW.md (why, nine axes, findings, gaps), CATALOGUE.md (the one reference for 540 papers), papers.csv (the one table to edit), papers/ (404 notes), deep/ + code/ (extractions), register.md (K ids)
 - execution state - experiment_execution/ : PLAN.md (experiment tree of the loop), schedule.csv (what next), LEDGER.md (every run), closed_questions.md, runs/ (run records), plans/ (design documents), history/
 - experiment summaries - experiments/ : one folder per experiment, E<id>_<slug> (card, detail plan, summary); reports/weekly/
 - training - training/ : the product (models, data, losses, train, pipeline, search), trainer.py with checkpoint + resume

@@ -1,8 +1,8 @@
-# literature/ - folder map
+﻿# literature/ - folder map
 
 Two files to read, one table to edit:
 
-- **[CATALOGUE.md](CATALOGUE.md)** - the one reference for every paper (generated, 456 rows): what it is, link to the original, where it lives here (note, deep extraction, code extraction), what it contains, and why it is relevant for our problem or why not. Relevant papers first, probably-not-relevant last (by reason), code extractions at the end. For an agent: grep the id or an axis (A1 - A9).
+- **[CATALOGUE.md](CATALOGUE.md)** - the one reference for every paper (generated, 540 rows): what it is, link to the original, where it lives here (note, deep extraction, code extraction), what it contains, and why it is relevant for our problem or why not. Relevant papers first, probably-not-relevant last (by reason), code extractions at the end. For an agent: grep the id or an axis (A1 - A9).
 - **[OVERVIEW.md](OVERVIEW.md)** - what we look for and why (navigate anywhere with an SD-map route and no HD map: lane centre-lines dense then sparse, temporal fusion of the detections, assignment to a map graph at lane level with road level as fallback, navigation context for the planner), the nine axes with their core papers, what the extractions found, the open gaps, the rules of this folder.
 - **[papers.csv](papers.csv)** - the only table to edit: per paper the axis, tier, verdict (use / watch / context / not-relevant), reason code, 3 - 4 sentence statement, extraction plan, code and licence overrides. Papers found by a search and not yet read are rows with their own title / url / idea. After a change: `wsl python3 tools/literature/catalogue.py all`.
 

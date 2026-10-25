@@ -89,7 +89,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A1 -->
 
 <!-- BEGIN more:A1 -->
-**Also worth using (1):** 2203.05482 model soups. Further: watch 5, context 19, probably not relevant 10 (trainable-encoder 4, out-of-scope 3, lidar 2, perspective-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (1):** 2203.05482 model soups. Further: watch 5, context 20, probably not relevant 11 (trainable-encoder 5, out-of-scope 3, lidar 2, perspective-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A1 -->
 
 ### A2 - Dense lane-centre field
@@ -98,11 +98,11 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 **Gap.** The literature mostly goes straight to sparse set predictors; dense-then-sparse with gradient through the conversion is rare. A grid head with end-to-end sparsification is on the roadmap.
 
 <!-- BEGIN core:A2 -->
-**Core papers (3):** GR09 Sat2Graph; TP11 Lane Field; VM30 HDMapNet.
+**Core papers (4):** 2205.14756 EfficientViT; GR09 Sat2Graph; TP11 Lane Field; VM30 HDMapNet.
 <!-- END core:A2 -->
 
 <!-- BEGIN more:A2 -->
-**Also worth using (1):** 1505.04597 U-Net / FCN dense head. Further: watch 7, context 5, probably not relevant 1 (aerial-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (2):** 1505.04597 U-Net / FCN dense head; 2006.04388 Generalized Focal Loss. Further: watch 18, context 13, probably not relevant 2 (aerial-only 1, lidar 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A2 -->
 
 ### A3 - Sparse lane graph (vertices, edges, junctions)
@@ -115,7 +115,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A3 -->
 
 <!-- BEGIN more:A3 -->
-**Also worth using (17):** 1612.00603 Chamfer distance as a point-set loss ...; 1712.01312 learned sparsity with hard-concrete gates ...; 1801.07372 numerical coordinate regression; 1803.03550 optimal polyline simplification; 2011.07057 learned edge keep gate with an ...; 2204.00408 hard-concrete masks plus a Lagrangian pull ...; 2512.10416 Beyond Endpoints; VS18 Cascade R-CNN; VS12 L-CNN; VS20 Deformable DETR; VS19 DINO; VS26 CLRNet; VS24 Sparse4D v1 / v3; VM32 MapVR; VS14 DeepLSD; TP07 TopoEnhance; VM34 DAMap. Further: watch 33, context 51, probably not relevant 26 (hungarian-or-tokens 9, trainable-encoder 5, out-of-scope 4, perspective-only 3, no-detail 2, aerial-only 1, lidar 1, compute 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (17):** 1612.00603 Chamfer distance as a point-set loss ...; 1712.01312 learned sparsity with hard-concrete gates ...; 1801.07372 numerical coordinate regression; 1803.03550 optimal polyline simplification; 2011.07057 learned edge keep gate with an ...; 2204.00408 hard-concrete masks plus a Lagrangian pull ...; 2512.10416 Beyond Endpoints; VS18 Cascade R-CNN; VS12 L-CNN; VS20 Deformable DETR; VS19 DINO; VS26 CLRNet; VS24 Sparse4D v1 / v3; VM32 MapVR; VS14 DeepLSD; TP07 TopoEnhance; VM34 DAMap. Further: watch 37, context 55, probably not relevant 26 (hungarian-or-tokens 9, trainable-encoder 5, out-of-scope 4, perspective-only 3, no-detail 2, aerial-only 1, lidar 1, compute 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A3 -->
 
 ### A4 - Differentiable selection, multi-hypothesis, training regime
@@ -128,7 +128,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A4 -->
 
 <!-- BEGIN more:A4 -->
-**Also worth using (6):** 2409.11172 Annealed Winner-Takes-All for Motion ...; 2606.26424 Rethinking Training & Inference for ...; MH04 Relaxed WTA; MH31 Relation Networks for duplicate removal; MH34 SOFT top-k by entropic optimal transport; MH02 Annealed Multiple Choice Learning. Further: watch 29, context 31, probably not relevant 6 (no-detail 3, out-of-scope 1, other 1, hungarian-or-tokens 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (6):** 2409.11172 Annealed Winner-Takes-All for Motion ...; 2606.26424 Rethinking Training & Inference for ...; MH04 Relaxed WTA; MH31 Relation Networks for duplicate removal; MH34 SOFT top-k by entropic optimal transport; MH02 Annealed Multiple Choice Learning. Further: watch 42, context 36, probably not relevant 6 (no-detail 3, out-of-scope 1, other 1, hungarian-or-tokens 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A4 -->
 
 ### A5 - Temporal fusion of detections
@@ -141,7 +141,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A5 -->
 
 <!-- BEGIN more:A5 -->
-**Also worth using (5):** 2607.19781 WASABI; VM02 SQD-MapNet; VM03 PrevPredMap / Uni-PrevPredMap; VM16 MemFusionMap; VM23 MapTCL. Further: watch 17, context 8, probably not relevant 6 (out-of-scope 2, hungarian-or-tokens 2, superseded 1, perspective-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (5):** 2607.19781 WASABI; VM02 SQD-MapNet; VM03 PrevPredMap / Uni-PrevPredMap; VM16 MemFusionMap; VM23 MapTCL. Further: watch 24, context 17, probably not relevant 6 (out-of-scope 2, hungarian-or-tokens 2, superseded 1, perspective-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A5 -->
 
 ### A6 - Assignment to a map graph (SD route; lane level, road level as fallback)
@@ -154,7 +154,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A6 -->
 
 <!-- BEGIN more:A6 -->
-**Also worth using (1):** 2608.07835 SeqLoc. Further: watch 13, context 21, probably not relevant 2 (out-of-scope 1, perspective-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (1):** 2608.07835 SeqLoc. Further: watch 14, context 22, probably not relevant 2 (out-of-scope 1, perspective-only 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A6 -->
 
 ### A7 - Navigation context to the planner
@@ -167,7 +167,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A7 -->
 
 <!-- BEGIN more:A7 -->
-**Also worth using (2):** 2206.02883 Lane-Level Route Planning for Autonomous ...; 2512.10660 route compliance metric and counterfactual .... Further: watch 13, context 23, probably not relevant 3 (trainable-encoder 1, out-of-scope 1, lidar 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (2):** 2206.02883 Lane-Level Route Planning for Autonomous ...; 2512.10660 route compliance metric and counterfactual .... Further: watch 13, context 24, probably not relevant 3 (trainable-encoder 1, out-of-scope 1, lidar 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A7 -->
 
 ### A8 - Robustness, sensor failure, uncertainty
@@ -176,11 +176,11 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 **Gap.** [RB14](papers/RB14_gaussiancar-no-failure-evaluation-exists.md): no failure evaluation of GaussianCaR exists; no lane-graph robustness benchmark.
 
 <!-- BEGIN core:A8 -->
-**Core papers (3):** RB04 RoboMap; RB01 Post Fusion Stabilizer; RB06 Grace-BEV.
+**Core papers (4):** 2208.02814 Conformal Risk Control; RB04 RoboMap; RB01 Post Fusion Stabilizer; RB06 Grace-BEV.
 <!-- END core:A8 -->
 
 <!-- BEGIN more:A8 -->
-**Also worth using (7):** 1706.04599 calibration and temperature scaling; 1906.02530 calibration under dataset shift; RB17 RoboBEV / nuScenes-C; RB19 MultiCorrupt; PL15 Producing and Leveraging Online Map ...; RB03 SafeMap; RB02 ModalPatch. Further: watch 13, context 11, probably not relevant 8 (trainable-encoder 5, perspective-only 1, out-of-scope 1, compute 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (7):** 1706.04599 calibration and temperature scaling; 1906.02530 calibration under dataset shift; RB17 RoboBEV / nuScenes-C; RB19 MultiCorrupt; PL15 Producing and Leveraging Online Map ...; RB03 SafeMap; RB02 ModalPatch. Further: watch 20, context 16, probably not relevant 8 (trainable-encoder 5, perspective-only 1, out-of-scope 1, compute 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A8 -->
 
 ### A9 - Evaluation, data, metrics
@@ -193,7 +193,7 @@ How to read a block: **core papers** are the generated table (tier 1; each has, 
 <!-- END core:A9 -->
 
 <!-- BEGIN more:A9 -->
-**Also worth using (6):** PL19 Ego-status and open-loop critiques of ...; A03 MapBench; 2603.19852 Failure Modes for Deep Learning-Based ...; 2605.22578 Beyond Chamfer Distance; SN13 Calibration-only visibility mask for ...; VM44 mAS. Further: watch 9, context 10, probably not relevant 1 (out-of-scope 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
+**Also worth using (6):** PL19 Ego-status and open-loop critiques of ...; A03 MapBench; 2603.19852 Failure Modes for Deep Learning-Based ...; 2605.22578 Beyond Chamfer Distance; SN13 Calibration-only visibility mask for ...; VM44 mAS. Further: watch 9, context 12, probably not relevant 1 (out-of-scope 1). Statement and link for every paper: [CATALOGUE.md](CATALOGUE.md).
 <!-- END more:A9 -->
 
 ### 2b. What the first full-text and code extraction found (P1: time and assignment, 2026-10-24)
@@ -242,6 +242,16 @@ Four search agents looked for papers, code releases and news since the loop-17 r
 - **Robustness (A8).** Repair Before You Fuse 2609.35264 (zero-initialised repair modules on a frozen host); structured probabilistic mapping 2603.20076; MapStableTest / mAS toolkit (MIT per its README, numpy only).
 - **Code releases and status changes.** Released: SeqGrowGraph (`MIV-XJTU/SeqGrowGraph`, no licence file, mmdet3d stack), TopoStreamer (LaneSegNet based, no licence file, py3.8 / torch 1.9 / mmcv-full 1.5.2, see [code/topostreamer.md](code/topostreamer.md)), DeH4R (`godx-7/DeH4R`, no licence file, weights on Hugging Face), MAT / ONR (ICLR 2026, MIT, dataset and checkpoint on Hugging Face). Still without code: Lane Field ("coming soon"), SCORE, HOLO, U-ViLAR v2, L2G-Map (v2 only), FASTopoWM, MapTCL, PredMapNet; NavMapFusion is still a README plus the GPL-3.0 licence.
 
+### 2e. Foundation topics F1 - F3 (scouts, 2026-10-25)
+
+Three scouts read abstract pages only (digest level; some repository URLs and kernel remarks are from memory and flagged in the rows) and added 84 rows (3 tier 1, 29 tier 2). Row texts start with `[F1]`, `[F2]` or `[F3]`.
+
+- **F1 building blocks.** EfficientViT 2205.14756 (ReLU linear attention, global context from plain matmuls on the 200x200 grid; test in the dense head against a conv-only control at equal ms for far-range recall). Cheap per-vertex memory cells: minGRU 2410.01201, LRU 2303.06349; Gated DeltaNet 2412.06464 is the best memory over a token set but its kernels are custom. Pure-PyTorch long-range blocks for thin structures: SCNN, CCNet, VAN, DSCNet. Mask2Former 2112.01527 only as a masked cross-attention block (corridor read along a ray). No pure-PyTorch Mamba / VMamba scan within 25 ms was found; no ego-motion-aware SSM memory over a vertex set exists (a gap).
+- **F2 training and losses.** Conformal Risk Control 2208.02814 (post-hoc threshold with a guarantee on an expected loss: candidate for the pruning and validity thresholds). Semi-supervised online mapping 2410.10279 (multi-frame fused teacher pseudo-labels: the template for the 628 ms teacher -> 25 ms student). Generalized Focal Loss 2006.04388 (calibrated quality score on the heat map), APML 2509.08104 and unbalanced optimal transport 2307.02402 (Sinkhorn point losses, soft assignment with a background column), robust multi-sensor map construction 2507.01484 (modality dropout that keeps the clean case). Not found: radar-camera BEV-lane distillation, a range-weighted loss for camera BEV.
+- **F3 formulations.** PMB-NLL 2203.07980 (Bernoulli + Poisson set likelihood on the vertex set; code georghess/pmb-nll; needs a check whether it needs an assignment step), conditional marked point process 2506.21486 (likelihood-trained intensity field with empty-space probability), smoothed Viterbi 1802.03676 and Fenchel-Young losses 1901.02324 (differentiable chain choice without argmax gradient). Not found: a learned RFS filter with a Bernoulli existence update, a learned eikonal centre-line solver, a conformal method for polylines (gaps).
+- **Deep reads of eight candidates** (files `deep/2*_*.md`, digest level: arXiv HTML and repository pages through a summarising tool, local code read directly). Worth an experiment: Conformal Risk Control 2208.02814 (calibrate the fork-pruning threshold on scene-level losses; the loss must be monotone with L(lambda_max) <= alpha, so use the miss relative to the unpruned tree; scene is the exchangeable unit, VAL the only calibration set), EfficientViT 2205.14756 (global-context layer in the seed / direction stage against a dilated-conv control at equal ms; prediction R@1 far +0.02), Generalized Focal Loss 2006.04388 (our dense-head loss is not minimised at p = y; calibration swap with temperature-scaling control). Watch only: semi-supervised online mapping 2410.10279 (gains at 2.5 - 25 % labels only, the teacher is an EMA, no code; fused-teacher raster from the 628 ms trace network as a three-arm test after a location-overlap check), PMB-NLL 2203.07980 (training loss needs a hard assignment; matching-free Poisson loss is our own sketch), APML 2509.08104 (released code differs from the paper; a position-only loss cannot create missing lanes). Low value: Gated DeltaNet 2412.06464 and minGRU 2410.01201 (our vertex rule is already a fixed minLSTM-like log-odds update; at 3 - 8 frames a learned cell initialised to reproduce it is the only arm worth trying).
+- **Next scouts (not fetched yet):** Perceiver IO, RepLKNet / SLaK, DiNAT, Griffin, Hyena, GraphGPS, ConvGRU temporal grids (F1); EMA / mean-teacher dense self-distillation, heat-map label shaping, evidential or selective-prediction heads for graphs (F2); 2025-26 follow-ups to PMB-NLL (F3).
+
 ## 3. What the literature did not provide (open, ranked by use for the next loops)
 
 1. A differentiable selection of hypotheses (tree / beam) with gradient to the dropped nodes for *geometric* nodes (only discrete or latent states are demonstrated). (A4)
@@ -254,23 +264,23 @@ Four search agents looked for papers, code releases and news since the loop-17 r
 ## 4. Numbers (generated)
 
 <!-- BEGIN stats -->
-456 papers from 404 notes (without a note: 133).
+540 papers from 404 notes (without a note: 217).
 
 | axis | core | relevant | background | not suitable | all |
 |---|---|---|---|---|---|
-| A1 Sensing foundation (camera + radar BEV) | 1 | 10 | 19 | 6 | 36 |
-| A2 Dense lane-centre field | 3 | 5 | 9 | 0 | 17 |
-| A3 Sparse lane graph (vertices, edges, junctions) | 5 | 48 | 62 | 17 | 132 |
-| A4 Differentiable selection, multi-hypothesis, training regime | 2 | 22 | 47 | 3 | 74 |
-| A5 Temporal fusion of detections | 4 | 15 | 19 | 2 | 40 |
-| A6 Assignment to a map graph (SD route, lane / road level) | 5 | 12 | 23 | 2 | 42 |
-| A7 Navigation context to the planner | 3 | 16 | 23 | 2 | 44 |
-| A8 Robustness, sensor failure, uncertainty | 3 | 14 | 21 | 4 | 42 |
-| A9 Evaluation, data, metrics | 3 | 10 | 15 | 1 | 29 |
+| A1 Sensing foundation (camera + radar BEV) | 1 | 10 | 20 | 7 | 38 |
+| A2 Dense lane-centre field | 4 | 15 | 19 | 1 | 39 |
+| A3 Sparse lane graph (vertices, edges, junctions) | 5 | 50 | 68 | 17 | 140 |
+| A4 Differentiable selection, multi-hypothesis, training regime | 2 | 29 | 58 | 3 | 92 |
+| A5 Temporal fusion of detections | 4 | 19 | 31 | 2 | 56 |
+| A6 Assignment to a map graph (SD route, lane / road level) | 5 | 12 | 25 | 2 | 44 |
+| A7 Navigation context to the planner | 3 | 16 | 24 | 2 | 45 |
+| A8 Robustness, sensor failure, uncertainty | 4 | 18 | 29 | 4 | 55 |
+| A9 Evaluation, data, metrics | 3 | 10 | 17 | 1 | 31 |
 
-Verdicts on relevance for our problem: use 75, watch 139, context 179, not-relevant 63, not yet rated 0.
+Verdicts on relevance for our problem: use 78, watch 182, context 215, not-relevant 65, not yet rated 0.
 
-Core papers: 29; deep extraction done for 26, still queued: none; not planned: SN01 (our own foundation, already integrated); RB04 (no repository in the note; search only when robustness work starts); RB06 (no repository in the note; search only when robustness work starts).
+Core papers: 31; deep extraction done for 26, still queued: 2205.14756, 2208.02814; not planned: SN01 (our own foundation, already integrated); RB04 (no repository in the note; search only when robustness work starts); RB06 (no repository in the note; search only when robustness work starts).
 Code extractions: 17 files in `code/` (overview at the end of [CATALOGUE.md](CATALOGUE.md)).
 <!-- END stats -->
 
