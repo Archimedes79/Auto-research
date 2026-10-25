@@ -1,5 +1,5 @@
 # One repository for the research system and the code of its problems. CODE ONLY (autoresearch/METHOD.md "Code and git"):
-# everything is ignored unless listed here. Never: data, checkpoints, caches, results, reports, literature notes, state, wsl/.
+# everything is ignored unless listed here. Never: data, checkpoints, caches, results, reports, state, third-party code, wsl/.
 /*
 !/.gitignore
 !/CLAUDE.md
@@ -24,6 +24,21 @@
 /bev_fusion_lane_center/models/*
 !/bev_fusion_lane_center/models/registry.json
 !/bev_fusion_lane_center/models/README.md
+# literature: the summaries (overview, catalogue, table, paper notes, deep extractions, register) but NOT the per-repository code extractions (code/<repo>.md,
+# skeletons, clones): code is extracted on the fly by the process in literature/code/README.md
+!/bev_fusion_lane_center/literature/
+/bev_fusion_lane_center/literature/*
+!/bev_fusion_lane_center/literature/README.md
+!/bev_fusion_lane_center/literature/OVERVIEW.md
+!/bev_fusion_lane_center/literature/CATALOGUE.md
+!/bev_fusion_lane_center/literature/papers.csv
+!/bev_fusion_lane_center/literature/register.md
+!/bev_fusion_lane_center/literature/papers/
+!/bev_fusion_lane_center/literature/deep/
+!/bev_fusion_lane_center/literature/code/
+/bev_fusion_lane_center/literature/code/*
+!/bev_fusion_lane_center/literature/code/README.md
+!/bev_fusion_lane_center/literature/code/_TEMPLATE.md
 # scratch: only the scripts (a run's tag keeps them after the loop's clean-up)
 !/bev_fusion_lane_center/temp/
 /bev_fusion_lane_center/temp/**

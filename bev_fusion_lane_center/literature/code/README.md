@@ -1,0 +1,22 @@
+# code/ - level 3: code extraction per repository
+
+One file per repository of a core paper, named `<repo>.md` (repository name, lower case). It records what the code really does (paper and code often differ), where the reusable parts are, whether they run in our environment (PyTorch 2.8, Python 3.12, no mmcv / mmdet / mmdet3d) and what the licence allows. Template: [_TEMPLATE.md](_TEMPLATE.md). The overview of all code extractions is the last section of [../CATALOGUE.md](../CATALOGUE.md) (generated from the port cards). Rules as in [../deep/README.md](../deep/README.md), plus:
+
+- **Licence first.** Read the LICENSE file before anything else and write it down. GPL-3 / AGPL / no licence file: read only, re-implement from your own description. MIT / Apache / BSD: adaptation with attribution is allowed. nuScenes data is non-commercial.
+- **No clone or download without the user's OK** (give repository, commit, size). Reading single files on GitHub is fine; local clones that already exist (WSL `~/work`): `CRN`, `gaussiancar` (weights in `gaussiancar_ckpt/`), `bevfusion`.
+- Prefer the parts that decide a port: label construction, assignment / loss, graph assembly rules, temporal propagation, metric implementation.
+- Check the repository URL on the paper note; if the note has none or a wrong one, say so here and in the extraction.
+
+## The systematic: select, pull, make readable, summarise, link
+
+Only the most meaningful repositories get a code extraction (core paper, something we would really port: labels, losses, assembly rules, metrics, planner feature builders). Everything else stays at level 2 and can be extracted later: the deep file then names where to start. The column `extract` in `../papers.csv` records the decision.
+
+| step | what happens | cost / gate | product |
+|---|---|---|---|
+| 1 select | pick the repositories by the rule above; check the licence page and the repository URL | none | row in the queue below |
+| 2 pull | **L0 web read** (default): README, LICENSE, file tree and the few files that matter through GitHub pages. **L1 sparse clone** (needs the user's OK per repository, with name, commit and size): `git clone --depth 1 --filter=blob:none --no-checkout <url> ~/work/ref/<repo>` in WSL, then `git sparse-checkout set <paths>` and `git checkout`, so that only the listed paths arrive. **L2 full clone or release files** only if a port needs reference outputs for a parity test, again with OK | L0 free; L1 / L2 gated | web notes or a read-only checkout; commit hash recorded |
+| 3 make readable | **skeleton** (generated, factual, safe for every licence): `python3 tools/literature/code_digest.py <checkout> --paths <sub-paths> --out literature/code/<repo>.skeleton.md` lists files with line counts, heavy-dependency flags (mmcv, spconv, custom CUDA), outlines of classes and functions with line ranges and the first docstring line, and a keyword index (loss, assign, merge, decode, metric ...); the code is parsed, never imported or executed. **Narrative** (by hand): for each key function, input shapes, steps and output in plain words, a call chain, config versus paper, label pipeline, gotchas. Pseudocode in own words only for GPL / unlicensed code; for permissive code snippets of at most 15 lines with file and line | cheap | `<repo>.skeleton.md` + sections 1 - 8 of `<repo>.md` |
+| 4 summarise | fill the **port card** at the top of `<repo>.md` (licence, portable, reuse, effort, port targets, status) and the port plan (what to lift, dependency gaps) | cheap | port card |
+| 5 link | the catalogue picks the file up: `[code]` in `../CATALOGUE.md` and the core tables of `../OVERVIEW.md`, a row in the code table at the end of [../CATALOGUE.md](../CATALOGUE.md); the deep file section 4 links the code file; a port that gets written into `training/` or `evaluation/` cites `literature/code/<repo>.md` and the source file and line in its docstring, gets a K id in `../register.md`, and its port card status becomes `ported` and, after a parity test against the reference, `verified` | `wsl python3 tools/literature/catalogue.py all` | index rows, links |
+
+Checks before a code file counts as done: licence read from the LICENSE file; commit or "web pages only" stated; every claim carries file and line; paper-versus-code differences listed; for GPL / non-commercial code no snippet and no fenced code block; port card complete. A reviewer spot-checks five claims against the source.
