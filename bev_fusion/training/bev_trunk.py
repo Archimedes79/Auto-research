@@ -84,6 +84,21 @@ class FPNLSS(nn.Module):
         return self.up2(self.conv(x))
 
 
+class DetailPath(nn.Module):
+    """Stride-1 detail path: two 3x3 convs (BN, ReLU) at the full 0.5 m grid on the trunk input, concatenated to the FPN output
+    before the head. The pyramid's first stage is already stride 2, so without this the 0.5 m output is rebuilt from 1 m
+    features; lane dividers and centre-lines are one or two cells wide."""
+
+    def __init__(self, cin, c=32):
+        super().__init__()
+        self.net = nn.Sequential(nn.Conv2d(cin, c, 3, 1, 1, bias=False), nn.BatchNorm2d(c), nn.ReLU(True),
+                                 nn.Conv2d(c, c, 3, 1, 1, bias=False), nn.BatchNorm2d(c), nn.ReLU(True))
+        self.out_channels = c
+
+    def forward(self, x):
+        return self.net(x)
+
+
 class SemanticHead(nn.Module):
     """3x3 conv BN ReLU + 1x1 to n_classes (logits, multi-label: sigmoid)."""
 
@@ -98,14 +113,17 @@ class SemanticHead(nn.Module):
 
 
 class BEVTrunk(nn.Module):
-    def __init__(self, cin=80, n_classes=14, width=1.0, light_up=False, head_hidden=None):
+    def __init__(self, cin=80, n_classes=14, width=1.0, light_up=False, head_hidden=None, detail=0):
+        """detail > 0: add the stride-1 detail path with that many channels (the pre-trained keys are unaffected)."""
         super().__init__()
         self.img_bev_encoder_backbone = BEVBackbone(cin, width)
         self.img_bev_encoder_neck = FPNLSS(self.img_bev_encoder_backbone.chans, width, light_up)
-        self.head = SemanticHead(self.img_bev_encoder_neck.out_channels, n_classes, head_hidden)
+        self.bev_detail = DetailPath(cin, detail) if detail else None
+        self.head = SemanticHead(self.img_bev_encoder_neck.out_channels + (detail or 0), n_classes, head_hidden)
 
     def features(self, x):
-        return self.img_bev_encoder_neck(self.img_bev_encoder_backbone(x))
+        f = self.img_bev_encoder_neck(self.img_bev_encoder_backbone(x))
+        return torch.cat([f, self.bev_detail(x)], 1) if self.bev_detail is not None else f
 
     def forward(self, x):
         return self.head(self.features(x))
@@ -152,6 +170,28 @@ def _selftest():
         t = BEVTrunk(cin=48, n_classes=14, **kw).eval()
         with torch.no_grad():
             assert t(torch.randn(1, 48, 120, 104)).shape == (1, 14, 120, 104)
+    # the stride-1 detail path: output shape unchanged, the pre-trained tensors unchanged, the head sees the extra channels
+    for kw in ({"width": 0.5, "light_up": True, "detail": 32}, {"width": 1.0, "detail": 32}):
+        t = BEVTrunk(cin=48, n_classes=14, **kw).eval()
+        with torch.no_grad():
+            assert t(torch.randn(1, 48, 120, 104)).shape == (1, 14, 120, 104)
+        assert t.head.net[0].in_channels == t.img_bev_encoder_neck.out_channels + 32
+    td = BEVTrunk(cin=80, n_classes=14, detail=32).eval()
+    stats_d = sum(v.numel() for k, v in td.state_dict().items()
+                  if k.startswith(("img_bev_encoder_backbone.", "img_bev_encoder_neck.")) and "num_batches" not in k)
+    assert stats_d == 26668896, "the detail path must not change the pre-trained encoder tensors"
+    td.train()
+    td(x).mean().backward()
+    assert all(p.grad is not None for p in td.parameters()), "gradient reaches the detail path"
+    # a detail-path signal reaches the output at full resolution: changing ONE input cell changes the output within +-1 cell
+    # of it by far more than at a cell 6 cells away (no pyramid path is needed for that)
+    td.eval()
+    with torch.no_grad():
+        base = td(torch.zeros(1, 80, 120, 104))
+        pert = torch.zeros(1, 80, 120, 104)
+        pert[0, :, 60, 50] = 1.0
+        d = (td(pert) - base).abs().sum(1)[0]
+    assert d[59:62, 49:52].max() > 5 * d[66, 56].clamp(min=1e-12), "the detail path is local"
     # gradient reaches the input and every parameter
     trunk.train()
     trunk(x).mean().backward()

@@ -67,7 +67,10 @@ for name, cin, kw in [("T0 DualBEV trunk, width 1 (pre-trained shape)", 80, {}),
                       ("T1 width 1/2", 40, {"width": 0.5}),
                       ("T2 width 1/2 + light up", 40, {"width": 0.5, "light_up": True}),
                       ("T3 width 1/4 + light up", 32, {"width": 0.25, "light_up": True}),
-                      ("T0 + light up (width 1)", 80, {"light_up": True})]:
+                      ("T0 + light up (width 1)", 80, {"light_up": True}),
+                      ("T2 + stride-1 detail path (32 ch)", 40, {"width": 0.5, "light_up": True, "detail": 32}),
+                      ("T3 + stride-1 detail path (32 ch)", 32, {"width": 0.25, "light_up": True, "detail": 32}),
+                      ("T2 + stride-1 detail path (16 ch)", 40, {"width": 0.5, "light_up": True, "detail": 16})]:
     m = BEVTrunk(cin=cin, n_classes=14, **kw).eval()
     x = torch.randn(1, cin, 120, 104)
     rows.append((name, gflops(m, x), n_params(m) / 1e6, ms(m, x)))

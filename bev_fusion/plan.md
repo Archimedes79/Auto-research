@@ -164,6 +164,9 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 | T1 width 1/2 | 25.2 | 6.8 | |
 | **T2 width 1/2 + light up-sampling (default)** | **18.7** | 6.7 | |
 | T3 width 1/4 + light up-sampling | 4.7 | 1.7 | speed variant |
+| T2 + stride-1 detail path (32 ch) | 21.3 | 6.8 | +2.6 GFLOPs; two 3 x 3 convs at 0.5 m on the trunk input, concatenated before the head (`detail=32`) |
+| T3 + stride-1 detail path (32 ch) | 6.4 | 1.7 | |
+| T2 + stride-1 detail path (16 ch) | 19.9 | 6.7 | |
 | G GaussianCaR two-stream fuser, conv skeleton only | 14.4 | 6.8 | lower bound: its rectify / cross-attention modules and the DPT head are not counted |
 
   For the whole chain (one camera): ResNet-50 backbone 29.4, neck 4.4, DepthNet 35.6, lift PD + output conv 2.1 = 71.4 GFLOPs (the pre-trained camera heads, frozen), splat heads 0.2 + 0.1 per branch and step. So the trunk decides the total: T0 gives about 172 GFLOPs, T2 about 90.
@@ -171,6 +174,10 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - Decision (compute first): T2 is the default - the standard flow at half width with the cheap up-sampling, 5.4 x fewer FLOPs than the original trunk; the FPN neck (two 3x3 convs at 512 channels and the full-resolution conv) is where the original spends its compute and where the width and the light up-sampling save it. Arms of the first trunk experiment: T2 (default), T3 (speed), T0 initialised from the pre-trained DualBEV BEV encoder (an ablation: it was trained for detection on a different grid and costs 5.4 x more, so it must earn it).
 - Fallback (proven camera-radar trunk, GaussianCaR, `gaussiancar_fusion.md`): its 4-stage two-stream fuser (FeatureRectify + cross-attention fusion at each of 4 scales, stride-2 convs + ResBlocks between them) and DPT-style decoder - fusion inside the pyramid instead of once before it; used if a fused map in front of a single-stream trunk loses to it.
 - Basis: BEVDet / BEVDepth / CRN / DualBEV BEV encoders (`literature/code/dualbev.md`, `crn_fusion.md`), GaussianCaR fuser + DPT head (`gaussiancar_fusion.md`), BEVFusion / CVT decoders (lit), CenterPoint trunk (lit, MIT).
+- Stride-1 detail path (Mirko approved 2026-10-26; BEVTrunk(detail=32), DetailPath): the pyramid's first stage is already stride 2, so the 0.5 m output is rebuilt from 1 m features, and lane dividers are one or two cells wide. Synthetic thin-line test (	emp/checks/trunk_thin_lines.py, one-cell-wide lines from a blurred noisy input, IoU of the lines, same data and seeds, T2 against T2 + detail 32):
+  - 100 steps: IoU 0.525 -> 0.887 (3 seeds each: 0.517 / 0.534 / 0.523 against 0.838 / 0.910 / 0.915); 300 steps: 0.841 -> 0.978; 1,500 steps: 0.995 -> 0.995 (both exact; first version of the script, same task)
+  - reading: the plain trunk CAN localise one-cell lines once it is trained (the sub-pixel up-sampling carries them), so the premise 'the pyramid cannot' is not confirmed; the detail path makes the trunk learn thin lines about 3 x faster (with the path 100 steps give IoU 0.89, T2 needs 300 steps for 0.84), which matters on a 3060 with short trainings; it costs +2.6 GFLOPs (+14 % of the trunk, about +3 % of the chain)
+  - decision: the detail path is an arm of the first trunk experiment (T2 against T2 + detail 32) on the real GT; it is kept only if it improves lines at 0-20 m or the speed of learning on real data
 - Tests: shapes of the three stages and the output, parameter count = the DualBEV tensors at width 1, pre-trained load report, gradients to every parameter (`training/bev_trunk.py`); overfit one scene to near-perfect IoU (wiring); ms per frame on an idle GPU.
 
 ## 7. Temporal fusion (ego motion, stationary environment, moving targets)
