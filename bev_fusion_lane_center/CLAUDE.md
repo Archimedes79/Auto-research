@@ -6,21 +6,25 @@
 - This folder is one problem of the general research system `../autoresearch/` (method: `../autoresearch/METHOD.md`: P1 research -> P2 hypotheses + plan -> P3 loop -> P4 close; agent roles in `../autoresearch/agents/`; templates in `../autoresearch/templates/`). The problem itself: PROBLEM.md (goal, chain, metrics, current best, gaps, problem groups A1-A9, foundation topics F1-F3); machine-readable paths: project.json
 - Two systems: the product (the perception system, `training/`) and the improver around it (`../autoresearch/tools/`, `evaluation/`, `literature/`)
 
-## Read first: the state is four files, nothing else
-- HANDOVER.md (<= 3 KB): where we are, what runs, the next step, decisions waiting for the user, pointers; rewrite it, do not append
+## Read first: the state is five files, nothing else
+- HANDOVER.md (<= 3 KB): where we are, what runs, the next step, the owner of the code (the lead chat), pointers; rewrite it, do not append
+- experiment_execution/DECISIONS.md: the only channel for Mirko's decisions (champion promotion with its one TEST check, changes of PROBLEM.md, changes of the tools or gates, permissions); write an entry and wait for the recorded answer, never act on it before
 - experiment_execution/PLAN.md: the experiment tree of the loop with a status per node
 - experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next | reconcile`): what happens next; a disrupted loop resumes from it
 - experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit; the journal of a loop goes into ledger notes, not into a new state file
 - when a loop starts: the loop prompt (from `../autoresearch/prompts/loop.md`: STOP_AT, TEST / mail / shutdown permissions; read each time, do not re-plan)
 - for reference only: README.md (folder map), evaluation/PROTOCOL.md (splits, metrics, timing), experiment_execution/closed_questions.md, literature/OVERVIEW.md before literature work (edit literature/papers.csv, then `wsl python3 tools/literature/catalogue.py all`); old state files are in experiment_execution/history/
+- what to read in full: single-file records (ledger, decisions, closed questions, plan) are complete files - search them, do not split or roll them; experiment folders: the last two loops in full, older loops through their loop / weekly summaries and PROBLEM.md's current best
 
 ## Evaluate
 - every number of a model comes from `tools/env/_py14.sh evaluate.py <registry name> [--compare <name>]` (models/registry.json holds checkpoint, config and the standard settings; a new model = a new registry entry, not a new evaluation script); headline metrics: Q at <= 14.3 vertices per 100 m, topo F1, lanes found, R@1 far, route success, ms per frame (S for the history)
 
-## Git: code only, a tag per experiment
-- one repository, the parent of this folder (whitelist in its .gitignore; remote `origin` = GitHub archimedes79/Auto-research-lmc): `autoresearch/`, this folder's code (training/, evaluation/ code, tools/, reports/build/, temp/ scripts), models/registry.json, PROBLEM.md, project.json, CLAUDE.md, README.md, and the literature summaries (literature/: OVERVIEW, CATALOGUE, papers.csv, register, papers/, deep/); never data, checkpoints, results, reports, state or third-party code (the per-repository code extractions literature/code/<repo>.md are not stored: extract on the fly by the process in literature/code/README.md)
+## Git: code and text records, a tag per experiment
+- one repository, the parent of this folder (whitelist in its .gitignore; remote `origin` = GitHub archimedes79/Auto-research-lmc, see DECISIONS D2): `autoresearch/`; this folder's code (training/, evaluation/, tools/, reports/build/, temp/ scripts, models/registry.json, PROBLEM.md, project.json, CLAUDE.md, README.md); and all TEXT records (decided 2026-10-25): HANDOVER, experiment_execution/ (plan, schedule, ledger, decisions, closed questions, run records, history), experiments/ (cards, summaries, result files), data/splits.json, runs/eval/ (metric cards), runs/e123_ladder/cards/ (model configs), models/*.md, reports/source/ (digests, reviews), the literature summaries (OVERVIEW, CATALOGUE, papers.csv, register, papers/, deep/)
+- never: data, checkpoints, caches, binaries (images, videos, pdf, pptx, html), third-party code (the per-repository code extractions literature/code/<repo>.md are extracted on the fly by the process in literature/code/README.md)
+- git history is the long-term memory: nothing committed is rolled away; what rolls is only what an agent reads (rule above)
 - `run.py` commits the code when a run starts and tags it `lcr/<run id>` (the ledger and run.json record the commit); `clean_temp.py` commits and tags the scratch (`lcr/loopNN-scratch`) before it removes it, so experiment code is never lost
-- main = the reviewed core bundle; a change of shared code gets an `ar-code-reviewer` pass; parallel chats use separate worktrees
+- main = the reviewed core bundle; a change of shared code gets an `ar-code-reviewer` pass; one lead chat per loop owns the code (named in HANDOVER.md), other chats work in literature/ or reports/ or only read (separate worktrees need roadmap step M7 first)
 
 ## Layout rules
 - keep it simple: for a one-time purpose a throw-away script and temporary files are better than general code. Scratch goes to temp/loopNN/; when the loop is filed run `wsl python3 ../autoresearch/tools/clean_temp.py loopNN` (dry run, then --move to _to_delete/ or --delete; it refuses if live code still imports a module from there). Build a reusable tool only when it is used a second time

@@ -6,7 +6,8 @@ General and problem-independent: the method (`METHOD.md`), the agent roles (`age
 |---|---|
 | `METHOD.md` | the cycle P0 frame -> P1 research -> P2 hypotheses + plan -> P3 loop -> P4 close, gates, disruptions, code and git, roles |
 | `agents/` | one file per role in Claude Code subagent format (`ar-scout`, `ar-group-summarizer`, `ar-hypothesis`, `ar-past-critic`, `ar-referee`, `ar-planner`, `ar-detail-planner`, ...) |
-| `templates/` | problem, topic brief, paper note, group summary, research digest, hypothesis card, experiment plan, schedule, detail plan, experiment summary, loop summary, handover, closed questions |
+| `templates/` | problem, topic brief, paper note, group summary, research digest, hypothesis card, experiment plan, schedule, detail plan, experiment summary, loop summary, handover, decisions, closed questions |
+| `ROADMAP.md` | review of the system (own + independent), weaknesses ranked by cost, what is missing, the target packages `ar` and `lcr`, the migration M0-M7, and what was agreed with the person |
 | `prompts/` | `research_cycle.md` (P1 + P2, run before a loop), `loop.md` (P3, pasted after `/loop`) |
 | `tools/` | `run.py` (launcher: ledger row, commit + tag per run, TEST guard, retries), `ledger.py`, `decide.py` (the written rule as code), `check_numbers.py`, `check_structure.py`, `clean_temp.py`, `schedule.py`, `install_agents.py`, `project.py` (finds the problem and its `project.json`), `selftest.py` |
 | `config.json` | the default problem folder |

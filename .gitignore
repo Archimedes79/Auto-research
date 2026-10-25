@@ -1,5 +1,5 @@
-# One repository for the research system and the code of its problems. CODE ONLY (autoresearch/METHOD.md "Code and git"):
-# everything is ignored unless listed here. Never: data, checkpoints, caches, results, reports, state, third-party code, wsl/.
+# One repository for the research system and its problems: CODE + TEXT RECORDS (decision of 2026-10-25, autoresearch/METHOD.md "Code and git").
+# Everything is ignored unless listed here. Never: data, checkpoints, caches, binaries (images, videos, pdf, pptx, html), third-party code, wsl/.
 /*
 !/.gitignore
 !/CLAUDE.md
@@ -14,16 +14,35 @@
 !/bev_fusion_lane_center/README.md
 !/bev_fusion_lane_center/PROBLEM.md
 !/bev_fusion_lane_center/project.json
+!/bev_fusion_lane_center/HANDOVER.md
+# code
 !/bev_fusion_lane_center/training/
 !/bev_fusion_lane_center/evaluation/
 !/bev_fusion_lane_center/tools/
 !/bev_fusion_lane_center/reports/
 /bev_fusion_lane_center/reports/*
+!/bev_fusion_lane_center/reports/README.md
 !/bev_fusion_lane_center/reports/build/
+!/bev_fusion_lane_center/reports/source/
+# text records: plan, schedule, ledger, decisions, closed questions, run records, history; experiment cards and summaries; model registry
+!/bev_fusion_lane_center/experiment_execution/
+!/bev_fusion_lane_center/experiments/
 !/bev_fusion_lane_center/models/
 /bev_fusion_lane_center/models/*
+!/bev_fusion_lane_center/models/*.md
 !/bev_fusion_lane_center/models/registry.json
-!/bev_fusion_lane_center/models/README.md
+# the split definition and the model configs and metric cards (needed to reproduce numbers); nothing else of data/ and runs/
+!/bev_fusion_lane_center/data/
+/bev_fusion_lane_center/data/*
+!/bev_fusion_lane_center/data/README.md
+!/bev_fusion_lane_center/data/splits.json
+!/bev_fusion_lane_center/runs/
+/bev_fusion_lane_center/runs/*
+!/bev_fusion_lane_center/runs/README.md
+!/bev_fusion_lane_center/runs/eval/
+!/bev_fusion_lane_center/runs/e123_ladder/
+/bev_fusion_lane_center/runs/e123_ladder/*
+!/bev_fusion_lane_center/runs/e123_ladder/cards/
 # literature: the summaries (overview, catalogue, table, paper notes, deep extractions, register) but NOT the per-repository code extractions (code/<repo>.md,
 # skeletons, clones): code is extracted on the fly by the process in literature/code/README.md
 !/bev_fusion_lane_center/literature/
@@ -48,13 +67,7 @@
 !/bev_fusion_lane_center/temp/README.md
 /bev_fusion_lane_center/temp/literature_backup_*/
 
-# results and records inside the code folders
-bev_fusion_lane_center/evaluation/examples/
-bev_fusion_lane_center/evaluation/METRIC_RESPONSE.md
-bev_fusion_lane_center/evaluation/TEST_USAGE_LOG.md
-bev_fusion_lane_center/tools/maintenance/CLEANUP_LIST.md
-
-# never, anywhere
+# never, anywhere: caches, checkpoints, arrays, binaries
 __pycache__/
 *.py[cod]
 *.pt
@@ -67,10 +80,17 @@ __pycache__/
 *.h5
 *.png
 *.jpg
+*.jpeg
+*.svg
 *.mp4
 *.gif
 *.pdf
 *.pptx
+*.docx
+*.xlsx
 *.html
+*.zip
+*.tgz
+*.gz
 ~$*
 *.tmp

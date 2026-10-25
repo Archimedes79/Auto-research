@@ -84,14 +84,19 @@ Gate G4: tests pass, structure check clean, every run of the loop has a ledger d
 
 ## Disruptions
 A loop can be stopped at any moment (user, crash, shutdown, another chat). The rules:
-- **State in three files**: HANDOVER (narrative, <= 3 KB), the schedule (what next), the ledger (what ran). A new chat continues from these alone.
+- **State in a few files**: HANDOVER (narrative, <= 3 KB, names the lead chat that owns the code), the plan, the schedule (what next), the ledger (what ran), the decisions file (what waits for the person). A new chat continues from these alone.
+- **Reading**: single-file records (ledger, decisions, closed questions, plan) are complete files that agents search; experiment folders are read in full for the last two loops, older loops through their loop / weekly summaries and the problem's current best.
 - **Idempotent steps**: every schedule item can be restarted; trainings checkpoint and resume; a run id that exists is resumed, not duplicated; a done flag means exit code 0.
 - **Reconcile first**: after a disruption the lead marks running items as done / failed / stalled from the run records, then continues. A user change of direction goes through the planner (a new schedule version), not into ad-hoc runs.
 - **STOP_AT is a work window**: when the schedule is empty early, the scheduler pulls the next items (controls, seeds, robustness, backlog) with rules written before the runs.
 
+## Decisions of the person
+The person decides through one decisions file (`templates/decisions.md`), never through file edits by agents: promoting a champion (which includes the one TEST check of the candidate and the current champion; TEST is never used otherwise), changes of `PROBLEM.md`, changes of the tools or of the gates of this method, and permissions (downloads, installs, mail, shutdown, backups, remote). An agent writes the entry with options, recommendation and evidence, and acts only after the answer is recorded.
+
 ## Code and git
-- The repository holds code only: this folder, the problem's code folders, the problem's scratch scripts (so a tag keeps them), the rules and templates. Never data, results, reports, notes or state.
-- `main` holds the reviewed core bundle; a loop may work on `loop/<NN>`; several chats work in separate worktrees.
+- The repository holds code and text records: this folder, the problem's code folders and scratch scripts (so a tag keeps them), the rules and templates, and the text records (plan, schedule, ledger, decisions, run records, cards, experiment summaries, metric cards, literature summaries). Never data, checkpoints, caches or binaries.
+- Git history is the long-term memory; nothing committed is rolled away. Only what an agent reads rolls (see Disruptions, "Reading").
+- `main` holds the reviewed core bundle; one lead chat per loop owns the code; other chats work in research or reports or only read (separate worktrees need the state outside the checkout first).
 - Every run commits the current code and tags it `<prefix>/E<id>.<arm>`; the ledger and the metric card record the commit. A result can always be traced to the exact code, and scratch scripts can be deleted after the loop because the tag keeps them.
 
 ## Roles at a glance
