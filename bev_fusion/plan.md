@@ -148,12 +148,30 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 - Basis: BEVDet4D 2203.17054 (lit: alignment matters, unaligned concat is worse than no history), RadarNet (lit).
 - Tests: the time-alignment tests of 3.3; a camera test with a synthetic static scene and a time offset; latency budget per block.
 
-## 6. BEV network
-- Grid around the vehicle (front-only first: x 0..60 m, y -26..26 m, 120 x 104 cells; full surround, also to 60 m, once all cameras are used), 0.5 m; coordinate channels (x, y, range, azimuth per sensor coverage) appended.
-- Main trunk after the fusion (standard, as the best camera(-radar) BEV papers - BEVDet / BEVDepth / CRN / DualBEV): a ResNet-style BEV encoder with 3 stages (strides 2, 4, 8: 0.5 m -> 1, 2, 4 m; channels 2C, 4C, 8C, BasicBlocks) and an FPN_LSS-style decoder (the two deepest scales upsampled and concatenated, convs, upsampled back to 0.5 m), then the semantic head (section 8). The grid divides cleanly: 120 x 104 -> 60 x 52 -> 30 x 26 -> 15 x 13. Option: initialise it from DualBEV's pre-trained `img_bev_encoder_backbone.` / `img_bev_encoder_neck.` (in our checkpoint, 80 input channels: a 1 x 1 projection of the fused map to 80 channels in front; pre-trained on detection, so an ablation, not a given).
-- Fallback (proven camera-radar trunk, GaussianCaR): its 4-stage two-stream fuser (FeatureRectify + cross-attention fusion at each of 4 scales, stride-2 convs + ResBlocks between them) and its DPT-style decoder over the 4 fused scales - fusion inside the pyramid instead of once before it; pure torch except its rasteriser, which we do not need (our inputs are already BEV maps).
-- Basis: BEVDet / CRN / DualBEV BEV encoders (CustomResNet + FPN_LSS; `literature/code/dualbev.md`, `crn_fusion.md`), GaussianCaR fuser + DPT head (`gaussiancar_fusion.md`), BEVFusion / CVT decoders (lit), CenterPoint trunk (lit, MIT).
-- Tests: overfit one scene to near-perfect IoU (wiring); ms per frame.
+## 6. BEV network after the fusion (standard flow, compute first)
+- Grid around the vehicle (front-only first: x 0..60 m, y -26..26 m, 120 x 104 cells; full surround, also to 60 m, once all cameras are used), 0.5 m; coordinate channels (x, y, range, azimuth per sensor coverage) appended to the fused map.
+- Flow (the standard of the best camera(-radar) BEV networks - BEVDet, BEVDepth, CRN, DualBEV all use the same `CustomResNet` + `FPN_LSS`; code `training/bev_trunk.py`, layer names as in the DualBEV checkpoint):
+  1. fused map (c_in channels, 80 for the pre-trained shape) at 0.5 m, 120 x 104
+  2. ResNet pyramid, 3 stages of two BasicBlocks, stride 2 each: 160 w channels at 60 x 52 (1 m), 320 w at 30 x 26 (2 m), 640 w at 15 x 13 (4 m)
+  3. FPN_LSS decoder: the 4 m stage upsampled x4 and concatenated with the 1 m stage, 3x3 conv, 3x3 conv (512 w), upsample x2, 3x3 conv (256 w), 1x1
+  4. semantic head: 3x3 conv BN ReLU + 1x1 to the classes at the full grid (section 8)
+- Compute, measured as FLOPs (conv / matmul, one sample, hardware independent; `temp/checks/trunk_flops.py`, `chain_flops.py`; 2 x multiply-adds):
+
+| candidate | GFLOPs | M params | note |
+|---|---|---|---|
+| T0 standard trunk, width 1 (DualBEV shape) | 100.9 | 27.3 | backbone 17.3, FPN neck 68.8, head 14.8; the 98 tensors of the DualBEV BEV encoder load exactly (0 missing / unexpected / mismatched) |
+| T0 + light up-sampling | 74.7 | 26.6 | the full-resolution 3x3 conv replaced by a sub-pixel conv |
+| T1 width 1/2 | 25.2 | 6.8 | |
+| **T2 width 1/2 + light up-sampling (default)** | **18.7** | 6.7 | |
+| T3 width 1/4 + light up-sampling | 4.7 | 1.7 | speed variant |
+| G GaussianCaR two-stream fuser, conv skeleton only | 14.4 | 6.8 | lower bound: its rectify / cross-attention modules and the DPT head are not counted |
+
+  For the whole chain (one camera): ResNet-50 backbone 29.4, neck 4.4, DepthNet 35.6, lift PD + output conv 2.1 = 71.4 GFLOPs (the pre-trained camera heads, frozen), splat heads 0.2 + 0.1 per branch and step. So the trunk decides the total: T0 gives about 172 GFLOPs, T2 about 90.
+  Milliseconds on the RTX 3060 are NOT measured yet: the GPU is shared with the lane project's training jobs (the indicative fp16 numbers of 7-16 ms are an upper bound dominated by that load); timing needs an idle GPU.
+- Decision (compute first): T2 is the default - the standard flow at half width with the cheap up-sampling, 5.4 x fewer FLOPs than the original trunk; the FPN neck (two 3x3 convs at 512 channels and the full-resolution conv) is where the original spends its compute and where the width and the light up-sampling save it. Arms of the first trunk experiment: T2 (default), T3 (speed), T0 initialised from the pre-trained DualBEV BEV encoder (an ablation: it was trained for detection on a different grid and costs 5.4 x more, so it must earn it).
+- Fallback (proven camera-radar trunk, GaussianCaR, `gaussiancar_fusion.md`): its 4-stage two-stream fuser (FeatureRectify + cross-attention fusion at each of 4 scales, stride-2 convs + ResBlocks between them) and DPT-style decoder - fusion inside the pyramid instead of once before it; used if a fused map in front of a single-stream trunk loses to it.
+- Basis: BEVDet / BEVDepth / CRN / DualBEV BEV encoders (`literature/code/dualbev.md`, `crn_fusion.md`), GaussianCaR fuser + DPT head (`gaussiancar_fusion.md`), BEVFusion / CVT decoders (lit), CenterPoint trunk (lit, MIT).
+- Tests: shapes of the three stages and the output, parameter count = the DualBEV tensors at width 1, pre-trained load report, gradients to every parameter (`training/bev_trunk.py`); overfit one scene to near-perfect IoU (wiring); ms per frame on an idle GPU.
 
 ## 7. Temporal fusion (ego motion, stationary environment, moving targets)
 ### 7.1 Main design T2: temporal fusion per branch, one splat function (Mirko, 2026-10-25)
@@ -243,7 +261,8 @@ Design agreed with Mirko (2026-10-25): three BEV maps with their own times are f
 - camera lift: image backbone + lookup tables, height kept as channels (feat[z_car]); lifts P / S / PD compared in S1, PD recommended because it keeps the depth uncertainty and is a pure gather (section 2)
 - first building block FIXED (Mirko, 2026-10-25): the camera block produces the world voxel map with lift PD (pull with depth weight); P and S stay in S1 only as controls; the next design topic is the radar
 - radar block FIXED, simple (Mirko, 2026-10-25): every detection goes into the BEV cell where it resides (hard raster, 0.5 m, same grid and index order as the camera BEV) with its properties - distance from the sensor, direction from the sensor in the vehicle frame (circular), Doppler as a circular value (sin / cos of k pi v_r / v_max, k = 1, 2, 4), RCS, age - and sub-cell offset; then two 3 x 3 convolutions (`training/radar_bev.py`, self-test passes). This replaces the learned density g of section 3 for the first version; section 3 and `radar_encoding.md` stay as the variants (polar image + soft splat + pull, Cartesian soft footprint, learned sigma, height profile), each to be justified against this simple block in the radar stage S2 (hard raster = R0).
-- radar path logged and made information-preserving (Mirko, 2026-10-25): adar_encoding.md section A records the chain adapter -> point-level time alignment -> raster -> 2 convs -> radar BEV with its interfaces for the temporal fusion; the raster has an information-preserving form (K = 3 exact slots per cell + remainder mean + count, exact inverse decode_slots); measured on nuScenes mini: the per-cell mean merges 56 % of the detections of a 0.5 s window (errors small for most, large in rare mixes), 3 slots keep 91 %; rule for the temporal fusion: align detections as POINTS and rasterise once, do not resample a finished radar raster
+- radar path logged and made information-preserving (Mirko, 2026-10-25): 
+adar_encoding.md section A records the chain adapter -> point-level time alignment -> raster -> 2 convs -> radar BEV with its interfaces for the temporal fusion; the raster has an information-preserving form (K = 3 exact slots per cell + remainder mean + count, exact inverse decode_slots); measured on nuScenes mini: the per-cell mean merges 56 % of the detections of a 0.5 s window (errors small for most, large in rare mixes), 3 slots keep 91 %; rule for the temporal fusion: align detections as POINTS and rasterise once, do not resample a finished radar raster
 - camera and radar blocks are settled: both deliver a BEV on the same grid (camera 128 channels, radar 32) for the fusion; next design topics: fusion, temporal state, heads
 - kept for later (Mirko, 2026-10-25): PD-G in inverse depth (mixture in 1/z, exact voxel mass, section 2.4); the categorical lift PD on the pre-trained head stays the working version until then
 
