@@ -8,7 +8,7 @@
   "schedule": "experiment_execution/schedule.csv",
   "test_log": "evaluation/TEST_USAGE_LOG.md",
   "code_dirs": ["training", "evaluation", "tools", "reports/build", "temp"],
-  "fingerprint_extra": ["data/splits.json"],
+  "fingerprint_extra": ["data/splits.json", "models/registry.json"],
   "scratch": "temp",
   "live_code": ["training", "evaluation", "tools", "reports/build"],
   "trash": "_to_delete",

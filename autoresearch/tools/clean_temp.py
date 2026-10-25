@@ -73,7 +73,7 @@ def run(name, move=False, delete=False, force=False, root=None, cfg=None, git=Tr
         return 0
     if git:
         from run import git_snapshot
-        commit, tag, note = git_snapshot(root, cfg["tag_prefix"], f"{name}-scratch", f"scratch of {name} before clean-up")
+        commit, tag, note = git_snapshot(root, cfg, cfg["tag_prefix"], f"{name}-scratch", f"scratch of {name} before clean-up")
         print(f"  code kept in git: {commit} {tag} {note}")
     for f in folders:
         if delete:

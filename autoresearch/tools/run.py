@@ -1,39 +1,49 @@
 """Experiment launcher: one command, one run record, one code tag.  Standard library only (works in any python of the WSL or Windows).
 
     python autoresearch/tools/run.py --id E240.a --hyp "..." --pred "Q >= 0.745" --rule "keep if > control + 0.010 on 2 seeds" --basis E219 --seed 0 \
-           [--after E239.a,E239.c] [--gpu-max-mb 9000 --wait-gpu 30] [--timeout 180] [--retries 2] [--split test] [--result <metrics.json>] -- <command ...>
+           [--after E239.a,E239.c] [--gpu | --gpu-max-mb 9000] [--wait-gpu 30] [--timeout 180] [--retries 2] [--split test] [--result <metrics.json>] -- <command ...>
 
 What it does (paths from the problem's project.json, see project.py):
-  * run record  <run_records>/<id>/run.json  (command, start / end, host, driver, env, seed, pid, status, exit code, duration, commit, tag, last log lines)
-  * full log    <run_records>/<id>/run.log   (stdout + stderr of the command); heartbeat file <run_records>/<id>/heartbeat touched every 15 s
-  * ledger row  <ledger>                     (one row per run id; written under a lock with an atomic replace; render with ledger.py)
+  * run record  <run_records>/<id>/run.json  (command, start / end, host, driver, env, seed, pids, status, exit code, duration, commit, tag, last log lines)
+  * full log    <run_records>/<id>/run.log   (stdout + stderr of the command); heartbeat file <run_records>/<id>/heartbeat touched every AR_HEARTBEAT_S
+                (15) seconds while the launcher waits or the command runs
+  * ledger row  <ledger>                     (one row per run id; written under a lock with an atomic replace; render with ledger.py). When the
+                ledger cannot be written (lock held for AR_LOCK_WAIT_S, file open elsewhere) the row is kept in <run_records>/<id>/ledger_row.json,
+                the launcher says so and its exit code stays the command's
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
   * card check  warns when --hyp / --pred / --rule are missing (--require-card refuses)
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
                 on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
-                user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger
+                user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger.
+                Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
+                fixed by the metric card, which names the registry entry and the commit)
   * id reuse    an id that is still running (fresh heartbeat) or finished with exit 0 is refused (a new id, or --again for a deliberate repeat);
                 a failed / blocked / stalled id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
-                and a note "code changed since attempt 1" (when the fingerprint differs) go into the record
+                and a note "code changed since attempt 1" (when the fingerprint differs) go into the record; result and decision of the earlier
+                attempt are cleared in the ledger row
   * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed or stalled); waiting is not counted as run time
   * TEST guard  --split test is refused unless the run id appears in the problem's TEST log
   * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under <run_records>/.gpu_slots taken
-                with an atomic mkdir, a slot whose owner is dead or whose run is over is reclaimed); --gpu-max-mb additionally waits until the GPU
-                memory in use is below the limit; max --wait-gpu minutes, then status gpu_busy (exit 1)
-  * timeout     --timeout <minutes>: the command is killed after the limit (status timeout, exit 124)
+                with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed); --gpu-max-mb
+                additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes, then status gpu_busy (exit 1). The
+                owner check needs launcher and slot owner in the same process namespace (all WSL or all Windows)
+  * timeout     --timeout <minutes>: the command and its process group are killed after the limit (status timeout, exit 124)
   * retry       a run whose LAST attempt printed a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
-  * stalled     a record in state running whose heartbeat is older than AR_STALE_S seconds (default 300) counts as stalled for --after and schedule.py
+  * stalled     a record in state running / waiting whose heartbeat is older than AR_STALE_S seconds (default 300) counts as stalled for --after
+                and schedule.py; records made before this version (no launcher_pid, no heartbeat file) count as running
 Exit code = exit code of the command (1 if the GPU never became free, 2 if refused, 3 if a dependency failed, 124 on timeout).
 """
 import argparse
 import csv
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -43,9 +53,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 
 COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", "basis", "seed", "command", "result", "decision", "notes", "prediction", "rule", "code_hash", "split", "commit"]
-STALE_S = int(os.environ.get("AR_STALE_S", "300"))
-HEARTBEAT_S = 15
+STALE_S = float(os.environ.get("AR_STALE_S", "300"))
+HEARTBEAT_S = float(os.environ.get("AR_HEARTBEAT_S", "15"))
 CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
+POSIX = os.name == "posix"
 
 
 def now():
@@ -65,7 +76,7 @@ def code_hash(root, cfg):
                     h.update(open(p, "rb").read())
     for extra in cfg["fingerprint_extra"]:
         p = os.path.join(root, extra)
-        if os.path.exists(p):
+        if os.path.isfile(p):
             h.update(open(p, "rb").read())
     return h.hexdigest()[:12]
 
@@ -96,8 +107,9 @@ def git_snapshot(root, cfg, prefix, run_id, msg):
         ar = os.path.relpath(P.AR, top).replace("\\", "/")
         if not ar.startswith(".."):  # the research system itself, when it lives in the same repository
             spec.append(ar)
-        spec = [s for s in spec if os.path.exists(os.path.join(top, s))]
         head = git(top, "rev-parse", "-q", "--verify", "HEAD").stdout.strip()
+        in_head = set(git(top, "ls-tree", "-r", "--name-only", "HEAD").stdout.split()) if head else set()
+        spec = [s for s in spec if os.path.exists(os.path.join(top, s)) or any(h == s or h.startswith(s + "/") for h in in_head)]  # a deleted folder leaves the snapshot too
         fd, idx = tempfile.mkstemp(prefix="ar_index_")
         os.close(fd)
         os.remove(idx)
@@ -155,10 +167,25 @@ def gpu_info():
 
 
 def pid_alive(pid):
+    """is a process with this pid alive? (on Windows os.kill(pid, 0) would TERMINATE it, so the process handle is queried instead)"""
     try:
-        os.kill(int(pid), 0)
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    if sys.platform == "win32":
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        ok = k.GetExitCodeProcess(h, ctypes.byref(code))
+        k.CloseHandle(h)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
         return True
-    except (OSError, ValueError, TypeError):
+    except OSError:
         return False
 
 
@@ -180,34 +207,55 @@ def state_of(d):
     """done | ok | failed | blocked | gpu_busy | timeout | running | stalled | '' from a run directory"""
     if os.path.exists(os.path.join(d, "done")):
         return "done"
-    st = record(d).get("status", "")
+    rec = record(d)
+    st = rec.get("status", "")
     if st in ("running", "waiting"):
+        if "launcher_pid" not in rec and not os.path.exists(os.path.join(d, "heartbeat")):
+            return "running"  # a record of the launcher before heartbeats: nothing to judge it by
         return "stalled" if heartbeat_age(d) > STALE_S else "running"
     return st
 
 
-def ledger_write(ledger, row):
+def beat(hb, text=""):
+    open(hb, "w").write(f"{now()} {text}".rstrip() + "\n")
+
+
+def ledger_write(ledger, row, clear=()):
     with P.locked(ledger):
         rows = []
         if os.path.exists(ledger):
             with open(ledger, newline="", encoding="utf-8") as f:
                 rows = list(csv.DictReader(f))
         old = next((r for r in rows if r["id"] == row["id"]), {})  # a planned row keeps what was written before the run
+        old = {k: v for k, v in old.items() if k not in clear}
         row = {**old, **{k: v for k, v in row.items() if v not in ("", None)}}
         rows = [r for r in rows if r["id"] != row["id"]] + [row]
         os.makedirs(os.path.dirname(ledger), exist_ok=True)
-        import io
         buf = io.StringIO()
-        w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore")  # unknown keys never break the write (loop-18 lesson)
+        w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore", lineterminator="\n")  # unknown keys never break the write (loop-18 lesson)
         w.writeheader()
         w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
         P.atomic_write(ledger, buf.getvalue())
 
 
-def wait_after(records, ids, minutes):
-    """wait for the done flags of ids; returns '' when all are done, else the reason"""
+def ledger_safe(ledger, row, d, clear=()):
+    """ledger_write that never kills the launcher: on failure the row is kept in <run dir>/ledger_row.json"""
+    try:
+        ledger_write(ledger, row, clear)
+        return ""
+    except Exception as e:
+        json.dump(row, open(os.path.join(d, "ledger_row.json"), "w"), indent=1, default=str)
+        msg = f"ledger not written ({type(e).__name__}: {str(e)[:120]}); row kept in {os.path.join(d, 'ledger_row.json')}"
+        print(f"[{row.get('id')}] {msg}")
+        return msg
+
+
+def wait_after(records, ids, minutes, hb=None):
+    """wait for the done flags of ids; returns '' when all are done, else the reason; touches the heartbeat while waiting"""
     t0 = time.time()
     while True:
+        if hb:
+            beat(hb, "waiting for " + ",".join(ids))
         missing = []
         for i in ids:
             st = state_of(os.path.join(records, i))
@@ -220,14 +268,24 @@ def wait_after(records, ids, minutes):
             return ""
         if time.time() - t0 > minutes * 60:
             return f"dependencies not done after {minutes} min: {', '.join(missing)}"
-        time.sleep(30)
+        time.sleep(min(30, max(1, HEARTBEAT_S)))
 
 
 class GpuSlot:
-    """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead or stalled is reclaimed"""
+    """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed"""
 
     def __init__(self, records, n, run_id, run_dir):
         self.base, self.n, self.id, self.run_dir, self.held = os.path.join(records, ".gpu_slots"), n, run_id, run_dir, None
+
+    def stale(self, s):
+        if not os.path.exists(os.path.join(s, "run.json")):
+            try:
+                return time.time() - os.path.getmtime(s) > 10  # mkdir without the owner file: the taker died in between, or a leftover
+            except OSError:
+                return False
+        o = record(s)
+        owner = o.get("run_dir", "")
+        return not pid_alive(o.get("pid")) or (owner and os.path.isdir(owner) and state_of(owner) != "running")
 
     def try_take(self):
         os.makedirs(self.base, exist_ok=True)
@@ -236,15 +294,12 @@ class GpuSlot:
             try:
                 os.mkdir(s)
             except FileExistsError:
-                o = record(s) if os.path.exists(os.path.join(s, "run.json")) else {}
-                owner = o.get("run_dir", "")
-                if o and (not pid_alive(o.get("pid")) or (owner and os.path.isdir(owner) and state_of(owner) not in ("running",))):
-                    shutil.rmtree(s, ignore_errors=True)  # stale: owner gone or its run is over
-                    try:
-                        os.mkdir(s)
-                    except FileExistsError:
-                        continue
-                else:
+                if not self.stale(s):
+                    continue
+                shutil.rmtree(s, ignore_errors=True)
+                try:
+                    os.mkdir(s)
+                except FileExistsError:
                     continue
             json.dump(dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now()), open(os.path.join(s, "run.json"), "w"))
             self.held = s
@@ -257,22 +312,37 @@ class GpuSlot:
             self.held = None
 
 
+def kill_tree(p):
+    """kill the command and everything it started (its process group on POSIX, the process tree on Windows)"""
+    try:
+        if POSIX:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        else:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+    except Exception:
+        pass
+    try:
+        p.kill()
+    except Exception:
+        pass
+    p.wait()
+
+
 def run_once(cmd, cwd, log_path, hb_path, timeout_s):
-    """one attempt: returns (exit code, text the attempt wrote); the heartbeat is touched while the command runs"""
+    """one attempt: returns (exit code, text the attempt wrote, pid); the heartbeat is touched while the command runs"""
     start = os.path.getsize(log_path) if os.path.exists(log_path) else 0
     with open(log_path, "a", encoding="utf-8", errors="replace") as lg:
         lg.write(f"=== attempt {now()}: {' '.join(cmd)}\n")
         lg.flush()
-        p = subprocess.Popen(cmd, cwd=cwd, stdout=lg, stderr=subprocess.STDOUT)
+        p = subprocess.Popen(cmd, cwd=cwd, stdout=lg, stderr=subprocess.STDOUT, start_new_session=POSIX)
         t0, last = time.time(), 0
         rc = None
         while rc is None:
             if time.time() - last >= HEARTBEAT_S:
-                open(hb_path, "w").write(f"{now()} pid {p.pid}\n")
+                beat(hb_path, f"pid {p.pid}")
                 last = time.time()
             if timeout_s and time.time() - t0 > timeout_s:
-                p.kill()
-                p.wait()
+                kill_tree(p)
                 rc = 124
                 lg.write(f"=== killed after {timeout_s / 60:.0f} min (timeout)\n")
                 break
@@ -336,7 +406,7 @@ def main():
     if prev:
         st = state_of(d)
         if st == "running":
-            print(f"[{a.id}] refused: this id is still running (pid {prev.get('pid')}, heartbeat {heartbeat_age(d):.0f} s old); use a new id")
+            print(f"[{a.id}] refused: this id is still running (launcher pid {prev.get('launcher_pid')}, heartbeat {heartbeat_age(d):.0f} s old); use a new id")
             return 2
         if st in ("done", "ok") and not a.again:
             print(f"[{a.id}] refused: this id finished with exit 0 on {prev.get('ended')}; use a new id (the record would be overwritten) or --again")
@@ -351,7 +421,8 @@ def main():
     if os.path.exists(os.path.join(d, "run.log")):
         os.rename(os.path.join(d, "run.log"), os.path.join(d, f"run.{n}.log"))
     hb = os.path.join(d, "heartbeat")
-    open(hb, "w").write(now() + "\n")
+    beat(hb, "created")
+    clear = ("result", "decision") if prev else ()  # a new attempt starts without the earlier attempt's judgement
     rec = dict(id=a.id, hypothesis=a.hyp, prediction=a.pred, rule=a.rule, split=a.split, basis=a.basis, seed=a.seed, command=" ".join(cmd), cwd=a.cwd,
                host=platform.node(), python=sys.version.split()[0], conda_env=os.environ.get("CONDA_DEFAULT_ENV", ""), gpu=gpu_info(), launcher_pid=os.getpid(),
                created=now(), status="waiting", after=a.after, timeout_min=a.timeout)
@@ -359,11 +430,11 @@ def main():
         rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
     json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
     if a.after:
-        why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after)
+        why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after, hb)
         if why:
             rec.update(status="blocked", ended=now(), notes=why)
             json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-            ledger_write(ledger, dict(rec, exit=3, duration_s=0))
+            ledger_safe(ledger, dict(rec, exit=3, duration_s=0), d, clear)
             print(f"[{a.id}] blocked: {why}")
             return 3
     slot = GpuSlot(records, a.gpu_slots, a.id, d) if (a.gpu or a.gpu_max_mb) else None
@@ -371,17 +442,17 @@ def main():
         if slot:
             t0 = time.time()
             while True:
-                open(hb, "w").write(now() + " waiting for the GPU\n")
+                beat(hb, "waiting for the GPU")
                 u = gpu_used_mb() if a.gpu_max_mb else None
                 if (u is None or u < a.gpu_max_mb) and slot.try_take():
                     break
                 if time.time() - t0 > a.wait_gpu * 60:
                     rec.update(status="gpu_busy", ended=now(), notes=f"GPU memory {u} MB in use or all {a.gpu_slots} slots taken for {a.wait_gpu} min")
                     json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-                    ledger_write(ledger, dict(rec, exit=1, duration_s=0))
+                    ledger_safe(ledger, dict(rec, exit=1, duration_s=0), d, clear)
                     print("GPU did not become free:", rec["notes"])
                     return 1
-                time.sleep(30)
+                time.sleep(min(30, max(1, HEARTBEAT_S)))
         ch = code_hash(root, cfg)
         if prev.get("code_hash") and prev["code_hash"] != ch:
             notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")
@@ -418,7 +489,7 @@ def main():
         open(os.path.join(d, "done"), "w").write(rec["ended"] + "\n")
     if attempt > 1:
         notes.insert(0, f"{attempt} attempt(s)")
-    ledger_write(ledger, dict(rec, result=res, notes="; ".join(notes)))
+    ledger_safe(ledger, dict(rec, result=res, notes="; ".join(notes)), d, clear)
     print(f"[{a.id}] {status} (exit {rc}, {dur} s, {attempt} attempt(s)), code {commit} {rec['tag']}; log {os.path.join(d, 'run.log')}")
     return rc
 

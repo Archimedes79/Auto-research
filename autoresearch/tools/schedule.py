@@ -35,7 +35,7 @@ def save(rows, path=None):
     path = path or P.path("schedule")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore")
+    w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore", lineterminator="\n")
     w.writeheader()
     w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
     with P.locked(path):

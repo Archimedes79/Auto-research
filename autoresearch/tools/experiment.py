@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
+from decide import LOWER  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
 TYPES = {"str": str, "number": (int, float), "dict": dict, "list": list, "bool": bool}
@@ -99,6 +100,8 @@ def check(exp, path):
     for a, arm in arms.items():
         if not any(k in arm for k in ("names", "cards", "recipe", "command")):
             bad.append(f"arm {a}: needs names / cards (results) or recipe / command (how to run)")
+    if exp["metric"] in LOWER and exp["direction"] != "lower":
+        bad.append(f"metric {exp['metric']} is lower-is-better (decide.LOWER) but direction is {exp['direction']}")
     pred = exp["prediction"]
     if not isinstance(pred.get("value"), (int, float)) or pred.get("vs") not in arms:
         bad.append("prediction needs {value: number, vs: <arm letter>}")

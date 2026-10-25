@@ -47,9 +47,10 @@ def path(key):
 
 
 @contextlib.contextmanager
-def locked(path, wait_s=60, stale_s=120):
+def locked(path, wait_s=None, stale_s=120):
     """exclusive lock on a shared state file (ledger, schedule): <path>.lock is created atomically; a lock older than stale_s is taken over"""
     lock = path + ".lock"
+    wait_s = float(os.environ.get("AR_LOCK_WAIT_S", "60")) if wait_s is None else wait_s
     t0 = time.time()
     while True:
         try:
@@ -60,7 +61,9 @@ def locked(path, wait_s=60, stale_s=120):
         except FileExistsError:
             try:
                 if time.time() - os.path.getmtime(lock) > stale_s:
-                    os.remove(lock)
+                    gone = f"{lock}.stale.{os.getpid()}"
+                    os.rename(lock, gone)  # only one waiter wins the rename; the others see FileNotFoundError and retry
+                    os.remove(gone)
                     continue
             except OSError:
                 continue

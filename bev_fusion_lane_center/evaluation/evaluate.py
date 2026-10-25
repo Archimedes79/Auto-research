@@ -49,12 +49,18 @@ def registry():
 
 
 def commit():
+    """short commit of the checkout, '+dirty' when tracked files differ ('+?' when the status check times out: git status on /mnt/c can take long)"""
     try:
-        h = subprocess.run(["git", "-c", "safe.directory=*", "-C", R, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=10).stdout.strip()
-        dirty = subprocess.run(["git", "-c", "safe.directory=*", "-C", R, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=10).stdout.strip()
-        return (h + ("+dirty" if dirty else "")) if h else "no-git"
+        h = subprocess.run(["git", "-c", "safe.directory=*", "-C", R, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=30).stdout.strip()
     except Exception:
         return "no-git"
+    if not h:
+        return "no-git"
+    try:
+        dirty = subprocess.run(["git", "-c", "safe.directory=*", "-C", R, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=120).stdout.strip()
+        return h + ("+dirty" if dirty else "")
+    except Exception:
+        return h + "+?"
 
 
 def test_allowed(test_id):
@@ -72,7 +78,7 @@ def subset_ks(split, subset):
     sys.exit(f"unknown subset {subset} for split {split} (known: val250 on val)")
 
 
-def builder_raw(e, split, ks=None, fresh=False):
+def builder_raw(e, split, ks=None, fresh=False, require_cache=False):
     """(raw node outputs, ground truths, source) of the frames ks of the split (None = all); cached unless ks is given or fresh is set"""
     run, M, K0 = e["run"], e["set"]["M"], e["set"]["K0"]
     os.makedirs(CACHE, exist_ok=True)
@@ -84,6 +90,8 @@ def builder_raw(e, split, ks=None, fresh=False):
             if os.path.exists(p):
                 raw, gts = pickle.load(open(p, "rb"))
                 return raw, gts, p
+    if require_cache:
+        raise RuntimeError(f"no cached network outputs for {run} {M} / {K0} on {split} (would need the GPU)")
     import torch
     import p16_data as PD
     import p16_infer as PI
@@ -103,7 +111,7 @@ def builder_raw(e, split, ks=None, fresh=False):
     return raw, gts, "fresh (no cache)"
 
 
-def graphs_of(name, e, split, asm_over=None, tau=None, ks=None, fresh=False):
+def graphs_of(name, e, split, asm_over=None, tau=None, ks=None, fresh=False, require_cache=False):
     """graphs, ground truths, info for a registry entry"""
     if e["kind"] == "graphs":
         z = pickle.load(open(f"{R}/{e['files'][split]}", "rb"))
@@ -115,7 +123,7 @@ def graphs_of(name, e, split, asm_over=None, tau=None, ks=None, fresh=False):
         return [z["preds"][i] for i in keep], gts, dict(source=e["files"][split], asm_ms=float("nan"))
     import p16_infer as PI
     import p16_train as PT
-    raw, gts, cache = builder_raw(e, split, ks, fresh)
+    raw, gts, cache = builder_raw(e, split, ks, fresh, require_cache)
     c = json.load(open(f"{R}/runs/e123_ladder/cards/{e['run']}.json", encoding="utf-8-sig"))
     extra = dict(c["cfg"])
     extra.update(PT.parse_set([f"{k}={v}" for k, v in e["set"].items()]))
@@ -139,12 +147,12 @@ def scenes(split, ks=None):
     return np.load(f"{HOME}/exp_gcar_b123/poses_val.npz")["scene"][rows]
 
 
-def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=False, compare=None, tag=""):
+def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=False, compare=None, tag="", require_cache=False):
     """one card: the registry name on the split (or its subset), written to runs/eval/<name>/; returns the card"""
     import sparse_metrics as SM
     over = over or {}
     ks = subset_ks(split, subset)
-    g, gts, info = graphs_of(name, reg[name], split, over, tau, ks, fresh)
+    g, gts, info = graphs_of(name, reg[name], split, over, tau, ks, fresh, require_cache)
     t0 = time.time()
     m = SM.card_any(g, gts, extra=True)
     info["metric_s"] = time.time() - t0
@@ -210,7 +218,7 @@ def golden_write(names, reg, split, subset, fresh, tol):
     print(f"golden: {len(g['entries'])} entries in {os.path.relpath(GOLDEN, R)}")
 
 
-def golden_check(reg, cached_only=False, fresh_only=False):
+def golden_check(reg, cached_only=False, fresh_only=False, test_id=""):
     g = golden_load()
     bad, n = [], 0
     for ent in g["entries"]:
@@ -221,7 +229,15 @@ def golden_check(reg, cached_only=False, fresh_only=False):
         if ent["name"] not in reg:
             bad.append(f"{label}: not in the registry")
             continue
-        card = evaluate(ent["name"], reg, ent["split"], subset=ent["subset"] or None, fresh=ent["fresh"], tag="golden")
+        if ent["split"] == "test" and not test_allowed(test_id):
+            print(f"skip  {label} (TEST: pass a --test-id logged in TEST_USAGE_LOG.md)")
+            continue
+        try:
+            card = evaluate(ent["name"], reg, ent["split"], subset=ent["subset"] or None, fresh=ent["fresh"], tag="golden", require_cache=cached_only)
+        except RuntimeError as e:
+            bad.append(f"{label}: {e}")
+            print(f"MISS  {label}: {e}")
+            continue
         n += 1
         miss = [f"{k} {card['metrics'].get(k, float('nan')):.4f} != {v}" for k, v in ent["metrics"].items() if not abs(card["metrics"].get(k, float("nan")) - v) <= ent["tol"]]
         if card["frames"] != ent["frames"]:
@@ -259,10 +275,10 @@ def main():
         for k, v in reg.items():
             print(f"{k:18} {v['kind']:8} {v.get('run', '')} {v.get('set', '')} {v.get('what', '')}")
         return
-    if a.split == "test" and not test_allowed(a.test_id):
+    if a.split == "test" and a.golden != "check" and not test_allowed(a.test_id):
         sys.exit("TEST refused: pass --test-id <run id> that is logged in evaluation/TEST_USAGE_LOG.md (select and tune on VAL only)")
     if a.golden == "check":
-        return golden_check(reg, a.cached_only, a.fresh_only)
+        return golden_check(reg, a.cached_only, a.fresh_only, a.test_id)
     if a.golden == "write":
         return golden_write(a.name or list(reg), reg, a.split, a.subset or None, a.fresh, a.tol)
     if len(a.name) != 1:

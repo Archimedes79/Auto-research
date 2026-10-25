@@ -54,9 +54,16 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
 # ------------------------------------------------------------------ experiment file + cards
 
 
-def paired_effect(metric, v_cards, c_cards):
+def is_lower(metric, exp=None):
+    """lower is better: the experiment's direction for its headline metric, else the known names (LOWER)"""
+    if exp is not None and metric == exp.get("metric"):
+        return exp.get("direction") == "lower"
+    return metric in LOWER
+
+
+def paired_effect(metric, v_cards, c_cards, lower=None):
     """(effect, paired diffs, interval or None) of a metric between two lists of (metrics, card, ref); the sign is 'higher is better'"""
-    sgn = -1.0 if metric in LOWER else 1.0
+    sgn = -1.0 if (metric in LOWER if lower is None else lower) else 1.0
     v = [m[metric] for m, _, _ in v_cards]
     c = [m[metric] for m, _, _ in c_cards]
     if not v or not c:
@@ -82,12 +89,14 @@ def judge_clause(clause, exp, cards):
     vs = clause.get("vs", exp["control"])
     variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
     band = clause.get("band", exp["band"] if metric == exp["metric"] else DEFAULT_BAND)
-    subsets = clause.get("subsets") or [""]
+    subsets = clause.get("subsets") or ([""] if "" in cards[variant] else sorted(cards[variant]))  # a plain clause on subset-only arms: every subset
     parts = []
     for s in subsets:
         vc, cc = cards[variant].get(s, []), cards[vs].get(s, [])
-        effect, diffs, interval = paired_effect(metric, vc, cc)
+        effect, diffs, interval = paired_effect(metric, vc, cc, is_lower(metric, exp))
         flags = []
+        if len(vc) != len(cc):
+            flags.append(f"seed counts differ ({len(vc)} vs {len(cc)}): unpaired, counts as one seed")
         if "min_effect" in clause:
             thr = max(clause["min_effect"], band) if metric == exp["metric"] else clause["min_effect"]  # inside the band it is a tie, whatever the clause says
             ok = effect >= thr
@@ -118,7 +127,7 @@ def decide_experiment(exp, root):
     sgn = 1.0  # paired_effect already turns lower-is-better around; exp["direction"] is for the reader
     def head(arm):  # the whole-split cards, else the subset cards in subset order (then the "seeds" of the headline are the subsets)
         return cards[arm].get("") or [c for s in sorted(cards[arm]) for c in cards[arm][s]]
-    effect, diffs, interval = paired_effect(head_metric, head(variant), head(exp["control"]))
+    effect, diffs, interval = paired_effect(head_metric, head(variant), head(exp["control"]), is_lower(head_metric, exp))
     effect *= sgn
     clauses = [judge_clause(c, exp, cards) for c in exp["rule"]]
     guards = [c for c in clauses if c["kind"] == "max_loss" and not c["ok"]]
@@ -147,13 +156,17 @@ def decide_experiment(exp, root):
         verdict, why = ("INCONCLUSIVE" if pending else "CUT"), "rule not met: " + "; ".join(c["text"] for c in missed)
     elif flags:
         verdict, why = "INCONCLUSIVE", f"headline {head_metric} {effect:+.4f} beyond the band but " + ", ".join(flags) + ": add a seed, do not adopt"
+    elif hc is not None and len(hc["parts"]) > 1:
+        verdict, why = "KEEP", f"headline {head_metric} by subsets ({sum(p['ok'] for p in hc['parts'])} of {len(hc['parts'])} pass, {hc['need']} needed): " + "; ".join(f"{p['subset']} {p['effect']:+.4f}" for p in hc["parts"]) + "; every clause holds"
     else:
         verdict, why = "KEEP", f"headline {head_metric} {variant}-{exp['control']} {effect:+.4f} beyond the band {band}" + (f", interval [{interval[0]:+.3f}, {interval[1]:+.3f}]" if interval else "") + f", {len(diffs)} paired seed(s); every clause holds"
     pred = exp.get("prediction", {})
     pred_txt = ""
     if isinstance(pred.get("value"), (int, float)) and pred.get("vs") == exp["control"]:
         pred_txt = f"prediction {pred['value']:+.3f}, measured {effect:+.4f} (error {effect - pred['value']:+.4f})"
+    subset_effects = {p["subset"]: round(p["effect"], 5) for p in hc["parts"]} if hc is not None and len(hc["parts"]) > 1 else None
     return dict(id=exp["id"], verdict=verdict, metric=head_metric, variant=variant, control=exp["control"], effect=round(effect, 5), diffs=[round(d, 5) for d in diffs],
+                subset_effects=subset_effects, effect_note="effect is pooled over the subset cards; the verdict uses subset_effects" if subset_effects else "",
                 interval=[round(x, 5) for x in interval] if interval else None, why=why, prediction=pred_txt, clauses=[dict(text=c["text"], ok=c["ok"], flags=c["flags"]) for c in clauses],
                 date=time.strftime("%Y-%m-%d %H:%M"))
 

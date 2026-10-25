@@ -95,3 +95,11 @@ __pycache__/
 *.gz
 ~$*
 *.tmp
+
+# launcher state files (autoresearch/tools/run.py): locks, temporary writes, heartbeats, GPU slots
+*.lock
+*.lock.stale.*
+*.tmp.*
+heartbeat
+.gpu_slots/
+ledger_row.json

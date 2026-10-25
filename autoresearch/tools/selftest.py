@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -113,6 +114,32 @@ try:
     busy = go("S.busy", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1", "--wait-gpu", "0")
     assert busy.returncode == 1 and rows()["S.busy"]["status"] == "gpu_busy", busy.stdout
     shutil.rmtree(f"{T}/runs/.gpu_slots")
+    # a slot directory without an owner file (taker died between mkdir and the write) is reclaimed after 10 s
+    os.makedirs(f"{T}/runs/.gpu_slots/0")
+    old_t = time.time() - 60
+    os.utime(f"{T}/runs/.gpu_slots/0", (old_t, old_t))
+    assert go("S.slot2", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1").returncode == 0, "an ownerless old slot is reclaimed"
+    # --again clears the earlier attempt's result and decision
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "S.ok2", "--decision", "KEEP"], check=True, env=env, capture_output=True)
+    assert go("S.ok2", ["bash", "-c", "echo again"], "--again").returncode == 0 and rows()["S.ok2"]["decision"] == "", rows()["S.ok2"]["decision"]
+    # the heartbeat is kept while a launcher waits for --after (a waiting chain member is not stalled)
+    fast = dict(env, AR_STALE_S="1", AR_HEARTBEAT_S="0.3")
+    pa = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.slowA", "--hyp", "selftest", "--no-git", "--", "bash", "-c", "sleep 4"], env=fast, stdout=subprocess.DEVNULL)
+    time.sleep(0.5)
+    pb = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.waitB", "--hyp", "selftest", "--no-git", "--after", "S.slowA", "--", "bash", "-c", "echo b"], env=fast, stdout=subprocess.DEVNULL)
+    time.sleep(2.5)
+    assert RUN.record(f"{T}/runs/S.waitB").get("status") == "waiting" and RUN.heartbeat_age(f"{T}/runs/S.waitB") < 1.5, "a waiting launcher must beat"
+    assert pa.wait() == 0 and pb.wait() == 0
+    # a ledger that cannot be locked does not kill the launcher: the row is kept next to the record
+    open(f"{T}/LEDGER.csv.lock", "w").write("held")
+    held = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.locked", "--hyp", "selftest", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=dict(env, AR_LOCK_WAIT_S="1"))
+    os.remove(f"{T}/LEDGER.csv.lock")
+    assert held.returncode == 0 and "ledger not written" in held.stdout and os.path.exists(f"{T}/runs/S.locked/ledger_row.json"), held.stdout
+    # clean_temp tags the scratch through the launcher's snapshot (the call with the new signature)
+    os.makedirs(f"{T}/temp/loop98")
+    open(f"{T}/temp/loop98/scratch98.py", "w").write("y = 1")
+    ct = subprocess.run([sys.executable, f"{HERE}/clean_temp.py", "loop98", "--move", "--force"], capture_output=True, text=True, env=env)
+    assert ct.returncode == 0 and "t/loop98-scratch" in tags(), ct.stdout + ct.stderr
     # concurrent ledger writes lose nothing
     procs = [subprocess.Popen([sys.executable, f"{HERE}/ledger.py", "note", f"S.c{i}", "--result", f"r{i}"], env=env, stdout=subprocess.DEVNULL) for i in range(8)]
     assert all(p.wait() == 0 for p in procs)
@@ -167,7 +194,14 @@ try:
     assert verdict(arms=subs, metric="R", rule=[dict(metric="R", min_effect=0.05, subsets=["n", "b", "x"])]) == "CUT", "all subsets needed"
     one = dict(a=dict(cards={s: f"sub.json#{s}/a" for s in "nbx"}), c=dict(cards={s: f"sub.json#{s}/c" for s in "nbx"}))
     assert verdict(arms=one, metric="R", rule=[dict(metric="R", min_effect=0.05, subsets=["n", "b", "x"], at_least=2)]) == "INCONCLUSIVE", "one seed per subset"
+    # a plain clause on subset-only arms judges every subset; lower-is-better by the experiment's direction; direction must match known names
+    assert verdict(arms=subs, metric="R", rule=[dict(metric="R", min_effect=0.05)]) == "CUT", "plain clause on subset-only arms: all subsets needed"
+    json.dump(dict(a=dict(err=0.10), b=dict(err=0.11), ca=dict(err=0.15), cb=dict(err=0.16)), open(f"{T}/err.json", "w"))
+    lower = dict(a=dict(cards=["err.json#a", "err.json#b"]), c=dict(cards=["err.json#ca", "err.json#cb"]))
+    assert verdict(arms=lower, metric="err", direction="lower", rule=[dict(metric="err", min_effect=0.01)]) == "KEEP", "lower is better by direction"
+    assert verdict(arms=lower, metric="err", direction="higher", rule=[dict(metric="err", min_effect=0.01)]) == "CUT", "the same numbers read as higher-is-better"
     import experiment as X
+    assert any("lower-is-better" in b for b in X.check(dict(base, arms=two, metric="vert100", direction="higher", rule=[dict(metric="vert100", min_effect=0.1)]), f"{T}/experiments/E1_x/experiment.json"))
     exp = dict(base, arms=two)
     json.dump(exp, open(f"{T}/experiments/E1_x/experiment.json", "w"))
     assert X.check(exp, f"{T}/experiments/E1_x/experiment.json") == []

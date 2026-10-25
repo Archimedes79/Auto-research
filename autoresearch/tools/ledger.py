@@ -30,7 +30,7 @@ def save(rows):
     p = P.path("ledger")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     buf = io.StringIO()
-    w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore")
+    w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore", lineterminator="\n")
     w.writeheader()
     w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
     P.atomic_write(p, buf.getvalue())
