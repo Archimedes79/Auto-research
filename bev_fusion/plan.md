@@ -102,7 +102,7 @@ Mirko's proposals are the two standard lift families of the literature; both are
 | differentiable | torch.autograd.gradcheck on small tables; the gradient reaches the depth head and the backbone |
 | fast | ms per frame per lift, batch 1, idle GPU; Fast-BEV's 0.006 ms gather as the reference for P |
 
-## 3. Radar: a learned density per detection
+## 3. Radar: a learned density per detection (variant; the first version is the simple block of section 12 "Decided": hard raster + properties + 2 convs)
 
 ### 3.1 What it does, in plain words (your formulation)
 For each detection d with position (x_d, y_d) in vehicle coordinates, its own sensor calibration c_d (radar position and direction in vehicle coordinates) and its time t_d:
@@ -215,6 +215,8 @@ Design agreed with Mirko (2026-10-25): three BEV maps with their own times are f
 
 - camera lift: image backbone + lookup tables, height kept as channels (feat[z_car]); lifts P / S / PD compared in S1, PD recommended because it keeps the depth uncertainty and is a pure gather (section 2)
 - first building block FIXED (Mirko, 2026-10-25): the camera block produces the world voxel map with lift PD (pull with depth weight); P and S stay in S1 only as controls; the next design topic is the radar
+- radar block FIXED, simple (Mirko, 2026-10-25): every detection goes into the BEV cell where it resides (hard raster, 0.5 m, same grid and index order as the camera BEV) with its properties - distance from the sensor, direction from the sensor in the vehicle frame (circular), Doppler as a circular value (sin / cos of k pi v_r / v_max, k = 1, 2, 4), RCS, age - and sub-cell offset; then two 3 x 3 convolutions (`training/radar_bev.py`, self-test passes). This replaces the learned density g of section 3 for the first version; section 3 and `radar_encoding.md` stay as the variants (polar image + soft splat + pull, Cartesian soft footprint, learned sigma, height profile), each to be justified against this simple block in the radar stage S2 (hard raster = R0).
+- camera and radar blocks are settled: both deliver a BEV on the same grid (camera 128 channels, radar 32) for the fusion; next design topics: fusion, temporal state, heads
 - kept for later (Mirko, 2026-10-25): PD-G in inverse depth (mixture in 1/z, exact voxel mass, section 2.4); the categorical lift PD on the pre-trained head stays the working version until then
 
 ### Proposed, not yet objected to
