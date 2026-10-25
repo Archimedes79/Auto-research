@@ -2,6 +2,8 @@
 
 Two reviews merged: the author's own and an independent, read-only one (a fresh agent that was given the files, not the author's conclusions). Its key claims were checked against the files (loop-18 ledger, run records, TEST log, launchers). The steps below become system-improvement cards of cycle 19.
 
+A third review by the loop-18 lead chat (`REVIEW_2026-10-25_loop18_lead.md`) adds findings R1-R10 and proposes to build the autonomy core (M6 pulled forward, a queue tick, hooks, `ar metrics`) before the package facades M3-M5; decision D8 in the problem's `DECISIONS.md`.
+
 ## Agreed with Mirko (2026-10-25)
 The decided entries are recorded in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`.
 - **Order:** the safety work (M0-M2) and the cycle-19 research (P1 / P2, no code) run in parallel; loop 19's GPU runs wait for the safety work.
