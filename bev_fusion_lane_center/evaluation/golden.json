@@ -120,6 +120,26 @@
     "R@1_far": 0.7714,
     "vert100": 15.5305
    }
+  },
+  {
+   "name": "champion",
+   "split": "val",
+   "subset": "val250",
+   "fresh": true,
+   "frames": 250,
+   "tol": 0.0005,
+   "commit": "0afae55+dirty",
+   "date": "2026-10-25 15:45",
+   "metrics": {
+    "S": 0.7739,
+    "Q": 0.74,
+    "F1@1.0": 0.8712,
+    "J": 0.427,
+    "topo_F1": 0.7443,
+    "lanes_found": 0.6944,
+    "R@1_far": 0.7075,
+    "vert100": 14.8008
+   }
   }
  ]
 }

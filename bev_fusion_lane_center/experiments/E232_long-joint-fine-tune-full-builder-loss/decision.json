@@ -1,0 +1,35 @@
+{
+ "id": "E232",
+ "verdict": "CUT",
+ "metric": "route_fail",
+ "variant": "a",
+ "control": "c",
+ "effect": -0.02433,
+ "diffs": [
+  -0.0365,
+  0.0,
+  -0.0365
+ ],
+ "subset_effects": {
+  "night": -0.0365,
+  "blur": -0.0365,
+  "cam3": 0.0
+ },
+ "effect_note": "effect is pooled over the subset cards; the verdict uses subset_effects",
+ "interval": null,
+ "why": "rule not met: route_fail night a-c -0.0365 (want >= +0.030, band 0.01); route_fail blur a-c -0.0365 (want >= +0.030, band 0.01); route_fail cam3 a-c +0.0000 (want >= +0.030, band 0.01) [0 of 3 pass, 2 needed]",
+ "prediction": "prediction +0.030, measured -0.0243 (error -0.0543)",
+ "clauses": [
+  {
+   "text": "route_fail night a-c -0.0365 (want >= +0.030, band 0.01); route_fail blur a-c -0.0365 (want >= +0.030, band 0.01); route_fail cam3 a-c +0.0000 (want >= +0.030, band 0.01) [0 of 3 pass, 2 needed]",
+   "ok": false,
+   "flags": []
+  },
+  {
+   "text": "S_fail night a-c -0.0028 (want >= -0.005); S_fail blur a-c +0.0001 (want >= -0.005); S_fail cam3 a-c -0.0020 (want >= -0.005) [3 of 3 pass, 3 needed]",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-10-25 15:43"
+}

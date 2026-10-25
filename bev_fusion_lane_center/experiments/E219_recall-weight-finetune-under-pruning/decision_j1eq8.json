@@ -1,0 +1,29 @@
+{
+ "id": "E219",
+ "verdict": "TIE",
+ "metric": "Q",
+ "variant": "a",
+ "control": "c",
+ "effect": -0.00405,
+ "diffs": [
+  -0.00405
+ ],
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": null,
+ "why": "headline Q a-c -0.0041 inside the band 0.01: take the cheaper arm",
+ "prediction": "prediction +0.003, measured -0.0041 (error -0.0071)",
+ "clauses": [
+  {
+   "text": "Q a-c -0.0041 (want >= +0.010, band 0.01)",
+   "ok": false,
+   "flags": []
+  },
+  {
+   "text": "lanes_found a-c +0.0035 (want >= -0.010)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-10-25 15:43"
+}

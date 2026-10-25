@@ -1,0 +1,37 @@
+{
+ "id": "E215",
+ "verdict": "KEEP",
+ "metric": "J",
+ "variant": "a",
+ "control": "c",
+ "effect": 0.14444,
+ "diffs": [
+  0.14444
+ ],
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": [
+  0.10434,
+  0.18195
+ ],
+ "why": "headline J a-c +0.1444 beyond the band 0.02, interval [+0.104, +0.182], 1 paired seed(s); every clause holds",
+ "prediction": "prediction +0.140, measured +0.1444 (error +0.0044)",
+ "clauses": [
+  {
+   "text": "J a-c +0.1444 (want >= +0.100, band 0.02)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "F1@1.0 a-c +0.0001 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "lanes_found a-c +0.0000 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-10-25 15:43"
+}

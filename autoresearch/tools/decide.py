@@ -15,7 +15,8 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
   * deterministic: true (the arms share the checkpoint, e.g. a post-processing change): no training seed exists, so a single pair with an
     interval that excludes 0 counts as agreeing seeds
   * bands: the experiment's band for its headline metric, a clause's own band, else 0.010; lower-is-better metrics are known by name (LOWER)
-  * --write puts the verdict into the decision column of the ledger rows of the variant arm (run_ids) and writes decision.json next to the experiment file
+  * --write writes decision.json next to the experiment file and appends "decide.py <date>: VERDICT (effect)" to the decision column of the
+    variant arm's ledger rows (run_ids); a prose decision already there is kept in front of it
 This is the pre-registered decision, not a significance test: intervals come from the problem's evaluation (paired scene bootstrap).
 """
 import argparse
@@ -198,11 +199,16 @@ def main():
         if d["prediction"]:
             print("  " + d["prediction"])
         if a.write:
-            out = os.path.join(os.path.dirname(path), "decision.json")
+            out = os.path.join(os.path.dirname(path), os.path.basename(path).replace("experiment", "decision", 1))  # experiment_x.json -> decision_x.json
             json.dump(d, open(out, "w", encoding="utf-8"), indent=1)
             print("  written:", out)
+            import ledger as L
+            old = {r["id"]: r.get("decision", "") for r in L.load()}
             for rid in exp["arms"][d["variant"]].get("run_ids", []):
-                subprocess.run([sys.executable, os.path.join(here, "ledger.py"), "note", rid, "--decision", f"{d['verdict']}: effect {d['effect']:+.4f} ({d['why']})"[:300]], check=True)
+                line = f"decide.py {d['date'][:10]}: {d['verdict']} (effect {d['effect']:+.4f})"
+                prose = old.get(rid, "").split(" | decide.py")[0].strip()  # a written prose decision is kept, an earlier decide.py verdict is replaced
+                text = (prose + " | " + line) if prose and not prose.startswith("decide.py") else line
+                subprocess.run([sys.executable, os.path.join(here, "ledger.py"), "note", rid, "--decision", text[:400]], check=True)
         return 0
     if not (a.variant and a.control):
         ap.error("--experiment, or --variant and --control")
