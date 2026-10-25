@@ -30,6 +30,8 @@ Recommendation: **keep TRAIN / VAL / TEST exactly as they are** (18 loops of his
 
   Reading: today's pipeline reproduces the stored **odd** TRAIN rows at the rasteriser's noise level; the even rows and VAL / TEST differ slightly more. That fits the history: the extraction code was rewritten after the rollback of 2026-10-14 (checked then on the logits only) and the odd TRAIN rows were extracted with the rewritten code, the even rows and VAL / TEST before. So half of TRAIN already comes from today's pipeline, and the b456 features are in distribution with it. The gate "correlation >= 0.999" of this plan was too strict for dec32; the criterion that holds is "today == stored odd rows at noise level", and it is met. Caveat: CONFIRM (today's pipeline) and VAL (original pipeline) differ at this small level, so CONFIRM is used only for paired comparisons on its own frames.
 
+- **step 4 running** (since 2026-10-25 about 13:45): `temp/loop19/run_b456_extract.sh` -> E234.tr0 (train rows 0-4365) and E234.tr1 (rows 4366-8730) in parallel, E234.val (CONFIRM, 1,567 rows) after E234.tr0; 2 workers each; first speeds 0.7 - 1.05 s per frame and process, so about 1.5 - 2 hours in all. Code tags `lcr/E234.tr0` / `tr1` were set by hand at 07a4bad (the WSL git had no identity at the start, see DECISIONS D9; their run records will say `git-error` and are corrected after the runs end); E234.val tags itself.
+
 ## Pipeline for the new scenes (set `b456`, written to new folders only; nothing of b123 is touched)
 
 | step | what | tool | output | check (before the next step) | time |
