@@ -125,6 +125,8 @@ CASES = {
     "changing: speed 8 -> 14 m/s, yaw rate 0.5 -> -0.1 rad/s": [(1 / 12, 8.0 + 1.5 * i, 0.5 - 0.15 * i) for i in range(5)],
 }
 
+GATE = "--no-gate" not in sys.argv
+
 if __name__ == "__main__":
     torch.set_grad_enabled(False)
     hd = head()
@@ -138,7 +140,7 @@ if __name__ == "__main__":
         frames = [render(ts[k], P[k]) for k in range(len(steps) + 1)]
         exp = frames[-1][0]
         win = [(frames[k], steps[k:]) for k in range(len(frames))]
-        out_w, mass_w = splat_window(win, G, head=hd, importance=imp)
+        out_w, mass_w = splat_window(win, G, head=hd, importance=imp, mass_gate=GATE)
         for k in range(len(frames) - 1):
             age = ts[-1] - ts[k]
             e, i, l = measure(out_w[0, k], exp)

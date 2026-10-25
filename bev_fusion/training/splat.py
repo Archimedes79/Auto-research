@@ -134,9 +134,11 @@ class CorrectionHead(nn.Module):
         return (self.d_max * torch.tanh(raw / self.d_max)).permute(0, 2, 1)
 
 
-def splat(feat, pos, grid, importance=None, eps=1e-6):
+def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False):
     """feat (B, C, N), pos (B, N, 2) target positions in metres, importance (B, N) or None -> (out (B, C, X, Y),
-    mass (B, 1, X, Y)). Bilinear kernel on the cell centres; sources whose 4 corners all fall outside are dropped."""
+    mass (B, 1, X, Y)). Bilinear kernel on the cell centres; sources whose 4 corners all fall outside are dropped.
+    mass_gate: out *= min(mass, 1), so cells that only received a weak bilinear tail are not scaled up to full
+    strength by the normalisation (helped in every variant of temp/checks/check_splat_coordinates.py)."""
     B, C, N = feat.shape
     X, Y = grid.nx, grid.ny
     fx = (pos[..., 0] - grid.x_min) / grid.res - 0.5           # continuous cell index
@@ -162,6 +164,8 @@ def splat(feat, pos, grid, importance=None, eps=1e-6):
         den = den.reshape(-1).index_add(0, flat, wk).reshape(B, X * Y)
         mass = mass.reshape(-1).index_add(0, flat, k.reshape(-1)).reshape(B, X * Y)
     out = num / (den.unsqueeze(1) + eps)
+    if mass_gate:
+        out = out * mass.clamp(max=1.0).unsqueeze(1)
     return out.view(B, C, X, Y), mass.view(B, 1, X, Y)
 
 
@@ -180,7 +184,7 @@ def splat_bev(bev, grid, dt, v, omega, head=None, importance=None, corr=None):
     return out, mass, v_hat
 
 
-def splat_window(frames, grid, head=None, corr=None, importance=None):
+def splat_window(frames, grid, head=None, corr=None, importance=None, mass_gate=True):
     """Bring the last K original frames into the current time, each with ONE splat (no resampling chain).
 
     frames: list of (bev (B, C, X, Y), steps) - a past frame with its own per-frame ego steps to the current time
@@ -201,7 +205,7 @@ def splat_window(frames, grid, head=None, corr=None, importance=None):
             delta = corr(bev.reshape(B, C, X * Y), p, T, v_m, w_m)
         pos = chain_positions(p, steps, v_obj, delta)
         imp = importance(bev).reshape(B, X * Y) if importance is not None else None
-        o, m = splat(bev.reshape(B, C, X * Y), pos, grid, imp)
+        o, m = splat(bev.reshape(B, C, X * Y), pos, grid, imp, mass_gate=mass_gate)
         outs.append(o)
         masses.append(m)
     return torch.stack(outs, 1), torch.stack(masses, 1)
