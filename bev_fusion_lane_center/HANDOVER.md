@@ -1,4 +1,4 @@
-# HANDOVER - 2026-10-25 16:10
+# HANDOVER - 2026-10-25 17:05
 
 New chat: start in the repository folder (parent of autoresearch/ and this folder) or in this folder, say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB).
 
@@ -9,7 +9,7 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
 - The research system was simplified today (7 agents, 5 templates, prompts/research_steps.md; roadmap and reviews in ../autoresearch/ROADMAP.md). No experiment of loop 19 has started (the user: system refinement first).
 
 ## Next step
-1. Split agreed 16:00. Lead: P2 (`tick`: reconcile + start ready items within the GPU slots), P8 (evaluator contract), `--require-card` default. Done by the data chat (8a18b25, bfd318e): P4 gate hook ON (`.claude/settings.json`; protected list in project.json; grant for ../autoresearch/tools/ under D8 until 2026-10-26 03:56, renew with `guard_hook.py grant`), P3 (`metrics.py`, loop table at the head of LEDGER.md), P7, the small items. Then P9 + b456 steps 5-7 (with `lcr.paths`, ar-reviewer mode code), P10 after P2.
+1. Split agreed 16:00. Lead: P2 DONE (tick.py: reconcile the run records, start the ready schedule items within the GPU / CPU slots from the `command` column or the experiment arm, `--handover` status block; run.py takes its card from the planned ledger row and refuses without one, `--no-card` for smoke tests; schedule.py `command` column; no experiment was run), review of the diff pending; next P8 (evaluator contract). Done by the data chat (8a18b25, bfd318e): P4 gate hook ON (`.claude/settings.json`; protected list in project.json; grant for ../autoresearch/tools/ under D8 until 2026-10-26 03:56, renew with `guard_hook.py grant`), P3 (`metrics.py`, loop table at the head of LEDGER.md), P7, the small items. Then P9 + b456 steps 5-7 (with `lcr.paths`, ar-reviewer mode code), P10 after P2.
 3. Research cycle 19 by hand from `../autoresearch/prompts/research_steps.md`; its GPU runs wait for the safety work and the user's go.
 
 ## Decisions waiting for the user

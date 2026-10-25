@@ -4,9 +4,11 @@
     python autoresearch/tools/schedule.py next [--resource gpu]    # ready items: state planned/ready and every dependency done
     python autoresearch/tools/schedule.py set E240.a running       # change a state (planned, ready, running, done, failed, blocked, cancelled)
     python autoresearch/tools/schedule.py reconcile                # items whose run ids have run records: running / done / failed from the records
-    python autoresearch/tools/schedule.py add E240.b --node R1 --kind train --depends E240.code --resource gpu --budget 40m --note "seed 1"
+    python autoresearch/tools/schedule.py add E240.b --node R1 --kind train --depends E240.code --resource gpu --budget 40m --note "seed 1" [--command "bash tools/env/_py14.sh ..."]
+    python autoresearch/tools/tick.py [--dry-run]                  # reconcile + start the ready items that fit (tick.py)
 
-Columns: item, node, kind, state, depends_on (';'-separated), resource (gpu / cpu / agent), budget, priority (1 = first), owner, run_ids (';'), note.
+Columns: item, node, kind, state, depends_on (';'-separated), resource (gpu / cpu / agent), budget, priority (1 = first), owner, run_ids (';'), note,
+command (what tick.py starts through run.py; empty = the arm's command in the experiment file). A file without the command column reads as empty commands.
 """
 import argparse
 import csv
@@ -17,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 
-COLS = ["item", "node", "kind", "state", "depends_on", "resource", "budget", "priority", "owner", "run_ids", "note"]
+COLS = ["item", "node", "kind", "state", "depends_on", "resource", "budget", "priority", "owner", "run_ids", "note", "command"]
 STATES = ("planned", "ready", "running", "done", "failed", "blocked", "cancelled")
 
 
@@ -29,8 +31,8 @@ def load(path=None):
         return list(csv.DictReader(f))
 
 
-def save(rows, path=None):
-    """whole-file write under the schedule lock with an atomic replace"""
+def save(rows, path=None, lock=True):
+    """whole-file write under the schedule lock with an atomic replace (lock=False when the caller holds P.locked already, as tick.py does)"""
     import io
     path = path or P.path("schedule")
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -38,7 +40,10 @@ def save(rows, path=None):
     w = csv.DictWriter(buf, fieldnames=COLS, extrasaction="ignore", lineterminator="\n")
     w.writeheader()
     w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
-    with P.locked(path):
+    if lock:
+        with P.locked(path):
+            P.atomic_write(path, buf.getvalue())
+    else:
         P.atomic_write(path, buf.getvalue())
 
 
@@ -72,7 +77,7 @@ def main():
     ap.add_argument("item", nargs="?")
     ap.add_argument("state", nargs="?")
     ap.add_argument("--resource")
-    for c in ("node", "kind", "depends", "budget", "priority", "owner", "runs", "note"):
+    for c in ("node", "kind", "depends", "budget", "priority", "owner", "runs", "note", "command"):
         ap.add_argument("--" + c, default="")
     a = ap.parse_args()
     rows = load()
@@ -97,7 +102,7 @@ def main():
         save(rows)
     elif a.cmd == "add":
         rows.append(dict(item=a.item, node=a.node, kind=a.kind, state="planned", depends_on=a.depends, resource=a.resource or "", budget=a.budget,
-                         priority=a.priority or "5", owner=a.owner, run_ids=a.runs or (a.item if a.kind == "train" else ""), note=a.note))
+                         priority=a.priority or "5", owner=a.owner, run_ids=a.runs or (a.item if a.kind == "train" else ""), note=a.note, command=a.command))
         save(rows)
 
 

@@ -31,7 +31,8 @@ python tools/guard_hook.py grant ../autoresearch/tools/ --decision D8 --hours 12
 python tools/decide.py --experiment E240 [--write]          # the rule clauses of experiments/E240_*/experiment.json on the metric cards -> KEEP / CUT / TIE / INCONCLUSIVE
 python tools/decide.py --variant 0.746,0.741 --control 0.725,0.722 --id E240.a --write   # typed per-seed scores (old interface)
 python tools/experiment.py check E240 | show E240 | check --all   # gate G2 as code for experiment.json (schema: schemas/experiment.schema.json)
-python tools/schedule.py show|next|set|reconcile|add
+python tools/schedule.py show|next|set|reconcile|add [--command "..."]
+python tools/tick.py [--dry-run] [--handover]           # the inner loop: reconcile the run records, start the ready items within the GPU / CPU slots, status block (into HANDOVER.md between <!-- tick --> markers)
 python tools/check_numbers.py <report> <sources ...> [--strict]   # --strict: exit 1 when a number is missing from the sources
 python tools/check_structure.py
 python tools/install_agents.py [--check]

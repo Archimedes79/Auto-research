@@ -11,7 +11,8 @@ What it does (paths from the problem's project.json, see project.py):
                 ledger cannot be written (lock held for AR_LOCK_WAIT_S, file open elsewhere) the row is kept in <run_records>/<id>/ledger_row.json,
                 the launcher says so and its exit code stays the command's
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
-  * card check  warns when --hyp / --pred / --rule are missing (--require-card refuses)
+  * card        a run needs its card: --hyp / --pred / --rule on the command line, else from the planned ledger row (ledger.py add); without
+                one it is refused (--no-card for smoke tests and data preparation, the ledger row then says "no card")
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
                 on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
                 user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger.
@@ -220,6 +221,14 @@ def beat(hb, text=""):
     open(hb, "w").write(f"{now()} {text}".rstrip() + "\n")
 
 
+def ledger_row(ledger, run_id):
+    """the ledger row of an id (empty dict when none)"""
+    if not os.path.exists(ledger):
+        return {}
+    with open(ledger, newline="", encoding="utf-8") as f:
+        return next((r for r in csv.DictReader(f) if r["id"] == run_id), {})
+
+
 def ledger_write(ledger, row, clear=()):
     with P.locked(ledger):
         rows = []
@@ -365,7 +374,8 @@ def main():
     ap.add_argument("--pred", default="", help="prediction written BEFORE the run, a number (e.g. 'Q >= 0.745')")
     ap.add_argument("--rule", default="", help="decision rule written BEFORE the run")
     ap.add_argument("--split", default="val", choices=["val", "test"], help="'test' needs a row naming this id in the TEST log")
-    ap.add_argument("--require-card", action="store_true", help="refuse to start without --hyp, --pred and --rule")
+    ap.add_argument("--require-card", action="store_true", help="(default) refuse to start without a card: --hyp, --pred and --rule, or a planned ledger row with them")
+    ap.add_argument("--no-card", action="store_true", help="start without a card (smoke tests, data preparation); the ledger row says 'no card'")
     ap.add_argument("--basis", default="")
     ap.add_argument("--seed", default="")
     ap.add_argument("--after", default="", help="comma list of run ids whose done flags this run waits for")
@@ -385,10 +395,13 @@ def main():
     cmd = a.cmd[1:] if a.cmd and a.cmd[0] == "--" else a.cmd
     if not cmd:
         ap.error("no command (put it after --)")
+    planned = ledger_row(ledger, a.id)  # a row written before the run (ledger.py add) carries the card
+    a.hyp, a.pred, a.rule = a.hyp or planned.get("hypothesis", ""), a.pred or planned.get("prediction", ""), a.rule or planned.get("rule", "")
     missing = [n for n, v in (("--hyp", a.hyp), ("--pred", a.pred), ("--rule", a.rule)) if not v]
     if missing:
-        print(f"[{a.id}] card incomplete, missing {', '.join(missing)} (hypothesis, prediction and decision rule are written before the run)")
-        if a.require_card:
+        print(f"[{a.id}] card incomplete, missing {', '.join(missing)} (hypothesis, prediction and decision rule are written before the run: on the command line or in the planned ledger row)")
+        if not a.no_card:
+            print(f"[{a.id}] refused: a run needs its card (--no-card for a smoke test or data preparation)")
             return 2
     if a.split == "test":
         log = open(test_log, encoding="utf-8").read() if os.path.exists(test_log) else ""
@@ -489,6 +502,8 @@ def main():
         open(os.path.join(d, "done"), "w").write(rec["ended"] + "\n")
     if attempt > 1:
         notes.insert(0, f"{attempt} attempt(s)")
+    if a.no_card and missing:
+        notes.append("no card")
     ledger_safe(ledger, dict(rec, result=res, notes="; ".join(notes)), d, clear)
     print(f"[{a.id}] {status} (exit {rc}, {dur} s, {attempt} attempt(s)), code {commit} {rec['tag']}; log {os.path.join(d, 'run.log')}")
     return rc

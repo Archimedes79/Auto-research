@@ -5,7 +5,7 @@
 Tests: run.py (done flag only on success, retry only on a CUDA unknown error, timeout, card check, TEST guard, --after waits / blocks / sees a
 stalled run, snapshot commit + tag per run through a temporary index, a finished id is refused without --again, a failed or stalled id is resumed
 and keeps its first tag, a planned ledger row keeps its prediction, GPU slots reclaim dead owners and block on live ones, no git identity refused),
-ledger.py (concurrent notes under the lock), decide.py (typed scores and experiment files with cards: seeds, interval, guards, subsets, deterministic), experiment.py (check), check_numbers.py, schedule.py (next, reconcile), clean_temp.py.
+tick.py (dry run, cpu / gpu slots, dependencies, commands from the schedule or the experiment arm, blocked items, handover block), ledger.py (concurrent notes under the lock), decide.py (typed scores and experiment files with cards: seeds, interval, guards, subsets, deterministic), experiment.py (check), check_numbers.py, schedule.py (next, reconcile), clean_temp.py.
 """
 import csv
 import json
@@ -33,7 +33,7 @@ for k, v in (("user.name", "selftest"), ("user.email", "selftest@example.invalid
 
 
 def go(rid, cmd, *extra):
-    return subprocess.run([sys.executable, f"{HERE}/run.py", "--id", rid, "--hyp", "selftest", "--retries", "1", *extra, "--", *cmd], capture_output=True, text=True, env=env)
+    return subprocess.run([sys.executable, f"{HERE}/run.py", "--id", rid, "--hyp", "selftest", "--pred", "x >= 1", "--rule", "keep if x >= 1", "--retries", "1", *extra, "--", *cmd], capture_output=True, text=True, env=env)
 
 
 def tags():
@@ -71,7 +71,13 @@ try:
     assert aft.returncode == 0 and blk.returncode == 3 and rows()["S.blocked"]["status"] == "blocked", (aft.stdout, blk.stdout)
     assert go("S.bad", ["bash", "-c", "echo retry; exit 0"]).returncode == 0 and "attempt after failed" in rows()["S.bad"]["notes"], "a failed id is resumed"
     # card check and TEST guard
-    assert go("S.card", ["bash", "-c", "echo x"], "--require-card").returncode == 2
+    nocard = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.card", "--hyp", "h", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)
+    assert nocard.returncode == 2 and "refused: a run needs its card" in nocard.stdout, nocard.stdout
+    smoke = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.smoke", "--no-card", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)
+    assert smoke.returncode == 0 and rows()["S.smoke"]["notes"] == "no card", (smoke.stdout, rows().get("S.smoke"))
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.planned", "--hyp", "planned", "--pred", "y >= 2", "--rule", "keep if y >= 2"], check=True, env=env, capture_output=True)
+    pl = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.planned", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)
+    assert pl.returncode == 0 and rows()["S.planned"]["prediction"] == "y >= 2" and rows()["S.planned"]["hypothesis"] == "planned", pl.stdout
     assert go("S.test", ["bash", "-c", "echo x"], "--split", "test").returncode == 2
     assert go("S.test.ok", ["bash", "-c", "echo x"], "--split", "test").returncode == 0
     # retry only on a CUDA unknown error; timeout kills the command
@@ -81,7 +87,7 @@ try:
     assert to.returncode == 124 and rows()["S.timeout"]["status"] == "timeout", (to.returncode, rows().get("S.timeout"))
     # a killed launcher leaves a stalled record: --after blocks on it, schedule.reconcile marks it failed, a new attempt is allowed
     import run as RUN
-    stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
         if RUN.record(f"{T}/runs/S.stall").get("status") == "running":
             break
@@ -98,9 +104,9 @@ try:
     stale = dict(env, AR_STALE_S="1")
     time.sleep(1.5)
     assert RUN.state_of(f"{T}/runs/S.stall") == "running", "fresh heartbeat without the env override"
-    dep = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.dep", "--hyp", "selftest", "--no-git", "--after", "S.stall", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
+    dep = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.dep", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.stall", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
     assert dep.returncode == 3 and "stalled" in dep.stdout, dep.stdout
-    redo = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
+    redo = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
     assert redo.returncode == 0 and "attempt after stalled" in rows()["S.stall"]["notes"], redo.stdout
     # GPU slots: dead owners are reclaimed, live owners block
     os.makedirs(f"{T}/runs/.gpu_slots/0")
@@ -124,15 +130,15 @@ try:
     assert go("S.ok2", ["bash", "-c", "echo again"], "--again").returncode == 0 and rows()["S.ok2"]["decision"] == "", rows()["S.ok2"]["decision"]
     # the heartbeat is kept while a launcher waits for --after (a waiting chain member is not stalled)
     fast = dict(env, AR_STALE_S="1", AR_HEARTBEAT_S="0.3")
-    pa = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.slowA", "--hyp", "selftest", "--no-git", "--", "bash", "-c", "sleep 4"], env=fast, stdout=subprocess.DEVNULL)
+    pa = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.slowA", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 4"], env=fast, stdout=subprocess.DEVNULL)
     time.sleep(0.5)
-    pb = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.waitB", "--hyp", "selftest", "--no-git", "--after", "S.slowA", "--", "bash", "-c", "echo b"], env=fast, stdout=subprocess.DEVNULL)
+    pb = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.waitB", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.slowA", "--", "bash", "-c", "echo b"], env=fast, stdout=subprocess.DEVNULL)
     time.sleep(2.5)
     assert RUN.record(f"{T}/runs/S.waitB").get("status") == "waiting" and RUN.heartbeat_age(f"{T}/runs/S.waitB") < 1.5, "a waiting launcher must beat"
     assert pa.wait() == 0 and pb.wait() == 0
     # a ledger that cannot be locked does not kill the launcher: the row is kept next to the record
     open(f"{T}/LEDGER.csv.lock", "w").write("held")
-    held = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.locked", "--hyp", "selftest", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=dict(env, AR_LOCK_WAIT_S="1"))
+    held = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.locked", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=dict(env, AR_LOCK_WAIT_S="1"))
     os.remove(f"{T}/LEDGER.csv.lock")
     assert held.returncode == 0 and "ledger not written" in held.stdout and os.path.exists(f"{T}/runs/S.locked/ledger_row.json"), held.stdout
     # clean_temp tags the scratch through the launcher's snapshot (the call with the new signature)
@@ -149,7 +155,7 @@ try:
     os.makedirs(f"{T2}/code")
     json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", run_records="runs", code_dirs=["code"]), open(f"{T2}/project.json", "w"))
     subprocess.run(["git", "-c", "safe.directory=*", "-C", T2, "init", "-q"], check=True)
-    noid = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.noid", "--hyp", "selftest", "--", "bash", "-c", "echo x"], capture_output=True, text=True,
+    noid = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.noid", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--", "bash", "-c", "echo x"], capture_output=True, text=True,
                           env=dict(env, AR_PROJECT=T2, GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="", GIT_COMMITTER_NAME=""))
     shutil.rmtree(T2, ignore_errors=True)
     assert noid.returncode == 2 and "git cannot commit" in noid.stdout and not os.path.exists(f"{T2}/runs/S.noid/run.json"), noid.stdout + noid.stderr
@@ -209,6 +215,48 @@ try:
     assert any("no metric" in b for b in X.check(dict(exp, rule=[dict(metric="Q", min_effect=0.01), dict(metric="nope", max_loss=0.1)]), f"{T}/experiments/E1_x/experiment.json"))
     assert subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write"], capture_output=True, text=True, env=env).returncode == 0
     assert os.path.exists(f"{T}/experiments/E1_x/decision.json")
+    # tick: reconcile, start what fits (cpu slot 1, gpu slots), commands from the schedule or the experiment arm, needs-the-lead, blocked items
+    import schedule as SC
+    for rid in ("S.ta", "S.tb"):
+        subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", rid, "--hyp", "tick", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
+    exp = json.load(open(f"{T}/experiments/E1_x/experiment.json"))
+    exp["arms"]["a"]["command"] = "bash -c 'echo arm a'"
+    json.dump(exp, open(f"{T}/experiments/E1_x/experiment.json", "w"))
+    SC.save([dict(item="S.ta", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'sleep 1; echo a'"),
+             dict(item="S.tb", kind="train", state="planned", depends_on="S.ta", resource="gpu", priority="1", budget="5m", command="bash -c 'echo b'"),
+             dict(item="E1.a", kind="train", state="planned", resource="cpu", priority="2", run_ids="E1.a"),
+             dict(item="S.sum", kind="summary", state="planned", resource="agent", priority="3"),
+             dict(item="S.nocmd", kind="train", state="planned", resource="cpu", priority="4"),
+             dict(item="S.nocard", kind="train", state="planned", resource="cpu", priority="5", command="bash -c 'echo x'")], f"{T}/schedule.csv")
+    def tick(*extra):
+        return subprocess.run([sys.executable, f"{HERE}/tick.py", *extra], capture_output=True, text=True, env=env)
+    def states():
+        return {r["item"]: r for r in SC.load(f"{T}/schedule.csv")}
+    def wait_done(*ids):
+        for _ in range(300):
+            if all(RUN.state_of(f"{T}/runs/{i}") == "done" for i in ids):
+                return True
+            time.sleep(0.2)
+        return False
+    dry = tick("--dry-run")
+    assert "would start: S.ta" in dry.stdout and states()["S.ta"]["state"] == "planned", dry.stdout
+    t1 = tick()
+    assert "started  S.ta" in t1.stdout and states()["S.ta"]["state"] == "running" and "waiting  E1.a" in t1.stdout and "S.tb" not in t1.stdout, t1.stdout + t1.stderr  # S.tb waits for S.ta: not ready, not listed
+    assert wait_done("S.ta"), open(f"{T}/runs/S.ta/launcher.log").read()
+    t2 = tick()
+    assert "reconciled S.ta: running -> done" in t2.stdout and "started  S.tb" in t2.stdout and "started  E1.a" in t2.stdout, t2.stdout + t2.stderr
+    assert wait_done("S.tb", "E1.a"), open(f"{T}/runs/E1.a/launcher.log").read()
+    assert RUN.record(f"{T}/runs/E1.a")["hypothesis"] == exp["title"] and "t/S.tb" in tags(), "the arm's card and the gpu run's tag"
+    t3 = tick("--handover")
+    st = states()
+    assert st["S.ta"]["state"] == st["S.tb"]["state"] == st["E1.a"]["state"] == "done", {k: v["state"] for k, v in st.items()}
+    assert st["S.nocmd"]["state"] == "blocked" and "no command" in st["S.nocmd"]["note"], st["S.nocmd"]
+    assert st["S.nocard"]["state"] == "blocked" and "launcher exit 2" in st["S.nocard"]["note"], st["S.nocard"]
+    assert "needs the lead" in t3.stdout and t3.returncode == 1, t3.stdout
+    hv = open(f"{T}/HANDOVER.md", encoding="utf-8").read()
+    assert "<!-- tick -->" in hv and "lead     S.sum" in hv and "<!-- /tick -->" in hv
+    t4 = tick("--handover")
+    assert open(f"{T}/HANDOVER.md", encoding="utf-8").read().count("<!-- tick -->") == 1, "the block is replaced, not appended"
     # check_numbers
     open(f"{T}/doc.md", "w").write("S 0.746 and 0.99 here")
     open(f"{T}/src.json", "w").write('{"S": 0.74612}')
