@@ -16,6 +16,20 @@ Recommendation: **keep TRAIN / VAL / TEST exactly as they are** (18 loops of his
 - **CONFIRM** = the 39 new official-val scenes (1,567 frames): never used for tuning or selection, only to confirm a champion candidate before its one TEST check (the fresh holdout that VAL no longer is);
 - option: hold the 19 hollandvillage scenes out of TRAIN2 as an **unseen-location** test (about 750 frames), since no location of TEST is new to the model.
 
+## Decided (D7 option b, 2026-10-25) and done so far
+- split file `data/splits_b456.json` (by `temp/loop19/make_b456_tokens.py`): TRAIN2 new 197 scenes / 7,961 frames (boston 137, onenorth 40, queenstown 20), UNSEEN 19 scenes / 770 frames (hollandvillage), CONFIRM 39 scenes / 1,567 frames (boston 36, onenorth 3); token lists `~/exp_gcar_b456/feats/{train,val}_tokens.json` (8,731 / 1,567); TRAIN2 = 8,414 + 7,961 = 16,375 frames.
+- `run_gcar.sh` repaired (it still called the old `scripts/` folder); `gcar_tools.py` has the sets `b456` and `chk` (scratch for determinism checks); the b123 PCA basis is copied to `~/exp_gcar_b456/` (same sha256).
+- **reproduction check (step 3)**: today's extraction against the stored features (correlation per frame, median / min):
+
+| comparison | dec32 | logit7 |
+|---|---|---|
+| run 2 vs run 1 today (20 VAL frames): the rasteriser's own noise | 0.99835 / 0.99343 | 0.99975 / 0.99946 |
+| today vs stored VAL (50 frames) | 0.99728 / 0.97811 | 0.99957 / 0.99791 |
+| today vs stored TRAIN, odd rows (10) | 0.99893 / 0.99807 | 0.99984 / 0.99973 |
+| today vs stored TRAIN, even rows (10) | 0.99761 / 0.98671 | 0.99968 / 0.99844 |
+
+  Reading: today's pipeline reproduces the stored **odd** TRAIN rows at the rasteriser's noise level; the even rows and VAL / TEST differ slightly more. That fits the history: the extraction code was rewritten after the rollback of 2026-10-14 (checked then on the logits only) and the odd TRAIN rows were extracted with the rewritten code, the even rows and VAL / TEST before. So half of TRAIN already comes from today's pipeline, and the b456 features are in distribution with it. The gate "correlation >= 0.999" of this plan was too strict for dec32; the criterion that holds is "today == stored odd rows at noise level", and it is met. Caveat: CONFIRM (today's pipeline) and VAL (original pipeline) differ at this small level, so CONFIRM is used only for paired comparisons on its own frames.
+
 ## Pipeline for the new scenes (set `b456`, written to new folders only; nothing of b123 is touched)
 
 | step | what | tool | output | check (before the next step) | time |

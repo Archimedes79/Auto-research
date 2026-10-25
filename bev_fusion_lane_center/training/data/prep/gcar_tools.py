@@ -22,6 +22,10 @@ CAMERAS = ["CAM_FRONT_LEFT", "CAM_FRONT", "CAM_FRONT_RIGHT", "CAM_BACK_LEFT", "C
 SPLITS = {
     "mini": dict(root=f"{HOME}/data/nuscenes", version="v1.0-mini", exp=f"{HOME}/exp_crn_mini"),
     "b123": dict(root=f"{HOME}/data/nuscenes_full", version="v1.0-trainval", exp=f"{HOME}/exp_crn_b123"),
+    # the 255 scenes of parts 4-6 (D1 / D7, 2026-10-25): token lists from temp/loop19/make_b456_tokens.py; the PCA basis is a copy of b123's (same features)
+    "b456": dict(root=f"{HOME}/data/nuscenes_full", version="v1.0-trainval", exp=f"{HOME}/exp_gcar_b456"),
+    # scratch target for determinism checks (extract the same frames twice, compare with --check); token lists written by the check script
+    "chk": dict(root=f"{HOME}/data/nuscenes_full", version="v1.0-trainval", exp=f"{HOME}/exp_gcar_chk"),
 }
 
 

@@ -36,6 +36,7 @@
 /bev_fusion_lane_center/data/*
 !/bev_fusion_lane_center/data/README.md
 !/bev_fusion_lane_center/data/splits.json
+!/bev_fusion_lane_center/data/splits_b456.json
 !/bev_fusion_lane_center/runs/
 /bev_fusion_lane_center/runs/*
 !/bev_fusion_lane_center/runs/README.md
