@@ -10,7 +10,7 @@ Status: completed
 - Leakage check (Lilja et al.): for every VAL / TEST frame the horizontal distance of its global ego position to the nearest TRAIN frame of the SAME city (poses of the nuScenes ego_pose); frames are grouped into <= 5 m, 5-10, 10-25, 25-100 and > 100 m, and the F1 of the heads is computed per group.
 - E58b: the Boston head B is fine-tuned on N = 100 / 400 / 1,600 randomly chosen Singapore TRAIN rows (400 / 800 / 1,500 steps, lr 2e-4, one cycle), to see how little target-domain data is needed; the Boston score after the fine-tuning shows forgetting.
 
-![architecture](architecture.png)
+![architecture](E58_architecture.png)
 
 ## Numbers
 
@@ -60,16 +60,16 @@ Status: completed
 
 ## Result images
 
-![Pixel F1 of the three equal-size heads on the two cities (VAL, TEST): the matched-city score is always the highest; the mixed head is close to the matched ones in both cities.](e58_bars.png)
+![Pixel F1 of the three equal-size heads on the two cities (VAL, TEST): the matched-city score is always the highest; the mixed head is close to the matched ones in both cities.](E58_e58_bars.png)
 *Pixel F1 of the three equal-size heads on the two cities (VAL, TEST): the matched-city score is always the highest; the mixed head is close to the matched ones in both cities.*
 
-![F1 against the distance of an evaluation frame to its nearest training frame: left - all-data head; right - city heads.](e58_bins.png)
+![F1 against the distance of an evaluation frame to its nearest training frame: left - all-data head; right - city heads.](E58_e58_bins.png)
 *F1 against the distance of an evaluation frame to its nearest training frame: left - all-data head; right - city heads.*
 
-![The same TEST frames under the three equal-size heads: the head of the OTHER city misses lanes and invents few; the mixed head is close to the matched head (heat map in colour, ground-truth centerlines in cyan).](e58_examples.png)
+![The same TEST frames under the three equal-size heads: the head of the OTHER city misses lanes and invents few; the mixed head is close to the matched head (heat map in colour, ground-truth centerlines in cyan).](E58_e58_examples.png)
 *The same TEST frames under the three equal-size heads: the head of the OTHER city misses lanes and invents few; the mixed head is close to the matched head (heat map in colour, ground-truth centerlines in cyan).*
 
-![Fine-tuning the Boston head on a few Singapore rows: F1 on Singapore against the number of target-domain rows.](e58b_ft.png)
+![Fine-tuning the Boston head on a few Singapore rows: F1 on Singapore against the number of target-domain rows.](E58_e58b_ft.png)
 *Fine-tuning the Boston head on a few Singapore rows: F1 on Singapore against the number of target-domain rows.*
 
 ## Findings

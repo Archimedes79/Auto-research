@@ -10,7 +10,7 @@ Status: completed
 - Model (link_head2.py): geometry branch = MLP (3 hidden layers) on the 32 features; semantic branch = two MLPs (39 -> 64 -> 32) and the scaled inner product of the two 32-d embeddings (TopoLogic's similarity topology; SAM-Road's source / target features); distance term = -(d / sigma)^p with learnable sigma and p (TopoLogic's learnable exponential mapping; start sigma 3 m, p 2); logit = geometry + w_s * similarity + w_d * distance term with learnable w_s, w_d. BCE, false links weighted x2 (errors cost more than omissions), 4,000 steps; the link threshold tau_l is chosen on VAL.
 - Evaluation on the refined pieces of the single-frame system of E39 (VAL / TEST), compared with the rule links and the E42 head.
 
-![architecture](architecture.png)
+![architecture](E45_architecture.png)
 
 ## Numbers
 
@@ -37,7 +37,7 @@ Status: completed
 
 ## Result images
 
-![Link head operating point on VAL: the TopoLogic-style head follows the E42 head and the rule.](e45_links.png)
+![Link head operating point on VAL: the TopoLogic-style head follows the E42 head and the rule.](E45_e45_links.png)
 *Link head operating point on VAL: the TopoLogic-style head follows the E42 head and the rule.*
 
 ## Findings

@@ -8,7 +8,7 @@ Status: completed
 - Control and test are identical to the adjustment runs of E30: every second training row (4,207 samples), 3,000 steps, the stabilised recipe, the same seed (21); only the input changes: after the global channel normalisation each sample's 39 channels are standardised by their own mean and standard deviation over the 200 x 200 grid (--inorm 1; statistic floor 0.01).
 - Reference: e30_base2 (same rows, steps, seed; global normalisation only): F1@1 m TRAIN_EVAL 0.933 / VAL 0.872 / TEST 0.838.
 
-![architecture](architecture.png)
+![architecture](E50_architecture.png)
 
 ## Numbers
 
@@ -21,7 +21,7 @@ Status: completed
 
 ## Result images
 
-![Precision-recall over the threshold sweep (x = VAL-chosen threshold).](e50_pr.png)
+![Precision-recall over the threshold sweep (x = VAL-chosen threshold).](E50_e50_pr.png)
 *Precision-recall over the threshold sweep (x = VAL-chosen threshold).*
 
 ## Findings

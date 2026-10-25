@@ -22,7 +22,7 @@
 
 Cut: removed D8, D5; ranking D7 0.718 > D6 0.708 > D5 0.710 > D8 0.696; noise band 0.010; rules none.
 
-![scores](rung_1_scores.png) ![frontier](rung_1_frontier.png) ![effects](rung_1_effects.png)
+![scores](../../figures/e123_ladder__rung_1_scores.png) ![frontier](../../figures/e123_ladder__rung_1_frontier.png) ![effects](../../figures/e123_ladder__rung_1_effects.png)
 
 
 ## Hybrid challenge H

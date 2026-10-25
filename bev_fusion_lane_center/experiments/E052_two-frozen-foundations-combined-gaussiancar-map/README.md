@@ -8,7 +8,7 @@ Status: completed
 - Input = the 39 GaussianCaR channels (decoder PCA 32 + 7 map-layer logits, 200 x 200) plus the 32 CRN channels (PCA of the detection network's BEV feature, 128 x 128 cells of 0.8 m, bilinearly up-sampled to 200 x 200 as in E27) = 71 channels in the same ego frame.
 - Identical to the adjustment runs of E30 / E49 / E50: every second training row (4,207 samples), 3,000 steps, the stabilised recipe (lr 6e-4, beta2 0.98, clipping, roll-back guard), seed 21; reference = e30_base2 (39 channels).
 
-![architecture](architecture.png)
+![architecture](E52_architecture.png)
 
 ## Numbers
 
@@ -21,7 +21,7 @@ Status: completed
 
 ## Result images
 
-![Precision-recall over the threshold sweep (x = VAL-chosen threshold).](e52_pr.png)
+![Precision-recall over the threshold sweep (x = VAL-chosen threshold).](E52_e52_pr.png)
 *Precision-recall over the threshold sweep (x = VAL-chosen threshold).*
 
 ## Findings

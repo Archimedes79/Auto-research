@@ -9,7 +9,7 @@ Status: completed
 - Scenario: the 21 TEST scenes, frames sorted by time; the map has the E61 pose error (scene-constant offset N(0, 1 m) per axis and yaw N(0, 2 deg) about the scene start, jitter 0.2 m / 0.3 deg); in the MIDDLE of every scene the global offset jumps by J metres in a random direction (J = 1.5 / 3 / 6 / 10 m, and a variant of 3 m with a 4 deg yaw jump). The frames before the jump are the seen condition, the frames after it the unseen one.
 - Methods: the map route as given; the per-frame graph-ICP (full search +-3 m, +-6 deg; E59); the tracked registration of E61 / E67 (window search around the prediction from the median of the last 5 estimates) WITHOUT a restart; the same tracker WITH the restart (if the window score is below the threshold, a wide search is run and, if it scores better, replaces the estimate and the history is restarted); the true registration (the floor). Metrics: anchored lateral error of the registered map route (E62) and the offset error of the registration at the vehicle, by the time since the jump (0.5 s per frame); the number of frames until the offset error is below 1 m (and the share of scenes that never get there); the restart events and the false alarms before the jump.
 
-![architecture](architecture.png)
+![architecture](E70_architecture.png)
 
 ## Numbers
 
@@ -85,10 +85,10 @@ Status: completed
 
 ## Result images
 
-![Lateral error of the registered map route before and after a jump of the map offset (clean sensors; the jump happens in the middle of every TEST scene).](e70_lines.png)
+![Lateral error of the registered map route before and after a jump of the map offset (clean sensors; the jump happens in the middle of every TEST scene).](E70_e70_lines.png)
 *Lateral error of the registered map route before and after a jump of the map offset (clean sensors; the jump happens in the middle of every TEST scene).*
 
-![Registration offset error per frame in three scenes around a 3 m jump: the tracked registration without a restart converges slowly, the score-triggered restart within a frame or two; the per-frame registration is noisy throughout.](e70_trace.png)
+![Registration offset error per frame in three scenes around a 3 m jump: the tracked registration without a restart converges slowly, the score-triggered restart within a frame or two; the per-frame registration is noisy throughout.](E70_e70_trace.png)
 *Registration offset error per frame in three scenes around a 3 m jump: the tracked registration without a restart converges slowly, the score-triggered restart within a frame or two; the per-frame registration is noisy throughout.*
 
 ## Findings

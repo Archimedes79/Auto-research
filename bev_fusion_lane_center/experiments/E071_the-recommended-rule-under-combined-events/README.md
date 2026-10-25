@@ -9,7 +9,7 @@ Status: completed
 - Scenario: in each TEST scene the sensors fail from 30 % to 70 % of the scene (the perturbed graphs of E57 - night, three forward cameras off, blur, front camera off; the frames after 70 % are clean again) and the map offset jumps by 3 m (6 m in one run) in a random direction at 15 % of the scene (BEFORE the failure, healthy sensors), at 50 % (DURING the failure: the sensors are blind) or not at all (the transient failure of E67). The map has the E61 pose error (scene-constant offset and yaw bias plus jitter). The clean frames before and after the failure are the same for all four failure types, so those columns are not independent across failure types.
 - Methods (registration of the map route): the per-frame graph-ICP (full search +-3 m); the tracked registration of E61 (window +-1 m around the prediction) updated at every frame; the tracked registration with the monitor gate and HOLD (E67); 'hold + restart' (a restart is allowed only on frames the monitor rates healthy, p <= 0.5, and only if the window score is below the threshold); the RECOMMENDED rule 'hold + restart + verify' (additionally, when the monitor says healthy again after at least four held frames = 2 s, the held registration is checked with the wide search and replaced if the wide search scores at least as well, within 0.05); a 'strict verify' variant of it that replaces the held registration only if the wide search scores better than the held one; a restart on a low score WITHOUT the monitor gate; the true registration (floor). Metrics: anchored lateral error of the registered map route (E62) and the registration offset error, by phase (before the failure / during / after, by the time since the sensors returned).
 
-![architecture](architecture.png)
+![architecture](E71_architecture.png)
 
 ## Numbers
 
@@ -131,10 +131,10 @@ Status: completed
 
 ## Result images
 
-![Lateral error of the registered map route before, during and after a sensor failure (30-70 % of every scene; mean of night, three forward cameras off, blur and front camera off) for four event sequences.](e71_lines.png)
+![Lateral error of the registered map route before, during and after a sensor failure (30-70 % of every scene; mean of night, three forward cameras off, blur and front camera off) for four event sequences.](E71_e71_lines.png)
 *Lateral error of the registered map route before, during and after a sensor failure (30-70 % of every scene; mean of night, three forward cameras off, blur and front camera off) for four event sequences.*
 
-![Registration offset error over time in two TEST scenes under the night failure (red band) with a 3 m jump in the middle of the failure (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the sensors return (fixed rule, not hand-picked). Below: the monitor p(fail); in the right scene it stays above 0.5 for several seconds on clean frames (false alarms), so the held registration is not corrected until it drops.](e71_trace.png)
+![Registration offset error over time in two TEST scenes under the night failure (red band) with a 3 m jump in the middle of the failure (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the sensors return (fixed rule, not hand-picked). Below: the monitor p(fail); in the right scene it stays above 0.5 for several seconds on clean frames (false alarms), so the held registration is not corrected until it drops.](E71_e71_trace.png)
 *Registration offset error over time in two TEST scenes under the night failure (red band) with a 3 m jump in the middle of the failure (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the sensors return (fixed rule, not hand-picked). Below: the monitor p(fail); in the right scene it stays above 0.5 for several seconds on clean frames (false alarms), so the held registration is not corrected until it drops.*
 
 ## Findings

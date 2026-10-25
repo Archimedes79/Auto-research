@@ -10,7 +10,7 @@ Status: completed
 - Source selection (policy_eval.py): in the failure phase the lane geometry can come from three sources - the perceived graph (used while the monitor says p <= 0.5), the carried-forward graph (E68) and the map lanes under the held registration (E69; current map, 30 % removed, 30 % shifted, or a WRONG map = the map of a random sample of another scene shown in this frame). Rule A takes the map lanes if the carried-forward graph (source frame at most 3 s old) agrees with them, otherwise the carried-forward graph; rule B takes them while a MAP-VALIDITY signal is high - the agreement between the perceived graph of the last ten healthy frames and the registered map lanes - otherwise the carried-forward graph. The thresholds are the 5 % quantiles of the signals on the clean frames of the current map (no labels).
 - Outdated map (applied to the lanes before the pose error; the registrations are those computed with the current map): 30 % of the lanes removed, or 30 % of the lanes shifted sideways by 1.5 m (re-painted). Metric: point F1 @1 m against the ground-truth lane graph of the frame, pooled over the failure-phase frames, for the whole +-48 m BEV and for the part in front of the vehicle (y > 0), by the time since the failure began; the sensitivity to the tolerance is shown with 1.5 m.
 
-![architecture](architecture.png)
+![architecture](E69_architecture.png)
 
 ## Numbers
 
@@ -92,13 +92,13 @@ Status: completed
 
 ## Result images
 
-![Point F1 @1 m of the lane graph in the failure phase: perceived graph, carried-forward graph (E68) and the map lanes placed by the registration of E67 (whole BEV left, in front of the vehicle right). The 'true registration' bar is 1 by construction (the ground truth is the map).](e69_bars.png)
+![Point F1 @1 m of the lane graph in the failure phase: perceived graph, carried-forward graph (E68) and the map lanes placed by the registration of E67 (whole BEV left, in front of the vehicle right). The 'true registration' bar is 1 by construction (the ground truth is the map).](E69_e69_bars.png)
 *Point F1 @1 m of the lane graph in the failure phase: perceived graph, carried-forward graph (E68) and the map lanes placed by the registration of E67 (whole BEV left, in front of the vehicle right). The 'true registration' bar is 1 by construction (the ground truth is the map).*
 
-![Point F1 @1 m against the seconds since the failure began: the map lanes under the held registration are better than the carried-forward graph at every moment (0.89 against 0.78 in the first second) and age only slowly (their level is set by the registration offset of about 1 m against the 1 m tolerance), while the carried-forward graph decays, faster in front of the vehicle.](e69_time.png)
+![Point F1 @1 m against the seconds since the failure began: the map lanes under the held registration are better than the carried-forward graph at every moment (0.89 against 0.78 in the first second) and age only slowly (their level is set by the registration offset of about 1 m against the 1 m tolerance), while the carried-forward graph decays, faster in front of the vehicle.](E69_e69_time.png)
 *Point F1 @1 m against the seconds since the failure began: the map lanes under the held registration are better than the carried-forward graph at every moment (0.89 against 0.78 in the first second) and age only slowly (their level is set by the registration offset of about 1 m against the 1 m tolerance), while the carried-forward graph decays, faster in front of the vehicle.*
 
-![Night, a moving vehicle, 1.5 s / 5 s / 9 s after the failure began: ground truth (green), the map lanes as given (grey dotted, biased), the same lanes placed by the held registration (blue) and the graph carried forward from the last good frame (orange).](e69_bev.png)
+![Night, a moving vehicle, 1.5 s / 5 s / 9 s after the failure began: ground truth (green), the map lanes as given (grey dotted, biased), the same lanes placed by the held registration (blue) and the graph carried forward from the last good frame (orange).](E69_e69_bev.png)
 *Night, a moving vehicle, 1.5 s / 5 s / 9 s after the failure began: ground truth (green), the map lanes as given (grey dotted, biased), the same lanes placed by the held registration (blue) and the graph carried forward from the last good frame (orange).*
 
 ## Findings

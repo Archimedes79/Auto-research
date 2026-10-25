@@ -19,6 +19,7 @@ run "builder spec tests (18)"               test_p16_spec.py
 run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
 run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
 run "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest
+run "agent copies in .claude/agents in step"   $REPO/autoresearch/tools/install_agents.py --check
 run "images + video tools"                  viz/selftest.py
 run "champion fast path == reference graphs" p16_fast_check.py --n 10
 run "registration K188 (synthetic shifts, gradient)" p18_regis.py

@@ -11,7 +11,7 @@
 - experiment_execution/DECISIONS.md: the only channel for Mirko's decisions (champion promotion with its one TEST check, changes of PROBLEM.md, changes of the tools or gates, permissions); write an entry and wait for the recorded answer, never act on it before
 - experiment_execution/PLAN.md: the experiment tree of the loop with a status per node
 - experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next | reconcile`): what happens next; a disrupted loop resumes from it
-- experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit; the journal of a loop goes into ledger notes, not into a new state file
+- experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit, and at its head the loop table of `../autoresearch/tools/metrics.py` (runs, GPU hours, verdicts, prediction hits, TEST uses); the journal of a loop goes into ledger notes, not into a new state file; for a wake-up `ledger.py tail --loop <NN>` instead of the whole file
 - when a loop starts: the loop prompt (from `../autoresearch/prompts/loop.md`: STOP_AT, TEST / mail / shutdown permissions; read each time, do not re-plan)
 - for reference only: README.md (folder map), evaluation/PROTOCOL.md (splits, metrics, timing), experiment_execution/closed_questions.md, literature/OVERVIEW.md before literature work (edit literature/papers.csv, then `wsl python3 tools/literature/catalogue.py all`); old state files are in experiment_execution/history/
 - what to read in full: single-file records (ledger, decisions, closed questions, plan) are complete files - search them, do not split or roll them; experiment folders: the last two loops in full, older loops through their loop / weekly summaries and PROBLEM.md's current best
@@ -70,6 +70,7 @@
 - before you believe a number: which split, rows, denominator? tuned or selected on this set? harness self-tested and a stored number reproduced? null baseline? is the oracle really a bound? matched reference? seeds and noise band? interval excludes 0 and exceeds the band? metric gameable? how many comparisons were made? traceable to a run record? reviewed?
 
 ## Permissions and safety
+- protected files (project.json "protected": PROBLEM.md, project.json, the TEST log, evaluation/golden.json, the champion / control entries of models/registry.json, ../autoresearch/tools/, ../autoresearch/METHOD.md, ../.claude/settings.json): the gate hook `../autoresearch/tools/guard_hook.py` refuses Write / Edit unless a grant names a decided D<n> (`guard_hook.py grant <path> --decision D<n> --hours 8 --note "..."`; `grants` lists them); a refusal means: write the question into DECISIONS.md, never go around the hook through the shell
 - no downloads / installs without asking; never kill another chat's jobs (ListAgents)
 - mail and shutdown only if the loop prompt says so (mail: mirko.meuter@aptiv.com via web.de in Chrome, confirm in Sent); check no other chat runs before a shutdown
 - rollback hazard: a conversation rollback deletes files its session created with Write / Edit (it destroyed the loop-17 code); cp new code and results when they matter, update HANDOVER.md
@@ -78,6 +79,7 @@
 - GPU: at most 3 jobs, more than 2 extraction streams with workers cause OOM; WSL needs a background sleep 36000 to survive the night
 - pkill -f inside wsl bash -c kills its own shell (script file or [p]attern); Start-Process splits quoted args (wrapper .sh); Git Bash rewrites /mnt/... (use PowerShell); no python in Git Bash (use wsl); PowerShell 5.1 has no &&
 - heredocs with non-ASCII or \n corrupt files (use Write / Edit); never name a script like a stdlib module; orphan tail -F locks directories
+- never edit a shell script while a job runs it (bash reads a script by offset, so an edit mid-run breaks that job; it broke a golden check through `_py14.sh` on 2026-10-25): check `ps` first, change shared wrappers (`_py14.sh`, `run_all_tests.sh`, launchers) only when nothing runs
 - model.pt saved every N iterations is not a completion sign; a subset-of-perturbations run can overwrite eval.json
 - training can derail (BN running_var): lr <= 6e-4, clipping, roll-back guard (trainer.fit); add the builder's time recursion only after the seed heads have learned
 - reports: weekly reports and decks are built by reports/build/ (build_week*_report.py, print_weekly.ps1, build_*_pptx.ps1); a PDF open in a viewer cannot be overwritten

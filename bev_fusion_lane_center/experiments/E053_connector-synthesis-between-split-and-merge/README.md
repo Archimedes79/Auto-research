@@ -9,7 +9,7 @@ Status: completed
 - For every split key point S that lies on a piece (within 1.5 m) and has no branch yet, candidate merge key points M are taken from the key points that lie on a piece of the graph, 4-40 m ahead of S inside the heading cone of the feeder (cos >= 0.17), with compatible headings at S and M (cos >= -0.3) and not yet connected through the graph (no path of at most 1.6 |SM| + 6 m). The connector is the cubic Bezier curve P0 = S, P1 = S + |SM|/3 h_S, P2 = M - |SM|/3 h_M, P3 = M (h = heading of the feeder at S and of the receiving piece at M); it is accepted if the mean dense heat along the curve is >= tau_h; at most the two best candidates per S are kept.
 - An accepted connector cuts the feeder at S and the receiving piece at M and is inserted as a new piece with two edges (feeder-part -> connector -> receiving part), sampled every 1 m. The evaluation is unchanged: split / merge locations within 3 m and 6 m of the ground truth, 1 m point F1, route score; the path column is the LaneGAP-style path F1 of E46.
 
-![architecture](architecture.png)
+![architecture](E53_architecture.png)
 
 ## Numbers
 
@@ -46,10 +46,10 @@ Status: completed
 
 ## Result images
 
-![Effect of the heat threshold of the connector acceptance (VAL). Dotted: default graph without connectors.](e53_sweep.png)
+![Effect of the heat threshold of the connector acceptance (VAL). Dotted: default graph without connectors.](E53_e53_sweep.png)
 *Effect of the heat threshold of the connector acceptance (VAL). Dotted: default graph without connectors.*
 
-![VAL examples (tau_h 0.5): two samples with the largest gain in correct split / merge nodes (rows 1-2) and the two with the largest increase of false nodes (rows 3-4); 'hits' = nodes within 6 m of a ground-truth node.](e53_examples.png)
+![VAL examples (tau_h 0.5): two samples with the largest gain in correct split / merge nodes (rows 1-2) and the two with the largest increase of false nodes (rows 3-4); 'hits' = nodes within 6 m of a ground-truth node.](E53_e53_examples.png)
 *VAL examples (tau_h 0.5): two samples with the largest gain in correct split / merge nodes (rows 1-2) and the two with the largest increase of false nodes (rows 3-4); 'hits' = nodes within 6 m of a ground-truth node.*
 
 ## Findings

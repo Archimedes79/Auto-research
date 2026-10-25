@@ -8,7 +8,7 @@ Status: completed
 - Same dense map (E27 GaussianCaR head, VAL) and tracer parameters as E31; only the construction step is varied: 0.5, 1, 2, 4 m per point (tracer 'step' parameter; the on-line check, fan search and re-centring all work at that step).
 - Metrics: dense point F1 at 0.5 / 1 m, precision / recall, 1:1 F1, and the number of support points per sample of the resulting polylines (before resampling).
 
-![architecture](architecture.png)
+![architecture](E33_architecture.png)
 
 ## Numbers
 
@@ -23,7 +23,7 @@ Status: completed
 
 ## Result images
 
-![Accuracy vs step size.](e33_spacing.png)
+![Accuracy vs step size.](E33_e33_spacing.png)
 *Accuracy vs step size.*
 
 ## Findings

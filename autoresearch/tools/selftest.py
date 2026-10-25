@@ -224,6 +224,12 @@ try:
     assert ("a", "planned", "done") in changed and ("b", "planned", "failed") in changed, changed
     import clean_temp
     clean_temp.selftest()
+    import guard_hook  # P4: protected files, grants, json entries, Windows spellings
+    guard_hook.selftest()
+    import metrics  # P3: loop table from ledger, decision files and TEST log
+    metrics.selftest()
+    strict = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc.md", f"{T}/src.json", "--strict"], capture_output=True, text=True)
+    assert strict.returncode == 1, "check_numbers --strict must fail on a number missing from the sources"
     print("autoresearch tools selftest passed")
 finally:
     shutil.rmtree(T, ignore_errors=True)

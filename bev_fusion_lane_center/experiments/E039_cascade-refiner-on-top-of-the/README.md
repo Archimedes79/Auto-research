@@ -12,7 +12,7 @@ Status: completed
 - Ablations (one change at a time, same data and steps): number of blocks (1 vs 3), false-alarm weight (lambda_FP 1 vs 3), input regularisation (channel dropout 0.2 + Gaussian noise 0.3 on the foundation features). Not run for lack of GPU time: 2 / 4 blocks, lambda_FP 6, no jitter, 2 m point spacing (the point-spacing question is covered by E33 for the tracer).
 - Comparison systems: the grid graph of E31 (strict tracer + assembler, now with the E37 head), the unrefined relaxed proposals with the same linking, the sparse-only extractor of E32 (no grid), and the oracle ceiling of the rule-based assembler (E38).
 
-![architecture](architecture.png)
+![architecture](E39_architecture.png)
 
 ## Numbers
 
@@ -61,19 +61,19 @@ Status: completed
 
 ## Result images
 
-![Ablations of the refiner (same proposals, same training data).](e39_ablation.png)
+![Ablations of the refiner (same proposals, same training data).](E39_e39_ablation.png)
 *Ablations of the refiner (same proposals, same training data).*
 
-![Operating point of the refiner: the existence threshold plays the role of the dense head's threshold.](e39_tau.png)
+![Operating point of the refiner: the existence threshold plays the role of the dense head's threshold.](E39_e39_tau.png)
 *Operating point of the refiner: the existence threshold plays the role of the dense head's threshold.*
 
-![Block-by-block movement of the proposal points on three VAL samples (the same input to all blocks is the proposal set; later blocks re-sample the maps at the new positions).](e39_cascade.png)
+![Block-by-block movement of the proposal points on three VAL samples (the same input to all blocks is the proposal set; later blocks re-sample the maps at the new positions).](E39_e39_cascade.png)
 *Block-by-block movement of the proposal points on three VAL samples (the same input to all blocks is the proposal set; later blocks re-sample the maps at the new positions).*
 
-![VAL: grid graph vs grid + refiner vs ground truth.](e39_system_val.png)
+![VAL: grid graph vs grid + refiner vs ground truth.](E39_e39_system_val.png)
 *VAL: grid graph vs grid + refiner vs ground truth.*
 
-![TEST (untouched by all decisions): grid graph vs grid + refiner vs ground truth.](e39_system_test.png)
+![TEST (untouched by all decisions): grid graph vs grid + refiner vs ground truth.](E39_e39_system_test.png)
 *TEST (untouched by all decisions): grid graph vs grid + refiner vs ground truth.*
 
 ## Findings

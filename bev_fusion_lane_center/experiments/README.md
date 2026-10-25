@@ -3,6 +3,7 @@
 191 experiment folders (catalogue ids E15 - E230). Each folder: `README.md` (what, result, links), `results/` (small json / csv / log files), `figures/` (images), `code/` (experiment-specific scripts of finished experiments).
 Tags: **E** E2E-usable; **P** with a classical step; **C** classical / reference; **D** dropped.
 Folder scheme: `E<first id, three digits><letter>_<slug>`, one folder per catalogue row; rows that cover several ids (e.g. E94b / E96 / E98) carry all of them in the README table and sit under the first. Raw arrays and checkpoints are NOT here (see `../runs`, `../models`).
+Provenance: runs from E234 on (loop 19) have a git commit and a tag `lcr/<run id>` (recorded in the ledger and the run record); the code of older experiments is what their `code/` folder and the history files hold, it is not tagged. Images keep the names the migration of 2026-10-24 gave them (`E39_architecture.png`); the links were repaired on 2026-10-25 and `check_structure.py` covers this folder since.
 
 | folder | theme | tag | result | files |
 |---|---|---|---|---|

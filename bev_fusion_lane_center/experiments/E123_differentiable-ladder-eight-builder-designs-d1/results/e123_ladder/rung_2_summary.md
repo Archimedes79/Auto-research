@@ -13,7 +13,7 @@
 
 Cut: removed ; ranking D7 0.724; noise band 0.010; rules none.
 
-![scores](rung_2_scores.png) ![frontier](rung_2_frontier.png) ![effects](rung_2_effects.png)
+![scores](../../figures/e123_ladder__rung_2_scores.png) ![frontier](../../figures/e123_ladder__rung_2_frontier.png) ![effects](../../figures/e123_ladder__rung_2_effects.png)
 
 
 ## Why designs lost and what the factors did

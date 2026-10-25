@@ -8,7 +8,7 @@ Status: completed
 - (a) Dense head (pixel-based): the reference recipe of E30 / E49 / E50 / E52 (39 frozen channels = decoder PCA 32 + 7 map logits, 4,207 training rows, 3,000 steps, the stabilised recipe) repeated with two further seeds (22, 23; the reference is seed 21). The seed changes the initialisation and the sample order only; data, features and the evaluation are identical, the threshold is chosen on VAL for every run.
 - (b) Key-point head (pixel-based node heat maps) of E44 (5,000 steps, all 8,414 rows) repeated with seed 1 (E44 = seed 0). The default node insertion (conservative cut + prune, vector-level) is applied to the same graphs of the previous system with the key-point threshold fixed at 0.5 (no re-tuning) - so the second table shows how much of the E44 result is seed noise.
 
-![architecture](architecture.png)
+![architecture](E55_architecture.png)
 
 ## Numbers
 
@@ -50,7 +50,7 @@ Status: completed
 
 ## Result images
 
-![Pixel F1 @1 m of the dense head on VAL and TEST: three seeds of the reference recipe (red) and the single-seed foundation variants.](e55_seeds.png)
+![Pixel F1 @1 m of the dense head on VAL and TEST: three seeds of the reference recipe (red) and the single-seed foundation variants.](E55_e55_seeds.png)
 *Pixel F1 @1 m of the dense head on VAL and TEST: three seeds of the reference recipe (red) and the single-seed foundation variants.*
 
 ## Findings

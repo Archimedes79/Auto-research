@@ -9,7 +9,7 @@ Status: completed
 - Scenario: every TEST scene gets THREE failure bursts at 10-25 %, 40-55 % and 70-85 % of its length (about 3 s each in a 20 s scene; the perturbed graphs of E57 - night, three forward cameras off, blur, front camera off - during the bursts, clean graphs in between), 1,323 failure frames in all four failure types. Two event sequences: no jump, and a 3 m jump of the map offset in a random direction at 50 % of the scene, i.e. in the last third of the second burst (the sensors are blind; in a 40-frame scene burst 2 covers frames 16-21 and the jump is at frame 20). The bursts are at fixed positions, not random. The blur condition perturbs only every second TEST sample (20 frames per scene, 1 s apart), so its bursts are three frames = 3 s long as well.
 - Methods and metrics as in E71: per-frame registration, tracked registration, tracked + monitor-gated hold, hold + restart, hold + restart + verify (the recommended rule), a 'strict verify' variant (the held registration is replaced only if the wide search scores better than it), a restart on a low score WITHOUT the monitor gate and the true registration (floor). Anchored lateral error of the registered map route (E62) and registration offset error; 'after a burst' = time since the end of the most recent burst. Lateral errors exist only for frames with 3 s of future motion, so the last 3 s of each scene (the return after burst 3) are not evaluated.
 
-![architecture](architecture.png)
+![architecture](E72_architecture.png)
 
 ## Numbers
 
@@ -114,10 +114,10 @@ Status: completed
 
 ## Result images
 
-![Lateral error of the registered map route before the first burst, during the three sensor-failure bursts and in the 0-1.5 s / 1.5-3 s after a burst (mean of night, three forward cameras off, blur and front camera off), without a jump and with a 3 m jump in the last third of the second burst.](e72_lines.png)
+![Lateral error of the registered map route before the first burst, during the three sensor-failure bursts and in the 0-1.5 s / 1.5-3 s after a burst (mean of night, three forward cameras off, blur and front camera off), without a jump and with a 3 m jump in the last third of the second burst.](E72_e72_lines.png)
 *Lateral error of the registered map route before the first burst, during the three sensor-failure bursts and in the 0-1.5 s / 1.5-3 s after a burst (mean of night, three forward cameras off, blur and front camera off), without a jump and with a 3 m jump in the last third of the second burst.*
 
-![Registration offset error over time in two TEST scenes with three night-failure bursts (red bands) and a 3 m jump in the last third of the second burst (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the bursts (fixed rule, not hand-picked). Below: the monitor p(fail).](e72_trace.png)
+![Registration offset error over time in two TEST scenes with three night-failure bursts (red bands) and a 3 m jump in the last third of the second burst (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the bursts (fixed rule, not hand-picked). Below: the monitor p(fail).](E72_e72_trace.png)
 *Registration offset error over time in two TEST scenes with three night-failure bursts (red bands) and a 3 m jump in the last third of the second burst (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the bursts (fixed rule, not hand-picked). Below: the monitor p(fail).*
 
 ## Findings

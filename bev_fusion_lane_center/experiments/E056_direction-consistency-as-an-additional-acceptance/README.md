@@ -8,7 +8,7 @@ Status: completed
 - Rule on top of E53: for every candidate connector (cubic Bezier curve from a split key point to a merge key point that passes the heat threshold tau_h) the cosine between the curve tangent (in travel direction) and the predicted direction field is sampled bilinearly at the interior points of the curve (cells with a predicted vector shorter than 0.1 are ignored) and averaged along the curve; the connector is accepted only if this mean cosine is >= cos_c. No learned parameter. Convention check (check_dircos.py): along the ground-truth centerlines the predicted direction has a mean cosine of 0.908 with the true direction (95 % of the points above 0.5), so the sign and the axes are right.
 - Sweep on VAL: tau_h 0.1 and 0.5, cos_c 0.3 / 0.6 / 0.8 (the left-most point of the figure is E53 without the criterion). The middle setting (tau_h 0.5, cos_c 0.6) was fixed beforehand and then run on VAL and TEST; paired scene-bootstrap intervals of its differences are given in E54.
 
-![architecture](architecture.png)
+![architecture](E56_architecture.png)
 
 ## Numbers
 
@@ -33,7 +33,7 @@ Status: completed
 
 ## Result images
 
-![Direction-consistency criterion for the connectors (VAL): split F1, merge F1 and route F against the minimum cosine between the curve tangent and the predicted direction field; left-most point: criterion off (E53).](e56_sweep.png)
+![Direction-consistency criterion for the connectors (VAL): split F1, merge F1 and route F against the minimum cosine between the curve tangent and the predicted direction field; left-most point: criterion off (E53).](E56_e56_sweep.png)
 *Direction-consistency criterion for the connectors (VAL): split F1, merge F1 and route F against the minimum cosine between the curve tangent and the predicted direction field; left-most point: criterion off (E53).*
 
 ## Findings

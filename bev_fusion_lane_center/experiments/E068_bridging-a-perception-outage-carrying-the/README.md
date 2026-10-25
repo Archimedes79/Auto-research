@@ -10,7 +10,7 @@ Status: completed
 - Carried-forward graph: for a frame in the failure phase the SOURCE is the latest frame up to and including the current one that the monitor rates as good (p <= 0.5; oracle: graph F1 >= 0.6). Its extracted lane polylines are transformed into the current ego frame with the ego poses, p_cur = R_cur^T (t_src + R_src p_src - t_cur), and clipped to the +-48 m evaluation window; lanes that leave the window are cut. No topology is rebuilt (the metric is the point F1).
 - Policies: perceived graph; carried-forward graph (source chosen by the monitor / by the oracle label); SWITCH = perceived graph while p <= 0.5, else the carried-forward one (monitor / oracle); UNION = perceived plus carried-forward when p > 0.5. Metric: point F1 @1 m of the whole +-48 m BEV (pooled over the frames: summed hits and counts), and for the part in front of the vehicle (y > 0) only, which is the part a planner needs; precision and recall; the F1 as a function of the age of the source frame. Ego motion: the dataset's ego poses (exact), and a variant with an odometry error (yaw N(0, 1 deg x sqrt(age in s)), offset N(0, 1 % of the distance travelled since the source frame)).
 
-![architecture](architecture.png)
+![architecture](E68_architecture.png)
 
 ## Numbers
 
@@ -75,13 +75,13 @@ Status: completed
 
 ## Result images
 
-![Point F1 @1 m of the lane graph after the sensor failure began, per condition and policy (left: whole BEV, right: only the part in front of the vehicle).](e68_bars.png)
+![Point F1 @1 m of the lane graph after the sensor failure began, per condition and policy (left: whole BEV, right: only the part in front of the vehicle).](E68_e68_bars.png)
 *Point F1 @1 m of the lane graph after the sensor failure began, per condition and policy (left: whole BEV, right: only the part in front of the vehicle).*
 
-![F1 of the carried-forward graph as a function of the age of its source frame (frames flagged by the monitor, all conditions pooled): the perceived graph of the same frames is the horizontal reference.](e68_age.png)
+![F1 of the carried-forward graph as a function of the age of its source frame (frames flagged by the monitor, all conditions pooled): the perceived graph of the same frames is the horizontal reference.](E68_e68_age.png)
 *F1 of the carried-forward graph as a function of the age of its source frame (frames flagged by the monitor, all conditions pooled): the perceived graph of the same frames is the horizontal reference.*
 
-![Night, one scene, 1.5 s / 5 s / 9 s after the failure began (x right, y forward, ego at the origin): ground truth (green), the nearly empty perceived graph (black) and the graph carried forward from the last good frame (orange). The carried-forward graph keeps the lanes behind and beside the vehicle; the lanes ahead of it end where the old frame ended.](e68_bev.png)
+![Night, one scene, 1.5 s / 5 s / 9 s after the failure began (x right, y forward, ego at the origin): ground truth (green), the nearly empty perceived graph (black) and the graph carried forward from the last good frame (orange). The carried-forward graph keeps the lanes behind and beside the vehicle; the lanes ahead of it end where the old frame ended.](E68_e68_bev.png)
 *Night, one scene, 1.5 s / 5 s / 9 s after the failure began (x right, y forward, ego at the origin): ground truth (green), the nearly empty perceived graph (black) and the graph carried forward from the last good frame (orange). The carried-forward graph keeps the lanes behind and beside the vehicle; the lanes ahead of it end where the old frame ended.*
 
 ## Findings

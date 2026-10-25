@@ -19,7 +19,8 @@ The decided entries are recorded in `bev_fusion_lane_center/experiment_execution
 - **Git holds code AND all text records** (no binaries, no data). Single-file records stay complete; agents read the experiment folders of the last two loops in full, older loops through summaries.
 - **D8 (a):** the autonomy core comes first, in the order M0 -> P5 -> P1 -> P2 -> P4 -> P3 -> P6-P8; the package facades M3-M5 follow after loop 19 (work of the loop-18 lead chat).
 - **Simplification (2026-10-25):** templates 14 -> 5, agents 13 -> 7, one research-steps prompt, and the rule "a new template or agent only when the same artifact was produced twice by hand" (`METHOD.md`, "Keeping the system small"); P6 is done with it.
-- **Data:** D1 radar parts 4-6 downloaded; D7 (b) TRAIN2 + CONFIRM + an unseen-location test (feature extraction running, `plans/data_extension_b456.md`).
+- **Status of D8 (2026-10-25, 16:15):** done M0 (golden numbers incl. the uncached champion on VAL250), P5, P1, P6; P4 (gate hook `tools/guard_hook.py`, live, grants under decided entries), P3 (`tools/metrics.py`, loop table at the head of `LEDGER.md`; loop 18 is the baseline), P7 (`check_structure.py` covers `experiments/`, 52 image links repaired, 0 problems) and the small items of section 5 (`install_agents.py --check`, `ledger.py tail`, `check_numbers.py --strict`, `_py14.sh` refuses ambiguous names) by the data chat. Open: P2 tick and P8 evaluator contract (loop-18 lead), P9 (with the b456 steps 5-7), P10 (after P2), M2 (needs the person's OK).
+- **Data:** D1 radar parts 4-6 downloaded; D7 (b) TRAIN2 + CONFIRM + an unseen-location test (features extracted, post-check PASS; steps 5-7 open, `plans/data_extension_b456.md`).
 - **Open** (see `DECISIONS.md`): D3 folder rename, D4 fast deployment variant, D5 purge, D6 start of M0 + M1, D9 launcher git identity (covered by P5).
 
 ## Verdict

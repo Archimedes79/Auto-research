@@ -28,7 +28,7 @@
 
 Cut: removed D1, D2, D3, D4; ranking D7 0.720 > D6 0.707 > D8 0.707 > D5 0.697 > D2 0.703 > D3 0.702 > D4 0.698 > D1 0.675; noise band 0.010; rules none.
 
-![scores](rung_0_scores.png) ![frontier](rung_0_frontier.png) ![effects](rung_0_effects.png)
+![scores](../../figures/e123_ladder__rung_0_scores.png) ![frontier](../../figures/e123_ladder__rung_0_frontier.png) ![effects](../../figures/e123_ladder__rung_0_effects.png)
 
 
 ## Why the designs lost

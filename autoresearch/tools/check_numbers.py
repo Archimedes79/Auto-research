@@ -1,11 +1,12 @@
 """First-pass numbers check for a document: which numbers in the text do not appear in the source files?
 
-    python check_numbers.py <document.md|.html|.txt> <source1> [<source2> ...] [--min-digits 2] [--show 40]
+    python check_numbers.py <document.md|.html|.txt> <source1> [<source2> ...] [--show 40] [--strict]
 
 Sources are the files the numbers should come from (metrics.json, digests, review files, LEDGER.csv).
 A decimal number of the document (0.746, 13.5, 31 ms is ignored: only numbers with a decimal point) counts as supported when a source contains the same
 number, or a number that rounds to it (0.7461 supports 0.746 and 0.75).  Everything else is listed with its line, for a human or the fresh reviewer to look at.
-It cannot tell a right number from a wrong one that happens to exist elsewhere in the sources; it only finds numbers that exist nowhere. Advisory, exit code 0.
+It cannot tell a right number from a wrong one that happens to exist elsewhere in the sources; it only finds numbers that exist nowhere. Advisory, exit code 0;
+with --strict exit code 1 when a number is not found (a gate for tables built from metric cards).
 """
 import argparse
 import html
@@ -24,6 +25,7 @@ def main():
     ap.add_argument("doc")
     ap.add_argument("sources", nargs="+")
     ap.add_argument("--show", type=int, default=40)
+    ap.add_argument("--strict", action="store_true")
     a = ap.parse_args()
     pool = set()
     for p in a.sources:
@@ -52,7 +54,7 @@ def main():
         print(f"  line {ln}: {tok}   | {ctx}")
     if bad > a.show:
         print(f"  ... {bad - a.show} more")
-    return 0
+    return 1 if a.strict and bad else 0
 
 
 if __name__ == "__main__":
