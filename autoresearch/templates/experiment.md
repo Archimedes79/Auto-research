@@ -7,11 +7,12 @@ One file per experiment, in the experiment folder; it grows from card (P2) to de
 |---|---|
 | id / card / title | E<id> / H<..> / ... |
 | kind | variant (configuration only) / block (new code) |
+| deterministic | true when the arms share one checkpoint (e.g. an assembly setting): no training seed, the paired scene-bootstrap interval decides |
 | metric, direction, band | headline metric (e.g. Q), higher / lower, noise band of that metric |
 | prediction | value, against arm <letter> |
 | arms | <letter>: recipe or command, base, settings, seeds |
 | control | <arm letter> |
-| rule | clauses: metric, vs, min_effect or max_loss, band, subset, quantifier, split |
+| rule | clauses: metric, vs (optional), min_effect or max_loss, band (optional), subsets (optional), at_least (optional), note (optional) |
 | budget_gpu_h, kill | ..., ... |
 | evaluate | split, subset, compare |
 
