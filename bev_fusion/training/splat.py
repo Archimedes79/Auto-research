@@ -57,6 +57,23 @@ def splat_positions(p, dt, v, omega, v_obj=None, delta=None):
     return out if delta is None else out + delta
 
 
+def chain_positions(p, steps, v_obj=None, delta=None):
+    """Chain the COORDINATES over several frames (Mirko, 2026-10-25; temp/checks showed that chaining resampled MAPS
+    smears and lags): p (B, N, 2) positions in the source frame, steps = [(dt_i, v_i, omega_i), ...] from the source
+    frame to the target, oldest first (each value a scalar or (B,)); v_obj (B, N, 2) object velocity in the source
+    axes, constant in the world, so its vector is rotated along by R(-omega_i dt_i) at every step; delta (B, N, 2) an
+    optional correction added once at the end. The positions are then splatted once (splat_window)."""
+    pos, vel = p, v_obj
+    for dt, v, omega in steps:
+        pos = splat_positions(pos, dt, v, omega, vel)
+        if vel is not None:
+            th = (torch.as_tensor(omega, dtype=p.dtype, device=p.device)
+                  * torch.as_tensor(dt, dtype=p.dtype, device=p.device)).reshape(-1, 1)
+            c, s = torch.cos(th), torch.sin(th)
+            vel = torch.stack([c * vel[..., 0] + s * vel[..., 1], -s * vel[..., 0] + c * vel[..., 1]], -1)
+    return pos if delta is None else pos + delta
+
+
 def ego_speed_yawrate(T_src, T_tgt, dt):
     """Ego speed v and yaw rate omega between two ego poses (4x4, ego -> world; batch (B, 4, 4) or single) over dt,
     consistent with splat_positions: omega = heading change / dt, v = forward displacement in the source frame / dt.
@@ -163,6 +180,33 @@ def splat_bev(bev, grid, dt, v, omega, head=None, importance=None, corr=None):
     return out, mass, v_hat
 
 
+def splat_window(frames, grid, head=None, corr=None, importance=None):
+    """Bring the last K original frames into the current time, each with ONE splat (no resampling chain).
+
+    frames: list of (bev (B, C, X, Y), steps) - a past frame with its own per-frame ego steps to the current time
+    (see chain_positions; [] for the current frame itself). Per frame: v_hat = head(bev) from its own features, the cell
+    centres chained by chain_positions, the correction corr(...) evaluated with the total dt and the dt-weighted mean
+    v, omega of its steps, one splat. importance: callable bev -> (B, X, Y) or None.
+    Returns out (B, K, C, X, Y) and mass (B, K, 1, X, Y) for the temporal fusion."""
+    outs, masses = [], []
+    for bev, steps in frames:
+        B, C, X, Y = bev.shape
+        p = grid_points(grid, bev.device, bev.dtype).unsqueeze(0).expand(B, -1, -1)
+        v_obj = head(bev).permute(0, 2, 3, 1).reshape(B, X * Y, 2) if head is not None else None
+        delta = None
+        if corr is not None and steps:
+            T = sum(float(s[0]) for s in steps)
+            v_m = sum(float(s[0]) * float(s[1]) for s in steps) / T
+            w_m = sum(float(s[0]) * float(s[2]) for s in steps) / T
+            delta = corr(bev.reshape(B, C, X * Y), p, T, v_m, w_m)
+        pos = chain_positions(p, steps, v_obj, delta)
+        imp = importance(bev).reshape(B, X * Y) if importance is not None else None
+        o, m = splat(bev.reshape(B, C, X * Y), pos, grid, imp)
+        outs.append(o)
+        masses.append(m)
+    return torch.stack(outs, 1), torch.stack(masses, 1)
+
+
 # ----------------------------------------------------------------------------------------------- self-test
 def _exact_ctrv(x, y, dt, v, w):
     th = w * dt
@@ -263,6 +307,35 @@ def _selftest():
     via_pose = (torch.linalg.inv(T1) @ torch.tensor([35.0, -6.0, 0.0, 1.0], dtype=dt64))[:2]
     via_splat = splat_positions(pw, dt, v_est, w_est)[0, 0]
     assert (via_splat - via_pose).norm() < 1e-3, "splat with v, omega from poses = pose transform"
+    # 11 coordinate chaining over varying steps (speed and yaw rate change every frame) against the composition of the
+    #    exact per-step motions; an object with a velocity constant in the world is followed exactly up to the
+    #    first-order translation error of each step
+    steps = [(1 / 12, 8.0 + i, 0.5 - 0.15 * i) for i in range(6)]
+    ex, ey, eh = 0.0, 0.0, 0.0                                   # exact ego pose in the source frame (= world)
+    for dt_i, v_i, w_i in steps:
+        th = w_i * dt_i
+        lx, ly = (v_i * dt_i, 0.0) if abs(w_i) < 1e-12 else (v_i / w_i * math.sin(th), v_i / w_i * (1 - math.cos(th)))
+        ex, ey = ex + math.cos(eh) * lx - math.sin(eh) * ly, ey + math.sin(eh) * lx + math.cos(eh) * ly
+        eh += th
+    T = sum(s[0] for s in steps)
+    p0 = torch.tensor([[[40.0, 5.0], [20.0, -8.0]]], dtype=dt64)
+    vo = torch.tensor([[[6.0, -1.0], [0.0, 0.0]]], dtype=dt64)
+    got = chain_positions(p0, steps, vo)
+    for j in range(2):
+        wx, wy = p0[0, j, 0].item() + vo[0, j, 0].item() * T, p0[0, j, 1].item() + vo[0, j, 1].item() * T
+        qx, qy = wx - ex, wy - ey
+        tx, ty = math.cos(eh) * qx + math.sin(eh) * qy, -math.sin(eh) * qx + math.cos(eh) * qy
+        assert math.hypot(got[0, j, 0] - tx, got[0, j, 1] - ty) < 0.01, f"chained coordinates {j}"
+
+    # 12 window: two frames of the same static scene, one 2 frames old, land on the same map as the current frame
+    st = [(0.1, 10.0, 0.0), (0.1, 10.0, 0.0)]                    # 2 m forward in total = 4 cells
+    old = torch.zeros(1, 1, grid.nx, grid.ny, dtype=dt64)
+    old[0, 0, 60, 30] = 1.0                                       # a static point at x = 30.25 m in the old frame
+    cur = torch.zeros_like(old)
+    cur[0, 0, 56, 30] = 1.0                                       # the same point now: 2 m closer
+    out_w, mass_w = splat_window([(old, st), (cur, [])], grid)
+    assert torch.allclose(out_w[0, 0, 0] * (mass_w[0, 0, 0] > 0), out_w[0, 1, 0] * (mass_w[0, 1, 0] > 0)), "window"
+
     # 10 correction head: zero at the start (no change), bounded by d_max, and it gets a gradient through the splat
     corr = CorrectionHead(cin=3, d_max=1.0).double()
     bev = torch.randn(1, 3, grid.nx, grid.ny, dtype=dt64)
