@@ -3,7 +3,7 @@
 Status: DRAFT for the discussion with Mirko; nothing is decided. Draft 2 (front camera, virtual upright camera, sigma points) is in `plan_draft2.md`; this draft replaces it after Mirko's comments of 2026-10-25:
 - the problem is the real world, nuScenes is only one dataset: the design takes the sensor set, the calibration and the timestamps as inputs, never as constants of one dataset
 - radar: a learned distribution per detection, f(x, y; detection, r(x, y; calibration), phi(x, y; calibration), time), not sigma points
-- camera: rays (cones) from pixel groups instead of a virtual upright camera
+- camera: frustums (rays of pixel groups) in the perspective space instead of a virtual upright camera
 - every block founded on papers and their code; the ground truth observable; a test for every step
 
 Paper ids are arXiv ids; "(lit)" = from a scout note in `literature/papers/` (all ids checked on their abstract pages, 2026-10-25). Code licences from `literature/code/front_bev_code_sources.md` (scout, read on the repository pages).
@@ -14,36 +14,38 @@ Paper ids are arXiv ids; "(lit)" = from a scout note in `literature/papers/` (al
 - nuScenes is the first training and validation set (front camera + five radars as the first rig; all six cameras are on disk once the download finishes). A second dataset or a changed rig is the test that the design does not depend on nuScenes.
 
 ## 1. One principle for every sensor
-Every measurement becomes a probability mass over world positions, written in the sensor's own polar coordinates around its calibrated pose, evaluated at the BEV cells it can reach, and added into one BEV grid.
+Every measurement becomes a probability mass over world positions, written in the sensor's own measurement space (where its uncertainty is simple), mapped by the sensor's model and calibration into vehicle coordinates, evaluated at the BEV cells it can reach, and added into one BEV grid. The measurement spaces differ (Mirko, 2026-10-25: a camera projection is not a polar system):
+- camera: a perspective (projective) space - image coordinates (u, v) plus depth z along the optical axis; the model is the projection (pinhole: x = K [R|t] X; fisheye: its own unprojection). A pixel group is a rectangle in the image, so its preimage is a rectangular frustum (pyramid) from the camera centre, not a circular cone, and its angular size changes across the image (smaller towards the edges for a pinhole).
+- radar: a polar space - range r, azimuth phi (elevation unknown for 2D radars), plus Doppler; the model is the polar-to-Cartesian map of the sensor pose.
 
-| | what the sensor knows well | what it does not know | what is learned |
-|---|---|---|---|
-| camera pixel group | the direction (a narrow cone) | the range along the cone | the distribution over range |
-| radar detection | the range (and Doppler) | the azimuth (wide), the height | the spread around the detection |
+| | measurement space | what the sensor knows well | what it does not know | what is learned |
+|---|---|---|---|---|
+| camera pixel group | perspective: (u, v) region x depth z | the image region (a narrow frustum) | the depth along it | the distribution over depth |
+| radar detection | polar: (r, phi) + Doppler | the range (and radial velocity) | the azimuth (wide), the height | the spread around the detection |
 
 Time is part of the position: each measurement is moved to the output time t_ref before it is evaluated (exact for static content, by Doppler for the radial motion of moving content, otherwise as a wider spread).
 
 ```
-cameras ──> backbone + FPN ──> pixel-group cones ──> learned range distribution ──> cone-footprint splat ──┐
+cameras ──> backbone + FPN ──> pixel-group frustums ──> learned depth distribution ──> frustum-slab splat ──┐
                                                                                                            ├──> fusion ──> temporal state ──> BEV trunk ──> heads
 radars ──> time alignment ──> point encoder ──> learned density f(cell; detection, calib, dt) ──> splat ───┘
 ```
 Block diagrams of draft 2 were shown in the chat; the drawing will be redrawn for this draft after the discussion.
 
-## 2. Camera: cones from pixel groups
+## 2. Camera: frustums from pixel groups (perspective space)
 
 ### 2.1 What it does, in plain words
 1. The backbone turns the image into a feature map; each feature cell sees a group of pixels (e.g. 8 x 8 or 16 x 16 pixels at the backbone stride).
-2. From the camera model and the calibration, each pixel group is a cone in vehicle coordinates: apex at the camera centre, opening = the angular size of the group. This works for any camera, any mounting (roll, pitch, yaw included), and for fisheye by swapping the ray model; nothing is warped, the image stays as it is.
-3. The network predicts, per pixel group, a distribution over range bins along the cone (plus a ground hypothesis, 2.3).
-4. At each range bin the cone's cross-section covers an area on the ground (narrow near, wide far); the feature times the bin's probability is spread over the BEV cells inside that area, weighted by overlap.
-5. Steps 2 and 4 are pure geometry: for a given calibration they are computed once into a sparse table (pixel group, range bin) -> (BEV cells, weights). At run time the lift is one sparse matrix product. When the calibration changes (another vehicle, an online re-calibration), the table is rebuilt (milliseconds).
+2. From the camera model and the calibration, each pixel group is a frustum in vehicle coordinates: the four rays through the corners of its image rectangle, apex at the camera centre. This works for any camera, any mounting (roll, pitch, yaw included), and for fisheye by swapping the unprojection; nothing is warped, the image stays as it is.
+3. The network predicts, per pixel group, a distribution over depth bins (depth z along the optical axis, the natural coordinate of a projection; plus a ground hypothesis, 2.3).
+4. A depth bin [z_k, z_k+1] cuts the frustum into a slab (narrow near, wide far); the feature times the bin's probability is spread over the BEV cells the slab covers, weighted by the covered share.
+5. Steps 2 and 4 are pure geometry: for a given calibration they are computed once into a sparse table (pixel group, depth bin) -> (BEV cells, weights). Because it is precomputed, the overlap can be exact (polygon clipping of the slab's ground footprint against the cells), no Gaussian approximation is needed. At run time the lift is one sparse matrix product. When the calibration changes (another vehicle, an online re-calibration), the table is rebuilt (milliseconds).
 
-### 2.2 Why cones and not rays
-A single ray through each pixel-group centre leaves gaps between rays at range (at 50 m two neighbouring stride-16 columns at 1600 px width are about 0.6 m apart, more than a cell) and hits cells unevenly; the cone covers the ground without gaps and splits mass by area, so far cells get the right share. It also gives the lateral uncertainty for free: the cone's width is the angular resolution of the feature map.
+### 2.2 Why frustums and not rays
+A single ray through each pixel-group centre leaves gaps between rays at range (at 50 m two neighbouring stride-16 columns at 1600 px width are about 0.6 m apart, more than a cell) and hits cells unevenly; the frustum covers the ground without gaps and splits mass by area, so far cells get the right share. It also gives the lateral uncertainty for free: the frustum's width is the angular resolution of the feature map.
 
 ### 2.3 Ground hypothesis
-For a cone that points below the horizon, the intersection of its axis with the road plane (z = 0 in vehicle coordinates) gives a range r_g; its spread follows from the cone's vertical opening and the pitch uncertainty (sigma_r ~ r_g^2 sigma_theta / h). A learned ground probability p_g mixes this sharp hypothesis with the learned range distribution: road surface and markings take the ground hypothesis, raised objects the learned bins. Dynamic pitch (braking, bumps) and slope changes enter only r_g and sigma_theta.
+For a frustum that points below the horizon, its lower and upper edge rays meet the road plane (z = 0 in vehicle coordinates) at d_near and d_far (capped when the upper edge looks above the horizon); this interval, widened by the pitch uncertainty (sigma_d ~ d^2 sigma_theta / h), is a fixed distribution over the depth bins, precomputed per calibration. A learned ground probability p_g mixes this sharp hypothesis with the learned range distribution: road surface and markings take the ground hypothesis, raised objects the learned bins. Dynamic pitch (braking, bumps) and slope changes enter only r_g and sigma_theta.
 
 ### 2.4 Paper and code basis
 | piece | paper (what we take) | code (licence) |
@@ -52,18 +54,18 @@ For a cone that points below the horizon, the intersection of its axis with the 
 | categorical depth with depth supervision | CaDDN 2103.01100 (lit: LID bins, focal depth loss), BEVDepth 2206.10092 (lit: camera-aware depth gate, lidar depth loss) | OpenPCDet / CaDDN (Apache-2.0), BEVDepth (MIT) |
 | parameter-free point sampling (a control) | Simple-BEV 2206.07959 (lit) | aharley/simple_bev (MIT) |
 | precomputed indices / lift as one sparse matrix | BEVPoolV2 2211.17111 (lit), MatrixVT 2211.10593 (lit), Fast-BEV 2301.12511 (lit: table lift 0.006 ms) | BEVDet `bev_pool_v2` (Apache-2.0), MatrixVT (MIT); our own sparse matrix in plain PyTorch |
-| cone instead of ray, area-weighted footprint | Mip-NeRF 2103.13415 (lit): the pixel cone (radius = pixel width x 2/sqrt(12)) between two depths t0, t1 has a closed-form Gaussian (mean, covariance); its xy block is the BEV footprint of one (pixel group, range bin). Zip-NeRF 2304.06706 (lit): the mass of a Gaussian inside one cell by erf - the per-cell weight of the table. Mip-Splatting 2311.16493 (abstract): a cell-sized filter against aliasing of sub-cell splats | google/mipnerf (Apache-2.0, JAX, archived: formulas only); Zip-NeRF: no official code |
-| depth variance sets the footprint width; one splat interface for camera and radar | GaussianLSS 2504.01957 (lit), GaussianCaR 2602.08784 (lit: camera and radar Gaussians in one rasteriser, 0.5 m, 75.6 ms on an RTX 4090; its Gaussian size is depth std x 0.5 - we replace it by the cone covariance) | GaussianLSS (MIT), GaussianCaR (Apache-2.0; already cloned in WSL `~/work/gaussiancar`) |
-| novelty | the scout found no published BEV lift that uses a cone / pixel-footprint integral (three searches, 2026-10-25): the cone lift is our own combination of Mip-NeRF geometry with an LSS / CaDDN depth head | - |
+| footprint of a pixel region instead of a ray | exact: frustum-slab footprint by polygon clipping in the precomputed table (our own, plain geometry); Gaussian approximation as a cheaper variant or reference: Mip-NeRF 2103.13415 (lit): the pixel cone (radius = pixel width x 2/sqrt(12)) between two depths t0, t1 has a closed-form Gaussian (mean, covariance); its xy block is the BEV footprint of one (pixel group, range bin). Zip-NeRF 2304.06706 (lit): the mass of a Gaussian inside one cell by erf - the per-cell weight of the table. Mip-Splatting 2311.16493 (abstract): a cell-sized filter against aliasing of sub-cell splats | google/mipnerf (Apache-2.0, JAX, archived: formulas only); Zip-NeRF: no official code |
+| depth variance sets the footprint width; one splat interface for camera and radar | GaussianLSS 2504.01957 (lit), GaussianCaR 2602.08784 (lit: camera and radar Gaussians in one rasteriser, 0.5 m, 75.6 ms on an RTX 4090; its Gaussian size is depth std x 0.5 - we replace it by the frustum-slab footprint) | GaussianLSS (MIT), GaussianCaR (Apache-2.0; already cloned in WSL `~/work/gaussiancar`) |
+| novelty | the scout found no published BEV lift that uses a pixel-region (frustum / cone) footprint integral (three searches, 2026-10-25): the frustum lift is our own combination of Mip-NeRF geometry with an LSS / CaDDN depth head | - |
 | ground prior | OFT 1811.08188 (lit), Cam2BEV 2005.04078 (lit: IPM breaks on raised objects - hence the mixture) | Gen-LaneNet homography utils (Apache-2.0) for cross-checks |
 
 ### 2.5 Tests (what it must do -> how we prove it)
 | requirement | test |
 |---|---|
-| the table is geometrically right | synthetic: a point at a known (x, y, z) projected into the image; its pixel group's cone at the true range bin must cover the cell of (x, y); for every calibration of the dataset and for random synthetic rigs |
+| the table is geometrically right | synthetic: a point at a known (x, y, z) projected into the image; its pixel group's frustum at the true depth bin must cover the cell of (x, y); for every calibration of the dataset and for random synthetic rigs |
 | mass is conserved | the weights of each (group, bin) inside the grid sum to its covered area fraction; a uniform image gives the analytic coverage map |
 | rig independence | move the camera 1 m forward in the calibration and shift the scene accordingly: the lifted BEV moves by 2 cells and is otherwise identical; rotate the camera (roll / pitch) with a synthetic image rendered for that pose: same BEV |
-| the lift can carry the truth (oracle) | feed one-hot depth from a known depth (lidar if downloaded, else rendered synthetic scenes) and the GT semantics of the image: the lifted BEV must reproduce the GT BEV layers up to the cone resolution; this gives the upper bound of the lift |
+| the lift can carry the truth (oracle) | feed one-hot depth from a known depth (lidar if downloaded, else rendered synthetic scenes) and the GT semantics of the image: the lifted BEV must reproduce the GT BEV layers up to the frustum resolution; this gives the upper bound of the lift |
 | it is differentiable | torch.autograd.gradcheck on a small table; gradient reaches the depth head and the backbone |
 | it is fast | ms per frame, batch 1, idle GPU, against Fast-BEV's table lift as the reference |
 
@@ -107,7 +109,7 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 
 ## 5. Sensor timing
 - Every measurement has its own timestamp and ego pose (nuScenes: per sample_data; a real vehicle: per message). Output time t_ref = the newest camera image (or a fixed output clock).
-- Static: exact pose change between t_meas and t_ref. Moving: radial part by Doppler, the rest as uncertainty (3.1). Camera images from several cameras with different times: each camera's cones use its own pose at its own time.
+- Static: exact pose change between t_meas and t_ref. Moving: radial part by Doppler, the rest as uncertainty (3.1). Camera images from several cameras with different times: each camera's frustums use its own pose at its own time.
 - Basis: BEVDet4D 2203.17054 (lit: alignment matters, unaligned concat is worse than no history), RadarNet (lit).
 - Tests: the time-alignment tests of 3.3; a camera test with a synthetic static scene and a time offset; latency budget per block.
 
@@ -130,11 +132,11 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 1. For every camera frame (keyframes and, after the download, 12 Hz sweeps): the vehicle pose at the image time t_ref.
 2. Map layers from the map expansion, transformed into the vehicle frame at t_ref: polygons (drivable area, ped crossing, walkway, stop line) rasterised with fractional coverage per cell; lines (dividers) drawn 1 cell wide plus a truncated distance field; lane centre-lines from the discretised lane arcs.
 3. Objects: the annotated boxes, interpolated per instance to t_ref (position, yaw, size) between the 2 Hz keyframes; footprints rasterised; velocity per box. Interpolated labels are flagged (training only; evaluation on keyframes).
-4. Masks: coverage = cells reached by any camera cone (from the calibration, generic for any rig); occlusion = ray casting from each camera centre through the GT box footprints (cells behind a box are occluded); range bins.
+4. Masks: coverage = cells reached by any camera frustum (from the calibration, generic for any rig); occlusion = ray casting from each camera centre through the GT box footprints (cells behind a box are occluded); range bins.
 5. Stored per frame (compressed arrays) with an index of provenance (map version, interpolated or annotated, timestamps).
 
 ### 9.2 Observing it (a viewer tool, local files, not in git)
-- Per frame a three-panel picture: (1) the camera image with the GT projected into it (dividers and centre-lines as lines, areas translucent, boxes as 3D wireframes, radar detections as dots with Doppler arrows) - if the projected lines do not sit on the painted markings, the GT or the transforms are wrong; (2) the BEV raster with each layer in its colour, coverage and occlusion masks hatched, the camera cones and radar fields of view outlined, the ego vehicle drawn; (3) a text strip with the timestamps, dt of each sensor, the interpolation flag and the class cell counts.
+- Per frame a three-panel picture: (1) the camera image with the GT projected into it (dividers and centre-lines as lines, areas translucent, boxes as 3D wireframes, radar detections as dots with Doppler arrows) - if the projected lines do not sit on the painted markings, the GT or the transforms are wrong; (2) the BEV raster with each layer in its colour, coverage and occlusion masks hatched, the camera frustums and radar fields of view outlined, the ego vehicle drawn; (3) a text strip with the timestamps, dt of each sensor, the interpolation flag and the class cell counts.
 - Per scene a 12 Hz video of those pictures, and an interactive page (scene / frame slider, layer toggles) to browse a scene; key frames sent to you.
 
 ### 9.3 Checks of the GT itself
@@ -158,7 +160,7 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 | stage | content | control |
 |---|---|---|
 | S0 | GT generation + viewer + GT checks; geometry tables with their unit tests | - |
-| S1 | camera only: cones + learned range distribution (+ ground hypothesis), seg head | ray-point lift (LSS-like), uniform along the cone (Fast-BEV-like) |
+| S1 | camera only: frustums + learned depth distribution (+ ground hypothesis), seg head | ray-point lift (LSS-like), uniform along the frustum (Fast-BEV-like) |
 | S2 | radar only: learned density g, reconstruction test, aux heads | point / pillar (R0), fixed polar Gaussian (R1) |
 | S3 | fusion | S1, S2 |
 | S4 | temporal: ego warp, stationary memory, moving memory with flow | single frame; memory without flow |
