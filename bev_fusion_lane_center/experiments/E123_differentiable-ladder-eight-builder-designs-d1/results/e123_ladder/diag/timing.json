@@ -1,0 +1,121 @@
+{
+ "device": "NVIDIA GeForce RTX 3060",
+ "n": 48,
+ "builder": [
+  {
+   "M": 288,
+   "K0": 144,
+   "params_M": 1.209244,
+   "forward_bs1_ms_per_frame": {
+    "mean": 33.398290475209556,
+    "median": 32.36520290374756,
+    "p90": 35.2959156036377
+   },
+   "to_numpy_bs1_ms_per_frame": {
+    "mean": 5.287682016690572,
+    "median": 5.2231550216674805,
+    "p90": 5.7836294174194345
+   },
+   "prior_if_recomputed_bs1_ms_per_frame": {
+    "mean": 36.851972341537476,
+    "median": 33.07497501373291,
+    "p90": 42.57030487060548
+   },
+   "peak_gpu_MB_bs1": 493.7626953125,
+   "forward_bs8_ms_per_frame": {
+    "mean": 5.029136935869853,
+    "median": 5.0009191036224365,
+    "p90": 5.5961161851882935
+   },
+   "to_numpy_bs8_ms_per_frame": {
+    "mean": 4.627972841262817,
+    "median": 4.620447754859924,
+    "p90": 4.7520846128463745
+   },
+   "prior_if_recomputed_bs8_ms_per_frame": {
+    "mean": 4.702220360438029,
+    "median": 4.636526107788086,
+    "p90": 5.013987421989441
+   },
+   "peak_gpu_MB_bs8": 952.97607421875,
+   "assembly_cpu_ms_per_frame": {
+    "mean": 16.49688680966695,
+    "median": 13.298988342285156,
+    "p90": 33.065223693847656
+   }
+  }
+ ],
+ "route": {
+  "champion_vertex_tokens": {
+   "points_per_frame": 55.333333333333336,
+   "params_M": 0.694321,
+   "ms_per_frame": {
+    "mean": 6.170685092608134,
+    "median": 6.124615669250488,
+    "p90": 6.5361738204956055
+   }
+  },
+  "champion_8m": {
+   "points_per_frame": 79.14583333333333,
+   "params_M": 0.694321,
+   "ms_per_frame": {
+    "mean": 6.156265735626221,
+    "median": 6.119966506958008,
+    "p90": 6.486105918884277
+   }
+  },
+  "champion_4m": {
+   "points_per_frame": 130.41666666666666,
+   "params_M": 0.694321,
+   "ms_per_frame": {
+    "mean": 6.309956312179565,
+    "median": 6.222963333129883,
+    "p90": 6.765437126159668
+   }
+  },
+  "champion_2m": {
+   "points_per_frame": 229.16666666666666,
+   "params_M": 0.694321,
+   "ms_per_frame": {
+    "mean": 6.589735547701518,
+    "median": 6.038546562194824,
+    "p90": 8.834958076477058
+   }
+  },
+  "control_vertex_tokens": {
+   "points_per_frame": 113.375,
+   "params_M": 0.694321,
+   "ms_per_frame": {
+    "mean": 6.3393861055374146,
+    "median": 6.1751604080200195,
+    "p90": 6.797289848327637
+   }
+  },
+  "control_4m": {
+   "points_per_frame": 186.20833333333334,
+   "params_M": 0.694321,
+   "ms_per_frame": {
+    "mean": 6.234034895896912,
+    "median": 6.113171577453613,
+    "p90": 6.662511825561524
+   }
+  }
+ },
+ "consumer": {
+  "params_M": 0.093314,
+  "ms_per_frame": {
+   "mean": 3.1704260036349297,
+   "median": 2.9696226119995117,
+   "p90": 3.5881996154785156
+  }
+ },
+ "control_trace": {
+  "params_M": 1.67161,
+  "wavefront_total_bs1_ms_per_frame": 628.1413386265436,
+  "feature_read_bs1_ms_per_frame": 8.87430707613627,
+  "wavefront_compute_bs1_ms_per_frame": 619.2670315504074,
+  "wavefront_total_bs16_ms_per_frame": 158.20255875587463,
+  "feature_read_bs16_ms_per_frame": 6.973440448443095,
+  "wavefront_compute_bs16_ms_per_frame": 151.22911830743155
+ }
+}

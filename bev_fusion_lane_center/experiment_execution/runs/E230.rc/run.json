@@ -1,0 +1,24 @@
+{
+ "id": "E230.rc",
+ "hypothesis": "recall variant rc1 + fork pruning 0.4 on TEST",
+ "prediction": "Q above the control, lanes found above 0.74, J above 0.38",
+ "rule": "report; nothing is selected on TEST",
+ "split": "test",
+ "code_hash": "5f0a39d8ffa3",
+ "basis": "E219,E215",
+ "seed": "0",
+ "command": "bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_pipeline18b.sh test_clean test18 e123_D7_r3_rc1 288 144 0.4 rcp",
+ "cwd": "/mnt/c/ML-Experiment/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "started": "2026-10-25T02:05:24",
+ "status": "ok",
+ "exit": 0,
+ "duration_s": 587,
+ "attempts": 1,
+ "ended": "2026-10-25T02:15:12",
+ "last_lines": [
+  "=== attempt 1 2026-10-25T02:05:25: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_pipeline18b.sh test_clean test18 e123_D7_r3_rc1 288 144 0.4 rcp"
+ ]
+}

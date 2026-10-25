@@ -1,0 +1,2 @@
+e123_D7_r0_x02 tau 0.7 | F1o2o 0.775 | splits pred 8.4 gt 2.6 P 0.088 R 0.292 | merges pred 8.2 gt 2.9 | v100 12.1 chord 8.1 m | along 0.13 across 0.39 | ece 0.08
+  -> ('D', 'spurious forks: 8.4 predicted vs 2.6 true splits per frame', 'NMS radius up, n children down, coverage merge, best-per-GT duplicate label')

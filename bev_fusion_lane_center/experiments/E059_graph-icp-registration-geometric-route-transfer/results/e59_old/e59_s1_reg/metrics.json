@@ -1,0 +1,32 @@
+{
+ "args": {
+  "sets": "test",
+  "graphs": "e44_cons_p/graphs",
+  "sigma": 1.0,
+  "drop": 0.0,
+  "shift_frac": 0.0,
+  "protect": 1,
+  "reg": 1,
+  "oracle": 0,
+  "nomap": 0,
+  "out": "e59_s1_reg",
+  "workers": 8
+ },
+ "test": {
+  "n_samples": 809,
+  "assoc_acc_all": 0.9036387721015954,
+  "assoc_acc_assigned": 0.9048039749397946,
+  "assigned_frac": 0.9987122041121926,
+  "route_P": 0.9446370132259251,
+  "route_R": 0.9627962973927803,
+  "route_F1": 0.953630214645971,
+  "route_cov": 0.8833954222815006,
+  "route_prec": 0.9866578881121589,
+  "route_success": 0.7849196538936959,
+  "novel_P": 0.9552728436549848,
+  "novel_R": 0.41576124808469145,
+  "reg_pos_median": 0.5164155791349658,
+  "reg_pos_p90": 1.6168823669001087,
+  "reg_yaw_median": 0.24265636626256715
+ }
+}

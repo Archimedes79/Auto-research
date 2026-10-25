@@ -1,0 +1,24 @@
+built tok_e94_a_oof0: 75698 pieces so far (40 s)
+built tok_e94_a_oof1: 169026 pieces so far (100 s)
+built tok_e94_a_oof2: 247458 pieces so far (156 s)
+train pieces 247458 true share 0.8732997179031372
+epoch 10 loss 0.2143
+epoch 20 loss 0.1924
+epoch 30 loss 0.1714
+val_clean {'n_pieces': 18368, 'true_share': 0.8421167247386759, 'auroc': 0.8793137333583014, 'false_length_share': 0.0959476670662539}
+val_clean pieces 0.5 {'F1@1m': 0.889, 'P@1m': 0.891, 'R@1m': 0.887, 'route_f': 0.749, 'split6_F1': 0.366, 'merge6_F1': 0.477} pieces 16817
+val_clean pieces 0.6 {'F1@1m': 0.889, 'P@1m': 0.896, 'R@1m': 0.883, 'route_f': 0.75, 'split6_F1': 0.364, 'merge6_F1': 0.479} pieces 16309
+val_clean pieces 0.7 {'F1@1m': 0.889, 'P@1m': 0.902, 'R@1m': 0.876, 'route_f': 0.749, 'split6_F1': 0.363, 'merge6_F1': 0.483} pieces 15717
+val_clean junctions+pieces 0.5 {'F1@1m': 0.889, 'P@1m': 0.891, 'R@1m': 0.887, 'route_f': 0.738, 'split6_F1': 0.396, 'merge6_F1': 0.531} pieces 16817
+val_clean junctions+pieces 0.6 {'F1@1m': 0.889, 'P@1m': 0.896, 'R@1m': 0.883, 'route_f': 0.741, 'split6_F1': 0.39, 'merge6_F1': 0.528} pieces 16309
+val_clean junctions+pieces 0.7 {'F1@1m': 0.889, 'P@1m': 0.902, 'R@1m': 0.876, 'route_f': 0.74, 'split6_F1': 0.384, 'merge6_F1': 0.526} pieces 15717
+val_clean base {'F1@1m': 0.883, 'P@1m': 0.872, 'R@1m': 0.894, 'route_f': 0.744, 'split6_F1': 0.357, 'merge6_F1': 0.459}
+test_clean {'n_pieces': 24605, 'true_share': 0.77793131477342, 'auroc': 0.8562360875824572, 'false_length_share': 0.1411580890908087}
+test_clean pieces 0.5 {'F1@1m': 0.86, 'P@1m': 0.864, 'R@1m': 0.856, 'route_f': 0.682, 'split6_F1': 0.4, 'merge6_F1': 0.447} pieces 21443
+test_clean pieces 0.6 {'F1@1m': 0.86, 'P@1m': 0.872, 'R@1m': 0.849, 'route_f': 0.684, 'split6_F1': 0.402, 'merge6_F1': 0.446} pieces 20591
+test_clean pieces 0.7 {'F1@1m': 0.859, 'P@1m': 0.881, 'R@1m': 0.839, 'route_f': 0.683, 'split6_F1': 0.404, 'merge6_F1': 0.444} pieces 19536
+test_clean junctions+pieces 0.5 {'F1@1m': 0.86, 'P@1m': 0.864, 'R@1m': 0.856, 'route_f': 0.669, 'split6_F1': 0.438, 'merge6_F1': 0.505} pieces 21443
+test_clean junctions+pieces 0.6 {'F1@1m': 0.86, 'P@1m': 0.872, 'R@1m': 0.849, 'route_f': 0.671, 'split6_F1': 0.436, 'merge6_F1': 0.498} pieces 20591
+test_clean junctions+pieces 0.7 {'F1@1m': 0.859, 'P@1m': 0.881, 'R@1m': 0.839, 'route_f': 0.671, 'split6_F1': 0.433, 'merge6_F1': 0.488} pieces 19536
+test_clean base {'F1@1m': 0.851, 'P@1m': 0.828, 'R@1m': 0.874, 'route_f': 0.668, 'split6_F1': 0.385, 'merge6_F1': 0.428}
+DONE 610.1371371746063

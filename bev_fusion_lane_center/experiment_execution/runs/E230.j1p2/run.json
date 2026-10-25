@@ -1,0 +1,24 @@
+{
+ "id": "E230.j1p2",
+ "hypothesis": "single-frame j1 192 / 96 + fork pruning as the fast deployment setting (re-run of E230.j1p)",
+ "prediction": "S >= 0.74, J >= 0.35",
+ "rule": "report; nothing is selected on TEST",
+ "split": "test",
+ "code_hash": "5f0a39d8ffa3",
+ "basis": "E215",
+ "seed": "0",
+ "command": "bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_pipeline18b.sh test_clean test18 e123_D7_r3_j1 192 96 0.3 j1p",
+ "cwd": "/mnt/c/ML-Experiment/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "started": "2026-10-25T02:15:25",
+ "status": "ok",
+ "exit": 0,
+ "duration_s": 485,
+ "attempts": 1,
+ "ended": "2026-10-25T02:23:30",
+ "last_lines": [
+  "=== attempt 1 2026-10-25T02:15:25: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_pipeline18b.sh test_clean test18 e123_D7_r3_j1 192 96 0.3 j1p"
+ ]
+}

@@ -1,0 +1,73 @@
+== 23:51:55 {'name': 'e65d_route_ft', 'steps': 1500, 'bs': 8, 'lr': 0.0002, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e60_main', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,s2:2:0,d30:0:0.3,s1d30:1:0.3,wrong:0:0:w,none:0:0:n', 'eval_only': 0, 'pert': '', 'pert_train': 'dark,cam_front_off,fog', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+E65d: gestoerte Zeilen 759 von 7489 ; Massenanteil 0.55
+Schritt 200/1500 Verlust 4.5274 (max 20.4) (0.18 s/Schritt) geklippt 6
+Schritt 400/1500 Verlust 3.5424 (max 6.9) (0.16 s/Schritt) geklippt 8
+Schritt 600/1500 Verlust 3.4457 (max 7.5) (0.14 s/Schritt) geklippt 12
+Schritt 800/1500 Verlust 3.4703 (max 5.9) (0.14 s/Schritt) geklippt 13
+Schritt 1000/1500 Verlust 3.3640 (max 5.7) (0.13 s/Schritt) geklippt 17
+Schritt 1200/1500 Verlust 3.4010 (max 5.5) (0.13 s/Schritt) geklippt 18
+Schritt 1400/1500 Verlust 3.4035 (max 6.2) (0.13 s/Schritt) geklippt 23
+[test/clean] 809 Samples | Spur-F1@1 m tau .5/.6: 0.923/0.914 | Route tau .5: cov 0.914 prec 0.994 success 0.848 F1@1m 0.962
+[test/s1] 809 Samples | Spur-F1@1 m tau .5/.6: 0.869/0.864 | Route tau .5: cov 0.873 prec 0.965 success 0.742 F1@1m 0.926
+[test/s2] 809 Samples | Spur-F1@1 m tau .5/.6: 0.854/0.851 | Route tau .5: cov 0.804 prec 0.920 success 0.606 F1@1m 0.882
+[test/d30] 809 Samples | Spur-F1@1 m tau .5/.6: 0.906/0.896 | Route tau .5: cov 0.925 prec 0.969 success 0.831 F1@1m 0.951
+[test/s1d30] 809 Samples | Spur-F1@1 m tau .5/.6: 0.866/0.858 | Route tau .5: cov 0.887 prec 0.939 success 0.732 F1@1m 0.917
+[test/wrong] 809 Samples | Spur-F1@1 m tau .5/.6: 0.849/0.842 | Route tau .5: cov 0.672 prec 0.779 success 0.261 F1@1m 0.770
+[test/none] 809 Samples | Spur-F1@1 m tau .5/.6: 0.856/0.844 | Route tau .5: cov 0.650 prec 0.813 success 0.341 F1@1m 0.781
+FERTIG 23:57:47
+== 23:57:55 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'dark', 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 809 Samples | Spur-F1@1 m tau .5/.6: 0.924/0.392 | Route tau .5: cov 0.847 prec 0.994 success 0.729 F1@1m 0.935
+[test/s1] 809 Samples | Spur-F1@1 m tau .5/.6: 0.648/0.291 | Route tau .5: cov 0.715 prec 0.904 success 0.519 F1@1m 0.781
+[test/wrong] 809 Samples | Spur-F1@1 m tau .5/.6: 0.359/0.220 | Route tau .5: cov 0.499 prec 0.659 success 0.080 F1@1m 0.611
+[test/none] 809 Samples | Spur-F1@1 m tau .5/.6: 0.311/0.177 | Route tau .5: cov 0.291 prec 0.761 success 0.074 F1@1m 0.531
+FERTIG 23:59:31
+== 23:59:42 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'cam_front_off', 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 809 Samples | Spur-F1@1 m tau .5/.6: 0.910/0.841 | Route tau .5: cov 0.875 prec 0.986 success 0.775 F1@1m 0.939
+[test/s1] 809 Samples | Spur-F1@1 m tau .5/.6: 0.804/0.762 | Route tau .5: cov 0.782 prec 0.917 success 0.590 F1@1m 0.835
+[test/wrong] 809 Samples | Spur-F1@1 m tau .5/.6: 0.742/0.713 | Route tau .5: cov 0.577 prec 0.710 success 0.133 F1@1m 0.666
+[test/none] 809 Samples | Spur-F1@1 m tau .5/.6: 0.760/0.710 | Route tau .5: cov 0.483 prec 0.780 success 0.150 F1@1m 0.669
+FERTIG 00:01:37
+== 00:01:41 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'fog', 'save_pert': 0, 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 809 Samples | Spur-F1@1 m tau .5/.6: 0.913/0.880 | Route tau .5: cov 0.904 prec 0.994 success 0.822 F1@1m 0.954
+[test/s1] 809 Samples | Spur-F1@1 m tau .5/.6: 0.832/0.811 | Route tau .5: cov 0.859 prec 0.962 success 0.723 F1@1m 0.911
+[test/wrong] 809 Samples | Spur-F1@1 m tau .5/.6: 0.797/0.774 | Route tau .5: cov 0.655 prec 0.773 success 0.229 F1@1m 0.756
+[test/none] 809 Samples | Spur-F1@1 m tau .5/.6: 0.809/0.776 | Route tau .5: cov 0.597 prec 0.819 success 0.276 F1@1m 0.759
+FERTIG 00:03:37
+== 00:03:45 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'cam_front3_off', 'save_pert': 0, 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 809 Samples | Spur-F1@1 m tau .5/.6: 0.931/0.724 | Route tau .5: cov 0.863 prec 0.997 success 0.755 F1@1m 0.947
+[test/s1] 809 Samples | Spur-F1@1 m tau .5/.6: 0.761/0.641 | Route tau .5: cov 0.744 prec 0.898 success 0.540 F1@1m 0.803
+[test/wrong] 809 Samples | Spur-F1@1 m tau .5/.6: 0.608/0.582 | Route tau .5: cov 0.529 prec 0.647 success 0.079 F1@1m 0.615
+[test/none] 809 Samples | Spur-F1@1 m tau .5/.6: 0.644/0.570 | Route tau .5: cov 0.389 prec 0.771 success 0.094 F1@1m 0.618
+FERTIG 00:05:09
+== 00:05:13 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'blur', 'save_pert': 0, 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 409 Samples | Spur-F1@1 m tau .5/.6: 0.917/0.534 | Route tau .5: cov 0.866 prec 0.975 success 0.770 F1@1m 0.929
+[test/s1] 409 Samples | Spur-F1@1 m tau .5/.6: 0.681/0.430 | Route tau .5: cov 0.768 prec 0.902 success 0.579 F1@1m 0.807
+[test/wrong] 409 Samples | Spur-F1@1 m tau .5/.6: 0.446/0.354 | Route tau .5: cov 0.532 prec 0.672 success 0.115 F1@1m 0.637
+[test/none] 409 Samples | Spur-F1@1 m tau .5/.6: 0.452/0.320 | Route tau .5: cov 0.338 prec 0.759 success 0.132 F1@1m 0.572
+FERTIG 00:05:54
+== 00:05:56 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'extr3', 'save_pert': 0, 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 409 Samples | Spur-F1@1 m tau .5/.6: 0.781/0.760 | Route tau .5: cov 0.797 prec 0.892 success 0.606 F1@1m 0.816
+[test/s1] 409 Samples | Spur-F1@1 m tau .5/.6: 0.713/0.693 | Route tau .5: cov 0.752 prec 0.860 success 0.506 F1@1m 0.770
+[test/wrong] 409 Samples | Spur-F1@1 m tau .5/.6: 0.685/0.663 | Route tau .5: cov 0.597 prec 0.707 success 0.159 F1@1m 0.654
+[test/none] 409 Samples | Spur-F1@1 m tau .5/.6: 0.690/0.665 | Route tau .5: cov 0.538 prec 0.733 success 0.208 F1@1m 0.641
+FERTIG 00:06:45
+== 00:06:48 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'radar_off', 'save_pert': 0, 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 409 Samples | Spur-F1@1 m tau .5/.6: 0.896/0.880 | Route tau .5: cov 0.906 prec 0.992 success 0.844 F1@1m 0.954
+[test/s1] 409 Samples | Spur-F1@1 m tau .5/.6: 0.828/0.818 | Route tau .5: cov 0.865 prec 0.966 success 0.748 F1@1m 0.915
+[test/wrong] 409 Samples | Spur-F1@1 m tau .5/.6: 0.799/0.788 | Route tau .5: cov 0.651 prec 0.774 success 0.249 F1@1m 0.754
+[test/none] 409 Samples | Spur-F1@1 m tau .5/.6: 0.806/0.790 | Route tau .5: cov 0.616 prec 0.827 success 0.323 F1@1m 0.768
+FERTIG 00:07:50
+== 00:08:16 {'name': 'e65d_route_ft', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'route+lanes', 'noise_train': 1, 'p_wrong': 0.1, 'p_none': 0.15, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'workers': 3, 'seed': 0, 'eval': 'test', 'conds': 'clean:0:0,wrong:0:0:w,none:0:0:n', 'eval_only': 1, 'pert': 'dark', 'save_pert': 1, 'pert_train': '', 'p_pert_mass': 0.55, 'p_use_pert': 0.85}
+Parameter 2738644 Trainings-Samples mit Route 7489
+[test/clean] 809 Samples | Spur-F1@1 m tau .5/.6: 0.924/0.392 | Route tau .5: cov 0.847 prec 0.994 success 0.729 F1@1m 0.935
+[test/wrong] 809 Samples | Spur-F1@1 m tau .5/.6: 0.359/0.220 | Route tau .5: cov 0.499 prec 0.659 success 0.080 F1@1m 0.611
+[test/none] 809 Samples | Spur-F1@1 m tau .5/.6: 0.311/0.177 | Route tau .5: cov 0.291 prec 0.761 success 0.074 F1@1m 0.531
+FERTIG 00:10:10

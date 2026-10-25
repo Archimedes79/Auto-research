@@ -1,0 +1,15 @@
+params 1.67 M
+stem initialised from e94_a
+it 1 4s head 5.822 step 0.949 rp 0.490 rl 0.478 off 1.279 on 2.294 ev 5.272 psi 0.273 ptr 3.490 seed 0.536 dir 0.066 tot 18.998 acc_head 0.012 acc_head1 0.103 acc_step 0.158 acc_ev 0.547 acc_on 0.494 off_mae 1.428 acc_ptr 0.028
+it 100 19s head 4.076 step 0.542 rp 0.374 rl 0.248 off 0.431 on 0.674 ev 2.330 psi 0.163 ptr 2.869 seed 0.532 dir 0.087 tot 10.724 acc_head 0.284 acc_head1 0.671 acc_step 0.638 acc_ev 0.820 acc_on 0.898 off_mae 0.561 acc_ptr 0.153
+it 200 37s head 3.210 step 0.436 rp 0.350 rl 0.196 off 0.205 on 0.249 ev 1.417 psi 0.126 ptr 1.902 seed 0.533 dir 0.088 tot 7.612 acc_head 0.455 acc_head1 0.823 acc_step 0.726 acc_ev 0.871 acc_on 0.972 off_mae 0.322 acc_ptr 0.349
+it 300 56s head 2.500 step 0.387 rp 0.343 rl 0.168 off 0.136 on 0.149 ev 1.032 psi 0.114 ptr 1.398 seed 0.532 dir 0.095 tot 6.016 acc_head 0.592 acc_head1 0.887 acc_step 0.754 acc_ev 0.896 acc_on 0.985 off_mae 0.245 acc_ptr 0.416
+it 400 79s head 2.280 step 0.371 rp 0.330 rl 0.164 off 0.123 on 0.115 ev 0.896 psi 0.086 ptr 1.205 seed 0.528 dir 0.089 tot 5.454 acc_head 0.628 acc_head1 0.904 acc_step 0.765 acc_ev 0.907 acc_on 0.990 off_mae 0.231 acc_ptr 0.501
+it 500 99s head 2.190 step 0.354 rp 0.324 rl 0.158 off 0.113 on 0.084 ev 0.783 psi 0.088 ptr 1.104 seed 0.533 dir 0.087 tot 5.129 acc_head 0.645 acc_head1 0.909 acc_step 0.774 acc_ev 0.914 acc_on 0.993 off_mae 0.217 acc_ptr 0.570
+it 600 117s head 2.123 step 0.347 rp 0.314 rl 0.156 off 0.107 on 0.075 ev 0.750 psi 0.071 ptr 1.046 seed 0.529 dir 0.089 tot 4.950 acc_head 0.652 acc_head1 0.911 acc_step 0.778 acc_ev 0.917 acc_on 0.994 off_mae 0.210 acc_ptr 0.607
+it 700 134s head 2.083 step 0.345 rp 0.307 rl 0.158 off 0.103 on 0.067 ev 0.680 psi 0.064 ptr 0.974 seed 0.533 dir 0.090 tot 4.776 acc_head 0.660 acc_head1 0.914 acc_step 0.781 acc_ev 0.925 acc_on 0.994 off_mae 0.203 acc_ptr 0.643
+it 800 151s head 2.037 step 0.337 rp 0.305 rl 0.158 off 0.101 on 0.058 ev 0.648 psi 0.058 ptr 0.912 seed 0.547 dir 0.092 tot 4.645 acc_head 0.663 acc_head1 0.918 acc_step 0.784 acc_ev 0.927 acc_on 0.995 off_mae 0.201 acc_ptr 0.665
+it 900 167s head 1.983 step 0.326 rp 0.300 rl 0.152 off 0.099 on 0.049 ev 0.594 psi 0.051 ptr 0.851 seed 0.521 dir 0.088 tot 4.457 acc_head 0.675 acc_head1 0.919 acc_step 0.793 acc_ev 0.936 acc_on 0.996 off_mae 0.198 acc_ptr 0.707
+it 1000 187s head 1.962 step 0.324 rp 0.296 rl 0.151 off 0.097 on 0.043 ev 0.590 psi 0.045 ptr 0.840 seed 0.525 dir 0.086 tot 4.406 acc_head 0.676 acc_head1 0.920 acc_step 0.793 acc_ev 0.937 acc_on 0.996 off_mae 0.195 acc_ptr 0.715
+it 1100 210s head 1.923 step 0.319 rp 0.291 rl 0.150 off 0.097 on 0.041 ev 0.556 psi 0.043 ptr 0.814 seed 0.529 dir 0.087 tot 4.304 acc_head 0.681 acc_head1 0.923 acc_step 0.797 acc_ev 0.938 acc_on 0.996 off_mae 0.195 acc_ptr 0.724
+it 1200 230s head 1.930 step 0.321 rp 0.292 rl 0.148 off 0.095 on 0.037 ev 0.557 psi 0.044 ptr 0.818 seed 0.531 dir 0.089 tot 4.314 acc_head 0.682 acc_head1 0.923 acc_step 0.795 acc_ev 0.937 acc_on 0.997 off_mae 0.192 acc_ptr 0.719

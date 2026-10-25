@@ -1,0 +1,40 @@
+{
+ "args": {
+  "sets": "test",
+  "graphs": "e44_cons_p/graphs",
+  "sigma": 2.0,
+  "drop": 0.0,
+  "shift_frac": 0.0,
+  "protect": 1,
+  "reg": 1,
+  "oracle": 0,
+  "hmm": 0,
+  "nomap": 0,
+  "rt_file": "route_drv_sub_val.pkl",
+  "out": "e59drv_s2.0",
+  "workers": 10
+ },
+ "test": {
+  "n_samples": 256,
+  "assoc_acc_all": 0.8755562316966493,
+  "assoc_acc_assigned": 0.8858932818188116,
+  "assigned_frac": 0.9883314950747347,
+  "route_P": 0.8913710322752734,
+  "route_R": 0.9127970499863425,
+  "route_F1": 0.9019568151147098,
+  "route_cov": 0.8190848396026705,
+  "route_prec": 0.9718591624433183,
+  "route_success": 0.62109375,
+  "routeG_P": 0.9747407159585145,
+  "routeG_R": 0.9629282802688113,
+  "routeG_F1": 0.9687984925737088,
+  "routeG_cov": 0.9160288769472942,
+  "routeG_prec": 0.968941675030668,
+  "routeG_success": 0.8203125,
+  "novel_P": 0.7633811507018355,
+  "novel_R": 0.4616173864378323,
+  "reg_pos_median": 0.49196446246106235,
+  "reg_pos_p90": 1.9256442414305535,
+  "reg_yaw_median": 0.2469866606065143
+ }
+}

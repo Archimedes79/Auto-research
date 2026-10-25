@@ -1,0 +1,6 @@
+== 23:24:55 {'name': 'e35_B', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 1500, 'bs': 8, 'lr': 0.0002, 'wd': 0.0001, 'lr_trunk': 1.0, 'd': 128, 'M': 96, 'layers': 4, 'base': 48, 'lam_fp': 3.0, 'wpos': 1.0, 'w_pts': 5.0, 'w_adj': 1.0, 'adj_pos': 3.0, 'w_dense': 1.0, 'dense_lam': 1.0, 'train_stride': 2, 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0, 'amp': 1, 'mon': 0, 'init_from': 'e32_main', 'init_dense': '', 'prior': 'none', 'prior_xy': 0.0, 'prior_deg': 0.0, 'prior_degrade': 0.0, 'align': 0, 'eval_prior_xy': -1.0, 'eval_prior_deg': -1.0, 'eval_degrade': -1.0, 'temporal': 'B', 'n_track': 40, 't_gap': 2, 'save_arrays': 1}
+Gewichte aus e32_main (unveraendert/teilweise/uebersprungen): (261, 0, 0)
+Eingangskanaele 39 + Zusatz 0 Parameter 4343680 Trainings-Samples 4207
+Schritt 100/1500 Verlust 21.336 (Existenz 0.523, Punkte 0.782, Nachfolger 0.085, dicht 2.632) 1.53 s/Schritt
+Schritt 200/1500 Verlust 20.511 (Existenz 0.521, Punkte 0.746, Nachfolger 0.079, dicht 2.632) 1.40 s/Schritt
+Schritt 300/1500 Verlust 20.380 (Existenz 0.518, Punkte 0.740, Nachfolger 0.077, dicht 2.706) 1.36 s/Schritt

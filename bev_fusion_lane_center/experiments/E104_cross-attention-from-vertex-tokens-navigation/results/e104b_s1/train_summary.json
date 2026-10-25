@@ -1,0 +1,26 @@
+{
+ "args": {
+  "tok": "tok_e94_a_oof0,tok_e94_a_oof1,tok_e94_a_oof2",
+  "name": "e104b_s1",
+  "iters": 40000,
+  "bs": 8,
+  "lr": 0.0007,
+  "workers": 2,
+  "p_wrong": 0.08,
+  "p_none": 0.08,
+  "p_bias": 0.3,
+  "seed": 1,
+  "loc": false,
+  "corr": false,
+  "xattn": true,
+  "w_pose": 1.0,
+  "tf": 0.5
+ },
+ "final": {
+  "loss": 0.013890404362226117,
+  "acc": 0.9957555970812292,
+  "recall": 0.9890812197857676,
+  "flagged_wrong": 0.0002845073549089694
+ },
+ "seconds": 2273.0808568000793
+}

@@ -1,0 +1,12 @@
+== 00:18:09 {'name': 'e80_t_free', 'init_from': 'e78_sd_a', 'steps': 1500, 'bs': 8, 'lr': 0.0002, 'wd': 0.0001, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'wroute': 1.0, 'maps': 'sdt', 'noise_train': 1, 'p_exact': 0.3, 'sig_lo': 0.3, 'sig_hi': 2.0, 'p_wrong': 0.1, 'p_none': 0.15, 'pert_train': 'dark,cam_front_off,fog,cam_front3_off,blur,extr3,radar_off', 'p_pert_mass': 0.55, 'p_use_pert': 0.85, 'train': 'all', 'ema': 0.0, 'l2sp': 0.0, 'trust': 1, 'wtrust': 1.0, 'workers': 3, 'seed': 0, 'dev': 1, 'dev_pert_conds': 'exact:0:0,wrong:0:0:w', 'dev_perts': 'dark,cam_front_off,fog,cam_front3_off,blur,extr3,radar_off', 'dev_stride': 2, 'test': 0, 'test_clean_conds': 'clean:0:0,s1:1:0,s2:2:0,d30:0:0.3,s1d30:1:0.3,wrong:0:0:w,none:0:0:n', 'test_pert_conds': 'clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n', 'test_perts': 'dark,cam_front_off,fog,cam_front3_off,blur,extr3,radar_off', 'agree_thr': 0.4, 'trust_thr': 0.5, 'keep_arrays': 0, 'alt': 0, 'test_pert_stride': 1, 'sd_eps_lo': 0.5, 'sd_eps_hi': 2.0, 'sd_pcnt': 0.1, 'sd_tr_eps_lo': -1.0, 'sd_tr_eps_hi': -1.0, 'sd_tr_pcnt': -1.0, 'prior_src': 'free', 'prior_thr': 0.0, 'prior_range': 0.0, 'prior_pnone': 0.25, 'prior_pcorrupt': 0.4, 'prior_store': 'e78_sd_a', 'load': '', 'soup': ''}
+parameters 2765077 trainable 2765077
+perturbed rows 759 of 7489 ; mass 0.55
+step 250/1500 loss 8.7379 (0.37 s/step) clipped 0
+step 500/1500 loss 8.3127 (0.33 s/step) clipped 0
+step 750/1500 loss 8.2454 (0.35 s/step) clipped 0
+step 1000/1500 loss 7.9379 (0.38 s/step) clipped 0
+step 1250/1500 loss 7.8989 (0.40 s/step) clipped 1
+step 1500/1500 loss 7.6934 (0.40 s/step) clipped 2
+== evaluating e80_t_free
+DEV 189 s | score 0.7535 | clean exact 0.908/0.755 s1 route 0.658 wrong lane 0.859 none lane 0.874 | pert exact lane 0.797 route 0.525 wrong lane 0.652 | trust AUC clean 0.940
+DONE 00:31:27

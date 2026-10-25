@@ -1,0 +1,41 @@
+=== attempt 1 2026-10-25T01:04:18: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p16_train.py --design D7 --name e18_D7_rc3 --u 4 --seed 0 --init e123_D7_r3_f1 --lr 0.0005 --stem_lr 0.3 --workers 4 --set reach=null spf2=false junc=true temporal=true stage_b=false stage_c=true b=3 mcl=true ver_mode="survival" link_mode="learned" pi_mode="min" detach_pos=false dedup="geo" ctx="global" pattern="teardrop" seeds="lattice" warm=true revisit=false constr="L" D=1 seed_gscale=1.0 tolerant=false local_r=12.0 M=288 K0=144 --w rec=10.0 --warm_frac 0.4 --eval val250
+init from e123_D7_r3_f1 missing 0 unexpected 0
+design D7 cfg {"D": 1, "K0": 144, "M": 288, "b": 3, "constr": "L", "ctx": "global", "d": 96, "dedup": "geo", "detach_pos": false, "fork_relax": false, "heads": 4, "junc": true, "lattice": 5.0, "link_mode": "learned", "local_r": 12.0, "mcl": true, "n_anchor": 128, "pattern": "teardrop", "pi_mode": "min", "reach": null, "relax_r": 0.6, "relax_seg": 0.35, "relax_thr": 0.4, "revisit": false, "seed_gscale": 1.0, "seeds": "lattice", "spf2": false, "stage_b": false, "stage_c": true, "temporal": true, "tolerant": false, "ver_mode": "survival", "warm": true} iters 4800 params 1.21 M
+it 1/4800 16s share 0.50 seed_pos 0.191 seed_dir 0.072 seed_val 0.034 ver 0.175 pos 0.441 val 0.104 cov 0.000 prec 0.572 rec 0.255 dup 0.238 link 0.176 junc 0.160 aux_seed 0.510 aux_dir 0.071 ver_pos 0.233 child_ok 0.130 child_near 0.188 link_pos 0.098 tot 5.238
+it 100/4800 73s share 0.47 seed_pos 0.219 seed_dir 0.074 seed_val 0.039 ver 0.182 pos 0.459 val 0.125 cov 0.000 prec 0.595 rec 0.290 dup 0.233 link 0.161 junc 0.162 aux_seed 0.533 aux_dir 0.086 ver_pos 0.224 child_ok 0.125 child_near 0.186 link_pos 0.099 tot 5.699 gn 1.493
+it 200/4800 128s share 0.45 seed_pos 0.214 seed_dir 0.077 seed_val 0.038 ver 0.184 pos 0.460 val 0.137 cov 0.000 prec 0.592 rec 0.269 dup 0.232 link 0.161 junc 0.162 aux_seed 0.534 aux_dir 0.090 ver_pos 0.223 child_ok 0.125 child_near 0.184 link_pos 0.098 tot 5.497 gn 1.310
+it 300/4800 190s share 0.42 seed_pos 0.219 seed_dir 0.070 seed_val 0.039 ver 0.183 pos 0.467 val 0.161 cov 0.000 prec 0.608 rec 0.241 dup 0.234 link 0.156 junc 0.162 aux_seed 0.530 aux_dir 0.084 ver_pos 0.223 child_ok 0.123 child_near 0.183 link_pos 0.096 tot 5.278 gn 1.119
+Traceback (most recent call last):
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/train/p16_train.py", line 160, in <module>
+    main()
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/train/p16_train.py", line 110, in main
+    res = net(b["x"].float(), gt=b if share > 0 else None, share=share, prior=(PT_.prior_from_prev(net, b, train=True) if cfg.temporal else None))
+                                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/models/p16_time.py", line 14, in prior_from_prev
+    rp = net(b["x_prev"].float())
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/models/p16_builder.py", line 445, in forward
+    idx, sok = self.seeds_select(sel_src, c.K0)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/models/p16_builder.py", line 283, in seeds_select
+    sup = dist.gather(1, best[:, None, None].expand(B, 1, S))[:, 0] <= nms_r
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+=== attempt 2 2026-10-25T01:09:26: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p16_train.py --design D7 --name e18_D7_rc3 --u 4 --seed 0 --init e123_D7_r3_f1 --lr 0.0005 --stem_lr 0.3 --workers 4 --set reach=null spf2=false junc=true temporal=true stage_b=false stage_c=true b=3 mcl=true ver_mode="survival" link_mode="learned" pi_mode="min" detach_pos=false dedup="geo" ctx="global" pattern="teardrop" seeds="lattice" warm=true revisit=false constr="L" D=1 seed_gscale=1.0 tolerant=false local_r=12.0 M=288 K0=144 --w rec=10.0 --warm_frac 0.4 --eval val250
+init from e123_D7_r3_f1 missing 0 unexpected 0
+design D7 cfg {"D": 1, "K0": 144, "M": 288, "b": 3, "constr": "L", "ctx": "global", "d": 96, "dedup": "geo", "detach_pos": false, "fork_relax": false, "heads": 4, "junc": true, "lattice": 5.0, "link_mode": "learned", "local_r": 12.0, "mcl": true, "n_anchor": 128, "pattern": "teardrop", "pi_mode": "min", "reach": null, "relax_r": 0.6, "relax_seg": 0.35, "relax_thr": 0.4, "revisit": false, "seed_gscale": 1.0, "seeds": "lattice", "spf2": false, "stage_b": false, "stage_c": true, "temporal": true, "tolerant": false, "ver_mode": "survival", "warm": true} iters 4800 params 1.21 M
+it 1/4800 26s share 0.50 seed_pos 0.191 seed_dir 0.072 seed_val 0.034 ver 0.175 pos 0.441 val 0.104 cov 0.000 prec 0.572 rec 0.255 dup 0.238 link 0.176 junc 0.160 aux_seed 0.510 aux_dir 0.071 ver_pos 0.233 child_ok 0.130 child_near 0.188 link_pos 0.098 tot 5.238
+it 100/4800 136s share 0.47 seed_pos 0.219 seed_dir 0.074 seed_val 0.039 ver 0.182 pos 0.459 val 0.125 cov 0.000 prec 0.594 rec 0.289 dup 0.233 link 0.160 junc 0.162 aux_seed 0.533 aux_dir 0.086 ver_pos 0.224 child_ok 0.125 child_near 0.186 link_pos 0.099 tot 5.698 gn 1.505
+it 200/4800 731s share 0.45 seed_pos 0.214 seed_dir 0.077 seed_val 0.038 ver 0.184 pos 0.460 val 0.137 cov 0.000 prec 0.592 rec 0.269 dup 0.232 link 0.160 junc 0.162 aux_seed 0.534 aux_dir 0.090 ver_pos 0.223 child_ok 0.125 child_near 0.184 link_pos 0.098 tot 5.496 gn 1.513
+it 300/4800 847s share 0.42 seed_pos 0.219 seed_dir 0.069 seed_val 0.039 ver 0.183 pos 0.467 val 0.161 cov 0.000 prec 0.608 rec 0.241 dup 0.234 link 0.157 junc 0.162 aux_seed 0.530 aux_dir 0.084 ver_pos 0.223 child_ok 0.123 child_near 0.183 link_pos 0.096 tot 5.277 gn 1.242
+=== stopped by the loop at 01:35 after 300 of 4800 steps (three GPU jobs stalled each other; rc2 was kept)

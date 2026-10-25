@@ -1,0 +1,9 @@
+== 23:22:53 {'name': 'e34_map_clean', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 1500, 'bs': 8, 'lr': 0.0002, 'wd': 0.0001, 'lr_trunk': 1.0, 'd': 128, 'M': 96, 'layers': 4, 'base': 48, 'lam_fp': 3.0, 'wpos': 1.0, 'w_pts': 5.0, 'w_adj': 1.0, 'adj_pos': 3.0, 'w_dense': 1.0, 'dense_lam': 1.0, 'train_stride': 2, 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0, 'amp': 1, 'mon': 0, 'init_from': 'e32_main', 'init_dense': '', 'prior': 'map', 'prior_xy': 0.0, 'prior_deg': 0.0, 'prior_degrade': 0.0, 'align': 0, 'eval_prior_xy': -1.0, 'eval_prior_deg': -1.0, 'eval_degrade': -1.0, 'temporal': '', 'n_track': 40, 't_gap': 2, 'save_arrays': 1}
+Gewichte aus e32_main (unveraendert/teilweise/uebersprungen): (260, 1, 0)
+Eingangskanaele 39 + Zusatz 3 Parameter 4344976 Trainings-Samples 4207
+Schritt 100/1500 Verlust 17.824 (Existenz 0.447, Punkte 0.604, Nachfolger 0.061, dicht 2.606) 1.04 s/Schritt
+Schritt 200/1500 Verlust 18.321 (Existenz 0.441, Punkte 0.629, Nachfolger 0.062, dicht 2.632) 0.99 s/Schritt
+Schritt 300/1500 Verlust 18.716 (Existenz 0.456, Punkte 0.649, Nachfolger 0.065, dicht 2.604) 1.03 s/Schritt
+Schritt 400/1500 Verlust 18.707 (Existenz 0.447, Punkte 0.646, Nachfolger 0.064, dicht 2.635) 1.03 s/Schritt
+Schritt 500/1500 Verlust 18.788 (Existenz 0.444, Punkte 0.653, Nachfolger 0.064, dicht 2.605) 1.03 s/Schritt
+Schritt 600/1500 Verlust 18.781 (Existenz 0.428, Punkte 0.652, Nachfolger 0.063, dicht 2.663) 1.03 s/Schritt

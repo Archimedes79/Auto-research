@@ -1,0 +1,6 @@
+cov 0.50 vtx 1.50 junc 0.00 spur 5.0 bubble 2.5 tau 0.3 | S 0.734 F1@1.0 0.876 J 0.193 split6_F1 0.170 merge6_F1 0.216 vert100 14.196 false_len_frac 0.041
+cov 0.50 vtx 1.50 junc 0.00 spur 5.0 bubble 2.5 tau 0.5 | S 0.734 F1@1.0 0.875 J 0.195 split6_F1 0.170 merge6_F1 0.219 vert100 14.219 false_len_frac 0.039
+cov 0.50 vtx 1.50 junc 0.00 spur 5.0 bubble 2.5 tau 0.7 | S 0.734 F1@1.0 0.873 J 0.194 split6_F1 0.168 merge6_F1 0.221 vert100 14.193 false_len_frac 0.038
+cov 0.50 vtx 1.50 junc 0.50 spur 5.0 bubble 2.5 tau 0.3 | S 0.734 F1@1.0 0.876 J 0.193 split6_F1 0.170 merge6_F1 0.216 vert100 14.196 false_len_frac 0.041
+cov 0.50 vtx 1.50 junc 0.50 spur 5.0 bubble 2.5 tau 0.5 | S 0.734 F1@1.0 0.875 J 0.195 split6_F1 0.170 merge6_F1 0.219 vert100 14.219 false_len_frac 0.039
+cov 0.50 vtx 1.50 junc 0.50 spur 5.0 bubble 2.5 tau 0.7 | S 0.734 F1@1.0 0.873 J 0.194 split6_F1 0.168 merge6_F1 0.221 vert100 14.193 false_len_frac 0.038

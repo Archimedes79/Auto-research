@@ -1,0 +1,4 @@
+[dark_single] n 291 | cl: S 0.750 F1@1 0.880 J 0.247 v100 13.4 found 0.71 | fail: S 0.424 F1@1 0.333 J 0.069 v100 15.3 found 0.10  21 s
+[blur_single] n 291 | cl: S 0.750 F1@1 0.880 J 0.247 v100 13.4 found 0.71 | fail: S 0.516 F1@1 0.505 J 0.094 v100 14.8 found 0.22  42 s
+[cam_front3_off_single] n 291 | cl: S 0.750 F1@1 0.880 J 0.247 v100 13.4 found 0.71 | fail: S 0.580 F1@1 0.665 J 0.162 v100 16.8 found 0.38  66 s
+DONE 16:29:34

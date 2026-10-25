@@ -1,0 +1,16 @@
+=== attempt 1 2026-10-25T00:07:57: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_eval_e209.sh
+[dark_single_B2m0] n 291 | cl: S 0.753 F1@1 0.887 J 0.248 v100 11.9 found 0.74 | fail: S 0.504 F1@1 0.465 J 0.123 v100 14.2 found 0.18  46 s
+[dark_maxdecay_0.95_B2m0] n 291 | cl: S 0.756 F1@1 0.896 J 0.232 v100 11.6 found 0.78 | fail: S 0.655 F1@1 0.749 J 0.172 v100 12.6 found 0.55  94 s
+[blur_single_B2m0] n 291 | cl: S 0.753 F1@1 0.887 J 0.248 v100 11.9 found 0.74 | fail: S 0.577 F1@1 0.617 J 0.130 v100 12.9 found 0.35  136 s
+[blur_maxdecay_0.95_B2m0] n 291 | cl: S 0.756 F1@1 0.896 J 0.232 v100 11.6 found 0.78 | fail: S 0.661 F1@1 0.773 J 0.152 v100 12.6 found 0.59  184 s
+DONE 00:11:13
+[dark_single_B2none] n 291 | cl: S 0.749 F1@1 0.879 J 0.246 v100 12.0 found 0.72 | fail: S 0.451 F1@1 0.368 J 0.087 v100 13.6 found 0.13  42 s
+[dark_maxdecay_0.95_B2none] n 291 | cl: S 0.752 F1@1 0.890 J 0.227 v100 11.7 found 0.76 | fail: S 0.641 F1@1 0.718 J 0.171 v100 12.5 found 0.48  82 s
+[blur_single_B2none] n 291 | cl: S 0.749 F1@1 0.879 J 0.246 v100 12.0 found 0.72 | fail: S 0.529 F1@1 0.520 J 0.105 v100 13.1 found 0.24  117 s
+[blur_maxdecay_0.95_B2none] n 291 | cl: S 0.752 F1@1 0.890 J 0.227 v100 11.7 found 0.76 | fail: S 0.642 F1@1 0.736 J 0.148 v100 12.6 found 0.51  165 s
+DONE 00:14:13
+[dark_single_C2none] n 291 | cl: S 0.744 F1@1 0.877 J 0.235 v100 11.7 found 0.73 | fail: S 0.454 F1@1 0.373 J 0.101 v100 13.8 found 0.13  38 s
+[dark_maxdecay_0.95_C2none] n 291 | cl: S 0.746 F1@1 0.890 J 0.207 v100 11.5 found 0.77 | fail: S 0.635 F1@1 0.711 J 0.164 v100 12.6 found 0.48  74 s
+[blur_single_C2none] n 291 | cl: S 0.744 F1@1 0.877 J 0.235 v100 11.7 found 0.73 | fail: S 0.530 F1@1 0.531 J 0.109 v100 13.4 found 0.25  110 s
+[blur_maxdecay_0.95_C2none] n 291 | cl: S 0.746 F1@1 0.890 J 0.207 v100 11.5 found 0.77 | fail: S 0.631 F1@1 0.723 J 0.142 v100 12.7 found 0.51  148 s
+DONE 00:16:58

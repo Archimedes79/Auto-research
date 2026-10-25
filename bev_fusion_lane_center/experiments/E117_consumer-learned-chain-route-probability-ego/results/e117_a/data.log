@@ -1,0 +1,7 @@
+test: 833 frames, static built (3 s); frames with a route label 546
+test: 2820 samples written (8 s)
+val: 873 frames, static built (10 s); frames with a route label 569
+val: 2976 samples written (14 s)
+train: 8414 frames, static built (42 s); frames with a route label 4743
+train: 19419 samples written (72 s)
+DONE

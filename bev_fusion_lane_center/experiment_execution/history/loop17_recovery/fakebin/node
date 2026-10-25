@@ -1,0 +1,4 @@
+#!/bin/bash
+a=()
+for x in "$@"; do a+=("${x//\/mnt\/c\//C:/}"); done
+exec "/mnt/c/Program Files/nodejs/node.exe" "${a[@]}"

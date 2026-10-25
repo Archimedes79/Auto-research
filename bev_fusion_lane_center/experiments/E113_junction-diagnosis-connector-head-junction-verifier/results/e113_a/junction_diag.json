@@ -1,0 +1,74 @@
+{
+ "learned (E94a)": {
+  "split": {
+   "n": 3002,
+   "detected": 1682,
+   "children_covered": 1087,
+   "branch_missing": 130,
+   "lane_missed": 103,
+   "pred_n": 5360,
+   "pred_true": 2628,
+   "pred_real_lane": 2376,
+   "pred_false_lane": 356
+  },
+  "merge": {
+   "n": 3150,
+   "detected": 1944,
+   "children_covered": 997,
+   "branch_missing": 173,
+   "lane_missed": 36,
+   "pred_n": 5447,
+   "pred_true": 2795,
+   "pred_real_lane": 2259,
+   "pred_false_lane": 393
+  }
+ },
+ "rule, loose graph": {
+  "split": {
+   "n": 3002,
+   "detected": 1028,
+   "children_covered": 1521,
+   "branch_missing": 297,
+   "lane_missed": 156,
+   "pred_n": 2878,
+   "pred_true": 1000,
+   "pred_real_lane": 1750,
+   "pred_false_lane": 128
+  },
+  "merge": {
+   "n": 3150,
+   "detected": 1206,
+   "children_covered": 1583,
+   "branch_missing": 289,
+   "lane_missed": 72,
+   "pred_n": 2879,
+   "pred_true": 1180,
+   "pred_real_lane": 1607,
+   "pred_false_lane": 92
+  }
+ },
+ "rule, key points + connectors": {
+  "split": {
+   "n": 3002,
+   "detected": 1948,
+   "children_covered": 604,
+   "branch_missing": 277,
+   "lane_missed": 173,
+   "pred_n": 2197,
+   "pred_true": 2029,
+   "pred_real_lane": 149,
+   "pred_false_lane": 19
+  },
+  "merge": {
+   "n": 3150,
+   "detected": 1950,
+   "children_covered": 811,
+   "branch_missing": 289,
+   "lane_missed": 100,
+   "pred_n": 2518,
+   "pred_true": 2088,
+   "pred_real_lane": 416,
+   "pred_false_lane": 14
+  }
+ }
+}

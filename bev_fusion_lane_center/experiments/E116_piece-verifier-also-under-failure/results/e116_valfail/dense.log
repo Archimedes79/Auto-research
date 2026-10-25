@@ -1,0 +1,6 @@
+[dark] Pixel-F1@1 m tau 0.5: 0.308 (P 0.714 R 0.196) tau 0.6: 0.274 (P 0.759 R 0.167) tau 0.7: 0.204 (P 0.861 R 0.115)
+fertig 6 s
+[blur] Pixel-F1@1 m tau 0.5: 0.483 (P 0.774 R 0.351) tau 0.6: 0.444 (P 0.817 R 0.305) tau 0.7: 0.374 (P 0.899 R 0.236)
+fertig 7 s
+[cam_front3_off] Pixel-F1@1 m tau 0.5: 0.659 (P 0.812 R 0.554) tau 0.6: 0.626 (P 0.888 R 0.484) tau 0.7: 0.531 (P 0.956 R 0.367)
+fertig 8 s

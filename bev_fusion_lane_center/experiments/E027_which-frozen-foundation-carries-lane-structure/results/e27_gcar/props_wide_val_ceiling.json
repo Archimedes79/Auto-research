@@ -1,0 +1,18 @@
+{
+ "tol1.0": {
+  "point_precision": 0.8518886946856418,
+  "gt_coverage": 0.860354659197486,
+  "ceiling_F1_if_snapped": 0.9249361727280787
+ },
+ "tol1.5": {
+  "point_precision": 0.9095086813521683,
+  "gt_coverage": 0.9329973047931119,
+  "ceiling_F1_if_snapped": 0.9653374088826993
+ },
+ "tol2.5": {
+  "point_precision": 0.937465776056024,
+  "gt_coverage": 0.9782638807384169,
+  "ceiling_F1_if_snapped": 0.9890125278668739
+ },
+ "points_per_sample": 981.0893470790378
+}

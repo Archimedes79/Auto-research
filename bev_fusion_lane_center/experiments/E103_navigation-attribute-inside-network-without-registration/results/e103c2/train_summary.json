@@ -1,0 +1,25 @@
+{
+ "args": {
+  "tok": "tok_e94_a_oof0",
+  "name": "e103c2",
+  "iters": 12000,
+  "bs": 8,
+  "lr": 0.001,
+  "workers": 3,
+  "p_wrong": 0.08,
+  "p_none": 0.08,
+  "p_bias": 0.3,
+  "seed": 0,
+  "loc": false,
+  "corr": false,
+  "w_pose": 1.0,
+  "tf": 0.5
+ },
+ "final": {
+  "loss": 0.047288529808856214,
+  "acc": 0.984926486914651,
+  "recall": 0.9495315374011228,
+  "flagged_wrong": 0.0011038639437822057
+ },
+ "seconds": 620.0891120433807
+}

@@ -1,0 +1,26 @@
+{
+ "args": {
+  "tok": "tok_e94_a_oof0",
+  "name": "e104_smoke",
+  "iters": 40,
+  "bs": 8,
+  "lr": 0.001,
+  "workers": 3,
+  "p_wrong": 0.08,
+  "p_none": 0.08,
+  "p_bias": 0.3,
+  "seed": 0,
+  "loc": false,
+  "corr": false,
+  "xattn": true,
+  "w_pose": 1.0,
+  "tf": 0.5
+ },
+ "final": {
+  "loss": 0.48022347947962524,
+  "acc": 0.8355511797711113,
+  "recall": 0.24927542551881063,
+  "flagged_wrong": 0.014885087942335992
+ },
+ "seconds": 8.21359634399414
+}

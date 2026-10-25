@@ -1,0 +1,1192 @@
+[
+[
+2287,
+"C:\\ML-Experiment\\reports\\Loop17_Plan_EN.md",
+"Write ok"
+],
+[
+2299,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Write ok"
+],
+[
+2324,
+"C:\\ML-Experiment\\scripts\\p17_probe.py",
+"Write ok"
+],
+[
+2344,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"Write ok"
+],
+[
+2402,
+"C:\\ML-Experiment\\scripts\\p17_eval.py",
+"Write ok"
+],
+[
+2425,
+"C:\\ML-Experiment\\scripts\\p17_ctrl_check.py",
+"Write ok"
+],
+[
+2445,
+"C:\\ML-Experiment\\scripts\\p17_compare.py",
+"Write ok"
+],
+[
+2457,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2462,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+2493,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2501,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2542,
+"C:\\ML-Experiment\\scripts\\p17_dense.py",
+"Write ok"
+],
+[
+2543,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"Edit ok"
+],
+[
+2548,
+"C:\\ML-Experiment\\scripts\\p17_dense.py",
+"Write ok"
+],
+[
+2548,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+2558,
+"-",
+"shell command run"
+],
+[
+2558,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"changed by shell command"
+],
+[
+2593,
+"C:\\ML-Experiment\\scripts\\_run_e133a.sh",
+"Write ok"
+],
+[
+2624,
+"C:\\ML-Experiment\\scripts\\p17_route.py",
+"Write ok"
+],
+[
+2638,
+"C:\\ML-Experiment\\scripts\\_cmp131.sh",
+"Write ok"
+],
+[
+2650,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2661,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2684,
+"C:\\ML-Experiment\\scripts\\p17_ft.py",
+"Write ok"
+],
+[
+2699,
+"C:\\ML-Experiment\\scripts\\_run_e133b.sh",
+"Write ok"
+],
+[
+2709,
+"C:\\ML-Experiment\\scripts\\_run_e135.sh",
+"Write ok"
+],
+[
+2731,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2732,
+"C:\\ML-Experiment\\scripts\\p17_merge.py",
+"Write ok"
+],
+[
+2742,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2742,
+"C:\\ML-Experiment\\scripts\\p17_merge.py",
+"Write ok"
+],
+[
+2748,
+"C:\\ML-Experiment\\scripts\\_run_e130b.sh",
+"Write ok"
+],
+[
+2787,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"Edit ok"
+],
+[
+2788,
+"C:\\ML-Experiment\\scripts\\_run_e130b.sh",
+"Write ok"
+],
+[
+2794,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+2794,
+"C:\\ML-Experiment\\scripts\\_run_e130b.sh",
+"Write ok"
+],
+[
+2812,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2822,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2848,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2862,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2868,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2878,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2908,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2916,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+2922,
+"C:\\ML-Experiment\\scripts\\p17_gate.py",
+"Write ok"
+],
+[
+2934,
+"C:\\ML-Experiment\\scripts\\p17_gate_check.py",
+"Write ok"
+],
+[
+2935,
+"C:\\ML-Experiment\\scripts\\_run_e134_check.sh",
+"Write ok"
+],
+[
+3009,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3017,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3030,
+"C:\\ML-Experiment\\scripts\\_run_e134.sh",
+"Write ok"
+],
+[
+3032,
+"C:\\ML-Experiment\\scripts\\_cmp133b.sh",
+"Write ok"
+],
+[
+3049,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3059,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3076,
+"C:\\ML-Experiment\\scripts\\p17_mapnet.py",
+"Write ok"
+],
+[
+3077,
+"C:\\ML-Experiment\\scripts\\p17_mapft.py",
+"Write ok"
+],
+[
+3091,
+"C:\\ML-Experiment\\scripts\\p17_mapsmoke.py",
+"Write ok"
+],
+[
+3112,
+"C:\\ML-Experiment\\scripts\\_run_e138_train.sh",
+"Write ok"
+],
+[
+3121,
+"-",
+"shell command run"
+],
+[
+3121,
+"C:\\ML-Experiment\\scripts\\p17_eval.py",
+"changed by shell command"
+],
+[
+3133,
+"C:\\ML-Experiment\\scripts\\_run_e138_eval.sh",
+"Write ok"
+],
+[
+3193,
+"C:\\ML-Experiment\\scripts\\_cmp134.sh",
+"Write ok"
+],
+[
+3207,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3208,
+"C:\\ML-Experiment\\scripts\\_run_e135b.sh",
+"Write ok"
+],
+[
+3220,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3220,
+"C:\\ML-Experiment\\scripts\\_run_e135b.sh",
+"Write ok"
+],
+[
+3242,
+"C:\\ML-Experiment\\scripts\\fig_p17_frames.py",
+"Write ok"
+],
+[
+3270,
+"-",
+"shell command run"
+],
+[
+3270,
+"C:\\ML-Experiment\\scripts\\fig_p17_frames.py",
+"changed by shell command"
+],
+[
+3277,
+"C:\\ML-Experiment\\scripts\\fig_p17_frames.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3278,
+"C:\\ML-Experiment\\scripts\\fig_p17_frames.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3289,
+"C:\\ML-Experiment\\scripts\\fig_p17_frames.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3289,
+"C:\\ML-Experiment\\scripts\\fig_p17_frames.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3294,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3297,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3319,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3327,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3344,
+"C:\\ML-Experiment\\scripts\\p17_joint.py",
+"Write ok"
+],
+[
+3356,
+"C:\\ML-Experiment\\scripts\\p17_joint.py",
+"Edit ok"
+],
+[
+3361,
+"C:\\ML-Experiment\\scripts\\p17_joint.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3371,
+"-",
+"shell command run"
+],
+[
+3371,
+"C:\\ML-Experiment\\scripts\\p17_joint.py",
+"changed by shell command"
+],
+[
+3379,
+"C:\\ML-Experiment\\scripts\\_run_e136.sh",
+"Write ok"
+],
+[
+3380,
+"-",
+"shell command run"
+],
+[
+3380,
+"C:\\ML-Experiment\\scripts\\p17_route.py",
+"changed by shell command"
+],
+[
+3420,
+"C:\\ML-Experiment\\scripts\\p17_master.py",
+"Write ok"
+],
+[
+3469,
+"C:\\ML-Experiment\\scripts\\fig_p17_arch.py",
+"Write ok"
+],
+[
+3494,
+"-",
+"shell command run"
+],
+[
+3494,
+"C:\\ML-Experiment\\scripts\\fig_p17_arch.py",
+"changed by shell command"
+],
+[
+3536,
+"C:\\ML-Experiment\\scripts\\_run_e136_graph.sh",
+"Write ok"
+],
+[
+3538,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3544,
+"C:\\ML-Experiment\\scripts\\_run_e136_graph.sh",
+"Write ok"
+],
+[
+3544,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3598,
+"-",
+"shell command run"
+],
+[
+3598,
+"C:\\ML-Experiment\\scripts\\p17_mapnet.py",
+"changed by shell command"
+],
+[
+3599,
+"C:\\ML-Experiment\\scripts\\p17_mapdiag.py",
+"Write ok"
+],
+[
+3615,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3618,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3645,
+"C:\\ML-Experiment\\scripts\\_run_master.sh",
+"Write ok"
+],
+[
+3684,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"Write ok"
+],
+[
+3710,
+"C:\\ML-Experiment\\scripts\\p17_traincheck.py",
+"Write ok"
+],
+[
+3720,
+"C:\\ML-Experiment\\scripts\\p17_dense_train.py",
+"Write ok"
+],
+[
+3721,
+"C:\\ML-Experiment\\scripts\\_run_e139_dense.sh",
+"Write ok"
+],
+[
+3745,
+"-",
+"shell command run"
+],
+[
+3745,
+"C:\\ML-Experiment\\scripts\\p17_mapnet.py",
+"changed by shell command"
+],
+[
+3745,
+"C:\\ML-Experiment\\scripts\\p17_mapft.py",
+"changed by shell command"
+],
+[
+3757,
+"C:\\ML-Experiment\\scripts\\_run_e139.sh",
+"Write ok"
+],
+[
+3759,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3770,
+"C:\\ML-Experiment\\scripts\\_run_e139.sh",
+"Write ok"
+],
+[
+3770,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3775,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3778,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+3801,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3811,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+3841,
+"C:\\ML-Experiment\\scripts\\fig_p17_bars.py",
+"Write ok"
+],
+[
+3842,
+"C:\\ML-Experiment\\scripts\\_run_figs17.sh",
+"Write ok"
+],
+[
+3869,
+"-",
+"shell command run"
+],
+[
+3869,
+"C:\\ML-Experiment\\scripts\\fig_p17_bars.py",
+"changed by shell command"
+],
+[
+3895,
+"-",
+"shell command run"
+],
+[
+3895,
+"C:\\ML-Experiment\\scripts\\p17_master.py",
+"changed by shell command"
+],
+[
+3907,
+"-",
+"shell command run"
+],
+[
+3907,
+"C:\\ML-Experiment\\scripts\\p17_master.py",
+"changed by shell command"
+],
+[
+3920,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Write ok"
+],
+[
+3932,
+"-",
+"shell command run"
+],
+[
+3932,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+3932,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"changed by shell command"
+],
+[
+3967,
+"-",
+"shell command run"
+],
+[
+3967,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+3967,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"changed by shell command"
+],
+[
+3975,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Write ok"
+],
+[
+4000,
+"-",
+"shell command run"
+],
+[
+4000,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"changed by shell command"
+],
+[
+4000,
+"C:\\ML-Experiment\\scripts\\fig_p17_arch.py",
+"changed by shell command"
+],
+[
+4000,
+"C:\\ML-Experiment\\scripts\\fig_p17_bars.py",
+"changed by shell command"
+],
+[
+4000,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"changed by shell command"
+],
+[
+4000,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"changed by shell command"
+],
+[
+4039,
+"C:\\ML-Experiment\\scripts\\_run_e137.sh",
+"Write ok"
+],
+[
+4082,
+"-",
+"shell command run"
+],
+[
+4082,
+"C:\\ML-Experiment\\scripts\\p17_route.py",
+"changed by shell command"
+],
+[
+4093,
+"C:\\ML-Experiment\\scripts\\_run_after137.sh",
+"Write ok"
+],
+[
+4095,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4101,
+"C:\\ML-Experiment\\scripts\\_run_after137.sh",
+"Write ok"
+],
+[
+4101,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4111,
+"-",
+"shell command run"
+],
+[
+4111,
+"C:\\ML-Experiment\\scripts\\p17_gate.py",
+"changed by shell command"
+],
+[
+4119,
+"C:\\ML-Experiment\\scripts\\_run_e140.sh",
+"Write ok"
+],
+[
+4141,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4145,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4217,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4225,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4230,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4234,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4251,
+"-",
+"shell command run"
+],
+[
+4251,
+"C:\\ML-Experiment\\scripts\\p17_master.py",
+"changed by shell command"
+],
+[
+4258,
+"C:\\ML-Experiment\\scripts\\fig_p17_best.py",
+"Write ok"
+],
+[
+4280,
+"-",
+"shell command run"
+],
+[
+4280,
+"C:\\ML-Experiment\\scripts\\p17_master.py",
+"changed by shell command"
+],
+[
+4291,
+"-",
+"SKIPPED shell command (danger pattern): cd /c/ML-Experiment/scripts && node -e \" const fs=require('fs'); let s=fs.readFileSync('lo"
+],
+[
+4311,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit failed in the original (skipped)"
+],
+[
+4313,
+"-",
+"shell command run"
+],
+[
+4318,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit failed in the original (skipped)"
+],
+[
+4318,
+"-",
+"shell command run"
+],
+[
+4334,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4339,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4354,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4358,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4364,
+"-",
+"shell command run"
+],
+[
+4364,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"changed by shell command"
+],
+[
+4389,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit ok"
+],
+[
+4399,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4404,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4407,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4456,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit ok"
+],
+[
+4466,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4471,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit ok"
+],
+[
+4472,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit ok"
+],
+[
+4476,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4476,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4481,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit ok"
+],
+[
+4482,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit ok"
+],
+[
+4493,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4493,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4503,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit ok"
+],
+[
+4511,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4516,
+"-",
+"shell command run"
+],
+[
+4516,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+4646,
+"-",
+"shell command run"
+],
+[
+4646,
+"C:\\ML-Experiment\\scripts\\p17_series.py",
+"changed by shell command"
+],
+[
+4646,
+"C:\\ML-Experiment\\scripts\\p17_gate.py",
+"changed by shell command"
+],
+[
+4646,
+"C:\\ML-Experiment\\scripts\\p17_mapft.py",
+"changed by shell command"
+],
+[
+4689,
+"C:\\ML-Experiment\\scripts\\p17_maponly.py",
+"Write ok"
+],
+[
+4703,
+"C:\\ML-Experiment\\scripts\\p17_maponly.py",
+"Edit ok"
+],
+[
+4708,
+"C:\\ML-Experiment\\scripts\\p17_maponly.py",
+"Edit OLD NOT FOUND (out of sync)"
+],
+[
+4713,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4721,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4779,
+"C:\\ML-Experiment\\scripts\\p17_consumer.py",
+"Write ok"
+],
+[
+4837,
+"C:\\ML-Experiment\\scripts\\p17_extra.py",
+"Write ok"
+],
+[
+4849,
+"-",
+"shell command run"
+],
+[
+4849,
+"C:\\ML-Experiment\\scripts\\p17_extra.py",
+"changed by shell command"
+],
+[
+4856,
+"-",
+"shell command run"
+],
+[
+4856,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+4867,
+"-",
+"shell command run"
+],
+[
+4867,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+4873,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"Write ok"
+],
+[
+4885,
+"-",
+"shell command run"
+],
+[
+4885,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+4885,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"changed by shell command"
+],
+[
+4892,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"Write ok"
+],
+[
+4905,
+"-",
+"shell command run"
+],
+[
+4905,
+"C:\\ML-Experiment\\scripts\\fig_p17_arch.py",
+"changed by shell command"
+],
+[
+4905,
+"C:\\ML-Experiment\\scripts\\fig_p17_bars.py",
+"changed by shell command"
+],
+[
+4905,
+"C:\\ML-Experiment\\scripts\\fig_p17_best.py",
+"changed by shell command"
+],
+[
+4936,
+"-",
+"shell command run"
+],
+[
+4936,
+"C:\\ML-Experiment\\scripts\\p17_consumer.py",
+"changed by shell command"
+],
+[
+4984,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+4989,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+5036,
+"-",
+"shell command run"
+],
+[
+5036,
+"C:\\ML-Experiment\\scripts\\p17_master.py",
+"changed by shell command"
+],
+[
+5036,
+"C:\\ML-Experiment\\scripts\\fig_p17_bars.py",
+"changed by shell command"
+],
+[
+5036,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"changed by shell command"
+],
+[
+5036,
+"C:\\ML-Experiment\\scripts\\loop17_text_e139.py",
+"changed by shell command"
+],
+[
+5036,
+"C:\\ML-Experiment\\scripts\\fig_p17_best.py",
+"changed by shell command"
+],
+[
+5043,
+"-",
+"shell command run"
+],
+[
+5043,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+5043,
+"C:\\ML-Experiment\\scripts\\p17_extra.py",
+"changed by shell command"
+],
+[
+5054,
+"-",
+"shell command run"
+],
+[
+5054,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+5060,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+5071,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+5120,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+5125,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+5158,
+"-",
+"shell command run"
+],
+[
+5158,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+5158,
+"C:\\ML-Experiment\\scripts\\p17_extra.py",
+"changed by shell command"
+],
+[
+5202,
+"-",
+"shell command run"
+],
+[
+5202,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+5221,
+"-",
+"shell command run"
+],
+[
+5221,
+"C:\\ML-Experiment\\scripts\\build_loop17_report.py",
+"changed by shell command"
+],
+[
+5221,
+"C:\\ML-Experiment\\scripts\\loop17_text.py",
+"changed by shell command"
+],
+[
+5227,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit ok"
+],
+[
+5237,
+"C:\\ML-Experiment\\out\\loop2\\e17\\LOOP17_STATE.md",
+"Edit OLD NOT FOUND (out of sync)"
+]
+]

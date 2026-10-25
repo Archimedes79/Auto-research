@@ -1,0 +1,39 @@
+{
+ "args": {
+  "sets": "test",
+  "graphs": "e57_cam_front3_off/graphs",
+  "sigma": 1.0,
+  "drop": 0.0,
+  "shift_frac": 0.0,
+  "protect": 1,
+  "reg": 1,
+  "oracle": 0,
+  "hmm": 0,
+  "nomap": 0,
+  "out": "e59p_cam_front3_off",
+  "workers": 10
+ },
+ "test": {
+  "n_samples": 809,
+  "assoc_acc_all": 0.8742694968211794,
+  "assoc_acc_assigned": 0.8796622353553055,
+  "assigned_frac": 0.9938695350131203,
+  "route_P": 0.8400113992590481,
+  "route_R": 0.9220758907623486,
+  "route_F1": 0.8791326781693186,
+  "route_cov": 0.6262213853929244,
+  "route_prec": 0.8973781704189228,
+  "route_success": 0.3189122373300371,
+  "routeG_P": 0.9302268122745466,
+  "routeG_R": 0.9360781681211308,
+  "routeG_F1": 0.9331433174298284,
+  "routeG_cov": 0.6870280447923892,
+  "routeG_prec": 0.887359786529624,
+  "routeG_success": 0.3757725587144623,
+  "novel_P": 0.9727829506088024,
+  "novel_R": 0.6746446890902824,
+  "reg_pos_median": 0.9876465396846241,
+  "reg_pos_p90": 2.6678770065523167,
+  "reg_yaw_median": 0.5564138119277896
+ }
+}

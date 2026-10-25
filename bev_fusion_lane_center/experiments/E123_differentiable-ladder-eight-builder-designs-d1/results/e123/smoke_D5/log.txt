@@ -1,0 +1,1 @@
+it 1/20 5s share 0.00 seed_pos 1.135 seed_dir 0.149 seed_val 0.993 ver 1.132 pos 0.731 val 0.684 prec 1.036 rec 2.532 dup 0.071 link 0.874 rev_prec 1.036 rev_rec 2.532 aux_seed 0.511 aux_dir 0.067 ver_pos 0.170 child_ok 0.141 child_near 0.346 link_pos 0.185 tot 13.268 gn nan

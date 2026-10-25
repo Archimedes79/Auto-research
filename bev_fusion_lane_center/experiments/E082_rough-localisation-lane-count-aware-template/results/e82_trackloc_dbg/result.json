@@ -1,0 +1,72 @@
+{
+ "odo0/dark/none/clean": {
+  "n": 413,
+  "route_success": 0.7360774818401937,
+  "route_success_ext": 0.6876513317191283,
+  "map_err_median": 3.46449847506984
+ },
+ "odo0/dark/none/fail": {
+  "n": 335,
+  "route_success": 0.25671641791044775,
+  "route_success_ext": 0.34328358208955223,
+  "map_err_median": 4.350948596881829
+ },
+ "odo0/dark/frame/clean": {
+  "n": 413,
+  "route_success": 0.8789346246973365,
+  "route_success_ext": 0.8813559322033898,
+  "map_err_median": 0.8801867751502781
+ },
+ "odo0/dark/frame/fail": {
+  "n": 335,
+  "route_success": 0.29850746268656714,
+  "route_success_ext": 0.41194029850746267,
+  "map_err_median": 3.248081581729969
+ },
+ "odo0/dark/hold/clean": {
+  "n": 413,
+  "route_success": 0.8958837772397095,
+  "route_success_ext": 0.9055690072639225,
+  "map_err_median": 0.6609425909755278
+ },
+ "odo0/dark/hold/fail": {
+  "n": 335,
+  "route_success": 0.33432835820895523,
+  "route_success_ext": 0.5880597014925373,
+  "map_err_median": 0.5989362907930382
+ },
+ "odo0/dark/gate/clean": {
+  "n": 413,
+  "route_success": 0.8789346246973365,
+  "route_success_ext": 0.8813559322033898,
+  "map_err_median": 0.8801867751502781
+ },
+ "odo0/dark/gate/fail": {
+  "n": 335,
+  "route_success": 0.32238805970149254,
+  "route_success_ext": 0.5194029850746269,
+  "map_err_median": 1.3535065064794851
+ },
+ "odo0/dark/oracle/clean": {
+  "n": 413,
+  "route_success": 0.9055690072639225,
+  "route_success_ext": 0.9200968523002422,
+  "map_err_median": 0.013272465679643502
+ },
+ "odo0/dark/oracle/fail": {
+  "n": 335,
+  "route_success": 0.39104477611940297,
+  "route_success_ext": 0.6537313432835821,
+  "map_err_median": 0.024035803538499968
+ },
+ "_mean/odo0/none/route_success": 0.25671641791044775,
+ "_mean/odo0/none/route_success_ext": 0.34328358208955223,
+ "_mean/odo0/frame/route_success": 0.29850746268656714,
+ "_mean/odo0/frame/route_success_ext": 0.41194029850746267,
+ "_mean/odo0/hold/route_success": 0.33432835820895523,
+ "_mean/odo0/hold/route_success_ext": 0.5880597014925373,
+ "_mean/odo0/gate/route_success": 0.32238805970149254,
+ "_mean/odo0/gate/route_success_ext": 0.5194029850746269,
+ "_mean/odo0/oracle/route_success": 0.39104477611940297,
+ "_mean/odo0/oracle/route_success_ext": 0.6537313432835821
+}

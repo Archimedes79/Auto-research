@@ -1,0 +1,2455 @@
+{
+ "theme": [
+  "T9",
+  "Loop 16: fully differentiable lane-graph builders (growth and link), search ladder",
+  "loop 16"
+ ],
+ "rows": [
+  [
+   "T9",
+   "E122",
+   "Control arm R: the trace network E94 trained from the shared E94 stem at 1 / 2 / 4 / 8 units (1 u = 600 iterations of 16 frames), seeds 0 and 1, fixed VAL subset of 250 frames; the full E94 runs on the same subset",
+   "S (composite of the plan) 0.713, 0.710, 0.707, 0.725, 0.724 (seed 0), seed 1 0.692, 0.712, 0.713, 0.726, 0.724; the shared stem carries the skill, the curve is flat from 2 u; E94 F1@1 0.883 on this subset, 21.8 vertices per 100 m, J 0.39",
+   "C"
+  ],
+  [
+   "T9",
+   "E124",
+   "E123.D3.r0.00 (T): trial as specified in the L8 row (second attempt after the verification-target flag fix; the first attempt is archived as e123_D3_r0_00_flagbug)",
+   "S 0.697, F1@1 0.846, F1@0.5 0.657, J 0.107, 9.3 vertices per 100 m, false length 0.061, tau 0.6; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.696",
+   "D"
+  ],
+  [
+   "T9",
+   "E125",
+   "E123.D1.r0.00 (T): trial as specified in the L8 row",
+   "S 0.589, F1@1 0.798, F1@0.5 0.652, J 0.079, 38.3 vertices per 100 m, false length 0.021, tau 0.3; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.610",
+   "D"
+  ],
+  [
+   "T9",
+   "E126",
+   "E123.D2.r0.00 (T): trial as specified in the L8 row",
+   "S 0.623, F1@1 0.776, F1@0.5 0.608, J 0.077, 19.5 vertices per 100 m, false length 0.048, tau 0.8; VAL subset of 250 frames, 1 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E127",
+   "E123.D4.r0.00 (T): trial as specified in the L8 row",
+   "S 0.642, F1@1 0.802, F1@0.5 0.549, J 0.029, 10.4 vertices per 100 m, false length 0.095, tau 0.2; VAL subset of 250 frames, 1 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E128",
+   "E123.D5.r0.00 (T): trial as specified in the L8 row",
+   "S 0.673, F1@1 0.819, F1@0.5 0.652, J 0.104, 16.3 vertices per 100 m, false length 0.039, tau 0.7; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.680",
+   "D"
+  ],
+  [
+   "T9",
+   "E129",
+   "E123.D6.r0.00 (T): trial as specified in the L8 row",
+   "S 0.589, F1@1 0.681, F1@0.5 0.529, J 0.099, 17.9 vertices per 100 m, false length 0.072, tau 0.1; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.600",
+   "E"
+  ],
+  [
+   "T9",
+   "E130",
+   "E123.D7.r0.00 (T): trial as specified in the L8 row",
+   "S 0.701, F1@1 0.819, F1@0.5 0.650, J 0.149, 12.4 vertices per 100 m, false length 0.031, tau 0.5; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.720",
+   "E"
+  ],
+  [
+   "T9",
+   "E131",
+   "E123.D8.r0.00 (T): trial as specified in the L8 row",
+   "S 0.646, F1@1 0.757, F1@0.5 0.576, J 0.076, 9.3 vertices per 100 m, false length 0.080, tau 0.8; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.670",
+   "D"
+  ],
+  [
+   "T9",
+   "E132",
+   "E123.B3.r0.00 (T): baseline arm B3: D3 with the line-of-interest verifier (one pooled score per ray, endpoint at the ray end) instead of the survival read-out",
+   "S 0.654, F1@1 0.815, F1@0.5 0.608, J 0.024, 9.8 vertices per 100 m, false length 0.112, tau 0.1; VAL subset of 250 frames, 1 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E133",
+   "E123.B1.r0.00 (T): baseline arm B1: D7 with the geometric link prior (TopoLogic form: exp(-d^2 / 11.5) x heading term, nothing learned) instead of the learned link head",
+   "S 0.697, F1@1 0.820, F1@0.5 0.657, J 0.119, 14.1 vertices per 100 m, false length 0.026, tau 0.7; VAL subset of 250 frames, 1 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E134",
+   "E123.D7.r0.00s1 (N): noise run: trial D7 with seed 1",
+   "S 0.701, F1@1 0.813, F1@0.5 0.648, J 0.160, 12.3 vertices per 100 m, false length 0.029, tau 0.6; VAL subset of 250 frames, 1 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E135",
+   "E123.D5.r0.00s1 (N): noise run: trial D5 with seed 1",
+   "S 0.674, F1@1 0.820, F1@0.5 0.656, J 0.104, 16.3 vertices per 100 m, false length 0.037, tau 0.8; VAL subset of 250 frames, 1 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E136",
+   "E123.D7.r0.01 (F): flip factor G (revisit) to level 2: E120-style revisit of the whole node set (continuation, new revisit layers)",
+   "S 0.700, F1@1 0.833, F1@0.5 0.652, J 0.126, 11.8 vertices per 100 m, false length 0.038, tau 0.8; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.710",
+   "E"
+  ],
+  [
+   "T9",
+   "E137",
+   "E123.D8.r0.01 (F): flip factor D (duplicates) to level 1 = geometry (density term, no pair head), continuation",
+   "S 0.692, F1@1 0.828, F1@0.5 0.651, J 0.093, 12.4 vertices per 100 m, false length 0.038, tau 0.8; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.707",
+   "D"
+  ],
+  [
+   "T9",
+   "E138",
+   "E123.D3.r0.01 (F): flip factor E (context) to level 2 = global graph-biased attention over all committed nodes, continuation",
+   "S 0.703, F1@1 0.843, F1@0.5 0.658, J 0.131, 8.9 vertices per 100 m, false length 0.050, tau 0.8; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.702",
+   "D"
+  ],
+  [
+   "T9",
+   "E139",
+   "E123.D4.r0.01 (S): stabilise: gradient of the tree losses into the seed state x 0.1, lr 3e-4, continuation",
+   "S 0.687, F1@1 0.834, F1@0.5 0.637, J 0.095, 10.1 vertices per 100 m, false length 0.061, tau 0.5; VAL subset of 250 frames, 1 u; with beam 192 and 96 seeds S 0.698",
+   "D"
+  ],
+  [
+   "T9",
+   "E140",
+   "E123.D1.r0.01 (F): flip factor B (pattern package) to level 2 = teardrop, restart from the shared stem, 2 u",
+   "S 0.666, F1@1 0.801, F1@0.5 0.567, J 0.101, 13.7 vertices per 100 m, false length 0.050, tau 0.5; VAL subset of 250 frames, 2 u; with beam 192 and 96 seeds S 0.675",
+   "D"
+  ],
+  [
+   "T9",
+   "E141",
+   "E123.D2.r0.01 (F): flip factor B (pattern package) to level 2 = teardrop, restart from the shared stem, 2 u",
+   "S 0.699, F1@1 0.837, F1@0.5 0.658, J 0.115, 10.7 vertices per 100 m, false length 0.048, tau 0.7; VAL subset of 250 frames, 2 u; with beam 192 and 96 seeds S 0.703",
+   "D"
+  ],
+  [
+   "T9",
+   "E142",
+   "E123.D5.r0.01 (F): flip factor B (pattern package) to level 2 = teardrop, restart from the shared stem, 2 u",
+   "S 0.701, F1@1 0.848, F1@0.5 0.660, J 0.116, 9.0 vertices per 100 m, false length 0.058, tau 0.8; VAL subset of 250 frames, 2 u; with beam 192 and 96 seeds S 0.697",
+   "D"
+  ],
+  [
+   "T9",
+   "E143",
+   "E123.D6.r0.01 (F): flip factor B (pattern package) to level 2 = teardrop, restart from the shared stem, 2 u",
+   "S 0.706, F1@1 0.842, F1@0.5 0.652, J 0.156, 9.6 vertices per 100 m, false length 0.052, tau 0.6; VAL subset of 250 frames, 2 u; with beam 192 and 96 seeds S 0.707",
+   "E"
+  ],
+  [
+   "T9",
+   "E144",
+   "E123.D3.r0.00s1 (N): noise run: trial D3 with seed 1",
+   "S 0.687, F1@1 0.830, F1@0.5 0.644, J 0.095, 9.3 vertices per 100 m, false length 0.063, tau 0.6; VAL subset of 250 frames, 1 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E145",
+   "E123.D7.r0.x01 (X): exploratory (not a ladder row): D7 continuation 1 u with the capacity base M = 192, K0 = 96 (trained, not only evaluated)",
+   "S 0.719, F1@1 0.866, F1@0.5 0.678, J 0.145, 12.5 vertices per 100 m, false length 0.039, tau 0.7; VAL subset of 250 frames, 1 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E146",
+   "E123.D7.r0.x02 (X): exploratory (not a ladder row): as x01 plus the best-per-ground-truth duplicate label (dupl = 1)",
+   "S 0.718, F1@1 0.864, F1@0.5 0.674, J 0.149, 12.2 vertices per 100 m, false length 0.040, tau 0.7; VAL subset of 250 frames, 1 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E147",
+   "E123.D7.r1.b1 (F): L4 branch b1: SPF1.1 (survival only), SPF2.1 (validity = survival), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D7_r0_00",
+   "S 0.718, F1@1 0.862, F1@0.5 0.679, J 0.149, 11.8 vertices per 100 m, false length 0.043, tau 0.7; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E148",
+   "E123.D7.r1.b2 (F): L4 branch b2: SPF1.1 (survival only), SPF2.2 (hard-concrete keep gate), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D7_r0_00",
+   "S 0.652, F1@1 0.756, F1@0.5 0.585, J 0.114, 15.3 vertices per 100 m, false length 0.032, tau 0.1; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E149",
+   "E123.D7.r1.b3 (F): L4 branch b3: SPF1.2 (vertex-count penalty with weight 1), SPF2.1 (validity = survival), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D7_r0_00",
+   "S 0.709, F1@1 0.861, F1@0.5 0.678, J 0.147, 15.2 vertices per 100 m, false length 0.039, tau 0.6; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E150",
+   "E123.D7.r1.b4 (F): L4 branch b4: SPF1.2 (vertex-count penalty with weight 1), SPF2.2 (hard-concrete keep gate), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D7_r0_00",
+   "S 0.642, F1@1 0.725, F1@0.5 0.543, J 0.108, 10.2 vertices per 100 m, false length 0.040, tau 0.1; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E151",
+   "E123.D6.r1.b1 (F): L4 branch b1: SPF1.1 (survival only), SPF2.1 (validity = survival), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D6_r0_01",
+   "S 0.650, F1@1 0.814, F1@0.5 0.657, J 0.106, 19.8 vertices per 100 m, false length 0.031, tau 0.1; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E152",
+   "E123.D6.r1.b2 (F): L4 branch b2: SPF1.1 (survival only), SPF2.2 (hard-concrete keep gate), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D6_r0_01",
+   "S 0.708, F1@1 0.839, F1@0.5 0.671, J 0.142, 14.3 vertices per 100 m, false length 0.039, tau 0.1; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E153",
+   "E123.D6.r1.b3 (F): L4 branch b3: SPF1.2 (vertex-count penalty with weight 1), SPF2.1 (validity = survival), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D6_r0_01",
+   "S 0.705, F1@1 0.834, F1@0.5 0.670, J 0.132, 14.3 vertices per 100 m, false length 0.034, tau 0.4; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E154",
+   "E123.D6.r1.b4 (F): L4 branch b4: SPF1.2 (vertex-count penalty with weight 1), SPF2.2 (hard-concrete keep gate), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D6_r0_01",
+   "S 0.649, F1@1 0.811, F1@0.5 0.656, J 0.111, 20.0 vertices per 100 m, false length 0.031, tau 0.1; VAL subset of 250 frames, 2 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E155",
+   "E123.D8.r1.b1 (F): L4 branch b1: SPF1.1 (survival only), SPF2.1 (validity = survival), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D8_r0_01",
+   "S 0.690, F1@1 0.839, F1@0.5 0.631, J 0.109, 9.3 vertices per 100 m, false length 0.065, tau 0.9; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E156",
+   "E123.D8.r1.b2 (F): L4 branch b2: SPF1.1 (survival only), SPF2.2 (hard-concrete keep gate), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D8_r0_01",
+   "S 0.696, F1@1 0.835, F1@0.5 0.648, J 0.120, 12.9 vertices per 100 m, false length 0.053, tau 0.1; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E157",
+   "E123.D8.r1.b3 (F): L4 branch b3: SPF1.2 (vertex-count penalty with weight 1), SPF2.1 (validity = survival), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D8_r0_01",
+   "S 0.690, F1@1 0.841, F1@0.5 0.644, J 0.088, 12.1 vertices per 100 m, false length 0.059, tau 0.9; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E158",
+   "E123.D8.r1.b4 (F): L4 branch b4: SPF1.2 (vertex-count penalty with weight 1), SPF2.2 (hard-concrete keep gate), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D8_r0_01",
+   "S 0.690, F1@1 0.822, F1@0.5 0.630, J 0.120, 10.4 vertices per 100 m, false length 0.047, tau 0.8; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E159",
+   "E123.D5.r1.b1 (F): L4 branch b1: SPF1.1 (survival only), SPF2.1 (validity = survival), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D5_r0_01",
+   "S 0.687, F1@1 0.844, F1@0.5 0.663, J 0.097, 15.5 vertices per 100 m, false length 0.041, tau 0.9; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E160",
+   "E123.D5.r1.b2 (F): L4 branch b2: SPF1.1 (survival only), SPF2.2 (hard-concrete keep gate), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D5_r0_01",
+   "S 0.710, F1@1 0.853, F1@0.5 0.688, J 0.106, 13.7 vertices per 100 m, false length 0.029, tau 0.9; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E161",
+   "E123.D5.r1.b3 (F): L4 branch b3: SPF1.2 (vertex-count penalty with weight 1), SPF2.1 (validity = survival), SPF3.2 (reach 12 m); shared base beam 192, seeds 96; continuation 2 u from e123_D5_r0_01",
+   "S 0.704, F1@1 0.857, F1@0.5 0.673, J 0.100, 13.3 vertices per 100 m, false length 0.048, tau 0.7; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E162",
+   "E123.D5.r1.b4 (F): L4 branch b4: SPF1.2 (vertex-count penalty with weight 1), SPF2.2 (hard-concrete keep gate), SPF3.1 (reach 24 m); shared base beam 192, seeds 96; continuation 2 u from e123_D5_r0_01",
+   "S 0.690, F1@1 0.848, F1@0.5 0.684, J 0.106, 16.2 vertices per 100 m, false length 0.029, tau 0.7; VAL subset of 250 frames, 2 u",
+   "D"
+  ],
+  [
+   "T9",
+   "E163",
+   "E123.H.r1.h00 (H): hybrid challenge: the L design D7 (lattice seeds, teardrop, geometry, global, warm) with growth: tree of 3 levels from every seed and the link head on the ends of the last level, 4 u from the shared stem, beam 192, seeds 96",
+   "S 0.704, F1@1 0.856, F1@0.5 0.652, J 0.121, 12.4 vertices per 100 m, false length 0.052, tau 0.7; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E164",
+   "E123.D7.r1.xj (X): exploratory (not a ladder row): D7 with the junction head (split / merge heat maps against the ground-truth landmarks), beam 192, seeds 96, continuation 2 u from the trial",
+   "S 0.717, F1@1 0.861, F1@0.5 0.680, J 0.140, 11.8 vertices per 100 m, false length 0.033, tau 0.8; VAL subset of 250 frames, 2 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E165",
+   "E123.D7.r2.b1 (F): L4 branch b1: HF1.1 (stage B off), HF2.1 (stage C off), HF3.1 (b = 2); continuation 4 u from e123_D7_r1_b1",
+   "S 0.714, F1@1 0.864, F1@0.5 0.677, J 0.141, 10.9 vertices per 100 m, false length 0.060, tau 0.7; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E166",
+   "E123.D7.r2.b2 (F): L4 branch b2: HF1.1 (stage B off), HF2.2 (stage C on: attention over parent and siblings), HF3.2 (b = 3 children with multiple-choice learning); continuation 4 u from e123_D7_r1_b1",
+   "S 0.724, F1@1 0.861, F1@0.5 0.687, J 0.180, 14.5 vertices per 100 m, false length 0.035, tau 0.5; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E167",
+   "E123.D7.r2.b3 (F): L4 branch b3: HF1.2 (stage B on: small pattern around every child), HF2.1 (stage C off), HF3.2 (b = 3 children with multiple-choice learning); continuation 4 u from e123_D7_r1_b1",
+   "S 0.709, F1@1 0.857, F1@0.5 0.670, J 0.131, 10.4 vertices per 100 m, false length 0.058, tau 0.8; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E168",
+   "E123.D7.r2.b4 (F): L4 branch b4: HF1.2 (stage B on: small pattern around every child), HF2.2 (stage C on: attention over parent and siblings), HF3.1 (b = 2); continuation 4 u from e123_D7_r1_b1",
+   "S 0.709, F1@1 0.830, F1@0.5 0.670, J 0.169, 14.6 vertices per 100 m, false length 0.033, tau 0.5; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E169",
+   "E123.D6.r2.b1 (F): L4 branch b1: HF1.1 (stage B off), HF2.1 (stage C off), HF3.1 (b = 2); continuation 4 u from e123_D6_r1_b2",
+   "S 0.678, F1@1 0.802, F1@0.5 0.637, J 0.086, 14.5 vertices per 100 m, false length 0.034, tau 0.1; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E170",
+   "E123.D6.r2.b2 (F): L4 branch b2: HF1.1 (stage B off), HF2.2 (stage C on: attention over parent and siblings), HF3.2 (b = 3 children with multiple-choice learning); continuation 4 u from e123_D6_r1_b2",
+   "S 0.669, F1@1 0.792, F1@0.5 0.623, J 0.084, 14.7 vertices per 100 m, false length 0.037, tau 0.1; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E171",
+   "E123.D6.r2.b3 (F): L4 branch b3: HF1.2 (stage B on: small pattern around every child), HF2.1 (stage C off), HF3.2 (b = 3 children with multiple-choice learning); continuation 4 u from e123_D6_r1_b2",
+   "S 0.676, F1@1 0.793, F1@0.5 0.629, J 0.082, 13.2 vertices per 100 m, false length 0.031, tau 0.1; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E172",
+   "E123.D6.r2.b4 (F): L4 branch b4: HF1.2 (stage B on: small pattern around every child), HF2.2 (stage C on: attention over parent and siblings), HF3.1 (b = 2); continuation 4 u from e123_D6_r1_b2",
+   "S 0.677, F1@1 0.795, F1@0.5 0.629, J 0.090, 13.2 vertices per 100 m, false length 0.033, tau 0.1; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E173",
+   "E123.D7.r3.t1 (F): rung 3 / time recursion T.2: previous-frame nodes warped by the ego motion as extra seed candidates and log-odds fusion of the validity (prior from the own single-frame prediction of the previous frame, pose noise and 10 % no-prior frames in training); continuation 8 u from the rung-2 winner",
+   "S 0.725, F1@1 0.863, F1@0.5 0.687, J 0.182, 14.5 vertices per 100 m, false length 0.034, tau 0.6; VAL subset of 250 frames, 8 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E174",
+   "E123.D7.r3.j1 (F): rung 3 / junction head: split and merge heat maps (stem features, Gaussian sigma 2.5 m against the ground-truth landmarks) trained beside the builder, anchoring of forks and merges at the heat peaks in the assembly; continuation 8 u from the rung-2 winner",
+   "S 0.720, F1@1 0.866, F1@0.5 0.694, J 0.186, 15.3 vertices per 100 m, false length 0.037, tau 0.2; VAL subset of 250 frames, 8 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E175",
+   "E123.D7.r3.c1 (N): rung 3 / length control: plain continuation 8 u from the rung-2 winner (no change set), to separate the effect of the flags from the effect of the extra training",
+   "S 0.724, F1@1 0.869, F1@0.5 0.692, J 0.189, 15.0 vertices per 100 m, false length 0.037, tau 0.3; VAL subset of 250 frames, 8 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E176",
+   "E123.D7.r3.f1 (F): rung 3 / final-model candidate: junction head (parent j1) plus time recursion T.2 (previous-frame nodes warped by the ego motion as seed candidates, log-odds fusion of the validity); continuation 8 u",
+   "S 0.723, F1@1 0.864, F1@0.5 0.690, J 0.191, 15.1 vertices per 100 m, false length 0.036, tau 0.3; VAL subset of 250 frames, 8 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E177",
+   "E123.D7.r3.g0 (F): rung 3 / capacity: the junction-head run j1 trained 4 u more at beam M = 288 and 144 seeds (j1: 192 / 96)",
+   "S 0.721, F1@1 0.878, F1@0.5 0.704, J 0.155, 15.2 vertices per 100 m, false length 0.035, tau 0.7; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E178",
+   "E123.D7.r3.k1 (F): rung 3 / fork coverage (FC, new loss term): a tip up to 14 m before a ground-truth fork (merge for backward tips) must cover the ground-truth lane points 10 - 16 m downstream with its children (min over the children, slack 1.2 m, smooth-L1; weight 0.5); junction-head run j1 continued 4 u at beam 288 / 144 (control g0: the same without the term)",
+   "S 0.725, F1@1 0.878, F1@0.5 0.701, J 0.178, 15.2 vertices per 100 m, false length 0.037, tau 0.5; VAL subset of 250 frames, 4 u",
+   "E"
+  ],
+  [
+   "T9",
+   "E179",
+   "E123.D7.r3.s1 (N): rung 3 / recipe replicate: the champion's final configuration (teardrop, lattice, geometry dedup, global context, warm; stage C, b = 3 with MCL, junction head, time recursion; beam 288 / 144) trained in ONE run of 12 u from the shared stem, seed 1 (the champion itself grew over 28 u in a lineage of continuations)",
+   "S 0.469, F1@1 0.585, F1@0.5 0.328, J 0.107, 25.3 vertices per 100 m, false length 0.190, tau 0.5; VAL subset of 250 frames, 12 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E180",
+   "E123.D7.r3.rc1 (X): rung 3 / exploration after the test freeze (validation only, not a ladder row, not a candidate for the test): recall-weighted fine-tune: f1 with the soft-recall loss weight 3 instead of 1, 4 u, beam 288 / 144",
+   "S 0.722, F1@1 0.882, F1@0.5 0.699, J 0.132, 14.5 vertices per 100 m, false length 0.040, tau 0.8; VAL subset of 250 frames, 4 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E181",
+   "E123.D7.r3.s2 (N): rung 3 / recipe replicate without the time recursion: teardrop, lattice, geometry dedup, global context, warm; stage C, b = 3 with MCL, junction head; beam 288 / 144; ONE run of 12 u from the shared stem, seed 1 (replicate s1 with the time recursion from step 0 failed: S 0.469, the seed head did not learn: the prior built from the network's own untrained single-frame prediction corrupts the seeds)",
+   "S 0.726, F1@1 0.870, F1@0.5 0.697, J 0.167, 14.6 vertices per 100 m, false length 0.032, tau 0.9; VAL subset of 250 frames, 12 u",
+   "C"
+  ],
+  [
+   "T9",
+   "E182",
+   "Loop 16b (validation only, after the champion freeze): Route head on the champion's own training frames (in-sample) against validation",
+   "success 0.760 (1052 frames) against 0.798; control on out-of-fold training frames 0.945 against 0.881. Not an in-sample effect",
+   "C"
+  ],
+  [
+   "T9",
+   "E183",
+   "Loop 16b (validation only, after the champion freeze): Route head with the token content set to zero (positions, cross sections, SD map stay)",
+   "champion 0.803 / 0.797 / 0.793 / 0.784, control 0.904 / 0.891 / 0.885 / 0.870 (map error 0 / 1 / 2 / 3 m); the head does not read the node features",
+   "C"
+  ],
+  [
+   "T9",
+   "E184",
+   "Loop 16b (validation only, after the champion freeze): Edge-level diagnosis of the route flagging (p16_route_diag2.py)",
+   "the same miss rate of route edges in both graphs (13.0 % / 13.5 %), confident misses, edges next to a fork vertex missed 28.7 % (champion) against 18.4 %; mean missed edge 8.1 m against 4.6 m; coverage ceiling 0.972 -> 0.872 against 0.993 -> 0.936",
+   "C"
+  ],
+  [
+   "T9",
+   "E185",
+   "Loop 16b (validation only, after the champion freeze): Route head asked along the edges (points every <= 4 m, interpolated tokens), two seeds, validation",
+   "champion 0.888 / 0.889 (exact), 0.881 / 0.886 (1 m), 0.886 / 0.883 (2 m), 0.883 / 0.876 (3 m); control with the same treatment 0.876 / 0.894; vertex-based 0.798 and 0.881 / 0.875. The route gap of the sparse graph is closed",
+   "E"
+  ],
+  [
+   "T9",
+   "E186",
+   "Loop 16b (validation only, after the champion freeze): Point spacing of the route attribute, champion, seed 0, validation",
+   "8 m (98 points per frame) 0.872, 4 m (162) 0.888, 2 m (284) 0.899, vertex-based (68) 0.798",
+   "C"
+  ],
+  [
+   "T9",
+   "E187",
+   "Loop 16b (validation only, after the champion freeze): Planner consumer on validation (3 seeds, exact map)",
+   "path error at 20 m champion with the vertex head 0.31 m, with the head along the edges 0.26 m, control 0.27 m",
+   "E"
+  ],
+  [
+   "T9",
+   "E188",
+   "Loop 16b (validation only, after the champion freeze): Relaxed child selection near predicted forks at inference (smaller dominance and non-maximum-suppression radii around junction peaks)",
+   "S 0.750, J 0.278 - 0.279 against 0.749 / 0.278; oracle junction heat J 0.282: the second branch of a shallow fork is not in the tree",
+   "D"
+  ],
+  [
+   "T9",
+   "E189",
+   "Loop 16b (validation only, after the champion freeze): Inference-time ensemble of two builders (champion f1 + replicate s2, node union)",
+   "F1@1 0.871 -> 0.885, lanes found 0.695 -> 0.778, J 0.278 -> 0.177, S 0.749 -> 0.734; only confident nodes of s2: S 0.738 - 0.743",
+   "D"
+  ],
+  [
+   "T9",
+   "E190",
+   "Loop 16b (validation only, after the champion freeze): Hysteresis threshold in the assembly (nodes with validity 0.3 - 0.6 admitted when their parent is, tau 0.7 - 0.9)",
+   "lanes found 0.695 -> 0.70 - 0.71, J 0.278 -> 0.257 - 0.271, S 0.745 - 0.748 against 0.749 (VAL250); plain threshold 0.9: S 0.754, J 0.308, lanes found 0.649 (a flat knob, tau stays 0.7): no gain",
+   "D"
+  ],
+  [
+   "T9",
+   "E191",
+   "Loop 16b (validation only, after the champion freeze): Fast runtime",
+   "builder in a CUDA graph (82 -> 19 ms under load; idle 69 -> 12 ms with the time recursion, 6 ms single frame), assembly vectorised 50 -> 20 ms under load (15 ms idle) with identical graphs, route head in padded CUDA graphs 6 -> 2 ms; chain 33 ms per frame (f1), 29 ms (j1) against 594 ms for the control",
+   "E"
+  ],
+  [
+   "T9",
+   "E192",
+   "Loop 16b (validation only, after the champion freeze): Quality against compute time (VAL250, idle GPU)",
+   "j1 192 / 96 S 0.747 in 20 ms, j1 288 / 144 S 0.748 in 21 ms, f1 288 / 144 S 0.749 in 27 ms; below 192 / 96 recall collapses (96 / 48: S 0.70); the time recursion is a tie in S",
+   "C"
+  ]
+ ],
+ "basis": {
+  "E122": {
+   "bb": [
+    "BB01",
+    "BB11",
+    "BB19",
+    "BB21",
+    "BB14"
+   ],
+   "k": [
+    "K16",
+    "K15"
+   ],
+   "sp": [
+    "SP5"
+   ]
+  },
+  "E124": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K06",
+    "K11",
+    "K14",
+    "K15",
+    "K16",
+    "K21",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E125": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K08",
+    "K11",
+    "K14",
+    "K15",
+    "K16",
+    "K21"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E126": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K08",
+    "K09",
+    "K11",
+    "K14",
+    "K15",
+    "K16",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E127": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K06",
+    "K09",
+    "K11",
+    "K14",
+    "K15",
+    "K16"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E128": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K08",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K21"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E129": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E130": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E131": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E132": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K40",
+    "K01",
+    "K02",
+    "K04",
+    "K06",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E133": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K30",
+    "K10",
+    "K12",
+    "K13",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E134": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E135": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K08",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K21"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E136": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K15",
+    "K43"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E137": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K21"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E138": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E139": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E140": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E141": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E142": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E143": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E144": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB22",
+    "BB23",
+    "BB24",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K06",
+    "K11",
+    "K14",
+    "K15",
+    "K16",
+    "K21",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E145": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K03",
+    "K06"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E146": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K38",
+    "K39"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E147": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E148": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K21",
+    "K23",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E149": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K15",
+    "K21",
+    "K23",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E150": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K21",
+    "K23",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E151": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E152": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K16",
+    "K23",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E153": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K15",
+    "K16",
+    "K23",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E154": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K02",
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K16",
+    "K23",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E155": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E156": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E157": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K15",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E158": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E159": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K08",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K21"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E160": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K16",
+    "K21",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E161": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K04",
+    "K06",
+    "K08",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K15",
+    "K16",
+    "K21",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E162": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB27",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K02",
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K129",
+    "K13",
+    "K134",
+    "K135",
+    "K15",
+    "K16",
+    "K21",
+    "K25"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E163": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K10",
+    "K13",
+    "K12",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E164": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB26",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K31",
+    "K33",
+    "K15",
+    "K180"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E165": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E166": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K22",
+    "K23",
+    "K34",
+    "K38",
+    "K39",
+    "K43",
+    "K44"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E167": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K07",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K22",
+    "K23",
+    "K36",
+    "K38",
+    "K39"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E168": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K07",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K22",
+    "K23",
+    "K34",
+    "K36",
+    "K43",
+    "K44"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E169": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K23"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E170": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K03",
+    "K04",
+    "K06",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K22",
+    "K23",
+    "K34",
+    "K38",
+    "K39",
+    "K43",
+    "K44"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E171": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K03",
+    "K04",
+    "K06",
+    "K07",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K22",
+    "K23",
+    "K36",
+    "K38",
+    "K39"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E172": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K04",
+    "K06",
+    "K07",
+    "K08",
+    "K09",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K16",
+    "K22",
+    "K23",
+    "K34",
+    "K36",
+    "K43",
+    "K44"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E173": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K06",
+    "K24"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E174": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K31",
+    "K33",
+    "K15",
+    "K180"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E175": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E176": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K06",
+    "K24",
+    "K31",
+    "K33",
+    "K180",
+    "K181"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E177": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K03",
+    "K15"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E178": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K03",
+    "K38",
+    "K31",
+    "K182"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E179": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K23",
+    "K31",
+    "K33",
+    "K06",
+    "K24"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E180": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K15",
+    "K23",
+    "K184"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E181": {
+   "bb": [
+    "BB01",
+    "BB03",
+    "BB08",
+    "BB10",
+    "BB13",
+    "BB14",
+    "BB22",
+    "BB23",
+    "BB25",
+    "BB26",
+    "BB27",
+    "BB28",
+    "BB29",
+    "BB30"
+   ],
+   "k": [
+    "K01",
+    "K02",
+    "K03",
+    "K04",
+    "K10",
+    "K12",
+    "K13",
+    "K15",
+    "K21",
+    "K23",
+    "K31",
+    "K33"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E182": {
+   "bb": [
+    "BB11",
+    "BB13"
+   ],
+   "k": [
+    "K185"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E183": {
+   "bb": [
+    "BB11",
+    "BB13"
+   ],
+   "k": [
+    "K185"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E184": {
+   "bb": [
+    "BB11"
+   ],
+   "k": [
+    "K185"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E185": {
+   "bb": [
+    "BB11",
+    "BB13",
+    "BB10"
+   ],
+   "k": [
+    "K185"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E186": {
+   "bb": [
+    "BB11"
+   ],
+   "k": [
+    "K185"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E187": {
+   "bb": [
+    "BB11",
+    "BB13"
+   ],
+   "k": [
+    "K185"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E188": {
+   "bb": [
+    "BB24",
+    "BB26"
+   ],
+   "k": [
+    "K183"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E189": {
+   "bb": [
+    "BB24",
+    "BB26"
+   ],
+   "k": [
+    "K183"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E190": {
+   "bb": [
+    "BB26"
+   ],
+   "k": [
+    "K183"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E191": {
+   "bb": [
+    "BB26"
+   ],
+   "k": [
+    "K186",
+    "K187"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  },
+  "E192": {
+   "bb": [
+    "BB28",
+    "BB24"
+   ],
+   "k": [
+    "K186"
+   ],
+   "sp": [
+    "SP1",
+    "SP4",
+    "SP5"
+   ]
+  }
+ }
+}

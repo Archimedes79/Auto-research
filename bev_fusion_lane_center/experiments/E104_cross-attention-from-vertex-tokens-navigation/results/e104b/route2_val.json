@@ -1,0 +1,60 @@
+{
+ "res": {
+  "exact/tau0.5": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.8809234507897934,
+   "route_cov": 0.9362844429070145,
+   "route_prec": 0.9624291244586028,
+   "flagged_len_per_row": 73.47211374636976,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s1/tau0.5": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.8821385176184691,
+   "route_cov": 0.9366862274176897,
+   "route_prec": 0.9599536086125766,
+   "flagged_len_per_row": 73.538484858952,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s2/tau0.5": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.8748481166464156,
+   "route_cov": 0.9330098485872721,
+   "route_prec": 0.9562578520262932,
+   "flagged_len_per_row": 73.65604610975409,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s3/tau0.5": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.8724179829890644,
+   "route_cov": 0.9303244859866636,
+   "route_prec": 0.9490939389559672,
+   "flagged_len_per_row": 73.95375676417459,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "_lane": {
+   "P": 0.8415644025117139,
+   "R": 0.8951058045811116,
+   "F1": 0.8675097649980088
+  }
+ },
+ "args": {
+  "tok": "tok_e94_a_val_clean",
+  "split": "val_clean",
+  "model": "e104b",
+  "kind": "x",
+  "taus": "0.5",
+  "cells": "exact,s1,s2,s3",
+  "n": 0,
+  "tag": "val"
+ },
+ "n": 873
+}

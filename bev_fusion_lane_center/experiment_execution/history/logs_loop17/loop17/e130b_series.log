@@ -1,0 +1,9 @@
+[fog] single           frames 291 flagged fail 0.01  7 s
+[fog] maxdecay:0.95    frames 291 flagged fail 0.01  9 s
+[radar_off] single           frames 291 flagged fail 0.00  6 s
+[radar_off] maxdecay:0.95    frames 291 flagged fail 0.00  8 s
+[extr3] single           frames 291 flagged fail 0.00  6 s
+[extr3] maxdecay:0.95    frames 291 flagged fail 0.00  7 s
+[cam_front_off] single           frames 291 flagged fail 0.04  6 s
+[cam_front_off] maxdecay:0.95    frames 291 flagged fail 0.04  8 s
+DONE 16:39:08

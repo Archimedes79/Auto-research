@@ -1,0 +1,85 @@
+{
+ "G2": {
+  "ok": true,
+  "no_grad": [],
+  "groups": {
+   "reader": {
+    "norm": 46.45147,
+    "with_grad": "17/17"
+   },
+   "stem": {
+    "norm": 3.00736,
+    "with_grad": "22/22"
+   },
+   "proj": {
+    "norm": 5.85832,
+    "with_grad": "6/6"
+   },
+   "seeds": {
+    "norm": 31.68225,
+    "with_grad": "11/11"
+   },
+   "ctx": {
+    "norm": 4.50524,
+    "with_grad": "15/15"
+   },
+   "child": {
+    "norm": 1.71355,
+    "with_grad": "6/6"
+   }
+  },
+  "loss": 57.02742004394531
+ },
+ "G3": {
+  "ok": true,
+  "groups": {
+   "reader": 0.058571,
+   "stem": 0.022936,
+   "proj": 0.065443,
+   "seeds": 0.441342,
+   "ctx": 4.267405,
+   "child": 2.372085
+  },
+  "validity_head_grad": 0.0026290416717529297
+ },
+ "G4": {
+  "ok": true,
+  "slopes": {
+   "out_off.bias": {
+    "autograd": 0.07522021610566298,
+    "finite_diff": 0.07522062730913603,
+    "rel_err": 5.466631797149853e-06
+   },
+   "seed_snap.bias": {
+    "autograd": 3136.54194688797,
+    "finite_diff": 3136.8048491236777,
+    "rel_err": 8.381211084304992e-05
+   }
+  }
+ },
+ "G0": {
+  "geometry parity (torch vs numpy reference)": {
+   "ok": true,
+   "line": "11/11 passed"
+  },
+  "numpy spec tests T01-T22": {
+   "ok": true,
+   "line": "18 / 18 passed"
+  },
+  "assembly: merge into an existing lane": {
+   "ok": true,
+   "line": "3 pieces, edges [(0, 2), (1, 2)]"
+  }
+ },
+ "G1": {
+  "ok": true,
+  "unlisted": [],
+  "selection_sites": 3,
+  "selection_functions": [
+   "candidates",
+   "seeds_select",
+   "select_children"
+  ]
+ },
+ "admitted": true
+}

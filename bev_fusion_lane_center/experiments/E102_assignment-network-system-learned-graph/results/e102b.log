@@ -1,0 +1,16 @@
+start Sat Oct 17 23:36:44 CEST 2026
+written /home/ml/exp_gcar_b123/p8/ltrain_oof.pkl 2814 rows, mean pieces 26.90049751243781
+5628 samples
+saved 5232 samples in 304 s
+train samples 5232 dev 1646 params 269066
+ep 5 loss keep 0.1784 route 0.0775 | DEV route success 0.7169 lane F1 0.8638 (33 s)
+ep 8 loss keep 0.1751 route 0.0622 | DEV route success 0.7290 lane F1 0.8639 (56 s)
+DEV route success 0.7290 lane F1 0.8639
+TEST clean/exact            n  809 route 0.556 (oracle 0.913) lane P 0.902 R 0.760 F1 0.825
+TEST clean/none             n  833 route 0.000 (oracle 0.000) lane P 0.904 R 0.758 F1 0.825
+TEST clean/s1               n  809 route 0.555 (oracle 0.913) lane P 0.902 R 0.760 F1 0.825
+TEST clean/s1d30            n  809 route 0.519 (oracle 0.913) lane P 0.905 R 0.757 F1 0.825
+TEST clean/s2               n  809 route 0.555 (oracle 0.913) lane P 0.902 R 0.760 F1 0.825
+TEST clean/s3               n  809 route 0.534 (oracle 0.913) lane P 0.903 R 0.759 F1 0.825
+TEST clean/wrong            n  787 route 0.000 (oracle 0.000) lane P 0.904 R 0.764 F1 0.828
+done Sat Oct 17 23:44:39 CEST 2026

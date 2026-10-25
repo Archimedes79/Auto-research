@@ -1,0 +1,1 @@
+INVALID: first construction of E117d (ego road behind the ego taken as side road in ~77 % of the frames); see ../e117_d2 and report_final/review14/review_f.md

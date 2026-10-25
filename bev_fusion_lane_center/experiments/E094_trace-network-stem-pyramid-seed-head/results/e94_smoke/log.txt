@@ -1,0 +1,2 @@
+it 1 10s head 6.480 step 1.008 rp 0.428 rl 0.650 off 1.341 on 2.093 ev 6.737 psi 0.413 ptr 3.705 seed 1.518 dir 0.985 tot 21.855 acc_head 0.062 acc_head1 0.213 acc_step 0.136 acc_ev 0.037 acc_on 0.832 off_mae 1.490 acc_ptr 0.000
+it 100 50s head 4.064 step 0.560 rp 0.356 rl 0.276 off 0.405 on 0.515 ev 2.484 psi 0.168 ptr 2.579 seed 0.888 dir 0.294 tot 10.755 acc_head 0.311 acc_head1 0.707 acc_step 0.648 acc_ev 0.754 acc_on 0.956 off_mae 0.532 acc_ptr 0.274

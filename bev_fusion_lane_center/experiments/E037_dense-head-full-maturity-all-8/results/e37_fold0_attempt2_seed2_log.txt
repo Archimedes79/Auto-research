@@ -1,0 +1,18 @@
+== 01:47:37 {'name': 'e37_fold0', 'fg': 'gcar', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'base': 48, 'drop': 0.0, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'train_n': 0, 'train_stride': 1, 'dir': 0.5, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'save_prob': 1, 'amp': 1, 'train_part': 'train', 'fold': 0, 'nfolds': 3, 'flip': 0, 'eval': 'oof,val,test', 'workers': 3, 'seed': 2, 'eps': 1e-06, 'beta2': 0.98, 'guard': 1, 'guard_ratio': 1.2, 'clip': 3.0}
+Eingangskanaele 39 Parameter 2736867 Trainings-Samples 5600
+Schritt 200/4000 Verlust 8.0537 (max 20.0, median 6.16) (0.63 s/Schritt) geklippt 1 uebersprungen 6 skala 1024
+Schritt 400/4000 Verlust 3.5329 (max 5.2, median 3.54) (0.57 s/Schritt) geklippt 2 uebersprungen 6 skala 1024
+Schritt 600/4000 Verlust 3.0505 (max 4.4, median 3.03) (0.52 s/Schritt) geklippt 3 uebersprungen 7 skala 512
+Schritt 800/4000 Verlust 2.9727 (max 4.6, median 2.96) (0.50 s/Schritt) geklippt 4 uebersprungen 12 skala 16
+Schritt 1000/4000 Verlust 2.8909 (max 4.7, median 2.84) (0.49 s/Schritt) geklippt 5 uebersprungen 14 skala 4
+Schritt 1200/4000 Verlust 2.8344 (max 4.4, median 2.79) (0.48 s/Schritt) geklippt 5 uebersprungen 15 skala 2
+Schritt 1400/4000 Verlust 3.5771 (max 6.4, median 3.18) (0.48 s/Schritt) geklippt 18 uebersprungen 24 skala 0
+ROLLBACK bei Schritt 1400: Verlust 3.577 > 1.2 x bestes 2.834; frische Adam-Momente, Lernrate-Faktor jetzt 0.70, 200 Schritte Anlauf
+Schritt 1600/4000 Verlust 2.7049 (max 4.0, median 2.67) (0.48 s/Schritt) geklippt 18 uebersprungen 26 skala 0
+Schritt 1800/4000 Verlust 3.1430 (max 5.2, median 3.09) (0.48 s/Schritt) geklippt 20 uebersprungen 33 skala 0
+Schritt 2000/4000 Verlust 4.7945 (max 6.7, median 4.83) (0.48 s/Schritt) geklippt 22 uebersprungen 34 skala 0
+ROLLBACK bei Schritt 2000: Verlust 4.794 > 1.2 x bestes 2.705; frische Adam-Momente, Lernrate-Faktor jetzt 0.49, 200 Schritte Anlauf
+Schritt 2200/4000 Verlust 2.6945 (max 4.1, median 2.65) (0.48 s/Schritt) geklippt 22 uebersprungen 35 skala 0
+Schritt 2400/4000 Verlust 2.8082 (max 4.0, median 2.79) (0.48 s/Schritt) geklippt 24 uebersprungen 38 skala 0
+Schritt 2600/4000 Verlust 3.4108 (max 5.3, median 3.34) (0.49 s/Schritt) geklippt 26 uebersprungen 39 skala 0
+ROLLBACK bei Schritt 2600: Verlust 3.411 > 1.2 x bestes 2.695; frische Adam-Momente, Lernrate-Faktor jetzt 0.34, 200 Schritte Anlauf

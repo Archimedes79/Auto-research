@@ -1,0 +1,8 @@
+champion, clean frames                     S 0.748 F1@1 0.869 J 0.274 found 0.69 FL 0.037 v100 13.8
+champion, degraded frames                  S 0.463 F1@1 0.365 J 0.126 found 0.16 FL 0.050 v100 16.4
+map builder, clean, exact map              S 0.746 F1@1 0.875 J 0.256 found 0.72 FL 0.042 v100 13.0
+map builder, clean, no map                 S 0.742 F1@1 0.873 J 0.243 found 0.71 FL 0.042 v100 13.2
+map builder, degraded, exact map           S 0.700 F1@1 0.835 J 0.168 found 0.69 FL 0.061 v100 12.4
+map builder, degraded, map error 2 m       S 0.672 F1@1 0.790 J 0.174 found 0.63 FL 0.102 v100 12.7
+map builder, degraded, wrong map           S 0.646 F1@1 0.752 J 0.164 found 0.59 FL 0.154 v100 13.5
+map builder, degraded, no map              S 0.678 F1@1 0.780 J 0.192 found 0.56 FL 0.065 v100 14.6

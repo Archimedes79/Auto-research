@@ -1,0 +1,30 @@
+﻿== dark_maxdecay_0.95
+  base s0  route success clean 0.846 failure 0.372 | graph S clean 0.754 failure 0.621 F1@1 0.682 found 0.43
+  base s1  route success clean 0.816 failure 0.372 | graph S clean 0.754 failure 0.621 F1@1 0.682 found 0.43
+  c0       route success clean 0.875 failure 0.591 | graph S clean 0.747 failure 0.623 F1@1 0.692 found 0.45
+  a0       route success clean 0.838 failure 0.518 | graph S clean 0.749 failure 0.618 F1@1 0.686 found 0.43
+  c1       route success clean 0.868 failure 0.562 | graph S clean 0.748 failure 0.618 F1@1 0.688 found 0.43
+  a1       route success clean 0.875 failure 0.555 | graph S clean 0.748 failure 0.616 F1@1 0.683 found 0.43
+== blur_maxdecay_0.95
+  base s0  route success clean 0.846 failure 0.584 | graph S clean 0.754 failure 0.637 F1@1 0.712 found 0.45
+  base s1  route success clean 0.816 failure 0.547 | graph S clean 0.754 failure 0.637 F1@1 0.712 found 0.45
+  c0       route success clean 0.875 failure 0.781 | graph S clean 0.747 failure 0.628 F1@1 0.709 found 0.46
+  a0       route success clean 0.838 failure 0.723 | graph S clean 0.749 failure 0.630 F1@1 0.707 found 0.44
+  c1       route success clean 0.868 failure 0.803 | graph S clean 0.748 failure 0.626 F1@1 0.709 found 0.45
+  a1       route success clean 0.875 failure 0.810 | graph S clean 0.748 failure 0.625 F1@1 0.710 found 0.45
+== cam_front3_off_maxdecay_0.95
+  base s0  route success clean 0.846 failure 0.423 | graph S clean 0.754 failure 0.611 F1@1 0.709 found 0.45
+  base s1  route success clean 0.816 failure 0.401 | graph S clean 0.754 failure 0.611 F1@1 0.709 found 0.45
+  c0       route success clean 0.875 failure 0.555 | graph S clean 0.747 failure 0.590 F1@1 0.701 found 0.46
+  a0       route success clean 0.838 failure 0.518 | graph S clean 0.749 failure 0.585 F1@1 0.697 found 0.45
+  c1       route success clean 0.868 failure 0.613 | graph S clean 0.748 failure 0.581 F1@1 0.697 found 0.45
+  a1       route success clean 0.875 failure 0.547 | graph S clean 0.748 failure 0.583 F1@1 0.695 found 0.45
+
+arm a - arm c (failure-half route success; graph S failure half)
+  dark_maxdecay_0.95: seed 0 route -0.073 S -0.005 | seed 1 route -0.007 S -0.001
+  blur_maxdecay_0.95: seed 0 route -0.058 S +0.002 | seed 1 route +0.007 S -0.001
+  cam_front3_off_maxdecay_0.95: seed 0 route -0.036 S -0.005 | seed 1 route -0.066 S +0.002
+arm c - base (continued route-head training with failure frames)
+  dark_maxdecay_0.95: seed 0 +0.219 | seed 1 +0.190
+  blur_maxdecay_0.95: seed 0 +0.197 | seed 1 +0.255
+  cam_front3_off_maxdecay_0.95: seed 0 +0.131 | seed 1 +0.212

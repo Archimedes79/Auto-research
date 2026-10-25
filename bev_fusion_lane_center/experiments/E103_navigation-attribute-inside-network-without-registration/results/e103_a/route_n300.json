@@ -1,0 +1,67 @@
+{
+ "res": {
+  "s1": {
+   "n": 279,
+   "n_route": 279,
+   "route_success": 0.3333333333333333,
+   "route_cov": 0.9765306060946312,
+   "route_prec": 0.673042895481892,
+   "flagged_len_per_row": 123.96602409398403,
+   "kept_len_per_row": 608.175240707425
+  },
+  "s2": {
+   "n": 279,
+   "n_route": 279,
+   "route_success": 0.20430107526881722,
+   "route_cov": 0.8959905093414381,
+   "route_prec": 0.6134964202021688,
+   "flagged_len_per_row": 123.42430931457737,
+   "kept_len_per_row": 608.175240707425
+  },
+  "wrong": {
+   "n": 287,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 123.96185460273797,
+   "kept_len_per_row": 616.6008401868833
+  },
+  "none": {
+   "n": 300,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 0.0,
+   "kept_len_per_row": 620.3265979863514
+  },
+  "_lane": {
+   "P": 0.8513372203561695,
+   "R": 0.9036952905836498,
+   "F1": 0.8767352535508974
+  }
+ },
+ "stats": {
+  "heads": 7557,
+  "verts": 40818,
+  "forks": 877,
+  "merges": 2429,
+  "seeds": 24905
+ },
+ "n": 300,
+ "args": {
+  "name": "e103_a",
+  "split": "val_clean",
+  "n": 300,
+  "tau": 0.4,
+  "tau_seed": 0.3,
+  "tau_on": 0.5,
+  "cells": "s1,s2,wrong,none",
+  "tag": "n300",
+  "r_cov": 1.2,
+  "k_seed": 192,
+  "nms": 5,
+  "four": false
+ }
+}

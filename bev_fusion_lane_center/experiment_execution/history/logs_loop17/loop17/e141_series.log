@@ -1,0 +1,7 @@
+[dark] single           frames 291 flagged fail 0.00  6 s
+[dark] maxdecay:0.95    frames 291 flagged fail 0.00  5 s
+[blur] single           frames 291 flagged fail 0.00  6 s
+[blur] maxdecay:0.95    frames 291 flagged fail 0.00  5 s
+[cam_front3_off] single           frames 291 flagged fail 0.00  5 s
+[cam_front3_off] maxdecay:0.95    frames 291 flagged fail 0.00  5 s
+DONE 19:35:09

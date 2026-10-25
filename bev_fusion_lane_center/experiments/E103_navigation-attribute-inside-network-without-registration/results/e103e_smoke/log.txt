@@ -1,0 +1,1 @@
+it 1 1s loss 5.674 acc 0.828 recall 0.025 flagged_wrong 0.092 d_err 2.189 yaw_err_deg 5.613 pose_loss 5.022

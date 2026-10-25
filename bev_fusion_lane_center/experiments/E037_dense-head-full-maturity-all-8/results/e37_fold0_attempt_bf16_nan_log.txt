@@ -1,0 +1,3 @@
+== 01:43:40 {'name': 'e37_fold0', 'fg': 'gcar', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'base': 48, 'drop': 0.0, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'train_n': 0, 'train_stride': 1, 'dir': 0.5, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'save_prob': 1, 'amp': 2, 'train_part': 'train', 'fold': 0, 'nfolds': 3, 'flip': 0, 'eval': 'oof,val,test', 'workers': 3, 'seed': 2, 'eps': 1e-06, 'beta2': 0.98, 'guard': 1, 'guard_ratio': 1.2, 'clip': 3.0}
+Eingangskanaele 39 Parameter 2736867 Trainings-Samples 5600
+Schritt 200/4000 Verlust nan (max 19.8, median nan) (0.58 s/Schritt) geklippt 0

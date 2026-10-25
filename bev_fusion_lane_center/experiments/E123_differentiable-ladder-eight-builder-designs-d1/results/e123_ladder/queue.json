@@ -1,0 +1,1419 @@
+[
+ {
+  "design": "D1",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 19:27:25"
+ },
+ {
+  "design": "D2",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 19:28:05"
+ },
+ {
+  "design": "D4",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 19:51:53"
+ },
+ {
+  "design": "D5",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 20:09:54"
+ },
+ {
+  "design": "D6",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 20:11:14"
+ },
+ {
+  "design": "D7",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 20:17:05"
+ },
+ {
+  "design": "D8",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 20:17:59"
+ },
+ {
+  "design": "B3",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 20:22:55"
+ },
+ {
+  "design": "B1",
+  "rung": 0,
+  "step": "00",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "launched": "2026-10-23 20:25:29"
+ },
+ {
+  "design": "D7",
+  "rung": 0,
+  "step": "00s1",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 1,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 20:32:01"
+ },
+ {
+  "design": "D5",
+  "rung": 0,
+  "step": "00s1",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 1,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 20:34:15"
+ },
+ {
+  "design": "D7",
+  "rung": 0,
+  "step": "01",
+  "u": 1,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "revisit=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 20:37:32"
+ },
+ {
+  "design": "D8",
+  "rung": 0,
+  "step": "01",
+  "u": 1,
+  "parent": "e123_D8_r0_00",
+  "sets": [
+   "dedup=\"geo\""
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 20:41:28"
+ },
+ {
+  "design": "D3",
+  "rung": 0,
+  "step": "01",
+  "u": 1,
+  "parent": "e123_D3_r0_00",
+  "sets": [
+   "ctx=\"global\""
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 20:44:44"
+ },
+ {
+  "design": "D4",
+  "rung": 0,
+  "step": "01",
+  "u": 1,
+  "parent": "e123_D4_r0_00",
+  "sets": [
+   "seed_gscale=0.1"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "3e-4"
+  ],
+  "launched": "2026-10-23 20:49:00"
+ },
+ {
+  "design": "D1",
+  "rung": 0,
+  "step": "01",
+  "u": 2,
+  "parent": null,
+  "sets": [
+   "pattern=\"teardrop\""
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 20:56:33"
+ },
+ {
+  "design": "D2",
+  "rung": 0,
+  "step": "01",
+  "u": 2,
+  "parent": null,
+  "sets": [
+   "pattern=\"teardrop\""
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 20:58:10"
+ },
+ {
+  "design": "D5",
+  "rung": 0,
+  "step": "01",
+  "u": 2,
+  "parent": null,
+  "sets": [
+   "pattern=\"teardrop\""
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 21:14:51"
+ },
+ {
+  "design": "D6",
+  "rung": 0,
+  "step": "01",
+  "u": 2,
+  "parent": null,
+  "sets": [
+   "pattern=\"teardrop\""
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 21:26:01"
+ },
+ {
+  "design": "D3",
+  "rung": 0,
+  "step": "00s1",
+  "u": 1,
+  "parent": null,
+  "sets": [],
+  "ws": [],
+  "seed": 1,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 21:33:34"
+ },
+ {
+  "design": "D7",
+  "rung": 0,
+  "step": "x01",
+  "u": 1,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 21:42:08"
+ },
+ {
+  "design": "D7",
+  "rung": 0,
+  "step": "x02",
+  "u": 1,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [
+   "dupl=1"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 21:42:28"
+ },
+ {
+  "design": "D7",
+  "rung": 1,
+  "step": "b1",
+  "u": 2,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 21:50:19"
+ },
+ {
+  "design": "D7",
+  "rung": 1,
+  "step": "b2",
+  "u": 2,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true",
+   "reach=12"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 21:50:39"
+ },
+ {
+  "design": "D7",
+  "rung": 1,
+  "step": "b3",
+  "u": 2,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "reach=12"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:03:58"
+ },
+ {
+  "design": "D7",
+  "rung": 1,
+  "step": "b4",
+  "u": 2,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:05:07"
+ },
+ {
+  "design": "D6",
+  "rung": 1,
+  "step": "b1",
+  "u": 2,
+  "parent": "e123_D6_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:17:07"
+ },
+ {
+  "design": "D6",
+  "rung": 1,
+  "step": "b2",
+  "u": 2,
+  "parent": "e123_D6_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true",
+   "reach=12"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:17:59"
+ },
+ {
+  "design": "D7",
+  "rung": 1,
+  "step": "xj",
+  "u": 2,
+  "parent": "e123_D7_r0_00",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "junc=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:30:05"
+ },
+ {
+  "design": "D6",
+  "rung": 1,
+  "step": "b3",
+  "u": 2,
+  "parent": "e123_D6_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "reach=12"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:31:02"
+ },
+ {
+  "design": "D6",
+  "rung": 1,
+  "step": "b4",
+  "u": 2,
+  "parent": "e123_D6_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:43:19"
+ },
+ {
+  "design": "D8",
+  "rung": 1,
+  "step": "b1",
+  "u": 2,
+  "parent": "e123_D8_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:44:17"
+ },
+ {
+  "design": "D8",
+  "rung": 1,
+  "step": "b2",
+  "u": 2,
+  "parent": "e123_D8_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true",
+   "reach=12"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 22:55:16"
+ },
+ {
+  "design": "D8",
+  "rung": 1,
+  "step": "b3",
+  "u": 2,
+  "parent": "e123_D8_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "reach=12"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 23:01:13"
+ },
+ {
+  "design": "D8",
+  "rung": 1,
+  "step": "b4",
+  "u": 2,
+  "parent": "e123_D8_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 23:11:32"
+ },
+ {
+  "design": "D5",
+  "rung": 1,
+  "step": "b1",
+  "u": 2,
+  "parent": "e123_D5_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 23:18:11"
+ },
+ {
+  "design": "D5",
+  "rung": 1,
+  "step": "b2",
+  "u": 2,
+  "parent": "e123_D5_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true",
+   "reach=12"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 23:27:50"
+ },
+ {
+  "design": "D5",
+  "rung": 1,
+  "step": "b3",
+  "u": 2,
+  "parent": "e123_D5_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "reach=12"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 23:34:29"
+ },
+ {
+  "design": "D5",
+  "rung": 1,
+  "step": "b4",
+  "u": 2,
+  "parent": "e123_D5_r0_01",
+  "sets": [
+   "M=192",
+   "K0=96",
+   "spf2=true"
+  ],
+  "ws": [
+   "vc=1.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-23 23:43:08"
+ },
+ {
+  "design": "H",
+  "rung": 1,
+  "step": "h00",
+  "u": 4,
+  "parent": null,
+  "sets": [
+   "M=192",
+   "K0=96"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [],
+  "launched": "2026-10-23 23:50:50"
+ },
+ {
+  "design": "D7",
+  "rung": 2,
+  "step": "b1",
+  "u": 4,
+  "parent": "e123_D7_r1_b1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=2",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 00:00:11"
+ },
+ {
+  "design": "D7",
+  "rung": 2,
+  "step": "b2",
+  "u": 4,
+  "parent": "e123_D7_r1_b1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=2",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "stage_c=true",
+   "b=3",
+   "mcl=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 00:25:59"
+ },
+ {
+  "design": "D7",
+  "rung": 2,
+  "step": "b3",
+  "u": 4,
+  "parent": "e123_D7_r1_b1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=2",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "stage_b=true",
+   "b=3",
+   "mcl=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 00:29:00"
+ },
+ {
+  "design": "D7",
+  "rung": 2,
+  "step": "b4",
+  "u": 4,
+  "parent": "e123_D7_r1_b1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=2",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "stage_b=true",
+   "stage_c=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 00:52:17"
+ },
+ {
+  "design": "D6",
+  "rung": 2,
+  "step": "b1",
+  "u": 4,
+  "parent": "e123_D6_r1_b2",
+  "sets": [
+   "reach=12",
+   "spf2=true",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=1",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"learned\"",
+   "ctx=\"local\"",
+   "pattern=\"fixed\"",
+   "seeds=\"anchors\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 00:55:56"
+ },
+ {
+  "design": "D6",
+  "rung": 2,
+  "step": "b2",
+  "u": 4,
+  "parent": "e123_D6_r1_b2",
+  "sets": [
+   "reach=12",
+   "spf2=true",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=1",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"learned\"",
+   "ctx=\"local\"",
+   "pattern=\"fixed\"",
+   "seeds=\"anchors\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "stage_c=true",
+   "b=3",
+   "mcl=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 01:17:23"
+ },
+ {
+  "design": "D6",
+  "rung": 2,
+  "step": "b3",
+  "u": 4,
+  "parent": "e123_D6_r1_b2",
+  "sets": [
+   "reach=12",
+   "spf2=true",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=1",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"learned\"",
+   "ctx=\"local\"",
+   "pattern=\"fixed\"",
+   "seeds=\"anchors\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "stage_b=true",
+   "b=3",
+   "mcl=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 01:18:16"
+ },
+ {
+  "design": "D6",
+  "rung": 2,
+  "step": "b4",
+  "u": 4,
+  "parent": "e123_D6_r1_b2",
+  "sets": [
+   "reach=12",
+   "spf2=true",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=false",
+   "b=1",
+   "mcl=false",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"learned\"",
+   "ctx=\"local\"",
+   "pattern=\"fixed\"",
+   "seeds=\"anchors\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "stage_b=true",
+   "stage_c=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 01:40:19"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "t1",
+  "u": 8,
+  "parent": "e123_D7_r2_b2",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=false",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "temporal=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 01:42:32"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "j1",
+  "u": 8,
+  "parent": "e123_D7_r2_b2",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "junc=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 02:01:56"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "c1",
+  "u": 8,
+  "parent": "e123_D7_r2_b2",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=false",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 02:41:34"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "f1",
+  "u": 8,
+  "parent": "e123_D7_r3_j1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=true",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "M=192",
+   "K0=96",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "temporal=true"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 03:10:05"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "g0",
+  "u": 4,
+  "parent": "e123_D7_r3_j1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=true",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "M=288",
+   "K0=144"
+  ],
+  "ws": [],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 03:29:34"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "k1",
+  "u": 4,
+  "parent": "e123_D7_r3_j1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=true",
+   "temporal=false",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "M=288",
+   "K0=144"
+  ],
+  "ws": [
+   "fc=0.5"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 04:44:17"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "s1",
+  "u": 12,
+  "parent": null,
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=true",
+   "temporal=true",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "M=288",
+   "K0=144"
+  ],
+  "ws": [],
+  "seed": 1,
+  "after": [],
+  "extra": [
+   "--lr",
+   "1e-3"
+  ],
+  "launched": "2026-10-24 06:29:23"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "rc1",
+  "u": 4,
+  "parent": "e123_D7_r3_f1",
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=true",
+   "temporal=true",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "M=288",
+   "K0=144"
+  ],
+  "ws": [
+   "rec=3.0"
+  ],
+  "seed": 0,
+  "after": [],
+  "extra": [
+   "--lr",
+   "5e-4"
+  ],
+  "launched": "2026-10-24 08:54:54"
+ },
+ {
+  "design": "D7",
+  "rung": 3,
+  "step": "s2",
+  "u": 12,
+  "parent": null,
+  "sets": [
+   "reach=null",
+   "spf2=false",
+   "junc=true",
+   "stage_b=false",
+   "stage_c=true",
+   "b=3",
+   "mcl=true",
+   "ver_mode=\"survival\"",
+   "link_mode=\"learned\"",
+   "pi_mode=\"min\"",
+   "detach_pos=false",
+   "dedup=\"geo\"",
+   "ctx=\"global\"",
+   "pattern=\"teardrop\"",
+   "seeds=\"lattice\"",
+   "warm=true",
+   "revisit=false",
+   "constr=\"L\"",
+   "D=1",
+   "seed_gscale=1.0",
+   "tolerant=false",
+   "local_r=12.0",
+   "M=288",
+   "K0=144",
+   "temporal=false"
+  ],
+  "ws": [],
+  "seed": 1,
+  "after": [],
+  "extra": [
+   "--lr",
+   "1e-3"
+  ],
+  "launched": "2026-10-24 08:55:55"
+ }
+]

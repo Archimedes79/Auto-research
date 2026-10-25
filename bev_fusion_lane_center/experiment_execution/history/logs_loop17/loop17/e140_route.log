@@ -1,0 +1,4 @@
+[dark_gateB] s0 s0: cl 0.882 fail 0.825 | s0 s1: cl 0.838 fail 0.810 | s2 s0: cl 0.868 fail 0.796 | s2 s1: cl 0.846 fail 0.781  38 s
+[blur_gateB] s0 s0: cl 0.882 fail 0.898 | s0 s1: cl 0.838 fail 0.869 | s2 s0: cl 0.868 fail 0.891 | s2 s1: cl 0.846 fail 0.861  74 s
+[cam_front3_off_gateB] s0 s0: cl 0.882 fail 0.803 | s0 s1: cl 0.838 fail 0.825 | s2 s0: cl 0.868 fail 0.774 | s2 s1: cl 0.846 fail 0.774  113 s
+DONE 19:17:39

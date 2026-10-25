@@ -1,0 +1,92 @@
+{
+ "res": {
+  "s1/tau0.7": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.7521263669501823,
+   "route_cov": 0.8656881954707103,
+   "route_prec": 0.9166415497299901,
+   "flagged_len_per_row": 69.05518935148103
+  },
+  "s1/tau0.8": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.6682867557715675,
+   "route_cov": 0.8023690169235307,
+   "route_prec": 0.9302557042059906,
+   "flagged_len_per_row": 59.72818592124632
+  },
+  "s1/tau0.9": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.5151883353584447,
+   "route_cov": 0.6909984202378803,
+   "route_prec": 0.9017127026770912,
+   "flagged_len_per_row": 47.83152854886695
+  },
+  "s2/tau0.7": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.5565006075334143,
+   "route_cov": 0.7762477113360998,
+   "route_prec": 0.8678271737828512,
+   "flagged_len_per_row": 63.55118101016496
+  },
+  "s2/tau0.8": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.48724179829890646,
+   "route_cov": 0.6951216119803314,
+   "route_prec": 0.8914365643866883,
+   "flagged_len_per_row": 52.025154562688996
+  },
+  "s2/tau0.9": {
+   "n": 823,
+   "n_route": 823,
+   "route_success": 0.32806804374240583,
+   "route_cov": 0.5642941009274155,
+   "route_prec": 0.8453392517457868,
+   "flagged_len_per_row": 38.71510014926118
+  },
+  "wrong/tau0.7": {
+   "n": 845,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 12.951513775240693
+  },
+  "wrong/tau0.8": {
+   "n": 845,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 9.946770600789582
+  },
+  "wrong/tau0.9": {
+   "n": 845,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 6.873595626195327
+  },
+  "_lane": {
+   "P": 0.8415644025117139,
+   "R": 0.8951058045811116,
+   "F1": 0.8675097649980088
+  }
+ },
+ "args": {
+  "tok": "tok_e94_a_val_clean",
+  "split": "val_clean",
+  "model": "e103c",
+  "kind": "graph",
+  "taus": "0.7,0.8,0.9",
+  "cells": "s1,s2,wrong",
+  "n": 0,
+  "tag": "val_hi"
+ },
+ "n": 873
+}

@@ -1,0 +1,95 @@
+{
+ "G2": {
+  "ok": true,
+  "no_grad": [],
+  "groups": {
+   "reader": {
+    "norm": 2.87055,
+    "with_grad": "17/17"
+   },
+   "stem": {
+    "norm": 0.68434,
+    "with_grad": "22/22"
+   },
+   "proj": {
+    "norm": 0.9402,
+    "with_grad": "6/6"
+   },
+   "seeds": {
+    "norm": 7.63048,
+    "with_grad": "11/11"
+   },
+   "ctx": {
+    "norm": 2.2752,
+    "with_grad": "15/15"
+   },
+   "child": {
+    "norm": 1.15802,
+    "with_grad": "6/6"
+   },
+   "revisit": {
+    "norm": 13.80902,
+    "with_grad": "60/60"
+   },
+   "link": {
+    "norm": 6.76761,
+    "with_grad": "8/8"
+   }
+  },
+  "loss": 39.888129234313965
+ },
+ "G3": {
+  "ok": true,
+  "groups": {
+   "reader": 0.005635,
+   "stem": 0.012389,
+   "proj": 0.030147,
+   "seeds": 0.197357,
+   "ctx": 0.388114,
+   "child": 0.182767,
+   "revisit": 0.0,
+   "link": 0.00084
+  },
+  "validity_head_grad": 0.00023168325424194336
+ },
+ "G4": {
+  "ok": true,
+  "slopes": {
+   "out_off.bias": {
+    "autograd": 0.017885737110191258,
+    "finite_diff": 0.017878483049571514,
+    "rel_err": 0.0004057425118020511
+   },
+   "seed_snap.bias": {
+    "autograd": 3137.2439613342285,
+    "finite_diff": 3137.3862370901406,
+    "rel_err": 4.534849876949848e-05
+   }
+  }
+ },
+ "G0": {
+  "geometry parity (torch vs numpy reference)": {
+   "ok": true,
+   "line": "11/11 passed"
+  },
+  "numpy spec tests T01-T22": {
+   "ok": true,
+   "line": "18 / 18 passed"
+  },
+  "assembly: merge into an existing lane": {
+   "ok": true,
+   "line": "3 pieces, edges [(0, 2), (1, 2)]"
+  }
+ },
+ "G1": {
+  "ok": true,
+  "unlisted": [],
+  "selection_sites": 3,
+  "selection_functions": [
+   "candidates",
+   "seeds_select",
+   "select_children"
+  ]
+ },
+ "admitted": true
+}

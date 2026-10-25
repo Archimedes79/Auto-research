@@ -1,0 +1,14 @@
+== 01:01:29 {'name': 'e37_fold0', 'fg': 'gcar', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 6000, 'bs': 8, 'lr': 0.002, 'wd': 0.0001, 'base': 48, 'drop': 0.0, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'train_n': 0, 'train_stride': 1, 'dir': 0.5, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'save_prob': 1, 'amp': 1, 'train_part': 'train', 'fold': 0, 'nfolds': 3, 'flip': 0, 'eval': 'oof,val,test', 'workers': 3, 'seed': 0, 'clip': 3.0}
+Eingangskanaele 39 Parameter 2736867 Trainings-Samples 5600
+Schritt 200/6000 Verlust 8.0693 (0.25 s/Schritt) geklippt 2
+Schritt 400/6000 Verlust 3.6330 (0.23 s/Schritt) geklippt 2
+Schritt 600/6000 Verlust 3.1416 (0.25 s/Schritt) geklippt 4
+Schritt 800/6000 Verlust 3.0312 (0.27 s/Schritt) geklippt 4
+Schritt 1000/6000 Verlust 2.9433 (0.28 s/Schritt) geklippt 4
+Schritt 1200/6000 Verlust 2.8483 (0.29 s/Schritt) geklippt 4
+Schritt 1400/6000 Verlust 2.8120 (0.30 s/Schritt) geklippt 4
+Schritt 1600/6000 Verlust 2.8217 (0.30 s/Schritt) geklippt 4
+Schritt 1800/6000 Verlust 2.7897 (0.30 s/Schritt) geklippt 4
+Schritt 2000/6000 Verlust 2.7226 (0.31 s/Schritt) geklippt 4
+Schritt 2200/6000 Verlust 2.7237 (0.31 s/Schritt) geklippt 4
+Schritt 2400/6000 Verlust 2.7843 (0.31 s/Schritt) geklippt 5

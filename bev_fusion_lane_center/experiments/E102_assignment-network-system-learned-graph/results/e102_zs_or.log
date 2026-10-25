@@ -1,0 +1,148 @@
+start Sat Oct 17 23:51:00 CEST 2026
+16/873 frames 5 s
+32/873 frames 8 s
+48/873 frames 10 s
+64/873 frames 12 s
+80/873 frames 14 s
+96/873 frames 17 s
+112/873 frames 20 s
+128/873 frames 23 s
+144/873 frames 29 s
+160/873 frames 33 s
+176/873 frames 37 s
+192/873 frames 40 s
+208/873 frames 44 s
+224/873 frames 49 s
+240/873 frames 54 s
+256/873 frames 57 s
+272/873 frames 60 s
+288/873 frames 63 s
+304/873 frames 65 s
+320/873 frames 67 s
+336/873 frames 70 s
+352/873 frames 75 s
+368/873 frames 80 s
+384/873 frames 82 s
+400/873 frames 86 s
+416/873 frames 89 s
+432/873 frames 90 s
+448/873 frames 92 s
+464/873 frames 93 s
+480/873 frames 95 s
+496/873 frames 98 s
+512/873 frames 101 s
+528/873 frames 107 s
+544/873 frames 113 s
+560/873 frames 117 s
+576/873 frames 120 s
+592/873 frames 122 s
+608/873 frames 125 s
+624/873 frames 128 s
+640/873 frames 132 s
+656/873 frames 135 s
+672/873 frames 137 s
+688/873 frames 141 s
+704/873 frames 145 s
+720/873 frames 149 s
+736/873 frames 154 s
+752/873 frames 157 s
+768/873 frames 161 s
+784/873 frames 165 s
+800/873 frames 168 s
+816/873 frames 170 s
+832/873 frames 172 s
+848/873 frames 174 s
+864/873 frames 177 s
+873/873 frames 178 s
+learned {"P@1.0": 0.8721, "R@1.0": 0.8944, "F1@1.0": 0.8831, "lanes_found": 0.7999, "false_len_frac": 0.0622, "split6_F1": 0.3539, "merge6_F1": 0.4569, "dir_acc": 0.9379}
+  bands F1 {'0-10': 0.951, '10-20': 0.952, '20-30': 0.925, '30-40': 0.883, '40-50': 0.819}
+rule_loose {"P@1.0": 0.9094, "R@1.0": 0.8742, "F1@1.0": 0.8915, "lanes_found": 0.7716, "false_len_frac": 0.039, "split6_F1": 0.2858, "merge6_F1": 0.3902, "dir_acc": 0.944}
+  bands F1 {'0-10': 0.957, '10-20': 0.959, '20-30': 0.929, '30-40': 0.891, '40-50': 0.829}
+stats {'heads': 24.90607101947308, 'verts': 134.82932416953037, 'forks': 2.8006872852233675, 'merges': 7.855670103092783, 'seeds': 84.33218785796106, 'flipped': 1.2428407789232532}
+written /home/ml/exp_gcar_b123/p8/lval_clean.pkl 873 rows, mean pieces 21.034364261168385
+16/833 frames 4 s
+32/833 frames 8 s
+48/833 frames 11 s
+64/833 frames 14 s
+80/833 frames 17 s
+96/833 frames 19 s
+112/833 frames 22 s
+128/833 frames 25 s
+144/833 frames 28 s
+160/833 frames 30 s
+176/833 frames 34 s
+192/833 frames 38 s
+208/833 frames 41 s
+224/833 frames 44 s
+240/833 frames 48 s
+256/833 frames 50 s
+272/833 frames 52 s
+288/833 frames 56 s
+304/833 frames 62 s
+320/833 frames 68 s
+336/833 frames 75 s
+352/833 frames 79 s
+368/833 frames 87 s
+384/833 frames 96 s
+400/833 frames 103 s
+416/833 frames 110 s
+432/833 frames 114 s
+448/833 frames 120 s
+464/833 frames 125 s
+480/833 frames 131 s
+496/833 frames 138 s
+512/833 frames 144 s
+528/833 frames 152 s
+544/833 frames 158 s
+560/833 frames 165 s
+576/833 frames 171 s
+592/833 frames 178 s
+608/833 frames 182 s
+624/833 frames 184 s
+640/833 frames 188 s
+656/833 frames 192 s
+672/833 frames 197 s
+688/833 frames 202 s
+704/833 frames 207 s
+720/833 frames 213 s
+736/833 frames 221 s
+752/833 frames 225 s
+768/833 frames 233 s
+784/833 frames 243 s
+800/833 frames 249 s
+816/833 frames 257 s
+832/833 frames 268 s
+833/833 frames 271 s
+learned {"P@1.0": 0.828, "R@1.0": 0.8744, "F1@1.0": 0.8506, "lanes_found": 0.7615, "false_len_frac": 0.0892, "split6_F1": 0.3773, "merge6_F1": 0.4302, "dir_acc": 0.9179}
+  bands F1 {'0-10': 0.954, '10-20': 0.936, '20-30': 0.903, '30-40': 0.858, '40-50': 0.774}
+rule_loose {"P@1.0": 0.8916, "R@1.0": 0.8442, "F1@1.0": 0.8672, "lanes_found": 0.7198, "false_len_frac": 0.0484, "split6_F1": 0.3214, "merge6_F1": 0.3622, "dir_acc": 0.9319}
+  bands F1 {'0-10': 0.957, '10-20': 0.943, '20-30': 0.913, '30-40': 0.874, '40-50': 0.8}
+stats {'heads': 34.944777911164465, 'verts': 175.0048019207683, 'forks': 3.5138055222088838, 'merges': 11.551020408163266, 'seeds': 98.98919567827132, 'flipped': 2.0408163265306123}
+written /home/ml/exp_gcar_b123/p8/ltest_clean.pkl 833 rows, mean pieces 29.52220888355342
+missing lval_dark
+missing lval_cam_front_off
+missing lval_fog
+missing lval_cam_front3_off
+missing lval_blur
+missing lval_extr3
+missing lval_radar_off
+1746 samples
+saved 1646 samples in 118 s
+missing ltest_dark
+missing ltest_cam_front_off
+missing ltest_fog
+missing ltest_cam_front3_off
+missing ltest_blur
+missing ltest_extr3
+missing ltest_radar_off
+5831 samples
+saved 5665 samples in 382 s
+DEV route success 0.9052 lane F1 0.8643
+TEST clean/exact            n  809 route 0.834 (oracle 0.913) lane P 0.907 R 0.758 F1 0.826
+TEST clean/none             n  833 route 0.000 (oracle 0.000) lane P 0.907 R 0.755 F1 0.824
+TEST clean/s1               n  809 route 0.838 (oracle 0.913) lane P 0.907 R 0.758 F1 0.826
+TEST clean/s1d30            n  809 route 0.833 (oracle 0.913) lane P 0.908 R 0.754 F1 0.824
+TEST clean/s2               n  809 route 0.837 (oracle 0.913) lane P 0.907 R 0.758 F1 0.826
+TEST clean/s3               n  809 route 0.823 (oracle 0.913) lane P 0.907 R 0.757 F1 0.825
+TEST clean/wrong            n  787 route 0.000 (oracle 0.000) lane P 0.915 R 0.752 F1 0.825
+done Sun Oct 18 00:09:22 CEST 2026

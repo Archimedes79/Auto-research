@@ -1,0 +1,5 @@
+== 09:44:08 {'name': 'e48_clean_s2_corrfine', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 0, 'bs': 8, 'lr': 0.002, 'wd': 0.0001, 'base': 48, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'train_stride': 1, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'eval': 'val,test', 'workers': 3, 'seed': 0, 'init_from': 'e40_clean', 'eps': 1e-06, 'beta2': 0.98, 'prior': 'map', 'prior_xy': 0.0, 'prior_deg': 0.0, 'prior_degrade': 0.0, 'align': 0, 'aligner': 'corr,e48_fine', 'eval_prior_xy': 2.0, 'eval_prior_deg': 4.0, 'eval_degrade': -1.0, 'eval_align': 2, 'temporal': '', 'nodes_in': 0, 'nodes_run': 'e44_nodes', 'nodes_oracle': 0, 't_gap': 1, 'eval_n': 0}
+Eingangskanaele 39 + Zusatz 3 Parameter 2738163 Trainings-Samples 8414
+[val] 873 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.737 / 0.918 / 0.968, P/R@1 0.941/0.895, 1:1 0.827
+[test] 833 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.719 / 0.906 / 0.952, P/R@1 0.943/0.871, 1:1 0.806
+FERTIG 09:47:40

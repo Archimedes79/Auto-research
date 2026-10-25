@@ -1,0 +1,157 @@
+=== line 3380 id toolu_01DvGByAPoEmRH29MBacBKBv
+cd /c/ML-Experiment/scripts && node -e "
+const fs=require('fs'); let s=fs.readFileSync('p17_route.py','utf8');
+s=s.replace('    ap.add_argument(\"--prev\", type=int, default=1)','    ap.add_argument(\"--prev\", type=int, default=1)\n    ap.add_argument(\"--tag_suffix\", default=\"\", help=\"appended to the result file name\")');
+s=s.replace('open(f\"{E17}/{a.out}/route_{tag}.json\", \"w\")','open(f\"{E17}/{a.out}/route_{tag}{a.tag_suffix}.json\", \"w\")');
+fs.writeFileSync('p17_route.py',s);" && grep -n "tag_suffix" p17_route.py | cut -c1-140; grep -n '"--set"' p17_route.py | cut -c1-140; cd /c/ML-Experiment && MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -- bash /mnt/c/ML-Experiment/scripts/_run_e136.sh; tail -2 out/loop2/e17/logs/e136_a.log | cut -c1-200
+
+=== line 3745 id toolu_01APij62LASoJjYi36BtNG3h
+cd /c/ML-Experiment/scripts && cat >> p17_mapnet.py <<'PYEOF'
+
+
+class RealFail(torch.utils.data.Dataset):
+    """real failure frames of the TRAIN rows (perturbed foundation features of the seven failure types, p17_dense_train.py maps from the out-of-fold dense heads): items of the clean TRAIN dataset with x replaced"""
+
+    def __init__(self, base, perts, e17="/mnt/c/ML-Experiment/out/loop2/e17"):
+        home = os.path.expanduser("~")
+        self.base, self.pairs, self.data = base, [], {}
+        for pn in perts:
+            d = f"{home}/exp_gcar_b123/pert/{pn}"
+            rows = np.load(f"{d}/train_rows.npy")
+            self.data[pn] = (np.load(f"{d}/train_dec32.npy", mmap_mode="r"), np.load(f"{d}/train_logit7.npy", mmap_mode="r"), np.load(f"{e17}/dense_trainoof/{pn}_prob.npy", mmap_mode="r"), np.load(f"{e17}/dense_trainoof/{pn}_dir.npy", mmap_mode="r"), rows)
+            self.pairs += [(pn, j) for j in range(len(rows))]
+        self.gt, self.rows, self.ks = base.gt, base.rows, base.ks
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, i):
+        pn, j = self.pairs[i]
+        dec, lg, prob, dirf, rows = self.data[pn]
+        row = int(rows[j])
+        o = self.base[int(self.base.row2k[row])]
+        x = np.concatenate([np.asarray(dec[j], np.float32), np.asarray(lg[j], np.float32)], 0)
+        x = (x - self.base.mean[:, None, None]) / self.base.std[:, None, None]
+        o["x"] = torch.from_numpy(np.concatenate([x, np.asarray(prob[j], np.float32)[None], np.asarray(dirf[j], np.float32)], 0).astype(np.float16))
+        return o
+
+
+class Mix2(torch.utils.data.Dataset):
+    """a draw of two datasets: share = probability of the second"""
+
+    def __init__(self, a, b, share=0.5, n=10 ** 7, seed=0):
+        self.a, self.b, self.share, self.n, self.seed = a, b, share, n, seed
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, i):
+        rng = np.random.RandomState((self.seed * 1000003 + i) % (2 ** 32))
+        d = self.b if rng.rand() < self.share else self.a
+        return d[int(rng.randint(len(d)))]
+PYEOF
+node -e "
+const fs=require('fs'); let s=fs.readFileSync('p17_mapft.py','utf8');
+s=s.replace('    ap.add_argument(\"--seed\", type=int, default=0)\n','    ap.add_argument(\"--seed\", type=int, default=0)\n    ap.add_argument(\"--real_fail\", type=int, default=0, help=\"1: half of the frames are real failure frames of the TRAIN rows (seven types, p17_dense_train.py)\")\n    ap.add_argument(\"--share\", type=float, default=0.5)\n    ap.add_argument(\"--init_ckpt\", default=None, help=\"start from the map-conditioned weights of this run (47 input channels)\")\n');
+s=s.replace('    MN.widen(net)\n    net.train()','    MN.widen(net)\n    if a.init_ckpt:\n        net.load_state_dict(torch.load(f\"{C.OUT}/e123/{a.init_ckpt}/model.pt\", map_location=dev), strict=False)\n    net.train()');
+s=s.replace('    dl = torch.utils.data.DataLoader(ds, batch_size=PT.BS, shuffle=True,','    if a.real_fail:\n        fail = MN.MapWrap(MN.RealFail(base, [\"dark\", \"blur\", \"cam_front3_off\", \"fog\", \"radar_off\", \"extr3\", \"cam_front_off\"]), \"train\", P, train=True, p_none=a.p_none, p_wrong=a.p_wrong, p_degrade=0.0, seed=a.seed + 1)\n        ds = MN.Mix2(ds, fail, a.share, n=iters * PT.BS + 1000, seed=a.seed)\n    dl = torch.utils.data.DataLoader(ds, batch_size=PT.BS, shuffle=not a.real_fail,');
+fs.writeFileSync('p17_mapft.py',s);" && grep -n "real_fail\|init_ckpt\|Mix2" p17_mapft.py | cut -c1-150
+
+=== line 4082 id toolu_01XwTgMbeEg3zjZyv9mUvK5i
+cd /c/ML-Experiment/scripts && node -e "
+const fs=require('fs'); let s=fs.readFileSync('p17_route.py','utf8');
+const rep=(a,b)=>{ if(!s.includes(a)) console.log('MISSING',a.slice(0,50)); s=s.replace(a,b); };
+rep('    ap.add_argument(\"--tag_suffix\"','    ap.add_argument(\"--mapnet\", type=int, default=0, help=\"1: --ckpt is a map-conditioned builder (p17_mapnet.py)\")\n    ap.add_argument(\"--map_mode\", default=\"exact\")\n    ap.add_argument(\"--map_sigma\", type=float, default=0.0)\n    ap.add_argument(\"--tag_suffix\"');
+rep('    if a.ckpt:\n        net.load_state_dict(','    if a.mapnet:\n        import p17_mapnet as MN\n\n        MN.widen(net)\n        a.prev = 0\n    if a.ckpt:\n        net.load_state_dict(');
+rep('        ds.P17 = ds.P17\n','        if a.mapnet:\n            ds = MN.MapWrap(ds, \"val\", ds.P17, train=False, mode=a.map_mode, sigma=a.map_sigma)\n');
+fs.writeFileSync('p17_route.py',s);"; grep -n "mapnet\|MapWrap" p17_route.py | cut -c1-120
+cat > /c/ML-Experiment/scripts/_run_e139_route.sh <<'EOF'
+#!/bin/bash
+# E139: route success of the map-conditioned builders trained on real failure frames (arm B with the exact map, arm C without), single frame and hold, SD map error 0 and 2 m for the route head
+S=/mnt/c/ML-Experiment/scripts
+L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+SER=dark_single,dark_maxdecay_0.95,blur_single,blur_maxdecay_0.95,cam_front3_off_single,cam_front3_off_maxdecay_0.95
+bash $S/_py14.sh p17_route.py --out e139_route --mapnet 1 --ckpt e17_map_b --map_mode exact --map_sigma 0 --series $SER --routes p16_f2hr_route_s0,p16_f2hr_route_s1 --sigmas 0,2 --tag_suffix _B > $L/e139_route_B.log 2>&1
+bash $S/_py14.sh p17_route.py --out e139_route --mapnet 1 --ckpt e17_map_c --map_mode none --series $SER --routes p16_f2hr_route_s0,p16_f2hr_route_s1 --sigmas 0,2 --tag_suffix _C > $L/e139_route_C.log 2>&1
+echo finished > $L/e139_route.done
+EOF
+cd /c/ML-Experiment && ls out/loop2/e17/logs/e137* 2>/dev/null; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
+
+=== line 4205 id toolu_01Q6dxtDhcbkUWHfzy7uQoEA
+cd /c/ML-Experiment/out/loop2/e17/logs && cut -c1-300 e139_route_B.log | grep "^\["; echo ==C; cut -c1-300 e139_route_C.log | grep "^\["; cat > /c/ML-Experiment/scripts/_run_e140_route.sh <<'EOF'
+#!/bin/bash
+# route success of the best chain: gated memory behind the map-conditioned builder (arm B, exact map; route head with the same map at error 0 and 2 m)
+S=/mnt/c/ML-Experiment/scripts
+L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+bash $S/_py14.sh p17_route.py --out e140_route --mapnet 1 --ckpt e17_map_b --map_mode exact --map_sigma 0 --series dark_gateB,blur_gateB,cam_front3_off_gateB --routes p16_f2hr_route_s0,p16_f2hr_route_s1 --sigmas 0,2 --tag_suffix _B > $L/e140_route.log 2>&1
+echo finished > $L/e140_route.done
+EOF
+cd /c/ML-Experiment && MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -- bash /mnt/c/ML-Experiment/scripts/_run_e140_route.sh; cat out/loop2/e17/logs/e140_route.done
+
+=== line 4280 id toolu_01EZaUTSanzQTtpR2wKCsuvN
+cd /c/ML-Experiment/scripts && node -e "
+const fs=require('fs'); let s=fs.readFileSync('p17_master.py','utf8');
+const a='        for mode in (\"m0\", \"m2\", \"mnone\", \"mwrong\"):\n            if os.path.exists(f\"{E17}/e140_gateB/{p}_gateB_{mode}.pkl\"):';
+if(!s.includes(a)) console.log('MISSING'); s=s.replace(a,'        for mode in (\"m0\", \"m1\", \"m2\", \"mnone\", \"mwrong\"):\n            if os.path.exists(f\"{E17}/e140_gateB/{p}_gateB_{mode}.pkl\"):');
+fs.writeFileSync('p17_master.py',s);"
+cat > /c/ML-Experiment/scripts/_run_e140_m1.sh <<'EOF'
+#!/bin/bash
+# E140 with a map pose error of 1 m (the builder sees the map shifted by a scene-constant 1 m error)
+S=/mnt/c/ML-Experiment/scripts
+L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+bash $S/_py14.sh p17_eval.py --out e140_gateB --mapnet 1 --ckpt e17_map_b --map_mode exact --map_sigma 1 --suffix _m1 --variants gateB > $L/e140_eval_m1.log 2>&1
+echo finished > $L/e140_m1.done
+EOF
+cd /c/ML-Experiment && MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -- bash /mnt/c/ML-Experiment/scripts/_run_e140_m1.sh; cut -c1-200 out/loop2/e17/logs/e140_eval_m1.log | grep "^\["
+
+=== line 4364 id toolu_016DwL7ahqHKHM22z3mqTKcM
+cd /c/ML-Experiment/scripts && cat >> loop17_text_e139.py <<'PYEOF'
+
+
+def gate_map_block(g):
+    """E207: the learned gate behind the map-conditioned builder B"""
+    S, f3, table, MJ, PERT3, NAME, esc_ = g["S"], g["f3"], g["table"], g["MJ"], g["PERT3"], g["NAME"], esc
+    has = lambda p, k: k in MJ["perts"][p]["cards"]
+    out = ["<h3>4.7c E207: the learned gate behind the map-conditioned builder</h3>"]
+    out.append("<p><b>Design.</b> The gate of section 4.4, trained again (out-of-fold, 1500 steps) with the map builder B frozen behind it: the fused 42 channels get the five SD channels appended, the loss is the builder loss, the map situation is drawn as in training (exact map with error 0 / 1 / 2 m, wrong 10 %, none 10 %). <b>Result.</b> It adds to B, and the map still decides how much:</p>")
+    rows = []
+    for p in PERT3:
+        r = [esc_(NAME[p]), f3(S(p, "norec_hold")), f3(S(p, "gate"))]
+        for k in ("m139b_hold_m0", "gateB_m0", "gateB_m1", "gateB_m2", "gateB_mnone", "gateB_mwrong"):
+            r.append(f3(S(p, k)) if has(p, k) else "-")
+        r.append(f3(S(p, "gateB_m0", m="lanes_found"), 2) if has(p, "gateB_m0") else "-")
+        r.append(f3(S(p, "gateB_m0", "cl")) if has(p, "gateB_m0") else "-")
+        rows.append(r)
+    out.append(table(["failure", "S champion + hold", "S champion + gate", "S B + hold, exact map", "S B + gate: exact map", "map error 1 m", "map error 2 m", "no map", "wrong map", "lanes found (exact)", "S clean half (exact)"], rows, nums=set(range(1, 11))))
+    rs = lambda tag, ph="fail", sig="0": (lambda c: (sum(v["route_success"] for k, v in c.items() if k.startswith(f"sigma{sig}_") and k.endswith(f"_{ph}")) / max(1, sum(1 for k in c if k.startswith(f"sigma{sig}_") and k.endswith(f"_{ph}")))) if c else float("nan"))(MJ["route"].get(tag, {}))
+    rrows = []
+    for p in PERT3:
+        rrows.append([esc_(NAME[p]), f3(rs(f"e135_route/{p}_gate")), f3(rs(f"e139_route/{p}_maxdecay_0.95_B")), f3(rs(f"e140_route/{p}_gateB_B")), f3(rs(f"e140_route/{p}_gateB_B", sig="2")), f3(rs(f"e140_route/{p}_gateB_B", "cl"))])
+    out.append("<p>Route success of the same chains (mean of two route-head seeds, SD map for the route head without error; the 2 m column gives the route head a map with a 2 m error, the builder keeps the exact one):</p>" + table(["failure", "champion + gate", "B + hold", "B + gate", "B + gate, route-head map error 2 m", "B + gate, clean half"], rrows, nums=set(range(1, 6))))
+    return "\n".join(out)
+PYEOF
+node -e "
+const fs=require('fs'); let s=fs.readFileSync('/c/ML-Experiment/scripts/loop17_text_e139.py','utf8');
+" 2>/dev/null; grep -n "out.append(narr(g))" loop17_text_e139.py
+
+=== line 5158 id toolu_01W6rdxMrvVCQDSxLGv2ijh8
+cd /c/ML-Experiment/scripts && node -e "
+const fs=require('fs');
+let b=fs.readFileSync('build_loop17_report.py','utf8');
+const a='return next((v[\"route_success\"] for k, v in c.items() if k.startswith(f\"sigma{sg}_\") and k.endswith(f\"_route_{rt}_{ph}\")), None)';
+if(!b.includes(a)) console.log('MISSING cell'); b=b.replace(a,'return next((v[\"route_success\"] for k, v in c.items() if k.startswith(f\"sigma{sg}_\") and k.endswith(f\"_route_{rt}_{ph}\")), float(\"nan\"))');
+fs.writeFileSync('build_loop17_report.py',b);
+let e=fs.readFileSync('p17_extra.py','utf8');
+const p='(f\"e135_route/{p}_single\", f\"e135_route/{p}_maxdecay_0.95\", f\"{p}_single\", f\"{p}: hold - single frame (champion; hold = recursion off)\"),';
+if(!e.includes(p)) console.log('MISSING pair'); e=e.replace(p,'(f\"e135_route/{p}_maxdecay_0.95\", f\"e135_route/{p}_single\", f\"{p}_maxdecay_0.95\", f\"{p}: hold - single frame (champion; hold = recursion off)\"),');
+fs.writeFileSync('p17_extra.py',e);"
+cat > /c/ML-Experiment/scripts/_run_final17b.sh <<'EOF'
+#!/bin/bash
+S=/mnt/c/ML-Experiment/scripts
+L=/mnt/c/ML-Experiment/out/loop2/e17/logs
+bash $S/_py14.sh p17_extra.py > $L/final_extra.log 2>&1
+bash $S/_py14.sh build_loop17_report.py > $L/final_build.log 2>&1
+echo finished > $L/final17b.done
+EOF
+rm -f /c/ML-Experiment/out/loop2/e17/logs/final17b.done; cd /c/ML-Experiment && MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-22.04 -- bash /mnt/c/ML-Experiment/scripts/_run_final17b.sh; tail -2 out/loop2/e17/logs/final_build.log | cut -c1-200
+

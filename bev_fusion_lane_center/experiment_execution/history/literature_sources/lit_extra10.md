@@ -1,0 +1,16 @@
+### 3.16 Loop 10: from algorithm to network (how the literature entered the learned extractor; what each element gave in our experiments)
+
+The works below were read for loops 8 and 9 (section 3.13) and for the loop-10 proposal (`reports/Proposal_Sparse_Graph_Extraction.pdf`, element-level mapping); here only what was taken over and what came out is listed. Numbers in the last column are ours (nuScenes VAL / TEST, camera + radar BEV features), not the authors'.
+
+| Work | Idea | Where it entered the implementation | What came out in our experiments |
+|---|---|---|---|
+| RoadTracer (CVPR 2018) | iterative search guided by a CNN decision function; evaluate at a fixed error budget | the step network is its decision function (heading, step, stop); range-banded evaluation | the tracer alone is good (oracle seeds F1 0.921 above the rule pipeline 0.908); the error budget view shows the seeds as the limit |
+| RNGDet / RNGDet++ (imitation learning, transformer) | graph grown vertex by vertex; noisy walks with corrective expert actions | training scheme: noisy states, corrective expert, events end / fork / merge | works at 1.67 M parameters and 10,000 steps; the expert replay reproduces the ground truth (F1 0.99) |
+| SAM-Road (CVPRW 2024), SAM-Road++, GLD-Road | vertices by NMS on probability masks, edge existence by a light transformer; repair only where the graph is broken | seed head with NMS; the merge pointer and the edge transformer of E83 / E87 | seeds: 48 -> 192 peaks lift F1 0.844 -> 0.895; the arm with vertex-first graph transformer (arm C of the proposal) was not run |
+| Sat2Graph (ECCV 2020) | graph tensor, single pass, decoding not differentiable | not used (decoding would be a hand-built block) | - |
+| LaneGAP (ECCV 2024), SeqGrowGraph (ICCV 2025) | lanes as paths; autoregressive vertex insertion | path view of the evaluation (E46); step events | the learned graph recovers junctions better than the loose rule graph (split / merge F1 0.36 / 0.46 against 0.29 / 0.39), not better than key points + connectors (0.69 / 0.65) |
+| TopoLogic / CGNet (2024) | learnable distance kernel x semantic similarity for links; junction-aware queries | not implemented (planned connector head) | topology remains the gap to the final rule graph |
+| MapTR / VectorMapNet / LaneSegNet-style queries (E32) | polyline set prediction with matching | arm B of the proposal, not run | E32 (loop 2) stays the evidence: sparse-only decoders underfit |
+| OrienterNet (CVPR 2023), UMPE (ICRA 2026) | differentiable registration of a BEV raster against a navigation map; presence gate for map priors | correlation-volume localisation with a soft-argmax (E103e); abstention targets (E87) | a differentiable localisation works as a module (pose error 2.5 -> 0.8 m at 2 m error with a fixed temperature, 1.1 m inside the trained head) but does not improve the route success of the registration-free head |
+
+Takeaway: the literature's sparse-graph methods map one to one onto learned elements (seed head, step network, events, pointer), and the expert-imitation scheme of RNGDet++ is enough to train them from the ground-truth graph; what the literature does not say is that the seeds, not the tracer, limit such a network on lane graphs, and that an order near to far gives no gain once the context is learned.

@@ -1,0 +1,4 @@
+e123_D6_r1_b4 tau 0.1 | F1o2o 0.733 | splits pred 0.7 gt 2.6 P 0.276 R 0.075 | merges pred 0.8 gt 2.9 | v100 20.0 chord 5.5 m | along 0.13 across 0.34 | ece 0.29
+  -> ('D', 'forks missed: split recall 0.08', 'b = 3 instead of 2, lower prune threshold')
+  -> ('H', 'vertices per 100 m 20.0', 'step-length target, vertex-count penalty (SPF1)')
+  -> ('H', 'validity calibration ECE 0.29', 'focal loss, temperature')

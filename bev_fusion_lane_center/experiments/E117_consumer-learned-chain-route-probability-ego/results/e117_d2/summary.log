@@ -1,0 +1,15 @@
+[strict] frames with a counterfactual branch and a driven path >= 30 m: 53 of 546 (dropped for a short driven path: 26)
+[strict] frames 53 (11 scenes); with >= 2 traced edges on each branch 51 (11 scenes), mean branch point 7.8 m
+  true: closer to the side road 0.000 (seeds 0.000-0.000; scene bootstrap 0.000-0.000), within 4 m of the side road 0.000, 30 m point to side road 14.1 m / to driven path 0.83 m; route prob on side-road edges 0.00, on driven edges 0.66
+  cf: closer to the side road 0.641 (seeds 0.549-0.706; scene bootstrap 0.512-0.807), within 4 m of the side road 0.471, 30 m point to side road 6.7 m / to driven path 8.74 m; route prob on side-road edges 0.43, on driven edges 0.01
+  true_or: closer to the side road 0.000 (seeds 0.000-0.000; scene bootstrap 0.000-0.000), within 4 m of the side road 0.000, 30 m point to side road 13.9 m / to driven path 0.82 m
+  cf_or: closer to the side road 0.810 (seeds 0.706-0.863; scene bootstrap 0.688-0.933), within 4 m of the side road 0.641, 30 m point to side road 5.0 m / to driven path 10.10 m
+  runs of consecutive frames: 15
+[loose] frames with a counterfactual branch and a driven path >= 30 m: 112 of 546 (dropped for a short driven path: 39)
+[loose] frames 112 (14 scenes); with >= 2 traced edges on each branch 110 (14 scenes), mean branch point 7.8 m
+  true: closer to the side road 0.000 (seeds 0.000-0.000; scene bootstrap 0.000-0.000), within 4 m of the side road 0.000, 30 m point to side road 18.6 m / to driven path 0.67 m; route prob on side-road edges 0.01, on driven edges 0.73
+  cf: closer to the side road 0.297 (seeds 0.255-0.327; scene bootstrap 0.205-0.431), within 4 m of the side road 0.218, 30 m point to side road 14.8 m / to driven path 5.27 m; route prob on side-road edges 0.36, on driven edges 0.02
+  true_or: closer to the side road 0.000 (seeds 0.000-0.000; scene bootstrap 0.000-0.000), within 4 m of the side road 0.000, 30 m point to side road 18.4 m / to driven path 0.66 m
+  cf_or: closer to the side road 0.370 (seeds 0.327-0.391; scene bootstrap 0.286-0.474), within 4 m of the side road 0.294, 30 m point to side road 13.8 m / to driven path 5.93 m
+  runs of consecutive frames: 23
+DONE

@@ -1,0 +1,25 @@
+== 03:15:31 {'name': 'e30_valA', 'fg': 'gcar', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 4000, 'bs': 8, 'lr': 0.0006, 'wd': 0.0001, 'base': 48, 'drop': 0.0, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'train_n': 0, 'train_stride': 1, 'dir': 0.5, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'save_prob': 1, 'amp': 1, 'train_part': 'val', 'fold': -1, 'nfolds': 3, 'flip': 0, 'eval': 'valB,test', 'workers': 3, 'seed': 12, 'eps': 1e-06, 'min_scale': 32.0, 'beta2': 0.98, 'guard': 1, 'guard_ratio': 1.2, 'clip': 3.0}
+Eingangskanaele 39 Parameter 2736867 Trainings-Samples 40
+Schritt 200/4000 Verlust 7.2779 (max 21.5, median 5.73) (0.43 s/Schritt) geklippt 1 uebersprungen 0 skala 2048
+Schritt 400/4000 Verlust 2.4446 (max 3.9, median 2.30) (0.38 s/Schritt) geklippt 2 uebersprungen 0 skala 4096
+Schritt 600/4000 Verlust 1.7471 (max 1.9, median 1.73) (0.36 s/Schritt) geklippt 2 uebersprungen 0 skala 8192
+Schritt 800/4000 Verlust 1.6580 (max 1.7, median 1.66) (0.35 s/Schritt) geklippt 2 uebersprungen 0 skala 16384
+Schritt 1000/4000 Verlust 1.6322 (max 1.7, median 1.63) (0.35 s/Schritt) geklippt 2 uebersprungen 0 skala 32768
+Schritt 1200/4000 Verlust 1.6233 (max 1.7, median 1.63) (0.35 s/Schritt) geklippt 2 uebersprungen 0 skala 65536
+Schritt 1400/4000 Verlust 1.6154 (max 1.7, median 1.62) (0.36 s/Schritt) geklippt 2 uebersprungen 0 skala 131072
+Schritt 1600/4000 Verlust 1.6113 (max 1.7, median 1.62) (0.36 s/Schritt) geklippt 2 uebersprungen 0 skala 262144
+Schritt 1800/4000 Verlust 1.6069 (max 1.7, median 1.61) (0.37 s/Schritt) geklippt 2 uebersprungen 0 skala 524288
+Schritt 2000/4000 Verlust 1.6045 (max 1.7, median 1.61) (0.38 s/Schritt) geklippt 2 uebersprungen 1 skala 262144
+Schritt 2200/4000 Verlust 1.6030 (max 1.7, median 1.61) (0.39 s/Schritt) geklippt 2 uebersprungen 1 skala 524288
+Schritt 2400/4000 Verlust 1.6022 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 2 uebersprungen 2 skala 524288
+Schritt 2600/4000 Verlust 1.6002 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 2 uebersprungen 3 skala 524288
+Schritt 2800/4000 Verlust 1.5997 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 2 uebersprungen 3 skala 1048576
+Schritt 3000/4000 Verlust 1.5988 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 2 uebersprungen 4 skala 1048576
+Schritt 3200/4000 Verlust 1.5984 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 2 uebersprungen 5 skala 524288
+Schritt 3400/4000 Verlust 1.5981 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 2 uebersprungen 5 skala 1048576
+Schritt 3600/4000 Verlust 1.5978 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 3 uebersprungen 6 skala 1048576
+Schritt 3800/4000 Verlust 1.5977 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 3 uebersprungen 6 skala 2097152
+Schritt 4000/4000 Verlust 1.5977 (max 1.7, median 1.60) (0.40 s/Schritt) geklippt 5 uebersprungen 6 skala 4194304
+[valB] 833 Samples; bester Schwellwert 0.2: F1 @0,5/1/1,5 = 0.141 / 0.259 / 0.333, P/R@1 0.636/0.162, 1:1 0.227
+[test] 833 Samples; bester Schwellwert 0.2: F1 @0,5/1/1,5 = 0.118 / 0.205 / 0.258, P/R@1 0.658/0.122, 1:1 0.176
+FERTIG 03:43:35

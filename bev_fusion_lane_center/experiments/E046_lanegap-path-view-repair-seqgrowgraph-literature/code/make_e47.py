@@ -1,0 +1,28 @@
+"""Bericht E47 (Schleife 4): SeqGrowGraph - Einordnung (ohne eigenes Training). Aufruf (gcar): make_e47.py"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from report2 import make_report2  # noqa: E402
+
+head = ["aspect", "SeqGrowGraph (Xie et al., ICCV 2025)", "this project", "consequence"]
+rows = [
+    ["graph representation", "directed graph of intersection / key-topology vertices; adjacency matrix grows n x n -> (n+1) x (n+1) with every inserted vertex; centerlines as quadratic Bezier curves (geometric matrix)", "pieces (polylines at 1 m spacing) + successor edges; nodes = piece ends / starts; explicit split / merge nodes from E44", "E44's CUT insertion is a non-autoregressive analogue of the vertex insertion: a learned key point becomes a vertex, the pieces around it are re-attached (adjacency expanded by the new node's row / column)"],
+    ["order and decoding", "depth-first vertex order (better than centre, coordinate or BFS order in their ablation); transformer decoder, 6 layers, autoregressive; 0.5 m coordinate tokens, node-index tokens 200-350, Bezier-point tokens 350-570", "line tracer = rule-based sequential growth in a greedy order (E26 / E31); proposals -> refiner -> links in parallel", "the learned autoregressive growth would replace tracer, refiner and link head by one model; it must learn the lane geometry from scratch"],
+    ["encoder and compute", "LSS ResNet50 lifts the six cameras to BEV; 4 x A100, 400 epochs on nuScenes (50 on Argoverse 2)", "frozen GaussianCaR features (map-pretrained) + small heads; one RTX 3060 (12 GB)", "not reproducible here: the sparse-only transformer of E32 (8,000 steps) was already far below the grid at this budget (0.821 vs 0.891 F1@1 m, route F 0.587 vs 0.782)"],
+    ["loops and bidirectional lanes", "explicitly represented (a vertex may connect back to earlier vertices through F_n / T_n)", "the tracer counts loops (8.3 per sample against 4.1 in the map, E26) and the assembler merges at contacts; roundabouts are enumerated once per piece in the path view (E46)", "an advantage of the sequence view; our pieces handle loops only through links"],
+    ["metrics", "landmark and reachability F (from RNTR), connectivity F (from STSU); nuScenes landmark F 56.4, reachability F 67.8", "point F1 at 0.5 / 1 / 1.5 m, route F (APLS-like), split / merge F1, path F1 (E46), stability", "not comparable numerically (different protocol, splits and ground truth); the route F plays the role of their reachability"],
+    ["what we took / could take", "vertex insertion as the growth step; DFS ordering; Bezier curves for connectors", "E44: learned vertices (key points) inserted into an existing graph; E46: paths enumerated depth-first; E53: Bezier connectors (cubic, end headings from the trunk and the exit piece) between a split and a merge key point", "E44's diagnosis (55 % / 42 % of the key-point-confirmed nodes lack the branch piece) pointed to the connector; E53 generates it without any autoregressive model (split F1 0.552 -> 0.714 on TEST); which connectors exist is still decided by a heat threshold, not learned"],
+]
+setup = [
+    "No SeqGrowGraph model was trained or evaluated: it needs an end-to-end BEV encoder and hundreds of GPU-hours for the autoregressive decoder (400 epochs on 4 A100 GPUs in the paper). This section places the method relative to our pipeline and states what was adopted from it in spirit.",
+    "Facts about the paper (arXiv 2507.04822): the lane graph is serialised as S_n = S_(n-1) + (v_n + F_n + T_n) - the new vertex v_n and the centerlines F_n (incoming) / T_n (outgoing) that connect it to earlier vertices -, ordered depth-first, coordinates discretised at 0.5 m, MLE cross-entropy loss with the coordinate tokens weighted twice; evaluated on nuScenes (default and PON splits) and Argoverse 2.",
+]
+findings = [
+    "SeqGrowGraph models exactly what the key-point experiments of this loop found to be the bottleneck - the NODES of the graph and the connectors between them - but with an autoregressive decoder learned from scratch. Our E44 shows that on frozen foundation features a dense key-point head already finds the vertices (location F1 0.79 / 0.83 at 6 m) and that inserting them into an existing graph lifts the split / merge F1 from 0.34 / 0.38 to 0.55 / 0.61 (TEST) without moving a single centerline point; what is missing afterwards are the connector pieces (E44's diagnosis), which a sequence model would have to generate.",
+    "A cheap bridge to SeqGrowGraph's representation is the Bezier connector between a split key point and a merge key point (end headings from the trunk and the exit piece): Bezier curves are exactly its geometry token. It was built afterwards as E53 (cubic instead of quadratic curves, accepted by the heat of the dense head along the curve): TEST split F1 (6 m) 0.552 -> 0.714 and merge F1 0.607 -> 0.637 at a route-F cost of 0.014, i.e. the connector geometry is useful without the autoregressive model; the decision WHICH connectors exist remains a threshold, not a learned sequence.",
+    "Because the method was not trained here, no performance claim is made; the comparison table is qualitative.",
+]
+limits = ["The comparison is based on the paper's text; no code or checkpoint was run."]
+make_report2("E47", "SeqGrowGraph (autoregressive lane-graph growth): relation to the pipeline and what E44 takes from it", "Is the autoregressive 'chain of graph expansions' of SeqGrowGraph a useful way to build the lane graph on our frozen features, and what does the pipeline already do in its spirit?", setup, [("SeqGrowGraph against this project", head, rows)], [], findings, limits, arch=None)
+print("E47 written")

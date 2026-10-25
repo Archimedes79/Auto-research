@@ -1,0 +1,42 @@
+{
+ "dense head (U-Net, 2.7 M params)": {
+  "ms": 7.861010233561198,
+  "device": "GPU (fp16, batch 1)",
+  "note": "heat map + direction field"
+ },
+ "grid graph: strict tracer + assembler": {
+  "ms": 6.392590204874675,
+  "device": "CPU (1 core, numba)",
+  "note": "the grid-only system"
+ },
+ "relaxed tracer + resampling to 1 m proposals": {
+  "ms": 6.124051411946615,
+  "device": "CPU (1 core, numba)",
+  "note": "input of the refiner"
+ },
+ "cascade refiner (3 blocks, 0.76 M params)": {
+  "ms": 22.175025939941406,
+  "device": "GPU (fp32, batch 1)",
+  "note": "18 pieces, 620 points in this sample"
+ },
+ "cut + orient + de-duplicate + link (rule)": {
+  "ms": 5.207186937332153,
+  "device": "CPU (1 core)",
+  "note": "post-processing of the refined pieces"
+ },
+ "learned link head (MLP, ~40 candidates)": {
+  "ms": 0.5347251892089844,
+  "device": "GPU",
+  "note": "feature extraction for the candidates on CPU is included in the next line"
+ },
+ "link candidates + features (CPU)": {
+  "ms": 8.755552768707275,
+  "device": "CPU (1 core)",
+  "note": "candidate links and the 32 features"
+ },
+ "TOTAL (without foundation network)": {
+  "ms": 57.05014268557231,
+  "device": "",
+  "note": "sequential, batch 1; the foundation network (GaussianCaR) adds about 80 ms per frame on an RTX 4090 according to its authors and was measured at roughly 0.4 s per sample here (RTX 3060)"
+ }
+}

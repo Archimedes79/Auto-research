@@ -1,0 +1,7 @@
+[dark_single] s0 s0: cl 0.882 fail 0.584 | s0 s1: cl 0.846 fail 0.547 | s2 s0: cl 0.860 fail 0.547 | s2 s1: cl 0.846 fail 0.533  62 s
+[dark_maxdecay_0.95] s0 s0: cl 0.860 fail 0.788 | s0 s1: cl 0.853 fail 0.737 | s2 s0: cl 0.838 fail 0.723 | s2 s1: cl 0.831 fail 0.672  119 s
+[blur_single] s0 s0: cl 0.882 fail 0.796 | s0 s1: cl 0.846 fail 0.766 | s2 s0: cl 0.860 fail 0.752 | s2 s1: cl 0.846 fail 0.759  179 s
+[blur_maxdecay_0.95] s0 s0: cl 0.860 fail 0.876 | s0 s1: cl 0.853 fail 0.839 | s2 s0: cl 0.838 fail 0.839 | s2 s1: cl 0.831 fail 0.832  236 s
+[cam_front3_off_single] s0 s0: cl 0.882 fail 0.745 | s0 s1: cl 0.846 fail 0.818 | s2 s0: cl 0.860 fail 0.723 | s2 s1: cl 0.846 fail 0.803  294 s
+[cam_front3_off_maxdecay_0.95] s0 s0: cl 0.860 fail 0.766 | s0 s1: cl 0.853 fail 0.701 | s2 s0: cl 0.838 fail 0.759 | s2 s1: cl 0.831 fail 0.701  352 s
+DONE 19:05:19

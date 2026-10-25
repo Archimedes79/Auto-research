@@ -1,0 +1,8 @@
+trained graph
+trained route+ego
+trained route+ego+both
+dark/s2 frame row 959 {'graph': 11.45, 'route+ego': 1.46, 'route+ego+both': 6.16}
+cam_front3_off/s2 frame row 958 {'graph': 11.13, 'route+ego': 3.4, 'route+ego+both': 3.63}
+blur/s2 frame row 959 {'graph': 11.64, 'route+ego': 2.51, 'route+ego+both': 3.11}
+clean/wrong frame row 186 {'graph': 17.57, 'route+ego': 0.99, 'route+ego+both': 0.81}
+DONE

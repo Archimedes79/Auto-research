@@ -1,0 +1,35 @@
+{
+ "res": {
+  "s2/a0/tau0.6": {
+   "route_success": 0.8009888751545118,
+   "route_cov": 0.8972453649916489,
+   "route_prec": 0.9460772706424713,
+   "n_route": 809,
+   "flagged_len_per_row": 65.69339072099783
+  },
+  "s2/a0.5/tau0.6": {
+   "route_success": 0.7601977750309024,
+   "route_cov": 0.8799560296582385,
+   "route_prec": 0.9521319449092457,
+   "n_route": 809,
+   "flagged_len_per_row": 64.40265011520552,
+   "diff_vs_a0": {
+    "diff": -0.0407911001236094,
+    "lo": -0.06180660943102963,
+    "hi": -0.019899879484564755
+   }
+  }
+ },
+ "args": {
+  "tok": "tok_e94_a_test_clean",
+  "model": "e104b",
+  "out": "e106_dbg",
+  "cells": "s2",
+  "a_list": "0,0.5",
+  "taus": "0.6",
+  "s": 1.5,
+  "draws": 2000
+ },
+ "n_items": 833,
+ "n_scenes": 21
+}

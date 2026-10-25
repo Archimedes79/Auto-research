@@ -1,0 +1,6771 @@
+{
+"live": [
+"arch_figs",
+"arch_figs2",
+"arch_figs4",
+"arch_figs5",
+"arch_figs6",
+"arch_figs7",
+"arch_figs8",
+"assoc_lib",
+"boot_eval",
+"build_e2e_condensed",
+"build_loop15_report",
+"build_loop16_report",
+"dense_head",
+"e2e_basis",
+"e2e_catalogue",
+"fig_p14",
+"fig_p15",
+"fig_p16_arch",
+"fig_p16_arch_draft",
+"fig_p16_assembly_ladder",
+"fig_p16_beam",
+"fig_p16_design",
+"fig_p16_effects0",
+"fig_p16_families",
+"fig_p16_forks",
+"fig_p16_frames",
+"fig_p16_frontier_final",
+"fig_p16_ladder",
+"fig_p16_pareto",
+"fig_p16_route_attr",
+"fig_p16_teardrop",
+"fig_p16_tree",
+"fig_p16_triage",
+"graph_eval",
+"graph_from_dense",
+"line_tracer",
+"loop15_text",
+"loop15_text_static",
+"loop16_text",
+"loop16_text_a",
+"loop16_text_b",
+"loop16_text_static",
+"p10_data",
+"p10_expert",
+"p10_infer",
+"p10_net",
+"p10_route_eval2",
+"p10_train",
+"p10_wave",
+"p11_eval",
+"p11_route_time",
+"p12_calib",
+"p13_connect",
+"p13_consumer",
+"p13_consumer_ego",
+"p13_consumer_ego2",
+"p13_consumer_ego3",
+"p13_consumer_gate",
+"p13_consumer_gate_ctrl",
+"p13_consumer_viz",
+"p13_jdiag_after",
+"p13_jhead",
+"p13_juncpr",
+"p13_junction",
+"p13_pfail_diag",
+"p13_phead",
+"p13_phead_fail",
+"p13_route_fail",
+"p13_rulejunc",
+"p13_temporal_val",
+"p13_vfail",
+"p14_chain_consumer",
+"p14_chain_data",
+"p14_chain_fail_data",
+"p14_chain_fail_eval",
+"p14_chain_fail_train",
+"p14_counterfactual",
+"p14_counterfactual_fig",
+"p14_diag_tok",
+"p14_explore",
+"p14_explore2",
+"p14_joint",
+"p14_oracle",
+"p14_pages",
+"p14_pages2",
+"p14_ref",
+"p14_stats",
+"p14_stats2",
+"p14_tmp",
+"p14_tmp2",
+"p14_tmp3",
+"p14_tmp4",
+"p14_tmp5",
+"p14_tmp6",
+"p14_viz",
+"p14_viz_fail",
+"p15_analysis",
+"p15_chain_data",
+"p15_joint",
+"p15_keep_eval",
+"p15_make_tokens",
+"p15_probe",
+"p15_refine",
+"p15_route_pairs",
+"p16_anchors",
+"p16_asm_grid",
+"p16_builder",
+"p16_builder_fix",
+"p16_catalogue",
+"p16_chain_data",
+"p16_common",
+"p16_ctrl",
+"p16_data",
+"p16_diag",
+"p16_driver",
+"p16_ensemble",
+"p16_ensemble2",
+"p16_eval",
+"p16_fast_check",
+"p16_fast_val",
+"p16_final_eval",
+"p16_gate",
+"p16_geom",
+"p16_graph_try",
+"p16_hyst",
+"p16_infer",
+"p16_junc_diag",
+"p16_junc_head_eval",
+"p16_loss",
+"p16_oracle_junc",
+"p16_pareto",
+"p16_pipeline",
+"p16_pipeline_eval",
+"p16_prof_asm",
+"p16_ref",
+"p16_report",
+"p16_route_check",
+"p16_route_diag",
+"p16_route_diag2",
+"p16_runtime",
+"p16_runtime_check",
+"p16_smoke",
+"p16_sync_try",
+"p16_time",
+"p16_timing",
+"p16_tok_resample",
+"p16_tokens",
+"p16_train",
+"p16_triage",
+"p17_latency",
+"p8_assign",
+"p8_consumer",
+"p8_lib",
+"p8_seg",
+"report_lib",
+"sd_lib",
+"test_p16_spec"
+],
+"cls": {
+"_add_e24.py": [
+"junk",
+null
+],
+"_add_odo_txt.py": [
+"junk",
+null
+],
+"_add_poorq.py": [
+"junk",
+null
+],
+"_add_route_txt.py": [
+"junk",
+null
+],
+"_apply_e111.py": [
+"exp",
+111
+],
+"_assemble_cards7.py": [
+"other",
+null
+],
+"_bench_iso.sh": [
+"other",
+null
+],
+"_bg.sh": [
+"other",
+null
+],
+"_build_bundle11.sh": [
+"other",
+null
+],
+"_build_bundle12.sh": [
+"other",
+null
+],
+"_build_bundle13.sh": [
+"other",
+null
+],
+"_build_bundle14.sh": [
+"other",
+null
+],
+"_bundle_selftest_temporal.py": [
+"other",
+null
+],
+"_bundle_temporal.py": [
+"other",
+null
+],
+"_cards8.txt": [
+"other",
+null
+],
+"_cards_graph.txt": [
+"other",
+null
+],
+"_chain_e102.sh": [
+"exp",
+102
+],
+"_chain_e102b.sh": [
+"exp",
+102
+],
+"_check_final13.py": [
+"other",
+null
+],
+"_chk11.py": [
+"junk",
+null
+],
+"_chk11b.py": [
+"junk",
+null
+],
+"_chk11c.py": [
+"junk",
+null
+],
+"_chk_auc.py": [
+"junk",
+null
+],
+"_chk_cards.py": [
+"junk",
+null
+],
+"_chk_cards2.py": [
+"junk",
+null
+],
+"_chk_final5.py": [
+"junk",
+null
+],
+"_chk_pptx.sh": [
+"junk",
+null
+],
+"_chk_splits.py": [
+"junk",
+null
+],
+"_cmp_arrays.py": [
+"junk",
+null
+],
+"_count_checks.sh": [
+"other",
+null
+],
+"_cut.py": [
+"other",
+null
+],
+"_dbg10.py": [
+"junk",
+null
+],
+"_dbg10b.py": [
+"junk",
+null
+],
+"_dbg_anchor.py": [
+"junk",
+null
+],
+"_dbg_asm.py": [
+"junk",
+null
+],
+"_dbg_axes.py": [
+"junk",
+null
+],
+"_dbg_corr.py": [
+"junk",
+null
+],
+"_dbg_forkcases.py": [
+"junk",
+null
+],
+"_dbg_forks.py": [
+"junk",
+null
+],
+"_dbg_g4.py": [
+"junk",
+null
+],
+"_dbg_glue.py": [
+"junk",
+null
+],
+"_dbg_gtsplit.py": [
+"junk",
+null
+],
+"_dbg_junc.py": [
+"junk",
+null
+],
+"_dbg_kind.py": [
+"junk",
+null
+],
+"_dbg_link.py": [
+"junk",
+null
+],
+"_dbg_links_off.py": [
+"junk",
+null
+],
+"_dbg_plot.py": [
+"junk",
+null
+],
+"_dbg_plot2.py": [
+"junk",
+null
+],
+"_dbg_route.py": [
+"junk",
+null
+],
+"_dbg_sd.py": [
+"junk",
+null
+],
+"_dbg_struct.py": [
+"junk",
+null
+],
+"_decide_p2a.py": [
+"junk",
+null
+],
+"_decide_p2b.py": [
+"junk",
+null
+],
+"_decide_p2c.py": [
+"junk",
+null
+],
+"_decide_p2d.py": [
+"junk",
+null
+],
+"_dump_cards_brief.py": [
+"junk",
+null
+],
+"_dump_cmds.py": [
+"junk",
+null
+],
+"_dump_final5.py": [
+"junk",
+null
+],
+"_e108.sh": [
+"exp",
+108
+],
+"_e108b.sh": [
+"exp",
+108
+],
+"_e109.sh": [
+"exp",
+109
+],
+"_e111_eval.sh": [
+"exp",
+111
+],
+"_e112.sh": [
+"exp",
+112
+],
+"_e112b.sh": [
+"exp",
+112
+],
+"_e114.sh": [
+"exp",
+114
+],
+"_e40_base.py": [
+"exp",
+40
+],
+"_enq_b.py": [
+"other",
+null
+],
+"_far_val.sh": [
+"other",
+null
+],
+"_figs11.sh": [
+"other",
+null
+],
+"_fill_best.py": [
+"junk",
+null
+],
+"_fill_bundle.py": [
+"junk",
+null
+],
+"_fill_e78card.py": [
+"junk",
+null
+],
+"_fill_e80card.py": [
+"junk",
+null
+],
+"_fill_ofat.py": [
+"junk",
+null
+],
+"_fill_placeholders.py": [
+"junk",
+null
+],
+"_fill_testtext.py": [
+"junk",
+null
+],
+"_final16b.py": [
+"other",
+null
+],
+"_final_build13.sh": [
+"other",
+null
+],
+"_final_state.py": [
+"other",
+null
+],
+"_finalize12.py": [
+"other",
+null
+],
+"_findpages.py": [
+"other",
+null
+],
+"_fix_basis.py": [
+"junk",
+null
+],
+"_fix_basis2.py": [
+"junk",
+null
+],
+"_fix_campus.py": [
+"junk",
+null
+],
+"_fix_e79.py": [
+"junk",
+null
+],
+"_fix_e79b.py": [
+"junk",
+null
+],
+"_fix_e80card.py": [
+"junk",
+null
+],
+"_fix_e80nums.py": [
+"junk",
+null
+],
+"_fix_fig13.py": [
+"junk",
+null
+],
+"_fix_fig13b.py": [
+"junk",
+null
+],
+"_fix_fig13c.py": [
+"junk",
+null
+],
+"_fix_final.sh": [
+"junk",
+null
+],
+"_fix_geo_readme.py": [
+"junk",
+null
+],
+"_fix_guard.py": [
+"junk",
+null
+],
+"_fix_honest.py": [
+"junk",
+null
+],
+"_fix_md.py": [
+"junk",
+null
+],
+"_fix_mem_tau.py": [
+"junk",
+null
+],
+"_fix_misc.py": [
+"junk",
+null
+],
+"_fix_misc2.py": [
+"junk",
+null
+],
+"_fix_odo2.py": [
+"junk",
+null
+],
+"_fix_s1.sh": [
+"junk",
+null
+],
+"_fix_seed.py": [
+"junk",
+null
+],
+"_fix_state_numbers.py": [
+"junk",
+null
+],
+"_fix_text3.py": [
+"junk",
+null
+],
+"_fix_ver_doc.py": [
+"junk",
+null
+],
+"_fixbundle.py": [
+"junk",
+null
+],
+"_fixbundle.sh": [
+"junk",
+null
+],
+"_fixbundle2.sh": [
+"junk",
+null
+],
+"_fork_nodes_fig.py": [
+"other",
+null
+],
+"_forks_by_angle.py": [
+"other",
+null
+],
+"_fx1.py": [
+"junk",
+null
+],
+"_fx10.py": [
+"junk",
+null
+],
+"_fx11.py": [
+"junk",
+null
+],
+"_fx12.py": [
+"junk",
+null
+],
+"_fx13.py": [
+"junk",
+null
+],
+"_fx14.py": [
+"junk",
+null
+],
+"_fx15.py": [
+"junk",
+null
+],
+"_fx16.py": [
+"junk",
+null
+],
+"_fx2.py": [
+"junk",
+null
+],
+"_fx3.py": [
+"junk",
+null
+],
+"_fx4.py": [
+"junk",
+null
+],
+"_fx5.py": [
+"junk",
+null
+],
+"_fx6.py": [
+"junk",
+null
+],
+"_fx7.py": [
+"junk",
+null
+],
+"_fx8.py": [
+"junk",
+null
+],
+"_fx9.py": [
+"junk",
+null
+],
+"_gen_ref11.py": [
+"junk",
+null
+],
+"_gen_ref12.py": [
+"junk",
+null
+],
+"_gen_ref13.py": [
+"junk",
+null
+],
+"_gen_ref14.py": [
+"junk",
+null
+],
+"_guard78.py": [
+"other",
+null
+],
+"_html2txt.py": [
+"other",
+null
+],
+"_insert_e78.py": [
+"exp",
+78
+],
+"_inspect10.py": [
+"junk",
+null
+],
+"_inspect_b.py": [
+"junk",
+null
+],
+"_inspect_ds.py": [
+"junk",
+null
+],
+"_install12.ps1": [
+"other",
+null
+],
+"_install13.ps1": [
+"other",
+null
+],
+"_install14.ps1": [
+"other",
+null
+],
+"_inventory.py": [
+"other",
+null
+],
+"_jl_find.py": [
+"junk",
+null
+],
+"_jl_ops.json": [
+"junk",
+null
+],
+"_jl_ops.py": [
+"junk",
+null
+],
+"_jl_ops.txt": [
+"junk",
+null
+],
+"_jl_probe.py": [
+"junk",
+null
+],
+"_jl_reads.py": [
+"junk",
+null
+],
+"_journal10.py": [
+"other",
+null
+],
+"_keys.py": [
+"other",
+null
+],
+"_kill_btr.sh": [
+"other",
+null
+],
+"_kill_btrain.sh": [
+"other",
+null
+],
+"_kill_chain1.sh": [
+"other",
+null
+],
+"_kill_dense.sh": [
+"other",
+null
+],
+"_kill_e39.sh": [
+"exp",
+39
+],
+"_kill_name.sh": [
+"other",
+null
+],
+"_kill_odo2.sh": [
+"other",
+null
+],
+"_kill_oldfinal.sh": [
+"other",
+null
+],
+"_kill_q7.sh": [
+"other",
+null
+],
+"_kill_tb.sh": [
+"other",
+null
+],
+"_killfit.sh": [
+"other",
+null
+],
+"_link_eval2.sh": [
+"other",
+null
+],
+"_listcards.py": [
+"other",
+null
+],
+"_loc_counts.py": [
+"other",
+null
+],
+"_ls_p8.sh": [
+"other",
+null
+],
+"_ls_pert.sh": [
+"other",
+null
+],
+"_make_build12.py": [
+"other",
+null
+],
+"_make_chain16.py": [
+"other",
+null
+],
+"_make_p13_rf.py": [
+"other",
+null
+],
+"_mem1.txt": [
+"junk",
+null
+],
+"_mem2.py": [
+"junk",
+null
+],
+"_mem3.py": [
+"junk",
+null
+],
+"_mem4.py": [
+"junk",
+null
+],
+"_mk_readmes.py": [
+"other",
+null
+],
+"_mkcards10.py": [
+"junk",
+null
+],
+"_mkcards11.py": [
+"junk",
+null
+],
+"_mkcards12.py": [
+"junk",
+null
+],
+"_mkcards13.py": [
+"junk",
+null
+],
+"_mkcards14.py": [
+"junk",
+null
+],
+"_mkcards9.py": [
+"junk",
+null
+],
+"_montage_pptx.py": [
+"other",
+null
+],
+"_next1.py": [
+"other",
+null
+],
+"_noshutdown.py": [
+"other",
+null
+],
+"_notes1.py": [
+"junk",
+null
+],
+"_notes_forks.py": [
+"junk",
+null
+],
+"_notes_forks2.py": [
+"junk",
+null
+],
+"_notes_h.py": [
+"junk",
+null
+],
+"_notes_r0.py": [
+"junk",
+null
+],
+"_notes_r1.py": [
+"junk",
+null
+],
+"_notes_r2.py": [
+"junk",
+null
+],
+"_notes_r3a.py": [
+"junk",
+null
+],
+"_notes_r3b.py": [
+"junk",
+null
+],
+"_notes_r3c.py": [
+"junk",
+null
+],
+"_notes_r3d.py": [
+"junk",
+null
+],
+"_notes_r3e.py": [
+"junk",
+null
+],
+"_oof_fast.sh": [
+"other",
+null
+],
+"_oof_fast2.sh": [
+"other",
+null
+],
+"_oof_now.sh": [
+"other",
+null
+],
+"_orient_eval.sh": [
+"other",
+null
+],
+"_p10_buildrep.sh": [
+"junk",
+null
+],
+"_p11_buildrep.sh": [
+"junk",
+null
+],
+"_p12_buildrep.sh": [
+"junk",
+null
+],
+"_p13_buildrep.sh": [
+"junk",
+null
+],
+"_p14_buildrep.sh": [
+"junk",
+null
+],
+"_p16_g.txt": [
+"junk",
+null
+],
+"_p16_h.txt": [
+"junk",
+null
+],
+"_p16_l.txt": [
+"junk",
+null
+],
+"_p16_parts.txt": [
+"junk",
+null
+],
+"_p8_build_all.sh": [
+"junk",
+null
+],
+"_p8_buildrep.sh": [
+"junk",
+null
+],
+"_p8_chain2.sh": [
+"junk",
+null
+],
+"_p8_chain3.sh": [
+"junk",
+null
+],
+"_p8_chainA.sh": [
+"junk",
+null
+],
+"_p8_chainB.sh": [
+"junk",
+null
+],
+"_p8_chainB2.sh": [
+"junk",
+null
+],
+"_p8_dbg_temporal.py": [
+"junk",
+null
+],
+"_p8_diag1.py": [
+"junk",
+null
+],
+"_p8_diag3.py": [
+"junk",
+null
+],
+"_p8_ds_all.sh": [
+"junk",
+null
+],
+"_p8_ds_loc.sh": [
+"junk",
+null
+],
+"_p8_ds_seg.sh": [
+"junk",
+null
+],
+"_p8_early_all.sh": [
+"junk",
+null
+],
+"_p8_final.sh": [
+"junk",
+null
+],
+"_p8_kill.sh": [
+"junk",
+null
+],
+"_p8_kill2.sh": [
+"junk",
+null
+],
+"_p8_kill3.sh": [
+"junk",
+null
+],
+"_p8_kill4.sh": [
+"junk",
+null
+],
+"_p8_kill5.sh": [
+"junk",
+null
+],
+"_p8_plan2.sh": [
+"junk",
+null
+],
+"_p8_q83.sh": [
+"junk",
+null
+],
+"_p8_rebuild.sh": [
+"junk",
+null
+],
+"_p8_regen.sh": [
+"junk",
+null
+],
+"_p8_regen2.sh": [
+"junk",
+null
+],
+"_p8_robust.sh": [
+"junk",
+null
+],
+"_p8_route_extent.py": [
+"junk",
+null
+],
+"_p8_show78.py": [
+"junk",
+null
+],
+"_p8_show84.py": [
+"junk",
+null
+],
+"_p8_show_q.py": [
+"junk",
+null
+],
+"_p8_showtab.py": [
+"junk",
+null
+],
+"_p8_sum_cons.py": [
+"junk",
+null
+],
+"_p8_sum_early.py": [
+"junk",
+null
+],
+"_p8_trackloc_run.sh": [
+"junk",
+null
+],
+"_p9_allC.sh": [
+"junk",
+null
+],
+"_p9_build.sh": [
+"junk",
+null
+],
+"_p9_buildC.sh": [
+"junk",
+null
+],
+"_p9_cons.sh": [
+"junk",
+null
+],
+"_p9_cons2.sh": [
+"junk",
+null
+],
+"_p9_drift.sh": [
+"junk",
+null
+],
+"_p9_e89.sh": [
+"junk",
+null
+],
+"_p9_ens_eval.sh": [
+"junk",
+null
+],
+"_p9_ens_evalC.sh": [
+"junk",
+null
+],
+"_p9_evalP.sh": [
+"junk",
+null
+],
+"_p9_evaldev.sh": [
+"junk",
+null
+],
+"_p9_evaldev2.sh": [
+"junk",
+null
+],
+"_p9_refine.sh": [
+"junk",
+null
+],
+"_p9_refvar.sh": [
+"junk",
+null
+],
+"_p9_stages.sh": [
+"junk",
+null
+],
+"_p9_stagesC.sh": [
+"junk",
+null
+],
+"_p9_train.sh": [
+"junk",
+null
+],
+"_p9_train2.sh": [
+"junk",
+null
+],
+"_p9_train3.sh": [
+"junk",
+null
+],
+"_p9_trainC.sh": [
+"junk",
+null
+],
+"_p9_trainC2.sh": [
+"junk",
+null
+],
+"_pages11.py": [
+"other",
+null
+],
+"_patch10.py": [
+"junk",
+null
+],
+"_patch11.py": [
+"junk",
+null
+],
+"_patch12.py": [
+"junk",
+null
+],
+"_patch13.py": [
+"junk",
+null
+],
+"_patch14.py": [
+"junk",
+null
+],
+"_patch15.py": [
+"junk",
+null
+],
+"_patch16.py": [
+"junk",
+null
+],
+"_patch17.py": [
+"junk",
+null
+],
+"_patch18.py": [
+"junk",
+null
+],
+"_patch19.py": [
+"junk",
+null
+],
+"_patch2.py": [
+"junk",
+null
+],
+"_patch20.py": [
+"junk",
+null
+],
+"_patch21.py": [
+"junk",
+null
+],
+"_patch22.py": [
+"junk",
+null
+],
+"_patch23.py": [
+"junk",
+null
+],
+"_patch24.py": [
+"junk",
+null
+],
+"_patch25.py": [
+"junk",
+null
+],
+"_patch26.py": [
+"junk",
+null
+],
+"_patch27.py": [
+"junk",
+null
+],
+"_patch28.py": [
+"junk",
+null
+],
+"_patch29.py": [
+"junk",
+null
+],
+"_patch3.py": [
+"junk",
+null
+],
+"_patch30.py": [
+"junk",
+null
+],
+"_patch31.py": [
+"junk",
+null
+],
+"_patch32.py": [
+"junk",
+null
+],
+"_patch33.py": [
+"junk",
+null
+],
+"_patch34.py": [
+"junk",
+null
+],
+"_patch34b.py": [
+"junk",
+null
+],
+"_patch35.py": [
+"junk",
+null
+],
+"_patch36.py": [
+"junk",
+null
+],
+"_patch37.py": [
+"junk",
+null
+],
+"_patch38.py": [
+"junk",
+null
+],
+"_patch39.py": [
+"junk",
+null
+],
+"_patch4.py": [
+"junk",
+null
+],
+"_patch40.py": [
+"junk",
+null
+],
+"_patch41.py": [
+"junk",
+null
+],
+"_patch42.py": [
+"junk",
+null
+],
+"_patch43.py": [
+"junk",
+null
+],
+"_patch44.py": [
+"junk",
+null
+],
+"_patch45.py": [
+"junk",
+null
+],
+"_patch46.py": [
+"junk",
+null
+],
+"_patch47.py": [
+"junk",
+null
+],
+"_patch47b.py": [
+"junk",
+null
+],
+"_patch48.py": [
+"junk",
+null
+],
+"_patch49.py": [
+"junk",
+null
+],
+"_patch5.py": [
+"junk",
+null
+],
+"_patch50.py": [
+"junk",
+null
+],
+"_patch51.py": [
+"junk",
+null
+],
+"_patch52.py": [
+"junk",
+null
+],
+"_patch53.py": [
+"junk",
+null
+],
+"_patch54.py": [
+"junk",
+null
+],
+"_patch55.py": [
+"junk",
+null
+],
+"_patch56.py": [
+"junk",
+null
+],
+"_patch57.py": [
+"junk",
+null
+],
+"_patch58.py": [
+"junk",
+null
+],
+"_patch59.py": [
+"junk",
+null
+],
+"_patch6.py": [
+"junk",
+null
+],
+"_patch60.py": [
+"junk",
+null
+],
+"_patch61.py": [
+"junk",
+null
+],
+"_patch62.py": [
+"junk",
+null
+],
+"_patch63.py": [
+"junk",
+null
+],
+"_patch7.py": [
+"junk",
+null
+],
+"_patch70.py": [
+"junk",
+null
+],
+"_patch71.py": [
+"junk",
+null
+],
+"_patch72.py": [
+"junk",
+null
+],
+"_patch73.py": [
+"junk",
+null
+],
+"_patch74.py": [
+"junk",
+null
+],
+"_patch75.py": [
+"junk",
+null
+],
+"_patch8.py": [
+"junk",
+null
+],
+"_patch80.py": [
+"junk",
+null
+],
+"_patch81.py": [
+"junk",
+null
+],
+"_patch9.py": [
+"junk",
+null
+],
+"_patch90.py": [
+"junk",
+null
+],
+"_patch91.py": [
+"junk",
+null
+],
+"_patch92.py": [
+"junk",
+null
+],
+"_patch93.py": [
+"junk",
+null
+],
+"_patch95.py": [
+"junk",
+null
+],
+"_patch96.py": [
+"junk",
+null
+],
+"_patch_88fix.py": [
+"junk",
+null
+],
+"_patch_a78.py": [
+"junk",
+null
+],
+"_patch_a78b.py": [
+"junk",
+null
+],
+"_patch_a78c.py": [
+"junk",
+null
+],
+"_patch_af7.py": [
+"junk",
+null
+],
+"_patch_agree.py": [
+"junk",
+null
+],
+"_patch_alt.py": [
+"junk",
+null
+],
+"_patch_anchor.py": [
+"junk",
+null
+],
+"_patch_approach_html.py": [
+"junk",
+null
+],
+"_patch_arch.py": [
+"junk",
+null
+],
+"_patch_arch2.py": [
+"junk",
+null
+],
+"_patch_arr.py": [
+"junk",
+null
+],
+"_patch_b11.py": [
+"junk",
+null
+],
+"_patch_b7.py": [
+"junk",
+null
+],
+"_patch_b7b.py": [
+"junk",
+null
+],
+"_patch_b7c.py": [
+"junk",
+null
+],
+"_patch_b7d.py": [
+"junk",
+null
+],
+"_patch_b7e.py": [
+"junk",
+null
+],
+"_patch_basis1.py": [
+"junk",
+null
+],
+"_patch_best10.py": [
+"junk",
+null
+],
+"_patch_best10b.py": [
+"junk",
+null
+],
+"_patch_best11.py": [
+"junk",
+null
+],
+"_patch_best12.py": [
+"junk",
+null
+],
+"_patch_best85.py": [
+"junk",
+null
+],
+"_patch_build10.py": [
+"junk",
+null
+],
+"_patch_build10b.py": [
+"junk",
+null
+],
+"_patch_build13.py": [
+"junk",
+null
+],
+"_patch_build14.py": [
+"junk",
+null
+],
+"_patch_builder1.py": [
+"junk",
+null
+],
+"_patch_builder2.py": [
+"junk",
+null
+],
+"_patch_builder3.py": [
+"junk",
+null
+],
+"_patch_bundle11.py": [
+"junk",
+null
+],
+"_patch_bundle11b.py": [
+"junk",
+null
+],
+"_patch_bundle11c.py": [
+"junk",
+null
+],
+"_patch_bundle12.py": [
+"junk",
+null
+],
+"_patch_bundle13a.py": [
+"junk",
+null
+],
+"_patch_bundle13b.py": [
+"junk",
+null
+],
+"_patch_bundle13c.py": [
+"junk",
+null
+],
+"_patch_bundle13d.py": [
+"junk",
+null
+],
+"_patch_bundle13e.py": [
+"junk",
+null
+],
+"_patch_bundle14a.py": [
+"junk",
+null
+],
+"_patch_bundle14b.py": [
+"junk",
+null
+],
+"_patch_bundle14c.py": [
+"junk",
+null
+],
+"_patch_bundle14d.py": [
+"junk",
+null
+],
+"_patch_bundle_cf2.py": [
+"junk",
+null
+],
+"_patch_bundle_round2.py": [
+"junk",
+null
+],
+"_patch_bundlesreadme14.py": [
+"junk",
+null
+],
+"_patch_calibb_scene.py": [
+"junk",
+null
+],
+"_patch_capacity14.py": [
+"junk",
+null
+],
+"_patch_card104.py": [
+"junk",
+null
+],
+"_patch_cards12.py": [
+"junk",
+null
+],
+"_patch_cards12b.py": [
+"junk",
+null
+],
+"_patch_cards12c.py": [
+"junk",
+null
+],
+"_patch_cards13.py": [
+"junk",
+null
+],
+"_patch_cards13b.py": [
+"junk",
+null
+],
+"_patch_catalogue_v2.py": [
+"junk",
+null
+],
+"_patch_cf14.py": [
+"junk",
+null
+],
+"_patch_cf14b.py": [
+"junk",
+null
+],
+"_patch_cf14c.py": [
+"junk",
+null
+],
+"_patch_cf14d.py": [
+"junk",
+null
+],
+"_patch_cf_misc.py": [
+"junk",
+null
+],
+"_patch_cf_text.py": [
+"junk",
+null
+],
+"_patch_cf_v2.py": [
+"junk",
+null
+],
+"_patch_cf_v3.py": [
+"junk",
+null
+],
+"_patch_cffig14.py": [
+"junk",
+null
+],
+"_patch_cffig2.py": [
+"junk",
+null
+],
+"_patch_cffig3.py": [
+"junk",
+null
+],
+"_patch_chain_route.py": [
+"junk",
+null
+],
+"_patch_ci2.py": [
+"junk",
+null
+],
+"_patch_consumer14.py": [
+"junk",
+null
+],
+"_patch_dec1.py": [
+"junk",
+null
+],
+"_patch_dec2.py": [
+"junk",
+null
+],
+"_patch_dec3.py": [
+"junk",
+null
+],
+"_patch_dec4.py": [
+"junk",
+null
+],
+"_patch_dec5.py": [
+"junk",
+null
+],
+"_patch_dec6.py": [
+"junk",
+null
+],
+"_patch_dec7.py": [
+"junk",
+null
+],
+"_patch_dec8.py": [
+"junk",
+null
+],
+"_patch_dec9.py": [
+"junk",
+null
+],
+"_patch_decision14.py": [
+"junk",
+null
+],
+"_patch_decision14b.py": [
+"junk",
+null
+],
+"_patch_decision14c.py": [
+"junk",
+null
+],
+"_patch_decision14d.py": [
+"junk",
+null
+],
+"_patch_decision14e.py": [
+"junk",
+null
+],
+"_patch_docs13.py": [
+"junk",
+null
+],
+"_patch_docs13b.py": [
+"junk",
+null
+],
+"_patch_docs13c.py": [
+"junk",
+null
+],
+"_patch_docstrings13.py": [
+"junk",
+null
+],
+"_patch_ds.py": [
+"junk",
+null
+],
+"_patch_e118c_text.py": [
+"junk",
+null
+],
+"_patch_eff0.py": [
+"junk",
+null
+],
+"_patch_ego2.py": [
+"junk",
+null
+],
+"_patch_eval2.py": [
+"junk",
+null
+],
+"_patch_failtrain_hold.py": [
+"junk",
+null
+],
+"_patch_fc.py": [
+"junk",
+null
+],
+"_patch_fig11.py": [
+"junk",
+null
+],
+"_patch_fig12a.py": [
+"junk",
+null
+],
+"_patch_fig12b.py": [
+"junk",
+null
+],
+"_patch_fig13.py": [
+"junk",
+null
+],
+"_patch_fig13b.py": [
+"junk",
+null
+],
+"_patch_fig13c.py": [
+"junk",
+null
+],
+"_patch_fig13d.py": [
+"junk",
+null
+],
+"_patch_fig13e.py": [
+"junk",
+null
+],
+"_patch_fig13f.py": [
+"junk",
+null
+],
+"_patch_fig13g.py": [
+"junk",
+null
+],
+"_patch_fig13h.py": [
+"junk",
+null
+],
+"_patch_fig14a.py": [
+"junk",
+null
+],
+"_patch_fig14b.py": [
+"junk",
+null
+],
+"_patch_fig14c.py": [
+"junk",
+null
+],
+"_patch_fig14d.py": [
+"junk",
+null
+],
+"_patch_fig14e.py": [
+"junk",
+null
+],
+"_patch_fig15a.py": [
+"junk",
+null
+],
+"_patch_fig15b.py": [
+"junk",
+null
+],
+"_patch_fig15c.py": [
+"junk",
+null
+],
+"_patch_fig15d.py": [
+"junk",
+null
+],
+"_patch_fig_condensed.py": [
+"junk",
+null
+],
+"_patch_fig_d.py": [
+"junk",
+null
+],
+"_patch_figc.py": [
+"junk",
+null
+],
+"_patch_figdecision_nored.py": [
+"junk",
+null
+],
+"_patch_figs_v2.py": [
+"junk",
+null
+],
+"_patch_figs_v3.py": [
+"junk",
+null
+],
+"_patch_figs_v4.py": [
+"junk",
+null
+],
+"_patch_figs_v5.py": [
+"junk",
+null
+],
+"_patch_final11.py": [
+"junk",
+null
+],
+"_patch_final12.py": [
+"junk",
+null
+],
+"_patch_final12b.py": [
+"junk",
+null
+],
+"_patch_final13.py": [
+"junk",
+null
+],
+"_patch_final13b.py": [
+"junk",
+null
+],
+"_patch_final13c.py": [
+"junk",
+null
+],
+"_patch_final13d.py": [
+"junk",
+null
+],
+"_patch_fix11.py": [
+"junk",
+null
+],
+"_patch_forkrelax.py": [
+"junk",
+null
+],
+"_patch_front.py": [
+"junk",
+null
+],
+"_patch_gate.py": [
+"junk",
+null
+],
+"_patch_gate13.py": [
+"junk",
+null
+],
+"_patch_genref12.py": [
+"junk",
+null
+],
+"_patch_glue.py": [
+"junk",
+null
+],
+"_patch_index.py": [
+"junk",
+null
+],
+"_patch_intro.py": [
+"junk",
+null
+],
+"_patch_joint_logit.py": [
+"junk",
+null
+],
+"_patch_joint_scratch.py": [
+"junk",
+null
+],
+"_patch_junc.py": [
+"junk",
+null
+],
+"_patch_l15_cat2.py": [
+"junk",
+null
+],
+"_patch_l15_d.py": [
+"junk",
+null
+],
+"_patch_l15_e.py": [
+"junk",
+null
+],
+"_patch_l15_e120d.py": [
+"junk",
+null
+],
+"_patch_l15_f.py": [
+"junk",
+null
+],
+"_patch_l15_g.py": [
+"junk",
+null
+],
+"_patch_l15_h.py": [
+"junk",
+null
+],
+"_patch_l15_route.py": [
+"junk",
+null
+],
+"_patch_l15_seed.py": [
+"junk",
+null
+],
+"_patch_l15_seedfinal.py": [
+"junk",
+null
+],
+"_patch_l15route.py": [
+"junk",
+null
+],
+"_patch_l15text.py": [
+"junk",
+null
+],
+"_patch_ladder.py": [
+"junk",
+null
+],
+"_patch_levels.py": [
+"junk",
+null
+],
+"_patch_limits13.py": [
+"junk",
+null
+],
+"_patch_limits14.py": [
+"junk",
+null
+],
+"_patch_limits14b.py": [
+"junk",
+null
+],
+"_patch_lit14.py": [
+"junk",
+null
+],
+"_patch_lit14b.py": [
+"junk",
+null
+],
+"_patch_lit14c.py": [
+"junk",
+null
+],
+"_patch_loc.py": [
+"junk",
+null
+],
+"_patch_loop15_docs.py": [
+"junk",
+null
+],
+"_patch_mc14.py": [
+"junk",
+null
+],
+"_patch_modelcard12.py": [
+"junk",
+null
+],
+"_patch_mt.py": [
+"junk",
+null
+],
+"_patch_mt2.py": [
+"junk",
+null
+],
+"_patch_mt3.py": [
+"junk",
+null
+],
+"_patch_mt4.py": [
+"junk",
+null
+],
+"_patch_mt5.py": [
+"junk",
+null
+],
+"_patch_mt6.py": [
+"junk",
+null
+],
+"_patch_mt7.py": [
+"junk",
+null
+],
+"_patch_mt8.py": [
+"junk",
+null
+],
+"_patch_mt9.py": [
+"junk",
+null
+],
+"_patch_p13a.py": [
+"junk",
+null
+],
+"_patch_p13b.py": [
+"junk",
+null
+],
+"_patch_p15_dumax.py": [
+"junk",
+null
+],
+"_patch_p16_beam.py": [
+"junk",
+null
+],
+"_patch_p16_docs.py": [
+"junk",
+null
+],
+"_patch_p16_fig_final.py": [
+"junk",
+null
+],
+"_patch_p16_fig_final2.py": [
+"junk",
+null
+],
+"_patch_p16_figs.py": [
+"junk",
+null
+],
+"_patch_p16_figs2.py": [
+"junk",
+null
+],
+"_patch_p16_figs3.py": [
+"junk",
+null
+],
+"_patch_p16_lit.py": [
+"junk",
+null
+],
+"_patch_p16_plan_tracking.py": [
+"junk",
+null
+],
+"_patch_p16_ref1.py": [
+"junk",
+null
+],
+"_patch_p16_register.py": [
+"junk",
+null
+],
+"_patch_p16_test2.py": [
+"junk",
+null
+],
+"_patch_p16_tree1.py": [
+"junk",
+null
+],
+"_patch_pair.py": [
+"junk",
+null
+],
+"_patch_plan_coverage.py": [
+"junk",
+null
+],
+"_patch_pooled.py": [
+"junk",
+null
+],
+"_patch_pptx_v2.py": [
+"junk",
+null
+],
+"_patch_pptx_v3.py": [
+"junk",
+null
+],
+"_patch_pptx_v4.py": [
+"junk",
+null
+],
+"_patch_q2.py": [
+"junk",
+null
+],
+"_patch_readme12b.py": [
+"junk",
+null
+],
+"_patch_readme15.py": [
+"junk",
+null
+],
+"_patch_readmes11.py": [
+"junk",
+null
+],
+"_patch_readmes12.py": [
+"junk",
+null
+],
+"_patch_register.py": [
+"junk",
+null
+],
+"_patch_reloc_guard.py": [
+"junk",
+null
+],
+"_patch_report.py": [
+"junk",
+null
+],
+"_patch_report_v2.py": [
+"junk",
+null
+],
+"_patch_report_v3.py": [
+"junk",
+null
+],
+"_patch_reportsreadme14.py": [
+"junk",
+null
+],
+"_patch_review10.py": [
+"junk",
+null
+],
+"_patch_review10b.py": [
+"junk",
+null
+],
+"_patch_review10c.py": [
+"junk",
+null
+],
+"_patch_review10d.py": [
+"junk",
+null
+],
+"_patch_rh3.py": [
+"junk",
+null
+],
+"_patch_rh3b.py": [
+"junk",
+null
+],
+"_patch_rh3c.py": [
+"junk",
+null
+],
+"_patch_rh4.py": [
+"junk",
+null
+],
+"_patch_rh4b.py": [
+"junk",
+null
+],
+"_patch_rh4b_a.py": [
+"junk",
+null
+],
+"_patch_rh4c.py": [
+"junk",
+null
+],
+"_patch_round2.py": [
+"junk",
+null
+],
+"_patch_scripts14.py": [
+"junk",
+null
+],
+"_patch_sd.py": [
+"junk",
+null
+],
+"_patch_sdassoc.py": [
+"junk",
+null
+],
+"_patch_selftest12.py": [
+"junk",
+null
+],
+"_patch_soup.py": [
+"junk",
+null
+],
+"_patch_sparsif.py": [
+"junk",
+null
+],
+"_patch_stage14.py": [
+"junk",
+null
+],
+"_patch_strata.py": [
+"junk",
+null
+],
+"_patch_sum.py": [
+"junk",
+null
+],
+"_patch_summary14.py": [
+"junk",
+null
+],
+"_patch_summary14b.py": [
+"junk",
+null
+],
+"_patch_summary15.py": [
+"junk",
+null
+],
+"_patch_summary15b.py": [
+"junk",
+null
+],
+"_patch_summary15c.py": [
+"junk",
+null
+],
+"_patch_summary15d.py": [
+"junk",
+null
+],
+"_patch_summary15e.py": [
+"junk",
+null
+],
+"_patch_summary_html.py": [
+"junk",
+null
+],
+"_patch_summary_html2.py": [
+"junk",
+null
+],
+"_patch_summary_html3.py": [
+"junk",
+null
+],
+"_patch_summary_html4.py": [
+"junk",
+null
+],
+"_patch_summary_html5.py": [
+"junk",
+null
+],
+"_patch_t.py": [
+"junk",
+null
+],
+"_patch_t10.py": [
+"junk",
+null
+],
+"_patch_t11.py": [
+"junk",
+null
+],
+"_patch_t12.py": [
+"junk",
+null
+],
+"_patch_t13.py": [
+"junk",
+null
+],
+"_patch_t2.py": [
+"junk",
+null
+],
+"_patch_t3.py": [
+"junk",
+null
+],
+"_patch_t4.py": [
+"junk",
+null
+],
+"_patch_t5.py": [
+"junk",
+null
+],
+"_patch_t6.py": [
+"junk",
+null
+],
+"_patch_t7.py": [
+"junk",
+null
+],
+"_patch_t8.py": [
+"junk",
+null
+],
+"_patch_t9.py": [
+"junk",
+null
+],
+"_patch_tab10.py": [
+"junk",
+null
+],
+"_patch_tab10b.py": [
+"junk",
+null
+],
+"_patch_tab10c.py": [
+"junk",
+null
+],
+"_patch_tab12a.py": [
+"junk",
+null
+],
+"_patch_tab12b.py": [
+"junk",
+null
+],
+"_patch_tab12c.py": [
+"junk",
+null
+],
+"_patch_tab12d.py": [
+"junk",
+null
+],
+"_patch_tab12e.py": [
+"junk",
+null
+],
+"_patch_tab13b.py": [
+"junk",
+null
+],
+"_patch_tab13c.py": [
+"junk",
+null
+],
+"_patch_tab13d.py": [
+"junk",
+null
+],
+"_patch_tab13e.py": [
+"junk",
+null
+],
+"_patch_tab13f.py": [
+"junk",
+null
+],
+"_patch_tab13g.py": [
+"junk",
+null
+],
+"_patch_tab13h.py": [
+"junk",
+null
+],
+"_patch_tab13i.py": [
+"junk",
+null
+],
+"_patch_tab14.py": [
+"junk",
+null
+],
+"_patch_tab14b.py": [
+"junk",
+null
+],
+"_patch_tables2.py": [
+"junk",
+null
+],
+"_patch_tables3.py": [
+"junk",
+null
+],
+"_patch_task.py": [
+"junk",
+null
+],
+"_patch_tau07.py": [
+"junk",
+null
+],
+"_patch_tear.py": [
+"junk",
+null
+],
+"_patch_text10.py": [
+"junk",
+null
+],
+"_patch_text10b.py": [
+"junk",
+null
+],
+"_patch_text10c.py": [
+"junk",
+null
+],
+"_patch_text11.py": [
+"junk",
+null
+],
+"_patch_text11b.py": [
+"junk",
+null
+],
+"_patch_text11c.py": [
+"junk",
+null
+],
+"_patch_text12.py": [
+"junk",
+null
+],
+"_patch_text13a.py": [
+"junk",
+null
+],
+"_patch_text13b.py": [
+"junk",
+null
+],
+"_patch_text13c.py": [
+"junk",
+null
+],
+"_patch_text2.py": [
+"junk",
+null
+],
+"_patch_text3.py": [
+"junk",
+null
+],
+"_patch_text4.py": [
+"junk",
+null
+],
+"_patch_text5.py": [
+"junk",
+null
+],
+"_patch_tokreg14.py": [
+"junk",
+null
+],
+"_patch_tokreg_text.py": [
+"junk",
+null
+],
+"_patch_trthr.py": [
+"junk",
+null
+],
+"_patch_trust1.py": [
+"junk",
+null
+],
+"_patch_trust2.py": [
+"junk",
+null
+],
+"_patch_trust3.py": [
+"junk",
+null
+],
+"_patch_viz14.py": [
+"junk",
+null
+],
+"_patch_viz14b.py": [
+"junk",
+null
+],
+"_patch_viz14c.py": [
+"junk",
+null
+],
+"_pause.sh": [
+"other",
+null
+],
+"_pdf_pages.sh": [
+"other",
+null
+],
+"_pdfinfo.py": [
+"other",
+null
+],
+"_pdfpages.py": [
+"other",
+null
+],
+"_peek7.py": [
+"other",
+null
+],
+"_peek8.py": [
+"other",
+null
+],
+"_phase16b.py": [
+"other",
+null
+],
+"_plan_r0.py": [
+"other",
+null
+],
+"_plib.py": [
+"other",
+null
+],
+"_prog_val.py": [
+"other",
+null
+],
+"_ps.sh": [
+"other",
+null
+],
+"_ptest.py": [
+"other",
+null
+],
+"_py.sh": [
+"other",
+null
+],
+"_py14.sh": [
+"other",
+null
+],
+"_pyr.sh": [
+"other",
+null
+],
+"_q.py": [
+"other",
+null
+],
+"_q1.py": [
+"junk",
+null
+],
+"_q2.py": [
+"junk",
+null
+],
+"_q3.py": [
+"junk",
+null
+],
+"_q4.py": [
+"junk",
+null
+],
+"_q5.py": [
+"junk",
+null
+],
+"_q6.py": [
+"junk",
+null
+],
+"_q7.py": [
+"junk",
+null
+],
+"_q_route.py": [
+"other",
+null
+],
+"_q_sweep.py": [
+"other",
+null
+],
+"_queue_e122.sh": [
+"exp",
+122
+],
+"_queue_h.py": [
+"other",
+null
+],
+"_queue_j.py": [
+"other",
+null
+],
+"_queue_r0_ref.py": [
+"other",
+null
+],
+"_queue_r1.py": [
+"other",
+null
+],
+"_queue_r2.py": [
+"other",
+null
+],
+"_queue_r3a.py": [
+"other",
+null
+],
+"_queue_r3b.py": [
+"other",
+null
+],
+"_queue_r3c.py": [
+"other",
+null
+],
+"_queue_r3d.py": [
+"other",
+null
+],
+"_queue_r3e.py": [
+"other",
+null
+],
+"_queue_r3f.py": [
+"other",
+null
+],
+"_queue_r3g.py": [
+"other",
+null
+],
+"_queue_x.py": [
+"other",
+null
+],
+"_r3tab_show.py": [
+"other",
+null
+],
+"_readme16.py": [
+"other",
+null
+],
+"_rebuild_paths.py": [
+"other",
+null
+],
+"_rec_new.txt": [
+"other",
+null
+],
+"_recover2.py": [
+"junk",
+null
+],
+"_recover3.py": [
+"junk",
+null
+],
+"_recover_transcript.py": [
+"junk",
+null
+],
+"_recut0.py": [
+"other",
+null
+],
+"_reeval11.sh": [
+"other",
+null
+],
+"_reeval_cap.sh": [
+"other",
+null
+],
+"_regen_rung_figs.py": [
+"other",
+null
+],
+"_relaunch_e40.sh": [
+"exp",
+40
+],
+"_relaunch_q7.sh": [
+"other",
+null
+],
+"_relaunch_waiters.sh": [
+"other",
+null
+],
+"_rename_final.sh": [
+"other",
+null
+],
+"_renice.sh": [
+"other",
+null
+],
+"_reorder_q.py": [
+"other",
+null
+],
+"_rerun_fold2.sh": [
+"other",
+null
+],
+"_restart2.sh": [
+"other",
+null
+],
+"_restart_fold0b.sh": [
+"other",
+null
+],
+"_restart_fold2b.sh": [
+"other",
+null
+],
+"_restart_folds.sh": [
+"other",
+null
+],
+"_restart_val_b.sh": [
+"other",
+null
+],
+"_resume_s1.sh": [
+"other",
+null
+],
+"_route_compare.py": [
+"other",
+null
+],
+"_route_fork_strata.py": [
+"other",
+null
+],
+"_route_test.sh": [
+"other",
+null
+],
+"_run_build12.sh": [
+"other",
+null
+],
+"_run_build13.sh": [
+"other",
+null
+],
+"_run_build14.sh": [
+"other",
+null
+],
+"_run_build17.sh": [
+"other",
+null
+],
+"_run_bundle12_tests.sh": [
+"other",
+null
+],
+"_run_bundle14.sh": [
+"other",
+null
+],
+"_run_calib_b.sh": [
+"other",
+null
+],
+"_run_calib_ci.sh": [
+"other",
+null
+],
+"_run_calib_ci2.sh": [
+"other",
+null
+],
+"_run_diag13.sh": [
+"other",
+null
+],
+"_run_e116c.sh": [
+"exp",
+116
+],
+"_run_e116c2.sh": [
+"exp",
+116
+],
+"_run_e122.sh": [
+"exp",
+122
+],
+"_run_e139_route.sh": [
+"exp",
+139
+],
+"_run_e140_m1.sh": [
+"exp",
+140
+],
+"_run_e140_route.sh": [
+"exp",
+140
+],
+"_run_e141.sh": [
+"exp",
+141
+],
+"_run_e142.sh": [
+"exp",
+142
+],
+"_run_e144.sh": [
+"exp",
+144
+],
+"_run_e144b.sh": [
+"exp",
+144
+],
+"_run_extract_check.sh": [
+"other",
+null
+],
+"_run_final17.sh": [
+"other",
+null
+],
+"_run_final17b.sh": [
+"other",
+null
+],
+"_run_fuse.sh": [
+"other",
+null
+],
+"_run_genref12.sh": [
+"other",
+null
+],
+"_run_insample.sh": [
+"other",
+null
+],
+"_run_master3.sh": [
+"other",
+null
+],
+"_run_p13.sh": [
+"other",
+null
+],
+"_run_p13b.sh": [
+"other",
+null
+],
+"_run_p13c.sh": [
+"other",
+null
+],
+"_run_p13ce.sh": [
+"other",
+null
+],
+"_run_p13ce2.sh": [
+"other",
+null
+],
+"_run_p13ce3.sh": [
+"other",
+null
+],
+"_run_p13cg.sh": [
+"other",
+null
+],
+"_run_p13cgc.sh": [
+"other",
+null
+],
+"_run_p13cv.sh": [
+"other",
+null
+],
+"_run_p13j.sh": [
+"other",
+null
+],
+"_run_p13j2.sh": [
+"other",
+null
+],
+"_run_p13p.sh": [
+"other",
+null
+],
+"_run_p13p2.sh": [
+"other",
+null
+],
+"_run_p13v.sh": [
+"other",
+null
+],
+"_run_p14c.sh": [
+"other",
+null
+],
+"_run_p14cap.sh": [
+"other",
+null
+],
+"_run_p14cf2.sh": [
+"other",
+null
+],
+"_run_p14d.sh": [
+"other",
+null
+],
+"_run_p14dt.sh": [
+"other",
+null
+],
+"_run_p14f.sh": [
+"other",
+null
+],
+"_run_p14fb.sh": [
+"other",
+null
+],
+"_run_p14fe.sh": [
+"other",
+null
+],
+"_run_p14fe2.sh": [
+"other",
+null
+],
+"_run_p14fh.sh": [
+"other",
+null
+],
+"_run_p14fh2.sh": [
+"other",
+null
+],
+"_run_p14fv.sh": [
+"other",
+null
+],
+"_run_p14j.sh": [
+"other",
+null
+],
+"_run_p14j1.sh": [
+"other",
+null
+],
+"_run_p14jl.sh": [
+"other",
+null
+],
+"_run_p14js.sh": [
+"other",
+null
+],
+"_run_p14or.sh": [
+"other",
+null
+],
+"_run_p14tr.sh": [
+"other",
+null
+],
+"_run_p15_c2.sh": [
+"other",
+null
+],
+"_run_p15_e121.sh": [
+"exp",
+121
+],
+"_run_p15_j1.sh": [
+"other",
+null
+],
+"_run_p15_route.sh": [
+"other",
+null
+],
+"_run_p15_seed.sh": [
+"other",
+null
+],
+"_run_p15a.sh": [
+"other",
+null
+],
+"_run_p15b.sh": [
+"other",
+null
+],
+"_run_p15c.sh": [
+"other",
+null
+],
+"_run_p15d.sh": [
+"other",
+null
+],
+"_run_p16.sh": [
+"other",
+null
+],
+"_run_p16_chain.sh": [
+"other",
+null
+],
+"_run_p16_chain_f1m.sh": [
+"other",
+null
+],
+"_run_p16_chain_f2.sh": [
+"other",
+null
+],
+"_run_p16_chain_rc1.sh": [
+"other",
+null
+],
+"_run_r3_table.sh": [
+"other",
+null
+],
+"_run_raw_check.sh": [
+"other",
+null
+],
+"_run_rec.sh": [
+"other",
+null
+],
+"_run_resample.sh": [
+"other",
+null
+],
+"_run_resample_cons.sh": [
+"other",
+null
+],
+"_run_resample_s1.sh": [
+"other",
+null
+],
+"_run_resample_steps.sh": [
+"other",
+null
+],
+"_run_soup.sh": [
+"other",
+null
+],
+"_run_test16b.sh": [
+"other",
+null
+],
+"_run_test_eval.sh": [
+"other",
+null
+],
+"_run_timing.sh": [
+"other",
+null
+],
+"_run_timing2.sh": [
+"other",
+null
+],
+"_run_trust.sh": [
+"other",
+null
+],
+"_run_verify_pert.sh": [
+"other",
+null
+],
+"_run_zero_tok.sh": [
+"other",
+null
+],
+"_rv_a3_1.py": [
+"junk",
+null
+],
+"_rv_a3_10.py": [
+"junk",
+null
+],
+"_rv_a3_11.py": [
+"junk",
+null
+],
+"_rv_a3_12.py": [
+"junk",
+null
+],
+"_rv_a3_13.py": [
+"junk",
+null
+],
+"_rv_a3_14.py": [
+"junk",
+null
+],
+"_rv_a3_15.py": [
+"junk",
+null
+],
+"_rv_a3_16.py": [
+"junk",
+null
+],
+"_rv_a3_17.py": [
+"junk",
+null
+],
+"_rv_a3_18.py": [
+"junk",
+null
+],
+"_rv_a3_19.py": [
+"junk",
+null
+],
+"_rv_a3_2.py": [
+"junk",
+null
+],
+"_rv_a3_20.py": [
+"junk",
+null
+],
+"_rv_a3_21.py": [
+"junk",
+null
+],
+"_rv_a3_22.py": [
+"junk",
+null
+],
+"_rv_a3_23.py": [
+"junk",
+null
+],
+"_rv_a3_24.py": [
+"junk",
+null
+],
+"_rv_a3_25.py": [
+"junk",
+null
+],
+"_rv_a3_26.py": [
+"junk",
+null
+],
+"_rv_a3_27.py": [
+"junk",
+null
+],
+"_rv_a3_28.out": [
+"junk",
+null
+],
+"_rv_a3_28.py": [
+"junk",
+null
+],
+"_rv_a3_29.py": [
+"junk",
+null
+],
+"_rv_a3_3.py": [
+"junk",
+null
+],
+"_rv_a3_30.py": [
+"junk",
+null
+],
+"_rv_a3_31.py": [
+"junk",
+null
+],
+"_rv_a3_32.py": [
+"junk",
+null
+],
+"_rv_a3_33.py": [
+"junk",
+null
+],
+"_rv_a3_34.py": [
+"junk",
+null
+],
+"_rv_a3_4.py": [
+"junk",
+null
+],
+"_rv_a3_5.py": [
+"junk",
+null
+],
+"_rv_a3_6.py": [
+"junk",
+null
+],
+"_rv_a3_7.py": [
+"junk",
+null
+],
+"_rv_a3_8.py": [
+"junk",
+null
+],
+"_rv_a3_8b.py": [
+"junk",
+null
+],
+"_rv_a3_9.py": [
+"junk",
+null
+],
+"_rv_a3_util.py": [
+"junk",
+null
+],
+"_rv_a4_1.py": [
+"junk",
+null
+],
+"_rv_a4_10.py": [
+"junk",
+null
+],
+"_rv_a4_11.py": [
+"junk",
+null
+],
+"_rv_a4_12.py": [
+"junk",
+null
+],
+"_rv_a4_13.py": [
+"junk",
+null
+],
+"_rv_a4_14.py": [
+"junk",
+null
+],
+"_rv_a4_15.py": [
+"junk",
+null
+],
+"_rv_a4_2.py": [
+"junk",
+null
+],
+"_rv_a4_3.py": [
+"junk",
+null
+],
+"_rv_a4_4.py": [
+"junk",
+null
+],
+"_rv_a4_5.py": [
+"junk",
+null
+],
+"_rv_a4_6.py": [
+"junk",
+null
+],
+"_rv_a4_7.py": [
+"junk",
+null
+],
+"_rv_a4_8.py": [
+"junk",
+null
+],
+"_rv_a4_9.py": [
+"junk",
+null
+],
+"_scan_cmds.py": [
+"junk",
+null
+],
+"_scene11.sh": [
+"other",
+null
+],
+"_serve_mail.py": [
+"other",
+null
+],
+"_show.py": [
+"junk",
+null
+],
+"_show105.py": [
+"junk",
+null
+],
+"_show107.py": [
+"junk",
+null
+],
+"_show_test.py": [
+"junk",
+null
+],
+"_showcards.py": [
+"junk",
+null
+],
+"_sig.sh": [
+"other",
+null
+],
+"_smoke_all.sh": [
+"other",
+null
+],
+"_smoke_base.sh": [
+"other",
+null
+],
+"_smoke_chain.sh": [
+"other",
+null
+],
+"_smoke_chain2.sh": [
+"other",
+null
+],
+"_smoke_fc.py": [
+"other",
+null
+],
+"_smoke_flags.sh": [
+"other",
+null
+],
+"_split_zip.py": [
+"other",
+null
+],
+"_stage_bundle12.sh": [
+"other",
+null
+],
+"_stage_bundle13.sh": [
+"other",
+null
+],
+"_stage_bundle14.sh": [
+"other",
+null
+],
+"_start_final2.sh": [
+"other",
+null
+],
+"_start_q78.sh": [
+"other",
+null
+],
+"_start_q80.sh": [
+"other",
+null
+],
+"_start_w1.sh": [
+"other",
+null
+],
+"_start_w2.sh": [
+"other",
+null
+],
+"_state12.txt": [
+"other",
+null
+],
+"_state_loop16.py": [
+"other",
+null
+],
+"_stop_ext.sh": [
+"other",
+null
+],
+"_survey_transcript.py": [
+"junk",
+null
+],
+"_sweeps_a.sh": [
+"other",
+null
+],
+"_sweeps_b.sh": [
+"other",
+null
+],
+"_syntax.sh": [
+"other",
+null
+],
+"_t10data.py": [
+"other",
+null
+],
+"_table_r0.py": [
+"other",
+null
+],
+"_table_r1.py": [
+"other",
+null
+],
+"_tau11.py": [
+"other",
+null
+],
+"_text12_vals.json": [
+"other",
+null
+],
+"_tok_eval.sh": [
+"other",
+null
+],
+"_tok_oof.sh": [
+"other",
+null
+],
+"_tok_sub.py": [
+"other",
+null
+],
+"_tracks_new.txt": [
+"other",
+null
+],
+"_unlock_rc1.py": [
+"other",
+null
+],
+"_update_memory.py": [
+"junk",
+null
+],
+"_update_memory13.py": [
+"junk",
+null
+],
+"_update_memory13b.py": [
+"junk",
+null
+],
+"_update_memory7.py": [
+"junk",
+null
+],
+"_update_readmes13.py": [
+"junk",
+null
+],
+"_valA_again.sh": [
+"other",
+null
+],
+"_vh_strict.py": [
+"other",
+null
+],
+"_wait_a3.sh": [
+"other",
+null
+],
+"_wait_f.sh": [
+"other",
+null
+],
+"_wait_final.sh": [
+"other",
+null
+],
+"_wait_reviews.sh": [
+"other",
+null
+],
+"_zero_tok.py": [
+"other",
+null
+],
+"align_tools.py": [
+"other",
+null
+],
+"align_train.py": [
+"other",
+null
+],
+"analyze_e73.py": [
+"exp",
+73
+],
+"analyze_e78.py": [
+"exp",
+78
+],
+"analyze_e79.py": [
+"exp",
+79
+],
+"apply_btr_text.py": [
+"other",
+null
+],
+"arch_figs.py": [
+"live",
+null
+],
+"arch_figs2.py": [
+"live",
+null
+],
+"arch_figs4.py": [
+"live",
+null
+],
+"arch_figs5.py": [
+"live",
+null
+],
+"arch_figs6.py": [
+"live",
+null
+],
+"arch_figs7.py": [
+"live",
+null
+],
+"arch_figs8.py": [
+"live",
+null
+],
+"archive_old_reports.sh": [
+"other",
+null
+],
+"assoc_eval.py": [
+"other",
+null
+],
+"assoc_lib.py": [
+"live",
+null
+],
+"assoc_temporal.py": [
+"other",
+null
+],
+"bench.py": [
+"other",
+null
+],
+"bench_loop5.py": [
+"other",
+null
+],
+"bench_ref.py": [
+"other",
+null
+],
+"bench_sys.py": [
+"other",
+null
+],
+"boot_e62.py": [
+"exp",
+62
+],
+"boot_e71.py": [
+"exp",
+71
+],
+"boot_eval.py": [
+"live",
+null
+],
+"boot_loc.py": [
+"other",
+null
+],
+"build_all.sh": [
+"other",
+null
+],
+"build_decision_report.py": [
+"other",
+null
+],
+"build_e2e_bundle_data.py": [
+"other",
+null
+],
+"build_e2e_condensed.py": [
+"live",
+null
+],
+"build_e2e_pptx.ps1": [
+"other",
+null
+],
+"build_experiment_table.py": [
+"other",
+null
+],
+"build_final_en.py": [
+"other",
+null
+],
+"build_final_report.py": [
+"other",
+null
+],
+"build_final_report10.py": [
+"other",
+null
+],
+"build_final_report11.py": [
+"other",
+null
+],
+"build_final_report12.py": [
+"other",
+null
+],
+"build_final_report13.py": [
+"other",
+null
+],
+"build_final_report14.py": [
+"other",
+null
+],
+"build_final_report6.py": [
+"other",
+null
+],
+"build_final_report6.py.bak": [
+"other",
+null
+],
+"build_final_report7.py": [
+"other",
+null
+],
+"build_final_report8.py": [
+"other",
+null
+],
+"build_headline.py": [
+"other",
+null
+],
+"build_headline4.py": [
+"other",
+null
+],
+"build_headline5.py": [
+"other",
+null
+],
+"build_loop15_report.py": [
+"live",
+null
+],
+"build_loop16_report.py": [
+"live",
+null
+],
+"build_loop4_report.py": [
+"other",
+null
+],
+"build_loop5_report.py": [
+"other",
+null
+],
+"build_ops.sh": [
+"other",
+null
+],
+"build_proposal.py": [
+"other",
+null
+],
+"bundle14_consumer.py": [
+"other",
+null
+],
+"bundle14_selftest_consumer.py": [
+"other",
+null
+],
+"calib_lines.py": [
+"other",
+null
+],
+"centerline_estimator.py": [
+"other",
+null
+],
+"centerline_gt.py": [
+"other",
+null
+],
+"chain_e18.sh": [
+"exp",
+18
+],
+"chain_e25.sh": [
+"exp",
+25
+],
+"chain_post.sh": [
+"other",
+null
+],
+"chain_range.sh": [
+"other",
+null
+],
+"chain_round3.sh": [
+"other",
+null
+],
+"chain_round5.sh": [
+"other",
+null
+],
+"chain_trace2.sh": [
+"other",
+null
+],
+"check_align_rows.py": [
+"other",
+null
+],
+"check_dense_repro.py": [
+"other",
+null
+],
+"check_dircos.py": [
+"other",
+null
+],
+"check_env.sh": [
+"other",
+null
+],
+"check_feats.py": [
+"other",
+null
+],
+"check_feats_all.py": [
+"other",
+null
+],
+"check_final_text.py": [
+"other",
+null
+],
+"check_official_split.py": [
+"other",
+null
+],
+"check_order.py": [
+"other",
+null
+],
+"check_warp.py": [
+"other",
+null
+],
+"choose_thr.py": [
+"other",
+null
+],
+"chunk_stats.py": [
+"other",
+null
+],
+"cmp_feats.py": [
+"other",
+null
+],
+"coast_eval.py": [
+"other",
+null
+],
+"combo_eval.py": [
+"other",
+null
+],
+"combo_eval_before_strict.py.bak": [
+"other",
+null
+],
+"combo_eval_with_holdsmart.py.bak": [
+"other",
+null
+],
+"contact_sheet.py": [
+"other",
+null
+],
+"crn_env.sh": [
+"other",
+null
+],
+"crn_extract.py": [
+"other",
+null
+],
+"crn_extract_radar.sh": [
+"other",
+null
+],
+"crn_fetch.sh": [
+"other",
+null
+],
+"crn_fields.py": [
+"other",
+null
+],
+"crn_flipcheck.sh": [
+"other",
+null
+],
+"crn_gen_radar.sh": [
+"other",
+null
+],
+"crn_make_infos.py": [
+"other",
+null
+],
+"crn_prep_b123.sh": [
+"other",
+null
+],
+"crn_prep_gt.sh": [
+"other",
+null
+],
+"crn_prep_mini.sh": [
+"other",
+null
+],
+"crn_progress.py": [
+"other",
+null
+],
+"crn_results.py": [
+"other",
+null
+],
+"crn_run_extract.sh": [
+"other",
+null
+],
+"dbg_edges.py": [
+"junk",
+null
+],
+"dbg_ends.py": [
+"junk",
+null
+],
+"dbg_graph.py": [
+"junk",
+null
+],
+"dbg_lf_adj.py": [
+"junk",
+null
+],
+"dbg_snap.py": [
+"junk",
+null
+],
+"dbg_sweep.sh": [
+"junk",
+null
+],
+"debug_mmap.py": [
+"other",
+null
+],
+"debug_step.py": [
+"other",
+null
+],
+"delete_lidar_raw.sh": [
+"other",
+null
+],
+"dense_ext.py": [
+"other",
+null
+],
+"dense_head.py": [
+"live",
+null
+],
+"dense_report_lib.py": [
+"other",
+null
+],
+"diag_dirnorm.py": [
+"other",
+null
+],
+"diag_grad.py": [
+"other",
+null
+],
+"diag_model.py": [
+"other",
+null
+],
+"diag_nan.py": [
+"other",
+null
+],
+"diag_refine.py": [
+"other",
+null
+],
+"diag_rowloss.py": [
+"other",
+null
+],
+"diag_stats.py": [
+"other",
+null
+],
+"download_nuscenes.ps1": [
+"other",
+null
+],
+"dump_catalogue_json.py": [
+"other",
+null
+],
+"e26_text.py": [
+"exp",
+26
+],
+"e2e_basis.py": [
+"live",
+null
+],
+"e2e_basis.py.bak_p16end": [
+"other",
+null
+],
+"e2e_catalogue.json": [
+"other",
+null
+],
+"e2e_catalogue.py": [
+"live",
+null
+],
+"est_junction_shift.py": [
+"other",
+null
+],
+"est_sweep.py": [
+"other",
+null
+],
+"eval_adabn.py": [
+"other",
+null
+],
+"eval_align.py": [
+"other",
+null
+],
+"eval_distbins.py": [
+"other",
+null
+],
+"eval_lf.py": [
+"other",
+null
+],
+"eval_pert.py": [
+"other",
+null
+],
+"eval_pert_val.py": [
+"other",
+null
+],
+"eval_temporal.py": [
+"other",
+null
+],
+"exp_assoc.py": [
+"other",
+null
+],
+"exp_est.py": [
+"other",
+null
+],
+"exp_range.py": [
+"other",
+null
+],
+"exp_temporal.py": [
+"other",
+null
+],
+"exp_temporal2.py": [
+"other",
+null
+],
+"exp_trace.py": [
+"other",
+null
+],
+"exp_track.py": [
+"other",
+null
+],
+"extract_blob.sh": [
+"other",
+null
+],
+"extract_features.py": [
+"other",
+null
+],
+"field_tools.py": [
+"other",
+null
+],
+"fig_decision.py": [
+"other",
+null
+],
+"fig_e2e_condensed.py": [
+"other",
+null
+],
+"fig_e2e_summary.py": [
+"other",
+null
+],
+"fig_e73.py": [
+"exp",
+73
+],
+"fig_e78_qual.py": [
+"exp",
+78
+],
+"fig_e79.py": [
+"exp",
+79
+],
+"fig_p10.py": [
+"other",
+null
+],
+"fig_p10_arch.py": [
+"other",
+null
+],
+"fig_p10_states.py": [
+"other",
+null
+],
+"fig_p10b.py": [
+"other",
+null
+],
+"fig_p10c.py": [
+"other",
+null
+],
+"fig_p10d.py": [
+"other",
+null
+],
+"fig_p11.py": [
+"other",
+null
+],
+"fig_p12.py": [
+"other",
+null
+],
+"fig_p13.py": [
+"other",
+null
+],
+"fig_p14.py": [
+"live",
+null
+],
+"fig_p15.py": [
+"live",
+null
+],
+"fig_p16_arch.py": [
+"live",
+null
+],
+"fig_p16_arch_draft.py": [
+"live",
+null
+],
+"fig_p16_assembly_ladder.py": [
+"live",
+null
+],
+"fig_p16_beam.py": [
+"live",
+null
+],
+"fig_p16_design.py": [
+"live",
+null
+],
+"fig_p16_effects0.py": [
+"live",
+null
+],
+"fig_p16_families.py": [
+"live",
+null
+],
+"fig_p16_forks.py": [
+"live",
+null
+],
+"fig_p16_frames.py": [
+"live",
+null
+],
+"fig_p16_frontier_final.py": [
+"live",
+null
+],
+"fig_p16_ladder.py": [
+"live",
+null
+],
+"fig_p16_pareto.py": [
+"live",
+null
+],
+"fig_p16_route_attr.py": [
+"live",
+null
+],
+"fig_p16_teardrop.py": [
+"live",
+null
+],
+"fig_p16_tree.py": [
+"live",
+null
+],
+"fig_p16_triage.py": [
+"live",
+null
+],
+"fig_p8.py": [
+"other",
+null
+],
+"fig_p8b.py": [
+"other",
+null
+],
+"fig_p9.py": [
+"other",
+null
+],
+"final_system.py": [
+"other",
+null
+],
+"final_text.py": [
+"other",
+null
+],
+"final_text_en.py": [
+"other",
+null
+],
+"final_text_en3.py": [
+"other",
+null
+],
+"finish_report.sh": [
+"other",
+null
+],
+"finish_report5.sh": [
+"other",
+null
+],
+"finish_report6.ps1": [
+"other",
+null
+],
+"fix_dns.sh": [
+"other",
+null
+],
+"fix_infos.py": [
+"other",
+null
+],
+"fix_ipv4.sh": [
+"other",
+null
+],
+"fold_seen.py": [
+"other",
+null
+],
+"foundation_only.py": [
+"other",
+null
+],
+"gcar_build_rast.sh": [
+"other",
+null
+],
+"gcar_build_rast2.sh": [
+"other",
+null
+],
+"gcar_nvcc.sh": [
+"other",
+null
+],
+"gcar_orient.py": [
+"other",
+null
+],
+"gcar_patch_rast.sh": [
+"other",
+null
+],
+"gcar_pert.py": [
+"other",
+null
+],
+"gcar_pipeline1.sh": [
+"other",
+null
+],
+"gcar_pipeline2.sh": [
+"other",
+null
+],
+"gcar_tools.py": [
+"other",
+null
+],
+"gcar_wide.py": [
+"other",
+null
+],
+"graph_eval.py": [
+"live",
+null
+],
+"graph_from_dense.py": [
+"live",
+null
+],
+"heat_align.py": [
+"other",
+null
+],
+"hold_eval.py": [
+"other",
+null
+],
+"inventar.sh": [
+"other",
+null
+],
+"jump_eval.py": [
+"other",
+null
+],
+"kill_e25.sh": [
+"exp",
+25
+],
+"kill_master.sh": [
+"other",
+null
+],
+"kill_old.sh": [
+"other",
+null
+],
+"lane_former.py": [
+"other",
+null
+],
+"launch_after_main.sh": [
+"other",
+null
+],
+"launch_bg.ps1": [
+"other",
+null
+],
+"launch_trace.sh": [
+"other",
+null
+],
+"launch_trace2.sh": [
+"other",
+null
+],
+"leak_stats.py": [
+"other",
+null
+],
+"learned_align.py": [
+"other",
+null
+],
+"lf_inputs.py": [
+"other",
+null
+],
+"lidar_fields.py": [
+"other",
+null
+],
+"lidar_inventory.sh": [
+"other",
+null
+],
+"lidar_offset.py": [
+"other",
+null
+],
+"line_tracer.py": [
+"live",
+null
+],
+"link_head.py": [
+"other",
+null
+],
+"link_head2.py": [
+"other",
+null
+],
+"lit16_merge.py": [
+"other",
+null
+],
+"local_align.py": [
+"other",
+null
+],
+"loop15_text.py": [
+"live",
+null
+],
+"loop15_text_static.py": [
+"live",
+null
+],
+"loop16_text.py": [
+"live",
+null
+],
+"loop16_text_a.py": [
+"live",
+null
+],
+"loop16_text_b.py": [
+"live",
+null
+],
+"loop16_text_static.py": [
+"live",
+null
+],
+"make_arch3.py": [
+"other",
+null
+],
+"make_cards_loop6.py": [
+"other",
+null
+],
+"make_crn_mini_plot.py": [
+"other",
+null
+],
+"make_dir_gt.py": [
+"other",
+null
+],
+"make_dist_gt.py": [
+"other",
+null
+],
+"make_e27_e30.py": [
+"exp",
+27
+],
+"make_e30.py": [
+"exp",
+30
+],
+"make_e31_e33.py": [
+"exp",
+31
+],
+"make_e32.py": [
+"exp",
+32
+],
+"make_e34.py": [
+"exp",
+34
+],
+"make_e35.py": [
+"exp",
+35
+],
+"make_e36.py": [
+"exp",
+36
+],
+"make_e37.py": [
+"exp",
+37
+],
+"make_e38.py": [
+"exp",
+38
+],
+"make_e39.py": [
+"exp",
+39
+],
+"make_e40.py": [
+"exp",
+40
+],
+"make_e41.py": [
+"exp",
+41
+],
+"make_e42.py": [
+"exp",
+42
+],
+"make_e43.py": [
+"exp",
+43
+],
+"make_e44.py": [
+"exp",
+44
+],
+"make_e45.py": [
+"exp",
+45
+],
+"make_e46.py": [
+"exp",
+46
+],
+"make_e47.py": [
+"exp",
+47
+],
+"make_e48.py": [
+"exp",
+48
+],
+"make_e49_e50.py": [
+"exp",
+49
+],
+"make_e51.py": [
+"exp",
+51
+],
+"make_e53.py": [
+"exp",
+53
+],
+"make_e54.py": [
+"exp",
+54
+],
+"make_e55.py": [
+"exp",
+55
+],
+"make_e56.py": [
+"exp",
+56
+],
+"make_e57.py": [
+"exp",
+57
+],
+"make_e58.py": [
+"exp",
+58
+],
+"make_e59.py": [
+"exp",
+59
+],
+"make_e60.py": [
+"exp",
+60
+],
+"make_e61.py": [
+"exp",
+61
+],
+"make_e62.py": [
+"exp",
+62
+],
+"make_e64.py": [
+"exp",
+64
+],
+"make_e65.py": [
+"exp",
+65
+],
+"make_e66.py": [
+"exp",
+66
+],
+"make_e67.py": [
+"exp",
+67
+],
+"make_e68.py": [
+"exp",
+68
+],
+"make_e69.py": [
+"exp",
+69
+],
+"make_e70.py": [
+"exp",
+70
+],
+"make_e71.py": [
+"exp",
+71
+],
+"make_e72.py": [
+"exp",
+72
+],
+"make_ensemble.py": [
+"other",
+null
+],
+"make_final_arch4.py": [
+"other",
+null
+],
+"make_final_arch5.py": [
+"other",
+null
+],
+"make_graph_gt.py": [
+"other",
+null
+],
+"make_gt_arrays.py": [
+"other",
+null
+],
+"make_instab_fig.py": [
+"other",
+null
+],
+"make_intro_figs.py": [
+"other",
+null
+],
+"make_loop10_tables.py": [
+"other",
+null
+],
+"make_loop11_tables.py": [
+"other",
+null
+],
+"make_loop12_tables.py": [
+"other",
+null
+],
+"make_loop13_tables.py": [
+"other",
+null
+],
+"make_loop14_tables.py": [
+"other",
+null
+],
+"make_loop6_tables.py": [
+"other",
+null
+],
+"make_loop7_tables.py": [
+"other",
+null
+],
+"make_loop8_tables.py": [
+"other",
+null
+],
+"make_loop9_tables.py": [
+"other",
+null
+],
+"make_node_gt.py": [
+"other",
+null
+],
+"make_overview.py": [
+"other",
+null
+],
+"make_overview4.py": [
+"other",
+null
+],
+"make_overview5.py": [
+"other",
+null
+],
+"make_poses.py": [
+"other",
+null
+],
+"make_prior.py": [
+"other",
+null
+],
+"make_propprops.py": [
+"other",
+null
+],
+"make_report_crn1.py": [
+"other",
+null
+],
+"make_report_crn2.py": [
+"other",
+null
+],
+"make_report_e26.py": [
+"exp",
+26
+],
+"make_report_g.py": [
+"other",
+null
+],
+"make_report_g2.py": [
+"other",
+null
+],
+"make_report_h0.py": [
+"other",
+null
+],
+"make_report_i.py": [
+"other",
+null
+],
+"make_report_j.py": [
+"other",
+null
+],
+"make_report_k.py": [
+"other",
+null
+],
+"make_reports_crn3.py": [
+"other",
+null
+],
+"make_reports_retro.py": [
+"other",
+null
+],
+"make_route_alt.py": [
+"other",
+null
+],
+"make_route_gt.py": [
+"other",
+null
+],
+"make_route_heat.py": [
+"other",
+null
+],
+"make_scaling_plot.py": [
+"other",
+null
+],
+"make_splits.py": [
+"other",
+null
+],
+"maplane_eval.py": [
+"other",
+null
+],
+"master_final.sh": [
+"other",
+null
+],
+"md_to_html_min.py": [
+"other",
+null
+],
+"models_cnt.py": [
+"other",
+null
+],
+"monitor_eval.py": [
+"other",
+null
+],
+"monitor_loco.py": [
+"other",
+null
+],
+"monitor_scenecv.py": [
+"other",
+null
+],
+"netspeed.sh": [
+"other",
+null
+],
+"node_assemble.py": [
+"other",
+null
+],
+"node_diag.py": [
+"other",
+null
+],
+"node_head.py": [
+"other",
+null
+],
+"nums.py": [
+"other",
+null
+],
+"oof_infer.py": [
+"other",
+null
+],
+"oof_scene_boot.py": [
+"other",
+null
+],
+"oracle_eval.py": [
+"other",
+null
+],
+"oracle_vertices.py": [
+"other",
+null
+],
+"orient_check.py": [
+"other",
+null
+],
+"p10_data.py": [
+"live",
+null
+],
+"p10_expert.py": [
+"live",
+null
+],
+"p10_extrap.py": [
+"other",
+null
+],
+"p10_final_eval.py": [
+"other",
+null
+],
+"p10_infer.py": [
+"live",
+null
+],
+"p10_net.py": [
+"live",
+null
+],
+"p10_range.py": [
+"other",
+null
+],
+"p10_replay.py": [
+"other",
+null
+],
+"p10_route_eval.py": [
+"other",
+null
+],
+"p10_route_eval2.py": [
+"live",
+null
+],
+"p10_route_train.py": [
+"other",
+null
+],
+"p10_sweep.py": [
+"other",
+null
+],
+"p10_tests.py": [
+"other",
+null
+],
+"p10_tokens.py": [
+"other",
+null
+],
+"p10_tosrc.py": [
+"other",
+null
+],
+"p10_tosrc2.py": [
+"other",
+null
+],
+"p10_train.py": [
+"live",
+null
+],
+"p10_wave.py": [
+"live",
+null
+],
+"p11_eval.py": [
+"live",
+null
+],
+"p11_route_fail.py": [
+"other",
+null
+],
+"p11_route_time.py": [
+"live",
+null
+],
+"p11_temporal.py": [
+"other",
+null
+],
+"p12_calib.py": [
+"live",
+null
+],
+"p12_calib_b.py": [
+"other",
+null
+],
+"p12_calib_ci.py": [
+"other",
+null
+],
+"p12_pair.py": [
+"other",
+null
+],
+"p12_seed_pair.py": [
+"other",
+null
+],
+"p12_trans.py": [
+"other",
+null
+],
+"p12_trust.py": [
+"other",
+null
+],
+"p13_connect.py": [
+"live",
+null
+],
+"p13_consumer.py": [
+"live",
+null
+],
+"p13_consumer_ego.py": [
+"live",
+null
+],
+"p13_consumer_ego2.py": [
+"live",
+null
+],
+"p13_consumer_ego3.py": [
+"live",
+null
+],
+"p13_consumer_gate.py": [
+"live",
+null
+],
+"p13_consumer_gate_ctrl.py": [
+"live",
+null
+],
+"p13_consumer_viz.py": [
+"live",
+null
+],
+"p13_jdiag_after.py": [
+"live",
+null
+],
+"p13_jhead.py": [
+"live",
+null
+],
+"p13_juncpr.py": [
+"live",
+null
+],
+"p13_junction.py": [
+"live",
+null
+],
+"p13_pfail_diag.py": [
+"live",
+null
+],
+"p13_phead.py": [
+"live",
+null
+],
+"p13_phead_fail.py": [
+"live",
+null
+],
+"p13_route_fail.py": [
+"live",
+null
+],
+"p13_rulejunc.py": [
+"live",
+null
+],
+"p13_temporal_val.py": [
+"live",
+null
+],
+"p13_vfail.py": [
+"live",
+null
+],
+"p14_chain_consumer.py": [
+"live",
+null
+],
+"p14_chain_data.py": [
+"live",
+null
+],
+"p14_chain_fail_data.py": [
+"live",
+null
+],
+"p14_chain_fail_eval.py": [
+"live",
+null
+],
+"p14_chain_fail_train.py": [
+"live",
+null
+],
+"p14_counterfactual.py": [
+"live",
+null
+],
+"p14_counterfactual_fig.py": [
+"live",
+null
+],
+"p14_diag_tok.py": [
+"live",
+null
+],
+"p14_explore.py": [
+"live",
+null
+],
+"p14_explore2.py": [
+"live",
+null
+],
+"p14_joint.py": [
+"live",
+null
+],
+"p14_oracle.py": [
+"live",
+null
+],
+"p14_pages.py": [
+"live",
+null
+],
+"p14_pages2.py": [
+"live",
+null
+],
+"p14_ref.py": [
+"live",
+null
+],
+"p14_stats.py": [
+"live",
+null
+],
+"p14_stats2.py": [
+"live",
+null
+],
+"p14_tmp.py": [
+"live",
+null
+],
+"p14_tmp2.py": [
+"live",
+null
+],
+"p14_tmp3.py": [
+"live",
+null
+],
+"p14_tmp4.py": [
+"live",
+null
+],
+"p14_tmp5.py": [
+"live",
+null
+],
+"p14_tmp6.py": [
+"live",
+null
+],
+"p14_viz.py": [
+"live",
+null
+],
+"p14_viz_fail.py": [
+"live",
+null
+],
+"p15_analysis.py": [
+"live",
+null
+],
+"p15_chain_data.py": [
+"live",
+null
+],
+"p15_joint.py": [
+"live",
+null
+],
+"p15_keep_eval.py": [
+"live",
+null
+],
+"p15_make_tokens.py": [
+"live",
+null
+],
+"p15_probe.py": [
+"live",
+null
+],
+"p15_refine.py": [
+"live",
+null
+],
+"p15_route_pairs.py": [
+"live",
+null
+],
+"p16_anchors.py": [
+"live",
+null
+],
+"p16_asm_grid.py": [
+"live",
+null
+],
+"p16_builder.py": [
+"live",
+null
+],
+"p16_builder.py.bak_fr": [
+"other",
+null
+],
+"p16_builder_fix.py": [
+"live",
+null
+],
+"p16_catalogue.py": [
+"live",
+null
+],
+"p16_chain_data.py": [
+"live",
+null
+],
+"p16_common.py": [
+"live",
+null
+],
+"p16_ctrl.py": [
+"live",
+null
+],
+"p16_ctrl.py.bak": [
+"other",
+null
+],
+"p16_data.py": [
+"live",
+null
+],
+"p16_diag.py": [
+"live",
+null
+],
+"p16_driver.py": [
+"live",
+null
+],
+"p16_ensemble.py": [
+"live",
+null
+],
+"p16_ensemble2.py": [
+"live",
+null
+],
+"p16_eval.py": [
+"live",
+null
+],
+"p16_fast_check.py": [
+"live",
+null
+],
+"p16_fast_val.py": [
+"live",
+null
+],
+"p16_final_eval.py": [
+"live",
+null
+],
+"p16_gate.py": [
+"live",
+null
+],
+"p16_geom.py": [
+"live",
+null
+],
+"p16_geom.py.bak_fr": [
+"other",
+null
+],
+"p16_graph_try.py": [
+"live",
+null
+],
+"p16_hyst.py": [
+"live",
+null
+],
+"p16_infer.py": [
+"live",
+null
+],
+"p16_infer.py.bak_before_fast": [
+"other",
+null
+],
+"p16_infer.py.bak_before_fork": [
+"other",
+null
+],
+"p16_infer.py.bak_fast1": [
+"other",
+null
+],
+"p16_junc_diag.py": [
+"live",
+null
+],
+"p16_junc_head_eval.py": [
+"live",
+null
+],
+"p16_loss.py": [
+"live",
+null
+],
+"p16_loss.py.bak_before_fc": [
+"other",
+null
+],
+"p16_oracle_junc.py": [
+"live",
+null
+],
+"p16_pareto.py": [
+"live",
+null
+],
+"p16_pipeline.py": [
+"live",
+null
+],
+"p16_pipeline_eval.py": [
+"live",
+null
+],
+"p16_prof_asm.py": [
+"live",
+null
+],
+"p16_ref.py": [
+"live",
+null
+],
+"p16_report.py": [
+"live",
+null
+],
+"p16_route_check.py": [
+"live",
+null
+],
+"p16_route_diag.py": [
+"live",
+null
+],
+"p16_route_diag2.py": [
+"live",
+null
+],
+"p16_runtime.py": [
+"live",
+null
+],
+"p16_runtime_check.py": [
+"live",
+null
+],
+"p16_smoke.py": [
+"live",
+null
+],
+"p16_sync_try.py": [
+"live",
+null
+],
+"p16_time.py": [
+"live",
+null
+],
+"p16_timing.py": [
+"live",
+null
+],
+"p16_tok_resample.py": [
+"live",
+null
+],
+"p16_tokens.py": [
+"live",
+null
+],
+"p16_train.py": [
+"live",
+null
+],
+"p16_triage.py": [
+"live",
+null
+],
+"p17_latency.py": [
+"live",
+null
+],
+"p8_alt.py": [
+"other",
+null
+],
+"p8_assign.py": [
+"live",
+null
+],
+"p8_attr.py": [
+"other",
+null
+],
+"p8_build.py": [
+"other",
+null
+],
+"p8_consumer.py": [
+"live",
+null
+],
+"p8_dataset.py": [
+"other",
+null
+],
+"p8_early.py": [
+"other",
+null
+],
+"p8_ens.py": [
+"other",
+null
+],
+"p8_eval_front.py": [
+"other",
+null
+],
+"p8_eval_loc.py": [
+"other",
+null
+],
+"p8_geo.py": [
+"other",
+null
+],
+"p8_inspect.py": [
+"other",
+null
+],
+"p8_inspect2.py": [
+"other",
+null
+],
+"p8_joint.py": [
+"other",
+null
+],
+"p8_lanewidth.py": [
+"other",
+null
+],
+"p8_lib.py": [
+"live",
+null
+],
+"p8_locstats.py": [
+"other",
+null
+],
+"p8_misc.py": [
+"other",
+null
+],
+"p8_oracle_unit.py": [
+"other",
+null
+],
+"p8_pipe.py": [
+"other",
+null
+],
+"p8_seg.py": [
+"live",
+null
+],
+"p8_sparse.py": [
+"other",
+null
+],
+"p8_stages.py": [
+"other",
+null
+],
+"p8_test_lib.py": [
+"other",
+null
+],
+"p8_timing.py": [
+"other",
+null
+],
+"p8_trackloc.py": [
+"other",
+null
+],
+"p9_flag.py": [
+"other",
+null
+],
+"patch_bevfusion.sh": [
+"other",
+null
+],
+"path_eval.py": [
+"other",
+null
+],
+"pca_features.py": [
+"other",
+null
+],
+"peek_archive.sh": [
+"other",
+null
+],
+"peek_step.sh": [
+"other",
+null
+],
+"peek_step2.sh": [
+"other",
+null
+],
+"pick_tau_l.py": [
+"other",
+null
+],
+"plan_eval.py": [
+"other",
+null
+],
+"planner_stub.py": [
+"other",
+null
+],
+"plot_e26.py": [
+"exp",
+26
+],
+"policy_eval.py": [
+"other",
+null
+],
+"post_runs.sh": [
+"other",
+null
+],
+"post_watch.sh": [
+"other",
+null
+],
+"postproc.py": [
+"other",
+null
+],
+"prep_graph.py": [
+"other",
+null
+],
+"print_graph_json.py": [
+"other",
+null
+],
+"prior_precompute.py": [
+"other",
+null
+],
+"prior_tools.py": [
+"other",
+null
+],
+"prof_lf.py": [
+"other",
+null
+],
+"prof_lf2.py": [
+"other",
+null
+],
+"proposals.py": [
+"other",
+null
+],
+"queue_dense2.sh": [
+"other",
+null
+],
+"queue_dense3.sh": [
+"other",
+null
+],
+"queue_dense4.sh": [
+"other",
+null
+],
+"queue_dense5.sh": [
+"other",
+null
+],
+"queue_dense6.sh": [
+"other",
+null
+],
+"queue_dense7.sh": [
+"other",
+null
+],
+"queue_e73.txt": [
+"exp",
+73
+],
+"queue_e73.txt.lock": [
+"exp",
+73
+],
+"queue_e73.txt.state": [
+"exp",
+73
+],
+"queue_e78.txt": [
+"exp",
+78
+],
+"queue_e78.txt.lock": [
+"exp",
+78
+],
+"queue_e78.txt.state": [
+"exp",
+78
+],
+"queue_e80.txt": [
+"exp",
+80
+],
+"queue_e80.txt.lock": [
+"exp",
+80
+],
+"queue_e80.txt.state": [
+"exp",
+80
+],
+"queue_e83.txt": [
+"exp",
+83
+],
+"queue_e83.txt.closed": [
+"exp",
+83
+],
+"queue_e83.txt.lock": [
+"exp",
+83
+],
+"queue_e83.txt.state": [
+"exp",
+83
+],
+"queue_runner.py": [
+"other",
+null
+],
+"queue_runner7.py": [
+"other",
+null
+],
+"range_pr.py": [
+"other",
+null
+],
+"refiner.py": [
+"other",
+null
+],
+"reg_precompute.py": [
+"other",
+null
+],
+"regen_old_reports.sh": [
+"other",
+null
+],
+"report2.py": [
+"other",
+null
+],
+"report_lib.py": [
+"live",
+null
+],
+"rerun_assoc.sh": [
+"other",
+null
+],
+"restart_stage.sh": [
+"other",
+null
+],
+"robust_ft.py": [
+"other",
+null
+],
+"route_head.py": [
+"other",
+null
+],
+"route_head2.py": [
+"other",
+null
+],
+"route_head2.py.bak0": [
+"other",
+null
+],
+"route_head2.py.bak1": [
+"other",
+null
+],
+"route_head2.py.bak2": [
+"other",
+null
+],
+"route_head2.py.bak3": [
+"other",
+null
+],
+"route_head2.py.bak4": [
+"other",
+null
+],
+"route_head2.py.bak5": [
+"other",
+null
+],
+"route_head3.py": [
+"other",
+null
+],
+"route_head4.py": [
+"other",
+null
+],
+"run_after_fix.sh": [
+"other",
+null
+],
+"run_align.sh": [
+"other",
+null
+],
+"run_align_test.sh": [
+"other",
+null
+],
+"run_bevfusion_mini.sh": [
+"other",
+null
+],
+"run_btrain.sh": [
+"other",
+null
+],
+"run_btrain2.sh": [
+"other",
+null
+],
+"run_build_report.sh": [
+"other",
+null
+],
+"run_calib.sh": [
+"other",
+null
+],
+"run_centerline_gt.sh": [
+"other",
+null
+],
+"run_crn_b123.sh": [
+"other",
+null
+],
+"run_crn_e18.sh": [
+"exp",
+18
+],
+"run_crn_e25.sh": [
+"exp",
+25
+],
+"run_crn_mini.sh": [
+"other",
+null
+],
+"run_crn_round2.sh": [
+"other",
+null
+],
+"run_crn_round2b.sh": [
+"other",
+null
+],
+"run_crn_round3.sh": [
+"other",
+null
+],
+"run_crn_round4.sh": [
+"other",
+null
+],
+"run_crn_round5.sh": [
+"other",
+null
+],
+"run_e30_adj.sh": [
+"exp",
+30
+],
+"run_e32_fp1.sh": [
+"exp",
+32
+],
+"run_e34.sh": [
+"exp",
+34
+],
+"run_e34_eval.sh": [
+"exp",
+34
+],
+"run_e34_stale.sh": [
+"exp",
+34
+],
+"run_e35.sh": [
+"exp",
+35
+],
+"run_e37_ens.sh": [
+"exp",
+37
+],
+"run_e38.sh": [
+"exp",
+38
+],
+"run_e39.sh": [
+"exp",
+39
+],
+"run_e39reg.sh": [
+"exp",
+39
+],
+"run_e40_e41.sh": [
+"exp",
+40
+],
+"run_e40_extra.sh": [
+"exp",
+40
+],
+"run_e40_na.sh": [
+"exp",
+40
+],
+"run_e41b.sh": [
+"exp",
+41
+],
+"run_e43.sh": [
+"exp",
+43
+],
+"run_e43_joint.sh": [
+"exp",
+43
+],
+"run_e43c.sh": [
+"exp",
+43
+],
+"run_e44_cfg.sh": [
+"exp",
+44
+],
+"run_e44_cons.sh": [
+"exp",
+44
+],
+"run_e44_cut2.sh": [
+"exp",
+44
+],
+"run_e44_map_cons.sh": [
+"exp",
+44
+],
+"run_e45.sh": [
+"exp",
+45
+],
+"run_e46_repair.sh": [
+"exp",
+46
+],
+"run_e48_chain.sh": [
+"exp",
+48
+],
+"run_e48_eval.sh": [
+"exp",
+48
+],
+"run_e48_eval2.sh": [
+"exp",
+48
+],
+"run_e48_sys.sh": [
+"exp",
+48
+],
+"run_e49.sh": [
+"exp",
+49
+],
+"run_e51_sys.sh": [
+"exp",
+51
+],
+"run_e52.sh": [
+"exp",
+52
+],
+"run_e53.sh": [
+"exp",
+53
+],
+"run_e53_map.sh": [
+"exp",
+53
+],
+"run_e53_reg.sh": [
+"exp",
+53
+],
+"run_e53b.sh": [
+"exp",
+53
+],
+"run_e53c.sh": [
+"exp",
+53
+],
+"run_e54.sh": [
+"exp",
+54
+],
+"run_e55.sh": [
+"exp",
+55
+],
+"run_e56.sh": [
+"exp",
+56
+],
+"run_e56b.sh": [
+"exp",
+56
+],
+"run_e57_eval.sh": [
+"exp",
+57
+],
+"run_e57_eval2.sh": [
+"exp",
+57
+],
+"run_e57_extract.sh": [
+"exp",
+57
+],
+"run_e57_extract2.sh": [
+"exp",
+57
+],
+"run_e57_extract3.sh": [
+"exp",
+57
+],
+"run_e57_extract4.sh": [
+"exp",
+57
+],
+"run_e57_fogresume.sh": [
+"exp",
+57
+],
+"run_e57_resume.sh": [
+"exp",
+57
+],
+"run_e58.sh": [
+"exp",
+58
+],
+"run_e58_rest.sh": [
+"exp",
+58
+],
+"run_e58_retry.sh": [
+"exp",
+58
+],
+"run_e58_train.sh": [
+"exp",
+58
+],
+"run_e58b.sh": [
+"exp",
+58
+],
+"run_e59.sh": [
+"exp",
+59
+],
+"run_e59_hmm.sh": [
+"exp",
+59
+],
+"run_e59b.sh": [
+"exp",
+59
+],
+"run_e59c.sh": [
+"exp",
+59
+],
+"run_e59d.sh": [
+"exp",
+59
+],
+"run_e60.sh": [
+"exp",
+60
+],
+"run_e60b.sh": [
+"exp",
+60
+],
+"run_e60c.sh": [
+"exp",
+60
+],
+"run_e61.sh": [
+"exp",
+61
+],
+"run_e62.sh": [
+"exp",
+62
+],
+"run_e62p.sh": [
+"exp",
+62
+],
+"run_e62p_retry.sh": [
+"exp",
+62
+],
+"run_e62r.sh": [
+"exp",
+62
+],
+"run_e64.sh": [
+"exp",
+64
+],
+"run_e64b.sh": [
+"exp",
+64
+],
+"run_e65.sh": [
+"exp",
+65
+],
+"run_e65_base.sh": [
+"exp",
+65
+],
+"run_e65_eval.sh": [
+"exp",
+65
+],
+"run_e65_extract.sh": [
+"exp",
+65
+],
+"run_e65_extract2.sh": [
+"exp",
+65
+],
+"run_e65_extract3.sh": [
+"exp",
+65
+],
+"run_e65b.sh": [
+"exp",
+65
+],
+"run_e65d.sh": [
+"exp",
+65
+],
+"run_e65e.sh": [
+"exp",
+65
+],
+"run_e65f.sh": [
+"exp",
+65
+],
+"run_e65f_extract.sh": [
+"exp",
+65
+],
+"run_e67.sh": [
+"exp",
+67
+],
+"run_e67seeds.sh": [
+"exp",
+67
+],
+"run_e68.sh": [
+"exp",
+68
+],
+"run_e69.sh": [
+"exp",
+69
+],
+"run_e70.sh": [
+"exp",
+70
+],
+"run_e71.sh": [
+"exp",
+71
+],
+"run_e72.sh": [
+"exp",
+72
+],
+"run_e73_extract.sh": [
+"exp",
+73
+],
+"run_extract.sh": [
+"other",
+null
+],
+"run_extract_lean.sh": [
+"other",
+null
+],
+"run_final78.sh": [
+"other",
+null
+],
+"run_final78b.sh": [
+"other",
+null
+],
+"run_fixes.sh": [
+"other",
+null
+],
+"run_floor.sh": [
+"other",
+null
+],
+"run_full_stage.sh": [
+"other",
+null
+],
+"run_gcar.sh": [
+"other",
+null
+],
+"run_gridbase.sh": [
+"other",
+null
+],
+"run_k.sh": [
+"other",
+null
+],
+"run_lidar_assoc.sh": [
+"other",
+null
+],
+"run_main_dense.sh": [
+"other",
+null
+],
+"run_multi_debug.sh": [
+"other",
+null
+],
+"run_odo.sh": [
+"other",
+null
+],
+"run_odo2.sh": [
+"other",
+null
+],
+"run_pca.sh": [
+"other",
+null
+],
+"run_post.sh": [
+"other",
+null
+],
+"run_post2.sh": [
+"other",
+null
+],
+"run_post_all.sh": [
+"other",
+null
+],
+"run_prep_graph.sh": [
+"other",
+null
+],
+"run_py.sh": [
+"other",
+null
+],
+"run_py2.sh": [
+"other",
+null
+],
+"run_refine_oracle.sh": [
+"other",
+null
+],
+"run_reports_crn.sh": [
+"other",
+null
+],
+"run_scaling.sh": [
+"other",
+null
+],
+"run_scaling_b.sh": [
+"other",
+null
+],
+"run_stage1.sh": [
+"other",
+null
+],
+"run_stageB.sh": [
+"other",
+null
+],
+"run_stageB2.sh": [
+"other",
+null
+],
+"run_stage_b.sh": [
+"other",
+null
+],
+"run_strict.sh": [
+"other",
+null
+],
+"run_system_eval.sh": [
+"other",
+null
+],
+"run_trace.sh": [
+"other",
+null
+],
+"run_unet.sh": [
+"other",
+null
+],
+"run_unet96.sh": [
+"other",
+null
+],
+"run_unet96b.sh": [
+"other",
+null
+],
+"run_v3.sh": [
+"other",
+null
+],
+"run_v4sweep.sh": [
+"other",
+null
+],
+"run_v5.sh": [
+"other",
+null
+],
+"run_v6.sh": [
+"other",
+null
+],
+"run_v7.sh": [
+"other",
+null
+],
+"run_v8.sh": [
+"other",
+null
+],
+"run_v9.sh": [
+"other",
+null
+],
+"run_vec_debug.sh": [
+"other",
+null
+],
+"run_wide.sh": [
+"other",
+null
+],
+"run_wrong80.sh": [
+"other",
+null
+],
+"sanity_cache.py": [
+"other",
+null
+],
+"sanity_order.py": [
+"other",
+null
+],
+"save_memory_note.py": [
+"other",
+null
+],
+"scene_bias.py": [
+"other",
+null
+],
+"sd_assoc_eval.py": [
+"other",
+null
+],
+"sd_lib.py": [
+"live",
+null
+],
+"sd_precompute.py": [
+"other",
+null
+],
+"sd_reg_precompute.py": [
+"other",
+null
+],
+"sd_test.py": [
+"other",
+null
+],
+"setup_env.sh": [
+"other",
+null
+],
+"setup_gcar_env.sh": [
+"other",
+null
+],
+"setup_wsl.ps1": [
+"other",
+null
+],
+"slot_test.py": [
+"other",
+null
+],
+"smoke_lf.sh": [
+"other",
+null
+],
+"stability.py": [
+"other",
+null
+],
+"stale_signal.py": [
+"other",
+null
+],
+"state_check.sh": [
+"other",
+null
+],
+"summ.py": [
+"other",
+null
+],
+"sweep_lead_oracle.py": [
+"other",
+null
+],
+"sweep_spacing.py": [
+"other",
+null
+],
+"sweep_tau_e.py": [
+"other",
+null
+],
+"sweep_trace.py": [
+"other",
+null
+],
+"sweep_trace_oracle.py": [
+"other",
+null
+],
+"sys_eval.py": [
+"other",
+null
+],
+"temporal_b.py": [
+"other",
+null
+],
+"temporal_eval.py": [
+"other",
+null
+],
+"temporal_filter.py": [
+"other",
+null
+],
+"test_align.py": [
+"junk",
+null
+],
+"test_arch.py": [
+"junk",
+null
+],
+"test_cnt.py": [
+"junk",
+null
+],
+"test_cnt_path.sh": [
+"junk",
+null
+],
+"test_cpustore.py": [
+"junk",
+null
+],
+"test_extract_pca.sh": [
+"junk",
+null
+],
+"test_fold.py": [
+"junk",
+null
+],
+"test_graph_eval.py": [
+"junk",
+null
+],
+"test_multi.py": [
+"junk",
+null
+],
+"test_p16_spec.py": [
+"live",
+null
+],
+"test_p16_torch.py": [
+"junk",
+null
+],
+"test_prior.py": [
+"junk",
+null
+],
+"test_trimmed.sh": [
+"junk",
+null
+],
+"test_unet.py": [
+"junk",
+null
+],
+"trim_sweeps.sh": [
+"other",
+null
+],
+"vec_head.py": [
+"other",
+null
+],
+"viz_crn_compare.py": [
+"other",
+null
+],
+"viz_crn_mini.py": [
+"other",
+null
+],
+"viz_graph.py": [
+"other",
+null
+],
+"viz_lf.py": [
+"other",
+null
+],
+"viz_nodes.py": [
+"other",
+null
+],
+"viz_nodes_k.py": [
+"other",
+null
+],
+"viz_results.py": [
+"other",
+null
+],
+"write_readmes.py": [
+"other",
+null
+]
+}
+}

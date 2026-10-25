@@ -1,0 +1,90 @@
+{
+ "res": {
+  "exact/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8158220024721878,
+   "route_cov": 0.9103140255708352,
+   "route_prec": 0.9241605966868217,
+   "flagged_len_per_row": 70.76259315517125,
+   "pose_err_m": 0.7702716884107162,
+   "yaw_err_deg": 0.9269777156316433
+  },
+  "s1/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.7453646477132262,
+   "route_cov": 0.8907293790372255,
+   "route_prec": 0.9052840728944006,
+   "flagged_len_per_row": 70.58266046186671,
+   "pose_err_m": 0.9138379251726108,
+   "yaw_err_deg": 0.8396232010833657
+  },
+  "s2/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.6316440049443758,
+   "route_cov": 0.8512133183304027,
+   "route_prec": 0.8702781197682804,
+   "flagged_len_per_row": 69.80396436935337,
+   "pose_err_m": 1.0959985428231225,
+   "yaw_err_deg": 0.8938476285213609
+  },
+  "s3/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.5179233621755254,
+   "route_cov": 0.8060592598597671,
+   "route_prec": 0.838058528292939,
+   "flagged_len_per_row": 67.61147426482343,
+   "pose_err_m": 1.5443767057805367,
+   "yaw_err_deg": 1.370958637770835
+  },
+  "s1d30/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.681087762669963,
+   "route_cov": 0.8699229561540427,
+   "route_prec": 0.8831744009471958,
+   "flagged_len_per_row": 70.40881286814613,
+   "pose_err_m": 1.2531206020246708,
+   "yaw_err_deg": 1.2732770026358573
+  },
+  "wrong/tau0.6": {
+   "n": 787,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 10.768409628230067,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "none/tau0.6": {
+   "n": 833,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 0.0,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "_lane": {
+   "P": 0.7970291663758888,
+   "R": 0.8748385645179435,
+   "F1": 0.8341232250692854
+  }
+ },
+ "args": {
+  "tok": "tok_e94_a_test_clean",
+  "split": "test_clean",
+  "model": "e103e3",
+  "kind": "corr",
+  "taus": "0.6",
+  "cells": "exact,s1,s2,s3,s1d30,wrong,none",
+  "n": 0,
+  "tag": ""
+ },
+ "n": 833
+}

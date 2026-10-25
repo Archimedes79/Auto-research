@@ -1,0 +1,39 @@
+{
+ "args": {
+  "sets": "test",
+  "graphs": "e57_fog/graphs",
+  "sigma": 1.0,
+  "drop": 0.0,
+  "shift_frac": 0.0,
+  "protect": 1,
+  "reg": 1,
+  "oracle": 0,
+  "hmm": 0,
+  "nomap": 0,
+  "out": "e59p_fog",
+  "workers": 10
+ },
+ "test": {
+  "n_samples": 809,
+  "assoc_acc_all": 0.893967491823961,
+  "assoc_acc_assigned": 0.8963059389890455,
+  "assigned_frac": 0.9973910167685354,
+  "route_P": 0.9038667976155129,
+  "route_R": 0.9450958851766055,
+  "route_F1": 0.9240216680676193,
+  "route_cov": 0.8630066395798236,
+  "route_prec": 0.9765662471735606,
+  "route_success": 0.7441285537700866,
+  "routeG_P": 0.9747514596812372,
+  "routeG_R": 0.9778762813155499,
+  "routeG_F1": 0.9763113701471896,
+  "routeG_cov": 0.9397681101972054,
+  "routeG_prec": 0.969366419441376,
+  "routeG_success": 0.896168108776267,
+  "novel_P": 0.9672599833994282,
+  "novel_R": 0.5357307043980181,
+  "reg_pos_median": 0.6186319863286235,
+  "reg_pos_p90": 1.826252254151562,
+  "reg_yaw_median": 0.273594356277962
+ }
+}

@@ -1,0 +1,18 @@
+stage 1 done (183 s)
+stage 1: {'exact': 0.356, 's2': 0.358, 'wrong': 0.76, 'none': 0.739}
+  frozen epoch 1/4: path loss 0.472 (29 s)
+  frozen epoch 2/4: path loss 0.455 (58 s)
+  frozen epoch 3/4: path loss 0.398 (87 s)
+  frozen epoch 4/4: path loss 0.351 (116 s)
+frozen: exact 0.352 s2 0.353 wrong 0.771 none 0.755 | route AUROC exact 0.996 s2 0.995; mean prob wrong 0.009 none 0.000 (329 s)
+  joint0 epoch 1/4: path loss 0.453 (52 s)
+  joint0 epoch 2/4: path loss 0.464 (103 s)
+  joint0 epoch 3/4: path loss 0.408 (156 s)
+  joint0 epoch 4/4: path loss 0.349 (208 s)
+joint0: exact 0.359 s2 0.356 wrong 0.785 none 0.747 | route AUROC exact 0.995 s2 0.994; mean prob wrong 0.008 none 0.000 (554 s)
+  joint1 epoch 1/4: path loss 0.454, label loss 0.0159 (53 s)
+  joint1 epoch 2/4: path loss 0.473, label loss 0.0162 (106 s)
+  joint1 epoch 3/4: path loss 0.389, label loss 0.0155 (158 s)
+  joint1 epoch 4/4: path loss 0.347, label loss 0.0151 (210 s)
+joint1: exact 0.353 s2 0.350 wrong 0.729 none 0.714 | route AUROC exact 0.996 s2 0.995; mean prob wrong 0.008 none 0.000 (781 s)
+DONE

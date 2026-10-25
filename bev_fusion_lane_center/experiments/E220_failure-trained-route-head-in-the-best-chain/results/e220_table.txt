@@ -1,0 +1,9 @@
+﻿== dark_gateB
+  map error 0 m | _route_s0: clean 0.882 fail 0.832 (n 137) | _route_s1: clean 0.838 fail 0.818 (n 137) | _joint_c0: clean 0.897 fail 0.847 (n 137) | _joint_c1: clean 0.853 fail 0.847 (n 137)
+  map error 2 m | _route_s0: clean 0.853 fail 0.788 (n 137) | _route_s1: clean 0.838 fail 0.796 (n 137) | _joint_c0: clean 0.860 fail 0.825 (n 137) | _joint_c1: clean 0.838 fail 0.825 (n 137)
+== blur_gateB
+  map error 0 m | _route_s0: clean 0.882 fail 0.883 (n 137) | _route_s1: clean 0.838 fail 0.854 (n 137) | _joint_c0: clean 0.897 fail 0.905 (n 137) | _joint_c1: clean 0.853 fail 0.891 (n 137)
+  map error 2 m | _route_s0: clean 0.853 fail 0.876 (n 137) | _route_s1: clean 0.838 fail 0.839 (n 137) | _joint_c0: clean 0.860 fail 0.847 (n 137) | _joint_c1: clean 0.838 fail 0.869 (n 137)
+== cam_front3_off_gateB
+  map error 0 m | _route_s0: clean 0.882 fail 0.774 (n 137) | _route_s1: clean 0.838 fail 0.825 (n 137) | _joint_c0: clean 0.897 fail 0.832 (n 137) | _joint_c1: clean 0.853 fail 0.847 (n 137)
+  map error 2 m | _route_s0: clean 0.853 fail 0.745 (n 137) | _route_s1: clean 0.838 fail 0.766 (n 137) | _joint_c0: clean 0.860 fail 0.781 (n 137) | _joint_c1: clean 0.838 fail 0.818 (n 137)

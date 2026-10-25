@@ -1,0 +1,31 @@
+{
+ "id": "E209.c2",
+ "hypothesis": "no-map control for E209.b2 (same data, map always zero)",
+ "basis": "E206,E139",
+ "seed": "0",
+ "command": "bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p17_mapft.py --name e17_map_c2 --init_ckpt e17_map_a --real_fail 1 --share 0.5 --u 4 --lr 3e-4 --p_degrade 0.2 --p_none 1.0 --p_wrong 0.0 --fail_perts cam_front3_off,fog,radar_off,extr3,cam_front_off",
+ "cwd": "/mnt/c/ML-Experiment/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "started": "2026-10-24T23:36:10",
+ "status": "ok",
+ "exit": 0,
+ "duration_s": 1530,
+ "attempts": 1,
+ "ended": "2026-10-25T00:01:41",
+ "last_lines": [
+  "it 3800/4800 1191s seed_pos 0.337 seed_dir 0.137 seed_val 0.097 ver 0.215 pos 0.503 val 0.194 cov 0.000 prec 0.657 rec 0.427 dup 0.196 link 0.182 junc 0.174 aux_seed 0.630 aux_dir 0.164 ver_pos 0.202 child_ok 0.101 child_near 0.169 link_pos 0.088 tot 3.728",
+  "it 3900/4800 1222s seed_pos 0.337 seed_dir 0.127 seed_val 0.091 ver 0.213 pos 0.510 val 0.189 cov 0.000 prec 0.668 rec 0.411 dup 0.193 link 0.177 junc 0.164 aux_seed 0.616 aux_dir 0.157 ver_pos 0.204 child_ok 0.099 child_near 0.167 link_pos 0.087 tot 3.697",
+  "it 4000/4800 1249s seed_pos 0.332 seed_dir 0.125 seed_val 0.091 ver 0.216 pos 0.507 val 0.193 cov 0.000 prec 0.642 rec 0.420 dup 0.198 link 0.182 junc 0.178 aux_seed 0.638 aux_dir 0.155 ver_pos 0.209 child_ok 0.104 child_near 0.175 link_pos 0.087 tot 3.709",
+  "it 4100/4800 1276s seed_pos 0.330 seed_dir 0.119 seed_val 0.087 ver 0.215 pos 0.507 val 0.193 cov 0.000 prec 0.649 rec 0.410 dup 0.199 link 0.176 junc 0.166 aux_seed 0.631 aux_dir 0.151 ver_pos 0.206 child_ok 0.103 child_near 0.172 link_pos 0.086 tot 3.677",
+  "it 4200/4800 1305s seed_pos 0.329 seed_dir 0.124 seed_val 0.091 ver 0.213 pos 0.501 val 0.191 cov 0.000 prec 0.645 rec 0.410 dup 0.197 link 0.179 junc 0.172 aux_seed 0.621 aux_dir 0.157 ver_pos 0.207 child_ok 0.103 child_near 0.171 link_pos 0.089 tot 3.665",
+  "it 4300/4800 1338s seed_pos 0.336 seed_dir 0.123 seed_val 0.091 ver 0.216 pos 0.509 val 0.192 cov 0.000 prec 0.654 rec 0.415 dup 0.197 link 0.180 junc 0.174 aux_seed 0.632 aux_dir 0.153 ver_pos 0.204 child_ok 0.101 child_near 0.172 link_pos 0.087 tot 3.713",
+  "it 4400/4800 1373s seed_pos 0.323 seed_dir 0.126 seed_val 0.091 ver 0.208 pos 0.506 val 0.184 cov 0.000 prec 0.652 rec 0.404 dup 0.197 link 0.175 junc 0.168 aux_seed 0.624 aux_dir 0.155 ver_pos 0.204 child_ok 0.103 child_near 0.171 link_pos 0.086 tot 3.651",
+  "it 4500/4800 1409s seed_pos 0.328 seed_dir 0.126 seed_val 0.092 ver 0.213 pos 0.508 val 0.190 cov 0.000 prec 0.651 rec 0.412 dup 0.196 link 0.177 junc 0.171 aux_seed 0.622 aux_dir 0.160 ver_pos 0.207 child_ok 0.102 child_near 0.170 link_pos 0.087 tot 3.684",
+  "it 4600/4800 1440s seed_pos 0.333 seed_dir 0.135 seed_val 0.095 ver 0.214 pos 0.513 val 0.190 cov 0.000 prec 0.647 rec 0.418 dup 0.198 link 0.179 junc 0.173 aux_seed 0.638 aux_dir 0.170 ver_pos 0.207 child_ok 0.103 child_near 0.173 link_pos 0.086 tot 3.719",
+  "it 4700/4800 1470s seed_pos 0.334 seed_dir 0.127 seed_val 0.094 ver 0.217 pos 0.509 val 0.195 cov 0.000 prec 0.656 rec 0.406 dup 0.200 link 0.181 junc 0.173 aux_seed 0.630 aux_dir 0.159 ver_pos 0.207 child_ok 0.103 child_near 0.173 link_pos 0.087 tot 3.711",
+  "it 4800/4800 1500s seed_pos 0.326 seed_dir 0.126 seed_val 0.091 ver 0.216 pos 0.506 val 0.195 cov 0.000 prec 0.641 rec 0.404 dup 0.202 link 0.180 junc 0.174 aux_seed 0.640 aux_dir 0.159 ver_pos 0.208 child_ok 0.105 child_near 0.175 link_pos 0.088 tot 3.686",
+  "DONE ok 1501 s"
+ ]
+}

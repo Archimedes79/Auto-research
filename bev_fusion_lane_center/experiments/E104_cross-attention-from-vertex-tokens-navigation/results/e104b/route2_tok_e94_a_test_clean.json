@@ -1,0 +1,90 @@
+{
+ "res": {
+  "exact/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8133498145859085,
+   "route_cov": 0.9021330278387925,
+   "route_prec": 0.9504687153127934,
+   "flagged_len_per_row": 65.694981353019,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s1/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8145859085290482,
+   "route_cov": 0.901165063404165,
+   "route_prec": 0.9509980949528802,
+   "flagged_len_per_row": 65.75714013440555,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s2/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.7948084054388134,
+   "route_cov": 0.8955821627822556,
+   "route_prec": 0.9459779984634256,
+   "flagged_len_per_row": 65.39414071621071,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s3/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.792336217552534,
+   "route_cov": 0.8918780570717136,
+   "route_prec": 0.941883589761998,
+   "flagged_len_per_row": 65.3712277191993,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s1d30/tau0.6": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8009888751545118,
+   "route_cov": 0.8972658585630292,
+   "route_prec": 0.9427658990388879,
+   "flagged_len_per_row": 65.71169763391228,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "wrong/tau0.6": {
+   "n": 787,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 4.647581113646772,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "none/tau0.6": {
+   "n": 833,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 0.0,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "_lane": {
+   "P": 0.7970291663758888,
+   "R": 0.8748385645179435,
+   "F1": 0.8341232250692854
+  }
+ },
+ "args": {
+  "tok": "tok_e94_a_test_clean",
+  "split": "test_clean",
+  "model": "e104b",
+  "kind": "x",
+  "taus": "0.6",
+  "cells": "exact,s1,s2,s3,s1d30,wrong,none",
+  "n": 0,
+  "tag": ""
+ },
+ "n": 833
+}

@@ -1,0 +1,19 @@
+== 23:58:02 {'name': 'e65_ftaug', 'init': 'e37_final', 'perts': 'dark,cam_front_off,fog', 'steps': 2000, 'bs_clean': 4, 'bs_pert': 4, 'lr': 0.0002, 'faug': 0.25, 'n_eval': 150}
+saubere Trainingszeilen 8414 gestoerte Beispiele 2526 {'dark': 842, 'cam_front_off': 842, 'fog': 842}
+Schritt 200/2000 Verlust 4.5150 (0.18 s/Schritt)
+Schritt 400/2000 Verlust 3.5419 (0.18 s/Schritt)
+Schritt 600/2000 Verlust 3.5013 (0.17 s/Schritt)
+Schritt 800/2000 Verlust 3.3654 (0.17 s/Schritt)
+Schritt 1000/2000 Verlust 3.3818 (0.17 s/Schritt)
+Schritt 1200/2000 Verlust 3.3954 (0.17 s/Schritt)
+Schritt 1400/2000 Verlust 3.3274 (0.17 s/Schritt)
+Schritt 1600/2000 Verlust 3.2580 (0.17 s/Schritt)
+Schritt 1800/2000 Verlust 3.2481 (0.17 s/Schritt)
+Schritt 2000/2000 Verlust 3.2744 (0.17 s/Schritt)
+[val clean] F1@1 tau .5/.6: 0.880 / 0.876
+[test clean] F1@1 tau .5/.6: 0.854 / 0.845
+[train_eval clean] F1@1 tau .5/.6: 0.947 / 0.948
+[train rows, dark] F1@1 tau .5/.6: 0.456 / 0.220
+[train rows, cam_front_off] F1@1 tau .5/.6: 0.868 / 0.839
+[train rows, fog] F1@1 tau .5/.6: 0.892 / 0.887
+FERTIG 00:04:42

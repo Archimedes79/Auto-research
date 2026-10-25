@@ -1,0 +1,80 @@
+{
+ "res": {
+  "exact/tau0.5": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8417799752781211,
+   "route_cov": 0.9135639961671986,
+   "route_prec": 0.9433933217722054,
+   "flagged_len_per_row": 69.20417924607052,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s1/tau0.5": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8318912237330037,
+   "route_cov": 0.9098634363427995,
+   "route_prec": 0.9393243119370358,
+   "flagged_len_per_row": 69.05177042183618,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s2/tau0.5": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8170580964153276,
+   "route_cov": 0.9032798007896021,
+   "route_prec": 0.9342953028925828,
+   "flagged_len_per_row": 68.84494215240318,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s3/tau0.5": {
+   "n": 809,
+   "n_route": 809,
+   "route_success": 0.8071693448702101,
+   "route_cov": 0.9001386585725127,
+   "route_prec": 0.9274087666950817,
+   "flagged_len_per_row": 68.84364902553435,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "wrong/tau0.5": {
+   "n": 787,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 5.563501405677475,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "none/tau0.5": {
+   "n": 833,
+   "n_route": 0,
+   "route_success": 0.0,
+   "route_cov": 0.0,
+   "route_prec": 0.0,
+   "flagged_len_per_row": 0.0,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "_lane": {
+   "P": 0.8445745321597261,
+   "R": 0.8817441781977725,
+   "F1": 0.8627592023627297
+  }
+ },
+ "args": {
+  "tok": "tok_e120_a_test_clean",
+  "split": "test_clean",
+  "model": "e104b",
+  "kind": "x",
+  "taus": "0.5",
+  "cells": "exact,s1,s2,s3,wrong,none",
+  "n": 0,
+  "tag": ""
+ },
+ "n": 833
+}

@@ -1,0 +1,4 @@
+[dark_single_cleanref] s0 s0: cl 0.853 fail 0.942 | s0 s1: cl 0.838 fail 0.942  162 s
+[dark_maxdecay_0.95_cleanref] s0 s0: cl 0.838 fail 0.934 | s0 s1: cl 0.838 fail 0.942  305 s
+[dark_gate_cleanref] s0 s0: cl 0.831 fail 0.949 | s0 s1: cl 0.838 fail 0.949  426 s
+DONE 20:14:34

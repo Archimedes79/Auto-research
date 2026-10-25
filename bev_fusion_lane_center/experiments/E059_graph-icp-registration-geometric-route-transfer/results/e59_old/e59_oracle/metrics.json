@@ -1,0 +1,43 @@
+{
+ "args": {
+  "sets": "val,test",
+  "graphs": "e44_cons_p/graphs",
+  "sigma": 0.0,
+  "drop": 0.0,
+  "shift_frac": 0.0,
+  "protect": 1,
+  "reg": 1,
+  "oracle": 1,
+  "nomap": 0,
+  "out": "e59_oracle",
+  "workers": 8
+ },
+ "val": {
+  "n_samples": 823,
+  "assoc_acc_all": 1.0,
+  "assoc_acc_assigned": 1.0,
+  "assigned_frac": 1.0,
+  "route_P": 1.0,
+  "route_R": 1.0,
+  "route_F1": 1.0,
+  "route_cov": 0.9305027154183487,
+  "route_prec": 1.0,
+  "route_success": 0.9173754556500607,
+  "novel_P": 1.0,
+  "novel_R": 1.0
+ },
+ "test": {
+  "n_samples": 809,
+  "assoc_acc_all": 1.0,
+  "assoc_acc_assigned": 1.0,
+  "assigned_frac": 1.0,
+  "route_P": 1.0,
+  "route_R": 1.0,
+  "route_F1": 1.0,
+  "route_cov": 0.8888684480829079,
+  "route_prec": 1.0,
+  "route_success": 0.796044499381953,
+  "novel_P": 1.0,
+  "novel_R": 1.0
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "args": {
+  "design": "D7",
+  "name": "e17_joint_smoke",
+  "init": "e123_D7_r3_f1",
+  "route": "p16_f2hr_route_s0",
+  "set": [
+   "M=192",
+   "K0=96"
+  ],
+  "asm": [
+   "cov_r=0.5",
+   "vtx_r=1.5",
+   "junc_thr=0.5",
+   "reloc_thr=0.4",
+   "reloc_shift=12",
+   "reloc_tol=1.6"
+  ],
+  "tau": 0.7,
+  "iters": 120,
+  "bs": 4,
+  "lr_b": 0.0001,
+  "lr_r": 0.0003,
+  "lam": 1.0,
+  "workers": 4,
+  "seed": 0,
+  "no_builder_grad": false
+ },
+ "final": {
+  "loss": 3.0896032001571188,
+  "route": 0.02855592613598632,
+  "builder": 3.061047274637272,
+  "grad_builder": 7.653972881248659,
+  "pos_rate": 0.12213427307232125,
+  "scale": 8311.24726006669
+ },
+ "seconds": 65.016850233078
+}

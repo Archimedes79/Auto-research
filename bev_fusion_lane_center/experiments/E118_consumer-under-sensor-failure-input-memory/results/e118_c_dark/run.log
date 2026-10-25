@@ -1,0 +1,4 @@
+train samples 25347 (validation failure frames 1482 x 4)
+route+ego            seed 0: clean exact 0.36 none 0.78 | dark_single 1.14 dark_maxdecay 0.50 blur_single 0.52 blur_maxdecay 0.36 cam_front3_off_single 0.63 cam_front3_off_maxdecay 0.50
+route+ego            seed 1: clean exact 0.37 none 0.74 | dark_single 2.02 dark_maxdecay 0.48 blur_single 0.47 blur_maxdecay 0.34 cam_front3_off_single 0.65 cam_front3_off_maxdecay 0.54
+DONE

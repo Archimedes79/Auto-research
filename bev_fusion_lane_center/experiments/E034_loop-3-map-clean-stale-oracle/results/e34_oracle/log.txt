@@ -1,0 +1,11 @@
+== 23:19:18 {'name': 'e34_oracle', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 1500, 'bs': 8, 'lr': 0.0002, 'wd': 0.0001, 'lr_trunk': 1.0, 'd': 128, 'M': 96, 'layers': 4, 'base': 48, 'lam_fp': 3.0, 'wpos': 1.0, 'w_pts': 5.0, 'w_adj': 1.0, 'adj_pos': 3.0, 'w_dense': 1.0, 'dense_lam': 1.0, 'train_stride': 2, 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0, 'amp': 1, 'mon': 0, 'init_from': 'e32_main', 'init_dense': '', 'prior': 'gt_oracle', 'prior_xy': 0.0, 'prior_deg': 0.0, 'prior_degrade': 0.0, 'align': 0, 'eval_prior_xy': -1.0, 'eval_prior_deg': -1.0, 'eval_degrade': -1.0, 'temporal': '', 'n_track': 40, 't_gap': 2, 'save_arrays': 1}
+Gewichte aus e32_main (unveraendert/teilweise/uebersprungen): (260, 1, 0)
+Eingangskanaele 39 + Zusatz 3 Parameter 4344976 Trainings-Samples 4207
+Schritt 100/1500 Verlust 17.826 (Existenz 0.447, Punkte 0.604, Nachfolger 0.061, dicht 2.604) 1.05 s/Schritt
+Schritt 200/1500 Verlust 18.497 (Existenz 0.446, Punkte 0.639, Nachfolger 0.064, dicht 2.617) 0.92 s/Schritt
+Schritt 300/1500 Verlust 18.785 (Existenz 0.457, Punkte 0.653, Nachfolger 0.066, dicht 2.558) 0.87 s/Schritt
+Schritt 400/1500 Verlust 18.519 (Existenz 0.448, Punkte 0.641, Nachfolger 0.063, dicht 2.539) 0.85 s/Schritt
+Schritt 500/1500 Verlust 18.548 (Existenz 0.445, Punkte 0.647, Nachfolger 0.064, dicht 2.453) 0.88 s/Schritt
+Schritt 600/1500 Verlust 18.508 (Existenz 0.429, Punkte 0.645, Nachfolger 0.062, dicht 2.457) 0.90 s/Schritt
+Schritt 700/1500 Verlust 17.682 (Existenz 0.429, Punkte 0.607, Nachfolger 0.060, dicht 2.378) 0.92 s/Schritt
+Schritt 800/1500 Verlust 17.795 (Existenz 0.449, Punkte 0.613, Nachfolger 0.061, dicht 2.263) 0.94 s/Schritt

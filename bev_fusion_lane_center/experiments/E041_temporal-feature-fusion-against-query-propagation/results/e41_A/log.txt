@@ -1,0 +1,16 @@
+== 03:45:08 {'name': 'e41_A', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 2000, 'bs': 8, 'lr': 0.0005, 'wd': 0.0001, 'base': 48, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'train_stride': 1, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0, 'init_from': 'e37_final', 'eps': 1e-06, 'beta2': 0.98, 'prior': 'none', 'prior_xy': 0.0, 'prior_deg': 0.0, 'prior_degrade': 0.0, 'align': 0, 'eval_prior_xy': -1.0, 'eval_prior_deg': -1.0, 'eval_degrade': -1.0, 'eval_align': -1, 'temporal': 'A', 't_gap': 1, 'eval_n': 0}
+Eingangskanaele 39 + Zusatz 40 Parameter 2754147 Trainings-Samples 8414
+Schritt 200/2000 Verlust 2.4229 (max 3.3, median 2.43) (0.42 s/Schritt) geklippt 0
+Schritt 400/2000 Verlust 2.4874 (max 3.5, median 2.48) (0.40 s/Schritt) geklippt 0
+Schritt 600/2000 Verlust 2.4379 (max 3.3, median 2.43) (0.40 s/Schritt) geklippt 0
+Schritt 800/2000 Verlust 2.4443 (max 3.3, median 2.45) (0.39 s/Schritt) geklippt 0
+Schritt 1000/2000 Verlust 2.4217 (max 3.6, median 2.42) (0.39 s/Schritt) geklippt 0
+Schritt 1200/2000 Verlust 2.4411 (max 3.9, median 2.43) (0.40 s/Schritt) geklippt 1
+Schritt 1400/2000 Verlust 2.3720 (max 3.4, median 2.38) (0.41 s/Schritt) geklippt 1
+Schritt 1600/2000 Verlust 2.3232 (max 3.1, median 2.32) (0.42 s/Schritt) geklippt 1
+Schritt 1800/2000 Verlust 2.3308 (max 3.3, median 2.33) (0.43 s/Schritt) geklippt 1
+Schritt 2000/2000 Verlust 2.3587 (max 3.2, median 2.35) (0.43 s/Schritt) geklippt 1
+[train_eval] 1052 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.877 / 0.971 / 0.983, P/R@1 0.995/0.947, 1:1 0.857
+[val] 873 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.706 / 0.895 / 0.951, P/R@1 0.929/0.864, 1:1 0.807
+[test] 833 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.683 / 0.869 / 0.924, P/R@1 0.924/0.819, 1:1 0.771
+FERTIG 04:19:26

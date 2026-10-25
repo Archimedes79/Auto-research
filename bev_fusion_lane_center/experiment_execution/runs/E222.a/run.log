@@ -1,0 +1,20 @@
+=== attempt 1 2026-10-25T01:40:04: bash -c 
+  bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p17_consumer.py --out e18_cons --series dark_gateB,blur_gateB,cam_front3_off_gateB --mapnet 1 --ckpt e17_map_b --map_mode exact --route p16_f2hr_route_s0 --asm cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6 --tag_suffix _s0_noprune &&
+  bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p17_consumer.py --out e18_cons --series dark_gateB,blur_gateB,cam_front3_off_gateB --mapnet 1 --ckpt e17_map_b --map_mode exact --route p16_f2hr_route_s0 --asm cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6 fork_prune=0.3 --tag_suffix _s0_prune &&
+  bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p17_consumer.py --out e18_cons --series dark_gateB,blur_gateB,cam_front3_off_gateB --mapnet 1 --ckpt e17_map_b --map_mode exact --route e18_joint_c0 --asm cov_r=0.5 vtx_r=1.5 junc_thr=0.5 reloc_thr=0.4 reloc_shift=12 reloc_tol=1.6 fork_prune=0.3 --tag_suffix _c0_prune
+Traceback (most recent call last):
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/evaluation/loops/loop17/p17_consumer.py", line 147, in <module>
+    main()
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/evaluation/loops/loop17/p17_consumer.py", line 136, in main
+    o = CC.predict(cn, static, p, k_t, MODE)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/train/p14_chain_consumer.py", line 122, in predict
+    x, t, m = feats(st, kk, p[i : i + bs], mode)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/ML-Experiment/bev_fusion_lane_center/training/train/p14_chain_consumer.py", line 45, in feats
+    geo = st["geo"][k]
+          ~~~~~~~~~^^^
+RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu)

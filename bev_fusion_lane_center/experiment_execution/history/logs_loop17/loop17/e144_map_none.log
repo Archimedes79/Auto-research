@@ -1,0 +1,10 @@
+[dark_single] exact: 0.54 m (n 82, seeds 0.54, 0.54, 0.53) none: 0.55 m (n 82, seeds 0.52, 0.52, 0.61)  97 s
+[dark_maxdecay_0.95] exact: 0.33 m (n 82, seeds 0.35, 0.31, 0.32) none: 0.42 m (n 82, seeds 0.42, 0.37, 0.46)  198 s
+[dark_gateB] exact: 0.34 m (n 82, seeds 0.35, 0.33, 0.33) none: 0.46 m (n 82, seeds 0.44, 0.37, 0.56)  303 s
+[blur_single] exact: 0.32 m (n 82, seeds 0.33, 0.30, 0.33) none: 0.37 m (n 82, seeds 0.32, 0.33, 0.48)  403 s
+[blur_maxdecay_0.95] exact: 0.28 m (n 82, seeds 0.28, 0.28, 0.28) none: 0.35 m (n 82, seeds 0.34, 0.33, 0.40)  506 s
+[blur_gateB] exact: 0.27 m (n 82, seeds 0.28, 0.26, 0.27) none: 0.39 m (n 82, seeds 0.34, 0.32, 0.50)  572 s
+[cam_front3_off_single] exact: 0.56 m (n 82, seeds 0.59, 0.56, 0.55) none: 0.77 m (n 82, seeds 0.76, 0.68, 0.88)  635 s
+[cam_front3_off_maxdecay_0.95] exact: 0.35 m (n 82, seeds 0.38, 0.34, 0.34) none: 0.45 m (n 82, seeds 0.40, 0.45, 0.51)  715 s
+[cam_front3_off_gateB] exact: 0.41 m (n 82, seeds 0.45, 0.40, 0.37) none: 0.65 m (n 82, seeds 0.61, 0.63, 0.72)  795 s
+DONE

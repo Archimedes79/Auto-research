@@ -1,0 +1,26 @@
+== 22:07:15 {'name': 'e28_fused32', 'fg': 'gcar', 'feats': 'fused32', 'split': 'b123', 'steps': 4000, 'bs': 8, 'lr': 0.002, 'wd': 0.0001, 'base': 48, 'drop': 0.0, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'train_n': 0, 'train_stride': 2, 'dir': 0.5, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'save_prob': 1, 'amp': 1, 'flip': 0, 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0}
+Eingangskanaele 32 Parameter 2733843 Trainings-Samples 4207
+Schritt 200/4000 Verlust 7.6952 (0.20 s/Schritt)
+Schritt 400/4000 Verlust 4.0038 (0.20 s/Schritt)
+Schritt 600/4000 Verlust 3.5829 (0.22 s/Schritt)
+Schritt 800/4000 Verlust 3.5361 (0.21 s/Schritt)
+Schritt 1000/4000 Verlust 3.5173 (0.21 s/Schritt)
+Schritt 1200/4000 Verlust 3.4046 (0.21 s/Schritt)
+Schritt 1400/4000 Verlust 3.3813 (0.21 s/Schritt)
+Schritt 1600/4000 Verlust 3.2764 (0.21 s/Schritt)
+Schritt 1800/4000 Verlust 3.3218 (0.21 s/Schritt)
+Schritt 2000/4000 Verlust 3.2320 (0.20 s/Schritt)
+Schritt 2200/4000 Verlust 3.2026 (0.20 s/Schritt)
+Schritt 2400/4000 Verlust 3.1232 (0.20 s/Schritt)
+Schritt 2600/4000 Verlust 3.1636 (0.20 s/Schritt)
+Schritt 2800/4000 Verlust 3.0991 (0.20 s/Schritt)
+Schritt 3000/4000 Verlust 3.0724 (0.20 s/Schritt)
+Schritt 3200/4000 Verlust 3.0138 (0.20 s/Schritt)
+Schritt 3400/4000 Verlust 3.0064 (0.20 s/Schritt)
+Schritt 3600/4000 Verlust 3.0132 (0.20 s/Schritt)
+Schritt 3800/4000 Verlust 2.9150 (0.20 s/Schritt)
+Schritt 4000/4000 Verlust 2.9455 (0.20 s/Schritt)
+[train_eval] 1052 Samples; bester Schwellwert 0.5: F1 @0,5/1/1,5 = 0.669 / 0.843 / 0.911, P/R@1 0.910/0.785, 1:1 0.740
+[val] 873 Samples; bester Schwellwert 0.5: F1 @0,5/1/1,5 = 0.569 / 0.772 / 0.869, P/R@1 0.832/0.720, 1:1 0.694
+[test] 833 Samples; bester Schwellwert 0.5: F1 @0,5/1/1,5 = 0.526 / 0.743 / 0.840, P/R@1 0.820/0.679, 1:1 0.656
+FERTIG 22:23:28

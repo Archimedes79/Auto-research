@@ -1,0 +1,40 @@
+{
+ "args": {
+  "sets": "test",
+  "graphs": "e44_cons_p/graphs",
+  "sigma": 0.0,
+  "drop": 0.0,
+  "shift_frac": 0.0,
+  "protect": 1,
+  "reg": 0,
+  "oracle": 0,
+  "hmm": 0,
+  "nomap": 0,
+  "rt_file": "route_drv_sub_val.pkl",
+  "out": "e59drv_s0",
+  "workers": 10
+ },
+ "test": {
+  "n_samples": 256,
+  "assoc_acc_all": 0.9784961776898794,
+  "assoc_acc_assigned": 0.9784961776898794,
+  "assigned_frac": 1.0,
+  "route_P": 0.9657451923076923,
+  "route_R": 0.9876399890740235,
+  "route_F1": 0.9765698852126942,
+  "route_cov": 0.8356402323182978,
+  "route_prec": 0.985176282051282,
+  "route_success": 0.66015625,
+  "routeG_P": 1.0,
+  "routeG_R": 1.0,
+  "routeG_F1": 1.0,
+  "routeG_cov": 0.9371437876567335,
+  "routeG_prec": 0.9833645477580698,
+  "routeG_success": 0.88671875,
+  "novel_P": 1.0,
+  "novel_R": 0.5371700401081989,
+  "reg_pos_median": 0.0,
+  "reg_pos_p90": 0.0,
+  "reg_yaw_median": 0.0
+ }
+}

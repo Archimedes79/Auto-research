@@ -1,0 +1,44 @@
+{
+ "ltest_clean/exact": {
+  "n": 809,
+  "flagged_len_mean": 74.46672117518554,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 598.3528238492195
+ },
+ "ltest_clean/none": {
+  "n": 833,
+  "flagged_len_mean": 0.014252848699599469,
+  "frames_with_route": 0.0024009603841536613,
+  "kept_len_mean": 597.4590374785168
+ },
+ "ltest_clean/s1": {
+  "n": 809,
+  "flagged_len_mean": 74.51188447242615,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 598.4968540300102
+ },
+ "ltest_clean/s1d30": {
+  "n": 809,
+  "flagged_len_mean": 75.02493931837517,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 595.4269955402841
+ },
+ "ltest_clean/s2": {
+  "n": 809,
+  "flagged_len_mean": 74.37461857506902,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 598.1792452025915
+ },
+ "ltest_clean/s3": {
+  "n": 809,
+  "flagged_len_mean": 73.76982357121811,
+  "frames_with_route": 0.9987639060568603,
+  "kept_len_mean": 597.9254406149809
+ },
+ "ltest_clean/wrong": {
+  "n": 787,
+  "flagged_len_mean": 10.935090756836658,
+  "frames_with_route": 0.3202033036848793,
+  "kept_len_mean": 588.7762150261575
+ }
+}

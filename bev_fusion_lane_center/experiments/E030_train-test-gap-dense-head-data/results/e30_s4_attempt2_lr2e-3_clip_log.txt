@@ -1,0 +1,11 @@
+== 01:03:11 {'name': 'e30_s4', 'fg': 'gcar', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 4000, 'bs': 8, 'lr': 0.002, 'wd': 0.0001, 'base': 48, 'drop': 0.0, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'train_n': 0, 'train_stride': 4, 'dir': 0.5, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'save_prob': 1, 'amp': 1, 'train_part': 'train', 'fold': -1, 'nfolds': 3, 'flip': 0, 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0, 'clip': 3.0}
+Eingangskanaele 39 Parameter 2736867 Trainings-Samples 2104
+Schritt 200/4000 Verlust 7.6495 (0.40 s/Schritt) geklippt 0
+Schritt 400/4000 Verlust 3.4504 (0.37 s/Schritt) geklippt 2
+Schritt 600/4000 Verlust 3.2866 (0.36 s/Schritt) geklippt 5
+Schritt 800/4000 Verlust 3.1099 (0.35 s/Schritt) geklippt 6
+Schritt 1000/4000 Verlust 3.1337 (0.35 s/Schritt) geklippt 7
+Schritt 1200/4000 Verlust 3.2428 (0.35 s/Schritt) geklippt 7
+Schritt 1400/4000 Verlust 3.3650 (0.34 s/Schritt) geklippt 8
+Schritt 1600/4000 Verlust 4.0170 (0.34 s/Schritt) geklippt 9
+Schritt 1800/4000 Verlust 4.2473 (0.34 s/Schritt) geklippt 9

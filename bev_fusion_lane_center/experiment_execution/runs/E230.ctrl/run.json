@@ -1,0 +1,24 @@
+{
+ "id": "E230.ctrl",
+ "hypothesis": "control E94 with the route head along the edges on TEST",
+ "prediction": "route success 0.85 - 0.88",
+ "rule": "reference only",
+ "split": "test",
+ "code_hash": "0ac5123a6767",
+ "basis": "E185",
+ "seed": "0",
+ "command": "bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_test18_ctrl.sh",
+ "cwd": "/mnt/c/ML-Experiment/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "started": "2026-10-25T02:02:21",
+ "status": "ok",
+ "exit": 0,
+ "duration_s": 176,
+ "attempts": 1,
+ "ended": "2026-10-25T02:05:17",
+ "last_lines": [
+  "=== attempt 1 2026-10-25T02:02:21: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_test18_ctrl.sh"
+ ]
+}

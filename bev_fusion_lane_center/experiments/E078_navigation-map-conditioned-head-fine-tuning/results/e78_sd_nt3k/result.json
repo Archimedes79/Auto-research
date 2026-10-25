@@ -1,0 +1,430 @@
+{
+ "args": {
+  "name": "e78_sd_nt3k",
+  "init_from": "e73_soup_all6",
+  "steps": 3000,
+  "bs": 8,
+  "lr": 0.0002,
+  "wd": 0.0001,
+  "lam": 1.0,
+  "wpos": 1.0,
+  "gamma": 2.0,
+  "dir": 0.5,
+  "wroute": 1.0,
+  "maps": "sd",
+  "noise_train": 1,
+  "p_exact": 0.3,
+  "sig_lo": 0.3,
+  "sig_hi": 2.0,
+  "p_wrong": 0.1,
+  "p_none": 0.15,
+  "pert_train": "dark,cam_front_off,fog,cam_front3_off,blur,extr3,radar_off",
+  "p_pert_mass": 0.55,
+  "p_use_pert": 0.85,
+  "train": "all",
+  "ema": 0.0,
+  "l2sp": 0.0,
+  "trust": 0,
+  "wtrust": 0.3,
+  "workers": 3,
+  "seed": 0,
+  "dev": 1,
+  "dev_pert_conds": "exact:0:0,wrong:0:0:w",
+  "dev_perts": "dark,cam_front_off,fog,cam_front3_off,blur,extr3,radar_off",
+  "dev_stride": 2,
+  "test": 0,
+  "test_clean_conds": "clean:0:0,s1:1:0,s2:2:0,d30:0:0.3,s1d30:1:0.3,wrong:0:0:w,none:0:0:n",
+  "test_pert_conds": "clean:0:0,s1:1:0,wrong:0:0:w,none:0:0:n",
+  "test_perts": "dark,cam_front_off,fog,cam_front3_off,blur,extr3,radar_off",
+  "agree_thr": 0.4,
+  "trust_thr": 0.5,
+  "keep_arrays": 0,
+  "alt": 0,
+  "test_pert_stride": 1,
+  "sd_eps_lo": 0.5,
+  "sd_eps_hi": 2.0,
+  "sd_pcnt": 0.1,
+  "sd_tr_eps_lo": -1.0,
+  "sd_tr_eps_hi": -1.0,
+  "sd_tr_pcnt": -1.0,
+  "load": "",
+  "soup": ""
+ },
+ "curve": [
+  [
+   250,
+   3.616163278579712
+  ],
+  [
+   500,
+   3.5688478498458864
+  ],
+  [
+   750,
+   3.6187662897109987
+  ],
+  [
+   1000,
+   3.5248487453460693
+  ],
+  [
+   1250,
+   3.5170395469665525
+  ],
+  [
+   1500,
+   3.5119752407073976
+  ],
+  [
+   1750,
+   3.4282541551589967
+  ],
+  [
+   2000,
+   3.503189542770386
+  ],
+  [
+   2250,
+   3.428821719169617
+  ],
+  [
+   2500,
+   3.3605003414154053
+  ],
+  [
+   2750,
+   3.3824799346923826
+  ],
+  [
+   3000,
+   3.3962993688583376
+  ]
+ ],
+ "train_s": 1068.9710805416107,
+ "clipped_steps": 24,
+ "eval": {
+  "dev": {
+   "clean": {
+    "exact": {
+     "n": 412,
+     "lane_P": 0.925373300212838,
+     "lane_R": 0.8857357851450768,
+     "lane_F1": 0.9051207939297935,
+     "route_success": 0.7427184466019418,
+     "route_cov": 0.8628677481440747,
+     "route_prec": 0.95522117110757,
+     "route_F1": 0.9258337876009713,
+     "trust_mean": 0.0,
+     "agree_mean": 0.5225362181663513,
+     "agr_accept": 1.0,
+     "agr_succ_accepted": 0.7427184466019418,
+     "agr_succ_rejected": null
+    },
+    "s1": {
+     "n": 412,
+     "lane_P": 0.9079226975104231,
+     "lane_R": 0.8667488948667972,
+     "lane_F1": 0.8868581635856491,
+     "route_success": 0.7014563106796117,
+     "route_cov": 0.8477797635413803,
+     "route_prec": 0.9383645772506695,
+     "route_F1": 0.9113969345764666,
+     "trust_mean": 0.0,
+     "agree_mean": 0.4873875677585602,
+     "agr_accept": 0.9368932038834952,
+     "agr_succ_accepted": 0.6968911917098446,
+     "agr_succ_rejected": 0.7692307692307693
+    },
+    "wrong": {
+     "n": 412,
+     "lane_P": 0.9043169831667986,
+     "lane_R": 0.8573026235551577,
+     "lane_F1": 0.8801824403362769,
+     "route_success": 0.36893203883495146,
+     "route_cov": 0.6850082485565027,
+     "route_prec": 0.8468685785758957,
+     "route_F1": 0.8073624993172757,
+     "trust_mean": 0.0,
+     "agree_mean": 0.22436916828155518,
+     "agr_accept": 0.04381443298969072,
+     "agr_succ_accepted": 0.23529411764705882,
+     "agr_succ_rejected": 0.3638814016172507
+    },
+    "none": {
+     "n": 412,
+     "lane_P": 0.9109673774890552,
+     "lane_R": 0.8592793219855349,
+     "lane_F1": 0.8843687500867131,
+     "route_success": 0.3422330097087379,
+     "route_cov": 0.6494363486389881,
+     "route_prec": 0.8744091994347805,
+     "route_F1": 0.8073772377928115,
+     "trust_mean": null,
+     "agree_mean": null,
+     "agr_accept": 0.0,
+     "agr_succ_accepted": null,
+     "agr_succ_rejected": null
+    },
+    "_agree_auc": 0.8787786376985991,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9966970273245921
+   },
+   "dark": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.799265181505343,
+     "lane_R": 0.6371457665158873,
+     "lane_F1": 0.7090567325753281,
+     "route_success": 0.4945054945054945,
+     "route_cov": 0.678025974025974,
+     "route_prec": 0.9109015068956446,
+     "route_F1": 0.8061748963170394,
+     "trust_mean": 0.0,
+     "agree_mean": 0.40229082107543945,
+     "agr_accept": 0.5201465201465202,
+     "agr_succ_accepted": 0.5845070422535211,
+     "agr_succ_rejected": 0.3969465648854962
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.5576403123781738,
+     "lane_R": 0.3507768718698263,
+     "lane_F1": 0.43065527116036434,
+     "route_success": 0.10989010989010989,
+     "route_cov": 0.4415064935064935,
+     "route_prec": 0.8216682151336843,
+     "route_F1": 0.6401550182763025,
+     "trust_mean": 0.0,
+     "agree_mean": 0.2758987247943878,
+     "agr_accept": 0.03076923076923077,
+     "agr_succ_accepted": 0.25,
+     "agr_succ_rejected": 0.0992063492063492
+    },
+    "_agree_auc": 0.9335164835164835,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9335164835164835
+   },
+   "cam_front_off": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.8790093904568249,
+     "lane_R": 0.8206336891542729,
+     "lane_F1": 0.8488190580070337,
+     "route_success": 0.5311355311355311,
+     "route_cov": 0.7789090909090909,
+     "route_prec": 0.9055224167789109,
+     "route_F1": 0.8475317840271392,
+     "trust_mean": 0.0,
+     "agree_mean": 0.496080607175827,
+     "agr_accept": 0.9963369963369964,
+     "agr_succ_accepted": 0.5330882352941176,
+     "agr_succ_rejected": 0.0
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.8101175524532968,
+     "lane_R": 0.7473001710988425,
+     "lane_F1": 0.7774420136657146,
+     "route_success": 0.17216117216117216,
+     "route_cov": 0.564051948051948,
+     "route_prec": 0.7890648913376186,
+     "route_F1": 0.6995421700038612,
+     "trust_mean": 0.0,
+     "agree_mean": 0.2399688959121704,
+     "agr_accept": 0.038461538461538464,
+     "agr_succ_accepted": 0.2,
+     "agr_succ_rejected": 0.176
+    },
+    "_agree_auc": 0.9914201183431952,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9914201183431952
+   },
+   "fog": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.8925581749306636,
+     "lane_R": 0.8428141949695555,
+     "lane_F1": 0.8669732360795125,
+     "route_success": 0.7472527472527473,
+     "route_cov": 0.8643116883116884,
+     "route_prec": 0.9550520626584018,
+     "route_F1": 0.9198953194561424,
+     "trust_mean": 0.0,
+     "agree_mean": 0.5090353488922119,
+     "agr_accept": 0.9926739926739927,
+     "agr_succ_accepted": 0.7453874538745388,
+     "agr_succ_rejected": 1.0
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.8620251852619578,
+     "lane_R": 0.7968183927792132,
+     "lane_F1": 0.828140195673819,
+     "route_success": 0.3553113553113553,
+     "route_cov": 0.6596883116883117,
+     "route_prec": 0.8422101069406585,
+     "route_F1": 0.7921613793804305,
+     "trust_mean": 0.0,
+     "agree_mean": 0.23360083997249603,
+     "agr_accept": 0.046153846153846156,
+     "agr_succ_accepted": 0.3333333333333333,
+     "agr_succ_rejected": 0.35080645161290325
+    },
+    "_agree_auc": 0.9916314454775993,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9916314454775993
+   },
+   "cam_front3_off": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.8744221436755423,
+     "lane_R": 0.7918101149202347,
+     "lane_F1": 0.8310681713196834,
+     "route_success": 0.48717948717948717,
+     "route_cov": 0.7416103896103896,
+     "route_prec": 0.9492995804593615,
+     "route_F1": 0.8592871806953185,
+     "trust_mean": 0.0,
+     "agree_mean": 0.46581801772117615,
+     "agr_accept": 0.9304029304029304,
+     "agr_succ_accepted": 0.5,
+     "agr_succ_rejected": 0.3157894736842105
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.677358231619584,
+     "lane_R": 0.603736466220101,
+     "lane_F1": 0.6384319064198943,
+     "route_success": 0.09523809523809523,
+     "route_cov": 0.46903896103896103,
+     "route_prec": 0.7796217150131854,
+     "route_F1": 0.6544575549000328,
+     "trust_mean": 0.0,
+     "agree_mean": 0.263821542263031,
+     "agr_accept": 0.05,
+     "agr_succ_accepted": 0.23076923076923078,
+     "agr_succ_rejected": 0.0931174089068826
+    },
+    "_agree_auc": 0.984530853761623,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.984530853761623
+   },
+   "blur": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.8239871499160141,
+     "lane_R": 0.6874225033076801,
+     "lane_F1": 0.7495351218387298,
+     "route_success": 0.6117216117216118,
+     "route_cov": 0.7794285714285715,
+     "route_prec": 0.9292290369585375,
+     "route_F1": 0.863305412371134,
+     "trust_mean": 0.0,
+     "agree_mean": 0.4267907738685608,
+     "agr_accept": 0.663003663003663,
+     "agr_succ_accepted": 0.6906077348066298,
+     "agr_succ_rejected": 0.45652173913043476
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.6292594676285976,
+     "lane_R": 0.44761743130069753,
+     "lane_F1": 0.5231192289510722,
+     "route_success": 0.18315018315018314,
+     "route_cov": 0.5269090909090909,
+     "route_prec": 0.8043596959133101,
+     "route_F1": 0.6928246765859912,
+     "trust_mean": 0.0,
+     "agree_mean": 0.2743346691131592,
+     "agr_accept": 0.03461538461538462,
+     "agr_succ_accepted": 0.3333333333333333,
+     "agr_succ_rejected": 0.17131474103585656
+    },
+    "_agree_auc": 0.9641589180050718,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9641589180050718
+   },
+   "extr3": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.7476744040334,
+     "lane_R": 0.7236753693864686,
+     "lane_F1": 0.7354791638184814,
+     "route_success": 0.5054945054945055,
+     "route_cov": 0.7472207792207792,
+     "route_prec": 0.8467029338700041,
+     "route_F1": 0.7654404428566831,
+     "trust_mean": 0.0,
+     "agree_mean": 0.5017746090888977,
+     "agr_accept": 0.9926739926739927,
+     "agr_succ_accepted": 0.5092250922509225,
+     "agr_succ_rejected": 0.0
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.7188935048973184,
+     "lane_R": 0.6906262771801248,
+     "lane_F1": 0.704476448346758,
+     "route_success": 0.2271062271062271,
+     "route_cov": 0.6031168831168832,
+     "route_prec": 0.7634531477249117,
+     "route_F1": 0.6782028671707206,
+     "trust_mean": 0.0,
+     "agree_mean": 0.22460372745990753,
+     "agr_accept": 0.046153846153846156,
+     "agr_succ_accepted": 0.08333333333333333,
+     "agr_succ_rejected": 0.22580645161290322
+    },
+    "_agree_auc": 0.9942237249929557,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9942237249929557
+   },
+   "radar_off": {
+    "exact": {
+     "n": 273,
+     "lane_P": 0.8804522001761819,
+     "lane_R": 0.8391809422212371,
+     "lane_F1": 0.8593213153528001,
+     "route_success": 0.7362637362637363,
+     "route_cov": 0.8578701298701299,
+     "route_prec": 0.9500701947140329,
+     "route_F1": 0.9151399280413085,
+     "trust_mean": 0.0,
+     "agree_mean": 0.5157870054244995,
+     "agr_accept": 0.9963369963369964,
+     "agr_succ_accepted": 0.7389705882352942,
+     "agr_succ_rejected": 0.0
+    },
+    "wrong": {
+     "n": 273,
+     "lane_P": 0.8508820216630957,
+     "lane_R": 0.8038355234446977,
+     "lane_F1": 0.8266899656626064,
+     "route_success": 0.3516483516483517,
+     "route_cov": 0.6672727272727272,
+     "route_prec": 0.8368437275249152,
+     "route_F1": 0.7828203148601927,
+     "trust_mean": 0.0,
+     "agree_mean": 0.22909265756607056,
+     "agr_accept": 0.05,
+     "agr_succ_accepted": 0.23076923076923078,
+     "agr_succ_rejected": 0.3441295546558704
+    },
+    "_agree_auc": 0.9934347703578473,
+    "_trust_auc": null,
+    "_agree_auc_exact_vs_wrong": 0.9934347703578473
+   },
+   "score": {
+    "score": 0.772137288104737,
+    "clean_exact_lane": 0.9051207939297935,
+    "clean_exact_route": 0.7427184466019418,
+    "clean_s1_route": 0.7014563106796117,
+    "clean_wrong_lane": 0.8801824403362769,
+    "clean_none_lane": 0.8843687500867131,
+    "pert_exact_lane": 0.8000361141416528,
+    "pert_exact_route": 0.5876504447933019,
+    "pert_wrong_lane": 0.6755650042686041
+   }
+  }
+ }
+}

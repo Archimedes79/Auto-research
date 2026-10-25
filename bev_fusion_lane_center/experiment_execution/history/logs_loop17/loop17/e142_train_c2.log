@@ -1,0 +1,55 @@
+it 1/4800 12s seed_pos 0.321 seed_dir 0.145 seed_val 0.106 ver 0.219 pos 0.497 val 0.143 cov 0.000 prec 0.700 rec 0.449 dup 0.168 link 0.220 junc 0.161 aux_seed 0.592 aux_dir 0.166 ver_pos 0.234 child_ok 0.093 child_near 0.150 link_pos 0.098 tot 3.716
+it 100/4800 58s seed_pos 0.341 seed_dir 0.131 seed_val 0.108 ver 0.220 pos 0.517 val 0.193 cov 0.000 prec 0.685 rec 0.450 dup 0.194 link 0.185 junc 0.166 aux_seed 0.639 aux_dir 0.165 ver_pos 0.208 child_ok 0.098 child_near 0.166 link_pos 0.087 tot 3.816
+it 200/4800 241s seed_pos 0.340 seed_dir 0.124 seed_val 0.112 ver 0.219 pos 0.516 val 0.196 cov 0.000 prec 0.668 rec 0.440 dup 0.198 link 0.185 junc 0.172 aux_seed 0.656 aux_dir 0.158 ver_pos 0.207 child_ok 0.101 child_near 0.170 link_pos 0.087 tot 3.804
+it 300/4800 340s seed_pos 0.352 seed_dir 0.137 seed_val 0.107 ver 0.219 pos 0.523 val 0.198 cov 0.000 prec 0.675 rec 0.452 dup 0.197 link 0.188 junc 0.178 aux_seed 0.652 aux_dir 0.168 ver_pos 0.207 child_ok 0.099 child_near 0.170 link_pos 0.088 tot 3.861
+it 400/4800 440s seed_pos 0.333 seed_dir 0.126 seed_val 0.095 ver 0.213 pos 0.505 val 0.191 cov 0.000 prec 0.663 rec 0.432 dup 0.198 link 0.182 junc 0.172 aux_seed 0.631 aux_dir 0.158 ver_pos 0.203 child_ok 0.101 child_near 0.169 link_pos 0.089 tot 3.725
+it 500/4800 552s seed_pos 0.351 seed_dir 0.141 seed_val 0.107 ver 0.216 pos 0.511 val 0.196 cov 0.000 prec 0.668 rec 0.455 dup 0.194 link 0.184 junc 0.176 aux_seed 0.629 aux_dir 0.175 ver_pos 0.200 child_ok 0.099 child_near 0.166 link_pos 0.086 tot 3.809
+it 600/4800 668s seed_pos 0.345 seed_dir 0.140 seed_val 0.097 ver 0.215 pos 0.513 val 0.197 cov 0.000 prec 0.660 rec 0.427 dup 0.196 link 0.183 junc 0.175 aux_seed 0.629 aux_dir 0.169 ver_pos 0.204 child_ok 0.100 child_near 0.168 link_pos 0.086 tot 3.764
+it 700/4800 840s seed_pos 0.329 seed_dir 0.125 seed_val 0.090 ver 0.211 pos 0.506 val 0.189 cov 0.000 prec 0.652 rec 0.414 dup 0.197 link 0.178 junc 0.173 aux_seed 0.622 aux_dir 0.147 ver_pos 0.207 child_ok 0.103 child_near 0.171 link_pos 0.086 tot 3.680
+it 800/4800 991s seed_pos 0.343 seed_dir 0.125 seed_val 0.097 ver 0.214 pos 0.508 val 0.198 cov 0.000 prec 0.652 rec 0.434 dup 0.203 link 0.185 junc 0.179 aux_seed 0.637 aux_dir 0.153 ver_pos 0.205 child_ok 0.104 child_near 0.174 link_pos 0.090 tot 3.757
+it 900/4800 1128s seed_pos 0.331 seed_dir 0.125 seed_val 0.093 ver 0.213 pos 0.506 val 0.191 cov 0.000 prec 0.653 rec 0.418 dup 0.202 link 0.175 junc 0.180 aux_seed 0.621 aux_dir 0.152 ver_pos 0.205 child_ok 0.104 child_near 0.172 link_pos 0.088 tot 3.700
+it 1000/4800 1286s seed_pos 0.341 seed_dir 0.130 seed_val 0.096 ver 0.217 pos 0.518 val 0.200 cov 0.000 prec 0.657 rec 0.432 dup 0.200 link 0.183 junc 0.176 aux_seed 0.641 aux_dir 0.161 ver_pos 0.208 child_ok 0.103 child_near 0.173 link_pos 0.087 tot 3.781
+it 1100/4800 1466s seed_pos 0.343 seed_dir 0.140 seed_val 0.099 ver 0.216 pos 0.510 val 0.196 cov 0.000 prec 0.656 rec 0.434 dup 0.197 link 0.188 junc 0.181 aux_seed 0.630 aux_dir 0.175 ver_pos 0.205 child_ok 0.101 child_near 0.170 link_pos 0.090 tot 3.775
+it 1200/4800 1614s seed_pos 0.338 seed_dir 0.125 seed_val 0.093 ver 0.211 pos 0.514 val 0.186 cov 0.000 prec 0.666 rec 0.417 dup 0.195 link 0.183 junc 0.173 aux_seed 0.622 aux_dir 0.158 ver_pos 0.209 child_ok 0.102 child_near 0.169 link_pos 0.090 tot 3.728
+it 1300/4800 1800s seed_pos 0.348 seed_dir 0.124 seed_val 0.093 ver 0.219 pos 0.516 val 0.204 cov 0.000 prec 0.655 rec 0.432 dup 0.206 link 0.184 junc 0.174 aux_seed 0.659 aux_dir 0.152 ver_pos 0.212 child_ok 0.106 child_near 0.177 link_pos 0.092 tot 3.795
+it 1400/4800 1991s seed_pos 0.349 seed_dir 0.126 seed_val 0.101 ver 0.217 pos 0.510 val 0.196 cov 0.000 prec 0.661 rec 0.439 dup 0.197 link 0.180 junc 0.177 aux_seed 0.630 aux_dir 0.157 ver_pos 0.204 child_ok 0.101 child_near 0.170 link_pos 0.087 tot 3.773
+it 1500/4800 2182s seed_pos 0.345 seed_dir 0.141 seed_val 0.097 ver 0.214 pos 0.513 val 0.197 cov 0.000 prec 0.662 rec 0.440 dup 0.195 link 0.180 junc 0.170 aux_seed 0.627 aux_dir 0.167 ver_pos 0.202 child_ok 0.099 child_near 0.167 link_pos 0.084 tot 3.768
+it 1600/4800 2333s seed_pos 0.350 seed_dir 0.139 seed_val 0.100 ver 0.216 pos 0.516 val 0.198 cov 0.000 prec 0.662 rec 0.440 dup 0.193 link 0.186 junc 0.174 aux_seed 0.634 aux_dir 0.167 ver_pos 0.202 child_ok 0.099 child_near 0.169 link_pos 0.087 tot 3.796
+it 1700/4800 2502s seed_pos 0.335 seed_dir 0.126 seed_val 0.096 ver 0.212 pos 0.512 val 0.191 cov 0.000 prec 0.655 rec 0.433 dup 0.197 link 0.177 junc 0.171 aux_seed 0.630 aux_dir 0.152 ver_pos 0.202 child_ok 0.102 child_near 0.172 link_pos 0.087 tot 3.728
+it 1800/4800 2678s seed_pos 0.333 seed_dir 0.127 seed_val 0.089 ver 0.214 pos 0.504 val 0.192 cov 0.000 prec 0.664 rec 0.411 dup 0.199 link 0.181 junc 0.173 aux_seed 0.626 aux_dir 0.154 ver_pos 0.205 child_ok 0.103 child_near 0.172 link_pos 0.089 tot 3.702
+it 1900/4800 2832s seed_pos 0.330 seed_dir 0.123 seed_val 0.093 ver 0.215 pos 0.502 val 0.195 cov 0.000 prec 0.652 rec 0.408 dup 0.199 link 0.178 junc 0.174 aux_seed 0.633 aux_dir 0.153 ver_pos 0.208 child_ok 0.104 child_near 0.173 link_pos 0.086 tot 3.687
+it 2000/4800 2962s seed_pos 0.335 seed_dir 0.127 seed_val 0.096 ver 0.219 pos 0.509 val 0.202 cov 0.000 prec 0.646 rec 0.435 dup 0.204 link 0.180 junc 0.175 aux_seed 0.646 aux_dir 0.157 ver_pos 0.206 child_ok 0.105 child_near 0.175 link_pos 0.087 tot 3.754
+it 2100/4800 3095s seed_pos 0.332 seed_dir 0.125 seed_val 0.090 ver 0.216 pos 0.502 val 0.197 cov 0.000 prec 0.649 rec 0.420 dup 0.201 link 0.178 junc 0.174 aux_seed 0.638 aux_dir 0.159 ver_pos 0.204 child_ok 0.105 child_near 0.174 link_pos 0.085 tot 3.704
+it 2200/4800 3232s seed_pos 0.336 seed_dir 0.130 seed_val 0.098 ver 0.213 pos 0.506 val 0.187 cov 0.000 prec 0.658 rec 0.423 dup 0.194 link 0.176 junc 0.170 aux_seed 0.622 aux_dir 0.157 ver_pos 0.200 child_ok 0.101 child_near 0.167 link_pos 0.085 tot 3.702
+it 2300/4800 3347s seed_pos 0.318 seed_dir 0.125 seed_val 0.088 ver 0.208 pos 0.499 val 0.184 cov 0.000 prec 0.648 rec 0.396 dup 0.197 link 0.174 junc 0.165 aux_seed 0.619 aux_dir 0.149 ver_pos 0.205 child_ok 0.104 child_near 0.171 link_pos 0.088 tot 3.609
+it 2400/4800 3460s seed_pos 0.339 seed_dir 0.136 seed_val 0.100 ver 0.217 pos 0.506 val 0.200 cov 0.000 prec 0.642 rec 0.427 dup 0.204 link 0.176 junc 0.177 aux_seed 0.652 aux_dir 0.161 ver_pos 0.202 child_ok 0.106 child_near 0.175 link_pos 0.085 tot 3.740
+it 2500/4800 3626s seed_pos 0.333 seed_dir 0.129 seed_val 0.097 ver 0.216 pos 0.512 val 0.196 cov 0.000 prec 0.651 rec 0.423 dup 0.199 link 0.177 junc 0.176 aux_seed 0.639 aux_dir 0.156 ver_pos 0.205 child_ok 0.103 child_near 0.174 link_pos 0.085 tot 3.732
+it 2600/4800 3770s seed_pos 0.342 seed_dir 0.126 seed_val 0.098 ver 0.217 pos 0.513 val 0.196 cov 0.000 prec 0.667 rec 0.429 dup 0.196 link 0.174 junc 0.175 aux_seed 0.639 aux_dir 0.157 ver_pos 0.203 child_ok 0.100 child_near 0.170 link_pos 0.084 tot 3.761
+it 2700/4800 3943s seed_pos 0.326 seed_dir 0.123 seed_val 0.088 ver 0.208 pos 0.502 val 0.186 cov 0.000 prec 0.658 rec 0.408 dup 0.197 link 0.179 junc 0.166 aux_seed 0.619 aux_dir 0.158 ver_pos 0.203 child_ok 0.102 child_near 0.170 link_pos 0.085 tot 3.655
+it 2800/4800 4064s seed_pos 0.319 seed_dir 0.119 seed_val 0.085 ver 0.215 pos 0.501 val 0.192 cov 0.000 prec 0.632 rec 0.389 dup 0.202 link 0.178 junc 0.171 aux_seed 0.634 aux_dir 0.145 ver_pos 0.207 child_ok 0.106 child_near 0.175 link_pos 0.087 tot 3.623
+it 2900/4800 4172s seed_pos 0.330 seed_dir 0.120 seed_val 0.089 ver 0.212 pos 0.497 val 0.190 cov 0.000 prec 0.655 rec 0.407 dup 0.197 link 0.182 junc 0.170 aux_seed 0.617 aux_dir 0.150 ver_pos 0.201 child_ok 0.103 child_near 0.171 link_pos 0.087 tot 3.658
+it 3000/4800 4297s seed_pos 0.343 seed_dir 0.133 seed_val 0.097 ver 0.219 pos 0.505 val 0.200 cov 0.000 prec 0.648 rec 0.435 dup 0.201 link 0.184 junc 0.179 aux_seed 0.654 aux_dir 0.158 ver_pos 0.202 child_ok 0.104 child_near 0.175 link_pos 0.087 tot 3.765
+it 3100/4800 4411s seed_pos 0.339 seed_dir 0.134 seed_val 0.092 ver 0.217 pos 0.514 val 0.196 cov 0.000 prec 0.647 rec 0.421 dup 0.199 link 0.185 junc 0.173 aux_seed 0.641 aux_dir 0.166 ver_pos 0.209 child_ok 0.103 child_near 0.174 link_pos 0.088 tot 3.746
+it 3200/4800 4546s seed_pos 0.335 seed_dir 0.128 seed_val 0.092 ver 0.221 pos 0.509 val 0.198 cov 0.000 prec 0.646 rec 0.420 dup 0.200 link 0.182 junc 0.171 aux_seed 0.642 aux_dir 0.161 ver_pos 0.209 child_ok 0.104 child_near 0.174 link_pos 0.085 tot 3.728
+it 3300/4800 4721s seed_pos 0.323 seed_dir 0.126 seed_val 0.085 ver 0.213 pos 0.505 val 0.193 cov 0.000 prec 0.637 rec 0.404 dup 0.201 link 0.179 junc 0.174 aux_seed 0.634 aux_dir 0.156 ver_pos 0.206 child_ok 0.105 child_near 0.175 link_pos 0.088 tot 3.661
+it 3400/4800 4859s seed_pos 0.347 seed_dir 0.140 seed_val 0.101 ver 0.219 pos 0.519 val 0.206 cov 0.000 prec 0.657 rec 0.442 dup 0.198 link 0.184 junc 0.178 aux_seed 0.656 aux_dir 0.171 ver_pos 0.203 child_ok 0.101 child_near 0.173 link_pos 0.084 tot 3.826
+it 3500/4800 5044s seed_pos 0.341 seed_dir 0.132 seed_val 0.097 ver 0.215 pos 0.513 val 0.198 cov 0.000 prec 0.660 rec 0.427 dup 0.196 link 0.185 junc 0.175 aux_seed 0.639 aux_dir 0.164 ver_pos 0.203 child_ok 0.101 child_near 0.172 link_pos 0.086 tot 3.764
+Traceback (most recent call last):
+  File "/mnt/c/ML-Experiment/scripts/p17_mapft.py", line 105, in <module>
+    main()
+  File "/mnt/c/ML-Experiment/scripts/p17_mapft.py", line 85, in main
+    scaler.step(opt)
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 465, in step
+    retval = self._maybe_opt_step(optimizer, optimizer_state, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 359, in _maybe_opt_step
+    if not sum(v.item() for v in optimizer_state["found_inf_per_device"].values()):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/amp/grad_scaler.py", line 359, in <genexpr>
+    if not sum(v.item() for v in optimizer_state["found_inf_per_device"].values()):
+               ^^^^^^^^
+torch.AcceleratorError: CUDA error: unknown error
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

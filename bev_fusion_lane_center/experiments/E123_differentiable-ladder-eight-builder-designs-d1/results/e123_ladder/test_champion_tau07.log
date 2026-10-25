@@ -1,0 +1,2 @@
+tau 0.70 | S 0.728 F1@1.0 0.839 F1@0.5 0.665 J 0.260 split6_F1 0.248 merge6_F1 0.271 Sp 1.000 vert100 13.840 false_len_frac 0.060 R@1.0 0.814 P@1.0 0.866 lanes_found 0.653
+best: e123_D7_r3_f1 test_clean tau 0.7 S 0.7277 F1@1 0.8392 J 0.260 v100 13.8

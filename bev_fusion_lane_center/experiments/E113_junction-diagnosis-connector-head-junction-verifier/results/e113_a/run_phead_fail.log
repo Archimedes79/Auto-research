@@ -1,0 +1,13 @@
+train pieces: clean 247458, failure 32595 (x3) (54 s)
+TEST clean clean_trained {'F1@1m': 0.86, 'P@1m': 0.871, 'R@1m': 0.849, 'route_f': 0.684}
+TEST clean failure_aware {'F1@1m': 0.858, 'P@1m': 0.871, 'R@1m': 0.846, 'route_f': 0.679}
+blur_ema_hold_mon_0.5 base fail F1 0.699 | clean-trained 0.645 | failure-aware 0.667
+blur_maxdecay_0.95 base fail F1 0.725 | clean-trained 0.711 | failure-aware 0.717
+blur_single base fail F1 0.524 | clean-trained 0.453 | failure-aware 0.464
+cam_front3_off_ema_hold_mon_0.5 base fail F1 0.666 | clean-trained 0.669 | failure-aware 0.683
+cam_front3_off_maxdecay_0.95 base fail F1 0.600 | clean-trained 0.709 | failure-aware 0.708
+cam_front3_off_single base fail F1 0.653 | clean-trained 0.669 | failure-aware 0.674
+dark_ema_hold_mon_0.5 base fail F1 0.728 | clean-trained 0.711 | failure-aware 0.716
+dark_maxdecay_0.95 base fail F1 0.680 | clean-trained 0.585 | failure-aware 0.630
+dark_single base fail F1 0.337 | clean-trained 0.280 | failure-aware 0.281
+DONE 340.50260305404663

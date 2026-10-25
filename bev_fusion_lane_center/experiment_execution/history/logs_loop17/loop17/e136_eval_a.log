@@ -1,0 +1,4 @@
+[dark_single] s0 _a: cl 0.846 fail 0.173  24 s
+[dark_maxdecay_0.95] s0 _a: cl 0.882 fail 0.438  50 s
+[blur_maxdecay_0.95] s0 _a: cl 0.882 fail 0.620  76 s
+DONE 17:54:53

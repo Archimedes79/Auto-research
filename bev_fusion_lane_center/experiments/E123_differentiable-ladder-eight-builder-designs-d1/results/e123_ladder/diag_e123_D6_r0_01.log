@@ -1,0 +1,2 @@
+e123_D6_r0_01 tau 0.6 | F1o2o 0.757 | splits pred 6.8 gt 2.6 P 0.096 R 0.254 | merges pred 6.9 gt 2.9 | v100 9.7 chord 10.5 m | along 0.15 across 0.40 | ece 0.08
+  -> ('H', 'no diagnostic below its threshold', 'sweep the most sensitive weight one step (position loss)')

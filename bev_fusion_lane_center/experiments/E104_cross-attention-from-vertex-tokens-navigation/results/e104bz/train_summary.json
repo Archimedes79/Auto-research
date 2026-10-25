@@ -1,0 +1,26 @@
+{
+ "args": {
+  "tok": "tok_e94az_oof0,tok_e94az_oof1,tok_e94az_oof2",
+  "name": "e104bz",
+  "iters": 40000,
+  "bs": 8,
+  "lr": 0.0007,
+  "workers": 3,
+  "p_wrong": 0.08,
+  "p_none": 0.08,
+  "p_bias": 0.3,
+  "seed": 0,
+  "loc": false,
+  "corr": false,
+  "xattn": true,
+  "w_pose": 1.0,
+  "tf": 0.5
+ },
+ "final": {
+  "loss": 0.02416248276989555,
+  "acc": 0.9921488709476736,
+  "recall": 0.9729408700283164,
+  "flagged_wrong": 0.0015269112118607476
+ },
+ "seconds": 2943.310043811798
+}

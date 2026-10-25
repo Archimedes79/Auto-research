@@ -1,0 +1,38 @@
+{
+ "val_clean/a25": {
+  "n": 823,
+  "flagged_len_mean": 71.55404442802235,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 437.89028721156996
+ },
+ "val_clean/bias1": {
+  "n": 823,
+  "flagged_len_mean": 71.80896004900463,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 438.06565113461613
+ },
+ "val_clean/bias2": {
+  "n": 823,
+  "flagged_len_mean": 71.67191916914206,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 438.14977511919284
+ },
+ "val_clean/none": {
+  "n": 873,
+  "flagged_len_mean": 48.340347966241126,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 444.6241227507182
+ },
+ "val_clean/s2": {
+  "n": 823,
+  "flagged_len_mean": 71.42985574993445,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 437.82914911875025
+ },
+ "val_clean/wrong": {
+  "n": 845,
+  "flagged_len_mean": 64.06815686423397,
+  "frames_with_route": 1.0,
+  "kept_len_mean": 443.71998108632465
+ }
+}

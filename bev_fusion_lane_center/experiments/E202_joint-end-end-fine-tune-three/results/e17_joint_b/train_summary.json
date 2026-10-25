@@ -1,0 +1,38 @@
+{
+ "args": {
+  "design": "D7",
+  "name": "e17_joint_b",
+  "init": "e123_D7_r3_f1",
+  "route": "p16_f2hr_route_s0",
+  "set": [
+   "M=192",
+   "K0=96"
+  ],
+  "asm": [
+   "cov_r=0.5",
+   "vtx_r=1.5",
+   "junc_thr=0.5",
+   "reloc_thr=0.4",
+   "reloc_shift=12",
+   "reloc_tol=1.6"
+  ],
+  "tau": 0.7,
+  "iters": 600,
+  "bs": 4,
+  "lr_b": 0.0001,
+  "lr_r": 0.0003,
+  "lam": 0.05,
+  "workers": 4,
+  "seed": 0,
+  "no_builder_grad": false
+ },
+ "final": {
+  "loss": 0.18245452322469471,
+  "route": 0.03279623302096063,
+  "builder": 2.993165739139296,
+  "grad_builder": 0.552350995699502,
+  "pos_rate": 0.09767514355918329,
+  "scale": 8193.14702769753
+ },
+ "seconds": 312.862988948822
+}

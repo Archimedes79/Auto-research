@@ -1,0 +1,60 @@
+{
+ "res": {
+  "exact/tau0.5": {
+   "n": 868,
+   "n_route": 868,
+   "route_success": 0.9447004608294931,
+   "route_cov": 0.9564737980646494,
+   "route_prec": 0.9670509707700022,
+   "flagged_len_per_row": 73.56739010003126,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s1/tau0.5": {
+   "n": 868,
+   "n_route": 868,
+   "route_success": 0.945852534562212,
+   "route_cov": 0.9570880860973666,
+   "route_prec": 0.9647803725376498,
+   "flagged_len_per_row": 73.8809456505155,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s2/tau0.5": {
+   "n": 868,
+   "n_route": 868,
+   "route_success": 0.9354838709677419,
+   "route_cov": 0.9558500048062597,
+   "route_prec": 0.9619265855512843,
+   "flagged_len_per_row": 74.0494541240188,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "s3/tau0.5": {
+   "n": 868,
+   "n_route": 868,
+   "route_success": 0.9251152073732719,
+   "route_cov": 0.9524872576456506,
+   "route_prec": 0.9587236891112699,
+   "flagged_len_per_row": 73.89389410724982,
+   "pose_err_m": 0.0,
+   "yaw_err_deg": 0.0
+  },
+  "_lane": {
+   "P": 0.8718282031174569,
+   "R": 0.9333403115454519,
+   "F1": 0.9015362278947223
+  }
+ },
+ "args": {
+  "tok": "tok_e94_a_oofsub",
+  "split": "train",
+  "model": "e104b",
+  "kind": "x",
+  "taus": "0.5",
+  "cells": "exact,s1,s2,s3",
+  "n": 0,
+  "tag": "oofsub"
+ },
+ "n": 938
+}

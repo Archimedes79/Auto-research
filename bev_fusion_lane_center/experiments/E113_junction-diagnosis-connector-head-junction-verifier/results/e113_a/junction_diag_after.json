@@ -1,0 +1,26 @@
+{
+ "learned + junction verifier (0.3)": {
+  "split": {
+   "n": 3002,
+   "detected": 1425,
+   "children_covered": 1324,
+   "branch_missing": 147,
+   "lane_missed": 106,
+   "pred_n": 3219,
+   "pred_true": 2236,
+   "pred_real_lane": 910,
+   "pred_false_lane": 73
+  },
+  "merge": {
+   "n": 3150,
+   "detected": 1782,
+   "children_covered": 1137,
+   "branch_missing": 195,
+   "lane_missed": 36,
+   "pred_n": 3495,
+   "pred_true": 2489,
+   "pred_real_lane": 895,
+   "pred_false_lane": 111
+  }
+ }
+}

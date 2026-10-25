@@ -1,0 +1,10 @@
+[dark] single           frames 291 flagged clean 0.00 fail 0.67  66 s
+[dark] ema_hold_mon:0.5 frames 291 flagged clean 0.00 fail 0.67  137 s
+[dark] maxdecay:0.95    frames 291 flagged clean 0.00 fail 0.67  236 s
+[blur] single           frames 291 flagged clean 0.00 fail 0.36  268 s
+[blur] ema_hold_mon:0.5 frames 291 flagged clean 0.00 fail 0.36  312 s
+[blur] maxdecay:0.95    frames 291 flagged clean 0.00 fail 0.36  361 s
+[cam_front3_off] single           frames 291 flagged clean 0.00 fail 0.01  415 s
+[cam_front3_off] ema_hold_mon:0.5 frames 291 flagged clean 0.00 fail 0.01  466 s
+[cam_front3_off] maxdecay:0.95    frames 291 flagged clean 0.00 fail 0.01  541 s
+DONE 02:26:56

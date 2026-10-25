@@ -1,0 +1,5 @@
+oracle channels built (3 s); mean oracle edge probability on right-map test samples 0.046
+oracle route + ego seed 0: exact 0.316 s2 0.316 wrong 0.740 none 0.740 curved(exact) 0.61 straight 0.29 (69 s)
+oracle route + ego seed 1: exact 0.321 s2 0.321 wrong 0.697 none 0.697 curved(exact) 0.66 straight 0.29 (134 s)
+oracle route + ego seed 2: exact 0.310 s2 0.310 wrong 0.736 none 0.736 curved(exact) 0.71 straight 0.28 (198 s)
+DONE

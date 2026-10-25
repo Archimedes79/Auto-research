@@ -1,0 +1,17 @@
+{
+ "id": "E219.rc3",
+ "hypothesis": "recall weight 10.0 during the fine-tune lifts lanes found and Q once pruning removes the false forks",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "code_hash": "978e6aca985c",
+ "basis": "E184,E215",
+ "seed": "0",
+ "command": "bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh p16_train.py --design D7 --name e18_D7_rc3 --u 4 --seed 0 --init e123_D7_r3_f1 --lr 0.0005 --stem_lr 0.3 --workers 4 --set reach=null spf2=false junc=true temporal=true stage_b=false stage_c=true b=3 mcl=true ver_mode=\"survival\" link_mode=\"learned\" pi_mode=\"min\" detach_pos=false dedup=\"geo\" ctx=\"global\" pattern=\"teardrop\" seeds=\"lattice\" warm=true revisit=false constr=\"L\" D=1 seed_gscale=1.0 tolerant=false local_r=12.0 M=288 K0=144 --w rec=10.0 --warm_frac 0.4 --eval val250",
+ "cwd": "/mnt/c/ML-Experiment/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "started": "2026-10-25T01:04:17",
+ "status": "stopped"
+}

@@ -1,0 +1,10 @@
+[dark] single           frames 291 flagged fail 0.67  6 s
+[dark] maxdecay:0.95    frames 291 flagged fail 0.67  4 s
+[dark] ema_hold_mon:0.5 frames 291 flagged fail 0.67  4 s
+[blur] single           frames 291 flagged fail 0.36  5 s
+[blur] maxdecay:0.95    frames 291 flagged fail 0.36  4 s
+[blur] ema_hold_mon:0.5 frames 291 flagged fail 0.36  4 s
+[cam_front3_off] single           frames 291 flagged fail 0.01  5 s
+[cam_front3_off] maxdecay:0.95    frames 291 flagged fail 0.01  4 s
+[cam_front3_off] ema_hold_mon:0.5 frames 291 flagged fail 0.01  4 s
+DONE 16:27:57

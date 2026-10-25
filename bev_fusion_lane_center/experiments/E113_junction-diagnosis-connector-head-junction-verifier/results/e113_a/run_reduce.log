@@ -1,0 +1,12 @@
+train candidates 531818 positive share 0.6717824339866638 inherited share 0.39308184378866456
+val_clean {'n_cand': 37316, 'n_new': 22754, 'pos_new': 0.5432451367378235, 'auc_new': 0.950813597575481}
+val_clean 0.9 {'F1@1m': 0.883, 'P@1m': 0.872, 'R@1m': 0.894, 'route_f': 0.744, 'split6_F1': 0.344, 'merge6_F1': 0.446} links 513
+val_clean 0.95 {'F1@1m': 0.883, 'P@1m': 0.872, 'R@1m': 0.894, 'route_f': 0.743, 'split6_F1': 0.347, 'merge6_F1': 0.448} links 392
+val_clean 0.98 {'F1@1m': 0.883, 'P@1m': 0.872, 'R@1m': 0.894, 'route_f': 0.743, 'split6_F1': 0.35, 'merge6_F1': 0.451} links 239
+val_clean 0.995 {'F1@1m': 0.883, 'P@1m': 0.872, 'R@1m': 0.894, 'route_f': 0.743, 'split6_F1': 0.354, 'merge6_F1': 0.455} links 129
+test_clean {'n_cand': 56717, 'n_new': 36709, 'pos_new': 0.5320765972137451, 'auc_new': 0.9476448761292524}
+test_clean 0.9 {'F1@1m': 0.851, 'P@1m': 0.828, 'R@1m': 0.874, 'route_f': 0.668, 'split6_F1': 0.376, 'merge6_F1': 0.407} links 1031
+test_clean 0.95 {'F1@1m': 0.851, 'P@1m': 0.828, 'R@1m': 0.874, 'route_f': 0.668, 'split6_F1': 0.379, 'merge6_F1': 0.41} links 812
+test_clean 0.98 {'F1@1m': 0.851, 'P@1m': 0.828, 'R@1m': 0.874, 'route_f': 0.668, 'split6_F1': 0.38, 'merge6_F1': 0.414} links 602
+test_clean 0.995 {'F1@1m': 0.851, 'P@1m': 0.828, 'R@1m': 0.874, 'route_f': 0.668, 'split6_F1': 0.383, 'merge6_F1': 0.421} links 251
+DONE 154.14759826660156

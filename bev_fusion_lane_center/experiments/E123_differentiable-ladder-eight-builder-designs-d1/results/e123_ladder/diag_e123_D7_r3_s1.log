@@ -1,0 +1,4 @@
+e123_D7_r3_s1 tau 0.5 | F1o2o 0.484 | splits pred 22.8 gt 2.6 P 0.056 R 0.498 | merges pred 23.6 gt 2.9 | v100 25.3 chord 3.9 m | along 0.14 across 0.70 | ece 0.14
+  -> ('D', 'spurious forks: 22.8 predicted vs 2.6 true splits per frame', 'NMS radius up, n children down, coverage merge, best-per-GT duplicate label')
+  -> ('H', 'vertices per 100 m 25.3', 'step-length target, vertex-count penalty (SPF1)')
+  -> ('D', 'false length 0.191', 'stage C rescore, density weight up')

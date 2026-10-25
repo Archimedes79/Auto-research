@@ -1,0 +1,9 @@
+[fog_single_e37] n 291 | cl: S 0.750 F1@1 0.880 J 0.246 v100 13.5 found 0.71 | fail: S 0.696 F1@1 0.803 J 0.227 v100 13.4 found 0.59  51 s
+[fog_maxdecay_0.95_e37] n 291 | cl: S 0.751 F1@1 0.890 J 0.222 v100 13.0 found 0.74 | fail: S 0.699 F1@1 0.827 J 0.199 v100 12.7 found 0.67  101 s
+[radar_off_single_e37] n 291 | cl: S 0.750 F1@1 0.880 J 0.246 v100 13.5 found 0.71 | fail: S 0.711 F1@1 0.814 J 0.263 v100 13.4 found 0.63  174 s
+[radar_off_maxdecay_0.95_e37] n 291 | cl: S 0.751 F1@1 0.890 J 0.222 v100 13.0 found 0.74 | fail: S 0.711 F1@1 0.834 J 0.225 v100 13.0 found 0.70  333 s
+[extr3_single_e37] n 291 | cl: S 0.750 F1@1 0.880 J 0.246 v100 13.5 found 0.71 | fail: S 0.624 F1@1 0.693 J 0.250 v100 13.5 found 0.45  474 s
+[extr3_maxdecay_0.95_e37] n 291 | cl: S 0.751 F1@1 0.890 J 0.222 v100 13.0 found 0.74 | fail: S 0.626 F1@1 0.754 J 0.117 v100 11.1 found 0.61  643 s
+[cam_front_off_single_e37] n 291 | cl: S 0.750 F1@1 0.880 J 0.246 v100 13.5 found 0.71 | fail: S 0.667 F1@1 0.759 J 0.208 v100 14.0 found 0.52  779 s
+[cam_front_off_maxdecay_0.95_e37] n 291 | cl: S 0.751 F1@1 0.890 J 0.222 v100 13.0 found 0.74 | fail: S 0.669 F1@1 0.784 J 0.172 v100 13.2 found 0.59  909 s
+DONE 16:54:23

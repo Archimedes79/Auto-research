@@ -1,0 +1,10 @@
+gate:none  seed 0: clean/s2 0.32 (g 0.44) dark 0.85 (g 0.44; straight 0.68 curved 3.00) pooled failures 0.63 wrong 0.72 curved clean 0.64 (95 s)
+gate:none  seed 1: clean/s2 0.35 (g 0.40) dark 0.91 (g 0.41; straight 0.76 curved 2.85) pooled failures 0.63 wrong 0.62 curved clean 0.78 (175 s)
+gate:none  seed 2: clean/s2 0.31 (g 0.46) dark 0.92 (g 0.47; straight 0.73 curved 3.36) pooled failures 0.65 wrong 0.70 curved clean 0.73 (254 s)
+gate:conf  seed 0: clean/s2 0.32 (g 0.44) dark 0.98 (g 0.45; straight 0.80 curved 3.27) pooled failures 0.65 wrong 0.73 curved clean 0.67 (334 s)
+gate:conf  seed 1: clean/s2 0.34 (g 0.44) dark 0.94 (g 0.45; straight 0.76 curved 3.19) pooled failures 0.64 wrong 0.69 curved clean 0.67 (414 s)
+gate:conf  seed 2: clean/s2 0.34 (g 0.44) dark 0.82 (g 0.44; straight 0.64 curved 3.07) pooled failures 0.64 wrong 0.67 curved clean 0.78 (494 s)
+gate:flag  seed 0: clean/s2 0.35 (g 0.45) dark 0.88 (g 0.46; straight 0.71 curved 2.99) pooled failures 0.65 wrong 0.73 curved clean 0.92 (574 s)
+gate:flag  seed 1: clean/s2 0.34 (g 0.45) dark 0.97 (g 0.46; straight 0.82 curved 2.91) pooled failures 0.64 wrong 0.65 curved clean 0.72 (654 s)
+gate:flag  seed 2: clean/s2 0.35 (g 0.44) dark 0.85 (g 0.44; straight 0.67 curved 3.14) pooled failures 0.64 wrong 0.68 curved clean 0.69 (734 s)
+DONE

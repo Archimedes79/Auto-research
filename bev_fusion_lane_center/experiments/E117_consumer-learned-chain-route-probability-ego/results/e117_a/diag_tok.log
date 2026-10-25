@@ -1,0 +1,8 @@
+route+ego          seed 0: train (right maps) 0.312  test exact 0.353 | train none 0.623 test none 0.773
+route+ego          seed 1: train (right maps) 0.309  test exact 0.332 | train none 0.600 test none 0.700
+route+ego          seed 2: train (right maps) 0.344  test exact 0.337 | train none 0.677 test none 0.751
+route+tok+ego      seed 0: train (right maps) 0.376  test exact 0.472 | train none 0.636 test none 0.767
+route+tok+ego      seed 1: train (right maps) 0.420  test exact 0.587 | train none 0.561 test none 0.784
+route+tok+ego      seed 2: train (right maps) 0.474  test exact 0.609 | train none 0.622 test none 0.788
+route+tokreg+ego   seed 0: train (right maps) 0.528  test exact 0.517 | train none 0.799 test none 0.814
+DONE

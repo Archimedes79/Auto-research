@@ -1,0 +1,31 @@
+{
+ "id": "E213.b",
+ "hypothesis": "registration + trust gate also lift the best chain (map builder + learned gate) at 1-3 m map error and against wrong maps",
+ "basis": "E213.a,E207",
+ "seed": "0",
+ "command": "bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_run_r21b.sh",
+ "cwd": "/mnt/c/ML-Experiment/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "started": "2026-10-24T23:48:16",
+ "status": "ok",
+ "exit": 0,
+ "duration_s": 1584,
+ "attempts": 1,
+ "ended": "2026-10-25T00:14:40",
+ "last_lines": [
+  "[dark_gateB_R62_wrong] n 291 | cl: S 0.754 F1@1 0.890 J 0.237 v100 11.9 found 0.76 | fail: S 0.632 F1@1 0.716 J 0.153 v100 12.7 found 0.51  40 s",
+  "[blur_gateB_R62_wrong] n 291 | cl: S 0.754 F1@1 0.890 J 0.237 v100 11.9 found 0.76 | fail: S 0.635 F1@1 0.731 J 0.147 v100 12.6 found 0.52  87 s",
+  "[cam_front3_off_gateB_R62_wrong] n 291 | cl: S 0.754 F1@1 0.890 J 0.237 v100 11.9 found 0.76 | fail: S 0.642 F1@1 0.742 J 0.156 v100 13.3 found 0.52  140 s",
+  "DONE 00:09:35",
+  "[dark_gateB_R75_wrong] n 291 | cl: S 0.755 F1@1 0.892 J 0.237 v100 11.8 found 0.76 | fail: S 0.647 F1@1 0.733 J 0.161 v100 12.4 found 0.51  46 s",
+  "[blur_gateB_R75_wrong] n 291 | cl: S 0.755 F1@1 0.892 J 0.237 v100 11.8 found 0.76 | fail: S 0.650 F1@1 0.748 J 0.151 v100 12.3 found 0.52  90 s",
+  "[cam_front3_off_gateB_R75_wrong] n 291 | cl: S 0.755 F1@1 0.892 J 0.237 v100 11.8 found 0.76 | fail: S 0.655 F1@1 0.757 J 0.161 v100 13.3 found 0.52  139 s",
+  "DONE 00:12:09",
+  "[dark_gateB_R75_s2] n 291 | cl: S 0.761 F1@1 0.897 J 0.249 v100 11.7 found 0.78 | fail: S 0.664 F1@1 0.768 J 0.158 v100 11.8 found 0.58  41 s",
+  "[blur_gateB_R75_s2] n 291 | cl: S 0.761 F1@1 0.897 J 0.249 v100 11.7 found 0.78 | fail: S 0.665 F1@1 0.776 J 0.154 v100 11.8 found 0.59  83 s",
+  "[cam_front3_off_gateB_R75_s2] n 291 | cl: S 0.761 F1@1 0.897 J 0.249 v100 11.7 found 0.78 | fail: S 0.668 F1@1 0.781 J 0.166 v100 12.5 found 0.59  135 s",
+  "DONE 00:14:39"
+ ]
+}

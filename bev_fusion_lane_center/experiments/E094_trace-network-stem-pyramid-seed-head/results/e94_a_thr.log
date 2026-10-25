@@ -1,0 +1,6 @@
+tau_on 0.3                                     P 0.884 R 0.906 F1 0.8948 lanes 0.834 false 0.057 split6 0.353 merge6 0.469 dir 0.855 far F1 0.867 (107 s)
+tau_on 0.4                                     P 0.885 R 0.906 F1 0.8953 lanes 0.837 false 0.057 split6 0.345 merge6 0.463 dir 0.856 far F1 0.866 (99 s)
+tau_on 0.5                                     P 0.885 R 0.905 F1 0.8952 lanes 0.835 false 0.056 split6 0.350 merge6 0.462 dir 0.856 far F1 0.866 (93 s)
+tau_on 0.6                                     P 0.885 R 0.905 F1 0.8951 lanes 0.834 false 0.056 split6 0.352 merge6 0.462 dir 0.856 far F1 0.866 (127 s)
+tau_on 0.7                                     P 0.885 R 0.905 F1 0.8948 lanes 0.832 false 0.056 split6 0.355 merge6 0.460 dir 0.856 far F1 0.865 (97 s)
+rule pipeline (loose graph)                    P 0.925 R 0.891 F1 0.9076 lanes 0.808 false 0.035 far F1 0.881

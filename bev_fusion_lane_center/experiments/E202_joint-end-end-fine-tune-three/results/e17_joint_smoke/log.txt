@@ -1,0 +1,9 @@
+it 1/20 4s loss 5.423 route 0.028 builder 5.395 grad_builder inf
+it 20/20 10s loss 4.017 route 0.028 builder 3.989 grad_builder nan
+it 1/120 3s loss 4.489 route 0.025 builder 4.464 grad_builder 0.000 pos_rate 0.151 scale 32768.000
+it 20/120 13s loss 3.640 route 0.027 builder 3.612 grad_builder 4.374 pos_rate 0.138 scale 24794.597
+it 40/120 24s loss 3.314 route 0.023 builder 3.291 grad_builder 6.470 pos_rate 0.115 scale 15412.379
+it 60/120 34s loss 3.205 route 0.030 builder 3.175 grad_builder 7.050 pos_rate 0.127 scale 10780.404
+it 80/120 44s loss 3.201 route 0.028 builder 3.173 grad_builder 7.033 pos_rate 0.109 scale 9119.906
+it 100/120 55s loss 3.155 route 0.028 builder 3.127 grad_builder 7.779 pos_rate 0.108 scale 8524.641
+it 120/120 65s loss 3.090 route 0.029 builder 3.061 grad_builder 7.654 pos_rate 0.122 scale 8311.247

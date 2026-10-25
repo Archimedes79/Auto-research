@@ -1,0 +1,37 @@
+=== attempt 1 2026-10-24T23:33:16: bash /mnt/c/ML-Experiment/bev_fusion_lane_center/temp/launchers/loop18/_run_r21.sh
+[dark_maxdecay_0.95_R62_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.229 v100 11.8 found 0.78 | fail: S 0.651 F1@1 0.761 J 0.146 v100 12.1 found 0.60  38 s
+[blur_maxdecay_0.95_R62_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.229 v100 11.8 found 0.78 | fail: S 0.648 F1@1 0.760 J 0.141 v100 12.2 found 0.59  81 s
+[cam_front3_off_maxdecay_0.95_R62_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.229 v100 11.8 found 0.78 | fail: S 0.644 F1@1 0.756 J 0.159 v100 13.1 found 0.60  118 s
+DONE 23:35:29
+[dark_maxdecay_0.95_R62_s1] n 291 | cl: S 0.754 F1@1 0.893 J 0.235 v100 11.8 found 0.78 | fail: S 0.653 F1@1 0.761 J 0.147 v100 12.2 found 0.60  32 s
+[blur_maxdecay_0.95_R62_s1] n 291 | cl: S 0.754 F1@1 0.893 J 0.235 v100 11.8 found 0.78 | fail: S 0.653 F1@1 0.769 J 0.145 v100 12.1 found 0.61  71 s
+[cam_front3_off_maxdecay_0.95_R62_s1] n 291 | cl: S 0.754 F1@1 0.893 J 0.235 v100 11.8 found 0.78 | fail: S 0.646 F1@1 0.759 J 0.162 v100 13.1 found 0.61  128 s
+DONE 23:38:05
+[dark_maxdecay_0.95_R62_s3] n 291 | cl: S 0.751 F1@1 0.891 J 0.227 v100 11.8 found 0.77 | fail: S 0.651 F1@1 0.760 J 0.147 v100 12.3 found 0.59  46 s
+[blur_maxdecay_0.95_R62_s3] n 291 | cl: S 0.751 F1@1 0.891 J 0.227 v100 11.8 found 0.77 | fail: S 0.648 F1@1 0.757 J 0.143 v100 12.2 found 0.58  87 s
+[cam_front3_off_maxdecay_0.95_R62_s3] n 291 | cl: S 0.751 F1@1 0.891 J 0.227 v100 11.8 found 0.77 | fail: S 0.643 F1@1 0.758 J 0.152 v100 13.0 found 0.61  133 s
+DONE 23:40:52
+[dark_maxdecay_0.95_R62_wrong] n 291 | cl: S 0.746 F1@1 0.888 J 0.211 v100 11.9 found 0.77 | fail: S 0.623 F1@1 0.713 J 0.143 v100 13.0 found 0.52  43 s
+[blur_maxdecay_0.95_R62_wrong] n 291 | cl: S 0.746 F1@1 0.888 J 0.211 v100 11.9 found 0.77 | fail: S 0.623 F1@1 0.719 J 0.141 v100 12.8 found 0.53  85 s
+[cam_front3_off_maxdecay_0.95_R62_wrong] n 291 | cl: S 0.746 F1@1 0.888 J 0.211 v100 11.9 found 0.77 | fail: S 0.616 F1@1 0.714 J 0.151 v100 13.9 found 0.52  130 s
+DONE 23:43:26
+[dark_maxdecay_0.95_R75_wrong] n 291 | cl: S 0.747 F1@1 0.889 J 0.215 v100 11.8 found 0.77 | fail: S 0.638 F1@1 0.728 J 0.148 v100 12.6 found 0.52  62 s
+[blur_maxdecay_0.95_R75_wrong] n 291 | cl: S 0.747 F1@1 0.889 J 0.215 v100 11.8 found 0.77 | fail: S 0.638 F1@1 0.735 J 0.147 v100 12.5 found 0.53  114 s
+[cam_front3_off_maxdecay_0.95_R75_wrong] n 291 | cl: S 0.747 F1@1 0.889 J 0.215 v100 11.8 found 0.77 | fail: S 0.629 F1@1 0.728 J 0.156 v100 13.9 found 0.52  177 s
+DONE 23:46:48
+[dark_maxdecay_0.95_R75_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.228 v100 11.8 found 0.78 | fail: S 0.651 F1@1 0.760 J 0.144 v100 12.1 found 0.59  36 s
+[blur_maxdecay_0.95_R75_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.228 v100 11.8 found 0.78 | fail: S 0.648 F1@1 0.757 J 0.144 v100 12.2 found 0.59  71 s
+[cam_front3_off_maxdecay_0.95_R75_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.228 v100 11.8 found 0.78 | fail: S 0.640 F1@1 0.748 J 0.159 v100 13.3 found 0.58  107 s
+DONE 23:48:59
+[dark_maxdecay_0.95_Rnotrust_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.229 v100 11.8 found 0.78 | fail: S 0.654 F1@1 0.769 J 0.150 v100 12.3 found 0.61  42 s
+[blur_maxdecay_0.95_Rnotrust_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.229 v100 11.8 found 0.78 | fail: S 0.651 F1@1 0.767 J 0.141 v100 12.2 found 0.61  82 s
+[cam_front3_off_maxdecay_0.95_Rnotrust_s2] n 291 | cl: S 0.753 F1@1 0.893 J 0.229 v100 11.8 found 0.78 | fail: S 0.649 F1@1 0.767 J 0.161 v100 12.8 found 0.63  125 s
+DONE 23:51:22
+[dark_maxdecay_0.95_U_s1] n 291 | cl: S 0.748 F1@1 0.888 J 0.220 v100 11.8 found 0.77 | fail: S 0.649 F1@1 0.761 J 0.153 v100 12.4 found 0.58  47 s
+[blur_maxdecay_0.95_U_s1] n 291 | cl: S 0.748 F1@1 0.888 J 0.220 v100 11.8 found 0.77 | fail: S 0.648 F1@1 0.765 J 0.144 v100 12.2 found 0.60  101 s
+[cam_front3_off_maxdecay_0.95_U_s1] n 291 | cl: S 0.748 F1@1 0.888 J 0.220 v100 11.8 found 0.77 | fail: S 0.641 F1@1 0.758 J 0.156 v100 12.8 found 0.63  148 s
+DONE 23:54:12
+[dark_maxdecay_0.95_U_s3] n 291 | cl: S 0.751 F1@1 0.887 J 0.239 v100 11.8 found 0.77 | fail: S 0.628 F1@1 0.731 J 0.144 v100 12.5 found 0.55  45 s
+[blur_maxdecay_0.95_U_s3] n 291 | cl: S 0.751 F1@1 0.887 J 0.239 v100 11.8 found 0.77 | fail: S 0.627 F1@1 0.731 J 0.141 v100 12.4 found 0.56  88 s
+[cam_front3_off_maxdecay_0.95_U_s3] n 291 | cl: S 0.751 F1@1 0.887 J 0.239 v100 11.8 found 0.77 | fail: S 0.613 F1@1 0.716 J 0.146 v100 12.9 found 0.57  139 s
+DONE 23:56:55

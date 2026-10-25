@@ -1,0 +1,90 @@
+== 21:51:40 {'name': 'e32_main', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 8000, 'bs': 8, 'lr': 0.0005, 'wd': 0.0001, 'lr_trunk': 0.4, 'd': 128, 'M': 96, 'layers': 4, 'base': 48, 'lam_fp': 3.0, 'wpos': 1.0, 'w_pts': 5.0, 'w_adj': 1.0, 'adj_pos': 3.0, 'w_dense': 1.0, 'dense_lam': 1.0, 'train_stride': 2, 'eval': 'train_eval,val,test', 'workers': 3, 'seed': 0, 'amp': 1, 'mon': 2000, 'init_from': '', 'init_dense': 'e27_gcar', 'prior': 'none', 'prior_xy': 0.0, 'prior_deg': 0.0, 'prior_degrade': 0.0, 'align': 0, 'eval_prior_xy': -1.0, 'eval_prior_deg': -1.0, 'eval_degrade': -1.0, 'temporal': '', 'n_track': 40, 'save_arrays': 1}
+Rumpf + dichter Kopf aus e27_gcar (unveraendert/teilweise/uebersprungen): (85, 1, 0)
+Eingangskanaele 39 + Zusatz 0 Parameter 4343680 Trainings-Samples 4207
+Schritt 100/8000 Verlust 50.940 (Existenz 0.803, Punkte 2.183, Nachfolger 0.645, dicht 2.577) 0.64 s/Schritt
+Schritt 200/8000 Verlust 41.931 (Existenz 0.549, Punkte 1.859, Nachfolger 0.231, dicht 2.669) 0.58 s/Schritt
+Schritt 300/8000 Verlust 38.737 (Existenz 0.545, Punkte 1.820, Nachfolger 0.189, dicht 2.783) 0.57 s/Schritt
+Schritt 400/8000 Verlust 33.360 (Existenz 0.510, Punkte 1.390, Nachfolger 0.154, dicht 2.714) 0.58 s/Schritt
+Schritt 500/8000 Verlust 31.279 (Existenz 0.507, Punkte 1.276, Nachfolger 0.139, dicht 2.742) 0.57 s/Schritt
+Schritt 600/8000 Verlust 28.885 (Existenz 0.485, Punkte 1.155, Nachfolger 0.133, dicht 2.732) 0.56 s/Schritt
+Schritt 700/8000 Verlust 27.938 (Existenz 0.487, Punkte 1.103, Nachfolger 0.128, dicht 2.727) 0.56 s/Schritt
+Schritt 800/8000 Verlust 27.576 (Existenz 0.475, Punkte 1.080, Nachfolger 0.126, dicht 2.774) 0.55 s/Schritt
+Schritt 900/8000 Verlust 26.407 (Existenz 0.488, Punkte 1.021, Nachfolger 0.122, dicht 2.713) 0.56 s/Schritt
+Schritt 1000/8000 Verlust 26.204 (Existenz 0.481, Punkte 1.015, Nachfolger 0.119, dicht 2.737) 0.56 s/Schritt
+Schritt 1100/8000 Verlust 25.408 (Existenz 0.474, Punkte 0.974, Nachfolger 0.113, dicht 2.724) 0.55 s/Schritt
+Schritt 1200/8000 Verlust 24.923 (Existenz 0.465, Punkte 0.956, Nachfolger 0.106, dicht 2.755) 0.55 s/Schritt
+Schritt 1300/8000 Verlust 24.662 (Existenz 0.486, Punkte 0.938, Nachfolger 0.107, dicht 2.651) 0.55 s/Schritt
+Schritt 1400/8000 Verlust 24.350 (Existenz 0.468, Punkte 0.929, Nachfolger 0.102, dicht 2.728) 0.54 s/Schritt
+Schritt 1500/8000 Verlust 24.590 (Existenz 0.464, Punkte 0.938, Nachfolger 0.100, dicht 2.741) 0.53 s/Schritt
+Schritt 1600/8000 Verlust 24.366 (Existenz 0.473, Punkte 0.930, Nachfolger 0.100, dicht 2.689) 0.52 s/Schritt
+Schritt 1700/8000 Verlust 24.114 (Existenz 0.464, Punkte 0.913, Nachfolger 0.098, dicht 2.718) 0.51 s/Schritt
+Schritt 1800/8000 Verlust 23.416 (Existenz 0.468, Punkte 0.880, Nachfolger 0.094, dicht 2.707) 0.50 s/Schritt
+Schritt 1900/8000 Verlust 23.611 (Existenz 0.475, Punkte 0.889, Nachfolger 0.095, dicht 2.676) 0.49 s/Schritt
+Schritt 2000/8000 Verlust 23.287 (Existenz 0.453, Punkte 0.875, Nachfolger 0.092, dicht 2.720) 0.48 s/Schritt
+  [Zwischenstand 2000] train_eval: F1 0.555 (P 0.857, R 0.411)  val: F1 0.490 (P 0.838, R 0.347)
+Schritt 2100/8000 Verlust 23.412 (Existenz 0.459, Punkte 0.884, Nachfolger 0.092, dicht 2.714) 0.50 s/Schritt
+Schritt 2200/8000 Verlust 22.919 (Existenz 0.462, Punkte 0.858, Nachfolger 0.090, dicht 2.683) 0.50 s/Schritt
+Schritt 2300/8000 Verlust 23.033 (Existenz 0.454, Punkte 0.864, Nachfolger 0.090, dicht 2.731) 0.50 s/Schritt
+Schritt 2400/8000 Verlust 22.989 (Existenz 0.451, Punkte 0.863, Nachfolger 0.089, dicht 2.731) 0.50 s/Schritt
+Schritt 2500/8000 Verlust 22.372 (Existenz 0.460, Punkte 0.835, Nachfolger 0.088, dicht 2.650) 0.50 s/Schritt
+Schritt 2600/8000 Verlust 22.063 (Existenz 0.470, Punkte 0.816, Nachfolger 0.086, dicht 2.670) 0.50 s/Schritt
+Schritt 2700/8000 Verlust 22.238 (Existenz 0.451, Punkte 0.826, Nachfolger 0.085, dicht 2.667) 0.50 s/Schritt
+Schritt 2800/8000 Verlust 22.263 (Existenz 0.452, Punkte 0.829, Nachfolger 0.085, dicht 2.708) 0.50 s/Schritt
+Schritt 2900/8000 Verlust 21.773 (Existenz 0.465, Punkte 0.806, Nachfolger 0.084, dicht 2.621) 0.50 s/Schritt
+Schritt 3000/8000 Verlust 22.117 (Existenz 0.460, Punkte 0.817, Nachfolger 0.083, dicht 2.675) 0.50 s/Schritt
+Schritt 3100/8000 Verlust 21.951 (Existenz 0.461, Punkte 0.810, Nachfolger 0.082, dicht 2.704) 0.50 s/Schritt
+Schritt 3200/8000 Verlust 21.483 (Existenz 0.457, Punkte 0.791, Nachfolger 0.081, dicht 2.672) 0.50 s/Schritt
+Schritt 3300/8000 Verlust 21.213 (Existenz 0.473, Punkte 0.777, Nachfolger 0.082, dicht 2.618) 0.50 s/Schritt
+Schritt 3400/8000 Verlust 21.462 (Existenz 0.456, Punkte 0.790, Nachfolger 0.080, dicht 2.661) 0.50 s/Schritt
+Schritt 3500/8000 Verlust 21.656 (Existenz 0.449, Punkte 0.804, Nachfolger 0.081, dicht 2.702) 0.50 s/Schritt
+Schritt 3600/8000 Verlust 21.023 (Existenz 0.462, Punkte 0.770, Nachfolger 0.078, dicht 2.684) 0.50 s/Schritt
+Schritt 3700/8000 Verlust 21.256 (Existenz 0.448, Punkte 0.786, Nachfolger 0.078, dicht 2.656) 0.49 s/Schritt
+Schritt 3800/8000 Verlust 20.787 (Existenz 0.442, Punkte 0.763, Nachfolger 0.076, dicht 2.689) 0.49 s/Schritt
+Schritt 3900/8000 Verlust 20.876 (Existenz 0.459, Punkte 0.765, Nachfolger 0.077, dicht 2.646) 0.49 s/Schritt
+Schritt 4000/8000 Verlust 20.696 (Existenz 0.447, Punkte 0.756, Nachfolger 0.075, dicht 2.665) 0.48 s/Schritt
+  [Zwischenstand 4000] train_eval: F1 0.504 (P 0.867, R 0.355)  val: F1 0.399 (P 0.830, R 0.263)
+Schritt 4100/8000 Verlust 20.381 (Existenz 0.461, Punkte 0.743, Nachfolger 0.075, dicht 2.616) 0.49 s/Schritt
+Schritt 4200/8000 Verlust 20.784 (Existenz 0.452, Punkte 0.760, Nachfolger 0.076, dicht 2.668) 0.49 s/Schritt
+Schritt 4300/8000 Verlust 19.838 (Existenz 0.463, Punkte 0.715, Nachfolger 0.073, dicht 2.562) 0.49 s/Schritt
+Schritt 4400/8000 Verlust 20.314 (Existenz 0.451, Punkte 0.737, Nachfolger 0.074, dicht 2.650) 0.49 s/Schritt
+Schritt 4500/8000 Verlust 20.570 (Existenz 0.436, Punkte 0.748, Nachfolger 0.073, dicht 2.752) 0.49 s/Schritt
+Schritt 4600/8000 Verlust 19.874 (Existenz 0.458, Punkte 0.714, Nachfolger 0.071, dicht 2.604) 0.49 s/Schritt
+Schritt 4700/8000 Verlust 20.057 (Existenz 0.454, Punkte 0.723, Nachfolger 0.072, dicht 2.634) 0.49 s/Schritt
+Schritt 4800/8000 Verlust 19.493 (Existenz 0.449, Punkte 0.697, Nachfolger 0.070, dicht 2.642) 0.49 s/Schritt
+Schritt 4900/8000 Verlust 19.762 (Existenz 0.457, Punkte 0.707, Nachfolger 0.071, dicht 2.645) 0.49 s/Schritt
+Schritt 5000/8000 Verlust 19.591 (Existenz 0.444, Punkte 0.701, Nachfolger 0.069, dicht 2.626) 0.50 s/Schritt
+Schritt 5100/8000 Verlust 19.287 (Existenz 0.449, Punkte 0.687, Nachfolger 0.069, dicht 2.597) 0.50 s/Schritt
+Schritt 5200/8000 Verlust 19.348 (Existenz 0.456, Punkte 0.688, Nachfolger 0.069, dicht 2.585) 0.50 s/Schritt
+Schritt 5300/8000 Verlust 19.413 (Existenz 0.439, Punkte 0.689, Nachfolger 0.068, dicht 2.685) 0.50 s/Schritt
+Schritt 5400/8000 Verlust 18.817 (Existenz 0.460, Punkte 0.660, Nachfolger 0.067, dicht 2.579) 0.50 s/Schritt
+Schritt 5500/8000 Verlust 18.941 (Existenz 0.433, Punkte 0.664, Nachfolger 0.065, dicht 2.680) 0.49 s/Schritt
+Schritt 5600/8000 Verlust 18.798 (Existenz 0.444, Punkte 0.661, Nachfolger 0.065, dicht 2.607) 0.49 s/Schritt
+Schritt 5700/8000 Verlust 18.668 (Existenz 0.445, Punkte 0.651, Nachfolger 0.065, dicht 2.642) 0.49 s/Schritt
+Schritt 5800/8000 Verlust 18.393 (Existenz 0.449, Punkte 0.638, Nachfolger 0.064, dicht 2.594) 0.49 s/Schritt
+Schritt 5900/8000 Verlust 18.375 (Existenz 0.442, Punkte 0.638, Nachfolger 0.064, dicht 2.625) 0.49 s/Schritt
+Schritt 6000/8000 Verlust 18.274 (Existenz 0.447, Punkte 0.633, Nachfolger 0.064, dicht 2.591) 0.49 s/Schritt
+  [Zwischenstand 6000] train_eval: F1 0.604 (P 0.884, R 0.459)  val: F1 0.475 (P 0.843, R 0.331)
+Schritt 6100/8000 Verlust 18.279 (Existenz 0.438, Punkte 0.630, Nachfolger 0.063, dicht 2.619) 0.49 s/Schritt
+Schritt 6200/8000 Verlust 18.154 (Existenz 0.429, Punkte 0.622, Nachfolger 0.061, dicht 2.678) 0.49 s/Schritt
+Schritt 6300/8000 Verlust 17.909 (Existenz 0.446, Punkte 0.613, Nachfolger 0.061, dicht 2.571) 0.49 s/Schritt
+Schritt 6400/8000 Verlust 17.785 (Existenz 0.430, Punkte 0.606, Nachfolger 0.060, dicht 2.640) 0.49 s/Schritt
+Schritt 6500/8000 Verlust 18.196 (Existenz 0.443, Punkte 0.621, Nachfolger 0.062, dicht 2.643) 0.49 s/Schritt
+Schritt 6600/8000 Verlust 17.741 (Existenz 0.440, Punkte 0.601, Nachfolger 0.060, dicht 2.616) 0.49 s/Schritt
+Schritt 6700/8000 Verlust 17.635 (Existenz 0.442, Punkte 0.601, Nachfolger 0.060, dicht 2.554) 0.49 s/Schritt
+Schritt 6800/8000 Verlust 17.718 (Existenz 0.437, Punkte 0.603, Nachfolger 0.060, dicht 2.598) 0.49 s/Schritt
+Schritt 6900/8000 Verlust 17.661 (Existenz 0.450, Punkte 0.598, Nachfolger 0.060, dicht 2.579) 0.49 s/Schritt
+Schritt 7000/8000 Verlust 17.555 (Existenz 0.441, Punkte 0.593, Nachfolger 0.059, dicht 2.602) 0.49 s/Schritt
+Schritt 7100/8000 Verlust 17.298 (Existenz 0.428, Punkte 0.579, Nachfolger 0.057, dicht 2.638) 0.49 s/Schritt
+Schritt 7200/8000 Verlust 17.408 (Existenz 0.425, Punkte 0.586, Nachfolger 0.058, dicht 2.618) 0.49 s/Schritt
+Schritt 7300/8000 Verlust 17.426 (Existenz 0.444, Punkte 0.586, Nachfolger 0.060, dicht 2.571) 0.49 s/Schritt
+Schritt 7400/8000 Verlust 17.853 (Existenz 0.424, Punkte 0.605, Nachfolger 0.059, dicht 2.670) 0.49 s/Schritt
+Schritt 7500/8000 Verlust 17.164 (Existenz 0.443, Punkte 0.575, Nachfolger 0.058, dicht 2.547) 0.49 s/Schritt
+Schritt 7600/8000 Verlust 17.639 (Existenz 0.421, Punkte 0.595, Nachfolger 0.058, dicht 2.685) 0.49 s/Schritt
+Schritt 7700/8000 Verlust 17.387 (Existenz 0.453, Punkte 0.583, Nachfolger 0.060, dicht 2.558) 0.49 s/Schritt
+Schritt 7800/8000 Verlust 17.648 (Existenz 0.430, Punkte 0.596, Nachfolger 0.059, dicht 2.632) 0.49 s/Schritt
+Schritt 7900/8000 Verlust 17.369 (Existenz 0.444, Punkte 0.582, Nachfolger 0.059, dicht 2.564) 0.48 s/Schritt
+Schritt 8000/8000 Verlust 17.436 (Existenz 0.436, Punkte 0.585, Nachfolger 0.059, dicht 2.597) 0.48 s/Schritt
+[train_eval] 1052 Samples; bester Existenz-Schwellwert 0.3: F1 @0,5/1/1,5 = 0.774 / 0.905 / 0.956, P/R@1 0.908/0.901, 1:1 0.659, Splits F1 0.162
+[val] 873 Samples; bester Existenz-Schwellwert 0.3: F1 @0,5/1/1,5 = 0.678 / 0.850 / 0.926, P/R@1 0.860/0.840, 1:1 0.597, Splits F1 0.093
+[test] 833 Samples; bester Existenz-Schwellwert 0.3: F1 @0,5/1/1,5 = 0.642 / 0.820 / 0.902, P/R@1 0.829/0.811, 1:1 0.589, Splits F1 0.105
+FERTIG 22:59:02
