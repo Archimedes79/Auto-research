@@ -3,14 +3,14 @@
 ## In this folder
 - No nuscenes folder any more (removed 2026-10-25): the Windows copy of nuScenes mini duplicated `~/data/nuscenes` in the WSL home, which the code reads.
 - `splits.json` - TRAIN / VAL / TEST scene lists of the full runs (scene-disjoint).
-- The raw nuScenes archives (`v1.0-mini.tgz`, map expansion, `v1.0-trainval_meta.tgz`, radar parts 1-3) were unpacked into the WSL home (see below); the archives were removed on 2026-10-25 (purged from _to_delete); the camera archives were not kept. nuScenes is licensed for non-commercial use; re-download only with the user's OK.
+- The raw nuScenes archives (`v1.0-mini.tgz`, map expansion, `v1.0-trainval_meta.tgz`, radar parts 1-3) were unpacked into the WSL home (see below); the archives were removed on 2026-10-25 (purged from _to_delete); the camera archives were not kept. Radar parts 4-6 were downloaded on 2026-10-25 (decision D1; public bucket `motional-nuscenes`, AWS Open Data, no login; verified by S3 ETag; archives in `~/downloads/nuscenes_radar_456/`). nuScenes is licensed for non-commercial use; re-download only with the user's OK.
 
 ## Not in this folder (and why)
 The big derived arrays live in the **WSL home** (`\\wsl$\Ubuntu-22.04\home\ml`, ext4): reading them over `/mnt/c` is about an order of magnitude slower. Registry (sizes of 2026-10-24):
 
 | path in WSL | size | content | how it is made |
 |---|---|---|---|
-| `~/data/nuscenes_full` | 25 GB | nuScenes parts 1-6 (cameras, radar) + infos | downloaded from nuscenes.org (archives removed after unpacking), `training/data/prep/crn_make_infos.py` |
+| `~/data/nuscenes_full` | 28 GB | nuScenes parts 1-6: camera keyframes and radar (samples + sweeps) of 510 scenes (radar of parts 4-6 since 2026-10-25), metadata, infos of parts 1-3 | public bucket `motional-nuscenes` (archives of parts 1-3 removed after unpacking), `training/data/prep/crn_make_infos.py`; the project uses 255 scenes, the other 255 are planned in `../experiment_execution/plans/data_extension_b456.md` |
 | `~/data/nuscenes` | 3 GB | mini copy for the env | |
 | `~/exp_gcar_b123/feats` | 54 GB | cached GaussianCaR features (dec32, fused32, logit7) per frame, TRAIN / VAL / TEST | `training/data/prep/gcar_pipeline1.sh`, `gcar_pipeline2.sh`, `extract_features.py` |
 | `~/exp_gcar_b123/pert` | 37 GB | features under sensor failures (dark, blur, cameras off, ...) | `training/data/prep/gcar_pert.py` |
