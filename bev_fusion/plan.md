@@ -232,6 +232,23 @@ Design agreed with Mirko (2026-10-25): three BEV maps with their own times are f
 - Basis: FIERY 2104.10490 (lit: future instance segmentation and flow in BEV, 2 s ahead, IoU 59.4 / 36.7 short / long range vs a static model 47.9 / 30.3; probabilistic future, recursive prediction beats predicting all futures at once); BEVerse 2205.09743 (motion prediction head on a shared BEV); PowerBEV and StretchBEV (BEV instance prediction; from memory, to verify); softmax splatting for the forward warp (Niklaus & Liu 2020, from memory).
 - Tests (synthetic world first, `tests/synthetic_world.py`): dt = 0 reproduces the current map; objects with known velocity appear at x + v dt for dt = +-0.5 s; the share of unknown cells grows with |dt| and none is reported as known; the refine block learns to continue a straight road into the unknown area; +dt then -dt returns to the start (consistency).
 
+### 8.3 Object head: centre points -> oriented boxes (vehicles) and circles (pedestrians), at any dt, with deformable refinement (Mirko, 2026-10-25)
+Pixel-based head (every cell is classified as an object centre or not; the box is regressed from the centre cell); the selection of centres is a detached top-K, everything after it is differentiable.
+- Input: the state at the requested time S(t_c + dt) from 8.2 (same splat + refine, in the ego frame of t_c + dt) and a dt embedding (dt, |dt|, sign) as FiLM (per-channel scale and shift) on the head's first conv, so the head knows the time it predicts for; dt = 0 is the current detection.
+- Stage 1, plain CenterPoint head (built first; also the fallback):
+  - heatmaps per class group - vehicle (car, truck, bus, trailer, construction vehicle), two-wheeler, pedestrian - with a focal loss on Gaussian targets around the GT centres (radius from the box size, CenterPoint's rule)
+  - regression at the centre cell: sub-cell offset (2); vehicles and two-wheelers: oriented box - log length, log width (2), yaw as sin, cos (2); pedestrians: circle - log radius (1); velocity (2) for all; L1 losses at the GT centres
+  - decoding: local maxima (3 x 3 max-pool, CenterNet), top-K, score threshold
+- Stage 2, iterative refinement with n = 1 (the loop allows n > 1 with shared weights):
+  - per candidate (training: top-K predictions, detached, plus GT centres with jitter; run time: top-K) 4 deformable sampling points: initialised at the centres of the 4 box faces (for circles: 4 points on the circle at 0 / 90 / 180 / 270 deg), learned bounded offsets from the centre feature in the box frame (they rotate with the box; zero start = the face centres), bilinear samples of the state's features
+  - coordinates: the sampling points' positions relative to the centre in the box frame are always an input; absolute x, y (or range, azimuth) channels only as an ablation arm - no learned layer sees absolute positions unless that arm shows a gain
+  - an MLP on [centre feature; 4 sampled features; relative offsets; dt embedding] gives residuals (dx, dy, dlog l, dlog w or dlog r, d yaw, dv) and an IoU-quality score; loss: L1 on the residual targets (GT - stage-1 box) and BCE of the score against the BEV IoU of the stage-1 box (CenterPoint's IoU-guided score)
+- The scene as a function of time (Mirko: force the network to learn it): per training sample several dt from {0, +-0.5, +-1.0 s} (keyframes: annotated boxes; sweeps: interpolated boxes, flagged, training only); GT boxes at t_c + dt in the ego frame of t_c + dt; sum_dt w(dt) (L_stage1 + L_stage2), most weight on dt = 0; an optional consistency term: the dt prediction of a constant-velocity object equals its dt = 0 box moved by v dt
+- Alternatives / fallbacks: the plain stage-1 head alone (CenterPoint without refinement); stage 2 with CenterPoint's fixed 5 points (centre + 4 face centres, no learned offsets) as the control of the deformable points; dt handled only by the 8.2 splat (no FiLM) as the control of the dt conditioning
+- Basis: CenterNet "Objects as Points" (1904.07850, from memory), CenterPoint 2006.11275 (lit: centre heatmap + regression; its second stage samples the BEV features at the box centre and the 4 face centres; MIT, `det3d/models/bbox_heads/center_head.py` for targets and loss), Deformable DETR (2010.04159, from memory: learned sampling offsets), Fast and Furious (Luo et al., CVPR 2018, from memory: detection and forecasting jointly from a temporal BEV), FIERY / BEVerse (lit: future prediction on a shared BEV)
+- Tests (synthetic world first): overfit one scene (all boxes found, BEV IoU > 0.9); objects with known velocity predicted at dt = +-0.5 s at x + v dt; pedestrian circles (radius error); refinement: BEV IoU after stage 2 > stage 1 on held-out synthetic scenes; the 4 points start on the box faces and move only where it helps; rotating the scene rotates the yaw accordingly
+- Metrics: nuScenes detection metrics in the front field of view up to 60 m (AP by centre distance 0.5 / 1 / 2 / 4 m, ATE, ASE, AOE, AVE), per range bin and per dt; ms of head and refinement
+
 ## 9. Ground truth: how it is made and how you can look at it
 
 ### 9.1 Generation (CPU, cached per frame)
@@ -296,7 +313,7 @@ No block is chained to the next before its synthetic test with a known answer pa
 | S2 | radar only: learned density g, reconstruction test, aux heads | point / pillar (R0), fixed polar Gaussian (R1) |
 | S3 | fusion | S1, S2 |
 | S4 | temporal: ego warp, stationary memory, moving memory with flow | single frame; memory without flow |
-| S5 | detection head | S4 seg only |
+| S5 | object head (8.3): a stage-1 plain centre head at dt = 0; b + dt conditioning and time targets; c + deformable refinement n = 1 | a: S4 seg only; b: a; c: b and the fixed 5-point refinement |
 
 ## 12. Decided and open questions
 
