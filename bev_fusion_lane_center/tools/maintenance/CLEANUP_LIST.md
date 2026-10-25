@@ -7,9 +7,9 @@ Nothing here is urgent for disk space: the WSL disk has 715 GB free of 1007 GB (
 | item | size | what | recommendation |
 |---|---|---|---|
 | ~~`data/nuscenes/`~~ (done 2026-10-25) | 3.0 GB | Windows copy of nuScenes **mini** (samples, sweeps, maps). The code reads the WSL copy `~/data/nuscenes`; only the default of `extract_features.py` (loop 1) names `data/nuscenes` | move to `_to_delete/` (duplicate); keep `data/splits.json` and `data/README.md` |
-| `runs/` loose files | ~250 files | old `.out`, `.log`, `.done`, `*_log.txt` of loops up to 12 | move into `_to_delete/` after loop 18 (`.done` flags of finished runs are not read any more) |
-| `runs/` dead runs | ~1 GB | `e30_s4_diverged` (642 MB), `e120_smoke`, `e121_smoke`, `e18_smoke_joint`, `e30_scene11`, `e35_B`, `e34_*` stubs | move after loop 18; **never checkpoints that a later experiment uses** (`models/REGISTRY.md` lists them) |
-| `experiment_execution/loop17_recovery/` | 0.6 MB, 128 files | replay of the loop-17 code (restored in `training/`, `evaluation/`) and its state file | move to `history/` after loop 18 (PROGRAM.md and HANDOVER.md still name it) |
+| ~~`runs/` loose files~~ (done 2026-10-25) | 185 files | moved to `_to_delete/runs_2026-10-25/loose/`; the 8 logs that experiments name and the small json / npz files stay | - |
+| `runs/` dead runs | ~1 GB | done 2026-10-25 for the smoke runs (`e120_smoke`, `e121_smoke`, `e18_smoke_joint` -> `_to_delete/runs_2026-10-25/smoke/`); KEPT: `e30_s4_diverged` and `e30_scene11` (read by `experiments/E030_*/code/make_e30.py`), `e34_*` / `e35_B` (named in E034) | move the kept ones only together with their experiment code |
+| ~~`experiment_execution/loop17_recovery/`~~ (done) | 0.6 MB | already in `experiment_execution/history/loop17_recovery/` | - |
 | `literature/sources/` | 4 MB | multi-paper notes without per-paper structure | the literature chat is reorganising `literature/`; leave to it |
 | `temp/literature_backup_2026-10-24/` | small | safety copy made by the literature chat | move when that work is filed |
 
@@ -28,7 +28,7 @@ Which ones the live code reads was checked by grep of `training/`, `evaluation/`
 | `~/exp_gcar_b123/p14/` | 6.4 GB | `chain_a/r/r2_*` (loop 14), `chainfail*` (loop 14 failure chains), `p16chain_*` of ladder designs | `p14_chain_consumer` default `chain_a`; `p16chain_f2hr_*` | candidate: `chain_r*`, `chainfail*`, `p16chain_f2l`, `f2h`, `smoke` (~4.5 GB) |
 | `~/exp_gcar_b123/*.npy, *.pkl` | ~5 GB | ground truth, priors, direction / node / route maps | partly (`graph_gt_*`, `dir_val`, `route_heat_train`, `sd_*`, `prior_*`) | keep; `node_*` (0.8 GB) and `dir_train` (1.3 GB) have no sign of use: check, then candidate |
 | `~/exp_gcar_b123/p18/` | 0.2 GB | loop 18 | yes | keep |
-| `~/exp_crn_b123/feats` | 12 GB | loop 1 CRN features (baseline, E52 two foundations) | only prep scripts | candidate after the final report; keep `graph/`, `gt/` (lane_grid selftest) |
+| `~/exp_crn_b123/feats` | 12 GB | loop 1 CRN features AND the exact-distance map `*_gt_dist_exact.npy`, the `gd` target of `p16_data` / `p16_loss` (seed, direction and builder losses) | yes | **keep** (corrected 2026-10-25: not a purge candidate; its distance map is the subject of D10) |
 | `~/exp_crn_mini`, `~/exp_gcar_mini`, `~/data/nuscenes` | 5.6 + 2.5 + 3.1 GB | mini set: loop 1, smoke tests, prep demos | prep scripts with `--mini` | candidate; the mini archive was unpacked from a download that is gone, re-download only with the user's OK |
 | `~/work/CRN`, `gaussiancar`, `bevfusion`, `gaussiancar_ckpt` | 2.4 GB | foundation code and weights | yes | keep (weights are the foundation) |
 | `~/_review_*`, `~/_verify_*`, `~/extract_blob.sh`, `run_full_stage.sh`, `run_py.sh`, `setup_env.sh`, `trim_sweeps.sh` | < 1 MB | review rounds and setup scripts of loops 1-9 | no | delete (nothing in them is data) |
@@ -47,6 +47,17 @@ Size is small (about 1 MB of code, 82 files + 28 in `legacy/` + 38 in `data/prep
 | inference variants | `pipeline/p16_{ensemble,hyst}`, `line_tracer.py`, `data/p14_chain_data.py` | nothing imports them (`p14_chain_data` is superseded by `p16_chain_data`) | move to `_to_delete/` unless a report names them |
 | `data/prep/` | 38 files | one-time builders of the caches (loops 1-5), nothing imports them; needed only to rebuild a cache | keep as one reproducibility folder, translate the German docstrings, drop `crn_prep_mini.sh`, `crn_prep_b123.sh`, `run_prep_graph.sh`, `run_centerline_gt.sh`, `gcar_pipeline1/2.sh` after folding them into a README with the order of the steps |
 | `legacy/` | 28 files, 390 KB | 10 modules are live dependencies (`eval_pert_val`, `p13_temporal_val`, `refiner`, `temporal_b`, `stability`, `route_head`, `route_head3`, `temporal_eval`, `lf_inputs`, `prior_tools`); the rest (`lane_former`, `exp_trace`, `report2`, `dense_report_lib`, `node_assemble`, `node_head`, `coast_eval`, `plan_eval`, `hold_eval`, `assoc_*`, `align_*`, `heat_align`, `field_tools`, `centerline_estimator`, `postproc`, `models_cnt`) serve the code of experiments E19-E72 | keep the live ones as `training/legacy/`; move them to `experiments/_lib/` (they belong to those experiments) |
+
+## E. Purge list for Mirko (2026-10-25; decision D5) - permanent deletes, run them yourself
+Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. Checked on 2026-10-25: nothing live reads them (grep of `training/`, `evaluation/`, `tools/`), no job runs from them. Not on the list on purpose: `~/exp_crn_b123/feats` (training target), `data/nuscenes_additions/` and the `~/data/nuscenes*` link views (owned by the bev_fusion chat), anything a running download writes.
+
+| what | size | how |
+|---|---|---|
+| `bev_fusion_lane_center/_to_delete/` (contents listed in its README) | 54 MB | PowerShell in the problem folder: `Get-ChildItem _to_delete -Exclude README.md | Remove-Item -Recurse -Force`, then empty the table of `_to_delete/README.md` |
+| WSL home: review and verify rounds of loops 1-9, setup scripts | ~140 MB | `wsl bash -c "cd ~ && rm -rf _review_* _verify_* extract_blob.sh run_full_stage.sh run_py.sh setup_env.sh trim_sweeps.sh"` |
+| `~/exp_gcar_b123/feats/{train,val}_fused32.npy` | 25 GB | regenerable (GaussianCaR pass, `training/data/prep/gcar_tools.py`); read only by the `--feats fused32` option of the dense head: `wsl bash -c "rm ~/exp_gcar_b123/feats/train_fused32.npy ~/exp_gcar_b123/feats/val_fused32.npy"` |
+| `~/exp_crn_mini`, `~/exp_gcar_mini` (mini-split copies of loop 1) | 8.3 GB | used only by prep scripts with `--mini`: `wsl bash -c "rm -rf ~/exp_crn_mini ~/exp_gcar_mini"` |
+| the Claude project key of the old folder name (`.claude/projects/C--ML-Experiment` in your user folder: memory and transcripts) | small | the memory was copied to the key of the new name (`C--Auto-research`); delete the old key when no session of the old name is open any more |
 
 ## D. Known findings of `check_structure.py` that wait for the end of loop 18
 - `experiment_execution/PROGRAM.md` names `indexes/LOOP17_STATE.md` (the loop-17 state file is `loop17_recovery/out__loop2__e17__LOOP17_STATE.md`) and a memory note outside the project; PROGRAM.md belongs to the running loop, fix it in the next plan.
