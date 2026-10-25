@@ -73,6 +73,100 @@ def rasterize(det, B, grid=None, v_max=V_MAX, harmonics=HARMONICS):
     return acc.view(B, NX, NY, 1 + P + 2).permute(0, 3, 1, 2).contiguous()
 
 
+def _slot_values(det, ix, iy, inside, grid, v_max, harmonics):
+    fx, fy = (det["x"] - grid.x_min) / grid.res, (det["y"] - grid.y_min) / grid.res
+    return torch.cat([torch.ones_like(fx)[:, None], properties(det, v_max, harmonics),
+                      (fx - ix - 0.5)[:, None], (fy - iy - 0.5)[:, None]], -1)
+
+
+def rasterize_slots(det, B, grid=None, K=3, v_max=V_MAX, harmonics=HARMONICS):
+    """Information-preserving raster: the first K detections of a cell are stored EXACTLY, one slot each (newest first, then
+    nearest to the sensor), the rest of the cell is summarised by the mean of its detections (remainder slot).
+
+    Returns (B, 1 + (K + 1) * W, NX, NY) with W = 1 + P + 2: channel 0 = number of detections in the cell (overflow is visible);
+    then K slots and the remainder slot, each [valid, properties (P), sub-cell offset (2)]. decode_slots() inverts it.
+    """
+    grid = grid or Grid()
+    NX, NY = grid.nx, grid.ny
+    P = n_properties(harmonics)
+    W = 1 + P + 2
+    fx, fy = (det["x"] - grid.x_min) / grid.res, (det["y"] - grid.y_min) / grid.res
+    ix, iy = fx.floor().long(), fy.floor().long()
+    inside = (ix >= 0) & (ix < NX) & (iy >= 0) & (iy < NY)
+    d = {k: v[inside] for k, v in det.items()}
+    ix, iy = ix[inside], iy[inside]
+    vals = _slot_values(d, ix, iy, inside, grid, v_max, harmonics)
+    cell = (d["b"] * NX + ix) * NY + iy
+    order = torch.argsort(d["r"], stable=True)                       # three stable sorts: cell, then age, then distance
+    order = order[torch.argsort(d["dt"][order], stable=True)]
+    order = order[torch.argsort(cell[order], stable=True)]
+    vals, cell = vals[order], cell[order]
+    _, inv, cnt = torch.unique_consecutive(cell, return_inverse=True, return_counts=True)
+    rank = torch.arange(len(cell), device=cell.device) - (torch.cumsum(cnt, 0) - cnt)[inv]
+    out = torch.zeros(B * NX * NY, 1 + (K + 1) * W, device=vals.device, dtype=vals.dtype)
+    out[:, 0].index_add_(0, cell, torch.ones(len(cell), device=vals.device, dtype=vals.dtype))
+    for k in range(K):
+        m = rank == k
+        out[cell[m], 1 + k * W: 1 + (k + 1) * W] = vals[m]
+    m = rank >= K
+    rem = torch.zeros(B * NX * NY, W, device=vals.device, dtype=vals.dtype)
+    rem.index_add_(0, cell[m], vals[m])
+    rem = torch.cat([(rem[:, :1] > 0).to(vals.dtype), rem[:, 1:] / rem[:, :1].clamp(min=1)], 1)
+    out[:, 1 + K * W:] = rem
+    return out.view(B, NX, NY, -1).permute(0, 3, 1, 2).contiguous()
+
+
+def decode_slots(r, grid=None, K=3, v_max=V_MAX, harmonics=HARMONICS):
+    """Inverse of rasterize_slots for the K exact slots: returns the detections (b, x, y, r, psi, vr, rcs, dt) they hold, plus the
+    remainder (cells with more than K detections: their count n - K and mean properties are in the returned 'remainder' dict).
+    vr is recovered modulo the unambiguous interval (exact for |vr| < v_max)."""
+    grid = grid or Grid()
+    P = n_properties(harmonics)
+    W = 1 + P + 2
+    B, C, NX, NY = r.shape
+    assert C == 1 + (K + 1) * W, "channel count does not match K and the harmonics"
+    x = r.permute(0, 2, 3, 1)                                         # (B, NX, NY, C)
+    bi, xi, yi = torch.meshgrid(torch.arange(B, device=r.device), torch.arange(NX, device=r.device), torch.arange(NY, device=r.device), indexing="ij")
+    outs = {k: [] for k in ["b", "x", "y", "r", "psi", "vr", "rcs", "dt"]}
+    def unpack(s, valid):
+        v = s[valid]                                                  # (n, W)
+        p = v[:, 1:1 + P]
+        ph = torch.atan2(p[:, 3], p[:, 4])                            # k = 1 pair of the Doppler code (harmonics[0] must be 1)
+        return v, p, ph
+    assert harmonics[0] == 1
+    for k in range(K):
+        s = x[..., 1 + k * W: 1 + (k + 1) * W]
+        valid = s[..., 0] > 0.5
+        v, p, ph = unpack(s, valid)
+        outs["b"].append(bi[valid]); outs["r"].append(p[:, 0] * RANGE_SCALE); outs["psi"].append(torch.atan2(p[:, 2], p[:, 1]))
+        outs["vr"].append(ph * v_max / math.pi); outs["rcs"].append(p[:, 3 + 2 * len(harmonics)] * RCS_SCALE)
+        outs["dt"].append(p[:, 4 + 2 * len(harmonics)] * AGE_SCALE)
+        outs["x"].append(grid.x_min + (xi[valid].to(v.dtype) + 0.5 + v[:, 1 + P]) * grid.res)
+        outs["y"].append(grid.y_min + (yi[valid].to(v.dtype) + 0.5 + v[:, 2 + P]) * grid.res)
+    det = {k: torch.cat(v) for k, v in outs.items()}
+    s = x[..., 1 + K * W:]
+    valid = s[..., 0] > 0.5
+    rem = {"b": bi[valid], "ix": xi[valid], "iy": yi[valid], "n": x[..., 0][valid] - K, "props": s[valid][:, 1:1 + P]}
+    return det, rem
+
+
+class RadarBEVSlots(nn.Module):
+    """Information-preserving radar block: slot raster (exact for K detections per cell) + two 3x3 convolutions.
+    forward(det, B) -> features (B, out_channels, NX, NY); with_state=True also returns the raster (the lossless state)."""
+
+    def __init__(self, grid=None, out_channels=32, K=3, v_max=V_MAX, harmonics=HARMONICS):
+        super().__init__()
+        self.grid, self.K, self.v_max, self.harmonics = grid or Grid(), K, v_max, harmonics
+        cin = 1 + (K + 1) * (1 + n_properties(harmonics) + 2)
+        self.net = nn.Sequential(nn.Conv2d(cin, out_channels, 3, padding=1), nn.ReLU(),
+                                 nn.Conv2d(out_channels, out_channels, 3, padding=1), nn.ReLU())
+
+    def forward(self, det, B, with_state=False):
+        r = rasterize_slots(det, B, self.grid, self.K, self.v_max, self.harmonics)
+        f = self.net(r)
+        return (f, r) if with_state else f
+
+
 class RadarBEV(nn.Module):
     """Raster + two 3x3 convolutions -> (B, out_channels, NX, NY), the grid of the camera BEV."""
 
@@ -162,5 +256,58 @@ def _selftest():
               f"{(time.perf_counter() - t0) * 10:.2f} ms per frame (GPU may be shared - not a timing number)")
 
 
+def _selftest_slots():
+    grid = Grid()
+    g = torch.Generator().manual_seed(1)
+
+    def rand_det(n, b=None, cells=None):
+        x = 60 * torch.rand(n, generator=g)
+        y = -26 + 52 * torch.rand(n, generator=g)
+        if cells is not None:                                      # force detections into given cells (x, y of the cell centre + jitter)
+            x = (torch.as_tensor(cells)[:, 0] + 0.5 + (torch.rand(n, generator=g) - 0.5) * 0.9) * 0.5
+            y = -26 + (torch.as_tensor(cells)[:, 1] + 0.5 + (torch.rand(n, generator=g) - 0.5) * 0.9) * 0.5
+        return {"b": torch.zeros(n, dtype=torch.long) if b is None else b, "x": x, "y": y,
+                "r": 3 + 60 * torch.rand(n, generator=g), "psi": (torch.rand(n, generator=g) - 0.5) * 6.28,
+                "vr": (torch.rand(n, generator=g) - 0.5) * 50, "rcs": 30 * (torch.rand(n, generator=g) - 0.5),
+                "dt": 0.5 * torch.rand(n, generator=g)}
+
+    def as_set(d, nd=3):
+        rows = torch.stack([d["b"].float(), d["x"], d["y"], d["r"], d["psi"], d["vr"], d["rcs"], d["dt"]], 1)
+        return rows[torch.argsort(rows[:, 1] * 1000 + rows[:, 2])]
+
+    # 1 distinct cells: the raster is exactly invertible (all eight fields, two frames)
+    ix = torch.arange(100)
+    cells = torch.stack([ix % 120, (ix * 7) % 104], 1)
+    d = rand_det(100, b=(ix % 2), cells=cells)
+    r = rasterize_slots(d, 2, grid, K=3)
+    assert r.shape == (2, 1 + 4 * 14, 120, 104)
+    dec, rem = decode_slots(r, grid, K=3)
+    a, b = as_set(d), as_set(dec)
+    assert len(a) == len(b) == 100 and (a - b).abs().max() < 2e-4, f"round trip {(a - b).abs().max()}"
+    assert rem["n"].numel() == 0
+    # 2 several detections in one cell (up to K): all recovered individually; K + 2: K exact + a remainder with count and mean
+    for n_in in (2, 3, 5):
+        d = rand_det(n_in, cells=torch.tensor([[40, 50]] * n_in))
+        dec, rem = decode_slots(rasterize_slots(d, 1, grid, K=3), grid, K=3)
+        assert len(dec["x"]) == min(n_in, 3)
+        if n_in > 3:
+            assert rem["n"].tolist() == [float(n_in - 3)] and rem["ix"].tolist() == [40]
+            kept = torch.argsort(torch.argsort(d["dt"]))             # newest (smallest dt) first
+            first = {round(v, 4) for v in d["r"][kept < 3].tolist()}
+            assert {round(v, 4) for v in dec["r"].tolist()} == first, "the K newest are kept exactly"
+            mean_r = d["r"][kept >= 3].mean() / RANGE_SCALE
+            assert abs(rem["props"][0, 0].item() - mean_r.item()) < 1e-5, "remainder is the mean of the rest"
+        else:
+            assert (as_set(d) - as_set(dec)).abs().max() < 2e-4
+    # 3 the count channel shows the overflow; the module returns features and the lossless state
+    m = RadarBEVSlots(out_channels=32, K=3)
+    f, st = m(d, 1, with_state=True)
+    assert f.shape == (1, 32, 120, 104) and st[0, 0, 40, 50] == 5
+    f.sum().backward()
+    assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in m.parameters())
+    print("radar_bev slots selftest ok: exact round trip of eight fields (K = 3), several detections per cell, overflow count and remainder mean, module")
+
+
 if __name__ == "__main__":
     _selftest()
+    _selftest_slots()

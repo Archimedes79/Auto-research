@@ -2,6 +2,34 @@
 
 Working document of the radar block (plan.md section 3 is the agreed state; this file collects the ideas until one is chosen). The camera block is fixed: lift PD, V(cell) = c(pixel) * p(depth of the cell | pixel), gathered through a lookup table per calibration (plan.md section 2).
 
+## A. The radar path as built (log of 2026-10-25, for the temporal-fusion chat) and the information-preserving encoder
+Settled chain (Mirko 2026-10-25; code `training/radar_bev.py`, self-tests pass):
+1. adapter (per dataset / rig): detections of each radar sweep as r (range from the sensor), azimuth phi in the sensor frame, ego-compensated radial velocity vr, rcs, quality codes, the sweep time, and the sensor pose (sx, sy, yaw in the vehicle frame) -> `to_vehicle` gives x, y and the ray direction psi in the vehicle frame
+2. time alignment at POINT level, before any raster: ego motion (v, omega, dt: `splat.splat_positions`) moves x, y to the target time; the ray direction is the ORIGINAL ray rotated rigidly with the frame (psi - omega dt), never recomputed from the moved position (the Doppler was measured along the original ray); dt = age stays as a property
+3. encoder = raster in the 0.5 m BEV grid (120 x 104, same grid and index order (x, y) as the camera BEV) with 11 properties per detection - distance r / 60, direction cos / sin psi, Doppler as a circular code (sin / cos of k pi vr / v_max, k = 1, 2, 4; v_max = 30 m/s is a sensor property), rcs / 20, age / 0.5 s - plus the sub-cell offset (dx, dy) and the count
+   - R0 `rasterize`: one mean per cell (14 channels): the simple block
+   - R1 `rasterize_slots`: the information-preserving form: the K = 3 first detections of a cell (newest first, then nearest) are stored exactly in slots, the rest as a remainder mean with its count (57 channels); `decode_slots` is its exact inverse (round trip tested to 2e-4 on all eight fields)
+4. two 3 x 3 convolutions -> radar BEV features (B, 32, 120, 104) (`RadarBEV`, `RadarBEVSlots`; the slot version can also return its raster as the lossless state)
+5. radar-only auxiliary head (training only) and the fusion / temporal blocks read the radar BEV; the temporal chat moves it from the radar time t_r to the camera time t_c
+
+What the raster loses - measured on nuScenes mini (404 keyframes, 262,827 detections of 5 radars in the 0.5 s window, ego-aligned, front grid; `temp/radar/radar_collision_stats.py`, `radar_cell_dispersion.py`):
+| | one sweep per radar (0.1 s) | 0.5 s (about 6 sweeps) |
+|---|---|---|
+| detections per frame inside the front grid (median) | 195 | 674 |
+| share of detections that sit in a cell with another detection (merged by a per-cell mean) | 34 % | 56 % |
+| most detections in one cell | 8 | 19 |
+| share kept exactly by K = 1 / 2 / 3 / 4 / 6 slots | 81 / 96 / 99.3 / 99.8 / 100 % | 62 / 81 / 89 / 94 / 98 % |
+Error of a detection reconstructed from its cell mean (the 56 % that are merged), median / 90 % quantile: position 0.10 / 0.20 m, distance from the sensor 0.24 / 1.35 m, direction 0.34 / 2.6 deg, radial velocity 0.04 / 0.21 m/s, RCS 1.4 / 4.9 dB, age 0.09 / 0.22 s; worst cases (maximum): radial velocity 40 m/s, direction 37 deg, distance 5 m (presumably a moving and a static return, or two different sensors, in one cell). With 3 exact slots + remainder, 91.3 % of the detections are stored exactly and only 8.7 % are still represented by a shared mean; the error of those remaining ones is smaller than before (median: distance 0.08 m, direction 0.17 deg, vr 0.01 m/s, RCS 0.8 dB), because only the most crowded cells overflow.
+Reading: merged detections are mostly repeated measurements of the same static point, so the mean is a fair summary; what it loses is the identity of the sensor and the sweep (direction, distance, age), the spread of RCS, and the occasional moving-over-static mix. The slot raster keeps these for 91 % of the detections at no learning cost and tells the network when it overflowed (count channel, remainder slot).
+
+Do the LEARNED features keep the information? Reconstruction test (`temp/radar/radar_recon_test.py`, result `radar_recon_result.txt`: a 1 x 1 decoder rebuilds the raster from the two-convolution features; error per ORIGINAL test detection at its cell / slot; tolerance: position 0.25 m, distance 0.5 m, direction 3 deg, vr 0.5 m/s, RCS 3 dB, age 0.1 s all at once; 2 test scenes, 50,712 detections):
+RECON_TABLE_PLACEHOLDER
+
+Interface notes for the temporal fusion (what breaks when a raster is moved in time):
+- warping or splatting the finished radar raster resamples it: channels with a geometric meaning break - the sub-cell offsets (dx, dy) are invalid after any shift (they must be recomputed from the moved position), the direction (cos psi, sin psi) is a vector (it must be rotated by the ego yaw change), circular means shrink in length when different phases are averaged, and slot identity is lost when two cells merge. Scalars (distance, Doppler magnitude via its phase, RCS) survive but blur; the count is conserved by a normalised splat; the age must grow by dt.
+- therefore: align the DETECTIONS (points) to the target time with `splat_positions` and rasterise ONCE (the point-level alternative the temporal plan already names, "or per detection at point level"); the hop t_r -> t_c can be done the same way (second, cheap raster at t_c from points moved by ego motion, radial Doppler and the velocity head's tangential part), so the radar raster is never resampled. Only the long memory (static map, moving memory) is a resampled state, and it is a state of the fused BEV, not the information-preserving radar channels.
+- what the fusion should read per cell: the radar features (32), the count (mass) and the youngest age (slot 0's age channel, or the mean age of R0) as confidence, and optionally the raw slot raster (57 channels) as a lossless skip.
+
 ## 0. What a nuScenes radar measurement looks like (measured, `temp/radar/radar_stats.py`, 300 random sweeps per radar, all detections, no filters)
 | radar | detections per sweep (median / max) | range 1 / 50 / 99 % | beyond 60 m | azimuth 1 / 99 % |
 |---|---|---|---|---|
