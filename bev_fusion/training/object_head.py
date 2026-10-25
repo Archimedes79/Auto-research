@@ -166,6 +166,86 @@ def decode(out, grid, groups=GROUPS, k=50, threshold=0.2, from_probabilities=Fal
     return res
 
 
+class TimeObjectHead(ObjectHead):
+    """The head as a function of time (Mirko, 2026-10-26; plan 8.3 S5b, learned arm): the same head, its shared
+    features modulated per channel by the time offset (FiLM: scale and shift from an MLP on dt, |dt|, sign(dt));
+    forward(feat, dt) predicts the boxes at t + dt in the ego frame of t + dt. The FiLM starts as the identity, so
+    dt = 0 behaves like ObjectHead; trained with several dt per scene against the GT boxes at t + dt."""
+
+    def __init__(self, cin, groups=GROUPS, hidden=64):
+        super().__init__(cin, groups, hidden)
+        self.film = nn.Sequential(nn.Linear(3, 64), nn.ReLU(), nn.Linear(64, 2 * hidden))
+        nn.init.zeros_(self.film[2].weight)
+        nn.init.zeros_(self.film[2].bias)
+
+    def forward(self, feat, dt):
+        dt = torch.as_tensor(dt, dtype=feat.dtype, device=feat.device).reshape(-1).expand(feat.shape[0])
+        e = torch.stack([dt, dt.abs(), torch.sign(dt)], -1)
+        gamma, beta = self.film(e).chunk(2, -1)
+        x = self.shared(feat)
+        x = x * (1 + gamma[..., None, None]) + beta[..., None, None]
+        return {k: getattr(self, k)(x) for k in ("hm", "off", "size", "rot", "rad", "vel")}
+
+
+# ------------------------------------------------------------------------------------------------ S5b: boxes in time
+def propagate_box_tensors(centre, yaw, vel, steps, delta=None, dyaw=None):
+    """S5b (plan 8.3): move boxes to another time with the splat's position function (training/splat.py).
+    centre (B, N, 2), yaw (B, N) or None (circles), vel (B, N, 2) box velocity in the source axes; steps =
+    [(dt_i, v_i, omega_i), ...] ego steps from the source to the target time (any sign of dt); delta (B, N, 2), dyaw
+    (B, N): an optional learned correction. Returns centre', yaw', vel' in the target frame; size / radius unchanged.
+    Differentiable in every input (the loss on the propagated box trains the velocity head and the correction)."""
+    try:
+        from .splat import chain_positions
+    except ImportError:
+        from splat import chain_positions
+    c = chain_positions(centre, steps, vel, delta)
+    th = sum(float(s[0]) * float(s[2]) for s in steps)
+    co, si = math.cos(th), math.sin(th)
+    v2 = torch.stack([co * vel[..., 0] + si * vel[..., 1], -si * vel[..., 0] + co * vel[..., 1]], -1)
+    y2 = None if yaw is None else yaw - th + (dyaw if dyaw is not None else 0.0)
+    return c, y2, v2
+
+
+def propagate_boxes(boxes, steps):
+    """The same for decoded box dicts (constant velocity, no correction): list of dicts -> list of dicts at the target
+    time."""
+    if not boxes:
+        return []
+    ctr = torch.tensor([[[b["cx"], b["cy"]] for b in boxes]], dtype=torch.float64)
+    vel = torch.tensor([[[b["vx"], b["vy"]] for b in boxes]], dtype=torch.float64)
+    yaw = torch.tensor([[b.get("yaw", 0.0) for b in boxes]], dtype=torch.float64)
+    c, y, v = propagate_box_tensors(ctr, yaw, vel, steps)
+    out = []
+    for i, b in enumerate(boxes):
+        nb = dict(b, cx=c[0, i, 0].item(), cy=c[0, i, 1].item(), vx=v[0, i, 0].item(), vy=v[0, i, 1].item())
+        if "yaw" in b:
+            nb["yaw"] = y[0, i].item()
+        out.append(nb)
+    return out
+
+
+class BoxCorrection(nn.Module):
+    """Bounded learned correction of a propagated box (S5b): (delta x, delta y, delta yaw) from the box's centre feature
+    and the ego / time inputs (v, omega, dt, v dt, omega dt) and the box velocity; zero start, |delta| <= d_max m,
+    |delta yaw| <= yaw_max rad. For objects that accelerate or turn (constant velocity is the model without it)."""
+
+    def __init__(self, cin, hidden=64, d_max=1.0, yaw_max=0.3):
+        super().__init__()
+        self.net = nn.Sequential(nn.Linear(cin + 7, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU(),
+                                 nn.Linear(hidden, 3))
+        nn.init.zeros_(self.net[4].weight)
+        nn.init.zeros_(self.net[4].bias)
+        self.d_max, self.yaw_max = d_max, yaw_max
+
+    def forward(self, feat, vel, dt, v, omega):
+        """feat (B, N, C) centre features, vel (B, N, 2); dt, v, omega scalars -> delta (B, N, 2), dyaw (B, N)."""
+        B, N = feat.shape[:2]
+        e = torch.tensor([v, omega, dt, v * dt, omega * dt], dtype=feat.dtype, device=feat.device).expand(B, N, 5)
+        raw = self.net(torch.cat([feat, vel, e], -1))
+        d = self.d_max * torch.tanh(raw[..., :2] / self.d_max)
+        return d, self.yaw_max * torch.tanh(raw[..., 2] / self.yaw_max)
+
+
 def targets_as_output(t, grid):
     """Perfect head output from targets (self-test): hm as probabilities, regressions written at the centre cells."""
     B, G, X, Y = t["hm"].shape
@@ -217,8 +297,21 @@ def _selftest():
     flat = focal_loss(torch.full_like(t["hm"], -2.19), t["hm"])
     good = focal_loss(torch.logit(t["hm"].clamp(1e-4, 1 - 1e-4)), t["hm"])
     assert good < flat
+    # 4 S5b: a box moving at 10 m/s, ego standing still: after 0.5 s it is 5 m further, heading and velocity kept;
+    #   with ego yaw rate the heading turns by -omega dt; forward then backward returns to the start
+    b0 = [{"group": "car", "cx": 20.0, "cy": 2.0, "length": 4.5, "width": 1.8, "yaw": 0.0, "vx": 10.0, "vy": 0.0}]
+    b1 = propagate_boxes(b0, [(0.5, 0.0, 0.0)])[0]
+    assert abs(b1["cx"] - 25.0) < 1e-9 and abs(b1["cy"] - 2.0) < 1e-9 and abs(b1["vx"] - 10.0) < 1e-9
+    b2 = propagate_boxes(b0, [(0.5, 8.0, 0.4)])[0]
+    assert abs(b2["yaw"] + 0.2) < 1e-9
+    b3 = propagate_boxes([b2], [(-0.5, 8.0, 0.4)])[0]
+    assert abs(b3["cx"] - 20.0) < 0.02 and abs(b3["cy"] - 2.0) < 0.02 and abs(b3["yaw"]) < 1e-9
+    corr = BoxCorrection(cin=8)
+    d, dy = corr(torch.randn(1, 3, 8), torch.randn(1, 3, 2), 0.5, 10.0, 0.1)
+    assert d.abs().max() == 0 and dy.abs().max() == 0, "correction starts at zero"
     print("object_head selftest ok: perfect targets decode to the GT boxes (centre, size, yaw, radius, velocity), "
-          "shapes, finite loss with gradients in every branch, focal loss ordering")
+          "shapes, finite loss with gradients in every branch, focal loss ordering, box propagation (S5b), "
+          "correction zero start")
 
 
 if __name__ == "__main__":

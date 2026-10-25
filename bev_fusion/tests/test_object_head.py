@@ -31,12 +31,25 @@ DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9
 QUICK = "--quick" in sys.argv
 
 
-def scene_inputs(scene):
+def scene_boxes(scene):
+    """GT box dicts of a scene (pedestrians as circles, radius = half the larger side)."""
+    boxes = []
+    for b in scene.boxes:
+        d = {"group": b.cls, "cx": b.cx, "cy": b.cy, "vx": b.vx, "vy": b.vy}
+        if b.cls == "pedestrian":
+            d["radius"] = max(b.length, b.width) / 2
+        else:
+            d.update(length=b.length, width=b.width, yaw=b.heading)
+        boxes.append(d)
+    return boxes
+
+
+def scene_inputs(scene, ss=4):
     """(4, X, Y) input maps and the GT box list of a scene."""
-    now = gt_bev(scene, G)
+    now = gt_bev(scene, G, ss)
     past = scene.__class__(boxes=[b.__class__(**{**b.__dict__, "cx": b.cx - 0.5 * b.vx, "cy": b.cy - 0.5 * b.vy})
                                   for b in scene.boxes], lanes=scene.lanes, lane_pose=scene.lane_pose)
-    pg = gt_bev(past, G)
+    pg = gt_bev(past, G, ss)
     x = torch.stack([now["vehicles"], now["pedestrians"], now["lanes"], torch.maximum(pg["vehicles"], pg["pedestrians"])])
     boxes = []
     for b in scene.boxes:
