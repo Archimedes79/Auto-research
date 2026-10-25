@@ -208,6 +208,7 @@ The function g works in the sensor's polar frame, so it learns range-like and az
 
 - camera lift: image backbone + lookup tables, height kept as channels (feat[z_car]); lifts P / S / PD compared in S1, PD recommended because it keeps the depth uncertainty and is a pure gather (section 2)
 - first building block FIXED (Mirko, 2026-10-25): the camera block produces the world voxel map with lift PD (pull with depth weight); P and S stay in S1 only as controls; the next design topic is the radar
+- kept for later (Mirko, 2026-10-25): PD-G in inverse depth (mixture in 1/z, exact voxel mass, section 2.4); the categorical lift PD on the pre-trained head stays the working version until then
 
 ### Proposed, not yet objected to
 - depth bins: 80, 1-60 m, linear-increasing spacing (CaDDN LID: a few cm near, about 1.5 m at 60 m)
