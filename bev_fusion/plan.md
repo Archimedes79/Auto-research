@@ -265,6 +265,59 @@ Pixel-based head (every cell is classified as an object centre or not; the box i
 - Tests (synthetic world first): overfit one scene (all boxes found, BEV IoU > 0.9); objects with known velocity predicted at dt = +-0.5 s at x + v dt; pedestrian circles (radius error); refinement: BEV IoU after stage 2 > stage 1 on held-out synthetic scenes; the 4 points start on the box faces and move only where it helps; rotating the scene rotates the yaw accordingly
 - Metrics: nuScenes detection metrics in the front field of view up to 60 m (AP by centre distance 0.5 / 1 / 2 / 4 m, ATE, ASE, AOE, AVE), per range bin and per dt; ms of head and refinement
 
+### 8.4 Loss specification - PROPOSAL for review (2026-10-26, not decided)
+Why: before this section the losses were scattered (the object head's complete in code; the semantic head one sentence; motion, dt, auxiliary and the total undefined). Everything here refers to GT layers that exist (`training/gt_bev.py`) and to heads that exist or are specified (8.2, 8.3).
+
+**Principles**
+- every term is normalised by its own count (valid cells, positives, objects), so all terms are of order 1 and comparable; fixed ratios inside a head, learned weights only between task groups
+- masks decide what is supervised; "undefined" (neither camera nor radar sees it) is never supervised
+- every loss is evaluated at the TARGET time t_c + dt against the GT of that time (8.2), dt-weighted
+- the GT is not exact (map registration offset of 0.5-1 m in places, 9.5): lines are supervised with a tolerance and per-frame weights, never at the exact cell alone
+
+**Masks (what each mask does)**
+| mask (from the GT) | map layers (areas, lines, centre-lines) | objects, velocity |
+|---|---|---|
+| undefined | weight 0 | weight 0 (also no negatives) |
+| occluded (behind a GT box seen from the camera) | weight 0.5 (the map is inferable from context and the planner needs it; arm: 0 / 1) | the centre is supervised if in (camera and not occluded) or radar coverage; otherwise ignored (neither positive nor negative) |
+| camera / radar coverage | all defined cells; the camera aux head only camera and not occluded, the radar aux head only radar coverage | as above |
+| unknown at the target time (splat mass < 0.5, dt != 0) | supervised with weight 0.5 (this is what teaches the refine block to fill in); reported separately | same |
+| interpolated labels (12 Hz sweeps, training only) | map exact: weight 1 | boxes: weight 0.5; evaluation only on keyframes |
+
+**Losses per output**
+| output (head) | loss | note |
+|---|---|---|
+| areas (5 layers; semantic head) | BCE on the soft coverage fraction (targets in [0, 1]) + 0.5 x (1 - soft IoU), per layer | |
+| lines (lane divider, road divider; semantic head) | (a) soft Dice between the predicted mask and the GT mask DILATED by 1 cell (tolerance +-0.5 m: a +-1 cell shift costs nothing, a 3-cell shift does); (b) Huber (delta 0.5 m) on the truncated distance field (metres), weight 1 for cells with GT distance < 1 m, 0.25 elsewhere; the line is decoded sub-cell from the field | thin structures: the field gives position below the cell size, the dilated Dice avoids punishing registration noise |
+| centre-lines (mask + direction; semantic head, later stage) | the same dilated Dice for the mask + L1 on the unit direction (cos, sin) at mask cells, weight 0.5 | link to the lane project; off until the S1 baseline exists |
+| objects, dense (3 groups; semantic head) | BCE on the footprint coverage + soft IoU | free space for the planner; may be dropped once the object head runs (ablation) |
+| object head stage 1 (8.3) | as implemented (`object_head.head_loss`): CenterNet focal loss (alpha 2, beta 4) / peaks + L1 on offset, log size, yaw (sin, cos normalised), log radius, velocity x 0.2 | complete, tested |
+| object head stage 2 (8.3, not built) | L1 on the residuals (GT - stage-1 box) + BCE of the quality score against the BEV IoU of the stage-1 box | |
+| motion head (8.2; `MotionHead.loss`) | L1 to the GT velocity per cell on object cells (GT set to 0 below 1 m/s; boxes whose devkit velocity is NaN, from memory: boxes without a neighbouring annotation, are masked) + 0.1 x L1 to 0 on the other cells | the radar Doppler channels are in the state; optional consistency: 0.1 x L1 between the object head's `vel` at the GT centres and the motion field there |
+| splat correction (7.1) | no own loss: trained through the dt != 0 losses; an L2 penalty 0.01 x |delta|^2 keeps it a correction (bound 1 m) | |
+| camera aux head (training only) | the main losses on areas, lines, objects, only camera and not occluded cells, weight 0.3 | catches sensor-specific failures |
+| radar aux head (training only) | (a) objects as the main loss on radar coverage; (b) STATIONARY STRUCTURE map: target = footprints of stationary annotated objects (boxes with speed < 0.5 m/s: parked vehicles, standing pedestrians) + a 1 m band along the edge of the drivable area; BCE + Dice, radar coverage, weight 0.3 | nuScenes has no guard-rail or kerb GT and no lidar: this is a PROXY (drivable-area edge ~ road boundary); the earlier "occupied by something that does not move" target is not available |
+| radar slot decoder (training only, optional) | valid BCE + L1 on properties and offsets at valid slots (as `radar_recon_test.py`), weight 0.1 | only if the 32-channel radar features are used without the raster skip (section A of `radar_encoding.md`) |
+| depth | none | the camera heads are frozen and there is no depth GT (no lidar); if unfrozen, the pretrained depth head stays frozen |
+
+**Time (the dt-weighted multi-time loss)**
+- total(sample) = sum over dt in {0, +-0.5 s (the neighbouring keyframes), +-1.0 s where the keyframes k +- 2 exist} of w(dt) x sum over heads of L_head(dt), with w(0) = 1, w(+-0.5) = 0.5, w(+-1.0) = 0.25 (per sign); GT of the keyframe at that time (annotated, exact), ego steps from the poses
+- warm-up: dt = 0 only for the first 20 % of the steps, then the dt != 0 terms ramp in linearly over the next 20 %; modality dropout (p = 0.15-0.2) from the second epoch
+- optional consistency (arm): the dt prediction of a constant-velocity object = its dt = 0 box moved by v dt, weight 0.1
+
+**Weighting between tasks**
+- four groups: map areas, lines + centre-lines, objects (dense + instances), motion; learned uncertainty weights (Kendall et al., 1705.07115, lit): L = sum_g exp(-s_g) L_g + s_g with s_g = log sigma_g^2 clamped to [-3, 1] (the clamp keeps the thin lines from being starved), start s_g = 0; GradNorm (1711.02257) only if one group starves
+- aux heads and the radar decoder: fixed weights (0.3 / 0.1), not learned: they are scaffolding
+- gradient clipping at norm 10, lr and BatchNorm precautions from the lane project (clip, roll-back guard)
+
+**Registration robustness (lines, area edges)**
+- (i) tolerance in the loss (dilated Dice, Huber's flat region) - always; (ii) a per-frame weight w_reg in [0.2, 1] from a registration estimate (lateral peak of the image contrast along the projected dividers within +-0.25 m: 1, within +-0.75 m: 0.5, otherwise 0.2; frames without an estimate: 1) once the estimator exists; (iii) metrics at tolerance 0 / 0.5 / 1.0 m, not only at the exact cell; (iv) arm: shift the GT layers per frame by the estimated offset where the peak is clear, flag the rest
+
+**Metrics reported next to the losses** (not used for training): IoU per layer per range bin (0-20, 20-40, 40-60 m) at the three tolerances; known / unknown cells for dt != 0; detection AP and AVE per range and dt; ms per frame
+
+**Tests (known answers, before any training)**: BCE on soft targets = the analytic value; the dilated Dice is 0 for a 1-cell shift and > 0 for 3 cells; Huber zero for the exact field; cells with weight 0 give exactly zero gradient; doubling the map area leaves every normalised term unchanged; the Kendall weights stay inside the clamp; the total is finite and decreases when overfitting one synthetic scene
+
+**Decisions needed from Mirko**: (1) weight of occluded map cells (0 / 0.5 / 1); (2) keep the dense object coverage in the semantic head or only the object head; (3) is the drivable-area-edge + parked-object proxy acceptable as the radar stationary target; (4) registration: tolerance only first, estimator later, or estimate-and-shift now; (5) w(dt) = 1 / 0.5 / 0.25 and the warm-up; (6) learned (Kendall) or fixed weights between the four groups
+
 ## 9. Ground truth: how it is made and how you can look at it
 
 ### 9.1 Generation (CPU, cached per frame)
