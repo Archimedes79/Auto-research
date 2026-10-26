@@ -17,15 +17,13 @@
    "seeds": [
     0,
     1,
-    2,
-    3
+    2
    ],
-   "note": "all four evaluated with evaluate.py (new registry names e24_j1rc_s0..s3) so that topo_F1 and R@1_far are on the cards; stored seeds 0 / 1 are re-evaluated, not re-trained",
+   "note": "all four evaluated with evaluate.py (new registry names e24_j1rc_s0..s3) so that topo_F1 and R@1_far are on the cards; stored seeds 0 / 1 are re-evaluated, not re-trained | pair 3 cancelled at 02:33 (machine shared with other chats): read with three pairs",
    "names": [
     "e24_j1rc_s0",
     "e24_j1rc_s1",
-    "e24_j1rc_s2",
-    "e24_j1rc_s3"
+    "e24_j1rc_s2"
    ]
   },
   "c": {
@@ -34,15 +32,13 @@
    "seeds": [
     0,
     1,
-    2,
-    3
+    2
    ],
-   "note": "registry names e24_j1eq_s0..s3",
+   "note": "registry names e24_j1eq_s0..s3 | pair 3 cancelled at 02:33 (machine shared with other chats): read with three pairs",
    "names": [
     "e24_j1eq_s0",
     "e24_j1eq_s1",
-    "e24_j1eq_s2",
-    "e24_j1eq_s3"
+    "e24_j1eq_s2"
    ]
   }
  },

@@ -14,12 +14,27 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 11553,
  "created": "2026-10-25T21:52:25",
- "status": "running",
+ "status": "ok",
  "after": "E237.a1",
  "timeout_min": 0,
  "started": "2026-10-25T23:24:56",
  "code_hash": "c83c64d4598d",
  "commit": "50cf7b9d49",
  "tag": "lcr/E244.b0",
- "git_note": ""
+ "git_note": "",
+ "pid": 37335,
+ "exit": 0,
+ "duration_s": 3353,
+ "attempts": 1,
+ "ended": "2026-10-26T00:20:49",
+ "last_lines": [
+  "=== attempt 2026-10-25T23:24:56: env P19_REC_CLAMP=8.0 bash temp/loop19/train_j1.sh e24_D7_j1cl8s0 0 1.0 e24_j1cl8_s0",
+  "env: LCR_DIST_DIR=default P19_REC_CLAMP=8.0 P18_FAR_W=0",
+  "it 4800/4800 2770s share 0.00 seed_pos 0.217 seed_dir 0.073 seed_val 0.036 ver 0.203 pos 0.454 val 0.170 cov 0.000 prec 0.456 rec 0.308 dup 0.295 link 0.150 junc 0.160 aux_seed 0.540 aux_dir 0.088 ver_pos 0.252 child_ok 0.174 child_near 0.251 link_pos 0.106 tot 3.047 gn 5.424",
+  "e24_D7_j1cl8s0 S 0.7286 tau 0.6 F1@1 0.8676 F1@.5 0.6957 J 0.195 Sp 0.967 v100 14.8 FL 0.033",
+  "_py14.sh: evaluation/evaluate.py",
+  "e24_j1cl8_s0 on val (873 frames), commit 4f51c02+?, assembly 35.0 ms per frame (CPU), metrics 79 s",
+  "  S 0.768  Q 0.733  F1@1.0 0.863  J 0.409  topo_F1 0.738  lanes_found 0.678  R@1_far 0.691  false_len_frac 0.041  dup_frac 0.046  vert100 14.767",
+  "card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e24_j1cl8_s0/val.json"
+ ]
 }

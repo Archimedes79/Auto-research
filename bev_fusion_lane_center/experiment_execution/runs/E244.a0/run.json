@@ -14,7 +14,31 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 37712,
  "created": "2026-10-25T23:26:13",
- "status": "waiting",
+ "status": "failed",
  "after": "E244.b0",
- "timeout_min": 0
+ "timeout_min": 0,
+ "started": "2026-10-26T00:21:13",
+ "code_hash": "43d589c69d32",
+ "commit": "637c0f8eb5",
+ "tag": "lcr/E244.a0",
+ "git_note": "",
+ "pid": 56142,
+ "exit": 1,
+ "duration_s": 7957,
+ "attempts": 1,
+ "ended": "2026-10-26T02:33:50",
+ "last_lines": [
+  "unc 0.159 aux_seed 0.514 aux_dir 0.083 ver_pos 0.245 child_ok 0.169 child_near 0.245 link_pos 0.110 tot 3.699 gn 5.260",
+  "it 2300/4800 2417s share 0.00 seed_pos 0.225 seed_dir 0.071 seed_val 0.042 ver 0.209 pos 0.456 val 0.202 cov 0.000 prec 0.441 rec 1.053 phd 1.538 dup 0.220 link 0.164 junc 0.168 aux_seed 0.548 aux_dir 0.089 ver_pos 0.250 child_ok 0.176 child_near 0.255 link_pos 0.112 tot 3.764 gn 5.225",
+  "it 2400/4800 2549s share 0.00 seed_pos 0.228 seed_dir 0.076 seed_val 0.044 ver 0.203 pos 0.458 val 0.200 cov 0.000 prec 0.462 rec 1.058 phd 1.552 dup 0.212 link 0.169 junc 0.159 aux_seed 0.527 aux_dir 0.091 ver_pos 0.247 child_ok 0.170 child_near 0.248 link_pos 0.109 tot 3.778 gn 6.032",
+  "it 2500/4800 2695s share 0.00 seed_pos 0.222 seed_dir 0.071 seed_val 0.040 ver 0.207 pos 0.454 val 0.204 cov 0.000 prec 0.445 rec 1.050 phd 1.533 dup 0.217 link 0.161 junc 0.164 aux_seed 0.544 aux_dir 0.085 ver_pos 0.249 child_ok 0.175 child_near 0.253 link_pos 0.109 tot 3.745 gn 5.861",
+  "it 2600/4800 2826s share 0.00 seed_pos 0.217 seed_dir 0.075 seed_val 0.040 ver 0.194 pos 0.448 val 0.199 cov 0.000 prec 0.445 rec 1.035 phd 1.531 dup 0.214 link 0.163 junc 0.161 aux_seed 0.528 aux_dir 0.088 ver_pos 0.243 child_ok 0.173 child_near 0.250 link_pos 0.110 tot 3.700 gn 5.230",
+  "it 2700/4800 2936s share 0.00 seed_pos 0.217 seed_dir 0.072 seed_val 0.039 ver 0.201 pos 0.458 val 0.203 cov 0.000 prec 0.453 rec 1.051 phd 1.534 dup 0.213 link 0.161 junc 0.158 aux_seed 0.530 aux_dir 0.085 ver_pos 0.249 child_ok 0.172 child_near 0.250 link_pos 0.111 tot 3.736 gn 7.416",
+  "it 2800/4800 3049s share 0.00 seed_pos 0.215 seed_dir 0.071 seed_val 0.039 ver 0.203 pos 0.458 val 0.200 cov 0.000 prec 0.456 rec 1.059 phd 1.531 dup 0.210 link 0.159 junc 0.162 aux_seed 0.521 aux_dir 0.086 ver_pos 0.247 child_ok 0.169 child_near 0.247 link_pos 0.110 tot 3.730 gn 5.497",
+  "it 2900/4800 3192s share 0.00 seed_pos 0.219 seed_dir 0.074 seed_val 0.040 ver 0.201 pos 0.458 val 0.201 cov 0.000 prec 0.462 rec 1.058 phd 1.543 dup 0.209 link 0.164 junc 0.163 aux_seed 0.527 aux_dir 0.090 ver_pos 0.248 child_ok 0.168 child_near 0.247 link_pos 0.110 tot 3.758 gn 5.617",
+  "it 3000/4800 3368s share 0.00 seed_pos 0.228 seed_dir 0.078 seed_val 0.043 ver 0.204 pos 0.460 val 0.203 cov 0.000 prec 0.457 rec 1.067 phd 1.544 dup 0.212 link 0.165 junc 0.164 aux_seed 0.539 aux_dir 0.097 ver_pos 0.248 child_ok 0.170 child_near 0.250 link_pos 0.108 tot 3.786 gn 5.551",
+  "it 3100/4800 5790s share 0.00 seed_pos 0.223 seed_dir 0.075 seed_val 0.040 ver 0.204 pos 0.458 val 0.204 cov 0.000 prec 0.461 rec 1.071 phd 1.551 dup 0.213 link 0.161 junc 0.159 aux_seed 0.538 aux_dir 0.092 ver_pos 0.248 child_ok 0.172 child_near 0.251 link_pos 0.110 tot 3.772 gn 6.298",
+  "it 3200/4800 7209s share 0.00 seed_pos 0.213 seed_dir 0.066 seed_val 0.040 ver 0.201 pos 0.458 val 0.203 cov 0.000 prec 0.445 rec 1.057 phd 1.532 dup 0.211 link 0.162 junc 0.162 aux_seed 0.527 aux_dir 0.085 ver_pos 0.252 child_ok 0.173 child_near 0.249 link_pos 0.111 tot 3.723 gn 5.350",
+  "Terminated"
+ ]
 }
