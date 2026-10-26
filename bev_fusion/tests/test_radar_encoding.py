@@ -199,6 +199,9 @@ def level_c(steps, ceiling):
     print(f"C  learned encoder (2 x 3x3 conv) + 1x1 decoder, slot raster K = 3, {steps} steps; recovered = all fields "
           "within tolerance; ceiling (B, K = 3, 0.5 m) " + f"{100 * ceiling:.1f}%")
     tr, te = rt.load(set(range(8))), rt.load({8, 9})
+    _, ok_or = rt.evaluate("S", None, te)                  # the oracle decodes the raster itself: own slot OR the remainder mean
+    ceiling = ok_or.float().mean().item()                  # (the remainder matches the redundant sweeps: 95.0%, above the strict 87.7%)
+    print(f"  oracle decode of the raster: {100 * ceiling:.1f}% - this is the ceiling used below")
     print("  variant           | held-out | train | gap  | held-out median: " + ", ".join(rt.TOL))
     res = {}
     for name, variant, C in (("plain C=64", "plain", 64), ("tolweight C=64", "tolweight", 64),
