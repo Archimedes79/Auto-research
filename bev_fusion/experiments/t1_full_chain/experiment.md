@@ -121,5 +121,16 @@ terms finite, validation logs total_last_warm / total_last_cold; evaluate_run.py
   error median 0.04 rad: the direction head learns the front / back half (temp/train/yaw_check.py). Refined and plain
   boxes agree closely (vehicle AP@2 0.599 / 0.602).
 
+- 14:59 combined run finished (6000 steps, exit 0, final val total 7.593). Full VAL evaluation, memory test, latency and
+  tables by temp/train/post_train.sh (15:00-15:30); results in results/, report in report.md.
+
 ## 3. Summary
-(after the combined run)
+- **Runs**: t1_r0 (baseline, window-only, 5000 steps, code of the 2ddf511 era) and t1_r3_combined (6000 steps, code 04a7de9); no
+  ledger (this folder has none); decision by the card's rule: **the combination is not adopted as an improvement**
+  (significant losses on walkway, lane dividers, vehicle and pedestrian AP; the only significant gain, vehicle coverage +0.005,
+  is inside the 0.010 band); its parts (direction head: AOE 1.78 -> 0.59 rad; carried memory: +0.02 IoU outside the view) are kept
+  for separate tests.
+- **Numbers, images, what it says, weaknesses, next steps**: report.md and results/tables.md (VAL, 3109 keyframes, paired
+  scene bootstrap, memory warm / cold, latency 43.4 / 43.9 ms for the chain at dt 0 on the idle RTX 3060).
+- Open: the causes of the small losses are not isolated (clip batches, refiner terms, seed noise); ablation arms A-D in the
+  report; the line zero-crossing decoder and the motion head are still weak.
