@@ -349,7 +349,7 @@ class FlowPyramid(nn.Module):
     def __init__(self, cin, grid, factors=(4, 2, 1), iters=(2, 1, 1), radius=3, detach_levels=True, **kw):
         super().__init__()
         self.detach_levels = detach_levels    # False = the earlier behaviour (coarse corrections pass a gradient into
-        #                                       v0); kept as an option: on the box test it scored better (one seed)
+        #                                       v0); kept as an option - on the box test it scored better on one seed, over 3 seeds the gain is inside the spread
         assert len(factors) == len(iters)
         assert all(grid.nx % f == 0 and grid.ny % f == 0 for f in factors), "grid size must divide by every factor"
         self.grid, self.factors, self.iters = grid, tuple(factors), tuple(iters)
