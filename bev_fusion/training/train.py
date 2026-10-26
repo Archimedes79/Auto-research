@@ -431,6 +431,8 @@ def train(cfg, eval_fn=None, datasets=None):
         if step % cfg.log_every == 0 or step == 1 or "diag" in acc:
             rec = {"step": step, "lr": cfg.lr * f, "grad_norm": float(gn),
                    "s_per_step": (time.time() - t0) / max(1, step - step0), **acc}
+            if device.startswith("cuda"):
+                rec["gpu_gb"] = torch.cuda.max_memory_allocated() / 1e9
             last = rec
             log.write(json.dumps(rec) + "\n")
             log.flush()
