@@ -110,8 +110,20 @@ for name, run, m in (("baseline", base, bm), ("combined", final, fm)):
           f"{cfgj['balancing']} task weights, model options {cfgj['model']}; validation losses (VAL, all samples, dt-weighted): "
           + ", ".join(f"{k[len('group.'):]} {f(m['val_loss/' + k], 3)}" for k in ("group.areas", "group.lines", "group.objects", "group.motion"))
           + f", total {f(m['val_loss/total'], 3)}")
-for name, m in (("baseline", bm), ("combined", fm)):
-    ms = {k[3:]: v for k, v in m.items() if k.startswith("ms/")}
-    if ms:
-        print(f"- latency {name} (batch 1, idle GPU: {ms.get('idle')}): " + ", ".join(f"{k} {v:.1f} ms" for k, v in ms.items()
-                                                                              if isinstance(v, float) and k.endswith("median")))
+names = {"bev_dt0_median": "chain at dt 0", "bev_3dt_median": "chain at dt -0.5 / 0 / +0.5 s",
+         "bev_dt0_refined_boxes_median": "chain at dt 0 + decoded and refined boxes",
+         "camera_heads_median": "frozen camera heads (ResNet-50 + FPN + DepthNet, cached in training)"}
+print("\n| latency, median ms per frame, batch 1 | baseline | combined |\n|---|---|---|")
+lat = {}
+for name, run in (("baseline", base), ("combined", final)):
+    lp = os.path.join(run, "eval", "latency.json")
+    lat[name] = json.load(open(lp)) if os.path.exists(lp) else None
+for key, label in names.items():
+    cells = [f(lat[n]["latency"].get(key, float("nan")), 1) if lat[n] else "-" for n in ("baseline", "combined")]
+    if any(c != "-" for c in cells):
+        print(f"| {label} | {cells[0]} | {cells[1]} |")
+for n in ("baseline", "combined"):
+    if lat[n]:
+        print(f"\n{n}: GPU {lat[n]['gpu']}, idle before the measurement: {lat[n]['latency'].get('idle')} (utilisation "
+              f"{lat[n]['latency'].get('gpu_before', {}).get('util_percent')} %), the chain without the camera heads (their output is cached "
+              f"in training; at run time they add the last row), RTX 3060 12 GB, fp32, PyTorch eager")

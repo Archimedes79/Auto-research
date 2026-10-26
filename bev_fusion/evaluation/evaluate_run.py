@@ -357,6 +357,9 @@ def latency(model, loader, device):
     out = {"gpu_before": busy}
     out["bev_dt0_median"] = ms_per_frame(lambda: model(b1, dts=(0.0,)), n=50, warmup=10, batch1=False)["median"]
     out["bev_3dt_median"] = ms_per_frame(lambda: model(b1, dts=(-0.5, 0.0, 0.5)), n=50, warmup=10, batch1=False)["median"]
+    if hasattr(model, "boxes") and model.cfg.refine:           # plus decoding and refining the boxes at dt 0
+        out["bev_dt0_refined_boxes_median"] = ms_per_frame(lambda: model.boxes(model(b1, dts=(0.0,)), 0.0), n=50,
+                                                           warmup=10, batch1=False)["median"]
     try:
         from camera_encoder import FrontCameraEncoder
         cam = FrontCameraEncoder().to(device).eval()
@@ -369,6 +372,25 @@ def latency(model, loader, device):
     out["gpu_after"] = gpu_busy()
     out["idle"] = bool(busy.get("util_percent", 100) < 10)
     return out
+
+
+def time_run(run, device="cuda"):
+    """latency of a run's chain (batch 1, EMA weights) -> runs/<name>/eval/latency.json; only valid on an idle GPU (the GPU
+    load before and after is recorded, 'idle' says whether it was below 10 %). Does not touch metrics.json."""
+    device = device if torch.cuda.is_available() else "cpu"
+    os.chdir(ROOT)
+    cfg, model, loss, step, ckpt = load_run(run, device)
+    cfg.batch_size, cfg.workers, cfg.seq_len = 4, 2, 1
+    if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
+        cfg.radar_cache = "data/cache/radar"
+    _, val_ds = make_datasets(cfg)
+    lat = latency(model, make_loader(val_subset(val_ds, 8), cfg, False), device)
+    os.makedirs(os.path.join(run, "eval"), exist_ok=True)
+    with open(os.path.join(run, "eval", "latency.json"), "w") as f:
+        json.dump({"run": run, "checkpoint": os.path.basename(ckpt), "gpu": torch.cuda.get_device_name(0) if device == "cuda" else "cpu",
+                   "latency": lat}, f, indent=1, default=float)
+    print(json.dumps(lat, indent=1, default=float))
+    return lat
 
 
 def headline_table(flat):
@@ -481,6 +503,7 @@ if __name__ == "__main__":
     ap.add_argument("--prior", type=int, default=0, help="train samples of the prior-map baseline (0 = off)")
     ap.add_argument("--images", type=int, default=0)
     ap.add_argument("--time", action="store_true")
+    ap.add_argument("--time-only", action="store_true", help="only the latency -> eval/latency.json (idle GPU)")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--compare", nargs=2)
@@ -489,7 +512,9 @@ if __name__ == "__main__":
     ap.add_argument("--det-b", default="det")
     ap.add_argument("--dt", type=float, default=0.0, help="target time of the detection comparison")
     a = ap.parse_args()
-    if a.compare:
+    if a.time_only:
+        time_run(a.run)
+    elif a.compare:
         os.chdir(ROOT)
         compare(*a.compare, n_boot=a.boot, det_a=a.det_a, det_b=a.det_b, dt=a.dt)
     else:
