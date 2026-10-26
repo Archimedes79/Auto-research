@@ -80,7 +80,7 @@ def dataset(seeds, name):
     """render the sequences of the given seeds (4 processes), cached in temp/checks/ (scratch, not in git)."""
     path = f"temp/checks/flow_explains_{name}_dt{DT}_ss{SS}_{seeds[0]}_{len(seeds)}.pt"
     if os.path.exists(path):
-        return torch.load(path)
+        return torch.load(path, weights_only=False)        # our own scratch cache
     import multiprocessing as mp
     with mp.get_context("fork").Pool(4) as pool:
         out = pool.map(frames_seeded, seeds, chunksize=8)
@@ -103,7 +103,7 @@ def frames(rng):
     return maps, g[0]["velocity"], g[0]["box_id"], st, st          # steps F0 -> F1, F1 -> F2 (the same here)
 
 
-def nuscenes_item(path):
+def nuscenes_item(path, with_v1=False):
     """one cached GT sample (training/gt_bev.py via nuscenes_dataset: keyframes k - 1, k, k + 1 at 0.5 m) -> the item of
     this test: maps (3, 3, X, Y) = (lanes = lane / road divider, vehicles = vehicle + two-wheeler, pedestrians) of F0 =
     k - 1, F1 = k, F2 = k + 1; GT velocity (2, X, Y) of F0 (ground velocity, F0 axes; stationary boxes 0); instance map
@@ -121,25 +121,28 @@ def nuscenes_item(path):
     if not ((maps_of(g["prev"])[1] > 0.5) & (speed > 1.0)).any():
         return None
     maps = torch.from_numpy(np.stack([maps_of(g["prev"]), maps_of(g["cur"]), maps_of(g["next"])]))
-    s01 = [(-dt, v, w) for dt, v, w in reversed(g["prev"]["meta"]["steps"])]
-    s12 = [tuple(s) for s in g["next"]["meta"]["steps"]]
-    return maps, torch.from_numpy(vel), torch.from_numpy(g["prev"]["instance"].astype(np.int64)), s01, s12
+    s01 = [(-float(dt), float(v), float(w)) for dt, v, w in reversed(g["prev"]["meta"]["steps"])]
+    s12 = [(float(dt), float(v), float(w)) for dt, v, w in g["next"]["meta"]["steps"]]
+    item = (maps, torch.from_numpy(vel), torch.from_numpy(g["prev"]["instance"].astype(np.int64)), s01, s12)
+    if with_v1:                                          # + the GT velocity of F1 (the recursive test scores at F1)
+        item = item + (torch.from_numpy(g["cur"]["velocity"].astype(np.float32)),)
+    return item
 
 
-def nuscenes_items(test, n):
+def nuscenes_items(test, n, with_v1=False):
     """n items with a moving vehicle from the GT cache; split by SCENE (one in five scenes is held out: no scene in both
     sets), files in a fixed pseudo-random order (sorted by token). Cached in temp/checks (scratch)."""
     import glob
     import numpy as np
-    path = f"temp/checks/flow_explains_nusc_{'test' if test else 'train'}_{n}.pt"
+    path = f"temp/checks/flow_explains_nusc_{'test' if test else 'train'}_{n}{'_v1' if with_v1 else ''}.pt"
     if os.path.exists(path):
-        return torch.load(path)
+        return torch.load(path, weights_only=False)        # our own scratch cache
     out = []
     for f in sorted(glob.glob("data/cache/gt/*_0.5_4_*.npz")):
         scene = np.load(f, allow_pickle=True)["gt"].item()["cur"]["meta"]["scene"]
         if (int(scene[:8], 16) % 5 == 0) != test:
             continue
-        it = nuscenes_item(f)
+        it = nuscenes_item(f, with_v1)
         if it is not None:
             out.append(it)
             if len(out) == n:
@@ -181,12 +184,12 @@ class Model(nn.Module):
         self.dec = nn.Sequential(nn.Conv2d(C + 1, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, 3, 1))
 
-    def forward(self, f0, f1, steps, v_override=None, vgt=None):
+    def forward(self, f0, f1, steps, v_override=None, vgt=None, v_init=None):
         e0, e1 = self.enc(f0), self.enc(f1)
         r = self.tp(e0, steps)
         self.ent = r["entropy"]
         imp = self.tp.importance_of(e0.flatten(2)).view(e0.shape[0], G.nx, G.ny) if SHARP else None
-        v0, corr = r["v_mean"], None
+        v0, corr = (r["v_mean"] if v_init is None else v_init), None      # v_init: recursive start (carried estimate)
         if DOPPLER and vgt is not None and v_override is None:      # the measurement corrects the start and EVERY iteration
             meas = radar_measure(f0, vgt)
             v0 = radar_apply(v0, meas)
@@ -268,7 +271,7 @@ def evaluate(model, test):
     keys = ("pred", "raw", "extrap", "pred v=0", "raw v=0", "raw GT v", "extrap GT v")
     acc = {k: [0, 0] for k in keys}
     epe = {"vehicles": [0.0, 0], "pedestrians": [0.0, 0], "lanes": [0.0, 0]}
-    for maps, vgt, bid, steps, steps12 in test:
+    for maps, vgt, bid, steps, steps12, *_ in test:
         m = maps[None].to(DEV)
         flows, preds, _ = model(m[:, 0], m[:, 1], [steps], vgt=vgt[None].to(DEV))
         v = flows[-1]
@@ -313,6 +316,33 @@ def evaluate(model, test):
 
 
 
+@torch.no_grad()
+def evaluate_recursive(model, test):
+    """Recursive speed refinement, scored at F1 against the GT velocity of F1 (vehicles, all / moving > 1 m/s):
+    fresh      the field estimated from (F1, F2) alone (hypotheses -> refinement), as in the pair test
+    carried    the estimate of (F0, F1) carried to F1 (moved with itself, rotated into F1's axes): constant velocity,
+               no new data
+    recursive  carried as the START of the (F1, F2) refinement (instead of the fresh hypothesis mean): the prediction
+               with the carried estimate is compared with the new frame (correlation, Doppler in every iteration)
+    Recursion pays if 'recursive' beats both."""
+    acc = {}
+    for maps, vgt0, bid, s01, s12, vgt1 in test:
+        m = maps[None].to(DEV)
+        v01 = model(m[:, 0], m[:, 1], [s01], vgt=vgt0[None].to(DEV))[0][-1]
+        carried = carry(v01, [s01])
+        fresh = model(m[:, 1], m[:, 2], [s12], vgt=vgt1[None].to(DEV))[0][-1]
+        recur = model(m[:, 1], m[:, 2], [s12], vgt=vgt1[None].to(DEV), v_init=carried)[0][-1]
+        veh = maps[1, 1] > 0.5
+        masks = {"vehicles": veh, "moving vehicles": veh & (vgt1.norm(dim=0) > 1.0)}
+        for name, v in (("fresh", fresh), ("carried", carried), ("recursive", recur)):
+            e = (v[0].cpu() - vgt1).norm(dim=0)
+            for k, mk in masks.items():
+                a = acc.setdefault((name, k), [0.0, 0])
+                a[0] += e[mk].sum().item()
+                a[1] += int(mk.sum())
+    return {f"EPE F1 {k} {name}": s_ / max(1, n_) for (name, k), (s_, n_) in acc.items()}
+
+
 def overlay(a, b):
     """a in red, b in green, overlap yellow (vehicles + pedestrians); lanes grey."""
     oa, ob = a[1:].max(0).values.clamp(0, 1), b[1:].max(0).values.clamp(0, 1)
@@ -332,7 +362,7 @@ def picture(model, test, path, n=3):
         ax[r, -1].axis("off")
     wheel(ax[0, -1], vmax=15.0)
     for r in range(n):
-        maps, vgt, bid, steps, steps12 = test[r]
+        maps, vgt, bid, steps, steps12, *_ = test[r]
         m = maps[None].to(DEV)
         flows, preds, _ = model(m[:, 0], m[:, 1], [steps], vgt=vgt[None].to(DEV))
         v = flows[-1]
@@ -357,11 +387,13 @@ if __name__ == "__main__":
     t0 = time.time()
     n_train, n_test, iters = (300, 16, 600) if QUICK else (1500, 48, 3000)
     if DATA == "nuscenes":                            # real GT (fixed data: the seed changes only init and batch order)
-        data, test = nuscenes_items(False, n_train), nuscenes_items(True, n_test)
+        rec = "--recursive" in sys.argv
+        data, test = nuscenes_items(False, n_train, rec), nuscenes_items(True, n_test, rec)
     else:
         data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
         test = dataset([50_000 + i for i in range(n_test)], "test")
-    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR} (leak {LEAK}), smooth {SMOOTH}, doppler {DOPPLER}; {n_train} training sequences, {n_test} held-out, "
+    when = "nuScenes keyframes (about 0.5 s)" if DATA == "nuscenes" else f"dt {DT} s"
+    print(f"device {DEV}, data {DATA}, seed {SEED}, {when}, prior {PRIOR}, sharp {SHARP}, pyramid {PYR} (leak {LEAK}), smooth {SMOOTH}, raw-warp {RAWWARP}, doppler {DOPPLER}; {n_train} training sequences, {n_test} held-out, "
           f"{iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
     torch.manual_seed(SEED)
     model = Model().to(DEV)
@@ -371,6 +403,10 @@ if __name__ == "__main__":
     print("== held-out sequences (IoU of vehicles; EPE in m/s)")
     for k, x in r.items():
         print(f"  {k:22s} {x:.3f}")
+    if DATA == "nuscenes" and "--recursive" in sys.argv:
+        print("== recursive speed refinement, scored at F1 (EPE m/s)")
+        for k, x in evaluate_recursive(model, test).items():
+            print(f"  {k:36s} {x:.3f}")
     claims = [("velocity explains the vehicles: EPE < 1 m/s", r["EPE vehicles"] < 1.0),
               ("raw F0 moved with v alone reaches >= 90 % of the GT-velocity IoU", r["IoU raw"] >= 0.9 * r["IoU raw GT v"]),
               ("extrapolation to t + 2 dt reaches >= 90 % of the GT-velocity IoU", r["IoU extrap"] >= 0.9 * r["IoU extrap GT v"]),
