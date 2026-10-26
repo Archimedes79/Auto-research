@@ -21,7 +21,8 @@ import torch
 
 sys.path.insert(0, "training")
 from lift_pd import Grid  # noqa: E402
-from temporal import TemporalPropagation, gaussian_splat, steps_tensor, wrap  # noqa: E402
+from temporal import (FlowRefine, GapFill, TemporalPropagation, gaussian_splat, landing, propagate, sample_at,  # noqa: E402
+                      steps_tensor, wrap)
 
 QUICK = "--quick" in sys.argv
 G = Grid(x_min=0, x_max=20, y_min=-10, y_max=10, res=0.5)                     # 40 x 40 cells
@@ -141,6 +142,81 @@ def smoke():
     ok = torch.autograd.gradcheck(lambda a, b, c: gaussian_splat(a, b, c, gs, 0.0, 2)[0], (f, p, w), eps=1e-6, atol=1e-5)
     check("gradcheck of the bilinear splat (features, positions, weights)", ok)
     check("aliasing wrap", abs(wrap(torch.tensor(17.0), 10.0).item() + 3.0) < 1e-6)
+
+    from splat import grid_points as gp
+    check("sample_at at the cell centres = the map", torch.allclose(sample_at(x, gp(G, dtype=D64)[None], G).view_as(x), x, atol=1e-9))
+    tu = TemporalPropagation(cin=2, grid=G, n_hyp=1).double()
+    tu.set_velocity((3.0, -2.0))
+    vu = torch.tensor([3.0, -2.0], dtype=D64).view(1, 2, 1, 1).expand(1, 2, G.nx, G.ny)
+    check("propagate (one v per cell) = TemporalPropagation with that v",
+          torch.allclose(propagate(x, [(0.3, 5.0, 0.2)], vu, G)[0], tu(x, [(0.3, 5.0, 0.2)])["feat"], atol=1e-9))
+    fr = FlowRefine(2, G, radius=3, proj=2).double()
+    with torch.no_grad():
+        for conv in (fr.f, fr.g):
+            conv.weight.copy_(torch.eye(2, dtype=D64).view(2, 2, 1, 1))
+            conv.bias.zero_()
+    cur = torch.zeros_like(spike(c=2))
+    cur[0, :, 22, 19] = 1.0                                                  # the spike moved +2, -1 cells
+    corr = fr.correlation(fr.f(spike(c=2)), fr.g(cur), landing(steps_tensor([(0.5, 0.0, 0.0)], 1, dtype=D64), torch.zeros(1, 2, G.nx, G.ny, dtype=D64), G))
+    k = corr[0, :, 20, 20].argmax().item()
+    check("correlation at the source cell peaks at the true displacement", tuple(fr.offs[k].tolist()) == (1.0, -0.5),
+          f"peak offset {tuple(fr.offs[k].tolist())} m")
+    v0 = torch.randn(1, 2, G.nx, G.ny, dtype=D64)
+    vs = fr(spike(c=2), cur, [(0.5, 4.0, 0.1)], v0, iters=4)
+    check("FlowRefine starts as the identity (v0 kept, 4 iterations)", len(vs) == 4 and torch.equal(vs[-1], v0))
+    for p in fr.net[-1].parameters():
+        torch.nn.init.normal_(p, std=0.1)
+    fr(x, x.roll(1, 2), [(0.5, 4.0, 0.1)], v0, iters=2)[-1].pow(2).sum().backward()
+    check("gradient reaches every FlowRefine parameter", all(p.grad is not None and p.grad.abs().sum() > 0 for p in fr.parameters()))
+
+    fp = torch.randn(1, 2, 5, dtype=D64)
+    pp = torch.rand(1, 5, 2, dtype=D64) * 8 + torch.tensor([4.0, -4.0], dtype=D64)
+    wp = torch.rand(1, 5, dtype=D64)
+    a0 = gaussian_splat(fp, pp, wp, G, 0.0, 2)
+    a1 = gaussian_splat(fp, pp, wp, G, 0.0, 2, importance=torch.ones(1, 5, dtype=D64))
+    check("importance 1 = the plain splat", torch.equal(a0[0], a1[0]) and torch.equal(a0[1], a1[1]))
+    two = torch.tensor([[[1.0, 0.0]]], dtype=D64)                           # features 1 and 0 land on one cell centre
+    pos2 = torch.tensor([[[10.25, 0.25], [10.25, 0.25]]], dtype=D64)
+    o, mss = gaussian_splat(two, pos2, torch.ones(1, 2, dtype=D64), G, 0.0, 2, importance=torch.tensor([[99.0, 1.0]], dtype=D64))
+    check("importance decides who wins a cell (99 : 1 -> 0.99), the mass stays 2", abs(o[0, 0, 20, 20].item() - 0.99) < 1e-9
+          and abs(mss[0, 0, 20, 20].item() - 2.0) < 1e-9)
+    ti = TemporalPropagation(cin=2, grid=G, n_hyp=2, importance=True).double()
+    ti.set_velocity((3.0, -2.0))
+    tu2 = TemporalPropagation(cin=2, grid=G, n_hyp=2).double()
+    tu2.set_velocity((3.0, -2.0))
+    check("TemporalPropagation(importance=True) starts as the plain block",
+          torch.allclose(ti(x, [(0.3, 5.0, 0.2)])["feat"], tu2(x, [(0.3, 5.0, 0.2)])["feat"], atol=1e-12))
+    gi = (torch.randn(1, 2, 5, dtype=D64, requires_grad=True),
+          (torch.rand(1, 5, 2, dtype=D64) * 2 + torch.tensor([1.0, -1.0], dtype=D64)).requires_grad_(True),
+          torch.rand(1, 5, dtype=D64, requires_grad=True), (torch.rand(1, 5, dtype=D64) + 0.5).requires_grad_(True))
+    ok = torch.autograd.gradcheck(lambda a, b, c, d: gaussian_splat(a, b, c, Grid(x_min=0, x_max=4, y_min=-2, y_max=2, res=0.5), 0.0, 2,
+                                                                      importance=d)[0], gi, eps=1e-6, atol=1e-5)
+    check("gradcheck of the importance-weighted splat", ok)
+    re = tm(spike(), [(0.5, 0.0, 0.0)])
+    check("entropy of two equal hypotheses = ln 2", abs(re["entropy"][0, 20, 20].item() - math.log(2)) < 1e-9)
+    tm.temperature = 0.1
+    with torch.no_grad():
+        tm.net[4].bias[2] = 1.0                                              # static logit 1 vs 0
+    pt = tm(spike(), [(0.5, 0.0, 0.0)])["pi"][0, :, 20, 20]
+    check("temperature 0.1 sharpens pi (logits 1 vs 0 -> 0.99995)", abs(pt[0].item() - 1 / (1 + math.exp(-10))) < 1e-9,
+          f"pi {pt.tolist()}")
+    tm.temperature = 1.0
+
+    te = TemporalPropagation(cin=2, grid=G, n_hyp=0).double()              # ego only: the static hypothesis alone
+    te.set_velocity((0.0, 0.0), static_weight=0.0)
+    check("n_hyp = 0 (ego only) = the 2-cell shift", torch.allclose(te(x, [(0.1, 10.0, 0.0)])["feat"][:, :, :-2], x[:, :, 2:], atol=1e-9))
+
+    gf = GapFill(2).double()
+    tp.set_velocity((0.0, 0.0), static_weight=0.0)
+    r = tp(x, [(0.5, 8.0, 0.2)])                                            # 4 m forward: a hole at the far edge
+    check("GapFill starts as the identity", torch.equal(gf(r["feat"], r["mass"]), r["feat"]))
+    for p in gf.parameters():
+        torch.nn.init.normal_(p, std=0.5)
+    out = gf(r["feat"], r["mass"])
+    known = (r["mass"] >= 1).expand_as(out)
+    check("GapFill (random weights) never changes a known cell, fills the holes",
+          torch.equal(out[known], r["feat"][known]) and (out[~known] - r["feat"][~known]).abs().max() > 0,
+          f"{int((r['mass'] < 1).sum())} of {G.nx * G.ny} cells with mass < 1")
 
 
 # ------------------------------------------------------------------------------------------------ end to end
