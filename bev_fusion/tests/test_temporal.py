@@ -21,7 +21,7 @@ import torch
 
 sys.path.insert(0, "training")
 from lift_pd import Grid  # noqa: E402
-from temporal import (FlowPyramid, FlowRefine, GapFill, TemporalPropagation, gaussian_splat, landing, propagate, sample_at,  # noqa: E402
+from temporal import (FlowPyramid, FlowRefine, GapFill, doppler_update, TemporalPropagation, gaussian_splat, landing, propagate, sample_at,  # noqa: E402
                       steps_tensor, wrap)
 
 QUICK = "--quick" in sys.argv
@@ -180,6 +180,29 @@ def smoke():
     sum(vk.pow(2).sum() for vk in fpy(x, x.roll(2, 2), [(0.5, 4.0, 0.1)], v0)).backward()   # a loss on EVERY output
     check("gradient reaches every FlowPyramid parameter (loss on every iteration, as in training)",
           all(p_.grad is not None and p_.grad.abs().sum() > 0 for p_ in fpy.parameters()))
+    vp = torch.tensor([[[0.0], [2.0]]], dtype=D64)                         # prior (0, 2) m/s, one cell
+    Pp = (torch.eye(2, dtype=D64) * 25.0).view(1, 2, 2, 1)                  # sigma 5 m/s
+    ux = torch.tensor([1.0, 0.0], dtype=D64).view(1, 1, 2, 1)               # one ray along x, Doppler 5 m/s
+    one = torch.ones(1, 1, 1, dtype=D64)
+    v1, P1 = doppler_update(vp, Pp, ux, 5.0 * one, one, sigma_d=0.1)
+    check("Doppler update, one ray: radial part from the radar, tangential part and its variance kept",
+          abs(v1[0, 0, 0].item() - 5.0) < 0.01 and abs(v1[0, 1, 0].item() - 2.0) < 1e-9 and abs(P1[0, 1, 1, 0].item() - 25.0) < 1e-9
+          and P1[0, 0, 0, 0].item() < 0.011, f"v ({v1[0, 0, 0].item():.3f}, {v1[0, 1, 0].item():.3f}), var x {P1[0, 0, 0, 0].item():.4f}, y {P1[0, 1, 1, 0].item():.1f}")
+    v2, _ = doppler_update(vp + torch.tensor([[[4.0], [0.0]]], dtype=D64), Pp, ux, (5.0 - 20.0) * one, one, sigma_d=0.1, v_alias=10.0)
+    check("Doppler update unwraps an aliased measurement to the alias nearest the prior", abs(v2[0, 0, 0].item() - 5.0) < 0.01,
+          f"measured -15, alias 10 -> v_x {v2[0, 0, 0].item():.3f}")
+    ang = torch.tensor([0.4, 1.3], dtype=D64)
+    u2 = torch.stack([torch.cos(ang), torch.sin(ang)], 1).view(1, 2, 2, 1)
+    vt = torch.tensor([6.0, -3.0], dtype=D64)
+    v3, _ = doppler_update(torch.zeros(1, 2, 1, dtype=D64), Pp * 1e4, u2, (u2[0, :, :, 0] @ vt).view(1, 2, 1),
+                           torch.ones(1, 2, 1, dtype=D64), sigma_d=0.1)
+    check("Doppler update, two rays + a vague prior: the full velocity", (v3[0, :, 0] - vt).norm() < 0.01,
+          f"v ({v3[0, 0, 0].item():.3f}, {v3[0, 1, 0].item():.3f}) vs (6, -3)")
+    v4, P4 = doppler_update(vp, Pp, ux, 5.0 * one, 0 * one)
+    check("Doppler update without valid detections = the prior", torch.allclose(v4, vp) and torch.allclose(P4, Pp))
+    gd = (vp.clone().requires_grad_(True), (torch.rand(1, 1, 1, dtype=D64) * 4).requires_grad_(True))
+    check("gradcheck of the Doppler update (prior velocity, measurement)",
+          torch.autograd.gradcheck(lambda a, dd: doppler_update(a, Pp, ux, dd, one, sigma_d=0.3)[0], gd, eps=1e-6, atol=1e-6))
     fp = torch.randn(1, 2, 5, dtype=D64)
     pp = torch.rand(1, 5, 2, dtype=D64) * 8 + torch.tensor([4.0, -4.0], dtype=D64)
     wp = torch.rand(1, 5, dtype=D64)

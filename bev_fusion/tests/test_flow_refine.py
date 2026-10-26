@@ -12,12 +12,16 @@ Arms:
            entropy penalty on pi (no hedging: the mixture spread objects over several velocities, faint and ringed)
   S + R4   S, then the 4 refinement iterations (warps with the same importance)
   0 + P4 / S + P4   coarse to fine (FlowPyramid): 2 iterations at 2 m cells (window +-6 m), 1 at 1 m, 1 at 0.5 m
+  S + D / S + D + P4   the hypothesis mean updated with radar Doppler (temporal.doppler_update, prior sigma 4 m/s): a
+           radar at the origin, a detection in 50 % of the occupied cells (objects AND static stripes: ego-compensated
+           clutter has radial velocity 0), noise 0.1 m/s - for stripes ahead the ray is nearly along the stripe, the
+           direction the warp cannot see (aperture)
 The refinement step is bounded by the lookup window (+-1.5 m per iteration; FlowRefine step_max).
 Metrics on held-out scenes after each iteration: end-point error of the velocity (m/s) on the cells of A, of B and
 of the static stripes; warp MSE on the known cells. Image: temp/checks/flow_refine.png (direction = hue, speed =
 brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
-    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4]
+    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4]
 """
 import math
 import random
@@ -28,7 +32,7 @@ import torch
 
 sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
-from temporal import FlowPyramid, FlowRefine, TemporalPropagation, propagate  # noqa: E402
+from temporal import FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, propagate  # noqa: E402
 from test_temporal_stages import G, VA, VB, sample  # noqa: E402
 
 QUICK = "--quick" in sys.argv
@@ -46,10 +50,26 @@ def true_flow(src):
     return torch.stack([vx, vy])
 
 
+def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
+    """the flow updated with simulated Doppler: radar at the origin, detections in a random half of the occupied
+    cells, d = u . v_true + noise (objects: their velocity, stripes: 0)."""
+    B, N = src.shape[0], G.nx * G.ny
+    xs, ys = G.xy_centres(device=src.device)
+    gx, gy = torch.meshgrid(xs, ys, indexing="ij")
+    r = torch.sqrt(gx ** 2 + gy ** 2).clamp(min=1e-3)
+    u = torch.stack([gx / r, gy / r]).reshape(1, 1, 2, N).expand(B, 1, 2, N)
+    vt = torch.stack([true_flow(s_.cpu()) for s_ in src]).to(src.device).reshape(B, 2, N)
+    d = (u[:, 0] * vt).sum(1, keepdim=True) + sigma_d * torch.randn(B, 1, N, device=src.device)
+    valid = ((src.max(1).values > 0.5) & (torch.rand(B, G.nx, G.ny, device=src.device) < rate)).float().reshape(B, 1, N)
+    P = (torch.eye(2, device=src.device) * sigma_p ** 2).view(1, 2, 2, 1).expand(B, 2, 2, N)
+    v, _ = doppler_update(v0.reshape(B, 2, N), P, u, d, valid, sigma_d=sigma_d)
+    return v.view_as(v0)
+
+
 class Arm(torch.nn.Module):
-    def __init__(self, hyp, refine, prior=0.0, sharp=False):
+    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False):
         super().__init__()
-        self.prior, self.sharp = prior, sharp
+        self.prior, self.sharp, self.doppler = prior, sharp, doppler
         self.tp = TemporalPropagation(cin=3, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=sharp) if hyp else None
         self.rf = None if not refine else (FlowPyramid(3, G, factors=(4, 2, 1), iters=(2, 1, 1)) if refine == "P"
                                            else FlowRefine(3, G, radius=3))
@@ -66,6 +86,8 @@ class Arm(torch.nn.Module):
                 self.ent = r["entropy"]
         else:
             v0, mix = src.new_zeros(src.shape[0], 2, G.nx, G.ny), None
+        if self.doppler:
+            v0 = radar_update(src, v0)
         if self.rf is None:
             flows = [v0]
         elif isinstance(self.rf, FlowPyramid):
@@ -164,12 +186,13 @@ if __name__ == "__main__":
     for name, hyp, refine, prior, sharp in (("H", True, False, 0.0, False), ("H + R4", True, True, 0.0, False),
                                             ("0 + R4", False, True, 0.0, False), ("H + R4 + prior", True, True, PRIOR, False),
                                             ("S", True, False, 0.0, True), ("S + R4", True, True, 0.0, True),
-                                            ("0 + P4", False, "P", 0.0, False), ("S + P4", True, "P", 0.0, True)):
+                                            ("0 + P4", False, "P", 0.0, False), ("S + P4", True, "P", 0.0, True),
+                                            ("S + D", True, False, 0.0, True), ("S + D + P4", True, "P", 0.0, True)):
         if ARMS is not None and name.replace(" ", "") not in ARMS:
             continue
         torch.manual_seed(SEED)
         print(f"  {name}", flush=True)
-        arm = Arm(hyp, refine, prior, sharp).to(DEV)
+        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name).to(DEV)
         train(arm, data, iters, random.Random(SEED + 7))
         arm.eval()
         for i, r in enumerate(evaluate(arm, test)):

@@ -222,6 +222,31 @@ class TemporalPropagation(nn.Module):
                 last.bias[2 * self.n_hyp] = static_weight
 
 
+def doppler_update(v_p, P_p, u, d, valid, sigma_d=0.3, v_alias=None):
+    """Per-cell Kalman measurement update of a velocity with radial (Doppler) velocities, in information form (plan.md
+    7.3, step 2; closed form, differentiable). v_p (B, 2, N) prior velocity, P_p (B, 2, 2, N) prior covariance; per
+    cell J detections: u (B, J, 2, N) unit rays, d (B, J, N) radial velocities, valid (B, J, N) in [0, 1].
+    The measurement d_j = u_j . v + noise(sigma_d); with aliasing, d_j is first unwrapped to the alias closest to the
+    prior (u_j . v_p). A = sum valid u u^T / sigma^2, b = sum valid u d / sigma^2;
+    P = (P_p^-1 + A)^-1, v = P (P_p^-1 v_p + b). The radial part comes from the radar, the tangential part keeps the
+    prior and its variance (a single ray says nothing across it). -> v (B, 2, N), P (B, 2, 2, N)."""
+    pred = (u * v_p.unsqueeze(1)).sum(2)                                          # (B, J, N)
+    if v_alias is not None:
+        d = d + 2 * v_alias * torch.round((pred - d) / (2 * v_alias)).detach()
+    w = valid / sigma_d ** 2
+    A = (w.unsqueeze(2).unsqueeze(2) * u.unsqueeze(3) * u.unsqueeze(2)).sum(1)  # (B, 2, 2, N)
+    b = (w.unsqueeze(2) * u * d.unsqueeze(2)).sum(1)                              # (B, 2, N)
+
+    def inv(M):                                                                   # closed-form 2 x 2 inverse per cell
+        a, b_, c, e = M[:, 0, 0], M[:, 0, 1], M[:, 1, 0], M[:, 1, 1]
+        det = a * e - b_ * c
+        return torch.stack([torch.stack([e, -b_], 1), torch.stack([-c, a], 1)], 1) / det.unsqueeze(1).unsqueeze(1)
+    Pi = inv(P_p)
+    P = inv(Pi + A)
+    rhs = (Pi * v_p.unsqueeze(1)).sum(2) + b                                      # P_p^-1 v_p + b
+    return (P * rhs.unsqueeze(1)).sum(2), P
+
+
 def landing(steps, v, grid):
     """steps (B, S, 3), v (B, 2, X, Y) one velocity per cell (m/s, source axes) -> landing points (B, X*Y, 2) of
     the cell centres in the target frame."""
