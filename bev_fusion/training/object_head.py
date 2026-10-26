@@ -260,6 +260,267 @@ def targets_as_output(t, grid):
     return out
 
 
+# ------------------------------------------------------------------------------------------------ S5c: box refinement
+# Stage 2 (plan 8.3 S5c): per candidate box 4 sampling points, initialised at the centres of the 4 box faces (front,
+# left, rear, right; circles: on the circle at 0 / 90 / 180 / 270 deg), moved by learned bounded offsets in the box
+# frame (zero start; deformable=False = CenterPoint's fixed centre + 4 face points, the control); bilinear samples of
+# the BEV features there and at the centre -> MLP -> residuals in the box frame and an IoU-quality logit.
+# Box tensor (B, N, 7): cx, cy, a, b, yaw, vx, vy; a, b = log length, log width (boxes) or log r, log r (circles, yaw 0).
+BOX_DIM = 7
+
+
+def boxes_to_tensor(box_lists, groups=GROUPS, device=None):
+    """list (B) of lists of box dicts -> box (B, N, 7), group (B, N) long, valid (B, N) float (padding 0)."""
+    gidx = {name: i for i, (name, _) in enumerate(groups)}
+    B, N = len(box_lists), max(1, max((len(b) for b in box_lists), default=0))
+    box, group, valid = torch.zeros(B, N, BOX_DIM), torch.zeros(B, N, dtype=torch.long), torch.zeros(B, N)
+    for i, boxes in enumerate(box_lists):
+        for j, bx in enumerate(boxes):
+            g = gidx[bx["group"]]
+            if groups[g][1] == "circle":
+                a = b = math.log(bx["radius"])
+                yaw = 0.0
+            else:
+                a, b, yaw = math.log(bx["length"]), math.log(bx["width"]), bx["yaw"]
+            box[i, j] = torch.tensor([bx["cx"], bx["cy"], a, b, yaw, bx["vx"], bx["vy"]])
+            group[i, j], valid[i, j] = g, 1.0
+    return box.to(device), group.to(device), valid.to(device)
+
+
+def tensor_to_boxes(box, group, valid, groups=GROUPS, like=None):
+    """Inverse of boxes_to_tensor -> list (B) of lists of box dicts; like: the source lists, whose other keys (score)
+    are copied."""
+    box, group, valid = box.detach().cpu().tolist(), group.cpu().tolist(), valid.cpu().tolist()
+    res = []
+    for i in range(len(box)):
+        out = []
+        for j in range(len(box[i])):
+            if valid[i][j] <= 0:
+                continue
+            name, kind = groups[group[i][j]]
+            cx, cy, a, b, yaw, vx, vy = box[i][j]
+            bx = dict(like[i][j]) if like is not None else {}
+            bx.update(group=name, cx=cx, cy=cy, vx=vx, vy=vy)
+            if kind == "box":
+                bx.update(length=math.exp(a), width=math.exp(b), yaw=yaw)
+            else:
+                bx["radius"] = math.exp(a)
+            out.append(bx)
+        res.append(out)
+    return res
+
+
+def _rot(yaw, v):
+    """rotate 2-vectors v (..., 2) by yaw (...)."""
+    c, s = torch.cos(yaw), torch.sin(yaw)
+    return torch.stack([c * v[..., 0] - s * v[..., 1], s * v[..., 0] + c * v[..., 1]], -1)
+
+
+def sample_bev(feat, pts, grid):
+    """Bilinear samples of feat (B, C, X, Y) at pts (B, N, K, 2) in metres (x forward, y left; cell i has its centre
+    at x_min + (i + 0.5) res, as lift_pd.Grid) -> (B, N, K, C); zero outside the grid."""
+    u = 2 * (pts[..., 1] - grid.y_min) / (grid.ny * grid.res) - 1        # grid_sample: [..., 0] indexes the last dim
+    v = 2 * (pts[..., 0] - grid.x_min) / (grid.nx * grid.res) - 1
+    s = F.grid_sample(feat, torch.stack([u, v], -1).to(feat.dtype), mode="bilinear", padding_mode="zeros",
+                      align_corners=False)
+    return s.permute(0, 2, 3, 1)
+
+
+def apply_residual(box, delta, circle):
+    """box (B, N, 7) + residuals delta (B, N, 7: dx, dy in the box frame, da, db, dyaw, dvx, dvy in the box frame);
+    circle (B, N) bool (b follows a, yaw stays)."""
+    c = box[..., :2] + _rot(box[..., 4], delta[..., :2])
+    a = box[..., 2] + delta[..., 2]
+    b = torch.where(circle, a, box[..., 3] + delta[..., 3])
+    yaw = torch.where(circle, box[..., 4], box[..., 4] + delta[..., 4])
+    v = box[..., 5:7] + _rot(box[..., 4], delta[..., 5:7])
+    return torch.cat([c, a[..., None], b[..., None], yaw[..., None], v], -1)
+
+
+def residual_targets(box, gt, circle):
+    """The residuals that move box onto gt (inverse of apply_residual); yaw modulo pi (a footprint is symmetric under
+    a half turn; the heading direction is left to stage 1 and the velocity); circles: db = dyaw = 0."""
+    d = _rot(-box[..., 4], gt[..., :2] - box[..., :2])
+    da = gt[..., 2] - box[..., 2]
+    db = torch.where(circle, torch.zeros_like(da), gt[..., 3] - box[..., 3])
+    dyaw = torch.remainder(gt[..., 4] - box[..., 4] + math.pi / 2, math.pi) - math.pi / 2
+    dyaw = torch.where(circle, torch.zeros_like(dyaw), dyaw)
+    dv = _rot(-box[..., 4], gt[..., 5:7] - box[..., 5:7])
+    return torch.cat([d, da[..., None], db[..., None], dyaw[..., None], dv], -1)
+
+
+class BoxRefiner(nn.Module):
+    """S5c: iterative box refinement (n_iter loops, shared weights, the box detached between loops). Inputs of the MLP
+    per candidate: [centre feature; 4 point features; the 4 points relative to the centre in the box frame (m); the box
+    velocity in the box frame / 10; group one-hot; dt embedding (dt, |dt|, sign) if use_dt; absolute x, y / 50 only if
+    use_abs_xy (ablation arm)]. Outputs: residuals (apply_residual) and an IoU-quality logit of the input box. Offsets
+    of the points (deformable=True): from the centre feature, |offset| <= d_max m per axis, zero start."""
+
+    def __init__(self, cin, n_iter=1, use_abs_xy=False, deformable=True, groups=GROUPS, hidden=128, d_max=1.0,
+                 use_dt=False):
+        super().__init__()
+        self.groups, self.n_iter, self.use_abs_xy, self.deformable = groups, n_iter, use_abs_xy, deformable
+        self.d_max, self.use_dt = d_max, use_dt
+        self.register_buffer("circle_of_group", torch.tensor([k == "circle" for _, k in groups]), persistent=False)
+        if deformable:
+            self.offset = nn.Sequential(nn.Linear(cin, hidden), nn.ReLU(), nn.Linear(hidden, 8))
+            nn.init.zeros_(self.offset[2].weight)
+            nn.init.zeros_(self.offset[2].bias)
+        nin = 5 * cin + 8 + 2 + len(groups) + (3 if use_dt else 0) + (2 if use_abs_xy else 0)
+        self.mlp = nn.Sequential(nn.Linear(nin, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU(),
+                                 nn.Linear(hidden, BOX_DIM + 1))
+        nn.init.zeros_(self.mlp[4].weight)
+        nn.init.zeros_(self.mlp[4].bias)
+
+    def points(self, box, group, centre_feat=None):
+        """Sampling points of the boxes: rel (B, N, 4, 2) in the box frame and world (B, N, 4, 2) in metres; order
+        front, left, rear, right face (circles: 0, 90, 180, 270 deg)."""
+        circle = self.circle_of_group[group]
+        ea, eb = box[..., 2].exp(), box[..., 3].exp()
+        hl, hw = torch.where(circle, ea, ea / 2), torch.where(circle, ea, eb / 2)
+        z = torch.zeros_like(hl)
+        rel = torch.stack([torch.stack(p, -1) for p in ((hl, z), (z, hw), (-hl, z), (z, -hw))], -2)
+        if self.deformable and centre_feat is not None:
+            raw = self.offset(centre_feat).view(rel.shape)
+            rel = rel + self.d_max * torch.tanh(raw / self.d_max)
+        return rel, box[..., None, :2] + _rot(box[..., 4, None], rel)
+
+    def forward(self, feat, box, group, grid, dt=None):
+        """feat (B, C, X, Y) BEV features; box (B, N, 7), group (B, N) -> list (n_iter) of dicts: box_in, delta
+        (B, N, 7), quality (B, N) logit, box (B, N, 7) refined, points (B, N, 4, 2) m."""
+        B, N = group.shape
+        circle = self.circle_of_group[group]
+        keep_c = torch.tensor([1, 1, 1, 0, 0, 1, 1], dtype=feat.dtype, device=feat.device)
+        onehot = F.one_hot(group, len(self.groups)).to(feat.dtype)
+        extra = []
+        if self.use_dt:
+            dt = torch.as_tensor(0.0 if dt is None else dt, dtype=feat.dtype, device=feat.device).reshape(-1).expand(B)
+            extra.append(torch.stack([dt, dt.abs(), torch.sign(dt)], -1)[:, None].expand(B, N, 3))
+        steps = []
+        for _ in range(self.n_iter):
+            cf = sample_bev(feat, box[..., None, :2], grid)[..., 0, :]
+            rel, pts = self.points(box, group, cf)
+            sf = sample_bev(feat, pts, grid)
+            x = [cf, sf.flatten(-2), rel.flatten(-2), _rot(-box[..., 4], box[..., 5:7]) / 10, onehot] + extra
+            if self.use_abs_xy:
+                x.append(box[..., :2] / 50)
+            out = self.mlp(torch.cat(x, -1))
+            delta = out[..., :BOX_DIM] * torch.where(circle[..., None], keep_c, torch.ones_like(keep_c))
+            nb = apply_residual(box, delta, circle)
+            steps.append({"box_in": box, "delta": delta, "quality": out[..., BOX_DIM], "box": nb, "points": pts})
+            box = nb.detach()
+        return steps
+
+
+@torch.no_grad()
+def bev_iou(box, gt, group, mask, groups=GROUPS):
+    """BEV IoU (shapely polygons; circles as 32-gons per quarter) of box and gt (B, N, 7) where mask > 0, else 0."""
+    from shapely.geometry import Point, Polygon
+
+    def shp(r, circle):
+        cx, cy, a, b, yaw = r[:5]
+        if circle:
+            return Point(cx, cy).buffer(math.exp(a), 32)
+        c, s = math.cos(yaw), math.sin(yaw)
+        hl, hw = math.exp(a) / 2, math.exp(b) / 2
+        return Polygon([(cx + c * u - s * w, cy + s * u + c * w) for u, w in ((hl, hw), (hl, -hw), (-hl, -hw), (-hl, hw))])
+    bl, gl, gr, ml = box.detach().cpu().tolist(), gt.detach().cpu().tolist(), group.cpu().tolist(), mask.cpu().tolist()
+    out = torch.zeros(len(bl), len(bl[0]))
+    for i in range(len(bl)):
+        for j in range(len(bl[i])):
+            if ml[i][j] > 0:
+                circle = groups[gr[i][j]][1] == "circle"
+                p, q = shp(bl[i][j], circle), shp(gl[i][j], circle)
+                u = p.union(q).area
+                out[i, j] = p.intersection(q).area / u if u > 0 else 0.0
+    return out
+
+
+def refine_candidates(dets, gts, k=50, n_jitter=1, jitter=(0.3, 0.1, 0.1, 0.5), match_dist=2.0, rng=None,
+                      groups=GROUPS):
+    """S5c training candidates per scene: the top-k decoded boxes (dicts, so detached) plus n_jitter copies of every GT
+    box with Gaussian jitter (sigma: position m, log size, yaw rad, velocity m/s); every candidate is matched to the
+    nearest GT of its group within match_dist m. Unobserved GT boxes (box.get("observed", True) False: no lidar /
+    radar point, plan 8.4 masks) are ignored, not background: no jittered copies, and a candidate whose nearest GT is
+    unobserved gets valid = matched = 0 (no regression, no quality term). Returns box, group, valid, gt (B, N, 7; the
+    candidate itself where unmatched), matched (B, N) float."""
+    import random
+    rng = rng or random.Random(0)
+    sp, ss, sy, sv = jitter
+    cands, gtl, mat, ign = [], [], [], []
+    for ds, gs in zip(dets, gts):
+        cs = [dict(d) for d in sorted(ds, key=lambda d: -d.get("score", 0.0))[:k]]
+        for g in gs:
+            if not g.get("observed", True):
+                continue
+            for _ in range(n_jitter):
+                j = dict(g, cx=g["cx"] + rng.gauss(0, sp), cy=g["cy"] + rng.gauss(0, sp), vx=g["vx"] + rng.gauss(0, sv),
+                         vy=g["vy"] + rng.gauss(0, sv), score=1.0)
+                if "radius" in g:
+                    j["radius"] = g["radius"] * math.exp(rng.gauss(0, ss))
+                else:
+                    j.update(length=g["length"] * math.exp(rng.gauss(0, ss)), width=g["width"] * math.exp(rng.gauss(0, ss)),
+                             yaw=g["yaw"] + rng.gauss(0, sy))
+                cs.append(j)
+        gm, mm, im = [], [], []
+        for c in cs:
+            best, bd = None, match_dist
+            for g in gs:
+                d = math.hypot(c["cx"] - g["cx"], c["cy"] - g["cy"])
+                if g["group"] == c["group"] and d <= bd:
+                    best, bd = g, d
+            unobs = best is not None and not best.get("observed", True)
+            gm.append(best if best is not None and not unobs else c)
+            mm.append(0.0 if best is None or unobs else 1.0)
+            im.append(unobs)
+        cands.append(cs)
+        gtl.append(gm)
+        mat.append(mm)
+        ign.append(im)
+    box, group, valid = boxes_to_tensor(cands, groups)
+    gt, _, _ = boxes_to_tensor(gtl, groups)
+    matched = torch.zeros_like(valid)
+    for i, (mm, im) in enumerate(zip(mat, ign)):
+        matched[i, :len(mm)] = torch.tensor(mm)
+        valid[i, :len(im)] *= 1.0 - torch.tensor(im, dtype=valid.dtype)
+    return box, group, valid, gt, matched
+
+
+def refine_loss(steps, gt, matched, valid, group, groups=GROUPS, w_vel=0.2, w_q=1.0):
+    """S5c loss, summed over the iterations: L1 of the residuals against the targets GT - input box (matched
+    candidates; circles without width and yaw; velocity weighted w_vel) + BCE of the quality logit against the BEV IoU
+    of the input box with its GT (0 for unmatched candidates; all valid candidates). Ignored candidates (near an
+    unobserved GT box, refine_candidates) have valid = matched = 0 and contribute nothing."""
+    dev = gt.device
+    circle = torch.tensor([k == "circle" for _, k in groups], device=dev)[group]
+    wb = torch.tensor([1, 1, 1, 1, 1, w_vel, w_vel], dtype=gt.dtype, device=dev)
+    wc = torch.tensor([1, 1, 1, 0, 0, w_vel, w_vel], dtype=gt.dtype, device=dev)
+    w = torch.where(circle[..., None], wc, wb) * matched[..., None]
+    reg, qual = 0.0, 0.0
+    for st in steps:
+        tgt = residual_targets(st["box_in"].detach(), gt, circle)
+        reg = reg + (F.l1_loss(st["delta"], tgt, reduction="none") * w).sum() / matched.sum().clamp(min=1)
+        iou = bev_iou(st["box_in"], gt, group, matched, groups).to(dev)
+        bce = F.binary_cross_entropy_with_logits(st["quality"], iou, reduction="none")
+        qual = qual + w_q * (bce * valid).sum() / valid.sum().clamp(min=1)
+    return {"reg": reg, "quality": qual, "total": reg + qual}
+
+
+@torch.no_grad()
+def refine_boxes(refiner, feat, dets, grid, dt=None, rescore=False):
+    """Run time: refine the decoded boxes (list (B) of lists of dicts) on the features feat (B, C, X, Y); rescore:
+    score = sqrt(score * sigmoid(quality)) (CenterPoint's IoU-guided score)."""
+    box, group, valid = boxes_to_tensor(dets, refiner.groups, feat.device)
+    st = refiner(feat, box, group, grid, dt)[-1]
+    res = tensor_to_boxes(st["box"], group, valid, refiner.groups, like=dets)
+    if rescore:
+        q = torch.sigmoid(st["quality"]).cpu()
+        for i, boxes in enumerate(res):
+            for j, bx in enumerate(boxes):
+                bx["score"] = math.sqrt(bx["score"] * q[i, j].item())
+    return res
+
+
 # ----------------------------------------------------------------------------------------------- self-test
 def _selftest():
     import sys
@@ -312,6 +573,98 @@ def _selftest():
     print("object_head selftest ok: perfect targets decode to the GT boxes (centre, size, yaw, radius, velocity), "
           "shapes, finite loss with gradients in every branch, focal loss ordering, box propagation (S5b), "
           "correction zero start")
+    _selftest_refiner(Grid)
+
+
+def _selftest_refiner(Grid):
+    """S5c: sampling convention, zero start, points on the faces rotating with the box, residual round trip, IoU,
+    a toy case (every box shifted by +-0.6 m along and +-0.3 m across its axis) learned and undone, gradients."""
+    import random
+    torch.manual_seed(0)
+    g = Grid(x_min=0.0, x_max=20.0, y_min=-10.0, y_max=10.0, res=0.25)
+    xs, ys = g.xy_centres()
+    # 1 bilinear sampling of linear maps returns the coordinates (x forward along dim 2, y left along dim 3)
+    lin = torch.stack([xs.view(-1, 1).expand(g.nx, g.ny), ys.view(1, -1).expand(g.nx, g.ny)])[None]
+    p = torch.tensor([[[[3.3, -2.1], [11.07, 4.6], [17.2, 0.01]]]])
+    assert (sample_bev(lin, p, g) - p).abs().max() < 1e-4
+    # 2 zero start: the boxes come back unchanged, the points are the face centres and rotate with the box
+    gb = [[{"group": "car", "cx": 10.0, "cy": 1.0, "length": 4.5, "width": 1.8, "yaw": 0.3, "vx": 5.0, "vy": 1.0},
+           {"group": "pedestrian", "cx": 6.0, "cy": -3.0, "radius": 0.4, "vx": 0.0, "vy": 1.0}]]
+    box, group, valid = boxes_to_tensor(gb)
+    ref = BoxRefiner(cin=2)
+    st = ref(lin, box, group, g)[0]
+    assert (st["box"] - box).abs().max() < 1e-6 and st["delta"].abs().max() == 0
+    c, s = math.cos(0.3), math.sin(0.3)
+    face = torch.tensor([[10 + 2.25 * c, 1 + 2.25 * s], [10 - 0.9 * s, 1 + 0.9 * c], [10 - 2.25 * c, 1 - 2.25 * s],
+                         [10 + 0.9 * s, 1 - 0.9 * c]])
+    assert (st["points"][0, 0] - face).abs().max() < 1e-5
+    assert (st["points"][0, 1] - torch.tensor([[6.4, -3.0], [6.0, -2.6], [5.6, -3.0], [6.0, -3.4]])).abs().max() < 1e-5
+    box2 = box.clone()
+    box2[0, 0, 4] += 0.5
+    pts2 = ref(lin, box2, group, g)[0]["points"][0, 0]
+    ctr = torch.tensor([10.0, 1.0])
+    assert (pts2 - (ctr + _rot(torch.tensor(0.5), face - ctr))).abs().max() < 1e-5
+    # 3 residual targets and apply_residual are inverse; IoU of identical boxes 1, of a box shifted by l / 2 1 / 3
+    gt = box + torch.tensor([0.4, -0.3, 0.1, -0.05, 0.2, 1.0, -0.5])
+    circle = ref.circle_of_group[group]
+    gt[0, 1, 3], gt[0, 1, 4] = gt[0, 1, 2], 0.0
+    assert (apply_residual(box, residual_targets(box, gt, circle), circle) - gt).abs().max() < 1e-5
+    assert abs(bev_iou(box, box, group, valid)[0, 0] - 1) < 1e-6
+    sh = box.clone()
+    sh[0, 0, 0] += 2.25 * c
+    sh[0, 0, 1] += 2.25 * s
+    assert abs(bev_iou(sh, box, group, valid)[0, 0] - 1 / 3) < 1e-4
+    # 4 toy case: coverage maps of random cars; the candidates are the GT boxes shifted by (+-0.6, +-0.3) m in the
+    #   box frame (random signs, so the refiner must read the samples); trained, it undoes the shift on fresh scenes
+    rng = random.Random(0)
+    gx, gy = torch.meshgrid(xs, ys, indexing="ij")
+
+    def scene():
+        boxes = []
+        for _ in range(2):
+            boxes.append({"group": "car", "cx": rng.uniform(4, 16), "cy": rng.uniform(-6, 6), "length": 4.5,
+                          "width": 1.8, "yaw": rng.uniform(-math.pi, math.pi), "vx": 0.0, "vy": 0.0})
+        cov = torch.zeros(g.nx, g.ny)
+        for b in boxes:
+            u = (gx - b["cx"]) * math.cos(b["yaw"]) + (gy - b["cy"]) * math.sin(b["yaw"])
+            w = -(gx - b["cx"]) * math.sin(b["yaw"]) + (gy - b["cy"]) * math.cos(b["yaw"])
+            cov = torch.maximum(cov, ((u.abs() <= b["length"] / 2) & (w.abs() <= b["width"] / 2)).float())
+        shifted = []
+        for b in boxes:
+            d = _rot(torch.tensor(b["yaw"]), torch.tensor([rng.choice((-0.6, 0.6)), rng.choice((-0.3, 0.3))]))
+            shifted.append(dict(b, cx=b["cx"] + d[0].item(), cy=b["cy"] + d[1].item()))
+        return torch.stack([cov, torch.ones_like(cov)]), boxes, shifted
+
+    def batch(n):
+        sc = [scene() for _ in range(n)]
+        feat = torch.stack([s[0] for s in sc])
+        cb, cg, cv = boxes_to_tensor([s[2] for s in sc])
+        gtb = boxes_to_tensor([s[1] for s in sc])[0]
+        return feat, cb, cg, cv, gtb
+
+    ref = BoxRefiner(cin=2, hidden=64)
+    opt = torch.optim.Adam(ref.parameters(), 3e-3)
+    for it in range(400):
+        feat, cb, cg, cv, gtb = batch(16)
+        loss = refine_loss(ref(feat, cb, cg, g), gtb, cv, cv, cg)
+        opt.zero_grad()
+        loss["total"].backward()
+        if it == 2:                                   # zero start: from the third step on the gradient reaches all
+            for name, prm in ref.named_parameters():
+                assert prm.grad is not None and prm.grad.abs().sum() > 0, name
+        opt.step()
+    feat, cb, cg, cv, gtb = batch(64)
+    with torch.no_grad():
+        st = ref(feat, cb, cg, g)[0]
+    e0 = (cb[..., :2] - gtb[..., :2]).norm(dim=-1).mean().item()
+    e1 = (st["box"][..., :2] - gtb[..., :2]).norm(dim=-1).mean().item()
+    iou0, iou1 = bev_iou(cb, gtb, cg, cv).mean().item(), bev_iou(st["box"], gtb, cg, cv).mean().item()
+    moved = (ref.points(cb, cg, sample_bev(feat, cb[..., None, :2], g)[..., 0, :])[0]
+             - ref.points(cb, cg)[0]).norm(dim=-1).mean().item()
+    assert e1 < 0.4 * e0 and iou1 > iou0, (e0, e1, iou0, iou1)
+    print(f"refiner selftest ok: sampling convention, zero start, face points rotate with the box, residual round "
+          f"trip, IoU; toy shift undone on fresh scenes: centre error {e0:.3f} -> {e1:.3f} m, IoU {iou0:.3f} -> "
+          f"{iou1:.3f} (mean point offset {moved:.3f} m); gradients reach the offsets and the MLP")
 
 
 if __name__ == "__main__":
