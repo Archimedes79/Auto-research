@@ -27,13 +27,13 @@ try:
     from .gt_bev import AREAS, DIST_MAX, LINES, OBJECTS
     from .lift_pd import Grid
     from .loss_extras import boundary_fp_loss, dice_semimetric_loss, ramp
-    from .object_head import _gather, build_targets, head_loss
+    from .object_head import _gather, build_targets, head_loss, refine_loss
     from .timed_head import MotionHead
 except ImportError:                                   # run as a script
     from gt_bev import AREAS, DIST_MAX, LINES, OBJECTS
     from lift_pd import Grid
     from loss_extras import boundary_fp_loss, dice_semimetric_loss, ramp
-    from object_head import _gather, build_targets, head_loss
+    from object_head import _gather, build_targets, head_loss, refine_loss
     from timed_head import MotionHead
 
 TASK_GROUPS = ("areas", "lines", "objects", "motion")
@@ -66,6 +66,7 @@ class LossConfig:
     w_direction: float = 0.5
     dense_objects: bool = True         # decision (2): footprint coverage in the semantic head
     w_obj_vel: float = 0.2             # object_head.head_loss velocity weight
+    w_refine: float = 1.0              # S5c refinement loss in the objects group (when the model refines)
     max_obj: int = 128
     motion_min_speed: float = 1.0
     motion_w_background: float = 0.1
@@ -305,6 +306,25 @@ def head_box(bx, groups=NUSC_GROUPS):
     return d
 
 
+def refine_gt_boxes(g, grid, groups=NUSC_GROUPS):
+    """GT boxes of one gt_bev GT dict for the S5c candidates (object_head.refine_candidates): head_box dicts whose
+    'observed' is True only where stage 1 supervises the box too (a lidar / radar point AND its centre cell covered:
+    camera and not occluded, or radar), so every other box is ignored, not background."""
+    X, Y = np.asarray(g["camera"]).shape[-2:]
+    w = np.maximum(np.asarray(g["camera"]) * (1 - np.asarray(g["occluded"])), np.asarray(g["radar"]))
+    out = []
+    for bx in g.get("meta", {}).get("boxes", []):
+        hb = head_box(bx, groups)
+        if hb is None:
+            continue
+        ix = int(math.floor((hb["cx"] - grid.x_min) / grid.res))
+        iy = int(math.floor((hb["cy"] - grid.y_min) / grid.res))
+        inside = 0 <= ix < X and 0 <= iy < Y
+        hb["observed"] = bool(bx.get("observed", True)) and inside and float(w[ix, iy]) > 0
+        out.append(hb)
+    return out
+
+
 def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0.2, max_obj=128):
     """Stage 1 via object_head.head_loss. A box is supervised if it is observed (gt_bev meta 'observed': any lidar /
     radar point) and its centre cell has w_obj > 0; the others are ignored (neither positive nor negative: their peak
@@ -443,6 +463,12 @@ class BEVLoss(nn.Module):
                                        cfg.max_obj)
             terms.update(("objhead." + k, v) for k, v in lo.items())
             add("objects", lo["total"])
+        if "refine" in p:                                     # S5c, candidates built by the model (model.refine)
+            r = p["refine"]                                   # tensors only (the trainer casts every entry to float)
+            steps = [{k: r[k][i] for k in ("box_in", "delta", "quality")} for i in range(r["delta"].shape[0])]
+            lr = refine_loss(steps, r["gt"], r["matched"], r["valid"], r["group"].long(), self.groups, cfg.w_obj_vel)
+            terms["refine.reg"], terms["refine.quality"] = lr["reg"], lr["quality"]
+            add("objects", cfg.w_refine * lr["total"])
         if "v_hat" in p and abs(float(dt)) < 1e-6:
             terms["motion"] = motion_term(p["v_hat"], T, cfg)
             add("motion", terms["motion"])

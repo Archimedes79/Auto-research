@@ -41,8 +41,8 @@ try:
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
     from .lift_pd import Grid, LiftPD, camera_visibility
-    from .losses import NUSC_GROUPS, layer_spec, radar_aux_spec
-    from .object_head import ObjectHead
+    from .losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
+    from .object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
     from .radar_bev import RadarBEV
     from .temporal_fusion import TemporalFusion
     from .timed_head import TimedHead, TimeMover
@@ -51,8 +51,8 @@ except ImportError:                                   # run as a script
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
     from lift_pd import Grid, LiftPD, camera_visibility
-    from losses import NUSC_GROUPS, layer_spec, radar_aux_spec
-    from object_head import ObjectHead
+    from losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
+    from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
     from radar_bev import RadarBEV
     from temporal_fusion import TemporalFusion
     from timed_head import TimedHead, TimeMover
@@ -85,6 +85,10 @@ class ModelConfig:
     n_sem: int = None                  # optional check: must equal len(layer_spec(...)) when given (train.py passes it)
     aux_heads: bool = True
     object_direction: bool = False     # object head: sign-free axis + front / back class (object_head.ObjectHead)
+    refine: bool = False               # S5c: deformable box refinement (object_head.BoxRefiner, n = 1, dt-aware) on the
+                                       # object head's features at the target time; trained on decoded + jittered GT
+    refine_k: int = 50                 # candidates: top-k decoded boxes per sample + refine_jitter copies of each GT box
+    refine_jitter: int = 1
     pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"
     freeze_camera: bool = True
     z_levels: tuple = Z_LEVELS
@@ -149,6 +153,10 @@ class BEVFusionModel(nn.Module):
         self.mover = TimeMover(c, self.grid)
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
         self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction), c, self.mover)
+        if cfg.refine:
+            import random
+            self.refiner = BoxRefiner(c, groups=NUSC_GROUPS, use_dt=True)
+            self._rng = random.Random(0)                          # candidate jitter
         if cfg.aux_heads:                                           # the layouts BEVLoss expects for them
             self.aux_cam = SemanticHead(cfg.c_cam, len(layer_spec(False, True)))
             self.aux_rad = SemanticHead(cfg.c_rad, len(radar_aux_spec(cfg.radar_stationary)))
@@ -190,6 +198,32 @@ class BEVFusionModel(nn.Module):
         out, new_state, _ = block(bevs[:, 0], past, state, step, obs_mass)
         return out, new_state
 
+    def _refine_train(self, obj, feat, gts, dt):
+        """S5c training step of one target time: candidates = top-k decoded boxes (detached) + jittered GT copies,
+        matched to the GT (losses.refine_gt_boxes: unobserved or unsupervised boxes ignored) -> the refiner's steps and
+        the targets in the layout of object_head.refine_loss (losses.BEVLoss adds it to the objects group)."""
+        with torch.no_grad():
+            dets = decode({k: v.detach().float().cpu() for k, v in obj.items()}, self.grid, NUSC_GROUPS,
+                          k=self.cfg.refine_k)
+        box, group, valid, gt, matched = refine_candidates(dets, [refine_gt_boxes(g, self.grid) for g in gts],
+                                                           self.cfg.refine_k, self.cfg.refine_jitter, rng=self._rng,
+                                                           groups=NUSC_GROUPS)
+        dev = feat.device
+        steps = self.refiner(feat, box.to(dev), group.to(dev), self.grid, dt)
+        st = {k: torch.stack([s[k] for s in steps]) for k in ("box_in", "delta", "quality")}    # (n_iter, B, N, ...)
+        return dict(st, gt=gt.to(dev), matched=matched.to(dev), valid=valid.to(dev), group=group.to(dev))
+
+    @torch.no_grad()
+    def boxes(self, res, dt=0.0, k=50, threshold=0.2, rescore=True):
+        """Run time: decoded boxes at the target time dt of a forward result (list (B) of box dicts), refined by S5c
+        when the model has a refiner (rescore: sqrt(score x predicted IoU))."""
+        p = res["out"][float(dt)]
+        dets = decode({kk: v.float().cpu() for kk, v in p["obj"].items()}, self.grid, NUSC_GROUPS, k=k,
+                      threshold=threshold)
+        if not self.cfg.refine or not any(dets):
+            return dets
+        return refine_boxes(self.refiner, p["obj_feat"], dets, self.grid, p["obj_dt"], rescore)
+
     def forward(self, batch, dts=(0.0,), state=None, step=None, ego=None):
         """batch from nuscenes_dataset.collate (or the same layout); dts: the times to decode (s, either sign);
         state: per-branch temporal states of the previous call (sequence training), step: the ego step (dt, v, omega)
@@ -210,11 +244,18 @@ class BEVFusionModel(nn.Module):
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
         v, w = batch["v"].to(S), batch["omega"].to(S)
         out = {}
+        refine_gt = (sample_targets(batch["gt"]) if self.cfg.refine and self.training and batch.get("gt") else {})
         for dt in dts:
             e = (ego or {}).get(float(dt))
             dt_i, v_i, w_i = (dt, v, w) if e is None else (torch.as_tensor(x).to(S) for x in e)
             sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True)
-            p = {"sem": sem, "obj": self.obj_head(S, dt_i, v_i, w_i), "mass": a["mass"]}
+            obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True)
+            p = {"sem": sem, "obj": obj, "mass": a["mass"]}
+            if self.cfg.refine:
+                p["obj_feat"] = ao["state"]                          # what the refiner samples (also at run time)
+                p["obj_dt"] = torch.as_tensor(dt_i).to(S).reshape(-1).expand(S.shape[0])
+                if len(refine_gt.get(float(dt), [])) == S.shape[0]:
+                    p["refine"] = self._refine_train(obj, ao["state"], refine_gt[float(dt)], dt_i)
             if abs(float(dt)) < 1e-6:
                 p["v_hat"] = self.mover.motion(S)
                 if self.cfg.aux_heads and self.training:
@@ -289,6 +330,22 @@ def _selftest():
         u_ref, u_gap = unk([0.5, 0.5]), unk([0.5, 0.45])
     assert abs(float(u_gap[0] - u_ref[0])) < 1e-6 and abs(float(u_gap[1] / u_ref[1]) - 0.9) < 0.05, (u_ref, u_gap)
     del model, res, res2
+    # S5c in training: refine=True adds the refinement terms to the objects group, the gradient reaches the refiner,
+    # the output survives the trainer's float cast; at run time boxes() returns refined boxes
+    m = BEVFusionModel(ModelConfig(pretrained="", refine=True)).train()
+    r = m(batch, dts=dts)
+    cast = {dt: {k: ({a: b.float() for a, b in v.items()} if isinstance(v, dict) else v.float()) for k, v in p.items()}
+            for dt, p in r["out"].items()}                                       # as train.py does
+    Lr = BEVLoss(grid=m.grid)(cast, gts, step_frac=1.0)
+    assert all(f"refine.reg@{dt:+.1f}" in Lr for dt in dts) and torch.isfinite(Lr["total"]), sorted(Lr)[:8]
+    Lr["total"].backward()
+    assert any(q.grad is not None and q.grad.abs().sum() > 0 for q in m.refiner.mlp.parameters()), "refiner gradient"
+    n_ref = int(r["out"][0.0]["refine"]["valid"].sum())
+    m.eval()
+    with torch.no_grad():
+        rb = m.boxes(m(batch, dts=(0.0,)), 0.0, threshold=0.0)
+    assert len(rb) == 2 and all(len(b) > 0 for b in rb) and "obj_feat" in r["out"][0.0]
+    del m, r, cast, Lr
     # every swappable block (shapes only: no checkpoint, no gradient)
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
              {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"}]
@@ -304,7 +361,8 @@ def _selftest():
           f"{float(L['total'].detach()):.2f} ({groups}); {n_train / 1e6:.1f} M of {n_all / 1e6:.1f} M parameters trainable "
           f"(camera heads frozen, no gradient); gradients reach reduce, camera temporal, radar, fusion, trunk, mover, "
           f"both heads; sequence mode with state; per-sample keyframe gap (ego = scalar path; 0.45 s gap: unknown band "
-          f"{float(u_gap[1] / u_ref[1]):.2f} x the 0.5 s band); swapped blocks run: {', '.join(tried)}")
+          f"{float(u_gap[1] / u_ref[1]):.2f} x the 0.5 s band); S5c refinement trains ({n_ref} valid candidates at dt 0, "
+          f"gradient reaches the refiner, float cast ok) and refines at run time; swapped blocks run: {', '.join(tried)}")
 
 
 if __name__ == "__main__":
