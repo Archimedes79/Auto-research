@@ -341,8 +341,10 @@ class FlowPyramid(nn.Module):
     fine-grid velocity after each iteration (sum(iters) entries). v is detached between iterations, also between
     levels (RAFT): each level learns only from the losses on its own outputs - put a loss on every output."""
 
-    def __init__(self, cin, grid, factors=(4, 2, 1), iters=(2, 1, 1), radius=3, **kw):
+    def __init__(self, cin, grid, factors=(4, 2, 1), iters=(2, 1, 1), radius=3, detach_levels=True, **kw):
         super().__init__()
+        self.detach_levels = detach_levels    # False = the earlier behaviour (coarse corrections pass a gradient into
+        #                                       v0); kept as an option: on the box test it scored better (one seed)
         assert len(factors) == len(iters)
         assert all(grid.nx % f == 0 and grid.ny % f == 0 for f in factors), "grid size must divide by every factor"
         self.grid, self.factors, self.iters = grid, tuple(factors), tuple(iters)
@@ -355,7 +357,7 @@ class FlowPyramid(nn.Module):
         not see the correction of the previous one: it works on the pooled field)."""
         out, v = [], v0
         for f, n, rf in zip(self.factors, self.iters, self.levels):
-            v = v.detach()              # between levels as between iterations (RAFT); without it the coarse output
+            v = v.detach() if self.detach_levels else v   # between levels as between iterations (RAFT); without it the coarse output
             #                             base + up(vk - pool(base)) passed a high-pass gradient into v0 (the
             #                             hypotheses), and B collapsed in both pyramid arms (10 / 22 m/s, 2026-10-26)
             if f == 1:

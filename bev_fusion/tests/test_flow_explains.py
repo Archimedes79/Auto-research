@@ -23,6 +23,9 @@ Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
       4 iterations of FlowRefine at 0.5 m) [--smooth 0.05] (edge-aware smoothness of every flow, weights from the input
       map: one box moves as one body - the first run failed 0 / 5: the field was a patchwork inside each box, the raw
       move scattered the boxes into debris, the decoder repaired it; prediction IoU 0.85, raw move 0.27, v = 0 0.42)
+      [--doppler] (simulated radar Doppler, a detection in half the occupied cells, applied to the start field and after
+      EVERY refinement iteration - in tests/test_flow_refine.py this kept the stripes static and improved A)
+      [--pyr-leak] (the pyramid without detaching between levels: the pre-fix behaviour, compared on seeds)
 """
 import math
 import os
@@ -39,7 +42,7 @@ sys.path.insert(0, "tests")
 from lift_pd import Grid  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402
 from flow_viz import flow_rgb, wheel  # noqa: E402
-from temporal import FlowPyramid, FlowRefine, TemporalPropagation, propagate  # noqa: E402
+from temporal import FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, propagate  # noqa: E402
 
 QUICK = "--quick" in sys.argv
 
@@ -51,7 +54,9 @@ def arg(name, default):
 SEED, DT, PRIOR, K = arg("--seed", 0), arg("--dt", 0.25), arg("--prior", 1e-3), 4
 SHARP, PYR, ENT = "--sharp" in sys.argv, "--pyr" in sys.argv, arg("--ent", 5e-3)
 SMOOTH = arg("--smooth", 0.0)
-TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "")
+DOPPLER = "--doppler" in sys.argv
+LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
+TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_s{SEED}" if SEED else "")
 G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
@@ -84,27 +89,54 @@ def frames(rng):
     return maps, g[0]["velocity"], g[0]["box_id"], [(DT, s0.v, s0.omega)]
 
 
+def radar_measure(f0, vgt, sigma_d=0.1, rate=0.5):
+    """simulated Doppler of frame 0: radar at the origin, a detection in a random half of the occupied cells (boxes and
+    lane lines), d = u . v_ground + noise (lane lines: 0) -> (u, d, valid) for doppler_update."""
+    B, N = f0.shape[0], G.nx * G.ny
+    xs, ys = G.xy_centres(device=f0.device)
+    gx, gy = torch.meshgrid(xs, ys, indexing="ij")
+    r = torch.sqrt(gx ** 2 + gy ** 2).clamp(min=1e-3)
+    u = torch.stack([gx / r, gy / r]).reshape(1, 1, 2, N).expand(B, 1, 2, N)
+    d = (u[:, 0] * vgt.reshape(B, 2, N)).sum(1, keepdim=True) + sigma_d * torch.randn(B, 1, N, device=f0.device)
+    valid = ((f0.max(1).values > 0.5) & (torch.rand(B, G.nx, G.ny, device=f0.device) < rate)).float().reshape(B, 1, N)
+    return u, d, valid
+
+
+def radar_apply(v, meas, sigma_p=4.0, sigma_d=0.1):
+    u, d, valid = meas
+    B, N = v.shape[0], G.nx * G.ny
+    P = (torch.eye(2, device=v.device) * sigma_p ** 2).view(1, 2, 2, 1).expand(B, 2, 2, N)
+    out, _ = doppler_update(v.reshape(B, 2, N), P, u, d, valid, sigma_d=sigma_d)
+    return out.view_as(v)
+
+
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
         self.enc = nn.Sequential(nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, C, 3, padding=1))
         self.tp = TemporalPropagation(cin=C, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=SHARP)
-        self.rf = FlowPyramid(C, G, factors=(4, 2, 1), iters=(2, 1, 1)) if PYR else FlowRefine(C, G, radius=3)
+        self.rf = (FlowPyramid(C, G, factors=(4, 2, 1), iters=(2, 1, 1), detach_levels=not LEAK) if PYR
+                   else FlowRefine(C, G, radius=3))
         self.dec = nn.Sequential(nn.Conv2d(C + 1, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, 3, 1))
 
-    def forward(self, f0, f1, steps, v_override=None):
+    def forward(self, f0, f1, steps, v_override=None, vgt=None):
         e0, e1 = self.enc(f0), self.enc(f1)
         r = self.tp(e0, steps)
         self.ent = r["entropy"]
         imp = self.tp.importance_of(e0.flatten(2)).view(e0.shape[0], G.nx, G.ny) if SHARP else None
+        v0, corr = r["v_mean"], None
+        if DOPPLER and vgt is not None and v_override is None:      # the measurement corrects the start and EVERY iteration
+            meas = radar_measure(f0, vgt)
+            v0 = radar_apply(v0, meas)
+            corr = lambda v: radar_apply(v, meas)                     # noqa: E731
         if v_override is not None:
             flows = [v_override]
         elif PYR:
-            flows = [r["v_mean"]] + self.rf(e0, e1, steps, r["v_mean"])
+            flows = [v0] + self.rf(e0, e1, steps, v0, correct=corr)
         else:
-            flows = [r["v_mean"]] + self.rf(e0, e1, steps, r["v_mean"], iters=K)
+            flows = [v0] + self.rf(e0, e1, steps, v0, iters=K, correct=corr)
         preds = []
         for v in flows:
             p, mass = propagate(e0, steps, v, G, importance=imp)
@@ -130,7 +162,8 @@ def train(model, data, iters, rng, bs=8, lr=2e-3):
         batch = [data[rng.randrange(len(data))] for _ in range(bs)]
         m = torch.stack([b[0] for b in batch]).to(DEV)
         steps = [b[3] for b in batch]
-        flows, preds, mix = model(m[:, 0], m[:, 1], steps)
+        vg = torch.stack([b[1] for b in batch]).to(DEV)
+        flows, preds, mix = model(m[:, 0], m[:, 1], steps, vgt=vg)
         tgt = m[:, 1]
         loss = F.binary_cross_entropy_with_logits(mix, tgt)
         for k, p in enumerate(preds[1:]):
@@ -175,7 +208,7 @@ def evaluate(model, test):
     epe = {"vehicles": [0.0, 0], "pedestrians": [0.0, 0], "lanes": [0.0, 0]}
     for maps, vgt, bid, steps in test:
         m = maps[None].to(DEV)
-        flows, preds, _ = model(m[:, 0], m[:, 1], [steps])
+        flows, preds, _ = model(m[:, 0], m[:, 1], [steps], vgt=vgt[None].to(DEV))
         v = flows[-1]
         zero = torch.zeros_like(v)
         _, p0, _ = model(m[:, 0], m[:, 1], [steps], v_override=zero)
@@ -224,7 +257,7 @@ def picture(model, test, path, n=3):
     for r in range(n):
         maps, vgt, bid, steps = test[r]
         m = maps[None].to(DEV)
-        flows, preds, _ = model(m[:, 0], m[:, 1], [steps])
+        flows, preds, _ = model(m[:, 0], m[:, 1], [steps], vgt=vgt[None].to(DEV))
         v = flows[-1]
         occ = (maps[0, 1:].max(0).values > 0.3).float()
         ims = [overlay(maps[0], maps[1]), flow_rgb(vgt, occ, 15.0), flow_rgb(v[0].cpu(), occ, 15.0),
@@ -248,7 +281,7 @@ if __name__ == "__main__":
     n_train, n_test, iters = (300, 16, 600) if QUICK else (1500, 48, 3000)
     data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
     test = dataset([50_000 + i for i in range(n_test)], "test")
-    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR}, smooth {SMOOTH}; {n_train} training sequences, {n_test} held-out, "
+    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR} (leak {LEAK}), smooth {SMOOTH}, doppler {DOPPLER}; {n_train} training sequences, {n_test} held-out, "
           f"{iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
     torch.manual_seed(SEED)
     model = Model().to(DEV)
