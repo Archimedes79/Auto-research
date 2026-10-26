@@ -49,7 +49,7 @@ def run(runp, n_clips=600, workers=4, device="cuda"):
                                          collate_fn=functools.partial(collate_clips, fn=collate_cached))
     spec, grid = model.spec, model.grid
     use_ref = bool(cfg.model.get("refine")) and hasattr(model, "boxes")
-    M = {w: {"seg": {"fov": SegMeter(grid), "seen": SegMeter(grid), "obj": SegMeter(grid)},
+    M = {w: {"seg": {"fov": SegMeter(grid), "seen": SegMeter(grid), "out": SegMeter(grid), "obj": SegMeter(grid)},
              "det": DetMeter(classes=[g for g, _ in NUSC_GROUPS]),
              "detr": DetMeter(classes=[g for g, _ in NUSC_GROUPS]) if use_ref else None} for w in ("warm", "cold")}
     t0, n = time.time(), 0
@@ -87,7 +87,11 @@ def run(runp, n_clips=600, workers=4, device="cuda"):
             flat.update({f"{w}/detr/" + k[len("det/"):]: v for k, v in report(det=M[w]["detr"]).items()})
     lines = [f"{runp} step {step}: warm vs cold memory on the last keyframe of {n} val clips of {L} keyframes (EMA, VAL)"]
     for dt in ("dt+0.00", "dt+0.50", "dt-0.50"):
-        rows = [(f"drivable IoU@0", f"seg_fov/seg/{dt}/drivable_area/all/all/iou@0"),
+        rows = [(f"drivable IoU@0 (in view)", f"seg_fov/seg/{dt}/drivable_area/all/all/iou@0"),
+                ("drivable IoU@0 (outside view)", f"seg_out/seg/{dt}/drivable_area/all/all/iou@0"),
+                ("walkway IoU@0 (outside view)", f"seg_out/seg/{dt}/walkway/all/all/iou@0"),
+                ("lane-div mask IoU@1 (outside view)", f"seg_out/seg/{dt}/lane_divider/all/all/iou@1"),
+                ("drivable IoU@0 (camera or radar)", f"seg_seen/seg/{dt}/drivable_area/all/all/iou@0"),
                 ("walkway IoU@0", f"seg_fov/seg/{dt}/walkway/all/all/iou@0"),
                 ("lane-divider mask IoU@1", f"seg_fov/seg/{dt}/lane_divider/all/all/iou@1"),
                 ("vehicle coverage IoU", f"seg_obj/seg/{dt}/vehicle/all/all/iou@0"),
@@ -100,7 +104,7 @@ def run(runp, n_clips=600, workers=4, device="cuda"):
             kw = f"warm/{key}"
             kc = f"cold/{key}"
             if kw in flat and kc in flat:
-                lines.append(f"  {label:26s} warm {flat[kw]:8.4f}  cold {flat[kc]:8.4f}  warm - cold {flat[kw] - flat[kc]:+8.4f}")
+                lines.append(f"  {label:36s} warm {flat[kw]:8.4f}  cold {flat[kc]:8.4f}  warm - cold {flat[kw] - flat[kc]:+8.4f}")
     txt = "\n".join(lines)
     out = os.path.join(runp, "eval")
     os.makedirs(out, exist_ok=True)

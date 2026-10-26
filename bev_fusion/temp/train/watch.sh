@@ -17,6 +17,7 @@ while true; do
       sed -n "$((seen[$n] + 1)),${total}p" "$f" | grep -E "$pat" | sed "s/^/[$n] /"
       seen[$n]=$total
     fi
+    [ "${seen[$n]}" -ge 999999999 ] && continue                      # already reported as finished / crashed
     if [ -f runs/$n/.done ]; then echo "[$n] finished (.done)"; seen[$n]=999999999; continue; fi
     if grep -q Traceback "$f"; then echo "[$n] crashed"; seen[$n]=999999999; continue; fi
     [ "${seen[$n]}" -lt 999999999 ] && alive=1

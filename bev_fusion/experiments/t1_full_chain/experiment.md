@@ -75,6 +75,33 @@ into this folder as `results/<name>_metrics.json` (text, in git).
 - Other chats edit the shared training code (an uncommitted sequence-training change in train.py appeared at 07:30): the
   launcher (temp/train/run_cfg.sh) now trains from a snapshot of the COMMITTED training/ code (git archive HEAD into
   runs/<name>/code/, commit in SNAPSHOT.txt).
+- 07:50-08:30: other chats' jobs ran next to t1_r0 (box-optimality and radar-encoder tests on the GPU: their
+  run_when_gpu_free waiters fired because t1_r0 is loader-bound and its GPU use dips below 50 %; CPU jobs of the
+  temporal-fusion chat at 4 cores; load 20 on 12 cores): t1_r0 slowed from 1.7 to about 6-7 s per step. Asked every chat
+  to stop / cap / wait for `pgrep -f "[t]1_r"` to find nothing. Speed does not change the result (same steps, same data).
+- Motion head (review by the bug-hunter chat: val group.motion 1.126 at steps 1000 / 2000 / 3000): it does train (the
+  output layer's norm grows 0.12 -> 0.25 -> 0.33 over steps 3000-4000; temp/train/motion_check.py), but slowly, and its
+  gradient at the BEV feature is about 1e-6 (the trunk learns nothing for motion): the dt = +-0.5 s outputs rest mostly on
+  the ego compensation. A candidate for round 2.
+
+### 2b. Change of plan (Mirko, 2026-10-26 08:40: "create a combined system, fix all issues, train one time, send results, shut down")
+The two separate round-1 arms are cancelled. t1_r0 (window-only, 5000 steps) finishes as the labelled baseline; ONE combined
+run `t1_r3_combined` (training/configs/t1_r3_combined.json, code pinned to commit 04a7de9) replaces rounds 1 and 2.
+Defects found and what the combined run does about each (an honest list: no ablation separates them, the run is one shot):
+| defect (evidence) | fix in the combined run |
+|---|---|
+| vehicle heading not learned: AOE 1.77 rad, rot loss at the random level, cos sign agreement 0.45-0.52 (step 1000 and 2000) | `model.object_direction`: sign-free axis loss + front / back class (SECOND); self-test in object_head.py |
+| the world memory never used in training: every earlier run has seq_len 1, memory / confidence inputs always 0 (review finding 3) | sequence training: clips of 3 consecutive keyframes, memory carried with the ego step, BPTT through it (`seq_len 3, seq_bptt true`, batch 2 clips x accum 3 = 18 samples per step); write only where the camera sees (e2b0ff5); memory confidence cap w_max 8 -> 2 so the fuse conv's confidence input covers the run-time range (5f401f8, temporal-fusion review); warm / cold validation pair logged |
+| unsupervised static weight of the memory (moving objects stay as ghosts) | BPTT: later keyframes' losses train the write path (the alternative, a direct supervision of that head, is not built) |
+| round 0 trained on a code state before these fixes | the final run trains and is evaluated with a snapshot of commit 04a7de9 |
+| box quality (ATE 0.6-0.8 m at step 1000) | S5c refinement (`model.refine`, 83c59fc), scored next to the plain boxes |
+| line zero-crossing F1 about 0: the distance field never reaches <= 0.25 m on GT lines (median 1.36 m) | no loss bug found (temp/train/line_check.py, losses.py read); not a code defect but under-training; the longer run is the only lever; line MASK IoU is reported next to it |
+| motion head: val loss flat, gradient at the BEV feature about 1e-6 | not a code defect (zero-start output layer, norm grows); more steps; reported |
+| radar tangential displacement of movers inside the 0.5 s window (review finding 4) | limitation, not changed (the age channel is given); the radar cache is keyed to the window |
+Not included, with reason: the RadarEncoder (training/radar_encoder.py: not wired into the chain, only its own gate), UW-SO
+balancing and the line-boundary loss (no evidence they fix a measured defect), Kendall stays as in round 0.
+Smoke test of the combination on the real caches (24 steps, temp/train/t1_r3_smoke_bptt.json): runs, peak 5.1 GB GPU, all
+terms finite, validation logs total_last_warm / total_last_cold; evaluate_run.py and eval_memory.py run on its checkpoint.
 
 ## 3. Summary
-(after round 2)
+(after the combined run)

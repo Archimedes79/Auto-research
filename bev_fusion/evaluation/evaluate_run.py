@@ -41,8 +41,10 @@ from object_head import decode  # noqa: E402
 from train import (EMA, TrainConfig, build, forward_loss, load_checkpoint, make_datasets, make_loader,  # noqa: E402
                    param_groups, val_subset)
 
-HEADLINE_SEG = (("drivable_area", "fov"), ("lane_divider:zc", "fov"), ("vehicle", "fov"))
-SEG_METRIC = {"drivable_area": "iou@0", "lane_divider:zc": "f1@0.5", "vehicle": "iou@0"}
+HEADLINE_SEG = (("drivable_area", "fov"), ("walkway", "fov"), ("lane_divider", "fov"), ("lane_divider:zc", "fov"),
+                ("vehicle", "fov"))
+SEG_METRIC = {"drivable_area": "iou@0", "walkway": "iou@0", "lane_divider": "iou@0.5", "lane_divider:zc": "f1@0.5",
+              "vehicle": "iou@0"}
 
 
 # ------------------------------------------------------------------------------------------------ helpers
@@ -83,7 +85,7 @@ def masks(g):
     cam = np.asarray(g["camera"], np.float32) > 0
     seen = np.asarray(g["undefined"], np.float32) == 0
     keep = (np.asarray(g["ignore"], np.float32) == 0) if "ignore" in g else np.ones_like(cam)
-    return {"fov": cam, "seen": seen, "obj_fov": cam & keep}
+    return {"fov": cam, "seen": seen, "obj_fov": cam & keep, "out": ~cam}      # out: whole grid outside the current view
 
 
 def add_sample(meters, prob, dist, g, spec, dt, mass):
@@ -95,7 +97,9 @@ def add_sample(meters, prob, dist, g, spec, dt, mass):
     gt_a = {n: np.asarray(g[k[n][2]], np.float32) for n in areas}
     gt_o = {n: np.asarray(g[k[n][2]], np.float32) for n in objs}
     gt_d = {n: np.asarray(g[n + "_dist"], np.float32) for n in dist}
-    for mname in ("fov", "seen"):
+    for mname in ("fov", "seen", "out"):
+        if mname not in meters:
+            continue
         meters[mname].add(areas, gt_a, mask=m[mname], mass=mass, dt=dt)
         meters[mname].add_lines(dist, gt_d, mask=m[mname], mass=mass, dt=dt)
     meters["obj"].add(objs, gt_o, mask=m["obj_fov"], mass=mass, dt=dt)
@@ -427,12 +431,15 @@ def det_ap(frames_by_scene, scenes, cls, thr=2.0):
     return ap_nuscenes([x[1] for x in m], n_gt)
 
 
-def compare(run_a, run_b, n_boot=1000, seed=0):
-    """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval."""
+def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0):
+    """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval. det_a / det_b: the box set of each
+    run ('det' = plain decode, 'detr' = refined by S5c); dt: the target time of the detection numbers (the map numbers are
+    at dt 0)."""
     ra = pickle.load(open(os.path.join(run_a, "eval", "scene_records.pkl"), "rb"))
     rb = pickle.load(open(os.path.join(run_b, "eval", "scene_records.pkl"), "rb"))
     rng = np.random.default_rng(seed)
-    lines = [f"paired scene bootstrap ({n_boot} resamples), b - a; a = {run_a}, b = {run_b}; val, dt 0"]
+    lines = [f"paired scene bootstrap ({n_boot} resamples), b - a; a = {run_a} ({det_a}), b = {run_b} ({det_b}); val; "
+             f"maps at dt 0, boxes at dt {dt:+.1f}"]
     res = {}
     for layer, _ in HEADLINE_SEG:
         metric = SEG_METRIC[layer]
@@ -446,8 +453,8 @@ def compare(run_a, run_b, n_boot=1000, seed=0):
             ds.append(_seg_value(Bc[ix].sum(0), metric) - _seg_value(A[ix].sum(0), metric))
         lo, hi = np.percentile(ds, [2.5, 97.5])
         res[f"{layer} {metric}"] = (point, lo, hi, _seg_value(A.sum(0), metric), _seg_value(Bc.sum(0), metric))
-    fa = {s: r[0.0] for s, r in ra["det"].items() if 0.0 in r}
-    fb = {s: r[0.0] for s, r in rb["det"].items() if 0.0 in r}
+    fa = {s: r[dt] for s, r in ra[det_a].items() if dt in r}
+    fb = {s: r[dt] for s, r in rb[det_b].items() if dt in r}
     sc = sorted(set(fa) & set(fb))
     nb = min(n_boot, 200)                                    # matching is slow in python
     for cls in ("vehicle", "pedestrian"):
@@ -478,9 +485,12 @@ if __name__ == "__main__":
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--compare", nargs=2)
     ap.add_argument("--boot", type=int, default=1000)
+    ap.add_argument("--det-a", default="det", help="box set of run a: det (plain) or detr (refined)")
+    ap.add_argument("--det-b", default="det")
+    ap.add_argument("--dt", type=float, default=0.0, help="target time of the detection comparison")
     a = ap.parse_args()
     if a.compare:
         os.chdir(ROOT)
-        compare(*a.compare, n_boot=a.boot)
+        compare(*a.compare, n_boot=a.boot, det_a=a.det_a, det_b=a.det_b, dt=a.dt)
     else:
         evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers)
