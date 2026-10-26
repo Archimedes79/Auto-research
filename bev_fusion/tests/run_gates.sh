@@ -21,6 +21,12 @@ run "camera encoder"    "$PY" training/camera_encoder.py
 run "radar encoder"     "$PY" training/radar_bev.py
 run "splat"             "$PY" training/splat.py
 run "BEV trunk"         "$PY" training/bev_trunk.py
+run "temporal fusion"   "$PY" training/temporal_fusion.py
+run "fusion"            "$PY" training/fusion.py
+run "timed heads"       "$PY" training/timed_head.py
+run "object head"       "$PY" training/object_head.py
+run "metrics"           "$PY" evaluation/metrics.py
+run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py
 if [ "${1:-}" = "--all" ]; then
