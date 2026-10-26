@@ -84,6 +84,14 @@ into this folder as `results/<name>_metrics.json` (text, in git).
   gradient at the BEV feature is about 1e-6 (the trunk learns nothing for motion): the dt = +-0.5 s outputs rest mostly on
   the ego compensation. A candidate for round 2.
 
+- t1_r0 finished 09:04 (5000 steps, final validation total 8.96 on the 100-sample training subset). Full VAL evaluation of
+  the baseline (3109 samples, 82 scenes, EMA, runs/t1_r0/eval, 23 min): drivable IoU@0 0.699 (prior map 0.429), walkway
+  0.278, carpark 0.201, ped crossing 0.106; lane-divider mask IoU@0.5 0.327 / @1 0.433, road divider @1 0.425; lane-divider
+  zero-crossing F1@0.5 0.068 (road divider 0.190); vehicle coverage IoU 0.435; vehicle AP@2 0.643 (dt +0.5: 0.411, dt -0.5:
+  0.479), ATE 0.60 m, ASE 0.17, AOE 1.78 rad (heading not learned), AVE 1.92 m/s; pedestrian AP@2 0.214; two-wheeler 0.258; mAP
+  (dt 0) 0.307, dt +0.5 0.189, dt -0.5 0.236. Pre-registered predictions: drivable >= 0.60 and vehicle AP@2 >= 0.25 hold;
+  "dt +0.5 s within 0.05 IoU of dt 0" is checked in the report.
+
 ### 2b. Change of plan (Mirko, 2026-10-26 08:40: "create a combined system, fix all issues, train one time, send results, shut down")
 The two separate round-1 arms are cancelled. t1_r0 (window-only, 5000 steps) finishes as the labelled baseline; ONE combined
 run `t1_r3_combined` (training/configs/t1_r3_combined.json, code pinned to commit 04a7de9) replaces rounds 1 and 2.
@@ -102,6 +110,16 @@ Not included, with reason: the RadarEncoder (training/radar_encoder.py: not wire
 balancing and the line-boundary loss (no evidence they fix a measured defect), Kendall stays as in round 0.
 Smoke test of the combination on the real caches (24 steps, temp/train/t1_r3_smoke_bptt.json): runs, peak 5.1 GB GPU, all
 terms finite, validation logs total_last_warm / total_last_cold; evaluate_run.py and eval_memory.py run on its checkpoint.
+
+### 2c. Log of the combined run
+- 09:08 start (commit 04a7de9, 8000 steps, 2.6-3.7 s per step: the loop is CPU / GPU-sync bound, GPU 44-60 % busy; profile
+  temp/train/profile_step.py: no single hot spot, many small syncs). 09:58 step 1000 checkpoint, then shortened to 6000
+  steps and resumed (10:00; the cosine curve moves by about 1 % at step 1000).
+- Early check, step 1000 checkpoint, 200 VAL samples over 82 scenes (baseline at its own step 1000, same kind of subset, in
+  brackets): drivable IoU 0.616 (0.642), lane-divider mask IoU@1 0.245, vehicle AP@2 0.602 (0.590), ATE 0.66 m, **AOE
+  1.13 rad (1.76)**; matched vehicles: median heading error **0.07 rad (2.99)**, flips (> 90 deg) **30 % (59 %)**, the axis
+  error median 0.04 rad: the direction head learns the front / back half (temp/train/yaw_check.py). Refined and plain
+  boxes agree closely (vehicle AP@2 0.599 / 0.602).
 
 ## 3. Summary
 (after the combined run)
