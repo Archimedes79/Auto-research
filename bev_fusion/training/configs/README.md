@@ -13,7 +13,7 @@ Arms (fields to change against `t1_base.json`; none is run yet, every one is a p
 | arm | fields | question |
 |---|---|---|
 | balancing | `"balancing": "fixed"` / `"uwso"` with `"uwso_T": 1, 2, 5, 10, 20` | does UW-SO (2408.07985) beat Kendall weights; T searched on quarter-length runs (`steps` / 4) |
-| consistency | `"consistency": 1.0` / `5.0` (first read the logged `consistency` value after the hold: the weight should make the term 3-10 % of `total_main`) | does the bidirectional cross-time consistency help dt = +-0.5 s |
+| consistency | `"consistency": 30` / `100` (the raw value is about 0.01 in the first steps, a mean over all cells and channels; the diagnostic logs its gradient norm at the BEV feature as group `consistency`: choose the weight so that weight x norm is 10-30 % of the largest other group's norm, and re-check after the hold) | does the bidirectional cross-time consistency help dt = +-0.5 s |
 | area overlap | `"loss": {"area_overlap": "semimetric"}` | Dice semimetric instead of 1 - soft IoU on soft coverage |
 | line boundary | `"loss": {"line_boundary": true}` | boundary false-positive loss on the lines |
 | dt weights | `"loss": {"dt_weights": [[0, 1], [0.5, 0.9], [1, 0.25]]}` | published 0.9 per 0.5 s step against 0.5 |

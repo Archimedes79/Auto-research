@@ -329,6 +329,8 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
             out["total"] = out["total"] + wc * ct["total"]
         if diag:
             groups = {k[len("group."):]: v for k, v in out.items() if k.startswith("group.") and torch.is_tensor(v) and v.requires_grad}
+            if wc > 0 and out["consistency"].requires_grad:      # its gradient norm at the BEV feature calibrates its weight
+                groups["consistency"] = out["consistency"]
             if len(groups) > 1:
                 names, C, nrm = group_gradient_cosines(groups, res["features"])
                 out["diag"] = {"groups": names, "cos": C.tolist(), "norm": nrm.tolist()}
