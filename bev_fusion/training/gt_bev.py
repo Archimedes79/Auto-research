@@ -9,9 +9,13 @@ Layers on a grid (lift_pd.Grid: x forward 0..60 m, y left -26..26 m, 0.5 m or 0.
 - areas: drivable_area, ped_crossing, walkway, stop_line, carpark_area - coverage fraction (4 x 4 supersampling)
 - lines: lane_divider, road_divider - 1-cell mask and a truncated distance field (metres, up to 2 m)
 - centre-lines: lane and lane_connector arcs - mask and direction (cos, sin of the heading in the ego frame)
-- objects: vehicle, pedestrian, two_wheeler - coverage fraction; velocity (vx, vy, ego axes); instance index
+- objects: vehicle, pedestrian, two_wheeler - coverage fraction; velocity (vx, vy, ego axes); instance (index into
+  meta["boxes"], -1 = none); only boxes with at least one lidar or radar point - boxes without any (nuScenes keeps
+  them, its detection evaluation drops them) go into the ignore mask: neither object nor free space
 - masks: camera (ground cells that project into the CAM_FRONT image), occluded (behind a box seen from the camera),
-  radar (inside one of the five radars' field of view - an approximate fan, see RADAR_FOV), undefined (neither)
+  radar (inside one of the five radars' field of view - an approximate fan, see RADAR_FOV), undefined (neither),
+  ignore (footprints of boxes without sensor points)
+- stationary rule (Mirko, 2026-10-26): static GT does not move - see NuScenesGT.__init__
 Conventions: arrays [ix, iy] with x forward, y left (as the rest of training/); sub-pixel centres at
 x_min + (i + 0.5) s. Rasterised with OpenCV on the supersampled grid in our own index convention (the map API's
 get_map_mask has its own orientation; we only use its polygons and lines).
@@ -121,11 +125,48 @@ def cell_centres(grid):
 class NuScenesGT:
     """GT per keyframe and training samples from a nuScenes copy (the WSL views ~/data/nuscenes, ~/data/nuscenes_full)."""
 
-    def __init__(self, dataroot, version, nusc=None):
+    def __init__(self, dataroot, version, nusc=None, stationary_fix=True, map_offsets=None):
+        """Rule (Mirko, 2026-10-26): stationary GT is temporally stable - it does not move.
+        - map layers are drawn from fixed world geometry in every frame; a correction may only be given per map element
+          in WORLD coordinates (map_offsets: element token -> (dx, dy) metres, applied identically in every frame),
+          never per frame
+        - stationary objects (speed < 0.5 m/s over the whole track and < 1 m from their median position) get ONE world
+          pose for all their keyframes (median position, mean yaw, median size) and velocity 0 (stationary_fix)"""
         from nuscenes.nuscenes import NuScenes
         self.nusc = nusc or NuScenes(version=version, dataroot=dataroot, verbose=False)
         self.dataroot = dataroot
         self._maps = {}
+        self.stationary_fix = stationary_fix
+        self.map_offsets = map_offsets or {}
+        self._stationary = {}
+
+    def stationary_instances(self, scene_token, v_max=0.5, d_max=1.0):
+        """instance token -> fixed world pose (translation (3,), yaw, size (3,)) for the scene's stationary instances."""
+        if scene_token in self._stationary:
+            return self._stationary[scene_token]
+        nusc = self.nusc
+        tracks = {}
+        tok = nusc.get("scene", scene_token)["first_sample_token"]
+        while tok:
+            s = nusc.get("sample", tok)
+            for atok in s["anns"]:
+                a = nusc.get("sample_annotation", atok)
+                v = nusc.box_velocity(atok)
+                tracks.setdefault(a["instance_token"], []).append(
+                    (np.array(a["translation"]), Quaternion(a["rotation"]).yaw_pitch_roll[0], np.array(a["size"]),
+                     np.hypot(v[0], v[1]) if np.isfinite(v[:2]).all() else np.nan))
+            tok = s["next"]
+        fixed = {}
+        for inst, tr in tracks.items():
+            P = np.stack([t[0] for t in tr])
+            sp = np.array([t[3] for t in tr])
+            med = np.median(P, 0)
+            if np.nanmax(np.r_[sp, 0.0]) < v_max and np.linalg.norm(P[:, :2] - med[:2], axis=1).max() < d_max:
+                yaws = np.array([t[1] for t in tr])
+                fixed[inst] = (med, math.atan2(np.sin(yaws).mean(), np.cos(yaws).mean()),
+                               np.median(np.stack([t[2] for t in tr]), 0))
+        self._stationary[scene_token] = fixed
+        return fixed
 
     def map_for(self, scene_token):
         from nuscenes.map_expansion.map_api import NuScenesMap
@@ -165,9 +206,9 @@ class NuScenesGT:
             polys = []
             for tok in recs[layer]:
                 rec = nmap.get(layer, tok)
-                for ptok in rec.get("polygon_tokens", [rec.get("polygon_token")]):
-                    if ptok is None:
-                        continue
+                # a token of None is real: in singapore-hollandvillage / -queenstown the road network of the drivable
+                # area is the one polygon whose token is null (found 2026-10-26 - it had been skipped: no road in GT)
+                for ptok in (rec["polygon_tokens"] if "polygon_tokens" in rec else [rec["polygon_token"]]):
                     poly = nmap.extract_polygon(ptok)
                     if poly.is_empty:
                         continue
@@ -181,7 +222,8 @@ class NuScenesGT:
             for tok in recs[layer]:
                 line = nmap.extract_line(nmap.get(layer, tok)["line_token"])
                 if not line.is_empty:
-                    pls.append(to_ego(np.asarray(line.coords)[:, :2]))
+                    g = np.asarray(line.coords)[:, :2] + np.asarray(self.map_offsets.get(tok, (0.0, 0.0)))  # world-fixed
+                    pls.append(to_ego(g))
             vectors[layer] = pls                                  # exact geometry, ego frame (no grid)
             R.lines(img, pls)
             dist = cv2.distanceTransform((img == 0).astype(np.uint8), cv2.DIST_L2, 5) * R.s
@@ -214,31 +256,42 @@ class NuScenesGT:
         Rg2e = T_g2e[:3, :3]
         objs = {k: R.canvas() for k in OBJECTS}
         inst = np.full(R.shape, -1, np.int32)
+        ignore = R.canvas()
         vel = np.zeros((2,) + R.shape, np.float32)
         boxes = []
+        fixed = self.stationary_instances(sample["scene_token"]) if self.stationary_fix else {}
         for i, atok in enumerate(sample["anns"]):
             a = nusc.get("sample_annotation", atok)
             grp = category_group(a["category_name"])
             if grp is None:
                 continue
-            q = Quaternion(a["rotation"])
-            yaw = q.yaw_pitch_roll[0]
-            w, l = a["size"][0], a["size"][1]
+            stationary = a["instance_token"] in fixed
+            if stationary:                                       # one world pose for the whole track (rule above)
+                trans, yaw, size = fixed[a["instance_token"]]
+            else:
+                trans, yaw, size = np.array(a["translation"]), Quaternion(a["rotation"]).yaw_pitch_roll[0], a["size"]
+            w, l = size[0], size[1]
             c, s_ = math.cos(yaw), math.sin(yaw)
             loc = np.array([[l / 2, w / 2], [l / 2, -w / 2], [-l / 2, -w / 2], [-l / 2, w / 2]])
-            cg_ = loc @ np.array([[c, s_], [-s_, c]]) + np.array(a["translation"][:2])
+            cg_ = loc @ np.array([[c, s_], [-s_, c]]) + np.asarray(trans)[:2]
             ce = to_ego(cg_)
-            v = np.nan_to_num(nusc.box_velocity(atok))
+            v = np.zeros(3) if stationary else np.nan_to_num(nusc.box_velocity(atok))
             ve = Rg2e @ v
             one = R.fill(R.canvas(), [(ce, [])])
-            objs[grp] |= one
-            inst[one > 0] = i
-            vel[0][one > 0], vel[1][one > 0] = ve[0], ve[1]
-            boxes.append({"group": grp, "corners": ce, "center": (Rg2e @ (np.array(a["translation"]) - T_e2g[:3, 3])),
-                          "size": a["size"], "yaw": yaw - yaw_e, "vel": ve[:2], "visibility": a["visibility_token"],
-                          "token": atok})
+            observed = a["num_lidar_pts"] + a["num_radar_pts"] > 0
+            if observed:
+                objs[grp] |= one
+                inst[one > 0] = len(boxes)                       # index into meta["boxes"]
+                vel[0][one > 0], vel[1][one > 0] = ve[0], ve[1]
+            else:                                                # no sensor point: neither object nor free -> ignore
+                ignore |= one
+            boxes.append({"group": grp, "corners": ce, "center": (Rg2e @ (np.asarray(trans) - T_e2g[:3, 3])),
+                          "size": list(size), "yaw": yaw - yaw_e, "vel": ve[:2], "visibility": a["visibility_token"],
+                          "token": atok, "instance": a["instance_token"], "stationary": stationary,
+                          "observed": observed, "world": np.asarray(trans)})
         for k in OBJECTS:
             out[k] = R.coverage(objs[k])
+        out["ignore"] = R.coverage(ignore)
         out["velocity"] = np.stack([R.at_centres(vel[0]), R.at_centres(vel[1])])
         out["instance"] = inst.reshape(grid.nx, ss, grid.ny, ss)[:, ss // 2, :, ss // 2]
 
@@ -253,7 +306,7 @@ class NuScenesGT:
         vv = K[1, 1] * P[:, 1] / np.maximum(z, 1e-6) + K[1, 2]
         cam = (z > 0.5) & (u >= 0) & (u < sd["width"]) & (vv >= 0) & (vv < sd["height"])
         out["camera"] = cam.reshape(gx.shape).astype(np.float32)
-        out["occluded"] = occlusion(gx, gy, T_c2e[:2, 3], [b["corners"] for b in boxes]).astype(np.float32)
+        out["occluded"] = occlusion(gx, gy, T_c2e[:2, 3], [b["corners"] for b in boxes if b["observed"]]).astype(np.float32)
         out["radar"] = radar_coverage(self, sample, gx, gy).astype(np.float32)
         out["undefined"] = ((out["camera"] == 0) & (out["radar"] == 0)).astype(np.float32)
         out["meta"] = {"sample": sample_token, "scene": sample["scene_token"], "timestamp": sd["timestamp"],
@@ -379,6 +432,15 @@ def _selftest():
     ts = gt.training_sample(s1, g)
     cur, nxt = ts["cur"], ts["next"]
     assert cur["drivable_area"].mean() > 0.05 and cur["camera"].mean() > 0.2
+    # 1b every map location has a road under the ego car (singapore-hollandvillage and -queenstown store their road
+    #    network under a polygon token of None; skipping it left no drivable area at all)
+    seen = {}
+    for sc in gt.nusc.scene:
+        loc = gt.nusc.get("log", sc["log_token"])["location"]
+        if loc not in seen:
+            k0 = gt.keyframe_gt(sc["first_sample_token"], g)
+            seen[loc] = float(k0["drivable_area"][0:6, 50:54].mean())
+            assert seen[loc] > 0.5, (loc, seen[loc])
     # 2 pooling: the 0.25 m GT pooled 2 x 2 equals the 0.5 m GT (areas and objects)
     fine = gt.keyframe_gt(s1, Grid(res=0.25))
     for layer in ("drivable_area", "walkway", "vehicle"):
@@ -397,17 +459,44 @@ def _selftest():
     a, b = moved.reshape(-1)[inside] > 0.5, nxt["drivable_area"].reshape(-1)[inside] > 0.5
     iou = (a & b).sum() / max(1, (a | b).sum())
     assert iou > 0.95, iou
-    # 4 velocities: rotation into the ego axes keeps the speed
+    # 4 velocities: rotation into the ego axes keeps the speed (moving boxes; stationary ones are 0 by the rule)
     for bx in cur["meta"]["boxes"][:20]:
         vg = np.nan_to_num(gt.nusc.box_velocity(bx["token"]))[:2]
-        assert abs(np.hypot(*bx["vel"]) - np.hypot(*vg)) < 0.05 * max(1, np.hypot(*vg)) + 0.1
+        if bx["stationary"]:
+            assert np.hypot(*bx["vel"]) == 0
+        else:
+            assert abs(np.hypot(*bx["vel"]) - np.hypot(*vg)) < 0.05 * max(1, np.hypot(*vg)) + 0.1
+    # 4a instance layer: every cell's index points at an observed box of the group whose layer covers the cell
+    bxs = cur["meta"]["boxes"]
+    ii = cur["instance"]
+    assert (ii >= 0).any()
+    for i in np.unique(ii[ii >= 0]):
+        assert bxs[i]["observed"] and cur[bxs[i]["group"]][ii == i].min() > 0, i
+    # 4b rule: stationary GT does not move - a stationary instance has the same world pose in k and k+1, while its raw
+    #    annotations jitter (measured over all stationary instances of the scene)
+    fixed = gt.stationary_instances(scene["token"])
+    both = [(b, c) for b in cur["meta"]["boxes"] for c in nxt["meta"]["boxes"]
+            if b["instance"] == c["instance"] and b["stationary"]]
+    assert both and all(np.allclose(b["world"], c["world"]) for b, c in both), "stationary boxes must not move"
+    jit = []
+    tok = scene["first_sample_token"]
+    while tok:
+        s = gt.nusc.get("sample", tok)
+        for atok in s["anns"]:
+            a = gt.nusc.get("sample_annotation", atok)
+            if a["instance_token"] in fixed:
+                jit.append(np.linalg.norm(np.array(a["translation"][:2]) - fixed[a["instance_token"]][0][:2]))
+        tok = s["next"]
+    jitter = float(np.median(jit))
     # 5 ego steps: dt add up to the keyframe gap, both directions
     assert abs(sum(s[0] for s in ts["next"]["meta"]["steps"]) - ts["next"]["meta"]["dt"]) < 1e-6
     assert abs(sum(s[0] for s in ts["prev"]["meta"]["steps"]) - ts["prev"]["meta"]["dt"]) < 1e-6
     print(f"gt_bev selftest ok: square 4 m^2, line distance, occlusion, real keyframe (drivable "
           f"{cur['drivable_area'].mean():.2f}, camera {cur['camera'].mean():.2f}), 0.25 m pooled = 0.5 m, next keyframe "
           f"= current moved by ego motion (IoU {iou:.3f}), velocity norms, ego steps "
-          f"({len(ts['prev']['meta']['steps'])} back, {len(ts['next']['meta']['steps'])} forward)")
+          f"({len(ts['prev']['meta']['steps'])} back, {len(ts['next']['meta']['steps'])} forward); stationary rule: "
+          f"{len(fixed)} stationary instances in the scene fixed in the world (raw annotation jitter median "
+          f"{jitter * 100:.1f} cm, now 0), {len(both)} seen in k and k+1 at the same world pose")
 
 
 if __name__ == "__main__":
