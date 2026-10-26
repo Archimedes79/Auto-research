@@ -179,6 +179,9 @@ def smoke():
         for p_ in lv.net[-1].parameters():
             torch.nn.init.normal_(p_, std=0.1)
     sum(vk.pow(2).sum() for vk in fpy(x, x.roll(2, 2), [(0.5, 4.0, 0.1)], v0)).backward()   # a loss on EVERY output
+    v0g = v0.clone().requires_grad_(True)
+    sum(vk.pow(2).sum() for vk in fpy(x, x.roll(2, 2), [(0.5, 4.0, 0.1)], v0g)).backward()
+    check("FlowPyramid passes no gradient into its start field v0 (detached between levels)", v0g.grad is None)
     check("gradient reaches every FlowPyramid parameter (loss on every iteration, as in training)",
           all(p_.grad is not None and p_.grad.abs().sum() > 0 for p_ in fpy.parameters()))
     vp = torch.tensor([[[0.0], [2.0]]], dtype=D64)                         # prior (0, 2) m/s, one cell

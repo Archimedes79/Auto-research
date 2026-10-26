@@ -349,6 +349,9 @@ class FlowPyramid(nn.Module):
     def forward(self, src, cur, steps, v0):
         out, v = [], v0
         for f, n, rf in zip(self.factors, self.iters, self.levels):
+            v = v.detach()              # between levels as between iterations (RAFT); without it the coarse output
+            #                             base + up(vk - pool(base)) passed a high-pass gradient into v0 (the
+            #                             hypotheses), and B collapsed in both pyramid arms (10 / 22 m/s, 2026-10-26)
             if f == 1:
                 ks = rf(src, cur, steps, v, iters=n)
             else:                       # the coarse level adds its CORRECTION, upsampled: the fine detail of v stays
