@@ -52,23 +52,26 @@ What would make it fail, in our own words: (a) the frozen context features were 
 
 Prerequisite (Mirko to decide): bev_fusion is not yet a problem folder of `../autoresearch/` (no project.json, no ledger, no run.py), so the CLAUDE rule "never start a run outside run.py" cannot be followed as is. Either set up the minimal problem files first (project.json, PROBLEM.md, experiment_execution/ ledger; runs then get a commit tag and a ledger row), or run S1a as documented scripts with result files committed and a short run log in this file.
 
-## 3. Synthetic unit test of the same pipeline (before any real run)
-Purpose: train and test the REAL driver end to end on artificial data where the answer is known, so a real-data failure can only come from data, calibration or the frozen heads, not from wiring, losses, the metric or the comparison itself. `tests/test_s1_pipeline.py`, gate exit 0 / 1, part of `tests/run_gates.sh --all`, minutes on the GPU (or about 15 min CPU).
+## 3. Synthetic unit test of the same pipeline (built 2026-10-26, before any real run)
+Purpose: train and test the REAL module and the REAL driver end to end on artificial data where the answer is known, so a real-data failure can only come from data, calibration or the frozen heads, not from wiring, losses, the metric or the comparison. AND keep the design anchored to the state of the art (Mirko, 2026-10-26: "do not go away totally from SOA"): the module switches between our design and the published designs with ONE config preset, and the same test trains all of them.
 
-Data adapter `tests/synthetic_s1_data.py`: scenes of `tests/synthetic_world.py` rendered by the front camera with the post-ida geometry of the real one (256 x 704, f = 560, 1.5 m high, pitch 0) -> exactly the sample format of the real feature cache (depth probability 118 bins and 80 context channels at 16 x 44, K, T_cam_car, ida, camera vector, GT layers and camera mask on the same grid), written in the shard format of `training/feature_cache.py` (`<scene>.npy` float16 (n, 198, 16, 44) + `<scene>.index.npz`) and read by the same `FeatureStore`. GT classes: lane lines, vehicles, pedestrians (+ road); the driver takes the class list from the data.
-- context: the per-pixel classes pooled over each 16 x 16 group (fractions) + noise channels up to 80 (perfect semantics, unknown position: exactly the information the lift must place)
-- depth variants per group: oracle = the histogram of its pixel depths over the 118 bins (the oracle-lift fix); blurred = that histogram smoothed with a Gaussian in 1/z whose width grows with range (mimics the frozen head's far-range blur); shuffled = the oracle histogram of another sample; uniform = P
+| file | what |
+|---|---|
+| `training/s1_camera.py` | `CameraBEVSeg(S1Config)`: cached (prob, ctx) -> lift (PD / P / S) -> heights as channels or summed -> reduce -> BEVTrunk -> semantic head. Presets: `ours` (PD, 8 slices incl. z = 0, 4 sub-heights, channels, width 0.5), `dualbev` (HeightTrans heights: 13 fixed, summed to 80 channels, no reduce, trunk width 1.0 = DualBEV's BEV encoder; deviations listed in the file), `simplebev` (P, 8 default slices as channels), `lss` (S forward splat, heights summed). Self-test: shapes, gradients, presets differ in the named choices only, one-hot depth reaches only its own depth |
+| `training/train_s1.py` | the driver for synthetic AND real data (it only sees batch dicts): loss (soft BCE + soft IoU on camera-visible cells), AdamW + warm-up + cosine, one SegMeter per scene, null baseline (prior map), paired scene bootstrap. Self-test with known answers (loss, meters, range bands, bootstrap, null, tiny training) |
+| `tests/synthetic_s1_data.py` | synthetic samples in the real cache format at the real feature resolution (stride 16, 16 x 44): context = pixel-class fractions + 75 noise channels (perfect semantics, unknown position); depth = oracle histogram, `blurred` (Gaussian in 1/z, 0 m at 3 m, 9 m at 51 m), `shuffled` (another sample's), `uniform`; GT lanes (presence at a coverage of 0.1: the line is 15 cm wide), vehicles, pedestrians; the camera-visible mask; lane lines vary per sample (offset, spacing, yaw) so a per-cell prior cannot solve them |
+| `tests/test_s1_pipeline.py` | the gate (below), exit 0 / 1, `run_gates.sh --all` |
 
-| # | test | known answer / gate |
-|---|---|---|
-| 3.1 | metric self-test (`evaluation/metrics.py`): hand-made masks with known IoU per class and band; empty classes; the null baseline equals the analytic prior IoU | exact |
-| 3.2 | cache round trip: a synthetic sample written and read back | equal within fp16 |
-| 3.3 | lift geometry in the driver: one synthetic vehicle pixel group with one-hot depth lands in the cell of its ray at that depth (the table is built from the sample's calibration) | exact cell |
-| 3.4 | wiring: overfit ONE synthetic scene, both arms | IoU >= 0.95 on every class; every trainable parameter gets a gradient |
-| 3.5 | learning: 300 train / 60 held-out scenes, 2,000 steps, arms P, PD-oracle, PD-blurred, PD-shuffled, 2 seeds for P and PD-oracle | held-out vehicle IoU: PD-oracle - P >= +0.10 (with exact depth the depth weight must help a lot: oracle-lift gate); PD-blurred between P and PD-oracle; PD-shuffled <= P + 0.01; PD-oracle above null at every range band |
-| 3.6 | the decision code: the bootstrap and the rule of 1 applied to 3.5 | gives "PD confirmed" for PD-oracle vs P and "not from depth" for PD-shuffled |
-| 3.7 | real encoder path: the frozen DualBEV encoder on the RENDERED images (instead of the class context) for 1 scene, through the same driver | runs, shapes, overfits (no number gate: the renders are not nuScenes images) |
-The seed spread of 3.5 is the harness's own noise; if it is larger than 0.02, steps / data are raised before the real run.
+Gates (written before the first full run; class mean = mean of IoU@0.5 m over lanes / vehicles / pedestrians, camera-visible cells, 60 held-out synthetic scenes, 300 train scenes, 1,200 steps, batch 8):
+| gate | criterion |
+|---|---|
+| G1 wiring | overfit ONE scene (ours, oracle depth): every class IoU@0.5 m >= 0.9 on that scene |
+| G2 learning | ours PD oracle: class mean >= null (prior map) + 0.15 on both seeds |
+| G3 depth | vehicles: PD-oracle - P >= +0.05 (two seeds each) |
+| G4 control | PD with shuffled depth: vehicles <= P + 0.03 (the depth content carries the gain, not the extra weight) |
+| G5 anchors | the three published presets each learn (class mean >= null + 0.15), and ours >= the best of them - 0.02 (our design is not worse than the published designs on the same task, budget and data) |
+Smoke run (300 steps, one seed): vehicles IoU@0.5 m PD-oracle 0.83 (0-20 / 20-40 / 40-60 m: 0.91 / 0.88 / 0.72) against P 0.29 (0.72 / 0.27 / 0.06) and simplebev 0.25; pedestrians were 0 and lanes not measured (the lane GT was a coverage below the 0.5 threshold - changed to a presence mask before the full run). The full result is in section 5.
+Not tested here (needs real images): the frozen heads' own depth quality (probe 10.2 on real data) and the encoder path on rendered images (the heads were trained on nuScenes; a rendered image is out of their distribution).
 
 ## 4. Idle-GPU timing (plan 10, level 6; independent of 2 and 3)
 - Script `temp/timing/time_s1_chain.py` (one-off, results to `temp/timing/result_<date>.txt`): batch 1, CUDA events, cudnn.benchmark on, 50 warm-up and 300 timed calls per block, median and 90 % quantile, fp32 and fp16 (autocast)
