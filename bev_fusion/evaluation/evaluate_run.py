@@ -234,6 +234,8 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     os.chdir(ROOT)
     cfg, model, loss, step, ckpt = load_run(run, device)
     cfg.batch_size, cfg.workers = batch_size, workers
+    cfg.seq_len = 1                         # independent samples with an empty world memory ("cold"); what a clip-trained
+                                            # model gains from the carried memory is measured by evaluation/eval_memory.py
     if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
         cfg.radar_cache = "data/cache/radar"                    # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = make_datasets(cfg)
@@ -245,6 +247,8 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     scene_of = {}
     meters = {"fov": SegMeter(grid), "seen": SegMeter(grid), "obj": SegMeter(grid)}
     det = DetMeter(classes=[g for g, _ in NUSC_GROUPS])
+    use_refined = bool(cfg.model.get("refine")) and hasattr(model, "boxes")           # S5c refiner: second box set
+    det_ref = DetMeter(classes=[g for g, _ in NUSC_GROUPS]) if use_refined else None
     pri = {"fov": SegMeter(grid), "seen": SegMeter(grid), "obj": SegMeter(grid)} if prior else None
     pmaps = prior_maps(train_ds, prior, spec) if prior else None
     scenes = {}                                                  # scene -> {"seg": {(layer, subset): SegMeter}, "det": frames}
@@ -260,10 +264,12 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
                     tot[key] = tot.get(key, 0.0) + float(v)
             nb += 1
             B = len(batch["tokens"])
+            refined = ({dt: model.boxes(res, dt, k=100, threshold=0.05, rescore=True) for dt in res["out"]}
+                       if use_refined else {})
             for b in range(B):
                 tok = batch["tokens"][b]
                 scene = scene_of.setdefault(tok, nusc.get("scene", nusc.get("sample", tok)["scene_token"])["name"])
-                rec = scenes.setdefault(scene, {"seg": {}, "det": {}})
+                rec = scenes.setdefault(scene, {"seg": {}, "det": {}, "detr": {}})
                 per_dt = {}
                 for dt, p in res["out"].items():
                     g = gts[dt][b]
@@ -275,6 +281,9 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
                     gb = gt_boxes(g)
                     det.add(dets, gb, dt=dt)
                     rec["det"].setdefault(dt, []).append(([d for d in dets], gb))
+                    if use_refined:
+                        det_ref.add(refined[dt][b], gb, dt=dt)
+                        rec["detr"].setdefault(dt, []).append(([d for d in refined[dt][b]], gb))
                     if abs(dt) < 1e-6:                        # per-scene headline records (dt 0)
                         for layer, sub in HEADLINE_SEG:
                             sm = rec["seg"].setdefault(layer, SegMeter(grid, tolerances=(0.0, 0.5)))
@@ -288,7 +297,7 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
                                        mask=m["obj_fov"] if layer == "vehicle" else m["fov"])
                     if pri is not None:
                         add_sample(pri, pmaps[0], pmaps[1], g, spec, dt, mass)
-                    per_dt[dt] = (prob, dist, dets, gb, mass)
+                    per_dt[dt] = (prob, dist, refined[dt][b] if use_refined else dets, gb, mass)     # images: the final boxes
                 if (i0 + b) in img_idx and 0.5 in per_dt:
                     g0 = gts[0.0][b]
                     prob, dist, dets, gb, _ = per_dt[0.0]
@@ -301,6 +310,8 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
             if nb % 50 == 0:
                 print(f"{i0}/{len(ds)} samples, {time.time() - t0:.0f} s", flush=True)
     flat = report(seg=None, det=det)
+    if use_refined:
+        flat.update({"detr/" + k[len("det/"):]: v for k, v in report(seg=None, det=det_ref).items()})
     for name, m in meters.items():
         flat.update({f"seg_{name}/" + k: v for k, v in report(seg=m).items()})
     if pri is not None:
@@ -318,8 +329,9 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
                    "metrics": flat, "latency": lat}, f, indent=1, default=float)
     seg_rec = {s: {layer: sm.c for layer, sm in r["seg"].items()} for s, r in scenes.items()}
     det_rec = {s: r["det"] for s, r in scenes.items()}
+    detr_rec = {s: r["detr"] for s, r in scenes.items()}
     with open(os.path.join(out_dir, "scene_records.pkl"), "wb") as f:
-        pickle.dump({"seg": seg_rec, "det": det_rec}, f)
+        pickle.dump({"seg": seg_rec, "det": det_rec, "detr": detr_rec}, f)
     table = headline_table(flat)
     with open(os.path.join(out_dir, "table.txt"), "w") as f:
         f.write(table + "\n")
@@ -368,11 +380,12 @@ def headline_table(flat):
         for dt in ("dt+0.00", "dt+0.50"):
             for layer in ("vehicle", "pedestrian", "two_wheeler"):
                 keys.append(f"{pre}/seg/{dt}/{layer}/all/all/iou@0")
-    for dt in ("dt+0.00", "dt+0.50", "dt-0.50"):
-        keys.append(f"det/{dt}/mean/all/mAP")
-        for cls in ("vehicle", "pedestrian", "two_wheeler"):
-            for m in ("ap@2", "ap@4", "ate", "aoe", "ave", "n_gt"):
-                keys.append(f"det/{dt}/{cls}/all/{m}")
+    for dp in ("det", "detr"):                                  # detr = boxes refined by S5c (only for models with a refiner)
+        for dt in ("dt+0.00", "dt+0.50", "dt-0.50"):
+            keys.append(f"{dp}/{dt}/mean/all/mAP")
+            for cls in ("vehicle", "pedestrian", "two_wheeler"):
+                for m in ("ap@2", "ap@4", "ate", "ase", "aoe", "ave", "n_gt"):
+                    keys.append(f"{dp}/{dt}/{cls}/all/{m}")
     keys += [k for k in flat if k.startswith(("val_loss/", "ms/", "info/"))]
     lines = []
     for k in keys:
