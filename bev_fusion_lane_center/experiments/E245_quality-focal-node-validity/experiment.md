@@ -48,5 +48,8 @@ What would make it fail: sigma too wide makes every near-lane child valid and Q 
 | train | arms a0, a1, b0 | `run.py --id E245.a0 ...` | done flags | 1.2 GPU h |
 | evaluate / decide | registry names, `--compare fast_eq`, `decide.py --experiment E245 --write` | evaluation entry | verdict | - |
 
-## 3. Summary (written after the decision)
-- pending
+## 3. Summary (2026-10-26)
+- **Decision: step 0 gate PASSED, experiment alive but not trained in loop 19** (`diag_far_tolerance.txt`, `temp/loop19/diag_e245.py`, cached raw nodes of j1 / j1eq / j1rc, VAL 873, tau 0.7). Of the far (> 40 m) rejected nodes that lie within 1.0 m of a lane, 36.3 % (j1), 37.6 % (j1eq), 37.4 % (j1rc) sit in the (0.6, 1.0] m band that the hard training label (< 0.8 m) mostly calls negative while the metric (1.0 m) accepts them; the kill threshold was 20 %. The share is similar in the mid range (31-33 %) and the near range (28-30 %).
+- **What it says**: the hard label and the metric disagree on about a third of the rejected hits at every range; whether a soft target recovers them is untested. The far hits rejected at tau 0.7 are 22.8 % / 21.5 % / 17.0 % of all far hits for j1 / j1eq / j1rc.
+- **Not done**: loss branch (K192), the `ece` metric in `evaluation/` (reproduce 0.121 on the stored champion nodes) and the trainings; no GPU time was free tonight (the machine was shared with other chats).
+- **Next**: build the `ece` metric and the loss branch with a spec test, then arms a (QFL) / b (soft BCE) with an isotonic-recalibration control (clause on R@1_far at equal vert100).

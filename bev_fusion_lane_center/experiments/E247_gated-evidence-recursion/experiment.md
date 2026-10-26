@@ -45,5 +45,6 @@ What would make it fail: the previous frame's single-frame prior adds little evi
 | train | arms a0, a1, c1 | gate trainer, `run.py --id E247.a0 ...` | done flags | 0.9 GPU h |
 | evaluate / decide | registry with `gate_ckpt`, `--compare champion`, `decide.py --experiment E247 --write` | evaluation entry | verdict | - |
 
-## 3. Summary (written after the decision)
-- pending
+## 3. Summary (2026-10-26)
+- **Decision: NOT RUN in loop 19**. The step-0 diagnostic (champion with and without the fixed prior on VAL, gate +0.010 R@1_far for the fixed rule; TRAIN-versus-VAL ECE of the frozen builder) needs GPU inference, and the GPU was shared with other chats most of the night; the cheaper CPU diagnostics (E245, E246) took the time.
+- **Next**: run the step-0 diagnostic on a quiet GPU in the next loop; the code (MinGateCell, hook in `Builder.fuse_prior`) only if the gate passes.

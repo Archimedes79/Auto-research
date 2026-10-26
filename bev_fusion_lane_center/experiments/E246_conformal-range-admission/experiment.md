@@ -45,5 +45,8 @@ What would make it fail: the far-bin loss curve is flat or not monotone (a highe
 | evaluate | out-of-fold graphs, cards, `--compare fast_recall` | `evaluate.py` | metric cards | 0.5 h CPU |
 | decide | the rule above | `decide.py --experiment E246 --write` | verdict | - |
 
-## 3. Summary (written after the decision)
-- pending
+## 3. Summary (2026-10-26)
+- **Decision: KILLED at step 0** (`step0_ceiling.txt`, `temp/loop19/e246_step0.py`, cached raw nodes of `fast_recall` (j1rc), VAL 873, in-sample). Best range-binned thresholds (near / mid / far) = (0.7, 0.3, 0.3) at false length <= base + 0.003 and vert100 <= base + 0.3: R@1_far 0.7334 (+0.0059 against the base point, gate +0.015), Q 0.7382 (-0.0009), false_len +0.0025, vert100 +0.09. The in-sample ceiling is below the gate, so an out-of-fold version cannot reach it.
+- **What it says**: per-range admission thresholds do not move far recall at a fixed false-length budget; the far misses are not a threshold problem at the node level.
+- **Weaknesses**: one model (j1rc), a coordinate search on a coarse grid (0.3-0.9), in-sample on VAL (optimistic, so a fortiori negative).
+- **Next**: nothing; K194 stays in the register as "killed at step 0".
