@@ -22,4 +22,6 @@ Arms (fields to change against `t1_base.json`; none is run yet, every one is a p
 | dt weights | `"loss": {"dt_weights": [[0, 1], [0.5, 0.9], [1, 0.25]]}` | published 0.9 per 0.5 s step against 0.5 |
 | ego control | `"gap_ego": false` | the nominal gap and the last step's ego motion: measures what the true gap is worth (0.2-0.35 m label error) |
 | no-time control | `"loss": {"dt_weights": [[0, 1]]}` | the same chain trained at dt = 0 only |
+| sequence | `"seq_len": 3, "batch_size": 2, "accum": 3` | clips of 3 consecutive keyframes (2 clips = 6 samples per micro-batch, 18 per step) with the world memory carried and detached at every keyframe; the validation log gets `total_last_warm` / `total_last_cold` (the same last keyframes with and without the carried memory: does the memory help) |
+| sequence + BPTT | `"seq_len": 3, "batch_size": 2, "accum": 3, "seq_bptt": true` | the same with the graph kept through the memory (about 3 x the activation memory of a micro-batch; GPU memory not measured), so the memory write path (static weight, velocity head) is trained by later keyframes |
 | micro-batch | `"batch_size": 2, "accum": 8` / `"batch_size": 8, "accum": 2` | BatchNorm statistics from 2 / 8 instead of 4 samples (2 x 8: 5.3 s per step, 2.3 GB; 8 x 2: 2.1 s, 8.6 GB) |

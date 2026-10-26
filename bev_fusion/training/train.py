@@ -14,11 +14,13 @@ warm-up), an optional gradient-conflict diagnostic of the task groups,
 atomic checkpoints with resume (only what trains is saved: the frozen camera heads come from the pre-trained file),
 a non-finite guard, JSONL logging, validation under the EMA weights. Derived data lives in this project folder (not in
 git): GT cache `data/cache/gt_*`, feature cache `data/cache/cam_feats*`, runs `runs/<name>`.
-Not here yet: sequence training through the recurrent memory (the dataset yields independent keyframes with a window of
-past frames; the world memory starts empty per sample, so in this training `cam_temporal = window_memory` is only the
-3-frame window, at train AND test time: a later sequence run with a carried state would be out of distribution until
-scene-contiguous clips with a detached carried state are trained), BEV augmentation, the metric evaluation of
-evaluation/metrics.py (`eval_fn` hook). BatchNorm statistics come from the micro-batch (`batch_size`, not the
+Sequence training (`seq_len` > 1): clips of consecutive keyframes of one scene (`ClipDataset`), the world memory of the
+temporal fusion carried from keyframe to keyframe with the GT ego step between them (`clip_step`), detached at every
+keyframe or, with `seq_bptt`, kept in the graph through the clip; the first keyframe of a clip starts cold, the later ones
+warm, so both cases are trained. With `seq_len` = 1 (default) every keyframe is independent, the world memory starts
+empty per sample and `cam_temporal = window_memory` is only the 3-frame window, at train AND test time. Validation of
+clips reports the last keyframe warm and cold (`total_last_warm` / `total_last_cold`, the same frames).
+Not here yet: BEV augmentation, the metric evaluation of evaluation/metrics.py (`eval_fn` hook). BatchNorm statistics come from the micro-batch (`batch_size`, not the
 effective batch): use the largest micro-batch that fits (GPU memory not measured yet).
 Validation: a fixed subset of `eval_batches * batch_size` samples spread over all val scenes (not the first scenes).
 Usage:  python training/train.py <config.json>   (fields of TrainConfig; unknown keys are an error)
@@ -26,6 +28,7 @@ Self-test (nuScenes mini, CPU, needs data/cache/cam_feats_mini): python training
 """
 import copy
 import dataclasses
+import functools
 import inspect
 import json
 import math
@@ -81,6 +84,11 @@ class TrainConfig:
     consistency: float = 0.0                     # weight of the train-only cross-time consistency (loss_extras), 0 = off
     consistency_warmup: tuple = (0.2, 0.2)       # (hold, ramp) fractions: off for the first 20 %, then linear in
     grad_diag_every: int = 0                     # log the cosines of the task-group gradients at the BEV feature every N steps
+    seq_len: int = 1                             # keyframes per clip: > 1 trains on clips of consecutive keyframes of one scene with
+                                                 # the world memory carried from keyframe to keyframe (batch_size = clips per
+                                                 # micro-batch, so a micro-batch has batch_size * seq_len samples); 1 = independent
+    seq_bptt: bool = False                       # backpropagate through the carried memory over the clip (graphs of all keyframes
+                                                 # stay in memory); False = the state is detached at every keyframe
     gap_ego: bool = True                         # decode dt = +-0.5 s with each sample's true keyframe gap and gap-mean ego
                                                  # motion (needs `ego=` in the model's forward; 0.2-0.35 m of label error otherwise)
     weight_decay: float = 1e-2
@@ -144,8 +152,41 @@ def make_datasets(cfg):
     return out
 
 
+class ClipDataset(torch.utils.data.Dataset):
+    """Clips of `length` consecutive keyframes of ONE scene (sequence training): item = [base[i], base[i + 1], ...], a clip
+    starts at every sample whose next `length - 1` keyframes are also in `base.samples` (the dataset already leaves out the
+    first and last keyframe of a scene, so the chain stays inside the scene)."""
+
+    def __init__(self, base, length):
+        self.base, self.length = base, length
+        pos = {t: i for i, t in enumerate(base.samples)}
+        self.starts = []
+        for t in base.samples:
+            chain, cur = [pos[t]], t
+            while len(chain) < length:
+                cur = base.nusc.get("sample", cur)["next"]
+                if cur not in pos:
+                    break
+                chain.append(pos[cur])
+            if len(chain) == length:
+                self.starts.append(chain)
+
+    def __len__(self):
+        return len(self.starts)
+
+    def __getitem__(self, i):
+        return [self.base[j] for j in self.starts[i]]
+
+
+def collate_clips(clips, fn):
+    """list of clips (lists of items) -> list over time of batches: [fn([clip[t] for clip in clips]) for t]."""
+    return [fn([c[t] for c in clips]) for t in range(len(clips[0]))]
+
+
 def make_loader(ds, cfg, train):
     fn = collate_cached if cfg.feature_cache else collate
+    if cfg.seq_len > 1:
+        fn = functools.partial(collate_clips, fn=fn)
     return torch.utils.data.DataLoader(ds, batch_size=cfg.batch_size, shuffle=train, num_workers=cfg.workers,
                                        collate_fn=fn, drop_last=train, persistent_workers=cfg.workers > 0)
 
@@ -306,18 +347,38 @@ def val_subset(ds, n):
     return torch.utils.data.Subset(ds, sorted({int(i) for i in np.linspace(0, len(ds) - 1, n).round()}))
 
 
-def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=False, train_terms=True):
+def detach_tree(x):
+    """The model state (nested dicts / lists of tensors, None allowed) without its graph."""
+    if torch.is_tensor(x):
+        return x.detach()
+    if isinstance(x, dict):
+        return {k: detach_tree(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return type(x)(detach_tree(v) for v in x)
+    return x
+
+
+def clip_step(prev_batch, device):
+    """(dt, v, omega) as (B,) tensors from the previous keyframe of each clip to the current one: the GT ego steps of the
+    previous batch toward its next keyframe, composed into one splat step; the model's memory pose advances by it."""
+    vals = [gap_ego_motion(s["next"]["meta"]["steps"]) for s in prev_batch["gt"]]
+    return tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
+
+
+def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=False, train_terms=True, state=None, step=None):
     """-> (loss dict, model result, GT targets). With cfg.gap_ego the model decodes dt = +-0.5 s with the TRUE gap of each
     sample and its gap-mean ego motion (the GT is the keyframe at the true gap), when the model takes `ego`. With
     cfg.consistency > 0 (and train_terms) the cross-time consistency is added (with its own warm-up); with diag the
-    cosines of the task-group gradients at the BEV feature are put into out['diag']."""
+    cosines of the task-group gradients at the BEV feature are put into out['diag']. state / step: the model state of the
+    previous keyframe of the clip and the ego step since then (sequence training)."""
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))
     ego = batch_ego(batch["gt"], dts, device) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
     batch = to_device(batch, device)
     ctx = torch.autocast("cuda", dtype=torch.bfloat16) if amp == "bf16" and device.startswith("cuda") else torch.autocast("cpu", enabled=False)
+    kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
     with ctx:
-        res = model(batch, dts=dts, ego=ego) if ego is not None else model(batch, dts=dts)
+        res = model(batch, dts=dts, **kw)
     with torch.autocast("cpu", enabled=False), torch.autocast("cuda", enabled=False):
         preds = {dt: {k: ({a: b.float() for a, b in v.items()} if isinstance(v, dict) else v.float()) for k, v in p.items()}
                  for dt, p in res["out"].items()}                                    # already in the loss's layout
@@ -338,21 +399,59 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     return out, res, gts
 
 
+def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False):
+    """One clip = a list of batches (consecutive keyframes of the same scenes; a single batch = a clip of length 1). The
+    model state (world memory) is carried from keyframe to keyframe with the ego step between them: detached at every
+    keyframe, or with cfg.seq_bptt kept in the graph through the clip. backward: backpropagate the mean loss of the clip
+    divided by cfg.accum, right after each keyframe (with seq_bptt the earlier graphs are retained for the state path of
+    the later keyframes, so the gradient is that of the clip's mean loss).
+    -> (dict of the scalar terms averaged over the keyframes, finite flag, diag of the last keyframe or None, list of the
+    per-keyframe totals)."""
+    L, state, prev, acc, totals, dg = len(clip), None, None, {}, [], None
+    bptt, accum = bool(cfg is not None and cfg.seq_bptt), (cfg.accum if cfg is not None else 1)
+    for t, batch in enumerate(clip):
+        step = clip_step(prev, device) if prev is not None else None
+        out, res, _ = forward_loss(model, loss, batch, step_frac, device, amp, cfg, diag=diag and t == L - 1,
+                                   train_terms=train_terms, state=state, step=step)
+        if not torch.isfinite(out["total"]):
+            return acc, False, dg, totals
+        totals.append(_f(out["total"]))
+        if backward:           # backward at once: the loss of a later keyframe changes the Kendall weights in place (clamp_)
+            (out["total"] / (L * accum)).backward(retain_graph=bptt and t < L - 1)    # bptt: the graph is still needed for the state path
+        for k, v in out.items():
+            if k == "total" or k == "consistency" or k.startswith(("group.", "s.")):
+                acc[k] = acc.get(k, 0.0) + _f(v) / L
+        if "diag" in out:
+            dg = out["diag"]
+        state = res["state"] if bptt else detach_tree(res["state"])
+        prev = batch
+    return acc, True, dg, totals
+
+
 def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg=None):
     """Validation loss (and groups) under the EMA weights, decoded like in training (cfg.gap_ego), without the train-only
-    terms; eval_fn(model, loader) -> dict is an optional metrics hook."""
+    terms; eval_fn(model, loader) -> dict is an optional metrics hook. With clips (seq_len > 1) the state is carried through
+    the clip, and the LAST keyframe is also run cold (no memory): total_last_warm / total_last_cold are the same frames with
+    and without the carried memory (paired)."""
     ema.apply(model)
     model.eval()
     tot, n = {}, 0
     try:
         with torch.no_grad():
-            for i, batch in enumerate(loader):
+            for i, item in enumerate(loader):
                 if i >= n_batches:
                     break
-                out, _, _ = forward_loss(model, loss, batch, 1.0, device, amp, cfg, train_terms=False)
+                clip = item if isinstance(item, list) else [item]
+                out, ok, _, totals = run_clip(model, loss, clip, 1.0, device, amp, cfg, train_terms=False)
+                if not ok:
+                    continue
                 for k, v in out.items():
                     if k == "total" or k.startswith("group."):
-                        tot[k] = tot.get(k, 0.0) + _f(v)
+                        tot[k] = tot.get(k, 0.0) + v
+                if len(clip) > 1:
+                    cold, _, _ = forward_loss(model, loss, clip[-1], 1.0, device, amp, cfg, train_terms=False)
+                    tot["total_last_warm"] = tot.get("total_last_warm", 0.0) + totals[-1]
+                    tot["total_last_cold"] = tot.get("total_last_cold", 0.0) + _f(cold["total"])
                 n += 1
         res = {k: v / max(1, n) for k, v in tot.items()}
         if eval_fn is not None:
@@ -372,6 +471,8 @@ def train(cfg, eval_fn=None, datasets=None):
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
     train_ds, val_ds = datasets or make_datasets(cfg)
+    if cfg.seq_len > 1:                                         # clips of consecutive keyframes, the memory carried through
+        train_ds, val_ds = ClipDataset(train_ds, cfg.seq_len), ClipDataset(val_ds, cfg.seq_len)
     train_loader = make_loader(train_ds, cfg, True)
     val_loader = make_loader(val_subset(val_ds, cfg.eval_batches * cfg.batch_size), cfg, False)     # fixed, spread over all scenes
     if cfg.gap_ego and not supports_ego(model):
@@ -406,18 +507,17 @@ def train(cfg, eval_fn=None, datasets=None):
         diag = bool(cfg.grad_diag_every) and (step + 1) % cfg.grad_diag_every == 0
         opt.zero_grad(set_to_none=True)
         acc, finite = {}, True
-        for m in range(cfg.accum):                              # effective batch = batch_size * accum, one optimiser step
-            out, _, _ = forward_loss(model, loss, next_batch(), step / max(1, cfg.steps), device, cfg.amp, cfg,
-                                     diag=diag and m == 0)
-            if not torch.isfinite(out["total"]):
+        for m in range(cfg.accum):                              # effective batch = batch_size * seq_len * accum samples
+            item = next_batch()
+            out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], step / max(1, cfg.steps),
+                                      device, cfg.amp, cfg, diag=diag and m == 0, backward=True)
+            if not ok:
                 finite = False
                 break
-            (out["total"] / cfg.accum).backward()
             for k, v in out.items():
-                if k == "total" or k == "consistency" or k.startswith(("group.", "s.")):
-                    acc[k] = acc.get(k, 0.0) + _f(v) / cfg.accum
-            if "diag" in out:
-                acc["diag"] = out["diag"]
+                acc[k] = acc.get(k, 0.0) + v / cfg.accum
+            if dg:
+                acc["diag"] = dg
         gn = torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip) if finite else None
         if gn is None or not torch.isfinite(gn):
             bad += 1
@@ -539,6 +639,39 @@ def _selftest():
         assert all(abs(consistency_weight(held, f) - w) < 1e-9 for f, w in ((0.3, 0.0), (0.5, 0.0), (0.55, 0.5), (0.6, 1.0), (0.9, 1.0)))
         out_h, _, _ = forward_loss(model, loss, batch, 0.3, "cpu", "off", held)           # step_frac 0.3 is inside the hold
         assert "consistency" not in out_h and _f(out_h["total"]) == _f(out_h["total_main"]), "hold = weight 0, nothing computed"
+        # 1c sequences: clips of consecutive keyframes, the world memory carried with the ego step between them
+        cds = ClipDataset(base, 3)
+        assert len(cds) == 2 and cds.starts == [[0, 1, 2], [1, 2, 3]], cds.starts     # 4 consecutive samples -> 2 clips of 3
+        toks = [base.samples[i] for i in cds.starts[0]]
+        assert [nusc.get("sample", t)["next"] for t in toks[:-1]] == toks[1:], "consecutive keyframes of one scene"
+        cl = collate_clips([cds[0], cds[1]], collate_cached)
+        assert len(cl) == 3 and all(b["prob"].shape[0] == 2 for b in cl)
+        step1 = clip_step(cl[0], "cpu")                                                  # keyframe 0 -> 1
+        gap_back = [-sum(x[0] for x in s["prev"]["meta"]["steps"]) for s in cl[1]["gt"]]   # the same gap from keyframe 1 back to 0
+        assert all(abs(float(a) - b) < 1e-6 for a, b in zip(step1[0], gap_back)), (step1[0], gap_back)
+        with torch.no_grad():                               # the carried memory changes the prediction (no graphs: CPU memory)
+            _, r0, _ = forward_loss(model, loss, cl[0], 0.5, "cpu", "off", cfg)
+            assert float(r0["state"]["cam"]["W"].max()) > 0, "the first keyframe writes the memory"
+            _, rw, _ = forward_loss(model, loss, cl[1], 0.5, "cpu", "off", cfg, state=r0["state"], step=step1)
+            _, rc, _ = forward_loss(model, loss, cl[1], 0.5, "cpu", "off", cfg)
+            assert float((rw["out"][0.0]["sem"] - rc["out"][0.0]["sem"]).abs().max()) > 1e-6, "the carried memory changes the prediction"
+        del r0, rw, rc
+        c1 = collate_clips([cds[0]], collate_cached)        # ONE clip of 3 keyframes (batch 1) for the gradient tests
+        s1 = clip_step(c1[0], "cpu")
+        p0 = next(p for n, p in model.named_parameters() if n.startswith("cam_reduce") and p.ndim >= 2)
+
+        def grad_second(attached):                         # gradient of the second keyframe's loss at a camera-branch weight
+            _, ra, _ = forward_loss(model, loss, c1[0], 0.5, "cpu", "off", cfg)
+            o2, _, _ = forward_loss(model, loss, c1[1], 0.5, "cpu", "off", cfg, state=ra["state"] if attached else detach_tree(ra["state"]),
+                                    step=s1)
+            return torch.autograd.grad(o2["total"], p0, allow_unused=True)[0]
+        g_det, g_att = grad_second(False), grad_second(True)
+        assert g_det is not None and g_att is not None and not torch.allclose(g_det, g_att, rtol=1e-3, atol=1e-9),             "with the state attached the second loss also reaches the first keyframe's camera planes"
+        model.zero_grad()
+        for bptt, clip in ((False, c1), (True, c1[:2])):    # run_clip with backward: finite, gradients on the weights
+            o, ok, _, tot_t = run_clip(model, loss, clip, 0.5, "cpu", "off", dataclasses.replace(cfg, seq_bptt=bptt), backward=True)
+            assert ok and len(tot_t) == len(clip) and p0.grad is not None and float(p0.grad.abs().sum()) > 0, bptt
+            model.zero_grad()
         # 2 four steps: loss finite, parameters change, frozen heads are not part of the optimiser or the checkpoint
         before = {k: v.clone() for k, v in model.state_dict().items() if k.startswith("cam_reduce")}
         model2, loss2, ema, last = train(cfg, datasets=(base, base))
@@ -559,12 +692,20 @@ def _selftest():
         loader = make_loader(base, dataclasses.replace(cfg, batch_size=2), False)
         ev = evaluate(model2, loss2, ema2, loader, 1, "cpu", "off")
         assert "total" in ev and all(torch.equal(w_before[k], v) for k, v in model2.state_dict().items() if k in w_before)
+        # 4b sequence training: train() on clips of 2 keyframes; validation with the paired warm / cold last keyframe
+        scfg = dataclasses.replace(cfg, name="seqrun", seq_len=2, batch_size=1, accum=1, steps=2, save_every=0, eval_every=0, warmup=1)
+        model_s, loss_s, ema_s, last_s = train(scfg, datasets=(base, base))
+        assert last_s["total"] == last_s["total"], "logged"
+        sl = make_loader(ClipDataset(base, 2), dataclasses.replace(scfg, batch_size=2), False)
+        ev_s = evaluate(model_s, loss_s, ema_s, sl, 1, "cpu", "off", None, scfg)
+        assert "total_last_warm" in ev_s and "total_last_cold" in ev_s and ev_s["total_last_warm"] != ev_s["total_last_cold"], ev_s
         # 5 schedule
         assert abs(lr_factor(0, 10, 100, 0.01) - (1 / 3 + 2 / 30)) < 1e-9 and abs(lr_factor(9, 10, 100, 0.01) - 1.0) < 1e-9
         assert abs(lr_factor(100, 10, 100, 0.01) - 0.01) < 1e-9
         print(f"train selftest ok: GT at three times (-0.5 / 0 / +0.5 s) -> loss, balancing arms (Kendall / fixed / UW-SO), "
               f"cross-time consistency (hold = weight 0, gradient reaches the motion head), gradient-conflict cosines, "
-              f"2 micro-batches per step, 4 steps with checkpoints (frozen heads "
+              f"sequence training (clips of consecutive keyframes, memory carried and detached or kept in the graph, paired "
+              f"warm / cold validation), 2 micro-batches per step, 4 steps with checkpoints (frozen heads "
               f"not saved), resume 4 -> 6, validation under EMA restores the weights, schedule; "
               f"{last['s_per_step']:.1f} s per step on the CPU at batch 2 (cached features, width 1/4)")
     finally:
