@@ -59,6 +59,7 @@ SHARP, PYR, ENT = "--sharp" in sys.argv, "--pyr" in sys.argv, arg("--ent", 5e-3)
 SMOOTH = arg("--smooth", 0.0)
 DOPPLER = "--doppler" in sys.argv
 RAWWARP = arg("--rawwarp", 0.0)                   # > 0: MSE of the RAW map F0 moved with v against F1, on every flow
+SS = arg("--ss", 4)                                # GT sub-samples per cell (2 missed the lane lines entirely)
 VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
 TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_s{SEED}" if SEED else "")
@@ -73,7 +74,7 @@ def frames_seeded(seed):
 
 def dataset(seeds, name):
     """render the sequences of the given seeds (4 processes), cached in temp/checks/ (scratch, not in git)."""
-    path = f"temp/checks/flow_explains_{name}_dt{DT}_{seeds[0]}_{len(seeds)}.pt"
+    path = f"temp/checks/flow_explains_{name}_dt{DT}_ss{SS}_{seeds[0]}_{len(seeds)}.pt"
     if os.path.exists(path):
         return torch.load(path)
     import multiprocessing as mp
@@ -89,7 +90,10 @@ def frames(rng):
     s0 = random_scene(rng, n_boxes=(3, 7), x_range=(6, 34), y_range=(-15, 15))
     s1 = s0.step(DT)
     s2 = s1.step(DT)
-    g = [gt_bev(s, G, ss=2) for s in (s0, s1, s2)]
+    # ss = 4: with ss = 2 the sub-samples sit at 0.125 / 0.375 m inside a cell and the 0.15 m lane lines (at y = +-1.75,
+    # +-5.25 m) fall exactly between them - F0 had NO lanes (F1 / F2 only dashed pieces after the ego rotation) in
+    # every run up to 2026-10-26
+    g = [gt_bev(s, G, ss=SS) for s in (s0, s1, s2)]
     maps = torch.stack([torch.stack([x["lanes"], x["vehicles"], x["pedestrians"]]) for x in g])
     return maps, g[0]["velocity"], g[0]["box_id"], [(DT, s0.v, s0.omega)]
 
@@ -231,12 +235,25 @@ def evaluate(model, test):
             i, u = iou(o[0, 1], ref[0, 1])
             acc[k][0] += i
             acc[k][1] += u
-        e = (v[0].cpu() - vgt).norm(dim=0)
-        masks = {"vehicles": maps[0, 1] > 0.5, "pedestrians": maps[0, 2] > 0.5,
-                 "lanes": (maps[0, 0] > 0.3) & (maps[0, 1:].max(0).values < 0.1)}
+        vc = v[0].cpu()
+        e = (vc - vgt).norm(dim=0)
+        veh = maps[0, 1] > 0.5
+        inner = veh & (-F.max_pool2d(-veh.float()[None, None], 3, 1, 1)[0, 0] > 0.5)   # all 8 neighbours inside too
+        masks = {"vehicles": veh, "pedestrians": maps[0, 2] > 0.5,
+                 # lane lines are 0.15 m wide in 0.5 m cells (coverage <= 0.3): > 0.3 left the mask empty and printed
+                 # "EPE lanes 0.000" in every run up to 2026-10-26 - not a measurement
+                 "lanes": (maps[0, 0] > 0.05) & (maps[0, 1:].max(0).values < 0.1),
+                 "vehicle interiors": inner, "vehicle edges": veh & ~inner}
         for k, mk in masks.items():
+            epe.setdefault(k, [0.0, 0])
             epe[k][0] += e[mk].sum().item()
             epe[k][1] += int(mk.sum())
+        for k in bid.unique().tolist():                 # object level: the error of each box's MEAN velocity
+            cells = (bid == k) & veh
+            if k >= 0 and cells.any():
+                epe.setdefault("vehicles per box (mean v)", [0.0, 0])
+                epe["vehicles per box (mean v)"][0] += (vc[:, cells].mean(1) - vgt[:, cells].mean(1)).norm().item()
+                epe["vehicles per box (mean v)"][1] += 1
     res = {"IoU " + k: i / max(1, u) for k, (i, u) in acc.items()}
     res.update({"EPE " + k: s / max(1, n) for k, (s, n) in epe.items()})
     return res
