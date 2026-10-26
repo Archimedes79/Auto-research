@@ -33,7 +33,8 @@ CFG = "200:400,200:2000,800:2000,800:6000"
 for i, a in enumerate(sys.argv):
     if a == "--configs":
         CFG = sys.argv[i + 1]
-CONFIGS = [(60, 40)] if QUICK else [tuple(int(v) for v in c.split(":")) for c in CFG.split(",")]
+ORACLE_ONLY = "--oracle-only" in sys.argv
+CONFIGS = [] if ORACLE_ONLY else [(60, 40)] if QUICK else [tuple(int(v) for v in c.split(":")) for c in CFG.split(",")]
 XS = G.x_min + (np.arange(G.nx) + 0.5) * RES
 YS = G.y_min + (np.arange(G.ny) + 0.5) * RES
 TRUCK_LENGTH = 6.2        # synthetic classes: car 4.5 x 1.8, truck 8.0 x 2.5, pedestrian 0.6 x 0.6
@@ -66,7 +67,9 @@ def oracle_decode(x, gt_boxes):
         lab, n = components(cov)
         for k in range(1, n + 1):
             mx, my, area, ev, evec = moments(cov, lab, k)
-            L, W = math.sqrt(12 * max(ev[1], 1e-9)), math.sqrt(12 * max(ev[0], 1e-9))
+            # the cell-averaged coverage is the object convolved with the cell: variances add, so subtract res^2 / 12 per axis
+            L = math.sqrt(max(12 * ev[1] - RES * RES, 1e-6))
+            W = math.sqrt(max(12 * ev[0] - RES * RES, 1e-6))
             yaw = math.atan2(evec[1, 1], evec[0, 1])
             d = {"cx": mx, "cy": my, "score": 1.0, "vx": 0.0, "vy": 0.0}
             if kind == "ped":
@@ -141,7 +144,7 @@ if __name__ == "__main__":
     print_table(rows)
     print("\nC  learned: the same network trained with more steps and scenes (held-out scenes; the last column set = 20 training scenes)")
     rng = random.Random(2)
-    pool = [T.scene_inputs(random_scene(rng)) for _ in range(max(c[0] for c in CONFIGS))]
+    pool = [T.scene_inputs(random_scene(rng)) for _ in range(max([c[0] for c in CONFIGS] or [0]))]
     for n_train, iters in CONFIGS:
         data = pool[:n_train]
         torch.manual_seed(0)
