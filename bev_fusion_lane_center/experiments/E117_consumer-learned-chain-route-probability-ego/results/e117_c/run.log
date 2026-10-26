@@ -1,5 +1,0 @@
-train samples 19419 test samples 2820; train cells {'n0': 3461, 'n1': 3454, 'n2': 3347, 'n3': 3307, 'none': 2844, 'wrong': 3006}
-route+ego            seed 0: exact 0.34 s2 0.35 wrong 0.76 none 0.73  curved(exact) 0.88  (1201 s)
-route+ego            seed 1: exact 0.34 s2 0.35 wrong 0.79 none 0.78  curved(exact) 0.85  (1665 s)
-route+ego            seed 2: exact 0.33 s2 0.33 wrong 0.73 none 0.71  curved(exact) 0.69  (1945 s)
-DONE

@@ -1,8 +1,0 @@
-exact   tau 0.6 n  809 route success 0.739 cov 0.904 prec 0.882 flagged length per row 74.4 m  pose error 0.09 m 0.02 deg
-s1      tau 0.6 n  809 route success 0.644 cov 0.869 prec 0.855 flagged length per row 73.5 m  pose error 0.94 m 1.69 deg
-s2      tau 0.6 n  809 route success 0.489 cov 0.784 prec 0.807 flagged length per row 68.0 m  pose error 1.78 m 3.38 deg
-s3      tau 0.6 n  809 route success 0.323 cov 0.689 prec 0.753 flagged length per row 61.1 m  pose error 2.72 m 5.08 deg
-s1d30   tau 0.6 n  809 route success 0.587 cov 0.846 prec 0.839 flagged length per row 72.5 m  pose error 1.04 m 1.69 deg
-wrong   tau 0.6 n  787 route success 0.000 cov 0.000 prec 0.000 flagged length per row 8.3 m  pose error 0.00 m 0.00 deg
-none    tau 0.6 n  833 route success 0.000 cov 0.000 prec 0.000 flagged length per row 0.0 m  pose error 0.00 m 0.00 deg
-traced graph lane P 0.797 R 0.875 F1 0.834

@@ -1,5 +1,0 @@
-rings 12.5/25/37.5/50 (near to far)            P 0.885 R 0.905 F1 0.8952 lanes 0.835 false 0.056 split6 0.350 merge6 0.462 dir 0.856 far F1 0.866 (48 s)
-one stage (all ranges, seeds near first)       P 0.885 R 0.905 F1 0.8947 lanes 0.828 false 0.054 split6 0.364 merge6 0.461 dir 0.866 far F1 0.865 (43 s)
-far to near (seeds far first)                  P 0.894 R 0.921 F1 0.9073 lanes 0.851 false 0.052 split6 0.367 merge6 0.432 dir 0.862 far F1 0.877 (38 s)
-rings 25/50 (two stages)                       P 0.883 R 0.903 F1 0.8926 lanes 0.822 false 0.056 split6 0.363 merge6 0.441 dir 0.865 far F1 0.863 (28 s)
-rule pipeline (loose graph)                    P 0.925 R 0.891 F1 0.9076 lanes 0.808 false 0.035 far F1 0.881

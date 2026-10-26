@@ -1,3 +1,0 @@
-e123_D6_r2_b3 tau 0.1 | F1o2o 0.707 | splits pred 0.9 gt 2.6 P 0.155 R 0.053 | merges pred 0.9 gt 2.9 | v100 13.1 chord 9.6 m | along 0.13 across 0.35 | ece 0.44
-  -> ('D', 'forks missed: split recall 0.05', 'b = 3 instead of 2, lower prune threshold')
-  -> ('H', 'validity calibration ECE 0.44', 'focal loss, temperature')

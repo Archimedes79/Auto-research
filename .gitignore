@@ -1,4 +1,5 @@
-# One repository for the research system and its problems: CODE + TEXT RECORDS (decision of 2026-10-25, autoresearch/METHOD.md "Code and git").
+# One repository for the research system and its problems: CODE + TEXT RECORDS + RECIPES (decisions of 2026-10-25, D11; rules: bev_fusion_lane_center/CLAUDE.md "Git").
+# Test of the rules: wsl python3 bev_fusion_lane_center/tools/maintenance/reproducible.py (policy in bev_fusion_lane_center/data/rebuild.json).
 # Everything is ignored unless listed here. Never: data, checkpoints, caches, binaries (images, videos, pdf, pptx, html), third-party code, wsl/.
 /*
 !/.gitignore
@@ -39,6 +40,7 @@
 !/bev_fusion_lane_center/data/
 /bev_fusion_lane_center/data/*
 !/bev_fusion_lane_center/data/README.md
+!/bev_fusion_lane_center/data/rebuild.json
 !/bev_fusion_lane_center/data/splits.json
 !/bev_fusion_lane_center/data/splits_b456.json
 !/bev_fusion_lane_center/runs/
@@ -72,7 +74,14 @@
 !/bev_fusion_lane_center/temp/README.md
 /bev_fusion_lane_center/temp/literature_backup_*/
 
-# not in git: wsl/ (the WSL disk image) and datasets/ (raw datasets shared by the problems, with their download tools)
+# not in git: wsl/ (the WSL disk image) and the raw data itself (nuScenes is on D:). In git: the description and the download / check tools of the raw data (recipes)
+!/datasets/
+/datasets/*
+!/datasets/NuScenes/
+/datasets/NuScenes/*
+!/datasets/NuScenes/README.md
+!/datasets/NuScenes/tools/
+/datasets/NuScenes/tools/history/
 # problem 2: camera + radar BEV (for now a discussion folder: plan, literature, one-off scripts)
 !/bev_fusion/
 
@@ -112,3 +121,12 @@ heartbeat
 .gpu_slots/
 ledger_row.json
 *_golden_check.json
+
+# per-run temporary files (the records that count are run.json, the ledger row, the metric card and the experiment file; D11)
+*.log
+log.txt
+stdout.txt
+stderr.txt
+status.json
+*.done
+*.done.FALSE

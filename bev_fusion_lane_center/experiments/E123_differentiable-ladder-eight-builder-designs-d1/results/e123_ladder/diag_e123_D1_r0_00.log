@@ -1,2 +1,0 @@
-e123_D1_r0_00 tau 0.3 | F1o2o 0.720 | splits pred 4.2 gt 2.6 P 0.062 R 0.103 | merges pred 4.3 gt 2.9 | v100 38.2 chord 2.7 m | along 0.13 across 0.30 | ece 0.04
-  -> ('H', 'vertices per 100 m 38.2', 'step-length target, vertex-count penalty (SPF1)')

@@ -1,4 +1,0 @@
-e123_D4_r0_00 tau 0.2 | F1o2o 0.496 | splits pred 163.0 gt 2.6 P 0.014 R 0.871 | merges pred 162.2 gt 2.9 | v100 10.4 chord 5.5 m | along 0.14 across 0.57 | ece 0.33
-  -> ('D', 'duplicates: F1 one-to-one 0.496 vs F1 0.805', 'density / repulsion weight up, or learned pair head (dedup flip)')
-  -> ('D', 'spurious forks: 163.0 predicted vs 2.6 true splits per frame', 'NMS radius up, n children down, coverage merge, best-per-GT duplicate label')
-  -> ('H', 'validity calibration ECE 0.33', 'focal loss, temperature')

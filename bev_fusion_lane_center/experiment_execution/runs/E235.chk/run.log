@@ -1,3 +1,0 @@
-=== attempt 2026-10-25T16:28:53: bash -c bash temp/loop19/run_b456_gt.sh gtchk && bash tools/env/_py14.sh temp/loop19/check_b456_gt_repro.py compare
-== 16:28:53 graph + poses + exact distance
-tail: option used in invalid context -- 2

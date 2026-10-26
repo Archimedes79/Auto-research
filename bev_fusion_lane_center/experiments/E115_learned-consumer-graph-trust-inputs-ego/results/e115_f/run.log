@@ -1,7 +1,0 @@
-const seed 0: g 0.426 clean 0.35 night 0.83 pooled 0.65 (101 s)
-sep blend g 0.44 seed 0: clean 0.67 night 0.99 (372 s)
-const seed 1: g 0.397 clean 0.33 night 0.87 pooled 0.62 (642 s)
-sep blend g 0.44 seed 1: clean 0.67 night 1.05 (914 s)
-const seed 2: g 0.425 clean 0.31 night 0.83 pooled 0.63 (1185 s)
-sep blend g 0.44 seed 2: clean 0.66 night 1.04 (1457 s)
-DONE

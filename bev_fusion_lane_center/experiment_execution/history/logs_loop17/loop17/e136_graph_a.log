@@ -1,5 +1,0 @@
-[dark_single] n 291 | cl: S 0.748 F1@1 0.865 J 0.270 v100 13.7 found 0.66 | fail: S 0.415 F1@1 0.314 J 0.086 v100 15.8 found 0.09  17 s
-[dark_maxdecay_0.95] n 291 | cl: S 0.756 F1@1 0.877 J 0.272 v100 13.3 found 0.70 | fail: S 0.619 F1@1 0.678 J 0.154 v100 13.8 found 0.41  40 s
-[blur_single] n 291 | cl: S 0.748 F1@1 0.865 J 0.270 v100 13.7 found 0.66 | fail: S 0.505 F1@1 0.491 J 0.091 v100 15.3 found 0.20  61 s
-[blur_maxdecay_0.95] n 291 | cl: S 0.756 F1@1 0.877 J 0.272 v100 13.3 found 0.70 | fail: S 0.636 F1@1 0.712 J 0.164 v100 14.1 found 0.45  83 s
-DONE 18:00:41

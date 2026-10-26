@@ -1,9 +1,0 @@
-[dark] maxdecay:0.9     frames 833 flagged clean 0.00 fail 0.80  427 s
-[dark] maxdecay:0.95    frames 833 flagged clean 0.00 fail 0.80  714 s
-[blur] maxdecay:0.9     frames 417 flagged clean 0.00 fail 0.46  869 s
-[blur] maxdecay:0.95    frames 417 flagged clean 0.00 fail 0.46  1027 s
-[cam_front3_off] maxdecay:0.9     frames 833 flagged clean 0.00 fail 0.00  1250 s
-[cam_front3_off] maxdecay:0.95    frames 833 flagged clean 0.00 fail 0.00  1612 s
-[radar_off] maxdecay:0.9     frames 417 flagged clean 0.00 fail 0.04  1775 s
-[radar_off] maxdecay:0.95    frames 417 flagged clean 0.00 fail 0.04  1904 s
-DONE 16:18:40

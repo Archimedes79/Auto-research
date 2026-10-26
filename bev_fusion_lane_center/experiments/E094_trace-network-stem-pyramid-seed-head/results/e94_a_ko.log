@@ -1,6 +1,0 @@
-trained network, nothing removed               P 0.885 R 0.905 F1 0.8952 lanes 0.835 false 0.056 split6 0.350 merge6 0.462 dir 0.856 far F1 0.866 (33 s)
-knock-out: covered crop (near graph) removed   P 0.920 R 0.880 F1 0.8996 lanes 0.781 false 0.033 split6 0.188 merge6 0.213 dir 0.823 far F1 0.871 (116 s)
-knock-out: range embedding removed             P 0.880 R 0.903 F1 0.8914 lanes 0.819 false 0.058 split6 0.355 merge6 0.463 dir 0.865 far F1 0.860 (46 s)
-knock-out: merge events suppressed             P 0.893 R 0.918 F1 0.9050 lanes 0.850 false 0.049 split6 0.247 merge6 0.333 dir 0.875 far F1 0.878 (118 s)
-knock-out: fork events suppressed              P 0.885 R 0.902 F1 0.8932 lanes 0.820 false 0.056 split6 0.401 merge6 0.483 dir 0.856 far F1 0.863 (41 s)
-rule pipeline (loose graph)                    P 0.925 R 0.891 F1 0.9076 lanes 0.808 false 0.035 far F1 0.881

@@ -572,6 +572,8 @@ def check(root):
             problems.append(f"{fn} missing")
             continue
         for link in re.findall(r"\]\(((?!http|#)[^)\s]+)\)", open(p, encoding="utf-8").read()):
+            if link.startswith("code/") and link.endswith(".md"):
+                continue  # per-repository code extractions are not in git (D11): extracted on the fly, links work where the file exists
             if not os.path.exists(os.path.join(root, link.split("#")[0])):
                 problems.append(f"{fn}: broken link {link}")
     return problems
@@ -631,3 +633,5 @@ if __name__ == "__main__":
         print("check:", "ok" if not probs else f"{len(probs)} problems")
         for p in probs[:60]:
             print("  ", p)
+        if probs:
+            sys.exit(1)

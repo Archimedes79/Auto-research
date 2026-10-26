@@ -1,6 +1,0 @@
-analytic arc: train error at 20 m by sign {1.0: 3.318877696990967, -1.0: 1.434778094291687} -> sign -1.0
-analytic arc: {'clean/exact': 1.22, 'clean/s2': 1.22, 'clean/wrong': 1.16, 'clean/none': 1.22, 'dark/s2': 1.22, 'blur/s2': 1.25, 'fog/s2': 1.22, 'cam_front_off/s2': 1.22, 'cam_front3_off/s2': 1.22, 'extr3/s2': 1.25, 'radar_off/s2': 1.25, 'failures/s2 (mean of the 7 types)': 1.23}
-ego_only seed 0 {'clean/s2': 1.01, 'clean/wrong': 0.94, 'clean/none': 1.01, 'dark/s2': 1.01, 'blur/s2': 1.0, 'cam_front3_off/s2': 1.01} (82 s)
-ego_only seed 1 {'clean/s2': 1.02, 'clean/wrong': 0.95, 'clean/none': 1.02, 'dark/s2': 1.02, 'blur/s2': 1.01, 'cam_front3_off/s2': 1.02} (107 s)
-ego_only seed 2 {'clean/s2': 1.02, 'clean/wrong': 0.95, 'clean/none': 1.02, 'dark/s2': 1.02, 'blur/s2': 1.01, 'cam_front3_off/s2': 1.02} (141 s)
-DONE

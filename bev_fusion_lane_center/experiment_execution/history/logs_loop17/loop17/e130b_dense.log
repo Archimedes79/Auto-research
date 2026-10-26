@@ -1,6 +1,0 @@
-clean torch.Size([873, 200, 200])
-fog torch.Size([291, 200, 200])
-radar_off torch.Size([291, 200, 200])
-extr3 torch.Size([291, 200, 200])
-cam_front_off torch.Size([291, 200, 200])
-DONE

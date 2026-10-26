@@ -1,5 +1,0 @@
-== 02:58:20 {'name': 'e40_noise_s2_align', 'feats': 'dec32,logit7', 'split': 'b123', 'steps': 0, 'bs': 8, 'lr': 0.002, 'wd': 0.0001, 'base': 48, 'lam': 1.0, 'wpos': 1.0, 'gamma': 2.0, 'dir': 0.5, 'train_stride': 1, 'taus': '0.2,0.3,0.4,0.5,0.6,0.7,0.8', 'eval': 'val,test', 'workers': 3, 'seed': 0, 'init_from': 'e40_noise', 'eps': 1e-06, 'beta2': 0.98, 'prior': 'map', 'prior_xy': 1.0, 'prior_deg': 2.0, 'prior_degrade': 0.0, 'align': 0, 'eval_prior_xy': 2.0, 'eval_prior_deg': 4.0, 'eval_degrade': -1.0, 'eval_align': 1, 'temporal': '', 't_gap': 1, 'eval_n': 0}
-Eingangskanaele 39 + Zusatz 3 Parameter 2738163 Trainings-Samples 8414
-[val] 873 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.701 / 0.891 / 0.947, P/R@1 0.928/0.857, 1:1 0.803
-[test] 833 Samples; bester Schwellwert 0.6: F1 @0,5/1/1,5 = 0.679 / 0.866 / 0.922, P/R@1 0.925/0.814, 1:1 0.769
-FERTIG 03:01:35

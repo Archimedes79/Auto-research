@@ -1,8 +1,0 @@
-train samples 28311 (validation failure frames 2223 x 4)
-route+ego            seed 0: clean exact 0.38 none 0.76 | dark_single 0.90 dark_maxdecay 0.48 blur_single 0.50 blur_maxdecay 0.37 cam_front3_off_single 0.61 cam_front3_off_maxdecay 0.52
-route+ego            seed 1: clean exact 0.37 none 0.76 | dark_single 1.04 dark_maxdecay 0.38 blur_single 0.47 blur_maxdecay 0.35 cam_front3_off_single 0.67 cam_front3_off_maxdecay 0.51
-route+ego            seed 2: clean exact 0.38 none 0.77 | dark_single 1.06 dark_maxdecay 0.45 blur_single 0.51 blur_maxdecay 0.35 cam_front3_off_single 0.66 cam_front3_off_maxdecay 0.53
-route+soft+ego       seed 0: clean exact 0.37 none 0.76 | dark_single 1.11 dark_maxdecay 0.44 blur_single 0.49 blur_maxdecay 0.35 cam_front3_off_single 0.67 cam_front3_off_maxdecay 0.53
-route+soft+ego       seed 1: clean exact 0.35 none 0.73 | dark_single 1.07 dark_maxdecay 0.40 blur_single 0.50 blur_maxdecay 0.34 cam_front3_off_single 0.67 cam_front3_off_maxdecay 0.52
-route+soft+ego       seed 2: clean exact 0.39 none 0.75 | dark_single 1.02 dark_maxdecay 0.49 blur_single 0.53 blur_maxdecay 0.41 cam_front3_off_single 0.74 cam_front3_off_maxdecay 0.63
-DONE

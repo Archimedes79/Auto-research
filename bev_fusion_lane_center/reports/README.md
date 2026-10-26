@@ -28,7 +28,7 @@ To finish the loop 17 report (open item in HANDOVER.md), move the builder files 
 
 ## Rebuild
 ```
-wsl bash /mnt/c/ML-Experiment/bev_fusion_lane_center/tools/env/_py14.sh reports/build/reports/build_week2_report.py
+wsl bash tools/env/_py14.sh reports/build/reports/build_week2_report.py
 powershell -File reports/build/reports/print_weekly.ps1 -Html <html> -Pdf <pdf>
 powershell -File reports/build/decks/build_research_workflow_pptx.ps1
 ```

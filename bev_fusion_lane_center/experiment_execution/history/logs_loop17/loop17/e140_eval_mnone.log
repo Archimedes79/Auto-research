@@ -1,4 +1,0 @@
-[dark_gateB_mnone] n 291 | cl: S 0.756 F1@1 0.892 J 0.238 v100 11.8 found 0.76 | fail: S 0.651 F1@1 0.736 J 0.163 v100 12.3 found 0.51  22 s
-[blur_gateB_mnone] n 291 | cl: S 0.756 F1@1 0.892 J 0.238 v100 11.8 found 0.76 | fail: S 0.653 F1@1 0.752 J 0.151 v100 12.2 found 0.52  43 s
-[cam_front3_off_gateB_mnone] n 291 | cl: S 0.756 F1@1 0.892 J 0.238 v100 11.8 found 0.76 | fail: S 0.657 F1@1 0.760 J 0.161 v100 13.3 found 0.52  67 s
-DONE 19:14:08

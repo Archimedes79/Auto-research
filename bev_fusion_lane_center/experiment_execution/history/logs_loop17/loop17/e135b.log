@@ -1,7 +1,0 @@
-[dark_gate] s0 s0: cl 0.831 fail 0.416 | s0 s1: cl 0.838 fail 0.423 | s2 s0: cl 0.824 fail 0.409 | s2 s1: cl 0.824 fail 0.423  55 s
-[blur_gate] s0 s0: cl 0.831 fail 0.606 | s0 s1: cl 0.838 fail 0.569 | s2 s0: cl 0.824 fail 0.620 | s2 s1: cl 0.824 fail 0.555  110 s
-[cam_front3_off_gate] s0 s0: cl 0.831 fail 0.453 | s0 s1: cl 0.838 fail 0.401 | s2 s0: cl 0.824 fail 0.438 | s2 s1: cl 0.824 fail 0.401  165 s
-[dark_maxdecay_0.95] s0 s0: cl 0.838 fail 0.350 | s0 s1: cl 0.838 fail 0.365 | s2 s0: cl 0.831 fail 0.365 | s2 s1: cl 0.824 fail 0.380  219 s
-[blur_maxdecay_0.95] s0 s0: cl 0.838 fail 0.620 | s0 s1: cl 0.838 fail 0.533 | s2 s0: cl 0.831 fail 0.613 | s2 s1: cl 0.824 fail 0.533  271 s
-[cam_front3_off_maxdecay_0.95] s0 s0: cl 0.838 fail 0.453 | s0 s1: cl 0.838 fail 0.416 | s2 s0: cl 0.831 fail 0.431 | s2 s1: cl 0.824 fail 0.416  324 s
-DONE 17:32:49

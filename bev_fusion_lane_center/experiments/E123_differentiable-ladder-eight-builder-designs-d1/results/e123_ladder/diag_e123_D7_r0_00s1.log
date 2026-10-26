@@ -1,2 +1,0 @@
-e123_D7_r0_00s1 tau 0.6 | F1o2o 0.734 | splits pred 3.3 gt 2.6 P 0.134 R 0.176 | merges pred 3.4 gt 2.9 | v100 12.2 chord 8.7 m | along 0.13 across 0.35 | ece 0.04
-  -> ('D', 'forks missed: split recall 0.18', 'b = 3 instead of 2, lower prune threshold')

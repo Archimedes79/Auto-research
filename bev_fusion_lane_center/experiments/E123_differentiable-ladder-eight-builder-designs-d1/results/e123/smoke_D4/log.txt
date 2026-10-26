@@ -1,1 +1,0 @@
-it 1/20 4s share 0.00 seed_pos 1.131 seed_dir 0.170 seed_val 0.962 ver 1.304 pos 1.228 val 0.531 prec 1.430 rec 2.086 pair 0.768 aux_seed 0.488 aux_dir 0.133 ver_pos 0.059 child_ok 0.002 child_near 0.028 tot 18.477 gn nan

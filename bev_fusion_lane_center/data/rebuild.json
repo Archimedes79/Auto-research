@@ -1,0 +1,367 @@
+{
+  "_about": "Decision D11. What is in git, what is not, and how everything that is not in git is made again. Read by tools/maintenance/reproducible.py (wsl python3 tools/maintenance/reproducible.py). Script paths are relative to the problem folder. status: scripted = a tracked script makes it from its inputs; recipe = made again by a run (ledger row + tag + run.json); partial = scripted in part, see note; missing = no script yet.",
+  "code_dirs": [
+    "training",
+    "evaluation",
+    "tools",
+    "reports/build",
+    "temp"
+  ],
+  "git_policy": {
+    "max_kb": 1024,
+    "forbid_names": [
+      "run.log",
+      "log.txt",
+      "stdout.txt",
+      "stderr.txt",
+      "status.json",
+      "ledger_row.json",
+      "heartbeat*",
+      "*.done",
+      "*.done.FALSE",
+      "*.lock"
+    ],
+    "forbid_ext": [
+      ".log",
+      ".tmp",
+      ".lock",
+      ".pt",
+      ".pth",
+      ".ckpt",
+      ".npy",
+      ".npz",
+      ".pkl",
+      ".pickle",
+      ".h5",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".mp4",
+      ".gif",
+      ".pdf",
+      ".pptx",
+      ".docx",
+      ".xlsx",
+      ".html",
+      ".zip",
+      ".tgz",
+      ".gz",
+      ".exe"
+    ],
+    "forbid_dirs": [
+      "__pycache__",
+      ".gpu_slots"
+    ],
+    "allow": []
+  },
+  "clone_checks": [
+    {
+      "name": "compile all code (python 3.12, gcar)",
+      "cmd": "source ~/miniconda3/etc/profile.d/conda.sh && conda activate gcar && PYTHONDONTWRITEBYTECODE=1 python -m compileall -q training evaluation tools reports/build temp",
+      "timeout": 300
+    },
+    {
+      "name": "structure and documents (check_structure)",
+      "cmd": "python3 ../autoresearch/tools/check_structure.py",
+      "kind": "info",
+      "why": "documents of experiments name logs, images and results that exist only on disk (by rule not in git); in the working tree the check has 0 problems"
+    },
+    {
+      "name": "literature (catalogue check, all links)",
+      "cmd": "python3 tools/literature/catalogue.py check"
+    },
+    {
+      "name": "paths from the location (bflc_paths)",
+      "cmd": "bash tools/env/_py14.sh bflc_paths.py"
+    },
+    {
+      "name": "autoresearch tools selftest",
+      "cmd": "python3 ../autoresearch/tools/selftest.py",
+      "timeout": 900
+    },
+    {
+      "name": "graph metric selftest",
+      "cmd": "bash tools/env/_py14.sh sparse_lanes/selftest.py",
+      "timeout": 600
+    },
+    {
+      "name": "grid metric reproduces stored numbers",
+      "cmd": "bash tools/env/_py14.sh lane_grid/selftest.py",
+      "timeout": 600,
+      "kind": "info",
+      "why": "reads the stored loop-3 dense output runs/e37_final (717 MB, not in git, rebuilt only by re-running E37); see artifact stored_run_outputs"
+    },
+    {
+      "name": "stored numbers (golden, cached data, all registry names except control)",
+      "cmd": "python3 -c \"import json;p='evaluation/golden.json';g=json.load(open(p));g['entries']=[e for e in g['entries'] if e['name']!='control'];json.dump(g,open(p,'w'))\" && bash tools/env/_py14.sh evaluate.py --golden check --cached-only",
+      "timeout": 1800
+    },
+    {
+      "name": "stored numbers of the control (golden)",
+      "cmd": "bash tools/env/_py14.sh evaluate.py --golden check --cached-only",
+      "timeout": 1800,
+      "kind": "info",
+      "why": "the control entries read its stored graphs runs/e94_a/graphs_*_clean.pkl: not kept in git (D11: what can be rebuilt is not kept), rebuilt by re-running the E94 evaluation (628 ms per frame)"
+    }
+  ],
+  "external": [
+    {
+      "what": "raw nuScenes (camera, radar, maps, metadata; no lidar)",
+      "where": "D:\\Auto-research\\NuScenes (WSL /mnt/d/Auto-research/NuScenes), public bucket motional-nuscenes",
+      "recipe": "../datasets/NuScenes/README.md and tools/ (download only with the user's OK; non-commercial licence)"
+    },
+    {
+      "what": "WSL home views of the raw data",
+      "where": "~/data/nuscenes_full, ~/data/nuscenes (symlinks)",
+      "recipe": "../datasets/NuScenes/tools/link_views.sh"
+    },
+    {
+      "what": "conda environment gcar (python 3.12, torch 2.8)",
+      "where": "~/miniconda3/envs/gcar",
+      "recipe": "tools/env/setup/setup_gcar_env.sh, tools/env/environment_gcar.yml"
+    },
+    {
+      "what": "clones of the foundation code and the GaussianCaR weights",
+      "where": "~/work/CRN, ~/work/gaussiancar, ~/work/bevfusion, ~/work/gaussiancar_ckpt",
+      "recipe": "tools/env/setup/foundation_code.md (remotes and commits; the source of the weights is still to be recorded)"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "nuscenes_views",
+      "where": "~/data/nuscenes_full, ~/data/nuscenes",
+      "status": "scripted",
+      "scripts": [
+        "../datasets/NuScenes/tools/link_views.sh"
+      ],
+      "needs": [
+        "raw nuScenes on D:",
+        "this problem's nuscenes_additions"
+      ],
+      "note": "folders of symlinks; re-run after the repository folder or D: moves"
+    },
+    {
+      "id": "crn_infos_radar",
+      "where": "nuscenes_additions/lcr_crn (info pkl files, filtered radar BEV / PV)",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/crn_make_infos.py",
+        "training/data/prep/crn_gen_radar.sh",
+        "training/data/prep/crn_extract_radar.sh"
+      ],
+      "needs": [
+        "raw nuScenes",
+        "clone ~/work/CRN"
+      ],
+      "note": "radar parts 4-6 (D1) are in the raw data since 2026-10-25"
+    },
+    {
+      "id": "splits",
+      "where": "data/splits.json (in git), data/splits_b456.json (in git)",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/make_splits.py",
+        "temp/loop19/make_b456_tokens.py"
+      ],
+      "needs": [
+        "raw nuScenes metadata"
+      ],
+      "note": "scene-disjoint lists; both files are tracked because every number depends on them"
+    },
+    {
+      "id": "gcar_features_b123",
+      "where": "~/exp_gcar_b123/feats (54 GB: dec32, fused32, logit7 per frame)",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/gcar_pipeline1.sh",
+        "training/data/prep/gcar_pipeline2.sh",
+        "training/data/prep/run_gcar.sh",
+        "training/data/prep/extract_features.py",
+        "training/data/prep/gcar_tools.py"
+      ],
+      "needs": [
+        "raw nuScenes",
+        "clone ~/work/gaussiancar",
+        "GaussianCaR weights"
+      ],
+      "note": "a re-extraction is not bit-identical: correlation 0.94 - 0.9997 against the stored arrays (E234 check, rasteriser noise); numbers stay comparable inside the noise band"
+    },
+    {
+      "id": "gcar_features_b456",
+      "where": "~/exp_gcar_b456/feats (255 new scenes)",
+      "status": "scripted",
+      "scripts": [
+        "temp/loop19/run_b456_extract.sh"
+      ],
+      "needs": [
+        "raw nuScenes parts 4-6",
+        "gcar_pipeline scripts"
+      ],
+      "note": "E234 (features), E235 (ground truth, route, SD map)"
+    },
+    {
+      "id": "gcar_perturbed",
+      "where": "~/exp_gcar_b123/pert (37 GB: dark, blur, cameras off ...)",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/gcar_pert.py"
+      ],
+      "needs": [
+        "gcar_features_b123",
+        "raw nuScenes"
+      ],
+      "note": ""
+    },
+    {
+      "id": "pca_basis",
+      "where": "~/exp_gcar_b123/feats/pca*_basis.npz",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/pca_features.py",
+        "training/data/prep/gcar_wide.py"
+      ],
+      "needs": [
+        "gcar_features_b123"
+      ],
+      "note": "the b123 basis is copied (same sha256) to b456"
+    },
+    {
+      "id": "graph_gt",
+      "where": "~/exp_gcar_b123/*.pkl, *.npy, *.npz (lane graph ground truth, direction / node maps, poses)",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/make_graph_gt.py",
+        "training/data/prep/make_gt_arrays.py",
+        "training/data/prep/make_node_gt.py",
+        "training/data/prep/make_dir_gt.py",
+        "training/data/prep/make_poses.py",
+        "training/data/prep/centerline_gt.py"
+      ],
+      "needs": [
+        "raw nuScenes maps and metadata",
+        "splits"
+      ],
+      "note": ""
+    },
+    {
+      "id": "dist_gt_exact",
+      "where": "~/exp_crn_b123/feats/*_gt_dist_exact.npy, *_gt_pts_exact.npy",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/make_dist_gt.py"
+      ],
+      "needs": [
+        "graph_gt"
+      ],
+      "note": "the stored b123 map has TF32 errors (D10); rebuild it in the gcar env (TF32 off)"
+    },
+    {
+      "id": "route_sd_maps",
+      "where": "~/exp_gcar_b123/route_*.pkl, sd_*.pkl, prior_*.npy, reg_*.pkl",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/make_route_gt.py",
+        "training/data/prep/make_route_heat.py",
+        "training/data/prep/make_route_alt.py",
+        "training/data/prep/sd_precompute.py",
+        "training/data/prep/prior_precompute.py",
+        "training/data/prep/make_prior.py",
+        "training/data/prep/reg_precompute.py",
+        "training/data/prep/sd_reg_precompute.py"
+      ],
+      "needs": [
+        "graph_gt",
+        "raw nuScenes maps"
+      ],
+      "note": "simulated ADASIS-like SD map and registrations"
+    },
+    {
+      "id": "chain_caches",
+      "where": "~/exp_gcar_b123/p8, p10, p14 (token and chain caches of loops 8-16)",
+      "status": "partial",
+      "scripts": [
+        "training/data/p14_chain_data.py",
+        "training/data/p16_chain_data.py"
+      ],
+      "needs": [
+        "gcar_features_b123",
+        "trained heads"
+      ],
+      "note": "the p8 and p10 cache builders of loops 8-10 are in experiment_execution/history/ only; the current chain (p16) rebuilds its own cache"
+    },
+    {
+      "id": "failure_series_p17",
+      "where": "~/exp_gcar_b123/p17 (39 GB: clean / failure half per scene, out-of-fold heads)",
+      "status": "partial",
+      "scripts": [
+        "evaluation/loops/loop17/p17_series.py"
+      ],
+      "needs": [
+        "gcar_perturbed",
+        "trained heads"
+      ],
+      "note": "the loop-17 series script was recovered; the out-of-fold heads need the loop-17 recipes (ledger E130 - E144)"
+    },
+    {
+      "id": "eval_cache",
+      "where": "~/exp_gcar_b123/eval_cache (raw network outputs per run, split, M, K0)",
+      "status": "scripted",
+      "scripts": [
+        "evaluation/evaluate.py"
+      ],
+      "needs": [
+        "checkpoints",
+        "gcar_features_b123"
+      ],
+      "note": "built on demand by evaluate.py; --cached-only never rebuilds"
+    },
+    {
+      "id": "checkpoints",
+      "where": "runs/<id>/model.pt (never in git)",
+      "status": "recipe",
+      "scripts": [
+        "../autoresearch/tools/run.py"
+      ],
+      "needs": [
+        "features",
+        "ground truth"
+      ],
+      "note": "retrain from the ledger row (command, seed), the code tag lcr/<id> and run.json; GPU training is not bit-identical, so a retrained model agrees within the noise band, not exactly"
+    },
+    {
+      "id": "env_gcar",
+      "where": "~/miniconda3/envs/gcar",
+      "status": "scripted",
+      "scripts": [
+        "tools/env/setup/setup_gcar_env.sh"
+      ],
+      "needs": [
+        "internet for packages"
+      ],
+      "note": "package list in tools/env/environment_gcar.yml"
+    },
+    {
+      "id": "foundation_code",
+      "where": "~/work/CRN, ~/work/gaussiancar, ~/work/bevfusion, ~/work/gaussiancar_ckpt",
+      "status": "partial",
+      "scripts": [
+        "tools/env/setup/foundation_code.md"
+      ],
+      "needs": [
+        "internet"
+      ],
+      "note": "remotes and commits are recorded; the weights are not scripted: record their source (D11 follow-up)"
+    },
+    {
+      "id": "stored_run_outputs",
+      "where": "runs/e94_a/graphs_{val,test}_clean.pkl (7 MB, the control's graphs: reference of every comparison); runs/e37_final (717 MB, loop-3 dense output read by the grid-metric selftest)",
+      "status": "partial",
+      "scripts": [],
+      "needs": [
+        "checkpoints of E94 and E37"
+      ],
+      "note": "not kept in git on purpose (D11: do not keep what can be rebuilt): the control's graphs are rebuilt by re-running the E94 evaluation from its checkpoint (recipe in the ledger, 628 ms per frame); runs/e37_final by re-running E37; until then the golden numbers of `control` and the grid-metric selftest cannot run from a clone"
+    }
+  ]
+}

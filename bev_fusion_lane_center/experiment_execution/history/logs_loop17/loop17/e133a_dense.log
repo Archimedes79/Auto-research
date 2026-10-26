@@ -1,5 +1,0 @@
-clean torch.Size([873, 200, 200])
-dark torch.Size([291, 200, 200])
-blur torch.Size([291, 200, 200])
-cam_front3_off torch.Size([291, 200, 200])
-DONE

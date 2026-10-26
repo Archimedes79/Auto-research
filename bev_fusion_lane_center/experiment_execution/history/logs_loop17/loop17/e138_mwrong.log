@@ -1,7 +1,0 @@
-[dark_single_mwrong] n 291 | cl: S 0.747 F1@1 0.879 J 0.244 v100 13.2 found 0.73 | fail: S 0.443 F1@1 0.345 J 0.088 v100 14.5 found 0.11  20 s
-[dark_maxdecay_0.95_mwrong] n 291 | cl: S 0.754 F1@1 0.893 J 0.232 v100 12.7 found 0.76 | fail: S 0.637 F1@1 0.708 J 0.169 v100 12.9 found 0.47  43 s
-[blur_single_mwrong] n 291 | cl: S 0.747 F1@1 0.879 J 0.244 v100 13.2 found 0.73 | fail: S 0.522 F1@1 0.511 J 0.098 v100 14.4 found 0.22  63 s
-[blur_maxdecay_0.95_mwrong] n 291 | cl: S 0.754 F1@1 0.893 J 0.232 v100 12.7 found 0.76 | fail: S 0.641 F1@1 0.733 J 0.149 v100 13.3 found 0.49  87 s
-[cam_front3_off_single_mwrong] n 291 | cl: S 0.747 F1@1 0.879 J 0.244 v100 13.2 found 0.73 | fail: S 0.568 F1@1 0.656 J 0.168 v100 16.9 found 0.39  114 s
-[cam_front3_off_maxdecay_0.95_mwrong] n 291 | cl: S 0.754 F1@1 0.893 J 0.232 v100 12.7 found 0.76 | fail: S 0.594 F1@1 0.701 J 0.184 v100 16.6 found 0.51  145 s
-DONE 18:00:19

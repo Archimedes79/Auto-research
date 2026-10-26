@@ -1,3 +1,0 @@
-e123_D6_r1_b1 tau 0.1 | F1o2o 0.735 | splits pred 0.8 gt 2.6 P 0.267 R 0.085 | merges pred 0.8 gt 2.9 | v100 19.7 chord 5.6 m | along 0.13 across 0.34 | ece 0.11
-  -> ('D', 'forks missed: split recall 0.08', 'b = 3 instead of 2, lower prune threshold')
-  -> ('H', 'vertices per 100 m 19.7', 'step-length target, vertex-count penalty (SPF1)')

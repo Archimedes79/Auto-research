@@ -1,3 +1,0 @@
-e123_D8_r1_b2 tau 0.1 | F1o2o 0.742 | splits pred 12.3 gt 2.6 P 0.056 R 0.270 | merges pred 12.9 gt 2.9 | v100 12.9 chord 7.5 m | along 0.13 across 0.42 | ece 0.56
-  -> ('D', 'spurious forks: 12.3 predicted vs 2.6 true splits per frame', 'NMS radius up, n children down, coverage merge, best-per-GT duplicate label')
-  -> ('H', 'validity calibration ECE 0.56', 'focal loss, temperature')
