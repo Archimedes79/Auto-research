@@ -23,6 +23,8 @@ Arms:
   H + R4 + label   the supervised control (plan 7.3 arm A): H + R4 plus an L1 velocity label on the occupied cells of
            every flow (as box-supervised detectors do; nuScenes has the labels) - the warp loss stays as an auxiliary;
            shows what the refinement does when the field is anchored
+  S + D + R4 + smooth   the combination the single arms point to: sharp hypotheses (best start), Doppler (stripes),
+           4 refinements (they recover a wrong start), edge-aware smoothness (limits the gaming)
   S + D / S + D + P4   the hypothesis mean updated with radar Doppler (temporal.doppler_update, prior sigma 4 m/s): a
            radar at the origin, a detection in 50 % of the occupied cells (objects AND static stripes: ego-compensated
            clutter has radial velocity 0), noise 0.1 m/s - for stripes ahead the ray is nearly along the stripe, the
@@ -32,7 +34,7 @@ Metrics on held-out scenes after each iteration: end-point error of the velocity
 of the static stripes; warp MSE on the known cells. Image: temp/checks/flow_refine.png (direction = hue, speed =
 brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
-    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label] [--smooth 0.05]
+    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label,S+D+R4+smooth] [--smooth 0.05]
 """
 import math
 import random
@@ -223,7 +225,8 @@ if __name__ == "__main__":
                                             ("0 + P4", False, "P", 0.0, False), ("S + P4", True, "P", 0.0, True),
                                             ("S + D", True, False, 0.0, True), ("S + D + P4", True, "P", 0.0, True),
                                             ("W", True, False, 0.0, False), ("S + R4 + smooth", True, True, 0.0, True),
-                                            ("H + R4 + label", True, True, 0.0, False)):
+                                            ("H + R4 + label", True, True, 0.0, False),
+                                            ("S + D + R4 + smooth", True, True, 0.0, True)):
         if ARMS is not None and name.replace(" ", "") not in ARMS:
             continue
         torch.manual_seed(SEED)
