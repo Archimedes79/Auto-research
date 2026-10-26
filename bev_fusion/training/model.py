@@ -40,7 +40,7 @@ try:
     from .bev_trunk import BEVTrunk, SemanticHead
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
-    from .lift_pd import Grid, LiftPD
+    from .lift_pd import Grid, LiftPD, camera_visibility
     from .losses import NUSC_GROUPS, layer_spec, radar_aux_spec
     from .object_head import ObjectHead
     from .radar_bev import RadarBEV
@@ -50,7 +50,7 @@ except ImportError:                                   # run as a script
     from bev_trunk import BEVTrunk, SemanticHead
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
-    from lift_pd import Grid, LiftPD
+    from lift_pd import Grid, LiftPD, camera_visibility
     from losses import NUSC_GROUPS, layer_spec, radar_aux_spec
     from object_head import ObjectHead
     from radar_bev import RadarBEV
@@ -169,14 +169,25 @@ class BEVFusionModel(nn.Module):
             bevs.append(self.cam_reduce(vol))
         return torch.stack(bevs)
 
+    def camera_visibility(self, batch, like):
+        """(B, 1, X, Y): the cells the current camera frame observes (LiftPD.visibility per sample) - the obs_mass of the
+        camera branch's world memory, so the empty BEV outside the field of view does not overwrite what the memory saw
+        (before 2026-10-26 the write used obs_mass = 1 everywhere)."""
+        hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
+        vis = [camera_visibility(self.grid, self.cfg.z_levels, self.lift.depth_centres, batch["K"][b, 0],
+                                 batch["T_cam_car"][b, 0], hw, batch.get("ida"), self.cfg.oversample)
+               for b in range(batch["K"].shape[0])]
+        return torch.stack(vis)[:, None].to(like)
+
     @staticmethod
-    def _branch_temporal(block, bevs, steps, state, step):
+    def _branch_temporal(block, bevs, steps, state, step, obs_mass=None):
         """bevs (B, F, C, X, Y) with frame 0 = current; steps[k]: list of (dt, v, omega) per-sample (B,) tensors from
-        frame k to the current time (collate); one batched call, past frames oldest first."""
+        frame k to the current time (collate); one batched call, past frames oldest first; obs_mass (B, 1, X, Y) where
+        the sensor observed (memory write mask) or None (everywhere)."""
         if block is None:
             return bevs[:, 0], state
         past = [(bevs[:, k], steps[k]) for k in range(bevs.shape[1] - 1, 0, -1)]
-        out, new_state, _ = block(bevs[:, 0], past, state, step)
+        out, new_state, _ = block(bevs[:, 0], past, state, step, obs_mass)
         return out, new_state
 
     def forward(self, batch, dts=(0.0,), state=None, step=None, ego=None):
@@ -192,7 +203,8 @@ class BEVFusionModel(nn.Module):
         cam_frames = self.camera_bevs(batch)
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
                  for f in batch["steps"]]
-        cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step)
+        cam_obs = self.camera_visibility(batch, cam_frames) if isinstance(self.cam_temporal, TemporalFusion) else None
+        cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
         rad = self.radar(batch["radar"], cam.shape[0])
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
@@ -254,6 +266,17 @@ def _selftest():
         res2 = model(batch, state=res["state"], step=(torch.full((2,), 1 / 12), torch.tensor([5.0, 8.0]),
                                                       torch.tensor([0.0, 0.1])))
     assert res2["out"][0.0]["sem"].shape == o["sem"].shape and "cam_aux" not in res2["out"][0.0]
+    # the camera memory writes only where the camera observes (obs_mass = LiftPD.visibility), nothing outside the view
+    if isinstance(model.cam_temporal, TemporalFusion):
+        with torch.no_grad():
+            vis = model.camera_visibility(batch, o["sem"])                                  # (B, 1, X, Y)
+            st = model(batch)["state"]["cam"]
+            from temporal_fusion import read_memory as _rm
+            _, conf = _rm(st["M"], st["W"], st["pose"], model.cam_temporal.ego_pts, vis.shape[-2], vis.shape[-1],
+                          model.cam_temporal.mem_grid)
+        assert 0.05 < float(vis.mean()) < 0.95, f"visibility covers part of the grid ({float(vis.mean()):.2f})"
+        assert float(conf[vis < 0.5].max()) < 1e-4 and float(conf[vis > 0.5].mean()) > 0.1, \
+            "memory written inside the camera view only"
     # per-sample true keyframe gap: the ego path equals the scalar path for shared values; a 0.45 s gap moves 0.9 x
     with torch.no_grad():
         vv, ww = batch["v"].float(), batch["omega"].float()

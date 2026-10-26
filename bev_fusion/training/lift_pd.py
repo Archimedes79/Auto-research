@@ -154,6 +154,35 @@ class LiftPD(nn.Module):
             vol = vol.view(B, C, X, Y, Zn // n, n).mean(-1)
         return height_to_channels(vol)
 
+    def visibility(self, K, T_cam_car, image_hw, ida=None):
+        """(X, Y) mask of the cells this camera observes (camera_visibility with this lift's heights)."""
+        return camera_visibility(self.grid, self.z_levels.detach(), self.depth_centres, K, T_cam_car, image_hw, ida,
+                                 self.oversample, self.slice_height)
+
+
+_VIS_CACHE = {}
+
+
+def camera_visibility(grid, z_levels, depth_centres, K, T_cam_car, image_hw, ida=None, oversample=1, slice_height=0.5):
+    """(X, Y) float mask of the cells a camera observes: any of the cell's height samples projects into the image within
+    the depth range (the `valid` of build_table, any over height). The obs_mass of the temporal memory - outside it the
+    camera BEV is empty, and writing that with full weight erased what the memory had seen before (temporal_fusion
+    write, found 2026-10-26). Independent of the lift type; cached per calibration (nuScenes has few)."""
+    z = torch.as_tensor(z_levels, dtype=torch.float32, device=depth_centres.device)
+    if oversample > 1:
+        off = ((torch.arange(oversample, dtype=z.dtype, device=z.device) + 0.5) / oversample - 0.5) * slice_height
+        z = (z.view(-1, 1) + off.view(1, -1)).reshape(-1)
+    key = (grid.x_min, grid.x_max, grid.y_min, grid.y_max, grid.res, tuple(z.tolist()), str(z.device),
+           tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(int(v) for v in image_hw),
+           None if ida is None else tuple(ida.flatten().tolist()))
+    if key not in _VIS_CACHE:
+        if len(_VIS_CACHE) > 64:
+            _VIS_CACHE.clear()
+        tab = build_table(grid, z, K.to(z.device), T_cam_car.to(z.device), image_hw, depth_centres, None if ida is None
+                          else ida.to(z.device))
+        _VIS_CACHE[key] = tab["valid"].view(grid.nx, grid.ny, -1).amax(-1).detach()
+    return _VIS_CACHE[key]
+
 
 # ----------------------------------------------------------------------------------------------- self-test
 def _front_camera(dtype=torch.float64, x0=0.0):
