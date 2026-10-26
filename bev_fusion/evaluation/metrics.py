@@ -173,10 +173,14 @@ class SegMeter:
 
 
 # ------------------------------------------------------------------------------------------------ detection
-def gt_boxes_from_meta(boxes, circle_groups=CIRCLE_GROUPS):
-    """training/gt_bev.py meta['boxes'] -> box dicts (size = [w, l, h]); circle groups get radius max(l, w) / 2."""
+def gt_boxes_from_meta(boxes, circle_groups=CIRCLE_GROUPS, observed_only=True):
+    """training/gt_bev.py meta['boxes'] -> box dicts (size = [w, l, h]); circle groups get radius max(l, w) / 2.
+    observed_only: drop boxes without any lidar / radar point (meta 'observed' == False), as the nuScenes detection
+    evaluation does; the training labels ignore them too (review 2026-10-26)."""
     out = []
     for b in boxes:
+        if observed_only and not b.get("observed", True):
+            continue
         w, l = float(b["size"][0]), float(b["size"][1])
         d = {"group": b["group"], "cx": float(b["center"][0]), "cy": float(b["center"][1]),
              "vx": float(b["vel"][0]), "vy": float(b["vel"][1])}
@@ -530,6 +534,12 @@ def _selftest():
     assert sorted(back["det"]) == [-0.5, 0.0, 0.5] and fa.keys() == fb.keys()
     assert all((fa[k] == fb[k]) or (fa[k] != fa[k] and fb[k] != fb[k]) for k in fa)
     assert "det/dt-0.50/car/0-20/ap@0.5" in fa and "seg/dt+0.50/vehicle/known/0-20/iou@0.5" in fa
+
+    # 5b boxes without any lidar / radar point are not GT (as in the nuScenes detection evaluation); opt-out flag
+    mb = [{"group": "vehicle", "size": [1.8, 4.5, 1.5], "center": [10.0, 0.0, 0.0], "vel": [0.0, 0.0], "yaw": 0.0, "observed": True},
+          {"group": "vehicle", "size": [1.8, 4.5, 1.5], "center": [30.0, 0.0, 0.0], "vel": [0.0, 0.0], "yaw": 0.0, "observed": False},
+          {"group": "vehicle", "size": [1.8, 4.5, 1.5], "center": [40.0, 0.0, 0.0], "vel": [0.0, 0.0], "yaw": 0.0}]
+    assert len(gt_boxes_from_meta(mb)) == 2 and len(gt_boxes_from_meta(mb, observed_only=False)) == 3
 
     # 6 latency helper (CPU callable here; timing itself only on an idle GPU)
     import torch
