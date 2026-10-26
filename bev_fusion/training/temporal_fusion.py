@@ -130,7 +130,10 @@ def rotate_explicit(x, theta, vec2=(), sym2=()):
 
 
 class TemporalFusion(nn.Module):
-    def __init__(self, c_in, c_out, grid, mem_cells=(256, 256), v_static=1.0, mem_tau=10.0, w_max=8.0, tau_src=0.3,
+    # w_max 2 (was 8, 2026-10-26): the fuse conv sees conf / w_max; sequence training uses clips of 3 keyframes (at most 2
+    # writes before the last read), so with 8 the conf input never exceeded about 0.25 in training but reaches 1.0 on a
+    # long drive (out of distribution); with 2 it saturates inside a training clip. Window-only runs never read the memory.
+    def __init__(self, c_in, c_out, grid, mem_cells=(256, 256), v_static=1.0, mem_tau=10.0, w_max=2.0, tau_src=0.3,
                  head_hidden=32, use_memory=True, n_explicit=0, vec2=(), sym2=()):
         super().__init__()
         self.grid, self.c_in, self.c_out = grid, c_in, c_out
@@ -326,7 +329,9 @@ def _selftest():
     # 5 a moving object (6 m/s sideways) does not leave a ghost trail in the memory when the velocity head reports it
     #   (static weight ~ 0); without the velocity (everything static) it does
     def moving_head_module():
-        m = TemporalFusion(3, 8, grid, mem_cells=(128, 96)).eval()
+        # w_max 8 here: the test shows the ghost mechanism; with the default 2 the memory forgets faster and the ghost
+        # without velocity is smaller (0.063 instead of > 0.1, 2026-10-26)
+        m = TemporalFusion(3, 8, grid, mem_cells=(128, 96), w_max=8.0).eval()
         w1 = torch.zeros_like(m.head.net[0].weight)
         w1[0, 1], w1[1, 1], w1[2, 2], w1[3, 2] = 1, -1, 1, -1                       # hidden units pass vx, vy (ReLU split)
         m.head.net[0].weight.data = w1
