@@ -21,9 +21,9 @@ import p8_lib as L  # noqa: E402
 
 HOME = os.path.expanduser("~")
 D = f"{HOME}/exp_gcar_b123"
-# folder of <part>_gt_dist_exact.npy (the seed / direction / builder target); default = the stored b123 map (made with TF32 matrix products, D10).
-# LCR_DIST_DIR=$HOME/exp_gcar_b123x/feats selects the CPU-exact rebuild (E251); the choice is part of the run command, so the ledger records it.
-DIST_DIR = os.environ.get("LCR_DIST_DIR") or f"{HOME}/exp_crn_b123/feats"
+# folder of <part>_gt_dist_exact.npy (the seed / direction / builder target); default = the CPU-exact rebuild of the b123 map (D14, decided 2026-10-26: a defective map is not used for new training).
+# LCR_DIST_DIR=$HOME/exp_crn_b123/feats selects the stored map (made with TF32 matrix products, D10; the loop-18/19 runs used it); the card of every run records env.dist_dir.
+DIST_DIR = os.environ.get("LCR_DIST_DIR") or f"{HOME}/exp_gcar_b123x/feats"
 OUT = BP.RUNS
 UNREACH = 65535
 DG_CAP = 40.0
