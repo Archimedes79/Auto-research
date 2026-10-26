@@ -35,6 +35,7 @@ import torch
 
 sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
+from flow_viz import flow_rgb, wheel  # noqa: E402
 from temporal import FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, propagate  # noqa: E402
 from test_temporal_stages import G, VA, VB, sample  # noqa: E402
 
@@ -152,12 +153,6 @@ def evaluate(arm, data):
     return [{k: s / max(1, n) for k, (s, n) in a.items()} for a in acc]
 
 
-def flow_rgb(v, occ):
-    from matplotlib.colors import hsv_to_rgb
-    ang = (torch.atan2(v[1], v[0]) / (2 * math.pi)) % 1.0
-    val = (v.norm(dim=0) / 10.0).clamp(0, 1)
-    rgb = torch.tensor(hsv_to_rgb(torch.stack([ang, torch.ones_like(ang), val], -1).numpy()))
-    return (rgb * occ.unsqueeze(-1)).flip(1).numpy()
 
 
 def picture(arms, data, path):
@@ -167,7 +162,7 @@ def picture(arms, data, path):
     src, tgt, steps, _ = data[0]
     occ = (src.max(0).values > 0.3).float()
     rgb = lambda m: m.clamp(0, 1).permute(1, 2, 0).flip(1).numpy()          # noqa: E731
-    fig, ax = plt.subplots(len(arms), 3 + K, figsize=(2.0 * (3 + K), 2.3 * len(arms)), squeeze=False)
+    fig, ax = plt.subplots(len(arms), 4 + K, figsize=(2.0 * (4 + K), 2.3 * len(arms)), squeeze=False)
     for row, (name, arm) in enumerate(arms):
         with torch.no_grad():
             outs, _ = arm(src[None].to(DEV), tgt[None].to(DEV), [steps])
@@ -178,6 +173,7 @@ def picture(arms, data, path):
         for a, (t, im) in zip(ax[row], panels):
             a.imshow(im, origin="lower")
             a.set_title(t, fontsize=7)
+    wheel(ax[0, -1], vmax=10.0)
     fig.suptitle("velocity field (hue = direction, brightness = speed, 10 m/s = full); x forward = up", fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)

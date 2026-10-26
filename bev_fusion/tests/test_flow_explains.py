@@ -36,6 +36,7 @@ sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
 from lift_pd import Grid  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402
+from flow_viz import flow_rgb, wheel  # noqa: E402
 from temporal import FlowPyramid, FlowRefine, TemporalPropagation, propagate  # noqa: E402
 
 QUICK = "--quick" in sys.argv
@@ -185,12 +186,6 @@ def evaluate(model, test):
     return res
 
 
-def flow_rgb(v, occ, vmax=15.0):
-    from matplotlib.colors import hsv_to_rgb
-    ang = (torch.atan2(v[1], v[0]) / (2 * math.pi)) % 1.0
-    val = (v.norm(dim=0) / vmax).clamp(0, 1)
-    rgb = torch.tensor(hsv_to_rgb(torch.stack([ang, torch.ones_like(ang), val], -1).numpy()))
-    return (rgb * occ.unsqueeze(-1)).flip(1).numpy()
 
 
 def overlay(a, b):
@@ -207,14 +202,17 @@ def picture(model, test, path, n=3):
     import matplotlib.pyplot as plt
     cols = ["F0 (red) / F1 (green)", "GT velocity", "learned velocity", "D(P) (red) vs F1 (green)",
             "raw F0 moved with v (red) vs F1", "extrapolated (red) vs F2 (green)", "v = 0 raw (red) vs F1"]
-    fig, ax = plt.subplots(n, len(cols), figsize=(2.3 * len(cols), 2.5 * n), squeeze=False)
+    fig, ax = plt.subplots(n, len(cols) + 1, figsize=(2.3 * (len(cols) + 1), 2.5 * n), squeeze=False)
+    for r in range(n):
+        ax[r, -1].axis("off")
+    wheel(ax[0, -1], vmax=15.0)
     for r in range(n):
         maps, vgt, bid, steps = test[r]
         m = maps[None].to(DEV)
         flows, preds, _ = model(m[:, 0], m[:, 1], [steps])
         v = flows[-1]
         occ = (maps[0, 1:].max(0).values > 0.3).float()
-        ims = [overlay(maps[0], maps[1]), flow_rgb(vgt, occ), flow_rgb(v[0].cpu(), occ),
+        ims = [overlay(maps[0], maps[1]), flow_rgb(vgt, occ, 15.0), flow_rgb(v[0].cpu(), occ, 15.0),
                overlay(torch.sigmoid(preds[-1][0]).cpu(), maps[1]),
                overlay(propagate(m[:, 0], [steps], v, G)[0][0].cpu(), maps[1]),
                overlay(propagate(m[:, 1], [steps], carry(v, [steps]), G)[0][0].cpu(), maps[2]),
