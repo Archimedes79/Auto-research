@@ -14,7 +14,7 @@ The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1
 ## Open
 | item | what | needs |
 |---|---|---|
-| M2 | backups and push: push `main` and the `lcr/*` tags, copy the records to a second place, one copy of registered checkpoints and splits, test a restore | Mirko's OK (the remote lags by dozens of commits and no run tag is pushed) |
+| M2 | backups: `main` and the 25 `lcr/*` tags were pushed on 2026-10-26 (Mirko's OK); still open: copy the run records to a second place, one copy of registered checkpoints and splits, test a restore; push again after each loop | Mirko |
 | P9 | CONFIRM split and the "adopted" state: a KEEP on VAL counts as adopted only when CONFIRM agrees | first use on D4 |
 | P10 | early kill from learning curves (E241 replay: lanes found separates at 25 %, Q does not) | after cycle 19 |
 | W8 | evaluation cache key has no checkpoint hash or inference-code fingerprint | small change in `evaluate.py` |
