@@ -96,11 +96,19 @@ if __name__ == "__main__":
             if dt != 0.0:
                 boxes[dt] = scene_boxes(scene.step(dt))
         return {"x": x, "boxes": boxes, "steps": {dt: [(dt, scene.v, scene.omega)] for dt in TRAIN_DTS}}
-    rng = random.Random(2)
-    train_set = [sample(random_scene(rng)) for _ in range(N_TRAIN)]
-    rng = random.Random(999)
-    test_set = [sample(random_scene(rng)) for _ in range(N_TEST)]
-    print(f"rendered {N_TRAIN} + {N_TEST} scenes in {time.time() - t0:.0f} s", flush=True)
+    import os
+    cache = f"temp/cache/box_time_{N_TRAIN}_{N_TEST}.pt"          # rendered scenes (not in git), reused by reruns
+    if os.path.exists(cache):
+        train_set, test_set = torch.load(cache, weights_only=False)
+        print(f"loaded {N_TRAIN} + {N_TEST} rendered scenes from {cache}", flush=True)
+    else:
+        rng = random.Random(2)
+        train_set = [sample(random_scene(rng)) for _ in range(N_TRAIN)]
+        rng = random.Random(999)
+        test_set = [sample(random_scene(rng)) for _ in range(N_TEST)]
+        os.makedirs("temp/cache", exist_ok=True)
+        torch.save((train_set, test_set), cache)
+        print(f"rendered {N_TRAIN} + {N_TEST} scenes in {time.time() - t0:.0f} s, cached in {cache}", flush=True)
 
     print("oracle: GT boxes at t moved with the position function and their true velocity", flush=True)
     for dt in DTS:
