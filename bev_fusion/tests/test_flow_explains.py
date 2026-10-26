@@ -482,6 +482,14 @@ def picture(model, test, path, n=3):
 if __name__ == "__main__":
     t0 = time.time()
     n_train, n_test, iters = (300, 16, 600) if QUICK else (1500, 48, 3000)
+    saved = f"temp/checks/model_explains{TAG}.pt"                    # scratch (not in git): the trained test model
+    if "--sequences" in sys.argv:                                     # evaluation only, on the model a run saved
+        model = Model().to(DEV)
+        model.load_state_dict(torch.load(saved, map_location=DEV))
+        model.eval()
+        seqs = nuscenes_sequences(True, arg("--n-seq", 24), arg("--length", 5))
+        sequence_report(model, seqs, f"temp/checks/flow_sequences{TAG}.png")
+        sys.exit(0)
     if DATA == "nuscenes":                            # real GT (fixed data: the seed changes only init and batch order)
         rec = "--recursive" in sys.argv
         data, test = nuscenes_items(False, n_train, rec), nuscenes_items(True, n_test, rec)
@@ -493,13 +501,6 @@ if __name__ == "__main__":
           f"{iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
     torch.manual_seed(SEED)
     model = Model().to(DEV)
-    saved = f"temp/checks/model_explains{TAG}.pt"                    # scratch (not in git): the trained test model
-    if "--sequences" in sys.argv:                                     # evaluation only, on the model a run saved
-        model.load_state_dict(torch.load(saved, map_location=DEV))
-        model.eval()
-        seqs = nuscenes_sequences(True, arg("--n-seq", 24), arg("--length", 5))
-        sequence_report(model, seqs, f"temp/checks/flow_sequences{TAG}.png")
-        sys.exit(0)
     train(model, data, iters, random.Random(SEED + 7))
     torch.save(model.state_dict(), saved)
     model.eval()
