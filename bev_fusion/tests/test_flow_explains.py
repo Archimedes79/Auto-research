@@ -19,6 +19,8 @@ IoU; the learned field beats v = 0 by > 0.1 IoU in 3; the prediction (1) is not 
 (< 0.1 IoU: the decoder does not carry the motion).
 Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
   wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_explains.py [--quick] [--seed N] [--dt 0.25] [--prior 1e-3]
+      [--sharp] (softmax-splatting importance + pi entropy 5e-3) [--pyr] (FlowPyramid 2 + 1 + 1 iterations instead of
+      4 iterations of FlowRefine at 0.5 m)
 """
 import math
 import os
@@ -34,7 +36,7 @@ sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
 from lift_pd import Grid  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402
-from temporal import FlowRefine, TemporalPropagation, propagate  # noqa: E402
+from temporal import FlowPyramid, FlowRefine, TemporalPropagation, propagate  # noqa: E402
 
 QUICK = "--quick" in sys.argv
 
@@ -44,6 +46,8 @@ def arg(name, default):
 
 
 SEED, DT, PRIOR, K = arg("--seed", 0), arg("--dt", 0.25), arg("--prior", 1e-3), 4
+SHARP, PYR, ENT = "--sharp" in sys.argv, "--pyr" in sys.argv, arg("--ent", 5e-3)
+TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "")
 G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
@@ -81,18 +85,25 @@ class Model(nn.Module):
         super().__init__()
         self.enc = nn.Sequential(nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, C, 3, padding=1))
-        self.tp = TemporalPropagation(cin=C, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0)
-        self.rf = FlowRefine(C, G, radius=3)
+        self.tp = TemporalPropagation(cin=C, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=SHARP)
+        self.rf = FlowPyramid(C, G, factors=(4, 2, 1), iters=(2, 1, 1)) if PYR else FlowRefine(C, G, radius=3)
         self.dec = nn.Sequential(nn.Conv2d(C + 1, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, 3, 1))
 
     def forward(self, f0, f1, steps, v_override=None):
         e0, e1 = self.enc(f0), self.enc(f1)
         r = self.tp(e0, steps)
-        flows = [r["v_mean"]] + self.rf(e0, e1, steps, r["v_mean"], iters=K) if v_override is None else [v_override]
+        self.ent = r["entropy"]
+        imp = self.tp.importance_of(e0.flatten(2)).view(e0.shape[0], G.nx, G.ny) if SHARP else None
+        if v_override is not None:
+            flows = [v_override]
+        elif PYR:
+            flows = [r["v_mean"]] + self.rf(e0, e1, steps, r["v_mean"])
+        else:
+            flows = [r["v_mean"]] + self.rf(e0, e1, steps, r["v_mean"], iters=K)
         preds = []
         for v in flows:
-            p, mass = propagate(e0, steps, v, G)
+            p, mass = propagate(e0, steps, v, G, importance=imp)
             preds.append(self.dec(torch.cat([p, mass.clamp(max=1.0)], 1)))
         mix = self.dec(torch.cat([r["feat"], r["mass"].clamp(max=1.0)], 1))
         return flows, preds, mix
@@ -110,6 +121,8 @@ def train(model, data, iters, rng, bs=8, lr=2e-3):
         loss = F.binary_cross_entropy_with_logits(mix, tgt)
         for k, p in enumerate(preds[1:]):
             loss = loss + 0.8 ** (len(preds) - 2 - k) * F.binary_cross_entropy_with_logits(p, tgt)
+        if SHARP:
+            loss = loss + ENT * (m[:, 0].max(1).values * model.ent).mean()
         if PRIOR > 0:
             occ = m[:, 0].max(1).values
             loss = loss + PRIOR * sum((occ * (v / 10.0).pow(2).sum(1)).mean() for v in flows)
@@ -222,7 +235,7 @@ if __name__ == "__main__":
     n_train, n_test, iters = (300, 16, 600) if QUICK else (1500, 48, 3000)
     data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
     test = dataset([50_000 + i for i in range(n_test)], "test")
-    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, K {K}; {n_train} training sequences, {n_test} held-out, "
+    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR}; {n_train} training sequences, {n_test} held-out, "
           f"{iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
     torch.manual_seed(SEED)
     model = Model().to(DEV)
@@ -240,6 +253,6 @@ if __name__ == "__main__":
     print("== claims")
     for name, ok in claims:
         print(f"{'PASS' if ok else 'FAIL'}  {name}")
-    picture(model, test, "temp/checks/flow_explains.png")
-    print(f"== {sum(ok for _, ok in claims)} / {len(claims)} claims hold; image temp/checks/flow_explains.png "
+    picture(model, test, f"temp/checks/flow_explains{TAG}.png")
+    print(f"== {sum(ok for _, ok in claims)} / {len(claims)} claims hold; image temp/checks/flow_explains{TAG}.png "
           f"({time.time() - t0:.0f} s)")
