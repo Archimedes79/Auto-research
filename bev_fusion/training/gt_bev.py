@@ -79,23 +79,61 @@ class Raster:
         """polygons: list of (exterior (N, 2), [holes (M, 2), ...]) in the ego frame. A sub-pixel is set if its CENTRE
         lies inside (matplotlib Path test, only in the polygon's bounding box): exact area, no boundary bias (OpenCV's
         fillPoly counts the boundary pixels on both sides: a 2 m square came out as 4.52 m^2 at ss = 4)."""
+        g, s = self.g, self.s
+        win = (g.x_min - s, g.y_min - s, g.x_max + s, g.y_max + s)
+        for ext, holes in polygons:
+            for ext_p, holes_p in self._clipped(ext, holes, win):
+                blk = self._block(ext_p)
+                if blk is None:
+                    continue
+                r0, r1, c0, c1 = blk
+                m = self._ring_mask(ext_p, blk)
+                for h in holes_p:                                  # each hole is tested only inside its own box
+                    m &= ~self._ring_mask(h, blk)
+                img[r0:r1, c0:c1][m] = value
+        return img
+
+    def _block(self, ring):
+        """(r0, r1, c0, c1) sub-pixel index box of a ring, clipped to the canvas (None if outside)."""
+        g, s = self.g, self.s
+        lo = np.floor((ring.min(0) - [g.x_min, g.y_min]) / s - 0.5).astype(int)
+        hi = np.ceil((ring.max(0) - [g.x_min, g.y_min]) / s - 0.5).astype(int)
+        r0, c0 = max(lo[0], 0), max(lo[1], 0)
+        r1, c1 = min(hi[0] + 1, self.shape[0]), min(hi[1] + 1, self.shape[1])
+        return None if (r0 >= r1 or c0 >= c1) else (r0, r1, c0, c1)
+
+    def _ring_mask(self, ring, blk):
+        """bool block: sub-pixel centres inside the ring (matplotlib Path test), evaluated only in the ring's own box."""
         from matplotlib.path import Path
         g, s = self.g, self.s
-        for ext, holes in polygons:
-            lo = np.floor((ext.min(0) - [g.x_min, g.y_min]) / s - 0.5).astype(int)
-            hi = np.ceil((ext.max(0) - [g.x_min, g.y_min]) / s - 0.5).astype(int)
-            r0, c0 = max(lo[0], 0), max(lo[1], 0)
-            r1, c1 = min(hi[0] + 1, self.shape[0]), min(hi[1] + 1, self.shape[1])
-            if r0 >= r1 or c0 >= c1:
-                continue
-            rr, cc = np.meshgrid(np.arange(r0, r1), np.arange(c0, c1), indexing="ij")
-            pts = np.stack([g.x_min + (rr.ravel() + 0.5) * s, g.y_min + (cc.ravel() + 0.5) * s], 1)
-            m = Path(ext).contains_points(pts)
-            for h in holes:
-                m &= ~Path(h).contains_points(pts)
-            sub = img[r0:r1, c0:c1]
-            sub[m.reshape(rr.shape)] = value
-        return img
+        r0, r1, c0, c1 = blk
+        m = np.zeros((r1 - r0, c1 - c0), bool)
+        own = self._block(ring)
+        if own is None:
+            return m
+        a0, a1, b0, b1 = max(own[0], r0), min(own[1], r1), max(own[2], c0), min(own[3], c1)
+        if a0 >= a1 or b0 >= b1:
+            return m
+        rr, cc = np.meshgrid(np.arange(a0, a1), np.arange(b0, b1), indexing="ij")
+        pts = np.stack([g.x_min + (rr.ravel() + 0.5) * s, g.y_min + (cc.ravel() + 0.5) * s], 1)
+        m[a0 - r0:a1 - r0, b0 - c0:b1 - c0] = Path(ring).contains_points(pts).reshape(rr.shape)
+        return m
+
+    @staticmethod
+    def _clipped(ext, holes, win):
+        """a polygon with many vertices (a whole road network) is cut to the grid window first: every point test then
+        runs against the few vertices inside the window instead of thousands; small polygons are passed through."""
+        if len(ext) + sum(len(h) for h in holes) < 60:
+            yield ext, holes
+            return
+        from shapely.geometry import Polygon, box
+        poly = Polygon(ext, holes)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        cut = poly.intersection(box(*win))
+        for part in getattr(cut, "geoms", [cut]):
+            if part.geom_type == "Polygon" and not part.is_empty:
+                yield (np.asarray(part.exterior.coords)[:-1], [np.asarray(h.coords)[:-1] for h in part.interiors])
 
     def lines(self, img, polylines, value=1, thickness=1):
         for pl in polylines:
@@ -139,6 +177,31 @@ class NuScenesGT:
         self.stationary_fix = stationary_fix
         self.map_offsets = map_offsets or {}
         self._stationary = {}
+        self._bounds = {}
+
+    def records_in_patch(self, nmap, box, layers):
+        """same result as nmap.get_records_in_patch(box, layers, 'intersect'), but the devkit extracts every polygon of the
+        whole map per call (0.5 s per keyframe): the bounding box of every record is computed once per map, and the
+        devkit's exact test runs only on the records whose box meets the patch."""
+        out = {}
+        x0, y0, x1, y1 = box
+        for layer in layers:
+            key = (nmap.map_name, layer)
+            if key not in self._bounds:
+                try:
+                    toks = [r["token"] for r in getattr(nmap, layer)]
+                    self._bounds[key] = (toks, np.array([nmap.get_bounds(layer, t) for t in toks], float).reshape(-1, 4))
+                except Exception:                                  # a layer without bounds: devkit path
+                    self._bounds[key] = None
+            b = self._bounds[key]
+            if b is None:
+                out[layer] = nmap.get_records_in_patch(box, [layer], mode="intersect")[layer]
+                continue
+            toks, bb = b
+            hit = (bb[:, 0] <= x1) & (bb[:, 2] >= x0) & (bb[:, 1] <= y1) & (bb[:, 3] >= y0)
+            out[layer] = [toks[i] for i in np.nonzero(hit)[0]
+                          if nmap.explorer.is_record_in_patch(layer, toks[i], box, "intersect")]
+        return out
 
     def signature(self):
         """10 hex chars identifying this generator (source of this file + stationary_fix + map_offsets): part of every
@@ -207,7 +270,7 @@ class NuScenesGT:
         cg = (np.c_[corners, np.zeros(4), np.ones(4)] @ T_e2g.T)[:, :2]
         box = (cg[:, 0].min() - 5, cg[:, 1].min() - 5, cg[:, 0].max() + 5, cg[:, 1].max() + 5)
         nmap = self.map_for(sample["scene_token"])
-        recs = nmap.get_records_in_patch(box, list(AREAS) + list(LINES) + ["lane", "lane_connector"], mode="intersect")
+        recs = self.records_in_patch(nmap, box, list(AREAS) + list(LINES) + ["lane", "lane_connector"])
         out = {}
         for layer in AREAS:
             img = R.canvas()
@@ -423,6 +486,14 @@ def _selftest():
     cov = R.coverage(R.fill(R.canvas(), [(sq, [])]))
     assert abs(cov.sum() * g.res ** 2 - 4.0) < 0.15, cov.sum() * g.res ** 2
     assert cov[20:24, 50:54].min() > 0.99 and cov[:19].max() == 0
+    # big polygon with a hole, mostly outside the grid (the clipped path of fill): area in the window = shapely's
+    from shapely.geometry import Polygon as ShPolygon, box as sh_box
+    th = np.linspace(0, 2 * np.pi, 201)[:-1]
+    ring = np.c_[30 + 80 * np.cos(th), 80 * np.sin(th)]
+    hole = np.c_[30 + 10 * np.cos(th[::2]), 10 * np.sin(th[::2])][::-1]
+    covb = R.coverage(R.fill(R.canvas(), [(ring, [hole])]))
+    want = ShPolygon(ring, [hole]).intersection(sh_box(g.x_min, g.y_min, g.x_max, g.y_max)).area
+    assert abs(covb.sum() * g.res ** 2 - want) / want < 0.003, (covb.sum() * g.res ** 2, want)
     # line distance: a line along x at y = 0.25 m -> distance at the cell centre y = 0.25 is ~0, at y = 1.25 ~1 m
     img = R.lines(R.canvas(), [np.array([[5.0, 0.25], [50.0, 0.25]])])
     dist = np.minimum(R.at_centres(cv2.distanceTransform((img == 0).astype(np.uint8), cv2.DIST_L2, 5) * R.s), 2)
