@@ -1,0 +1,20 @@
+{
+ "run": "runs/t1_r3_combined",
+ "checkpoint": "ckpt_00006000.pt",
+ "gpu": "NVIDIA GeForce RTX 3060",
+ "latency": {
+  "gpu_before": {
+   "util_percent": 0.0,
+   "mem_mib": 1301.0
+  },
+  "bev_dt0_median": 43.9022990030935,
+  "bev_3dt_median": 62.81942150235409,
+  "bev_dt0_refined_boxes_median": 47.52674649353139,
+  "camera_heads_median": 17.25740049732849,
+  "gpu_after": {
+   "util_percent": 99.0,
+   "mem_mib": 2429.0
+  },
+  "idle": true
+ }
+}

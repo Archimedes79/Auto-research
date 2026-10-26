@@ -444,6 +444,26 @@ def scene_counts(rec, layer):
     return out
 
 
+def scene_flags(frames_by_scene, scenes, cls, thr=2.0):
+    """scene -> (scores, true-positive flags, n_gt) of one class (front field of view, matching at thr metres)."""
+    from evaluation.metrics import in_front
+    out = {}
+    for s in scenes:
+        frames = [([d for d in ds if d["group"] == cls and in_front(d)], [g for g in gs if g["group"] == cls and in_front(g)])
+                  for ds, gs in frames_by_scene[s]]
+        m, n_gt = match(frames, thr)
+        out[s] = (np.array([x[0] for x in m], float), np.array([x[1] for x in m], float), n_gt)
+    return out
+
+
+def ap_from_flags(flags, scenes):
+    """nuScenes AP of the detections of the listed scenes (repeats allowed): one sort of the concatenated flags."""
+    sc = np.concatenate([flags[s][0] for s in scenes])
+    fl = np.concatenate([flags[s][1] for s in scenes])
+    n_gt = sum(flags[s][2] for s in scenes)
+    return ap_nuscenes(fl[np.argsort(-sc, kind="stable")], n_gt)
+
+
 def det_ap(frames_by_scene, scenes, cls, thr=2.0):
     frames = [([d for d in ds if d["group"] == cls], [g for g in gs if g["group"] == cls])
               for s in scenes for ds, gs in frames_by_scene[s]]
@@ -478,14 +498,16 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0)
     fa = {s: r[dt] for s, r in ra[det_a].items() if dt in r}
     fb = {s: r[dt] for s, r in rb[det_b].items() if dt in r}
     sc = sorted(set(fa) & set(fb))
-    nb = min(n_boot, 200)                                    # matching is slow in python
     for cls in ("vehicle", "pedestrian"):
-        a0, b0 = det_ap(fa, sc, cls), det_ap(fb, sc, cls)
+        # the greedy matching of a detection only involves its own frame, so the true-positive flags of every scene are fixed:
+        # compute them once, a resample only re-sorts the concatenated flags (equal to re-running det_ap, but fast)
+        fl_a, fl_b = scene_flags(fa, sc, cls), scene_flags(fb, sc, cls)
+        a0, b0 = ap_from_flags(fl_a, sc), ap_from_flags(fl_b, sc)
         ds = []
-        for _ in range(nb):
+        for _ in range(n_boot):
             ix = rng.integers(0, len(sc), len(sc))
             s_ix = [sc[i] for i in ix]
-            ds.append(det_ap(fb, s_ix, cls) - det_ap(fa, s_ix, cls))
+            ds.append(ap_from_flags(fl_b, s_ix) - ap_from_flags(fl_a, s_ix))
         lo, hi = np.percentile(ds, [2.5, 97.5])
         res[f"{cls} AP@2"] = (b0 - a0, lo, hi, a0, b0)
     for k, (d, lo, hi, a, b) in res.items():
