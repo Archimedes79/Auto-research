@@ -165,6 +165,8 @@ def smoke():
     v0 = torch.randn(1, 2, G.nx, G.ny, dtype=D64)
     vs = fr(spike(c=2), cur, [(0.5, 4.0, 0.1)], v0, iters=4)
     check("FlowRefine starts as the identity (v0 kept, 4 iterations)", len(vs) == 4 and torch.equal(vs[-1], v0))
+    vc = fr(spike(c=2), cur, [(0.5, 4.0, 0.1)], v0, iters=3, correct=lambda v: 0.5 * v)
+    check("FlowRefine applies the correction after every iteration (x 0.5 three times)", torch.allclose(vc[-1], v0 / 8))
     for p in fr.net[-1].parameters():
         torch.nn.init.normal_(p, std=0.1)
     fr(x, x.roll(1, 2), [(0.5, 4.0, 0.1)], v0, iters=2)[-1].pow(2).sum().backward()

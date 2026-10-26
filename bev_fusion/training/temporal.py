@@ -307,9 +307,11 @@ class FlowRefine(nn.Module):
         look = sample_at(gc, q, self.grid).view(B, P, T, X * Y)
         return (look * fs.flatten(2).unsqueeze(2)).sum(1).view(B, T, X, Y) / math.sqrt(P)
 
-    def forward(self, src, cur, steps, v0, iters=4):
+    def forward(self, src, cur, steps, v0, iters=4, correct=None):
         """src (B, C, X, Y) source map, cur (B, C, X, Y) current frame, v0 (B, 2, X, Y) m/s -> list of the velocity
-        fields after each iteration (B, 2, X, Y)."""
+        fields after each iteration (B, 2, X, Y). correct: optional function v -> v applied after EVERY iteration, e.g.
+        a Doppler measurement update (doppler_update) - the refinement proposes, the measurement corrects (without it
+        the refinement undid what Doppler fixed: stripes 0.07 -> 2.33 m/s over 4 iterations, 2026-10-26)."""
         B = src.shape[0]
         S = steps_tensor(steps, B, src.device, src.dtype)
         dt = S[:, :, 0].sum(1)
@@ -324,6 +326,8 @@ class FlowRefine(nn.Module):
             d = self.net(torch.cat([corr, fs, v / self.v_scale], 1))               # metres, target axes
             d = self.step_max * torch.tanh(d / self.step_max)                      # inside the lookup window
             v = v + torch.stack([c * d[:, 0] - s * d[:, 1], s * d[:, 0] + c * d[:, 1]], 1) / dt.unsqueeze(1)
+            if correct is not None:
+                v = correct(v)
             out.append(v)
         return out
 
@@ -346,18 +350,22 @@ class FlowPyramid(nn.Module):
                       for f in factors]
         self.levels = nn.ModuleList(FlowRefine(cin, g, radius=radius, **kw) for g in self.grids)
 
-    def forward(self, src, cur, steps, v0):
+    def forward(self, src, cur, steps, v0, correct=None):
+        """correct: as in FlowRefine, applied to every fine-grid output (inside a coarse level the next iteration does
+        not see the correction of the previous one: it works on the pooled field)."""
         out, v = [], v0
         for f, n, rf in zip(self.factors, self.iters, self.levels):
             v = v.detach()              # between levels as between iterations (RAFT); without it the coarse output
             #                             base + up(vk - pool(base)) passed a high-pass gradient into v0 (the
             #                             hypotheses), and B collapsed in both pyramid arms (10 / 22 m/s, 2026-10-26)
             if f == 1:
-                ks = rf(src, cur, steps, v, iters=n)
+                ks = rf(src, cur, steps, v, iters=n, correct=correct)
             else:                       # the coarse level adds its CORRECTION, upsampled: the fine detail of v stays
                 vl, base = F.avg_pool2d(v, f), v
                 ks = [base + F.interpolate(vk - vl, scale_factor=f, mode="bilinear", align_corners=False)
                       for vk in rf(F.avg_pool2d(src, f), F.avg_pool2d(cur, f), steps, vl, iters=n)]
+                if correct is not None:
+                    ks = [correct(k) for k in ks]
             out += ks
             v = ks[-1]
         return out

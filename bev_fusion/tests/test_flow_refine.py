@@ -24,7 +24,9 @@ Arms:
            every flow (as box-supervised detectors do; nuScenes has the labels) - the warp loss stays as an auxiliary;
            shows what the refinement does when the field is anchored
   S + D + R4 + smooth   the combination the single arms point to: sharp hypotheses (best start), Doppler (stripes),
-           4 refinements (they recover a wrong start), edge-aware smoothness (limits the gaming)
+           4 refinements (they recover a wrong start), edge-aware smoothness (limits the gaming); result: the start is the
+           best field so far (A 0.20, B 0.48, stripes 0.07 m/s) but the refinement undoes the Doppler (stripes 2.33)
+  S + DD + R4 + smooth  the same with the Doppler update applied after EVERY refinement iteration (FlowRefine correct=)
   S + D / S + D + P4   the hypothesis mean updated with radar Doppler (temporal.doppler_update, prior sigma 4 m/s): a
            radar at the origin, a detection in 50 % of the occupied cells (objects AND static stripes: ego-compensated
            clutter has radial velocity 0), noise 0.1 m/s - for stripes ahead the ray is nearly along the stripe, the
@@ -34,7 +36,7 @@ Metrics on held-out scenes after each iteration: end-point error of the velocity
 of the static stripes; warp MSE on the known cells. Image: temp/checks/flow_refine.png (direction = hue, speed =
 brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
-    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label,S+D+R4+smooth] [--smooth 0.05]
+    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label,S+D+R4+smooth,S+DD+R4+smooth] [--smooth 0.05]
 """
 import math
 import random
@@ -65,9 +67,9 @@ def true_flow(src):
     return torch.stack([vx, vy])
 
 
-def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
-    """the flow updated with simulated Doppler: radar at the origin, detections in a random half of the occupied
-    cells, d = u . v_true + noise (objects: their velocity, stripes: 0)."""
+def radar_measure(src, sigma_d=0.1, rate=0.5):
+    """simulated Doppler detections: radar at the origin, a detection in a random half of the occupied cells,
+    d = u . v_true + noise (objects: their velocity, stripes: 0) -> (u, d, valid), each (B, 1, ..., N)."""
     B, N = src.shape[0], G.nx * G.ny
     xs, ys = G.xy_centres(device=src.device)
     gx, gy = torch.meshgrid(xs, ys, indexing="ij")
@@ -76,14 +78,28 @@ def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
     vt = torch.stack([true_flow(s_.cpu()) for s_ in src]).to(src.device).reshape(B, 2, N)
     d = (u[:, 0] * vt).sum(1, keepdim=True) + sigma_d * torch.randn(B, 1, N, device=src.device)
     valid = ((src.max(1).values > 0.5) & (torch.rand(B, G.nx, G.ny, device=src.device) < rate)).float().reshape(B, 1, N)
-    P = (torch.eye(2, device=src.device) * sigma_p ** 2).view(1, 2, 2, 1).expand(B, 2, 2, N)
-    v, _ = doppler_update(v0.reshape(B, 2, N), P, u, d, valid, sigma_d=sigma_d)
-    return v.view_as(v0)
+    return u, d, valid
+
+
+def radar_apply(v, meas, sigma_p=4.0, sigma_d=0.1):
+    u, d, valid = meas
+    B, N = v.shape[0], G.nx * G.ny
+    P = (torch.eye(2, device=v.device) * sigma_p ** 2).view(1, 2, 2, 1).expand(B, 2, 2, N)
+    out, _ = doppler_update(v.reshape(B, 2, N), P, u, d, valid, sigma_d=sigma_d)
+    return out.view_as(v)
+
+
+def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
+    """the flow updated with simulated Doppler (one draw of detections)."""
+    return radar_apply(v0, radar_measure(src, sigma_d, rate), sigma_p, sigma_d)
+
 
 
 class Arm(torch.nn.Module):
-    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False, wta=False, smooth=0.0, label=False):
+    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False, wta=False, smooth=0.0, label=False,
+                 doppler_every=False):
         super().__init__()
+        self.doppler_every = doppler_every
         self.prior, self.sharp, self.doppler, self.wta, self.smooth, self.label = prior, sharp, doppler, wta, smooth, label
         self.tp = TemporalPropagation(cin=3, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=sharp) if hyp else None
         self.rf = None if not refine else (FlowPyramid(3, G, factors=(4, 2, 1), iters=(2, 1, 1)) if refine == "P"
@@ -103,14 +119,18 @@ class Arm(torch.nn.Module):
                 self.ent = r["entropy"]
         else:
             v0, mix = src.new_zeros(src.shape[0], 2, G.nx, G.ny), None
+        corr = None
         if self.doppler:
-            v0 = radar_update(src, v0)
+            meas = radar_measure(src)
+            v0 = radar_apply(v0, meas)
+            if self.doppler_every:
+                corr = lambda v: radar_apply(v, meas)                     # noqa: E731
         if self.rf is None:
             flows = [v0]
         elif isinstance(self.rf, FlowPyramid):
-            flows = [v0] + self.rf(src, tgt, steps, v0)
+            flows = [v0] + self.rf(src, tgt, steps, v0, correct=corr)
         else:
-            flows = [v0] + self.rf(src, tgt, steps, v0, iters=K)
+            flows = [v0] + self.rf(src, tgt, steps, v0, iters=K, correct=corr)
         return [(v, propagate(src, steps, v, G, importance=imp)[0]) for v in flows], mix
 
 
@@ -226,12 +246,13 @@ if __name__ == "__main__":
                                             ("S + D", True, False, 0.0, True), ("S + D + P4", True, "P", 0.0, True),
                                             ("W", True, False, 0.0, False), ("S + R4 + smooth", True, True, 0.0, True),
                                             ("H + R4 + label", True, True, 0.0, False),
-                                            ("S + D + R4 + smooth", True, True, 0.0, True)):
+                                            ("S + D + R4 + smooth", True, True, 0.0, True),
+                                            ("S + DD + R4 + smooth", True, True, 0.0, True)):
         if ARMS is not None and name.replace(" ", "") not in ARMS:
             continue
         torch.manual_seed(SEED)
         print(f"  {name}", flush=True)
-        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name, wta=name == "W",
+        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name, wta=name == "W", doppler_every=" DD" in name,
                   smooth=SMOOTH if "smooth" in name else 0.0, label="label" in name).to(DEV)
         train(arm, data, iters, random.Random(SEED + 7))
         arm.eval()
