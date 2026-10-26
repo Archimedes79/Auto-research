@@ -140,6 +140,14 @@ class NuScenesGT:
         self.map_offsets = map_offsets or {}
         self._stationary = {}
 
+    def signature(self):
+        """10 hex chars identifying this generator (source of this file + stationary_fix + map_offsets): part of every
+        cache key of derived GT, so a changed generator can never be mixed with GT cached by an older one."""
+        import hashlib
+        h = hashlib.sha1(open(__file__, "rb").read())
+        h.update(repr((self.stationary_fix, sorted((k, tuple(v)) for k, v in self.map_offsets.items()))).encode())
+        return h.hexdigest()[:10]
+
     def stationary_instances(self, scene_token, v_max=0.5, d_max=1.0):
         """instance token -> fixed world pose (translation (3,), yaw, size (3,)) for the scene's stationary instances."""
         if scene_token in self._stationary:

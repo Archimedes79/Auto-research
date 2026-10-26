@@ -140,7 +140,9 @@ class FrontRadarDataset(torch.utils.data.Dataset):
 
     # ---- GT (optionally cached)
     def _gt(self, token):
-        path = os.path.join(self.cache_dir, f"{token}_{self.grid.res}_{self.gt_ss}.npz") if self.cache_dir else None
+        # the generator signature (gt_bev.py source + flags) is part of the key: GT cached by an older generator is never reused
+        path = (os.path.join(self.cache_dir, f"{token}_{self.grid.res}_{self.gt_ss}_{self.gt.signature()}.npz")
+                if self.cache_dir else None)
         if path and os.path.exists(path):
             z = np.load(path, allow_pickle=True)
             return z["gt"].item()
