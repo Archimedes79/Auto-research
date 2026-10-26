@@ -13,6 +13,7 @@ errors (tests/test_object_head.evaluate); depth: mean absolute error of the expe
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_camera_only.py [--quick]
 """
 import math
+import os
 import random
 import sys
 import time
@@ -23,6 +24,9 @@ import torch.nn.functional as F
 sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
 from camera_decoder import DEPTH_CENTRES, SEM_CLASSES, Z_LEVELS, CameraOnlyDecoder  # noqa: E402
+
+SEM_THR = (0.05, 0.5, 0.25)             # coverage threshold per class of SEM_CLASSES (a 0.6 m pedestrian often
+                                        # covers four 0.5 m cells by about 0.36 each: 0.5 left some without a cell)
 from lift_pd import Grid  # noqa: E402
 from object_head import GROUPS, build_targets, decode, head_loss  # noqa: E402
 from synthetic_world import camera, front_camera, gt_bev, random_scene  # noqa: E402
@@ -75,7 +79,11 @@ def sample(rng):
             cls_now = cls
     g = gt_bev(scene, G)
     sem = torch.stack([g["lanes"], g["vehicles"], g["pedestrians"]])
-    return torch.stack(imgs), torch.stack(dts), (sem > 0.5).float(), boxes_of(scene, cls_now), (scene.v, scene.omega)
+    # per-class threshold of the coverage: lane lines are 0.15 m wide in 0.5 m cells (coverage <= 0.3), so a lane
+    # cell is any covered cell; vehicles / pedestrians from half coverage (a 0.5 threshold for all made the lane
+    # target empty: lane IoU 0 by construction in the first quick run, 2026-10-26)
+    thr = torch.tensor(SEM_THR).view(-1, 1, 1)
+    return torch.stack(imgs), torch.stack(dts), (sem > thr).float(), boxes_of(scene, cls_now), (scene.v, scene.omega)
 
 
 def steps_for(v, w):
@@ -165,11 +173,16 @@ if __name__ == "__main__":
     random.seed(0)
     print(f"device {DEV}")
     t0 = time.time()
-    rng = random.Random(11)
     n_train, n_test = (150, 16) if QUICK else (1000, 48)
-    train_set = [sample(rng) for _ in range(n_train)]
-    rng = random.Random(5150)
-    test_set = [sample(rng) for _ in range(n_test)]
+    cache = f"temp/checks/camera_only_data_{n_train}_{n_test}_thr{'_'.join(map(str, SEM_THR))}.pt"   # scratch, not in git
+    if os.path.exists(cache):
+        train_set, test_set = torch.load(cache)
+    else:
+        rng = random.Random(11)
+        train_set = [sample(rng) for _ in range(n_train)]
+        rng = random.Random(5150)
+        test_set = [sample(rng) for _ in range(n_test)]
+        torch.save((train_set, test_set), cache)
     print(f"data: {n_train} training / {n_test} held-out scenes, {time.time() - t0:.0f} s")
     model = CameraOnlyDecoder(grid=G).to(DEV)
     print("(1) overfit one scene")
