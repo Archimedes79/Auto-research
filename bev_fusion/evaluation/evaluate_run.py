@@ -28,7 +28,11 @@ import numpy as np
 import torch
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-sys.path.insert(0, os.path.join(ROOT, "training"))
+# the model code: the run's own snapshot (runs/<name>/code/, written by the launcher from a pinned commit) when it exists,
+# so a run is evaluated with the code it was trained with even after the shared training/ code changed; else training/
+_RUN = next((a for a in sys.argv[1:] if not a.startswith("-") and os.path.isdir(os.path.join(a, "code"))), None)
+CODE = os.path.abspath(os.path.join(_RUN, "code")) if _RUN else os.path.join(ROOT, "training")
+sys.path.insert(0, CODE)
 sys.path.insert(0, ROOT)
 from evaluation.metrics import (DetMeter, SegMeter, FRONT_HALF_FOV, format_table, gt_boxes_from_meta,  # noqa: E402
                                 match, ap_nuscenes, ms_per_frame, report)
@@ -310,6 +314,7 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
         flat.update({f"ms/{k}": v for k, v in lat.items() if not isinstance(v, dict)})
     with open(os.path.join(out_dir, "metrics.json"), "w") as f:
         json.dump({"run": run, "checkpoint": os.path.basename(ckpt), "split": cfg.val_split, "weights": "EMA",
+                   "code": os.path.relpath(CODE, ROOT),
                    "metrics": flat, "latency": lat}, f, indent=1, default=float)
     seg_rec = {s: {layer: sm.c for layer, sm in r["seg"].items()} for s, r in scenes.items()}
     det_rec = {s: r["det"] for s, r in scenes.items()}

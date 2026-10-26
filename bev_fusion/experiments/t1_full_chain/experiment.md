@@ -53,6 +53,28 @@ into this folder as `results/<name>_metrics.json` (text, in git).
   about 1.27), cos sign agreement 0.45-0.52 (chance), the prediction is a nearly constant direction (mean (sin, cos) =
   (+0.4, -0.6)) while the targets average (0, 0) (half the vehicles face the ego car). The small axis error (median 0.04
   rad) is an artefact of most boxes lying along x. To re-check at later checkpoints.
+- Step 2000 (VAL 200): drivable 0.673, walkway 0.230, carpark 0.165, ped crossing 0.037; vehicle coverage IoU 0.412;
+  vehicle AP@2 dt 0 0.632, +0.5 0.328, -0.5 0.419; pedestrian AP@2 0.204. Heading still not learned (rot loss 1.25-1.36,
+  identical mean prediction); the rot branch does train (weights change like size / offset, its loss gradient reaches it:
+  temp/train/rot_grad.py), so it is not a bug but the front / back ambiguity -> round-1 arm a.
+- Lines: the zero-crossing F1 is about 0 because the regressed distance field is too smooth: on GT lane-divider cells the
+  predicted distance has median 1.36 m, p10 0.47 m, and is never <= 0.25 m (the decoder's rule), so no line cell is
+  decoded (temp/train/line_check.py). The line MASK head does find lines (30 % of the lane-divider cells > 0.5, 2 % of
+  other cells): line masks are now evaluated as tolerant IoU next to the zero-crossing F1.
+- Round 1 = two arms against t1_r0 at the same 5000 steps: a = object heading as sign-free axis + front / back class
+  (`model.object_direction`, SECOND / PointPillars; code in object_head.py with a known-answer self-test), b = UW-SO task
+  balancing (T 5; the objects gradient at the BEV feature is still 50 x the areas gradient at step 1000 under Kendall).
+- Loader: two runs in parallel gave no extra throughput. Profile (temp/train/profile_sample.py): radar sweeps 558 ms
+  (cold) of a sample, GT 33 ms, features 30 ms, camera index 8 ms. Built an exact per-sample radar cache
+  (data/cache/radar, 19,398 samples, 1.0 GB, 40 min on 5 CPU workers; cached = computed exactly, self-tested). A
+  placement bug in that edit (CachedFrontRadarDataset lost its __getitem__) crashed the first cached start (KeyError
+  'prob'); fixed in 2ddf511, the self-test now loads a whole item. Runs of round 1 use the cache; t1_r0 does not (same data).
+- With two runs on the GPU the GPU became the shared limit (83 % busy, 0.53 steps/s together vs 0.58 alone) and free RAM
+  fell to 2-3 GB (6 workers per run: 10 GB per run). Round-1 arm a was stopped twice (step 20, step 140, step 100;
+  folders in _to_delete/) - every restart begins at step 0, so no partial run enters a comparison.
+- Other chats edit the shared training code (an uncommitted sequence-training change in train.py appeared at 07:30): the
+  launcher (temp/train/run_cfg.sh) now trains from a snapshot of the COMMITTED training/ code (git archive HEAD into
+  runs/<name>/code/, commit in SNAPSHOT.txt).
 
 ## 3. Summary
 (after round 2)
