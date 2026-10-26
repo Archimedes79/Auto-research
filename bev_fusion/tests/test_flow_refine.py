@@ -12,6 +12,9 @@ Arms:
            entropy penalty on pi (no hedging: the mixture spread objects over several velocities, faint and ringed)
   S + R4   S, then the 4 refinement iterations (warps with the same importance)
   0 + P4 / S + P4   coarse to fine (FlowPyramid): 2 iterations at 2 m cells (window +-6 m), 1 at 1 m, 1 at 0.5 m
+  W        hypotheses trained winner-takes-all (relaxed MCL, Rupprecht 1612.00197): every hypothesis splatted alone,
+           per target cell (1 - eps) min_m err_m + eps mean_m err_m, eps 0.05 - the hypotheses specialise instead of
+           averaging; the mixture loss still trains pi
   S + D / S + D + P4   the hypothesis mean updated with radar Doppler (temporal.doppler_update, prior sigma 4 m/s): a
            radar at the origin, a detection in 50 % of the occupied cells (objects AND static stripes: ego-compensated
            clutter has radial velocity 0), noise 0.1 m/s - for stripes ahead the ray is nearly along the stripe, the
@@ -21,7 +24,7 @@ Metrics on held-out scenes after each iteration: end-point error of the velocity
 of the static stripes; warp MSE on the known cells. Image: temp/checks/flow_refine.png (direction = hue, speed =
 brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
-    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4]
+    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W]
 """
 import math
 import random
@@ -67,9 +70,9 @@ def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
 
 
 class Arm(torch.nn.Module):
-    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False):
+    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False, wta=False):
         super().__init__()
-        self.prior, self.sharp, self.doppler = prior, sharp, doppler
+        self.prior, self.sharp, self.doppler, self.wta = prior, sharp, doppler, wta
         self.tp = TemporalPropagation(cin=3, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=sharp) if hyp else None
         self.rf = None if not refine else (FlowPyramid(3, G, factors=(4, 2, 1), iters=(2, 1, 1)) if refine == "P"
                                            else FlowRefine(3, G, radius=3))
@@ -77,9 +80,11 @@ class Arm(torch.nn.Module):
     def forward(self, src, tgt, steps):
         """-> list of (flow, warped map); the first entry is the initial flow, then one per refinement iteration;
         and the hypothesis mixture's own warped map (or None)."""
-        imp, self.ent = None, None
+        imp, self.ent, self.per_hyp = None, None, None
         if self.tp is not None:
             r = self.tp(src, steps)
+            if self.wta and self.training:
+                self.per_hyp = [propagate(src, steps, r["v_hyp"][:, m], G)[0] for m in range(r["v_hyp"].shape[1])]
             v0, mix = r["v_mean"], r["feat"]
             if self.sharp:
                 imp = self.tp.importance_of(src.flatten(2)).view(src.shape[0], G.nx, G.ny)
@@ -107,6 +112,9 @@ def train(arm, data, iters, rng, bs=8, lr=2e-3):
         steps = [b[2] for b in batch]
         outs, mix = arm(src, tgt, steps)
         loss = 0.0 if mix is None else ((mix - tgt) ** 2).mean()
+        if arm.per_hyp is not None:
+            err = torch.stack([((ph - tgt) ** 2).sum(1) for ph in arm.per_hyp])        # (M, B, X, Y)
+            loss = loss + (0.95 * err.min(0).values + 0.05 * err.mean(0)).mean() / tgt.shape[1]
         if arm.ent is not None:
             loss = loss + ENT * (src.max(1).values.clamp(0, 1) * arm.ent).mean()
         if arm.prior > 0:
@@ -187,12 +195,13 @@ if __name__ == "__main__":
                                             ("0 + R4", False, True, 0.0, False), ("H + R4 + prior", True, True, PRIOR, False),
                                             ("S", True, False, 0.0, True), ("S + R4", True, True, 0.0, True),
                                             ("0 + P4", False, "P", 0.0, False), ("S + P4", True, "P", 0.0, True),
-                                            ("S + D", True, False, 0.0, True), ("S + D + P4", True, "P", 0.0, True)):
+                                            ("S + D", True, False, 0.0, True), ("S + D + P4", True, "P", 0.0, True),
+                                            ("W", True, False, 0.0, False)):
         if ARMS is not None and name.replace(" ", "") not in ARMS:
             continue
         torch.manual_seed(SEED)
         print(f"  {name}", flush=True)
-        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name).to(DEV)
+        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name, wta=name == "W").to(DEV)
         train(arm, data, iters, random.Random(SEED + 7))
         arm.eval()
         for i, r in enumerate(evaluate(arm, test)):
