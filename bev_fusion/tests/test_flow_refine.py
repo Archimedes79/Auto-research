@@ -15,6 +15,11 @@ Arms:
   W        hypotheses trained winner-takes-all (relaxed MCL, Rupprecht 1612.00197): every hypothesis splatted alone,
            per target cell (1 - eps) min_m err_m + eps mean_m err_m, eps 0.05 - the hypotheses specialise instead of
            averaging; the mixture loss still trains pi
+  S + R4 + smooth   S + R4 with an edge-aware smoothness term on every flow: lambda * mean(w |v_i - v_j| / 10) over
+           the 4-neighbours, w = exp(-10 |f_i - f_j|) (strong inside an object, weak across its boundary). Reason: the
+           warp loss is gameable - the TRUE field gets warp MSE 0.0080 on the known cells, the refined fields 0.0013:
+           per-cell velocities that reshape blobs and stripes (against the splat blur and the aliased rendering) beat
+           the real motion; the reference row "true velocity" is printed with every run
   S + D / S + D + P4   the hypothesis mean updated with radar Doppler (temporal.doppler_update, prior sigma 4 m/s): a
            radar at the origin, a detection in 50 % of the occupied cells (objects AND static stripes: ego-compensated
            clutter has radial velocity 0), noise 0.1 m/s - for stripes ahead the ray is nearly along the stripe, the
@@ -24,7 +29,7 @@ Metrics on held-out scenes after each iteration: end-point error of the velocity
 of the static stripes; warp MSE on the known cells. Image: temp/checks/flow_refine.png (direction = hue, speed =
 brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
-    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W]
+    [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth] [--smooth 0.05]
 """
 import math
 import random
@@ -45,6 +50,7 @@ DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9
 K = 4
 PRIOR = float(sys.argv[sys.argv.index("--prior") + 1]) if "--prior" in sys.argv else 1e-3
 ENT = float(sys.argv[sys.argv.index("--ent") + 1]) if "--ent" in sys.argv else 5e-3
+SMOOTH = float(sys.argv[sys.argv.index("--smooth") + 1]) if "--smooth" in sys.argv else 0.05
 ARMS = sys.argv[sys.argv.index("--arms") + 1].split(",") if "--arms" in sys.argv else None
 
 
@@ -71,9 +77,9 @@ def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
 
 
 class Arm(torch.nn.Module):
-    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False, wta=False):
+    def __init__(self, hyp, refine, prior=0.0, sharp=False, doppler=False, wta=False, smooth=0.0):
         super().__init__()
-        self.prior, self.sharp, self.doppler, self.wta = prior, sharp, doppler, wta
+        self.prior, self.sharp, self.doppler, self.wta, self.smooth = prior, sharp, doppler, wta, smooth
         self.tp = TemporalPropagation(cin=3, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=sharp) if hyp else None
         self.rf = None if not refine else (FlowPyramid(3, G, factors=(4, 2, 1), iters=(2, 1, 1)) if refine == "P"
                                            else FlowRefine(3, G, radius=3))
@@ -103,6 +109,16 @@ class Arm(torch.nn.Module):
         return [(v, propagate(src, steps, v, G, importance=imp)[0]) for v in flows], mix
 
 
+def smoothness(v, feat, alpha=10.0):
+    """edge-aware first-order smoothness of a flow (B, 2, X, Y) m/s over the 4-neighbours, weights from the map."""
+    tot = 0.0
+    for dim in (2, 3):
+        dv = (v.diff(dim=dim) / 10.0).abs().sum(1)
+        w = torch.exp(-alpha * feat.diff(dim=dim).abs().sum(1))
+        tot = tot + (w * dv).mean()
+    return tot
+
+
 def train(arm, data, iters, rng, bs=8, lr=2e-3):
     opt = torch.optim.Adam(arm.parameters(), lr=lr)
     t0 = time.time()
@@ -113,6 +129,8 @@ def train(arm, data, iters, rng, bs=8, lr=2e-3):
         steps = [b[2] for b in batch]
         outs, mix = arm(src, tgt, steps)
         loss = 0.0 if mix is None else ((mix - tgt) ** 2).mean()
+        if arm.smooth > 0:
+            loss = loss + arm.smooth * sum(smoothness(v, src) for v, _ in outs)
         if arm.per_hyp is not None:
             err = torch.stack([((ph - tgt) ** 2).sum(1) for ph in arm.per_hyp])        # (M, B, X, Y)
             loss = loss + (0.95 * err.min(0).values + 0.05 * err.mean(0)).mean() / tgt.shape[1]
@@ -186,18 +204,24 @@ if __name__ == "__main__":
     data = [sample(rng) for _ in range(n_train)]
     test = [sample(random.Random(10_000 + i)) for i in range(n_test)]
     print(f"device {DEV}, seed {SEED}; {n_train} training scenes, {n_test} held-out, {iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
+    se, nk = 0.0, 0
+    for src, tgt, steps, hole in test:                                  # reference: the TRUE velocity field
+        e = ((propagate(src[None], [steps], true_flow(src)[None], G)[0][0] - tgt) ** 2).sum(0)
+        se, nk = se + e[~hole].sum().item(), nk + int((~hole).sum()) * 3
+    print(f"  true velocity   (reference)  EPE A  0.00  B  0.00  static  0.00 m/s   warp MSE known {se / nk:.5f}", flush=True)
     arms = []
     for name, hyp, refine, prior, sharp in (("H", True, False, 0.0, False), ("H + R4", True, True, 0.0, False),
                                             ("0 + R4", False, True, 0.0, False), ("H + R4 + prior", True, True, PRIOR, False),
                                             ("S", True, False, 0.0, True), ("S + R4", True, True, 0.0, True),
                                             ("0 + P4", False, "P", 0.0, False), ("S + P4", True, "P", 0.0, True),
                                             ("S + D", True, False, 0.0, True), ("S + D + P4", True, "P", 0.0, True),
-                                            ("W", True, False, 0.0, False)):
+                                            ("W", True, False, 0.0, False), ("S + R4 + smooth", True, True, 0.0, True)):
         if ARMS is not None and name.replace(" ", "") not in ARMS:
             continue
         torch.manual_seed(SEED)
         print(f"  {name}", flush=True)
-        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name, wta=name == "W").to(DEV)
+        arm = Arm(hyp, refine, prior, sharp, doppler=" D" in name, wta=name == "W",
+                  smooth=SMOOTH if "smooth" in name else 0.0).to(DEV)
         train(arm, data, iters, random.Random(SEED + 7))
         arm.eval()
         for i, r in enumerate(evaluate(arm, test)):
