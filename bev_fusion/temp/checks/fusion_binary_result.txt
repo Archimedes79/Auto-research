@@ -1,0 +1,14 @@
+300 steps, batch 8, grid 64 x 56; IoU near third / far third of the rows
+scenario                                       fusion         both  camera off   radar off  radar shuffled   gate radar->camera near / far
+   (0.43 s per step on cpu)
+S1 camera informative, radar clutter           concat    0.94/0.26   0.00/0.00   0.94/0.26       0.93/0.26   -
+   (0.30 s per step on cpu)
+S1 camera informative, radar clutter           gate      0.92/0.26   0.00/0.00   0.92/0.26       0.92/0.26   0.38 / 0.38
+   (1.05 s per step on cpu)
+S2 camera noise, radar informative             concat    0.62/0.64   0.60/0.61   0.00/0.00       0.02/0.01   -
+   (1.98 s per step on cpu)
+S2 camera noise, radar informative             gate      0.63/0.66   0.61/0.64   0.00/0.00       0.02/0.01   0.56 / 0.56
+   (0.67 s per step on cpu)
+S3 both informative (camera near, radar far)   concat    0.95/0.71   0.62/0.65   0.93/0.21       0.68/0.05   -
+   (8.78 s per step on cpu)
+S3 both informative (camera near, radar far)   gate      0.93/0.70   0.65/0.68   0.91/0.24       0.66/0.06   0.38 / 0.39
