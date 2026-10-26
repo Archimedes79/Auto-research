@@ -63,7 +63,11 @@ SS = arg("--ss", 4)                                # GT sub-samples per cell (2 
 VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
 TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_prior{PRIOR:g}" if PRIOR != 1e-3 else "") + (f"_s{SEED}" if SEED else "")
-G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
+DATA = arg("--data", "synthetic")                 # "nuscenes": real GT boxes (data/cache/gt), see nuscenes_items
+if DATA == "nuscenes":
+    TAG = "_nusc" + TAG
+G = (Grid(x_min=0.0, x_max=60.0, y_min=-26.0, y_max=26.0, res=0.5) if DATA == "nuscenes"          # 120 x 104 (gt_bev)
+     else Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5))                           # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
 
@@ -95,7 +99,53 @@ def frames(rng):
     # every run up to 2026-10-26
     g = [gt_bev(s, G, ss=SS) for s in (s0, s1, s2)]
     maps = torch.stack([torch.stack([x["lanes"], x["vehicles"], x["pedestrians"]]) for x in g])
-    return maps, g[0]["velocity"], g[0]["box_id"], [(DT, s0.v, s0.omega)]
+    st = [(DT, s0.v, s0.omega)]
+    return maps, g[0]["velocity"], g[0]["box_id"], st, st          # steps F0 -> F1, F1 -> F2 (the same here)
+
+
+def nuscenes_item(path):
+    """one cached GT sample (training/gt_bev.py via nuscenes_dataset: keyframes k - 1, k, k + 1 at 0.5 m) -> the item of
+    this test: maps (3, 3, X, Y) = (lanes = lane / road divider, vehicles = vehicle + two-wheeler, pedestrians) of F0 =
+    k - 1, F1 = k, F2 = k + 1; GT velocity (2, X, Y) of F0 (ground velocity, F0 axes; stationary boxes 0); instance map
+    of F0; ego steps F0 -> F1 (the 'prev' chain of k reversed: k -> k - 1 runs with negative dt) and F1 -> F2 (the 'next'
+    chain). Returns None without a moving vehicle (> 1 m/s) in F0."""
+    import numpy as np
+    g = np.load(path, allow_pickle=True)["gt"].item()
+
+    def maps_of(f):
+        lanes = np.maximum(f["lane_divider"], f["road_divider"]).astype(np.float32)
+        veh = np.maximum(f["vehicle"], f["two_wheeler"]).astype(np.float32)
+        return np.stack([lanes, veh, f["pedestrian"].astype(np.float32)])
+    vel = g["prev"]["velocity"].astype(np.float32)
+    speed = np.hypot(vel[0], vel[1])
+    if not ((maps_of(g["prev"])[1] > 0.5) & (speed > 1.0)).any():
+        return None
+    maps = torch.from_numpy(np.stack([maps_of(g["prev"]), maps_of(g["cur"]), maps_of(g["next"])]))
+    s01 = [(-dt, v, w) for dt, v, w in reversed(g["prev"]["meta"]["steps"])]
+    s12 = [tuple(s) for s in g["next"]["meta"]["steps"]]
+    return maps, torch.from_numpy(vel), torch.from_numpy(g["prev"]["instance"].astype(np.int64)), s01, s12
+
+
+def nuscenes_items(test, n):
+    """n items with a moving vehicle from the GT cache; split by SCENE (one in five scenes is held out: no scene in both
+    sets), files in a fixed pseudo-random order (sorted by token). Cached in temp/checks (scratch)."""
+    import glob
+    import numpy as np
+    path = f"temp/checks/flow_explains_nusc_{'test' if test else 'train'}_{n}.pt"
+    if os.path.exists(path):
+        return torch.load(path)
+    out = []
+    for f in sorted(glob.glob("data/cache/gt/*_0.5_4_*.npz")):
+        scene = np.load(f, allow_pickle=True)["gt"].item()["cur"]["meta"]["scene"]
+        if (int(scene[:8], 16) % 5 == 0) != test:
+            continue
+        it = nuscenes_item(f)
+        if it is not None:
+            out.append(it)
+            if len(out) == n:
+                break
+    torch.save(out, path)
+    return out
 
 
 def radar_measure(f0, vgt, sigma_d=0.1, rate=0.5):
@@ -218,7 +268,7 @@ def evaluate(model, test):
     keys = ("pred", "raw", "extrap", "pred v=0", "raw v=0", "raw GT v", "extrap GT v")
     acc = {k: [0, 0] for k in keys}
     epe = {"vehicles": [0.0, 0], "pedestrians": [0.0, 0], "lanes": [0.0, 0]}
-    for maps, vgt, bid, steps in test:
+    for maps, vgt, bid, steps, steps12 in test:
         m = maps[None].to(DEV)
         flows, preds, _ = model(m[:, 0], m[:, 1], [steps], vgt=vgt[None].to(DEV))
         v = flows[-1]
@@ -228,8 +278,8 @@ def evaluate(model, test):
         out = {"pred": torch.sigmoid(preds[-1]), "pred v=0": torch.sigmoid(p0[0]),
                "raw": propagate(m[:, 0], [steps], v, G)[0], "raw v=0": propagate(m[:, 0], [steps], zero, G)[0],
                "raw GT v": propagate(m[:, 0], [steps], vg, G)[0],
-               "extrap": propagate(m[:, 1], [steps], carry(v, [steps]), G)[0],
-               "extrap GT v": propagate(m[:, 1], [steps], carry(vg, [steps]), G)[0]}
+               "extrap": propagate(m[:, 1], [steps12], carry(v, [steps]), G)[0],
+               "extrap GT v": propagate(m[:, 1], [steps12], carry(vg, [steps]), G)[0]}
         for k, o in out.items():
             ref = m[:, 2] if k.startswith("extrap") else m[:, 1]
             i, u = iou(o[0, 1], ref[0, 1])
@@ -243,7 +293,9 @@ def evaluate(model, test):
                  # lane lines are 0.15 m wide in 0.5 m cells (coverage <= 0.3): > 0.3 left the mask empty and printed
                  # "EPE lanes 0.000" in every run up to 2026-10-26 - not a measurement
                  "lanes": (maps[0, 0] > 0.05) & (maps[0, 1:].max(0).values < 0.1),
-                 "vehicle interiors": inner, "vehicle edges": veh & ~inner}
+                 "vehicle interiors": inner, "vehicle edges": veh & ~inner,
+                 "vehicles moving (> 1 m/s)": veh & (vgt.norm(dim=0) > 1.0),
+                 "vehicles static (< 0.2 m/s)": veh & (vgt.norm(dim=0) < 0.2)}
         for k, mk in masks.items():
             epe.setdefault(k, [0.0, 0])
             epe[k][0] += e[mk].sum().item()
@@ -280,7 +332,7 @@ def picture(model, test, path, n=3):
         ax[r, -1].axis("off")
     wheel(ax[0, -1], vmax=15.0)
     for r in range(n):
-        maps, vgt, bid, steps = test[r]
+        maps, vgt, bid, steps, steps12 = test[r]
         m = maps[None].to(DEV)
         flows, preds, _ = model(m[:, 0], m[:, 1], [steps], vgt=vgt[None].to(DEV))
         v = flows[-1]
@@ -288,14 +340,14 @@ def picture(model, test, path, n=3):
         ims = [overlay(maps[0], maps[1]), flow_rgb(vgt, occ, 15.0), flow_rgb(v[0].cpu(), occ, 15.0),
                overlay(torch.sigmoid(preds[-1][0]).cpu(), maps[1]),
                overlay(propagate(m[:, 0], [steps], v, G)[0][0].cpu(), maps[1]),
-               overlay(propagate(m[:, 1], [steps], carry(v, [steps]), G)[0][0].cpu(), maps[2]),
+               overlay(propagate(m[:, 1], [steps12], carry(v, [steps]), G)[0][0].cpu(), maps[2]),
                overlay(propagate(m[:, 0], [steps], torch.zeros_like(v), G)[0][0].cpu(), maps[1])]
         for c, im in enumerate(ims):
             ax[r, c].imshow(im, origin="lower")
             ax[r, c].axis("off")
             if r == 0:
                 ax[r, c].set_title(cols[c], fontsize=7)
-    fig.suptitle(f"dt = {DT} s; velocity: hue = direction, brightness = speed (15 m/s full); x forward = up; "
+    fig.suptitle(("nuScenes keyframes k-1, k, k+1 (about 0.5 s apart)" if DATA == "nuscenes" else f"dt = {DT} s") + "; velocity: hue = direction, brightness = speed (15 m/s full); x forward = up; "
                  "overlays: red = prediction, green = truth, yellow = both", fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=120)
@@ -304,8 +356,11 @@ def picture(model, test, path, n=3):
 if __name__ == "__main__":
     t0 = time.time()
     n_train, n_test, iters = (300, 16, 600) if QUICK else (1500, 48, 3000)
-    data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
-    test = dataset([50_000 + i for i in range(n_test)], "test")
+    if DATA == "nuscenes":                            # real GT (fixed data: the seed changes only init and batch order)
+        data, test = nuscenes_items(False, n_train), nuscenes_items(True, n_test)
+    else:
+        data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
+        test = dataset([50_000 + i for i in range(n_test)], "test")
     print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR} (leak {LEAK}), smooth {SMOOTH}, doppler {DOPPLER}; {n_train} training sequences, {n_test} held-out, "
           f"{iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
     torch.manual_seed(SEED)
