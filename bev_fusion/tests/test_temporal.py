@@ -11,7 +11,8 @@ source map (types at t - 0.5 s) is propagated by the block and compared with the
 label. Learned velocity per type after training, for: (1) one hypothesis, bilinear, starting at 0 (the plain splat);
 (2) one hypothesis with a Gaussian kernel annealed from 2 cells to bilinear; (3) four hypotheses + static, bilinear;
 (4) (3) + Doppler evidence (radial velocity along rays from the origin, noise 0.1 m/s).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_temporal.py [--quick]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_temporal.py [--quick | --smoke]
+(--smoke: only the smoke checks, exit code 1 on any FAIL - the fast gate of tests/run_gates.sh)
 """
 import math
 import random
@@ -342,6 +343,8 @@ if __name__ == "__main__":
     print("== smoke tests")
     smoke()
     print(f"== {sum(RESULTS)} / {len(RESULTS)} smoke tests pass")
+    if "--smoke" in sys.argv:                                            # the fast gate (tests/run_gates.sh)
+        sys.exit(0 if all(RESULTS) else 1)
     iters = 150 if QUICK else 600
     print(f"== end-to-end speed learning without velocity labels ({iters} steps of 4 scenes; truth A = {VA}, B = {VB} m/s)")
     res = [e2e("(1) one hypothesis, bilinear, starts at 0 (plain)", 1, False, 0.0, False, iters),
