@@ -27,6 +27,8 @@ Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
       EVERY refinement iteration - in tests/test_flow_refine.py this kept the stripes static and improved A)
       [--pyr-leak] (the pyramid without detaching between levels: the pre-fix behaviour, compared on seeds)
       [--vmax 20] (soft physical speed bound of the refined field)
+      [--rawwarp 1.0] (the explanation as a loss: MSE of the raw F0 moved with v alone against F1, on every refined flow;
+      the decoder alone can no longer carry the motion)
 """
 import math
 import os
@@ -56,9 +58,10 @@ SEED, DT, PRIOR, K = arg("--seed", 0), arg("--dt", 0.25), arg("--prior", 1e-3), 
 SHARP, PYR, ENT = "--sharp" in sys.argv, "--pyr" in sys.argv, arg("--ent", 5e-3)
 SMOOTH = arg("--smooth", 0.0)
 DOPPLER = "--doppler" in sys.argv
+RAWWARP = arg("--rawwarp", 0.0)                   # > 0: MSE of the RAW map F0 moved with v against F1, on every flow
 VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
-TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_s{SEED}" if SEED else "")
+TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_s{SEED}" if SEED else "")
 G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
@@ -175,6 +178,8 @@ def train(model, data, iters, rng, bs=8, lr=2e-3):
             loss = loss + ENT * (m[:, 0].max(1).values * model.ent).mean()
         if SMOOTH > 0:
             loss = loss + SMOOTH * sum(smoothness(v, m[:, 0]) for v in flows)
+        if RAWWARP > 0:                       # the explanation as a training term: v alone must move the raw map onto F1
+            loss = loss + RAWWARP * sum(((propagate(m[:, 0], steps, v, G)[0] - tgt) ** 2).mean() for v in flows[1:])
         if PRIOR > 0:
             occ = m[:, 0].max(1).values
             loss = loss + PRIOR * sum((occ * (v / 10.0).pow(2).sum(1)).mean() for v in flows)
