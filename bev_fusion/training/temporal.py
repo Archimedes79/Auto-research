@@ -283,9 +283,11 @@ class FlowRefine(nn.Module):
     test). v is detached between iterations (as in RAFT); the last layer starts at zero, so v0 is kept until something
     is learned. Grid mode only."""
 
-    def __init__(self, cin, grid, radius=3, proj=16, hidden=64, v_scale=10.0, step_max=None):
+    def __init__(self, cin, grid, radius=3, proj=16, hidden=64, v_scale=10.0, step_max=None, v_max=None):
         super().__init__()
         self.grid, self.v_scale = grid, v_scale
+        self.v_max = v_max      # optional physical speed bound (m/s, soft): |v| -> v_max tanh(|v| / v_max); stops the
+        #                         "throw the object out of the grid" optimum of a warp loss (box test, 2026-10-26)
         self.step_max = radius * grid.res if step_max is None else step_max
         self.f, self.g = nn.Conv2d(cin, proj, 1), nn.Conv2d(cin, proj, 1)
         o = torch.arange(-radius, radius + 1, dtype=torch.float32) * grid.res
@@ -328,6 +330,9 @@ class FlowRefine(nn.Module):
             v = v + torch.stack([c * d[:, 0] - s * d[:, 1], s * d[:, 0] + c * d[:, 1]], 1) / dt.unsqueeze(1)
             if correct is not None:
                 v = correct(v)
+            if self.v_max is not None:
+                sp = v.norm(dim=1, keepdim=True).clamp(min=1e-6)
+                v = v * (self.v_max * torch.tanh(sp / self.v_max) / sp)
             out.append(v)
         return out
 

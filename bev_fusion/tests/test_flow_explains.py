@@ -26,6 +26,7 @@ Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
       [--doppler] (simulated radar Doppler, a detection in half the occupied cells, applied to the start field and after
       EVERY refinement iteration - in tests/test_flow_refine.py this kept the stripes static and improved A)
       [--pyr-leak] (the pyramid without detaching between levels: the pre-fix behaviour, compared on seeds)
+      [--vmax 20] (soft physical speed bound of the refined field)
 """
 import math
 import os
@@ -55,8 +56,9 @@ SEED, DT, PRIOR, K = arg("--seed", 0), arg("--dt", 0.25), arg("--prior", 1e-3), 
 SHARP, PYR, ENT = "--sharp" in sys.argv, "--pyr" in sys.argv, arg("--ent", 5e-3)
 SMOOTH = arg("--smooth", 0.0)
 DOPPLER = "--doppler" in sys.argv
+VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
-TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_s{SEED}" if SEED else "")
+TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_s{SEED}" if SEED else "")
 G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
@@ -116,8 +118,9 @@ class Model(nn.Module):
         self.enc = nn.Sequential(nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, C, 3, padding=1))
         self.tp = TemporalPropagation(cin=C, grid=G, n_hyp=4, static_hyp=True, init_speed=5.0, importance=SHARP)
-        self.rf = (FlowPyramid(C, G, factors=(4, 2, 1), iters=(2, 1, 1), detach_levels=not LEAK) if PYR
-                   else FlowRefine(C, G, radius=3))
+        vkw = {"v_max": VMAX} if VMAX > 0 else {}
+        self.rf = (FlowPyramid(C, G, factors=(4, 2, 1), iters=(2, 1, 1), detach_levels=not LEAK, **vkw) if PYR
+                   else FlowRefine(C, G, radius=3, **vkw))
         self.dec = nn.Sequential(nn.Conv2d(C + 1, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, 3, 1))
 
