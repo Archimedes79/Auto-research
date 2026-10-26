@@ -62,7 +62,7 @@ RAWWARP = arg("--rawwarp", 0.0)                   # > 0: MSE of the RAW map F0 m
 SS = arg("--ss", 4)                                # GT sub-samples per cell (2 missed the lane lines entirely)
 VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
-TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_s{SEED}" if SEED else "")
+TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_prior{PRIOR:g}" if PRIOR != 1e-3 else "") + (f"_s{SEED}" if SEED else "")
 G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
