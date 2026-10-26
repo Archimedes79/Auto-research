@@ -37,6 +37,7 @@ import torch
 import torch.nn as nn
 
 try:
+    from .augment import flip_cam
     from .bev_trunk import BEVTrunk, SemanticHead
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
@@ -47,6 +48,7 @@ try:
     from .temporal_fusion import TemporalFusion
     from .timed_head import TimedHead, TimeMover
 except ImportError:                                   # run as a script
+    from augment import flip_cam
     from bev_trunk import BEVTrunk, SemanticHead
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
@@ -78,6 +80,9 @@ class ModelConfig:
     c_rad: int = 32
     c_fuse: int = 96
     trunk_width: float = 0.5
+    trunk_detail: int = 0              # stride-1 detail path (bev_trunk.DetailPath) channels, 0 = off
+    head_channels: int = 0             # 1x1 reduction of the trunk output before the heads (CenterPoint-style light heads), 0 = off
+    trunk_pretrained: str = ""         # DualBEV checkpoint to initialise the BEV encoder (width 1.0, c_fuse 80), "" = random
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     dense_objects: bool = True
@@ -144,9 +149,18 @@ class BEVFusionModel(nn.Module):
                 self.fusion = GateFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse)
             else:
                 raise ValueError(cfg.fusion)
-            self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width)
-            c = self.trunk.img_bev_encoder_neck.out_channels
+            self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail)
+            if cfg.trunk_pretrained:                                  # detection-trained BEV encoder of DualBEV (SOA init)
+                rep = self.trunk.load_pretrained(cfg.trunk_pretrained)
+                if rep["missing"] or rep["shape_mismatch"]:
+                    raise RuntimeError(f"trunk weights do not fit: {rep['missing'][:3]} {rep['shape_mismatch'][:3]}")
+            c = self.trunk.img_bev_encoder_neck.out_channels + cfg.trunk_detail
         del self.trunk.head                                          # the heads below decode the trunk features
+        self.head_reduce = None
+        if cfg.head_channels and cfg.head_channels != c:
+            self.head_reduce = nn.Sequential(nn.Conv2d(c, cfg.head_channels, 1, bias=False),
+                                             nn.BatchNorm2d(cfg.head_channels), nn.ReLU(True))
+            c = cfg.head_channels
         self.spec = layer_spec(cfg.centrelines, cfg.dense_objects)
         if cfg.n_sem is not None and cfg.n_sem != len(self.spec):
             raise ValueError(f"n_sem {cfg.n_sem} != len(layer_spec) {len(self.spec)}")
@@ -238,10 +252,15 @@ class BEVFusionModel(nn.Module):
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
                  for f in batch["steps"]]
         cam_obs = self.camera_visibility(batch, cam_frames) if isinstance(self.cam_temporal, TemporalFusion) else None
+        flip = batch.get("flip")                                 # mirror augmentation (training/augment.py): the other inputs
+        if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
+            cam_frames, cam_obs = flip_cam(cam_frames, cam_obs, flip)
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
         rad = self.radar(batch["radar"], cam.shape[0])
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
+        if self.head_reduce is not None:
+            S = self.head_reduce(S)
         v, w = batch["v"].to(S), batch["omega"].to(S)
         out = {}
         refine_gt = (sample_targets(batch["gt"]) if self.cfg.refine and self.training and batch.get("gt") else {})

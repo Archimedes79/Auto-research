@@ -42,6 +42,7 @@ import torch
 import torch.nn as nn
 
 try:
+    from .augment import flip_batch
     from .feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
     from .loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from .losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -49,6 +50,7 @@ try:
     from .nuscenes_dataset import FrontRadarDataset, available_scenes, collate
 except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from augment import flip_batch
     from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
     from loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -91,6 +93,8 @@ class TrainConfig:
                                                  # stay in memory); False = the state is detached at every keyframe
     gap_ego: bool = True                         # decode dt = +-0.5 s with each sample's true keyframe gap and gap-mean ego
                                                  # motion (needs `ego=` in the model's forward; 0.2-0.35 m of label error otherwise)
+    flip_aug: float = 0.0                        # probability that a sample (a whole clip) is mirrored left-right in training
+                                                 # (training/augment.py: BEV, radar, ego motion and every target); 0 = off
     weight_decay: float = 1e-2
     grad_clip: float = 5.0
     ema: float = 0.999
@@ -399,7 +403,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     return out, res, gts
 
 
-def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False):
+def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False, augment=False):
     """One clip = a list of batches (consecutive keyframes of the same scenes; a single batch = a clip of length 1). The
     model state (world memory) is carried from keyframe to keyframe with the ego step between them: detached at every
     keyframe, or with cfg.seq_bptt kept in the graph through the clip. backward: backpropagate the mean loss of the clip
@@ -409,6 +413,10 @@ def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_t
     per-keyframe totals)."""
     L, state, prev, acc, totals, dg = len(clip), None, None, {}, [], None
     bptt, accum = bool(cfg is not None and cfg.seq_bptt), (cfg.accum if cfg is not None else 1)
+    if augment and cfg is not None and cfg.flip_aug > 0:         # mirror a sample in ALL its keyframes (same memory frame)
+        flip = torch.rand(len(clip[0]["tokens"])) < cfg.flip_aug
+        for batch in clip:
+            flip_batch(batch, flip)
     for t, batch in enumerate(clip):
         step = clip_step(prev, device) if prev is not None else None
         out, res, _ = forward_loss(model, loss, batch, step_frac, device, amp, cfg, diag=diag and t == L - 1,
@@ -510,7 +518,7 @@ def train(cfg, eval_fn=None, datasets=None):
         for m in range(cfg.accum):                              # effective batch = batch_size * seq_len * accum samples
             item = next_batch()
             out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], step / max(1, cfg.steps),
-                                      device, cfg.amp, cfg, diag=diag and m == 0, backward=True)
+                                      device, cfg.amp, cfg, diag=diag and m == 0, backward=True, augment=True)
             if not ok:
                 finite = False
                 break

@@ -40,6 +40,10 @@ from losses import NUSC_GROUPS  # noqa: E402
 from object_head import decode  # noqa: E402
 from train import (EMA, TrainConfig, build, forward_loss, load_checkpoint, make_datasets, make_loader,  # noqa: E402
                    param_groups, val_subset)
+try:                                                  # sequence training (snapshots before 2026-10-26 do not have it)
+    from train import clip_step, detach_tree  # noqa: E402
+except ImportError:
+    clip_step = detach_tree = None
 
 HEADLINE_SEG = (("drivable_area", "fov"), ("walkway", "fov"), ("lane_divider", "fov"), ("lane_divider:zc", "fov"),
                 ("vehicle", "fov"))
@@ -233,13 +237,18 @@ def save_image(path, token, nusc, root, grid, prob, dist, gtd, dets, gts, probs_
 
 
 # ------------------------------------------------------------------------------------------------ evaluation
-def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, workers=4, device="cuda"):
+def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, workers=4, device="cuda", warm=False):
+    """warm=False: independent samples with an empty world memory ("cold", the default of every table so far); warm=True:
+    the real deployment, every val scene run in time order with the world memory carried from keyframe to keyframe over the
+    WHOLE scene (batch 1; a keyframe whose predecessor is not the previous sample starts with an empty memory); the files
+    get the suffix _warm (metrics_warm.json, ...) and the run's cold files stay."""
     device = device if torch.cuda.is_available() else "cpu"
     os.chdir(ROOT)
     cfg, model, loss, step, ckpt = load_run(run, device)
-    cfg.batch_size, cfg.workers = batch_size, workers
-    cfg.seq_len = 1                         # independent samples with an empty world memory ("cold"); what a clip-trained
-                                            # model gains from the carried memory is measured by evaluation/eval_memory.py
+    cfg.batch_size, cfg.workers = (1 if warm else batch_size), workers
+    cfg.seq_len = 1                         # the loader yields single samples; with warm=True the state is carried below
+                                            # (what a clip-trained model gains from the memory over 3 keyframes: eval_memory.py)
+    tag = "_warm" if warm else ""
     if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
         cfg.radar_cache = "data/cache/radar"                    # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = make_datasets(cfg)
@@ -260,9 +269,19 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     out_dir = os.path.join(run, "eval")
     os.makedirs(os.path.join(out_dir, "images"), exist_ok=True)
     tot, nb, i0, t0 = {}, 0, 0, time.time()
+    state, prev_batch, prev_tok = None, None, None
     with torch.no_grad():
         for batch in loader:
-            out, res, gts = forward_loss(model, loss, batch, 1.0, device, cfg.amp, cfg, train_terms=False)
+            kw = {}
+            if warm:                                                  # carry the world memory along the scene
+                tok0 = batch["tokens"][0]
+                cont = prev_tok is not None and nusc.get("sample", tok0)["prev"] == prev_tok
+                if not cont:
+                    state = None
+                kw = {"state": state, "step": clip_step(prev_batch, device) if (cont and state is not None) else None}
+            out, res, gts = forward_loss(model, loss, batch, 1.0, device, cfg.amp, cfg, train_terms=False, **kw)
+            if warm:
+                state, prev_batch, prev_tok = detach_tree(res["state"]), batch, batch["tokens"][0]
             for key, v in out.items():
                 if key == "total" or key.startswith("group."):
                     tot[key] = tot.get(key, 0.0) + float(v)
@@ -327,17 +346,18 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     if timing:
         lat = latency(model, loader, device)
         flat.update({f"ms/{k}": v for k, v in lat.items() if not isinstance(v, dict)})
-    with open(os.path.join(out_dir, "metrics.json"), "w") as f:
+    with open(os.path.join(out_dir, f"metrics{tag}.json"), "w") as f:
         json.dump({"run": run, "checkpoint": os.path.basename(ckpt), "split": cfg.val_split, "weights": "EMA",
+                   "memory": "carried over the whole scene" if warm else "empty (cold)",
                    "code": os.path.relpath(CODE, ROOT),
                    "metrics": flat, "latency": lat}, f, indent=1, default=float)
     seg_rec = {s: {layer: sm.c for layer, sm in r["seg"].items()} for s, r in scenes.items()}
     det_rec = {s: r["det"] for s, r in scenes.items()}
     detr_rec = {s: r["detr"] for s, r in scenes.items()}
-    with open(os.path.join(out_dir, "scene_records.pkl"), "wb") as f:
+    with open(os.path.join(out_dir, f"scene_records{tag}.pkl"), "wb") as f:
         pickle.dump({"seg": seg_rec, "det": det_rec, "detr": detr_rec}, f)
     table = headline_table(flat)
-    with open(os.path.join(out_dir, "table.txt"), "w") as f:
+    with open(os.path.join(out_dir, f"table{tag}.txt"), "w") as f:
         f.write(table + "\n")
     print(table)
     print(f"done: {i0} val samples, {len(scenes)} scenes, {time.time() - t0:.0f} s -> {out_dir}")
@@ -528,6 +548,7 @@ if __name__ == "__main__":
     ap.add_argument("--time-only", action="store_true", help="only the latency -> eval/latency.json (idle GPU)")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--warm", action="store_true", help="carry the world memory over whole scenes (batch 1, time order) -> *_warm files")
     ap.add_argument("--compare", nargs=2)
     ap.add_argument("--boot", type=int, default=1000)
     ap.add_argument("--det-a", default="det", help="box set of run a: det (plain) or detr (refined)")
@@ -540,4 +561,4 @@ if __name__ == "__main__":
         os.chdir(ROOT)
         compare(*a.compare, n_boot=a.boot, det_a=a.det_a, det_b=a.det_b, dt=a.dt)
     else:
-        evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers)
+        evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers, warm=a.warm)
