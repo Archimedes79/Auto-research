@@ -5,9 +5,11 @@ Run it in the WSL, the same process namespace as the launchers (wsl python3 ../a
 
 One pass, idempotent and restartable (call it at every wake-up, from a timer, or by hand):
   1. reconcile: every schedule item with run ids takes its state from the run records (done / failed / stalled / running; schedule.py reconcile);
-     a running item whose run has no record and no heartbeat (the launcher died before it wrote anything) becomes blocked
+     a running item whose run has no record and no heartbeat (the launcher died before it wrote anything) becomes blocked. The ledger is synced the
+     same way: a 'running' row whose run is stalled becomes 'stalled', a row parked by run.py (ledger_row.json) is merged back. (run.py itself
+     syncs the schedule when a run starts and ends, so hand-started launchers keep schedule.csv honest too)
   2. start: ready items (state planned or ready, every dependency done) in priority order. Resource gpu needs a free GPU slot: project.json
-     gpu_slots minus the busier of (slot directories held, schedule items running on the gpu whose record is not over); resource cpu runs at
+     gpu_slots minus the busier of (slot directories held, gpu items whose launcher is past its --after wait: queueing or running); resource cpu runs at
      most cpu_slots (project.json, default 1) items at a time; resource agent (detail plan, code, summary) is never started by the tick - it
      needs a chat - and is listed as "needs the lead". An empty resource follows the kind (train -> gpu, evaluate -> cpu, else agent).
      GPU jobs started by hand without --gpu hold no slot: the tick cannot see them
@@ -58,17 +60,14 @@ def resource_of(item):
     return item.get("resource") or KIND_RESOURCE.get(item.get("kind", ""), "agent")
 
 
-def run_over(records, run_id):
-    return RUN.state_of(os.path.join(records, run_id)) in ("done", "ok", "failed", "blocked", "gpu_busy", "timeout", "stalled")
-
-
 def free_gpu_slots(records, rows, n):
     base = os.path.join(records, ".gpu_slots")
     probe = RUN.GpuSlot(records, n, "tick", "")
     held = sum(1 for i in range(n) if os.path.isdir(os.path.join(base, str(i))) and not probe.stale(os.path.join(base, str(i))))
+    # launchers past their --after wait that queue for a slot or run: a launcher that still waits for its dependencies occupies nothing
     queued = sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "gpu"
-                 and not all(run_over(records, i) for i in (r.get("run_ids") or "").split(";") if i))
-    return n - max(held, queued)
+                 and any(RUN.phase_of(os.path.join(records, i)) in ("gpu", "run") for i in (r.get("run_ids") or "").split(";") if i))
+    return max(0, n - max(held, queued))
 
 
 def experiment_arm(root, run_id):
@@ -183,6 +182,44 @@ def status_lines(rows, records, started, waiting, lead, slots_free):
     return out
 
 
+def ledger_sync(records, ledger, dry=False):
+    """keep the ledger honest about runs whose launcher is gone or restarted; every change is checked again under the ledger lock (guard) and nothing here
+    may stop a tick: errors become report lines. (1) a row parked by run.py (ledger_row.json) is merged back unless the ledger row has moved on;
+    (2) a 'running' row whose run finished (record ok / failed / timeout / done flag) is completed from the record; (3) a 'running' row whose run is stalled
+    becomes 'stalled'; (4) a 'stalled' row whose heartbeat is back becomes 'running' again. Returns the report lines."""
+    out = []
+    try:
+        for f in sorted(glob.glob(os.path.join(records, "*", "ledger_row.json"))):
+            try:
+                row = json.load(open(f, encoding="utf-8"))
+                merged = dry or RUN.ledger_write(ledger, row, guard=lambda cur: cur is None or cur.get("status") in ("", "planned", "running", "stalled"))
+                if not dry:
+                    os.remove(f)  # merged, or superseded by a row that has moved on
+                out.append(f"{'would merge' if dry else 'merged' if merged else 'dropped (the ledger row has moved on)'}: the parked ledger row of {row.get('id')}")
+            except Exception as e:
+                out.append(f"parked ledger row {os.path.relpath(f, records)}: {type(e).__name__}: {str(e)[:80]}")
+        for r in RUN.ledger_rows(ledger):
+            rid, status = r.get("id", ""), r.get("status")
+            if not rid or status not in ("running", "stalled"):
+                continue
+            d = os.path.join(records, rid)
+            st, rec = RUN.state_of(d), RUN.record(d)
+            if status == "running" and (st == "done" or rec.get("status") in ("ok", "failed", "timeout")):
+                new = dict(id=rid, status="ok" if st == "done" else rec["status"], exit=rec.get("exit"), duration_s=rec.get("duration_s"), ended=rec.get("ended"))
+                guard, what = (lambda cur: bool(cur) and cur.get("status") == "running"), f"{'would complete' if dry else 'completed'} the ledger row of {rid} from its record ({new['status']})"
+            elif status == "running" and st == "stalled":
+                new, guard, what = dict(id=rid, status="stalled"), (lambda cur: bool(cur) and cur.get("status") == "running" and RUN.state_of(d) == "stalled"), f"{'would mark' if dry else 'marked'} the ledger row of {rid} stalled"
+            elif status == "stalled" and st == "running":
+                new, guard, what = dict(id=rid, status="running"), (lambda cur: bool(cur) and cur.get("status") == "stalled" and RUN.state_of(d) == "running"), f"{'would set' if dry else 'set'} the ledger row of {rid} running again (heartbeat is back)"
+            else:
+                continue
+            if dry or RUN.ledger_write(ledger, new, guard=guard):
+                out.append(what)
+    except Exception as e:
+        out.append(f"ledger sync skipped: {type(e).__name__}: {str(e)[:100]}")
+    return out
+
+
 BLOCK = re.compile(r"^<!-- tick -->\n.*?^<!-- /tick -->$", re.M | re.S)
 
 
@@ -213,7 +250,8 @@ def tick(dry=False, max_start=10, handover=False):
                 r["state"], r["note"] = "blocked", "no run record and no heartbeat (the launcher left nothing)"
         started, waiting, lead, failed = [], [], [], 0
         gpu_free = free_gpu_slots(records, rows, int(cfg.get("gpu_slots", 2)))
-        cpu_free = int(cfg.get("cpu_slots", 1)) - sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "cpu")
+        cpu_free = int(cfg.get("cpu_slots", 1)) - sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "cpu"
+                                                       and any(RUN.phase_of(os.path.join(records, i)) in ("gpu", "run") for i in (r.get("run_ids") or "").split(";") if i))
         for r in SC.ready(rows):
             if len(started) >= max_start:
                 waiting.append((r, "max-start reached"))
@@ -262,6 +300,8 @@ def tick(dry=False, max_start=10, handover=False):
             touch(lock)
         if not dry:
             SC.save(rows, lock=False)
+    for line in ledger_sync(records, ledger, dry):  # after the schedule pass: a ledger problem never stops a start
+        print("ledger: " + line)
     lines = status_lines(rows, records, started, waiting, lead, gpu_free)
     for item, old, new in changed:
         print(f"{would}reconcile {item}: {old} -> {new}")

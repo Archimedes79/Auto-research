@@ -205,6 +205,9 @@ def main():
             import ledger as L
             old = {r["id"]: r.get("decision", "") for r in L.load()}
             for rid in exp["arms"][d["variant"]].get("run_ids", []):
+                if rid not in old:  # ledger.py note would create an empty 'planned' row for an id that never ran
+                    print(f"  warning: no ledger row {rid}: the verdict is only in {out} (fix run_ids of the variant arm in the experiment file)")
+                    continue
                 line = f"decide.py {d['date'][:10]}: {d['verdict']} (effect {d['effect']:+.4f})"
                 prose = old.get(rid, "").split(" | decide.py")[0].strip()  # a written prose decision is kept, an earlier decide.py verdict is replaced
                 text = (prose + " | " + line) if prose and not prose.startswith("decide.py") else line
@@ -218,6 +221,10 @@ def main():
     line = f"{verdict}: effect {effect:+.4f} ({why})"
     print(line)
     if a.write and a.id:
+        import ledger as L
+        if a.id not in {r["id"] for r in L.load()}:  # ledger.py note would create an empty 'planned' row for an id that never ran
+            print(f"warning: no ledger row {a.id}: the verdict is only printed")
+            return 0
         subprocess.run([sys.executable, os.path.join(here, "ledger.py"), "note", a.id, "--decision", line], check=True)
     return 0
 

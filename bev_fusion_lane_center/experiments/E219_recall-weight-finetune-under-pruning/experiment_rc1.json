@@ -1,7 +1,7 @@
 {"id": "E219", "card": "", "title": "recall weight 3 on the 288 / 144 chain (rc1) against its equal-budget control f1eq (re-encoded)",
  "kind": "variant", "metric": "Q", "direction": "higher", "band": 0.010,
  "prediction": {"value": 0.008, "vs": "c"},
- "arms": {"a": {"cards": ["runs/e18/rc_eval/rc1.json"], "run_ids": ["E219.rc1"]}, "c": {"cards": ["runs/e18/rc_eval/f1eq.json"], "run_ids": ["E219.f1eq"]}},
+ "arms": {"a": {"cards": ["runs/e18/rc_eval/rc1.json"], "run_ids": [], "note": "rc1 was trained before the E219 ledger rows existed: no ledger row of its own"}, "c": {"cards": ["runs/e18/rc_eval/f1eq.json"], "run_ids": ["E219.f1eq"]}},
  "control": "c",
  "rule": [{"metric": "Q", "min_effect": 0.008, "note": "Q >= 0.745 (f1eq 0.737)"}, {"metric": "lanes_found", "min_effect": 0.073, "note": "lanes found >= 0.78 (f1eq 0.707)"}],
  "budget_gpu_h": 1, "kill": "", "evaluate": {"split": "val", "compare": "c"},

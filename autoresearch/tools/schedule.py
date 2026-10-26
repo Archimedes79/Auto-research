@@ -80,6 +80,9 @@ def main():
     for c in ("node", "kind", "depends", "budget", "priority", "owner", "runs", "note", "command"):
         ap.add_argument("--" + c, default="")
     a = ap.parse_args()
+    if a.cmd in ("set", "reconcile", "add"):  # load, change and save as one step: launchers sync this file too
+        with P.locked(P.path("schedule")):
+            return change(a)
     rows = load()
     if a.cmd == "show":
         for s in STATES:
@@ -89,22 +92,25 @@ def main():
     elif a.cmd == "next":
         for r in ready(rows, a.resource)[:10]:
             print(f"{r['item']:14} {r['kind']:12} {r['resource']:6} {r['budget']:6} {r['note']}")
-    elif a.cmd == "set":
+
+
+def change(a):
+    """set / reconcile / add: called with the schedule lock held"""
+    rows = load()
+    if a.cmd == "set":
         if a.state not in STATES:
             sys.exit(f"state must be one of {STATES}")
         for r in rows:
             if r["item"] == a.item:
                 r["state"] = a.state
-        save(rows)
     elif a.cmd == "reconcile":
         for item, old, new in reconcile(rows):
             print(f"{item}: {old} -> {new}")
-        save(rows)
     elif a.cmd == "add":
         res = a.resource or {"train": "gpu", "evaluate": "cpu"}.get(a.kind, "agent")  # an empty resource follows the kind
         rows.append(dict(item=a.item, node=a.node, kind=a.kind, state="planned", depends_on=a.depends, resource=res, budget=a.budget,
                          priority=a.priority or "5", owner=a.owner, run_ids=a.runs or (a.item if a.kind == "train" else ""), note=a.note, command=a.command))
-        save(rows)
+    save(rows, lock=False)
 
 
 if __name__ == "__main__":

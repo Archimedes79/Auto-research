@@ -244,8 +244,13 @@ try:
     t1 = tick()
     assert "started  S.ta" in t1.stdout and states()["S.ta"]["state"] == "running" and "waiting  E1.a" in t1.stdout and "S.tb" not in t1.stdout, t1.stdout + t1.stderr  # S.tb waits for S.ta: not ready, not listed
     assert wait_done("S.ta"), open(f"{T}/runs/S.ta/launcher.log").read()
+    for _ in range(100):  # the launcher syncs the schedule itself right after its last ledger write: the tick finds nothing left to reconcile
+        if states()["S.ta"]["state"] == "done":
+            break
+        time.sleep(0.1)
+    assert states()["S.ta"]["state"] == "done", "run.py keeps the schedule in step without the tick"
     t2 = tick()
-    assert "reconcile S.ta: running -> done" in t2.stdout and "started  S.tb" in t2.stdout and "started  E1.a" in t2.stdout, t2.stdout + t2.stderr
+    assert "started  S.tb" in t2.stdout and "started  E1.a" in t2.stdout, t2.stdout + t2.stderr
     assert wait_done("S.tb", "E1.a"), open(f"{T}/runs/E1.a/launcher.log").read()
     assert RUN.record(f"{T}/runs/E1.a")["hypothesis"] == exp["title"] and "t/S.tb" in tags(), "the arm's card and the gpu run's tag"
     t3 = tick("--handover")
@@ -354,6 +359,108 @@ try:
     finally:
         del os.environ["AR_PROJECT"]
     json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k != "cards"}, open(f"{T}/project.json", "w"))
+    # phase of a launcher and the GPU slot count: a launcher that still waits for --after occupies nothing, one that queues for the GPU or runs does
+    def fake_run(name, status, phase=None, hb_text="", age=0):
+        d = f"{T}/runs/{name}"
+        os.makedirs(d, exist_ok=True)
+        rec = dict(id=name, status=status, launcher_pid=1)
+        if phase:
+            rec["phase"] = phase
+        json.dump(rec, open(f"{d}/run.json", "w"))
+        open(f"{d}/heartbeat", "w").write(hb_text or "x")
+        os.utime(f"{d}/heartbeat", (time.time() - age, time.time() - age))
+    fake_run("P.after", "waiting", "after")
+    fake_run("P.gpu", "waiting", "gpu")
+    fake_run("P.run", "running", "run")
+    fake_run("P.old_after", "waiting", None, "2026 waiting for E1.a,E1.c")
+    fake_run("P.old_gpu", "waiting", None, "2026 waiting for the GPU")
+    phases = {n: RUN.phase_of(f"{T}/runs/{n}") for n in ("P.after", "P.gpu", "P.run", "P.old_after", "P.old_gpu", "P.none")}
+    assert phases == {"P.after": "after", "P.gpu": "gpu", "P.run": "run", "P.old_after": "after", "P.old_gpu": "gpu", "P.none": ""}, phases
+    rows_g = [dict(item=n, state="running", resource="gpu", run_ids=n) for n in ("P.after", "P.old_after", "P.gpu", "P.run")]
+    assert TK.free_gpu_slots(f"{T}/runs", rows_g, 3) == 1, "only the queueing and the running launcher occupy a slot"
+    assert TK.free_gpu_slots(f"{T}/runs", rows_g[:2], 3) == 3 and TK.free_gpu_slots(f"{T}/runs", rows_g, 1) == 0, "never negative"
+    # a hand-started launcher: ledger row and schedule are in step from the start of the command, without the tick
+    SC.save([dict(item="S.live", kind="train", state="planned", resource="cpu", priority="1", run_ids="S.live2")], f"{T}/schedule.csv")
+    live = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.live2", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 4; echo x"], env=env, stdout=subprocess.DEVNULL)
+    for _ in range(100):
+        if RUN.record(f"{T}/runs/S.live2").get("status") == "running":
+            break
+        time.sleep(0.1)
+    time.sleep(0.5)
+    assert RUN.record(f"{T}/runs/S.live2").get("phase") == "run" and RUN.phase_of(f"{T}/runs/S.live2") == "run"
+    assert rows()["S.live2"]["status"] == "running" and rows()["S.live2"]["started"] and rows()["S.live2"]["hypothesis"] == "h", rows().get("S.live2")
+    assert states()["S.live"]["state"] == "running", "the schedule follows a hand-started launcher"
+    assert live.wait() == 0
+    assert rows()["S.live2"]["status"] == "ok" and rows()["S.live2"]["exit"] == "0" and states()["S.live"]["state"] == "done"
+    # ledger sync of the tick: a running row whose launcher is gone becomes stalled; a parked row is merged back and its file removed
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.zombie", status="running", started="2026-10-25T10:00:00", hypothesis="z"))
+    fake_run("S.zombie", "running", "run", age=3000)
+    os.makedirs(f"{T}/runs/S.parked", exist_ok=True)
+    json.dump(dict(id="S.parked", status="ok", exit="0", hypothesis="parked", started="2026-10-25T11:00:00"), open(f"{T}/runs/S.parked/ledger_row.json", "w"))
+    dry_sync = tick("--dry-run")
+    assert "would mark the ledger row of S.zombie stalled" in dry_sync.stdout and rows()["S.zombie"]["status"] == "running" and os.path.exists(f"{T}/runs/S.parked/ledger_row.json"), dry_sync.stdout
+    real_sync = tick()
+    assert rows()["S.zombie"]["status"] == "stalled" and rows()["S.zombie"]["notes"] == "", rows()["S.zombie"]  # the status says it; no note that a later end row would leave stale
+    assert rows()["S.parked"]["status"] == "ok" and not os.path.exists(f"{T}/runs/S.parked/ledger_row.json"), real_sync.stdout
+    # decide --write puts a verdict on existing ledger rows only: an id that never ran gets no empty 'planned' row
+    json.dump(dict(full, name="v", metrics=dict(Q=0.760, F=0.9)), open(f"{T}/runs/eval/v/val.json", "w"))
+    json.dump(dict(base, id="E6", arms=dict(a=dict(names=["v"], run_ids=["S.live2", "S.never_ran"]), c=dict(names=["c"])), deterministic=True),
+              open(f"{T}/experiments/E1_x/experiment.json", "w"))
+    before = set(rows())
+    wr = subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write"], capture_output=True, text=True, env=env, cwd=T)
+    assert wr.returncode == 0 and "no ledger row S.never_ran" in wr.stdout and set(rows()) == before, wr.stdout + wr.stderr
+    assert "decide.py" in rows()["S.live2"]["decision"], rows()["S.live2"]
+    pw = subprocess.run([sys.executable, f"{HERE}/decide.py", "--variant", "0.76,0.75", "--control", "0.73,0.72", "--id", "S.never_plain", "--write"], capture_output=True, text=True, env=env, cwd=T)
+    assert pw.returncode == 0 and "no ledger row S.never_plain" in pw.stdout and "S.never_plain" not in rows(), "the typed-score path makes no ghost row either"
+    # a command that cannot even be started is a failed run (exit 127), not a launcher that dies and leaves a 'running' row
+    nb = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.nobin", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "/nonexistent/binary"], capture_output=True, text=True, env=env)
+    assert nb.returncode == 127 and rows()["S.nobin"]["status"] == "failed" and RUN.record(f"{T}/runs/S.nobin")["status"] == "failed", (nb.stdout, nb.stderr[-300:])
+    # a re-run of an id that has a ledger row but no run record starts without the old judgement
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.old", status="ok", started="2026-10-24T10:00:00", result="old result", decision="KEEP", exit="0", duration_s="5", hypothesis="o"))
+    old_run = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.old", "--hyp", "o", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 3"], env=env, stdout=subprocess.DEVNULL)
+    for _ in range(100):
+        if RUN.record(f"{T}/runs/S.old").get("status") == "running":
+            break
+        time.sleep(0.1)
+    time.sleep(0.5)
+    assert rows()["S.old"]["status"] == "running" and rows()["S.old"]["result"] == "" and rows()["S.old"]["decision"] == "" and rows()["S.old"]["exit"] == "", rows()["S.old"]
+    assert old_run.wait() == 0 and rows()["S.old"]["status"] == "ok" and rows()["S.old"]["exit"] == "0"
+    # ledger sync of the tick, second part: finished runs complete their 'running' row, a returned heartbeat un-stalls it, a parked row never overwrites a row that moved on
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.fin", status="running", started="2026-10-25T10:00:00", hypothesis="f"))
+    os.makedirs(f"{T}/runs/S.fin", exist_ok=True)
+    json.dump(dict(id="S.fin", status="ok", exit=0, duration_s=42, ended="2026-10-25T10:01:00", launcher_pid=1), open(f"{T}/runs/S.fin/run.json", "w"))
+    open(f"{T}/runs/S.fin/done", "w").write("x")
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.back", status="stalled", started="2026-10-25T10:00:00", hypothesis="b"))
+    fake_run("S.back", "running", "run")
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.moved", status="stopped", started="2026-10-25T10:00:00", hypothesis="m", notes="stopped by hand"))
+    os.makedirs(f"{T}/runs/S.moved", exist_ok=True)
+    json.dump(dict(id="S.moved", status="running", started="2026-10-25T10:00:00", hypothesis="m"), open(f"{T}/runs/S.moved/ledger_row.json", "w"))
+    sync2 = tick()
+    assert rows()["S.fin"]["status"] == "ok" and rows()["S.fin"]["exit"] == "0" and rows()["S.fin"]["duration_s"] == "42", rows()["S.fin"]
+    assert rows()["S.back"]["status"] == "running", rows()["S.back"]
+    assert rows()["S.moved"]["status"] == "stopped" and not os.path.exists(f"{T}/runs/S.moved/ledger_row.json"), (rows()["S.moved"], sync2.stdout)
+    # a ledger that is locked by someone else does not stop a tick: the sync reports and the pass goes on
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.zombie2", status="running", started="2026-10-25T10:00:00", hypothesis="z2"))
+    fake_run("S.zombie2", "running", "run", age=3000)
+    open(f"{T}/LEDGER.csv.lock", "w").write("held")
+    locked_tick = subprocess.run([sys.executable, f"{HERE}/tick.py"], capture_output=True, text=True, env=dict(env, AR_LOCK_WAIT_S="1"))
+    os.remove(f"{T}/LEDGER.csv.lock")
+    assert locked_tick.returncode == 0 and "Traceback" not in locked_tick.stderr and "ledger sync skipped" in locked_tick.stdout, (locked_tick.stdout, locked_tick.stderr[-300:])
+    # CPU slots: a cpu launcher that still waits for --after does not block the next cpu item
+    fake_run("S.cpuwait", "waiting", "after")
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.cpunew", "--hyp", "tick", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
+    SC.save([dict(item="S.cpuwait", kind="evaluate", state="running", resource="cpu", priority="1", run_ids="S.cpuwait"),
+             dict(item="S.cpunew", kind="evaluate", state="planned", resource="cpu", priority="2", command="bash -c 'echo c'")], f"{T}/schedule.csv")
+    cpu_tick = tick()
+    assert "started  S.cpunew" in cpu_tick.stdout, cpu_tick.stdout
+    # the schedule CLI loads and saves under the lock
+    assert subprocess.run([sys.executable, f"{HERE}/schedule.py", "set", "S.cpuwait", "done"], capture_output=True, text=True, env=env).returncode == 0 and states()["S.cpuwait"]["state"] == "done"
+    # a slow ledger lock does not delay the command by more than the schedule sync's own short wait
+    open(f"{T}/schedule.csv.lock", "w").write("held")
+    t0 = time.time()
+    slow = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.nolag", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=dict(env, AR_LOCK_WAIT_S="60"))
+    os.remove(f"{T}/schedule.csv.lock")
+    assert slow.returncode == 0 and time.time() - t0 < 20, (time.time() - t0, slow.stdout)
     # check_numbers
     open(f"{T}/doc.md", "w").write("S 0.746 and 0.99 here")
     open(f"{T}/src.json", "w").write('{"S": 0.74612}')
