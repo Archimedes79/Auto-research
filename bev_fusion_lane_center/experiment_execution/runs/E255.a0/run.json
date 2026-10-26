@@ -1,0 +1,20 @@
+{
+ "id": "E255.a0",
+ "hypothesis": "E255: replacing the clamped hinge recall by the matching-free Poisson set likelihood does not lift Q, lanes found or R@1 far of the j1 fine-tune at a matched vertex budget on the same exact distance map",
+ "prediction": "Q a - c = -0.030 at 14.3 vertices per 100 m, lanes found -0.03",
+ "rule": "CUT if Q a - c <= -0.010 (one seed is enough); KEEP only if Q a - c >= +0.010, lanes found >= +0.05, R@1_far >= +0.03 and topo_F1 loss <= 0.005 on both seeds; TIE otherwise (take the plain fine-tune); matched-vertex procedure of the card",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/loop19/train_j1.sh e25_D7_j1phd2s0 0 0.0 e25_j1phd2_s0 --w rec=0 phd=0.65",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1204,
+ "created": "2026-10-26T23:56:35",
+ "status": "waiting",
+ "after": "E240.c3",
+ "timeout_min": 0
+}

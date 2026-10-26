@@ -1,0 +1,13 @@
+_py14.sh: temp/loop20/e252b_controls.py
+== champion: Boston 396 frames / 10 scenes, other 477 frames / 12 scenes
+1. observed gap Boston - Singapore: {'Q': 0.0524, 'F1@0.5': 0.0527, 'F1@1.0': 0.0398, 'lanes_found': 0.0743}
+   permutation null of the Q gap (2000 label draws over scenes): mean +0.0010 SD 0.0274; share with |gap| >= |observed| 0.056; share with gap >= observed 0.032
+2. offset signature: gap F1@0.5 +0.0527, F1@1.0 +0.0398 (ratio 0.75; an offset effect would shrink with the tolerance AND make Boston lower)
+3. synthetic shift of the ground truth (all frames):
+   shift 0.0 m: Q 0.7350 (Boston 0.7625, Singapore 0.7101), F1@1.0 0.8696
+   shift 0.3 m: Q 0.7125 (Boston 0.7371, Singapore 0.6904), F1@1.0 0.8488
+   shift 0.5 m: Q 0.6652 (Boston 0.6794, Singapore 0.6529), F1@1.0 0.8229
+   shift 1.0 m: Q 0.5203 (Boston 0.5229, Singapore 0.5191), F1@1.0 0.6025
+4. per ground-truth polyline (predicted points matched within 1.5 m, at least 20 points):
+   Boston     polylines   6723: median |polyline median offset| 0.157 m, share > 0.3 m 0.283, share > 0.5 m 0.149; predicted points with no GT within 1.5 m: 0.026
+   Singapore  polylines   6835: median |polyline median offset| 0.221 m, share > 0.3 m 0.380, share > 0.5 m 0.187; predicted points with no GT within 1.5 m: 0.056

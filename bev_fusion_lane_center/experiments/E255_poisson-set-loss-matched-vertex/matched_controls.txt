@@ -1,0 +1,19 @@
+_py14.sh: temp/loop20/e255_matched.py
+== e24_j1ex_s0: layer 1 (registry settings reproduce the stored card): Q 0.7311 vs 0.7311, vert100 15.10 vs 15.10: PASS
+  tau 0.12: vtx_r 1.5 -> vert100 15.43 Q 0.7300  vtx_r 2.0 -> vert100 14.84 Q 0.7286  vtx_r 2.5 -> vert100 14.34 Q 0.7266  vtx_r 3.0 -> vert100 13.86 Q 0.7197  vtx_r 3.5 -> vert100 13.59 Q 0.6784  vtx_r 4.0 -> vert100 13.18 Q 0.6384
+  tau 0.20: vtx_r 1.5 -> vert100 15.29 Q 0.7286  vtx_r 2.0 -> vert100 14.71 Q 0.7283  vtx_r 2.5 -> vert100 14.23 Q 0.7257  vtx_r 3.0 -> vert100 13.79 Q 0.7183  vtx_r 3.5 -> vert100 13.53 Q 0.6775  vtx_r 4.0 -> vert100 13.13 Q 0.6381
+  tau 0.30: vtx_r 1.5 -> vert100 15.19 Q 0.7290  vtx_r 2.0 -> vert100 14.63 Q 0.7282  vtx_r 2.5 -> vert100 14.17 Q 0.7251  vtx_r 3.0 -> vert100 13.75 Q 0.7174  vtx_r 3.5 -> vert100 13.49 Q 0.6772  vtx_r 4.0 -> vert100 13.09 Q 0.6381
+  tau 0.50: vtx_r 1.5 -> vert100 15.16 Q 0.7312  vtx_r 2.0 -> vert100 14.61 Q 0.7298  vtx_r 2.5 -> vert100 14.12 Q 0.7267  vtx_r 3.0 -> vert100 13.71 Q 0.7182  vtx_r 3.5 -> vert100 13.46 Q 0.6773  vtx_r 4.0 -> vert100 13.08 Q 0.6383
+  tau 0.70: vtx_r 1.5 -> vert100 15.05 Q 0.7318  vtx_r 2.0 -> vert100 14.52 Q 0.7289  vtx_r 2.5 -> vert100 14.05 Q 0.7258  vtx_r 3.0 -> vert100 13.66 Q 0.7163  vtx_r 3.5 -> vert100 13.42 Q 0.6768  vtx_r 4.0 -> vert100 13.07 Q 0.6378
+  CHOSEN (val250, interpolated at vert100 14.3): tau 0.5 vtx_r 2.320, Q 0.7278
+  VAL 873          Q 0.7241 vert100 14.29 lanes_found 0.675 R@1_far 0.685 topo_F1 0.737 F1@1.0 0.861
+  held-out 623     Q 0.7226 vert100 14.30 lanes_found 0.675 R@1_far 0.685 topo_F1 0.737 F1@1.0 0.860
+  val250 (tuning)  Q 0.7279 vert100 14.26 lanes_found 0.673 R@1_far 0.686 topo_F1 0.738 F1@1.0 0.863
+  card val_m143.json: Q 0.7241 vert100 14.29 -> inside 14.3 +- 0.2
+== e24_j1ex_s1: layer 1 (registry settings reproduce the stored card): Q 0.7319 vs 0.7319, vert100 15.08 vs 15.08: PASS
+  tau 0.12: vtx_r 1.5 -> vert100 15.36 Q 0.7282  vtx_r 2.0 -> vert100 14.77 Q 0.7285  vtx_r 2.5 -> vert100 14.29 Q 0.7249  vtx_r 3.0 -> vert100 13.74 Q 0.7163  vtx_r 3.5 -> vert100 13.39 Q 0.6796  vtx_r 4.0 -> vert100 13.02 Q 0.6404
+  tau 0.20: vtx_r 1.5 -> vert100 15.28 Q 0.7306  vtx_r 2.0 -> vert100 14.70 Q 0.7299  vtx_r 2.5 -> vert100 14.22 Q 0.7258  vtx_r 3.0 -> vert100 13.70 Q 0.7170  vtx_r 3.5 -> vert100 13.35 Q 0.6788  vtx_r 4.0 -> vert100 12.99 Q 0.6400
+  tau 0.30: vtx_r 1.5 -> vert100 15.20 Q 0.7297  vtx_r 2.0 -> vert100 14.62 Q 0.7289  vtx_r 2.5 -> vert100 14.15 Q 0.7253  vtx_r 3.0 -> vert100 13.66 Q 0.7161  vtx_r 3.5 -> vert100 13.32 Q 0.6777  vtx_r 4.0 -> vert100 12.96 Q 0.6395
+  tau 0.50: vtx_r 1.5 -> vert100 15.15 Q 0.7303  vtx_r 2.0 -> vert100 14.54 Q 0.7291  vtx_r 2.5 -> vert100 14.07 Q 0.7240  vtx_r 3.0 -> vert100 13.57 Q 0.7142  vtx_r 3.5 -> vert100 13.28 Q 0.6765  vtx_r 4.0 -> vert100 12.91 Q 0.6374
+  tau 0.70: vtx_r 1.5 -> vert100 15.03 Q 0.7295  vtx_r 2.0 -> vert100 14.44 Q 0.7277  vtx_r 2.5 -> vert100 13.99 Q 0.7235  vtx_r 3.0 -> vert100 13.52 Q 0.7131  vtx_r 3.5 -> vert100 13.24 Q 0.6753  vtx_r 4.0 -> vert100 12.90 Q 0.6361
+  CHOSEN (val250, interpolated at vert100 14.3): tau 0.2 vtx_r 2.414, Q 0.7265

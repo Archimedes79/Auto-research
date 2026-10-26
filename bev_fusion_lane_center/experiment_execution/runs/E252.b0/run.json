@@ -1,0 +1,33 @@
+{
+ "id": "E252.b0",
+ "hypothesis": "E252 after the referee: the Boston - Singapore gap of Q is outside a permutation null of city labels, and the synthetic shift of the ground truth gives the metres scale; per-polyline offsets are small",
+ "prediction": "permutation p of the observed gap > 0.05 (22 scenes only); a 0.5 m shift costs Q about 0.05; per-polyline median offset above 0.3 m in under 10 % of the polylines",
+ "rule": "report only; the E252 verdict (cap not supported) stands unless the Boston gap is NEGATIVE, outside the null and the per-polyline share above 0.3 m is at least 1.5 x Singapore",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c bash tools/env/_py14.sh e252b_controls.py champion > experiments/E252_gt-map-offset-by-city/gt_offset_controls.txt 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1520,
+ "created": "2026-10-27T00:05:11",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-10-27T00:05:22",
+ "code_hash": "58bce4604977",
+ "commit": "d02cc56739",
+ "tag": "lcr/E252.b0",
+ "git_note": "",
+ "pid": 1544,
+ "exit": 0,
+ "duration_s": 91,
+ "attempts": 1,
+ "ended": "2026-10-27T00:06:53",
+ "last_lines": [
+  "=== attempt 2026-10-27T00:05:22: bash -c bash tools/env/_py14.sh e252b_controls.py champion > experiments/E252_gt-map-offset-by-city/gt_offset_controls.txt 2>&1"
+ ]
+}

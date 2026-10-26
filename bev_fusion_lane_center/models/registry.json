@@ -82,6 +82,12 @@
   "e24_j1phd_s0_at50": {"kind": "builder", "design": "D7", "run": "e24_D7_j1phds0_at50", "set": {"M": 192, "K0": 96}, "tau": 0.5,
                "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
                "what": "E244 arm a seed 0 after 50 % of the 4 u fine-tune (run cut at 3200 / 4800 iterations)"},
+  "e25_j1phd2_s0": {"kind": "builder", "design": "D7", "run": "e25_D7_j1phd2s0", "set": {"M": 192, "K0": 96}, "tau": 0.2,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "E255: j1 4 u fine-tune with the Poisson set likelihood (phd 0.65, rec 0) on the exact distance map, seed 0; tau / vtx_r are placeholders, see the card"},
+  "e25_j1phd2_s1": {"kind": "builder", "design": "D7", "run": "e25_D7_j1phd2s1", "set": {"M": 192, "K0": 96}, "tau": 0.2,
+               "asm": {"cov_r": 0.5, "vtx_r": 1.5, "junc_thr": 0.5, "reloc_thr": 0.4, "reloc_shift": 12, "reloc_tol": 1.6, "fork_prune": 0.4, "fast": 2},
+               "what": "E255: j1 4 u fine-tune with the Poisson set likelihood (phd 0.65, rec 0) on the exact distance map, seed 1; tau / vtx_r are placeholders, see the card"},
   "control": {"kind": "graphs", "files": {"val": "runs/e94_a/graphs_val_clean.pkl", "test": "runs/e94_a/graphs_test_clean.pkl"},
                "what": "control arm: stored graphs of the learned trace network E94 (loop 10), the reference of loops 16-18"}
 }

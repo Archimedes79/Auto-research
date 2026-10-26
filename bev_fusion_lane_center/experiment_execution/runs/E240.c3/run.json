@@ -12,9 +12,14 @@
  "python": "3.10.12",
  "conda_env": "",
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
- "launcher_pid": 37832,
- "created": "2026-10-25T23:26:22",
- "status": "waiting",
+ "launcher_pid": 1042,
+ "created": "2026-10-26T23:52:09",
+ "status": "running",
  "after": "E240.a3",
- "timeout_min": 0
+ "timeout_min": 0,
+ "started": "2026-10-27T00:14:04",
+ "code_hash": "0cdfad4afe26",
+ "commit": "c263683f62",
+ "tag": "lcr/E240.c3",
+ "git_note": ""
 }
