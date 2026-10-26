@@ -21,7 +21,7 @@ import torch
 
 sys.path.insert(0, "training")
 from lift_pd import Grid  # noqa: E402
-from temporal import (FlowRefine, GapFill, TemporalPropagation, gaussian_splat, landing, propagate, sample_at,  # noqa: E402
+from temporal import (FlowPyramid, FlowRefine, GapFill, TemporalPropagation, gaussian_splat, landing, propagate, sample_at,  # noqa: E402
                       steps_tensor, wrap)
 
 QUICK = "--quick" in sys.argv
@@ -169,6 +169,17 @@ def smoke():
     fr(x, x.roll(1, 2), [(0.5, 4.0, 0.1)], v0, iters=2)[-1].pow(2).sum().backward()
     check("gradient reaches every FlowRefine parameter", all(p.grad is not None and p.grad.abs().sum() > 0 for p in fr.parameters()))
 
+    fpy = FlowPyramid(2, G, factors=(4, 2, 1), iters=(2, 1, 1)).double()
+    vs = fpy(x, x.roll(2, 2), [(0.5, 4.0, 0.1)], v0)
+    check("FlowPyramid: 4 refinements (2 at 2 m, 1 at 1 m, 1 at 0.5 m), starts as the identity",
+          len(vs) == 4 and all(vk.shape == v0.shape for vk in vs) and torch.allclose(vs[-1], v0, atol=1e-12)
+          and fpy.levels[0].grid.res == 2.0, f"coarse window +-{3 * fpy.levels[0].grid.res:.0f} m")
+    for lv in fpy.levels:
+        for p_ in lv.net[-1].parameters():
+            torch.nn.init.normal_(p_, std=0.1)
+    sum(vk.pow(2).sum() for vk in fpy(x, x.roll(2, 2), [(0.5, 4.0, 0.1)], v0)).backward()   # a loss on EVERY output
+    check("gradient reaches every FlowPyramid parameter (loss on every iteration, as in training)",
+          all(p_.grad is not None and p_.grad.abs().sum() > 0 for p_ in fpy.parameters()))
     fp = torch.randn(1, 2, 5, dtype=D64)
     pp = torch.rand(1, 5, 2, dtype=D64) * 8 + torch.tensor([4.0, -4.0], dtype=D64)
     wp = torch.rand(1, 5, dtype=D64)

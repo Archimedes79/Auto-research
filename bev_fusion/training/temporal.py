@@ -238,12 +238,13 @@ def sample_at(feat, pos, grid):
                          align_corners=False)[:, :, 0]
 
 
-def propagate(feat, steps, v, grid, mass_gate=True):
-    """move a map with one velocity per cell: feat (B, C, X, Y), v (B, 2, X, Y) -> splat (B, C, X, Y), mass."""
+def propagate(feat, steps, v, grid, mass_gate=True, importance=None):
+    """move a map with one velocity per cell: feat (B, C, X, Y), v (B, 2, X, Y), importance (B, X, Y) or None
+    (softmax splatting) -> splat (B, C, X, Y), mass."""
     B, C, X, Y = feat.shape
     S = steps_tensor(steps, B, feat.device, feat.dtype)
     return gaussian_splat(feat.flatten(2), landing(S, v, grid), feat.new_ones(B, X * Y), grid, 0.0, 2,
-                          mass_gate=mass_gate)
+                          mass_gate=mass_gate, importance=None if importance is None else importance.flatten(1))
 
 
 class FlowRefine(nn.Module):
@@ -299,6 +300,38 @@ class FlowRefine(nn.Module):
             d = self.step_max * torch.tanh(d / self.step_max)                      # inside the lookup window
             v = v + torch.stack([c * d[:, 0] - s * d[:, 1], s * d[:, 0] + c * d[:, 1]], 1) / dt.unsqueeze(1)
             out.append(v)
+        return out
+
+
+class FlowPyramid(nn.Module):
+    """Coarse to fine (PWC-Net style): FlowRefine on pooled maps first - at 4x the cell size a +-3 cell window sees
+    +-6 m instead of +-1.5 m, so large motions are found before the fine levels refine them. Per level: features
+    average-pooled by the factor, a grid with factor x the cell size, its own update operator, `iters` iterations;
+    the velocity (m/s, not cells) is pooled into the level, and the level's CORRECTION is upsampled (bilinear) and
+    added to the fine velocity (the fine detail of v0 is kept; identity at initialisation). forward returns the
+    fine-grid velocity after each iteration (sum(iters) entries). v is detached between iterations, also between
+    levels (RAFT): each level learns only from the losses on its own outputs - put a loss on every output."""
+
+    def __init__(self, cin, grid, factors=(4, 2, 1), iters=(2, 1, 1), radius=3, **kw):
+        super().__init__()
+        assert len(factors) == len(iters)
+        assert all(grid.nx % f == 0 and grid.ny % f == 0 for f in factors), "grid size must divide by every factor"
+        self.grid, self.factors, self.iters = grid, tuple(factors), tuple(iters)
+        self.grids = [Grid(x_min=grid.x_min, x_max=grid.x_max, y_min=grid.y_min, y_max=grid.y_max, res=grid.res * f)
+                      for f in factors]
+        self.levels = nn.ModuleList(FlowRefine(cin, g, radius=radius, **kw) for g in self.grids)
+
+    def forward(self, src, cur, steps, v0):
+        out, v = [], v0
+        for f, n, rf in zip(self.factors, self.iters, self.levels):
+            if f == 1:
+                ks = rf(src, cur, steps, v, iters=n)
+            else:                       # the coarse level adds its CORRECTION, upsampled: the fine detail of v stays
+                vl, base = F.avg_pool2d(v, f), v
+                ks = [base + F.interpolate(vk - vl, scale_factor=f, mode="bilinear", align_corners=False)
+                      for vk in rf(F.avg_pool2d(src, f), F.avg_pool2d(cur, f), steps, vl, iters=n)]
+            out += ks
+            v = ks[-1]
         return out
 
 
