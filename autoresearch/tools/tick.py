@@ -1,27 +1,21 @@
-"""The tick of a loop: reconcile the run records, start the ready schedule items that fit the machine, report what runs. Standard library only.
-Run it in the WSL, the same process namespace as the launchers (wsl python3 ../autoresearch/tools/tick.py ...): the GPU-slot owner check is by pid.
+"""The tick: read the schedule (item states derived from the run records), start the ready items that have a command and fit the machine, print what runs.
+Standard library only. Run it in the WSL, the same process namespace as the launchers (wsl python3 ../autoresearch/tools/tick.py ...).
 
-    python autoresearch/tools/tick.py [--dry-run] [--max-start N] [--handover]
+    python autoresearch/tools/tick.py [--dry-run] [--max-start N]
 
-One pass, idempotent and restartable (call it at every wake-up, from a timer, or by hand):
-  1. reconcile: every schedule item with run ids takes its state from the run records (done / failed / stalled / running; schedule.py reconcile);
-     a running item whose run has no record and no heartbeat (the launcher died before it wrote anything) becomes blocked. The ledger is synced the
-     same way: a 'running' row whose run is stalled becomes 'stalled', a row parked by run.py (ledger_row.json) is merged back. (run.py itself
-     syncs the schedule when a run starts and ends, so hand-started launchers keep schedule.csv honest too)
-  2. start: ready items (state planned or ready, every dependency done) in priority order. Resource gpu needs a free GPU slot: project.json
-     gpu_slots minus the busier of (slot directories held, gpu items whose launcher is past its --after wait: queueing or running); resource cpu runs at
-     most cpu_slots (project.json, default 1) items at a time; resource agent (detail plan, code, summary) is never started by the tick - it
-     needs a chat - and is listed as "needs the lead". An empty resource follows the kind (train -> gpu, evaluate -> cpu, else agent).
-     GPU jobs started by hand without --gpu hold no slot: the tick cannot see them
+One pass, idempotent, safe to call at every wake-up. It writes nothing except a `blocked` state (with the reason) for an item whose launcher refused to start.
+  1. derive: the state of an item with run ids comes from the run records (schedule.derived); nothing is synced or written back
+  2. start: ready items (planned / ready, every dependency done) in priority order. A gpu item needs a free slot (project.json gpu_slots minus the slot
+     directories that are held: the launchers' own semaphore, run.py GpuSlot); a launcher that still waits for its --after holds nothing. cpu items
+     run at most cpu_slots (project.json, default 1) at a time. A real pass holds <run_records>/.tick, so a second tick exits at once and
+     never starts an item twice; an item with several run ids starts the first one without a record. An agent item (detail plan, code, summary) is never started: it needs a chat. A TEST run (experiment
+     evaluate.split = holdout split) is never started either. An item without a command is listed, not started.
   3. the command of an item: its `command` column, else the arm of the experiment file (run id E<id>.<arm> -> experiments/E<id>_*/experiment.json
-     arms[<arm>].command). The card: the planned ledger row (ledger.py add) first, else the experiment file (title, prediction value vs arm,
-     rule clauses); without a card run.py refuses and the item becomes blocked. TEST runs (experiment evaluate.split = test) are never started
-     by the tick: they need the lead and a logged id.
-     The item starts as `run.py --id <run id> [--gpu --wait-gpu 720] [--timeout <budget x timeout_factor>] -- <command>`, detached, its
-     launcher output in <run_records>/<run id>/launcher.log. The tick waits (AR_ACCEPT_S, default 60 s) until the launcher has written its
-     record (accepted) or exited (refused -> the row is blocked with the reason); the row is saved before and after every start
-  4. status: running (heartbeat age), started now, waiting for a slot, needs the lead, blocked / failed, done - printed, and with --handover
-     written between the markers <!-- tick --> and <!-- /tick --> of HANDOVER.md, each on its own line (added at the end when missing)
+     arms[<arm>].command). The card: the planned ledger row (ledger.py add) first, else the experiment file (title, prediction, rule clauses); without a
+     card run.py refuses and the item becomes blocked. The item starts as `run.py --id <run id> [--gpu] [--timeout <budget x timeout_factor>] -- <command>`,
+     detached, its launcher output in <run_records>/<run id>/launcher.log; the tick waits (AR_ACCEPT_S, default 60 s) until the launcher has written its
+     record (accepted) or exited (refused -> blocked with the reason)
+  4. status: running (heartbeat age), started now, waiting, needs the lead, needs a command, blocked / failed, done
 Budgets: "40m", "2h", "1.5 h", "90" (minutes); the timeout is budget x timeout_factor (project.json, default 2). Exit code 0; 1 when a start failed.
 """
 import argparse
@@ -60,14 +54,12 @@ def resource_of(item):
     return item.get("resource") or KIND_RESOURCE.get(item.get("kind", ""), "agent")
 
 
-def free_gpu_slots(records, rows, n):
+def free_gpu_slots(records, n):
+    """n minus the slot directories that are held by a live launcher (run.py GpuSlot is the semaphore; a stale directory does not count)"""
     base = os.path.join(records, ".gpu_slots")
     probe = RUN.GpuSlot(records, n, "tick", "")
     held = sum(1 for i in range(n) if os.path.isdir(os.path.join(base, str(i))) and not probe.stale(os.path.join(base, str(i))))
-    # launchers past their --after wait that queue for a slot or run: a launcher that still waits for its dependencies occupies nothing
-    queued = sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "gpu"
-                 and any(RUN.phase_of(os.path.join(records, i)) in ("gpu", "run") for i in (r.get("run_ids") or "").split(";") if i))
-    return max(0, n - max(held, queued))
+    return max(0, n - held)
 
 
 def experiment_arm(root, run_id):
@@ -105,8 +97,9 @@ def launch_args(root, cfg, ledger, item, run_id):
     if exp is not None:
         if not cmd:
             cmd = (arm.get("command") or "").strip()
-        if str(exp.get("evaluate", {}).get("split", "")).strip().lower() == str(cfg.get("holdout_split", "test")).lower():
-            return None, f"holdout run ({cfg.get('holdout_split', 'test')}): needs the lead and a logged id (never started by the tick)"
+        ev = exp.get("evaluate")
+        if str((ev.get("split", "") if isinstance(ev, dict) else "")).strip().lower() == str(cfg.get("holdout_split", "test")).lower():
+            return None, f"holdout run ({cfg.get('holdout_split', 'test')}): needs the lead and a logged id"
         row = RUN.ledger_row(ledger, run_id)  # the planned row wins; the experiment file fills what it lacks
         pred = exp.get("prediction") if isinstance(exp.get("prediction"), dict) else {}
         pred_txt = f"{pred['value']} vs {pred['vs']} on {exp.get('metric', '')}" if "value" in pred and "vs" in pred else ""
@@ -116,7 +109,7 @@ def launch_args(root, cfg, ledger, item, run_id):
     if not cmd:
         return None, "no command (column `command` or arms[<arm>].command of the experiment file)"
     if resource_of(item) == "gpu":
-        args += ["--gpu", "--wait-gpu", "720"]
+        args.append("--gpu")
     minutes = budget_minutes(item.get("budget"))
     if minutes is None:
         print(f"warning: budget '{item.get('budget')}' of {item['item']} not readable: no timeout")
@@ -125,14 +118,7 @@ def launch_args(root, cfg, ledger, item, run_id):
     return args, shlex.split(cmd, posix=POSIX)
 
 
-def touch(path):
-    try:
-        os.utime(path, None)
-    except OSError:
-        pass
-
-
-def start(root, records, run_id, args, cmd, lock):
+def start(root, records, run_id, args, cmd):
     """start run.py detached and wait until it has accepted the run (record written) or refused; returns '' or the reason"""
     launcher = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.py"), *args, "--", *cmd]
     d = os.path.join(records, run_id)
@@ -155,172 +141,111 @@ def start(root, records, run_id, args, cmd, lock):
             return f"launcher exit {p.returncode}: {tail[0][:160] if tail else ''}"
         if time.time() - t0 > ACCEPT_S:
             return f"no run record after {ACCEPT_S:.0f} s (launcher pid {p.pid} still alive)"
-        touch(lock)
         time.sleep(0.2)
 
 
-def status_lines(rows, records, started, waiting, lead, slots_free):
+def mark_blocked(item, why):
+    """the one thing the tick writes: a blocked state with the reason, for an item whose launcher refused to start (it has no run record to derive from)"""
+    with P.locked(P.path("schedule")):
+        rows = SC.load()
+        for r in rows:
+            if r["item"] == item:
+                r["state"], r["note"] = "blocked", why
+        SC.save(rows, lock=False)
+
+
+def status_lines(rows, records, started, waiting, lead, nocmd, blocked, free):
     out = []
+    names = {r["item"] for r, _ in started}
     for r in rows:
-        if r["state"] != "running" or any(r is s for s, _ in started):
-            continue
-        ids = [x for x in (r.get("run_ids") or "").split(";") if x]
-        ages = [(f"{i} heartbeat {RUN.heartbeat_age(os.path.join(records, i)):.0f} s" if RUN.heartbeat_age(os.path.join(records, i)) < 1e9 else f"{i} no heartbeat") for i in ids]
-        out.append(f"running  {r['item']} ({resource_of(r)}, {r.get('budget', '')}): " + ", ".join(ages))
-    for r, rid in started:
-        out.append(f"started  {r['item']} -> {rid}")
-    for r, why in waiting:
-        out.append(f"waiting  {r['item']}: {why}")
-    for r in lead:
-        out.append(f"lead     {r['item']} ({r.get('kind', '')}): needs the lead chat")
-    for r in rows:
-        if r["state"] in ("blocked", "failed"):
-            out.append(f"{r['state']:8} {r['item']}: {r.get('note', '')[:120]}")
+        if r["state"] == "running" and r["item"] not in names:
+            ids = [x for x in (r.get("run_ids") or r["item"]).split(";") if x]
+            ages =[(f"{i} heartbeat {RUN.heartbeat_age(os.path.join(records, i)):.0f} s" if RUN.heartbeat_age(os.path.join(records, i)) < 1e9 else f"{i} no heartbeat") for i in ids]
+            out.append(f"running  {r['item']} ({resource_of(r)}, {r.get('budget', '')}): " + ", ".join(ages))
+    out += [f"started  {r['item']} -> {rid}" for r, rid in started]
+    out += [f"waiting  {r['item']}: {why}" for r, why in waiting]
+    out += [f"lead     {r['item']} ({r.get('kind', '')}): needs the lead chat" for r in lead]
+    out += [f"command  {r['item']}: {why}" for r, why in nocmd]
+    out += [f"blocked  {r['item']}: {why}" for r, why in blocked]
+    out += [f"{r['state']:8} {r['item']}: {r.get('note', '')[:120]}" for r in rows if r["state"] in ("blocked", "failed") and r["item"] not in {b['item'] for b, _ in blocked}]
     done = [r["item"] for r in rows if r["state"] == "done"]
     out.append(f"done     {len(done)}: " + ", ".join(done[-8:]) + ("" if len(done) <= 8 else " ..."))
-    out.append(f"slots    gpu free {slots_free}")
+    out.append(f"slots    gpu free {free}")
     return out
 
 
-def ledger_sync(records, ledger, dry=False):
-    """keep the ledger honest about runs whose launcher is gone or restarted; every change is checked again under the ledger lock (guard) and nothing here
-    may stop a tick: errors become report lines. (1) a row parked by run.py (ledger_row.json) is merged back unless the ledger row has moved on;
-    (2) a 'running' row whose run finished (record ok / failed / timeout / done flag) is completed from the record; (3) a 'running' row whose run is stalled
-    becomes 'stalled'; (4) a 'stalled' row whose heartbeat is back becomes 'running' again. Returns the report lines."""
-    out = []
+def next_run_id(records, item):
+    """the run id of an item that still has to start: the first of its run ids without a run record (an item `A;B` whose A is done starts B)"""
+    ids = [x for x in (item.get("run_ids") or item["item"]).split(";") if x]
+    return next((i for i in ids if not os.path.exists(os.path.join(records, i, "run.json"))), ids[0])
+
+
+def tick(dry=False, max_start=10):
+    """one pass; two ticks at once would start the same item twice, so a real pass holds <run_records>/.tick (a second tick exits at once)"""
+    records = P.path("run_records")
+    if dry:
+        return tick_pass(True, max_start)
+    os.makedirs(records, exist_ok=True)
     try:
-        for f in sorted(glob.glob(os.path.join(records, "*", "ledger_row.json"))):
-            try:
-                row = json.load(open(f, encoding="utf-8"))
-                merged = dry or RUN.ledger_write(ledger, row, guard=lambda cur: cur is None or cur.get("status") in ("", "planned", "running", "stalled"))
-                if not dry:
-                    os.remove(f)  # merged, or superseded by a row that has moved on
-                out.append(f"{'would merge' if dry else 'merged' if merged else 'dropped (the ledger row has moved on)'}: the parked ledger row of {row.get('id')}")
-            except Exception as e:
-                out.append(f"parked ledger row {os.path.relpath(f, records)}: {type(e).__name__}: {str(e)[:80]}")
-        for r in RUN.ledger_rows(ledger):
-            rid, status = r.get("id", ""), r.get("status")
-            if not rid or status not in ("running", "stalled"):
-                continue
-            d = os.path.join(records, rid)
-            st, rec = RUN.state_of(d), RUN.record(d)
-            if status == "running" and (st == "done" or rec.get("status") in ("ok", "failed", "timeout")):
-                new = dict(id=rid, status="ok" if st == "done" else rec["status"], exit=rec.get("exit"), duration_s=rec.get("duration_s"), ended=rec.get("ended"))
-                guard, what = (lambda cur: bool(cur) and cur.get("status") == "running"), f"{'would complete' if dry else 'completed'} the ledger row of {rid} from its record ({new['status']})"
-            elif status == "running" and st == "stalled":
-                new, guard, what = dict(id=rid, status="stalled"), (lambda cur: bool(cur) and cur.get("status") == "running" and RUN.state_of(d) == "stalled"), f"{'would mark' if dry else 'marked'} the ledger row of {rid} stalled"
-            elif status == "stalled" and st == "running":
-                new, guard, what = dict(id=rid, status="running"), (lambda cur: bool(cur) and cur.get("status") == "stalled" and RUN.state_of(d) == "running"), f"{'would set' if dry else 'set'} the ledger row of {rid} running again (heartbeat is back)"
-            else:
-                continue
-            if dry or RUN.ledger_write(ledger, new, guard=guard):
-                out.append(what)
-    except Exception as e:
-        out.append(f"ledger sync skipped: {type(e).__name__}: {str(e)[:100]}")
-    return out
+        with P.locked(os.path.join(records, ".tick"), wait_s=0, stale_s=ACCEPT_S * max_start + 120):
+            return tick_pass(False, max_start)
+    except TimeoutError:
+        print("another tick is running: nothing started")
+        return 0
 
 
-BLOCK = re.compile(r"^<!-- tick -->\n.*?^<!-- /tick -->$", re.M | re.S)
-
-
-def write_handover(root, lines):
-    p = os.path.join(root, "HANDOVER.md")
-    with P.locked(p):
-        text = open(p, encoding="utf-8").read() if os.path.exists(p) else "# HANDOVER\n"
-        block = "<!-- tick -->\n" + f"tick {RUN.now()}:\n" + "\n".join("- " + ln for ln in lines) + "\n<!-- /tick -->"
-        if BLOCK.search(text):
-            text = BLOCK.sub(lambda m: block, text, count=1)
-        else:
-            text = text.rstrip("\n") + "\n\n## What runs (written by tick.py)\n" + block + "\n"
-        P.atomic_write(p, text)
-
-
-def tick(dry=False, max_start=10, handover=False):
+def tick_pass(dry, max_start):
     root, cfg = P.root(), P.cfg()
-    records, ledger, sched = P.path("run_records"), P.path("ledger"), P.path("schedule")
-    would = "would " if dry else ""
-    with P.locked(sched):
-        lock = sched + ".lock"
-        rows = SC.load()
-        changed = SC.reconcile(rows, records)
-        for r in rows:  # a launcher that died before writing its record leaves nothing to reconcile from
-            ids = [x for x in (r.get("run_ids") or "").split(";") if x]
-            if r["state"] == "running" and ids and all(RUN.state_of(os.path.join(records, i)) == "" and RUN.heartbeat_age(os.path.join(records, i)) == float("inf") for i in ids):
-                changed.append((r["item"], "running", "blocked"))
-                r["state"], r["note"] = "blocked", "no run record and no heartbeat (the launcher left nothing)"
-        started, waiting, lead, failed = [], [], [], 0
-        gpu_free = free_gpu_slots(records, rows, int(cfg.get("gpu_slots", 2)))
-        cpu_free = int(cfg.get("cpu_slots", 1)) - sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "cpu"
-                                                       and any(RUN.phase_of(os.path.join(records, i)) in ("gpu", "run") for i in (r.get("run_ids") or "").split(";") if i))
-        for r in SC.ready(rows):
-            if len(started) >= max_start:
-                waiting.append((r, "max-start reached"))
+    records, ledger = P.path("run_records"), P.path("ledger")
+    rows = SC.derived(SC.load())
+    free = free_gpu_slots(records, int(cfg.get("gpu_slots", 2)))
+    cpu_free = int(cfg.get("cpu_slots", 1)) - sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "cpu")  # the box is shared: evaluations one at a time
+    started, waiting, lead, nocmd, blocked = [], [], [], [], []
+    for r in SC.ready(rows):
+        res = resource_of(r)
+        if res == "agent":
+            lead.append(r)
+            continue
+        if len(started) >= max_start:
+            waiting.append((r, "max-start reached"))
+            continue
+        if res == "gpu" and free <= 0:
+            waiting.append((r, "no free GPU slot"))
+            continue
+        if res == "cpu" and cpu_free <= 0:
+            waiting.append((r, "cpu slot busy"))
+            continue
+        run_id = next_run_id(records, r)
+        try:
+            args, cmd = launch_args(root, cfg, ledger, r, run_id)
+            if args is None:
+                (lead if cmd.startswith("holdout") else nocmd).append(r if cmd.startswith("holdout") else (r, cmd))
                 continue
-            res = resource_of(r)
-            if res == "agent":
-                lead.append(r)
-                continue
-            if res == "gpu" and gpu_free <= 0:
-                waiting.append((r, "no free GPU slot"))
-                continue
-            if res == "cpu" and cpu_free <= 0:
-                waiting.append((r, "cpu slot busy"))
-                continue
-            run_id = (r.get("run_ids") or r["item"]).split(";")[0]
-            try:
-                args, cmd = launch_args(root, cfg, ledger, r, run_id)
-                if args is None:
-                    if not dry:
-                        r["state"], r["note"] = "blocked", cmd
-                        SC.save(rows, lock=False)
-                    print(f"{would}block {r['item']}: {cmd}")
-                    failed += 1
-                    continue
-                if dry:
-                    started.append((r, run_id))
-                    continue
-                r["state"], r["run_ids"] = "running", r.get("run_ids") or run_id  # saved before the start: a crash cannot start it twice
-                SC.save(rows, lock=False)
-                why = start(root, records, run_id, args, cmd, lock)
-            except Exception as e:
-                why = f"tick error: {type(e).__name__}: {str(e)[:120]}"
-            if why and "still running" in why:
-                why = ""  # a launcher of this id is alive: the row stays running
-            if why:
-                r["state"], r["note"] = "blocked", why
-                SC.save(rows, lock=False)
-                failed += 1
-                continue
-            SC.save(rows, lock=False)
-            started.append((r, run_id))
-            if res == "gpu":
-                gpu_free -= 1
-            else:
-                cpu_free -= 1
-            touch(lock)
-        if not dry:
-            SC.save(rows, lock=False)
-    for line in ledger_sync(records, ledger, dry):  # after the schedule pass: a ledger problem never stops a start
-        print("ledger: " + line)
-    lines = status_lines(rows, records, started, waiting, lead, gpu_free)
-    for item, old, new in changed:
-        print(f"{would}reconcile {item}: {old} -> {new}")
-    if dry and started:
-        print("DRY RUN - would start: " + ", ".join(rid for _, rid in started))
-    for ln in lines:
-        print(("would " if dry and ln.startswith("started") else "") + ln)
-    if handover and not dry:
-        write_handover(root, lines)
-    return 1 if failed else 0
+            why = "" if dry else start(root, records, run_id, args, cmd)
+        except Exception as e:
+            why = f"tick error: {type(e).__name__}: {str(e)[:120]}"
+        if why:
+            if not dry:  # a dry run writes nothing, also not on its error path
+                try:
+                    mark_blocked(r["item"], why)
+                except Exception as e:  # a busy schedule must not end the pass after earlier items have started
+                    why += f" (schedule not written: {type(e).__name__})"
+            blocked.append((r, why))
+            continue
+        started.append((r, run_id))
+        free -= res == "gpu"
+        cpu_free -= res == "cpu"
+    for line in status_lines(rows, records, started, waiting, lead, nocmd, blocked, max(0, free)):
+        print("would start " + line[len("started "):] if dry and line.startswith("started ") else line)
+    return 1 if blocked else 0
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dry-run", action="store_true", help="reconcile in memory and report; start nothing, write nothing")
+    ap.add_argument("--dry-run", action="store_true", help="derive and report; start nothing, write nothing")
     ap.add_argument("--max-start", type=int, default=10, help="start at most this many items per tick")
-    ap.add_argument("--handover", action="store_true", help="write the status block into HANDOVER.md between <!-- tick --> markers")
     a = ap.parse_args()
-    return tick(a.dry_run, a.max_start, a.handover)
+    return tick(a.dry_run, a.max_start)
 
 
 if __name__ == "__main__":

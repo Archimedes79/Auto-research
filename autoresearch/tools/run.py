@@ -1,17 +1,16 @@
 """Experiment launcher: one command, one run record, one code tag.  Standard library only (works in any python of the WSL or Windows).
 
     python autoresearch/tools/run.py --id E240.a --hyp "..." --pred "Q >= 0.745" --rule "keep if > control + 0.010 on 2 seeds" --basis E219 --seed 0 \
-           [--after E239.a,E239.c] [--gpu | --gpu-max-mb 9000] [--wait-gpu 30] [--timeout 180] [--retries 2] [--split test] [--result <metrics.json>] -- <command ...>
+           [--after E239.a,E239.c] [--gpu | --gpu-max-mb 9000] [--wait-gpu 720] [--timeout 180] [--retries 2] [--split test] [--result <metrics.json>] -- <command ...>
 
 What it does (paths from the problem's project.json, see project.py):
   * run record  <run_records>/<id>/run.json  (command, start / end, host, driver, env, seed, pids, status, exit code, duration, commit, tag, last log lines)
   * full log    <run_records>/<id>/run.log   (stdout + stderr of the command); heartbeat file <run_records>/<id>/heartbeat touched every AR_HEARTBEAT_S
                 (15) seconds while the launcher waits or the command runs
-  * ledger row  <ledger>                     (one row per run id, there from the start of the command (status running, commit, started) and completed at its end;
-                written under a lock with an atomic replace; render with ledger.py). The schedule is synced at the same moments (a launcher keeps
-                schedule.csv honest without the tick). The launcher's phase (after / gpu / run) is in run.json. When the
-                ledger cannot be written (lock held for AR_LOCK_WAIT_S, file open elsewhere) the row is kept in <run_records>/<id>/ledger_row.json,
-                the launcher says so and its exit code stays the command's
+  * ledger row  <ledger>                     (one row per run id, written once when the run ends, under a lock with an atomic replace; render with ledger.py).
+                A busy ledger is retried; if it stays busy the exit code stays the command's and `ledger.py sync` adds the row later from the run
+                record. Runs in progress are not in the ledger: `ledger.py tail` and `schedule.py show` read them from the run records (state is
+                derived from the records, never synced between files)
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
   * card        a run needs its card: --hyp / --pred / --rule on the command line, else from the planned ledger row (ledger.py add); without
                 one it is refused (--no-card for smoke tests and data preparation, the ledger row then says "no card")
@@ -23,20 +22,21 @@ What it does (paths from the problem's project.json, see project.py):
   * id reuse    an id that is still running (fresh heartbeat) or finished with exit 0 is refused (a new id, or --again for a deliberate repeat);
                 a failed / blocked / stalled id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
                 and a note "code changed since attempt 1" (when the fingerprint differs) go into the record; result and decision of the earlier
-                attempt are cleared in the ledger row
+                attempt are cleared in the ledger row when the new attempt starts; two launchers of one id starting at once: the second is refused
+                (an atomic claim directory in the run directory)
   * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed or stalled); waiting is not counted as run time
   * holdout     --split <holdout> (project.json holdout_split, default test) is refused unless the run id appears in the problem's holdout log
                 (project.json test_log)
-  * chains      a launcher that still waits for its --after dependencies holds no slot (the tick fills it): start GPU chains with a long --wait-gpu
-                (e.g. 720), or a chain member whose dependencies end while both slots are taken gives up after --wait-gpu minutes (gpu_busy)
+  * chains      a launcher waits for its dependencies (--wait-after, default 720 min) and then for a GPU slot (--wait-gpu, default 720 min) before it
+                gives up; give-up marks it blocked / gpu_busy and its own dependents are blocked in turn
   * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under <run_records>/.gpu_slots taken
                 with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed); --gpu-max-mb
-                additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes, then status gpu_busy (exit 1). The
+                additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes (720), then status gpu_busy (exit 1). The
                 owner check needs launcher and slot owner in the same process namespace (all WSL or all Windows)
   * timeout     --timeout <minutes>: the command and its process group are killed after the limit (status timeout, exit 124)
   * retry       a run whose LAST attempt printed a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
-  * stalled     a record in state running / waiting whose heartbeat is older than AR_STALE_S seconds (default 300) counts as stalled for --after
-                and schedule.py; records made before this version (no launcher_pid, no heartbeat file) count as running
+  * stalled     a record in state running / waiting whose heartbeat is older than AR_STALE_S seconds (default 300) counts as stalled for --after,
+                ledger.py tail and schedule.py show; records made before this version (no launcher_pid, no heartbeat file) count as running
 Exit code = exit code of the command (1 if the GPU never became free, 2 if refused, 3 if a dependency failed, 124 on timeout).
 """
 import argparse
@@ -222,26 +222,6 @@ def state_of(d):
     return st
 
 
-def phase_of(d):
-    """what a live launcher is doing: 'after' (waits for --after), 'gpu' (waits for a GPU slot), 'run' (the command runs), 'over' (finished, refused, stalled), '' (no record).
-    New launchers write the phase into run.json; for older records the heartbeat text tells."""
-    st = state_of(d)
-    if st == "":
-        return ""
-    if st != "running":
-        return "over"
-    rec = record(d)
-    if rec.get("status") == "running":
-        return "run"
-    if rec.get("phase") in ("after", "gpu", "run"):
-        return rec["phase"]
-    try:
-        text = open(os.path.join(d, "heartbeat"), encoding="utf-8", errors="replace").read()
-    except OSError:
-        text = ""
-    return "gpu" if ("waiting for the GPU" in text or "created" in text) else "after"
-
-
 def beat(hb, text=""):
     open(hb, "w").write(f"{now()} {text}".rstrip() + "\n")
 
@@ -254,16 +234,19 @@ def ledger_row(ledger, run_id):
         return next((r for r in csv.DictReader(f) if r["id"] == run_id), {})
 
 
-def ledger_write(ledger, row, clear=(), guard=None):
-    """merge one row into the ledger under the lock; guard(current row or None) is checked under the lock and may refuse the write (returns False then)"""
+def ledger_write(ledger, row, clear=(), fill=False):
+    """merge one row into the ledger under the lock (a planned row keeps what was written before the run; `clear` names columns of the old row to drop).
+    fill=True (ledger.py sync): only a missing row or a planned / running / stalled one is filled in, a finished row is never replaced; returns whether it wrote"""
     with P.locked(ledger):
         rows = []
         if os.path.exists(ledger):
             with open(ledger, newline="", encoding="utf-8") as f:
                 rows = list(csv.DictReader(f))
-        old = next((r for r in rows if r["id"] == row["id"]), {})  # a planned row keeps what was written before the run
-        if guard is not None and not guard(old or None):
+        old = next((r for r in rows if r["id"] == row["id"]), {})
+        if fill and old.get("status") not in (None, "", "planned", "running", "stalled"):
             return False
+        if fill and old.get("notes"):
+            row = dict(row, notes=old["notes"] + "; " + row.get("notes", ""))
         old = {k: v for k, v in old.items() if k not in clear}
         row = {**old, **{k: v for k, v in row.items() if v not in ("", None)}}
         rows = [r for r in rows if r["id"] != row["id"]] + [row]
@@ -276,42 +259,18 @@ def ledger_write(ledger, row, clear=(), guard=None):
         return True
 
 
-def ledger_safe(ledger, row, d, clear=()):
-    """ledger_write that never kills the launcher: on failure the row is kept in <run dir>/ledger_row.json"""
-    try:
-        ledger_write(ledger, row, clear)
+def ledger_safe(ledger, row, clear=(), tries=3):
+    """ledger_write that never kills the launcher: a busy ledger is retried; when it stays busy the run record keeps all facts and `ledger.py sync` adds the row later"""
+    msg = ""
+    for _ in range(tries):
         try:
-            os.remove(os.path.join(d, "ledger_row.json"))  # a row parked by an earlier failed write is superseded by this one
-        except OSError:
-            pass
-        return ""
-    except Exception as e:
-        json.dump(row, open(os.path.join(d, "ledger_row.json"), "w"), indent=1, default=str)
-        msg = f"ledger not written ({type(e).__name__}: {str(e)[:120]}); row kept in {os.path.join(d, 'ledger_row.json')}"
-        print(f"[{row.get('id')}] {msg}")
-        return msg
-
-
-def ledger_rows(ledger):
-    if not os.path.exists(ledger):
-        return []
-    with open(ledger, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
-def sync_schedule(records):
-    """bring the schedule in step with the run records (schedule.reconcile), so a hand-started launcher keeps schedule.csv honest; never raises"""
-    try:
-        import schedule as SC
-        path = P.path("schedule")
-        if not os.path.exists(path):
-            return
-        with P.locked(path, wait_s=3):  # best effort: a busy schedule (the tick holds it while it starts items) must not delay the command; the next sync or tick catches up
-            rows = SC.load(path)
-            if SC.reconcile(rows, records):
-                SC.save(rows, path, lock=False)
-    except Exception as e:
-        print(f"schedule not synced: {type(e).__name__}: {str(e)[:100]}")
+            ledger_write(ledger, row, clear)
+            return ""
+        except Exception as e:
+            msg = f"ledger not written ({type(e).__name__}: {str(e)[:120]}); the run record has the facts, `ledger.py sync` adds the row"
+            time.sleep(2)
+    print(f"[{row.get('id')}] {msg}")
+    return msg
 
 
 def wait_after(records, ids, minutes, hb=None):
@@ -333,6 +292,19 @@ def wait_after(records, ids, minutes, hb=None):
         if time.time() - t0 > minutes * 60:
             return f"dependencies not done after {minutes} min: {', '.join(missing)}"
         time.sleep(min(30, max(1, HEARTBEAT_S)))
+
+
+def take_claim(d):
+    """the right to start this run id: a directory made atomically in the run directory; a claim older than 60 s belongs to a launcher that died
+    while starting and is taken over. None = another launcher holds it"""
+    c = os.path.join(d, ".starting")
+    try:
+        os.mkdir(c)
+    except FileExistsError:
+        if time.time() - os.path.getmtime(c) < 60:
+            return None
+        os.utime(c)
+    return c
 
 
 class GpuSlot:
@@ -439,7 +411,7 @@ def main():
     ap.add_argument("--gpu", action="store_true", help="GPU job: start only when one of the GPU slots is free")
     ap.add_argument("--gpu-max-mb", type=int, default=0, help="GPU job: additionally wait until the GPU memory in use is below this (implies --gpu)")
     ap.add_argument("--gpu-slots", type=int, default=int(cfg.get("gpu_slots", 2)), help="number of GPU slots on this machine")
-    ap.add_argument("--wait-gpu", type=int, default=30)
+    ap.add_argument("--wait-gpu", type=int, default=720, help="minutes to wait for a GPU slot")
     ap.add_argument("--timeout", type=float, default=0, help="minutes after which the command is killed (0 = none)")
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--again", action="store_true", help="repeat an id that finished with exit 0 (otherwise refused)")
@@ -474,47 +446,55 @@ def main():
             print(f"[{a.id}] refused: git cannot commit the snapshot here ({err}); set user.name / user.email in the repository, or --no-git")
             return 2
     d = os.path.join(records, a.id)
-    prev = record(d)
-    notes = []
-    if prev:
-        st = state_of(d)
-        if st == "running":
-            print(f"[{a.id}] refused: this id is still running (launcher pid {prev.get('launcher_pid')}, heartbeat {heartbeat_age(d):.0f} s old); use a new id")
-            return 2
-        if st in ("done", "ok") and not a.again:
-            print(f"[{a.id}] refused: this id finished with exit 0 on {prev.get('ended')}; use a new id (the record would be overwritten) or --again")
-            return 2
-        notes.append(f"attempt after {st}")
     os.makedirs(d, exist_ok=True)
-    if os.path.exists(os.path.join(d, "done")):
-        os.remove(os.path.join(d, "done"))
-    n = 1
-    while os.path.exists(os.path.join(d, f"run.{n}.log")):
-        n += 1
-    if os.path.exists(os.path.join(d, "run.log")):
-        os.rename(os.path.join(d, "run.log"), os.path.join(d, f"run.{n}.log"))
-    hb = os.path.join(d, "heartbeat")
-    beat(hb, "created")
-    again = bool(prev) or bool(ledger_row(ledger, a.id).get("started"))  # the id ran before (run record or ledger row)
-    clear = ("result", "decision") if again else ()  # a new attempt starts without the earlier attempt's judgement
-    rec = dict(id=a.id, hypothesis=a.hyp, prediction=a.pred, rule=a.rule, split=a.split, basis=a.basis, seed=a.seed, command=" ".join(cmd), cwd=a.cwd,
-               host=platform.node(), python=sys.version.split()[0], conda_env=os.environ.get("CONDA_DEFAULT_ENV", ""), gpu=gpu_info(), launcher_pid=os.getpid(),
-               created=now(), status="waiting", after=a.after, timeout_min=a.timeout,
-               phase="after" if a.after else ("gpu" if (a.gpu or a.gpu_max_mb) else "run"))
-    if prev.get("code_hash"):
-        rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
-    json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+    claim = take_claim(d)  # two launchers of one id (two ticks, two chats) must not both start: the first to make the directory goes on
+    if claim is None:
+        print(f"[{a.id}] refused: another launcher is starting this id right now")
+        return 2
+    notes = []
+    try:
+        prev = record(d)
+        if prev:
+            st = state_of(d)
+            if st == "running":
+                print(f"[{a.id}] refused: this id is still running (launcher pid {prev.get('launcher_pid')}, heartbeat {heartbeat_age(d):.0f} s old); use a new id")
+                return 2
+            if st in ("done", "ok") and not a.again:
+                print(f"[{a.id}] refused: this id finished with exit 0 on {prev.get('ended')}; use a new id (the record would be overwritten) or --again")
+                return 2
+            notes.append(f"attempt after {st}")
+        if os.path.exists(os.path.join(d, "done")):
+            os.remove(os.path.join(d, "done"))
+        n = 1
+        while os.path.exists(os.path.join(d, f"run.{n}.log")):
+            n += 1
+        if os.path.exists(os.path.join(d, "run.log")):
+            os.rename(os.path.join(d, "run.log"), os.path.join(d, f"run.{n}.log"))
+        hb = os.path.join(d, "heartbeat")
+        beat(hb, "created")
+        again = bool(prev) or bool(ledger_row(ledger, a.id).get("started"))  # the id ran before (run record or ledger row)
+        clear = ("result", "decision") if again else ()  # a new attempt starts without the earlier attempt's judgement
+        rec = dict(id=a.id, hypothesis=a.hyp, prediction=a.pred, rule=a.rule, split=a.split, basis=a.basis, seed=a.seed, command=" ".join(cmd), cwd=a.cwd,
+                   host=platform.node(), python=sys.version.split()[0], conda_env=os.environ.get("CONDA_DEFAULT_ENV", ""), gpu=gpu_info(), launcher_pid=os.getpid(),
+                   created=now(), status="waiting", after=a.after, timeout_min=a.timeout)
+        if prev.get("code_hash"):
+            rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
+        json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+    finally:
+        try:
+            os.rmdir(claim)
+        except OSError:
+            pass
+    if again and ledger_row(ledger, a.id):
+        ledger_safe(ledger, dict(id=a.id), clear)  # the old judgement goes now, not only at the end: a re-run that dies must not keep the old KEEP beside it
     if a.after:
         why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after, hb)
         if why:
             rec.update(status="blocked", ended=now(), notes=why)
             json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-            ledger_safe(ledger, dict(rec, exit=3, duration_s=0), d, clear)
-            sync_schedule(records)
+            ledger_safe(ledger, dict(rec, exit=3, duration_s=0), clear)
             print(f"[{a.id}] blocked: {why}")
             return 3
-        rec["phase"] = "gpu" if (a.gpu or a.gpu_max_mb) else "run"  # the dependencies are done: from here the launcher queues for the machine
-        json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
     slot = GpuSlot(records, a.gpu_slots, a.id, d) if (a.gpu or a.gpu_max_mb) else None
     try:
         if slot:
@@ -527,8 +507,7 @@ def main():
                 if time.time() - t0 > a.wait_gpu * 60:
                     rec.update(status="gpu_busy", ended=now(), notes=f"GPU memory {u} MB in use or all {a.gpu_slots} slots taken for {a.wait_gpu} min")
                     json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-                    ledger_safe(ledger, dict(rec, exit=1, duration_s=0), d, clear)
-                    sync_schedule(records)
+                    ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
                     print("GPU did not become free:", rec["notes"])
                     return 1
                 time.sleep(min(30, max(1, HEARTBEAT_S)))
@@ -538,12 +517,8 @@ def main():
         commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
         if gnote:
             notes.append(gnote)
-        rec.update(status="running", phase="run", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
+        rec.update(status="running", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
         json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
-        # a ledger row exists from the start of the command (status running, commit, started); the end of the run completes it
-        start_clear = clear + ("exit", "duration_s", "ended") if again else ()
-        row_failed = ledger_safe(ledger, dict(rec, notes="; ".join(notes)), d, start_clear)
-        sync_schedule(records)
         t1 = time.time()
         rc, attempt, tail = 1, 0, ""
         while attempt <= a.retries:
@@ -580,8 +555,7 @@ def main():
         notes.insert(0, f"{attempt} attempt(s)")
     if a.no_card and missing:
         notes.append("no card")
-    ledger_safe(ledger, dict(rec, result=res, notes="; ".join(notes)), d, clear if row_failed else ())  # the start row already cleared the earlier judgement
-    sync_schedule(records)
+    ledger_safe(ledger, dict(rec, result=res, notes="; ".join(notes)), clear)
     print(f"[{a.id}] {status} (exit {rc}, {dur} s, {attempt} attempt(s)), code {commit} {rec['tag']}; log {os.path.join(d, 'run.log')}")
     return rc
 

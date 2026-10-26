@@ -10,7 +10,7 @@
 - HANDOVER.md (<= 3 KB): where we are, what runs, the next step, the owner of the code (the lead chat), pointers; rewrite it, do not append
 - experiment_execution/DECISIONS.md: the only channel for Mirko's decisions (champion promotion with its one TEST check, changes of PROBLEM.md, changes of the tools or gates, permissions); write an entry and wait for the recorded answer, never act on it before
 - experiment_execution/PLAN.md: the experiment tree of the loop with a status per node
-- experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next | reconcile`): what happens next; a disrupted loop resumes from it
+- experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next`, item states are read from the run records): what happens next; a disrupted loop resumes from it
 - experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit, and at its head the loop table of `../autoresearch/tools/metrics.py` (runs, GPU hours, verdicts, prediction hits, TEST uses); the journal of a loop goes into ledger notes, not into a new state file; for a wake-up `ledger.py tail --loop <NN>` instead of the whole file
 - when a loop starts: the loop prompt (from `../autoresearch/prompts/loop.md`: STOP_AT, TEST / mail / shutdown permissions; read each time, do not re-plan)
 - for reference only: README.md (folder map), evaluation/PROTOCOL.md (splits, metrics, timing), experiment_execution/closed_questions.md, literature/OVERVIEW.md before literature work (edit literature/papers.csv, then `wsl python3 tools/literature/catalogue.py all`); old state files are in experiment_execution/history/
@@ -53,7 +53,7 @@
 - every experiment: architecture drawing (no red blocks), numbers table with baselines, result images (key ones to the user with SendUserFile), ms per frame, honest negatives
 - every finished run gets a ledger row, also crashed and cut ones; catalogue row (E-id); experiment folder
 - decide with the written rule, by tool: `autoresearch/tools/decide.py --variant s0,s1 --control s0,s1 [--band 0.010] [--cost-variant ms --cost-control ms] --id <run> --write` gives KEEP / CUT / TIE / INCONCLUSIVE into the ledger; INCONCLUSIVE means add a seed, not adopt; TIE means the cheaper variant
-- every wake-up and every milestone: reconcile and update the schedule, the ledger (`ledger.py note <id> --result ... --decision ...`), the PLAN status and HANDOVER.md; a new chat must be able to continue from the files alone
+- every wake-up and every milestone: read the state (`schedule.py show`, `ledger.py tail`) and update the ledger (`ledger.py note <id> --result ... --decision ...`), the PLAN status and HANDOVER.md; a new chat must be able to continue from the files alone
 - a question answered the same way twice goes into experiment_execution/closed_questions.md; re-opening it needs a new mechanism
 - quality AND speed: ms per frame (idle GPU, batch 1, cached features); an optimisation must reproduce the reference graphs; on a tie inside the noise band take the cheaper variant
 - fully differentiable path: no argmax, no matching, no rule step on the training path, gradient reaches every module; better short lane graphs than false ones; say whether a head is pixel- or graph-based

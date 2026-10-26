@@ -55,7 +55,7 @@ Gate G2 (hand-over ready, checked by the referee): a falsifiable statement, a me
 - **Variant** (a configuration of existing code): experiment file -> the launcher runs every arm and seed (commit + tag per run) -> the evaluation entry point writes a metric card per run -> the decision tool applies the rule clauses to the cards (KEEP / CUT / TIE / INCONCLUSIVE; INCONCLUSIVE adds a seed) -> one summary line in the experiment file. No detail planner, no coder.
 - **Block** (new code): `ar-planner` writes the detail plan (section 2 of `experiment.md`) -> `ar-coder` implements the change with its spec test; a change of shared code gets `ar-reviewer` (mode code) -> then as a variant -> summary (section 3).
 
-Wake-up routine: read HANDOVER -> `tools/tick.py --handover` (reconcile the run records: done, failed, stalled; start the ready schedule items within the GPU / CPU slots; write the status block into HANDOVER) -> do what it lists as "needs the lead" (detail plan, code, decide, summary) -> ledger notes, plan status, HANDOVER -> next wake-up. Nothing else is state.
+Wake-up routine: read HANDOVER -> `tools/schedule.py show` and `tools/ledger.py tail` (the state of a run is read from its run record, nothing is synced) -> `tools/tick.py` starts ready items that have a command (a chain of `run.py --after` launchers does the same by hand) -> do what needs a chat (detail plan, code, decide, summary) -> ledger notes, plan status, HANDOVER -> next wake-up. Nothing else is state.
 
 Gate G3 (per experiment): every number comes from a metric card or a run record; the rule was applied as written; the summary has open points and next steps.
 
@@ -71,7 +71,7 @@ A loop can be stopped at any moment (user, crash, shutdown, another chat).
 - **State in a few files**: HANDOVER (narrative, <= 3 KB: where we are, what runs, next step, the lead chat that owns the code, pointers), the plan, the schedule, the ledger, the decisions file. A new chat continues from these alone.
 - **Reading**: single-file records (ledger, decisions, closed questions, plan) are complete files that agents search; experiment folders are read in full for the last two loops, older loops through their summaries and the problem's current best.
 - **Idempotent steps**: every schedule item can be restarted; trainings checkpoint and resume; a done flag means exit code 0.
-- **Reconcile first**: after a disruption the lead marks running items done / failed / stalled from the run records, then continues. A change of direction goes through `ar-planner` (a new schedule version), not into ad-hoc runs.
+- **Read the records first**: after a disruption `schedule.py show` and `ledger.py tail` give done / failed / stalled / running from the run records (`ledger.py sync` adds rows of finished runs that have none); then the lead continues. A change of direction goes through `ar-planner` (a new schedule version), not into ad-hoc runs.
 - **STOP_AT is a work window**: when the schedule empties early, `ar-planner` adds the next items (controls, seeds, robustness, backlog) with rules written before the runs.
 
 ## Decisions of the person

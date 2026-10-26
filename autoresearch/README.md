@@ -8,7 +8,8 @@ General and problem-independent: the method (`METHOD.md`), seven agent roles (`a
 | `agents/` | `ar-scout` (scan and deep mode), `ar-summarizer`, `ar-hypothesis` (six lenses incl. past critic and system review), `ar-referee`, `ar-planner` (plan, schedule, detail plan), `ar-coder`, `ar-reviewer` (code and numbers) - Claude Code subagent format |
 | `templates/` | `problem`, `paper_note`, `group_summary` (with its digest), `experiment` (card -> detail plan -> summary, next to `experiment.json`), `plan` (tree + end of loop) |
 | `prompts/` | `research_steps.md` (P1 + P2 in four steps started by hand), `loop.md` (P3 + P4, pasted after `/loop`) |
-| `tools/` | `run.py` (launcher: ledger row, commit + tag per run, TEST guard, retries), `ledger.py`, `schedule.py`, `decide.py` (the written rule as code), `check_numbers.py`, `check_structure.py`, `clean_temp.py`, `install_agents.py`, `guard_hook.py` (gate hook: Write / Edit of protected files only with a grant under a decided D<n>), `metrics.py` (per-loop table: runs, GPU hours, verdicts, prediction hits, TEST uses), `project.py` (finds the problem and its `project.json`), `selftest.py` - being reworked under decision D8 (see `ROADMAP.md`) |
+| `tools/` | `run.py` (launcher: ledger row, commit + tag per run, TEST guard, retries), `ledger.py`, `schedule.py`, `decide.py` (the written rule as code), `check_numbers.py`, `check_structure.py`, `clean_temp.py`, `install_agents.py`, `guard_hook.py` (gate hook: Write / Edit of protected files only with a grant under a decided D<n>), `metrics.py` (per-loop table: runs, GPU hours, verdicts, prediction hits, TEST uses), `project.py` (finds the problem and its `project.json`), `selftest.py` |
+| `history/` | the long roadmap and reviews of 2026-10-25 |
 | `ROADMAP.md` | the reviews of the system (own, independent, and the loop-18 lead's second review with R1-R10 / P1-P10), weaknesses ranked by cost, target packages, the migration, and what the person decided |
 | `config.json` | the default problem folder |
 
@@ -25,15 +26,15 @@ Problems using it: `../bev_fusion_lane_center/` (lane-centre-line graph from cam
 ## Tools in one line each
 ```
 python tools/run.py --id E240.a --hyp "..." --pred "..." --rule "..." [--split test] [--after E239.a] [--gpu | --gpu-max-mb 9000] [--timeout 180] -- <command>   # snapshot + tag lcr/E240.a, heartbeat, GPU slot
-python tools/ledger.py add|note|render ...   |   python tools/ledger.py tail [--loop 19] [-n 15]   # the last rows, for a wake-up
+python tools/ledger.py add|note|render ...   |   ledger.py tail [--loop 19] [-n 15]   # last rows + runs in progress   |   ledger.py sync   # rows of finished runs that have none
 python tools/metrics.py [--loop 18] [-v] [--md]             # per-loop table (also at the head of LEDGER.md); -v shows how each row was counted
 python tools/guard_hook.py grant ../autoresearch/tools/ --decision D8 --hours 12 --note "..."   |   guard_hook.py grants | check <path>
 python tools/decide.py --experiment E240 [--write]          # the rule clauses of experiments/E240_*/experiment.json on the metric cards -> KEEP / CUT / TIE / INCONCLUSIVE
 python tools/decide.py --variant 0.746,0.741 --control 0.725,0.722 --id E240.a --write   # typed per-seed scores (old interface)
 python tools/experiment.py check E240 | show E240 | check --all   # gate G2 as code for experiment.json (schema: schemas/experiment.schema.json)
 python tools/card.py check --all | check <card.json> | show <card.json>   # the evaluator contract (schemas/card.schema.json): every metric card decide.py reads
-python tools/schedule.py show|next|set|reconcile|add [--command "..."]
-python tools/tick.py [--dry-run] [--handover]           # the inner loop: reconcile the run records, start the ready items within the GPU / CPU slots, status block (into HANDOVER.md between <!-- tick --> markers)
+python tools/schedule.py show|next|set|add [--command "..."]    # item states are read from the run records
+python tools/tick.py [--dry-run]                       # start the ready items that have a command (gpu items when a slot is free); prints what runs
 python tools/check_numbers.py <report> <sources ...> [--strict]   # --strict: exit 1 when a number is missing from the sources
 python tools/check_structure.py
 python tools/install_agents.py [--check]

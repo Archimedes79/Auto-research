@@ -9,7 +9,7 @@ The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1
 - Gates: hook on the protected files with grants (P4), holdout split from `project.json`.
 - Measurement of the improver: loop table at the head of `LEDGER.md` (P3).
 - Method simplified: 7 agents, 5 templates, light cycle by default (P6); structure check over `experiments/` (P7).
-- State derived from the run records instead of synced between three files (D16): built and tested in a scratch copy, **not deployed yet** (the tools folder is under the gate hook; deploying waits for a grant by Mirko).
+- State derived from the run records instead of synced between three files (D16, deployed 2026-10-26): item states are computed on read, the ledger row is written once at the end, `ledger.py sync` adds rows of runs that ended or lost their launcher, a second launcher of one id is refused, one tick at a time, cpu items one at a time. A fresh `ar-reviewer` pass found 8 findings in the first version; 7 are fixed with tests (one is the open item L1 below).
 
 ## Open
 | item | what | needs |
@@ -20,6 +20,7 @@ The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1
 | W8 | evaluation cache key has no checkpoint hash or inference-code fingerprint | small change in `evaluate.py` |
 | W13 | scouts have WebFetch and Write: fetched text is data, scouts write only under `literature/` | hook rule or agent definition |
 | W11 | evaluation covers graphs only: route success, failure series, timing are still per-loop drivers | after loop 19 |
+| L1 | a re-run of an id whose final ledger write fails keeps the old finished row (its result and decision are cleared at the start; `ledger.py sync` replaces only planned / running / stalled rows): compare the row's `started` with the record's | rare; small change in `ledger.py`/`run.py` |
 | M3-M5 | package rename `ar` / facade `lcr` / `lcr.train` recipes | **deferred, probably not needed**: the loop runs without them; revisit only if a second problem is plugged in |
 
 ## What the last days taught (design rules for the tools)

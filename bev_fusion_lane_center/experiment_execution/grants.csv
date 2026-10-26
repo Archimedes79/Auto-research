@@ -4,3 +4,6 @@ granted,until,path,decision,note
 2026-10-25T16:16,2026-10-25T17:16,project.json,D8,D8 P4 review fix: protect settings.local.json and the champion / control config cards
 2026-10-25T16:51,2026-10-25T18:51,project.json,D8,"P8 evaluator contract: holdout_split, cards, headline_metrics keys"
 2026-10-25T17:01,2026-10-25T18:01,../autoresearch/METHOD.md,D8,"D8 P2: the wake-up routine becomes tick.py --handover (lead chat's P2, committed e480bd8)"
+2026-10-25T21:51,2026-10-25T22:51,evaluation/TEST_USAGE_LOG.md,D13,D13: repoint the one loop-18 launcher path
+2026-10-26T08:38,2026-10-26T14:38,../autoresearch/tools/,D16,"D16: deploy the simplified run/tick/schedule/ledger/selftest (state derived from run records), tested in a scratch copy"
+2026-10-26T08:38,2026-10-26T14:38,../autoresearch/METHOD.md,D16,"D16: two lines of METHOD.md (wake-up routine, read the records first)"
