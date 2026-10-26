@@ -25,21 +25,35 @@ def _branch(cin, hidden, cout, bias=0.0):
     return b
 
 
+DIR_OFFSET = -math.pi / 4      # direction classes split the heading circle at -45 deg / 135 deg (diagonal: rare on roads)
+
+
+def direction_class(yaw):
+    """1 if the heading lies in [DIR_OFFSET, DIR_OFFSET + pi) (mod 2 pi), else 0 (SECOND's direction target)."""
+    return float(((yaw - DIR_OFFSET) % (2 * math.pi)) < math.pi)
+
+
 class ObjectHead(nn.Module):
     """BEV features (B, C, X, Y) -> dict of maps: hm (B, G, X, Y) logits, off (2), size (2: log l, log w),
-    rot (2: sin, cos), rad (1: log r), vel (2)."""
+    rot (2: sin, cos), rad (1: log r), vel (2). direction=True (t1 round 1, 2026-10-26): also dir (1 logit); the rot
+    loss is then sign-free (the box axis) and the front / back half comes from dir, as SECOND (Yan et al. 2018) /
+    PointPillars: the plain L1 on (sin, cos) did not learn front vs back on nuScenes in 2000 steps (rot loss stayed at
+    the level of random directions while the axis was right)."""
 
-    def __init__(self, cin, groups=GROUPS, hidden=64):
+    def __init__(self, cin, groups=GROUPS, hidden=64, direction=False):
         super().__init__()
         self.groups = groups
         self.shared = nn.Sequential(nn.Conv2d(cin, hidden, 3, padding=1), nn.BatchNorm2d(hidden), nn.ReLU())
         self.hm = _branch(hidden, hidden, len(groups), bias=-2.19)        # sigmoid(-2.19) = 0.1 (CenterNet init)
         self.off, self.size = _branch(hidden, hidden, 2), _branch(hidden, hidden, 2)
         self.rot, self.rad, self.vel = _branch(hidden, hidden, 2), _branch(hidden, hidden, 1), _branch(hidden, hidden, 2)
+        self.names = ("hm", "off", "size", "rot", "rad", "vel") + (("dir",) if direction else ())
+        if direction:
+            self.dir = _branch(hidden, hidden, 1)
 
     def forward(self, feat):
         x = self.shared(feat)
-        return {k: getattr(self, k)(x) for k in ("hm", "off", "size", "rot", "rad", "vel")}
+        return {k: getattr(self, k)(x) for k in self.names}
 
 
 # ------------------------------------------------------------------------------------------------ targets
@@ -62,7 +76,8 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
     t = {"hm": torch.zeros(B, G, X, Y), "ind": torch.zeros(B, max_obj, dtype=torch.long),
          "mask": torch.zeros(B, max_obj), "group": torch.zeros(B, max_obj, dtype=torch.long),
          "off": torch.zeros(B, max_obj, 2), "size": torch.zeros(B, max_obj, 2), "rot": torch.zeros(B, max_obj, 2),
-         "rad": torch.zeros(B, max_obj, 1), "vel": torch.zeros(B, max_obj, 2), "is_box": torch.zeros(B, max_obj)}
+         "rad": torch.zeros(B, max_obj, 1), "vel": torch.zeros(B, max_obj, 2), "is_box": torch.zeros(B, max_obj),
+         "dir": torch.zeros(B, max_obj, 1)}
     gx = torch.arange(X, dtype=torch.float32).view(X, 1)
     gy = torch.arange(Y, dtype=torch.float32).view(1, Y)
     for b, boxes in enumerate(boxes_batch):
@@ -91,6 +106,7 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
             if kind == "box":
                 t["size"][b, n] = torch.tensor([math.log(bx["length"]), math.log(bx["width"])])
                 t["rot"][b, n] = torch.tensor([math.sin(bx["yaw"]), math.cos(bx["yaw"])])
+                t["dir"][b, n] = direction_class(bx["yaw"])
                 t["is_box"][b, n] = 1.0
             else:
                 t["rad"][b, n] = math.log(bx["radius"])
@@ -115,8 +131,9 @@ def _gather(m, ind):
     return m.reshape(B, C, -1).gather(2, ind.unsqueeze(1).expand(B, C, ind.shape[1])).permute(0, 2, 1)
 
 
-def head_loss(out, t, w_vel=0.2):
-    """dict of loss terms and their sum 'total'."""
+def head_loss(out, t, w_vel=0.2, w_dir=0.2):
+    """dict of loss terms and their sum 'total'. With out['dir'] (ObjectHead(direction=True)): rot is the sign-free axis
+    loss min(L1(r, t), L1(r, -t)) and 'dir' the BCE of the direction class (weight w_dir, SECOND's 0.2)."""
     dev = out["hm"].device
     t = {k: v.to(dev) for k, v in t.items()}
     m = t["mask"].unsqueeze(-1)
@@ -127,9 +144,15 @@ def head_loss(out, t, w_vel=0.2):
         return (F.l1_loss(_gather(out[name], t["ind"]), t[name], reduction="none") * mask).sum() / mask.sum().clamp(min=1)
     rot = _gather(out["rot"], t["ind"])
     rot = rot / rot.norm(dim=-1, keepdim=True).clamp(min=1e-6)
+    e_rot = F.l1_loss(rot, t["rot"], reduction="none").sum(-1, keepdim=True)
+    if "dir" in out:
+        e_rot = torch.minimum(e_rot, F.l1_loss(rot, -t["rot"], reduction="none").sum(-1, keepdim=True))
     losses = {"hm": focal_loss(out["hm"], t["hm"]), "off": l1("off", m), "size": l1("size", mb),
-              "rot": (F.l1_loss(rot, t["rot"], reduction="none") * mb).sum() / mb.sum().clamp(min=1),
+              "rot": (e_rot * mb).sum() / mb.sum().clamp(min=1),
               "rad": l1("rad", mc), "vel": w_vel * l1("vel", m)}
+    if "dir" in out:
+        bce = F.binary_cross_entropy_with_logits(_gather(out["dir"], t["ind"]), t["dir"], reduction="none")
+        losses["dir"] = w_dir * (bce * mb).sum() / mb.sum().clamp(min=1)
     losses["total"] = sum(losses.values())
     return losses
 
@@ -158,7 +181,12 @@ def decode(out, grid, groups=GROUPS, k=50, threshold=0.2, from_probabilities=Fal
             if groups[g][1] == "box":
                 ll, lw = out["size"][b, :, ix, iy].tolist()
                 sn, cs = out["rot"][b, :, ix, iy].tolist()
-                bx.update(length=math.exp(ll), width=math.exp(lw), yaw=math.atan2(sn, cs))
+                yaw = math.atan2(sn, cs)
+                if "dir" in out:                           # axis in [off, off + pi), then the half from the class
+                    yaw = (yaw - DIR_OFFSET) % math.pi + DIR_OFFSET
+                    if out["dir"][b, 0, ix, iy].item() < 0:
+                        yaw = math.remainder(yaw + math.pi, 2 * math.pi)
+                bx.update(length=math.exp(ll), width=math.exp(lw), yaw=yaw)
             else:
                 bx["radius"] = math.exp(out["rad"][b, 0, ix, iy].item())
             boxes.append(bx)
@@ -246,17 +274,21 @@ class BoxCorrection(nn.Module):
         return d, self.yaw_max * torch.tanh(raw[..., 2] / self.yaw_max)
 
 
-def targets_as_output(t, grid):
-    """Perfect head output from targets (self-test): hm as probabilities, regressions written at the centre cells."""
+def targets_as_output(t, grid, direction=False):
+    """Perfect head output from targets (self-test): hm as probabilities, regressions written at the centre cells;
+    direction: also 'dir' as a logit (+-10)."""
     B, G, X, Y = t["hm"].shape
     out = {"hm": t["hm"].clone()}
-    for name, c in (("off", 2), ("size", 2), ("rot", 2), ("rad", 1), ("vel", 2)):
+    names = (("off", 2), ("size", 2), ("rot", 2), ("rad", 1), ("vel", 2)) + ((("dir", 1),) if direction else ())
+    for name, c in names:
         m = torch.zeros(B, c, X * Y)
         for b in range(B):
             for n in range(t["ind"].shape[1]):
                 if t["mask"][b, n] > 0:
                     m[b, :, t["ind"][b, n]] = t[name][b, n]
         out[name] = m.view(B, c, X, Y)
+    if direction:
+        out["dir"] = 20.0 * out["dir"] - 10.0
     return out
 
 
@@ -570,9 +602,35 @@ def _selftest():
     corr = BoxCorrection(cin=8)
     d, dy = corr(torch.randn(1, 3, 8), torch.randn(1, 3, 2), 0.5, 10.0, 0.1)
     assert d.abs().max() == 0 and dy.abs().max() == 0, "correction starts at zero"
+    # 5 direction head (axis + front / back class): perfect maps decode to the GT yaw, also with the axis vector
+    #   flipped (the class decides the half); the axis loss is sign-free; the class flips at DIR_OFFSET; gradients reach
+    #   rot and dir
+    assert direction_class(0.0) == 1.0 and direction_class(math.pi) == 0.0 and direction_class(-math.pi / 2) == 0.0
+    assert direction_class(DIR_OFFSET + 1e-6) == 1.0 and direction_class(DIR_OFFSET - 1e-6) == 0.0
+    po = targets_as_output(t, grid, direction=True)
+    for flip in (1.0, -1.0):
+        dec = decode(dict(po, rot=flip * po["rot"]), grid, from_probabilities=True, threshold=0.99)
+        for gt_list, d_list in zip(boxes, dec):
+            for gb in gt_list:
+                if "yaw" in gb:
+                    db = min(d_list, key=lambda d: math.hypot(d["cx"] - gb["cx"], d["cy"] - gb["cy"]))
+                    assert abs(math.remainder(db["yaw"] - gb["yaw"], 2 * math.pi)) < 1e-4, (flip, db["yaw"], gb["yaw"])
+    logit = lambda p: torch.logit(p.clamp(1e-4, 1 - 1e-4))                               # noqa: E731
+    lp = head_loss(dict(po, hm=logit(po["hm"])), t)
+    ln = head_loss(dict(po, hm=logit(po["hm"]), rot=-po["rot"]), t)
+    assert lp["rot"] < 1e-6 and ln["rot"] < 1e-6 and lp["dir"] < 1e-3, (lp["rot"], ln["rot"], lp["dir"])
+    wrong = head_loss(dict(po, hm=logit(po["hm"]), dir=-po["dir"]), t)
+    assert wrong["dir"] > 1.0
+    hd = ObjectHead(cin=16, direction=True)
+    od = hd(torch.randn(2, 16, grid.nx, grid.ny))
+    assert set(od) == {"hm", "off", "size", "rot", "rad", "vel", "dir"} and od["dir"].shape == (2, 1, 120, 104)
+    head_loss(od, t)["total"].backward()
+    assert hd.dir[2].weight.grad.abs().sum() > 0 and hd.rot[2].weight.grad.abs().sum() > 0
+    assert "dir" not in out and "dir" not in loss                       # default head: unchanged outputs and terms
     print("object_head selftest ok: perfect targets decode to the GT boxes (centre, size, yaw, radius, velocity), "
           "shapes, finite loss with gradients in every branch, focal loss ordering, box propagation (S5b), "
-          "correction zero start")
+          "correction zero start, direction head (classes, decode with either axis sign, sign-free axis loss, "
+          "direction BCE, gradients)")
     _selftest_refiner(Grid)
 
 

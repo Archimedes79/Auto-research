@@ -6,7 +6,10 @@ the listed fields changed (copy the file, change the name and the fields, never 
 
 | file | what | status |
 |---|---|---|
-| `t1_base.json` | the first full training: cached camera-head features (`data/cache/cam_feats`, built by `temp/setup/build_full_cache.sh`), GT at -0.5 / 0 / +0.5 s with the true keyframe gap (`gap_ego`), Kendall task weights, AdamW 3e-4 with 500 warm-up steps from lr / 3 and cosine, effective batch 16 (micro-batch 4 x 4 accumulation: 2.5 s per optimiser step, 4.4 GB; 2 x 8 takes 5.3 s, 8 x 2 takes 2.1 s with 8.6 GB; idle GPU, 4 workers, 2026-10-26), EMA 0.999, gradient-conflict log every 500 steps, 20000 optimiser steps | not run yet (the caches are built, the trainer self-test passes on mini and a 12-step smoke ran on the real caches) |
+| `t1_base.json` | the first full training: cached camera-head features (`data/cache/cam_feats`, built by `temp/setup/build_full_cache.sh`), GT at -0.5 / 0 / +0.5 s with the true keyframe gap (`gap_ego`), Kendall task weights, AdamW 3e-4 with 500 warm-up steps from lr / 3 and cosine, effective batch 16 (micro-batch 4 x 4 accumulation: 2.5 s per optimiser step, 4.4 GB; 2 x 8 takes 5.3 s, 8 x 2 takes 2.1 s with 8.6 GB; idle GPU, 4 workers, 2026-10-26), EMA 0.999, gradient-conflict log every 500 steps, 20000 optimiser steps | not run at full length (the caches are built, the trainer self-test passes on mini and a 12-step smoke ran on the real caches) |
+| `t1_r0.json` | experiment t1 round 0 (`../../experiments/t1_full_chain/`): t1_base with 5000 steps (4.9 epochs), warm-up 300, 8 loader workers (1.7 s per step) | ran 2026-10-26 |
+| `t1_r1a_dir.json` | round 1 arm a: t1_r0 + `model.object_direction` (object heading as sign-free axis + front / back class, SECOND) | round 1 |
+| `t1_r1b_uwso.json` | round 1 arm b: t1_r0 with UW-SO task balancing (T = 5) instead of Kendall | round 1 |
 
 Arms (fields to change against `t1_base.json`; none is run yet, every one is a proposal of plan 8.4):
 

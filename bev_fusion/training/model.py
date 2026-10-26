@@ -84,6 +84,7 @@ class ModelConfig:
     radar_stationary: bool = True      # radar aux head = losses.radar_aux_spec(radar_stationary)
     n_sem: int = None                  # optional check: must equal len(layer_spec(...)) when given (train.py passes it)
     aux_heads: bool = True
+    object_direction: bool = False     # object head: sign-free axis + front / back class (object_head.ObjectHead)
     pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"
     freeze_camera: bool = True
     z_levels: tuple = Z_LEVELS
@@ -147,7 +148,7 @@ class BEVFusionModel(nn.Module):
             raise ValueError(f"n_sem {cfg.n_sem} != len(layer_spec) {len(self.spec)}")
         self.mover = TimeMover(c, self.grid)
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
-        self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS), c, self.mover)
+        self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction), c, self.mover)
         if cfg.aux_heads:                                           # the layouts BEVLoss expects for them
             self.aux_cam = SemanticHead(cfg.c_cam, len(layer_spec(False, True)))
             self.aux_rad = SemanticHead(cfg.c_rad, len(radar_aux_spec(cfg.radar_stationary)))
