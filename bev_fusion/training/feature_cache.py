@@ -161,6 +161,12 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         os.replace(tmp, path)                              # atomic: a reader never sees a partial file
         return out
 
+    def __getitem__(self, i):
+        item = super().__getitem__(i)
+        for f in item["frames"]:
+            f["prob"], f["ctx"] = self.store.get(f["token"])
+        return item
+
 
 _FILL_DS = None                                           # the dataset of build_radar_cache, inherited by the forked workers
 
@@ -184,12 +190,6 @@ def build_radar_cache(ds, workers=4):
             n += k
             print(f"radar cache: {n}/{len(todo)} samples, {time.time() - t0:.0f} s", flush=True)
     return len(todo)
-
-    def __getitem__(self, i):
-        item = super().__getitem__(i)
-        for f in item["frames"]:
-            f["prob"], f["ctx"] = self.store.get(f["token"])
-        return item
 
 
 def collate_cached(items):
@@ -302,8 +302,24 @@ def _selftest_radar():
         n = build_radar_cache(cds, workers=2)
         assert n == 9 and all(os.path.exists(cds._radar_path(ds.nusc.get("sample", t), ds.gt.cam(t))) for t in cds.samples)
         assert not [f for f in os.listdir(tmp) if ".tmp" in f], "no partial files left"
+        # a whole item through the cached dataset: cached features attached, radar equal to the plain dataset's; a batch
+        # collates (this path broke once when the class lost its __getitem__)
+        fdir, item_checked = "data/cache/cam_feats_mini", False
+        if os.path.isdir(fdir):
+            store = FeatureStore(fdir)
+            cds.store = store
+            ok = [i for i, t in enumerate(cds.samples) if all(store.has(f["token"]) for f in cds._cam_frames(t)[0])]
+            if ok:
+                it = cds[ok[0]]
+                ref = ds[ds.samples.index(cds.samples[ok[0]])]
+                assert all("prob" in f and "ctx" in f for f in it["frames"])
+                assert all(torch.equal(it["radar"][k], ref["radar"][k]) for k in ref["radar"])
+                b = collate_cached([it, it])
+                assert b["prob"].shape[:2] == (2, 3) and len(b["radar"]["b"]) == 2 * len(ref["radar"]["x"])
+                item_checked = True
     print(f"radar cache selftest ok: cached radar equals the computed one exactly (every column, dtype), read back in "
-          f"{1000 * t_read:.1f} ms, parallel fill of 9 samples, no partial files")
+          f"{1000 * t_read:.1f} ms, parallel fill of 9 samples, no partial files; whole cached item + collate "
+          f"{'checked' if item_checked else 'NOT checked (no mini feature cache)'}")
 
 
 def _cli(argv):

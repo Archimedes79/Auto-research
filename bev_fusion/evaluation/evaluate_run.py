@@ -230,6 +230,8 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     os.chdir(ROOT)
     cfg, model, loss, step, ckpt = load_run(run, device)
     cfg.batch_size, cfg.workers = batch_size, workers
+    if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
+        cfg.radar_cache = "data/cache/radar"                    # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = make_datasets(cfg)
     ds = val_subset(val_ds, n) if n else val_ds
     loader = make_loader(ds, cfg, False)
