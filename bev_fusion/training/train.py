@@ -65,6 +65,7 @@ class TrainConfig:
     val_scenes: tuple = ()
     feature_cache: str = ""                      # path of the frozen-head feature cache ("" = run the camera heads)
     gt_cache: str = "data/cache/gt"              # GT cache folder of the dataset ("" = off)
+    radar_cache: str = ""                        # per-sample radar cache folder (feature_cache.py; "" = off; exact)
     n_cam: int = 3
     cam_stride: int = 2
     batch_size: int = 2
@@ -137,7 +138,7 @@ def make_datasets(cfg):
     for split, names in ((cfg.train_split, cfg.train_scenes), (cfg.val_split, cfg.val_scenes)):
         if cfg.feature_cache:
             out.append(CachedFrontRadarDataset(root, cfg.version, scenes(split, names),
-                                               store=FeatureStore(cfg.feature_cache), **kw))
+                                               store=FeatureStore(cfg.feature_cache), radar_cache=cfg.radar_cache or None, **kw))
         else:
             out.append(FrontRadarDataset(root, cfg.version, scenes(split, names), **kw))
     return out

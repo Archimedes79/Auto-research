@@ -122,15 +122,68 @@ def build(ds, root, sample_tokens=None, device="cpu", batch=16, checkpoint=CHECK
     return FeatureStore(root)
 
 
-class CachedFrontRadarDataset(FrontRadarDataset):
-    """FrontRadarDataset whose camera frames carry cached head outputs instead of images (no image is read or resized)."""
+def radar_signature():
+    """md5 prefix of FrontRadarDataset._radar's source: a radar cache entry is only reused by the same radar code."""
+    import hashlib
+    import inspect
+    return hashlib.md5(inspect.getsource(FrontRadarDataset._radar).encode()).hexdigest()[:10]
 
-    def __init__(self, *args, store, **kw):
+
+class CachedFrontRadarDataset(FrontRadarDataset):
+    """FrontRadarDataset whose camera frames carry cached head outputs instead of images (no image is read or resized).
+    radar_cache (folder, optional): the radar detections of a sample (all sweeps of the window, moved to the camera time)
+    are stored once per sample as .npz and read back exactly (float32 / int64 as computed): reading the ~35 sweep files of a
+    sample costs ~0.3-0.6 s, the cached entry ~5 ms (t1, 2026-10-26: the loader was the bottleneck of training)."""
+
+    def __init__(self, *args, store, radar_cache=None, **kw):
         super().__init__(*args, **kw)
-        self.store = store
+        self.store, self.radar_cache = store, radar_cache
+        self._rsig = radar_signature() if radar_cache else None
 
     def _image(self, sd):
         return torch.zeros(1)                              # placeholder: the cached features replace the image
+
+    def _radar_path(self, sample, cur_sd):
+        return os.path.join(self.radar_cache, f"{sample['token']}_{cur_sd['token'][:8]}_{self.radar_window}_"
+                                              f"{int(self.doppler_shift)}_{self._rsig}.npz")
+
+    def _radar(self, sample, cur_sd):
+        if not self.radar_cache:
+            return super()._radar(sample, cur_sd)
+        path = self._radar_path(sample, cur_sd)
+        if os.path.exists(path):
+            z = np.load(path)
+            return {k: torch.from_numpy(z[k]) for k in z.files}
+        out = super()._radar(sample, cur_sd)
+        os.makedirs(self.radar_cache, exist_ok=True)
+        tmp = path[:-4] + f".tmp{os.getpid()}.npz"
+        np.savez(tmp, **{k: v.numpy() for k, v in out.items()})
+        os.replace(tmp, path)                              # atomic: a reader never sees a partial file
+        return out
+
+
+_FILL_DS = None                                           # the dataset of build_radar_cache, inherited by the forked workers
+
+
+def _radar_fill(tokens):
+    for t in tokens:
+        _FILL_DS._radar(_FILL_DS.nusc.get("sample", t), _FILL_DS.gt.cam(t))
+    return len(tokens)
+
+
+def build_radar_cache(ds, workers=4):
+    """fill ds.radar_cache for every sample of ds (resumable: existing entries are kept), `workers` processes."""
+    import multiprocessing as mp
+    global _FILL_DS
+    _FILL_DS = ds
+    todo = [t for t in ds.samples if not os.path.exists(ds._radar_path(ds.nusc.get("sample", t), ds.gt.cam(t)))]
+    chunks = [todo[i::workers * 8] for i in range(workers * 8)]
+    t0, n = time.time(), 0
+    with mp.get_context("fork").Pool(workers) as pool:
+        for k in pool.imap_unordered(_radar_fill, chunks):
+            n += k
+            print(f"radar cache: {n}/{len(todo)} samples, {time.time() - t0:.0f} s", flush=True)
+    return len(todo)
 
     def __getitem__(self, i):
         item = super().__getitem__(i)
@@ -225,10 +278,42 @@ def _selftest():
               f"{(n_std - n_cached) / 1e6:.1f} M fewer parameters (frozen heads not instantiated)")
 
 
+def _selftest_radar():
+    """the radar cache returns exactly what FrontRadarDataset computes (dtypes, shapes, values); a second read comes from
+    the file; the parallel fill covers every sample."""
+    import tempfile
+    root_nusc = os.path.expanduser("~/data/nuscenes")
+    ds = FrontRadarDataset(root_nusc, "v1.0-mini", n_cam=3, cam_stride=2, with_gt=False)
+    with tempfile.TemporaryDirectory() as tmp:
+        cds = CachedFrontRadarDataset(root_nusc, "v1.0-mini", store=None, radar_cache=tmp, n_cam=3, cam_stride=2,
+                                      with_gt=False, nusc=ds.nusc)
+        cds.samples = cds.samples[:12]
+        for t in cds.samples[:3]:
+            s, cur = ds.nusc.get("sample", t), ds.gt.cam(t)
+            ref = ds._radar(s, cur)
+            first = cds._radar(s, cur)                                  # computed and written
+            assert os.path.exists(cds._radar_path(s, cur))
+            t0 = time.time()
+            second = cds._radar(s, cur)                                 # read back
+            t_read = time.time() - t0
+            for k in ref:
+                for got in (first, second):
+                    assert got[k].dtype == ref[k].dtype and torch.equal(got[k], ref[k]), k
+        n = build_radar_cache(cds, workers=2)
+        assert n == 9 and all(os.path.exists(cds._radar_path(ds.nusc.get("sample", t), ds.gt.cam(t))) for t in cds.samples)
+        assert not [f for f in os.listdir(tmp) if ".tmp" in f], "no partial files left"
+    print(f"radar cache selftest ok: cached radar equals the computed one exactly (every column, dtype), read back in "
+          f"{1000 * t_read:.1f} ms, parallel fill of 9 samples, no partial files")
+
+
 def _cli(argv):
     import argparse
-    p = argparse.ArgumentParser(description="build the frozen-head feature cache")
-    p.add_argument("cmd", choices=["build"])
+    if argv[:1] == ["radar-selftest"]:
+        return _selftest_radar()
+    p = argparse.ArgumentParser(description="build the frozen-head feature cache (build) or the radar cache (radar: root = "
+                                            "the radar cache folder)")
+    p.add_argument("cmd", choices=["build", "radar"])
+    p.add_argument("--workers", type=int, default=4)
     p.add_argument("dataroot")
     p.add_argument("version")
     p.add_argument("root")
@@ -242,6 +327,14 @@ def _cli(argv):
     from nuscenes.nuscenes import NuScenes
     nusc = NuScenes(a.version, dataroot=a.dataroot, verbose=False)
     scenes = available_scenes(nusc, a.split) if a.split else None
+    if a.cmd == "radar":
+        ds = CachedFrontRadarDataset(a.dataroot, a.version, scenes=scenes, store=None, radar_cache=a.root, n_cam=a.n_cam,
+                                     cam_stride=a.cam_stride, with_gt=False, nusc=nusc)
+        if a.limit:
+            ds.samples = ds.samples[:a.limit]
+        n = build_radar_cache(ds, a.workers)
+        print(f"radar cache: {n} samples written to {a.root}; all done")
+        return
     ds = FrontRadarDataset(a.dataroot, a.version, scenes=scenes, n_cam=a.n_cam, cam_stride=a.cam_stride, with_gt=False, nusc=nusc)
     tokens = ds.samples[:a.limit] if a.limit else None
     store = build(ds, a.root, tokens, device=a.device, batch=a.batch)
