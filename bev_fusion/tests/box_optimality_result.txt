@@ -1,0 +1,64 @@
+03:40:15 GPU free (util 14 %, 1718 MiB): starting /home/ml/miniconda3/envs/gcar/bin/python tests/test_box_optimality.py
+device cuda; configs (training scenes : iterations) [(200, 400), (200, 2000), (800, 2000), (800, 6000)]
+B  IoU of a perfect box shifted / rotated by an error (analytic, shapely)
+   error                    car 4.5 x 1.8    pedestrian r 0.3
+   centre 0.02 m (lateral)           0.978               0.919
+   centre 0.05 m (lateral)           0.946               0.808
+   centre 0.10 m (lateral)           0.895               0.651
+   centre 0.15 m (lateral)           0.846               0.521
+   centre 0.25 m (lateral)           0.756               0.320
+   centre 0.50 m (lateral)           0.565               0.041
+   yaw 2 deg                        0.952                   -
+   yaw 5 deg                        0.887                   -
+   yaw 10 deg                       0.796                   -
+   forecast: a velocity error sigma_v moves a box by sigma_v x dt (the centre rows above): at dt = 0.5 s
+   sigma_v 0.2 m/s                  0.895   (car, shift 0.10 m)
+   sigma_v 0.5 m/s                  0.756   (car, shift 0.25 m)
+   sigma_v 1.0 m/s                  0.565   (car, shift 0.50 m)
+   sigma_v 2.0 m/s                  0.286   (car, shift 1.00 m)
+
+A  analytic decoder from the same input (50 held-out scenes): the information ceiling
+                                  car AP@1     car IoU  car centre  car yaw/pi    car size     car vel  truck AP@1    ped AP@1     ped IoU  ped centre  ped radius
+A analytic ceiling                   0.879       0.976       0.025       0.660       0.033       0.215       0.796       1.000       0.772       0.019       0.040
+
+C  learned: the same network trained with more steps and scenes (held-out scenes; the last column set = 20 training scenes)
+  iter     0 loss 19.455 (hm 11.243) 1 s
+  iter    80 loss 3.749 (hm 0.790) 15 s
+  iter   160 loss 2.698 (hm 0.769) 54 s
+  iter   240 loss 1.545 (hm 0.401) 119 s
+  iter   320 loss 0.997 (hm 0.237) 183 s
+  iter   399 loss 1.467 (hm 0.369) 245 s
+   C 200 scenes, 400 it: 248 s
+  iter     0 loss 19.455 (hm 11.243) 1 s
+  iter   400 loss 1.126 (hm 0.252) 165 s
+  iter   800 loss 0.596 (hm 0.074) 289 s
+  iter  1200 loss 0.379 (hm 0.022) 565 s
+  iter  1600 loss 0.202 (hm 0.019) 697 s
+  iter  1999 loss 0.178 (hm 0.021) 814 s
+   C 200 scenes, 2000 it: 815 s
+  iter     0 loss 17.877 (hm 10.545) 1 s
+  iter   400 loss 1.662 (hm 0.298) 144 s
+  iter   800 loss 1.182 (hm 0.200) 267 s
+  iter  1200 loss 0.983 (hm 0.128) 392 s
+  iter  1600 loss 0.594 (hm 0.074) 509 s
+  iter  1999 loss 0.285 (hm 0.042) 634 s
+   C 800 scenes, 2000 it: 635 s
+  iter     0 loss 17.877 (hm 10.545) 0 s
+  iter  1200 loss 0.958 (hm 0.114) 351 s
+  iter  2400 loss 0.479 (hm 0.048) 721 s
+  iter  3600 loss 0.311 (hm 0.016) 1073 s
+  iter  4800 loss 0.176 (hm 0.006) 1322 s
+  iter  5999 loss 0.103 (hm 0.004) 1500 s
+   C 800 scenes, 6000 it: 1500 s
+
+summary (car / truck / pedestrian: AP at 1 m, IoU, centre error m, yaw error deg mod pi, size error m, velocity error m/s)
+                                  car AP@1     car IoU  car centre  car yaw/pi    car size     car vel  truck AP@1    ped AP@1     ped IoU  ped centre  ped radius
+A analytic ceiling                   0.879       0.976       0.025       0.660       0.033       0.215       0.796       1.000       0.772       0.019       0.040
+C 200 scenes, 400 it                 0.925       0.828       0.171       4.714       0.082       1.542       0.501       0.980       0.733       0.075       0.002
+C 200 scenes, 400 it (train)         0.897       0.868       0.145       2.722       0.075       1.245       0.452       0.867       0.734       0.079       0.003
+C 200 scenes, 2000 it                0.926       0.892       0.104       2.868       0.026       1.006       0.953       1.000       0.818       0.050       0.001
+C 200 scenes, 2000 it (train)        1.000       0.967       0.019       0.912       0.014       0.158       1.000       1.000       0.922       0.024       0.001
+C 800 scenes, 2000 it                0.957       0.912       0.071       3.745       0.022       0.810       1.000       1.000       0.862       0.037       0.001
+C 800 scenes, 2000 it (train)        0.999       0.916       0.080       2.742       0.023       0.697       1.000       1.000       0.846       0.046       0.001
+C 800 scenes, 6000 it                0.993       0.933       0.052       2.560       0.013       0.688       0.997       1.000       0.874       0.033       0.001
+C 800 scenes, 6000 it (train)        1.000       0.982       0.008       0.506       0.010       0.122       1.000       1.000       0.971       0.007       0.001
