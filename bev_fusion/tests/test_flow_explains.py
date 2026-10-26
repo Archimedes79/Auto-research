@@ -20,7 +20,9 @@ IoU; the learned field beats v = 0 by > 0.1 IoU in 3; the prediction (1) is not 
 Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
   wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_explains.py [--quick] [--seed N] [--dt 0.25] [--prior 1e-3]
       [--sharp] (softmax-splatting importance + pi entropy 5e-3) [--pyr] (FlowPyramid 2 + 1 + 1 iterations instead of
-      4 iterations of FlowRefine at 0.5 m)
+      4 iterations of FlowRefine at 0.5 m) [--smooth 0.05] (edge-aware smoothness of every flow, weights from the input
+      map: one box moves as one body - the first run failed 0 / 5: the field was a patchwork inside each box, the raw
+      move scattered the boxes into debris, the decoder repaired it; prediction IoU 0.85, raw move 0.27, v = 0 0.42)
 """
 import math
 import os
@@ -48,7 +50,8 @@ def arg(name, default):
 
 SEED, DT, PRIOR, K = arg("--seed", 0), arg("--dt", 0.25), arg("--prior", 1e-3), 4
 SHARP, PYR, ENT = "--sharp" in sys.argv, "--pyr" in sys.argv, arg("--ent", 5e-3)
-TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "")
+SMOOTH = arg("--smooth", 0.0)
+TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "")
 G = Grid(x_min=0.0, x_max=40.0, y_min=-20.0, y_max=20.0, res=0.5)          # 80 x 80 cells
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"
 C = 16
@@ -110,6 +113,16 @@ class Model(nn.Module):
         return flows, preds, mix
 
 
+def smoothness(v, feat, alpha=10.0):
+    """edge-aware first-order smoothness of a flow (B, 2, X, Y) m/s over the 4-neighbours, weights from the map."""
+    tot = 0.0
+    for dim in (2, 3):
+        dv = (v.diff(dim=dim) / 10.0).abs().sum(1)
+        w = torch.exp(-alpha * feat.diff(dim=dim).abs().sum(1))
+        tot = tot + (w * dv).mean()
+    return tot
+
+
 def train(model, data, iters, rng, bs=8, lr=2e-3):
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     t0 = time.time()
@@ -124,6 +137,8 @@ def train(model, data, iters, rng, bs=8, lr=2e-3):
             loss = loss + 0.8 ** (len(preds) - 2 - k) * F.binary_cross_entropy_with_logits(p, tgt)
         if SHARP:
             loss = loss + ENT * (m[:, 0].max(1).values * model.ent).mean()
+        if SMOOTH > 0:
+            loss = loss + SMOOTH * sum(smoothness(v, m[:, 0]) for v in flows)
         if PRIOR > 0:
             occ = m[:, 0].max(1).values
             loss = loss + PRIOR * sum((occ * (v / 10.0).pow(2).sum(1)).mean() for v in flows)
@@ -233,7 +248,7 @@ if __name__ == "__main__":
     n_train, n_test, iters = (300, 16, 600) if QUICK else (1500, 48, 3000)
     data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
     test = dataset([50_000 + i for i in range(n_test)], "test")
-    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR}; {n_train} training sequences, {n_test} held-out, "
+    print(f"device {DEV}, seed {SEED}, dt {DT} s, prior {PRIOR}, sharp {SHARP}, pyramid {PYR}, smooth {SMOOTH}; {n_train} training sequences, {n_test} held-out, "
           f"{iters} steps of 8 ({time.time() - t0:.0f} s to render)", flush=True)
     torch.manual_seed(SEED)
     model = Model().to(DEV)
