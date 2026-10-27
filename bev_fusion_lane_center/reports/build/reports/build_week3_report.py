@@ -70,7 +70,7 @@ d.ul([
     "<b>The map benefit is not an artefact of one error draw</b> (E238): +0.018 … +0.042 F1@1 on two new draws of the 2 m map error, intervals above zero.",
     "<b>Four loss and threshold ideas of the cycle were killed or tied</b> (clamp, per-range thresholds, soft targets not trained, the Poisson set loss): the far-recall gap is not a threshold or a clamp problem. The Poisson set likelihood looked fine at its own 18.7 vertices per 100 m and lost 0.073 Q once held to the same 14.3 vertices as the controls (E255): <b>the matched vertex budget decides such verdicts</b>.",
     "<b>The map offsets that other work found on dividers do not show on our lane centrelines</b> (E252): Boston scores higher than Singapore, correct predictions sit closer to the ground truth in Boston, per-line medians are small.",
-    "<b>The research framework held, and it also hurt in specific places</b>: the derived-state tools (D16) worked, a stalled launcher could be resumed, and a shared machine was the largest source of lost time: the planned timing repeat (E253) could not run at all because another chat started a 7-hour training in its window (section 6).",
+    "<b>The research framework held, and it also hurt in specific places</b>: the derived-state tools (D16) worked, a stalled launcher could be resumed, and a shared machine was the largest source of lost time: the planned timing repeat (E253) had to wait five hours for another chat's 7-hour training to end (section 6), and the session was valid once it ran.",
 ])
 d.callout("How reliable are these numbers?",
           "Everything is on the 22 VAL scenes; the seed floor is estimated from four pairs, each comparison is one or two seeds, tuning of tau and the vertex radius is done on VAL subsets and said so. "
@@ -152,7 +152,7 @@ d.table([
     header=["card", "result", "state"], widths=["16%", "62%", "22%"])
 d.h2("4.6  Timing (E243)")
 d.p("The first timing repeat was not valid (machine 2 - 3 ms above the stored values, spread above 1.5 ms in 5 of 6 configurations, other chats' jobs running). Only the ordering survives: "
-    "j1 20.26 < f1 20.76 < j1eq 20.86 < rc1 22.25 < j1rc 23.43 < f1 with recursion 27.13 ms; j1 is not a speed variant. Absolute numbers are quoted from the stored loop-18 timings (champion 24.2 ms with recursion, 17.5 ms without).")
+    "j1 20.26 < f1 20.76 < j1eq 20.86 < rc1 22.25 < j1rc 23.43 < f1 with recursion 27.13 ms; j1 is not a speed variant. The repeat on a quiet machine is in 5.4 (E253): same ordering, absolute values 2 - 3 ms lower.")
 
 # ------------------------------------------------------------------ 5 loop 20
 d.h1("5  Loop 20: four iterations (26 - 27 October)", new_page=True)
@@ -162,7 +162,7 @@ d.table([
     ["1", "E252", "Does the map offset of the ground truth cap the metric by city?", "CPU, 10 min", "see 5.1"],
     ["2", "E240 pair 3", "closes the seed floor with a fourth pair (and E241 pair 3)", "2 trainings, ~20 min each", "see 5.2"],
     ["3", "E255", "Poisson set loss, full schedule, compared at a matched vertex budget", "1 training + grids", "see 5.3"],
-    ["4", "E256 (E253 blocked)", "the planned timing repeat on a quiet machine (E253) could not run: another chat's 7-hour training started in its window. Replaced by: do the D4 candidates keep their order in each city?", "CPU 10 min", "see 5.4 / 5.5"]],
+    ["4", "E253 (after a wait: E256)", "timing repeat on a quiet machine with a machine guard; it had to wait five hours for another chat's 7-hour training, and E256 (do the D4 candidates keep their order in each city?) used the wait", "45 min exclusive; CPU 10 min", "see 5.4 / 5.5"]],
     header=["#", "card", "question", "cost", "result"], widths=["4%", "12%", "50%", "20%", "14%"])
 d.h2("5.1  Map offsets of the ground truth by city (E252)")
 d.p("The BEV-system chat found map-to-image offsets of 0.3 - 1 m on dividers, worst in Boston (41 % of Boston lane dividers within 0.25 m of the paint against 82 % in Singapore-Queenstown). "
@@ -197,11 +197,23 @@ if m143["e25_j1phd2_s0"]:
 else:
     d.p("E255 did not finish in this report's window; see the experiment file.")
 d.fig(F + "w3_matched_vertex.png", "E255 / E244: Q against the vertex budget on the tuning subset (left; thin lines = other tau values, dashed line 14.3) and the first, cut attempt at its 50 % checkpoint (right).")
-d.h2("5.4  Timing on a quiet machine (E253) - blocked")
-d.p(f"{INFO('not run')} The repeat needs an exclusive machine for 45 minutes (idle GPU, load average below 3, no other chat's job). The BEV-system chat had announced a 7 - 9 hour training right after the window and started it while loop 20 still ran its trainings; it asked that no timing run alongside it, "
-    "and the guard of the driver (<code>temp/loop20/run_e253.sh</code>: GPU use, WSL load, Windows CPU, repair rounds) would have voided every replicate. The card stays planned (item E253.t); the timing numbers of this report are still the stored loop-18 values and the ordering of the invalid E243 session. "
-    "This is the clearest case for a machine lease between chats (N1): an exclusive window cannot be agreed by message alone when two chats plan the same hours.")
-d.h2("5.5  The D4 candidates by city (E256, replaces the timing iteration)")
+d.h2("5.4  Timing on a quiet machine (E253)")
+d.p("The repeat needs the machine alone for 45 minutes. The BEV-system chat's 7-hour training ran in the planned window, so the run waited until it reported the end (07:19 on 27 October) and started at 07:20. "
+    "Six configurations, six rounds in round-robin order, a fresh process per replicate, 200 timed frames each; the guards of the driver (GPU use, WSL load average, Windows CPU) voided no replicate.")
+d.table([
+    ["j1 192 / 96, pruning 0.3 (a)", "18.52", "0.44", "17.97 - 19.17", "7.8"],
+    ["f1 288 / 144, pruning 0.3 (c)", "18.75", "0.29", "18.55 - 19.34", "7.5"],
+    ["j1eq, pruning 0.4", "18.49", "0.21", "18.15 - 18.72", "7.7"],
+    ["j1rc, pruning 0.4", "21.14", "0.39", "20.74 - 21.82", "8.9"],
+    ["rc1 288 / 144, pruning 0.4", "20.81", "0.26", "20.46 - 21.20", "8.8"],
+    ["f1 with time recursion (as trained)", "24.85", "0.76", "24.71 - 26.69", "7.8"]],
+    header=["configuration (ms per frame, idle machine)", "median", "replicate SD", "range of 6", "assembly ms"], num=range(1, 5))
+d.p(f"{OK('session valid')} 6 of 6 replicates per configuration, replicate SD at most 0.6 ms in 5 of 6 configurations (the recursion run has 0.76 ms), the stored loop-18 values reproduced within 1.0 ms. "
+    f"{TIE('TIE')} j1 minus f1 = -0.23 ms (per-round differences -0.83 to +0.21; prediction -0.3 hit; the rule needs -1.0 ms for a speed claim): <b>j1 is not a speed variant</b>. "
+    "The recall weight costs +2.65 ms (j1rc against j1eq; prediction +2.2) and the recursion +6.1 ms, as in the invalid first session, but all absolute values are 2 - 3 ms lower on the quiet machine. "
+    "The chain therefore runs at 18.5 - 18.8 ms without recursion and 24.9 ms with it.")
+d.fig(F + "w3_timing.png", "Replicate medians per configuration, ms per frame: the invalid session of loop 19 (left, shared machine) and the repeat with the machine guard (right).")
+d.h2("5.5  The D4 candidates by city (E256, used the wait for the quiet machine)")
 d.p("E252 showed that all models score higher in Boston than in Singapore. D4 chooses between candidates on pooled numbers, so we asked whether their order holds in each city (CPU, 10 minutes). Rule: a pair that is ordered one way in Boston and the other way in Singapore by more than 0.010 in both cities is a flip.")
 d.table([
     ["fast_recall (j1rc 192 / 96)", "0.7757", "0.7061", "+0.070", "0.774 / 0.702", "15.0 / 15.0"],
@@ -222,16 +234,16 @@ d.table([
     ["hurt: launcher", "five launchers started within seconds raced on the snapshot commit; a killed launcher's stale heartbeat blocked relaunch; both are fixed or worked around by D15 / D16"],
     ["hurt: bookkeeping", "<code>project.json</code> (protected) lists the E-id range of each loop, so loop 20 is invisible to <code>ledger.py tail --loop 20</code> and to the loop table: D17 is open; stale planned rows of the previous loop stayed in the schedule; <code>experiment.json</code> run ids were wrong once (E237)"],
     ["hurt: reproducibility", "a decided data change (D14) switched the loader default in the middle of a seed series: pair 3 had to be pinned to the old map by an environment variable; the card of every run records which map it used"],
-    ["hurt: exclusive windows", "the timing window (E253) was agreed by message with the BEV-system chat and then overrun by its training start: the iteration was replaced by a CPU one (E256). A lease (N1) is the fix, not more messages. The cut test of E241 (cross-pairings) had no tool support and was decided by hand: a subcommand of <code>decide.py</code> is open (N15)"],
+    ["hurt: exclusive windows", "the timing window (E253) was agreed by message with the BEV-system chat and then overrun by its training start: the run waited five hours and a CPU iteration (E256) used the time. A lease (N1) is the fix, not more messages. The cut test of E241 (cross-pairings) had no tool support and was decided by hand: a subcommand of <code>decide.py</code> is open (N15)"],
     ["changed", "matched-vertex procedure as code (<code>temp/loop20/e255_matched.py</code>: stored-card reproduction first, upper-envelope interpolation instead of a maximum over grid points, held-out frames reported); timing driver with machine sidecar files; E252 follow-up controls; 12 system items (N1 - N12) written into the plan with a 'done when' each; D17 filed"],
 ], header=["", ""], widths=["16%", "84%"], idcol=0)
 
 # ------------------------------------------------------------------ 7 where the chain stands
 d.h1("7  Where the chain stands")
 d.table([
-    ["champion (D7 f1 + fork pruning 0.3)", "0.735", "0.741", "0.695", "0.709", "0.409", "24 (17.5 without recursion)"],
-    ["recall (rc1 + pruning 0.4)", "0.740", "0.742", "0.767", "0.771", "0.428", ""],
-    ["fast_recall (j1rc 192 / 96)", "0.739", "0.737", "0.736", "0.727", "0.447", "20 - 22"],
+    ["champion (D7 f1 + fork pruning 0.3)", "0.735", "0.741", "0.695", "0.709", "0.409", "24.9 (18.8 without recursion; E253)"],
+    ["recall (rc1 + pruning 0.4)", "0.740", "0.742", "0.767", "0.771", "0.428", "20.8 (E253)"],
+    ["fast_recall (j1rc 192 / 96)", "0.739", "0.737", "0.736", "0.727", "0.447", "21.1 (E253)"],
     ["control (E94 trace network)", "0.737", "0.763", "0.800", "0.811", "0.408", "628"]],
     header=["system (registry name)", "Q", "topo F1", "lanes found", "R@1 far", "J", "ms per frame"], num=range(1, 7))
 d.p("VAL 873, <code>evaluate.py</code>, stated at each system's own operating point (14.8 - 15.5 vertices per 100 m; the control sits at 21.8, so its row is not at the same budget); at a matched 14.3 the champion has Q 0.7306 and rc1 0.7331 (E236). Nothing was promoted this week: "
@@ -240,7 +252,7 @@ d.p("VAL 873, <code>evaluate.py</code>, stated at each system's own operating po
 # ------------------------------------------------------------------ 8 failed, limits, next
 d.h1("8  What failed, limits, next steps")
 d.h2("What did not work (kept in the record)")
-d.ul(["The recall clamp (E244 arm b), per-range thresholds (E246), the Poisson set loss (E244 arm a partial, E255 final: -0.073 Q at 14.3 vertices), a quick timing session on a shared machine (E243) and the planned quiet-machine repeat (E253, blocked).",
+d.ul(["The recall clamp (E244 arm b), per-range thresholds (E246), the Poisson set loss (E244 arm a partial, E255 final: -0.073 Q at 14.3 vertices), and a quick timing session on a shared machine (E243, invalid).",
       "The map-offset cap (E252): the hypothesis came out on the wrong side of the null."])
 d.h2("Limits")
 d.ul(["Two cities in VAL; 22 scenes; the bands rest on four seed pairs (the standard error of an SD with n = 4 is about 40 %).",
@@ -248,7 +260,7 @@ d.ul(["Two cities in VAL; 22 scenes; the bands rest on four seed pairs (the stan
       "The ground-truth question is answered for lane centrelines on two cities only; the divider offsets of the other chat remain unexplained for the dividers themselves."])
 d.h2("Next steps")
 d.ul(["Switch to reporting every metric by city next to the pooled number; third city once the b456 loader exists (S19.9).",
-      "A machine lease between chats before the next timing session (N1; E253 waits for the BEV chat's training to end), and metric-specific noise bands as a DECISIONS entry (D18) now that four pairs exist: seed SDs Q 0.0025, lanes found 0.004, R@1 far 0.003, topo F1 0.001; a band is about 2 paired SDs (Q 0.009, lanes found 0.012), not 1 SD.",
+      "A machine lease between chats before the next timing session (N1; E253 only got its quiet window because the BEV chat reported the end of its training), and metric-specific noise bands as a DECISIONS entry (D18) now that four pairs exist: seed SDs Q 0.0025, lanes found 0.004, R@1 far 0.003, topo F1 0.001; a band is about 2 paired SDs (Q 0.009, lanes found 0.012), not 1 SD.",
       "E245: the ece metric and the soft-target training; E247 step 0 on a quiet GPU."])
 
 # ------------------------------------------------------------------ 9 corrected claims
@@ -283,7 +295,7 @@ d.table([
     ["E247", "gated evidence update", INFO("not run")],
     ["E251", "CPU-exact distance map", OK("done, PASS")],
     ["E252", "map offset of the ground truth by city", NEG("cap not supported")],
-    ["E253", "timing repeat with a machine guard", INFO("blocked, planned")],
+    ["E253", "timing repeat with a machine guard", TIE("TIE, session valid")],
     ["E256", "D4 candidates by city", TIE("no flip, order not established")],
     ["E255", "Poisson set loss, full schedule, matched vertex budget", NEG("CUT")],
 ], header=["id", "question", "outcome"], widths=["8%", "62%", "30%"])
