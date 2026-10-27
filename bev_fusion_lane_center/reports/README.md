@@ -9,12 +9,13 @@ Cleaned up on 2026-10-24 (two passes). Read the two weekly reports first.
 | `Week1_Loops1-9_Report_EN.pdf` | Week 1 (11 - 17 Oct), loops 1 - 9: baseline, grid head, key points, route transfer, robustness, fine-tuning, simulated SD map, training against map faults |
 | `Week2_Loops10-17_Report_EN.pdf` | Week 2 (18 - 24 Oct), loops 10 - 17: trace network, planner consumer, differentiable builders and champion, route head along the edges, robustness with gate and map builder |
 | `Loop18_Fork_Pruning_Localisation_Report_EN.pdf` | Loop 18 (24 - 25 Oct, 12 pages, updated 10:10 with the controls, failure series, third joint negative and range recall): E209 closed, rough localisation + map trust, fork pruning (J gap closed), failure-trained route head, recall variants incl. the fast j1rc and its equal-budget controls, numba assembly (chain 17.5 ms), TEST once, calibration, building blocks 2025 - 26; builder `build/reports/build_loop18_report.py` |
+| `Week3_Loops18-20_Report_EN.pdf` | Week 3 (24 - 27 Oct), loops 18 - 20: seed floor (four paired seeds, Q SD 0.0025), matched vertex budgets, the damaged distance map, map benefit on new error draws, ground-truth offset by city, Poisson set loss CUT at a matched budget (-0.073 Q), D4 candidates by city, the framework test (what worked, what hurt), corrected claims, experiment index (the timing repeat E253 was blocked by another chat's training) |
 | `Weeks1-2_LaneGraph_Presentation_EN.pptx` | 24-slide deck of both weeks |
 | `Automated_Research_Workflow_short_EN.pptx` | 12-slide pitch for the team and managers: idea, what it gave us, what others do, how to do it, research pipeline (small vs large data, modular vs joint training), our setup, four trust rules, noise, tree / ledger / state files, what we ask for. (The older 20-slide version is staged in _to_delete/cleanup_2026-10-24b/.) |
 | `Loop17_DRAFT_Robust_Differentiable_Lane_Graph_Report_EN.pdf` | draft of the loop 17 report, built before the E209 crash; cannot be rebuilt as is (see Removed) |
 | `Background_Approach_Sparse_Lane_Graph_EN.pdf` | the idea of the sparse lane graph |
 
-Both weekly reports end with the list of corrected claims and an experiment index. Known gap: E209 (unseen failure types) has no result.
+All three weekly reports end with the list of corrected claims and an experiment index. Known gap: E209 (unseen failure types) has no result.
 
 ## Other folders
 

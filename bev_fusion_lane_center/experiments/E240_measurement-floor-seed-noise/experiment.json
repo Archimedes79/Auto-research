@@ -17,13 +17,15 @@
    "seeds": [
     0,
     1,
-    2
+    2,
+    3
    ],
-   "note": "all four evaluated with evaluate.py (new registry names e24_j1rc_s0..s3) so that topo_F1 and R@1_far are on the cards; stored seeds 0 / 1 are re-evaluated, not re-trained | pair 3 cancelled at 02:33 (machine shared with other chats): read with three pairs",
+   "note": "all four evaluated with evaluate.py (new registry names e24_j1rc_s0..s3) so that topo_F1 and R@1_far are on the cards; stored seeds 0 / 1 are re-evaluated, not re-trained | pair 3 trained in loop 20 on the stored distance map (LCR_DIST_DIR), read with four pairs",
    "names": [
     "e24_j1rc_s0",
     "e24_j1rc_s1",
-    "e24_j1rc_s2"
+    "e24_j1rc_s2",
+    "e24_j1rc_s3"
    ]
   },
   "c": {
@@ -32,13 +34,15 @@
    "seeds": [
     0,
     1,
-    2
+    2,
+    3
    ],
-   "note": "registry names e24_j1eq_s0..s3 | pair 3 cancelled at 02:33 (machine shared with other chats): read with three pairs",
+   "note": "registry names e24_j1eq_s0..s3 | pair 3 trained in loop 20 on the stored distance map (LCR_DIST_DIR), read with four pairs",
    "names": [
     "e24_j1eq_s0",
     "e24_j1eq_s1",
-    "e24_j1eq_s2"
+    "e24_j1eq_s2",
+    "e24_j1eq_s3"
    ]
   }
  },

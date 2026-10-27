@@ -1,0 +1,43 @@
+_py14.sh: temp/loop20/e252_gt_offset.py
+VAL frames 873; per city: boston-seaport 396 frames / 10 scenes, singapore-onenorth 477 frames / 12 scenes
+identity check passed (20 frames); frame counts add to 873
+
+== fast_recall
+city                       frames scenes       Q   Q 95% scene CI  F1@0.5  F1@1.0  F1@2.0  lanes  R1far vert100
+boston-seaport                396     10  0.7757 [0.7354,0.8188]  0.7194  0.8884     nan  0.774    nan   15.00
+singapore-onenorth            477     12  0.7061 [0.6875,0.7289]  0.6587  0.8447     nan  0.702    nan   14.96
+city                       scenes   points  median s   IQR of scene medians median |s| share |s|>0.5 share |s|>1.0  scenes with |median s|>0.15
+boston-seaport                 10   443873    -0.001 [-0.008,+0.008]      0.199         0.236         0.061              1 of 10
+singapore-onenorth             12   463279     0.018 [-0.038,+0.037]      0.274         0.284         0.082              0 of 12
+
+== recall
+city                       frames scenes       Q   Q 95% scene CI  F1@0.5  F1@1.0  F1@2.0  lanes  R1far vert100
+boston-seaport                396     10  0.7700 [0.7314,0.8063]  0.7195  0.8975     nan  0.803    nan   15.62
+singapore-onenorth            477     12  0.7137 [0.6922,0.7359]  0.6651  0.8577     nan  0.736    nan   15.45
+city                       scenes   points  median s   IQR of scene medians median |s| share |s|>0.5 share |s|>1.0  scenes with |median s|>0.15
+boston-seaport                 10   468793    -0.006 [-0.030,+0.001]      0.208         0.250         0.063              0 of 10
+singapore-onenorth             12   489949     0.025 [-0.026,+0.042]      0.281         0.296         0.085              0 of 12
+
+== fast
+city                       frames scenes       Q   Q 95% scene CI  F1@0.5  F1@1.0  F1@2.0  lanes  R1far vert100
+boston-seaport                396     10  0.7515 [0.7121,0.7923]  0.7176  0.8801     nan  0.709    nan   15.03
+singapore-onenorth            477     12  0.7064 [0.6860,0.7326]  0.6625  0.8421     nan  0.636    nan   14.95
+city                       scenes   points  median s   IQR of scene medians median |s| share |s|>0.5 share |s|>1.0  scenes with |median s|>0.15
+boston-seaport                 10   393482    -0.005 [-0.029,-0.000]      0.181         0.211         0.050              1 of 10
+singapore-onenorth             12   402950     0.025 [-0.035,+0.048]      0.253         0.258         0.070              0 of 12
+
+== control
+city                       frames scenes       Q   Q 95% scene CI  F1@0.5  F1@1.0  F1@2.0  lanes  R1far vert100
+boston-seaport                396     10  0.7661 [0.7228,0.8086]  0.7276  0.9003     nan  0.830    nan   21.66
+singapore-onenorth            477     12  0.7119 [0.6903,0.7315]  0.6674  0.8670     nan  0.773    nan   21.91
+city                       scenes   points  median s   IQR of scene medians median |s| share |s|>0.5 share |s|>1.0  scenes with |median s|>0.15
+boston-seaport                 10   477455    -0.004 [-0.061,+0.009]      0.232         0.228         0.058              0 of 10
+singapore-onenorth             12   504644     0.033 [+0.002,+0.057]      0.281         0.282         0.076              0 of 12
+
+== champion
+city                       frames scenes       Q   Q 95% scene CI  F1@0.5  F1@1.0  F1@2.0  lanes  R1far vert100
+boston-seaport                396     10  0.7625 [0.7231,0.7959]  0.7182  0.8899     nan  0.734    nan   14.87
+singapore-onenorth            477     12  0.7101 [0.6904,0.7336]  0.6655  0.8502     nan  0.660    nan   14.79
+city                       scenes   points  median s   IQR of scene medians median |s| share |s|>0.5 share |s|>1.0  scenes with |median s|>0.15
+boston-seaport                 10   411882    -0.005 [-0.029,+0.004]      0.189         0.224         0.052              1 of 10
+singapore-onenorth             12   425722     0.025 [-0.023,+0.043]      0.263         0.267         0.074              0 of 12

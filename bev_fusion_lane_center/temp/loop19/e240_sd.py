@@ -6,7 +6,7 @@ ks = ("Q", "lanes_found", "R@1_far", "topo_F1", "F1@1.0", "vert100")
 v = {}
 for arm in ("rc", "eq"):
     v[arm] = {k: [] for k in ks}
-    for s in range(3):
+    for s in range(4):
         d = json.load(open(f"{R}/runs/eval/e24_j1{arm}_s{s}/val.json", encoding="utf-8-sig"))
         m = d.get("metrics", d)
         for k in ks:

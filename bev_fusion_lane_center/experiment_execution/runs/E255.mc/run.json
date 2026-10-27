@@ -14,7 +14,7 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 1391,
  "created": "2026-10-27T00:01:32",
- "status": "running",
+ "status": "ok",
  "after": "",
  "timeout_min": 0,
  "attempts_before": 1,
@@ -22,5 +22,13 @@
  "code_hash": "261312f929cd",
  "commit": "7e64aa841f",
  "tag": "lcr/E255.mc",
- "git_note": "tag existed (resume): tag lcr/E255.mc is attempt 1 (149fa623c8), this attempt ran 7e64aa841f"
+ "git_note": "tag existed (resume): tag lcr/E255.mc is attempt 1 (149fa623c8), this attempt ran 7e64aa841f",
+ "pid": 1415,
+ "exit": 0,
+ "duration_s": 859,
+ "attempts": 1,
+ "ended": "2026-10-27T00:15:59",
+ "last_lines": [
+  "=== attempt 2026-10-27T00:01:40: bash -c bash tools/env/_py14.sh e255_matched.py e24_j1ex_s0 e24_j1ex_s1 > experiments/E255_poisson-set-loss-matched-vertex/matched_controls.txt 2>&1"
+ ]
 }

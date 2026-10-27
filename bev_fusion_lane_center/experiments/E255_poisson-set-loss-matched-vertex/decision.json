@@ -1,0 +1,39 @@
+{
+ "id": "E255",
+ "verdict": "CUT",
+ "metric": "Q",
+ "variant": "a",
+ "control": "c",
+ "effect": -0.07261,
+ "diffs": [
+  -0.07261
+ ],
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": null,
+ "why": "guard violated: topo_F1 a-c -0.1272 (want >= -0.005)",
+ "prediction": "prediction -0.045, measured -0.0726 (error -0.0276)",
+ "clauses": [
+  {
+   "text": "Q a-c -0.0726 (want >= +0.010, band 0.01)",
+   "ok": false,
+   "flags": []
+  },
+  {
+   "text": "lanes_found a-c -0.1297 (want >= +0.050)",
+   "ok": false,
+   "flags": []
+  },
+  {
+   "text": "R@1_far a-c -0.1150 (want >= +0.030)",
+   "ok": false,
+   "flags": []
+  },
+  {
+   "text": "topo_F1 a-c -0.1272 (want >= -0.005)",
+   "ok": false,
+   "flags": []
+  }
+ ],
+ "date": "2026-10-27 01:36"
+}

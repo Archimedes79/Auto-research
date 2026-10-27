@@ -1,23 +1,19 @@
-# HANDOVER - 2026-10-26 03:15
+# HANDOVER - 2026-10-27 02:30
 
 New chat: start in the repository folder (parent of autoresearch/ and this folder), say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB).
 
 ## Who does what
-- **Lead of loop 19 and owner of the Spurmitte experiments, code, PLAN, schedule, HANDOVER: the data chat "BEV Fusion Spurmitte"** (prompt: experiment_execution/history/prompts/PROGRAM_loop19.md; STOP_AT 2026-10-26 04:00, TEST closed, no mail, no shutdown). The tools chat "BEV Fusion Spurmitte Experiments" owns `autoresearch/tools` (D15 fixes done), evaluation tool code, cleanup. "BEV system" chats work on bev_fusion/ and run many CPU/GPU tests at the same time.
+- **Lead of loop 20 and owner of the lane-project experiments, code, PLAN, schedule, HANDOVER: this chat** (prompt: experiment_execution/history/prompts/PROGRAM_loop20.md; TEST closed, no mail). The tools chat owns `autoresearch/tools`. The "BEV system" chat trains `t1_r4_soa` (7000 steps, 3.4 s per step, step 1340 at 01:48, ends about 07:10; session local_ef1c1a32-671e-4989-9e6a-a1d4fe88f515): no timing, at most 2 GPU jobs, no "t1_r" in my command lines; **no shutdown while `pgrep -f t1_r4` matches** (Mirko asked for a shutdown at the end: left to Mirko or that chat).
 
-## Where we are (03:15)
-- Loop 19 results are in PLAN.md (status column) and in the cards: E236 TIE, E237 TIE, E238 KEEP, E240 TIE (3 pairs: lanes found +0.060, Q +0.006, seed SD Q about 0.003), E241 pair 2 (lanes-found effect full size at 25 %), E244 arm b cut as lever, arm a cut at 3200 / 4800 (partial reading negative: Q 0.673 vs 0.730 at matched vertices), E245 gate passed, E246 killed, E243 invalid, E247 not run, E239 waits for the b456 loader.
-- D10/D14 decided: new training uses the CPU-exact distance map (`LCR_DIST_DIR=~/exp_gcar_b123x/feats`); the default of `DIST_DIR` in `training/data/p16_data.py` was switched to the exact map at 03:30 (`LCR_DIST_DIR=~/exp_crn_b123/feats` selects the stored one; test `temp/loop19/test_dist_switch.py` PASS, golden check and spec tests PASS); the foundation network is not retrained.
-- No GPU job queued. The loop-19 queue was cut at 02:33 because other chats held the machine (load average 30-64): pair 3 of E240, E244.a1, E244.b1 were never started.
-- PLAN.md section "What the system still needs" lists N1-N12 (first: no machine lease between chats, timing and training need a quiet machine).
+## Where we are
+- Loop 20 done: E252 (map-offset cap not supported), E240 four pairs (TIE, Q +0.0062, seed SD Q 0.0030 / 0.0020), E241 pair 3 (cut test 4 of 4, KEEP = worth a 12-pairing replay), E255 (Poisson set loss CUT, Q -0.073 at 14.3 vertices), E256 (D4 candidates by city: no flip, order not established). **E253 timing is blocked** (t1_r4 runs; item E253.t planned; run it when no other chat's job is up: `run.py --id E253.t ... -- bash temp/loop20/run_e253.sh`, then `analyse_e253.py`).
+- Week 3 report built and numbers-reviewed: `reports/weekly/Week3_Loops18-20_Report_EN.pdf` (builder `reports/build/reports/build_week3_report.py`, figures `fig_w3_results.py`; PDF needs absolute paths in `print_weekly.ps1`; delete the html).
+- Open decisions for Mirko: D4 fast variant, D5 purge, D17 (`project.json` loops), D18 (per-metric noise bands), D19 (machine lease). Loader default is the exact distance map (D14).
 
 ## Next
-1. (done 03:30) DIST_DIR default switch; runs after it train on the exact map: a new arm needs a fresh equal-budget control on the same map (the stored-map controls differ by about 0.002 Q, E237).
-2. On a quiet machine: E243 repeat (8 replicates), E240 pair 3, E244 arm a with a tau calibration, E241 pair 3.
-3. Add K192-K195 to `literature/register.md`; b456 loader (step 7); `ece` metric for E245.
-
-## Decisions waiting for the user
-DECISIONS.md: D4 fast variant (E240/E236 now read: j1rc buys lanes found, not Q), D5 purge, D12 (git rules into METHOD.md). D14 decided 2026-10-26.
+1. After t1_r4 ends: E253 (45 min exclusive); the 12-pairing E241 replay only if D4 needs it.
+2. Tools chat items: N15 (cross-pairing cut test in decide.py, duplicate ids in schedule.py add), N1 / D19 lease.
+3. Commit by path (the BEV chat's files are not mine); K193 into closed_questions.md.
 
 ## Pointers
-PROBLEM.md; METHOD.md; closed_questions.md; literature/OVERVIEW.md; old state history/; git: one repository, tag `lcr/<id>` per run, remote origin = github.com/Archimedes79/Auto-research (pushes only on request).
+PROBLEM.md; METHOD.md; closed_questions.md; literature/OVERVIEW.md; old state in experiment_execution/history/ (plans/PLAN_loop19.md); git: one repository, tag `lcr/<id>` per run, remote origin = github.com/Archimedes79/Auto-research (pushes only on request).

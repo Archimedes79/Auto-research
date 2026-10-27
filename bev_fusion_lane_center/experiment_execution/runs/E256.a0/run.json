@@ -1,0 +1,33 @@
+{
+ "id": "E256.a0",
+ "hypothesis": "E256: the ranking of the D4 deployment candidates by Q is the same in Boston and in Singapore One-North",
+ "prediction": "no pair flips by more than the band 0.010 between the cities",
+ "rule": "a pair ordered one way in Boston and the other way in Singapore by more than 0.010 in both cities is a flip and goes into D4; otherwise the ranking is confirmed",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c bash tools/env/_py14.sh e252_gt_offset.py fast_recall recall fast control champion > experiments/E256_candidates-by-city/by_city.txt 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 2410,
+ "created": "2026-10-27T00:17:55",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-10-27T00:18:04",
+ "code_hash": "f63a7683d571",
+ "commit": "56f358be09",
+ "tag": "lcr/E256.a0",
+ "git_note": "",
+ "pid": 2447,
+ "exit": 0,
+ "duration_s": 152,
+ "attempts": 1,
+ "ended": "2026-10-27T00:20:36",
+ "last_lines": [
+  "=== attempt 2026-10-27T00:18:04: bash -c bash tools/env/_py14.sh e252_gt_offset.py fast_recall recall fast control champion > experiments/E256_candidates-by-city/by_city.txt 2>&1"
+ ]
+}

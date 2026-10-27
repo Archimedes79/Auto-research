@@ -14,7 +14,27 @@
  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
  "launcher_pid": 1204,
  "created": "2026-10-26T23:56:35",
- "status": "waiting",
+ "status": "ok",
  "after": "E240.c3",
- "timeout_min": 0
+ "timeout_min": 0,
+ "started": "2026-10-27T00:47:03",
+ "code_hash": "f63a7683d571",
+ "commit": "3e021e494a",
+ "tag": "lcr/E255.a0",
+ "git_note": "",
+ "pid": 3519,
+ "exit": 0,
+ "duration_s": 2113,
+ "attempts": 1,
+ "ended": "2026-10-27T01:22:16",
+ "last_lines": [
+  "=== attempt 2026-10-27T00:47:03: bash temp/loop19/train_j1.sh e25_D7_j1phd2s0 0 0.0 e25_j1phd2_s0 --w rec=0 phd=0.65",
+  "env: LCR_DIST_DIR=default P19_REC_CLAMP=3.0 P18_FAR_W=0",
+  "it 4800/4800 1951s share 0.00 seed_pos 0.210 seed_dir 0.075 seed_val 0.038 ver 0.178 pos 0.438 val 0.196 cov 0.000 prec 0.433 rec 1.031 phd 1.517 dup 0.217 link 0.162 junc 0.160 aux_seed 0.531 aux_dir 0.088 ver_pos 0.226 child_ok 0.175 child_near 0.254 link_pos 0.109 tot 3.633 gn 4.944",
+  "e25_D7_j1phd2s0 S 0.6853 tau 0.2 F1@1 0.8565 F1@.5 0.6862 J 0.154 Sp 0.771 v100 18.6 FL 0.035",
+  "_py14.sh: evaluation/evaluate.py",
+  "e25_j1phd2_s0 on val (873 frames), commit 2c59879+dirty, assembly 11.1 ms per frame (CPU), metrics 24 s",
+  "  S 0.729  Q 0.723  F1@1.0 0.853  J 0.386  topo_F1 0.728  lanes_found 0.640  R@1_far 0.646  false_len_frac 0.040  dup_frac 0.022  vert100 18.710",
+  "card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e25_j1phd2_s0/val.json"
+ ]
 }
