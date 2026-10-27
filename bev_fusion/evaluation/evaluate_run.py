@@ -237,7 +237,7 @@ def save_image(path, token, nusc, root, grid, prob, dist, gtd, dets, gts, probs_
 
 
 # ------------------------------------------------------------------------------------------------ evaluation
-def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, workers=4, device="cuda", warm=False):
+def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, workers=4, device="cuda", warm=False, on_train=False):
     """warm=False: independent samples with an empty world memory ("cold", the default of every table so far); warm=True:
     the real deployment, every val scene run in time order with the world memory carried from keyframe to keyframe over the
     WHOLE scene (batch 1; a keyframe whose predecessor is not the previous sample starts with an empty memory); the files
@@ -248,11 +248,11 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     cfg.batch_size, cfg.workers = (1 if warm else batch_size), workers
     cfg.seq_len = 1                         # the loader yields single samples; with warm=True the state is carried below
                                             # (what a clip-trained model gains from the memory over 3 keyframes: eval_memory.py)
-    tag = "_warm" if warm else ""
+    tag = ("_warm" if warm else "") + ("_train" if on_train else "")           # on_train: n TRAIN samples (overfitting check)
     if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
         cfg.radar_cache = "data/cache/radar"                    # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = make_datasets(cfg)
-    ds = val_subset(val_ds, n) if n else val_ds
+    ds = val_subset(train_ds if on_train else val_ds, n) if n else val_ds
     loader = make_loader(ds, cfg, False)
     spec = model.spec
     grid = model.grid
@@ -548,6 +548,7 @@ if __name__ == "__main__":
     ap.add_argument("--time-only", action="store_true", help="only the latency -> eval/latency.json (idle GPU)")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--on-train", action="store_true", help="evaluate --n TRAIN samples instead of val (overfitting check, files *_train)")
     ap.add_argument("--warm", action="store_true", help="carry the world memory over whole scenes (batch 1, time order) -> *_warm files")
     ap.add_argument("--compare", nargs=2)
     ap.add_argument("--boot", type=int, default=1000)
@@ -561,4 +562,4 @@ if __name__ == "__main__":
         os.chdir(ROOT)
         compare(*a.compare, n_boot=a.boot, det_a=a.det_a, det_b=a.det_b, dt=a.dt)
     else:
-        evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers, warm=a.warm)
+        evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers, warm=a.warm, on_train=a.on_train)
