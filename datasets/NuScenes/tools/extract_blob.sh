@@ -17,7 +17,7 @@ if tar -tzf "$f" | grep -E '(^|/)\.\.(/|$)|^/' >/dev/null; then echo "ABORT: uns
 echo "$(date +%T) unpack to $dest ${members:+(only: $members)}"
 if [ "${NUSC_WINTAR:-0}" = "1" ]; then
   # shellcheck disable=SC2086
-  tar.exe -xzf "$(wslpath -w "$f")" -C "$(wslpath -w "$dest")" $members
+  /mnt/c/Windows/System32/tar.exe -xzf "$(wslpath -w "$f")" -C "$(wslpath -w "$dest")" $members
 else
   # shellcheck disable=SC2086
   tar -xzf "$f" -C "$dest" $members

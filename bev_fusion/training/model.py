@@ -39,6 +39,7 @@ import torch.nn as nn
 try:
     from .augment import flip_cam
     from .bev_trunk import BEVTrunk, SemanticHead
+    from .blocks_new import RadarPillars, SecondTrunk
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
     from .lift_pd import Grid, LiftPD, camera_visibility
@@ -50,6 +51,7 @@ try:
 except ImportError:                                   # run as a script
     from augment import flip_cam
     from bev_trunk import BEVTrunk, SemanticHead
+    from blocks_new import RadarPillars, SecondTrunk
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
     from lift_pd import Grid, LiftPD, camera_visibility
@@ -83,6 +85,9 @@ class ModelConfig:
     trunk_detail: int = 0              # stride-1 detail path (bev_trunk.DetailPath) channels, 0 = off
     head_channels: int = 0             # 1x1 reduction of the trunk output before the heads (CenterPoint-style light heads), 0 = off
     trunk_pretrained: str = ""         # DualBEV checkpoint to initialise the BEV encoder (width 1.0, c_fuse 80), "" = random
+    trunk_kind: str = "dualbev"        # "dualbev" (ResNet pyramid + FPN-LSS) | "second" (SECOND + SECONDFPN, blocks_new.py)
+    radar_kind: str = "raster"         # "raster" (means + 2 convs) | "pillars" (point MLP + scatter-max, blocks_new.py) | "off" (zeros)
+    camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     dense_objects: bool = True
@@ -135,7 +140,12 @@ class BEVFusionModel(nn.Module):
                                         nn.ReLU(True))
         self.cam_temporal = _temporal(cfg.cam_temporal, cfg.c_cam, self.grid)
         # radar branch
-        self.radar = RadarBEV(self.grid, cfg.c_rad)
+        if cfg.radar_kind == "pillars":
+            self.radar = RadarPillars(self.grid, cfg.c_rad)
+        elif cfg.radar_kind in ("raster", "off"):
+            self.radar = RadarBEV(self.grid, cfg.c_rad)
+        else:
+            raise ValueError(cfg.radar_kind)
         self.rad_temporal = _temporal(cfg.rad_temporal, cfg.c_rad, self.grid)
         # fusion, trunk (CMX is its own four-stage pyramid + decoder: it replaces both)
         if cfg.fusion == "cmx":
@@ -149,13 +159,20 @@ class BEVFusionModel(nn.Module):
                 self.fusion = GateFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse)
             else:
                 raise ValueError(cfg.fusion)
-            self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail)
-            if cfg.trunk_pretrained:                                  # detection-trained BEV encoder of DualBEV (SOA init)
-                rep = self.trunk.load_pretrained(cfg.trunk_pretrained)
-                if rep["missing"] or rep["shape_mismatch"]:
-                    raise RuntimeError(f"trunk weights do not fit: {rep['missing'][:3]} {rep['shape_mismatch'][:3]}")
-            c = self.trunk.img_bev_encoder_neck.out_channels + cfg.trunk_detail
-        del self.trunk.head                                          # the heads below decode the trunk features
+            if cfg.trunk_kind == "second":
+                self.trunk = SecondTrunk(cin=cfg.c_fuse)
+                c = self.trunk.out_channels
+            elif cfg.trunk_kind == "dualbev":
+                self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail)
+                if cfg.trunk_pretrained:                              # detection-trained BEV encoder of DualBEV (SOA init)
+                    rep = self.trunk.load_pretrained(cfg.trunk_pretrained)
+                    if rep["missing"] or rep["shape_mismatch"]:
+                        raise RuntimeError(f"trunk weights do not fit: {rep['missing'][:3]} {rep['shape_mismatch'][:3]}")
+                c = self.trunk.img_bev_encoder_neck.out_channels + cfg.trunk_detail
+            else:
+                raise ValueError(cfg.trunk_kind)
+        if hasattr(self.trunk, "head"):
+            del self.trunk.head                                      # the heads below decode the trunk features
         self.head_reduce = None
         if cfg.head_channels and cfg.head_channels != c:
             self.head_reduce = nn.Sequential(nn.Conv2d(c, cfg.head_channels, 1, bias=False),
@@ -181,6 +198,8 @@ class BEVFusionModel(nn.Module):
         """(B, F, c_cam, X, Y) camera BEV per frame."""
         img = batch["img"]
         B, Fn = img.shape[:2]
+        if self.cfg.camera_off:
+            return torch.zeros(B, Fn, self.cfg.c_cam, self.grid.nx, self.grid.ny, device=img.device)
         with torch.set_grad_enabled(torch.is_grad_enabled() and not self.cfg.freeze_camera):
             prob, ctx = self.camera.image_features(img.flatten(0, 1), batch["cam_vec"].flatten(0, 1))
         prob, ctx = prob.view(B, Fn, *prob.shape[1:]), ctx.view(B, Fn, *ctx.shape[1:])
@@ -256,7 +275,8 @@ class BEVFusionModel(nn.Module):
         if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
             cam_frames, cam_obs = flip_cam(cam_frames, cam_obs, flip)
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
-        rad = self.radar(batch["radar"], cam.shape[0])
+        rad = (torch.zeros(cam.shape[0], self.cfg.c_rad, self.grid.nx, self.grid.ny, device=cam.device)
+               if self.cfg.radar_kind == "off" else self.radar(batch["radar"], cam.shape[0]))
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:
@@ -367,14 +387,16 @@ def _selftest():
     del m, r, cast, Lr
     # every swappable block (shapes only: no checkpoint, no gradient)
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
-             {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"}]
+             {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"},
+             {"radar_kind": "pillars"}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
+             {"camera_off": True}]
     tried = []
     for kw in swaps:
         m = BEVFusionModel(ModelConfig(pretrained="", **kw)).eval()
         with torch.no_grad():
             r = m(batch, dts=(0.0, 0.5))
         assert r["out"][0.5]["sem"].shape == o["sem"].shape, kw
-        tried.append("=".join(next(iter(kw.items()))))
+        tried.append("=".join(str(x) for x in next(iter(kw.items()))))
         del m, r
     print(f"model selftest ok: two mini samples through the whole chain at dt {dts}, BEVLoss total "
           f"{float(L['total'].detach()):.2f} ({groups}); {n_train / 1e6:.1f} M of {n_all / 1e6:.1f} M parameters trainable "
