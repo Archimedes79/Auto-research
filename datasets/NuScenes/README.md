@@ -16,6 +16,7 @@ State 2026-10-25 17:06: raw data copied to D: and verified (787,847 + 27,300 fil
 | `nuscenes_mini/` | v1.0-mini (environment tests) |
 | `downloads/` | archives: `nuscenes_camera/pNN/` (camera parts), `nuscenes_radar_456/`; one log per part |
 | `manifests/` | file lists (path, size) of the copy from WSL, used to check it |
+| `occ3d/`, `downloads/occ3d/` | Occ3D-nuScenes labels (third-party labels derived from nuScenes lidar; MIT + nuScenes non-commercial terms), downloaded 2026-10-26 with Mirko's OK from the public Google Drive folder of github.com/CVPR2023-3D-Occupancy-Prediction/CVPR2023-3D-Occupancy-Prediction (`gts.tar.gz` 2.74 GB -> `occ3d/gts/<scene>/<sample token>/labels.npz`, `annotations.json` 0.15 GB; NOT the 30.7 GB images); 0.4 m voxels, x / y +-40 m, z -1..5.4 m, 17 classes, `mask_lidar` / `mask_camera`; used for the radar stationary-structure target (bev_fusion plan 8.4) |
 | `_to_delete/` | scratch of tests (empty folders / small files) |
 
 ## What is on disk (2026-10-25)
@@ -26,11 +27,17 @@ State 2026-10-25 17:06: raw data copied to D: and verified (787,847 + 27,300 fil
 | camera sweeps, six cameras (12 Hz) | 1-6 | on D: since 2026-10-25 21:07 (97.9 GB, approved by Mirko; each archive checked against its S3 ETag; only `sweeps/` unpacked). Complete (`tools/history/check_camera_sweeps.py`): every camera sweep the metadata lists for the 510 scenes is present, 584,074 images (CAM_FRONT 98,029), none missing, none from other scenes. Archives kept in `downloads/nuscenes_camera/pNN/` |
 | radar samples + sweeps, five radars | 1-6 | on D: |
 | lidar (LIDAR_TOP) | - | not downloaded (parts 1-6: 80.2 GB) |
-| parts 7-10 (340 scenes) | - | not downloaded (camera 79.4 GB, radar 0.8 GB, lidar 54.8 GB) |
+| parts 7-10 (340 scenes: 272 train, 68 val by the official split), radar | 7-10 | on D: since 2026-10-28 (0.8 GB; all five radars, samples + sweeps) |
+| parts 7-10, camera | 7-10 | archives on D: since 2026-10-28 (79.4 GB, approved by Mirko, each checked against its S3 ETag, kept in `downloads/nuscenes_camera/pNN/`); only `samples/CAM_FRONT` and `sweeps/CAM_FRONT` unpacked (`NUSC_MEMBERS`), the other five cameras are still in the archives (unpack them with `get_blob_part.sh` when a model needs them). The 340 scenes therefore have front camera + radar only |
+| parts 7-10, lidar | - | not downloaded (54.8 GB) |
+
+D: has about 35 GB free after this (2026-10-28); C: was full after the derived caches of these scenes (feature cache +9 GB), so finished study checkpoints of `bev_fusion` were moved to `D:\Auto-research\bev_fusion_ckpts\` (a `MOVED.txt` in each run folder).
 
 Archive sizes and ETags: `wsl python3 datasets/NuScenes/tools/list_nuscenes_bucket.py trainval` (listing only).
 
 ## Tools (`tools/`)
+Google Drive helpers (2026-10-26): `list_gdrive_folder.py <folder id>` lists a public Drive folder (names, ids; listing only), `gdrive_size.sh <file id>` gives a file's size from a header request, `get_gdrive_file.sh <file id> <dest>` downloads one file resumably and checks its size (and gzip integrity); `history/get_occ3d_labels.sh` is the one-off that fetched the Occ3D labels.
+
 | tool | what it does |
 |---|---|
 | `list_nuscenes_bucket.py [filter]` | lists the archives of the public bucket `motional-nuscenes` with size and ETag (no download) |
