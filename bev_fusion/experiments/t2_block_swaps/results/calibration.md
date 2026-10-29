@@ -1,7 +1,7 @@
 # Calibration audit (2026-10-29, layer 0-1, real VAL frames, CPU)
 
 Script `temp/calib/check_calibration.py` (stride 8: 389 of 3,109 VAL keyframes, 82 scenes, 1,403 visible (>= 60 %) vehicle boxes),
-raw output `temp/calib/check_calibration.log`. Request: "make sure calibration is right".
+raw output `calibration_raw.txt`. Request: "make sure calibration is right".
 
 | check | method | result |
 |---|---|---|

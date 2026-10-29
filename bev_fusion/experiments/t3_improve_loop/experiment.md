@@ -71,3 +71,17 @@ system is the camera path (information gain ~0 on unseen scenes). Tries 6 and 7 
 `t3_cam_adapter` (frozen features are the bottleneck?) and `t3_cam_zsum` (the 640-channel height-into-channels 1x1 conv is learned from scratch and overfits; the standard LSS /
 DualBEV collapse sums over heights and has 10 x fewer parameters). Success criterion for a camera-only arm: mAP above the floor 0.156 by more than the band, i.e. >= 0.17, and
 AP@0.5 above the floor 0.047.
+
+## 4 Metric hygiene decided on the data (2026-10-29 23:20, after the noise seed `ref_s1` came in)
+
+`ref_s0` and `ref_s1` (same config, seed 0 / 1, `results/arms.md`) differ by 0.049 in the 3-class mAP, far above the 0.02 kill criterion of the swap card - but the whole
+difference is the rare class `two_wheeler` (174 GT in 1000 frames; AP@2 0.196 vs 0.047). Vehicle AP@1 / AP@2 (0.468 / 0.465, 0.606 / 0.605), drivable (0.666 / 0.663)
+and lane divider (0.181 / 0.179) agree; walkway differs by 0.027, pedestrian AP@1 by 0.020. Consequences, applied from here on (tool `temp/study/collect.py`, `evaluate_run.compare`):
+- headline = `mAP2` (vehicle + pedestrian, mean over the four matching distances), vehicle / pedestrian AP@1 and AP@2, drivable / walkway / lane-divider IoU; `mAP3` and the
+  `two_wheeler` AP are reported but never decide a verdict (one seed cannot resolve them);
+- AP@1 added to the paired bootstrap (AP@2 has the high no-sensor floor, try 1); the noise band is 2 x the seed spread of the stable metrics;
+- every table carries the no-sensor floor row (`cam_off` with zero radar: mAP2 / AP@1 / drivable / walkway / divider = see `try1_controls.md`).
+Re-read verdicts of the swap study with these rules (`results/arms.md`, seed spread of mAP2 0.015): `radar_off` WORSE (veh AP@1 -0.26*, ped AP@1 -0.11*), `lift_p` WORSE
+(veh AP@1 -0.042*, ped AP@1 -0.048*), `trunk_rand` WORSE (walkway -0.055*), `cam_off` TIE, `camtemp_none` TIE (ped AP@1 -0.028* is close to the band).
+
+| 2026-10-29 23:20 | `ref_s1` evaluated; mAP3 noise recognised (two_wheeler); metric set changed (section 4) | `cam_off` (radar only) is a TIE with the full system on detection |

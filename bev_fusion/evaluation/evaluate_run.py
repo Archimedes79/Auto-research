@@ -537,17 +537,18 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0)
     fb = {s: r[dt] for s, r in rb[det_b].items() if dt in r}
     sc = sorted(set(fa) & set(fb))
     for cls in ("vehicle", "pedestrian"):
-        # the greedy matching of a detection only involves its own frame, so the true-positive flags of every scene are fixed:
-        # compute them once, a resample only re-sorts the concatenated flags (equal to re-running det_ap, but fast)
-        fl_a, fl_b = scene_flags(fa, sc, cls), scene_flags(fb, sc, cls)
-        a0, b0 = ap_from_flags(fl_a, sc), ap_from_flags(fl_b, sc)
-        ds = []
-        for _ in range(n_boot):
-            ix = rng.integers(0, len(sc), len(sc))
-            s_ix = [sc[i] for i in ix]
-            ds.append(ap_from_flags(fl_b, s_ix) - ap_from_flags(fl_a, s_ix))
-        lo, hi = np.percentile(ds, [2.5, 97.5])
-        res[f"{cls} AP@2"] = (b0 - a0, lo, hi, a0, b0)
+        for thr in (1.0, 2.0):            # AP@1 added 2026-10-29: AP@2 has a high no-sensor floor (t3_improve_loop try 1)
+            # the greedy matching of a detection only involves its own frame, so the true-positive flags of every scene are fixed:
+            # compute them once, a resample only re-sorts the concatenated flags (equal to re-running det_ap, but fast)
+            fl_a, fl_b = scene_flags(fa, sc, cls, thr), scene_flags(fb, sc, cls, thr)
+            a0, b0 = ap_from_flags(fl_a, sc), ap_from_flags(fl_b, sc)
+            ds = []
+            for _ in range(n_boot):
+                ix = rng.integers(0, len(sc), len(sc))
+                s_ix = [sc[i] for i in ix]
+                ds.append(ap_from_flags(fl_b, s_ix) - ap_from_flags(fl_a, s_ix))
+            lo, hi = np.percentile(ds, [2.5, 97.5])
+            res[f"{cls} AP@{thr:g}"] = (b0 - a0, lo, hi, a0, b0)
     for k, (d, lo, hi, a, b) in res.items():
         lines.append(f"{k:28s} a {a:.4f}  b {b:.4f}  b-a {d:+.4f}  95% [{lo:+.4f}, {hi:+.4f}]"
                      + ("  (excludes 0)" if lo > 0 or hi < 0 else ""))
