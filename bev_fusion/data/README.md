@@ -16,7 +16,7 @@ Size (the nuScenes parts downloaded so far, `n_cam = 3`, `cam_stride = 2`): feat
 
 Update 2026-10-28 (parts 7-10, 340 new scenes: 272 train, 68 val, front camera + radar only): the three caches above were extended
 by `temp/data/prep_new_scenes.sh` (radar cache 13,051 samples, GT cache 32,449 entries, feature cache about 31 k frames of the train
-split plus the val split, roughly +9 GB on C:). Scenes `scenes_parts1_6.json` (428 train / 82 val = the scenes of the earlier runs and
+split plus the val split, totals now: feature cache 26 GB, GT cache 4.4 GB, radar cache 1.6 GB on C:). Scenes `scenes_parts1_6.json` (428 train / 82 val = the scenes of the earlier runs and
 of the study `t2_block_swaps`) are frozen in the t2 configs as `train_scenes` / `val_scenes`: `available_scenes()` takes every scene
 whose first CAM_FRONT keyframe exists, so a config without these lists would silently train on 700 scenes. The older configs
 (`t1_*`) have no list and now mean 700 / 150 scenes; patch them before re-evaluating an old run.
