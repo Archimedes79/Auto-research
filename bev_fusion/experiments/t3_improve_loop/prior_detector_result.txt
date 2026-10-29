@@ -1,0 +1,7 @@
+groups ['vehicle', 'two_wheeler', 'pedestrian'] prior layers ['vehicle', 'pedestrian', 'two_wheeler']
+detections per frame: 100 {'vehicle': 42, 'two_wheeler': 27, 'pedestrian': 31}
+
+PRIOR DETECTOR (no sensor, 100 fixed detections per frame), 1000 val frames:
+mAP2 0.000  mAP3 0.000
+vehicle AP@0.5 0.000 AP@1 0.000 AP@2 0.000 AP@4 0.003
+pedestrian AP@0.5 0.000 AP@1 0.000 AP@2 0.000 AP@4 0.000

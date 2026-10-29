@@ -123,3 +123,4 @@ should provide. Lesson (memory note): a subclass override that skips the parent'
 check before training.
 
 | 2026-10-30 01:20 | **ERRATUM**: `camera_off` ignored by the cached model; `cam_off` arm and the "floor" invalid; camera works (probes), localisation weak; fix d57bcc2, `t3_radar_only` queued first in lane 3 | see section 5 |
+| 2026-10-30 01:45 | true no-sensor floor of the detection metric: `temp/calib/prior_detector.py` (100 fixed detections per frame at the top-k local maxima of the smoothed train prior, same 1000 val frames, same DetMeter): mAP2 0.000, vehicle AP@4 0.003, all other AP 0.000 (`prior_detector_result.txt`) | the metric is NOT gameable by a position prior; the earlier "floor of 0.15-0.21" was the camera-only model. Camera-only (`radar_off`, mAP2 0.210) is real sensing; open item 6 of the erratum partly closed (floor = 0), radar-only still to run |
