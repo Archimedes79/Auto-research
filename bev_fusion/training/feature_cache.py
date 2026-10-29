@@ -212,6 +212,8 @@ def CachedBEVFusionModel(cfg=None):
         def camera_bevs(self, batch):
             prob, ctx = batch["prob"].float(), batch["ctx"].float()
             B, Fn = prob.shape[:2]
+            if self.cam_adapter is not None:
+                ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
             bevs = []
             for b in range(B):                                          # one calibration per sample (scenes differ)
                 vol = self.lift(ctx[b], prob[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida"])

@@ -39,7 +39,7 @@ import torch.nn as nn
 try:
     from .augment import flip_cam
     from .bev_trunk import BEVTrunk, SemanticHead
-    from .blocks_new import RadarPillars, SecondTrunk
+    from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
     from .lift_pd import Grid, LiftPD, camera_visibility
@@ -51,7 +51,7 @@ try:
 except ImportError:                                   # run as a script
     from augment import flip_cam
     from bev_trunk import BEVTrunk, SemanticHead
-    from blocks_new import RadarPillars, SecondTrunk
+    from blocks_new import CtxAdapter, RadarPillars, SecondTrunk
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
     from lift_pd import Grid, LiftPD, camera_visibility
@@ -87,6 +87,7 @@ class ModelConfig:
     trunk_pretrained: str = ""         # DualBEV checkpoint to initialise the BEV encoder (width 1.0, c_fuse 80), "" = random
     trunk_kind: str = "dualbev"        # "dualbev" (ResNet pyramid + FPN-LSS) | "second" (SECOND + SECONDFPN, blocks_new.py)
     radar_kind: str = "raster"         # "raster" (means + 2 convs) | "pillars" (point MLP + scatter-max, blocks_new.py) | "off" (zeros)
+    cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
     camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
@@ -136,6 +137,7 @@ class BEVFusionModel(nn.Module):
             self.lift = _fallbacks().LiftS(self.grid, depth_centres())
         else:
             raise ValueError(cfg.lift)
+        self.cam_adapter = CtxAdapter(n_ctx) if cfg.cam_adapter else None
         self.cam_reduce = nn.Sequential(nn.Conv2d(nz * n_ctx, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
                                         nn.ReLU(True))
         self.cam_temporal = _temporal(cfg.cam_temporal, cfg.c_cam, self.grid)
@@ -203,6 +205,8 @@ class BEVFusionModel(nn.Module):
         with torch.set_grad_enabled(torch.is_grad_enabled() and not self.cfg.freeze_camera):
             prob, ctx = self.camera.image_features(img.flatten(0, 1), batch["cam_vec"].flatten(0, 1))
         prob, ctx = prob.view(B, Fn, *prob.shape[1:]), ctx.view(B, Fn, *ctx.shape[1:])
+        if self.cam_adapter is not None:
+            ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
         hw = img.shape[-2:]
         bevs = []
         for b in range(B):                                       # one calibration per sample (scenes differ)
@@ -389,7 +393,7 @@ def _selftest():
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
              {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"},
              {"radar_kind": "pillars"}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
-             {"camera_off": True}]
+             {"camera_off": True}, {"cam_adapter": True}]
     tried = []
     for kw in swaps:
         m = BEVFusionModel(ModelConfig(pretrained="", **kw)).eval()

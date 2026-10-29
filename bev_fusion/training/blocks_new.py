@@ -7,6 +7,9 @@ RadarPillars   point-based radar encoder (PointPillars / RadarPillarNet idea; CR
 SecondTrunk    SECOND backbone + SECONDFPN (the CenterPoint / BEVFusion-lidar BEV encoder): stage 1 at the full grid (stride 1),
                stage 2 at stride 2, both upsampled to the full grid and concatenated. Replaces the DualBEV
                ResNet pyramid + FPN-LSS (BEVTrunk). Not pre-trained here.
+CtxAdapter     trainable residual adapter on the cached (frozen, detection-trained) image context features before the lift:
+               x + conv3x3(relu(norm(conv3x3(x)))), the last conv zero-initialised, so training starts exactly at the reference
+               system (try 6 of t3_improve_loop: are the frozen features the bottleneck?).
 Run the self-test: python training/blocks_new.py
 """
 import torch
@@ -88,6 +91,18 @@ class SecondTrunk(nn.Module):
     forward = features
 
 
+class CtxAdapter(nn.Module):
+    def __init__(self, c=80, hidden=96):
+        super().__init__()
+        self.body = nn.Sequential(nn.Conv2d(c, hidden, 3, padding=1, bias=False), nn.GroupNorm(8, hidden), nn.ReLU(True),
+                                  nn.Conv2d(hidden, c, 3, padding=1))
+        nn.init.zeros_(self.body[-1].weight)
+        nn.init.zeros_(self.body[-1].bias)
+
+    def forward(self, x):                                  # (N, c, H, W)
+        return x + self.body(x)
+
+
 def _selftest():
     torch.manual_seed(0)
     g = Grid()
@@ -122,9 +137,14 @@ def _selftest():
     assert y.shape == (2, 256, g.nx, g.ny)
     y.mean().backward()
     assert x.grad is not None and all(q.grad is not None for q in t.parameters())
+    a = CtxAdapter(80)
+    xa = torch.randn(3, 80, 16, 44)
+    assert torch.equal(a(xa), xa), "zero-initialised adapter is the identity"
+    a(xa).sum().backward()
+    assert a.body[-1].weight.grad is not None and a.body[0].weight.grad is not None
     print(f"blocks_new selftest ok: RadarPillars (scatter-max = brute force, count channel, empty input, gradients; "
           f"{sum(q.numel() for q in m.parameters()) / 1e3:.1f} k parameters), SecondTrunk (output {tuple(y.shape)}, "
-          f"{sum(q.numel() for q in t.parameters()) / 1e6:.2f} M parameters)")
+          f"{sum(q.numel() for q in t.parameters()) / 1e6:.2f} M parameters), CtxAdapter (identity at init, gradients)")
 
 
 if __name__ == "__main__":
