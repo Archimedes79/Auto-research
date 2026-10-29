@@ -13,7 +13,8 @@ base = json.load(open(os.path.join(root, "training/configs/t2_ref_s0.json")))
 ARMS = {"t3_cam_adapter": ({"radar_kind": "off", "cam_adapter": True}, {}),
         "t3_cam_zsum": ({"radar_kind": "off", "cam_collapse": "zsum"}, {}),
         "t3_adapter": ({"cam_adapter": True}, {}), "t3_zsum": ({"cam_collapse": "zsum"}, {}),
-        "t3_ref_long": ({}, {"steps": 6000, "eval_every": 2000})}
+        "t3_ref_long": ({}, {"steps": 6000, "eval_every": 2000}),
+        "t3_radar_only": ({"camera_off": True}, {})}      # the real radar-only arm (t2_cam_off ran WITH camera: bug, fixed 2026-10-30)
 for name, (model, top) in ARMS.items():
     c = copy.deepcopy(base)
     c["name"] = name
