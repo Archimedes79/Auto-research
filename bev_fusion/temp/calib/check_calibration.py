@@ -29,9 +29,10 @@ from nuscenes.utils.geometry_utils import view_points  # noqa: E402
 from pyquaternion import Quaternion  # noqa: E402
 
 stride = int(sys.argv[1]) if len(sys.argv) > 1 else 8
+split = sys.argv[2] if len(sys.argv) > 2 else "val"
 root = os.path.expanduser("~/data/nuscenes_full")
 nusc = NuScenes("v1.0-trainval", dataroot=root, verbose=False)
-val_names = set(json.load(open("data/scenes_parts1_6.json"))["val"])
+val_names = set(json.load(open("data/scenes_parts1_6.json"))[split])
 scenes = [s["token"] for s in nusc.scene if s["name"] in val_names]
 store = FeatureStore("data/cache/cam_feats")
 ds = CachedFrontRadarDataset(root, "v1.0-trainval", scenes, store=store, radar_cache="data/cache/radar", with_gt=False,

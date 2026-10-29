@@ -39,7 +39,7 @@ import torch.nn as nn
 try:
     from .augment import flip_cam
     from .bev_trunk import BEVTrunk, SemanticHead
-    from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk
+    from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
     from .lift_pd import Grid, LiftPD, camera_visibility
@@ -51,7 +51,7 @@ try:
 except ImportError:                                   # run as a script
     from augment import flip_cam
     from bev_trunk import BEVTrunk, SemanticHead
-    from blocks_new import CtxAdapter, RadarPillars, SecondTrunk
+    from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
     from lift_pd import Grid, LiftPD, camera_visibility
@@ -87,6 +87,7 @@ class ModelConfig:
     trunk_pretrained: str = ""         # DualBEV checkpoint to initialise the BEV encoder (width 1.0, c_fuse 80), "" = random
     trunk_kind: str = "dualbev"        # "dualbev" (ResNet pyramid + FPN-LSS) | "second" (SECOND + SECONDFPN, blocks_new.py)
     radar_kind: str = "raster"         # "raster" (means + 2 convs) | "pillars" (point MLP + scatter-max, blocks_new.py) | "off" (zeros)
+    cam_collapse: str = "zconv"        # try 7: "zconv" (1x1 conv over Z x 80 channels) | "zsum" (sum over heights, then 1x1; blocks_new.ZSumReduce)
     cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
     camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
     oversample: int = 4
@@ -138,8 +139,13 @@ class BEVFusionModel(nn.Module):
         else:
             raise ValueError(cfg.lift)
         self.cam_adapter = CtxAdapter(n_ctx) if cfg.cam_adapter else None
-        self.cam_reduce = nn.Sequential(nn.Conv2d(nz * n_ctx, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
-                                        nn.ReLU(True))
+        if cfg.cam_collapse == "zsum":
+            self.cam_reduce = ZSumReduce(nz, n_ctx, cfg.c_cam)
+        elif cfg.cam_collapse == "zconv":
+            self.cam_reduce = nn.Sequential(nn.Conv2d(nz * n_ctx, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
+                                            nn.ReLU(True))
+        else:
+            raise ValueError(cfg.cam_collapse)
         self.cam_temporal = _temporal(cfg.cam_temporal, cfg.c_cam, self.grid)
         # radar branch
         if cfg.radar_kind == "pillars":
@@ -393,7 +399,7 @@ def _selftest():
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
              {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"},
              {"radar_kind": "pillars"}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
-             {"camera_off": True}, {"cam_adapter": True}]
+             {"camera_off": True}, {"cam_adapter": True}, {"cam_collapse": "zsum"}]
     tried = []
     for kw in swaps:
         m = BEVFusionModel(ModelConfig(pretrained="", **kw)).eval()

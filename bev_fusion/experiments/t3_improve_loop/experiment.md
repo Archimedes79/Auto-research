@@ -38,3 +38,36 @@ excludes 0; TIE -> the cheaper variant. Order in the GPU queue: 1, 2, 3, 4, 5 (q
 | time | step | result |
 |---|---|---|
 | 2026-10-29 20:43 | queue lane started (detached Windows process); `camtemp_none` resumes from step 2000 | running |
+| 2026-10-29 21:55 | **Try 1 done: sanity controls** (table `try1_controls.md`; raw `runs/*/eval/metrics_ctl_*.json`; `temp/study/collect_ctl.py`) | see section 3 |
+
+## 3 Try 1 - what the model really uses (cold VAL-1000, 82 scenes; controls at evaluation only)
+
+| system | normal | no / shuffled radar | no / shuffled camera |
+|---|---|---|---|
+| `ref_s0` (3000 steps) mAP | 0.277 | 0.177 / 0.151 | 0.013 / 0.028 |
+| `t1_r4_soa` (7000 steps x accum 2) mAP | 0.307 | - / 0.156 | 0.031 / 0.036 |
+| `cam_off` (trained without camera) mAP | 0.247 | 0.156 / 0.136 | - |
+| `radar_off` (trained without radar) mAP | 0.147 | - | 0.000 / 0.009 |
+
+Findings (numbers: `try1_controls.md`):
+1. **The metric has a high floor.** `cam_off` with its radar removed has NO sensor input at all, and still scores mAP 0.156, vehicle AP@2 0.445, drivable
+   0.629, lane divider 0.162 (a learned mean-position prior + ego motion; a likely reason for the height of the floor, NOT measured: up to k = 100 detections per frame at score 0.05 with
+   2 m / 4 m matching circles cover a large part of the 60 x 52 m area). My prediction "shuffled radar < 0.03" was wrong for that reason. From now on every table carries the floor row and the gain over the floor:
+   `ref_s0` mAP gain +0.121 (of 0.277), vehicle AP@2 +0.161, drivable +0.037, walkway +0.117, lane divider +0.019.
+2. **Radar carries the detection signal.** Radar-only (`cam_off`) gains +0.091 over the floor, with real radar replaced by another sample's the model drops to the floor.
+   Radar-only is NOT a leak: shuffled radar gives the floor, real radar +0.09.
+3. **THE CAMERA PATH DOES NOT WORK ON ITS OWN.** Camera-only (`radar_off`) scores mAP 0.147 = the floor (0.156); vehicle AP@2 0.448 vs floor 0.445; AP@0.5 0.045 vs
+   0.047; AP@4 0.617 vs 0.610. On TRAIN scenes the same model gets mAP 0.213 (vehicle AP@2 0.566, `metrics_train.json`): it fits training scenes but learns nothing that
+   transfers. The long-trained `t1_r4_soa` behaves the same (shuffled radar = floor 0.156): the camera adds +0.03 over radar-only in `ref_s0` and nothing without radar.
+4. **The joint model depends on the camera input without gaining from it alone**: zero / shuffled camera collapses `ref_s0` to 0.01-0.03 (below the floor: out-of-distribution
+   fused features), though `cam_off` trained without it keeps 0.247.
+5. **Not a data / calibration bug**: depth-head alignment on TRAIN scenes peaks at (0, 0) exactly as on VAL (mass 0.691, `temp/calib/check_calibration_train.log`);
+   geometry matches the devkit to 1e-10. Camera-only training scenes are correctly paired with their features.
+6. Maps: the camera adds +0.03 walkway over the floor in camera-only; lane dividers are at the floor in every system (0.162-0.181): the divider head learns almost nothing
+   beyond the prior, in the long-trained system too (0.273 vs floor 0.162, the only strong gain, from 2.6 epochs).
+
+Decision (card rule: "mAP > 0.10 for shuffled radar = find the cause first"): the cause is the metric floor, not a leak; radar-only is genuine. The weak spot of the
+system is the camera path (information gain ~0 on unseen scenes). Tries 6 and 7 are re-aimed at it and run as CAMERA-ONLY arms (the radar hides camera gains in the full system):
+`t3_cam_adapter` (frozen features are the bottleneck?) and `t3_cam_zsum` (the 640-channel height-into-channels 1x1 conv is learned from scratch and overfits; the standard LSS /
+DualBEV collapse sums over heights and has 10 x fewer parameters). Success criterion for a camera-only arm: mAP above the floor 0.156 by more than the band, i.e. >= 0.17, and
+AP@0.5 above the floor 0.047.

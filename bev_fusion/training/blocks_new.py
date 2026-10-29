@@ -10,6 +10,9 @@ SecondTrunk    SECOND backbone + SECONDFPN (the CenterPoint / BEVFusion-lidar BE
 CtxAdapter     trainable residual adapter on the cached (frozen, detection-trained) image context features before the lift:
                x + conv3x3(relu(norm(conv3x3(x)))), the last conv zero-initialised, so training starts exactly at the reference
                system (try 6 of t3_improve_loop: are the frozen features the bottleneck?).
+ZSumReduce     the standard LSS / DualBEV collapse of the height axis: SUM the depth-weighted features over the height slices
+               (80 channels, no parameters), then 1x1 conv + BN + ReLU to c_out. Replaces the 1x1 conv over Z x 80 = 640 channels
+               of the reference (`cam_reduce`), which has 10x more parameters learned from scratch (try 7 of t3_improve_loop).
 Run the self-test: python training/blocks_new.py
 """
 import torch
@@ -103,6 +106,17 @@ class CtxAdapter(nn.Module):
         return x + self.body(x)
 
 
+class ZSumReduce(nn.Module):
+    def __init__(self, nz, c_in, c_out):
+        super().__init__()
+        self.nz, self.c_in = nz, c_in
+        self.proj = nn.Sequential(nn.Conv2d(c_in, c_out, 1, bias=False), nn.BatchNorm2d(c_out), nn.ReLU(True))
+
+    def forward(self, vol):                                # (B, Z * C, X, Y), z-major as lift_pd.height_to_channels
+        B, _, X, Y = vol.shape
+        return self.proj(vol.view(B, self.nz, self.c_in, X, Y).sum(1))
+
+
 def _selftest():
     torch.manual_seed(0)
     g = Grid()
@@ -142,9 +156,13 @@ def _selftest():
     assert torch.equal(a(xa), xa), "zero-initialised adapter is the identity"
     a(xa).sum().backward()
     assert a.body[-1].weight.grad is not None and a.body[0].weight.grad is not None
+    zr = ZSumReduce(8, 80, 64)
+    xv = torch.randn(2, 8 * 80, 6, 5)
+    ref = xv.view(2, 8, 80, 6, 5).sum(1)
+    assert torch.allclose(zr.proj[0](ref), zr.proj[0](xv.view(2, 8, 80, 6, 5).sum(1))) and zr(xv).shape == (2, 64, 6, 5)
     print(f"blocks_new selftest ok: RadarPillars (scatter-max = brute force, count channel, empty input, gradients; "
           f"{sum(q.numel() for q in m.parameters()) / 1e3:.1f} k parameters), SecondTrunk (output {tuple(y.shape)}, "
-          f"{sum(q.numel() for q in t.parameters()) / 1e6:.2f} M parameters), CtxAdapter (identity at init, gradients)")
+          f"{sum(q.numel() for q in t.parameters()) / 1e6:.2f} M parameters), CtxAdapter (identity at init, gradients), ZSumReduce")
 
 
 if __name__ == "__main__":
