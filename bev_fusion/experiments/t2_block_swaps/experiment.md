@@ -55,3 +55,21 @@ an arm that diverges (NaN / grad norm > 500 for 100 steps) is cut and reported a
 **Caveats written in advance.** One seed per arm (the controls give the noise floor only); 3000 steps is about a fifth of the compute
 of `t1_r4_soa`, so ranking favours fast-converging blocks (pre-trained, simple) over blocks that need a long schedule; 428 scenes,
 front camera; effects found here are effects on this data and schedule, not general laws.
+
+## 4 Phase 2 plan: the ladder (added 2026-10-29 on Mirko's advice: start from a good vision BEV network, add one step at a time, test as you go)
+
+The block swaps above are the subtractive view of one chain; phase 2 reads and extends them as an ADDITIVE ladder with a fallback at every rung.
+Rung 0 is the good vision network: pre-trained DualBEV (R50) image backbone + neck + depth head + BEV encoder (all pre-trained, only the lift, the
+BEV reduce and the light heads are new) = arm `radar_off`. Every later rung adds ONE thing and is kept only when the decision rule (band, paired
+bootstrap) says BETTER, or TIE and cheaper; otherwise the previous rung stays the champion (risk control).
+
+| rung | adds | arms that measure it (this study) | next candidate if the rung is weak |
+|---|---|---|---|
+| 0 vision BEV | lift + pre-trained encoder + heads | `radar_off`, `lift_p`, `lift_s`, `trunk_*` | longer schedule; unfreeze the last image stage (needs images, not the cache) |
+| 1 + radar | radar branch + fusion | `ref_s0` vs `radar_off`; `radar_pillars` | richer radar encoder, radar depth hint into the lift |
+| 2 + fusion | concat / gate / CMX | `fusion_gate`, `fusion_cmx` | cross-attention at the stride-16 level |
+| 3 + time ("tracking") | window + world memory / GRU | `camtemp_none`, `camtemp_gru` | BEVDet4D-style aligned previous BEV, then an explicit track-association head |
+| 4 + data | parts 7-10 (700 train scenes) | final system | more scenes need more cameras unpacked |
+
+Not yet done and needed for rung 0 to count as "good": the vision-only number against the published camera-only level on the same protocol
+(the pre-trained DualBEV box head is not loaded here, so only its image/depth part is reproduced - layer 1 gap, named in the report).
