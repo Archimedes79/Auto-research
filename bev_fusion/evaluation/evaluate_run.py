@@ -52,15 +52,15 @@ SEG_METRIC = {"drivable_area": "iou@0", "walkway": "iou@0", "lane_divider": "iou
 
 
 # ------------------------------------------------------------------------------------------------ helpers
-def load_run(run, device):
+def load_run(run, device, ckpt_dir=None):
     with open(os.path.join(run, "config.json")) as f:
         raw = json.load(f)
     cfg = TrainConfig(**raw)
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
-    ckpts = sorted(glob.glob(os.path.join(run, "ckpt_*.pt")))
+    ckpts = sorted(glob.glob(os.path.join(ckpt_dir or run, "ckpt_*.pt")))
     if not ckpts:
-        raise FileNotFoundError(f"no checkpoint in {run}")
+        raise FileNotFoundError(f"no checkpoint in {ckpt_dir or run}")
     opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr)   # as train(), to load
     ema = EMA(model, cfg.ema)
     step, _ = load_checkpoint(ckpts[-1], model, loss, opt, ema)
@@ -237,18 +237,34 @@ def save_image(path, token, nusc, root, grid, prob, dist, gtd, dets, gts, probs_
 
 
 # ------------------------------------------------------------------------------------------------ evaluation
-def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, workers=4, device="cuda", warm=False, on_train=False):
+def perturb(batch, control):
+    """in place: the sanity controls of evaluate_run (the model must lose what the control takes away, else the input is not used)."""
+    B = len(batch["tokens"])
+    if control == "shuffle_radar":
+        batch["radar"]["b"] = (batch["radar"]["b"] + 1) % B
+    elif control == "zero_radar":
+        batch["radar"] = {k: v[:0] for k, v in batch["radar"].items()}
+    elif control == "shuffle_cam":
+        batch["prob"], batch["ctx"] = torch.roll(batch["prob"], 1, 0), torch.roll(batch["ctx"], 1, 0)
+    elif control == "zero_cam":
+        batch["prob"], batch["ctx"] = torch.zeros_like(batch["prob"]), torch.zeros_like(batch["ctx"])
+    else:
+        raise ValueError(f"unknown control {control}")
+
+
+def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, workers=4, device="cuda", warm=False, on_train=False,
+                 control="", ckpt_dir=None):
     """warm=False: independent samples with an empty world memory ("cold", the default of every table so far); warm=True:
     the real deployment, every val scene run in time order with the world memory carried from keyframe to keyframe over the
     WHOLE scene (batch 1; a keyframe whose predecessor is not the previous sample starts with an empty memory); the files
     get the suffix _warm (metrics_warm.json, ...) and the run's cold files stay."""
     device = device if torch.cuda.is_available() else "cpu"
     os.chdir(ROOT)
-    cfg, model, loss, step, ckpt = load_run(run, device)
+    cfg, model, loss, step, ckpt = load_run(run, device, ckpt_dir)
     cfg.batch_size, cfg.workers = (1 if warm else batch_size), workers
     cfg.seq_len = 1                         # the loader yields single samples; with warm=True the state is carried below
                                             # (what a clip-trained model gains from the memory over 3 keyframes: eval_memory.py)
-    tag = ("_warm" if warm else "") + ("_train" if on_train else "")           # on_train: n TRAIN samples (overfitting check)
+    tag = ("_warm" if warm else "") + ("_train" if on_train else "") + (f"_ctl_{control}" if control else "")   # on_train: n TRAIN samples (overfitting check)
     if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
         cfg.radar_cache = "data/cache/radar"                    # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = make_datasets(cfg)
@@ -273,6 +289,8 @@ def evaluate_run(run, n=0, prior=0, images=0, timing=False, batch_size=4, worker
     with torch.no_grad():
         for batch in loader:
             kw = {}
+            if control:
+                perturb(batch, control)
             if warm:                                                  # carry the world memory along the scene
                 tok0 = batch["tokens"][0]
                 cont = prev_tok is not None and nusc.get("sample", tok0)["prev"] == prev_tok
@@ -399,7 +417,7 @@ def time_run(run, device="cuda"):
     load before and after is recorded, 'idle' says whether it was below 10 %). Does not touch metrics.json."""
     device = device if torch.cuda.is_available() else "cpu"
     os.chdir(ROOT)
-    cfg, model, loss, step, ckpt = load_run(run, device)
+    cfg, model, loss, step, ckpt = load_run(run, device, ckpt_dir)
     cfg.batch_size, cfg.workers, cfg.seq_len = 4, 2, 1
     if not cfg.radar_cache and os.path.isdir("data/cache/radar"):
         cfg.radar_cache = "data/cache/radar"
@@ -549,6 +567,9 @@ if __name__ == "__main__":
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--on-train", action="store_true", help="evaluate --n TRAIN samples instead of val (overfitting check, files *_train)")
+    ap.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"],
+                    help="sanity control: perturb one input at evaluation (files *_ctl_<name>)")
+    ap.add_argument("--ckpt-dir", default=None, help="read the checkpoint from this folder (e.g. the D: copy of a moved run)")
     ap.add_argument("--warm", action="store_true", help="carry the world memory over whole scenes (batch 1, time order) -> *_warm files")
     ap.add_argument("--compare", nargs=2)
     ap.add_argument("--boot", type=int, default=1000)
@@ -562,4 +583,4 @@ if __name__ == "__main__":
         os.chdir(ROOT)
         compare(*a.compare, n_boot=a.boot, det_a=a.det_a, det_b=a.det_b, dt=a.dt)
     else:
-        evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers, warm=a.warm, on_train=a.on_train)
+        evaluate_run(a.run, a.n, a.prior, a.images, a.time, a.batch, a.workers, warm=a.warm, on_train=a.on_train, control=a.control, ckpt_dir=a.ckpt_dir)
