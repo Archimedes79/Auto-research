@@ -40,7 +40,7 @@ excludes 0; TIE -> the cheaper variant. Order in the GPU queue: 1, 2, 3, 4, 5 (q
 | 2026-10-29 20:43 | queue lane started (detached Windows process); `camtemp_none` resumes from step 2000 | running |
 | 2026-10-29 21:55 | **Try 1 done: sanity controls** (table `try1_controls.md`; raw `runs/*/eval/metrics_ctl_*.json`; `temp/study/collect_ctl.py`) | see section 3 |
 
-## 3 Try 1 - what the model really uses (cold VAL-1000, 82 scenes; controls at evaluation only)
+## 3 Try 1 - what the model really uses (cold VAL-1000, 82 scenes; controls at evaluation only) - FINDINGS 1-4 AND 6 SUPERSEDED BY THE ERRATUM IN SECTION 5 (the `cam_off` arm ran with the camera on)
 
 | system | normal | no / shuffled radar | no / shuffled camera |
 |---|---|---|---|
@@ -80,7 +80,7 @@ and lane divider (0.181 / 0.179) agree; walkway differs by 0.027, pedestrian AP@
 - headline = `mAP2` (vehicle + pedestrian, mean over the four matching distances), vehicle / pedestrian AP@1 and AP@2, drivable / walkway / lane-divider IoU; `mAP3` and the
   `two_wheeler` AP are reported but never decide a verdict (one seed cannot resolve them);
 - AP@1 added to the paired bootstrap (AP@2 has the high no-sensor floor, try 1); the noise band is 2 x the seed spread of the stable metrics;
-- every table carries the no-sensor floor row (`cam_off` with zero radar: mAP2 / AP@1 / drivable / walkway / divider = see `try1_controls.md`).
+- every table carries a no-sensor floor row (SUPERSEDED: the former floor row was camera-only, see section 5; a true floor comes from a prior detector, to be built).
 Re-read verdicts of the swap study with these rules (`results/arms.md`, seed spread of mAP2 0.015): `radar_off` WORSE (veh AP@1 -0.26*, ped AP@1 -0.11*), `lift_p` WORSE
 (veh AP@1 -0.042*, ped AP@1 -0.048*), `trunk_rand` WORSE (walkway -0.055*), `cam_off` TIE, `camtemp_none` TIE (ped AP@1 -0.028* is close to the band).
 
@@ -88,3 +88,38 @@ Re-read verdicts of the swap study with these rules (`results/arms.md`, seed spr
 | 2026-10-29 23:50 | housekeeping: C: fell to 2.9 GB free (not from this study: its runs on C: total 3.6 GB); the checkpoint mover had stopped with lane 2; superseded checkpoints of `t1_r0`, `t1_r3_combined`, `t1_r4_soa` moved to `D:\Auto-research\bev_fusion_ckpts\` (size-checked, MOVED.txt), mover restarted and extended to `runs/t3_*` | C: 4.2 GB free; D: has the rest |
 | 2026-10-30 00:35 | **Try 7 done (`t3_cam_zsum`, camera only, standard LSS height-sum collapse)**: mAP2 0.205, vehicle AP@1 0.197, AP@0.5 0.037, drivable 0.624, walkway 0.089, divider 0.154 against the no-sensor floor 0.211 / 0.213 / 0.047 / 0.629 / 0.074 / 0.162 and camera-only `radar_off` 0.210 / 0.209 / 0.045 / 0.637 / 0.107 / 0.164 | NOT adopted: the height collapse is not the reason, camera-only stays at the floor |
 | 2026-10-30 00:36 | next: `temp/calib/probe_camera_bev.py` (linear probe on the lifted camera BEV, no trunk, no head) to decide whether the information is in the lifted features | running; `t3_cam_adapter` (try 6) trains meanwhile |
+
+## 5 ERRATUM (2026-10-30 01:20): the `cam_off` arm ran WITH the camera; findings of section 3 corrected
+
+**Bug.** `CachedBEVFusionModel` (training/feature_cache.py) overrides `camera_bevs` and did not honour `ModelConfig.camera_off`; the flag worked only in the
+uncached model (its self-test). Every `cam_off` run therefore trained and evaluated the FULL system (camera on), `t2_cam_off` = `ref` with another run-to-run
+noise draw. Found because the stage probe of the "floor" model (cam_off + zero radar, supposedly no sensor at all) looked exactly like the camera-only model.
+Fixed in commit d57bcc2 (+ self-test `python training/feature_cache.py camera-off-selftest`); the true radar-only arm is `t3_radar_only` (queued first in lane 3).
+Unaffected: all other swap arms (camera on), `radar_off` (the radar flag is handled in `forward`), the zero / shuffle camera controls, the train-subset check.
+
+**Invalid (do not use):** the `cam_off` row of `results/arms.md` and of `try1_controls.md` (it is a second seed of the reference); "radar-only is genuine /
+radar adds +0.09 over a floor"; "the camera adds +0.03 over radar-only"; the "no-sensor floor" (it is the camera-only model: `cam_off` + empty radar = a camera-only
+system); finding 3 "the camera path does not work".
+
+**Valid and what they now say:**
+1. The camera works, with poor localisation. Camera-only (`radar_off`): mAP2 0.210, vehicle AP@1 0.209, AP@2 0.448, AP@0.5 0.045; with radar (`ref_s0`): mAP2 0.339,
+   vehicle AP@1 0.468, AP@0.5 0.228. The radar adds +0.26 vehicle AP@1 and +0.18 AP@0.5 on top of the camera; the maps gain 0.03 (drivable) and 0.08 (walkway).
+2. The camera features carry the information (model-free): a linear probe on the lifted features (30 train scenes, tested on 20 unseen val scenes, `probe_camera_bev.log`)
+   gives vehicle IoU 0.249 against 0.021 for the per-cell prior map, drivable 0.577 against 0.459, walkway 0.200 against 0.121; in the trained camera-only model the probe
+   stays at 0.26-0.29 vehicle IoU through camera BEV, fused BEV, trunk and head input (`probe_stages_radar_off.log`), and the model's own dense vehicle output reaches 0.279,
+   drivable 0.689, walkway 0.254 (`probe_stages_radar_off.log`, same IoU definition). So nothing is lost between the features and the head; the camera-only model is
+   limited by what stride-16 image features with depth uncertainty can localise (AP@0.5 0.045), not by a broken path.
+3. Calibration, cache alignment (train and val), geometry: unchanged and fine.
+4. The joint model depends on the camera input: zero / shuffled camera collapses `ref_s0` (0.013 / 0.028 mAP3) and the long-trained `t1_r4_soa` (0.031 / 0.036);
+   shuffled radar leaves the camera-like level (0.151 / 0.156): consistent with finding 1.
+5. The camera-only model overfits the training scenes (mAP3 train 0.213, val 0.147; vehicle AP@2 0.566 vs 0.448).
+6. Open and now explicitly unknown: the true no-sensor floor of the AP metric (a prior detector must be built: top-k detections at the highest-density cells), the radar-only
+   performance (`t3_radar_only`), whether the camera adds anything on top of radar (ref vs radar-only).
+
+**Consequences for the tries.** Try 7 (`t3_cam_zsum`, mAP2 0.205) must be compared with camera-only `radar_off` (0.210), not with a floor: TIE, not adopted. Try 6
+(`t3_cam_adapter`, running) is judged against `radar_off` too. The weak spot is camera LOCALISATION (AP@0.5 / AP@1), so camera-side candidates become: an adapter that
+sharpens depth-related features, stride-8 features (DualBEV's FPN level that the cache does not hold), a depth-refinement step, and the radar-assisted depth that the fusion
+should provide. Lesson (memory note): a subclass override that skips the parent's config flags silently voids a study arm; every arm needs a "does the flag change the output"
+check before training.
+
+| 2026-10-30 01:20 | **ERRATUM**: `camera_off` ignored by the cached model; `cam_off` arm and the "floor" invalid; camera works (probes), localisation weak; fix d57bcc2, `t3_radar_only` queued first in lane 3 | see section 5 |

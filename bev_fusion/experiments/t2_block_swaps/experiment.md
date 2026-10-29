@@ -73,3 +73,9 @@ bootstrap) says BETTER, or TIE and cheaper; otherwise the previous rung stays th
 
 Not yet done and needed for rung 0 to count as "good": the vision-only number against the published camera-only level on the same protocol
 (the pre-trained DualBEV box head is not loaded here, so only its image/depth part is reproduced - layer 1 gap, named in the report).
+
+## 5 Erratum (2026-10-30)
+
+The `cam_off` arm (radar-only system) ran WITH the camera on: `CachedBEVFusionModel` overrode `camera_bevs` and ignored `ModelConfig.camera_off` (fixed in commit d57bcc2).
+`runs/t2_cam_off` is a second run of the reference configuration, not a radar-only result; its rows in `results/arms.md` are invalid. The radar-only arm is rerun as
+`t3_radar_only`. All other arms are unaffected. Details and the corrected reading: `../t3_improve_loop/experiment.md` section 5.

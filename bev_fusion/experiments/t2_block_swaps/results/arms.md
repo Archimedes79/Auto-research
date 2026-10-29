@@ -1,3 +1,5 @@
+> ERRATUM 2026-10-30: the `cam_off` rows (and the floor rows derived from `cam_off` + zero radar) are INVALID (the arm ran with the camera on); see `experiment.md` section 5.
+
 # t2_block_swaps: arms vs `ref_s0` (cold VAL, 1000 keyframes of 82 scenes, EMA, 3000 steps)
 
 Noise band for the verdict: 0.054 (2 x seed spread, `ref_s1`). Difference = arm - `ref_s0`; interval = paired scene bootstrap (1000 draws).

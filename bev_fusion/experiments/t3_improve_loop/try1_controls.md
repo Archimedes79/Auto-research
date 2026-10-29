@@ -1,3 +1,5 @@
+> ERRATUM 2026-10-30: the `cam_off` rows (and the floor rows derived from `cam_off` + zero radar) are INVALID (the arm ran with the camera on); see `experiment.md` section 5.
+
 | run | control | mAP | veh AP@2 | ped AP@2 | drivable | walkway | lane div@0.5 |
 |---|---|---|---|---|---|---|---|
 | ref_s0 | (none) | 0.277 | 0.606 | 0.204 | 0.666 | 0.191 | 0.181 |
