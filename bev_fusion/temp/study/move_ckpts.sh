@@ -6,7 +6,7 @@
 cd "$(dirname "$0")/../.." || exit 1
 DEST=/mnt/d/Auto-research/bev_fusion_ckpts
 move_once() {
-  for r in runs/t2_*; do
+  for r in runs/t2_* runs/t3_*; do
     [ -f $r/eval/metrics.json ] && [ -f $r/.done ] || continue
     ls $r/ckpt_*.pt >/dev/null 2>&1 || continue
     a=$(basename $r); mkdir -p $DEST/$a

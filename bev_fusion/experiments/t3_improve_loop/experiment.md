@@ -85,3 +85,4 @@ Re-read verdicts of the swap study with these rules (`results/arms.md`, seed spr
 (veh AP@1 -0.042*, ped AP@1 -0.048*), `trunk_rand` WORSE (walkway -0.055*), `cam_off` TIE, `camtemp_none` TIE (ped AP@1 -0.028* is close to the band).
 
 | 2026-10-29 23:20 | `ref_s1` evaluated; mAP3 noise recognised (two_wheeler); metric set changed (section 4) | `cam_off` (radar only) is a TIE with the full system on detection |
+| 2026-10-29 23:50 | housekeeping: C: fell to 2.9 GB free (not from this study: its runs on C: total 3.6 GB); the checkpoint mover had stopped with lane 2; superseded checkpoints of `t1_r0`, `t1_r3_combined`, `t1_r4_soa` moved to `D:\Auto-research\bev_fusion_ckpts\` (size-checked, MOVED.txt), mover restarted and extended to `runs/t3_*` | C: 4.2 GB free; D: has the rest |
