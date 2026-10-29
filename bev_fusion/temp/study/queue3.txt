@@ -1,0 +1,5 @@
+cfg:t3_adapter:c5de8b7
+cfg:t3_ref_long:c5de8b7
+train:trunk_second
+train:lift_s
+train:trunk_small
