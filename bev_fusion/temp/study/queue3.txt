@@ -1,5 +1,10 @@
-cfg:t3_adapter:c5de8b7
-cfg:t3_ref_long:c5de8b7
+cfg:t3_cam_zsum:1a6b8d8
+cfg:t3_cam_adapter:1a6b8d8
+train:fusion_gate
+train:camtemp_gru
+train:fusion_cmx
+train:radar_pillars
+cfg:t3_ref_long:1a6b8d8
 train:trunk_second
 train:lift_s
 train:trunk_small
