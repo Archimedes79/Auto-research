@@ -1,0 +1,26 @@
+== train:camtemp_none train 20:43:25
+t2_camtemp_none exit 0 21:09:32
+== train:camtemp_none eval 21:09:32
+done: 1000 val samples, 82 scenes, 195 s -> runs/t2_camtemp_none/eval
+== ctl:cam_off:shuffle_radar 21:13:55
+done: 1000 val samples, 82 scenes, 209 s -> runs/t2_cam_off/eval
+== ctl:cam_off:zero_radar 21:18:23
+done: 1000 val samples, 82 scenes, 204 s -> runs/t2_cam_off/eval
+== ctl:ref_s0:shuffle_radar 21:22:45
+done: 1000 val samples, 82 scenes, 232 s -> runs/t2_ref_s0/eval
+== ctl:radar_off:shuffle_cam 21:27:38
+done: 1000 val samples, 82 scenes, 224 s -> runs/t2_radar_off/eval
+== ctl:radar_off:zero_cam 21:32:36
+done: 1000 val samples, 82 scenes, 240 s -> runs/t2_radar_off/eval
+== ctl:ref_s0:zero_radar 21:37:43
+done: 1000 val samples, 82 scenes, 233 s -> runs/t2_ref_s0/eval
+== ctl:ref_s0:shuffle_cam 21:42:36
+done: 1000 val samples, 82 scenes, 246 s -> runs/t2_ref_s0/eval
+== ctl:ref_s0:zero_cam 21:47:43
+done: 1000 val samples, 82 scenes, 247 s -> runs/t2_ref_s0/eval
+== train:ref_s1 train 21:52:49
+t2_ref_s1 exit 0 23:08:29
+== train:ref_s1 eval 23:08:29
+done: 1000 val samples, 82 scenes, 195 s -> runs/t2_ref_s1/eval
+queue empty 23:12:58
+lane finished 23:13:58
