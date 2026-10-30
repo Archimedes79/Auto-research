@@ -45,7 +45,8 @@ sys.path.insert(0, "tests")
 from lift_pd import Grid  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402
 from flow_viz import flow_rgb, wheel  # noqa: E402
-from temporal import FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, propagate  # noqa: E402
+from temporal import (FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, landing, propagate,  # noqa: E402
+                      sample_at, steps_tensor)
 
 QUICK = "--quick" in sys.argv
 
@@ -63,6 +64,9 @@ SS = arg("--ss", 4)                                # GT sub-samples per cell (2 
 VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
 TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_prior{PRIOR:g}" if PRIOR != 1e-3 else "") + (f"_s{SEED}" if SEED else "")
+GATE = "--gate" in sys.argv                      # learned soft gate carried vs fresh start, recursive training (nuScenes)
+if GATE:
+    TAG = TAG + "_gate"
 DATA = arg("--data", "synthetic")                 # "nuscenes": real GT boxes (data/cache/gt), see nuscenes_items
 if DATA == "nuscenes":
     TAG = "_nusc" + TAG
@@ -183,8 +187,22 @@ class Model(nn.Module):
                    else FlowRefine(C, G, radius=3, **vkw))
         self.dec = nn.Sequential(nn.Conv2d(C + 1, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, 3, 1))
+        if GATE:      # [features, fresh v, carried v, their residuals] -> softmax weights (fresh, carried); zero start = 0.5 / 0.5
+            self.gate = nn.Sequential(nn.Conv2d(C + 6, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
+                                      nn.Conv2d(32, 2, 1))
+            nn.init.zeros_(self.gate[-1].weight)
+            nn.init.zeros_(self.gate[-1].bias)
+        self.last_gate = None
 
-    def forward(self, f0, f1, steps, v_override=None, vgt=None, v_init=None):
+    @staticmethod
+    def residual(f0, f1, steps, v):
+        """(B, 1, X, Y): how badly a velocity explains the next frame at each SOURCE cell - |F0(p) - F1(landing(p))| summed
+        over the channels (raw maps, bilinear lookup of F1 at the landing point)."""
+        S = steps_tensor(steps, f0.shape[0], f0.device, f0.dtype)
+        look = sample_at(f1, landing(S, v, G), G).view_as(f0)
+        return (f0 - look).abs().sum(1, keepdim=True)
+
+    def forward(self, f0, f1, steps, v_override=None, vgt=None, v_init=None, v_carried=None):
         e0, e1 = self.enc(f0), self.enc(f1)
         r = self.tp(e0, steps)
         self.ent = r["entropy"]
@@ -194,6 +212,13 @@ class Model(nn.Module):
             meas = radar_measure(f0, vgt)
             v0 = radar_apply(v0, meas)
             corr = lambda v: radar_apply(v, meas)                     # noqa: E731
+            if v_carried is not None:
+                v_carried = radar_apply(v_carried, meas)
+        if v_carried is not None and GATE and v_override is None:     # learned soft blend of the two starts (no hard choice)
+            rf_, rc_ = self.residual(f0, f1, steps, v0), self.residual(f0, f1, steps, v_carried)
+            w = torch.softmax(self.gate(torch.cat([e0, v0 / 10.0, v_carried / 10.0, rf_, rc_], 1)), 1)
+            self.last_gate = w.detach()
+            v0 = w[:, :1] * v0 + w[:, 1:] * v_carried
         if v_override is not None:
             flows = [v_override]
         elif PYR:
@@ -218,6 +243,24 @@ def smoothness(v, feat, alpha=10.0):
     return tot
 
 
+def pair_loss(model, src, tgt, steps, flows, preds, mix):
+    """the training loss of one frame pair (no velocity labels): prediction BCE per refinement output, entropy,
+    smoothness, raw warp, zero-motion prior - the same terms as the pair training."""
+    loss = F.binary_cross_entropy_with_logits(mix, tgt)
+    for k, p in enumerate(preds[1:]):
+        loss = loss + 0.8 ** (len(preds) - 2 - k) * F.binary_cross_entropy_with_logits(p, tgt)
+    if SHARP:
+        loss = loss + ENT * (src.max(1).values * model.ent).mean()
+    if SMOOTH > 0:
+        loss = loss + SMOOTH * sum(smoothness(v, src) for v in flows)
+    if RAWWARP > 0:
+        loss = loss + RAWWARP * sum(((propagate(src, steps, v, G)[0] - tgt) ** 2).mean() for v in flows[1:])
+    if PRIOR > 0:
+        occ = src.max(1).values
+        loss = loss + PRIOR * sum((occ * (v / 10.0).pow(2).sum(1)).mean() for v in flows)
+    return loss
+
+
 def train(model, data, iters, rng, bs=8, lr=2e-3):
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     t0 = time.time()
@@ -227,19 +270,13 @@ def train(model, data, iters, rng, bs=8, lr=2e-3):
         steps = [b[3] for b in batch]
         vg = torch.stack([b[1] for b in batch]).to(DEV)
         flows, preds, mix = model(m[:, 0], m[:, 1], steps, vgt=vg)
-        tgt = m[:, 1]
-        loss = F.binary_cross_entropy_with_logits(mix, tgt)
-        for k, p in enumerate(preds[1:]):
-            loss = loss + 0.8 ** (len(preds) - 2 - k) * F.binary_cross_entropy_with_logits(p, tgt)
-        if SHARP:
-            loss = loss + ENT * (m[:, 0].max(1).values * model.ent).mean()
-        if SMOOTH > 0:
-            loss = loss + SMOOTH * sum(smoothness(v, m[:, 0]) for v in flows)
-        if RAWWARP > 0:                       # the explanation as a training term: v alone must move the raw map onto F1
-            loss = loss + RAWWARP * sum(((propagate(m[:, 0], steps, v, G)[0] - tgt) ** 2).mean() for v in flows[1:])
-        if PRIOR > 0:
-            occ = m[:, 0].max(1).values
-            loss = loss + PRIOR * sum((occ * (v / 10.0).pow(2).sum(1)).mean() for v in flows)
+        loss = pair_loss(model, m[:, 0], m[:, 1], steps, flows, preds, mix)
+        if GATE:          # recursive: the estimate of pair 1 carried to F1 (detached) is blended with pair 2's fresh start
+            s12 = [b[4] for b in batch]
+            vg1 = torch.stack([b[5] for b in batch]).to(DEV)
+            carried = carry(flows[-1].detach(), steps)
+            f2, p2, mix2 = model(m[:, 1], m[:, 2], s12, vgt=vg1, v_carried=carried)
+            loss = loss + pair_loss(model, m[:, 1], m[:, 2], s12, f2, p2, mix2)
         opt.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
@@ -249,9 +286,12 @@ def train(model, data, iters, rng, bs=8, lr=2e-3):
 
 
 def rotate_into_next(v, steps):
-    """velocity vectors (B, 2, X, Y) from the source axes into the axes after the steps (ego yaw)."""
-    th = sum(dt * w for dt, _, w in steps[0])
-    c, s = math.cos(th), math.sin(th)
+    """velocity vectors (B, 2, X, Y) from the source axes into the axes after the steps (ego yaw), per sample: steps is a
+    list of B step lists (before 2026-10-30 the yaw of sample 0 was used for the whole batch - right only for batch 1,
+    which is all the evaluations used)."""
+    th = torch.tensor([sum(dt * w for dt, _, w in st) for st in steps], dtype=v.dtype, device=v.device).view(-1, 1, 1)
+    th = th.expand(v.shape[0], 1, 1) if th.shape[0] == 1 else th
+    c, s = torch.cos(th), torch.sin(th)
     return torch.stack([c * v[:, 0] + s * v[:, 1], -s * v[:, 0] + c * v[:, 1]], 1)
 
 
@@ -374,33 +414,40 @@ def sequence_report(model, seqs, image):
     of the pair (F_t, F_t+1) and of the recursive one (the estimate of the previous pair carried to F_t as the START of
     this pair's refinement). Recursion pays if its error falls with t while the fresh one stays flat."""
     T = len(seqs[0]["steps"])
-    acc = {(n, k, t): [0.0, 0] for n in ("fresh", "recursive") for k in ("vehicles", "moving") for t in range(T)}
+    names = ("fresh", "recursive") + (("gated",) if GATE else ())
+    acc = {(n, k, t): [0.0, 0] for n in names for k in ("vehicles", "moving") for t in range(T)}
     for sq in seqs:
         m, vel, steps = sq["maps"][None].to(DEV), sq["velocity"], sq["steps"]
-        carried = None
+        carried, carried_g = None, None
         for t in range(T):
             vg = vel[t][None].to(DEV)
             fresh = model(m[:, t], m[:, t + 1], [steps[t]], vgt=vg)[0][-1]
             recur = fresh if carried is None else model(m[:, t], m[:, t + 1], [steps[t]], vgt=vg, v_init=carried)[0][-1]
             carried = carry(recur, [steps[t]])
+            gated = None
+            if GATE:
+                gated = fresh if carried_g is None else model(m[:, t], m[:, t + 1], [steps[t]], vgt=vg, v_carried=carried_g)[0][-1]
+                carried_g = carry(gated, [steps[t]])
             veh = sq["maps"][t, 1] > 0.5
             for k, mk in (("vehicles", veh), ("moving", veh & (vel[t].norm(dim=0) > 1.0))):
-                for n, v in (("fresh", fresh), ("recursive", recur)):
+                for n, v in (("fresh", fresh), ("recursive", recur), ("gated", gated)):
+                    if v is None:
+                        continue
                     e = (v[0].cpu() - vel[t]).norm(dim=0)
                     acc[(n, k, t)][0] += e[mk].sum().item()
                     acc[(n, k, t)][1] += int(mk.sum())
     res = {key: s_ / max(1, n_) for key, (s_, n_) in acc.items()}
     print(f"== recursive speed refinement over {len(seqs)} held-out sequences of {T + 1} keyframes (EPE m/s at F_t)")
-    print("  t   vehicles fresh / recursive    moving vehicles fresh / recursive")
+    print("  t   vehicles " + " / ".join(names) + "    moving vehicles " + " / ".join(names))
     for t in range(T):
-        print(f"  {t}   {res[('fresh', 'vehicles', t)]:6.2f} / {res[('recursive', 'vehicles', t)]:6.2f}"
-              f"            {res[('fresh', 'moving', t)]:6.2f} / {res[('recursive', 'moving', t)]:6.2f}", flush=True)
+        print(f"  {t}   " + " / ".join(f"{res[(n, 'vehicles', t)]:6.2f}" for n in names) + "            "
+              + " / ".join(f"{res[(n, 'moving', t)]:6.2f}" for n in names), flush=True)
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 2, figsize=(8, 3))
     for i, k in enumerate(("vehicles", "moving")):
-        for n, sty in (("fresh", "o--"), ("recursive", "s-")):
+        for n, sty in (("fresh", "o--"), ("recursive", "s-"), ("gated", "^-"))[:len(names)]:
             ax[i].plot(range(T), [res[(n, k, t)] for t in range(T)], sty, label=n)
         ax[i].set_xlabel("keyframe t (0.5 s apart)")
         ax[i].set_ylabel("velocity error (m/s)")
@@ -428,9 +475,12 @@ def evaluate_recursive(model, test):
         carried = carry(v01, [s01])
         fresh = model(m[:, 1], m[:, 2], [s12], vgt=vgt1[None].to(DEV))[0][-1]
         recur = model(m[:, 1], m[:, 2], [s12], vgt=vgt1[None].to(DEV), v_init=carried)[0][-1]
+        gated = model(m[:, 1], m[:, 2], [s12], vgt=vgt1[None].to(DEV), v_carried=carried)[0][-1] if GATE else None
         veh = maps[1, 1] > 0.5
         masks = {"vehicles": veh, "moving vehicles": veh & (vgt1.norm(dim=0) > 1.0)}
-        for name, v in (("fresh", fresh), ("carried", carried), ("recursive", recur)):
+        for name, v in (("fresh", fresh), ("carried", carried), ("recursive", recur), ("gated", gated)):
+            if v is None:
+                continue
             e = (v[0].cpu() - vgt1).norm(dim=0)
             for k, mk in masks.items():
                 a = acc.setdefault((name, k), [0.0, 0])
@@ -491,7 +541,7 @@ if __name__ == "__main__":
         sequence_report(model, seqs, f"temp/checks/flow_sequences{TAG}.png")
         sys.exit(0)
     if DATA == "nuscenes":                            # real GT (fixed data: the seed changes only init and batch order)
-        rec = "--recursive" in sys.argv
+        rec = "--recursive" in sys.argv or GATE
         data, test = nuscenes_items(False, n_train, rec), nuscenes_items(True, n_test, rec)
     else:
         data = dataset([100_000 * SEED + i for i in range(n_train)], "train")
@@ -508,7 +558,7 @@ if __name__ == "__main__":
     print("== held-out sequences (IoU of vehicles; EPE in m/s)")
     for k, x in r.items():
         print(f"  {k:22s} {x:.3f}")
-    if DATA == "nuscenes" and "--recursive" in sys.argv:
+    if DATA == "nuscenes" and ("--recursive" in sys.argv or GATE):
         print("== recursive speed refinement, scored at F1 (EPE m/s)")
         for k, x in evaluate_recursive(model, test).items():
             print(f"  {k:36s} {x:.3f}")
