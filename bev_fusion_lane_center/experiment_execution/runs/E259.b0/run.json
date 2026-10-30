@@ -1,0 +1,33 @@
+{
+ "id": "E259.b0",
+ "hypothesis": "E259 step 2: the CPU time of the assembly stages is measurable on a loaded machine and shows which stages are worth removing for speed",
+ "prediction": "anchoring saves 1.3 ms CPU, relocation 1.5, clean-up 0.9, the dp stage costs +0.3",
+ "rule": "a stage is worth removing for speed only if its CPU-time saving exceeds 0.5 ms and the range over the repetitions excludes zero (provisional until an idle window)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c bash tools/env/_py14.sh temp/loop21/e259_cputime.py > experiments/E259_assembly-cleanup-ablation/cputime.txt 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 33822,
+ "created": "2026-10-30T22:52:27",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-10-30T22:52:50",
+ "code_hash": "15b40f82f68f",
+ "commit": "e20fb70003",
+ "tag": "lcr/E259.b0",
+ "git_note": "",
+ "pid": 34146,
+ "exit": 0,
+ "duration_s": 230,
+ "attempts": 1,
+ "ended": "2026-10-30T22:56:40",
+ "last_lines": [
+  "=== attempt 2026-10-30T22:52:50: bash -c bash tools/env/_py14.sh temp/loop21/e259_cputime.py > experiments/E259_assembly-cleanup-ablation/cputime.txt 2>&1"
+ ]
+}

@@ -1,0 +1,15 @@
+_py14.sh: temp/loop21/e259_cputime.py
+== fast_recall: mean ms per frame over 200 frames; 5 repetitions, load average at the repetitions 9.21 8.96 9.06 8.74 8.14
+  base              CPU  19.60 ms [15.16 - 35.47]  wall  19.92  saving vs base (CPU) per repetition +0.00 +0.00 +0.00 +0.00 +0.00 -> median +0.00
+  anchor off        CPU  14.17 ms [12.27 - 28.40]  wall  14.17  saving vs base (CPU) per repetition +5.24 +4.93 +0.98 +7.07 +15.93 -> median +5.24
+  reloc off         CPU  16.49 ms [14.20 - 25.08]  wall  16.49  saving vs base (CPU) per repetition +5.40 -0.76 -1.05 +10.39 +11.71 -> median +5.40
+  clean off         CPU  22.43 ms [16.54 - 38.66]  wall  22.44  saving vs base (CPU) per repetition +1.86 -4.00 -1.38 -3.19 +5.77 -> median -1.38
+  dp 0.2 stage      CPU  20.26 ms [17.90 - 23.20]  wall  20.32  saving vs base (CPU) per repetition -0.66 -1.28 -2.74 +12.26 +7.88 -> median -0.66
+  clean+anchor off  CPU  15.46 ms [13.35 - 17.38]  wall  15.46  saving vs base (CPU) per repetition +4.14 +2.46 -2.22 +20.99 +14.85 -> median +4.14
+== champion: mean ms per frame over 200 frames; 5 repetitions, load average at the repetitions 8.93 9.00 9.25 9.33 9.58
+  base              CPU  17.45 ms [16.96 - 18.80]  wall  17.45  saving vs base (CPU) per repetition +0.00 +0.00 +0.00 +0.00 +0.00 -> median +0.00
+  anchor off        CPU  13.80 ms [12.55 - 14.20]  wall  13.80  saving vs base (CPU) per repetition +4.99 +4.29 +2.76 +3.77 +4.90 -> median +4.29
+  reloc off         CPU  14.13 ms [13.07 - 23.41]  wall  14.14  saving vs base (CPU) per repetition +3.94 -6.38 +2.82 +4.53 +3.36 -> median +3.36
+  clean off         CPU  16.73 ms [15.34 - 19.22]  wall  16.73  saving vs base (CPU) per repetition +3.38 +1.69 +0.06 -1.62 +0.72 -> median +0.72
+  dp 0.2 stage      CPU  19.06 ms [16.29 - 19.97]  wall  19.06  saving vs base (CPU) per repetition +1.53 +0.74 -3.01 -1.52 -1.61 -> median -1.52
+  clean+anchor off  CPU  12.86 ms [12.29 - 16.16]  wall  12.94  saving vs base (CPU) per repetition +6.50 +4.17 +4.47 +4.37 +1.29 -> median +4.37

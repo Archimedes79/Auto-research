@@ -96,28 +96,6 @@ class Union:
         self.add_edge(w, b)
         return w
 
-    def covered_fraction(self, a, c, r=1.5):
-        """share of the interior of the candidate edge a -> c (1 m samples) that lies within r of an existing edge running in the same direction (cos > 0.5)"""
-        if not self.E:
-            return 0.0
-        pa, pc = self.V[a], self.V[c]
-        L = float(np.linalg.norm(pc - pa))
-        n = max(int(L / 1.0), 2)
-        s = np.linspace(0.0, 1.0, n + 1)[1:-1] if n > 2 else np.array([0.5])
-        P = pa + s[:, None] * (pc - pa)
-        e = np.asarray(sorted(self.E))
-        V = np.asarray(self.V)
-        ea, eb = V[e[:, 0]], V[e[:, 1]]
-        ab = eb - ea
-        L2 = np.maximum((ab ** 2).sum(1), 1e-12)
-        t = np.clip(((P[:, None, :] - ea[None]) * ab[None]).sum(2) / L2[None], 0, 1)
-        d = np.linalg.norm(P[:, None, :] - (ea[None] + t[..., None] * ab[None]), axis=2)  # [S,E]
-        cd = (pc - pa) / max(L, 1e-9)
-        ed = ab / np.sqrt(L2)[:, None]
-        okdir = (ed @ cd) > 0.5
-        d = np.where(okdir[None, :], d, 1e9)
-        return float((d.min(1) < r).mean())
-
     def add_split(self, a, c, snap=1.0, end=1.0):
         """add the edge a -> c, split at every existing vertex that lies on it (within snap, not near the ends); parts that exist already or duplicate a path are skipped"""
         if a == c:
@@ -352,112 +330,6 @@ def simplify(V, E, vpi, bubble_r=2.5, spur_len=5.0, rounds=4):
         if not changed:
             break
     return E
-
-
-def contract_junctions(V, E, r=3.0, rounds=6):
-    """vertices that are junctions (in-degree >= 2 or out-degree >= 2) and closer than r are one junction (a fork or merge is a place, not a cluster of vertices): the second one is merged into the first (mean position)"""
-    V = np.array(V, float)
-    E = set(E)
-    for _ in range(rounds):
-        out, inn = {}, {}
-        for a, b in E:
-            out.setdefault(a, set()).add(b)
-            inn.setdefault(b, set()).add(a)
-        J = [v for v in set(out) | set(inn) if len(out.get(v, ())) >= 2 or len(inn.get(v, ())) >= 2]
-        best = None
-        for i, u in enumerate(J):
-            for v in J[i + 1:]:
-                d = float(np.linalg.norm(V[u] - V[v]))
-                if d < r and (best is None or d < best[0]):
-                    best = (d, u, v)
-        if best is None:
-            break
-        _, u, v = best
-        V[u] = 0.5 * (V[u] + V[v])
-        E = {(u if a == v else a, u if b == v else b) for a, b in E}
-        E = {(a, b) for a, b in E if a != b}
-    return E, V
-
-
-def glue_ends(V, E, r=2.5, ang_lo=10.0, ang_hi=80.0):
-    """junction gluing: a free start (in-degree 0) that lies within r of an existing edge, branching away from it at an angle between ang_lo and ang_hi, is connected to the nearest point of that edge (edge split: a FORK);
-    a free end (out-degree 0) that runs towards an edge is connected the same way (a MERGE).  Nearly parallel neighbours (a lane change copy) and the own chain are not glued.  returns the new vertex list and edge set"""
-    V = [np.asarray(v, float) for v in V]
-    E = set(E)
-    for kind in ("start", "end"):
-        out, inn = {}, {}
-        for a, b in E:
-            out.setdefault(a, set()).add(b)
-            inn.setdefault(b, set()).add(a)
-        for s_ in sorted(set(out) | set(inn)):
-            if kind == "start":
-                if len(inn.get(s_, ())) != 0 or len(out.get(s_, ())) != 1:
-                    continue
-                nb = next(iter(out[s_]))
-                d = V[nb] - V[s_]
-            else:
-                if len(out.get(s_, ())) != 0 or len(inn.get(s_, ())) != 1:
-                    continue
-                nb = next(iter(inn[s_]))
-                d = V[s_] - V[nb]
-            nd = float(np.linalg.norm(d))
-            if nd < 1e-6:
-                continue
-            d = d / nd
-            own, frontier = {s_}, [s_]
-            for _ in range(3):  # the own chain (undirected, three hops)
-                nxt = []
-                for v in frontier:
-                    for w in list(out.get(v, ())) + list(inn.get(v, ())):
-                        if w not in own:
-                            own.add(w)
-                            nxt.append(w)
-                frontier = nxt
-            best = None
-            for (u, w) in E:
-                if u in own or w in own:
-                    continue
-                a, b = V[u], V[w]
-                ab = b - a
-                L2 = float(ab @ ab)
-                if L2 < 1e-9:
-                    continue
-                t = float(np.clip(((V[s_] - a) @ ab) / L2, 0.0, 1.0))
-                q = a + t * ab
-                dist = float(np.linalg.norm(V[s_] - q))
-                if dist > r:
-                    continue
-                e = ab / np.sqrt(L2)
-                ang = float(np.degrees(np.arccos(np.clip(d @ e, -1.0, 1.0))))
-                if not (ang_lo <= ang <= ang_hi):
-                    continue
-                if kind == "start" and (V[s_] - q) @ d < -0.5:
-                    continue
-                if kind == "end" and (q - V[s_]) @ d < -0.5:
-                    continue
-                if best is None or dist < best[0]:
-                    best = (dist, u, w, q, t)
-            if best is None:
-                continue
-            _, u, w, q, t = best
-            if t < 0.05:
-                tgt = u
-            elif t > 0.95:
-                tgt = w
-            else:
-                V.append(q)
-                tgt = len(V) - 1
-                E.discard((u, w))
-                E.add((u, tgt))
-                E.add((tgt, w))
-            E.add((tgt, s_) if kind == "start" else (s_, tgt))
-            if kind == "start":
-                out.setdefault(tgt, set()).add(s_)
-                inn.setdefault(s_, set()).add(tgt)
-            else:
-                out.setdefault(s_, set()).add(tgt)
-                inn.setdefault(tgt, set()).add(s_)
-    return np.asarray(V), E
 
 
 def anchor_junctions(V, E, jmap, thr=0.3, r_edge=3.0, r_free=8.0, ang_hi=100.0):
@@ -697,7 +569,7 @@ def simplify_dp(g, eps):
     return dict(pts=pts, edges=list(g["edges"]), nodes=nodes)
 
 
-def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_frac=1.0, clean=True, bubble_r=2.5, spur_len=5.0, contract=0.0, aux=False, glue_r=0.0, glue_lo=10.0, glue_hi=80.0, junc_thr=0.0, junc_edge=3.0, junc_free=8.0, junc_ang=100.0, fork_tau=0.0, fork_peak=0.6, fork_r=10.0, fork_vtx=0.0, fork_cov=0.0, reloc_thr=0.0, reloc_shift=8.0, reloc_tol=0.8, fast=True, tau_low=0.0, fork_prune=0.0, fork_prune_m=-1.0, tau_decay=0.0, dp_eps=0.0):
+def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, clean=True, bubble_r=2.5, spur_len=5.0, aux=False, junc_thr=0.0, junc_edge=3.0, junc_free=8.0, junc_ang=100.0, reloc_thr=0.0, reloc_shift=8.0, reloc_tol=0.8, fast=True, tau_low=0.0, fork_prune=0.0, fork_prune_m=-1.0, tau_decay=0.0, dp_eps=0.0):
     """tree -> DAG by path union (nodes in descending path validity): a node within cov_r of an existing edge is snapped onto it (edge split: fork / merge), a node near a vertex reuses it,
     edges that duplicate an existing path are skipped. `pair` = optional learned duplicate suppression (alias of a node to the better node).
     tau_low > 0: hysteresis, a node with validity between tau_low and tau is admitted if its parent is admitted (a lane is extended, no lane is started)."""
@@ -714,19 +586,6 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_fra
             for i in np.argsort(r["level"], kind="stable"):
                 if lowok[i] and par_[i] >= 0 and alive[par_[i]]:
                     alive[i] = True
-    if fork_tau > 0 and "junc" in r:  # fork-conditioned admission: near a strong split / merge peak of the junction head, nodes down to the lower validity fork_tau are admitted (the second successor of a fork the head has found)
-        near = np.zeros(len(pos), bool)
-        for kind in (0, 1):
-            Pk = _peaks(r["junc"][kind].astype(np.float32), fork_peak)
-            if len(Pk):
-                near |= np.linalg.norm(pos[:, None, :] - Pk[None], axis=2).min(1) <= fork_r
-        alive = alive | ((r["valid"] > 0) & (r["pi"] >= fork_tau) & near)
-    nearp = np.zeros(len(pos), bool)
-    if (fork_vtx > 0 or fork_cov > 0) and "junc" in r:  # fork-preserving union: near a strong junction peak the siblings keep their own vertices (small reuse and snap radii)
-        for kind in (0, 1):
-            Pk = _peaks(r["junc"][kind].astype(np.float32), fork_peak)
-            if len(Pk):
-                nearp |= np.linalg.norm(pos[:, None, :] - Pk[None], axis=2).min(1) <= fork_r
     idx = np.nonzero(alive)[0]
     empty = dict(pts=[], edges=[], nodes=[])
     if len(idx) == 0:
@@ -752,11 +611,11 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_fra
         if vid[i] < 0:
             p = pos[i]
             nv, dv = U.nearest_vertex(p)
-            if dv < (fork_vtx if nearp[i] else vtx_r) and nv >= 0:
+            if dv < vtx_r and nv >= 0:
                 vid[i] = nv
             else:
                 e, de, proj = U.nearest_edge(p)
-                if e is not None and de < (fork_cov if nearp[i] else cov_r):
+                if e is not None and de < cov_r:
                     vid[i] = U.split(e, proj)
                     synth.add(vid[i])
                 else:
@@ -773,7 +632,7 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_fra
         pa = place(par)
         ci = place(i)
         a, c = (pa, ci) if r["flag"][i] > 0 else (ci, pa)
-        if a != c and (a, c) not in U.E and not U.has_path(a, c) and not (seg_frac < 1.0 and U.covered_fraction(a, c, seg_r) >= seg_frac):
+        if a != c and (a, c) not in U.E and not U.has_path(a, c):
             U.add_split(a, c, cov_r)
     for (i, j, pl) in r.get("link_p", []):
         if pl >= 0.5 and alive[i] and alive[j]:
@@ -800,8 +659,6 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_fra
                     out[a].add(c)
                     inn.setdefault(c, set()).add(a)
     Vall = np.asarray(U.V)
-    if glue_r > 0 and E:
-        Vall, E = glue_ends(Vall, E, glue_r, glue_lo, glue_hi)
     jm, mf = r.get("junc"), None
     if fast and jm is not None and E and (junc_thr > 0 or reloc_thr > 0):
         from scipy.ndimage import maximum_filter
@@ -818,8 +675,6 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_fra
     if (fork_prune > 0 or fork_prune_m > 0) and E and "junc" in r:  # loop 18: un-link forks without support of the junction head (geometry unchanged)
         jj = jm if (fast and jm is not None) else [np.asarray(r["junc"][k], np.float32) for k in (0, 1)]
         Vall, E = prune_forks(Vall, E, jj, fork_prune, fork_prune if fork_prune_m < 0 else fork_prune_m)
-    if contract > 0 and E:
-        E, Vall = contract_junctions(Vall, E, contract)
     if not E:
         return (empty, dict(V=np.zeros((0, 2)), src=[], edges=[])) if aux else empty
     used = sorted({v for e in E for v in e})
