@@ -35,11 +35,14 @@ def verify(path, n_frames):
     import cv2
     cap = cv2.VideoCapture(path)
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fourcc = int(cap.get(cv2.CAP_PROP_FOURCC)).to_bytes(4, "little").decode("latin-1").lower()
     ok, frame = cap.read()
     cap.release()
     if not ok or frame is None or frame.max() == 0 or n != n_frames:
         raise RuntimeError(f"{path}: read back {n} frames (expected {n_frames}), first frame {'ok' if ok else 'unreadable'}")
-    return {"frames": n, "size": (frame.shape[1], frame.shape[0])}
+    if fourcc not in ("h264", "avc1"):        # OpenCV also decodes MPEG-4 part 2 (mp4v / fmp4), which browsers refuse
+        raise RuntimeError(f"{path}: codec {fourcc!r}, not H.264")
+    return {"frames": n, "size": (frame.shape[1], frame.shape[0]), "fourcc": fourcc}
 
 
 def encode(frames, out, fps=12.0, crf=20):
