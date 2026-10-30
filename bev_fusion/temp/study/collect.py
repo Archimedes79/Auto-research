@@ -8,7 +8,7 @@ import os
 import sys
 
 sys.path.insert(0, ".")
-from evaluation import evaluate_run as ev  # noqa: E402
+from evaluation import bev_legacy as ev  # noqa: E402
 
 ARMS = ["ref_s0", "ref_s1", "t3_radar_only", "t3_cam_zsum", "t3_cam_adapter", "t3_adapter", "t3_zsum", "t3_ref_long", "radar_off", "trunk_rand", "lift_p", "camtemp_none", "fusion_gate", "radar_pillars",
         "trunk_second", "trunk_small", "lift_s", "camtemp_gru", "fusion_cmx"]

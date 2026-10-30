@@ -1,14 +1,14 @@
 """Result tables of experiment t1 from the metric files (nothing typed by hand): baseline run vs combined run (VAL, EMA weights).
 Usage (from the bev_fusion folder): python temp/train/build_tables.py runs/t1_r0 runs/t1_r3_combined > experiments/t1_full_chain/results/tables.md
-Inputs: <run>/eval/metrics.json (evaluation/evaluate_run.py), <final>/eval/memory.json (eval_memory.py, optional), the paired
-scene bootstrap (evaluate_run.compare) and the logs. All numbers: VAL (82 scenes, 3109 keyframes), camera cells, 0.5 m grid."""
+Inputs: <run>/eval/metrics.json (bev_suite.py RUN eval), <final>/eval/memory.json (bev_suite.py RUN memory, optional), the paired
+scene bootstrap (bev_legacy.compare) and the logs. All numbers: VAL (82 scenes, 3109 keyframes), camera cells, 0.5 m grid."""
 import json
 import math
 import os
 import sys
 
 sys.path.insert(0, ".")
-from evaluation import evaluate_run as ev  # noqa: E402
+from evaluation import bev_legacy as ev  # noqa: E402
 
 base, final = sys.argv[1], sys.argv[2]
 B = json.load(open(os.path.join(base, "eval", "metrics.json")))

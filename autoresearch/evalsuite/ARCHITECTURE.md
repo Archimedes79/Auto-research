@@ -1,4 +1,4 @@
-# evalsuite - architecture (plan written before the code, 2026-10-30)
+# evalsuite - architecture (planned before the code, built 2026-10-30; section 7 lists what changed)
 
 Goal (Mirko): look into any network problem with two suites on one core.
 
@@ -105,3 +105,12 @@ Rules: the core imports only numpy (+ matplotlib / PIL / cv2 lazily in `render/`
 ## 6. Migration of the old scripts (Mirko: replace and fix all callers)
 
 `evaluate_run.py`, `observe_run.py`, `eval_memory.py`, `video_encode.py` of `bev_fusion/evaluation/` are replaced by the suite; their callers (about 25 scripts and shell chains of other sessions) are rewritten to the new API / command line. Order: golden numbers from the old code first, then the suite, then callers, then the old files go to `bev_fusion/_to_delete/` (listed there); a shell script that is executing right now is not edited (bash reads scripts by offset): it is rewritten when its lane has ended, and until then the old entry point stays as a short forwarding stub.
+
+## 7. As built (2026-10-30): what changed against the plan
+
+- `state` has a third mode **`warmup`**: every frame from an empty start with only the `Subject.warmup` frames before it (any subset of frames); with `reset` it is the paired test whether a memory helps on the frames a clip-trained network was trained for (`bev_suite.py RUN memory`). `trace` replays any of the three states exactly (history `full` / `warmup` / `none`).
+- `TapSpec` got `optional` (the network may lack the part: other configuration, older snapshot) and `alive_check` (an all-zero tap is legitimate, e.g. a memory on the first frame); `Panel` got `origin` (image-plane maps). Overlays can no longer move an image's limits.
+- `Quantitative.run(on_frame=...)` calls a callback for every frame run; the BEV `eval` uses it to write the legacy `scene_records.pkl`. `Sampler.spread(min_index=...)` leaves out the first frames of each scene.
+- `TapRecorder` never breaks a forward pass: a tap that cannot be read from a network's output is skipped and counted; missing optional modules are skipped.
+- The BEV adapter replaced eleven scripts' worth of glue: `metrics.py`'s `DetMeter` was made additive per frame (`frame_rows` / `reduce_rows`, tested against the original global matching on random frames), the old evaluation scripts are archived, their callers rewritten (`bev_probe.py` for one-off probes, `bev_legacy.py` for the pickles of runs evaluated before the suite), and `evaluate_run.py` stays as a deprecated forwarding stub while the running lane `temp/study/lane3.sh` calls it.
+- Proof: `python -m evalsuite selftest` (29 checks on the toy adapter), `python evaluation/bev_selftest.py` (8 checks on a synthetic BEV world), `--golden` (the 3738 numbers of the former `evaluate_run.py` on 24 real val frames reproduced to 1e-9 relative on the CPU: same keys, same values, and the same per-scene records), `--real` (the adapter, every view, a quantitative run, outliers, report and a video on a real run).

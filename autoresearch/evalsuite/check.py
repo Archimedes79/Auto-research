@@ -93,8 +93,10 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
         subj.predict(f1, ())                                      # change the state ...
         subj.reset()                                              # ... and forget it
         b = subj.predict(f0, list(declared))
-        for n in a.taps:
-            assert np.allclose(a.taps[n], b.taps[n], atol=1e-5, equal_nan=True), f"after reset() the same frame gave another tap {n}"
+        for n in a.taps:                                          # float noise of a GPU network grows with depth (1e-4 of the scale), a leaked state is of the scale itself
+            x, y = np.asarray(a.taps[n], np.float64), np.asarray(b.taps[n], np.float64)
+            tol = 1e-5 + 1e-3 * (np.nanmax(np.abs(x)) if x.size and np.isfinite(x).any() else 0.0)
+            assert np.allclose(x, y, atol=tol, rtol=0, equal_nan=True), f"after reset() the same frame gave another tap {n} (max difference {np.nanmax(np.abs(x - y)):.3g})"
     _run(R, "subject: reset() restores the start state", reset_same)
 
     def warm():

@@ -5,8 +5,8 @@ import sys
 import numpy as np
 import torch
 
-sys.path.insert(0, "evaluation")
-import observe_run as ob  # noqa: E402
+sys.path.insert(0, ".")
+from evaluation import bev_probe as ob  # noqa: E402
 from train import make_datasets  # noqa: E402
 
 run = sys.argv[1] if len(sys.argv) > 1 else "runs/t1_r4_soa"

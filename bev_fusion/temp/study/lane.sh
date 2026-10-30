@@ -10,7 +10,7 @@ for a in "$@"; do
   [ -f $r/.done ] || bash temp/train/run_cfg.sh training/configs/t2_$a.json $rev
   [ -f $r/.done ] || { echo "$a: no .done, skipped evaluation"; continue; }
   echo "== $a eval $(date +%T)"
-  ~/miniconda3/envs/gcar/bin/python -u evaluation/evaluate_run.py $r --n 1000 --workers 4 --batch 4 > temp/study/eval_$a.log 2>&1
+  ~/miniconda3/envs/gcar/bin/python -u evaluation/bev_suite.py $r --workers 4 eval --n 1000 > temp/study/eval_$a.log 2>&1
   tail -n 1 temp/study/eval_$a.log
 done
 echo "lane finished $(date +%T)"

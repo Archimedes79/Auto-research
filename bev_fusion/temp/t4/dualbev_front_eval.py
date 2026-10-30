@@ -1,5 +1,5 @@
 """t4_soa_front: the pre-trained DualBEV (front camera only) on the same 1000 cold-VAL frames as the study arms.
-Writes runs/t4_dualbev_front/eval/scene_records.pkl in the format of evaluate_run (det[scene][dt] = [(dets, gt boxes)]) and
+Writes runs/t4_dualbev_front/eval/scene_records.pkl in the legacy scene_records format of evaluation/bev_legacy.py (det[scene][dt] = [(dets, gt boxes)]) and
 metrics.json (front field of view up to 60 m, as every other arm). Resumable (partial records every 100 frames).
 Usage (bev_fusion folder): python temp/t4/dualbev_front_eval.py [--device cpu|cuda] [--n 1000] [--threads 2]
 """
@@ -14,8 +14,8 @@ import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, "training")]
-from evaluation import evaluate_run as ev  # noqa: E402
-from evaluation.metrics import DetMeter  # noqa: E402
+from evaluation.bev_probe import gt_boxes as _gt_boxes  # noqa: E402
+from evaluation.metrics import DetMeter, report  # noqa: E402
 from dualbev_front import DualBEVFront, decode  # noqa: E402
 from losses import NUSC_GROUPS  # noqa: E402
 from train import TrainConfig, make_datasets, val_subset  # noqa: E402
@@ -58,7 +58,7 @@ for i in range(len(sub)):
         ms.append((time.time() - t1) * 1e3)
     dets = decode(outs, k=100, threshold=0.05)[0]
     scene = val_ds.nusc.get("scene", val_ds.nusc.get("sample", tok)["scene_token"])["name"]
-    records[tok] = (scene, dets, ev.gt_boxes(item["gt"]["cur"]))
+    records[tok] = (scene, dets, _gt_boxes(item["gt"]["cur"], [g for g, _ in NUSC_GROUPS]))
     if len(records) % 100 == 0:
         pickle.dump(records, open(part, "wb"))
         print(f"{len(records)}/{len(sub)} frames, {time.time() - t0:.0f} s, {sum(ms) / len(ms):.0f} ms/frame (model)", flush=True)
@@ -68,7 +68,7 @@ for tok in (sub.dataset.samples[j] for j in sub.indices) if hasattr(sub, "indice
     scene, dets, gb = records[tok]
     det.add(dets, gb, dt=0.0)
     scenes.setdefault(scene, {}).setdefault(0.0, []).append((dets, gb))
-flat = ev.report(seg=None, det=det)
+flat = report(seg=None, det=det)
 flat["info/n_samples"], flat["info/n_scenes"] = len(records), len(scenes)
 json.dump({"run": a.out, "checkpoint": "dualbev-r50-cbgs.pth (EMA)", "split": cfg.val_split, "weights": "EMA",
            "memory": "none (single frame)", "device": a.device, "metrics": flat,

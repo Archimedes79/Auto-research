@@ -54,10 +54,11 @@ class Quantitative:
 
     def run(self, scenes: Optional[Sequence[str]] = None, n_scenes: Optional[int] = None, seed: int = 0,
             max_frames: Optional[int] = None, frames: Optional[Sequence[FrameRef]] = None, state: Optional[str] = None,
-            name: Optional[str] = None, resume: bool = True, progress: int = 25) -> RunStore:
+            name: Optional[str] = None, resume: bool = True, progress: int = 25, on_frame=None) -> RunStore:
         """Run the chosen scenes (default: all; n_scenes: that many random scenes; max_frames: the first frames of each scene)
         or the given frames (grouped by scene, in time order) through the Subject and store the counts of every Metric.
-        state 'carry' (default of the suite) | 'reset' (every frame independent). -> the closed RunStore."""
+        state 'carry' (default of the suite) | 'reset' (every frame independent) | 'warmup'. on_frame(sample, prediction): optional callback
+        for EVERY frame run (also frames a resumed run already has stored: the Subject runs them anyway). -> the closed RunStore."""
         src, subj, task = self.s.source, self.s.subject, self.s.task
         state = state or self.s.state
         if frames is not None:
@@ -91,6 +92,8 @@ class Quantitative:
                     continue
                 for sample, pred in runner.iter_scene(sc, refs):
                     n += 1
+                    if on_frame is not None:
+                        on_frame(sample, pred)
                     if sample.ref.label in done:
                         continue
                     counts, scores, support = {}, {}, {}

@@ -19,9 +19,9 @@ ap.add_argument("--n", type=int, default=300)
 ap.add_argument("--splits", default="val,train")
 ap.add_argument("--variants", default="base,no_radar,no_camera")
 a = ap.parse_args(_argv[1:])
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "evaluation"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 sys.argv = [sys.argv[0], a.run]
-import evaluate_run as E  # noqa: E402
+from evaluation import bev_probe as E  # noqa: E402
 from evaluation.metrics import DetMeter, report  # noqa: E402
 
 LAYERS = [("drivable_area", "fov"), ("walkway", "fov"), ("lane_divider", "fov"), ("vehicle", "obj_fov")]

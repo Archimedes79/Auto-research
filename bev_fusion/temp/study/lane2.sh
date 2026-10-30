@@ -12,7 +12,7 @@ sleep 36000 &                                         # keeps the WSL VM alive
 bash temp/study/move_ckpts.sh --loop > temp/study/move_ckpts.log 2>&1 &
 evalrun() {  # <run dir> [extra args]
   r=$1; shift
-  $PY -u evaluation/evaluate_run.py $r --n 1000 --workers 4 --batch 4 "$@" > temp/study/eval_$(basename $r)$LOGSFX.log 2>&1
+  $PY -u evaluation/bev_suite.py $r --workers 4 "$@" eval --n 1000 > temp/study/eval_$(basename $r)$LOGSFX.log 2>&1
   tail -n 1 temp/study/eval_$(basename $r)$LOGSFX.log
 }
 while true; do

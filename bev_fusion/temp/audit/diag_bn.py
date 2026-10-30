@@ -19,9 +19,9 @@ ap.add_argument("run")
 ap.add_argument("--n", type=int, default=300)
 ap.add_argument("--recal", type=int, default=400)
 a = ap.parse_args(_argv[1:])
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "evaluation"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 sys.argv = [sys.argv[0], a.run]
-import evaluate_run as E  # noqa: E402
+from evaluation import bev_probe as E  # noqa: E402
 from evaluation.metrics import DetMeter, SegMeter, report  # noqa: E402
 
 

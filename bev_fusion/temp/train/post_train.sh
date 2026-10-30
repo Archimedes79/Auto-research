@@ -11,12 +11,12 @@ echo "training ended $(date +%T); .done: $([ -f runs/t1_r3_combined/.done ] && e
 [ -f runs/t1_r3_combined/.done ] || { echo "NO .done: stopping the pipeline"; exit 1; }
 sleep 20
 echo "== latency $(date +%T)"
-$PY -u evaluation/evaluate_run.py runs/t1_r0 --time-only > temp/train/post_time_r0.log 2>&1
-$PY -u evaluation/evaluate_run.py runs/t1_r3_combined --time-only > temp/train/post_time_final.log 2>&1
+$PY -u evaluation/bev_suite.py runs/t1_r0 time > temp/train/post_time_r0.log 2>&1
+$PY -u evaluation/bev_suite.py runs/t1_r3_combined time > temp/train/post_time_final.log 2>&1
 echo "== full VAL evaluation $(date +%T)"
-$PY -u evaluation/evaluate_run.py runs/t1_r3_combined --prior 500 --images 8 --workers 6 --batch 4 > temp/train/post_eval_final.log 2>&1
+$PY -u evaluation/bev_suite.py runs/t1_r3_combined --workers 6 eval --prior 500 --images 8 > temp/train/post_eval_final.log 2>&1
 echo "== memory test $(date +%T)"
-$PY -u evaluation/eval_memory.py runs/t1_r3_combined --clips 600 --workers 6 > temp/train/post_memory.log 2>&1
+$PY -u evaluation/bev_suite.py runs/t1_r3_combined --workers 6 memory --clips 600 > temp/train/post_memory.log 2>&1
 echo "== curves and tables $(date +%T)"
 mkdir -p experiments/t1_full_chain/results experiments/t1_full_chain/images
 $PY temp/train/plot_curves.py experiments/t1_full_chain/images/curves.png t1_r0 t1_r3_combined > temp/train/post_curves.log 2>&1

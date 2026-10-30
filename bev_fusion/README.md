@@ -10,7 +10,7 @@ For now this folder only holds the discussion of a new BEV system (camera pixel-
 | `plan_draft2.md` | the previous draft (front camera, virtual upright camera, sigma points), kept for the record |
 | `training/` | code (plain PyTorch, a self-test per module): the blocks (camera lift, camera encoder with pre-trained DualBEV heads, radar block, splat, temporal fusion, fusion, BEV trunk, time-decoded heads, object head), the paper fallbacks, the losses, the nuScenes loader and the whole-chain assembly `model.py` - see `training/README.md` |
 | `autogt/` | the standalone autoGT suite: automatic GT from nuScenes (static BEV layers, objects, masks, radar-corrected velocity / flow field in m/s), with its own build, check, view and video commands and self-tests - see `autogt/README.md` |
-| `evaluation/` | metric code (segmentation / line IoU with tolerances, nuScenes-style detection AP and TP errors, latency) with known-answer self-tests - see `evaluation/README.md` |
+| `evaluation/` | the evaluation of a run: qualitative + quantitative suite (the BEV adapter of `../autoresearch/evalsuite/`: frames, random frames, network-part debug views, videos, numbers over all videos with outlier trace-back, paired comparison) and the metric library (tolerant IoU, nuScenes-style AP) with known-answer self-tests - see `evaluation/README.md` |
 | `tests/` | synthetic gates per block (`tests/run_gates.sh`) - see `tests/README.md` |
 | `models/` | weights (not in git): `pretrained/dualbev-r50-cbgs.pth` with source and checks - see `models/README.md` |
 | `literature/papers.csv`, `literature/papers/` | the papers of the scans of 2026-10-25 (lift, radar, temporal, heads, SDF, polar radar; 68 notes), moved here from `../bev_fusion_lane_center/literature/` |

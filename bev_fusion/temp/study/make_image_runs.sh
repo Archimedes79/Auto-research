@@ -17,6 +17,6 @@ c["val_scenes"], c["train_scenes"] = s["val"], s["train"]
 json.dump(c, open(f"runs/{name}/config.json", "w"), indent=1)
 PYEOF
   echo "== $name ($src) $(date +%T)"
-  CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=2 nice -n 10 $PY -u evaluation/evaluate_run.py runs/$name --n 40 --images 8 --workers 0 --batch 2 --ckpt-dir $ck 2>&1 | tail -n 1
+  CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=2 nice -n 10 $PY -u evaluation/bev_suite.py runs/$name --workers 0 --device cpu --ckpt-dir $ck eval --n 40 --images 8 2>&1 | tail -n 1
 done
 echo "images finished $(date +%T)"

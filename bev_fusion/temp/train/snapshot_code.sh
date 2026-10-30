@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-off: write runs/<name>/code/ from a pinned commit for a run that was started without a snapshot (t1_r0: trained with
-# the working tree at 914ec77; 2ddf511 adds only opt-in options with unchanged defaults), so evaluate_run uses that code.
+# the working tree at 914ec77; 2ddf511 adds only opt-in options with unchanged defaults), so the evaluation (bev_suite.py) uses that code.
 cd "$(dirname "$0")/../.." || exit 1
 name=$1; rev=$2; note=$3
 mkdir -p runs/$name/code

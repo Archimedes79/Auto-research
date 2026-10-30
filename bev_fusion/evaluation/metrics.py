@@ -277,33 +277,116 @@ def ap_all_points(tp_flags, n_gt):
     return float(np.sum(prec * np.diff(np.r_[0.0, rec])))
 
 
+TP_ERR_KEYS = ("ate", "ase", "aoe", "ave", "biou")
+
+
 class DetMeter:
-    """Accumulates frames of detections and GT boxes per dt; result() gives AP and TP errors per class and range bin."""
+    """Detection numbers per class, range bin and dt. Accumulates frames of detections and GT boxes per dt (`add`) and gives
+    AP and TP errors (`result`). Underneath, everything is additive PER FRAME so any set of frames can be reduced without
+    re-matching: `frame_rows` turns one frame into the true-positive flags of each of its detections (the greedy matching only
+    involves the detection's own frame) plus the GT counts; `reduce_rows` sorts the rows of any set of frames by score and
+    computes the numbers. The evaluation suite stores the rows per frame (evalsuite adapter evaluation/bev_task.py)."""
 
     def __init__(self, classes=None, thresholds=DIST_THRESHOLDS, x_max=60.0, half_fov=FRONT_HALF_FOV, bins=RANGE_BINS):
         self.classes, self.thr, self.x_max, self.half_fov, self.bins = classes, thresholds, x_max, half_fov, bins
         self.frames = {}                                  # dt -> list of (dets, gts)
 
+    def keep(self, bs):
+        """the boxes of the scored field of view"""
+        return [b for b in bs if in_front(b, self.x_max, self.half_fov)]
+
     def add(self, dets, gts, dt=0.0):
         """one frame: dets (box dicts with score), gts (box dicts) at the target time t + dt, ego frame of t + dt."""
-        keep = lambda bs: [b for b in bs if in_front(b, self.x_max, self.half_fov)]       # noqa: E731
-        self.frames.setdefault(round(float(dt), 3), []).append((keep(dets), keep(gts)))
+        self.frames.setdefault(round(float(dt), 3), []).append((self.keep(dets), self.keep(gts)))
 
-    def _evaluate(self, frames):
+    # ---- one frame -> rows (additive)
+    @property
+    def n_cols(self):
+        T = len(self.thr)
+        return 3 + 2 * T + 2 * len(TP_ERR_KEYS)
+
+    def frame_rows(self, dets, gts, classes):
+        """dets, gts: the boxes of one frame already inside the scored field of view. -> {'rows': (n_det, n_cols) float64,
+        'n_gt': (n_classes, 1 + n_bins) int}. Row = [class index, range bin of the detection (-1 none), score, true-positive
+        flag per threshold when matched among ALL boxes of the class (T), the same when matched among the boxes of its own
+        range bin (T), TP errors of the match at TP_THRESHOLD among all (5), among its bin (5)]; errors are nan where the
+        detection is no true positive at TP_THRESHOLD. n_gt column 0 = all, then one per bin."""
+        T, nb = len(self.thr), len(self.bins)
+        rows, n_gt = [], np.zeros((len(classes), 1 + nb), int)
+        for ci, cls in enumerate(classes):
+            ds = [d for d in dets if d["group"] == cls]
+            gs = [g for g in gts if g["group"] == cls]
+            bin_of = {id(d): range_bin(d["cx"], self.bins) for d in ds}
+            scopes = [(ds, gs)] + [([d for d in ds if bin_of[id(d)] == i], [g for g in gs if range_bin(g["cx"], self.bins) == i])
+                                   for i in range(nb)]
+            n_gt[ci] = [len(g) for _, g in scopes]
+            flag = [{}, {}]                                # scope 0 / own bin -> {id(det): [tp per threshold]}
+            err = [{}, {}]
+            for si, (sd, sg) in enumerate(scopes):
+                tgt = 0 if si == 0 else 1
+                for k, t in enumerate(self.thr):
+                    m, _ = match([(sd, sg)], t)
+                    for _, ok, d, g in m:
+                        flag[tgt].setdefault((id(d), si), [0.0] * T)[k] = float(ok)
+                        if ok and t == TP_THRESHOLD:
+                            err[tgt][(id(d), si)] = tp_errors(d, g)
+            for d in ds:
+                bi = bin_of[id(d)]
+                a = flag[0].get((id(d), 0), [0.0] * T)
+                b = flag[1].get((id(d), 1 + bi), [0.0] * T) if bi is not None else [0.0] * T
+                ea = err[0].get((id(d), 0))
+                eb = err[1].get((id(d), 1 + bi)) if bi is not None else None
+                rows.append([ci, -1 if bi is None else bi, d["score"], *a, *b,
+                             *[(ea[k] if ea else float("nan")) for k in TP_ERR_KEYS],
+                             *[(eb[k] if eb else float("nan")) for k in TP_ERR_KEYS]])
+        return {"rows": np.asarray(rows, float).reshape(-1, self.n_cols), "n_gt": n_gt}
+
+    # ---- any set of frames -> numbers
+    def _scope_row(self, rr, n_gt, si):
+        """the numbers of one (class, scope) from its rows rr (all rows of the scope) and its GT count"""
+        T = len(self.thr)
+        order = np.argsort(-rr[:, 2], kind="stable")          # score order; ties keep frame order, then detection order
+        rr = rr[order]
+        c0 = 3 if si == 0 else 3 + T
         row = {}
-        for t in self.thr:
-            m, n_gt = match(frames, t)
-            flags = [x[1] for x in m]
+        for k, t in enumerate(self.thr):
+            flags = rr[:, c0 + k]
             row["ap@%g" % t], row["ap_all@%g" % t] = ap_nuscenes(flags, n_gt), ap_all_points(flags, n_gt)
             if t == TP_THRESHOLD:
-                errs = [tp_errors(d, g) for _, ok, d, g in m if ok]
-                for k in ("ate", "ase", "aoe", "ave", "biou"):
-                    v = [e[k] for e in errs if e[k] == e[k]]
-                    row[k] = float(np.mean(v)) if v else float("nan")
-                row["n_tp"] = len(errs)
-        row["n_gt"] = sum(len(g) for _, g in frames)
-        row["n_det"] = sum(len(d) for d, _ in frames)
+                tp = flags > 0
+                e0 = 3 + 2 * T + (0 if si == 0 else len(TP_ERR_KEYS))
+                for j, name in enumerate(TP_ERR_KEYS):
+                    v = rr[tp, e0 + j]
+                    v = v[v == v]
+                    row[name] = float(v.mean()) if len(v) else float("nan")
+                row["n_tp"] = int(tp.sum())
+        row["n_gt"] = int(n_gt)
+        row["n_det"] = len(rr)
         return row
+
+    def reduce_rows(self, frames, classes, only=None):
+        """frames: list of frame_rows() results. -> {class: {bin: {...}}, 'mean': {'all': {...}}} as result()[dt];
+        only: optional set of (class, scope name) to compute (the rest is left out, 'mean' is then not computed)."""
+        nb = len(self.bins)
+        rows = np.concatenate([f["rows"] for f in frames]) if frames else np.zeros((0, self.n_cols))
+        n_gt = sum((f["n_gt"] for f in frames), np.zeros((len(classes), 1 + nb), int))
+        out = {}
+        names = ["all"] + [bin_label(i) for i in range(nb)]
+        for ci, cls in enumerate(classes):
+            rc = rows[rows[:, 0] == ci]
+            for si, name in enumerate(names):
+                if only is not None and (cls, name) not in only:
+                    continue
+                rr = rc if si == 0 else rc[rc[:, 1] == si - 1]
+                out.setdefault(cls, {})[name] = self._scope_row(rr, n_gt[ci, si], si)
+        if only is None:
+            mean = {}
+            for name, keys in (("mAP", ["ap@%g" % t for t in self.thr]), ("mAP_all", ["ap_all@%g" % t for t in self.thr]),
+                               ("mATE", ["ate"]), ("mASE", ["ase"]), ("mAOE", ["aoe"]), ("mAVE", ["ave"])):
+                v = [out[c]["all"][k] for c in out for k in keys if out[c]["all"]["n_gt"] and out[c]["all"][k] == out[c]["all"][k]]
+                mean[name] = float(np.mean(v)) if v else float("nan")
+            out["mean"] = {"all": mean}
+        return out
 
     def result(self):
         """{dt: {class: {bin: {ap@t, ap_all@t, ate, ase, aoe, ave, biou, n_tp, n_gt, n_det}}, 'mean': {'all': {mAP,
@@ -312,20 +395,7 @@ class DetMeter:
         for dt in sorted(self.frames):
             frames = self.frames[dt]
             classes = self.classes or sorted({b["group"] for ds, gs in frames for b in ds + gs})
-            out = {}
-            for cls in classes:
-                fc = [([d for d in ds if d["group"] == cls], [g for g in gs if g["group"] == cls]) for ds, gs in frames]
-                out[cls] = {"all": self._evaluate(fc)}
-                for i in range(len(self.bins)):
-                    inb = lambda bs: [b for b in bs if range_bin(b["cx"], self.bins) == i]        # noqa: E731
-                    out[cls][bin_label(i)] = self._evaluate([(inb(ds), inb(gs)) for ds, gs in fc])
-            mean = {}
-            for name, keys in (("mAP", ["ap@%g" % t for t in self.thr]), ("mAP_all", ["ap_all@%g" % t for t in self.thr]),
-                               ("mATE", ["ate"]), ("mASE", ["ase"]), ("mAOE", ["aoe"]), ("mAVE", ["ave"])):
-                v = [out[c]["all"][k] for c in out for k in keys if out[c]["all"]["n_gt"] and out[c]["all"][k] == out[c]["all"][k]]
-                mean[name] = float(np.mean(v)) if v else float("nan")
-            out["mean"] = {"all": mean}
-            res[dt] = out
+            res[dt] = self.reduce_rows([self.frame_rows(ds, gs, classes) for ds, gs in frames], classes)
         return res
 
 
@@ -541,6 +611,65 @@ def _selftest():
           {"group": "vehicle", "size": [1.8, 4.5, 1.5], "center": [40.0, 0.0, 0.0], "vel": [0.0, 0.0], "yaw": 0.0}]
     assert len(gt_boxes_from_meta(mb)) == 2 and len(gt_boxes_from_meta(mb, observed_only=False)) == 3
 
+    # 5c the per-frame rows (frame_rows / reduce_rows) give the numbers of the ORIGINAL global greedy matching (oracle below:
+    #    the former DetMeter code, kept here only as the test's reference) on random frames with ties, empty frames, circles and
+    #    boxes outside the field of view; the reduction is order-independent; `only` computes just the asked scopes
+    def oracle_eval(frames):
+        row = {}
+        for t in DIST_THRESHOLDS:
+            mm, n_gt = match(frames, t)
+            fl = [x[1] for x in mm]
+            row["ap@%g" % t], row["ap_all@%g" % t] = ap_nuscenes(fl, n_gt), ap_all_points(fl, n_gt)
+            if t == TP_THRESHOLD:
+                errs = [tp_errors(d, g) for _, ok, d, g in mm if ok]
+                for k in ("ate", "ase", "aoe", "ave", "biou"):
+                    v = [e[k] for e in errs if e[k] == e[k]]
+                    row[k] = float(np.mean(v)) if v else float("nan")
+                row["n_tp"] = len(errs)
+        row["n_gt"] = sum(len(gg) for _, gg in frames)
+        row["n_det"] = sum(len(dd) for dd, _ in frames)
+        return row
+    rng = np.random.default_rng(3)
+    classes = ["vehicle", "pedestrian"]
+    dm = DetMeter(classes=classes)
+    for dt in (0.0, 0.5):
+        for f in range(30):
+            gs = []
+            for _ in range(int(rng.integers(0, 6))):
+                cls = classes[int(rng.integers(0, 2))]
+                b = {"group": cls, "cx": float(rng.uniform(0, 62)), "cy": float(rng.uniform(-30, 30)), "vx": float(rng.normal()),
+                     "vy": float(rng.normal())}
+                b.update({"radius": 0.4} if cls == "pedestrian" else {"length": 4.5, "width": 1.8, "yaw": float(rng.uniform(-3, 3))})
+                gs.append(b)
+            ds = [dict(b, cx=b["cx"] + float(rng.normal(0, 1.2)), cy=b["cy"] + float(rng.normal(0, 1.2)),
+                       score=float(rng.choice([0.9, 0.9, 0.5, rng.uniform()]))) for b in gs if rng.uniform() < 0.8]
+            ds += [dict(gs[0] if gs else {"group": "vehicle", "length": 4.5, "width": 1.8, "yaw": 0.0, "vx": 0.0, "vy": 0.0},
+                        cx=float(rng.uniform(0, 60)), cy=float(rng.uniform(-20, 20)), score=float(rng.uniform())) for _ in range(3)]
+            dm.add(ds, gs, dt=dt)
+    new = dm.result()
+    for dt, frames in dm.frames.items():
+        for cls in classes:
+            fc = [([d for d in ds if d["group"] == cls], [g for g in gs if g["group"] == cls]) for ds, gs in frames]
+            want = {"all": oracle_eval(fc)}
+            for i in range(3):
+                inb = lambda bs: [b for b in bs if range_bin(b["cx"]) == i]                         # noqa: E731
+                want[bin_label(i)] = oracle_eval([(inb(ds), inb(gs)) for ds, gs in fc])
+            for sc, row in want.items():
+                assert list(row) == list(new[dt][cls][sc]), (list(row), list(new[dt][cls][sc]))
+                for k, v in row.items():
+                    w = new[dt][cls][sc][k]
+                    assert (v != v and w != w) or abs(v - w) < 1e-12, (dt, cls, sc, k, v, w)
+        rows = [dm.frame_rows(ds, gs, classes) for ds, gs in frames]
+        part = dm.reduce_rows(rows, classes, only={("vehicle", "all")})
+        assert list(part) == ["vehicle"] and part["vehicle"]["all"] == new[dt]["vehicle"]["all"]
+    # without tied scores the frame order does not matter (with ties the greedy order is 'frame order, then detection order')
+    uni = DetMeter(classes=classes)
+    for ds, gs in dm.frames[0.0]:
+        uni.add([dict(d, score=float(rng.uniform())) for d in ds], gs)
+    rows = [uni.frame_rows(ds, gs, classes) for ds, gs in uni.frames[0.0]]
+    a, b = flatten({"x": uni.reduce_rows(rows, classes)}), flatten({"x": uni.reduce_rows(rows[::-1], classes)})
+    assert a.keys() == b.keys() and all((a[k] == b[k]) or (a[k] != a[k] and b[k] != b[k]) or abs(a[k] - b[k]) < 1e-12 for k in a)
+
     # 6 latency helper (CPU callable here; timing itself only on an idle GPU)
     import torch
     x = torch.randn(1, 8, 64, 64)
@@ -556,7 +685,8 @@ def _selftest():
           f"and 1 at 0.5 / 1 m, mask, known / unknown split, line zero-crossing F1 (perfect 1, shift 0 / 1, field "
           f"error 0.425 m), detection perfect AP 1 and errors 0, empty AP 0, 90 deg AOE pi/2 ASE 0 BIoU 0.25, ASE "
           f"by hand (box 0.191, circle 0.36), two-detection AP nuScenes {ap_rank:.4f} = 8.2/81 / all-point 0.25, "
-          f"front field of view, dt-keyed round trip ({len(fa)} keys), latency {lat['median']:.2f} ms (CPU)")
+          f"front field of view, dt-keyed round trip ({len(fa)} keys), per-frame rows = the original greedy matching on random "
+          f"frames (ties, circles, empty frames), latency {lat['median']:.2f} ms (CPU)")
 
 
 if __name__ == "__main__":

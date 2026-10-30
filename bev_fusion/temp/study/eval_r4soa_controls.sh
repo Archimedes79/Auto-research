@@ -4,6 +4,6 @@ cd "$(dirname "$0")/../.." || exit 1
 PY=~/miniconda3/envs/gcar/bin/python
 for c in "" shuffle_radar zero_cam shuffle_cam; do
   echo "== r4soa control '$c' $(date +%T)"
-  OMP_NUM_THREADS=2 nice -n 5 $PY -u evaluation/evaluate_run.py runs/t3_eval_r4soa --n 1000 --workers 2 --batch 4 --ckpt-dir runs/t1_r4_soa ${c:+--control $c} 2>&1 | tail -n 1
+  OMP_NUM_THREADS=2 nice -n 5 $PY -u evaluation/bev_suite.py runs/t3_eval_r4soa --workers 2 --ckpt-dir runs/t1_r4_soa ${c:+--control $c} eval --n 1000 2>&1 | tail -n 1
 done
 echo "r4soa controls finished $(date +%T)"

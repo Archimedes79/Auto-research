@@ -5,7 +5,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, ".")
-from evaluation import evaluate_run as ev  # noqa: E402
+from evaluation import bev_legacy as ev  # noqa: E402
 
 rec = pickle.load(open("runs/t1_r0/eval/scene_records.pkl", "rb"))
 f = {s: r[0.0] for s, r in rec["det"].items() if 0.0 in r}

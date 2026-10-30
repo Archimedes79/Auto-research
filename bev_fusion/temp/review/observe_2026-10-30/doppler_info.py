@@ -6,9 +6,9 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, "evaluation")
-import observe_run as ob  # noqa: E402
-from evaluate_run import gt_boxes  # noqa: E402
+sys.path.insert(0, ".")
+from evaluation import bev_probe as ob  # noqa: E402
+from evaluation.bev_probe import gt_boxes  # noqa: E402
 from evaluation.metrics import in_front  # noqa: E402
 from train import collate_cached  # noqa: E402
 

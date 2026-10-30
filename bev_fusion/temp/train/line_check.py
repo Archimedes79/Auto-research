@@ -8,7 +8,7 @@ import torch
 
 sys.path.insert(0, "training")
 sys.path.insert(0, ".")
-from evaluation.evaluate_run import load_run, predictions  # noqa: E402
+from evaluation.bev_probe import load_run, predictions  # noqa: E402
 from train import forward_loss, make_datasets, make_loader, val_subset  # noqa: E402
 
 cfg, model, loss, step, _ = load_run(sys.argv[1], "cuda")

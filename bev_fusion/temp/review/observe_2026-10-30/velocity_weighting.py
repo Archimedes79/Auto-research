@@ -12,8 +12,8 @@ import sys
 import numpy as np
 import torch
 
-sys.path.insert(0, "evaluation")
-import observe_run as ob  # noqa: E402
+sys.path.insert(0, ".")
+from evaluation import bev_probe as ob  # noqa: E402
 from losses import build_layer_targets  # noqa: E402
 from timed_head import MotionHead  # noqa: E402
 from train import collate, collate_cached, forward_loss, make_datasets  # noqa: E402

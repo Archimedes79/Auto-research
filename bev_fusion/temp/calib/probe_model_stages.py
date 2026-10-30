@@ -13,7 +13,7 @@ import torch
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "training")
-from evaluation import evaluate_run as ev  # noqa: E402
+from evaluation import bev_probe as ev  # noqa: E402
 from train import forward_loss, make_datasets, make_loader  # noqa: E402
 
 torch.set_num_threads(2)

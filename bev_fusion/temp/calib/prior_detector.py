@@ -13,8 +13,8 @@ from scipy.ndimage import gaussian_filter
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "training")
-from evaluation import evaluate_run as ev  # noqa: E402
-from evaluation.metrics import DetMeter  # noqa: E402
+from evaluation import bev_probe as ev  # noqa: E402
+from evaluation.metrics import DetMeter, report  # noqa: E402
 from losses import NUSC_GROUPS  # noqa: E402
 from object_head import decode  # noqa: E402
 from train import TrainConfig, make_datasets, val_subset  # noqa: E402
@@ -48,7 +48,7 @@ det = DetMeter(classes=groups)
 for i in range(len(sub)):
     g = sub[i]["gt"]["cur"]
     det.add(dets, ev.gt_boxes(g), dt=0.0)
-flat = ev.report(seg=None, det=det)
+flat = report(seg=None, det=det)
 key = lambda c, t: flat[f"det/dt+0.00/{c}/all/ap@{t}"]
 mAP2 = sum(key(c, t) for c in ("vehicle", "pedestrian") for t in (0.5, 1, 2, 4)) / 8
 print(f"\nPRIOR DETECTOR (no sensor, {len(dets)} fixed detections per frame), {len(sub)} val frames:")

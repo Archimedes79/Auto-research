@@ -1,6 +1,6 @@
 # evalsuite - qualitative and quantitative evaluation of any network
 
-One core, two suites, three small boxes to plug in a network. Design and porting guide: `ARCHITECTURE.md`. Needs numpy and matplotlib (+ PIL, cv2 for videos, ffmpeg with libx264 optional); the core never imports torch or a dataset. Known-answer self-test of everything: `python -m evalsuite selftest` (28 checks, about 1 minute, run from `autoresearch/`).
+One core, two suites, three small boxes to plug in a network. Design and porting guide: `ARCHITECTURE.md`. Needs numpy and matplotlib (+ PIL, cv2 for videos, ffmpeg with libx264 optional); the core never imports torch or a dataset. Known-answer self-test of everything: `python -m evalsuite selftest` (29 checks, about 1 minute, run from `autoresearch/`). Adapters in use: `adapters/toy.py` (template and test bed) and `bev_fusion/evaluation/bev_adapter.py` (camera + radar BEV system, 17 contract checks pass on a real run).
 
 ## What you get
 
@@ -16,7 +16,7 @@ One core, two suites, three small boxes to plug in a network. Design and porting
 | is run B better than run A | `quant compare A B` | paired scene bootstrap of the headline numbers on the frames both have (needs no network) |
 | how fast | `quant timing` | ms per frame (idle machine only; the load is recorded) |
 
-A frame is named `scene/index` (`scene-0061/12`, the index is the position in the video) or by the dataset's own key. `--state carry` (default) runs a video in order with the network's memory carried from frame to frame, `--state reset` makes every frame independent; the difference of two such runs (`quant compare`) is the test whether a memory helps. Quick single-frame looks feed the history the network needs (`--history warmup`); `--history full` replays the whole video up to the frame (what `quant trace` does).
+A frame is named `scene/index` (`scene-0061/12`, the index is the position in the video) or by the dataset's own key. `--state carry` (default) runs a video in order with the network's memory carried from frame to frame, `--state reset` makes every frame independent, `--state warmup` starts every frame from empty and feeds only the history the network needs (any subset of frames); the difference of two such runs (`quant compare`) is the test whether a memory helps. `quant table RUN` prints the headline numbers of every metric, `--all` every number. Quick single-frame looks feed the history the network needs (`--history warmup`); `--history full` replays the whole video up to the frame (what `quant trace` does).
 
 ## Run it
 
