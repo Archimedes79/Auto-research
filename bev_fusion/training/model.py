@@ -86,6 +86,7 @@ class ModelConfig:
     head_channels: int = 0             # 1x1 reduction of the trunk output before the heads (CenterPoint-style light heads), 0 = off
     trunk_pretrained: str = ""         # DualBEV checkpoint to initialise the BEV encoder (width 1.0, c_fuse 80), "" = random
     trunk_kind: str = "dualbev"        # "dualbev" (ResNet pyramid + FPN-LSS) | "second" (SECOND + SECONDFPN, blocks_new.py)
+    trunk_fpn_original: bool = False   # t4: FPN-LSS concatenation order of BEVDet / DualBEV (stage 0 first), what the pre-trained weights expect
     radar_kind: str = "raster"         # "raster" (means + 2 convs) | "pillars" (point MLP + scatter-max, blocks_new.py) | "off" (zeros)
     cam_collapse: str = "zconv"        # try 7: "zconv" (1x1 conv over Z x 80 channels) | "zsum" (sum over heights, then 1x1; blocks_new.ZSumReduce)
     cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
@@ -171,7 +172,8 @@ class BEVFusionModel(nn.Module):
                 self.trunk = SecondTrunk(cin=cfg.c_fuse)
                 c = self.trunk.out_channels
             elif cfg.trunk_kind == "dualbev":
-                self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail)
+                self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail,
+                                      fpn_original_order=cfg.trunk_fpn_original)
                 if cfg.trunk_pretrained:                              # detection-trained BEV encoder of DualBEV (SOA init)
                     rep = self.trunk.load_pretrained(cfg.trunk_pretrained)
                     if rep["missing"] or rep["shape_mismatch"]:

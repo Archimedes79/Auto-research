@@ -15,6 +15,7 @@ ARMS = {"t3_cam_adapter": ({"radar_kind": "off", "cam_adapter": True}, {}),
         "t3_adapter": ({"cam_adapter": True}, {}), "t3_zsum": ({"cam_collapse": "zsum"}, {}),
         "t3_ref_long": ({}, {"steps": 6000, "eval_every": 2000}),
         "t3_radar_only": ({"camera_off": True}, {}),
+        "t4_fpn_order": ({"trunk_fpn_original": True}, {}),     # try 10: FPN-LSS concat order of the pre-trained DualBEV encoder
         "t3_vel10": ({}, {"loss": {"w_obj_vel": 10.0}})}      # the real radar-only arm (t2_cam_off ran WITH camera: bug, fixed 2026-10-30)
 for name, (model, top) in ARMS.items():
     c = copy.deepcopy(base)
