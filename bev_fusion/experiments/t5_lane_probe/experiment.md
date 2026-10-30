@@ -105,3 +105,59 @@ What can and cannot be said:
 recall as the pre-registered measures, (3) longer training (50 epochs) so that the RGB control can pass, (4) 300 fresh VAL frames (the
 current ones shaped the post-hoc metric), (5) the control must beat the prior by a margin before any feature is ranked. The 9 GB of
 features in `temp/t5/feats/` are kept for v2 (the TRAIN part is reusable).
+
+## 4 Probe v2 - card (written 2026-10-30 before the v2 run; Mirko: "Run probe v2")
+
+- **Question, hypothesis, arms, heads, TRAIN frames:** as in section 1 (the same 600 TRAIN keyframes and their features).
+- **Changes against v1, all fixed before the run:**
+  1. **Fresh VAL frames:** 300 keyframes of the val scenes that v1 did not use (v1's frames shaped the post-hoc metric).
+  2. **Range:** every measure only on pixels whose flat-ground distance is 2-30 m (near enough that the flat-road projection is exact to
+     about a cell and a painted line spans more than one cell). Training still uses all labels.
+  3. **Measures (pre-registered now):** recall@1 = labelled line cells with a prediction within 1 cell (all 2-30 m pixels);
+     corridor precision@1 = predicted cells within 1 cell of a label, counted only inside a 4-cell corridor around the labels (detected
+     but unlabelled paint further away is not a false positive); headline **F1** of the two. All from `evaluation/metrics.SegMeter`
+     counts, per val scene; paired scene bootstrap, 1000 draws, 95 % interval.
+  4. **Training:** 50 epochs instead of 15 (the v1 heads were underfit); the threshold of each arm is the one with the best F1 on the
+     TRAIN frames (2-30 m), never chosen on VAL.
+  5. **Control gate:** the RGB control must beat the prior by at least 0.05 F1 with an interval excluding 0; otherwise the probe is
+     invalid again and no feature is ranked.
+- **Prediction (before the run).** prior F1 <= 0.30 at 2-30 m (the prior has no near-range advantage: v1 prior IoU@1 at 2-20 m was 0.000);
+  rgb >= prior + 0.15; ctx16 the lowest of the four frozen arms; best of res8 / res4 >= ctx16 + 0.10.
+- **Decision rule (F1, after the gate passes).**
+  1. ctx16 >= 0.9 x rgb and no frozen arm beats ctx16 outside the interval: the lift's features hold the near lines -> the lane loss is
+     downstream (lift depth, BEV, line head).
+  2. best(res8, res4) - ctx16 > 0.05 with the interval excluding 0: stride 16 loses lines that the frozen backbone keeps -> a lane
+     branch from the stride-4 / 8 features into the BEV.
+  3. all frozen arms < 0.7 x rgb: the frozen backbone does not keep paint -> train an image lane head on unfrozen stages / a lane
+     backbone.
+  Otherwise (overlapping intervals): TIE between the features; report and do not build anything on it.
+- **Budget.** CPU, 2 threads: 300 new frames of features (about 8 min), six heads x 50 epochs (about 1 h in total).
+
+## 5 Probe v2 - result (2026-10-30)
+
+Run: `bash temp/t5/run_v2.sh` (CPU, 2 threads), code `temp/t5/lane_probe_v2.py`; table `results_v2.md` (copied from
+`temp/t5/results_v2.md`), picture `images/probe_v2_predictions.png` (not in git). VAL: 300 fresh keyframes of 82 val scenes (overlap with
+v1: 0); 25937 labelled line cells at 2-30 m (mean 86 per frame, 30 frames without one).
+
+| arm | recall@1 | corridor precision@1 | F1 | d F1 vs ctx16 [95 %] |
+|---|---|---|---|---|
+| prior (null) | 0.499 | 0.389 | 0.437 | -0.012 [-0.034, +0.010] |
+| ctx16 (lift input) | 0.551 | 0.380 | 0.450 | - |
+| fpn16 | 0.498 | 0.419 | 0.455 | +0.005 [-0.007, +0.017] |
+| res8 | 0.430 | 0.464 | 0.446 | -0.003 [-0.025, +0.017] |
+| res4 | 0.594 | 0.421 | 0.493 | +0.043 [+0.024, +0.061] |
+| rgb (control) | 0.557 | 0.434 | 0.488 | +0.038 [+0.017, +0.058] |
+
+- **Gate:** rgb - prior = +0.050 [+0.021, +0.077] -> passes, at the margin.
+- **Predictions:** all four missed. Prior 0.437 (predicted <= 0.30); rgb only +0.050 over the prior (predicted +0.15); the lowest
+  frozen arm is res8, not ctx16 (by 0.004, inside the noise); best(res8, res4) - ctx16 = +0.043 (predicted >= +0.10).
+- **Decision (written rule): TIE.** Rule 1 fails (res4 beats ctx16 outside the interval); rule 2 fails (+0.043 < 0.05, although the
+  interval excludes 0); rule 3 fails (every frozen arm >= 0.91 x rgb). Nothing is built on it.
+- **What the picture shows (qualitative, not part of the rule):** ctx16 and fpn16 give blurry bands, mostly along the horizon; res4
+  and rgb draw the painted lines sharply, including paint that has no label (the double yellow line in row 4, the curb line in row 1).
+  Painted lines are clearly visible at stride 4 and clearly blurred at stride 16. The F1 hardly separates them, for two reasons: the
+  labels miss much visible paint (section 3), and a per-pixel prior already reaches F1 0.44 because lines sit at similar image places.
+  In this design the metric, not the features, limits what the probe can tell apart.
+- **Consequence:** the probe question is closed as a TIE under nuScenes divider labels; a third probe on the same labels would not
+  help. A sharper test needs either complete line labels (hand-checked frames, or the image-side lane labels of another dataset) or
+  a direct BEV test (a stride-4/8 lane branch into the BEV against the reference, judged by the BEV divider metric).
