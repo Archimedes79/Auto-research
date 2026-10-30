@@ -22,7 +22,13 @@ gpu_util() { nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounit
 until [ "$(gpu_used)" -lt 6000 ]; do sleep 120; done
 for s in 0 1; do
   r=runs/t2_ref_s$s
-  [ -f $r/eval/metrics_legacy_2026-10-28.json ] || cp $r/eval/metrics.json $r/eval/metrics_legacy_2026-10-28.json
+  # keep the pre-suite evaluation exactly (t4 front-area table and temp/study/collect.py read scene_records.pkl of these runs):
+  # the whole eval folder copied to eval_legacy_2026-10-28/ plus legacy-named copies of the three files inside eval/
+  [ -d $r/eval_legacy_2026-10-28 ] || cp -a $r/eval $r/eval_legacy_2026-10-28 || exit 1
+  for f in metrics.json scene_records.pkl table.txt; do
+    g=${f%.*}_legacy_2026-10-28.${f##*.}
+    [ -f $r/eval/$g ] || cp -p $r/eval/$f $r/eval/$g || exit 1
+  done
   [ -f $r/eval/suite/quant/eval_n1000/manifest.json ] || \
     $PY -u evaluation/bev_suite.py $r --workers 2 --ckpt-dir /mnt/d/Auto-research/bev_fusion_ckpts/t2_ref_s$s eval --n 1000 \
       > temp/t7/eval_ref_s$s.log 2>&1
