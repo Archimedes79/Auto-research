@@ -86,3 +86,7 @@ seed 0, cold VAL 1000 frames, evaluated 2026-10-30 (numbers: `results_x50_fpn.md
 contributes little at this budget. Consequence: the bug did not visibly cost accuracy at 3000 steps, so the earlier block-swap verdicts (e.g. trunk_rand WORSE) are not shown to be
 wrong by it (not re-run), and the SOA reading in section 3 stands. The flag stays default off (cheaper to leave results comparable); a fresh arm
 for the corrected order would only be worth it together with longer training.
+
+Note on sources: `temp/t7/finish.sh` re-evaluates `t2_ref_s0` / `t2_ref_s1` with `bev_suite` after the t7 runs; the evaluation behind the
+tables above is then kept in `runs/t2_ref_s{0,1}/eval_legacy_2026-10-28/` (`scene_records.pkl`, `metrics.json`). To regenerate a table
+after that, point `compare_front.py` at those folders, not at `eval/`.
