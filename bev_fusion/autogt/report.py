@@ -8,13 +8,15 @@ nothing to clean up afterwards except the report itself and the stored data, bot
 (`--reports`, `--stale-caches`, `--all-caches`).
 
 Big datasets (v1.0-trainval, 850 sequences, 34,149 keyframes):
-- `--light` (automatic for trainval): the memory-light devkit (autogt/light_nusc.py), about 4 GB instead of 8+ GB
+- `--light` (automatic for trainval): the memory-light devkit (autogt/light_nusc.py); the sequences are processed in groups of
+  `GROUP` (60), each group loads only its own records: about 1 GB instead of 8+ GB for the full devkit
 - `--workers N`: N processes (fork: they share the devkit loaded once); the unit of work is one sequence. A finished sequence is saved
   as `DIR/<signature>/_scene_<name>.pkl` (its check accumulator and sample): an interrupted run (Ctrl-C, WSL restart, a stopped job)
   resumes with the next sequence, finished ones are not recomputed; a sequence that fails (missing file) is listed in the report
   and skipped
 """
 import datetime
+import gc
 import multiprocessing as mp
 import os
 import pickle
@@ -29,11 +31,13 @@ from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import Checks, leave_one_radar_out, radar_fov  # noqa: E402
 from .cli import _flat, write_index  # noqa: E402
+from .light_nusc import scene_names  # noqa: E402
 from .suite import AutoGT  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
 
 _STATE = {}
 PAGE_LINES = 78
+GROUP = 60
 
 
 def _text_pages(pdf, title, lines, size=7.5):
@@ -93,31 +97,45 @@ def _scene_task(name):
 def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, holdout=False, samples=10, workers=1, light=False,
            verbose=True, **options):
     """see the module docstring; returns dict(pdf, signature, keyframes, written, stored, samples, failed)."""
-    gen = AutoGT(dataroot, version, light=light, **options)
-    sig = gen.signature()
-    names = scenes or gen.scenes()
+    if light:
+        names = scenes or scene_names(dataroot, version)
+        gen0 = AutoGT(dataroot, version, light=True, scenes=names[:1], **options)
+    else:
+        gen0 = AutoGT(dataroot, version, **options)
+        names = scenes or gen0.scenes()
+    sig = gen0.signature()
+    grid = gen0.grid
     sig_dir = os.path.join(data_dir, sig) if data_dir else None
     if sig_dir:
         os.makedirs(sig_dir, exist_ok=True)
     pick = set(names[i] for i in np.unique(np.linspace(0, len(names) - 1, min(samples, len(names))).round().astype(int))) if samples else set()
-    _STATE["gen"], _STATE["cfg"] = gen, {"sig_dir": sig_dir, "stride": stride, "pick": pick}
-    results, t0 = {}, time.time()
-    if workers > 1:
-        with mp.get_context("fork").Pool(workers) as pool:
-            it = pool.imap_unordered(_scene_task, names)
-            for i, r in enumerate(it):
-                results[r[0]] = r
-                if verbose:
-                    print(f"[{i + 1}/{len(names)}] {r[0]} {'FAILED ' + r[3] if r[3] else 'ok'}  {time.time() - t0:.0f} s, "
-                          f"ETA {(time.time() - t0) / (i + 1) * (len(names) - i - 1) / 60:.0f} min", flush=True)
-    else:
-        for i, n in enumerate(names):
-            r = _scene_task(n)
-            results[n] = r
+    results, t0, done = {}, time.time(), 0
+    groups = [names[i:i + GROUP] for i in range(0, len(names), GROUP)] if light else [names]
+    for grp in groups:
+        gen = AutoGT(dataroot, version, light=True, scenes=grp, **options) if light else gen0
+        _STATE["gen"], _STATE["cfg"] = gen, {"sig_dir": sig_dir, "stride": stride, "pick": pick}
+        its = None
+        if workers > 1:
+            pool = mp.get_context("fork").Pool(workers)
+            its = pool.imap_unordered(_scene_task, grp)
+        else:
+            its = (_scene_task(n) for n in grp)
+        for r in its:
+            results[r[0]] = r
+            done += 1
             if verbose:
-                print(f"[{i + 1}/{len(names)}] {n} {'FAILED ' + r[3] if r[3] else 'ok'}  {time.time() - t0:.0f} s, "
-                      f"ETA {(time.time() - t0) / (i + 1) * (len(names) - i - 1) / 60:.0f} min", flush=True)
-    ck = Checks(gen.grid)
+                print(f"[{done}/{len(names)}] {r[0]} {'FAILED ' + r[3] if r[3] else 'ok'}  {time.time() - t0:.0f} s, "
+                      f"ETA {(time.time() - t0) / done * (len(names) - done) / 60:.0f} min", flush=True)
+        if workers > 1:
+            pool.close()
+            pool.join()
+        _STATE.clear()
+        del gen, its
+        gc.collect()
+    # the sample pictures and the radar field of view need the devkit of a few sequences only
+    keep = sorted(n for n in names if results[n][2] is not None) or names[:1]
+    gen = AutoGT(dataroot, version, light=True, scenes=keep, **options) if light else gen0
+    ck = Checks(grid)
     failed = {n: r[3] for n, r in results.items() if r[3]}
     held, written = {}, 0
     for n in names:                                                   # merged in sequence order
@@ -130,8 +148,8 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
     n_kf = len(ck.st["dt_ms"])
     if sig_dir:
         write_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options)
-    fov = radar_fov(gen, [n for n in names if n not in failed], stride)
-    ho = leave_one_radar_out(gen, [n for n in names if n not in failed], stride) if holdout else None
+    fov = radar_fov(gen, [n for n in keep if n not in failed], stride)
+    ho = leave_one_radar_out(gen, [n for n in names if n not in failed], stride) if (holdout and not light) else None
     os.makedirs(os.path.dirname(os.path.abspath(out_pdf)), exist_ok=True)
     with PdfPages(out_pdf) as pdf:
         head = [f"GT evaluation of {len(names) - len(failed)} sequences, {n_kf} keyframes - nuScenes {version}, grid 120 x 104 at 0.5 m",
