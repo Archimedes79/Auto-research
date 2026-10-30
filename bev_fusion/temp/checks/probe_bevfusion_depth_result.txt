@@ -1,0 +1,16 @@
+probe_bevfusion_depth.py 6 (nuScenes mini, 68 CAM_FRONT keyframes, 2026-10-30)
+median expected depth (m) of the cells in the central third of the image, by flat-road depth band; nuScenes mini, 68 CAM_FRONT keyframes
+ flat-road depth |              bevfusion |                dualbev
+    6 -  10 m      |   30.4 (n 13463, 27.8-31.6) |    7.4 (n 2856,  6.7- 8.5)
+   10 -  15 m      |   23.4 (n 7319, 18.1-27.6) |   11.0 (n 1904, 10.1-12.6)
+   15 -  20 m      |   18.6 (n 3403, 15.5-22.2) |   16.8 (n  952, 15.1-18.1)
+   20 -  30 m      |   21.3 (n 3754, 18.2-23.6) |   23.4 (n  952, 18.7-26.4)
+   30 -  45 m      |   27.8 (n 2039, 24.7-31.1) |                      -
+   45 -  60 m      |   35.7 (n 1769, 30.2-40.2) |   31.6 (n  952, 22.5-40.8)
+bevfusion: correlation of expected depth with flat-road depth 0.11, median |expected - flat| / flat 1.11 over 31747 cells
+dualbev: correlation of expected depth with flat-road depth 0.82, median |expected - flat| / flat 0.06 over 7616 cells
+
+
+probe_bevfusion_depth_sharpness.py (12 keyframes)
+bevfusion mean peak probability 0.096 (uniform 0.008), mean entropy / ln 118 = 0.82 (uniform 1.00), std of expected depth over cells 8.5 m; mean expected depth by feature row [30.9, 35.9, 40.8, 19.0, 21.4, 27.1, 29.8, 27.8]
+dualbev   mean peak probability 0.349 (uniform 0.008), mean entropy / ln 118 = 0.46 (uniform 1.00), std of expected depth over cells 13.5 m; mean expected depth by feature row [32.2, 32.2, 29.8, 20.6, 12.2, 8.5, 6.5, 4.7]
