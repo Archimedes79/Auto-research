@@ -64,9 +64,10 @@ SS = arg("--ss", 4)                                # GT sub-samples per cell (2 
 VMAX = arg("--vmax", 0.0)                         # > 0: physical speed bound of the refined field (FlowRefine v_max)
 LEAK = "--pyr-leak" in sys.argv                 # FlowPyramid(detach_levels=False): the pre-fix behaviour, for comparison
 TAG = ("_sharp" if SHARP else "") + ("_pyr" if PYR else "") + (f"_smooth{SMOOTH}" if SMOOTH > 0 else "") + ("_doppler" if DOPPLER else "") + ("_leak" if LEAK else "") + (f"_vmax{VMAX:g}" if VMAX > 0 else "") + (f"_raw{RAWWARP:g}" if RAWWARP > 0 else "") + (f"_prior{PRIOR:g}" if PRIOR != 1e-3 else "") + (f"_s{SEED}" if SEED else "")
-GATE = "--gate" in sys.argv                      # learned soft gate carried vs fresh start, recursive training (nuScenes)
+GATE = "--gate" in sys.argv or "--gate-doppler" in sys.argv   # learned soft gate carried vs fresh start, recursive training
+GATE_DOPPLER = "--gate-doppler" in sys.argv     # + each candidate's Doppler residual (before the update) as gate input
 if GATE:
-    TAG = TAG + "_gate"
+    TAG = TAG + ("_gatedop" if GATE_DOPPLER else "_gate")
 DATA = arg("--data", "synthetic")                 # "nuscenes": real GT boxes (data/cache/gt), see nuscenes_items
 if DATA == "nuscenes":
     TAG = "_nusc" + TAG
@@ -188,7 +189,7 @@ class Model(nn.Module):
         self.dec = nn.Sequential(nn.Conv2d(C + 1, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                  nn.Conv2d(32, 3, 1))
         if GATE:      # [features, fresh v, carried v, their residuals] -> softmax weights (fresh, carried); zero start = 0.5 / 0.5
-            self.gate = nn.Sequential(nn.Conv2d(C + 6, 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
+            self.gate = nn.Sequential(nn.Conv2d(C + 6 + (3 if GATE_DOPPLER else 0), 32, 3, padding=1), nn.ReLU(), nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(),
                                       nn.Conv2d(32, 2, 1))
             nn.init.zeros_(self.gate[-1].weight)
             nn.init.zeros_(self.gate[-1].bias)
@@ -208,15 +209,27 @@ class Model(nn.Module):
         self.ent = r["entropy"]
         imp = self.tp.importance_of(e0.flatten(2)).view(e0.shape[0], G.nx, G.ny) if SHARP else None
         v0, corr = (r["v_mean"] if v_init is None else v_init), None      # v_init: recursive start (carried estimate)
+        dres = None
         if DOPPLER and vgt is not None and v_override is None:      # the measurement corrects the start and EVERY iteration
             meas = radar_measure(f0, vgt)
+            if GATE_DOPPLER and v_carried is not None:              # disagreement with the radar BEFORE the update (after
+                u, d, valid = meas                                   # it both candidates agree radially by construction)
+                B_ = v0.shape[0]
+
+                def dop_res(v):
+                    pred = (u[:, 0] * v.reshape(B_, 2, -1)).sum(1)
+                    return ((pred - d[:, 0]).abs() * valid[:, 0]).view(B_, 1, G.nx, G.ny) / 10.0
+                dres = torch.cat([dop_res(v0), dop_res(v_carried), valid.view(B_, 1, G.nx, G.ny)], 1)
             v0 = radar_apply(v0, meas)
             corr = lambda v: radar_apply(v, meas)                     # noqa: E731
             if v_carried is not None:
                 v_carried = radar_apply(v_carried, meas)
         if v_carried is not None and GATE and v_override is None:     # learned soft blend of the two starts (no hard choice)
             rf_, rc_ = self.residual(f0, f1, steps, v0), self.residual(f0, f1, steps, v_carried)
-            w = torch.softmax(self.gate(torch.cat([e0, v0 / 10.0, v_carried / 10.0, rf_, rc_], 1)), 1)
+            gin = [e0, v0 / 10.0, v_carried / 10.0, rf_, rc_]
+            if GATE_DOPPLER:
+                gin.append(dres if dres is not None else e0.new_zeros(e0.shape[0], 3, G.nx, G.ny))
+            w = torch.softmax(self.gate(torch.cat(gin, 1)), 1)
             self.last_gate = w.detach()
             v0 = w[:, :1] * v0 + w[:, 1:] * v_carried
         if v_override is not None:
