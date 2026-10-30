@@ -7,13 +7,14 @@ fn (ground truth missed)                                   fp (prediction false)
   unobservable  outside the view of the input (mask given)    shift        the best shift of the whole prediction fixes it
   shift         the best shift of the whole prediction        duplicate    parallel copy of a correct lane
                 fixes it                                      spur         short stray piece (< spur_len)
-  offset        a prediction within near_factor * tau:        offset       ground truth within near_factor * tau: displaced
-                displaced, not absent                         overshoot    a correct lane continues past the end of the truth
-  gap           hole inside a lane that is found elsewhere    hallucinated nothing within near_factor * tau: invented lane
-  truncated     prediction stops short of the end / starts          (or ground truth that is missing there)
-                late
+  offset        a parallel prediction within near_factor * tau  offset     parallel ground truth within near_factor * tau
+                (displaced, not absent; a lane that only        overshoot  a correct lane continues past the end of the truth
+                crosses the missing one does not count)         hallucinated nothing parallel within near_factor * tau: invented
+  gap           hole inside a lane that is found elsewhere                 lane (or ground truth that is missing there)
+  truncated     prediction stops short of the end / starts late
   missed_near   lane absent within far_m of the ego
   missed_far    lane absent beyond far_m
+duplicate and offset need a neighbour with the same direction (|cos| >= `parallel`, directions from the points 4 m before / after).
 """
 from __future__ import annotations
 
@@ -86,6 +87,19 @@ def _ends(d, ds: float) -> np.ndarray:
     return np.array([d.s[i] <= 0.75 * ds or d.s[i] >= top[int(d.line[i])] - 0.75 * ds for i in range(len(d))])
 
 
+def _secant(d, ds: float, half: float = 4.0) -> np.ndarray:
+    """direction of every dense point from the points `half` metres before and after it on its own polyline (steady against jitter of single vertices)"""
+    out = np.zeros((len(d), 2))
+    k = max(int(round(half / ds)), 1)
+    for ln in np.unique(d.line):
+        idx = np.flatnonzero(d.line == ln)
+        idx = idx[np.argsort(d.s[idx])]
+        p = d.xy[idx]
+        v = p[np.minimum(np.arange(len(p)) + k, len(p) - 1)] - p[np.maximum(np.arange(len(p)) - k, 0)]
+        out[idx] = v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-12)
+    return out
+
+
 def _lateral(A: np.ndarray, B, j: np.ndarray, is_end: np.ndarray) -> np.ndarray:
     """is the offset of the points A from their nearest point of B (index j) sideways? False when that nearest point is an end of its
     polyline and A lies beyond it along the track: then the difference is the missing / extra LENGTH, not a displacement"""
@@ -107,7 +121,7 @@ def _runs(flag: np.ndarray):
 
 def error_budget(pred: LaneGraph, gt: LaneGraph, ds: float, tau: float, near_factor: float = 3.0, far_m: float = 40.0,
                  box=None, visible=None, grid=None, shift_max: float = 2.0, shift_step: float = 0.25, shift_min: float = 0.5,
-                 shift_gain: float = 0.10, dup_r: float = 1.5, spur_len: float = 6.0, origin=(0.0, 0.0)) -> Dict[str, float]:
+                 shift_gain: float = 0.10, dup_r: float = 1.5, spur_len: float = 6.0, origin=(0.0, 0.0), parallel: float = 0.8) -> Dict[str, float]:
     """metres of lane per cause for one frame (all CAUSES keys, zero when absent) + 'shift_u', 'shift_v', 'shift_gain'.
     `visible` (bool image on `grid`): cells the input can observe; ground-truth points outside are 'unobservable'."""
     dg, dp = gt.dense(ds, box), pred.dense(ds, box)
@@ -118,6 +132,10 @@ def error_budget(pred: LaneGraph, gt: LaneGraph, ds: float, tau: float, near_fac
     d_pg, j_pg = nn_index(P, G)
     fn, fp = d_gp > tau, d_pg > tau
     lat_g, lat_p = _lateral(G, dp, j_gp, _ends(dp, ds)), _lateral(P, dg, j_pg, _ends(dg, ds))
+    # 'displaced' needs a neighbour that runs the same way: a lane that only crosses the missing one (an intersection) is no localisation error
+    tg, tp_ = _secant(dg, ds), _secant(dp, ds)
+    par_g = np.abs((tg * tp_[j_gp]).sum(1)) >= parallel if len(P) and len(G) else np.zeros(len(G), bool)
+    par_p = np.abs((tp_ * tg[j_pg]).sum(1)) >= parallel if len(P) and len(G) else np.zeros(len(P), bool)
     # a displaced prediction: the best rigid translation of this frame
     du, dv, mp, mg, mp0, mg0 = best_shift(P, G, tau, shift_max, shift_step)
     tot = max(len(P) + len(G), 1)
@@ -138,7 +156,7 @@ def error_budget(pred: LaneGraph, gt: LaneGraph, ds: float, tau: float, near_fac
         vis[ok] = np.asarray(visible, bool)[r[ok], c[ok]]
         cause[fn & ~vis] = "fn.unobservable"
     cause[fn & (cause == "") & sh_g] = "fn.shift"
-    cause[fn & (cause == "") & (d_gp <= near) & lat_g] = "fn.offset"
+    cause[fn & (cause == "") & (d_gp <= near) & lat_g & par_g] = "fn.offset"
     miss = fn & (cause == "")                                  # absent: nothing within near
     covered = ~fn | (cause == "fn.shift") | (cause == "fn.offset")      # a prediction is there (right, displaced or shifted)
     rng = np.hypot(G[:, 0] - origin[0], G[:, 1] - origin[1]) if len(G) else np.zeros(0)
@@ -168,17 +186,17 @@ def error_budget(pred: LaneGraph, gt: LaneGraph, ds: float, tau: float, near_fac
     if tp_pts.any() and fp.any():
         from scipy.spatial import cKDTree
         t = cKDTree(P[tp_pts])
-        lid = dp.line[tp_pts]
+        lid, ttp = dp.line[tp_pts], tp_[tp_pts]
         for j in np.flatnonzero(fp & (cp == "")):
             for q in t.query_ball_point(P[j], dup_r):
-                if lid[q] != dp.line[j]:
+                if lid[q] != dp.line[j] and abs(float(tp_[j] @ ttp[q])) >= parallel:
                     cp[j] = "fp.duplicate"
                     break
     plen = {int(l): float((dp.line == l).sum() * ds) for l in np.unique(dp.line)}
     for j in np.flatnonzero(fp & (cp == "")):
         if plen[int(dp.line[j])] < spur_len:
             cp[j] = "fp.spur"
-    cp[fp & (cp == "") & (d_pg <= near) & lat_p] = "fp.offset"
+    cp[fp & (cp == "") & (d_pg <= near) & lat_p & par_p] = "fp.offset"
     for ln in np.unique(dp.line):
         idx = np.flatnonzero(dp.line == ln)
         idx = idx[np.argsort(dp.s[idx])]

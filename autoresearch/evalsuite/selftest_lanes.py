@@ -200,6 +200,8 @@ def t_causes_unit():
     assert ghost["fp.hallucinated"] > 55 and ghost["fn_total"] == 0, ghost
     over = C.error_budget(LaneGraph([line(0, 0, 0, 60)]), LaneGraph([line(0, 0, 0, 40)]), 0.5, 1.0, 3.0, 35.0, (-25, 25, 0, 60))
     assert over["fp.overshoot"] > 18 and over["fn_total"] == 0, over
+    cross = C.error_budget(LaneGraph([line(0, 0, 0, 60)]), LaneGraph([line(0, 0, 0, 60), line(-20, 30, 20, 30, 41)]), 0.5, 1.0, 3.0, 35.0, (-25, 25, 0, 60))
+    assert cross["fn.offset"] == 0 and cross["fn.missed_near"] + cross["fn.missed_far"] > 36, cross     # a lane that only CROSSES the missing one is not a displaced prediction
     spur = eb(LaneGraph([line(0, 0, 0, 60), line(-9, 10, -9, 14)]))
     assert 3.5 <= spur["fp.spur"] <= 4.6 and spur["fp.hallucinated"] == 0, spur
     g = Grid(-25.0, -5.0, 0.5, 100, 130)
