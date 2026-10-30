@@ -69,13 +69,17 @@ class FrontRadarDataset(torch.utils.data.Dataset):
         return len(self.samples)
 
     # ---- camera
-    def _image(self, sd):
+    def _image_uint8(self, sd):
+        """(H, W, 3) uint8 RGB after the resize + crop of self.ida (also what the lane-branch image cache stores)."""
         img = Image.open(os.path.join(self.root, sd["filename"])).convert("RGB")
         s = self.ida[0, 0].item()
         w, h = int(round(img.width * s)), int(round(img.height * s))
         top = h - DST_HW[0]
         img = img.resize((w, h), Image.BILINEAR).crop((0, top, DST_HW[1], h))
-        x = (torch.tensor(np.asarray(img), dtype=torch.float32) - torch.tensor(IMG_MEAN)) / torch.tensor(IMG_STD)
+        return np.asarray(img)
+
+    def _image(self, sd):
+        x = (torch.tensor(self._image_uint8(sd), dtype=torch.float32) - torch.tensor(IMG_MEAN)) / torch.tensor(IMG_STD)
         return x.permute(2, 0, 1)
 
     def _cam_frames(self, token):

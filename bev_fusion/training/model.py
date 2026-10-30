@@ -42,6 +42,7 @@ try:
     from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from .fusion import ConcatFusion, GateFusion
+    from .lane_branch import LaneBranch
     from .lift_pd import Grid, LiftPD, camera_visibility
     from .losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
     from .object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
@@ -54,6 +55,7 @@ except ImportError:                                   # run as a script
     from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
     from fusion import ConcatFusion, GateFusion
+    from lane_branch import LaneBranch
     from lift_pd import Grid, LiftPD, camera_visibility
     from losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
     from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
@@ -92,6 +94,9 @@ class ModelConfig:
     cam_collapse: str = "zconv"        # try 7: "zconv" (1x1 conv over Z x 80 channels) | "zsum" (sum over heights, then 1x1; blocks_new.ZSumReduce)
     cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
     camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
+    lane_branch: str = ""              # t7: stride-4 lane branch of the current frame added to the camera BEV after the temporal
+                                       # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch)
+    lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     dense_objects: bool = True
@@ -161,6 +166,12 @@ class BEVFusionModel(nn.Module):
         else:
             raise ValueError(cfg.cam_collapse)
         self.cam_temporal = _temporal(cfg.cam_temporal, cfg.c_cam, self.grid)
+        self.lane = None
+        if cfg.lane_branch:
+            if cfg.camera_features != "dualbev" or cfg.lift == "s":
+                raise ValueError("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
+            self.lane = LaneBranch(self.grid, depth_centres(), kind=cfg.lane_branch, c_out=cfg.c_cam,
+                                   oversample=cfg.oversample, pretrained=cfg.lane_pretrained)
         # radar branch
         if cfg.radar_kind == "pillars":
             self.radar = RadarPillars(self.grid, cfg.c_rad)
@@ -226,6 +237,7 @@ class BEVFusionModel(nn.Module):
         with torch.set_grad_enabled(torch.is_grad_enabled() and not self.cfg.freeze_camera):
             prob, ctx = self.camera.image_features(img.flatten(0, 1), batch["cam_vec"].flatten(0, 1))
         prob, ctx = prob.view(B, Fn, *prob.shape[1:]), ctx.view(B, Fn, *ctx.shape[1:])
+        self._prob0 = prob[:, 0]                                  # depth of the current frame (lane branch)
         if self.cam_adapter is not None:
             ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
         hw = img.shape[-2:]
@@ -300,6 +312,14 @@ class BEVFusionModel(nn.Module):
         if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
             cam_frames, cam_obs = flip_cam(cam_frames, cam_obs, flip)
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
+        if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam
+            img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
+            prob0 = batch["prob"][:, 0].float() if "prob" in batch else self._prob0
+            hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
+            lane = self.lane(img0, prob0, batch["K"][:, 0], batch["T_cam_car"][:, 0], hw, batch["ida"])
+            if flip is not None and bool(flip.any()):
+                lane = flip_cam(lane[:, None], None, flip)[0][:, 0]
+            cam = cam + lane
         rad = (torch.zeros(cam.shape[0], self.cfg.c_rad, self.grid.nx, self.grid.ny, device=cam.device)
                if self.cfg.radar_kind == "off" else self.radar(batch["radar"], cam.shape[0]))
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step)

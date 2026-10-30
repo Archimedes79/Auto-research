@@ -135,9 +135,11 @@ class CachedFrontRadarDataset(FrontRadarDataset):
     are stored once per sample as .npz and read back exactly (float32 / int64 as computed): reading the ~35 sweep files of a
     sample costs ~0.3-0.6 s, the cached entry ~5 ms (t1, 2026-10-26: the loader was the bottleneck of training)."""
 
-    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", **kw):
+    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", lane_images=None, **kw):
+        """lane_images (folder, optional): the key-frame image cache of the lane branch (lane_branch.py, experiment t7); the
+        item then carries the current frame as uint8 "lane_img" (3, H, W)."""
         super().__init__(*args, **kw)
-        self.store, self.radar_cache = store, radar_cache
+        self.store, self.radar_cache, self.lane_images = store, radar_cache, lane_images
         if camera_features == "bevfusion":                 # the cache was made with BEVFusion's test pipeline (scale 0.48, crop 32 / 176)
             try:
                 from .bevfusion_camera import bevfusion_ida
@@ -173,6 +175,12 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         item = super().__getitem__(i)
         for f in item["frames"]:
             f["prob"], f["ctx"] = self.store.get(f["token"])
+        if self.lane_images:
+            try:
+                from .lane_branch import load_image
+            except ImportError:
+                from lane_branch import load_image
+            item["lane_img"] = load_image(self.lane_images, item["frames"][0]["token"])
         return item
 
 
@@ -205,6 +213,8 @@ def collate_cached(items):
     batch["prob"] = torch.stack([torch.stack([f["prob"] for f in it["frames"]]) for it in items])      # (B, F, 118, 16, 44)
     batch["ctx"] = torch.stack([torch.stack([f["ctx"] for f in it["frames"]]) for it in items])        # (B, F, 80, 16, 44)
     batch["hw"] = DST_HW
+    if "lane_img" in items[0]:
+        batch["lane_img"] = torch.stack([it["lane_img"] for it in items])                               # (B, 3, H, W) uint8
     return batch
 
 

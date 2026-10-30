@@ -71,6 +71,7 @@ class TrainConfig:
     feature_cache: str = ""                      # path of the frozen-head feature cache ("" = run the camera heads)
     gt_cache: str = "data/cache/gt"              # GT cache folder of the dataset ("" = off)
     radar_cache: str = ""                        # per-sample radar cache folder (feature_cache.py; "" = off; exact)
+    lane_images: str = ""                        # key-frame image cache of the lane branch (lane_branch.py, t7; "" = off)
     n_cam: int = 3
     cam_stride: int = 2
     batch_size: int = 2
@@ -130,6 +131,8 @@ def build(cfg):
     cached = bool(cfg.feature_cache)
     if mcfg.camera_features != "dualbev" and not cached:
         raise ValueError(f"camera_features={mcfg.camera_features!r} needs a feature_cache")
+    if mcfg.lane_branch and cached and not cfg.lane_images:
+        raise ValueError("model.lane_branch with a feature_cache needs lane_images (lane_branch.py build-cache)")
     model = CachedBEVFusionModel(mcfg) if cached else BEVFusionModel(mcfg)
     return model, loss, cached
 
@@ -153,7 +156,8 @@ def make_datasets(cfg):
         if cfg.feature_cache:
             out.append(CachedFrontRadarDataset(root, cfg.version, scenes(split, names),
                                                store=FeatureStore(cfg.feature_cache), radar_cache=cfg.radar_cache or None,
-                                               camera_features=cfg.model.get("camera_features", "dualbev"), **kw))
+                                               camera_features=cfg.model.get("camera_features", "dualbev"),
+                                               lane_images=cfg.lane_images or None, **kw))
         else:
             out.append(FrontRadarDataset(root, cfg.version, scenes(split, names), **kw))
     return out
