@@ -10,6 +10,7 @@ the listed fields changed (copy the file, change the name and the fields, never 
 | `t1_r0.json` | experiment t1 round 0 (`../../experiments/t1_full_chain/`): t1_base with 5000 steps (4.9 epochs), warm-up 300, 8 loader workers (1.7 s per step) | ran 2026-10-26 |
 | `t1_r1a_dir.json` | round 1 arm a: t1_r0 + `model.object_direction` (object heading as sign-free axis + front / back class, SECOND) | round 1 |
 | `t1_r1b_uwso.json` | round 1 arm b: t1_r0 with UW-SO task balancing (T = 5) instead of Kendall | round 1 |
+| `t6_maps_only.json` | experiment t6_soa_gap: `t2_ref_s0` with fixed task weights (areas 1, lines 1, objects 0, motion 0) and the radar aux head off, pinned to the code of `t2_ref_s0` (commit 0a3d73c): does detection competition hold the maps back? card `../../experiments/t6_soa_gap/experiment.md` | queued 2026-10-30 behind the lane |
 
 Arms (fields to change against `t1_base.json`; none is run yet, every one is a proposal of plan 8.4):
 
