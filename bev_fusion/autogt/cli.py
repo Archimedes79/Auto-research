@@ -12,7 +12,8 @@
       motion relative to the static world; --total shows the total apparent flow instead)
   python -m autogt sheets OUT_DIR                            overview sheets of the sample pictures
   python -m autogt video  SCENE OUT.mp4 [seconds]            driving through the GT at 12 Hz
-  python -m autogt report [--version v1.0-mini] [--out REPORT.pdf] [--data DIR | --no-data] [--scenes ..] [--stride N] [--samples N] [--holdout]
+  python -m autogt report [--version v1.0-mini|v1.0-trainval] [--out REPORT.pdf] [--data DIR | --no-data] [--scenes ..] [--stride N]
+                          [--samples N] [--holdout] [--workers N] [--light]
       GT evaluation of all sequences in one pass: store the GT (as `build`), run every check, write ONE PDF report (summary, table
       per sequence, legend, sample pictures drawn straight into the PDF - no picture files exist, nothing to clean up but the report)
   python -m autogt clean  [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--older-than DAYS] [--move | --delete]
@@ -126,8 +127,10 @@ def main(argv=None):
     s = sub.add_parser("sheets")
     s.add_argument("out")
     r = sub.add_parser("report", help="evaluate the GT of all sequences, store it, write one PDF report with samples")
-    r.add_argument("--dataroot", default="~/data/nuscenes")
+    r.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
     r.add_argument("--version", default="v1.0-mini")
+    r.add_argument("--workers", type=int, default=1, help="processes (fork, one sequence per task); a finished sequence is saved, reruns resume")
+    r.add_argument("--light", action="store_true", help="memory-light devkit (automatic for trainval)")
     r.add_argument("--out", default=None, help="report PDF (default autogt/reports/autogt_report_<version>_<date>.pdf)")
     r.add_argument("--data", default=None, help="cache directory (default bev_fusion/data/autogt); --no-data: do not store")
     r.add_argument("--no-data", action="store_true")
@@ -171,7 +174,9 @@ def main(argv=None):
         out = a.out or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "autogt", "reports",
                                     f"autogt_report_{a.version}_{datetime.date.today().isoformat()}.pdf")
         data = None if a.no_data else (a.data or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt"))
-        report(os.path.expanduser(a.dataroot), a.version, out, data, a.scenes, a.stride, a.holdout, a.samples)
+        root = a.dataroot or ("~/data/nuscenes_full" if "trainval" in a.version else "~/data/nuscenes")
+        report(os.path.expanduser(root), a.version, out, data, a.scenes, a.stride, a.holdout, a.samples, a.workers,
+               a.light or "trainval" in a.version)
     elif a.cmd == "clean":
         from .clean import clean
         clean(delete=a.delete, move=a.move, videos=a.videos, pictures=a.pictures, reports=a.reports, old_outputs=a.old_outputs,

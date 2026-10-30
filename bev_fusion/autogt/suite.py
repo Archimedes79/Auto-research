@@ -14,10 +14,15 @@ class AutoGT(NuScenesGT):
     scenes()                 scene names
     signature()              cache key of the generator (source + options)
     options: stationary_fix, map_offsets, use_flow, use_radar, flow_config (autogt.flow.Config)
+    light=True: a memory-light devkit (CAM_FRONT + radars only, autogt/light_nusc.py): v1.0-trainval in ~4 GB instead of 8+ GB
     """
 
-    def __init__(self, dataroot, version, grid=None, ss=4, **options):
-        super().__init__(os.path.expanduser(dataroot), version, **options)
+    def __init__(self, dataroot, version, grid=None, ss=4, light=False, **options):
+        dataroot = os.path.expanduser(dataroot)
+        if light:
+            from .light_nusc import light_nuscenes
+            options["nusc"] = light_nuscenes(dataroot, version)
+        super().__init__(dataroot, version, **options)
         self.grid, self.ss = grid or GridSpec(), ss
 
     def keyframe(self, sample_token, grid=None, ss=None, sd=None):

@@ -39,22 +39,23 @@ def _cell(grid, x, y):
 
 
 class Checks:
-    """accumulator of the checks above; feed(scene_name, k, token, gt_dict) per keyframe, then text() / scenes()."""
+    """accumulator of the checks above; feed(scene_name, k, token, gt_dict, annotation_time_us) per keyframe, then text() /
+    scene_rows(); small and picklable (workers return it, `merge` adds another one)."""
 
-    def __init__(self, gen):
-        self.gen, self.st = gen, collections.defaultdict(list)
+    def __init__(self, grid):
+        self.grid, self.st = grid, collections.defaultdict(list)
         self.flags = collections.Counter()
         self.prev_world, self.scene = {}, None
         self.per_scene = collections.OrderedDict()
 
-    def feed(self, name, k, tok, gk):
-        g, st = self.gen.grid, self.st
+    def feed(self, name, k, tok, gk, sample_time_us):
+        g, st = self.grid, self.st
         if name != self.scene:
             self.scene, self.prev_world = name, {}
             self.per_scene[name] = collections.Counter()
         ps = self.per_scene[name]
         m, da = gk["meta"], gk["drivable_area"]
-        st["dt_ms"].append((m["timestamp"] - self.gen.nusc.get("sample", tok)["timestamp"]) * 1e-3)
+        st["dt_ms"].append((m["timestamp"] - sample_time_us) * 1e-3)
         ps["keyframes"] += 1
         for b in m["boxes"]:
             x, y, z = b["center"]
@@ -105,6 +106,15 @@ class Checks:
         st["V1_vel_outside"].append(float(np.abs(gk["velocity"][:, obj == 0]).max()) if (obj == 0).any() else 0.0)
         st["V1_w"].append(bool((gk["flow_weight"][gk["ignore"] > 0.9] == 0).all()))
 
+    def merge(self, other):
+        """add the accumulated results of another Checks (e.g. of a worker that did other sequences)."""
+        for k, v in other.st.items():
+            self.st[k].extend(v)
+        self.flags.update(other.flags)
+        for n, c in other.per_scene.items():
+            self.per_scene[n] = c
+        return self
+
     def text(self, fov=None):
         """the report lines (a list of str)."""
         st = self.st
@@ -140,11 +150,11 @@ class Checks:
 
 def run(dataroot, version="v1.0-mini", scenes=None, stride=1, holdout=False):
     gen = AutoGT(dataroot, version)
-    ck = Checks(gen)
+    ck = Checks(gen.grid)
     for name in (scenes or gen.scenes()):
         for k, tok in enumerate(gen.keyframes(name)):
             if k % stride == 0:
-                ck.feed(name, k, tok, gen.keyframe(tok))
+                ck.feed(name, k, tok, gen.keyframe(tok), gen.nusc.get("sample", tok)["timestamp"])
         print(name, flush=True)
     print("\n=== GT checks ===")
     print("\n".join(ck.text(radar_fov(gen, scenes, stride))))

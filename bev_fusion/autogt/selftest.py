@@ -135,6 +135,23 @@ def run(root=None, verbose=True):
         assert not [f for _, _, fs in os.walk(d) for f in fs if f.lower().endswith((".png", ".jpg"))], "no picture files"
         stored = os.listdir(os.path.join(d, "data", rep["signature"]))
         assert "index.json" in stored and rep["written"] == len([f for f in stored if f.endswith(".npz")]), rep
+    # 7b the memory-light devkit gives the identical GT, and a parallel run of the report equals a serial one and resumes
+    from .suite import AutoGT
+    full = AutoGT(root, "v1.0-mini", ss=4)
+    light = AutoGT(root, "v1.0-mini", ss=4, light=True)
+    tk = full.keyframes("scene-0061")[8]
+    a, b2 = full.keyframe(tk), light.keyframe(tk)
+    assert all(np.array_equal(a[k_], b2[k_]) for k_ in a if k_ != "meta"), "light devkit must give identical GT"
+    assert len(light.nusc.sample_data) < 0.7 * len(full.nusc.sample_data)
+    with tempfile.TemporaryDirectory() as d:
+        kw = dict(scenes=["scene-0061", "scene-0103", "scene-1077"], stride=20, samples=3, verbose=False)
+        r1 = report(root, "v1.0-mini", os.path.join(d, "a.pdf"), os.path.join(d, "d1"), workers=1, **kw)
+        r2 = report(root, "v1.0-mini", os.path.join(d, "b.pdf"), os.path.join(d, "d2"), workers=2, light=True, **kw)
+        assert r1["keyframes"] == r2["keyframes"] and r1["samples"] == r2["samples"] and not r2["failed"], (r1, r2)
+        sd2 = os.path.join(d, "d2", r2["signature"])
+        assert len([f for f in os.listdir(sd2) if f.startswith("_scene_")]) == 3
+        r3 = report(root, "v1.0-mini", os.path.join(d, "c.pdf"), os.path.join(d, "d2"), workers=2, light=True, **kw)       # resumes
+        assert r3["keyframes"] == r1["keyframes"] and r3["written"] == 0, r3
     from . import clean as cleanmod                                                  # the cleanup lists, moves, deletes only its own
     cleanmod.selftest()
     # 6 a one-second video encodes to H.264 and plays back (read-back check inside encode)
