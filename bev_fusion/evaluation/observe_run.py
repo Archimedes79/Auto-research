@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evaluate_run as ev  # noqa: E402  (sets sys.path to the run's pinned code snapshot)
 from evaluate_run import (COLORS, NUSC_GROUPS, composite, decode, draw_boxes, gt_boxes, layer_index,  # noqa: E402
                           load_run, masks, predictions, show)
+from video_encode import encode  # noqa: E402
 from train import clip_step, collate, collate_cached, forward_loss, make_datasets, to_device  # noqa: E402
 
 ROOT = ev.ROOT
@@ -68,6 +69,8 @@ class Tap:
         reg(model.lift, out_hook("lift", many=True))
         reg(model.cam_reduce, out_hook("cam_frames", many=True))
         reg(model.cam_temporal, out_hook("cam_temporal", pick=lambda o: o[0]))
+        reg(model.cam_temporal, lambda m, a, o: self.d.__setitem__(
+            "cam_aux", {k: v.detach().float().cpu() for k, v in o[2].items() if torch.is_tensor(v)}) if len(o) > 2 else None)
         reg(model.radar, out_hook("radar_feat"))
         net = getattr(model.radar, "net", None)
         if net is not None:
@@ -223,9 +226,15 @@ def stages_figure(path, model, cfg, grid, batch, res, gts, tap, vis, nusc, root,
             axs[1, 3].contour(np.linspace(grid.y_min, grid.y_max, vis.shape[1]), np.linspace(grid.x_min, grid.x_max,
                               vis.shape[0]), vis, levels=[0.5], colors="lime", linewidths=0.7)
     # row 3 ---- temporal change, radar branch, fusion
-    if ct is not None and cf:
-        draw_map(axs[2, 0], grid, energy(ct[0].numpy() - cf[0][0].numpy()),
-                 "9 what the temporal fusion added (|fused - current frame|)", boxes, fig=fig)
+    aux = tap.get("cam_aux")
+    if aux is not None and "agg" in aux:
+        conf = aux["mem_conf"][0, 0].numpy() if "mem_conf" in aux else None
+        draw_map(axs[2, 0], grid, energy(aux["agg"][0].numpy()),
+                 "9 what the past frames supply: window frames moved to now by ego motion + velocity head (energy; green = "
+                 "world memory confident)", boxes, fig=fig)
+        if conf is not None and conf.max() > 0.5:
+            axs[2, 0].contour(np.linspace(grid.y_min, grid.y_max, conf.shape[1]), np.linspace(grid.x_min, grid.x_max, conf.shape[0]),
+                              conf, levels=[0.5], colors="lime", linewidths=0.7)
     rr = tap.get("radar_raster")
     if rr is not None:
         draw_map(axs[2, 1], grid, rr[0, 0].numpy(), "10 radar raster: detections per cell (count channel)", boxes,
@@ -299,6 +308,7 @@ def outputs_figure(path, model, cfg, grid, batch, res, gts, nusc, title):
     sc = np.array([d["score"] for d in dets])
     ax = axs[1, 3]
     ax.hist(sc, bins=np.linspace(0, 1, 21), color="tab:red")
+    ax.set_yscale("log")
     ax.set_title(textwrap.fill(f"20 detection scores (n >= 0.3: {int((sc >= 0.3).sum())}; GT boxes in view: {len(gtb)})", 46),
                  fontsize=9)
     ax.tick_params(labelsize=7)
@@ -365,7 +375,8 @@ def checks(model, cfg, grid, batch, res, gts, tap, vis):
             "a road scene: pixel groups mostly 5-40 m away")
     rad = batch["radar"]
     n = len(rad["x"])
-    boxes = gt_boxes(g0)
+    from evaluation.metrics import in_front
+    boxes = [b for b in gt_boxes(g0) if in_front(b)]                  # the field of view DetMeter scores
     inside = 0
     for x, y in zip(rad["x"].numpy(), rad["y"].numpy()):
         for b in boxes:
@@ -380,12 +391,15 @@ def checks(model, cfg, grid, batch, res, gts, tap, vis):
     add("radar detections", f"{n} in window", "ok" if n > 20 else "warn", "forward radars: tens to hundreds per 0.5 s")
     add("radar detections on or within 1 m of a GT box", f"{inside / max(n, 1):.0%}", "ok",
         "context only: most radar points are static structure, not objects")
-    ct, cf = tap.get("cam_temporal"), tap.get("cam_frames")
-    if ct is not None and cf:
-        d = energy(ct[0].numpy() - cf[0][0].numpy())
-        base = energy(cf[0][0].numpy())
-        add("temporal fusion: change / current energy", f"{d.sum() / max(base.sum(), 1e-9):.2f}", "ok" if 0.05 < d.sum() / max(base.sum(), 1e-9) < 3 else "warn",
-            "~0: the past is ignored, very large: the past dominates")
+    aux, cf = tap.get("cam_aux"), tap.get("cam_frames")
+    if aux is not None and cf and "agg" in aux:
+        share = float(energy(aux["agg"][0].numpy()).sum() / max(energy(cf[0][0].numpy()).sum(), 1e-9))
+        add("temporal fusion: energy of the moved past frames / current frame", f"{share:.2f}", "ok" if 0.05 < share < 3 else "warn",
+            "~0: the window supplies nothing (frames missing or splat empty); >3: the past dominates")
+        if "mem_conf" in aux:
+            cov = float((aux["mem_conf"] > 0.5).float().mean())
+            add("world memory: cells it is confident about", f"{cov:.0%}", "ok",
+                "0 % on the first keyframe of a clip, grows as the clip runs (the camera cone fills in)")
     spec = model.spec
     k = layer_index(spec)
     prob, _ = predictions(res["out"][0.0], 0, spec)
@@ -396,7 +410,8 @@ def checks(model, cfg, grid, batch, res, gts, tap, vis):
     P, G = prob["drivable_area"] > 0.5, np.asarray(g0["drivable_area"], np.float32) > 0.5
     iou = float((P & G & cam).sum() / max((P | G)[cam].sum(), 1))
     add("drivable area IoU on camera cells", f"{iou:.2f}", "ok" if iou > 0.5 else "warn", "this frame only")
-    dets = decode({a: b[:1].float().cpu() for a, b in res["out"][0.0]["obj"].items()}, grid, NUSC_GROUPS, k=100, threshold=0.3)[0]
+    dets = [d for d in decode({a: b[:1].float().cpu() for a, b in res["out"][0.0]["obj"].items()}, grid, NUSC_GROUPS, k=100,
+                              threshold=0.3)[0] if in_front(d)]
     left = list(boxes)
     hit = 0
     for d in sorted(dets, key=lambda d: -d["score"]):
@@ -404,9 +419,9 @@ def checks(model, cfg, grid, batch, res, gts, tap, vis):
         if j is not None and math.hypot(left[j]["cx"] - d["cx"], left[j]["cy"] - d["cy"]) < 2.0:
             left.pop(j)
             hit += 1
-    add("boxes (score >= 0.3, centre within 2 m): found / detected / GT in view", f"{hit} / {len(dets)} / {len(boxes)}",
+    add("boxes in the front field of view (score >= 0.3, centre within 2 m): found / detected / GT", f"{hit} / {len(dets)} / {len(boxes)}",
         "ok" if hit >= 0.5 * len(boxes) and len(dets) <= 2 * max(hit, 1) + 2 else "warn",
-        "GT in view includes far and small objects: recall is not expected to be 100 %")
+        "far and small objects are in the GT: recall is not expected to be 100 %")
     for dt in (0.5, -0.5):
         if dt in res["out"]:
             m = res["out"][dt]["mass"][0, 0].float().cpu().numpy()
@@ -471,7 +486,13 @@ def write_html(out_dir, run, step, cfg, frames, summary):
         nw = sum(r[2] != "ok" for r in row)
         h.append(f"<tr class='{worst}'><td>{html.escape(n)}</td><td>{html.escape(' | '.join(str(r[1]) for r in row))}</td>"
                  f"<td>{nw} of {len(row)}</td><td>{html.escape(row[0][3])}</td></tr>")
-    h.append("</table>" + GUIDE)
+    h.append("</table>")
+    if summary.get("videos"):
+        h.append("<h2>Scene videos (all keyframes of a scene in order, the world memory carried over)</h2>")
+        for v in summary["videos"]:
+            h.append(f"<p>{html.escape(v['scene'])} ({v['info']['frames']} frames, {v['info']['codec']})<br>"
+                     f"<video src='{v['path']}' controls loop width='1260'></video></p>")
+    h.append(GUIDE)
     for f in frames:
         h.append(f"<h3>frame {f['idx']}: {html.escape(f['scene'])}, sample {html.escape(f['token'][:8])}, "
                  f"{f['n_clip']} keyframe(s) run before the picture</h3>")
@@ -563,21 +584,28 @@ def dashboard_figure(path, model, cfg, grid, batch, res, gts, tap, nusc, title):
     plt.close(fig)
 
 
-def video(run, scene=None, device="cuda", out=None, fps=2.0, max_frames=0):
-    """All keyframes of one validation scene (a 20 s clip, 2 Hz) run in order with the model state (world memory)
-    carried from frame to frame; one dashboard picture per frame -> video.mp4 (+ the frames, index_video.html)."""
-    import cv2
+def load_all(run, device):
+    """everything a report needs, loaded once: (cfg, model, loss, step, val dataset, device)."""
     os.chdir(ROOT)
     device = device if torch.cuda.is_available() else "cpu"
     cfg, model, loss, step, ckpt = load_run(run, device)
     cfg.workers = 0
     _freeze_scenes(cfg)
     _, val_ds = make_datasets(cfg)
+    return cfg, model, loss, step, val_ds, device
+
+
+def video(run, scene=None, device="cuda", out=None, fps=2.0, max_frames=0, ctx=None):
+    """All keyframes of one validation scene (a 20 s clip, 2 Hz) run in order with the model state (world memory)
+    carried from frame to frame; one dashboard picture per frame -> video.mp4 (+ the frames, index_video.html)."""
+    cfg, model, loss, step, val_ds, device = ctx or load_all(run, device)
     grid, nusc = model.grid, val_ds.nusc
     pos = {t: k for k, t in enumerate(val_ds.samples)}
     names = {nusc.get("scene", nusc.get("sample", t)["scene_token"])["name"] for t in val_ds.samples}
     if scene in (None, "auto"):
         scene = sorted(names)[len(names) // 2]
+    elif scene not in names:
+        raise ValueError(f"{scene} is not in the validation scenes of this config")
     first = [t for t in val_ds.samples if nusc.get("scene", nusc.get("sample", t)["scene_token"])["name"] == scene]
     toks = [first[0]]
     while True:
@@ -608,23 +636,15 @@ def video(run, scene=None, device="cuda", out=None, fps=2.0, max_frames=0):
             print(f"video frame {n + 1}/{len(toks)} {time.time() - t0:.0f} s", flush=True)
     finally:
         tap.close()
-    im0 = cv2.imread(files[0])
-    h, w = im0.shape[:2]
-    vw = cv2.VideoWriter(os.path.join(out_dir, "video.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
-    for f in files:
-        vw.write(cv2.imread(f))
-    vw.release()
-    print(f"done: {len(files)} frames -> {os.path.join(out_dir, 'video.mp4')}")
-    return out_dir
+    info = encode(files, os.path.join(out_dir, "video.mp4"), fps)
+    print(f"encoded {info}", flush=True)
+    print(f"done: {len(files)} frames -> {info['path']}")
+    return info
 
 
-def observe(run, every=20, max_frames=12, start=0, device="cuda", cold=False, out=None, per_scene=False):
-    os.chdir(ROOT)
-    device = device if torch.cuda.is_available() else "cpu"
-    cfg, model, loss, step, ckpt = load_run(run, device)
-    cfg.workers = 0
-    _freeze_scenes(cfg)
-    _, val_ds = make_datasets(cfg)
+def observe(run, every=20, max_frames=12, start=0, device="cuda", cold=False, out=None, per_scene=False, videos=0, fps=2.0):
+    ctx = load_all(run, device)
+    cfg, model, loss, step, val_ds, device = ctx
     grid, nusc = model.grid, val_ds.nusc
     out_dir = out or os.path.join(run, "observe")
     os.makedirs(os.path.join(out_dir, "img"), exist_ok=True)
@@ -653,7 +673,14 @@ def observe(run, every=20, max_frames=12, start=0, device="cuda", cold=False, ou
         frames.append({"idx": i, "token": tok, "scene": scene, "stages": sp, "outputs": op, "n_clip": n_clip,
                        "checks": checks(model, cfg, grid, batch, res, gts, tap, vis)})
         print(f"frame {i} ({n + 1}/{len(idx)}) {time.time() - t0:.0f} s", flush=True)
-    summary = {"every": every}
+    vids = []
+    if videos:                                                 # scenes spread evenly over the validation set
+        names = sorted({nusc.get("scene", nusc.get("sample", t)["scene_token"])["name"] for t in val_ds.samples})
+        for sc in [names[int(j)] for j in np.linspace(0, len(names) - 1, videos + 2).round()[1:-1]]:
+            vd = os.path.join(out_dir, f"video_{sc}")
+            info = video(run, sc, device, vd, fps, ctx=ctx)
+            vids.append({"scene": sc, "path": os.path.relpath(info["path"], out_dir).replace(os.sep, "/"), "info": info})
+    summary = {"every": every, "videos": vids}
     write_html(out_dir, run, step, cfg, frames, summary)
     with open(os.path.join(out_dir, "checks.json"), "w") as f:
         json.dump([{k: v for k, v in fr.items()} for fr in frames], f, indent=1, default=str)
@@ -674,8 +701,9 @@ if __name__ == "__main__":
                     "evenly over at most --max scenes, instead of every N-th frame")
     ap.add_argument("--video", default=None, metavar="SCENE", help="a video of all keyframes of one scene (name, or auto)")
     ap.add_argument("--fps", type=float, default=2.0)
+    ap.add_argument("--videos", type=int, default=0, help="with the frame report: also K scene videos, scenes spread evenly")
     a = ap.parse_args()
     if a.video:
         video(a.run, a.video, a.device, a.out, a.fps)
     else:
-        observe(a.run, a.every, a.max, a.start, a.device, a.cold, a.out, a.per_scene)
+        observe(a.run, a.every, a.max, a.start, a.device, a.cold, a.out, a.per_scene, a.videos, a.fps)
