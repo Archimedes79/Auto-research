@@ -20,3 +20,5 @@ split plus the val split, totals now: feature cache 26 GB, GT cache 4.4 GB, rada
 of the study `t2_block_swaps`) are frozen in the t2 configs as `train_scenes` / `val_scenes`: `available_scenes()` takes every scene
 whose first CAM_FRONT keyframe exists, so a config without these lists would silently train on 700 scenes. The older configs
 (`t1_*`) have no list and now mean 700 / 150 scenes; patch them before re-evaluating an old run.
+
+Note 2026-10-30: the feature-cache shards of the scenes of parts 7-10 (680 files, 10.9 GB) were moved from `cache/cam_feats/` to `D:\Auto-research\bev_fusion_cache_parts7_10\cam_feats\` because C: was full (`temp/study/move_new_feats.py`; `... back` restores them). Runs with the frozen 428 / 82 scene lists do not need them; a 700-scene run does.
