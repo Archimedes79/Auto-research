@@ -8,7 +8,8 @@ One figure per keyframe, four panels (all from the generator, nothing re-compute
   direction arrows
 3 objects: footprints with heading, velocity of 1 s (cyan arrows) and speed in km/h, '!' = radar_conflict, 'o' = radar_override,
   occluded cells blue, ignored boxes yellow, outside camera and radar dark
-4 total apparent flow (static world from the ego motion + objects) in m/s: hue = direction (wheel in the corner), brightness =
+4 motion RELATIVE TO THE STATIC WORLD in m/s (the ego motion removed: the static world sits at the centre of the colour wheel,
+  black; only moving things have colour): hue = direction (wheel in the corner), brightness =
   speed to 12 m/s, arrows
 `sheets` stacks the ten default samples, three per sheet, with a legend.
 """
@@ -113,10 +114,11 @@ def corners_3d(b):
     return np.stack([cx + c * loc[:, 0] - s * loc[:, 1], cy + s * loc[:, 0] + c * loc[:, 1], cz + loc[:, 2]], 1)
 
 
-def figure(gt_gen, name, k, out_dir):
+def figure(gt_gen, name, k, out_dir, total=False, gt=None):
+    """one sample figure; out_dir = None returns the matplotlib figure (the caller closes it: no file is written), else a png."""
     sc = next(s for s in gt_gen.nusc.scene if s["name"] == name)
     tok = gt_gen.keyframes(name)[k]
-    gt = gt_gen.keyframe(tok)
+    gt = gt if gt is not None else gt_gen.keyframe(tok)
     bx = gt["meta"]["boxes"]
     fig, ax = plt.subplots(1, 4, figsize=(24, 6.6), gridspec_kw=dict(width_ratios=[2.0, 1, 1, 1]))
     ax[0].imshow(Image.open(os.path.join(gt_gen.dataroot, gt["meta"]["cam_file"])).convert("RGB"))
@@ -159,8 +161,10 @@ def figure(gt_gen, name, k, out_dir):
             ax[2].annotate("", (cy + v[1], cx + v[0]), (cy, cx), arrowprops=dict(arrowstyle="->", color="cyan", lw=1.0))
             lab = f"{np.hypot(*v) * 3.6:.0f}" + {"radar_conflict": "!", "radar_override": "o"}.get(b["vel_flag"], "")
             ax[2].text(cy, cx + 2.0, lab, color="white", fontsize=7, ha="center")
-    fl = np.where((gt["flow_weight"] > 0)[None], gt["flow"], 0)
-    show(ax[3], flow_rgb(fl), "total apparent flow = static world + objects [m/s]")
+    # default: relative to the static world (flow - flow_ego = the objects' own world velocity); total=True: the apparent flow
+    fl = np.where((gt["flow_weight"] > 0)[None], gt["flow"] if total else gt["velocity"], 0)
+    show(ax[3], flow_rgb(fl), "total apparent flow = static world + objects [m/s]" if total
+         else "motion relative to the static world [m/s] (static world = black = wheel centre)")
     nx, ny = gt["drivable_area"].shape
     gx = 0.25 + 0.5 * np.arange(nx)[:, None] + 0 * np.arange(ny)[None, :]
     gy = -26 + 0.25 + 0.5 * np.arange(ny)[None, :] + 0 * np.arange(nx)[:, None]
@@ -182,6 +186,8 @@ def figure(gt_gen, name, k, out_dir):
                  f", stationary {sum(b['stationary'] for b in bx)}, ignored {sum(not b['observed'] for b in bx)}, "
                  f"velocity flags {sum(b['vel_flag'] in ('radar_conflict', 'radar_override') for b in bx)}", fontsize=10)
     fig.subplots_adjust(left=0.01, right=0.92, top=0.92, bottom=0.07, wspace=0.18)
+    if out_dir is None:
+        return fig
     p = os.path.join(out_dir, f"gt_sample_{name}_k{k:02d}.png")
     fig.savefig(p, dpi=72)
     plt.close(fig)
@@ -189,10 +195,10 @@ def figure(gt_gen, name, k, out_dir):
     return p
 
 
-def run(out_dir, picks=None, dataroot="~/data/nuscenes", version="v1.0-mini"):
+def run(out_dir, picks=None, dataroot="~/data/nuscenes", version="v1.0-mini", total=False):
     os.makedirs(out_dir, exist_ok=True)
     gen = AutoGT(dataroot, version)
-    return [figure(gen, n, int(k), out_dir) for n, k in (picks or DEFAULT)]
+    return [figure(gen, n, int(k), out_dir, total) for n, k in (picks or DEFAULT)]
 
 
 LEGEND = ["camera: 3D boxes (vehicle red, pedestrian magenta, two-wheeler orange; white rim = stationary, fixed in the world; "
@@ -200,7 +206,7 @@ LEGEND = ["camera: 3D boxes (vehicle red, pedestrian magenta, two-wheeler orange
           "semantic BEV 0.5 m (x forward 0-60 m, y left +-26 m): drivable grey, walkway purple, car park blue, crossing light, "
           "stop line red, dividers, centre-lines with direction arrows",
           "objects: velocity of 1 s (cyan) and km/h, '!' radar conflict, 'o' radar override, occluded blue, ignored yellow; "
-          "flow: hue = direction, brightness = speed (to 12 m/s)"]
+          "motion relative to the static world: static world black (wheel centre), hue = direction, brightness = speed (to 12 m/s)"]
 
 
 def sheets(out_dir):

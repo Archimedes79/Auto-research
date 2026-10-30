@@ -15,7 +15,11 @@ gt.signature()                                  # cache key: changes with every 
 python -m autogt selftest                                   # all tests (synthetic world + real keyframes + build)
 python -m autogt build --version v1.0-mini --out DIR [--scenes ..] [--workers N] [--res 0.25]   # per-keyframe cache DIR/<signature>/
 python -m autogt check [--holdout]                          # automatic consistency checks (+ leave-one-radar-out radar test)
-python -m autogt view OUT_DIR [scene:keyframe ...]          # sample pictures; `sheets OUT_DIR` stacks the ten defaults
+python -m autogt view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
+python -m autogt report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (data/autogt/<signature>/), run every check, write ONE PDF
+                                                            # (autogt/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
+python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--older-than DAYS] [--move|--delete]
+                                                            # removes only what autogt generated; dry run by default, --move puts it into _to_delete/
 python -m autogt video SCENE OUT.mp4 [seconds]              # driving through the GT at 12 Hz (H.264, read back)
 ```
 
@@ -27,7 +31,7 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade; commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video` |
-| `checks.py`, `view.py`, `video.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
+| `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
 
 ## What a keyframe contains (ego frame at the front-camera time, x forward 0-60 m, y left +-26 m, 0.5 m or 0.25 m)
 - areas `drivable_area ped_crossing walkway stop_line carpark_area` (coverage fraction, exact 4 x 4 supersampling); lines

@@ -1,6 +1,7 @@
 """Automatic consistency checks of the generated GT over keyframes: python -m autogt check [--stride N] [--holdout]
 
-Each check is a physical or bookkeeping fact the GT must obey; the report counts violations and lists the worst frames.
+Each check is a physical or bookkeeping fact the GT must obey; the report counts violations. `Checks` is an accumulator: feed it
+the keyframes one by one (the `report` command feeds it while it builds the cache, so every keyframe is generated once).
 Objects
   O1 box bottom on the ground: z of the box bottom in the ego frame (|z| > 0.5 m within 40 m = slope / overpass, a ground-plane
      assumption of the camera lift, not a GT error)
@@ -37,116 +38,147 @@ def _cell(grid, x, y):
     return (i, j) if 0 <= i < grid.nx and 0 <= j < grid.ny else None
 
 
-def run(dataroot, version="v1.0-mini", scenes=None, stride=1, holdout=False):
-    gt = AutoGT(dataroot, version)
-    g = gt.grid
-    st, worst, prev_world, flags = collections.defaultdict(list), collections.defaultdict(list), {}, collections.Counter()
-    for name in (scenes or gt.scenes()):
-        prev_world = {}
-        for k, tok in enumerate(gt.keyframes(name)):
-            if k % stride:
+class Checks:
+    """accumulator of the checks above; feed(scene_name, k, token, gt_dict) per keyframe, then text() / scenes()."""
+
+    def __init__(self, gen):
+        self.gen, self.st = gen, collections.defaultdict(list)
+        self.flags = collections.Counter()
+        self.prev_world, self.scene = {}, None
+        self.per_scene = collections.OrderedDict()
+
+    def feed(self, name, k, tok, gk):
+        g, st = self.gen.grid, self.st
+        if name != self.scene:
+            self.scene, self.prev_world = name, {}
+            self.per_scene[name] = collections.Counter()
+        ps = self.per_scene[name]
+        m, da = gk["meta"], gk["drivable_area"]
+        st["dt_ms"].append((m["timestamp"] - self.gen.nusc.get("sample", tok)["timestamp"]) * 1e-3)
+        ps["keyframes"] += 1
+        for b in m["boxes"]:
+            x, y, z = b["center"]
+            self.flags[b["vel_flag"]] += 1
+            if b["vel_flag"] in ("radar_override", "radar_conflict", "short_track", "stationary_but_moving"):
+                ps[b["vel_flag"]] += 1
+            if not (0 < x < 60 and abs(y) < 26):
                 continue
-            gk = gt.keyframe(tok)
-            m, da = gk["meta"], gk["drivable_area"]
-            sample = gt.nusc.get("sample", tok)
-            st["dt_ms"].append((m["timestamp"] - sample["timestamp"]) * 1e-3)
-            for bi, b in enumerate(m["boxes"]):
-                x, y, z = b["center"]
-                flags[b["vel_flag"]] += 1
-                if not (0 < x < 60 and abs(y) < 26):
-                    continue
-                if not b["observed"]:
-                    st["O4_unobs_range"].append(math.hypot(x, y))
-                    continue
-                st["O4_obs"].append(1)
-                zb = z - b["size"][2] / 2
-                if x < 40:
-                    st["O1_z"].append(zb)
-                sp = math.hypot(*b["vel"])
-                c = _cell(g, x, y)
-                if b["group"] == "vehicle" and sp > 1 and c:
-                    st["O2"].append(da[c] > 0)
-                    if da[c] == 0:
-                        worst["O2"].append((sp, name, k, f"vehicle {sp:.1f} m/s at x {x:.0f} y {y:.0f} off the drivable area"))
-                if sp > 1:
-                    st["O6_shift_cm"].append(sp * abs(st["dt_ms"][-1]) * 0.1)
-                if c and gk["camera"][c] > 0:
-                    st[f"O5_vis{b['visibility']}"].append(gk["occluded"][c] > 0)
-                if b["stationary"]:
-                    if b["instance"] in prev_world:
-                        st["O8_move_cm"].append(np.linalg.norm(prev_world[b["instance"]] - b["world"]) * 100)
-                    prev_world[b["instance"]] = b["world"]
-            vb = [(i, Polygon(b["corners"])) for i, b in enumerate(m["boxes"]) if b["group"] == "vehicle" and b["observed"]]
-            for a in range(len(vb)):
-                for c2 in range(a + 1, len(vb)):
-                    pa, pb = vb[a][1], vb[c2][1]
-                    if pa.intersects(pb) and pa.intersection(pb).area / max(pa.union(pb).area, 1e-6) > 0.10:
-                        st["O3"].append(1)
-            ii = gk["instance"]
-            for i in np.unique(ii[ii >= 0]):
-                st["O7"].append(m["boxes"][i]["observed"] and gk[m["boxes"][i]["group"]][ii == i].min() > 0)
-            st["M1"].append(float(da[0:6, 50:54].mean()))
-            if (gk["centreline"] > 0).any():
-                st["M2"].append(float((da[gk["centreline"] > 0] > 0).mean()))
-            if (gk["lane_divider"] > 0).any():
-                st["M3"].append(float((da[gk["lane_divider"] > 0] > 0).mean()))
-            st["V1_flow"].append(float(np.abs(gk["flow"] - gk["flow_ego"] - gk["velocity"]).max()))
-            obj = gk["vehicle"] + gk["pedestrian"] + gk["two_wheeler"]
-            st["V1_vel_outside"].append(float(np.abs(gk["velocity"][:, obj == 0]).max()) if (obj == 0).any() else 0.0)
-            st["V1_w"].append(bool((gk["flow_weight"][gk["ignore"] > 0.9] == 0).all()))
+            if not b["observed"]:
+                st["O4_unobs_range"].append(math.hypot(x, y))
+                ps["ignored"] += 1
+                continue
+            st["O4_obs"].append(1)
+            ps["observed"] += 1
+            ps["stationary"] += b["stationary"]
+            sp = math.hypot(*b["vel"])
+            ps["moving"] += (not b["stationary"]) and sp > 1.0
+            zb = z - b["size"][2] / 2
+            if x < 40:
+                st["O1_z"].append(zb)
+            c = _cell(g, x, y)
+            if b["group"] == "vehicle" and sp > 1 and c:
+                st["O2"].append(da[c] > 0)
+            if sp > 1:
+                st["O6_shift_cm"].append(sp * abs(st["dt_ms"][-1]) * 0.1)
+            if c and gk["camera"][c] > 0:
+                st[f"O5_vis{b['visibility']}"].append(gk["occluded"][c] > 0)
+            if b["stationary"]:
+                if b["instance"] in self.prev_world:
+                    st["O8_move_cm"].append(np.linalg.norm(self.prev_world[b["instance"]] - b["world"]) * 100)
+                self.prev_world[b["instance"]] = b["world"]
+        vb = [Polygon(b["corners"]) for b in m["boxes"] if b["group"] == "vehicle" and b["observed"]]
+        for a in range(len(vb)):
+            for c2 in range(a + 1, len(vb)):
+                if vb[a].intersects(vb[c2]) and vb[a].intersection(vb[c2]).area / max(vb[a].union(vb[c2]).area, 1e-6) > 0.10:
+                    st["O3"].append(1)
+        ii = gk["instance"]
+        for i in np.unique(ii[ii >= 0]):
+            st["O7"].append(m["boxes"][i]["observed"] and gk[m["boxes"][i]["group"]][ii == i].min() > 0)
+        st["M1"].append(float(da[0:6, 50:54].mean()))
+        ps["drivable"] += float(da.mean())
+        if (gk["centreline"] > 0).any():
+            st["M2"].append(float((da[gk["centreline"] > 0] > 0).mean()))
+        if (gk["lane_divider"] > 0).any():
+            st["M3"].append(float((da[gk["lane_divider"] > 0] > 0).mean()))
+        st["V1_flow"].append(float(np.abs(gk["flow"] - gk["flow_ego"] - gk["velocity"]).max()))
+        obj = gk["vehicle"] + gk["pedestrian"] + gk["two_wheeler"]
+        st["V1_vel_outside"].append(float(np.abs(gk["velocity"][:, obj == 0]).max()) if (obj == 0).any() else 0.0)
+        st["V1_w"].append(bool((gk["flow_weight"][gk["ignore"] > 0.9] == 0).all()))
+
+    def text(self, fov=None):
+        """the report lines (a list of str)."""
+        st = self.st
+        rate = lambda v: f"{np.mean(v):.1%} of {len(v)}"  # noqa: E731
+        dt = np.array(st["dt_ms"])
+        z, sh, ur = np.array(st["O1_z"]), np.array(st["O6_shift_cm"]), np.array(st["O4_unobs_range"])
+        out = [f"keyframes {len(dt)} in {len(self.per_scene)} sequences; camera minus annotation time: median {np.median(dt):+.1f} ms, "
+               f"range {dt.min():+.1f}..{dt.max():+.1f}",
+               f"O1 box bottom z (< 40 m): median {np.median(z):+.2f} m, |z| > 0.5 m in {np.mean(np.abs(z) > 0.5):.1%} of {len(z)}",
+               f"O2 moving vehicles on the drivable area: {rate(st['O2'])}",
+               f"O3 overlapping observed vehicle pairs (IoU > 0.10): {len(st['O3'])}",
+               f"O4 boxes without lidar / radar points: {len(ur)} vs {len(st['O4_obs'])} observed (median range "
+               f"{np.median(ur) if len(ur) else float('nan'):.0f} m)",
+               "O5 centre cell in our occlusion mask by annotator visibility 0-40 / 40-60 / 60-80 / 80-100 %: " +
+               " / ".join(f"{np.mean(st[f'O5_vis{v}']):.0%}" if st[f"O5_vis{v}"] else "-" for v in "1234"),
+               f"O6 moving boxes: v * (camera - annotation time) median {np.median(sh):.0f} cm, 95 % {np.percentile(sh, 95):.0f} cm, max {sh.max():.0f} cm",
+               f"O7 instance layer consistent: {rate(st['O7'])}",
+               f"O8 stationary boxes, world motion between keyframes: max {max(st['O8_move_cm'], default=0):.2f} cm (n = {len(st['O8_move_cm'])})",
+               f"M1 ego on the road: median {np.median(st['M1']):.2f}, < 0.5 in {np.mean(np.array(st['M1']) < 0.5):.1%}; "
+               f"M2 centre-line cells on the road {np.median(st['M2']):.1%}; M3 lane-divider cells on the road {np.median(st['M3']):.1%}",
+               f"V1 flow = flow_ego + velocity (max abs difference {max(st['V1_flow']):.1e}); velocity outside boxes (max "
+               f"{max(st['V1_vel_outside']):.1e}); weight 0 on ignored boxes: {rate(st['V1_w'])}",
+               f"V2 velocity flags over all boxes: {dict(self.flags)}"]
+        if fov is not None:
+            out.append(f"V3 radar field of view: {fov:.2%} of all detections lie within +-60 deg of the sensor axis")
+        return out
+
+    def scene_rows(self):
+        """per sequence: (name, keyframes, observed boxes, moving, stationary, ignored, overrides + conflicts, drivable share)."""
+        return [(n, c["keyframes"], c["observed"], c["moving"], c["stationary"], c["ignored"],
+                 c["radar_override"] + c["radar_conflict"], c["drivable"] / max(c["keyframes"], 1)) for n, c in self.per_scene.items()]
+
+
+def run(dataroot, version="v1.0-mini", scenes=None, stride=1, holdout=False):
+    gen = AutoGT(dataroot, version)
+    ck = Checks(gen)
+    for name in (scenes or gen.scenes()):
+        for k, tok in enumerate(gen.keyframes(name)):
+            if k % stride == 0:
+                ck.feed(name, k, tok, gen.keyframe(tok))
         print(name, flush=True)
-    rate = lambda v: f"{np.mean(v):.1%} of {len(v)}"  # noqa: E731
-    dt = np.array(st["dt_ms"])
     print("\n=== GT checks ===")
-    print(f"keyframes {len(dt)}; camera minus annotation time: median {np.median(dt):+.1f} ms, range {dt.min():+.1f}..{dt.max():+.1f}")
-    z = np.array(st["O1_z"])
-    print(f"O1 box bottom z (< 40 m): median {np.median(z):+.2f} m, |z| > 0.5 m in {np.mean(np.abs(z) > 0.5):.1%} of {len(z)}")
-    print(f"O2 moving vehicles on the drivable area: {rate(st['O2'])}")
-    print(f"O3 overlapping observed vehicle pairs (IoU > 0.10): {len(st['O3'])}")
-    ur = np.array(st["O4_unobs_range"])
-    print(f"O4 boxes without lidar / radar points: {len(ur)} vs {len(st['O4_obs'])} observed (median range {np.median(ur) if len(ur) else float('nan'):.0f} m)")
-    print("O5 centre cell in our occlusion mask by annotator visibility 0-40 / 40-60 / 60-80 / 80-100 %: " +
-          " / ".join(f"{np.mean(st[f'O5_vis{v}']):.0%}" if st[f"O5_vis{v}"] else "-" for v in "1234"))
-    sh = np.array(st["O6_shift_cm"])
-    print(f"O6 moving boxes: v * (camera - annotation time) median {np.median(sh):.0f} cm, 95 % {np.percentile(sh, 95):.0f} cm, max {sh.max():.0f} cm")
-    print(f"O7 instance layer consistent: {rate(st['O7'])}")
-    print(f"O8 stationary boxes, world motion between keyframes: max {max(st['O8_move_cm'], default=0):.2f} cm (n = {len(st['O8_move_cm'])})")
-    print(f"M1 ego on the road: median {np.median(st['M1']):.2f}, < 0.5 in {np.mean(np.array(st['M1']) < 0.5):.1%}; "
-          f"M2 centre-line cells on the road {np.median(st['M2']):.1%}; M3 lane-divider cells on the road {np.median(st['M3']):.1%}")
-    print(f"V1 flow = flow_ego + velocity (max abs difference {max(st['V1_flow']):.1e}); velocity outside boxes (max {max(st['V1_vel_outside']):.1e}); "
-          f"weight 0 on ignored boxes: {rate(st['V1_w'])}")
-    print("V2 velocity flags over all boxes:", dict(flags))
-    print(f"V3 radar field of view: {radar_fov(gt, scenes, stride):.2%} of all detections lie within +-60 deg of the sensor axis")
+    print("\n".join(ck.text(radar_fov(gen, scenes, stride))))
     if holdout:
-        leave_one_radar_out(gt, scenes, stride)
-    return st
+        print("\n".join(leave_one_radar_out(gen, scenes, stride)))
+    return ck
 
 
-def radar_fov(gt, scenes=None, stride=1):
+def radar_fov(gen, scenes=None, stride=1):
     from nuscenes.utils.data_classes import RadarPointCloud
     inside = total = 0
-    for name in (scenes or gt.scenes())[:5]:
-        for k, tok in enumerate(gt.keyframes(name)):
+    for name in (scenes or gen.scenes())[:5]:
+        for k, tok in enumerate(gen.keyframes(name)):
             if k % max(stride, 4):
                 continue
-            for ch, sdt in gt.nusc.get("sample", tok)["data"].items():
+            for ch, sdt in gen.nusc.get("sample", tok)["data"].items():
                 if ch.startswith("RADAR"):
-                    sd = gt.nusc.get("sample_data", sdt)
-                    pts = RadarPointCloud.from_file(os.path.join(gt.dataroot, sd["filename"])).points
+                    sd = gen.nusc.get("sample_data", sdt)
+                    pts = RadarPointCloud.from_file(os.path.join(gen.dataroot, sd["filename"])).points
                     ang = np.abs(np.degrees(np.arctan2(pts[1], pts[0])))
                     inside += int((ang <= 60).sum())
                     total += pts.shape[1]
     return inside / max(total, 1)
 
 
-def leave_one_radar_out(gt, scenes=None, stride=1):
+def leave_one_radar_out(gen, scenes=None, stride=1):
+    """the leave-one-radar-out test of the radar correction; returns the report lines."""
     res = collections.defaultdict(list)
     per_pair = []
     fl = collections.Counter()
-    for name in (scenes or gt.scenes()):
-        sc = NuScenesScene(gt.nusc, gt.dataroot, name)
+    for name in (scenes or gen.scenes()):
+        sc = NuScenesScene(gen.nusc, gen.dataroot, name)
         by_id = {tr.id: tr for tr in sc.tracks}
-        for k, tok in enumerate(gt.keyframes(name)):
+        for k, tok in enumerate(gen.keyframes(name)):
             if k % stride:
                 continue
             t = sc.time_of(tok, "annotation")
@@ -171,15 +203,16 @@ def leave_one_radar_out(gt, scenes=None, stride=1):
                     res["radar-corrected"].extend((rh @ of.v - d).tolist())
                     per_pair.append((float(np.sqrt(np.mean((rh @ op.v - d) ** 2))), float(np.sqrt(np.mean((rh @ of.v - d) ** 2)))))
         print(name, "(holdout)", flush=True)
-    print(f"\nleave-one-radar-out: {len(res['zero'])} held-out detections in moving observed boxes ({len(per_pair)} box-radar pairs)")
-    print("estimate | RMSE (m/s) | median |err| | within 0.5 m/s | share > 2 m/s")
+    lines = [f"leave-one-radar-out: {len(res['zero'])} held-out detections in moving observed boxes ({len(per_pair)} box-radar pairs)",
+             "estimate | RMSE (m/s) | median |err| | within 0.5 m/s | share > 2 m/s"]
     for k in ("zero", "track", "radar-corrected"):
         e = np.abs(np.array(res[k]))
-        print(f"{k:15s} | {np.sqrt((e ** 2).mean()):.3f} | {np.median(e):.3f} | {np.mean(e < 0.5):.1%} | {np.mean(e > 2):.1%}")
+        lines.append(f"{k:15s} | {np.sqrt((e ** 2).mean()):.3f} | {np.median(e):.3f} | {np.mean(e < 0.5):.1%} | {np.mean(e > 2):.1%}")
     pp = np.array(per_pair)
     diff = pp[:, 1] - pp[:, 0]
     rng = np.random.default_rng(0)
     boot = [diff[rng.integers(0, len(diff), len(diff))].mean() for _ in range(2000)]
-    print(f"per box-radar pair: corrected better {np.mean(diff < -1e-9):.1%}, equal {np.mean(np.abs(diff) <= 1e-9):.1%}, "
-          f"worse {np.mean(diff > 1e-9):.1%}; mean RMSE change {diff.mean():+.3f} m/s (bootstrap {np.percentile(boot, 2.5):+.3f} .. "
-          f"{np.percentile(boot, 97.5):+.3f}; pairs of one scene are correlated: optimistic); flags {dict(fl)}")
+    lines.append(f"per box-radar pair: corrected better {np.mean(diff < -1e-9):.1%}, equal {np.mean(np.abs(diff) <= 1e-9):.1%}, "
+                 f"worse {np.mean(diff > 1e-9):.1%}; mean RMSE change {diff.mean():+.3f} m/s (bootstrap {np.percentile(boot, 2.5):+.3f} .. "
+                 f"{np.percentile(boot, 97.5):+.3f}; pairs of one scene are correlated: optimistic); flags {dict(fl)}")
+    return lines

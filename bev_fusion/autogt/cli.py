@@ -8,9 +8,15 @@
       generator is never mixed in
   python -m autogt check  [--version v1.0-mini] [--scenes ...] [--stride 1] [--holdout]
       automatic consistency checks of the GT over keyframes (see autogt/checks.py); --holdout adds the leave-one-radar-out test
-  python -m autogt view   OUT_DIR [scene:keyframe ...]      sample pictures (camera, semantic BEV, objects + velocity, flow)
+  python -m autogt view   OUT_DIR [scene:keyframe ...] [--total]   sample pictures (camera, semantic BEV, objects + velocity,
+      motion relative to the static world; --total shows the total apparent flow instead)
   python -m autogt sheets OUT_DIR                            overview sheets of the sample pictures
   python -m autogt video  SCENE OUT.mp4 [seconds]            driving through the GT at 12 Hz
+  python -m autogt report [--version v1.0-mini] [--out REPORT.pdf] [--data DIR | --no-data] [--scenes ..] [--stride N] [--samples N] [--holdout]
+      GT evaluation of all sequences in one pass: store the GT (as `build`), run every check, write ONE PDF report (summary, table
+      per sequence, legend, sample pictures drawn straight into the PDF - no picture files exist, nothing to clean up but the report)
+  python -m autogt clean  [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--older-than DAYS] [--move | --delete]
+      dry run by default; --move puts the items into _to_delete/, --delete removes them (see autogt/clean.py)
 """
 import argparse
 import json
@@ -111,8 +117,29 @@ def main(argv=None):
     v = sub.add_parser("view")
     v.add_argument("out")
     v.add_argument("picks", nargs="*")
+    v.add_argument("--total", action="store_true", help="4th panel: total apparent flow (ego motion included) instead of motion relative to the static world")
     s = sub.add_parser("sheets")
     s.add_argument("out")
+    r = sub.add_parser("report", help="evaluate the GT of all sequences, store it, write one PDF report with samples")
+    r.add_argument("--dataroot", default="~/data/nuscenes")
+    r.add_argument("--version", default="v1.0-mini")
+    r.add_argument("--out", default=None, help="report PDF (default autogt/reports/autogt_report_<version>_<date>.pdf)")
+    r.add_argument("--data", default=None, help="cache directory (default bev_fusion/data/autogt); --no-data: do not store")
+    r.add_argument("--no-data", action="store_true")
+    r.add_argument("--scenes", nargs="*")
+    r.add_argument("--stride", type=int, default=1)
+    r.add_argument("--samples", type=int, default=10, help="sample pictures in the report (evenly spread over the sequences)")
+    r.add_argument("--holdout", action="store_true", help="add the leave-one-radar-out test of the radar correction")
+    cl = sub.add_parser("clean", help="list / move / delete generated videos, pictures, old outputs, stale caches")
+    cl.add_argument("--videos", action="store_true")
+    cl.add_argument("--pictures", action="store_true")
+    cl.add_argument("--reports", action="store_true")
+    cl.add_argument("--old-outputs", action="store_true")
+    cl.add_argument("--all-caches", metavar="DIR")
+    cl.add_argument("--stale-caches", metavar="DIR")
+    cl.add_argument("--older-than", type=float, metavar="DAYS")
+    cl.add_argument("--move", action="store_true")
+    cl.add_argument("--delete", action="store_true")
     d = sub.add_parser("video")
     d.add_argument("scene")
     d.add_argument("mp4")
@@ -129,10 +156,21 @@ def main(argv=None):
         run(os.path.expanduser(a.dataroot), a.version, a.scenes, a.stride, a.holdout)
     elif a.cmd == "view":
         from .view import run
-        run(a.out, [x.split(":") for x in a.picks] or None)
+        run(a.out, [x.split(":") for x in a.picks] or None, total=a.total)
     elif a.cmd == "sheets":
         from .view import sheets
         sheets(a.out)
+    elif a.cmd == "report":
+        import datetime
+        from .report import report
+        out = a.out or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "autogt", "reports",
+                                    f"autogt_report_{a.version}_{datetime.date.today().isoformat()}.pdf")
+        data = None if a.no_data else (a.data or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt"))
+        report(os.path.expanduser(a.dataroot), a.version, out, data, a.scenes, a.stride, a.holdout, a.samples)
+    elif a.cmd == "clean":
+        from .clean import clean
+        clean(delete=a.delete, move=a.move, videos=a.videos, pictures=a.pictures, reports=a.reports, old_outputs=a.old_outputs,
+              stale_caches=a.stale_caches, all_caches=a.all_caches, older_than=a.older_than)
     elif a.cmd == "video":
         from .video import run
         run(a.scene, a.mp4, a.seconds)
