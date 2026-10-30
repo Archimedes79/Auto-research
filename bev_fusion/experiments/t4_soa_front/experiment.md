@@ -56,7 +56,7 @@ centre-distance AP at 0.5 / 1 / 2 / 4 m, `mAP2` = vehicle + pedestrian. Differen
   (ours); no systematic offset (median dx +0.14 m, dy 0.00 m for DualBEV): the gap is precision, not a coordinate error (`temp/t4/bias_check.py`).
 
 **Reading.** In the front area the pre-trained SOA camera detector and our camera-only system are the same (0.250 vs 0.242). Everything our
-system has beyond it comes from the radar branch (+0.13 at the same schedule) and, to a smaller degree, from longer training (+0.025 to 0.4);
+system has beyond it comes from the radar branch (+0.13 at the same schedule) and, to a smaller degree, from longer training (+0.011 at 6000 steps, +0.025 at 7000 x 2 steps, both against the 3000-step reference 0.375);
 the SOA camera path itself is not exceeded. The prediction 0.40-0.55 for DualBEV was wrong: its camera-only front-sector number is 0.25.
 
 **Limits (do not over-read).**
