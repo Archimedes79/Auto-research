@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, ".")
 from evaluation import evaluate_run as ev  # noqa: E402
 
-ARMS = ["ref_s0", "ref_s1", "t3_cam_zsum", "t3_cam_adapter", "t3_adapter", "t3_zsum", "t3_ref_long", "radar_off", "cam_off", "trunk_rand", "lift_p", "camtemp_none", "fusion_gate", "radar_pillars",
+ARMS = ["ref_s0", "ref_s1", "t3_radar_only", "t3_cam_zsum", "t3_cam_adapter", "t3_adapter", "t3_zsum", "t3_ref_long", "radar_off", "trunk_rand", "lift_p", "camtemp_none", "fusion_gate", "radar_pillars",
         "trunk_second", "trunk_small", "lift_s", "camtemp_gru", "fusion_cmx"]
 KEYS = [("mAP2", "mAP2", 3), ("veh AP@1", "det/dt+0.00/vehicle/all/ap@1", 3), ("ped AP@1", "det/dt+0.00/pedestrian/all/ap@1", 3),
         ("veh AP@2", "det/dt+0.00/vehicle/all/ap@2", 3), ("ped AP@2", "det/dt+0.00/pedestrian/all/ap@2", 3),

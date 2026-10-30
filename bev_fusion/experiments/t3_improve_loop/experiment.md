@@ -132,3 +132,16 @@ check before training.
 1 sanity controls (done, partly corrected) - 2 `t3_cam_zsum` (done, TIE) - 3 `t3_cam_adapter` (done, TIE) - 4 `t3_radar_only` (the real radar-only arm; running next) -
 5 `fusion_gate` - 6 `camtemp_gru` (+ `camtemp_none`, done: TIE) - 7 `fusion_cmx` - 8 `radar_pillars`; then, outside the eight: `t3_ref_long` (6000 steps), the combination of
 winners, 700-scene run, `trunk_second`, `lift_s`, `trunk_small`. Expected end of try 8: about 10:00 on 2026-10-30 (about 1.5 h per arm).
+| 2026-10-30 03:45 | **Try 4 done (`t3_radar_only`, the real radar-only arm, commit d57bcc2, 3000 steps)**: mAP2 0.062, vehicle AP@0.5 / @1 / @2 0.011 / 0.079 / 0.161, pedestrian AP 0.000, drivable 0.586, walkway 0.112, divider 0.098, val loss 12.87 (`results/arms.md`) | radar alone is weak, as expected |
+
+### Corrected block verdicts of the sensor blocks (cold VAL-1000, 3000 steps, one seed; `results/arms.md`)
+| system | mAP2 | veh AP@0.5 | veh AP@1 | ped AP@1 | drivable | walkway | divider |
+|---|---|---|---|---|---|---|---|
+| radar only (`t3_radar_only`) | 0.062 | 0.011 | 0.079 | 0.000 | 0.586 | 0.112 | 0.098 |
+| camera only (`radar_off`) | 0.210 | 0.045 | 0.209 | 0.033 | 0.637 | 0.107 | 0.164 |
+| camera + radar (`ref_s0` / `ref_s1`) | 0.339 / 0.324 | 0.228 / 0.210 | 0.468 / 0.465 | 0.141 / 0.122 | 0.666 / 0.663 | 0.191 / 0.164 | 0.181 / 0.179 |
+| prior detector, no sensor | 0.000 | 0.000 | 0.000 | 0.000 | - | - | - |
+The camera is the strong single sensor (3.4 x the radar's mAP2); the radar is what makes the camera precise (vehicle AP@0.5 0.045 -> 0.228, AP@1 0.209 -> 0.468 when added),
+and the camera is what makes the radar usable (0.062 -> 0.339). Both blocks are STRONG by the card's rule (removing either is WORSE on every headline metric, bootstrap
+intervals exclude 0). The fusion is clearly more than the sum: that is where the remaining gain must come from (fusion arms next). Erratum item 6 closed: floor = 0, radar-only
+= 0.062, camera adds +0.28 mAP2 on top of radar, radar adds +0.13 on top of camera.
