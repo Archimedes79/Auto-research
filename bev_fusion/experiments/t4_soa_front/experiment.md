@@ -72,5 +72,17 @@ the SOA camera path itself is not exceeded. The prediction 0.40-0.55 for DualBEV
 
 ## 4 Consequence: trunk bug (try 10)
 
-`t4_fpn_order` (same as the reference, FPN-LSS concatenation in the order the pre-trained weights expect) is running on the GPU lane
-(commit 1ac3757); result to be appended here and in the ledger of tries.
+`t4_fpn_order` (same as the reference, FPN-LSS concatenation in the order the pre-trained weights expect; commit 1ac3757), 3000 steps,
+seed 0, cold VAL 1000 frames, evaluated 2026-10-30 (numbers: `results_x50_fpn.md`, front sector 0-50 m).
+
+| run | mAP2 front | 0-20 / 20-40 / 40-50 m |
+|---|---|---|
+| ref_s0 (scrambled order) | 0.375 | 0.557 / 0.341 / 0.161 |
+| ref_s1 (seed twin) | 0.359 | 0.519 / 0.333 / 0.159 |
+| t4_fpn_order (correct order) | 0.367 | 0.531 / 0.335 / 0.160 |
+
+**Result: TIE.** The corrected order lies between the two seeds of the reference (difference to ref_s0 -0.008, seed spread 0.016, noise band
+0.054). Prediction was a modest gain; there is none at 3000 steps: fine-tuning evidently repaired the scrambled weights, or the trunk
+contributes little at this budget. Consequence: the bug did not visibly cost accuracy at 3000 steps, so the earlier block-swap verdicts (e.g. trunk_rand WORSE) are not shown to be
+wrong by it (not re-run), and the SOA reading in section 3 stands. The flag stays default off (cheaper to leave results comparable); a fresh arm
+for the corrected order would only be worth it together with longer training.
