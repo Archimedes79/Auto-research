@@ -34,3 +34,43 @@ Code: `training/dualbev_front.py` (self-test), `temp/t4/dualbev_front_eval.py`, 
   order-specific, so the pre-trained FPN-LSS was scrambled. With the original order the port detects (best car score 0.8, 7.7 m / 0.1 m
   against GT 7.6 m / 0.1 m). **This also affects our own system**: every run since t1 loaded the pre-trained trunk with the scrambled order
   (fine-tuning repairs part of it). New flag `trunk_fpn_original` (default off, earlier runs unchanged) and arm `t4_fpn_order` (try 10).
+
+## 3 Result (2026-10-30; numbers from `results_x50.md`, made by `temp/t4/compare_front.py` from the `scene_records.pkl` of each run)
+
+Front sector (0-50 m, +-32.3 deg), the same 1000 cold-VAL frames of 82 official val scenes (3061 vehicle and 1435 pedestrian GT boxes),
+centre-distance AP at 0.5 / 1 / 2 / 4 m, `mAP2` = vehicle + pedestrian. Difference to DualBEV with the paired scene bootstrap (100 draws).
+
+| system | mAP2 | difference to DualBEV [95% interval] |
+|---|---|---|
+| DualBEV pre-trained, front camera only (SOA reference) | 0.250 | - |
+| ours, camera only, 3000 steps | 0.242 | -0.009 [-0.021, -0.002] (tie inside the noise band 0.054) |
+| ours, camera + radar, 3000 steps (two seeds) | 0.375 / 0.359 | +0.124 / +0.109 |
+| ours, camera + radar, 6000 steps | 0.386 | +0.135 |
+| ours, camera + radar, 7000 x 2 steps | 0.400 | +0.150 [+0.133, +0.169] |
+
+- Vehicles: equal at the loose threshold (AP@4 0.733 both, 3000 steps), far apart at tight ones (AP@1 0.277 vs 0.524, AP@0.5 0.076 vs 0.271).
+  Pedestrians: DualBEV AP@2 0.105 vs 0.226 (ours), AP@0.5 0.000 vs 0.066.
+- By distance: DualBEV 0.447 / 0.211 / 0.063 (0-20 / 20-40 / 40-50 m); ours 0.557 / 0.341 / 0.161. The camera-only arm of our system equals DualBEV
+  in all three bins (0.439 / 0.204 / 0.054).
+- Localisation: matched confident detections (score >= 0.3, nearest same-group GT within 2 m) miss the GT centre by 0.76 m (DualBEV) and 0.50 m
+  (ours); no systematic offset (median dx +0.14 m, dy 0.00 m for DualBEV): the gap is precision, not a coordinate error (`temp/t4/bias_check.py`).
+
+**Reading.** In the front area the pre-trained SOA camera detector and our camera-only system are the same (0.250 vs 0.242). Everything our
+system has beyond it comes from the radar branch (+0.13 at the same schedule) and, to a smaller degree, from longer training (+0.025 to 0.4);
+the SOA camera path itself is not exceeded. The prediction 0.40-0.55 for DualBEV was wrong: its camera-only front-sector number is 0.25.
+
+**Limits (do not over-read).**
+- DualBEV was run with its other five cameras absent, which is the requested condition but not its published one (36.8 mAP with six cameras
+  cannot be reproduced here: 360 degrees, ten classes, not the same metric). A camera + radar SOA system (CRN, RCBEVDet) was NOT run; the
+  comparison with it remains the secondary-source table in `../t3_improve_loop/soa_reference.md` (not area-comparable).
+- Our port is read from the checkpoint tensor names and a code summary, not run against the original: no NMS (3 x 3 peaks, threshold 0.05,
+  top 100 as for our heads), RGB input chosen on a 100-frame check (mAP2 0.206 RGB vs 0.175 BGR, other frames, 60 m), no test-time tricks.
+  That our own camera-only arm lands on the same number is a consistency check of the port, not proof that it is exact.
+- Groups are merged (vehicle = car, truck, bus, trailer, construction vehicle), as in the study; the metric rewards our heads, which were trained
+  on exactly this grouping and metric, DualBEV on ten classes.
+- Our systems use three camera frames (and radar); DualBEV is single frame. One seed except where two are shown.
+
+## 4 Consequence: trunk bug (try 10)
+
+`t4_fpn_order` (same as the reference, FPN-LSS concatenation in the order the pre-trained weights expect) is running on the GPU lane
+(commit 1ac3757); result to be appended here and in the ledger of tries.

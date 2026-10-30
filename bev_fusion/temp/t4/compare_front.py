@@ -18,7 +18,7 @@ out_md, x_max = sys.argv[1], float(sys.argv[2])
 systems = [a.split("=", 1) for a in sys.argv[3:]]
 THR = (0.5, 1, 2, 4)
 CL = ("vehicle", "pedestrian")
-N_BOOT = 300
+N_BOOT = int(os.environ.get("BOOT", "100"))
 
 
 def load(path):
