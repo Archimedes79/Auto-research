@@ -76,3 +76,12 @@ touching the image encoder: a side branch.
 - Image cache: the first build with two forked workers ran the shared box out of memory at 8,133 images (the devkit copied into
   each worker, next to another chat's training); stopped through the task tool (a direct `kill` was refused), resumed in ONE
   process (`--workers 1`, the default now).
+- Cache done: 19,398 keyframes (train + val of the t2 scene lists), 981 MB; check against the dataset's own image on 40 val
+  samples: mean abs error 1.00 of 255 (max 1.30). CPU smoke of the real res4 config (2 steps, batch 1, one validation batch):
+  runs, the checkpoint stores 84 lane tensors, the zero-initialised mix moved (|W| sum 0.43), the frozen layer 1 is unchanged.
+  `train.py` self-test passes.
+- Committed 4719d1d (code, configs, card); queued in `temp/study/queue3.txt` behind t6_maps_only as `cfg:t7_<arm>_s<seed>:4719d1d`
+  (order res4 s0, rgb s0, res4 s1, rgb s1; run by the live queue `temp/study/lane3.sh`, log `temp/study/lane3b.log`).
+  `temp/t7/finish.sh` (log `temp/t7/finish.log`) waits for the four, re-evaluates `t2_ref_s0` / `s1` with the current suite
+  (legacy metrics copied to `metrics_legacy_2026-10-28.json` first: layer-1 check), writes the paired comparisons
+  `temp/t7/compare_<arm>_s<seed>.txt` and the timing if the GPU is idle. `temp/t7/wait_step1000.sh <run>` = the kill check.
