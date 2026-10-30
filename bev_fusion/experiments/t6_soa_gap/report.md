@@ -62,7 +62,23 @@ pedestrians 0.80 / 0.39 / 0.12; at 40-60 m 37 % of the vehicles and 49 % of the 
 0.3 (a detection exists, its confidence is low), and 90 % / 76 % have one within 4 m. Motion does not matter for vehicles (moving 0.70, static
 0.55 recall; the static ones include the long and far ones); length >= 6 m (trucks, buses) recall 0.36.
 
-FP_PLACEHOLDER
+What the confident detections are (score >= 0.3 in the front field of view, 10395 of them, `fp_breakdown.py`; each classified against all GT
+boxes of the frame including the ones the metric ignores because they carry no lidar / radar point):
+
+| class of the detection | count | share | 0-20 / 20-40 / 40-60 m |
+|---|---|---|---|
+| same-group observed GT within 2 m (true positives and duplicates of them) | 8206 | 78.9 % | 2313 / 4126 / 1767 |
+| background: no GT within 4 m | 1127 | 10.8 % | 123 / 422 / 582 |
+| 2-4 m from a same-group GT (localisation or duplicate) | 785 | 7.6 % | 134 / 420 / 231 |
+| on an unobserved GT box of the same group | 198 | 1.9 % | 2 / 55 / 141 |
+| on an observed GT box of another group (class confusion) | 79 | 0.8 % | 13 / 50 / 16 |
+
+Precision of the confident detections falls with range: 0.89 (0-20 m), 0.81 (20-40 m), 0.64 (40-60 m); at 40-60 m 25 % of them are background.
+Counting the unobserved boxes as GT would LOWER the mAP (0.309 -> 0.286), so the metric's rule of ignoring them does not hurt us, and class
+confusion (0.8 %) is negligible. So the false positives that cost AP are background detections that grow with range, plus detections 2-4 m off
+(duplicates and imprecise centres) - not the evaluation convention and not the class grouping. Caveat: 54 of 3109 frames (1.7 %) have an observed
+GT list that differs from the stored record (the GT cache holds files of more than one generator signature and the first file of a token was
+used); the percentages are therefore good to about a percentage point.
 
 ## 3 Attribution
 
@@ -88,7 +104,7 @@ the numbers, not yet isolated by an experiment.
 |---|---|---|
 | D1 | The camera path is not behind the SOA camera detector. | front sector, same frames and metric: DualBEV 0.250, ours camera-only 0.242 (tie), camera + radar 0.375 / 0.359 / 0.400 |
 | D2 | There is no like-for-like SOA camera + radar number. | CRN is on disk (r50 checkpoint, MIT) but was never run on our frames; the published 49.0 mAP is 10 classes, 360 degrees, six cameras |
-| D3 | The AP is lost to centre precision and false positives before misses. | oracles above: vehicle 0.187 / 0.225 / 0.067 |
+| D3 | The AP is lost to centre precision and false positives before misses. | oracles above: vehicle 0.187 / 0.225 / 0.067; the false positives are background detections that grow with range (precision of confident detections 0.89 / 0.81 / 0.64 at 0-20 / 20-40 / 40-60 m), not unobserved boxes (1.9 %) or class confusion (0.8 %) |
 | D4 | The far objects are mostly detected but with low confidence. | at 40-60 m a detection within 2 m exists for 37 % (vehicle) / 49 % (pedestrian) of the GT below score 0.3 |
 | D5 | Detection overfits strongly; the big map areas do not (thin and rare map classes a little). | mAP 0.448 train / 0.309 val; objects loss 9.9 / 11.2; drivable 0.711 / 0.698 |
 | D6 | The velocity is not learned. | AVE 1.82 m/s against 2.40 for predicting zero; moving vehicles predicted 2.7 against 7.6 m/s (observability review) |
