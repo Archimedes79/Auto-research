@@ -1,0 +1,33 @@
+{
+ "id": "E258.p0",
+ "hypothesis": "E258: the assembly (7.5 - 8.9 ms of the chain) has a stage above 15 percent whose change saves at least 1.0 ms with identical graphs",
+ "prediction": "asm_ms a - c = -1.0 (tolerance 1.0); step 0: two stages above 15 percent",
+ "rule": "CUT if no stage above 15 percent of the assembly after step 0; KEEP if identical on 873 and >= 1.0 ms faster in interleaved A/B (relative, loaded machine)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c bash tools/env/_py14.sh temp/loop21/e258_profile.py > experiments/E258_assembly-profile-and-speedup/profile_step0.txt 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 5345,
+ "created": "2026-10-30T09:39:34",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-10-30T09:39:46",
+ "code_hash": "6da3084964d8",
+ "commit": "95f8246c1b",
+ "tag": "lcr/E258.p0",
+ "git_note": "",
+ "pid": 5375,
+ "exit": 0,
+ "duration_s": 18,
+ "attempts": 1,
+ "ended": "2026-10-30T09:40:04",
+ "last_lines": [
+  "=== attempt 2026-10-30T09:39:46: bash -c bash tools/env/_py14.sh temp/loop21/e258_profile.py > experiments/E258_assembly-profile-and-speedup/profile_step0.txt 2>&1"
+ ]
+}

@@ -1,0 +1,58 @@
+_py14.sh: temp/loop21/e258_profile.py
+load average 4.20 4.20 3.19 8/359 5391
+fast_recall: assemble wall ms per frame: median 11.00  mean 12.20  p90 18.98  (200 frames)
+profile total 21.85 ms per frame (with profiler overhead)
+--- by tottime
+         5568418 function calls in 4.370 seconds
+
+   Ordered by: internal time
+   List reduced from 146 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      200    0.420    0.002    0.912    0.005 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:967(relocate_forks)
+      200    0.269    0.001    0.714    0.004 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:547(anchor_junctions_fast)
+      200    0.267    0.001    4.355    0.022 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:650(assemble)
+      200    0.233    0.001    0.497    0.002 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:287(simplify)
+    74864    0.232    0.000    0.702    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:693(place)
+      800    0.196    0.000    0.196    0.000 {built-in method scipy.ndimage._nd_image.min_or_max_filter1d}
+    44061    0.186    0.000    0.244    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:241(has_path)
+    14992    0.169    0.000    0.392    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p18_union_nb.py:138(add_split)
+    36676    0.136    0.000    0.227    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p18_union_nb.py:112(add_edge)
+   815653    0.128    0.000    0.128    0.000 {method 'get' of 'dict' objects}
+      573    0.126    0.000    0.241    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:554(build)
+   753501    0.117    0.000    0.117    0.000 {method 'setdefault' of 'dict' objects}
+   921839    0.114    0.000    0.114    0.000 {method 'add' of 'set' objects}
+    41049    0.108    0.000    0.195    0.000 /home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/numpy/linalg/linalg.py:2383(norm)
+    39941    0.105    0.000    0.105    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+   166651    0.085    0.000    0.085    0.000 {built-in method numpy.asarray}
+      200    0.081    0.000    0.257    0.001 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:918(prune_forks)
+    25255    0.081    0.000    0.105    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p18_union_nb.py:105(nearest_edge)
+
+
+--- by cumulative
+         5568418 function calls in 4.370 seconds
+
+   Ordered by: cumulative time
+   List reduced from 146 to 18 due to restriction <18>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.015    0.015    4.370    4.370 /mnt/c/Auto-research/bev_fusion_lane_center/temp/loop21/e258_profile.py:25(run)
+      200    0.267    0.001    4.355    0.022 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:650(assemble)
+      200    0.420    0.002    0.912    0.005 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:967(relocate_forks)
+      200    0.269    0.001    0.714    0.004 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:547(anchor_junctions_fast)
+    74864    0.232    0.000    0.702    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:693(place)
+      200    0.233    0.001    0.497    0.002 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:287(simplify)
+    14992    0.169    0.000    0.392    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p18_union_nb.py:138(add_split)
+      200    0.081    0.000    0.257    0.001 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:918(prune_forks)
+    44061    0.186    0.000    0.244    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:241(has_path)
+      573    0.126    0.000    0.241    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p16_infer.py:554(build)
+    51827    0.039    0.000    0.228    0.000 /home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/numpy/core/fromnumeric.py:53(_wrapfunc)
+    36676    0.136    0.000    0.227    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p18_union_nb.py:112(add_edge)
+      400    0.001    0.000    0.224    0.001 /home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/scipy/ndimage/_filters.py:1874(maximum_filter)
+      400    0.005    0.000    0.223    0.001 /home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/scipy/ndimage/_filters.py:1735(_min_or_max_filter)
+      800    0.003    0.000    0.203    0.000 /home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/scipy/ndimage/_filters.py:1678(maximum_filter1d)
+      800    0.196    0.000    0.196    0.000 {built-in method scipy.ndimage._nd_image.min_or_max_filter1d}
+    41049    0.108    0.000    0.195    0.000 /home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/numpy/linalg/linalg.py:2383(norm)
+    10450    0.039    0.000    0.193    0.000 /mnt/c/Auto-research/bev_fusion_lane_center/training/pipeline/p18_union_nb.py:124(split)
+
+

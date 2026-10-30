@@ -1,0 +1,23 @@
+_py14.sh: temp/loop21/e258_variants.py
+== fast_recall
+  variant               Q            J    split6_F1    merge6_F1      topo_F1  lanes_found      R@1_far      vert100
+  base             0.7392       0.4469       0.4176       0.4763       0.7369       0.7364       0.7275      14.9773   (layer 1: stored Q 0.7392, vert100 14.98)
+  reloc off        0.7281       0.3929       0.3580       0.4278       0.7347       0.7328       0.7260      16.3864   dQ -0.0111 dJ -0.0540 dvert100 +1.41
+  anchor off       0.7388       0.4428       0.4097       0.4759       0.7415       0.7343       0.7264      15.0204   dQ -0.0004 dJ -0.0042 dvert100 +0.04
+  both off         0.7251       0.3772       0.3389       0.4154       0.7396       0.7310       0.7251      16.3915   dQ -0.0141 dJ -0.0698 dvert100 +1.41
+  assembly ms per frame (median of 5 repetition medians; range of the repetitions); load average at the repetitions: 3.73 3.67 3.56 3.52 3.51
+   base         11.58 ms  [10.63 - 12.58]  paired saving vs base per repetition: -0.00 -0.00 -0.00 -0.00 -0.00  median -0.00 ms
+   reloc off     9.34 ms  [8.67 - 9.70]  paired saving vs base per repetition: +1.29 +2.88 +2.91 +2.16 +2.31  median +2.31 ms
+   anchor off    9.08 ms  [8.90 - 9.44]  paired saving vs base per repetition: +1.19 +3.18 +2.67 +2.81 +1.97  median +2.67 ms
+   both off      5.78 ms  [5.63 - 6.08]  paired saving vs base per repetition: +5.00 +6.70 +5.81 +5.93 +4.97  median +5.81 ms
+== champion
+  variant               Q            J    split6_F1    merge6_F1      topo_F1  lanes_found      R@1_far      vert100
+  base             0.7350       0.4092       0.3802       0.4382       0.7413       0.6948       0.7087      14.8301   (layer 1: stored Q 0.7350, vert100 14.83)
+  reloc off        0.7240       0.3568       0.3289       0.3847       0.7406       0.6938       0.7078      15.9032   dQ -0.0110 dJ -0.0524 dvert100 +1.07
+  anchor off       0.7274       0.3736       0.3469       0.4002       0.7449       0.6920       0.7066      14.8928   dQ -0.0076 dJ -0.0356 dvert100 +0.06
+  both off         0.7133       0.3084       0.2807       0.3362       0.7442       0.6911       0.7059      15.9153   dQ -0.0216 dJ -0.1007 dvert100 +1.09
+  assembly ms per frame (median of 5 repetition medians; range of the repetitions); load average at the repetitions: 4.08 3.99 3.84 3.85 4.10
+   base          9.70 ms  [9.23 - 10.14]  paired saving vs base per repetition: -0.00 -0.00 -0.00 -0.00 -0.00  median -0.00 ms
+   reloc off     8.17 ms  [7.65 - 8.29]  paired saving vs base per repetition: +1.47 +1.67 +1.78 +1.06 +1.85  median +1.67 ms
+   anchor off    7.37 ms  [7.13 - 7.60]  paired saving vs base per repetition: +2.32 +2.01 +2.65 +1.69 +2.54  median +2.32 ms
+   both off      4.66 ms  [4.60 - 4.90]  paired saving vs base per repetition: +5.04 +4.71 +4.88 +4.39 +5.51  median +4.88 ms

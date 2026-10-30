@@ -1,0 +1,33 @@
+_py14.sh: temp/loop21/e257_simplify.py
+== fast_recall: layer 1 (registry settings reproduce the stored card): Q 0.7392 vs 0.7392, vert100 14.98 vs 14.98: PASS
+  eps              Q     F1@0.5     F1@1.0          J    topo_F1  lanes_found    R@1_far    vert100  false_len_frac   max dev (m)
+  none        0.7392     0.6881     0.8658     0.4469     0.7369     0.7364     0.7275    14.9773     0.0565
+  0.1         0.7392     0.6879     0.8660     0.4469     0.7370     0.7361     0.7276    11.4091     0.0565   0.100   (dQ -0.0000, dvert100 -3.57)
+  0.2         0.7389     0.6863     0.8664     0.4469     0.7376     0.7369     0.7279     9.8601     0.0565   0.200   (dQ -0.0002, dvert100 -5.12)
+  0.3         0.7384     0.6844     0.8661     0.4469     0.7371     0.7368     0.7280     8.9873     0.0565   0.300   (dQ -0.0008, dvert100 -5.99)
+  0.5         0.7366     0.6772     0.8659     0.4469     0.7365     0.7346     0.7284     8.0078     0.0562   0.500   (dQ -0.0025, dvert100 -6.97)
+  0.75        0.7308     0.6557     0.8636     0.4469     0.7332     0.7312     0.7272     7.4825     0.0562   0.750   (dQ -0.0084, dvert100 -7.49)
+  1.0         0.7236     0.6353     0.8573     0.4469     0.7255     0.7199     0.7240     7.2036     0.0570   1.000   (dQ -0.0155, dvert100 -7.77)
+  eps 0.3: paired scene bootstrap of the Q change: [-0.0014, -0.0001] (2000 draws over the 22 scenes)
+  card runs/eval/fast_recall/val_dp03.json written
+  secondary: Q at matched vertex counts (vtx_r sweep on VAL 873, interpolation; vtx_r is not tuned, nothing is chosen)
+   no simplification : vtx_r 1.5: 14.98 / 0.7392  vtx_r 2.0: 14.35 / 0.7364  vtx_r 2.5: 13.83 / 0.7342  vtx_r 3.0: 13.39 / 0.7233  vtx_r 3.5: 13.19 / 0.6832  vtx_r 4.0: 12.92 / 0.6458  vtx_r 5.0: 12.04 / 0.6159  vtx_r 6.0: 10.95 / 0.5835
+                       Q at 8: outside grid, 10: outside grid, 12 vertices: 0.6148
+   DP 0.3 m          : vtx_r 1.5:  8.99 / 0.7384  vtx_r 2.0:  8.69 / 0.7356  vtx_r 2.5:  8.44 / 0.7334  vtx_r 3.0:  8.35 / 0.7227  vtx_r 3.5:  9.20 / 0.6827  vtx_r 4.0: 10.14 / 0.6455  vtx_r 5.0: 10.36 / 0.6158  vtx_r 6.0:  9.74 / 0.5834
+                       Q at 8: outside grid, 10 vertices: 0.6240, 12: outside grid
+== champion: layer 1 (registry settings reproduce the stored card): Q 0.7350 vs 0.7350, vert100 14.83 vs 14.83: PASS
+  eps              Q     F1@0.5     F1@1.0          J    topo_F1  lanes_found    R@1_far    vert100  false_len_frac   max dev (m)
+  none        0.7350     0.6912     0.8696     0.4092     0.7413     0.6948     0.7087    14.8301     0.0415
+  0.1         0.7348     0.6907     0.8696     0.4092     0.7413     0.6950     0.7087    11.2171     0.0416   0.100   (dQ -0.0001, dvert100 -3.61)
+  0.2         0.7345     0.6895     0.8696     0.4092     0.7414     0.6947     0.7084     9.5212     0.0417   0.200   (dQ -0.0004, dvert100 -5.31)
+  0.3         0.7336     0.6859     0.8693     0.4092     0.7408     0.6941     0.7082     8.5195     0.0416   0.300   (dQ -0.0014, dvert100 -6.31)
+  0.5         0.7305     0.6741     0.8685     0.4092     0.7400     0.6923     0.7099     7.4871     0.0417   0.500   (dQ -0.0044, dvert100 -7.34)
+  0.75        0.7243     0.6521     0.8655     0.4092     0.7363     0.6869     0.7096     6.9029     0.0420   0.750   (dQ -0.0107, dvert100 -7.93)
+  1.0         0.7173     0.6333     0.8586     0.4092     0.7282     0.6785     0.7075     6.6034     0.0427   1.000   (dQ -0.0177, dvert100 -8.23)
+  eps 0.3: paired scene bootstrap of the Q change: [-0.0017, -0.0011] (2000 draws over the 22 scenes)
+  card runs/eval/champion/val_dp03.json written
+  secondary: Q at matched vertex counts (vtx_r sweep on VAL 873, interpolation; vtx_r is not tuned, nothing is chosen)
+   no simplification : vtx_r 1.5: 14.83 / 0.7350  vtx_r 2.0: 14.23 / 0.7307  vtx_r 2.5: 13.79 / 0.7259  vtx_r 3.0: 13.25 / 0.7138  vtx_r 3.5: 12.66 / 0.6676  vtx_r 4.0: 11.97 / 0.6267  vtx_r 5.0: 10.95 / 0.5936  vtx_r 6.0:  9.94 / 0.5641
+                       Q at 8: outside grid, 10 vertices: 0.5659, 12 vertices: 0.6282
+   DP 0.3 m          : vtx_r 1.5:  8.52 / 0.7336  vtx_r 2.0:  8.27 / 0.7295  vtx_r 2.5:  8.11 / 0.7246  vtx_r 3.0:  8.01 / 0.7128  vtx_r 3.5:  8.72 / 0.6671  vtx_r 4.0:  9.35 / 0.6261  vtx_r 5.0:  9.39 / 0.5932  vtx_r 6.0:  8.85 / 0.5638
+                       Q at 8: outside grid, 10: outside grid, 12: outside grid

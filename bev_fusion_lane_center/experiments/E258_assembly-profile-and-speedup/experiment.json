@@ -1,0 +1,11 @@
+{"id": "E258", "card": "H21.S1", "title": "the assembly (7.5 - 8.9 ms of the 18.5 - 21 ms chain) has a hot spot whose removal saves at least 1.0 ms per frame with identical graphs",
+ "kind": "variant", "deterministic": true, "metric": "asm_ms", "direction": "lower", "band": 0.5,
+ "prediction": {"value": -1.0, "vs": "c"},
+ "variant": "a", "control": "c",
+ "arms": {"a": {"recipe": "step 0: cProfile / stage timers of PI.assemble (fast=2) on 200 cached frames of fast_recall; step 1 (only if a stage above 15 % exists): the change of that stage in a copy of the code under temp/loop21, interleaved A/B timing and the identity check on all 873 graphs",
+                "base": "e18_D7_j1rc", "names": ["fast_recall"]},
+          "c": {"recipe": "the unchanged assemble() at the registry settings", "base": "e18_D7_j1rc", "names": ["fast_recall"]}},
+ "rule": [{"metric": "asm_ms", "min_effect": 1.0, "note": "KEEP (candidate for a code change with ar-reviewer pass) if the changed assembly gives identical graphs on 873 of 873 frames AND is at least 1.0 ms per frame faster in interleaved A/B on 5 repetitions (median of repetition medians, same process, one thread); the machine is loaded (other chat's lane), so the number is RELATIVE and provisional until an idle window repeats it; CUT if no stage above 15 % of the assembly exists after step 0 or the identity check fails"}],
+ "budget_gpu_h": 0.0,
+ "kill": "step 0 finds no stage above 15 % of the assembly time (nothing to optimise); identity failure",
+ "evaluate": {"split": "val"}}

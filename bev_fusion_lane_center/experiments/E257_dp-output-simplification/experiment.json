@@ -1,0 +1,65 @@
+{
+ "id": "E257",
+ "card": "H21.A1",
+ "title": "Douglas-Peucker simplification of the assembled graph (interior vertices that are not shared, geometry kept within eps) cuts the vertices per 100 m by at least a third at equal Q",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "vert100",
+ "direction": "lower",
+ "band": 1.0,
+ "prediction": {
+  "value": -5.0,
+  "vs": "c"
+ },
+ "variant": "a",
+ "control": "c",
+ "arms": {
+  "a": {
+   "recipe": "assemble at the registry settings, then simplify_dp(g, 0.3): per polyline keep ends, nodes shared with another polyline and the Douglas-Peucker vertices (tolerance 0.3 m) between them; temp/loop21/e257_simplify.py writes the cards val_dp03.json",
+   "base": "e18_D7_j1rc",
+   "cards": [
+    "runs/eval/fast_recall/val_dp03.json",
+    "runs/eval/champion/val_dp03.json"
+   ],
+   "note": "same raw outputs, same frames; only the output stage differs"
+  },
+  "c": {
+   "recipe": "the same models at the registry settings, no simplification (stored evaluate.py cards)",
+   "base": "e18_D7_j1rc",
+   "cards": [
+    "runs/eval/fast_recall/val.json",
+    "runs/eval/champion/val.json"
+   ],
+   "note": "stored cards, reproduced by the script first (layer 1)"
+  }
+ },
+ "rule": [
+  {
+   "metric": "vert100",
+   "min_effect": 3.0,
+   "note": "KEEP the simplification as an output stage (candidate for assemble(), then reproduced through evaluate.py and reviewed) if vert100 a - c <= -3.0 on both models AND the guards hold: Q loss <= 0.003, F1@0.5 loss <= 0.005, topo F1 and J loss <= 0.005 / 0.01; else TIE or CUT"
+  },
+  {
+   "metric": "Q",
+   "max_loss": 0.003
+  },
+  {
+   "metric": "F1@0.5",
+   "max_loss": 0.005
+  },
+  {
+   "metric": "topo_F1",
+   "max_loss": 0.005
+  },
+  {
+   "metric": "J",
+   "max_loss": 0.01
+  }
+ ],
+ "budget_gpu_h": 0.0,
+ "kill": "none (CPU, 2 threads, about 15 minutes); layer 1 failure (the script does not reproduce the stored cards of the two models) stops the run",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}

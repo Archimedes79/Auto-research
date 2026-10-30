@@ -1,40 +1,38 @@
-# PLAN - experiment tree of the current loop (loop 20)
+# PLAN - experiment tree of the current loop (loop 21)
 
-The loop-19 plan with all statuses is in `history/plans/PLAN_loop19.md` (its section "What the system still needs", N1 - N12, is still the open list).
+The loop-20 plan with all statuses is in `history/plans/PLAN_loop20.md` (N1 - N15 open list); loop 19 in `history/plans/PLAN_loop19.md`.
 
 ## Question of the loop
-Mirko (2026-10-26, chat): when the other training is ready, do four iterations of automatic research here, test the methodology and the framework, improve the framework where necessary, report the week, then shut down. Prompt and reading: `history/prompts/PROGRAM_loop20.md`. The BEV-system chats' training (t1_r3) had finished, so the loop started at once.
+Mirko (2026-10-30, chat): a general loop to improve performance (quality and speed), freedom to choose the questions; "create a card and run the loop". Prompt and reading: `history/prompts/PROGRAM_loop21.md`. The GPU is held by the BEV-system chat's t2 lane (12 GB, 100 %), so the iterations are CPU-only on cached raw outputs and timing is relative.
 
 ## Tree
-Four iterations, each: card -> referee (G2) -> run through `run.py` -> decision by the written rule -> summary. All numbers VAL 873, `evaluate.py`; the ids E252 ff. are not yet in `project.json` "loops" (D17), the loop table counts them under loop 19.
+Each node: card -> (referee when it can change a decision) -> run through `run.py` -> decision by the written rule -> summary. VAL 873 unless stated. Ids E257 ff. are not yet in `project.json` "loops" (D17).
 
 | node | experiment | hypothesis (short) | decision rule | cost | status (result) |
 |---|---|---|---|---|---|
-| I1 | E252 map offset of the ground truth by city | the 0.3 - 1 m map offset caps Q in Boston and shows as a lateral bias of correct predictions | CAP only if all Q gaps <= -0.03 and the |offset| ratio >= 1.5; NO EVIDENCE within +-0.010 | CPU 10 min | done (E252): cap NOT supported (Boston higher, +0.05; per-polyline offsets smaller in Boston); referee follow-up (null p 0.056, shift scale, per-polyline) done, verdict unchanged |
-| I2 | E240 seed pair 3 (+ E241 pair 3) | completes the seed floor with a fourth pair | `decide.py --experiment E240` on four pairs | 2 x 20 min GPU | done (E240): TIE on four pairs, Q a - c +0.0062 (prediction +0.006 hit), lanes found +0.0596, seed SD Q 0.0030 / 0.0020, paired 0.0043; E241 KEEP as 'worth a 12-pairing replay' (cut test 4 of 4, 0 wrong) |
-| I3 | E255 Poisson set loss, full schedule, matched vertex budget | the Poisson loss does not lift Q or lanes found at 14.3 vertices per 100 m | CUT <= -0.020 on one seed, KEEP >= +0.010 on both seeds and held-out frames | 20 min GPU + grids | done (E255): CUT, Q a - c -0.0726 at 14.3 vertices (prediction -0.045 missed by -0.028), topo F1 -0.127; K193 closed |
-| I4 | E253 timing repeat with a machine guard | j1 is not a speed variant; recall costs +2.5 ms | session valid (5 of 6 SD <= 0.6 ms, stored values reproduced) then a - c <= -1.0 ms | 45 min exclusive | done (E253, 07:20 after the BEV chat's training ended): session valid, TIE, j1 - f1 -0.23 ms (prediction -0.3 hit), recall +2.65 ms, recursion +6.1 ms |
-| I4b | E256 D4 candidates by city | the order of the five candidates holds in each city | flip = opposite order by > 0.010 in both cities | CPU 10 min | done (E256): no flip; fast_recall over fast is a Boston-only Q gain, lanes found +0.065 in both |
+| I1 | E257 Douglas-Peucker output simplification | 40 % of the assembled vertices are interior points of straight runs; removing them (0.3 m) keeps Q and cuts vert100 by >= 3 | KEEP if vert100 -3.0 on both models and Q loss <= 0.003, F1@0.5 <= 0.005, topo F1 <= 0.005, J <= 0.01 | CPU 15 min | done (E257): KEEP, vert100 15.0 -> 9.0 at eps 0.3 (Q -0.001), eps 0.2 holds all guards on both models (9.9 / 9.5); D20 filed |
+| I2 | E258 assembly profile and speed-up | the assembly (7.5 - 8.9 ms) has a stage above 15 % whose change saves >= 1.0 ms with identical graphs | CUT if no stage > 15 %; KEEP >= 1.0 ms relative, identical on 873 | CPU 30 min | done (E258): profile (relocation 21 %, anchoring 16 %); relocation stays (J -0.05); anchoring off holds on 4 of 4 j1rc seeds (dQ -0.0011 .. +0.0005, dJ -0.007 .. 0) -> registry `fast_recall_na`, saving ~1.3 - 2 ms estimated, idle repeat pending |
+| I3 | results video of the best system (Mirko's request) | - | no rule (presentation) | CPU | done: `reports/weekly/Lane_graph_recall_val.mp4` (recall, 2 median scenes, 80 frames) |
 
-## System improvements (framework test, from the plan of loop 19 and new)
-| item | what | state |
-|---|---|---|
-| N1 | no machine lease between chats | open (decision for the tools); guard in the timing driver done |
-| N7 | timing protocol guard | done in `temp/loop20/run_e253.sh` (GPU, WSL load, Windows CPU, repair rounds) |
-| N10 | exact map as loader default | done 2026-10-26 (D14) |
-| N13 (new) | `project.json` "loops" (protected) must list each loop; stale planned rows of the previous loop remain in the schedule | D17 filed; schedule rows of loop 19 are still shown as planned |
-| N14 (new) | matched-vertex evaluation had no code, a max over grid points favours the arm with more freedom | `temp/loop20/e255_matched.py` (interpolation at 14.3, stored-card reproduction, held-out frames): used in E255, works; promote to `evaluation/drivers/` when used a second time |
-| N15 (new) | `decide.py` has no cross-pairing cut test (E241 was decided by hand) and `schedule.py add` accepts duplicate ids | open (tools chat) |
-| D18 / D19 (new) | per-metric noise bands from four pairs; machine lease between chats | filed in DECISIONS |
+## Candidates for I3 and for the next GPU window (not started)
+- re-spend the freed vertex budget: after E257, is Q at 8 - 10 vertices per 100 m at the level of 15 (the curve moves left)? (secondary output of E257)
+- seed ensemble of cached raw outputs (teacher ceiling for a distillation: lanes found and R@1 far of the mean of four j1rc seeds)
+- GPU, when a slot is free: calibration step for the validity scores before thinning (K193 follow-up), the loss added next to the hinge, cheaper time recursion (+6.1 ms), fp16 / compiled builder with identical graphs
+- do not repeat: Poisson loss swap, clamp 8 m, per-range thresholds, joint end-to-end fine-tune, recall weight above 3 (`closed_questions.md`)
 
 ## Controls and statistics
-- the controls of E255 are the exact-map j1eq fine-tunes of E237 (same map, recipe and init); pair 3 of E240 is pinned to the stored map (`LCR_DIST_DIR`) so the four pairs stay comparable
-- every claim names its vertex budget; noise band 0.010 until the SD table says otherwise (Q SD about 0.003)
-- tuning of tau / vtx_r on val250 is declared, held-out frames are reported
+- layer 1 in every script: the stored cards are reproduced first; layer 0: identity / geometry bound asserted
+- noise band 0.010 for Q, seed SD 0.0025; E257 and E258 compare the same raw outputs, so the seed noise does not enter, only the guards
+- every claim names its vertex budget and the way vertices are counted (node ids or Douglas-Peucker)
 
-## What the system still needs
-See `history/plans/PLAN_loop19.md` (N1 - N12) plus N13 / N14 above and the report section 6 of `reports/weekly/Week3_Loops18-20_Report_EN.pdf`.
+## System items (framework)
+| item | what | state |
+|---|---|---|
+| N1 / D19 | machine lease between chats | open (decision); loop 21 works around by CPU-only iterations while the other lane runs |
+| N15 | `decide.py` cross-pairing cut test; `schedule.py add` duplicate ids | open (tools chat) |
+| N16 (new) | `experiment.py check` reports NOT READY for cards that the run itself writes (E257); a card path that does not exist yet is not an error before the run | open |
+| D20 (new, with E257) | vertex budget 14.3: count node ids or after output simplification? | file with the result |
 
 ## End of loop (P4)
-- per node: result and decision (one line each) in the summaries of E252, E240, E255, E253
-- weekly report week 3 (loops 18 - 20): `reports/weekly/Week3_Loops18-20_Report_EN.pdf` built, numbers reviewer run; `check_structure.py` clean; full test suite; handover; E253 ran 07:20 - 07:38 on a quiet machine
+- per node: result and decision (one line each) in the summaries; HANDOVER; `run_all_tests.sh`; `check_structure.py`; commit by path
+- a report only if Mirko asks (week 4 report later)

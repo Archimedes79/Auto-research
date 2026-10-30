@@ -1,0 +1,45 @@
+{
+ "id": "E257",
+ "verdict": "KEEP",
+ "metric": "vert100",
+ "variant": "a",
+ "control": "c",
+ "effect": 6.1503,
+ "diffs": [
+  5.99,
+  6.3106
+ ],
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": null,
+ "why": "headline vert100 a-c +6.1503 beyond the band 1.0, 2 paired seed(s); every clause holds",
+ "prediction": "prediction -5.000, measured +6.1503 (error +11.1503)",
+ "clauses": [
+  {
+   "text": "vert100 a-c +6.1503 (want >= +3.000, band 1.0)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "Q a-c -0.0011 (want >= -0.003)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "F1@0.5 a-c -0.0045 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "topo_F1 a-c -0.0001 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "J a-c +0.0000 (want >= -0.010)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-10-30 09:38"
+}

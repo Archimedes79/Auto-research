@@ -1,0 +1,33 @@
+{
+ "id": "E257.a0",
+ "hypothesis": "E257: Douglas-Peucker simplification (0.3 m) of the assembled graph removes at least a third of the vertices at equal Q",
+ "prediction": "vert100 a - c = -5.0 (tolerance 1.5) on fast_recall and champion; Q change -0.001 (tolerance 0.003)",
+ "rule": "KEEP if vert100 falls by >= 3.0 on both models and the guards hold (Q loss <= 0.003, F1@0.5 <= 0.005, topo F1 <= 0.005, J <= 0.01); else TIE or CUT",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c bash tools/env/_py14.sh temp/loop21/e257_simplify.py > experiments/E257_dp-output-simplification/dp_sweep.txt 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 5010,
+ "created": "2026-10-30T09:19:52",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-10-30T09:20:04",
+ "code_hash": "23caaa337f05",
+ "commit": "0cf89b90af",
+ "tag": "lcr/E257.a0",
+ "git_note": "",
+ "pid": 5052,
+ "exit": 0,
+ "duration_s": 1068,
+ "attempts": 1,
+ "ended": "2026-10-30T09:37:52",
+ "last_lines": [
+  "=== attempt 2026-10-30T09:20:04: bash -c bash tools/env/_py14.sh temp/loop21/e257_simplify.py > experiments/E257_dp-output-simplification/dp_sweep.txt 2>&1"
+ ]
+}

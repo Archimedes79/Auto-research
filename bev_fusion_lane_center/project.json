@@ -21,7 +21,7 @@
   "_protected": "guard_hook.py refuses Write / Edit of these unless a grant names a decided D<n>; a list of entries protects only those top-level keys of a json file",
   "protected": {"PROBLEM.md": null, "project.json": null, "evaluation/TEST_USAGE_LOG.md": null, "evaluation/golden.json": null,
                 "models/registry.json": ["champion", "control"], "runs/e123_ladder/cards/e123_D7_r3_f1.json": null,
-                "../autoresearch/tools/": null, "../autoresearch/METHOD.md": null, "../.claude/settings.json": null, "../.claude/settings.local.json": null},
+                "../autoresearch/tools/guard_hook.py": null, "../.claude/settings.json": null, "../.claude/settings.local.json": null},
   "_loops": "experiment numbers per loop for metrics.py (the ledger starts with loop 18; null = open)",
   "loops": {"18": [209, 233], "19": [234, null]},
   "structure": {
