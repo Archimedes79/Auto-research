@@ -31,5 +31,7 @@ run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py
 if [ "${1:-}" = "--all" ]; then
   run "flow from frames" "$PY" tests/test_flow_from_frames.py
+  run "flow correlation" "$PY" tests/test_flow_correlation.py
+  run "projection (R-GEO)" "$PY" tests/test_projection_general.py
 fi
 exit $fail

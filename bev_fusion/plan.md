@@ -9,6 +9,7 @@ Status: DRAFT for the discussion with Mirko; nothing is decided. Draft 2 (front 
 Paper ids are arXiv ids; "(lit)" = from a scout note in `literature/papers/` (all ids checked on their abstract pages, 2026-10-25). Code licences from `literature/code/front_bev_code_sources.md` (scout, read on the repository pages).
 
 ## 0. The problem, not the dataset
+Requirements set by Mirko (camera projection from calibration data, general and rolled-capable, not learned, no virtual cameras; method rules): `requirements.md`; every design below is checked against it.
 - Product: a BEV environment model for a vehicle with any number of cameras and radars at any mounting: semantic map layers (road, markings, lanes), objects, later detection, at 0.5 m, fast.
 - Input contract (the only thing the system knows about a sensor): its model (pinhole / fisheye intrinsics, radar field of view and resolution), its pose in vehicle coordinates (calibration), the timestamp of each measurement, and the ego motion. Nothing is tuned to one calibration.
 - nuScenes is the first training and validation set (front camera + five radars as the first rig; all six cameras are on disk once the download finishes). A second dataset or a changed rig is the test that the design does not depend on nuScenes.

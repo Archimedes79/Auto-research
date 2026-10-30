@@ -4,6 +4,7 @@ For now this folder only holds the discussion of a new BEV system (camera pixel-
 
 | file / folder | content |
 |---|---|
+| `requirements.md` | what the system must satisfy, set by Mirko (camera geometry from calibration data with a general, rolled-capable, not learned projection and no virtual cameras; problem and data; method rules), each with its check and status |
 | `plan.md` | the current plan (draft 3) with the paper and code basis per block, the GT generation and viewer, and the tests |
 | `radar_encoding.md` | radar grid encoding ideas (measured nuScenes radar statistics, Mirko's per-detection decoder, the symmetric polar radar image + table pull, comparison, tests); discussed separately until one is chosen |
 | `plan_draft2.md` | the previous draft (front camera, virtual upright camera, sigma points), kept for the record |
