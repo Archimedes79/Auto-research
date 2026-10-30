@@ -1,0 +1,33 @@
+step 1: total 15.4080 lr 2.00e-04 grad 90.36
+step 2: total 17.1503 lr 3.00e-04 grad 93.84
+step 3: total 23.7416 lr 3.00e-04 grad 93.49
+step 4: total 23.2848 lr 1.50e-04 grad 67.25
+resumed from ckpt_00000004.pt at step 4
+step 5: total 21.4916 lr 1.50e-04 grad 62.71
+step 6: total 21.8666 lr 4.42e-05 grad 56.36
+step 1: total 15.4226 lr 3.00e-04 grad 155.37
+step 2: total 25.1795 lr 3.00e-04 grad 163.64
+train selftest ok: GT at three times (-0.5 / 0 / +0.5 s) -> loss, balancing arms (Kendall / fixed / UW-SO), cross-time consistency (hold = weight 0, gradient reaches the motion head), gradient-conflict cosines, sequence training (clips of consecutive keyframes, memory carried and detached or kept in the graph, paired warm / cold validation), 2 micro-batches per step, 4 steps with checkpoints (frozen heads not saved), resume 4 -> 6, validation under EMA restores the weights, schedule; 14.7 s per step on the CPU at batch 2 (cached features, width 1/4)
+	Command being timed: "nice -n 15 /home/ml/miniconda3/envs/gcar/bin/python train.py"
+	User time (seconds): 389.58
+	System time (seconds): 83.83
+	Percent of CPU this job got: 277%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:50.41
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 11586032
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 238
+	Minor (reclaiming a frame) page faults: 23184265
+	Voluntary context switches: 43278
+	Involuntary context switches: 764652
+	Swaps: 0
+	File system inputs: 776301
+	File system outputs: 471952
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

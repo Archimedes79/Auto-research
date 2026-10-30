@@ -1,0 +1,4 @@
+{"name": "smoke_refine", "out_root": "temp/checks/runs", "data_root": "~/data/nuscenes", "version": "v1.0-mini",
+ "gt_cache": "", "batch_size": 2, "accum": 1, "workers": 0, "steps": 4, "warmup": 1, "log_every": 1,
+ "eval_every": 4, "eval_batches": 1, "save_every": 1000, "device": "cpu",
+ "model": {"refine": true}}

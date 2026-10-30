@@ -1,0 +1,6 @@
+device cuda; train 324 frames, test 80 frames; detections of the test frames inside the grid: 50712
+share of detections recovered within pos (m) 0.25, dist (m) 0.5, dir (deg) 3.0, vr (m/s) 0.5, rcs (dB) 3.0, age (s) 0.1 (all at once);
+                           recovered |      pos med/p90 |     dist med/p90 |      dir med/p90 |       vr med/p90 |      rcs med/p90 |      age med/p90
+M learned, C = 32              46.5% |    0.017 / 0.165 |    0.295 / 1.266 |    0.248 / 1.855 |    0.017 / 0.149 |    0.243 / 3.099 |    0.036 / 0.187
+S learned, C = 64              35.3% |    0.009 / 0.076 |    0.644 / 2.030 |    0.733 / 2.992 |    0.031 / 0.182 |    0.285 / 1.758 |    0.014 / 0.082
+S learned, C = 128             46.0% |    0.006 / 0.037 |    0.496 / 1.557 |    0.609 / 2.424 |    0.020 / 0.108 |    0.208 / 1.158 |    0.006 / 0.050

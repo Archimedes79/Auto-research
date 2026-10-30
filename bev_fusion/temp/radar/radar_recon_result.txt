@@ -1,0 +1,8 @@
+device cuda; train 324 frames, test 80 frames; detections of the test frames inside the grid: 50712
+share of detections recovered within pos (m) 0.25, dist (m) 0.5, dir (deg) 3.0, vr (m/s) 0.5, rcs (dB) 3.0, age (s) 0.1 (all at once);
+                           recovered |      pos med/p90 |     dist med/p90 |      dir med/p90 |       vr med/p90 |      rcs med/p90 |      age med/p90
+M oracle (raster itself)       63.5% |    0.002 / 0.165 |    0.000 / 0.497 |    0.003 / 0.943 |    0.000 / 0.092 |    0.143 / 2.929 |    0.035 / 0.187
+M learned, C = 32              10.9% |    0.025 / 0.166 |    1.589 / 4.691 |    0.751 / 3.468 |    0.042 / 0.200 |    0.382 / 3.162 |    0.037 / 0.189
+S oracle (raster itself)       95.0% |    0.000 / 0.000 |    0.000 / 0.000 |    0.000 / 0.001 |    0.000 / 0.000 |    0.000 / 0.000 |    0.000 / 0.035
+S learned, C = 32               2.2% |    0.051 / 0.182 |   4.380 / 12.651 |    1.991 / 8.443 |    0.131 / 0.635 |    1.277 / 4.425 |    0.032 / 0.110
+S learned, C = 64              11.0% |    0.026 / 0.108 |    1.429 / 4.021 |    1.280 / 5.058 |    0.075 / 0.350 |    0.826 / 3.531 |    0.023 / 0.091

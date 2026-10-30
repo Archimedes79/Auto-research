@@ -1,0 +1,12 @@
+device cuda; 100 steps x batch 8, 3 seeds; blur sigma 1.0 cells, signal noise 0.05; 64 test scenes
+arm                            IoU  F1 (+-1 cell)  thickness
+T2 (default)                 0.525          0.998       1.82   (IoU per seed 0.517, 0.534, 0.523)
+T2 + detail path (32 ch)     0.887          1.000       1.08   (IoU per seed 0.838, 0.910, 0.915)
+device cuda; 300 steps x batch 8, 3 seeds; blur sigma 1.0 cells, signal noise 0.05; 64 test scenes
+arm                            IoU  F1 (+-1 cell)  thickness
+T2 (default)                 0.841          1.000       1.16   (IoU per seed 0.870, 0.814, 0.841)
+T2 + detail path (32 ch)     0.978          1.000       1.01   (IoU per seed 0.971, 0.982, 0.980)
+device cuda; 1500 steps x batch 8, 2 seeds; blur sigma 2.0 cells, signal noise 0.15; 64 test scenes
+arm                            IoU  F1 (+-1 cell)  thickness
+T2 (default)                 0.842          1.000       1.15   (IoU per seed 0.845, 0.839)
+T2 + detail path (32 ch)     0.763          0.999       1.25   (IoU per seed 0.772, 0.753)

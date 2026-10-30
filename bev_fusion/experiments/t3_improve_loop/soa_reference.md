@@ -13,5 +13,5 @@ nuScenes VAL, ResNet-50 image backbone, 256 x 704 input, six cameras (+ radar wh
 
 Not comparable one-to-one with our numbers (stated in the report): ours is the FRONT camera only, the 60 m x 52 m front sector, three class groups (vehicle, pedestrian,
 two_wheeler), mAP over matching distances 0.5 / 1 / 2 / 4 m (nuScenes uses the same distances), no attribute / velocity / NDS terms, 82 val scenes of 150, 1000 frames,
-3000-step schedule (about 0.55 epoch of the 428-scene training set; published systems train 20-24 epochs on 850 scenes with 6 cameras). The relation that carries over: in the
-literature radar-camera fusion beats the camera-only counterpart by 5-10 mAP points on the same backbone; ours: camera 0.210 -> camera + radar 0.339 mAP2 (+0.13).
+3000-step schedule (about 0.55 epoch of the 428-scene training set; published systems train about 20-24 epochs on the 700 training scenes of the official split, 850 = train + val, with 6 cameras). Qualitatively: radar-camera
+fusion beats camera-only in the literature (the size of the gap on the same backbone is NOT verified here); ours: camera 0.210 -> camera + radar 0.339 mAP2 (+0.13).

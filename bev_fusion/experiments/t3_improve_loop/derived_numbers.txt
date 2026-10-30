@@ -1,0 +1,5 @@
+t1_r4_soa mAP2: train subset (800 samples) 0.462, full val (3109 frames) 0.361
+lift_p pedestrian AP@2 0.148 vs ref_s1 0.188: -0.039
+walkway: zsum - radar_off -0.018; adapter - radar_off +0.005
+drivable: zsum - radar_off -0.014; adapter - radar_off +0.001
+divider: zsum - radar_off -0.010; adapter - radar_off +0.021
