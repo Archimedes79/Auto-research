@@ -45,4 +45,6 @@ information; (M7) the detection loss dominates the shared trunk (gradient at the
 
 ## 2 Log
 
-- 2026-10-30: config and gate done; queued at the end of the lane's queue (see the commit of this card).
+- 2026-10-30: config and gate done (commit bb745cf); queued as the last line of `temp/study/queue3.txt` (`cfg:t6_maps_only:0a3d73c`, after
+  `train:lift_s` and `train:trunk_small`; `temp/soa_gap/queue_maps_only.sh`); the owner of the lane (session "BEV system") was told. The lane
+  was evaluating `trunk_second` at the time; the run starts after the two jobs in front of it.
