@@ -1,0 +1,193 @@
+"""Where do the errors of a lane graph come from? The error of one frame is split into the metres of lane that are missing
+(`fn.*`: ground-truth points with no prediction within tau) and the metres that are false (`fp.*`: prediction points with no
+ground truth within tau), and every metre is given ONE cause, by the first rule that fits (order = priority). The pieces add up to the
+frame's total error, so they can be summed over frames, scenes or situations: an error budget.
+
+fn (ground truth missed)                                   fp (prediction false)
+  unobservable  outside the view of the input (mask given)    shift        the best shift of the whole prediction fixes it
+  shift         the best shift of the whole prediction        duplicate    parallel copy of a correct lane
+                fixes it                                      spur         short stray piece (< spur_len)
+  offset        a prediction within near_factor * tau:        offset       ground truth within near_factor * tau: displaced
+                displaced, not absent                         overshoot    a correct lane continues past the end of the truth
+  gap           hole inside a lane that is found elsewhere    hallucinated nothing within near_factor * tau: invented lane
+  truncated     prediction stops short of the end / starts          (or ground truth that is missing there)
+                late
+  missed_near   lane absent within far_m of the ego
+  missed_far    lane absent beyond far_m
+"""
+from __future__ import annotations
+
+from typing import Dict, Tuple
+
+import numpy as np
+
+from .geometry import LaneGraph
+from .measures import nn_dist, nn_index
+
+CAUSES: Dict[str, Tuple[str, str]] = {          # cause -> (what it is, what to improve)
+    "fn.unobservable": ("missed part lies outside the input's view", "evaluation: mask the unobservable part"),
+    "fn.shift": ("missed only because the whole prediction is displaced", "model / calibration: registration"),
+    "fn.offset": ("a prediction is there but displaced beyond tau (localisation)", "model: localisation accuracy"),
+    "fn.gap": ("hole inside a lane that is found elsewhere (broken lane)", "assembly code: linking / pruning"),
+    "fn.truncated": ("lane found but the prediction stops short / starts late", "model range or assembly extension"),
+    "fn.missed_near": ("lane absent within the near range", "model: recall"),
+    "fn.missed_far": ("lane absent beyond the far range", "model: range / resolution at distance"),
+    "fp.shift": ("false only because the whole prediction is displaced", "model / calibration: registration"),
+    "fp.duplicate": ("parallel copy of a correct lane", "assembly code: de-duplication"),
+    "fp.spur": ("short stray piece", "assembly code: pruning"),
+    "fp.offset": ("ground truth nearby but displaced beyond tau", "model: localisation accuracy"),
+    "fp.overshoot": ("a correct lane continues past the end of the ground truth", "model or assembly extension; or GT ends early"),
+    "fp.hallucinated": ("no ground truth nearby: invented lane or ground truth missing there", "model precision, or evaluation: GT incomplete?"),
+}
+FN = [k for k in CAUSES if k.startswith("fn.")]
+FP = [k for k in CAUSES if k.startswith("fp.")]
+
+
+def best_shift(P: np.ndarray, G: np.ndarray, tau: float, smax: float, step: float):
+    """translation (du, dv) of the prediction that fits both sets best (triangular kernel of width tau: the peak is the true displacement,
+    a count within tau would be flat over a whole range of shifts)
+    -> (du, dv, matched P at the best shift, matched G at the best shift, matched P at 0, matched G at 0), 'matched' within tau"""
+    from scipy.spatial import cKDTree
+    if len(P) == 0 or len(G) == 0:
+        return 0.0, 0.0, 0, 0, 0, 0
+    tg, tp = cKDTree(G), cKDTree(P)
+    ks = np.arange(-smax, smax + 1e-9, step)
+    best = (-1.0, 0.0, 0.0)
+    for du in ks:
+        for dv in ks:
+            d = np.array([du, dv])
+            s = np.clip(1 - tg.query(P + d)[0] / tau, 0, 1).sum() + np.clip(1 - tp.query(G - d)[0] / tau, 0, 1).sum()
+            if s > best[0] + 1e-9 or (abs(s - best[0]) <= 1e-9 and np.hypot(du, dv) < np.hypot(best[1], best[2])):
+                best = (s, du, dv)
+    counts = lambda d: (int((tg.query(P + d)[0] <= tau).sum()), int((tp.query(G - d)[0] <= tau).sum()))
+    mp, mg = counts(np.array(best[1:]))
+    mp0, mg0 = counts(np.zeros(2))
+    return best[1], best[2], mp, mg, mp0, mg0
+
+
+def _prediction_ends_there(dp, dg, idx: np.ndarray, a: int, b: int, near: float, ds: float) -> bool:
+    """a missed run at one end of a ground-truth lane is a TRUNCATION when the prediction that covers the neighbouring points ends
+    (starts) right there; if that prediction piece runs on elsewhere, the run is a missed branch / lane"""
+    if len(dp) == 0:
+        return False
+    at_end = b == len(idx)
+    j = idx[a - 1] if at_end else idx[b]                       # last covered ground-truth point next to the run
+    k = int(np.argmin(np.linalg.norm(dp.xy - dg.xy[j], axis=1)))
+    ln = dp.line[k]
+    s_all = dp.s[dp.line == ln]
+    return bool((s_all.max() - dp.s[k]) <= near + ds) if at_end else bool(dp.s[k] <= near + ds)
+
+
+def _ends(d, ds: float) -> np.ndarray:
+    """per dense point: is it (within a spacing of) the start or end of its polyline"""
+    if not len(d):
+        return np.zeros(0, bool)
+    top = {int(l): d.s[d.line == l].max() for l in np.unique(d.line)}
+    return np.array([d.s[i] <= 0.75 * ds or d.s[i] >= top[int(d.line[i])] - 0.75 * ds for i in range(len(d))])
+
+
+def _lateral(A: np.ndarray, B, j: np.ndarray, is_end: np.ndarray) -> np.ndarray:
+    """is the offset of the points A from their nearest point of B (index j) sideways? False when that nearest point is an end of its
+    polyline and A lies beyond it along the track: then the difference is the missing / extra LENGTH, not a displacement"""
+    if len(A) == 0 or len(B) == 0:
+        return np.zeros(len(A), bool)
+    w, t = A - B.xy[j], B.tan[j]
+    along = np.abs((w * t).sum(1))
+    side = np.abs(w[:, 0] * t[:, 1] - w[:, 1] * t[:, 0])
+    return ~(is_end[j] & (along > side))
+
+
+def _runs(flag: np.ndarray):
+    """(start, stop) of the runs of True in a 1-d bool array"""
+    if not len(flag):
+        return []
+    d = np.diff(np.r_[0, flag.astype(np.int8), 0])
+    return list(zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)))
+
+
+def error_budget(pred: LaneGraph, gt: LaneGraph, ds: float, tau: float, near_factor: float = 3.0, far_m: float = 40.0,
+                 box=None, visible=None, grid=None, shift_max: float = 2.0, shift_step: float = 0.25, shift_min: float = 0.5,
+                 shift_gain: float = 0.10, dup_r: float = 1.5, spur_len: float = 6.0, origin=(0.0, 0.0)) -> Dict[str, float]:
+    """metres of lane per cause for one frame (all CAUSES keys, zero when absent) + 'shift_u', 'shift_v', 'shift_gain'.
+    `visible` (bool image on `grid`): cells the input can observe; ground-truth points outside are 'unobservable'."""
+    dg, dp = gt.dense(ds, box), pred.dense(ds, box)
+    G, P = dg.xy, dp.xy
+    out = {k: 0.0 for k in CAUSES}
+    near = near_factor * tau
+    d_gp, j_gp = nn_index(G, P)
+    d_pg, j_pg = nn_index(P, G)
+    fn, fp = d_gp > tau, d_pg > tau
+    lat_g, lat_p = _lateral(G, dp, j_gp, _ends(dp, ds)), _lateral(P, dg, j_pg, _ends(dg, ds))
+    # a displaced prediction: the best rigid translation of this frame
+    du, dv, mp, mg, mp0, mg0 = best_shift(P, G, tau, shift_max, shift_step)
+    tot = max(len(P) + len(G), 1)
+    gain = (mp + mg - mp0 - mg0) / tot
+    # a displacement explains the errors only if BOTH sets match better afterwards (a duplicate or an extra lane straddling the
+    # truth lets one set match better at the cost of the other)
+    shifted = (np.hypot(du, dv) >= shift_min and gain >= shift_gain and (mp - mp0) >= 0.05 * max(len(P), 1)
+               and (mg - mg0) >= 0.05 * max(len(G), 1))
+    out.update(shift_u=float(du) if shifted else 0.0, shift_v=float(dv) if shifted else 0.0, shift_gain=float(gain) if shifted else 0.0)
+    sh_g = (nn_dist(G, P + [du, dv]) <= tau) if shifted else np.zeros(len(G), bool)
+    sh_p = (nn_dist(P + [du, dv], G) <= tau) if shifted else np.zeros(len(P), bool)
+
+    # ---- missed ground truth
+    cause = np.full(len(G), "", object)
+    if visible is not None and grid is not None and len(G):
+        r, c, ok = grid.cell(G)
+        vis = np.ones(len(G), bool)                              # outside the image: not known to be unobservable
+        vis[ok] = np.asarray(visible, bool)[r[ok], c[ok]]
+        cause[fn & ~vis] = "fn.unobservable"
+    cause[fn & (cause == "") & sh_g] = "fn.shift"
+    cause[fn & (cause == "") & (d_gp <= near) & lat_g] = "fn.offset"
+    miss = fn & (cause == "")                                  # absent: nothing within near
+    covered = ~fn | (cause == "fn.shift") | (cause == "fn.offset")      # a prediction is there (right, displaced or shifted)
+    rng = np.hypot(G[:, 0] - origin[0], G[:, 1] - origin[1]) if len(G) else np.zeros(0)
+    for ln in np.unique(dg.line):
+        idx = np.flatnonzero(dg.line == ln)
+        idx = idx[np.argsort(dg.s[idx])]
+        idx = idx[cause[idx] != "fn.unobservable"]               # the unobservable points are neutral for the lane's structure
+        mk, cv = miss[idx], covered[idx]
+        for a, b in _runs(mk):
+            interior = a > 0 and b < len(idx)
+            touches = (a == 0) != (b == len(idx))                # exactly one end
+            if interior and cv[:a].any() and cv[b:].any():
+                lab = "fn.gap"
+            elif touches and cv.any() and _prediction_ends_there(dp, dg, idx, a, b, near, ds):
+                lab = "fn.truncated"
+            else:
+                lab = None                                       # absent (a missed branch included): near or far by range
+            for j in idx[a:b]:
+                cause[j] = lab or ("fn.missed_far" if rng[j] >= far_m else "fn.missed_near")
+    for k in FN:
+        out[k] = float((cause == k).sum() * ds)
+
+    # ---- false prediction
+    cp = np.full(len(P), "", object)
+    cp[fp & sh_p] = "fp.shift"
+    tp_pts = ~fp
+    if tp_pts.any() and fp.any():
+        from scipy.spatial import cKDTree
+        t = cKDTree(P[tp_pts])
+        lid = dp.line[tp_pts]
+        for j in np.flatnonzero(fp & (cp == "")):
+            for q in t.query_ball_point(P[j], dup_r):
+                if lid[q] != dp.line[j]:
+                    cp[j] = "fp.duplicate"
+                    break
+    plen = {int(l): float((dp.line == l).sum() * ds) for l in np.unique(dp.line)}
+    for j in np.flatnonzero(fp & (cp == "")):
+        if plen[int(dp.line[j])] < spur_len:
+            cp[j] = "fp.spur"
+    cp[fp & (cp == "") & (d_pg <= near) & lat_p] = "fp.offset"
+    for ln in np.unique(dp.line):
+        idx = np.flatnonzero(dp.line == ln)
+        idx = idx[np.argsort(dp.s[idx])]
+        free = fp[idx] & (cp[idx] == "")
+        for a, b in _runs(free):
+            if (a == 0) != (b == len(idx)) and (~fp[idx]).any():          # a run at one end of a line that is right elsewhere
+                cp[idx[a:b]] = "fp.overshoot"
+    cp[fp & (cp == "")] = "fp.hallucinated"
+    for k in FP:
+        out[k] = float((cp == k).sum() * ds)
+    out["fn_total"], out["fp_total"] = float(fn.sum() * ds), float(fp.sum() * ds)
+    return out

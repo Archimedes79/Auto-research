@@ -105,6 +105,9 @@ class Quantitative:
                     flags = [dict(name=f.name, status=f.status, value=_plain(f.value), note=f.note)
                              for f in task.checks(sample, pred) if f.status != "ok"]
                     info = {k: v for k, v in pred.info.items() if isinstance(v, (int, float, str, bool))}
+                    pr = task.probe(sample, pred)
+                    if pr:                                                       # descriptors and error causes for the probing
+                        info["probe"] = {k: round(float(v), 4) for k, v in pr.items()}
                     store.add(sample.ref, counts, scores, support, flags, info)
                     if progress and n % progress == 0:
                         dt = time.perf_counter() - t0

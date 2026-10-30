@@ -712,10 +712,14 @@ def _():
         assert "20 frames" in buf.getvalue()
 
 
-def main() -> int:
+def main(only=()) -> int:
+    from evalsuite.selftest_lanes import CHECKS as LANE_CHECKS
+    checks = CHECKS + LANE_CHECKS
+    if only:                                                               # name filter: python -m evalsuite selftest lane
+        checks = [c for c in checks if any(o in c[0] for o in only)]
     t0 = time.time()
     bad = 0
-    for name, fn in CHECKS:
+    for name, fn in checks:
         t = time.time()
         try:
             fn()
@@ -723,9 +727,9 @@ def main() -> int:
         except Exception:                                                  # noqa: BLE001
             bad += 1
             print(f"FAIL  {name}\n{traceback.format_exc()}")
-    print(f"evalsuite selftest: {len(CHECKS) - bad}/{len(CHECKS)} checks passed in {time.time() - t0:.0f} s")
+    print(f"evalsuite selftest: {len(checks) - bad}/{len(checks)} checks passed in {time.time() - t0:.0f} s")
     return 1 if bad else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

@@ -310,3 +310,13 @@ class Task(ABC):
     def guide(self) -> str:
         """text for the html index: how to read the pictures"""
         return ""
+
+    def probe(self, sample: Sample, pred: Prediction) -> Dict[str, float]:
+        """optional, for the probing (`probing.py`): numbers of ONE frame, stored with it. 'tag.<name>': a property of the situation
+        (0 / 1, or a number: curvature, range, night ...); 'cause.<name>': the amount of error assigned to a cause, in one unit that
+        adds up over frames (e.g. metres of lane). Cheap, deterministic, no network access."""
+        return {}
+
+    def causes(self) -> Dict[str, Tuple[str, str]]:
+        """optional: cause name (without the 'cause.' prefix) -> (what it is, what to improve: model / code / evaluation)"""
+        return {}

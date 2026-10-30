@@ -6,6 +6,7 @@
     suite.qual.videos(2)                                                # 2 random sequences as videos
     run = suite.quant.run(n_scenes=20)                                  # numbers over many videos, stored per frame
     suite.quant.table(run); suite.quant.outliers(run); suite.quant.report(run)
+    suite.probe.scan(run)                                               # where do the errors come from: budget, situations, random examples
     suite.check()                                                       # does the adapter keep the contracts?
 `state` is the suite-wide default of how the Subject's memory is treated: 'carry' (frame to frame along a scene, as deployed) or
 'reset' (every frame independent).
@@ -27,8 +28,10 @@ class EvalSuite:
         os.makedirs(self.out, exist_ok=True)
         from .qualitative import Qualitative
         from .quantitative import Quantitative
+        from .probing import Prober
         self.qual = Qualitative(self)
         self.quant = Quantitative(self)
+        self.probe = Prober(self)
 
     def check(self) -> List[Dict[str, Any]]:
         """run the contract checker of the adapter (see check.py); a list of {name, ok, note}"""

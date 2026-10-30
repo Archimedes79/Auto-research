@@ -9,7 +9,7 @@ General and problem-independent: the method (`METHOD.md`), seven agent roles (`a
 | `templates/` | `problem`, `paper_note`, `group_summary` (with its digest), `experiment` (card -> detail plan -> summary, next to `experiment.json`), `plan` (tree + end of loop) |
 | `prompts/` | `research_steps.md` (P1 + P2 in four steps started by hand), `loop.md` (P3 + P4, pasted after `/loop`) |
 | `tools/` | `run.py` (launcher: ledger row, commit + tag per run, TEST guard, retries), `ledger.py`, `schedule.py`, `decide.py` (the written rule as code), `check_numbers.py`, `check_structure.py`, `clean_temp.py`, `install_agents.py`, `guard_hook.py` (gate hook: Write / Edit of protected files only with a grant under a decided D<n>), `metrics.py` (per-loop table: runs, GPU hours, verdicts, prediction hits, TEST uses), `project.py` (finds the problem and its `project.json`), `selftest.py` |
-| `evalsuite/` | the evaluation suite for any network: a qualitative suite (one frame, random frames, network-part debug views, result videos) and a quantitative suite (numbers over all videos, outlier trace-back to videos and frames, paired comparison) behind three small interface boxes (Source / Subject / Task); `python -m evalsuite selftest`; ported per problem by an adapter (`bev_fusion/evaluation/`); numpy + matplotlib, not standard-library only - see `evalsuite/README.md` |
+| `evalsuite/` | the evaluation suite for any network: a qualitative suite (one frame, random frames, network-part debug views, result videos) and a quantitative suite (numbers over all videos, outlier trace-back to videos and frames, paired comparison) behind three small interface boxes (Source / Subject / Task); plus a probing of where the errors come from (error budget by cause, situations, random examples) and a ready-made lane-centre-line task (picture level first, then sparse; common metrics); `python -m evalsuite selftest`; ported per problem by an adapter (`bev_fusion/evaluation/`, `bev_fusion_lane_center/evaluation/lane_suite.py`); numpy + scipy + matplotlib, not standard-library only - see `evalsuite/README.md` |
 | `history/` | the long roadmap and reviews of 2026-10-25 |
 | `ROADMAP.md` | the reviews of the system (own, independent, and the loop-18 lead's second review with R1-R10 / P1-P10), weaknesses ranked by cost, target packages, the migration, and what the person decided |
 | `config.json` | the default problem folder |
@@ -42,4 +42,4 @@ python tools/install_agents.py [--check]
 python tools/clean_temp.py loopNN [--move | --delete]
 python tools/selftest.py
 ```
-All tools in `tools/` are standard-library Python 3 (any interpreter in the WSL or on Windows); `evalsuite/` needs numpy and matplotlib (the `gcar` environment).
+All tools in `tools/` are standard-library Python 3 (any interpreter in the WSL or on Windows); `evalsuite/` needs numpy, scipy and matplotlib (the `gcar` environment).

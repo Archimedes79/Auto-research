@@ -113,4 +113,29 @@ Rules: the core imports only numpy (+ matplotlib / PIL / cv2 lazily in `render/`
 - `Quantitative.run(on_frame=...)` calls a callback for every frame run; the BEV `eval` uses it to write the legacy `scene_records.pkl`. `Sampler.spread(min_index=...)` leaves out the first frames of each scene.
 - `TapRecorder` never breaks a forward pass: a tap that cannot be read from a network's output is skipped and counted; missing optional modules are skipped.
 - The BEV adapter replaced eleven scripts' worth of glue: `metrics.py`'s `DetMeter` was made additive per frame (`frame_rows` / `reduce_rows`, tested against the original global matching on random frames), the old evaluation scripts are archived, their callers rewritten (`bev_probe.py` for one-off probes, `bev_legacy.py` for the pickles of runs evaluated before the suite), and `evaluate_run.py` stays as a deprecated forwarding stub while the running lane `temp/study/lane3.sh` calls it.
+- Lane centre lines and probing (added the same day, see section 8).
 - Proof: `python -m evalsuite selftest` (29 checks on the toy adapter), `python evaluation/bev_selftest.py` (8 checks on a synthetic BEV world), `--golden` (the 3738 numbers of the former `evaluate_run.py` on 24 real val frames reproduced to 1e-9 relative on the CPU: same keys, same values, and the same per-scene records), `--real` (the adapter, every view, a quantitative run, outliers, report and a video on a real run).
+
+## 8. Lane centre lines, picture first then sparse, and probing (added 2026-10-30)
+
+New files: `lanes/` (library), `probing.py` (core), `adapters/lanes_synth.py` (test bed), `selftest_lanes.py`; changes of the core: `Task.probe()` / `Task.causes()` (optional), the run store keeps what `probe()` returns in the frame record (`info['probe']`), `suite.probe`, the CLI command `probe`.
+
+```
+ adapter delivers                         lanes/ (generic, numpy + scipy)                          core (generic)
+ reference {lanes | mask}  ----+
+ outputs   {prob | lanes}   ---+--> task.lane_data: picture AND graph of GT and prediction     Runner / RunStore / outliers / compare / views
+                                    (graph -> picture: rasterize;  picture -> graph: thin + trace = skeleton_graph)
+                                    LaneImageMetric  'img'  : tolerant P / R / F1 / quality, skeleton, soft Dice, AP     (picture level)
+                                    LaneSparseMetric 'geo'  : P / R / F1 @ tau, chamfer, lanes found, 1:1 F1, direction, vertices
+                                    LaneTopoMetric   'topo' : TOPO marbles, junction F1                                  (sparse level)
+                                    LaneTask.probe : tag.* descriptors + cause.* = error_budget(): every missing / false metre -> one cause
+                                    LaneOverviewView: GT | prediction | errors on the lines | errors on the image | error budget | tags
+                                                                                                      probing.Prober over the stored run:
+                                                                                                        budget (cause -> amount, fix = model / code / evaluation)
+                                                                                                        situations (tags, dominant cause, worst decile, flags; excess error)
+                                                                                                        sample (video first, then frame) and scan (html)
+```
+
+Decisions: (1) the picture level and the sparse level are two Metrics of one Task and run on the same output, so a dense head is scored first as an image and then, after thinning and tracing, as a graph (`quant table` shows both); a graph head is drawn into a picture for the first level. (2) Every number is a function of additive counts, so the probing and the outlier search work on stored runs without the network. (3) The error budget is exclusive and exact: each missing or false point gets exactly one cause by a fixed priority order, so the causes add up to the frame's error (tested against a brute-force count). (4) A cause carries its remedy (model, code, evaluation): the probing tells where to work, not only where it hurts. (5) The lane library has no project knowledge: `bev_fusion_lane_center/evaluation/lane_suite.py` adds the data (VAL graphs, dense maps, registry graphs) and wraps the project's own metrics (`bootstrap.frame_records`, `topo_metrics`) as additive Metrics, so the numbers of `evaluate.py` appear next to the common ones and equal them (selftest).
+
+Limits worth knowing: a thinned picture merges parallel lanes closer than about 3 cells, so duplicates are invisible at the picture level (they show in `dup_frac` of a graph head); the skeleton graph is undirected, so direction accuracy and directed TOPO only exist for graph heads; a shifted whole prediction is detected by a best-shift search within 2 m (a larger displacement is reported as missing lane plus hallucination); 'hallucinated' can also mean that the ground truth is missing at that place (the remedy text says so).

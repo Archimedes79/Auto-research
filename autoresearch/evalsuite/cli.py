@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", default="eval_out")
     p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("selftest")
+    sub.add_parser("selftest").add_argument("only", nargs="*", help="run only the checks whose name contains one of these words")
     sub.add_parser("selftest-adapter")
     ls = sub.add_parser("list")
     ls.add_argument("scene", nargs="?")
@@ -133,6 +133,21 @@ def build_parser() -> argparse.ArgumentParser:
     t = n.add_parser("timing")
     t.add_argument("--frame", default=None)
     t.add_argument("--n", type=int, default=30)
+    pr = sub.add_parser("probe").add_subparsers(dest="mode", required=True)
+    for name in ("budget", "situations", "sample", "scan"):
+        a = pr.add_parser(name)
+        a.add_argument("run")
+        if name == "sample":
+            a.add_argument("situation", help="a situation name from `probe situations RUN`, e.g. 'dominated by fn.gap'")
+            a.add_argument("-n", type=int, default=6)
+        if name in ("sample", "scan"):
+            a.add_argument("--seed", type=int, default=0)
+        if name == "scan":
+            a.add_argument("-k", type=int, default=3, help="random examples per situation")
+            a.add_argument("--top", type=int, default=6, help="how many situations (by excess error)")
+            a.add_argument("--no-render", action="store_true")
+        if name == "situations":
+            a.add_argument("--min-frames", type=int, default=3)
     return p
 
 
@@ -140,7 +155,7 @@ def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
     if a.cmd == "selftest":
         from .selftest import main as selftest
-        return selftest()
+        return selftest(a.only)
     if not a.adapter:
         raise SystemExit("--adapter module:function is required")
     from .suite import EvalSuite
@@ -170,6 +185,21 @@ def main(argv=None) -> int:
             else:
                 for o in suite.qual.videos(a.m, a.seed, a.view, a.fps, a.max_frames, a.scenes):
                     print(f"{o['scene']}: {o['video']['path']} ({o['video']['codec']}, {o['frames']} frames), scores: {o['scores_strip']}")
+        elif a.cmd == "probe":
+            pb = suite.probe
+            if a.mode == "budget":
+                b = pb.budget(a.run)
+                print(_fmt_table({f"{x['cause']} ({x['target']})": x["amount"] for x in b}))
+                print("where to work:", {k: round(v, 3) for k, v in pb.targets(b).items()})
+            elif a.mode == "situations":
+                for s in pb.situations(a.run, a.min_frames):
+                    print(f"{s['excess']:+.2f}  {s['name']:38s} n={s['n']:<4d} of all {s['share']:.0%}  error share {s['error_share']:.0%}  scenes {s['scenes']}  ({s['kind']}: {s['desc']})")
+            elif a.mode == "sample":
+                for d in pb.sample(a.run, a.situation, a.n, a.seed):
+                    print(f"{d['label']}: error {d['error']:.1f}, mostly {d['top_cause'] or '-'}  {d['images'].get('overview', '')}")
+            else:
+                res = pb.scan(a.run, a.k, a.top, a.seed, render=not a.no_render)
+                print(res["index"])
         else:
             qt = suite.quant
             if a.mode == "run":
