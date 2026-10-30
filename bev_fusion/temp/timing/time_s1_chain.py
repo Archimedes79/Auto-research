@@ -1,6 +1,7 @@
 """One-off: milliseconds per frame of the S1 camera chain on an IDLE GPU (plan 10 level 6; experiments/s1a_lift_pd_vs_p section 4).
 Batch 1, CUDA-synchronised median of 300 calls after 50 warm-ups (evaluation/metrics.ms_per_frame), fp32 and fp16 autocast.
-Blocks: the frozen image heads (ResNet-50 + neck + DepthNet, random weights: timing does not depend on them), the lift of every
+Blocks: the frozen image heads (ResNet-50 + neck + DepthNet, random weights: timing does not depend on them), the light stride-8 / 16
+encoders of plan 2.7 (ResNet-18, EfficientNet-B0, B2: image -> depth probability + context), the lift of every
 preset, and the whole module from cached features (lift + reduce + trunk + head) for the presets ours / dualbev / simplebev /
 lss, plus our design with the stride-1 detail path and with trunk width 1.0. The result is INVALID (exit 1) if another process
 uses the GPU before or after (checked with nvidia-smi: compute apps and utilisation over 10 s) unless --force is given.
@@ -65,6 +66,12 @@ def main():
     with torch.no_grad():
         heads = FrontCameraEncoder().to(dev).eval()
         time_it("image heads (ResNet-50 + neck + DepthNet)", lambda: heads.image_features(img, cam_vec))
+        from light_encoder import LightImageEncoder
+        for bb in ("resnet18", "efficientnet_b0", "efficientnet_b2"):
+            for st in (8, 16):
+                enc = LightImageEncoder(bb, out_stride=st, pretrained=False).to(dev).eval()
+                time_it(f"light encoder {bb} stride {st} ({n_params(enc) / 1e6:.1f} M)", lambda: enc.image_features(img, cam_vec))
+                del enc
         for name, cfg in (("ours", S1Config.preset("ours")), ("dualbev", S1Config.preset("dualbev")),
                           ("simplebev", S1Config.preset("simplebev")), ("lss", S1Config.preset("lss")),
                           ("ours + detail path 32", S1Config.preset("ours", detail=32)),
