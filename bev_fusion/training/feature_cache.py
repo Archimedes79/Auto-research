@@ -135,9 +135,17 @@ class CachedFrontRadarDataset(FrontRadarDataset):
     are stored once per sample as .npz and read back exactly (float32 / int64 as computed): reading the ~35 sweep files of a
     sample costs ~0.3-0.6 s, the cached entry ~5 ms (t1, 2026-10-26: the loader was the bottleneck of training)."""
 
-    def __init__(self, *args, store, radar_cache=None, **kw):
+    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", **kw):
         super().__init__(*args, **kw)
         self.store, self.radar_cache = store, radar_cache
+        if camera_features == "bevfusion":                 # the cache was made with BEVFusion's test pipeline (scale 0.48, crop 32 / 176)
+            try:
+                from .bevfusion_camera import bevfusion_ida
+            except ImportError:
+                from bevfusion_camera import bevfusion_ida
+            self.ida = bevfusion_ida()
+        elif camera_features != "dualbev":
+            raise ValueError(camera_features)
         self._rsig = radar_signature() if radar_cache else None
 
     def _image(self, sd):

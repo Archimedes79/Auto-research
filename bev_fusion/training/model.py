@@ -74,6 +74,7 @@ def _fallbacks():
 
 @dataclass
 class ModelConfig:
+    camera_features: str = "dualbev"   # "dualbev" (frozen DualBEV heads, stride 16) | "bevfusion" (cached BEVFusion features, stride 8; needs feature_cache)
     lift: str = "pd"
     cam_temporal: str = "window_memory"
     rad_temporal: str = "none"
@@ -133,8 +134,20 @@ class BEVFusionModel(nn.Module):
             self.camera.freeze_camera_heads()
         del self.camera.lift, self.camera.out_conv                   # replaced by the model's own lift
         n_ctx, nz = 80, len(cfg.z_levels)
+        if cfg.camera_features not in ("dualbev", "bevfusion"):
+            raise ValueError(cfg.camera_features)
+        if cfg.camera_features == "bevfusion":                       # cached BEVFusion features: stride 8, frustum conventions
+            if cfg.lift == "s":
+                raise ValueError("camera_features='bevfusion' is not supported with lift 's'")
+            try:
+                from .bevfusion_camera import DEPTHS
+            except ImportError:
+                from bevfusion_camera import DEPTHS
+            lift_kw = dict(depth_centres=DEPTHS, frustum_cells=True)
+        else:
+            lift_kw = dict(depth_centres=depth_centres())
         if cfg.lift in ("pd", "p"):
-            self.lift = LiftPD(self.grid, depth_centres(), use_depth=(cfg.lift == "pd"), oversample=cfg.oversample)
+            self.lift = LiftPD(self.grid, use_depth=(cfg.lift == "pd"), oversample=cfg.oversample, **lift_kw)
         elif cfg.lift == "s":
             self.lift = _fallbacks().LiftS(self.grid, depth_centres())
         else:

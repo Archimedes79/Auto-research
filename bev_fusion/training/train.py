@@ -128,6 +128,8 @@ def build(cfg):
         if getattr(mcfg, k) != v:
             raise ValueError(f"model.{k} = {getattr(mcfg, k)} but loss.{k} = {v}: the head layout must match the loss")
     cached = bool(cfg.feature_cache)
+    if mcfg.camera_features != "dualbev" and not cached:
+        raise ValueError(f"camera_features={mcfg.camera_features!r} needs a feature_cache")
     model = CachedBEVFusionModel(mcfg) if cached else BEVFusionModel(mcfg)
     return model, loss, cached
 
@@ -150,7 +152,8 @@ def make_datasets(cfg):
     for split, names in ((cfg.train_split, cfg.train_scenes), (cfg.val_split, cfg.val_scenes)):
         if cfg.feature_cache:
             out.append(CachedFrontRadarDataset(root, cfg.version, scenes(split, names),
-                                               store=FeatureStore(cfg.feature_cache), radar_cache=cfg.radar_cache or None, **kw))
+                                               store=FeatureStore(cfg.feature_cache), radar_cache=cfg.radar_cache or None,
+                                               camera_features=cfg.model.get("camera_features", "dualbev"), **kw))
         else:
             out.append(FrontRadarDataset(root, cfg.version, scenes(split, names), **kw))
     return out
