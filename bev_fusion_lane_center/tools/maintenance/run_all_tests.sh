@@ -16,6 +16,7 @@ run "connectivity / duplicate / range metrics" topo_metrics.py
 run "metric response to controlled errors"  test_metric_response.py
 run "evaluate.py reproduces the golden numbers (cached, all registry names)" evaluate.py --golden check --cached-only
 run "builder spec tests (18)"               test_p16_spec.py
+run "output stage simplify_dp (9)"          test_dp_simplify.py
 run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
 run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
 run "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest

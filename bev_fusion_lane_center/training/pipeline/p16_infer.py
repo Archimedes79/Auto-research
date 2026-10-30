@@ -647,10 +647,62 @@ def anchor_junctions_fast(V, E, jmap, thr=0.3, r_edge=3.0, r_free=8.0, ang_hi=10
     return np.asarray(V), E
 
 
-def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_frac=1.0, clean=True, bubble_r=2.5, spur_len=5.0, contract=0.0, aux=False, glue_r=0.0, glue_lo=10.0, glue_hi=80.0, junc_thr=0.0, junc_edge=3.0, junc_free=8.0, junc_ang=100.0, fork_tau=0.0, fork_peak=0.6, fork_r=10.0, fork_vtx=0.0, fork_cov=0.0, reloc_thr=0.0, reloc_shift=8.0, reloc_tol=0.8, fast=True, tau_low=0.0, fork_prune=0.0, fork_prune_m=-1.0, tau_decay=0.0):
+def _dp_keep(q, eps):
+    """indices kept by Douglas-Peucker (iterative) on the polyline q [n,2] with tolerance eps (m); the ends are always kept.
+    Same rule as evaluation/sparse_lanes/sparse_metrics._dp_keep (the oracle count vert100_dp); keep the two equal."""
+    n = len(q)
+    if n <= 2:
+        return list(range(n))
+    keep = np.zeros(n, bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b <= a + 1:
+            continue
+        ab = q[b] - q[a]
+        s = np.clip(((q[a + 1:b] - q[a]) @ ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0)
+        d = np.linalg.norm(q[a + 1:b] - (q[a] + s[:, None] * ab), axis=1)
+        k = int(np.argmax(d))
+        if d[k] > eps:
+            keep[a + 1 + k] = True
+            stack += [(a, a + 1 + k), (a + 1 + k, b)]
+    return [int(i) for i in np.nonzero(keep)[0]]
+
+
+def simplify_dp(g, eps):
+    """output stage (E257, decision D20): remove the interior vertices of every polyline that the Douglas-Peucker rule (tolerance eps, m) does not need.
+    Kept: both ends of every polyline, every node id that occurs in more than one polyline (junctions, links), and the DP vertices between those anchors, so connectivity,
+    the polyline pairs of `edges` and the junction metrics are unchanged and no removed vertex is farther than eps from the new polyline. Returns a new graph dict (pts, edges, nodes)."""
+    from collections import Counter
+
+    assert g.get("nodes") is not None and len(g["nodes"]) == len(g["pts"]), "simplify_dp needs a node id list for every polyline"
+    cnt = Counter(i for nd in g["nodes"] for i in nd)
+    pts, nodes = [], []
+    for q, nd in zip(g["pts"], g["nodes"]):
+        q = np.asarray(q, np.float64)
+        n = len(q)
+        assert len(nd) == n, "simplify_dp: node ids and points of a polyline differ in length"
+        if n < 3:
+            pts.append(q)
+            nodes.append(list(nd))
+            continue
+        anchors = sorted({0, n - 1} | {j for j in range(n) if cnt[nd[j]] > 1})
+        keep = set(anchors)
+        for a, b in zip(anchors, anchors[1:]):
+            keep.update(a + k for k in _dp_keep(q[a:b + 1], eps))
+        idx = sorted(keep)
+        pts.append(q[idx])
+        nodes.append([nd[j] for j in idx])
+    return dict(pts=pts, edges=list(g["edges"]), nodes=nodes)
+
+
+def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_frac=1.0, clean=True, bubble_r=2.5, spur_len=5.0, contract=0.0, aux=False, glue_r=0.0, glue_lo=10.0, glue_hi=80.0, junc_thr=0.0, junc_edge=3.0, junc_free=8.0, junc_ang=100.0, fork_tau=0.0, fork_peak=0.6, fork_r=10.0, fork_vtx=0.0, fork_cov=0.0, reloc_thr=0.0, reloc_shift=8.0, reloc_tol=0.8, fast=True, tau_low=0.0, fork_prune=0.0, fork_prune_m=-1.0, tau_decay=0.0, dp_eps=0.0):
     """tree -> DAG by path union (nodes in descending path validity): a node within cov_r of an existing edge is snapped onto it (edge split: fork / merge), a node near a vertex reuses it,
     edges that duplicate an existing path are skipped. `pair` = optional learned duplicate suppression (alias of a node to the better node).
     tau_low > 0: hysteresis, a node with validity between tau_low and tau is admitted if its parent is admitted (a lane is extended, no lane is started)."""
+    if dp_eps < 0 or (dp_eps > 0 and aux):
+        raise ValueError("dp_eps must be >= 0 and cannot be combined with aux=True (the token map of aux refers to the unsimplified vertices)")
     pos = r["pos_rev"] if "pos_rev" in r else r["pos"]
     thr = tau if tau_decay <= 0 else tau * np.exp(-tau_decay * r["level"].astype(np.float64))  # loop 18: the path validity is a cumulative product, so a deeper node is admitted at a lower threshold
     alive = (r["valid"] > 0) & (r["pi"] >= thr)
@@ -775,6 +827,8 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, seg_r=1.5, seg_fra
     V = Vall[used]
     ve = [(remap[a], remap[c]) for a, c in sorted(E)]
     g = C.graph_from_vertices(V, ve)
+    if dp_eps > 0:  # output stage (E257 / D20): drop interior vertices of straight runs, geometry kept within dp_eps; off by default (guard at the top: aux and dp_eps exclude each other)
+        g = simplify_dp(g, dp_eps)
     if aux:  # vertex positions, the node whose token a vertex inherits (the highest path validity among the nodes snapped onto it) and the vertex-level edges
         return g, dict(V=V, src=[vsrc.get(v, -1) for v in used], edges=ve)
     return g

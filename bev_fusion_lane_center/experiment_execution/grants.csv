@@ -8,3 +8,4 @@ granted,until,path,decision,note
 2026-10-26T08:38,2026-10-26T14:38,../autoresearch/tools/,D16,"D16: deploy the simplified run/tick/schedule/ledger/selftest (state derived from run records), tested in a scratch copy"
 2026-10-26T08:38,2026-10-26T14:38,../autoresearch/METHOD.md,D16,"D16: two lines of METHOD.md (wake-up routine, read the records first)"
 2026-10-30T18:53,2026-10-30T20:53,project.json,D21,"D21: protected list narrowed to the truth files and the gate itself (tools/ and METHOD.md leave it, guard_hook.py joins it)"
+2026-10-30T21:04,2026-10-31T01:04,PROBLEM.md,D20,"D20: one sentence on how the vertex budget is counted (after the output simplification, node-id count next to it)"

@@ -15,6 +15,7 @@ camera + radar -> GaussianCaR BEV features (frozen, cached) -> dense lane heads 
 ## Metrics and protocol
 - One entry point: `evaluation/evaluate.py <registry name> [--compare <name>]` (names in `models/registry.json`); protocol in `evaluation/PROTOCOL.md` (splits, seeds, noise band 0.010, failure series, map errors, timing, TEST rule, TEST log `evaluation/TEST_USAGE_LOG.md`).
 - Headline: **Q** at <= 14.3 vertices per 100 m, **topo F1** (connectivity), **lanes found**, **R@1 far** (> 40 m), route success (2 seeds), ms per frame. S is kept for the history; FL and dup_frac are checks. Metric response tests: `evaluation/METRIC_RESPONSE.md`.
+- Vertex count (D20, 2026-10-30): the vertex budget is quoted for the graph after the output stage `simplify_dp` (Douglas-Peucker 0.2 m, `assemble(dp_eps=0.2)`, registry names `*_dp`: champion 14.8 -> 9.5, fast_recall 15.0 -> 9.9 per 100 m, E257); tables of such systems give the node-id count of the unsimplified graph next to it. The stage is off by default, the route head and the map pipeline (`aux=True`) work on the unsimplified vertices, and S of a `*_dp` card is not comparable with S of other cards (it rewards the lower count); Q comparisons name which count they use.
 
 ## Current best (VAL 873 frames, `evaluate.py`, 2026-10-25; ms from the loop-18 report)
 | system (registry name) | Q | topo F1 | lanes found | R@1 far | J | S | ms per frame |
