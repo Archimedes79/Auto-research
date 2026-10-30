@@ -1,7 +1,4 @@
-train:fusion_gate
-train:camtemp_gru
-train:fusion_cmx
-train:radar_pillars
+cfg:t3_vel10:678ece8
 cfg:t3_ref_long:1a6b8d8
 train:trunk_second
 train:lift_s
