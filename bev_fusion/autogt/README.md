@@ -95,3 +95,13 @@ The generator was `training/gt_bev.py` (+ the first flow version `training/gt_fl
 `temp/checks/` (projection checks, pitch / time-offset tests, Boston debug, map-alignment per location, viewers, videos); they
 are folded into this suite and removed - git history before the commit "autogt suite" has them. What they found is in
 `../plan.md` section 9.5.
+
+## Using the velocity targets in a loss (note from the t1_r4_soa review, 2026-10-30)
+About 80 % of the supervised object cells are static (velocity 0) and 20 % move: an L1 / MSE over all object cells is minimised by
+predicting zero, and the gradient of a dense motion head at the BEV feature was measured ~18x below the objects group. Balance the
+two groups (weight moving cells, `|velocity| > 1 m/s`, separately from static ones, or use a loss normalised per group), use
+`flow_weight` (0 = unknown) as the mask and `flow_sigma` as an uncertainty (e.g. a Huber / beta-NLL scale), and report speed errors
+split into moving and static cells with the zero predictor next to them. The signal is in the input: the median radar Doppler inside
+a moving box reproduces the GT radial speed (corr 0.989, review notes in `temp/review/observe_2026-10-30/NOTES.md`). A `moving`
+mask is not stored in the GT on purpose (it would change the generator signature and invalidate the caches); derive it from
+`velocity`.
