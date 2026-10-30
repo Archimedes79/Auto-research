@@ -1,5 +1,3 @@
-cfg:t3_cam_zsum:1a6b8d8
-cfg:t3_cam_adapter:1a6b8d8
 train:fusion_gate
 train:camtemp_gru
 train:fusion_cmx
