@@ -133,7 +133,8 @@ def run(root=None, verbose=True):
         left = sorted(os.listdir(d))
         assert left == ["data", "r.pdf"] and os.path.getsize(os.path.join(d, "r.pdf")) > 20000 and len(rep["samples"]) == 2, left
         assert not [f for _, _, fs in os.walk(d) for f in fs if f.lower().endswith((".png", ".jpg"))], "no picture files"
-        assert rep["written"] == len(os.listdir(os.path.join(d, "data", rep["signature"]))) - 0, rep
+        stored = os.listdir(os.path.join(d, "data", rep["signature"]))
+        assert "index.json" in stored and rep["written"] == len([f for f in stored if f.endswith(".npz")]), rep
     from . import clean as cleanmod                                                  # the cleanup lists, moves, deletes only its own
     cleanmod.selftest()
     # 6 a one-second video encodes to H.264 and plays back (read-back check inside encode)
