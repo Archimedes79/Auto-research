@@ -22,6 +22,7 @@ Velocity / flow
   (radial error against the held-out Doppler: RMSE / median / within 0.5 m/s; track only vs corrected vs zero velocity)
 """
 import collections
+import hashlib
 import math
 import os
 
@@ -31,6 +32,9 @@ from shapely.geometry import Polygon
 from . import flow as flowmod
 from .nuscenes_adapter import RADARS, NuScenesScene
 from .suite import AutoGT
+
+
+SRC_HASH = hashlib.sha1(open(__file__, "rb").read()).hexdigest()[:10]       # version of the checks: stored in every accumulator
 
 
 def _cell(grid, x, y):
@@ -44,6 +48,7 @@ class Checks:
 
     def __init__(self, grid):
         self.grid, self.st = grid, collections.defaultdict(list)
+        self.version = SRC_HASH
         self.flags = collections.Counter()
         self.prev_world, self.scene = {}, None
         self.per_scene = collections.OrderedDict()

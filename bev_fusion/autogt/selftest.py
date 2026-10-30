@@ -152,6 +152,9 @@ def run(root=None, verbose=True):
         assert len([f for f in os.listdir(sd2) if f.startswith("_scene_")]) == 3
         r3 = report(root, "v1.0-mini", os.path.join(d, "c.pdf"), os.path.join(d, "d2"), workers=2, light=True, **kw)       # resumes
         assert r3["keyframes"] == r1["keyframes"] and r3["written"] == 0, r3
+        r4 = report(root, "v1.0-mini", os.path.join(d, "e.pdf"), os.path.join(d, "d2"), workers=1, scenes=kw["scenes"], stride=10,
+                    samples=3, verbose=False)                                       # another stride must NOT reuse the saved sequences
+        assert r4["keyframes"] > r1["keyframes"] and r4["written"] > 0, r4
     from . import clean as cleanmod                                                  # the cleanup lists, moves, deletes only its own
     cleanmod.selftest()
     # 6 a one-second video encodes to H.264 and plays back (read-back check inside encode)
