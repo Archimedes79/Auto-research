@@ -102,6 +102,29 @@ Mirko's proposals are the two standard lift families of the literature; both are
 | differentiable | torch.autograd.gradcheck on small tables; the gradient reaches the depth head and the backbone |
 | fast | ms per frame per lift, batch 1, idle GPU; Fast-BEV's 0.006 ms gather as the reference for P |
 
+### 2.7 PROPOSAL (2026-10-30, not decided): finer image features (stride 8) from a much cheaper encoder
+Why: the oracle lift at the real encoder's stride 16 keeps road 1.00 and vehicles 0.98 but only 0.17 of the 40-60 m lane lines even with exact depth (stride 8: 0.81, `temp/checks/check_oracle_lift_stride16.py`). Arithmetic behind it (input 256 x 704, f about 557 px, camera 1.5 m high): a ground point at depth z lies f h / z rows below the horizon: 42 px at 20 m, 21 px at 40 m, 14 px at 60 m, so 40-60 m is 7 rows - below one cell at stride 8 and 0.4 cell at stride 16; the far range needs depth from the head AND more pixels (a horizon strip at higher scale is the later option; full-resolution rows give 16 rows for 40-60 m).
+Cost now: ResNet-50 29.4 + CustomFPN 4.4 + DepthNet 35.6 = 71.4 GFLOPs at 16 x 44 cells; the DepthNet (three 512-channel BasicBlocks + ASPP) is the largest part and scales with the number of cells, so stride 8 with the same head would be about 4 x its cost.
+Candidate (E8): ImageNet-initialised light backbone to stride 32 + FPN with 128 channels to stride 8 + light heads at stride 8 (depth: 3 x 3 conv 128, 3 x 3 conv 128, 1 x 1 -> 118 bins; context: 1 x 1 -> 80; the camera-aware SE gate of the 27-vector kept). FLOPs at 256 x 704 (`temp/checks/encoder_flops.py`, 2 x MACs, random weights; 32 x 88 = 2,816 cells, 4 x the cells of now):
+| backbone | params M | backbone GFLOPs | + FPN + heads at stride 8 |
+|---|---|---|---|
+| current: ResNet-50 + CustomFPN + DepthNet (stride 16) | - | 29.4 | 71.4 |
+| ResNet-18 | 11.8 | 13.0 | 15.8 |
+| ResNet-34 | 21.9 | 26.3 | 29.1 |
+| EfficientNet-B0 | 4.7 | 2.8 | 5.5 |
+| EfficientNet-B2 | 8.4 | 4.7 | 7.5 |
+| EfficientNet-B4 | 18.3 | 10.8 | 13.6 |
+| RegNetY-800MF | 6.3 | 6.0 | 8.8 |
+| MobileNetV3-large | 3.6 | 1.5 | 4.3 |
+| ConvNeXt-T | 28.5 | 32.0 | 34.9 |
+FLOPs are not latency: depthwise-convolution networks (EfficientNet, MobileNet, RegNet groups) run slower per FLOP on a GPU than ResNets; the ms per frame come from the idle-GPU timing of the S1a card (section 4), with the E8 candidates added.
+Training recipe (nothing downloaded or trained yet):
+1. initialise the backbone from ImageNet weights (torchvision / timm, 20-30 MB; needs Mirko's OK); FPN and heads random
+2. distillation from the frozen DualBEV heads, whose outputs are already cached for 58 k front frames (`training/feature_cache.py`): the student's stride-8 depth probabilities averaged over 2 x 2 cells match the teacher's depth distribution (KL) and a 1 x 1 projection of the student's context matches the teacher's context (cosine / MSE); this gives a student that is as good as the teacher at the teacher's resolution at a fraction of the cost, and finer cells to learn on; it inherits the teacher's depth limits (sharp near, blurred far)
+3. BEV task loss through the lift (S1 driver, `training/train_s1.py`; Simple-BEV shows a pull lift trains from the task loss alone), lift PD against P as in S1a, so the student can improve beyond the teacher where the task needs it
+4. optional extra depth supervision, each a decision for Mirko: lidar depth (80 GB, the BEVDepth recipe, +2.2 mAP there), sparse radar ranges projected into the image (free, accurate, sparse), the map's road plane as depth for road pixels (free; flat-road error on slopes), Depth Anything V2 Small (24.8 M, Apache-2.0, metric outdoor checkpoint trained on Virtual KITTI to 80 m) run OFFLINE as a dense depth teacher on the sweeps (not in the loop: a ViT at this size costs about as much as the whole current image side - my estimate, not measured)
+Downloadable pretrained solutions found (web, 2026-10-30; none matches 'stride 8 + camera-aware depth distribution + light + our bins' as it is): GaussianCaR checkpoints (Apache-2.0, Hugging Face `santimontieleu/gaussiancar`, nuScenes vehicle and map, EfficientViT-L2 at stride 8 with per-pixel depth-bin logits, but camera + radar, 75.6 ms for the whole net on a 4090 at 448 x 800, no camera-only or light variant); PointBeV checkpoints (MIT, four EfficientNet-B4 files at 224 x 480 and 448 x 800, lane IoU 49.6, depth-free pull, the page names no stride); DINOv3 ConvNeXt-T (timm `convnext_tiny.dinov3_lvd1689m`, licence 'dinov3-license': terms not read) and DINOv2 + Metric3Dv2 (+7.4 vehicle IoU in LSS, 2501.08118) give stronger frozen features but are not cheaper (ConvNeXt-T 32 GFLOPs here; ViT patch 14 / 16 stride). The recipe above is therefore the main route; the checkpoints are references and possible initialisations.
+
 ## 3. Radar: a learned density per detection (variant; the first version is the simple block of section 12 "Decided": hard raster + properties + 2 convs)
 
 ### 3.1 What it does, in plain words (your formulation)
