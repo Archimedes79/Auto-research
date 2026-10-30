@@ -18,7 +18,7 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .cli import _flat  # noqa: E402
+from .cli import _flat, write_index  # noqa: E402
 from .suite import AutoGT  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
 
@@ -63,6 +63,8 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
                 held[name] = (k, gk)                                   # the sample of this sequence (kept in memory only)
         if verbose:
             print(f"{name}: {len(toks)} keyframes", flush=True)
+    if sig_dir:
+        write_index(sig_dir, gen, version, names, stride, n_kf, options)
     fov = radar_fov(gen, names, stride)
     ho = leave_one_radar_out(gen, names, stride) if holdout else None
     os.makedirs(os.path.dirname(os.path.abspath(out_pdf)), exist_ok=True)

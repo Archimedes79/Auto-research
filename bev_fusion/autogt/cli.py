@@ -63,6 +63,13 @@ def _init(dataroot, version, res, ss, options):
     _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
 
 
+def write_index(sig_dir, gen, version, names, stride, n_keyframes, options):
+    """index.json of a cache folder (marks it as an autogt cache for `clean`, records what it holds)."""
+    idx = {"signature": gen.signature(), "version": version, "res": gen.grid.res, "ss": gen.ss,
+           "options": {k: repr(v) for k, v in options.items()}, "scenes": list(names), "stride": stride, "keyframes": n_keyframes}
+    json.dump(idx, open(os.path.join(sig_dir, "index.json"), "w"), indent=1)
+
+
 def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=4, verbose=True, **options):
     """see the module docstring; returns the number of keyframes written (existing ones are skipped)."""
     from .suite import AutoGT
@@ -86,9 +93,7 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
                 done += r
                 if verbose and i % 200 == 0:
                     print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
-    idx = {"signature": gt.signature(), "version": version, "res": res, "ss": ss, "options": {k: repr(v) for k, v in options.items()},
-           "scenes": names, "stride": stride, "keyframes": len(tokens)}
-    json.dump(idx, open(os.path.join(sig_dir, "index.json"), "w"), indent=1)
+    write_index(sig_dir, gt, version, names, stride, len(tokens), options)
     if verbose:
         print(f"{done} written, {len(tokens) - done} already there: {sig_dir}")
     return done
