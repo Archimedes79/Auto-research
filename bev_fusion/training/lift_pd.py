@@ -89,6 +89,24 @@ def build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida=None)
             "valid": valid.to(dt), "shape": (X, Y, Z)}
 
 
+def frustum_table(table, feat_hw, image_hw):
+    """Re-express a table's image coordinates for feature maps in the frustum convention: cell j of w sits at pixel j (W - 1) / (w - 1)
+    (and alike in y), so the feature index of pixel u is j = u (w - 1) / (W - 1); the returned grid2d / grid3d are the normalised
+    coordinates grid_sample (align_corners=False) needs for that index. The depth coordinate and the valid mask are unchanged."""
+    h, w = feat_hw
+    H, W = image_hw
+
+    def remap(xn, size, fsize):
+        pix = (xn + 1) * size / 2 - 0.5
+        return 2 * (pix * (fsize - 1) / (size - 1) + 0.5) / fsize - 1
+    g2 = table["grid2d"]
+    xy = torch.stack([remap(g2[:, 0], W, w), remap(g2[:, 1], H, h)], -1)
+    out = dict(table)
+    out["grid2d"] = xy
+    out["grid3d"] = torch.cat([xy, table["grid3d"][:, 2:]], -1)
+    return out
+
+
 def lift_pd(feat, depth_prob, table, use_depth=True):
     """feat (B, C, Hf, Wf), depth_prob (B, D, Hf, Wf) (softmax over D) -> volume (B, C, X, Y, Z).
 
@@ -116,13 +134,16 @@ def height_to_channels(vol):
 class LiftPD(nn.Module):
     """Lift PD for one camera with optional learned elevations; the table is cached unless the heights are learned."""
 
-    def __init__(self, grid, depth_centres, learn_heights=False, use_depth=True, oversample=1, slice_height=0.5):
+    def __init__(self, grid, depth_centres, learn_heights=False, use_depth=True, oversample=1, slice_height=0.5,
+                 frustum_cells=False):
         """oversample = n > 1: every height slice is the mean of n sub-heights spread over its slice_height - a
         numerical integration over the slice, so thin surfaces between slice centres (the road at z = 0) are not
         missed; synthetic oracle (tests/test_oracle_lift.py, stride 8, depth histogram): lane-line recall 0-20 / 20-40
-        / 40-60 m from 0.90 / 0.08 / 0.00 (n = 1) to 1.00 / 1.00 / 0.81 (n = 4)."""
+        / 40-60 m from 0.90 / 0.08 / 0.00 (n = 1) to 1.00 / 1.00 / 0.81 (n = 4).
+        frustum_cells: feature cell j sits at pixel j (W - 1) / (w - 1) (the frustum convention of LSS / BEVFusion, whose
+        networks were trained with it) instead of the cell centre (j + 0.5) W / w - 0.5 (DualBEV's cached heads, default)."""
         super().__init__()
-        self.grid, self.use_depth = grid, use_depth
+        self.grid, self.use_depth, self.frustum_cells = grid, use_depth, frustum_cells
         self.oversample, self.slice_height = oversample, slice_height
         self.register_buffer("depth_centres", torch.as_tensor(depth_centres, dtype=torch.float32))
         z = torch.tensor(grid.z_levels, dtype=torch.float32)
@@ -148,6 +169,8 @@ class LiftPD(nn.Module):
                 self._cache = (key, table)
         else:
             table = self._cache[1]
+        if self.frustum_cells:
+            table = frustum_table(table, feat.shape[-2:], image_hw)
         vol = lift_pd(feat, depth_prob, table, self.use_depth)
         if n > 1:
             B, C, X, Y, Zn = vol.shape
@@ -247,6 +270,26 @@ def _selftest():
     c = lift_pd(feat, uni, tab2, use_depth=False)
     assert torch.allclose(c[:, :, 2:], a[:, :, :-2], atol=1e-12), "rig shift"
 
+    # 8 frustum convention: a feature ramp along the width read at a voxel gives the feature index u (w - 1) / (W - 1) of its pixel u
+    h_f, w_f = 14, 25
+    ramp = torch.arange(w_f, dtype=dt).view(1, 1, 1, w_f).expand(1, 1, h_f, w_f).contiguous()
+    tf = frustum_table(tab, (h_f, w_f), hw)
+    got = lift_pd(ramp, torch.ones(1, len(dc), h_f, w_f, dtype=dt) / len(dc), tf, use_depth=False)[0, 0].reshape(-1)
+    pix_u = (tab["grid2d"][:, 0] + 1) * hw[1] / 2 - 0.5
+    sel = (tab["valid"] > 0) & (pix_u >= 0) & (pix_u <= hw[1] - 1)
+    assert sel.sum() > 1000
+    assert torch.allclose(got[sel], (pix_u * (w_f - 1) / (hw[1] - 1))[sel], atol=1e-9), "frustum cells"
+    ctr = lift_pd(ramp, torch.ones(1, len(dc), h_f, w_f, dtype=dt) / len(dc), tab, use_depth=False)[0, 0].reshape(-1)
+    idx_c = (pix_u + 0.5) * w_f / hw[1] - 0.5
+    sel_c = sel & (idx_c >= 0) & (idx_c <= w_f - 1)                                  # inside the cell centres (border clamping outside)
+    assert torch.allclose(ctr[sel_c], idx_c[sel_c], atol=1e-9), "centre cells (default)"
+    assert (got[sel_c] - ctr[sel_c]).abs().max() > 0.1, "the two conventions differ by up to half a cell"
+    mod_f = LiftPD(grid, dc, use_depth=False, frustum_cells=True)
+    mod_c = LiftPD(grid, dc, use_depth=False)
+    Kf, Tf, _ = _front_camera(torch.float32)
+    f_in = torch.randn(1, 3, h_f, w_f)
+    assert not torch.allclose(mod_f(f_in, f_in[:, :1], Kf, Tf, hw), mod_c(f_in, f_in[:, :1], Kf, Tf, hw)), "option changes the lift"
+
     # 5 gradients reach the feature, the depth distribution and learned heights (gradcheck on a tiny grid)
     small = Grid(x_min=4, x_max=8, y_min=-1, y_max=1, res=1.0, z_levels=(0.0, 1.0))
     f_s = torch.randn(1, 2, 7, 12, dtype=dt, requires_grad=True)
@@ -276,7 +319,7 @@ def _selftest():
     ref = lift_pd(feat.float(), uni.float(), build_table(grid, zsub, K.float(), T.float(), hw, dc.float()))
     ref = height_to_channels(ref.view(1, 4, 120, 104, 8, n).mean(-1))
     assert o4.shape == out.shape and torch.allclose(o4, ref, atol=1e-6), "oversampling"
-    print("lift_pd selftest ok: geometry, uniform = P / D, one-hot depth, rig shift, gradcheck, module, oversampling")
+    print("lift_pd selftest ok: geometry, uniform = P / D, one-hot depth, rig shift, gradcheck, module, oversampling, frustum cells")
 
     if torch.cuda.is_available():
         import time
