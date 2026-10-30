@@ -8,6 +8,7 @@ For now this folder only holds the discussion of a new BEV system (camera pixel-
 | `radar_encoding.md` | radar grid encoding ideas (measured nuScenes radar statistics, Mirko's per-detection decoder, the symmetric polar radar image + table pull, comparison, tests); discussed separately until one is chosen |
 | `plan_draft2.md` | the previous draft (front camera, virtual upright camera, sigma points), kept for the record |
 | `training/` | code (plain PyTorch, a self-test per module): the blocks (camera lift, camera encoder with pre-trained DualBEV heads, radar block, splat, temporal fusion, fusion, BEV trunk, time-decoded heads, object head), the paper fallbacks, the losses, the nuScenes loader and the whole-chain assembly `model.py` - see `training/README.md` |
+| `autogt/` | the standalone autoGT suite: automatic GT from nuScenes (static BEV layers, objects, masks, radar-corrected velocity / flow field in m/s), with its own build, check, view and video commands and self-tests - see `autogt/README.md` |
 | `evaluation/` | metric code (segmentation / line IoU with tolerances, nuScenes-style detection AP and TP errors, latency) with known-answer self-tests - see `evaluation/README.md` |
 | `tests/` | synthetic gates per block (`tests/run_gates.sh`) - see `tests/README.md` |
 | `models/` | weights (not in git): `pretrained/dualbev-r50-cbgs.pth` with source and checks - see `models/README.md` |
@@ -15,5 +16,6 @@ For now this folder only holds the discussion of a new BEV system (camera pixel-
 | `literature/code/front_bev_code_sources.md` | repository, licence and module per block (read on the repository pages) |
 | `temp/scout_tables/` | the raw tables of the scouts |
 | `temp/setup/` | one-off scripts of this discussion (calibration check, table merges, the move out of the lane project) |
+| `experiments/` | one folder per experiment (card, detail plan, summary); first: `s1a_lift_pd_vs_p/` (camera-only real-data run, its synthetic unit test, idle-GPU timing) - see `experiments/README.md` |
 
 Shared data (nuScenes) is described in `../datasets/NuScenes/README.md`.

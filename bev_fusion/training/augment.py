@@ -20,7 +20,7 @@ import math
 import numpy as np
 import torch
 
-LATERAL_VECTOR_KEYS = ("velocity", "centreline_dir")      # (2, X, Y): component 1 is the lateral one
+LATERAL_VECTOR_KEYS = ("velocity", "flow_ego", "flow", "centreline_dir")      # (2, X, Y): component 1 is the lateral one
 
 
 def flip_meta(m):
