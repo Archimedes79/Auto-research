@@ -1,7 +1,9 @@
 """The Runner: frames through the Subject, in the order and with the state a deployed system would see.
 
     iter_scene(scene)      every frame of a scene in time order; state='carry' keeps the Subject's memory from frame to frame
-                           (reset() once at the start), state='reset' makes every frame independent (reset() before each)
+                           (reset() once at the start), state='reset' makes every frame independent (reset() before each),
+                           state='warmup' starts every frame from empty and feeds only the `Subject.warmup` frames before it
+                           (what a network trained on short clips saw; frames may be any subset)
     run_to(ref)            random access: reset, feed `Subject.warmup` history frames (their outputs are discarded), then the
                            frame itself (taps on). cold=True skips the history.
 The Runner owns nothing but the order of calls; metrics, pictures and storage are the callers' business.
@@ -18,8 +20,8 @@ from .contracts import FrameRef, Prediction, Sample, Source, Subject
 
 class Runner:
     def __init__(self, source: Source, subject: Subject, state: str = "carry", prefetch: int = 2):
-        if state not in ("carry", "reset"):
-            raise ValueError("state must be 'carry' or 'reset'")
+        if state not in ("carry", "reset", "warmup"):
+            raise ValueError("state must be 'carry', 'reset' or 'warmup'")
         self.source, self.subject, self.state, self.prefetch = source, subject, state, prefetch
 
     # -------------------------------------------------------------------------------------- iteration
@@ -65,6 +67,10 @@ class Runner:
         """(sample, prediction) of the frames of one scene in time order (all frames, or the given ones, which must be in
         time order). In 'carry' mode skipping frames skips their effect on the state: pass consecutive frames."""
         refs = list(frames) if frames is not None else self.source.frames(scene)
+        if self.state == "warmup":                                # every frame from a fresh start with its warm-up history only
+            for ref in refs:
+                yield self.run_to(ref, taps)
+            return
         if self.state == "carry":
             self.subject.reset()
         for sample in self._loader(refs):

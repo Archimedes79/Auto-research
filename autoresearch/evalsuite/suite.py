@@ -20,8 +20,8 @@ from .contracts import Source, Subject, Task
 
 class EvalSuite:
     def __init__(self, source: Source, subject: Subject, task: Task, out: str = "eval_out", state: str = "carry"):
-        if state not in ("carry", "reset"):
-            raise ValueError("state must be 'carry' or 'reset'")
+        if state not in ("carry", "reset", "warmup"):
+            raise ValueError("state must be 'carry', 'reset' or 'warmup'")
         self.source, self.subject, self.task = source, subject, task
         self.out, self.state = os.path.abspath(out), state
         os.makedirs(self.out, exist_ok=True)

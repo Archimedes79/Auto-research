@@ -83,7 +83,7 @@ def _panel(fig, ax, p: Panel) -> None:
         ax.axis("off")
     elif p.kind in ("raster", "rgb"):
         a = np.asarray(p.data)
-        kw = dict(origin="lower", interpolation="nearest", aspect="equal" if p.equal else "auto")
+        kw = dict(origin=p.origin, interpolation="nearest", aspect="equal" if p.equal else "auto")
         if p.extent is not None:
             kw["extent"] = p.extent
         if p.kind == "raster":
@@ -110,13 +110,12 @@ def _panel(fig, ax, p: Panel) -> None:
         ax.tick_params(labelsize=7)
     else:
         raise ValueError(f"unknown panel kind {p.kind!r}")
+    view = (ax.get_xlim(), ax.get_ylim()) if p.kind in ("image", "raster", "rgb") else None
     for s in p.shapes:
         _shape(ax, s)
-    if p.kind in ("raster", "rgb"):                    # the overlays must not move the limits chosen above
-        if p.xlim is not None:
-            ax.set_xlim(*p.xlim)
-        if p.ylim is not None:
-            ax.set_ylim(*p.ylim)
+    if view is not None:                               # the overlays (which may reach far outside) must not move the limits
+        ax.set_xlim(*(p.xlim if p.xlim is not None else view[0]))
+        ax.set_ylim(*(p.ylim if p.ylim is not None else view[1]))
     ax.set_title(title, fontsize=8)
     if p.note and p.kind in ("raster", "rgb", "image"):          # what to look for, under the picture
         ax.set_xlabel(textwrap.fill(p.note, 60), fontsize=6, color="0.35")

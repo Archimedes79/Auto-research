@@ -155,7 +155,7 @@ class Quantitative:
             for key in hk:
                 sign = 1.0 if m.direction(key) == "high" else -1.0
                 rows = [{"kind": "scene", "metric": f"{name}.{key}", "scene": sc, "drag": -sign * v[key], "frames": len(by_scene[sc]),
-                         "view": f"quant outliers --scene {sc}  |  qual videos --scenes {sc}"} for sc, v in infl.items()
+                         "view": f"qual videos 1 --scenes {sc}"} for sc, v in infl.items()
                         if v[key] == v[key]]
                 rows.sort(key=lambda r: -r["drag"])
                 res["scenes"] += rows[:k]
@@ -200,8 +200,8 @@ class Quantitative:
         st = self.open(run)
         fr = st.frame(label)
         state = st.manifest.get("state", "carry")
-        return self.s.qual.frame((fr["scene"], fr["index"]), views, out_dir=os.path.join(st.path, "trace"),
-                                 history="full" if state == "carry" else "none", state=state)        # the exact replay of the run
+        history = {"carry": "full", "warmup": None, "reset": "none"}[state]                          # the exact replay of the run
+        return self.s.qual.frame((fr["scene"], fr["index"]), views, out_dir=os.path.join(st.path, "trace"), history=history, state=state)
 
     # -------------------------------------------------------------------------------------- compare
     def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0) -> Dict[str, Any]:

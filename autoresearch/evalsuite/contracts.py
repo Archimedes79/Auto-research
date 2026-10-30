@@ -81,7 +81,8 @@ class TapSpec:
     """A place inside the network that can be looked at. kind: 'feature_map' (C, H, W) | 'map' (H, W) | 'image' (H, W, 3 or 1)
     | 'logits' (K, H, W) | 'vector' (N,) | 'scalar'. `stage` groups taps in the picture (camera, radar, fusion, heads, ...),
     `note` says what the tap should look like, `redflag` what a problem looks like, `extent` places a map on a plane
-    (left, right, bottom, top) and `flip_x` inverts its horizontal axis (e.g. +y on the left in a bird's-eye view)."""
+    (left, right, bottom, top) and `flip_x` inverts its horizontal axis (e.g. +y on the left in a bird's-eye view). `optional`: the
+    network may not have this part (another configuration, an older snapshot): not returning it is no contract violation."""
     name: str
     kind: str = "feature_map"
     stage: str = ""
@@ -89,6 +90,8 @@ class TapSpec:
     redflag: str = ""
     extent: Optional[Tuple[float, float, float, float]] = None
     flip_x: bool = False
+    optional: bool = False
+    alive_check: bool = True          # False: all-zero is legitimate (e.g. a memory on the first frame): no 'dead stage' flag
 
 
 @dataclass
@@ -125,6 +128,7 @@ class Panel:
     data: Any = None
     extent: Optional[Tuple[float, float, float, float]] = None
     cmap: str = "magma"
+    origin: str = "lower"            # 'lower': first array axis points up (maps on a plane); 'upper': image-plane arrays
     vmin: Optional[float] = None
     vmax: Optional[float] = None
     colorbar: bool = False

@@ -29,9 +29,13 @@ class Hook:
 
 
 def resolve(model, path: str):
+    """the module at a dotted path, or None when the network has no such part (optional blocks, other snapshots)"""
     obj = model
     for part in path.split("."):
-        obj = obj[int(part)] if part.isdigit() else getattr(obj, part)
+        try:
+            obj = obj[int(part)] if part.isdigit() else getattr(obj, part, None)
+        except (IndexError, KeyError, TypeError):
+            return None
         if obj is None:
             return None
     return obj
@@ -42,6 +46,7 @@ class TapRecorder:
         self.model, self.hooks = model, hooks
         self.armed: set = set()
         self.data: Dict[str, List[Any]] = {}
+        self.errors: Dict[str, int] = {}
         self._handles = []
         for name, h in hooks.items():
             mod = resolve(model, h.path)
@@ -51,11 +56,17 @@ class TapRecorder:
                                  else mod.register_forward_hook(self._post(name, h)))
 
     def _store(self, name: str, h: Hook, value: Any) -> None:
+        """record one value; a tap that cannot be read from this network's output is skipped (counted in `errors`), it never
+        breaks the forward pass"""
         if name not in self.armed:
             return
-        if h.pick is not None:
-            value = h.pick(value)
-        v = value.detach().float().cpu()
+        try:
+            if h.pick is not None:
+                value = h.pick(value)
+            v = value.detach().float().cpu()
+        except Exception:                                                           # noqa: BLE001
+            self.errors[name] = self.errors.get(name, 0) + 1
+            return
         lst = self.data.setdefault(name, [])
         if h.select == "last":
             lst[:] = [v]

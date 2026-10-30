@@ -49,7 +49,9 @@ def plausibility(spec: TapSpec, arr) -> List[Flag]:
     if not np.isfinite(a).all():
         out.append(Flag(f"{spec.name}: finite", "fail", float((~np.isfinite(a)).mean()), "NaN or Inf in the tensor"))
         a = np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0)
-    if a.size and (a == 0).all():
+    if not spec.alive_check:
+        pass
+    elif a.size and (a == 0).all():
         out.append(Flag(f"{spec.name}: alive", "fail", 0.0, "all zero (dead stage or an input that never arrived)"))
     elif a.size and a.std() < 1e-9:
         out.append(Flag(f"{spec.name}: alive", "warn", float(a.std()), "constant tensor"))

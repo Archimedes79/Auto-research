@@ -333,6 +333,36 @@ def _():
         assert s2.quant.table(done) == full, "a resumed run must give the numbers of an undisturbed run"
 
 
+@check("state 'warmup': any subset of frames, each from an empty start with the network's warm-up history only; trace replays it exactly")
+def _():
+    from evalsuite.runner import Runner
+    with tempfile.TemporaryDirectory() as d:
+        suite = make(d)
+        sm = Sampler(suite.source, 0)
+        frames = sm.spread(20, min_index=2)
+        assert all(f.index >= 2 for f in frames) and len(frames) == 20
+        wu = suite.quant.run(frames=frames, state="warmup", name="w", progress=0)
+        rs = suite.quant.run(frames=frames, state="reset", name="r", progress=0)
+        ca = suite.quant.run(scenes=sorted({f.scene for f in frames}), state="carry", name="c", progress=0)
+        tw, tr = suite.quant.table(wu), suite.quant.table(rs)
+        assert tw != tr, "the warm-up history changes the numbers of a stateful network"
+        # each frame equals run_to with the network's warm-up history (2 frames) - and differs from the empty start
+        runner = Runner(suite.source, suite.subject, "carry")
+        for f in frames[:6]:
+            s, p = runner.run_to(f)
+            c = suite.task.metrics()[0].frame(s, p)["cnt"]
+            assert np.array_equal(c, wu.counts("seg", [f.label])[0]["cnt"]), f.label
+        tr_ = suite.quant.trace(wu, frames[3].label, ("overview",))
+        assert abs(tr_.scores["seg.iou"] - wu.frame(frames[3].label)["scores"]["seg.iou"]) < 1e-12
+        # the warm-up numbers lie between the empty start and the full-scene memory on average
+        full = {r["label"]: r["scores"]["seg.iou"] for r in ca.frames}
+        d_w = np.mean([abs(wu.frame(f.label)["scores"]["seg.iou"] - full[f.label]) for f in frames])
+        d_r = np.mean([abs(rs.frame(f.label)["scores"]["seg.iou"] - full[f.label]) for f in frames])
+        assert d_w <= d_r + 1e-12, (d_w, d_r)
+        last = Sampler(suite.source, 0).spread(5, min_index=11)
+        assert len(last) == 5 and all(f.index == 11 for f in last)
+
+
 @check("outliers: the planted frames are found first; scene drag = leave-one-out by hand; frame drag is positive for them")
 def _():
     with tempfile.TemporaryDirectory() as d:

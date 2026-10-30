@@ -75,8 +75,8 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
         assert isinstance(p, Prediction), "predict() must return a Prediction"
         extra = set(p.taps) - set(declared)
         assert not extra, f"taps returned but not declared: {sorted(extra)}"
-        missing = set(declared) - set(p.taps)
-        assert not missing, f"taps declared but not returned: {sorted(missing)}"
+        missing = {n for n in set(declared) - set(p.taps) if not declared[n].optional}
+        assert not missing, f"taps declared but not returned: {sorted(missing)} (mark a tap optional=True if the network may lack it)"
         for n, a in p.taps.items():
             assert isinstance(a, np.ndarray) and np.isfinite(a.astype(float)).all(), f"tap {n}: finite numpy array expected"
         box["pred"] = p

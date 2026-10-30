@@ -1,6 +1,6 @@
 """Command line of the suite.
 
-    python -m evalsuite --adapter pkg.module:build [--arg key=value ...] [--out DIR] [--state carry|reset] <command>
+    python -m evalsuite --adapter pkg.module:build [--arg key=value ...] [--out DIR] [--state carry|reset|warmup] <command>
 
     list [SCENE]                                         scenes (and the frames of one scene)
     qual frame SPEC [--view overview debug] [--taps a b] [--history warmup|full|none]   SPEC = scene-0061/12 | scene-0061:12 | a frame key
@@ -44,6 +44,12 @@ def load_adapter(spec: str, kv: Dict[str, Any]):
     return built
 
 
+def _headline(suite, table: Dict[str, float]) -> Dict[str, float]:
+    """the headline numbers of every metric out of a full table"""
+    keep = {f"{m.name}.{k}" for m in suite.task.metrics() for k in m.headline}
+    return {k: v for k, v in table.items() if k in keep}
+
+
 def _hist(name: str):
     return {"warmup": None, "full": "full", "none": "none"}[name]
 
@@ -71,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--adapter", help="module:function returning (source, subject, task)")
     p.add_argument("--arg", action="append", default=[], metavar="K=V", help="keyword argument for build() (repeatable)")
     p.add_argument("--out", default="eval_out")
-    p.add_argument("--state", default="carry", choices=["carry", "reset"])
+    p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("selftest")
     sub.add_parser("selftest-adapter")
@@ -112,6 +118,8 @@ def build_parser() -> argparse.ArgumentParser:
         a.add_argument("run")
         if name == "trace":
             a.add_argument("label")
+        if name == "table":
+            a.add_argument("--all", action="store_true", help="every number (default: the headline numbers of each metric)")
         if name == "report":
             a.add_argument("--render", type=int, default=6)
         if name == "outliers":
@@ -174,9 +182,9 @@ def main(argv=None) -> int:
                 st = qt.run(scenes=a.scenes if not a.spread else None, n_scenes=a.n_scenes, seed=a.seed, max_frames=a.max_frames,
                             frames=frames, state=state, name=a.name)
                 print(f"run {st.path}: {len(st.frames)} frames, {len(st.scene_names())} scenes")
-                print(_fmt_table(qt.table(st)))
+                print(_fmt_table(_headline(suite, qt.table(st))))
             elif a.mode == "table":
-                print(_fmt_table(qt.table(a.run)))
+                print(_fmt_table(qt.table(a.run) if a.all else _headline(suite, qt.table(a.run))))
             elif a.mode == "per-scene":
                 for sc, d in qt.per_scene(a.run).items():
                     print(sc, "  ".join(f"{k}={v:.3f}" for k, v in d.items()))
