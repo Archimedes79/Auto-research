@@ -5,7 +5,7 @@
 # (only on an idle GPU: < 10 % utilisation and < 1 GB used; otherwise skipped). Log: temp/t7/finish.log
 cd "$(dirname "$0")/../.." || exit 1
 PY="$HOME/miniconda3/envs/gcar/bin/python"
-L=temp/study/lane3.log
+L=temp/study/lane3b.log                                          # the live log of temp/study/lane3.sh
 RUNS="t7_res4_s0 t7_rgb_s0 t7_res4_s1 t7_rgb_s1"
 sleep 36000 &                                                     # keeps WSL alive overnight
 state() {  # done | failed | wait
