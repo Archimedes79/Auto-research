@@ -1,0 +1,18 @@
+config without scene lists: using the frozen scenes of parts 1-6 (428 train / 82 val)
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/bev_fusion/temp/review/observe_2026-10-30/velocity_weighting.py", line 25, in <module>
+    train_ds = make_datasets(cfg)[0]
+               ^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Auto-research/bev_fusion/runs/t1_r4_soa/code/train.py", line 138, in make_datasets
+    nusc = NuScenes(cfg.version, dataroot=root, verbose=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/nuscenes/nuscenes.py", line 78, in __init__
+    self.ego_pose = self.__load_table__('ego_pose')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/nuscenes/nuscenes.py", line 140, in __load_table__
+    table = json.load(f)
+            ^^^^^^^^^^^^
+  File "/home/ml/miniconda3/envs/gcar/lib/python3.12/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+                 ^^^^^^^^^
+OSError: [Errno 12] Cannot allocate memory

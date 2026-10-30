@@ -33,3 +33,17 @@ Tool: `evaluation/observe_run.py` + `evaluation/video_encode.py` (see evaluation
    vehicles), not the threshold. Drivable area: the prediction is pale and too small in 7 of 30 frames (share 0.25 vs GT 0.40).
 6. Fine: no NaN or dead channels in any stage, camera BEV energy only inside the camera cone (0.0 % outside), depth head median
    10-14 m, GT boxes sit on camera-BEV blobs and on radar returns (alignment of both branches), world memory covers 62 % of the cells.
+
+## Weighting (asked 2026-10-30 evening; t1_r4_soa, `grad_share.py`, output in `grad_share_t1_r4_soa.txt`)
+- Kendall at the end: objects s = 1.0 (the upper clamp, weight 0.37), areas 0.94, lines 0.84, motion 1.44.
+- Gradient norm of the task groups at the BEV feature (log.jsonl diag rows): motion 0.000 (step 500) .. 0.006 (step 7000) against
+  objects 0.08 .. 0.73 and areas 0.001 .. 0.005: the dense motion head hardly shapes the shared features (18x below objects at the end).
+  The box head's velocity terms (3 dt) carry about 3 % of the summed per-term gradient at S (hm, size, rad, rot ~2-3 % each per dt).
+- Composition: moving vehicles are 19 % of the vehicle cells and 20 % of the observed vehicle boxes (692 / 3023 cells, 37 / 147 boxes in
+  12 train frames). Both velocity losses are L1 over all objects, whose optimum on objects the features cannot separate is the median = 0.
+- `t3_vel10` (velocity weight x10, 3000 steps) did not help: vehicle AVE at dt 0 2.38 m/s (t1_r4_soa 1.82), so plain re-scaling is not the lever.
+- NOT done: the test whether moving-cell balancing / MSE / Huber changes what a head can learn on the frozen features
+  (`velocity_weighting.py`): the run died with "Cannot allocate memory" (the box is full of other chats' jobs). Rerun when memory is free,
+  or better as a real training arm. Candidates for the arm: moving cells weighted by 1 / moving share, per-object normalisation of the
+  dense loss (as the focal loss does), Huber / L2 instead of L1, a Doppler-aggregating branch per object.
+- The velocity GT itself is not the suspect: autogt (GT chat) finds the annotation tracks agree with the radar to ~0.2 m/s.
