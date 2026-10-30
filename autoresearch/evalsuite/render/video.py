@@ -42,14 +42,18 @@ def _native(path: str) -> str:
 
 
 def verify(path: str, n_frames: int) -> dict:
-    """decode the file again: all frames present, the first frame not black"""
+    """decode the file again: all frames present, the first frame not black, the codec H.264"""
     import cv2
     cap = cv2.VideoCapture(path)
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fcc = int(cap.get(cv2.CAP_PROP_FOURCC))
     ok, frame = cap.read()
     cap.release()
+    codec = "".join(chr((fcc >> 8 * i) & 255) for i in range(4)).lower()
     if not ok or frame is None or frame.max() == 0 or n != n_frames:
         raise RuntimeError(f"{path}: read back {n} frames (expected {n_frames}), first frame {'ok' if ok else 'unreadable'}")
+    if codec not in ("h264", "avc1"):         # OpenCV decodes MPEG-4 part 2 ('FMP4') as well, which browsers refuse
+        raise RuntimeError(f"{path}: codec {codec!r}, not H.264 - it would not play in a browser")
     return {"frames": n, "size": (frame.shape[1], frame.shape[0])}
 
 

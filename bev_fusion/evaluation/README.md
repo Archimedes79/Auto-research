@@ -35,7 +35,7 @@ Global options: `--device cuda|cpu --workers N --split val|train --ckpt-dir DIR 
 | `metrics.py` | the metric library: `SegMeter` (tolerant IoU per layer / range bin / dt, line zero-crossing F1), `DetMeter` (nuScenes-style AP and TP errors; additive per-frame rows `frame_rows` / `reduce_rows`), latency, flat reports | `python evaluation/metrics.py` (known answers; the rows equal the original global matching on random frames) |
 | `bev_selftest.py` | known-answer tests of the BEV task on a synthetic BEV world (planted bad frames), `--golden` the numbers of the former `evaluate_run.py` on 24 real frames, `--real` the adapter on a real run | itself |
 | `golden/t1_r4_soa_n24_old.json` | the metrics of `evaluate_run.py` on 24 val frames of `t1_r4_soa` (CPU, written before the old code was removed): 3738 numbers | `bev_selftest.py --golden` |
-| `evaluate_run.py` | DEPRECATED forwarding stub of the old command line (running lane `temp/study/lane3.sh` calls it); delete when that lane has ended | `bev_selftest.py` |
+| `evaluate_run.py` | DEPRECATED forwarding stub of the old command line; no script calls it any more (checked 2026-10-30: `temp/study/lane3.sh` calls `bev_suite.py`; `temp/calib/prior_detector.py`, `temp/study/collect.py`, `build_compare_images.py` only name it in docstrings); delete it | `bev_selftest.py` |
 
 The pre-suite scripts (`evaluate_run.py`, `observe_run.py`, `eval_memory.py`, `video_encode.py`) are in `../_to_delete/evaluation_pre_suite/`.
 

@@ -26,13 +26,13 @@ import torch.nn.functional as F
 try:
     from .gt_bev import AREAS, DIST_MAX, LINES, OBJECTS
     from .lift_pd import Grid
-    from .loss_extras import boundary_fp_loss, dice_semimetric_loss, ramp
+    from .loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from .object_head import _gather, build_targets, head_loss, refine_loss
     from .timed_head import MotionHead
 except ImportError:                                   # run as a script
     from gt_bev import AREAS, DIST_MAX, LINES, OBJECTS
     from lift_pd import Grid
-    from loss_extras import boundary_fp_loss, dice_semimetric_loss, ramp
+    from loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from object_head import _gather, build_targets, head_loss, refine_loss
     from timed_head import MotionHead
 
@@ -169,15 +169,6 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
 
 
 # ------------------------------------------------------------------------------------------------ per-output losses
-def _wsum(x, w):
-    """sum over batch and cells per channel: x (B, K, X, Y), w broadcastable -> (K,)."""
-    return (x * w).sum((0, 2, 3))
-
-
-def _wcount(w, like):
-    return w.expand_as(like).sum((0, 2, 3)).clamp(min=EPS)
-
-
 def soft_bce(logits, target, w):
     """BCE on soft targets in [0, 1], weighted mean per channel -> (K,)."""
     return _wsum(F.binary_cross_entropy_with_logits(logits, target, reduction="none"), w) / _wcount(w, logits)

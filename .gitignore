@@ -82,8 +82,15 @@
 !/datasets/NuScenes/README.md
 !/datasets/NuScenes/tools/
 /datasets/NuScenes/tools/history/
-# problem 2: camera + radar BEV (for now a discussion folder: plan, literature, one-off scripts)
+# problem 2: camera + radar BEV: code and text records; runs (checkpoints, run snapshots, logs), caches and weights stay out
 !/bev_fusion/
+/bev_fusion/runs/*
+!/bev_fusion/runs/README.md
+/bev_fusion/data/*
+!/bev_fusion/data/README.md
+!/bev_fusion/data/scenes_parts1_6.json
+/bev_fusion/models/pretrained/*
+!/bev_fusion/models/pretrained/*.sha256
 
 # never, anywhere: caches, checkpoints, arrays, binaries
 __pycache__/

@@ -260,10 +260,10 @@ def cmd_compare(argv) -> int:
     name = f"eval{c.tag}_n{c.n}"
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
     if not all(os.path.exists(s) for s in stores):
-        recs = [os.path.join(r, "eval", "scene_records.pkl") for r in (c.run_a, c.run_b)]
+        recs = [os.path.join(r, "eval", f"scene_records{c.tag}.pkl") for r in (c.run_a, c.run_b)]
         if all(os.path.exists(r) for r in recs):                 # runs evaluated before the suite: the former pickle records
             from evaluation import bev_legacy
-            bev_legacy.compare(c.run_a, c.run_b, c.boot, c.seed, c.det_a, c.det_b, c.dt)
+            bev_legacy.compare(c.run_a, c.run_b, c.boot, c.seed, c.det_a, c.det_b, c.dt, c.tag)
             return 0
         raise SystemExit(f"no evaluation '{name}' of both runs ({stores}); run `bev_suite.py RUN eval --n ...` on both")
     task = _task_only(c.run_a)
@@ -288,7 +288,7 @@ def main(argv=None) -> int:
     p.add_argument("--ckpt-dir", default=None)
     p.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"])
     p.add_argument("--out", default=None)
-    p.add_argument("--state", default="carry", choices=["carry", "reset"])
+    p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])
     a, command = p.parse_known_args(argv)                      # the global options anywhere; the rest is the command
     a.command = command
     a.run = a.run.rstrip("/")

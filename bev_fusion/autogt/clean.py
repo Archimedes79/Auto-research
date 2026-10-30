@@ -46,7 +46,7 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
         items.append((old, "old-outputs"))
     if all_caches and os.path.isdir(all_caches):
         items += [(os.path.join(all_caches, d), "cache") for d in sorted(os.listdir(all_caches))
-                  if os.path.exists(os.path.join(all_caches, d, "index.json")) or os.path.isdir(os.path.join(all_caches, d))]
+                  if os.path.exists(os.path.join(all_caches, d, "index.json"))]          # only what autogt marked as its cache
     if stale_caches and os.path.isdir(stale_caches):
         if current_signature is None:
             import types

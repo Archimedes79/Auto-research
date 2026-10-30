@@ -92,12 +92,12 @@ def det_ap(frames_by_scene, scenes, cls, thr=2.0):
     return ap_nuscenes([x[1] for x in m], n_gt)
 
 
-def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0):
+def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0, tag=""):
     """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval. det_a / det_b: the box set of each run
     ('det' = plain decode, 'detr' = refined by S5c); dt: the target time of the detection numbers (the map numbers are at dt 0).
     -> ({name: (b - a, lo, hi, a, b)}, text)"""
-    ra = pickle.load(open(os.path.join(run_a, "eval", "scene_records.pkl"), "rb"))
-    rb = pickle.load(open(os.path.join(run_b, "eval", "scene_records.pkl"), "rb"))
+    ra = pickle.load(open(os.path.join(run_a, "eval", f"scene_records{tag}.pkl"), "rb"))    # tag: "" cold, "_warm" ...
+    rb = pickle.load(open(os.path.join(run_b, "eval", f"scene_records{tag}.pkl"), "rb"))
     rng = np.random.default_rng(seed)
     lines = [f"paired scene bootstrap ({n_boot} resamples), b - a; a = {run_a} ({det_a}), b = {run_b} ({det_b}); val; "
              f"maps at dt 0, boxes at dt {dt:+.1f}"]

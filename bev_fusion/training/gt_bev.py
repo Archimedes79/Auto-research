@@ -8,6 +8,8 @@ import os
 import sys
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+while not os.path.isdir(os.path.join(_ROOT, "autogt")) and os.path.dirname(_ROOT) != _ROOT:
+    _ROOT = os.path.dirname(_ROOT)      # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 

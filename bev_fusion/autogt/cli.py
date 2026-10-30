@@ -76,6 +76,12 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
     from .suite import AutoGT
     gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
     sig_dir = os.path.join(out, gt.signature())
+    idx_path = os.path.join(sig_dir, "index.json")
+    if os.path.exists(idx_path):               # the signature does not contain res / ss: existing files would be reused silently
+        held = json.load(open(idx_path))
+        if abs(held.get("res", res) - res) > 1e-9 or held.get("ss", ss) != ss:
+            raise SystemExit(f"{sig_dir} holds res {held.get('res')} / ss {held.get('ss')} (asked: res {res} / ss {ss}): "
+                             "build into another output folder")
     os.makedirs(sig_dir, exist_ok=True)
     names = scenes or gt.scenes()
     tokens = [t for s in names for t in gt.keyframes(s)[::stride]]
