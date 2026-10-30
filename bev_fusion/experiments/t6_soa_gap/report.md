@@ -120,3 +120,54 @@ the numbers, not yet isolated by an experiment.
 4. Map-supervised stride-8 image features (plan 2.7, the image-encoder chat is distilling them now): the direct test of M6.
 5. Longer training on all 700 scenes with the existing feature shards (M8, M3).
 
+## 4 Question set: why does GaussianCaR win the maps? (analytic; `temp/soa_gap/analytic_questions.py`, `steps_curve.py`)
+
+Arithmetic on the nuScenes camera model (CAM_FRONT f = 1266 px, height 1.51 m), on our image pipeline (704 wide, 256 rows, stride 16, 80
+channels) and on GaussianCaR's (448 x 800, stride 8, 128 channels, from the paper note), plus the measured tolerance curves.
+
+| # | question | analytic answer | verdict |
+|---|---|---|---|
+| Q1 | Does the SOA push more image information into the BEV? | ours 16 x 44 = 704 feature cells x 80 channels = 56,320 values; GaussianCaR 56 x 100 = 5,600 cells x 128 = 716,800: 12.7 x more values, 8 x more cells; per BEV cell of our front grid 4.5 against 57 values | YES, an order of magnitude |
+| Q2 | Can a stride-16 cell resolve the ground structures? | one feature cell on the ground at 20 m: ours 0.57 m wide and 7.9 m deep, SOA 0.25 m and 3.4 m; at 40 m ours 1.15 m x 35.5 m, SOA 0.51 m x 13.8 m; a 15 cm marking is 4.2 px at 20 m (0.26 of our cell, 0.59 of the SOA cell). The down-range extent is the real problem: a crossing (stripes 0.5 m wide, 1 m period, 3-4 m deep) or a stop line fills less than one of our cells | YES for crossings, stop lines, divider ends; lateral position of long dividers survives only through sub-cell codes in the features |
+| Q3 | Which loss shaped the image features? | ours: detection and lidar depth (DualBEV heads, frozen); SOA: the map loss through the whole backbone. Linear probe on OUR lifted features (t3): drivable 0.577 (prior 0.459), walkway 0.200 (0.121), lane dividers 0.031 (0.018) = dividers are not linearly readable at all | YES, strongest candidate; consistent with Q1-Q2 |
+| Q4 | Does the SOA train longer? | 40 epochs x 28,130 frames = 1.13 M sample passes against 42 k - 126 k (2.6 - 7.7 epochs of 16,289) = 9 - 27 x more | YES (see section 5) |
+| Q5 | Is the deficit one of POSITION (blur) or of PRESENCE (the class is not recognised)? | ratio ours / SOA at tolerance 0 / 0.5 / 1 m: drivable 0.85 / 0.86 / 0.88, walkway 0.43 / 0.45 / 0.48, carpark 0.41 / 0.41 / 0.44, crossing 0.17 / 0.18 / 0.19, lane divider 0.46 / 0.42 / 0.49; a blur would close toward 1 with the tolerance, it does not; at 1 m the missing IoU is still 0.41 (walkway), 0.51 (carpark), 0.59 (crossing), 0.43 (lane divider) | PRESENCE: the network does not recognise the classes in many places; boundary precision is secondary |
+| Q6 | Does the SOA see more of our cells (side cameras)? | 26.5 % of the front-cone cells are also inside a side camera's field (the outer edges) | minor: cannot give 2 - 5 x |
+| Q7 | Does the radar explain it? | our own ablation: camera-only -> camera + radar adds drivable +0.03, walkway +0.08, dividers +0.02 (t3, 3000 steps); static layers are camera information | NO |
+| Q8 | Is the BEV trunk or head the limit? | eight block swaps tie (M4); but a 26 M-parameter trunk lifts walkway only from the linear-probe 0.200 to 0.244 (different frame sets, indicative): it extracts little the features do not hold | NO (the information is upstream) |
+| Q9 | Range / depth? | gap equal or larger at 0-20 m (section 1) | NO |
+| Q10 | Labels, threshold, scenes seen in training? | same labels; best-threshold changes <= 0.04; GaussianCaR scored only on official val scenes | NO |
+
+Reading: the deficit is mainly one of PRESENCE (Q5) with an information bottleneck upstream (Q1-Q3), compounded by a much smaller training budget
+(Q4). The SOA's advantage is not in the BEV network, which we replaced eight times without gain.
+
+## 5 Why do the maps underfit, and does more training help? (`steps_curve.py`)
+
+The same configuration trained for 3000, 6000 and 7000 x 2 steps (VAL-1000, camera cells, dt 0):
+
+| steps (accum) | drivable | walkway | carpark | crossing | lane divider (0.5 m) | road divider (0.5 m) |
+|---|---|---|---|---|---|---|
+| 3000 (ref_s0) | 0.666 | 0.191 | 0.106 | 0.002 | 0.181 | 0.220 |
+| 6000 (ref_long) | 0.689 | 0.225 | 0.155 | 0.057 | 0.234 | 0.297 |
+| 7000 x 2 (r4_soa) | 0.698 | 0.246 | 0.160 | 0.093 | 0.273 | 0.320 |
+| GaussianCaR (400 frames) | 0.845 | 0.594 | 0.659 | 0.536 | 0.691 | 0.634 |
+
+Every layer still rises, so the model is not at its limit: more training helps. But the rate does not carry it to the SOA. Gain per doubling of
+the steps, first doubling (3000 -> 6000): drivable +0.023, walkway +0.034, carpark +0.049, crossing +0.055, lane divider +0.053, road divider
++0.077; it shrinks in the next step (drivable +0.009 per 1.2 doublings). Even at the optimistic first-doubling rate the remaining gap to the SOA
+needs 4 (road divider) to 10 (walkway, carpark) more doublings = 16 - 1000 x the compute; the real curves are concave, so these are lower
+bounds. Longer training alone does not close the gap of this setup.
+
+Why the maps underfit (ranked; the first two are supported by measurements, the rest are mechanisms the numbers allow):
+1. The features hold little of the map classes (Q1-Q3): with frozen detection-trained stride-16 features the trained model cannot separate the
+   training maps either (train IoU walkway 0.282, crossing 0.140). Optimisation cannot create information the features lack.
+2. The rare thin classes take off late: crossing 0.002 -> 0.057 -> 0.093 and carpark 0.106 -> 0.155 -> 0.160. The positive cells are roughly
+   0.5 - 3 % of the evaluated cells (n_gt of the 400-frame run over about 2.6 M cells, my estimate of the cell count), and a BCE + soft-IoU
+   loss sits near "predict nothing" for a long time on such classes (focal losses or class weights shorten that plateau - a mechanism, not
+   tested here; GaussianCaR trains 9 - 27 x longer).
+3. Task competition: at the BEV feature the gradient of the objects is 9 - 22 x that of lines and areas (step 7000: 0.111 / 0.012 / 0.005) although
+   the Kendall weights down-weight the objects. Indication that the fit of the maps is not set by the number of steps alone: t1_r4_soa (7000 x 2
+   steps, several changes at once: velocity weight x5, mirror augmentation, pre-trained trunk) fits the TRAIN lane dividers worse (0.346) than
+   t1_r0 with fewer steps (0.446); the cause is not isolated.
+4. Data: 428 of 700 scenes; thin classes overfit a little (0.346 train / 0.274 val), the large areas not.
+
