@@ -15,6 +15,7 @@ Noise band for the verdict: 0.054 (2 x seed spread, `ref_s1`). Difference = arm 
 | trunk_rand | 0.318 | 0.457 | 0.117 | 0.592 | 0.177 | 0.224 | 1.13 | 2.43 | 0.653 | 0.136 | 0.149 | 11.92 |
 | lift_p | 0.290 | 0.426 | 0.094 | 0.549 | 0.148 | 0.194 | 1.30 | 2.36 | 0.677 | 0.170 | 0.167 | 11.81 |
 | camtemp_none | 0.321 | 0.464 | 0.113 | 0.599 | 0.189 | 0.264 | 1.26 | 2.44 | 0.659 | 0.182 | 0.173 | 11.68 |
+| fusion_gate | 0.330 | 0.470 | 0.126 | 0.613 | 0.188 | 0.226 | 1.10 | 2.39 | 0.668 | 0.185 | 0.190 | 11.69 |
 
 ## Differences and verdicts
 
@@ -28,5 +29,6 @@ Noise band for the verdict: 0.054 (2 x seed spread, `ref_s1`). Difference = arm 
 | trunk_rand | -0.021 | -0.011 | -0.024* | -0.014* | -0.026* | -0.053 | -0.00 | +0.04 | -0.012* | -0.055* | -0.032* | WORSE: walkway |
 | lift_p | -0.048 | -0.042* | -0.048* | -0.057* | -0.056* | -0.083 | +0.16 | -0.03 | +0.011 | -0.021* | -0.013* | WORSE: veh AP@2, ped AP@2 |
 | camtemp_none | -0.017 | -0.005 | -0.028* | -0.007 | -0.015 | -0.012 | +0.13 | +0.05 | -0.007* | -0.010* | -0.008* | TIE |
+| fusion_gate | -0.009 | +0.001 | -0.016* | +0.007 | -0.016* | -0.051 | -0.03 | +0.00 | +0.002 | -0.006 | +0.010* | TIE |
 
 `*` = paired bootstrap interval excludes 0. Velocity / heading errors (AVE, AOE) are lower-better and have no bootstrap; they are not used in the verdict.
