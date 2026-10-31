@@ -9,7 +9,7 @@ Four folders live here: `autoresearch/`, `bev_fusion_lane_center/`, `bev_fusion/
 
 If the line above was not expanded, read `bev_fusion_lane_center/CLAUDE.md` and `bev_fusion_lane_center/HANDOVER.md` first.
 
-- `bev_fusion/` - a second problem, for now only the discussion of a camera + radar BEV system (plan, literature); later its own GT, evaluation and code (duplicating code from the lane project is allowed). See `bev_fusion/README.md`.
+- `bev_fusion/` - a second problem: a camera + radar BEV system (plan, `training/`, `autogt/`, `evaluation/`, runs, experiments, literature); not yet managed by `autoresearch/` (no project.json, ledger or run.py: runs are launched by `temp/train/run_cfg.sh`); duplicating code from the lane project is allowed. See `bev_fusion/README.md`.
 - `datasets/NuScenes/` - description and download / check tools of the raw nuScenes data shared by all problems (not in git). The raw data itself is on D: (`D:\Auto-research\NuScenes`); derived data (GT, additions, caches) belongs to the problem's project folder on C:. Existing code reads the WSL views `~/data/nuscenes_full` / `~/data/nuscenes` (symlinks to both places). See `datasets/NuScenes/README.md`.
 
 Other things in this folder: `wsl/` is the Ubuntu disk image of the WSL distribution (registered with WSL: do not move, rename or delete, never in git); the scripts and the move log of the folder migration of 2026-10-24 are in `bev_fusion_lane_center/experiment_execution/history/migration_tools/`.

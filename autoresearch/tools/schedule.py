@@ -85,6 +85,8 @@ def change(a):
                 if shown != a.state:
                     print(f"note: {a.item} is shown as {shown}: its run record decides, the stored state counts only for an item without a record (cancel it with `set {a.item} cancelled`)")
     else:
+        if any(r["item"] == a.item for r in rows):
+            sys.exit(f"item {a.item} exists already in the schedule (change its state with `set`)")
         res = a.resource or {"train": "gpu", "evaluate": "cpu"}.get(a.kind, "agent")  # an empty resource follows the kind
         rows.append(dict(item=a.item, node=a.node, kind=a.kind, state="planned", depends_on=a.depends, resource=res, budget=a.budget,
                          priority=a.priority or "5", owner=a.owner, run_ids=a.runs or (a.item if a.kind == "train" else ""), note=a.note, command=a.command))

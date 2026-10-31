@@ -133,6 +133,8 @@ def main():
     ap.add_argument("-n", type=int, default=15)
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+    if a.cmd in ("note", "add") and not a.id:
+        ap.error(f"{a.cmd} needs a run id (a row without an id would be written)")
     if a.cmd == "render":
         return render()
     if a.cmd == "tail":

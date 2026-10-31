@@ -6,6 +6,7 @@ autoresearch/). Paths in project.json are relative to the problem folder; P.path
 import contextlib
 import json
 import os
+import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -31,7 +32,16 @@ def root():
     p = os.environ.get("AR_PROJECT")
     if not p:
         p = json.load(open(os.path.join(AR, "config.json"), encoding="utf-8"))["default_project"]
-    return os.path.normpath(p if os.path.isabs(p) else os.path.join(AR, p))
+    r = os.path.normpath(p if os.path.isabs(p) else os.path.join(AR, p))
+    if not os.path.isfile(os.path.join(r, "project.json")) and not os.path.isabs(p):
+        alt = os.path.normpath(os.path.abspath(p))              # a relative AR_PROJECT may also mean: relative to the current folder
+        if os.path.isfile(os.path.join(alt, "project.json")):
+            r = alt
+            os.environ["AR_PROJECT"] = r                        # a child started from another folder must find the same problem
+    if not os.path.isfile(os.path.join(r, "project.json")):    # defaults + a ghost ledger folder would follow otherwise
+        sys.exit(f"no project.json in {r} (AR_PROJECT={os.environ.get('AR_PROJECT')!r}, else default_project of autoresearch/config.json): "
+                 "that folder is not a problem folder")
+    return r
 
 
 def cfg_of(problem_root):

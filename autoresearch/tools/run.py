@@ -164,6 +164,11 @@ def gpu_used_mb():
         return None
 
 
+def mem_ok(used_mb, max_mb):
+    """the memory gate of --gpu-max-mb: no gate when max_mb is 0; a GPU that cannot be read (nvidia-smi failed: used_mb None) is NOT free"""
+    return not max_mb or (used_mb is not None and used_mb < max_mb)
+
+
 def gpu_info():
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"], capture_output=True, text=True, timeout=20).stdout
@@ -203,10 +208,33 @@ def heartbeat_age(d):
 
 
 def record(d):
-    try:
-        return json.load(open(os.path.join(d, "run.json")))
-    except Exception:
-        return {}
+    """the run record of a directory, {} when there is none. A file that exists but does not parse, or a write in progress (a tmp file next to it),
+    is retried a few times: on /mnt/c (9p) an atomic replace is not atomic for a concurrent reader (about 2 % torn / missing reads measured)"""
+    path = os.path.join(d, "run.json")
+    for i in range(4):
+        try:
+            return json.load(open(path))
+        except Exception:
+            try:
+                writing = (os.path.exists(path) or any(n.startswith("run.json.tmp.") for n in os.listdir(d))
+                           or time.time() - os.path.getmtime(d) < 1.0)         # the directory changed a moment ago: a replace may be in flight
+            except OSError:
+                writing = False
+            if not writing or i == 3:
+                return {}
+            time.sleep(0.05)
+
+
+def save_rec(path, rec, indent=1):
+    """write a run record / slot owner file through a temporary file and an atomic replace: other tools poll these files (state_of, schedule,
+    tick, GpuSlot.stale); a torn read gave record() == {}, and a live slot with an unreadable owner file looked stale and was taken twice"""
+    text = json.dumps(rec, indent=indent)
+    for i in range(3):
+        try:
+            return P.atomic_write(path, text)
+        except PermissionError:      # native Windows: os.replace over a file that a reader has open
+            time.sleep(0.1)
+    P.atomic_write(path, text)
 
 
 def state_of(d):
@@ -320,6 +348,11 @@ class GpuSlot:
             except OSError:
                 return False
         o = record(s)
+        if not o:                    # owner file there but unreadable right now: a taker that is writing it, not a dead one
+            try:
+                return time.time() - os.path.getmtime(s) > 10
+            except OSError:
+                return False
         owner = o.get("run_dir", "")
         return not pid_alive(o.get("pid")) or (owner and os.path.isdir(owner) and state_of(owner) != "running")
 
@@ -337,7 +370,7 @@ class GpuSlot:
                     os.mkdir(s)
                 except FileExistsError:
                     continue
-            json.dump(dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now()), open(os.path.join(s, "run.json"), "w"))
+            save_rec(os.path.join(s, "run.json"), dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now()), indent=None)
             self.held = s
             return True
         return False
@@ -479,7 +512,7 @@ def main():
                    created=now(), status="waiting", after=a.after, timeout_min=a.timeout)
         if prev.get("code_hash"):
             rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
-        json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+        save_rec(os.path.join(d, "run.json"), rec)
     finally:
         try:
             os.rmdir(claim)
@@ -491,7 +524,7 @@ def main():
         why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after, hb)
         if why:
             rec.update(status="blocked", ended=now(), notes=why)
-            json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+            save_rec(os.path.join(d, "run.json"), rec)
             ledger_safe(ledger, dict(rec, exit=3, duration_s=0), clear)
             print(f"[{a.id}] blocked: {why}")
             return 3
@@ -502,11 +535,11 @@ def main():
             while True:
                 beat(hb, "waiting for the GPU")
                 u = gpu_used_mb() if a.gpu_max_mb else None
-                if (u is None or u < a.gpu_max_mb) and slot.try_take():
+                if mem_ok(u, a.gpu_max_mb) and slot.try_take():
                     break
                 if time.time() - t0 > a.wait_gpu * 60:
-                    rec.update(status="gpu_busy", ended=now(), notes=f"GPU memory {u} MB in use or all {a.gpu_slots} slots taken for {a.wait_gpu} min")
-                    json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+                    rec.update(status="gpu_busy", ended=now(), notes=("nvidia-smi unreadable" if (a.gpu_max_mb and u is None) else f"GPU memory {u} MB in use") + f" or all {a.gpu_slots} slots taken for {a.wait_gpu} min")
+                    save_rec(os.path.join(d, "run.json"), rec)
                     ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
                     print("GPU did not become free:", rec["notes"])
                     return 1
@@ -518,7 +551,7 @@ def main():
         if gnote:
             notes.append(gnote)
         rec.update(status="running", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
-        json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+        save_rec(os.path.join(d, "run.json"), rec)
         t1 = time.time()
         rc, attempt, tail = 1, 0, ""
         while attempt <= a.retries:
@@ -548,7 +581,10 @@ def main():
             res = "(result file unreadable)"
     status = "ok" if rc == 0 else "timeout" if rc == 124 else "failed"
     rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
-    json.dump(rec, open(os.path.join(d, "run.json"), "w"), indent=1)
+    try:
+        save_rec(os.path.join(d, "run.json"), rec)
+    except OSError as e:             # the command has finished: the done flag and the ledger row matter more than this file
+        print(f"[{a.id}] warning: run record not written ({e!r})", flush=True)
     if rc == 0:
         open(os.path.join(d, "done"), "w").write(rec["ended"] + "\n")
     if attempt > 1:

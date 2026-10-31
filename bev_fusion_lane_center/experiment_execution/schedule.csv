@@ -54,8 +54,6 @@ L19.tests_end,S19,evaluate,cancelled,E244.sum,cpu,30m,10,lead,,03:00-03:30 run_a
 L19.p4,S19,summary,cancelled,L19.tests_end;E244.sum;E240.sum,agent,60m,10,lead,,"03:00-04:00 PLAN end-of-loop and What the system still needs, check_numbers.py, fresh ar-reviewer mode numbers, check_structure.py, ledger notes, DECISIONS entries (bands, cpu_slots, K192-K195), HANDOVER rewrite, commit; 03:00-03:30 ledger.py tail --loop 19",
 E252.a0,I1,analysis,planned,,cpu,10m,5,,E252.a0,map offset by city (done),
 E252.b0,I1,analysis,planned,E252.a0,cpu,10m,5,,E252.b0,referee follow-up,
-E240.a3,I2,train,planned,,gpu,20m,5,,E240.a3,"seed pair 3, j1rc, stored map",
-E240.c3,I2,train,planned,E240.a3,gpu,20m,5,,E240.c3,"seed pair 3, j1eq, stored map",
 E255.mc,I3,analysis,planned,,cpu,15m,5,,E255.mc,matched-vertex grids of the exact-map controls,
 E255.a0,I3,train,planned,E240.c3,gpu,25m,5,,E255.a0,"Poisson set loss, full schedule",
 E255.mp,I3,analysis,done,E255.a0,cpu,15m,5,,,matched-vertex procedure for arm a (python e255_matched.py e25_j1phd2_s0),

@@ -455,6 +455,43 @@ try:
     assert [x["item"] for x in SC.ready(sch)] == ["a", "c"]
     st = {x["item"]: x["state"] for x in SC.derived(sch, f"{T}/runs")}
     assert st == {"a": "done", "b": "failed", "c": "planned"} and sch[0]["state"] == "planned", st  # derived from the run records; the input rows are untouched
+    # D22: run records are written atomically (a reader never sees a torn file), an unreadable GPU is not free, a folder without
+    # project.json is refused, schedule add refuses an existing item, ledger note needs an id
+    import threading
+    rd = f"{T}/runs/S.atomic"
+    os.makedirs(rd, exist_ok=True)
+    RUN.save_rec(os.path.join(rd, "run.json"), dict(id="S.atomic", pid=1))
+    stop = threading.Event()
+
+    n_writes = [0]
+
+    def writer():
+        while not stop.is_set():
+            RUN.save_rec(os.path.join(rd, "run.json"), dict(id="S.atomic", pid=1, notes="x" * 20000, i=n_writes[0]))
+            n_writes[0] += 1
+    th = threading.Thread(target=writer)
+    th.start()
+    try:
+        torn, t_end = 0, time.time() + 30
+        while n_writes[0] < 50 and time.time() < t_end:           # read for as long as the writer needs for 50 replaces
+            torn += 0 if RUN.record(rd) else 1
+    finally:
+        stop.set()
+        th.join()
+    assert torn == 0 and n_writes[0] >= 50, f"{torn} torn reads of a run record, {n_writes[0]} writes (a dead writer proves nothing)"
+    assert RUN.mem_ok(None, 9000) is False and RUN.mem_ok(None, 0) is True and RUN.mem_ok(8000, 9000) is True and RUN.mem_ok(9500, 9000) is False
+    empty = tempfile.mkdtemp(prefix="ar_noproj_")
+    r2 = subprocess.run([sys.executable, f"{HERE}/ledger.py", "render"], capture_output=True, text=True, env=dict(env, AR_PROJECT=empty))
+    assert r2.returncode != 0 and "no project.json" in r2.stdout + r2.stderr and os.listdir(empty) == [], (r2.stdout, r2.stderr, os.listdir(empty))
+    shutil.rmtree(empty)
+    SC.save([dict(item="S.dup1", kind="train", state="planned", resource="cpu", priority="1", command="true")], f"{T}/schedule.csv")
+    sch_before = open(f"{T}/schedule.csv", "rb").read()
+    r5 = subprocess.run([sys.executable, f"{HERE}/schedule.py", "add", "S.dup1", "--kind", "train"], capture_output=True, text=True, env=env)
+    assert r5.returncode != 0 and "exists already" in r5.stdout + r5.stderr and open(f"{T}/schedule.csv", "rb").read() == sch_before \
+        and not os.path.exists(f"{T}/schedule.csv.lock"), (r5.stdout, r5.stderr)
+    led_before = open(f"{T}/LEDGER.csv", "rb").read()
+    r6 = subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "--result", "x"], capture_output=True, text=True, env=env)
+    assert r6.returncode != 0 and open(f"{T}/LEDGER.csv", "rb").read() == led_before, (r6.stdout, r6.stderr)
     import clean_temp
     clean_temp.selftest()
     import guard_hook  # P4: protected files, grants, json entries, Windows spellings
