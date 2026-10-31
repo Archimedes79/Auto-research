@@ -12,7 +12,10 @@ camera-visible cells, held-out synthetic scenes):
   G1 wiring     overfit ONE scene (ours, oracle depth): every class IoU@0.5 m >= 0.9 on that scene
   G2 learning   ours + PD + oracle depth: class mean >= null + 0.15 on both seeds
   G3 depth      vehicles: PD-oracle - P >= +0.05 (mean of two seeds each)
-  G4 control    PD with shuffled depth: vehicles <= P + 0.03 (the depth CONTENT carries the gain, not the extra weight)
+  G4b control   PD with pixel-permuted depth (the sample's own histograms at random other pixel groups): vehicles <= P + 0.03 (the depth
+                CONTENT at its place carries the gain, not the extra weight). History: G4 as first written (PD with the NEXT sample's depth, vehicles <=
+                P + 0.03) FAILED in the first full run of 2026-10-31 (0.477 vs 0.286): that depth keeps the scene-independent flat-ground depth (89 % of
+                ground groups within 1 m of the truth), so it is no null; replaced by G4b, not removed silently
   G5 anchors    each published preset (simplebev, lss, dualbev) learns: class mean >= null + 0.15; and ours >= max of them - 0.02
 Printed besides the gates: per class and range band, paired scene bootstrap PD - P, null, parameters, seconds per run.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_s1_pipeline.py [--steps N] [--arms a,b] [--quick]
@@ -42,6 +45,7 @@ ARMS = {"ours PD oracle": ("ours", {}, "oracle", (0, 1)),
         "ours P": ("ours", {"lift": "p"}, "oracle", (0, 1)),
         "ours PD blurred": ("ours", {}, "blurred", (0,)),
         "ours PD shuffled": ("ours", {}, "shuffled", (0,)),
+        "ours PD permuted": ("ours", {}, "permuted", (0,)),
         "simplebev (P, 8 slices)": ("simplebev", {}, "oracle", (0,)),
         "lss (S, heights summed)": ("lss", {}, "oracle", (0,)),
         "dualbev (13 heights summed, width 1.0)": ("dualbev", {}, "oracle", (0,))}
@@ -142,7 +146,10 @@ def main():
     p_v, _ = mean_over_seeds("ours P", veh)
     gates[f"G3 depth: vehicles PD - P = {pd_v - p_v:+.3f} >= +0.05"] = pd_v - p_v >= 0.05
     sh_v, _ = mean_over_seeds("ours PD shuffled", veh)
-    gates[f"G4 control: vehicles shuffled {sh_v:.3f} <= P {p_v:.3f} + 0.03"] = sh_v <= p_v + 0.03
+    log(f"info: PD with the NEXT sample's depth (shuffled) reaches vehicles {sh_v:.3f} against P {p_v:.3f}: it keeps the scene-independent ground depth")
+    if ("ours PD permuted", 0) in res:
+        pm_v, _ = mean_over_seeds("ours PD permuted", veh)
+        gates[f"G4b control: vehicles with pixel-permuted depth {pm_v:.3f} <= P {p_v:.3f} + 0.03"] = pm_v <= p_v + 0.03
     soa = {k: cm(res[(k, 0)]) for k in ARMS if k.startswith(("simplebev", "lss", "dualbev"))}
     gates["G5a anchors learn: " + ", ".join(f"{k.split(' ')[0]} {v:.3f}" for k, v in soa.items()) + f" >= null {nul:.3f} + 0.15"] = \
         all(v >= nul + 0.15 for v in soa.values())

@@ -41,6 +41,9 @@ class Frames:
         self.nusc, self.root, self.store = nusc, root, store
         self.ida = nuscenes_front_ida(dst_hw=DST_HW)
 
+    def _image_uint8(self, sd):
+        return FrontRadarDataset._image_uint8(self, sd)
+
     def _image(self, sd):
         return FrontRadarDataset._image(self, sd)
 

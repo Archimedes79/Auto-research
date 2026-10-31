@@ -7,7 +7,7 @@ features - the oracle gate at stride 8 was too kind, plan 10.1):
   fractions (sky, road, lane line, vehicle, pedestrian) + 75 noise channels; perfect semantics, unknown position
 - prob_oracle (118, 16, 44): the depth head's output if it were perfect: the histogram of the group's pixel depths
   over the 118 bins (tests/test_oracle_lift.depth_hist); variants made at batch time by `depth_variant`:
-  blurred (Gaussian in 1/z, mimics the frozen head's far-range blur), shuffled (another sample's), uniform
+  blurred (Gaussian in 1/z, mimics the frozen head's far-range blur), shuffled (another sample's: keeps the scene-independent flat-ground depth, see the S1a card section 5), permuted (the sample's histograms at random other pixel groups), uniform
 - gt (3, 120, 104): lane lines, vehicles, pedestrians as coverage on the BEV grid (synthetic_world.gt_bev); mask (120, 104):
   the cells the camera sees (the cells whose height samples project into the image, LiftPD.visibility), float
 - K, T_cam_car, hw: the rig, the same for every sample; ida = None
@@ -92,7 +92,7 @@ _BLUR = None
 
 
 def depth_variant(prob, kind):
-    """prob (B, D, h, w) oracle histograms -> the variant: 'oracle', 'blurred', 'shuffled' (the next sample's), 'uniform'."""
+    """prob (B, D, h, w) oracle histograms -> the variant: 'oracle', 'blurred', 'shuffled' (the next sample's), 'permuted', 'uniform'."""
     global _BLUR
     if kind == "oracle":
         return prob
@@ -102,6 +102,13 @@ def depth_variant(prob, kind):
         return out / out.sum(1, keepdim=True).clamp(min=1e-6) * (prob.sum(1, keepdim=True) > 0)
     if kind == "shuffled":
         return prob.roll(1, 0)
+    if kind == "permuted":                    # the same histograms at random other pixel groups of the SAME sample: marginal kept, depth-pixel relation destroyed
+        B, D_, h, w = prob.shape
+        g = torch.Generator().manual_seed(1234)
+        out = prob.clone().view(B, D_, h * w)
+        for i in range(B):
+            out[i] = out[i][:, torch.randperm(h * w, generator=g)]
+        return out.view(B, D_, h, w)
     if kind == "uniform":
         return torch.full_like(prob, 1.0 / prob.shape[1])
     raise ValueError(kind)
