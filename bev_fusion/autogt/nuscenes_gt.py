@@ -61,6 +61,7 @@ class NuScenesGT:
         self._scenes = collections.OrderedDict()
         self._stationary = {}
         self._bounds = {}
+        self.signature()                               # frozen now (see signature())
 
     # ---- scene data (tracks, ego, radar) of the flow box, a few scenes kept
     def scene(self, scene_token):
@@ -98,13 +99,16 @@ class NuScenesGT:
         """10 hex chars identifying this generator: the source of every file that shapes the GT (SIGNATURE_FILES) plus the
         flags (stationary_fix, map_offsets, use_flow, use_radar, flow config). Part of every cache key of derived GT, so a
         changed generator can never be mixed with GT cached by an older one."""
-        h = hashlib.sha1()
-        here = os.path.dirname(__file__)
-        for name in SIGNATURE_FILES:
-            h.update(open(os.path.join(here, name), "rb").read())
-        h.update(repr((self.stationary_fix, sorted((k, tuple(v)) for k, v in self.map_offsets.items()), self.use_flow,
-                       self.use_radar, self.flow_config, self.boxes_at)).encode())
-        return h.hexdigest()[:10]
+        sig = getattr(self, "_signature", None)
+        if sig is None:                  # computed ONCE (at construction): a process that runs while the source is edited keeps
+            h = hashlib.sha1()           # the key of the code it runs - re-hashing the files per call made a running job
+            here = os.path.dirname(__file__)                 # write its cache under a key no other process reads
+            for name in SIGNATURE_FILES:
+                h.update(open(os.path.join(here, name), "rb").read())
+            h.update(repr((self.stationary_fix, sorted((k, tuple(v)) for k, v in self.map_offsets.items()), self.use_flow,
+                           self.use_radar, self.flow_config, self.boxes_at)).encode())
+            sig = self._signature = h.hexdigest()[:10]
+        return sig
 
     def stationary_instances(self, scene_token):
         """instance token -> fixed world pose (translation (3,), yaw, size (3,)) of the scene's stationary instances
@@ -136,7 +140,8 @@ class NuScenesGT:
     # ---- one keyframe
     def keyframe_gt(self, sample_token, grid, ss=4, sd=None):
         """all layers of one keyframe (see the module docstring). `sd` = another CAM_FRONT sample_data of the same scene
-        (a 12 Hz sweep): the ego frame, camera and map layers are those of that frame (boxes stay the keyframe's)."""
+        (a 12 Hz sweep): the ego frame, camera and map layers are those of that frame, and the keyframe's boxes are moved to its
+        time by v * dt (first order, up to +-0.25 s; with boxes_at="annotation" they stay where they were annotated)."""
         nusc = self.nusc
         sample = nusc.get("sample", sample_token)
         sd = sd or self.cam(sample_token)
@@ -245,7 +250,7 @@ class NuScenesGT:
             ve = Rg2e[:2, :2] @ v
             # annotation time -> GT time: constant velocity over t_cam; a stationary box (v = 0) and a box of unknown
             # velocity stay where the annotation (or the fixed world pose) puts them; z, size and yaw are kept
-            trans_ann = np.asarray(trans, float)
+            trans_ann = np.array(trans, float)                   # a copy: `fixed` poses are shared by all keyframes of the scene
             shifted = known and not stationary and t_cam != 0.0
             shift = v * t_cam if shifted else np.zeros(2)
             trans = trans_ann + np.r_[shift, 0.0]

@@ -126,6 +126,8 @@ def run(root=None, verbose=True):
     assert np.array_equal(k["drivable_area"], ka["drivable_area"]) and not np.array_equal(k["vehicle"], ka["vehicle"])
     short = gt.keyframe_gt(sc61["first_sample_token"], g)           # first keyframe: tracks without history
     assert all(b_["vel_known"] or (b_["vel"] == 0).all() for b_ in short["meta"]["boxes"])     # never a silent nonzero
+    unk = [b_ for b_ in short["meta"]["boxes"] if not b_["vel_known"]]
+    assert unk and all(b_["shift_s"] == 0.0 and np.array_equal(b_["world"], b_["world_ann"]) for b_ in unk), len(unk)   # not moved
     track = gt.camera_track(tok)                                  # ego flow = the exact pose change per camera frame
     sd = gt.cam(tok)
     i = [s["token"] for s in track].index(sd["token"])
@@ -138,6 +140,24 @@ def run(root=None, verbose=True):
     assert err < 0.05, err
     sw = gt.keyframe_gt(tok, g, sd=nx_)                           # a 12 Hz sweep frame
     assert abs(sw["meta"]["timestamp"] - nx_["timestamp"]) == 0 and sw["drivable_area"].mean() > 0.05
+    # boxes at a sweep 0.2 s after the annotation (sd=): the constant-velocity shift must agree with the straight line between the
+    # annotations of this and the next keyframe - independent of the sign of v (a wrong direction would be off by 2 * |shift|)
+    nxt_tok = gt.nusc.get("sample", tok)["next"]
+    t0a, t1a = (gt.nusc.get("sample", x)["timestamp"] for x in (tok, nxt_tok))
+    sd3 = track[i + 3]
+    sw3 = gt.keyframe_gt(tok, g, sd=sd3)
+    f = (sd3["timestamp"] - t0a) / (t1a - t0a)
+    nxt_boxes = {b_["instance"]: b_ for b_ in ann.keyframe_gt(nxt_tok, g)["meta"]["boxes"]}
+    errs, wrong = [], []
+    for b_ in sw3["meta"]["boxes"]:
+        o_ = nxt_boxes.get(b_["instance"])
+        if b_["stationary"] or not b_["vel_known"] or o_ is None or np.hypot(*b_["vel"]) < 3:
+            continue
+        lin = b_["world_ann"][:2] + f * (o_["world"][:2] - b_["world_ann"][:2])
+        errs.append(np.linalg.norm(b_["world"][:2] - lin))
+        wrong.append(np.linalg.norm(2 * b_["world_ann"][:2] - b_["world"][:2] - lin))            # the opposite sign
+        assert abs(b_["shift_s"] - (sd3["timestamp"] - t0a) * 1e-6) < 1e-12
+    assert len(errs) >= 3 and np.median(errs) < 0.3 and np.median(wrong) > 2 * np.median(errs), (len(errs), np.median(errs), np.median(wrong))
 
     # 5 the build command (cache keyed by the signature)
     from .cli import build, load_keyframe

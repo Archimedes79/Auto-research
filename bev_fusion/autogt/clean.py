@@ -8,8 +8,9 @@ bev_fusion/_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is delet
 - reports: *.pdf in autogt/reports (what `python -m autogt report` writes by default; the report is self-contained, its sample pictures are
   drawn straight into the PDF and never exist as files)
 - old-outputs: bev_fusion/_to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
-- stale-caches DIR: the cache folders `DIR/<signature>` of `python -m autogt build` / `report` whose signature is not the current
-  one (every edit of the generator changes the signature, GT of older versions is never read again); all-caches DIR: every
+- stale-caches DIR: the cache folders `DIR/<signature>` of `python -m autogt build` / `report` whose signature is not a current
+  one (the default options or `--boxes-at annotation`; every edit of the generator changes the signature, GT of older versions
+  is never read again); all-caches DIR: every
   cache folder in DIR, the current one included (stored GT is derived data and can always be rebuilt)
 Never touches code, the current cache, or anything outside these categories.
 """
@@ -51,11 +52,13 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
         if current_signature is None:
             import types
             from .nuscenes_gt import NuScenesGT
-            current_signature = NuScenesGT.signature(types.SimpleNamespace(      # the signature of the default options
-                stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at="camera"))
+            # the signatures of the current source with the default options and with the annotation-time boxes
+            current_signature = {NuScenesGT.signature(types.SimpleNamespace(
+                stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at=b)) for b in ("camera", "annotation")}
+        keep = {current_signature} if isinstance(current_signature, str) else set(current_signature)
         for d in sorted(os.listdir(stale_caches)):
             p = os.path.join(stale_caches, d)
-            if os.path.isdir(p) and os.path.exists(os.path.join(p, "index.json")) and d != current_signature:
+            if os.path.isdir(p) and os.path.exists(os.path.join(p, "index.json")) and d not in keep:
                 items.append((p, "stale-cache"))
     if older_than is not None:
         limit = time.time() - older_than * 86400
