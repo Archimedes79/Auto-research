@@ -4,14 +4,14 @@ How loops are planned, run and logged follows `../../autoresearch/METHOD.md` (P1
 
 | file / folder | what it holds |
 |---|---|
-| [PLAN.md](PLAN.md) | the experiment tree of the current (or last) loop, written in P2 from `autoresearch/templates/plan.md`; only the status column changes during the loop. Now: loop 18, closed |
-| `schedule.csv` | one row per work item (state, dependencies, resource, budget, owner, run ids): what happens next; `autoresearch/tools/schedule.py show / next / set / add` (states of items with runs are read from the run records). Empty until the next P2 |
+| [PLAN.md](PLAN.md) | the experiment tree of the current (or last) loop, written in P2 from `autoresearch/templates/plan.md`; only the status column changes during the loop (now: loop 21) |
+| `schedule.csv` | one row per work item (state, dependencies, resource, budget, owner, run ids): what happens next; `autoresearch/tools/schedule.py show / next / set / add` (states of items with runs are read from the run records) |
 | [LEDGER.md](LEDGER.md) / `LEDGER.csv` | one row per run started with `autoresearch/tools/run.py`: hypothesis, prediction, rule, status, result, decision, commit |
 | [DECISIONS.md](DECISIONS.md) | the only channel for Mirko's decisions (champion promotion with its TEST check, problem changes, tool / gate changes, permissions): open entries with options, recommendation and evidence; decided entries with date |
 | [closed_questions.md](closed_questions.md) | questions answered the same way twice; re-opening needs a new mechanism |
 | `runs/` | run records of the launcher: `run.json` (with commit and tag), `run.log`, `done` flag only on success |
 | [plans/](plans/) | longer design documents written before loops: loop 16 triage plan, hypothesis tree, concept, growth / link architectures, literature compatibility space, experiment table (generated), `PRACTICE_NOTES.md`, `System_Review_2026-10-25.md` |
-| [history/](history/) | everything that was state once: STATE of loops 2-11, loop indexes 8-15, loop-16 triage state, LOOP18_STATE, the loop prompts (PROGRAM of loop 18), old handovers, loop-17 recovery and loop-18 code backup, logs of loop 17, old templates, launcher scripts of loops 15-16 and the loop-wide tools of loop 18 (`history/launchers/loop18/`: backup, ledger notes, status, final VAL table; the experiment scripts of loop 18 are in `../experiments/E2xx_*/code/`, D13), path map, migration log, doc backups, `SYSTEM_2026-10-25.md` (first design note, now METHOD.md + PROBLEM.md) |
+| [history/](history/) | everything that was state once: STATE of loops 2-11, loop indexes 8-15, loop-16 triage state, LOOP18_STATE, the loop prompts (`prompts/PROGRAM_loopNN.md`, one per loop from 18 on; written from the start checklist of `autoresearch/prompts/loop.md`), old handovers, loop-17 recovery and loop-18 code backup, logs of loop 17, old templates, launcher scripts of loops 15-16 and the loop-wide tools of loop 18 (`history/launchers/loop18/`: backup, ledger notes, status, final VAL table; the experiment scripts of loop 18 are in `../experiments/E2xx_*/code/`, D13), path map, migration log, doc backups, `SYSTEM_2026-10-25.md` (first design note, now METHOD.md + PROBLEM.md) |
 
 ## The cycle in this folder
 1. **P1 / P2** (before a loop, the steps of `autoresearch/prompts/research_steps.md`, started by hand): research in `../literature/`, experiment cards (`experiment.md` per experiment folder), then `PLAN.md` and `schedule.csv`.

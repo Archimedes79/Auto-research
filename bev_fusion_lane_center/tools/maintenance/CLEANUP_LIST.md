@@ -11,7 +11,7 @@ Nothing here is urgent for disk space: the WSL disk has 715 GB free of 1007 GB (
 | `runs/` dead runs | ~1 GB | done 2026-10-25 for the smoke runs (`e120_smoke`, `e121_smoke`, `e18_smoke_joint` -> `_to_delete/runs_2026-10-25/smoke/`); KEPT: `e30_s4_diverged` and `e30_scene11` (read by `experiments/E030_*/code/make_e30.py`), `e34_*` / `e35_B` (named in E034) | move the kept ones only together with their experiment code |
 | ~~`experiment_execution/loop17_recovery/`~~ (done) | 0.6 MB | already in `experiment_execution/history/loop17_recovery/` | - |
 | `literature/sources/` | 4 MB | multi-paper notes without per-paper structure | the literature chat is reorganising `literature/`; leave to it |
-| `temp/literature_backup_2026-10-24/` | small | safety copy made by the literature chat | move when that work is filed |
+| `temp/literature_backup_2026-10-24/` | small | safety copy made by the literature chat | done 2026-10-31: moved to `_to_delete/cleanup_2026-10-31_review/temp/` (its copied `tools/catalogue.py` shadowed the live one through the temp/ search path of `_py14.sh`) |
 
 ## B. Caches in the WSL home (derived data, all regenerable; hours of GPU time)
 
