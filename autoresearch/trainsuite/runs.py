@@ -28,7 +28,7 @@ def _flat(obj, prefix=""):
 def read_log(path):
     """(train rows, eval rows, restarts) of a metrics stream. A row is a flat dict with `step`; an eval row has keys `val.*`.
     After a resume the file holds steps twice: a row whose step is not above the last one replaces everything from that step on
-    (the later attempt wins); `restarts` counts those replacements. A half-written last line is skipped."""
+    (the later attempt wins, its evaluations from that step on included); `restarts` counts those replacements. A half-written last line is skipped."""
     train, evals, restarts = [], [], 0
     try:
         f = open(path, encoding="utf-8", errors="replace")
@@ -54,6 +54,8 @@ def read_log(path):
                     lst.pop()
                 if lst is train:
                     restarts += 1
+                    while evals and evals[-1]["step"] >= row["step"]:        # the evaluations of the superseded training suffix go with it
+                        evals.pop()
             lst.append(row)
     return train, evals, restarts
 

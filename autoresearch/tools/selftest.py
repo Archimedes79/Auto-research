@@ -570,6 +570,20 @@ try:
     assert rows()["S.dead"]["status"] == "stalled" and "launcher gone" in rows()["S.dead"]["notes"] and "1 row(s) added" in sy.stdout, (rows()["S.dead"], sy.stdout)
     assert "0 row(s) added" in subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env).stdout, "a second sync adds nothing"
     assert RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.ok", status="failed"), fill=True) is False and rows()["S.ok"]["status"] == "ok", "a finished row is not replaced by a fill"
+    # L1: the re-run of a failed id succeeded but its own final ledger write failed: the row still says failed (an earlier attempt); sync replaces it
+    # with the newer attempt's facts and drops the earlier attempt's judgement, and never replaces the row of the SAME attempt
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1", status="failed", started="2026-10-24T10:00:00", exit="1", result="old result", decision="CUT", notes="attempt 1", hypothesis="h"))
+    os.makedirs(f"{T}/runs/S.l1", exist_ok=True)
+    json.dump(dict(id="S.l1", status="ok", exit=0, started="2026-10-25T10:00:00", ended="2026-10-25T10:05:00", duration_s=300, launcher_pid=1), open(f"{T}/runs/S.l1/run.json", "w"))
+    open(f"{T}/runs/S.l1/done", "w").write("x")
+    dry_sync = lambda: subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync", "--dry-run"], capture_output=True, text=True, env=env).stdout  # noqa: E731
+    assert "would add S.l1" in dry_sync(), "a finished row of an earlier attempt is outdated"
+    sy = subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env)
+    got = rows()["S.l1"]
+    assert got["status"] == "ok" and got["started"] == "2026-10-25T10:00:00" and got["result"] == "" and got["decision"] == "" and "attempt 1" not in got["notes"] \
+        and got["hypothesis"] == "h" and "1 row(s) added" in sy.stdout, (got, sy.stdout)
+    assert "S.l1" not in dry_sync() and RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1", status="failed", started="2026-10-25T10:00:00"), fill=True) is False, \
+        "the row of the same attempt is never replaced"
     # tick: an item `A;B` whose A is done starts B (not A again); a dry run writes nothing, also when an item cannot be started; a real run marks it blocked
     for rid in ("S.m2", "S.c1", "S.c2", "S.race"):
         subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", rid, "--hyp", "t", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)

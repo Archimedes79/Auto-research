@@ -319,7 +319,9 @@ def ledger_row(ledger, run_id):
 
 def ledger_write(ledger, row, clear=(), fill=False):
     """merge one row into the ledger under the lock (a planned row keeps what was written before the run; `clear` names columns of the old row to drop).
-    fill=True (ledger.py sync): only a missing row or a planned / running / stalled one is filled in, a finished row is never replaced; returns whether it wrote"""
+    fill=True (ledger.py sync): a missing row or a planned / running / stalled one is filled in; a finished row is replaced only by the row of a LATER
+    attempt (its `started` is later: the re-run whose own final write failed), which drops that old attempt's result, decision and notes; the same
+    attempt's row is never replaced; returns whether it wrote"""
     with P.locked(ledger):
         rows = []
         if os.path.exists(ledger):
@@ -327,7 +329,9 @@ def ledger_write(ledger, row, clear=(), fill=False):
                 rows = list(csv.DictReader(f))
         old = next((r for r in rows if r["id"] == row["id"]), {})
         if fill and old.get("status") not in (None, "", "planned", "running", "stalled"):
-            return False
+            if not (row.get("started") and row["started"] > (old.get("started") or "")):
+                return False
+            old = {k: v for k, v in old.items() if k not in ("result", "decision", "notes")}  # the judgement of the earlier attempt
         if fill and old.get("notes"):
             row = dict(row, notes=old["notes"] + "; " + row.get("notes", ""))
         old = {k: v for k, v in old.items() if k not in clear}

@@ -94,14 +94,17 @@ def tail(loop=None, n=15):
 
 
 def missing(inside=lambda rid: True):
-    """(id, run directory, state) of every run record that has ended (or whose launcher died: stalled) and has no ledger row, or only a planned / running / stalled one"""
+    """(id, run directory, state) of every run record that has ended (or whose launcher died: stalled) and has no ledger row, or only a planned / running /
+    stalled one, or one of an EARLIER attempt (the record started later: a re-run whose own final ledger write failed)"""
     import run as RUN
     have = {r["id"]: r for r in load()}
     out = []
     for rid, d in run_dirs():
-        st, row = RUN.state_of(d), have.get(rid, {}).get("status")
+        st, old = RUN.state_of(d), have.get(rid, {})
+        row = old.get("status")
         if inside(rid) and st in ("done", "ok", "failed", "timeout", "blocked", "gpu_busy", "stalled") \
-                and (row in (None, "", "planned", "running") or (row == "stalled" and st != "stalled")):  # a stalled row stays until the run really ends
+                and (row in (None, "", "planned", "running") or (row == "stalled" and st != "stalled")  # a stalled row stays until the run really ends
+                     or (old.get("started") and (RUN.record(d).get("started") or "") > old["started"])):
             out.append((rid, d, st))
     return out
 
