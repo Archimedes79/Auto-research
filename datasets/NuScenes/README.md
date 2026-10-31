@@ -12,7 +12,7 @@ State 2026-10-25 17:06: raw data copied to D: and verified (787,847 + 27,300 fil
 ## Layout on D: (`D:\Auto-research\NuScenes`)
 | folder | content |
 |---|---|
-| `nuscenes_full/` | v1.0-trainval: `v1.0-trainval/` (metadata, 850 scenes), `maps/` (incl. expansion v1.3, 4 cities), `samples/` (keyframes: 6 cameras, 5 radars, parts 1-6), `sweeps/` (radar sweeps parts 1-6; camera sweeps parts 1-6 being unpacked), `LICENSE` |
+| `nuscenes_full/` | v1.0-trainval: `v1.0-trainval/` (metadata, 850 scenes), `maps/` (incl. expansion v1.3, 4 cities), `samples/` (keyframes: 6 cameras, 5 radars, parts 1-6), `sweeps/` (radar sweeps parts 1-6; camera sweeps parts 1-6, complete since 2026-10-25), `LICENSE` |
 | `nuscenes_mini/` | v1.0-mini (environment tests) |
 | `downloads/` | archives: `nuscenes_camera/pNN/` (camera parts), `nuscenes_radar_456/`; one log per part |
 | `manifests/` | file lists (path, size) of the copy from WSL, used to check it |
@@ -31,7 +31,7 @@ State 2026-10-25 17:06: raw data copied to D: and verified (787,847 + 27,300 fil
 | parts 7-10, camera | 7-10 | archives on D: since 2026-10-28 (79.4 GB, approved by Mirko, each checked against its S3 ETag, kept in `downloads/nuscenes_camera/pNN/`); only `samples/CAM_FRONT` and `sweeps/CAM_FRONT` unpacked (`NUSC_MEMBERS`), the other five cameras are still in the archives (unpack them with `get_blob_part.sh` when a model needs them). The 340 scenes therefore have front camera + radar only |
 | parts 7-10, lidar | - | not downloaded (54.8 GB) |
 
-D: has about 35 GB free after this (2026-10-28); C: was full after the derived caches of these scenes (feature cache +9 GB), so finished study checkpoints of `bev_fusion` were moved to `D:\Auto-research\bev_fusion_ckpts\` (a `MOVED.txt` in each run folder).
+State 2026-10-31: D: 260 GB free, C: only 5.7 GB free. Against the rule "derived data on C:", three derived `bev_fusion` folders live on D: and are reached through symlinks from `bev_fusion/data/cache`: `D:\Auto-research\bev_fusion_cache_bevfusion`, `bev_fusion_cache_parts7_10`, `bev_fusion_ckpts` (a space decision, not a mistake). Earlier: D: had about 35 GB free after this (2026-10-28); C: was full after the derived caches of these scenes (feature cache +9 GB), so finished study checkpoints of `bev_fusion` were moved to `D:\Auto-research\bev_fusion_ckpts\` (a `MOVED.txt` in each run folder).
 
 Archive sizes and ETags: `wsl python3 datasets/NuScenes/tools/list_nuscenes_bucket.py trainval` (listing only).
 
@@ -45,9 +45,9 @@ Google Drive helpers (2026-10-26): `list_gdrive_folder.py <folder id>` lists a p
 | `get_parts_parallel.sh <kind> <part>...` | several parts in parallel (one connection gets 1-2 MB/s, six together about 6 MB/s) |
 | `extract_blob.sh <tgz> [--delete]` | path check (no absolute or `..` paths), then unpack; `NUSC_DEST` target, `NUSC_MEMBERS` (e.g. `sweeps`), `NUSC_WINTAR=1` unpacks with Windows `tar.exe` (fast on D:; WSL writes small files there at only about 50 per second) |
 | `verify_s3_etag.py <file> <etag>` | checks a file against a plain or multipart S3 ETag |
-| `link_views.sh` | builds the WSL views (above); moves the former WSL copies to `~/_to_delete/` |
+| `link_views.sh` | builds the WSL views (above); moves the former WSL copies to `~/_to_delete/`. It refuses while a process has a file of a view open; the guard matches the link targets (`/mnt/d/Auto-research/NuScenes/nuscenes_full/*`, `.../nuscenes_mini/*`, the additions folder), because an open file reached through a view resolves to them in `/proc/*/fd` (fixed 2026-10-31: the former guard matched `~/data/*` only and never fired); `--selftest` holds a mini-view file open and checks that the guard sees it |
 | `stop_downloads.sh` | stops running downloads (partial archives are kept) |
-| `move_additions.sh` | one-off of 2026-10-25: first separation of the lane project's additions inside WSL (superseded by `link_views.sh`) |
+| `datasets/NuScenes/_to_delete/` (not the one on D:) | moved out on 2026-10-31, listed in its README: `move_additions.sh` (superseded by `link_views.sh`) and the identical copies of `list_nuscenes_bucket.py` / `verify_s3_etag.py` from `history/` |
 | `history/` | one-off scripts of 2026-10-25 (first download run, D: speed test, copy to D: / C: with manifests, `verify_copy.ps1`, `sample_checksums.sh`, self-test of `extract_blob.sh`) |
 
 ## Speeds measured from WSL on D: (2026-10-25)

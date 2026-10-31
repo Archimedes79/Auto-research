@@ -3,13 +3,31 @@
 # symlinks only - raw entries point to the raw data on D: (D:\Auto-research\NuScenes), the lane project's additions
 # point to its project folder on C: (bev_fusion_lane_center/data/nuscenes_additions). The former real folders in
 # WSL are moved to ~/_to_delete/ (purge only with Mirko's OK). Re-run after the repository folder or the D: root
-# moves (the links are absolute). Refuses while a process has a file open under ~/data.
-# Usage (from the repository root): wsl bash datasets/NuScenes/tools/link_views.sh
+# moves (the links are absolute). Refuses while a process has a file open under ~/data (checked on the link TARGETS: an
+# open file reached through a view shows as /mnt/d/... or as the additions path in /proc/*/fd, never as ~/data/...).
+# Usage (from the repository root): wsl bash datasets/NuScenes/tools/link_views.sh [--selftest]
+#   --selftest: holds a file of the mini view open and checks that the guard sees it; changes nothing
 set -euo pipefail
 raw_d=/mnt/d/Auto-research/NuScenes
 add_c="$(cd bev_fusion_lane_center/data/nuscenes_additions && pwd)"
 add="nuscenes_infos_train.pkl nuscenes_infos_val.pkl nuscenes_infos_train_crn.pkl nuscenes_infos_val_crn.pkl radar_bev_filter radar_pv_filter"
-if find /proc/[0-9]*/fd -lname "$HOME/data/*" 2>/dev/null | grep -q .; then echo "ABORT: files under ~/data are open"; exit 1; fi
+open_files() {  # "fd -> target" of every open file under a view or under what the views link to (no pipe: pipefail + SIGPIPE)
+  find /proc/[0-9]*/fd \( -lname "$HOME/data/*" -o -lname "$raw_d/nuscenes_full/*" -o -lname "$raw_d/nuscenes_mini/*" \
+    -o -lname "$add_c/*" \) -printf '%p -> %l\n' 2>/dev/null || true
+}
+if [ "${1:-}" = "--selftest" ]; then
+  f="$HOME/data/nuscenes/LICENSE"
+  exec 3< "$f"                                       # this shell holds a file of the mini view open
+  hit=$(open_files)
+  exec 3<&-
+  case "$hit" in
+    *"/proc/$$/fd/3 -> $raw_d/nuscenes_mini/LICENSE"*) echo "selftest ok: the guard sees $f open (as $raw_d/nuscenes_mini/LICENSE)" ;;
+    *) echo "selftest FAILED: the guard does not see $f open"; exit 1 ;;
+  esac
+  exit 0
+fi
+open=$(open_files)
+if [ -n "$open" ]; then echo "ABORT: files under the views (~/data) are open:"; echo "$open" | head -n 5; exit 1; fi
 stamp=$(date +%Y-%m-%d_%H%M%S)
 mkdir -p "$HOME/_to_delete"
 view() {  # view <view path> <raw dir on D:> <additions dir on C:> <raw entries...>
