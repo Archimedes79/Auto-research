@@ -87,3 +87,42 @@ touching the image encoder: a side branch.
   `temp/t7/compare_<arm>_s<seed>.txt` and the timing if the GPU is idle. `temp/t7/wait_step1000.sh <run>` = the kill check.
 - 2026-10-31 kill check `t7_res4_s0`: `group.lines` mean over steps 900-1000 = 1.267 (reference 1.253 / 1.217, threshold 1.48):
   passes, the run continues. The same check is armed for `t7_rgb_s0`, `t7_res4_s1`, `t7_rgb_s1`.
+- 2026-10-31 kill checks (by hand after the fact; the armed waiter lost its argument): `t7_rgb_s0` 1.353, `t7_res4_s1` 1.266,
+  `t7_rgb_s1` 1.328, all below 1.48.
+- 2026-10-31 queue: `t7_res4_s0`, `t7_rgb_s0`, `t7_res4_s1` trained and evaluated; `t7_rgb_s1` died at step ~1000 (10:46,
+  `OSError: [Errno 12] Cannot allocate memory` in the data loader while another chat's feature extraction filled the box; crash log
+  `runs/t7_rgb_s1/train_crash_2026-10-31.log` after the resume starts; checkpoint 500 kept).
+- Layer 1: the current suite re-evaluates `t2_ref_s0` / `s1` to lane divider IoU@0.5 0.181 / 0.179 and drivable 0.714 / 0.711,
+  exactly the stored numbers (legacy evaluation kept in `runs/t2_ref_s*/eval_legacy_2026-10-28/`).
+- **GT caveat (found 2026-10-31, from the loop chat).** The GT is built by the LIVE `autogt/` (not by the pinned code snapshot);
+  its cache key is a hash of the generator source + flags. Training GT per run (cache signatures and their write times):
+  `t2_ref_s*` 962e788566 (written 10-26 to 10-28); `t7_res4_s0`, `t7_rgb_s0`, `t7_res4_s1` 7fe1149566 (10-30 21:05 to 10-31 08:44,
+  after 354caef: stationary rule, velocity); `t7_rgb_s1`, the t8 runs and every evaluation since 10-31 09:37 15efbde2d1 (769aafc /
+  a49bbd3: moving boxes at the camera time). The changes touch the OBJECT targets (box position, velocity); the map layers are
+  unchanged (the layer-1 reproduction above, made on 15efbde2d1, equals the stored maps). The first evaluations of `t7_res4_s0` /
+  `t7_rgb_s0` ran on 7fe1149566, those of the references and `t7_res4_s1` on 15efbde2d1: the detection deltas below mix GT versions,
+  the map deltas do not.
+  Control for the training GT: `t8_ctl_s0` / `s1` (another chat's lane 4) = `t2_ref_s*` config unchanged, trained at 96a02be (training/
+  differs from 4719d1d only in `cache_bevfusion_features.py`, not imported by this chain) on 15efbde2d1. `t8_ctl` vs `t2_ref` measures what
+  the GT change alone does to the dividers; inside the band = the training-GT confound cannot explain the arms' gain.
+- **Provisional result (VAL, 1000 cold frames, front FOV, dt 0; paired scene bootstrap against the reference seed with the same
+  index; `temp/t7/compare_<arm>_s<seed>.txt`).** Lane divider IoU@0.5:
+
+  | run | ref | arm | arm - ref | 95 % |
+  |---|---|---|---|---|
+  | L4 (res4) s0 | 0.181 | 0.246 | +0.065 | [+0.050, +0.079] |
+  | L4 (res4) s1 | 0.179 | 0.221 | +0.042 | [+0.030, +0.053] |
+  | LR (rgb) s0 | 0.181 | 0.196 | +0.015 | [+0.008, +0.022] |
+  | LR (rgb) s1 | - | crashed, resume queued | | |
+
+  L4 mean +0.054 (prediction +0.04), both intervals exclude 0; secondary (`temp/t7/ref_maps.py`): IoU@1 0.274 / 0.267 -> 0.346 / 0.306,
+  road divider IoU@1 0.279 / 0.286 -> 0.398 / 0.382, lane divider 0-20 m 0.215 / 0.221 -> 0.316 / 0.286. Other classes inside their
+  bands (drivable +0.012 / -0.012, walkway +0.009 / -0.008); mAP +0.005 / -0.010 (band 0.03). LR s0 gains less than the band (+0.015)
+  and loses mAP 0.044 (pedestrian AP -0.02; detection deltas mix GT versions, see above). By the rule L4 would be KEEP; the verdict waits
+  for the equal-GT control and the second LR seed.
+- Timing of 2026-10-31 12:30 (`temp/t7/time_*.log`) is INVALID: the GPU was idle at the check, another chat's training started in
+  the same minute.
+- `temp/t7/finish2.sh` (log `temp/t7/finish2.log`) waits for the end of lane 4, moves 0-byte GT cache files aside, resumes `t7_rgb_s1`
+  (pinned 4719d1d, from checkpoint 500; its `log.jsonl` will hold steps 500-1000 twice), re-evaluates the four arms on the current
+  GT (old eval folders kept as `eval_2026-10-31_first/`), writes `temp/t7/compare2_ref_<run>.txt` (arm or t8_ctl vs t2_ref) and
+  `compare2_ctl_<arm>.txt` (arm vs t8_ctl), and times on an idle GPU.

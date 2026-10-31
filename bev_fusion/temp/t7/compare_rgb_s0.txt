@@ -1,0 +1,12 @@
+paired scene bootstrap (1000 resamples), b - a; a = runs/t2_ref_s0, b = runs/t7_rgb_s0; val; 1000 common frames
+seg.fov/dt+0.00/drivable_area/all/all/iou@0                    a 0.6657  b 0.6728  b-a +0.0071  95% [+0.0011, +0.0135]  (excludes 0)
+seg.fov/dt+0.00/walkway/all/all/iou@0                          a 0.1914  b 0.1774  b-a -0.0141  95% [-0.0218, -0.0072]  (excludes 0)
+seg.fov/dt+0.00/lane_divider/all/all/iou@0.5                   a 0.1808  b 0.1961  b-a +0.0153  95% [+0.0084, +0.0221]  (excludes 0)
+seg.fov/dt+0.00/lane_divider:zc/all/all/f1@0.5                 a 0.0080  b 0.0022  b-a -0.0058  95% [-0.0102, -0.0022]  (excludes 0)
+seg.obj/dt+0.00/vehicle/all/all/iou@0                          a 0.4095  b 0.4130  b-a +0.0034  95% [-0.0012, +0.0076]
+det.dt+0.00/vehicle/all/ap@1                                   a 0.4683  b 0.4690  b-a +0.0007  95% [-0.0103, +0.0116]
+det.dt+0.00/vehicle/all/ap@2                                   a 0.6061  b 0.6162  b-a +0.0101  95% [+0.0008, +0.0194]  (excludes 0)
+det.dt+0.00/pedestrian/all/ap@1                                a 0.1413  b 0.1179  b-a -0.0234  95% [-0.0348, -0.0124]  (excludes 0)
+det.dt+0.00/pedestrian/all/ap@2                                a 0.2039  b 0.1828  b-a -0.0211  95% [-0.0347, -0.0064]  (excludes 0)
+det.dt+0.00/mean/all/mAP                                       a 0.2767  b 0.2331  b-a -0.0436  95% [-0.0602, -0.0270]  (excludes 0)
+loss.mean/total                                                a 11.3532  b 11.3750  b-a +0.0218  95% [-0.0091, +0.0539]
