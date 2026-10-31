@@ -1,0 +1,32 @@
+{
+  "_about": "Machine-readable part of the bev_fusion problem for the tools in ../autoresearch/tools (paths relative to this folder; decision D23 of 2026-10-31). Launch a training: see records/README.md.",
+  "name": "camera + radar BEV system (bf)",
+  "tag_prefix": "bf",
+  "ledger": "records/LEDGER.csv",
+  "ledger_md": "records/LEDGER.md",
+  "run_records": "records/runs",
+  "schedule": "records/schedule.csv",
+  "test_log": "records/TEST_USAGE_LOG.md",
+  "holdout_split": "test",
+  "splits": ["val", "train", "mini", "test"],
+  "cards": "runs",
+  "headline_metrics": [],
+  "lower_is_better": ["ate", "ase", "aoe", "ave", "fp_hi", "median_ms", "p90_ms", "mean_ms"],
+  "code_dirs": ["training", "evaluation", "autogt", "tests"],
+  "fingerprint_extra": ["temp/train/run_ar.sh", "temp/train/run_cfg.sh"],
+  "scratch": "temp",
+  "live_code": ["training", "evaluation", "autogt"],
+  "trash": "_to_delete",
+  "gpu_slots": 2,
+  "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
+  "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
+  "structure": {
+    "root_files": ["README.md", "plan.md", "plan_draft2.md", "radar_encoding.md", "requirements.md", "project.json"],
+    "root_dirs": ["_to_delete", "autogt", "data", "evaluation", "experiments", "literature", "models", "records", "runs", "temp", "tests", "training"],
+    "folders_with_readme": ["_to_delete", "autogt", "data", "evaluation", "experiments", "models", "records", "runs", "temp", "training"],
+    "living": [],
+    "skip_parts": [],
+    "index_dirs": ["training", "evaluation", "autogt", "tests", "temp"],
+    "extra_bases": []
+  }
+}

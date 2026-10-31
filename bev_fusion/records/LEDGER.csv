@@ -1,0 +1,2 @@
+id,started,ended,status,exit,duration_s,hypothesis,basis,seed,command,result,decision,notes,prediction,rule,code_hash,split,commit
+smoke.d23,2026-10-31T15:20:06,2026-10-31T15:20:06,ok,0,0,,,,bash -c echo,"launcher smoke test (D23): snapshot and tag bf/smoke.d23, ledger row, done flag",setup check,no card,,,ced3b2e88bc3,val,dcb594c1b9

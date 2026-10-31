@@ -14,7 +14,10 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
       a clause with subsets passes when at_least (default: all) of its subsets pass. A violated guard -> CUT; a missed min_effect -> CUT ("rule not met")
   * deterministic: true (the arms share the checkpoint, e.g. a post-processing change): no training seed exists, so a single pair with an
     interval that excludes 0 counts as agreeing seeds
-  * bands: the experiment's band for its headline metric, a clause's own band, else 0.010; lower-is-better metrics are known by name (LOWER)
+  * bands: the experiment's band for its headline metric, a clause's own band, else 0.010; lower-is-better: the experiment's direction for its
+    headline metric, else the generic cost names (LOWER) plus the problem's project.json "lower_is_better" list
+  * the headline is judged for its evidence (one seed, a disagreeing seed, an interval containing 0) also when its clause is a guard (max_loss)
+    or it has no min_effect clause: a better headline on one seed is INCONCLUSIVE, not KEEP
   * --write writes decision.json next to the experiment file and appends "decide.py <date>: VERDICT (effect)" to the decision column of the
     variant arm's ledger rows (run_ids); a prose decision already there is kept in front of it
 This is the pre-registered decision, not a significance test: intervals come from the problem's evaluation (paired scene bootstrap).
@@ -28,7 +31,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-LOWER = {"vert100", "false_len_frac", "dup_frac", "ms", "ms_per_frame", "asm_ms", "map_err", "path_err", "ece"}
+LOWER = {"ms", "ms_per_frame"}  # generic cost names; problem metrics are listed in project.json "lower_is_better"
 DEFAULT_BAND = 0.010
 
 
@@ -55,16 +58,34 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
 # ------------------------------------------------------------------ experiment file + cards
 
 
-def is_lower(metric, exp=None):
-    """lower is better: the experiment's direction for its headline metric, else the known names (LOWER)"""
+# TEMPORARY (D24, 2026-10-31): the lane problem's names (tag prefix lcr), used only while its project.json has no "lower_is_better" key
+# (that file is protected and the grant is pending); remove this set once the key is there
+LEGACY_LANE_LOWER = {"vert100", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"}
+
+
+def lower_names(root=None):
+    """the lower-is-better metric names of a problem: project.json "lower_is_better" plus the generic LOWER"""
+    import project as P
+    try:
+        c = P.cfg_of(root or P.root())
+    except SystemExit:  # no problem folder (typed interface outside a project)
+        return set(LOWER)
+    if "lower_is_better" in c:
+        return LOWER | set(c["lower_is_better"])
+    return LOWER | (LEGACY_LANE_LOWER if c.get("tag_prefix") == "lcr" else set())
+
+
+def is_lower(metric, exp=None, root=None):
+    """lower is better: the experiment's direction for its headline metric, else the problem's names (lower_names)"""
     if exp is not None and metric == exp.get("metric"):
         return exp.get("direction") == "lower"
-    return metric in LOWER
+    return metric in lower_names(root)
 
 
 def paired_effect(metric, v_cards, c_cards, lower=None):
-    """(effect, paired diffs, interval or None) of a metric between two lists of (metrics, card, ref); the sign is 'higher is better'"""
-    sgn = -1.0 if (metric in LOWER if lower is None else lower) else 1.0
+    """(effect, paired diffs, interval or None) of a metric between two lists of (metrics, card, ref); the sign is 'higher is better'.
+    lower: the direction (pass it: the default reads the AR_PROJECT / default problem, not necessarily the experiment's)"""
+    sgn = -1.0 if (is_lower(metric) if lower is None else lower) else 1.0
     v = [m[metric] for m, _, _ in v_cards]
     c = [m[metric] for m, _, _ in c_cards]
     if not v or not c:
@@ -83,7 +104,7 @@ def paired_effect(metric, v_cards, c_cards, lower=None):
     return effect, diffs, interval
 
 
-def judge_clause(clause, exp, cards):
+def judge_clause(clause, exp, cards, root=None):
     """one clause -> dict(ok, effect, diffs, interval, flags, text); subsets are judged one by one"""
     import experiment as X  # noqa: F401  (same folder)
     metric = clause["metric"]
@@ -94,7 +115,7 @@ def judge_clause(clause, exp, cards):
     parts = []
     for s in subsets:
         vc, cc = cards[variant].get(s, []), cards[vs].get(s, [])
-        effect, diffs, interval = paired_effect(metric, vc, cc, is_lower(metric, exp))
+        effect, diffs, interval = paired_effect(metric, vc, cc, is_lower(metric, exp, root))
         flags = []
         if len(vc) != len(cc):
             flags.append(f"seed counts differ ({len(vc)} vs {len(cc)}): unpaired, counts as one seed")
@@ -128,13 +149,22 @@ def decide_experiment(exp, root):
     sgn = 1.0  # paired_effect already turns lower-is-better around; exp["direction"] is for the reader
     def head(arm):  # the whole-split cards, else the subset cards in subset order (then the "seeds" of the headline are the subsets)
         return cards[arm].get("") or [c for s in sorted(cards[arm]) for c in cards[arm][s]]
-    effect, diffs, interval = paired_effect(head_metric, head(variant), head(exp["control"]), is_lower(head_metric, exp))
+    effect, diffs, interval = paired_effect(head_metric, head(variant), head(exp["control"]), is_lower(head_metric, exp, root))
     effect *= sgn
-    clauses = [judge_clause(c, exp, cards) for c in exp["rule"]]
+    clauses = [judge_clause(c, exp, cards, root) for c in exp["rule"]]
     guards = [c for c in clauses if c["kind"] == "max_loss" and not c["ok"]]
     hc = next(c for c in clauses if c["metric"] == head_metric and c["kind"] == "min_effect") if any(c["metric"] == head_metric and c["kind"] == "min_effect" for c in clauses) else None
     missed = [c for c in clauses if c["kind"] == "min_effect" and not c["ok"] and c is not hc]
     flags = sorted({f for c in clauses if c["ok"] for f in c["flags"]})
+    if hc is None and effect > band and cards[variant].get(""):  # no min_effect clause on the headline (e.g. only a guard): its evidence is judged here
+        # (review 2026-10-31, T1); only for whole-split cards: with subset-only cards the "seeds" of head() are subsets, which a guard's at_least judges
+        if len(diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
+            flags.append("one seed")
+        if len(diffs) >= 2 and not all(d > 0 for d in diffs):
+            flags.append("a seed disagrees")
+        if interval is not None and interval[0] <= 0:
+            flags.append(f"interval [{interval[0]:+.3f}, {interval[1]:+.3f}] contains 0")
+        flags = sorted(set(flags))
     if guards:
         verdict, why = "CUT", "guard violated: " + "; ".join(c["text"] for c in guards)
     elif hc is not None and not hc["ok"]:

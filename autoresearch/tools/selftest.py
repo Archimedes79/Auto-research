@@ -23,7 +23,7 @@ T = tempfile.mkdtemp(prefix="ar_selftest_")
 os.makedirs(f"{T}/code")
 open(f"{T}/code/a.py", "w").write("x = 1\n")
 json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", ledger_md="LEDGER.md", run_records="runs", schedule="schedule.csv", test_log="TEST.md",
-               code_dirs=["code"], scratch="temp", live_code=["code"], cpu_slots=5), open(f"{T}/project.json", "w"))  # 5 here; the cpu-cap test below uses the default 1
+               code_dirs=["code"], scratch="temp", live_code=["code"], cpu_slots=5, lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))  # 5 here; the cpu-cap test below uses the default 1
 open(f"{T}/TEST.md", "w").write("| S.test.ok | logged |\n")
 env = dict(os.environ, AR_PROJECT=T)
 G = ["git", "-c", "safe.directory=*", "-C", T]
@@ -120,6 +120,24 @@ try:
     busy = go("S.busy", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1", "--wait-gpu", "0")
     assert busy.returncode == 1 and rows()["S.busy"]["status"] == "gpu_busy", busy.stdout
     shutil.rmtree(f"{T}/runs/.gpu_slots")
+    # project.json gpu_slots_dir: one slot folder shared by the problems of a machine (D23); a live slot there blocks this problem too
+    shared = tempfile.mkdtemp(prefix="ar_slots_")
+    assert RUN.slot_dir(T, dict(gpu_slots_dir=shared), f"{T}/runs") == os.path.normpath(shared) and RUN.slot_dir(T, {}, f"{T}/runs") == f"{T}/runs/.gpu_slots"
+    json.dump(dict(json.load(open(f"{T}/project.json")), gpu_slots_dir=shared), open(f"{T}/project.json", "w"))
+    os.makedirs(f"{shared}/0")
+    json.dump(dict(id="other", pid=os.getpid(), run_dir=f"{T}/runs/S.live"), open(f"{shared}/0/run.json", "w"))
+    busy2 = go("S.busy2", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1", "--wait-gpu", "0")
+    assert busy2.returncode == 1 and rows()["S.busy2"]["status"] == "gpu_busy", busy2.stdout
+    import tick as TK
+    assert TK.free_gpu_slots(f"{T}/runs", 2, shared) == 1 and TK.free_gpu_slots(f"{T}/runs", 2) == 2
+    shutil.rmtree(shared)
+    json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k != "gpu_slots_dir"}, open(f"{T}/project.json", "w"))
+    # a command's own exit 124 is a failure, not the launcher's timeout (review 2026-10-31)
+    envrun = go("S.env", ["bash", "-c", 'echo "id=$AR_RUN_ID commit=$AR_COMMIT tag=$AR_TAG"'])
+    rec = json.load(open(f"{T}/runs/S.env/run.json"))
+    assert envrun.returncode == 0 and f"id=S.env commit={rec['commit']} tag=t/S.env" in open(f"{T}/runs/S.env/run.log").read(), open(f"{T}/runs/S.env/run.log").read()
+    own = go("S.e124", ["bash", "-c", "exit 124"], "--no-git")
+    assert own.returncode == 124 and rows()["S.e124"]["status"] == "failed", (own.stdout, rows()["S.e124"]["status"])
     # a slot directory without an owner file (taker died between mkdir and the write) is reclaimed after 10 s
     os.makedirs(f"{T}/runs/.gpu_slots/0")
     old_t = time.time() - 60
@@ -212,6 +230,29 @@ try:
     lower = dict(a=dict(cards=["err.json#a", "err.json#b"]), c=dict(cards=["err.json#ca", "err.json#cb"]))
     assert verdict(arms=lower, metric="err", direction="lower", rule=[dict(metric="err", min_effect=0.01)]) == "KEEP", "lower is better by direction"
     assert verdict(arms=lower, metric="err", direction="higher", rule=[dict(metric="err", min_effect=0.01)]) == "CUT", "the same numbers read as higher-is-better"
+    # a headline judged only by a guard (no min_effect clause): its evidence still counts (review 2026-10-31, T1)
+    guard = [dict(metric="Q", max_loss=0.005)]
+    json.dump(dict(a=dict(Q=0.76, F=0.9), b=dict(Q=0.74, F=0.9), ca=dict(Q=0.73, F=0.9), cb=dict(Q=0.72, F=0.9)), open(f"{T}/cards.json", "w"))
+    assert verdict(arms=dict(a=dict(cards=["cards.json#a"]), c=dict(cards=["cards.json#ca"])), rule=guard) == "INCONCLUSIVE", "guard-only headline, one seed"
+    assert verdict(arms=two, rule=guard) == "KEEP", "guard-only headline, two agreeing seeds"
+    json.dump(dict(a=dict(Q=0.80, F=0.9), b=dict(Q=0.69, F=0.9), ca=dict(Q=0.70, F=0.9), cb=dict(Q=0.70, F=0.9)), open(f"{T}/cards.json", "w"))
+    assert verdict(arms=two, rule=guard) == "INCONCLUSIVE", "guard-only headline, seeds disagree"
+    assert DC.decide([0.80, 0.69], [0.70, 0.70])[0] == "INCONCLUSIVE", "the typed interface agrees"
+    # ... but a guard-only headline on subset-only cards is judged by the guard's subsets, not flagged as disagreeing seeds (reviewer finding)
+    json.dump(dict(n=dict(a=dict(Q=0.80), c=dict(Q=0.70)), b=dict(a=dict(Q=0.80), c=dict(Q=0.70)), x=dict(a=dict(Q=0.69), c=dict(Q=0.70))), open(f"{T}/subq.json", "w"))
+    subq = dict(a=dict(cards={k: f"subq.json#{k}/a" for k in "nbx"}), c=dict(cards={k: f"subq.json#{k}/c" for k in "nbx"}))
+    assert verdict(arms=subq, rule=[dict(metric="Q", max_loss=0.05, subsets=["n", "b", "x"], at_least=2)]) == "KEEP", "subset-only guard: no seed flags"
+    # lower-is-better names: project.json "lower_is_better" replaces the legacy lane list, which only a problem with tag prefix lcr gets
+    assert "vert100" in DC.lower_names(T)
+    pj = json.load(open(f"{T}/project.json"))
+    json.dump(dict(pj, lower_is_better=[]), open(f"{T}/project.json", "w"))
+    assert "vert100" not in DC.lower_names(T) and "ms" in DC.lower_names(T), "an empty list: vert100 reads higher-is-better"
+    json.dump({k: v for k, v in pj.items() if k != "lower_is_better"}, open(f"{T}/project.json", "w"))
+    assert "vert100" not in DC.lower_names(T), "no key, tag prefix t: no lane names"
+    json.dump(dict({k: v for k, v in pj.items() if k != "lower_is_better"}, tag_prefix="lcr"), open(f"{T}/project.json", "w"))
+    assert "vert100" in DC.lower_names(T), "no key, the lane problem: the legacy list until its key is written"
+    json.dump(pj, open(f"{T}/project.json", "w"))
+    json.dump(dict(a=dict(Q=0.76, F=0.9), b=dict(Q=0.74, F=0.9), ca=dict(Q=0.73, F=0.9), cb=dict(Q=0.72, F=0.9)), open(f"{T}/cards.json", "w"))
     import experiment as X
     assert any("lower-is-better" in b for b in X.check(dict(base, arms=two, metric="vert100", direction="higher", rule=[dict(metric="vert100", min_effect=0.1)]), f"{T}/experiments/E1_x/experiment.json"))
     exp = dict(base, arms=two)

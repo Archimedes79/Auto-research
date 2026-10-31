@@ -12,7 +12,7 @@
     "fresh": "true when the numbers were computed without the evaluator's cache",
     "frames": "the denominator: number of frames (lcr) - or",
     "n": "the denominator: number of samples / benchmark runs / test cases (generic name; a card has frames or n)",
-    "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); lower-is-better metrics are known by name (decide.py LOWER) or by the experiment file's direction",
+    "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); lower-is-better metrics are known by the experiment file's direction, else by name (project.json lower_is_better, plus the generic ms names of decide.py LOWER)",
     "commit": "the code commit the numbers were made with ('+dirty' when tracked files differed, '+?' when unknown)",
     "date": "YYYY-MM-DD HH:MM",
     "registry": "the registry entry used (checkpoint, config, standard settings) - lcr",
