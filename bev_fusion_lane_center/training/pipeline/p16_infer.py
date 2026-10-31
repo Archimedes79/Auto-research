@@ -645,7 +645,8 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, clean=True, bubble
     remap = {v: k for k, v in enumerate(used)}
     V = Vall[used]
     ve = [(remap[a], remap[c]) for a, c in sorted(E)]
-    g = C.graph_from_vertices(V, ve)
+    g = C.graph_from_vertices(V, ve, legacy_cut=True)  # D24 open item: the consumer / route heads were trained on this piece cut; the
+    # fixed cut (legacy_cut=False) moves F1o2o +0.001, dup_frac up to +0.005, vert100 of the *_dp names -0.16 and was not yet measured on route success
     if dp_eps > 0:  # output stage (E257 / D20): drop interior vertices of straight runs, geometry kept within dp_eps; off by default (guard at the top: aux and dp_eps exclude each other)
         g = simplify_dp(g, dp_eps)
     if aux:  # vertex positions, the node whose token a vertex inherits (the highest path validity among the nodes snapped onto it) and the vertex-level edges

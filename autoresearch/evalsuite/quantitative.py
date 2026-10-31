@@ -243,15 +243,17 @@ class Quantitative:
         return self.s.qual.frame((fr["scene"], fr["index"]), views, out_dir=os.path.join(st.path, "trace"), history=history, state=state)
 
     # -------------------------------------------------------------------------------------- compare
-    def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0, force: bool = False
-                ) -> Dict[str, Any]:
+    def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0, force: bool = False,
+                ignore: Optional[Dict[str, Sequence[str]]] = None) -> Dict[str, Any]:
         """Paired scene bootstrap of the headline numbers on the frames both runs have: run_a = the CONTROL (reference), run_b = the
         VARIANT, diff = b - a = variant - control (the sign autoresearch/tools/decide.py reads, the same as the lane project's
         SB.paired(variant, control)). -> {'metric.key': {a, b, diff, lo, hi, p_b_better (direction-aware), p_diff_gt0, n_valid, ...}}.
         Both runs must come from the same Source and Task (their manifests' `source` and `task` entries: dataset, split, ground-truth
-        version, caches); otherwise the counts are of different questions and the comparison is refused (force=True compares anyway)."""
+        version, caches); otherwise the counts are of different questions and the comparison is refused (force=True compares anyway).
+        ignore: description keys that are the arms' difference, not the question ({"source": ("feature_cache",)}: a run fed with
+        other features answers the same question on the same frames and ground truth)."""
         a, b = self.open(run_a), self.open(run_b)
-        same_question(a, b, force=force)
+        same_question(a, b, force=force, ignore=ignore)
         common = set(a.labels()) & set(b.labels())
         if not common:
             raise ValueError("the runs have no frame in common")
@@ -360,15 +362,15 @@ class Quantitative:
         return res
 
 
-def same_question(*stores: RunStore, force: bool = False) -> None:
+def same_question(*stores: RunStore, force: bool = False, ignore: Optional[Dict[str, Sequence[str]]] = None) -> None:
     """refuse runs whose manifests differ in `source` or `task` (dataset, split, ground-truth version, caches: the bev_fusion GT signature
-    trap) unless force=True; the first run is the reference"""
+    trap) unless force=True; the first run is the reference. ignore: {entry: keys} that may differ (the inputs the arms vary)"""
     if force or len(stores) < 2:
         return
     bad = []
     for st in stores[1:]:
         gained: List[str] = []
-        diff = _identity_differences(stores[0].manifest, st.manifest, ("source", "task"), gained=gained, either=True)
+        diff = _identity_differences(stores[0].manifest, st.manifest, ("source", "task"), gained=gained, either=True, ignore=ignore)
         warn_gained(gained, f"comparing {st.manifest.get('name', st.path)} with {stores[0].manifest.get('name', stores[0].path)}")
         if diff:
             bad.append(f"{st.manifest.get('name', st.path)} vs {stores[0].manifest.get('name', stores[0].path)}: {'; '.join(diff)}")

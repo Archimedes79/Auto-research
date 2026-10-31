@@ -113,7 +113,9 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0,
         ds = []
         for ix in scene_picks(len(sc), n_boot, seed):
             ds.append(_seg_value(Bc[ix].sum(0), metric) - _seg_value(A[ix].sum(0), metric))
-        lo, hi, _ = percentile_interval(ds)
+        lo, hi, nv = percentile_interval(ds)
+        if nv < n_boot:
+            lines.append(f"  note: {layer} {metric}: {n_boot - nv} of {n_boot} resamples had nothing to score; interval over the other {nv}")
         res[f"{layer} {metric}"] = (point, lo, hi, _seg_value(A.sum(0), metric), _seg_value(Bc.sum(0), metric))
     fa = {s: r[dt] for s, r in ra[det_a].items() if dt in r}
     fb = {s: r[dt] for s, r in rb[det_b].items() if dt in r}
@@ -128,7 +130,9 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0,
             for ix in scene_picks(len(sc), n_boot, seed):
                 s_ix = [sc[i] for i in ix]
                 ds.append(ap_from_flags(fl_b, s_ix) - ap_from_flags(fl_a, s_ix))
-            lo, hi, _ = percentile_interval(ds)
+            lo, hi, nv = percentile_interval(ds)
+            if nv < n_boot:
+                lines.append(f"  note: {cls} AP@{thr:g}: {n_boot - nv} of {n_boot} resamples had nothing to score; interval over the other {nv}")
             res[f"{cls} AP@{thr:g}"] = (b0 - a0, lo, hi, a0, b0)
     for k, (d, lo, hi, a, b) in res.items():
         lines.append(f"{k:28s} a {a:.4f}  b {b:.4f}  b-a {d:+.4f}  95% [{lo:+.4f}, {hi:+.4f}]"

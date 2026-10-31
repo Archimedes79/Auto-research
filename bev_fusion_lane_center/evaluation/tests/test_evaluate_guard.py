@@ -18,8 +18,8 @@ def test_whole_ids_pass():
 def test_prefixes_and_substrings_fail():
     for rid in ("", "E", "E2", "E212", "E212.a", "212.a0", "E245.b", "a0", "E212.a01", "E245", "b1", "E245.b12"):
         assert not EV.test_allowed(rid, LOG), rid
-    # same limit as run.py: a free-standing token of the log (a date part such as 2026, a word) still counts as a whole id
-    assert EV.test_allowed("2026", LOG) and EV.test_allowed("Mirko", LOG)
+    # tokens of the log that are not run ids (date parts, words) never pass: the id must have the shape E<number>...
+    assert not EV.test_allowed("2026", LOG) and not EV.test_allowed("10", LOG) and not EV.test_allowed("Mirko", LOG)
 
 
 def test_regex_characters_are_literal():

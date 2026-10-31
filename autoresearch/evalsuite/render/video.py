@@ -22,8 +22,14 @@ import numpy as np
 
 
 def _candidates():
-    """$FFMPEG, then ffmpeg on the PATH (and ffmpeg.exe: Windows programs on the PATH of WSL), then imageio-ffmpeg's binary"""
+    """$FFMPEG, then the path in ~/.evalsuite_ffmpeg (one line: this machine's choice, kept out of the repository), then ffmpeg on the
+    PATH (and ffmpeg.exe: Windows programs on the PATH of WSL), then imageio-ffmpeg's binary"""
     yield os.environ.get("FFMPEG")
+    try:
+        with open(os.path.expanduser("~/.evalsuite_ffmpeg"), encoding="utf-8") as f:
+            yield f.readline().strip() or None
+    except OSError:
+        yield None
     yield shutil.which("ffmpeg")
     yield shutil.which("ffmpeg.exe")
     try:

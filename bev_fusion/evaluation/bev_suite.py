@@ -159,8 +159,11 @@ def cmd_eval(a, rest) -> int:
                    "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
                    "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "latency": lat}, f, indent=1, default=float)
     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
-    bev_legacy.write_scene_records(os.path.join(out_dir, f"scene_records{tag}_n{e.n or 'all'}.pkl"), suite.task.metrics()[0], store,
+    rec_path = os.path.join(out_dir, f"scene_records{tag}_n{e.n or 'all'}.pkl")
+    bev_legacy.write_scene_records(rec_path, suite.task.metrics()[0], store,
                                    det_rec, detr_rec, meta={"frames": [fr["key"] for fr in store.frames], "gt_signature": gt_sig})
+    import shutil                                                        # the plain name too, always replaced: the temp readers (collect.py,
+    shutil.copyfile(rec_path, os.path.join(out_dir, f"scene_records{tag}.pkl"))  # build_tables.py, ...) read it next to metrics<tag>.json
     table = headline_table(flat)
     with open(os.path.join(out_dir, f"table{tag}.txt"), "w") as f:
         f.write(table + "\n")
@@ -368,7 +371,8 @@ def cmd_compare(argv) -> int:
         print(w)
     task = _task_only(c.run_a)
     q = Quantitative(SimpleNamespace(out=os.path.join(c.run_a, "eval", "suite"), task=task))
-    res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed)
+    res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed,
+                    force=c.force, ignore={"source": ("feature_cache", "control")})   # the arms may differ in what the model is fed (t8: features)
     print(f"paired scene bootstrap ({c.boot} resamples), b - a; a = {c.run_a}, b = {c.run_b}; val; {res['n_common_frames']} common frames")
     for k, v in res["metrics"].items():
         print(f"{k:62s} a {v['a']:.4f}  b {v['b']:.4f}  b-a {v['diff']:+.4f}  95% [{v['lo']:+.4f}, {v['hi']:+.4f}]"

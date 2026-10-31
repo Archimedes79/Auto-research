@@ -458,7 +458,7 @@ try:
     assert "started  S.multi -> S.m2" in real.stdout and raw()["S.bq"]["state"] == "blocked" and wait_done("S.m2"), real.stdout
     # cpu items run one at a time (cpu_slots, default 1); two ticks at once start an item once; two launchers of one id: the second is refused
     json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k != "cpu_slots"}, open(f"{T}/project.json", "w"))
-    SC.save([dict(item="S.c1", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'sleep 3; echo 1'"),
+    SC.save([dict(item="S.c1", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'sleep 12; echo 1'"),  # long enough for two ticks on a loaded box
              dict(item="S.c2", kind="train", state="planned", resource="cpu", priority="2", command="bash -c 'echo 2'")], f"{T}/schedule.csv")
     c1 = tick()
     assert "started  S.c1" in c1.stdout and "waiting  S.c2: cpu slot busy" in c1.stdout, c1.stdout

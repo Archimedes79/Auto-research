@@ -14,6 +14,8 @@ run "grid metric reproduces stored numbers" lane_grid/selftest.py
 run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "connectivity / duplicate / range metrics" topo_metrics.py
 run "metric response to controlled errors"  test_metric_response.py
+run "TEST guard of evaluate.py (whole id)"  test_evaluate_guard.py
+run "lane task of the evaluation suite (moved from autoresearch, D24)" test_lane_task.py
 run "evaluate.py reproduces the golden numbers (cached, all registry names)" evaluate.py --golden check --cached-only
 run "builder spec tests (18)"               test_p16_spec.py
 run "output stage simplify_dp (9)"          test_dp_simplify.py

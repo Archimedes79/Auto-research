@@ -509,6 +509,8 @@ def record_gt(out_dir, datasets):
     sig = sigs[0] if len(sigs) == 1 else sigs
     path = os.path.join(out_dir, "gt.json")
     rec = {"gt_signature": sig}
+    if not os.path.exists(path) and any(f.startswith("ckpt_") and f.endswith(".pt") for f in os.listdir(out_dir)):
+        rec["earlier"] = ["unknown: the run has checkpoints from before gt.json existed"]   # a resume of a run started before 2026-10-31
     if os.path.exists(path):
         with open(path) as f:
             old = json.load(f)

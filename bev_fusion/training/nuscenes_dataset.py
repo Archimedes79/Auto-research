@@ -162,8 +162,10 @@ class FrontRadarDataset(torch.utils.data.Dataset):
             try:
                 with np.load(path, allow_pickle=True) as z:
                     return z["gt"].item()
-            except Exception:                         # noqa: BLE001  an empty / truncated file of a killed writer: built again
-                pass
+            except Exception as e:                    # noqa: BLE001  an empty / truncated file of a killed writer: built again
+                if not getattr(self, "_told_rebuild", False):     # said once per process: a cache that never reads (permissions) shows
+                    print(f"GT cache: {os.path.basename(path)} unreadable ({type(e).__name__}), built again", flush=True)
+                    self._told_rebuild = True
         g = self.gt.training_sample(token, self.grid, self.gt_ss)
         if path:
             os.makedirs(self.cache_dir, exist_ok=True)

@@ -115,7 +115,8 @@ class Run:
         after = [x for x in text[i:].splitlines() if x.strip()]
         if self.progress and any(x.startswith(self.progress) for x in after[1:]):
             return ""
-        return after[-1].strip()[:200]
+        exc = next((x for x in after[1:] if not x.startswith((" ", "	"))), after[-1])   # the exception line, not a launcher's later print
+        return exc.strip()[:200]
 
     def skipped_steps(self):
         """(non-finite steps the trainer skipped, longest run of them in a row) from the text log"""

@@ -65,8 +65,9 @@ def commit():
 
 
 def test_allowed(test_id, log=None):
-    """True if the TEST usage log names test_id as a whole id, the rule of autoresearch/tools/run.py (review bug L2, D24: a substring test let `E` or `2026` pass)"""
-    if not test_id:
+    """True if test_id is a run id (E<number>...) and the TEST usage log names it as a whole id, the rule of autoresearch/tools/run.py
+    (review bug L2, D24: a substring test let `E` pass; the run-id shape keeps date parts such as `2026` or `10` and words out)"""
+    if not test_id or not re.fullmatch(r"E\d+[A-Za-z0-9_.-]*", test_id):
         return False
     if log is None:
         log = open(f"{R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8").read()

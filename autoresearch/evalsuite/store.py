@@ -37,17 +37,18 @@ _VOLATILE = {"subject": ("device",)}
 
 
 def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDENTITY_KEYS, gained: Optional[List[str]] = None,
-                          either: bool = False) -> List[str]:
+                          either: bool = False, ignore: Optional[Dict[str, Any]] = None) -> List[str]:
     """the manifest entries that make a resume (or a benchmark attached to a run) another run (what differs, stored -> new).
     A key of a description (source / subject / task dict) that is NEW in `new` and absent from `stored` is not a difference: the
     stored run predates it (an adapter that later adds e.g. a ground-truth signature must not orphan its older stores); it is
     appended to `gained` ("source: gt_signature") for a warning. either=True (two stored runs compared) tolerates a key that only
-    one side has, in both directions. A key present on both sides with another value always differs."""
+    one side has, in both directions. A key present on both sides with another value always differs, unless `ignore` names it
+    ({entry: keys}: inputs that two compared arms vary on purpose, e.g. a feature cache)."""
     out = []
     for k in keys:
         a, b = stored.get(k), new.get(k)
         if isinstance(a, dict) and isinstance(b, dict):
-            drop = _VOLATILE.get(k, ())
+            drop = tuple(_VOLATILE.get(k, ())) + tuple((ignore or {}).get(k, ()))
             a, b = {x: v for x, v in a.items() if x not in drop}, {x: v for x, v in b.items() if x not in drop}
             only = sorted(set(b) - set(a)) + (sorted(set(a) - set(b)) if either else [])
             if only and gained is not None:

@@ -47,6 +47,10 @@ def _differs(x: Any, y: Any, path: str = "outputs") -> Any:
             if bad:
                 return bad
         return None
+    if hasattr(x, "detach") and hasattr(x, "cpu"):                   # a torch tensor (no torch import here): compare its values
+        x = x.detach().cpu().numpy()
+    if hasattr(y, "detach") and hasattr(y, "cpu"):
+        y = y.detach().cpu().numpy()
     if isinstance(x, (np.ndarray, np.generic, int, float, bool)) and isinstance(y, (np.ndarray, np.generic, int, float, bool)):
         a, b = np.asarray(x), np.asarray(y)
         if a.shape != b.shape:
@@ -62,8 +66,8 @@ def _differs(x: Any, y: Any, path: str = "outputs") -> Any:
         return _differs(vars(x), vars(y), path)
     try:
         return None if bool(x == y) else f"{path}: {x!r} != {y!r}"[:200]
-    except Exception:                                                   # noqa: BLE001  (not comparable: not checked)
-        return None
+    except Exception:                                                   # noqa: BLE001  (not comparable)
+        return None if type(x) is type(y) else f"{path}: {type(x).__name__} vs {type(y).__name__}"
 
 
 def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:

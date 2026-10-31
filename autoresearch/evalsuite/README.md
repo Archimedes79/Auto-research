@@ -2,7 +2,7 @@
 
 You write three small classes for your network. The suite then gives you **pictures** (a frame with ground truth, prediction and the errors; random frames; result videos), **numbers** (the metrics over all videos, which scenes and frames drag them down, whether run B is really better than run A) and **cost** (ms and operations per frame, and where each run sits on the quality-against-cost curve).
 
-Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($FFMPEG, the PATH or imageio-ffmpeg; an animated GIF without), the full selftest also needs scipy. The suite imports no torch and knows no dataset. Run it from `autoresearch/`.
+Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($FFMPEG, the one-line file ~/.evalsuite_ffmpeg with this machine's path, the PATH or imageio-ffmpeg; an animated GIF without), the full selftest also needs scipy. The suite imports no torch and knows no dataset. Run it from `autoresearch/`.
 
 ## Try it
 The whole adapter is `adapters/minimal.py` (about 70 lines): a moving disc in noise, a thresholding "network", one metric.

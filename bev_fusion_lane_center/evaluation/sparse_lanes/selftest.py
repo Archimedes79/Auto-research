@@ -29,7 +29,11 @@ def spec_graph_from_vertices():
     for name, (edges, want_nodes, want_edges) in cases.items():
         got = pieces(edges)
         assert got == (want_nodes, want_edges), f"graph_from_vertices {name}: {got} != {(want_nodes, want_edges)}"
-    print(f"graph_from_vertices spec: {len(cases)} cases passed (fork, merge, cycles, isolated chain)")
+    # legacy_cut=True: the cut of the product path until route success is re-measured (D24) - the old stubs, exactly as before the fix
+    xy = np.stack([np.arange(8, dtype=np.float64), np.zeros(8)], 1)
+    old = SM.graph_from_vertices(xy, cases["fork"][0], legacy_cut=True)["nodes"]
+    assert old == [[0, 1, 2], [3, 4], [5, 6], [2, 3], [2, 5]], f"legacy cut changed: {old}"
+    print(f"graph_from_vertices spec: {len(cases)} cases passed (fork, merge, cycles, isolated chain) + the legacy cut")
 
 
 spec_graph_from_vertices()
