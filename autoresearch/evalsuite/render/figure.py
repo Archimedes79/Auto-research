@@ -38,10 +38,10 @@ def error_rgb(pred, gt, valid=None) -> np.ndarray:
 
 
 def error_counts(pred, gt, valid=None) -> Tuple[int, int, int]:
-    """(tp, fp, fn) cell counts of the same comparison (for captions)"""
-    p, g = np.asarray(pred).astype(bool), np.asarray(gt).astype(bool)
-    v = np.ones_like(p) if valid is None else np.asarray(valid).astype(bool)
-    return int((p & g & v).sum()), int((p & ~g & v).sum()), int((~p & g & v).sum())
+    """(tp, fp, fn) cell counts of the same comparison (for captions); the counting is `comparison.maps.confusion`"""
+    from ..comparison.maps import confusion
+    tp, fp, fn, _ = confusion(np.asarray(pred).astype(bool), np.asarray(gt).astype(bool), None if valid is None else np.asarray(valid).astype(bool))
+    return int(tp), int(fp), int(fn)
 
 
 def _table_text(rows) -> str:

@@ -13,6 +13,7 @@
 | 7 Lane centre lines | the network outputs lane centre lines |
 | 8 Checking an adapter, the selftest | a new adapter, a change of the suite |
 | 9 Real adapters, files, rules | porting a large project, changing the suite |
+| (separate) `comparison/README.md` | you want to know or review how a prediction is compared with the ground truth |
 
 ## 1. More on the three boxes, command line options
 - **Source**: `FrameRef(scene, index, key)`: `key` is the dataset's own id (a token), so `qual frame <key>` works. `Sample.display` holds extra things for pictures (values may be callables, read them with `Sample.get`), `Sample.meta` free text. `describe()` goes into the run record, `prefetch(refs)` is a hint, the runner reads ahead in a thread.
@@ -80,7 +81,7 @@ The probing causes: missed lane near / far, hole (gap), truncated, displaced (a 
 
 ## 8. Checking an adapter, the selftest
 - `selftest-adapter` (`python -m evalsuite --adapter pkg.module:build selftest-adapter`): scenes and frames in order, `find()` by label / tuple / key, `load()`, `predict()` and the declared taps (finite numpy arrays), `reset()` restores the start state, every metric (counts are arrays, `reduce()` works on one, several and no frame, does not depend on the order, produces the headline keys, `keys=` agrees with the full result), every view renders a page that draws.
-- `python -m evalsuite selftest [word ...]` runs the known-answer tests of every function (44 checks, 2 to 3 minutes on a busy machine; `selftest minimal`, `selftest lane`, `selftest pareto`, or any word of a check name). A failing check prints its traceback. Needs scipy.
+- `python -m evalsuite selftest [word ...]` runs the known-answer tests of every function (54 checks, 3 to 4 minutes on a busy machine; `selftest minimal`, `selftest lane`, `selftest pareto`, `selftest comparison`, or any word of a check name). A failing check prints its traceback. Needs scipy.
 
 ## 9. Real adapters, files, rules
 **Adapters in use**: `adapters/minimal.py` (template), `adapters/toy.py` (test bed with memory, taps, planted outlier frames, two metrics, a hand-made `ops()`), `adapters/lanes_synth.py` (synthetic road world with every error cause planted), `bev_fusion/evaluation/bev_adapter.py` (camera + radar BEV system; its `ops()` is `count_ops` on the cached chain, its `benchmark()` times the same path), `bev_fusion_lane_center/evaluation/lane_suite.py` (lane centre lines of VAL: dense heads and registry graphs). These two bring their own entry scripts (they put the suite on the path).
@@ -88,8 +89,9 @@ The probing causes: missed lane near / far, hole (gap), truncated, displaced (a 
 **Files** (from `autoresearch/evalsuite/`):
 - *core* (about 2,100 lines, numpy + matplotlib): `contracts.py` boxes and data, `suite.py`, `runner.py` order of calls and state, `sampling.py` video-then-frame draws, `store.py` run store, `stats.py` robust z, leave-one-out, bootstrap, `qualitative.py`, `quantitative.py`, `cli.py`, `render/figure.py` `report.py` `taps.py` (pictures of tapped tensors) `video.py` (H.264 with libx264, read back and checked; an animated GIF without ffmpeg).
 - *small modules loaded when used*: `cost.py` (chapter 5), `probing.py` (chapter 6), `check.py` (contract checker), `torch_taps.py` (hooks and `count_ops`).
+- *the comparison core, to be read and reviewed as one piece*: `comparison/` (`README.md` first): `maps.py` two pixel maps, `boxes.py` two lists of boxes, `metrics.py` the join to the suite (`MapMetric`, `BoxMetric`). `render/figure.error_counts` and the toy adapter use it; the BEV system's own `bev_fusion/evaluation/metrics.py` still carries its own copies (frozen as `_REF` in `selftest_comparison.py`, which proves the core reproduces them).
 - *libraries the core never imports*: `lanes/` (chapter 7), `adapters/`.
-- tests: `selftest.py`, `selftest_cost.py`, `selftest_lanes.py`.
+- tests: `selftest.py`, `selftest_cost.py`, `selftest_comparison.py`, `selftest_lanes.py`.
 
 **Rules**: the core imports only numpy (matplotlib and PIL are imported lazily where a picture is drawn, cv2 only to read a video back); an adapter may import anything. One `Subject` per process when the network code is pinned per run (module cache). Every number is a function of additive counts, so outliers, comparison and probing work on stored runs without the network.
 

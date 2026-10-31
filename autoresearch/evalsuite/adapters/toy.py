@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from ..comparison.maps import confusion, scores
 from ..contracts import (Flag, FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, TapSpec, Task, View,
                          ViewContext)
 from ..render.figure import ERROR_LEGEND, TP_COLOR, error_counts, error_rgb
@@ -121,26 +122,16 @@ class SegMetric(Metric):
 
     def frame(self, sample: Sample, pred: Prediction):
         p, g = pred.outputs["mask"], sample.reference["mask"]
-        c = np.zeros((2, 4))
-        for r, sl in enumerate((slice(0, SIZE // 2), slice(SIZE // 2, SIZE))):
-            a, b = p[:, sl], g[:, sl]
-            c[r] = [(a & b).sum(), (a & ~b).sum(), (~a & b).sum(), (~a & ~b).sum()]
-        return {"cnt": c}
-
-    @staticmethod
-    def _iou(c):
-        d = c[0] + c[1] + c[2]
-        return float(c[0] / d) if d else float("nan")
+        return {"cnt": np.stack([confusion(p[:, sl], g[:, sl]) for sl in (slice(0, SIZE // 2), slice(SIZE // 2, SIZE))])}
 
     def reduce(self, counts, keys=None):
-        c = sum((x["cnt"] for x in counts), np.zeros((2, 4)))
-        t = c.sum(0)
-        return {"iou": self._iou(t), "iou_near": self._iou(c[0]), "iou_far": self._iou(c[1]),
-                "precision": float(t[0] / (t[0] + t[1])) if t[0] + t[1] else float("nan"),
-                "recall": float(t[0] / (t[0] + t[2])) if t[0] + t[2] else float("nan")}
+        c = sum((x["cnt"] for x in counts), np.zeros((2, 4), dtype=np.int64))
+        total = scores(c.sum(0))
+        return {"iou": total["iou"], "iou_near": scores(c[0])["iou"], "iou_far": scores(c[1])["iou"],
+                "precision": total["precision"], "recall": total["recall"]}
 
     def score(self, counts):
-        return {"iou": self._iou(counts["cnt"].sum(0))}
+        return {"iou": scores(counts["cnt"].sum(0))["iou"]}
 
     def support(self, counts):
         t = counts["cnt"].sum(0)

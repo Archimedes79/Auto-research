@@ -720,12 +720,11 @@ def _():
     import shutil
     from evalsuite.adapters import minimal
     from evalsuite.cli import main
-    from evalsuite.render.figure import error_counts
     src, subj, m = minimal.MinSource(), minimal.MinSubject(), minimal.IoU()
     s = src.load(src.frames("demo-0")[2])
     c = m.frame(s, subj.predict(s))
     assert m.score(c) == {"iou": m.reduce([c])["iou"]} and m.support(c) == {}, "default score = reduce of the frame alone, no support"
-    assert m.score({"c": [3.0, 1.0, 1.0]}) == {"iou": 0.6}, "counts given as plain lists work in the default score too"
+    assert m.score({"c": [3, 1, 1, 0]}) == {"iou": 0.6}, "counts given as plain lists work in the default score too"
     with tempfile.TemporaryDirectory() as d:
         shutil.copy(minimal.__file__, os.path.join(d, "my_adapter.py"))                   # the recipe: copy the file, point --adapter at it
         for spec in ("evalsuite.adapters.minimal:build", os.path.join(d, "my_adapter.py") + ":build"):
@@ -754,8 +753,9 @@ def _():
         assert '"iou.iou"' in call("quant", "compare", "a", "b", "--boot", "50")
         st = RunStore.open(os.path.join(d, "quant", "a"))
         assert len(st.frames) == 18
-        tp, fp, fn = error_counts(subj.predict(s).outputs, s.reference)
-        assert abs(st.frame("demo-0/002")["scores"]["iou.iou"] - tp / (tp + fp + fn)) < 1e-12, "the stored frame score is the frame's own IoU, computed independently"
+        p, g = subj.predict(s).outputs, s.reference
+        want = (p & g).sum() / (p | g).sum()                                  # intersection over union, written out here
+        assert abs(st.frame("demo-0/002")["scores"]["iou.iou"] - want) < 1e-12, "the stored frame score is the frame's own IoU, computed independently"
         scores = [fr["scores"]["iou.iou"] for fr in st.frames]
         assert len({round(v, 6) for v in scores}) > 3 and all(0 <= v <= 1 for v in scores), "the default scores differ from frame to frame"
         out = json.loads(call("quant", "outliers", "a", "--k", "2"))
@@ -774,7 +774,8 @@ def _():
 def main(only=()) -> int:
     from evalsuite.selftest_lanes import CHECKS as LANE_CHECKS
     from evalsuite.selftest_cost import CHECKS as COST_CHECKS
-    checks = CHECKS + COST_CHECKS + LANE_CHECKS
+    from evalsuite.selftest_comparison import CHECKS as COMPARISON_CHECKS
+    checks = CHECKS + COST_CHECKS + COMPARISON_CHECKS + LANE_CHECKS
     if only:                                                               # name filter: python -m evalsuite selftest lane
         checks = [c for c in checks if any(o in c[0] for o in only)]
     t0 = time.time()

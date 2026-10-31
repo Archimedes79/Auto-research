@@ -10,7 +10,8 @@ from __future__ import annotations
 import numpy as np
 
 from evalsuite import FrameRef, Metric, Page, Panel, Prediction, Sample, Source, Subject, Task, View
-from evalsuite.render.figure import ERROR_LEGEND, error_counts, error_rgb
+from evalsuite.comparison.maps import confusion, scores
+from evalsuite.render.figure import ERROR_LEGEND, error_rgb
 
 
 class MinSource(Source):                    # 1. the data: scenes ("videos"), their frames in time order, how to load one frame
@@ -43,12 +44,10 @@ class IoU(Metric):                          # 3. what to measure: ADDITIVE count
     name, headline = "iou", ("iou",)        # headline = the numbers that tables, outlier search and comparison use
 
     def frame(self, sample, pred):
-        tp, fp, fn = error_counts(pred.outputs, sample.reference)
-        return {"c": np.array([tp, fp, fn], float)}
+        return {"c": confusion(pred.outputs, sample.reference)}               # [tp, fp, fn, tn]; the comparison itself is evalsuite/comparison/
 
     def reduce(self, counts, keys=None):
-        tp, fp, fn = sum((c["c"] for c in counts), np.zeros(3))
-        return {"iou": float(tp / (tp + fp + fn)) if tp + fp + fn else float("nan")}
+        return scores(sum((c["c"] for c in counts), np.zeros(4, dtype=np.int64)))        # iou, precision, recall, f1
 
 
 class Overview(View):                       # 4. how to draw one frame: a Page of Panels (pure data, no plotting code)

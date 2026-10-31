@@ -45,6 +45,9 @@ run = suite.quant.run(name="a");  suite.quant.table(run);  suite.quant.outliers(
 suite.quant.timing(run="a");  suite.quant.pareto(["a", "b", "c"])
 ```
 
+## Where the comparison happens
+Every comparison of a prediction with the ground truth lives in `comparison/` (read `comparison/README.md`): `maps.py` compares two pixel maps, `boxes.py` two lists of boxes, both on plain numpy arrays and dicts, with counts that add up over frames. `comparison/metrics.py` turns them into ready-made `Metric`s (`MapMetric`, `BoxMetric`): you only write the function that hands over the two things to compare.
+
 ## Port it to your network
 1. Copy `adapters/minimal.py` anywhere, e.g. `<problem>/evaluation/my_adapter.py`; it imports only `evalsuite`.
 2. `Source`: list the scenes and their frames in time order; `load()` gives `inputs` (for the network) and `reference` (for metrics and pictures).
