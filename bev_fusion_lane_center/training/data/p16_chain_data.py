@@ -3,7 +3,7 @@ Original description: Loop 14 / E117: data for a planner-side consumer of the LE
 Per frame of the traced graph (trace network E94a, tokens of p10_tokens.py): edge tokens (the 6 m edges inside the pieces: start / middle / end point), the mean step token of the two end vertices, the probabilities of the piece verifier
 (E116, one per piece) and of the junction verifier (E113c, minimum over the junctions that touch the piece), the ego motion of the frame, the driven-path targets. Per SAMPLE (frame x map cell): the route probability of the route head (E104b) on the vertices, averaged over the two ends of every edge.
 Cells: train = random draw per sample (right map with pose error sigma in {0, 1, 2, 3} m, wrong map, no map); test = exact / s2 / wrong / none for every frame.
-Usage (gcar, GPU): p14_chain_data.py --out chain_a   (writes ~/exp_gcar_b123/p14/<out>_<split>.pt)"""
+Usage (gcar, GPU): p16_chain_data.py --tok <token prefix of the builder run> --route <route head run> [--out chain_a] [--splits test,val,train]   (writes ~/exp_gcar_b123/p14/<out>_<split>.pt)"""
 import argparse
 import os
 import pickle

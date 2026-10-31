@@ -1,6 +1,6 @@
 """D7 (2026-10-25): token lists and split assignment of the 255 new scenes (nuScenes parts 4-6), written to new files only.
 
-    wsl bash tools/env/_py14.sh temp/loop19/make_b456_tokens.py
+    wsl bash tools/env/_py14.sh make_b456_tokens.py      (training/data/prep/, moved from temp/loop19/ on 2026-10-31, D24)
 
 New scenes = scenes with camera AND radar keyframes on disk that are not in data/splits.json. Official train scenes -> part 'train', official val scenes -> part 'val'
 (the parts of the feature arrays, as in b123). Order: by scene name, then by time inside the scene.

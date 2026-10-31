@@ -1,0 +1,6 @@
+== fast_recall: Q 0.7392 vert100 (nodes) 14.98 | vert100_dp 0.3 m 12.24 unique_ends 8.37 | dp 0.15 9.89 dp 0.5 7.48
+== champion: Q 0.7350 vert100 (nodes) 14.83 | vert100_dp 0.3 m 11.32 unique_ends 8.07 | dp 0.15 9.84 dp 0.5 7.08
+== recall: Q 0.7404 vert100 (nodes) 15.53 | vert100_dp 0.3 m 12.82 unique_ends 8.56 | dp 0.15 10.17 dp 0.5 7.63
+== fast_recall_dp: Q 0.7389 vert100 (nodes) 9.86 | vert100_dp 0.3 m 12.23 unique_ends 8.36 | dp 0.15 9.37 dp 0.5 7.48
+== champion_dp: Q 0.7345 vert100 (nodes) 9.52 | vert100_dp 0.3 m 11.32 unique_ends 8.07 | dp 0.15 9.22 dp 0.5 7.08
+== recall_dp: Q 0.7399 vert100 (nodes) 10.37 | vert100_dp 0.3 m 12.80 unique_ends 8.54 | dp 0.15 9.64 dp 0.5 7.63

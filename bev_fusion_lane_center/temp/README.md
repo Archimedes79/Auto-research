@@ -11,7 +11,7 @@ The script refuses while `training/`, `evaluation/`, `tools/` or `reports/build/
 
 | folder | what |
 |---|---|
-| `loop19/` | scratch of loop 19 (filed); not yet cleaned: `data/rebuild.json` names `loop19/make_b456_tokens.py` and `loop19/run_b456_extract.sh` as builders of the b456 split and features (move them to `training/data/prep/` first) |
+| `loop19/` | scratch of loop 19 (filed); its b456 builders `make_b456_tokens.py` and `run_b456_extract.sh` moved to `training/data/prep/` on 2026-10-31 (D24, `data/rebuild.json` updated); `run_b456_gt.sh` (b456 ground truth, E235) is still here and not yet in `data/rebuild.json` |
 | `loop20/` | scratch of loop 20 (filed); still used by loop 21: the E253 timing driver (`loop20/run_e253.sh`) and the E255 matched-vertex loader (`loop20/e255_matched.py`) |
 | `loop21/` | scratch of the running loop 21 (the status report builder in `reports/build/reports/` uses its `fig_status_*.py`) |
 | `STRUCTURE.md` | folder map with sizes, on demand (`tools/maintenance/make_structure.py`) |

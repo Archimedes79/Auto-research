@@ -68,11 +68,6 @@ def first_link(src):
     return m.group(1) if m else ""
 
 
-def short_src(src):
-    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", src)
-    return s[:70]
-
-
 def main():
     n_new = update_plan()
     reg = parse_register()

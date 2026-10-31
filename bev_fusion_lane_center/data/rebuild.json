@@ -162,7 +162,7 @@
       "status": "scripted",
       "scripts": [
         "training/data/prep/make_splits.py",
-        "temp/loop19/make_b456_tokens.py"
+        "training/data/prep/make_b456_tokens.py"
       ],
       "needs": [
         "raw nuScenes metadata"
@@ -192,7 +192,7 @@
       "where": "~/exp_gcar_b456/feats (255 new scenes)",
       "status": "scripted",
       "scripts": [
-        "temp/loop19/run_b456_extract.sh"
+        "training/data/prep/run_b456_extract.sh"
       ],
       "needs": [
         "raw nuScenes parts 4-6",

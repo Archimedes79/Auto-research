@@ -17,42 +17,6 @@ import p16_loss as PL  # noqa: E402
 TAUS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
-def wrap(a):
-    return (a + np.pi) % (2 * np.pi) - np.pi
-
-
-def split_edges(pos, edges, snap_r=1.0, snap_end=1.5, max_iter=20):
-    """M4b vectorised: an edge that passes closer than snap_r to a vertex (not near its ends) is split at that vertex (all such vertices in order along the edge)"""
-    E = sorted(set((int(a), int(b)) for a, b in edges if a != b))
-    for _ in range(max_iter):
-        if not E:
-            break
-        e = np.asarray(E)
-        a, b = pos[e[:, 0]], pos[e[:, 1]]
-        ab = b - a
-        L2 = np.maximum((ab ** 2).sum(1), 1e-12)
-        t = ((pos[None] - a[:, None]) * ab[:, None]).sum(2) / L2[:, None]
-        proj = a[:, None] + np.clip(t, 0, 1)[..., None] * ab[:, None]
-        d = np.linalg.norm(pos[None] - proj, axis=2)
-        da, db = np.linalg.norm(pos[None] - a[:, None], axis=2), np.linalg.norm(pos[None] - b[:, None], axis=2)
-        ok = (t > 0) & (t < 1) & (d < snap_r) & (da > snap_end) & (db > snap_end)
-        if not ok.any():
-            break
-        new = set()
-        for i, (ai, bi) in enumerate(E):
-            if not ok[i].any():
-                new.add((ai, bi))
-                continue
-            vs = np.nonzero(ok[i])[0]
-            vs = vs[np.argsort(t[i, vs])]
-            chain = [ai] + [int(v) for v in vs] + [bi]
-            for u, w in zip(chain[:-1], chain[1:]):
-                if u != w:
-                    new.add((u, w))
-        E = sorted(new)
-    return E
-
-
 class Union:
     """incremental union of the paths of the tree: vertices, directed edges; a new node that lies on an existing edge is snapped onto it (the edge is split there: merge / fork), duplicates are not added"""
 
@@ -687,69 +651,6 @@ def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, clean=True, bubble
     if aux:  # vertex positions, the node whose token a vertex inherits (the highest path validity among the nodes snapped onto it) and the vertex-level edges
         return g, dict(V=V, src=[vsrc.get(v, -1) for v in used], edges=ve)
     return g
-
-
-def assemble_cluster(r, b, tau, cfg, merge_r=1.5, merge_deg=30.0, pair=None):
-    """legacy (first version): cluster merge + edge split; overlapping paths of different seeds interleave into a mesh of spurious forks and merges (D3 trial: split precision 0.006).
-    r: dict of numpy arrays of ONE frame (pos, th_travel, flag, pi, valid, parent, [pos_rev], [links]); returns graph_eval graph.
-    cluster = alive nodes closer than merge_r with a similar travel heading (greedy by path validity); `pair` = optional dict(ki, p) from the learned pair head (suppression instead of the distance rule)"""
-    pos = r["pos_rev"] if "pos_rev" in r else r["pos"]
-    alive = (r["valid"] > 0) & (r["pi"] >= tau)
-    idx = np.nonzero(alive)[0]
-    if len(idx) == 0:
-        return dict(pts=[], edges=[], nodes=[])
-    order = idx[np.argsort(-r["pi"][idx], kind="stable")]
-    cl = -np.ones(len(pos), int)
-    centres = []
-    if pair is not None:  # learned: a node is merged into the best node it is a duplicate of
-        ki, pp = pair["ki"], pair["p"]
-        for i in order:
-            hit = -1
-            for j, p_ in zip(ki[i], pp[i]):
-                if p_ > 0.5 and alive[j] and cl[j] >= 0 and (r["pi"][j] > r["pi"][i] or (r["pi"][j] == r["pi"][i] and j < i)):
-                    hit = cl[j]
-                    break
-            if hit < 0:
-                centres.append(i)
-                hit = len(centres) - 1
-            cl[i] = hit
-    else:
-        cpos = np.zeros((0, 2))
-        cth = np.zeros(0)
-        for i in order:
-            hit = -1
-            if len(centres):
-                d = np.linalg.norm(cpos - pos[i], axis=1)
-                ok = (d < merge_r) & (np.abs(np.degrees(wrap(cth - r["th_travel"][i]))) < merge_deg)
-                if ok.any():
-                    hit = int(np.nonzero(ok)[0][0])
-            if hit < 0:
-                centres.append(i)
-                cpos = np.vstack([cpos, pos[i][None]])
-                cth = np.append(cth, r["th_travel"][i])
-                hit = len(centres) - 1
-            cl[i] = hit
-    nC = len(centres)
-    vp = np.zeros((nC, 2))
-    w = np.zeros(nC)
-    for i in idx:
-        vp[cl[i]] += r["pi"][i] * pos[i]
-        w[cl[i]] += r["pi"][i]
-    vp /= np.maximum(w[:, None], 1e-9)
-    edges = set()
-    for i in idx:
-        p = int(r["parent"][i])
-        if p >= 0 and cl[p] >= 0 and cl[p] != cl[i]:
-            edges.add((cl[p], cl[i]) if r["flag"][i] > 0 else (cl[i], cl[p]))
-    for (i, j, pl) in r.get("link_p", []):
-        if pl >= 0.5 and cl[i] >= 0 and cl[j] >= 0 and cl[i] != cl[j]:
-            edges.add((cl[i], cl[j]))
-    edges = split_edges(vp, sorted(edges))
-    if not edges:
-        return dict(pts=[], edges=[], nodes=[])
-    used = sorted({v for e in edges for v in e})
-    remap = {v: k for k, v in enumerate(used)}
-    return C.graph_from_vertices(vp[used], [(remap[a], remap[b]) for a, b in edges])
 
 
 def to_numpy(res, i, keys=("pos", "th_travel", "flag", "pi", "nu", "valid", "parent", "level", "pos_rev")):

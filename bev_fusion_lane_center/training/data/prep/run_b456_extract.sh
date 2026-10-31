@@ -1,7 +1,7 @@
 #!/bin/bash
 # D7 step 4: GaussianCaR features of the 255 new scenes (b456), three runs through the launcher (ledger row, commit + tag lcr/<id>, done flag only on success).
-# At most two GPU processes at once: train halves in parallel, the val part (CONFIRM) after the first half. Usage: wsl bash temp/loop19/run_b456_extract.sh
-cd "$(dirname "$0")/../.." || exit 1                      # the problem folder
+# At most two GPU processes at once: train halves in parallel, the val part (CONFIRM) after the first half. Usage: wsl bash training/data/prep/run_b456_extract.sh (moved from temp/loop19/ on 2026-10-31, D24)
+cd "$(dirname "$0")/../../.." || exit 1                   # the problem folder
 RUN="python3 ../autoresearch/tools/run.py"
 X="bash training/data/prep/run_gcar.sh gcar_tools.py extract --split b456 --workers 2"
 HYP="data extension b456 (D7): GaussianCaR features of the new frames with the b123 PCA basis"
