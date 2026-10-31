@@ -73,7 +73,8 @@ def headline_table(flat: dict) -> str:
         for dt in ("dt+0.00", "dt+0.50", "dt-0.50"):
             keys.append(f"{dp}/{dt}/mean/all/mAP")
             for cls in ("vehicle", "pedestrian", "two_wheeler"):
-                for m in ("ap@2", "ap@4", "ate", "ase", "aoe", "ave", "n_gt"):
+                for m in ("ap@2", "ap@4", "ate", "ase", "aoe", "ave", "n_gt", "ave_moving", "ave0_moving", "ave_skill_moving", "ave_slow_moving",
+                          "n_tp_moving", "ave_static", "ave0_static", "ave_skill_static", "n_tp_static"):
                     keys.append(f"{dp}/{dt}/{cls}/all/{m}")
     keys += [k for k in flat if k.startswith(("val_loss/", "ms/", "info/"))]
     lines = []

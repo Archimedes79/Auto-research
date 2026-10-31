@@ -21,6 +21,8 @@ numbers) and is keyed by the prediction time offset dt (seconds; dt = 0 is the c
   excluded), AVE (velocity, m/s), and BIoU (oriented BEV IoU without alignment, shapely); per class, per range bin
   (GT and detections both filtered to the bin by their centre x) and per dt. Circles (pedestrians): matched by centre,
   ASE = 1 - (r_min / r_max)^2; a GT box of a circle class is turned into a circle of radius max(l, w) / 2.
+  The velocity error of the same matches split into moving and static GT boxes (MOVING_SPEED), next to the error of always saying 0 m/s:
+  DetMeter.frame_velocity / reduce_velocity (scope: all boxes of the class, no range bins), because most vehicles stand and the plain AVE hides it.
 - latency: ms_per_frame (warm-up, CUDA synchronize, median over N, batch 1); only valid on an idle GPU.
 - report: one flat dict "task/dt+0.00/name/.../metric" (flatten / unflatten round trip) and a printable table.
 Box dicts as training/object_head.py decode(): group, score, cx, cy (m, ego frame), length, width, yaw or radius, vx,
@@ -51,6 +53,7 @@ RANGE_BINS = ((0.0, 20.0), (20.0, 40.0), (40.0, 60.0))
 TOLERANCES = (0.0, 0.5, 1.0)
 DIST_THRESHOLDS = (0.5, 1.0, 2.0, 4.0)
 TP_THRESHOLD = 2.0                                       # nuScenes: TP errors of the matches at 2 m
+MOVING_SPEED = 0.5                                       # m/s: a GT box faster than this is moving, a moving box predicted slower than this "stands"
 FRONT_HALF_FOV = math.atan(800.0 / 1266.4)               # CAM_FRONT, 1600 px wide, f about 1266 px (memory): 32.3 deg
 CIRCLE_GROUPS = ("pedestrian",)
 
@@ -295,6 +298,22 @@ class DetMeter:
                 mean[name] = float(np.mean(v)) if v else float("nan")
             out["mean"] = {"all": mean}
         return out
+
+    # ---- the velocity error of the true positives, moving against static ground truth (additive per frame, scope: all boxes of the class)
+    def frame_velocity(self, dets, gts, classes):
+        """dets, gts: the boxes of one frame already inside the scored field of view. -> (n_classes, K) float64, the counts of
+        comparison.boxes.velocity_counts per class (K = len(VELOCITY_COUNT_KEYS)), matched at TP_THRESHOLD among all boxes of the class:
+        the same pairs whose ave goes into the class's 'all' row."""
+        return np.array([_boxes.velocity_counts([d for d in dets if d["group"] == cls], [g for g in gts if g["group"] == cls],
+                                                TP_THRESHOLD, MOVING_SPEED, MOVING_SPEED) for cls in classes],
+                        float).reshape(len(classes), len(_boxes.VELOCITY_COUNT_KEYS))
+
+    def reduce_velocity(self, frames, classes):
+        """frames: list of frame_velocity() results. -> {class: {ave_moving, ave_static, ave0_moving, ave0_static, ave_skill_moving,
+        ave_skill_static, ave_slow_moving, n_tp_*, n_gt_*}} (comparison.boxes.velocity_numbers); ave0 = the error of always saying 0 m/s
+        on the same pairs, ave_skill = 1 - ave / ave0."""
+        tot = sum(frames, np.zeros((len(classes), len(_boxes.VELOCITY_COUNT_KEYS))))
+        return {cls: _boxes.velocity_numbers(tot[ci]) for ci, cls in enumerate(classes)}
 
     def result(self):
         """{dt: {class: {bin: {ap@t, ap_all@t, ate, ase, aoe, ave, biou, n_tp, n_gt, n_det}}, 'mean': {'all': {mAP,

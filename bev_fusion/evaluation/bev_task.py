@@ -138,8 +138,10 @@ class BevSegMetric(Metric):
 
 # ------------------------------------------------------------------------------------------------ boxes
 class BevDetMetric(Metric):
-    HEADLINE = ("vehicle/all/ap@1", "vehicle/all/ap@2", "pedestrian/all/ap@1", "pedestrian/all/ap@2")
+    HEADLINE = ("vehicle/all/ap@1", "vehicle/all/ap@2", "pedestrian/all/ap@1", "pedestrian/all/ap@2", "vehicle/all/ave_skill_moving")
     better = {"ate": "low", "fp_hi": "low"}
+    LOW = ("ate", "ase", "aoe", "ave", "mATE", "mASE", "mAOE", "mAVE", "ave_moving", "ave_static", "ave0_moving", "ave0_static",
+           "ave_slow_moving")                                      # the last part of a number's name: errors (and the share of moving boxes predicted to stand) are better low
 
     def __init__(self, groups: Sequence[str], name: str = "det", source: str = "dets"):
         self.name, self.source, self.groups = name, source, list(groups)
@@ -158,6 +160,7 @@ class BevDetMetric(Metric):
             fr = self.meter.frame_rows(self.meter.keep(dets), gts, self.groups)
             out[f"{dt_key(dt)}|rows"] = fr["rows"]                                     # float64: ties and errors stay exact
             out[f"{dt_key(dt)}|n_gt"] = fr["n_gt"].astype(np.int32)
+            out[f"{dt_key(dt)}|vel"] = self.meter.frame_velocity(self.meter.keep(dets), gts, self.groups)     # moving / static velocity counts
         return out
 
     def reduce(self, counts, keys: Optional[Sequence[str]] = None):
@@ -177,9 +180,17 @@ class BevDetMetric(Metric):
                 for b, row in bins.items():
                     for metric, v in row.items():
                         out[f"{dk}/{cls}/{b}/{metric}"] = float(v)
+            vel = [c[f"{dk}|vel"] for c in counts if f"{dk}|vel" in c]
+            if vel and len(vel) == len(frames):                                              # (a stored run from before the split has none: nan)
+                for cls, row in self.meter.reduce_velocity(vel, self.groups).items():
+                    for metric, v in row.items():
+                        out[f"{dk}/{cls}/all/{metric}"] = float(v)                           # scope all boxes of the class; no range bins
         if keys is not None:
             return {k: out.get(k, float("nan")) for k in keys}
         return out
+
+    def direction(self, key):
+        return "low" if key.rsplit("/", 1)[-1] in self.LOW else self.better.get(key, "high")
 
     def _frame_vals(self, c):
         rows = c.get("dt+0.00|rows")

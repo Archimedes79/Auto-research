@@ -478,6 +478,87 @@ def _():
     assert B.detection_numbers(np.zeros(0), np.zeros((0, 4)), np.zeros((0, 5)), 3, thresholds, 2.0)["ap@2"] == 0.0
 
 
+@check("comparison.boxes.velocity_*: hand case (moving / static / missing velocity / predicted standing, the speed boundaries), counts add up, the mean of both groups = the `ave` of detection_numbers, brute force on random worlds")
+def _():
+    def box(x, v=None, score=None):
+        b = {"cx": float(x), "cy": 0.0, "length": 4.0, "width": 2.0, "yaw": 0.0}
+        if v is not None:
+            b["vx"], b["vy"] = v
+        if score is not None:
+            b["score"] = score
+        return b
+    gts = [box(0, (4.0, 0.0)), box(10, (0.2, 0.0)), box(20, (0.0, 2.0)), box(30), box(40, (0.0, -3.0))]
+    dets = [box(0.5, (3.0, 0.0), 0.9), box(10, (0.0, 0.0), 0.8), box(100, (1.0, 0.0), 0.7), box(30, (1.0, 1.0), 0.6), box(40, (0.1, 0.0), 0.5)]
+    c = B.velocity_counts(dets, gts, 2.0)
+    want = dict(zip(B.VELOCITY_COUNT_KEYS, [3, 1, 2, 1, 1.0 + math.hypot(0.1, 3.0), 0.2, 4.0 + 3.0, 0.2, 1]))      # box(30) has no velocity, box(100) is a false positive
+    assert c.shape == (9,) and all(same(c[i], want[k]) for i, k in enumerate(B.VELOCITY_COUNT_KEYS)), (c, want)
+    n = B.velocity_numbers(c)
+    assert same(n["ave_moving"], (1.0 + math.hypot(0.1, 3.0)) / 2) and same(n["ave0_moving"], 3.5) and same(n["ave_skill_moving"], 1 - (1.0 + math.hypot(0.1, 3.0)) / 7.0)
+    assert same(n["ave_static"], 0.2) and same(n["ave0_static"], 0.2) and same(n["ave_skill_static"], 0.0) and same(n["ave_slow_moving"], 0.5)
+    assert (n["n_tp_moving"], n["n_tp_static"], n["n_gt_moving"], n["n_gt_static"]) == (2, 1, 3, 1)
+    # the boundaries: a speed of exactly `moving` is static; a detection of exactly `slow` is not slow; the detection's speed alone decides "slow"
+    edge = B.velocity_counts([box(0, (0.5, 0.0), 0.9), box(10, (0.5, 0.0), 0.9)], [box(0, (0.5, 0.0)), box(10, (0.5001, 0.0))], 2.0)
+    assert (edge[0], edge[1], edge[2], edge[3], edge[8]) == (1, 1, 1, 1, 0), edge
+    d55, g55 = [box(0, (0.55, 0.0), 0.9)], [box(0, (0.55, 0.0))]                  # the arguments are used (no hidden constants)
+    base = B.velocity_counts(d55, g55, 2.0)
+    assert (base[2], base[3], base[8]) == (1, 0, 0)
+    assert tuple(B.velocity_counts(d55, g55, 2.0, moving=0.6)[[2, 3, 8]]) == (0, 1, 0)
+    assert tuple(B.velocity_counts(d55, g55, 2.0, slow=0.6)[[2, 3, 8]]) == (1, 0, 1)
+    # nothing to judge is nan; a detector without velocities has no pair; a zero error of the zero predictor has no skill
+    empty = B.velocity_numbers(B.velocity_counts([], [], 2.0))
+    assert all(math.isnan(empty[k]) for k in ("ave_moving", "ave_static", "ave0_moving", "ave_skill_moving", "ave_skill_static", "ave_slow_moving")) and empty["n_tp_moving"] == 0
+    none = B.velocity_numbers(B.velocity_counts([box(0, None, 0.9)], [box(0, (4.0, 0.0))], 2.0))
+    assert none["n_tp_moving"] == 0 and none["n_gt_moving"] == 1 and math.isnan(none["ave_moving"])
+    for part in ({"vx": 1.0}, {"vy": 1.0}):                                         # half a velocity is no velocity, on either side
+        half_det = B.velocity_counts([dict(box(0, None, 0.9), **part)], [box(0, (4.0, 0.0))], 2.0)
+        half_gt = B.velocity_counts([box(0, (1.0, 0.0), 0.9)], [dict(box(0, None), **part)], 2.0)
+        assert half_det[2] == 0 and half_det[0] == 1 and not half_gt[:4].any(), (part, half_det, half_gt)
+    assert math.isnan(B.velocity_numbers(B.velocity_counts([box(0, (0.0, 0.0), 0.9)], [box(0, (0.0, 0.0))], 2.0))["ave_skill_static"])
+    for bad in (np.zeros(8), np.zeros((2, 3, 9))):
+        try:
+            B.velocity_numbers(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("counts of the wrong shape must be refused")
+    # random worlds with ties: counts of single frames add up; the two groups together are the `ave` of detection_numbers (same pairs, same
+    # mean); every number against a plain-loop version that uses the frozen former matching and tp_errors
+    rng = np.random.default_rng(11)
+    frames = of_class(random_frames(rng, 250), "car")
+    frames = [([dict(b, vx=b["vx"] * f, vy=b["vy"] * f) for b, f in zip(d, rng.choice([0.15, 1.0], len(d)))],
+               [dict(b, vx=b["vx"] * f, vy=b["vy"] * f) for b, f in zip(g, rng.choice([0.15, 1.0], len(g)))]) for d, g in frames]    # half of the boxes nearly stand
+    per_frame = np.array([B.velocity_counts(d, g, 2.0) for d, g in frames])
+    tot = B.velocity_numbers(per_frame)
+    scores, flags, errors, n_gt = [], [], [], 0
+    for d, g in frames:
+        f, e = B.match_flags(d, g, (2.0,), 2.0)
+        scores += [x["score"] for x in d]
+        flags.append(f)
+        errors.append(e)
+        n_gt += len(g)
+    ave = B.detection_numbers(np.array(scores), np.concatenate(flags), np.concatenate(errors), n_gt, (2.0,), 2.0, "list")["ave"]
+    pooled = (per_frame[:, 4].sum() + per_frame[:, 5].sum()) / (per_frame[:, 2].sum() + per_frame[:, 3].sum())
+    assert same(pooled, ave, 1e-9), (pooled, ave)
+    assert same(B.velocity_numbers(per_frame[:20])["n_tp_moving"] + B.velocity_numbers(per_frame[20:])["n_tp_moving"], tot["n_tp_moving"])
+    sums = {k: 0.0 for k in ("e0", "e1", "z0", "z1", "n0", "n1", "slow", "g0", "g1")}
+    for d, g in frames:
+        mm, _ = _REF.match([(d, g)], 2.0)
+        for dd in g:
+            sums["g0" if math.hypot(dd["vx"], dd["vy"]) > 0.5 else "g1"] += 1
+        for _, ok, det, gt in mm:
+            if ok:
+                k = 0 if math.hypot(gt["vx"], gt["vy"]) > 0.5 else 1
+                sums[f"e{k}"] += _REF.tp_errors(det, gt)["ave"]
+                sums[f"z{k}"] += math.hypot(gt["vx"], gt["vy"])
+                sums[f"n{k}"] += 1
+                sums["slow"] += float(k == 0 and math.hypot(det["vx"], det["vy"]) < 0.5)
+    assert sums["n0"] > 3 and sums["n1"] > 3 and sums["slow"] > 0, "the random world must have moving and static pairs, and slow ones"
+    for k, v in (("ave_moving", sums["e0"] / sums["n0"]), ("ave_static", sums["e1"] / sums["n1"]), ("ave0_moving", sums["z0"] / sums["n0"]),
+                 ("ave0_static", sums["z1"] / sums["n1"]), ("ave_skill_moving", 1 - sums["e0"] / sums["z0"]), ("ave_slow_moving", sums["slow"] / sums["n0"])):
+        assert same(tot[k], v, 1e-9), (k, tot[k], v)
+    assert (tot["n_gt_moving"], tot["n_gt_static"]) == (sums["g0"], sums["g1"])
+
+
 @check("comparison.boxes against the real nuScenes devkit (accumulate + calc_ap): the same average precision on random frames; the two places where the rules differ are pinned")
 def _():
     try:

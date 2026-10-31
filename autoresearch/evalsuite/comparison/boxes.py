@@ -13,6 +13,7 @@ The comparison of one frame in four steps, each a function below:
     match_flags   the same at several thresholds: one 0 / 1 flag per detection and threshold, and the errors of the true positives
     tp_errors     how far a matched pair is off: ATE, ASE, AOE, AVE, BIoU
     ap_*          precision and recall over a score-ordered list of flags, from the rows of ANY set of frames: average precision
+    velocity_*    the velocity error of the matched pairs split into moving and static ground truth, against the predictor "0 m/s"
 The rows of one frame (score, flags, errors) and the number of ground-truth boxes are additive over frames: put the rows of several
 frames together, sort by score and the average precision of all of them follows (`detection_numbers`), without matching again.
 """
@@ -208,4 +209,60 @@ def detection_numbers(scores: np.ndarray, flags: np.ndarray, errors: np.ndarray,
                 row[name] = float(v.mean()) if len(v) else NAN
             row["n_tp"] = int(tp.sum())
     row["n_gt"], row["n_det"] = int(n_gt), len(scores)
+    return row
+
+
+# ------------------------------------------------------------------------------------------------ velocity: moving against static
+VELOCITY_COUNT_KEYS = ("n_gt_moving", "n_gt_static", "n_moving", "n_static", "ave_moving", "ave_static", "zero_moving", "zero_static",
+                       "n_slow_moving")
+
+
+def velocity_counts(dets: Sequence[dict], gts: Sequence[dict], thr: float, moving: float = 0.5, slow: float = 0.5) -> np.ndarray:
+    """The additive velocity counts of ONE frame and ONE class (order VELOCITY_COUNT_KEYS), the plain mean `ave` of `tp_errors` split by
+    what the object does. A ground-truth box is MOVING if its speed is above `moving` m/s, else STATIC (a box without a velocity is
+    neither). The true positives are the matches `match` makes at `thr` (the same as the ones whose `ave` goes into `detection_numbers`),
+    only the pairs with both velocities finite count. Per group: n_gt_* ground-truth boxes (matched or not), n_* matched pairs, ave_* the
+    sum of the velocity errors (m/s), zero_* the sum of the speeds of the ground-truth boxes of the same pairs (= the velocity error of a
+    predictor that always says 0), n_slow_moving the moving pairs whose detection is slower than `slow` m/s (a moving object
+    predicted to stand). `velocity_numbers` turns the counts of any set of frames into numbers."""
+    out = np.zeros(len(VELOCITY_COUNT_KEYS))
+    for g in gts:
+        s = math.hypot(g.get("vx", NAN), g.get("vy", NAN))
+        if math.isfinite(s):
+            out[0 if s > moving else 1] += 1
+    for d, j in zip(dets, match(dets, gts, thr)):
+        if j < 0:
+            continue
+        g = gts[j]
+        e = math.hypot(d.get("vx", NAN) - g.get("vx", NAN), d.get("vy", NAN) - g.get("vy", NAN))
+        s = math.hypot(g.get("vx", NAN), g.get("vy", NAN))
+        if not (math.isfinite(e) and math.isfinite(s)):
+            continue
+        k = 0 if s > moving else 1
+        out[2 + k] += 1
+        out[4 + k] += e
+        out[6 + k] += s
+        if k == 0 and math.hypot(d["vx"], d["vy"]) < slow:
+            out[8] += 1
+    return out
+
+
+def velocity_numbers(counts: np.ndarray) -> Dict[str, float]:
+    """The numbers of the velocity counts of any set of frames (the counts of one frame, or an (n_frames, K) array that is summed):
+    per group g in moving, static: "ave_g" the mean velocity error (m/s) of the matched pairs, "ave0_g" the same for the predictor that
+    always says 0 (on the same pairs), "ave_skill_g" = 1 - ave_g / ave0_g (above 0: better than saying 0; 1: perfect), "n_tp_g" the
+    pairs, "n_gt_g" the ground-truth boxes; and "ave_slow_moving", the share of the moving pairs predicted slower than `slow`. nan where
+    there is nothing to judge (no pair; a zero predictor with no error)."""
+    c = np.asarray(counts, float)
+    if c.shape[-1:] != (len(VELOCITY_COUNT_KEYS),) or c.ndim > 2:
+        raise ValueError(f"velocity counts must have {len(VELOCITY_COUNT_KEYS)} columns, got shape {c.shape}")
+    c = c.sum(0) if c.ndim == 2 else c
+    row: Dict[str, float] = {}
+    for k, g in enumerate(("moving", "static")):
+        n, e, z = c[2 + k], c[4 + k], c[6 + k]
+        row[f"ave_{g}"] = float(e / n) if n else NAN
+        row[f"ave0_{g}"] = float(z / n) if n else NAN
+        row[f"ave_skill_{g}"] = float(1.0 - e / z) if z > 0 else NAN
+        row[f"n_tp_{g}"], row[f"n_gt_{g}"] = int(n), int(c[k])
+    row["ave_slow_moving"] = float(c[8] / c[2]) if c[2] else NAN
     return row

@@ -36,6 +36,8 @@ from evaluation import bev_legacy, bev_suite  # noqa: E402
 from evaluation.bev_task import BEVTask, BevDetMetric, BevSegMetric, MASKS, add_sample  # noqa: E402
 from evaluation.bev_views import gt_boxes  # noqa: E402
 from evaluation.metrics import DetMeter, SegMeter, dt_key, flatten  # noqa: E402
+from evaluation.metrics import match as metrics_match  # noqa: E402
+from evalsuite.comparison import boxes as BX  # noqa: E402
 
 AREAS = ("drivable_area", "ped_crossing", "walkway", "stop_line", "carpark_area")
 LINES = ("lane_divider", "road_divider")
@@ -248,11 +250,74 @@ def _():
                 dm.add(o[src_name], gt_boxes(s.reference[dt], groups), dt=dt)
         want = {k[len("det/"):]: v for k, v in flatten({"det": dm.result()}).items()}
         got = m.reduce(counts)
+        vel = {k: v for k, v in got.items() if k.rsplit("/", 1)[-1] in BX.velocity_numbers(np.zeros(9))}     # the moving / static split: its own check below
+        got = {k: v for k, v in got.items() if k not in vel}
         assert set(got) == set(want) and all(same(got[k], want[k]) for k in want), [k for k in want if not same(got.get(k, -1), want[k])][:3]
+        assert len(vel) == len(DTS) * len(groups) * len(BX.velocity_numbers(np.zeros(9))) and all(k.split("/")[2] == "all" for k in vel)
         part = m.reduce(counts, keys=list(m.headline))
-        assert all(same(part[k], want[k]) for k in m.headline)
+        assert all(same(part[k], want[k]) for k in m.headline if k in want) and all(same(part[k], vel[k]) for k in m.headline if k in vel)
+        assert set(m.headline) <= set(want) | set(vel)
         sc = m.score(counts[0])
         assert 0 <= sc["recall2"] <= 1 and sc["fp_hi"] >= 0 and set(m.support(counts[0])) == set(sc)
+
+
+@check("BevDetMetric velocity split: moving / static / zero predictor / predicted-standing against a plain-loop count on a planted world; the two groups pool to the class's ave; scenes add up; a run without the counts gives nan")
+def _():
+    groups = ["vehicle", "two_wheeler", "pedestrian"]
+    src, sub = SynthSource(), SynthSubject()
+    fp = []
+    for sc in src.scenes()[:5]:
+        sub.reset()
+        for ref in src.frames(sc)[:4]:
+            s = src.load(ref)
+            for g in s.reference.values():                                    # per frame: vehicle 0 stands (0.2 m/s), vehicle 1 moves slowly (0.8 m/s)
+                veh = [b for b in g["meta"]["boxes"] if b["group"] == "vehicle"]
+                veh[0]["vel"], veh[1]["vel"] = [0.2, 0.0], [0.8, 0.0]
+            p = sub.predict(s)
+            for o in p.outputs["dt"].values():                                # the network says half of every velocity, and a little sideways
+                o["dets"] = [dict(d, vx=d["vx"] * 0.5, vy=d["vy"] * 0.5 + 0.1) for d in o["dets"]]
+            fp.append((s, p))
+    m = BevDetMetric(groups, "det", "dets")
+    counts = [m.frame(s, p) for s, p in fp]
+    meter = DetMeter(classes=groups)
+    got = m.reduce(counts)
+    for dt in DTS:                                                            # a plain-loop count of the pairs, per class
+        dk = dt_key(dt)
+        for cls in groups:
+            frames = [([d for d in meter.keep(p.outputs["dt"][dt]["dets"]) if d["group"] == cls],
+                       [b for b in meter.keep(gt_boxes(s.reference[dt], groups)) if b["group"] == cls]) for s, p in fp]
+            rows, _ = metrics_match(frames, 2.0)
+            acc = {"m": [], "s": []}
+            for _score, ok, d, gt in rows:
+                if ok:
+                    speed = math.hypot(gt["vx"], gt["vy"])
+                    acc["m" if speed > 0.5 else "s"].append((math.hypot(d["vx"] - gt["vx"], d["vy"] - gt["vy"]), speed, math.hypot(d["vx"], d["vy"])))
+            for tag, name in (("m", "moving"), ("s", "static")):
+                a = acc[tag]
+                n = len(a)
+                assert got[f"{dk}/{cls}/all/n_tp_{name}"] == n
+                for key, want in ((f"ave_{name}", sum(x[0] for x in a) / n if n else float("nan")), (f"ave0_{name}", sum(x[1] for x in a) / n if n else float("nan"))):
+                    assert same(got[f"{dk}/{cls}/all/{key}"], want, 1e-9), (dk, cls, key)
+            slow = sum(1 for x in acc["m"] if x[2] < 0.5)
+            assert same(got[f"{dk}/{cls}/all/ave_slow_moving"], slow / len(acc["m"]) if acc["m"] else float("nan"), 1e-9)
+            if cls == "vehicle":
+                assert len(acc["m"]) > 10 and len(acc["s"]) >= 10 and slow >= 5, (len(acc["m"]), len(acc["s"]), slow)    # the planted world has all three
+                assert same(got[f"{dk}/vehicle/all/ave_skill_moving"], 1 - sum(x[0] for x in acc["m"]) / sum(x[1] for x in acc["m"]), 1e-9)
+                n_all = len(acc["m"]) + len(acc["s"])                           # the groups pooled = the class's ave (the same pairs: matches at 2 m among all boxes)
+                pooled = (got[f"{dk}/vehicle/all/ave_moving"] * len(acc["m"]) + got[f"{dk}/vehicle/all/ave_static"] * len(acc["s"])) / n_all
+                assert same(pooled, got[f"{dk}/vehicle/all/ave"], 1e-9), (pooled, got[f"{dk}/vehicle/all/ave"])
+    k = f"{dt_key(0.0)}/vehicle/all/n_tp_moving"                              # scenes add up (the counts are additive per frame)
+    per_scene = [m.reduce([c for c, (s, _) in zip(counts, fp) if s.ref.scene == sc], keys=[k])[k] for sc in src.scenes()[:5]]
+    assert sum(per_scene) == got[k]
+    sel = m.reduce(counts, keys=[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving", f"{dt_key(0.0)}/vehicle/all/ap@2"])      # selective keys include the split
+    assert same(sel[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"], got[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"]) and m.direction("dt+0.00/vehicle/all/ave_moving") == "low" \
+        and m.direction("dt+0.00/vehicle/all/ave_skill_moving") == "high" and m.direction("dt+0.00/vehicle/all/ap@2") == "high"
+    old = [{kk: v for kk, v in c.items() if not kk.endswith("|vel")} for c in counts]                  # a stored run from before the split
+    nan = float("nan")
+    pre = m.reduce(old)                                                       # no counts: the keys are left out of the full table, nan when asked for
+    assert f"{dt_key(0.0)}/vehicle/all/ave_skill_moving" not in pre and same(pre[f"{dt_key(0.0)}/vehicle/all/ap@2"], got[f"{dt_key(0.0)}/vehicle/all/ap@2"])
+    assert math.isnan(m.reduce(old, keys=[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"])[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"])
+    assert f"{dt_key(0.0)}/vehicle/all/ave_moving" not in m.reduce(old[:10] + counts[10:]), "frames with and without the counts must not be mixed"
 
 
 @check("to_legacy: the table of the suite becomes the flat names of the former metrics.json; headline_table prints")
