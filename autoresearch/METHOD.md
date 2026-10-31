@@ -20,7 +20,7 @@ A general workflow for improving a technical system by research, with agents doi
  problem groups      with its digest                   system improvements               -> run -> evaluate -> decide -> summary  handover
 ```
 
-A cycle is P1-P4. P1 and P2 are started by the person step by step (`prompts/research_steps.md`), before a loop or while a previous loop runs. P3 is the `/loop` (`prompts/loop.md`). P4 closes it and feeds the next cycle. Each phase ends with a gate; a phase reads only the summaries of the phase before it and opens details only for the ids it uses. **Light cycle by default**: research only the groups whose gap or literature changed, three lenses; a full cycle every third time.
+A cycle is P1-P4. P1 and P2 are started by the person step by step (`prompts/research_steps.md`), before a loop or while a previous loop runs. P3 is the `/loop` (`prompts/loop.md`, which starts with the checklist for starting a loop). P4 closes it and feeds the next cycle. Each phase ends with a gate; a phase reads only the summaries of the phase before it and opens details only for the ids it uses. **Light cycle by default**: research only the groups whose gap or literature changed, three lenses; a full cycle every third time.
 
 ### P0 Frame (once per problem, revisited each cycle)
 `PROBLEM.md` (`templates/problem.md`): goal and constraints, the product chain, the metrics and the evaluation protocol, the current best with its numbers, the known gaps, the **problem groups** (the taxonomy every later artifact is filed under) and the **foundation topics** (building blocks, training and losses, mathematical formulations). The person owns this file.

@@ -9,7 +9,7 @@
 The suite never imports project code and never touches a training process: it reads the run directory (contract: README.md) and, to
 stop, writes a CONTROL file that the trainer reads. The project's model, losses and data stay in the project.
 """
-from .control import EXIT_STOPPED, mark_stopped, request_stop, stop_requested  # noqa: F401
+from .control import EXIT_STOPPED, clear_stale, honours_stop, mark_stopped, request_stop, stop_requested  # noqa: F401
 from .health import Finding, check  # noqa: F401
 from .kill import Rule, load_rules  # noqa: F401
 from .runs import Run, read_log  # noqa: F401

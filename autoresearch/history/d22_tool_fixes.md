@@ -1,4 +1,4 @@
-# D22 - six small fixes of the research tools (staged, NOT applied)
+# D22 - six small fixes of the research tools (written as staged; all six APPLIED on 2026-10-31 in commit ee19026, see DECISIONS.md D22)
 
 Source: the structure review of 2026-10-30 (`bev_fusion/temp/review/STRUCTURE_REVIEW_2026-10-30.md`); every item below was re-read in
 the code on 2026-10-31 (line numbers of that day). Since D21 the tools are not protected: applying these needs no grant, but

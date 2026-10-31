@@ -12,7 +12,7 @@
 - experiment_execution/PLAN.md: the experiment tree of the loop with a status per node
 - experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next`, item states are read from the run records): what happens next; a disrupted loop resumes from it
 - experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit, and at its head the loop table of `../autoresearch/tools/metrics.py` (runs, GPU hours, verdicts, prediction hits, TEST uses); the journal of a loop goes into ledger notes, not into a new state file; for a wake-up `ledger.py tail --loop <NN>` instead of the whole file
-- when a loop starts: the loop prompt (from `../autoresearch/prompts/loop.md`: STOP_AT, TEST / mail / shutdown permissions; read each time, do not re-plan)
+- when a loop starts: the start checklist and the loop prompt (`../autoresearch/prompts/loop.md`; the filled prompt is kept as experiment_execution/history/prompts/PROGRAM_loopNN.md: STOP_AT, TEST / mail / shutdown permissions; read each time, do not re-plan)
 - for reference only: README.md (folder map), evaluation/PROTOCOL.md (splits, metrics, timing), experiment_execution/closed_questions.md, literature/OVERVIEW.md before literature work (edit literature/papers.csv, then `wsl python3 tools/literature/catalogue.py all`); old state files are in experiment_execution/history/
 - what to read in full: single-file records (ledger, decisions, closed questions, plan) are complete files - search them, do not split or roll them; experiment folders: the last two loops in full, older loops through their loop / weekly summaries and PROBLEM.md's current best
 

@@ -48,7 +48,7 @@ def read_log(path):
             row = _flat(rec)
             if "step" not in row:
                 continue
-            lst = evals if any(k.startswith("val.") for k in row) else train
+            lst = evals if isinstance(rec.get("val"), dict) else train          # by the record, not by its keys: an empty val dict is an eval row
             if lst and row["step"] <= lst[-1]["step"]:
                 while lst and lst[-1]["step"] >= row["step"]:
                     lst.pop()
@@ -103,11 +103,16 @@ class Run:
             return ""
 
     def crash_reason(self):
-        """the last line of a traceback when the text log ends in one (a crashed process writes nothing more), else ''"""
-        lines = [x for x in self.text_tail().splitlines() if x.strip()]
-        if not lines or "Traceback (most recent call last)" not in "\n".join(lines[-60:]) or lines[-1].startswith("step "):
+        """the last line of a traceback when the text log ends in one (a crashed process writes nothing more), else ''.
+        The last traceback of the final 20 KB counts if no `step ...` line follows it."""
+        text = self.text_tail()
+        i = text.rfind("Traceback (most recent call last)")
+        if i < 0:
             return ""
-        return lines[-1].strip()[:200]
+        after = [x for x in text[i:].splitlines() if x.strip()]
+        if any(x.startswith("step ") for x in after[1:]):
+            return ""
+        return after[-1].strip()[:200]
 
     def skipped_steps(self):
         """(non-finite steps the trainer skipped, longest run of them in a row) from the text log"""
@@ -119,10 +124,13 @@ class Run:
         return len(hits), max(hits, default=0)
 
     def stopped(self):
-        """the STOPPED marker (dict) when the run ended because of a stop request and has not run since, else None"""
+        """the STOPPED marker (dict) when the run ended because of a stop request and has not run since, else None. A trainer with
+        the stop check moves STOPPED aside at its start; for any other, STOPPED must not be older than the last output by more than 60 s"""
         t = self.mtime("STOPPED")
+        if not t:
+            return None
         last = max([x for x in (self.mtime(self.log_name), self.mtime(self.text_name)) if x] or [0])
-        return self.json("STOPPED") or {"reason": ""} if t and t >= last - 5 else None
+        return (self.json("STOPPED") or {"reason": ""}) if t >= last - 60 else None
 
     # ---- progress
     @property
@@ -139,19 +147,48 @@ class Run:
         age = self.heartbeat_age()
         if age is None:
             return "new"
-        if age > STALE_S:
+        if age > self.stale_limit():
             return "ended" if self.total and self.step >= self.total else "stalled"
         return "running"
 
+    def recent_rows(self, n=30):
+        """the last n rows of the CURRENT attempt: back from the end while the steps fall and the time between rows stays below 10 times the
+        median interval (a resume leaves the downtime between two attempts in the file). Rows without `t` give the plain last n."""
+        r = self.train[-n:]
+        if len(r) < 3 or not all("t" in x for x in r):
+            return r
+        gaps = [b["t"] - a["t"] for a, b in zip(r, r[1:])]
+        med = statistics.median(gaps)
+        cut = 0
+        for i, g in enumerate(gaps):
+            if g < 0 or (med > 0 and g > 10 * med):
+                cut = i + 1
+        return r[cut:]
+
+    def timed(self):
+        """True when the rows carry the time `t` (runs from a trainer of 2026-10-31 on)"""
+        return bool(self.train) and all("t" in x for x in self.train[-5:])
+
+    def row_interval(self):
+        """median seconds between two logged rows of the current attempt (None without row times)"""
+        r = self.recent_rows()
+        gaps = [b["t"] - a["t"] for a, b in zip(r, r[1:]) if "t" in a and "t" in b and b["t"] > a["t"]]
+        return statistics.median(gaps) if gaps else None
+
+    def stale_limit(self):
+        """seconds without output before a run counts as stalled: 15 min, longer when a logged row takes longer than 90 s"""
+        iv = self.row_interval()
+        return max(STALE_S, 10 * iv) if iv else STALE_S
+
     def s_per_step(self):
-        """seconds per step: from the row times `t` when the stream has them (last 200 steps), else the trainer's own average"""
-        r = self.train
-        if len(r) >= 2 and all("t" in x for x in r[-30:]):
-            a = r[max(0, len(r) - 30)]
-            b = r[-1]
+        """seconds per step: from the row times `t` over the current attempt when the stream has them, else the trainer's own average
+        (an average since its process start, startup and evals included: only a rough speed)"""
+        r = self.recent_rows()
+        if len(r) >= 2 and all("t" in x for x in r):
+            a, b = r[0], r[-1]
             if b["step"] > a["step"] and b["t"] > a["t"]:
                 return (b["t"] - a["t"]) / (b["step"] - a["step"])
-        return r[-1].get("s_per_step") if r else None
+        return self.train[-1].get("s_per_step") if self.train else None
 
     def eta_s(self):
         sp = self.s_per_step()

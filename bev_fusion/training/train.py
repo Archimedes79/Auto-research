@@ -480,27 +480,32 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
 EXIT_STOPPED = 75                      # a stopped run exits with this code and never with 0: the flag `.done` means "finished correctly"
 
 
-def _stop_requested(run_dir, since):
-    """reason (a string) when a CONTROL file {"cmd": "stop"} newer than `since` (the start of this process) exists, else None.
-    Same code as autoresearch/trainsuite/control.py (inlined: a run trains from a code snapshot that does not contain that package)."""
-    path = os.path.join(run_dir, "CONTROL")
+def _stop_requested(run_dir):
+    """reason (a string) when the file CONTROL of the run directory says {"cmd": "stop"}, else None. Same code as
+    autoresearch/trainsuite/control.py (inlined: a run trains from a code snapshot that does not contain that package)."""
     try:
-        if os.path.getmtime(path) <= since:
-            return None
-        with open(path, encoding="utf-8") as fh:
+        with open(os.path.join(run_dir, "CONTROL"), encoding="utf-8") as fh:
             d = json.load(fh)
         return str(d.get("reason", "")) if d.get("cmd") == "stop" else None
     except (OSError, ValueError, AttributeError):
         return None
 
 
+def _clear_control(run_dir):
+    """at the start: move CONTROL / STOPPED of an earlier stop aside (*.old), so a new process never obeys an old request (no clocks)"""
+    for n in ("CONTROL", "STOPPED"):
+        p = os.path.join(run_dir, n)
+        if os.path.exists(p):
+            os.replace(p, p + ".old")
+
+
 def train(cfg, eval_fn=None, datasets=None):
-    t_start = time.time()
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
     device = cfg.device if (cfg.device != "cuda" or torch.cuda.is_available()) else "cpu"
     out_dir = os.path.join(cfg.out_root, cfg.name)
     os.makedirs(out_dir, exist_ok=True)
+    _clear_control(out_dir)
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
     train_ds, val_ds = datasets or make_datasets(cfg)
@@ -534,7 +539,7 @@ def train(cfg, eval_fn=None, datasets=None):
     params = [p for g in opt.param_groups for p in g["params"]]
     bad, t0, step0, last = 0, time.time(), step, {}
     while step < cfg.steps:
-        reason = _stop_requested(out_dir, t_start)               # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
+        reason = _stop_requested(out_dir)               # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
         if reason is not None:
             save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg)
             prune_checkpoints(out_dir, cfg.keep)
@@ -728,34 +733,40 @@ def _selftest():
         _, _, ema2, last2 = train(cfg2, datasets=(base, base))
         ck2 = sorted(f for f in os.listdir(os.path.join(tmp, "selftest")) if f.endswith(".pt"))[-1]
         assert torch.load(os.path.join(tmp, "selftest", ck2), weights_only=False)["step"] == 6
-        # 3b stop request (autoresearch/trainsuite): an old CONTROL file is ignored, a newer one stops the run at a step boundary with a
-        # checkpoint, a STOPPED marker and exit code 75 (not 0: no `.done`); the log rows carry the time `t`
-        stop_cfg = dataclasses.replace(cfg, name="stoprun", steps=6, save_every=0, eval_every=0)
+        # 3b stop request (autoresearch/trainsuite): CONTROL / STOPPED of an earlier stop are moved aside at the start (no clocks compared); a
+        # request that arrives while training stops the run at a step boundary with a checkpoint, a STOPPED marker and exit code 75 (not 0:
+        # no `.done`); the run resumes from that checkpoint; the log rows carry the time `t`
+        stop_cfg = dataclasses.replace(cfg, name="stoprun", steps=1, save_every=0, eval_every=0)
         sdir = os.path.join(tmp, "stoprun")
         os.makedirs(sdir)
-        ctl = os.path.join(sdir, "CONTROL")
-        with open(ctl, "w") as fh:
-            json.dump({"cmd": "stop", "reason": "selftest"}, fh)
-        os.utime(ctl, (time.time() - 3600, time.time() - 3600))
+        for n in ("CONTROL", "STOPPED"):
+            with open(os.path.join(sdir, n), "w") as fh:
+                json.dump({"cmd": "stop", "reason": "old"}, fh)
         train(stop_cfg, datasets=(base, base))
-        assert not os.path.exists(os.path.join(sdir, "STOPPED")), "an old stop request must not stop a new process"
+        assert not os.path.exists(os.path.join(sdir, "STOPPED")) and not os.path.exists(os.path.join(sdir, "CONTROL")), "old files not moved"
+        assert os.path.exists(os.path.join(sdir, "CONTROL.old")) and os.path.exists(os.path.join(sdir, "STOPPED.old"))
         assert all("t" in json.loads(ln) for ln in open(os.path.join(sdir, "log.jsonl")) if '"val"' not in ln), "log rows carry t"
         real_stop, calls = globals()["_stop_requested"], [0]
 
-        def stop_third(run_dir, since):                       # the stop request arrives while the run trains: seen at the third step
+        def stop_third(run_dir):                              # the stop request arrives while the run trains: seen at the third step
             calls[0] += 1
             return "selftest" if calls[0] > 2 else None
+        stop_cfg2 = dataclasses.replace(stop_cfg, name="stoprun2", steps=4)
         globals()["_stop_requested"] = stop_third
         try:
-            train(dataclasses.replace(stop_cfg, name="stoprun2"), datasets=(base, base))
+            train(stop_cfg2, datasets=(base, base))
             raise AssertionError("the stop request must end the run")
         except SystemExit as e:
             assert e.code == EXIT_STOPPED, e.code
         finally:
             globals()["_stop_requested"] = real_stop
-        st = json.load(open(os.path.join(tmp, "stoprun2", "STOPPED")))
-        assert st["step"] == 2 and st["reason"] == "selftest" and os.path.exists(os.path.join(tmp, "stoprun2", "ckpt_00000002.pt")), st
-        assert real_stop(sdir, 0) == "selftest" and real_stop(sdir, time.time() + 5) is None
+        d2 = os.path.join(tmp, "stoprun2")
+        st = json.load(open(os.path.join(d2, "STOPPED")))
+        assert st["step"] == 2 and st["reason"] == "selftest" and os.path.exists(os.path.join(d2, "ckpt_00000002.pt")), st
+        assert not os.path.exists(os.path.join(d2, ".done")), "a stopped run is never done"
+        train(stop_cfg2, datasets=(base, base))               # resume: from step 2 to 4, the old STOPPED is moved aside, no second stop
+        assert os.path.exists(os.path.join(d2, "ckpt_00000004.pt")) and os.path.exists(os.path.join(d2, "STOPPED.old"))
+        assert not os.path.exists(os.path.join(d2, "STOPPED")), "STOPPED of the earlier stop must not stay"
         # 4 validation under the EMA weights restores the training weights afterwards
         w_before = {k: v.clone() for k, v in model2.state_dict().items() if k.startswith("cam_reduce")}
         loader = make_loader(base, dataclasses.replace(cfg, batch_size=2), False)
