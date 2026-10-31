@@ -88,6 +88,16 @@
 !/bev_fusion/
 /bev_fusion/runs/*
 !/bev_fusion/runs/README.md
+# scratch of problem 2 (as for the lane problem): only the scripts; results, logs, feature dumps, patches and JSON of a one-off stay out
+# (what is tracked already stays tracked)
+/bev_fusion/temp/**
+!/bev_fusion/temp/**/
+!/bev_fusion/temp/**/*.py
+!/bev_fusion/temp/**/*.sh
+!/bev_fusion/temp/README.md
+# staged for deletion: the history of what was tracked stays, only the list (README.md) is a record
+/bev_fusion/_to_delete/**
+!/bev_fusion/_to_delete/README.md
 /bev_fusion/data/*
 !/bev_fusion/data/README.md
 !/bev_fusion/data/scenes_parts1_6.json
