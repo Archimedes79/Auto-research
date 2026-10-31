@@ -1,0 +1,7 @@
+{
+  "_about": "The base chain every card is compared against, read by evaluation/board.py. 'base' is a run name (all its seeds runs/<base>_s*), 'open' the arms still on the board. 'promoted' stays null until Mirko says yes; then it holds {date, decision}. A card that wins is added to 'options' only after that OK.",
+  "base": "t8_ctl",
+  "promoted": null,
+  "options": [],
+  "open": ["t8_bevfeat", "t7_res4", "t7_rgb", "t10_dual"]
+}
