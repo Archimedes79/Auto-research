@@ -1,6 +1,6 @@
 # Decisions for Mirko
 
-The only channel for decisions that are yours (agreed 2026-10-25): **promoting a champion** (with its one TEST check), **changes of the problem** (`PROBLEM.md`: goal, metrics, gap ranking, constraints), **changes of the tools or the gates** (`autoresearch/tools/`, the rules of `autoresearch/METHOD.md`), and **permissions** (downloads, installs, mail, shutdown, backups, remote, renames). An agent writes the entry (question, options, recommendation, evidence with numbers from metric cards, what each option means) and does nothing about it until the answer is recorded here with a date. `HANDOVER.md` points to the open entries; every loop summary ends with them.
+The only channel for decisions that are yours (agreed 2026-10-25): **promoting a champion** (with its one TEST check), **changes of the problem** (`PROBLEM.md`: goal, metrics, gap ranking, constraints), **changes of the gates** (the protected files of `project.json`, `guard_hook.py` and the hook settings; since D21 the other tools and `METHOD.md` are covered by git, `selftest.py` and an `ar-reviewer` pass), and **permissions** (downloads, installs, mail, shutdown, backups, remote, renames). An agent writes the entry (question, options, recommendation, evidence with numbers from metric cards, what each option means) and does nothing about it until the answer is recorded here with a date. `HANDOVER.md` points to the open entries; every loop summary ends with them.
 
 ## Open
 

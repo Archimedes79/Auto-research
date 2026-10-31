@@ -6,7 +6,7 @@ The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1
 - Records: locked atomic ledger and schedule writes, run record with heartbeat, done flag only on exit 0, a code snapshot and tag per run (temporary git index, no branch moves), refusal of id reuse, card required before a run (W1, W3, W4, W9).
 - Decisions as code: `experiment.json` with rule clauses, `decide.py --experiment` from metric cards; evaluator contract `schemas/card.schema.json` with `card.py` (P1, P8).
 - Evaluation: one entry point with a registry, golden numbers (cached and one uncached) in `run_all_tests.sh` (M0).
-- Gates: hook on the protected files with grants (P4), holdout split from `project.json`.
+- Gates: hook on the protected files with grants (P4), holdout split from `project.json`. Since D21 (2026-10-30) the list holds the truth (problem, TEST log, golden numbers, champion entries, `project.json`) and the gate itself (`guard_hook.py`, the hook settings), not the other tools or `METHOD.md`.
 - Measurement of the improver: loop table at the head of `LEDGER.md` (P3).
 - Method simplified: 7 agents, 5 templates, light cycle by default (P6); structure check over `experiments/` (P7).
 - State derived from the run records instead of synced between three files (D16, deployed 2026-10-26): item states are computed on read, the ledger row is written once at the end, `ledger.py sync` adds rows of runs that ended or lost their launcher, a second launcher of one id is refused, one tick at a time, cpu items one at a time. A fresh `ar-reviewer` pass found 8 findings in the first version; 7 are fixed with tests (one is the open item L1 below).

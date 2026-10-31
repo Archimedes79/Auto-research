@@ -8,7 +8,7 @@
 
 ## Read first: the state is five files, nothing else
 - HANDOVER.md (<= 3 KB): where we are, what runs, the next step, the owner of the code (the lead chat), pointers; rewrite it, do not append
-- experiment_execution/DECISIONS.md: the only channel for Mirko's decisions (champion promotion with its one TEST check, changes of PROBLEM.md, changes of the tools or gates, permissions); write an entry and wait for the recorded answer, never act on it before
+- experiment_execution/DECISIONS.md: the only channel for Mirko's decisions (champion promotion with its one TEST check, changes of PROBLEM.md, changes of the gates (the protected files, the hook), permissions); write an entry and wait for the recorded answer, never act on it before
 - experiment_execution/PLAN.md: the experiment tree of the loop with a status per node
 - experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next`, item states are read from the run records): what happens next; a disrupted loop resumes from it
 - experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit, and at its head the loop table of `../autoresearch/tools/metrics.py` (runs, GPU hours, verdicts, prediction hits, TEST uses); the journal of a loop goes into ledger notes, not into a new state file; for a wake-up `ledger.py tail --loop <NN>` instead of the whole file
