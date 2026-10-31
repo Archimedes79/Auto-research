@@ -1,8 +1,8 @@
 {
   "_about": "Machine-readable part of an experiment (experiments/E<id>_<slug>/experiment.json, next to the human experiment.md from templates/experiment.md). Checked by autoresearch/tools/experiment.py check; decided by autoresearch/tools/decide.py --experiment. Plain JSON, no JSON-Schema library: 'required' lists the fields that must exist, 'types' their python types, 'enum' the allowed values, 'fields' the meaning.",
   "required": ["id", "title", "kind", "metric", "direction", "band", "prediction", "arms", "control", "rule", "evaluate"],
-  "types": {"deterministic": "bool", "id": "str", "card": "str", "title": "str", "kind": "str", "metric": "str", "direction": "str", "band": "number", "prediction": "dict", "arms": "dict", "control": "str", "variant": "str", "rule": "list", "budget_gpu_h": "number", "kill": "str", "evaluate": "dict", "seeds": "list"},
-  "enum": {"kind": ["variant", "block"], "direction": ["higher", "lower"]},
+  "types": {"deterministic": "bool", "id": "str", "card": "str", "title": "str", "kind": "str", "metric": "str", "direction": "str", "band": "number", "prediction": "dict", "arms": "dict", "control": "str", "variant": "str", "rule": "list", "budget_gpu_h": "number", "kill": "str", "evaluate": "dict", "seeds": "list", "pairing": "str"},
+  "enum": {"kind": ["variant", "block"], "direction": ["higher", "lower"], "pairing": ["position"]},
   "fields": {
     "id": "E<number> (never reused)",
     "card": "the hypothesis card it tests (H<cycle>.<n>) or empty",
@@ -18,8 +18,9 @@
     "rule": "list of clauses, ALL must hold for KEEP: {metric, vs?: <arm letter, default control>, min_effect?: number (variant - vs >= this), max_loss?: number (variant - vs >= -this), band?: number, subsets?: [subset names], at_least?: int (how many subsets must pass), note?}",
     "budget_gpu_h": "planned GPU hours",
     "kill": "stop early when ... (text; a tick can act on it once learning curves are recorded)",
-    "evaluate": "{split: val | test | confirm, subset?: val250, compare: <control arm letter>}: how the cards are made (evaluate.py <name> --compare <control name>)",
-    "seeds": "the seeds every arm runs (informational; the cards carry the actual seeds)",
+    "evaluate": "{split: val | test | confirm, subset?: val250, compare: <control arm letter>, allow?: [split | subset | denominator | protocol]}: how the cards are made (evaluate.py <name> --compare <control name>). decide.py refuses arms whose cards differ in split (must be this split), subset, denominator (frames / n) or protocol; allow names a difference you know and accept",
+    "seeds": "the seeds every arm runs: a list as long as an arm's cards pairs the cards of the arms seed by seed (a card's own `seed` wins; an arm can carry its own `seeds` list)",
+    "pairing": "'position' = the cards of two arms are paired by their order in the lists (card i against card i), for experiments whose cards carry no seed identity; without seeds and without this declaration decide.py refuses to pair two or more seeds",
     "deterministic": "true when the arms share the checkpoint and differ by a deterministic step (assembly, pruning, threshold): no training seed exists, the paired scene-bootstrap interval decides"
   },
   "verdicts": {

@@ -10,12 +10,13 @@ problem folder, optionally '#a/b/c' into the JSON; a card has its metrics under 
 import argparse
 import glob
 import json
+import math
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-from decide import card_lower, lower_names  # noqa: E402
+from decide import card_lower, decide_experiment, named_lower  # noqa: E402
 import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
@@ -106,6 +107,9 @@ def check(exp, path):
     pred = exp["prediction"]
     if not isinstance(pred.get("value"), (int, float)) or pred.get("vs") not in arms:
         bad.append("prediction needs {value: number, vs: <arm letter>}")
+    thresholds = [("band", exp["band"]), ("prediction.value", pred.get("value"))] + [
+        (f"clause {i} {k}", c[k]) for i, c in enumerate(exp["rule"]) if isinstance(c, dict) for k in ("min_effect", "max_loss", "band") if k in c]
+    bad += [f"{name} must be a finite number" for name, v in thresholds if isinstance(v, (int, float)) and not math.isfinite(v)]
     if not exp["rule"]:
         bad.append("rule has no clause")
     for i, c in enumerate(exp["rule"]):
@@ -123,12 +127,14 @@ def check(exp, path):
     if not isinstance(exp["evaluate"].get("split"), str) or not exp["evaluate"]["split"].strip():
         bad.append("evaluate.split must name the split or benchmark set (val | test | confirm | <benchmark>)")
     every = []  # the cards of all arms: the directions they declare must agree (decide.card_lower)
+    resolved = 0  # arms whose cards exist: with all of them the decision itself is tried below
     for a in arms:
         try:
             cards = arm_cards(exp, a, root)
         except (FileNotFoundError, KeyError, ValueError) as e:
             bad.append(f"arm {a}: {e}")
             continue
+        resolved += bool(cards)
         for s, lst in cards.items():
             for m, full, ref in lst:
                 every.append((m, full, ref))
@@ -147,8 +153,13 @@ def check(exp, path):
             continue
         if said is not None and said != (exp["direction"] == "lower"):
             bad.append(f"direction {exp['direction']} contradicts the cards: their evaluator declares {metric} {'lower' if said else 'higher'}-is-better")
-        elif said is None and metric in lower_names(root) and exp["direction"] != "lower":
+        elif said is None and named_lower(metric, root) and exp["direction"] != "lower":
             bad.append(f"metric {metric} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
+    if not bad and resolved == len(arms):  # every card is there and sound: the decision must not refuse them (same split / frames, seeds that pair)
+        try:
+            decide_experiment(exp, root)
+        except ValueError as e:
+            bad.append(f"cannot be decided: {e}")
     return bad
 
 

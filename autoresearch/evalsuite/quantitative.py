@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import re
@@ -81,7 +82,8 @@ class Quantitative:
         manifest = {"name": run_name, "state": state, "source": src.describe(), "subject": desc, "task": task.name,
                     "metrics": {m.name: {"headline": list(m.headline), "better": dict(m.better)} for m in metrics.values()},
                     "selection": {"scenes": list(plan), "n_frames_planned": sum(len(v) for v in plan.values()),
-                                  "max_frames": max_frames, "seed": seed}}
+                                  "max_frames": max_frames, "seed": seed,
+                                  "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
         store = RunStore.create(os.path.join(self.dir, run_name), manifest, resume=resume)
         done = store.done()
         n_before = len(store.frames)

@@ -5,7 +5,8 @@
     <run dir>/counts_<metric>_<chunk>.npz   the Counts of `CHUNK` consecutive frames of one metric (arrays '<pos>|<name>')
 
 Frames are appended in chunks (counts file first, then the frames.jsonl lines of that chunk), so a run that dies leaves a
-consistent prefix and `RunStore.open(...).done()` tells what to skip when it is resumed. Any shapes are allowed per frame
+consistent prefix and `RunStore.open(...).done()` tells what to skip when it is resumed (a frames.jsonl line cut off by the crash is dropped
+on open, and cut away when the store is opened for writing). Any shapes are allowed per frame
 (fixed or ragged); the store never interprets a count.
 """
 from __future__ import annotations
@@ -68,6 +69,32 @@ def warn_gained(gained: List[str], where: str) -> None:
               "keys both have)", file=sys.stderr, flush=True)
 
 
+def _read_frames(fp: str, repair: bool) -> List[Dict[str, Any]]:
+    """the frames of frames.jsonl. A cut-off LAST line (the run died inside a flush) is dropped; with repair the file is cut back to the
+    last whole line, so the next flush appends cleanly and the dropped frame is run again. A bad line anywhere else is a damaged file."""
+    with open(fp, "rb") as f:
+        raw = f.read()
+    frames, end, offset = [], 0, 0                                        # end: the byte after the last whole line
+    lines = raw.split(b"\n")
+    for n, line in enumerate(lines, 1):
+        offset += len(line) + 1
+        if line.strip():
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                if any(rest.strip() for rest in lines[n:]):
+                    raise ValueError(f"{fp}: line {n} is not valid JSON and is not the last line: the file is damaged") from None
+                break
+        end = min(offset, len(raw))
+    if repair and end < len(raw):
+        with open(fp, "r+b") as f:
+            f.truncate(end)
+    elif repair and raw and not raw.endswith(b"\n"):
+        with open(fp, "ab") as f:
+            f.write(b"\n")
+    return frames
+
+
 class RunStore:
     def __init__(self, path: str, manifest: Dict[str, Any], mode: str):
         self.path, self.manifest, self.mode = path, manifest, mode
@@ -118,8 +145,7 @@ class RunStore:
         st = cls(path, manifest, mode)
         fp = os.path.join(path, "frames.jsonl")
         if os.path.exists(fp):
-            with open(fp, encoding="utf-8") as f:
-                st._frames = [json.loads(line) for line in f if line.strip()]
+            st._frames = _read_frames(fp, repair=mode != "r")
         st._n_chunks = 1 + max((fr["chunk"] for fr in st._frames), default=-1)
         return st
 
