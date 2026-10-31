@@ -14,8 +14,9 @@ Position is always: cell index (implicit in the tensor, exact, translation equiv
 Checks: the codec itself is lossless (decode the raster without learning = the oracle ceiling); then the learned probes.
 Levels (second argument): none = D (codecs x capacity C = 64 / 128, ReLU probe); e = E (probe architecture: activation relu / leaky,
 default / identity start - the probe starts as a pass-through, as a residual block does); f = F (tolerances x 0.25, two seeds,
-leaky + identity start). Results: tests/README.md and plan.md section 3.4.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u tests/radar_codecs.py [steps] [e | f]
+leaky + identity start); cv = 5-fold cross-validation over scenes, paired codec comparison with a written rule (arg 3 = seeds per fold).
+Results: tests/README.md and plan.md section 3.4.
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u tests/radar_codecs.py [steps] [e | f | cv [seeds]]
 """
 import math
 import sys
@@ -285,6 +286,77 @@ def level_f(steps, scale=0.25):
         print(f"  {name + ' / seed ' + str(seed):19s} | {100 * ok_or.float().mean().item():7.1f}% | {100 * h:7.1f}% | {100 * t:4.1f}% | {100 * (t - h):+4.1f} | {med} | {fail_share(e)}", flush=True)
 
 
+def _ok_at(e, scale):
+    """share of detections with all six fields within the nominal tolerances x scale."""
+    ok = torch.ones_like(e["pos (m)"], dtype=torch.bool)
+    for k, t in rt.TOL.items():
+        ok &= e[k] <= t * scale
+    return ok.float().mean().item()
+
+
+def level_cv(steps, seeds=(0, 1), scales=(1.0, 0.25), names=("abs", "delta", "phys"), out="temp/radar/cv_result.json"):
+    """Standard treatment of seed noise and small data: K-fold cross-validation over SCENES (5 folds of 2 scenes; each scene is held
+    out once), every fold with 2 seeds, the same folds and seeds for every codec (paired). Reported per codec: held-out kept share,
+    kept share / oracle (decoding the raster itself, the ceiling of that fold), and the overfitting EXCESS = (train - held-out of the
+    probe) - (train - held-out of the oracle); the oracle's own difference is a property of the data. Comparison of two codecs: the
+    paired difference of the fold means (seeds averaged), its mean and SD over the 5 folds, wins, and a t statistic (df 4). Rule
+    (written before the run): A is better than B if the mean paired difference of kept / oracle exceeds the noise band
+    max(0.02, mean seed SD) AND t > 2.776 (95 %, two-sided); otherwise TIE; overfitting is flagged if the excess exceeds 3 points."""
+    import json
+    import time
+
+    torch.set_num_threads(2)
+    per_scene = {s: rt.load({s}) for s in range(10)}
+    folds = [(2 * i, 2 * i + 1) for i in range(5)]
+    R, t0 = {}, time.time()
+    print(f"CV  5 folds of 2 scenes x {len(seeds)} seeds x codecs {names}; probe leaky + identity start, C = 64, {steps} steps; tolerance scales {scales}")
+    for fi, fold in enumerate(folds):
+        te = [f for s in fold for f in per_scene[s]]
+        tr = [f for s in range(10) if s not in fold for f in per_scene[s]]
+        for name in names:
+            c = Codec(name)
+            e_or_te, e_or_tr = eval_codec(c, None, te)[0], eval_codec(c, None, tr)[0]
+            for seed in seeds:
+                net = train_codec(c, "leaky+id", 64, steps, tr, seed=seed)
+                e_te, e_tr = eval_codec(c, net, te)[0], eval_codec(c, net, tr)[0]
+                R[(name, fi, seed)] = {sc: dict(te=_ok_at(e_te, sc), tr=_ok_at(e_tr, sc), or_te=_ok_at(e_or_te, sc), or_tr=_ok_at(e_or_tr, sc)) for sc in scales}
+                r = R[(name, fi, seed)][scales[-1]]
+                print(f"  fold {fi} scenes {fold} {name:6s} seed {seed}: tol x{scales[-1]}: held-out {100 * r['te']:.1f}% train {100 * r['tr']:.1f}% oracle "
+                      f"{100 * r['or_te']:.1f}% / {100 * r['or_tr']:.1f}%   ({(time.time() - t0) / 60:.0f} min)", flush=True)
+    with open(out.replace(".json", "_raw.json"), "w", encoding="utf-8") as f:              # raw numbers first: the statistics below cannot lose them
+        json.dump({f"{n}|fold{fi}|seed{s}": v for (n, fi, s), v in R.items()}, f, indent=1)
+    summary = {}
+    for sc in scales:
+        print(f"\ntolerances x {sc}")
+        print("  codec  | held-out kept (mean +- SD, 10 runs) | kept / oracle (mean +- SD) | seed SD (within fold) | overfitting excess (mean, worst fold)")
+        ratio, seed_sd = {}, {}
+        for name in names:
+            te = np.array([[R[(name, fi, s)][sc]["te"] for s in seeds] for fi in range(5)])
+            orc = np.array([[R[(name, fi, s)][sc]["or_te"] for s in seeds] for fi in range(5)])
+            exc = np.array([[(R[(name, fi, s)][sc]["tr"] - R[(name, fi, s)][sc]["te"]) - (R[(name, fi, s)][sc]["or_tr"] - R[(name, fi, s)][sc]["or_te"])
+                             for s in seeds] for fi in range(5)])
+            ratio[name] = (te / orc).mean(1)                                  # per fold, seeds averaged
+            seed_sd[name] = float(np.mean(np.std(te / orc, axis=1, ddof=1))) if len(seeds) > 1 else 0.0
+            summary[f"{name}@{sc}"] = dict(kept=float(te.mean()), kept_sd=float(te.std(ddof=1)), ratio=float((te / orc).mean()), excess=float(exc.mean()))
+            print(f"  {name:6s} | {100 * te.mean():5.1f}% +- {100 * te.std(ddof=1):4.1f}                   | {100 * (te / orc).mean():5.1f}% +- {100 * (te / orc).std(ddof=1):4.1f}"
+                  f"        | {100 * seed_sd[name]:4.1f} points          | {100 * exc.mean():+4.1f} / {100 * exc.max():+4.1f} points"
+                  + ("   <- OVERFITTING" if exc.mean() > 0.03 else ""))
+        for a, b in (("delta", "abs"), ("phys", "abs"), ("phys", "delta")):
+            if a not in names or b not in names:
+                continue
+            d = ratio[a] - ratio[b]
+            band = max(0.02, seed_sd[a], seed_sd[b])
+            t = d.mean() / (d.std(ddof=1) / np.sqrt(len(d)) + 1e-12)
+            verdict = f"{a} BETTER" if (d.mean() > band and t > 2.776) else (f"{b} BETTER" if (-d.mean() > band and -t > 2.776) else "TIE")
+            summary[f"{a}-{b}@{sc}"] = dict(mean=float(d.mean()), sd=float(d.std(ddof=1)), wins=int((d > 0).sum()), t=float(t), band=band, verdict=verdict)
+            print(f"  paired {a} - {b}: kept/oracle difference per fold {np.round(100 * d, 1).tolist()} points, mean {100 * d.mean():+.1f} +- {100 * d.std(ddof=1):.1f}, "
+                  f"wins {int((d > 0).sum())}/5, t = {t:.1f}, band {100 * band:.1f} -> {verdict}")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump({"steps": steps, "seeds": list(seeds), "summary": summary}, f, indent=1)
+    print(f"\nresult file: {out}")
+    return summary
+
+
 def level_e(steps, names=("abs", "delta")):
     print(f"E  architecture of the probe (activation, identity start), codecs {names}, C = 64, {steps} steps")
     tr, te = rt.load(set(range(8))), rt.load({8, 9})
@@ -302,7 +374,9 @@ def level_e(steps, names=("abs", "delta")):
 
 if __name__ == "__main__":
     steps = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 2000
-    if "f" in sys.argv[2:]:
+    if "cv" in sys.argv[2:]:
+        level_cv(steps, seeds=tuple(range(int(sys.argv[3]) if len(sys.argv) > 3 else 2)))
+    elif "f" in sys.argv[2:]:
         level_f(steps)
     elif "e" in sys.argv[2:]:
         level_e(steps)
