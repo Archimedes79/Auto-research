@@ -12,7 +12,7 @@ Rule of the repository: scratch goes here, a reusable tool is promoted to a prop
 | `setup/` | cache builders, `get_dualbev_ckpt.sh`, one-time table merges | **used** (`data/README.md`, `models/README.md` name the build / download scripts) |
 | `data/` | download scripts of the nuScenes parts 7-10 | **used** (`data/README.md`) |
 | `radar/` | radar statistics and the reconstruction test `radar_recon_test.py` | `radar_recon_test.py` is **imported by `tests/`** (with the cache `temp/radar/cache/`) |
-| `checks/` | single-purpose checks, queue chains (`chain_*.sh`), probes, plots | scratch (one-off scripts that were finished moved to `../_to_delete/temp_oneoffs/`) |
+| `checks/` | single-purpose checks, queue chains (`chain_*.sh`), probes, plots | scratch (one-off scripts that were finished moved to `../_to_delete/temp_oneoffs/`; on 2026-10-31 also the t1-era queue chains `chain_a` ... `chain_x` and job probes, and 15 unreferenced one-offs of `train/` and `setup/`) |
 | `calib/`, `audit/`, `timing/` | code of the t1 / t2 / t3 experiments (calibration, audit of the chain, latency) | experiment code, cited from `../experiments/*/experiment.md` |
 | `soa_gap/`, `t4/`, `t5/`, `t7/` | code and results of the experiments t6, t4, t5, t7 | experiment code, cited from `../experiments/` |
 | `scout_tables/` | the raw tables of the literature scouts | input of `../literature/papers.csv` (not scratch) |
