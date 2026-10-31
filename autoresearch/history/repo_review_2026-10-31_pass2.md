@@ -143,7 +143,7 @@ The fixes the first review reported as done are in HEAD (124 exit code, `wait_af
   - `temp/train/run_ar.sh` and `run_cfg.sh`: live launch code (proposal 4);
   - `temp/study/lane*.sh`: the queue history of the t2-t8 runs;
   - `temp/t7/` and `temp/t10/`: running work.
-- **The lane problem:** its structure check reports 41 dead paths. They come from another chat's uncommitted removal of the loop 19-21 scratch; that chat (the loop-21 lead) owns them.
+- **The lane problem:** its structure check reported 41 dead paths, from the removal of the loop 19-21 scratch. The lane chat fixed them in e3d8aa9 (check_structure 41 -> 0).
 
 ## 4. Proposals, ranked
 1. **The box velocity:** find why the branch does not learn (section 2). Until then, every AVE in a table is "the zero predictor" and should be printed next to `ave0`.
