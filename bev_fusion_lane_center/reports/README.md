@@ -13,7 +13,6 @@ Cleaned up on 2026-10-24 (two passes). Read the two weekly reports first.
 | `Lane_graph_recall_val.mp4` (+ a poster png) | results video of the `recall` system (VAL scenes 23 Boston and 7 Singapore One-North, the two whose scene Q is nearest the median; 80 frames, 3 fps): front camera, prediction red over ground truth green, per-frame F1@1.0; made by `temp/loop21/make_results_video.py` (mp4v: VLC / Windows Media Player) |
 | `Weeks1-2_LaneGraph_Presentation_EN.pptx` | 24-slide deck of both weeks |
 | `Automated_Research_Workflow_short_EN.pptx` | 12-slide pitch for the team and managers: idea, what it gave us, what others do, how to do it, research pipeline (small vs large data, modular vs joint training), our setup, four trust rules, noise, tree / ledger / state files, what we ask for. (The older 20-slide version is staged in _to_delete/cleanup_2026-10-24b/.) |
-| `Loop17_DRAFT_Robust_Differentiable_Lane_Graph_Report_EN.pdf` | draft of the loop 17 report, built before the E209 crash; cannot be rebuilt as is (see Removed) |
 | `Background_Approach_Sparse_Lane_Graph_EN.pdf` | the idea of the sparse lane graph |
 
 All three weekly reports end with the list of corrected claims and an experiment index. Known gap: E209 (unseen failure types) has no result.
@@ -26,6 +25,7 @@ All three weekly reports end with the list of corrected claims and an experiment
 ## Removed
 
 Everything older is in `../_to_delete/` (`reports_cleanup_2026-10-24/` and `cleanup_2026-10-24b/`), same relative paths: condensed reports of loops 1 - 14, loop 4 / 5 / 15 / 16 reports, decision and E2E reports, html copies of the PDFs, per-experiment mini reports, loop 1 figures, old builders and text sources. Per-experiment detail is in `../experiments/`.
+2026-10-31: the files of `weekly/` that git does not hold (binaries) and the `temp/` scratch were found missing from disk, also not in `../_to_delete/` (cause unknown). The scratch came back from git; the status report after loop 21, the loop-18 report, the results video and the two-week deck were rebuilt from their builders the same day (the video run reproduced the stored `recall` card). The loop-17 draft report (Loop17_DRAFT_Robust_Differentiable_Lane_Graph_Report_EN.pdf, built before the E209 crash) could not be rebuilt and is gone.
 To finish the loop 17 report (open item in HANDOVER.md), move the builder files (`build_loop17_report.py`, `loop17_text*.py`, `fig_p17_*.py`, `build_e2e_condensed.py`, `report_lib.py`, `finish_report6.ps1`) and `source/text|tables|cards|review|build` back from `cleanup_2026-10-24b/reports/`.
 
 ## Rebuild

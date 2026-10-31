@@ -1,6 +1,6 @@
 # All checkpoints under runs/ (generated)
 
-242 files >= 1 MB, total 1.7 GB. Regenerate: `python tools/maintenance/make_structure.py`. The curated list of the models that matter is `README.md` in this folder.
+305 files >= 1 MB, total 2.0 GB. Regenerate: `python tools/maintenance/make_structure.py`. The curated list of the models that matter is `README.md` in this folder.
 
 | file (relative to runs/) | size | date | sha256[:12] |
 |---|---|---|---|
@@ -32,12 +32,10 @@
 | e120_b/model.pt | 5.5 MB | 2026-10-23 | 0d0ed5a55607 |
 | e120_c/model.pt | 3.2 MB | 2026-10-23 | 9d2744a7883a |
 | e120_d/model.pt | 5.5 MB | 2026-10-23 | c75bae317f42 |
-| e120_smoke/model.pt | 5.5 MB | 2026-10-22 | ddf076ff099b |
 | e121_b/model_cons.pt | 5.9 MB | 2026-10-23 | 6fafa99ee853 |
 | e121_b/model_joint0.pt | 5.9 MB | 2026-10-23 | 4eb012a90732 |
 | e121_b/model_joint1.pt | 5.9 MB | 2026-10-23 | 808a2d9ee13c |
 | e121_b_keep/model_joint1.pt | 5.9 MB | 2026-10-23 | 3f0b54f03d09 |
-| e121_smoke/model_joint1.pt | 5.9 MB | 2026-10-23 | 6efa1da3e186 |
 | e121c/model.pt | 2.8 MB | 2026-10-23 | 950870f3129d |
 | e121c_s1/model.pt | 2.8 MB | 2026-10-23 | 2c3047b245b1 |
 | e122_s0_1u/model.pt | 6.7 MB | 2026-10-23 | a1cf7d127501 |
@@ -121,11 +119,72 @@
 | e123/e17_map_c/model.pt | 4.9 MB | 2026-10-24 | 981aa83c86e6 |
 | e123/e17_map_c2/ckpt.pt | 14.7 MB | 2026-10-24 | 985e2d79280b |
 | e123/e17_map_c2/model.pt | 4.9 MB | 2026-10-25 | 6796fca6a228 |
+| e123/e18_D7_f1eq/model.pt | 4.9 MB | 2026-10-25 | 31f227b515ad |
+| e123/e18_D7_j1eq/model.pt | 4.9 MB | 2026-10-25 | 2f3d7ce5d77d |
+| e123/e18_D7_j1eq8/model.pt | 4.9 MB | 2026-10-25 | 765729bde439 |
+| e123/e18_D7_j1eqs1/model.pt | 4.9 MB | 2026-10-25 | 53591558b623 |
+| e123/e18_D7_j1rc/model.pt | 4.9 MB | 2026-10-25 | 7f3e1f333b29 |
+| e123/e18_D7_j1rc6/model.pt | 4.9 MB | 2026-10-25 | a08d081f521a |
+| e123/e18_D7_j1rcs1/model.pt | 4.9 MB | 2026-10-25 | 5a9315a9044b |
+| e123/e18_D7_rc1s1/model.pt | 4.9 MB | 2026-10-25 | 99ae582771e5 |
+| e123/e18_D7_rc2/model.pt | 4.9 MB | 2026-10-25 | 615f6347e0f9 |
+| e123/e18_D7_rc4/model.pt | 4.9 MB | 2026-10-25 | 588061871649 |
+| e123/e18_joint2_a0/model.pt | 4.9 MB | 2026-10-25 | 9e30f474eb96 |
+| e123/e18_joint2_c0/model.pt | 4.9 MB | 2026-10-25 | fdefe75d7fb8 |
 | e123/e18_joint_a0/model.pt | 4.9 MB | 2026-10-25 | fb2f0435c89b |
+| e123/e18_joint_a1/model.pt | 4.9 MB | 2026-10-25 | c22dd347e1c4 |
 | e123/e18_joint_c0/model.pt | 4.9 MB | 2026-10-25 | c4f4534b3996 |
+| e123/e18_joint_c1/model.pt | 4.9 MB | 2026-10-25 | f610a5bec4b9 |
 | e123/e18_smoke_joint/model.pt | 4.9 MB | 2026-10-24 | 52214bb37682 |
 | e123/e18_smoke_mapft/ckpt.pt | 14.7 MB | 2026-10-24 | 8e08c60d81f0 |
 | e123/e18_smoke_mapft/model.pt | 4.9 MB | 2026-10-24 | d4588040e605 |
+| e123/e24_D7_j1cl8s0/model.pt | 4.9 MB | 2026-10-26 | f4428c68cf57 |
+| e123/e24_D7_j1cl8s0/model_at25.pt | 4.9 MB | 2026-10-25 | 2da82edbd048 |
+| e123/e24_D7_j1cl8s0/model_at50.pt | 4.9 MB | 2026-10-25 | b7fa78b167b5 |
+| e123/e24_D7_j1cl8s0/model_at75.pt | 4.9 MB | 2026-10-25 | afc77457bcc6 |
+| e123/e24_D7_j1eqs2/model.pt | 4.9 MB | 2026-10-25 | 060bb4bbc89e |
+| e123/e24_D7_j1eqs2/model_at25.pt | 4.9 MB | 2026-10-25 | f37367c34846 |
+| e123/e24_D7_j1eqs2/model_at50.pt | 4.9 MB | 2026-10-25 | 18731e83ae51 |
+| e123/e24_D7_j1eqs2/model_at75.pt | 4.9 MB | 2026-10-25 | 3b8b920f3687 |
+| e123/e24_D7_j1eqs2_at25/model.pt | 4.9 MB | 2026-10-25 | f37367c34846 |
+| e123/e24_D7_j1eqs2_at50/model.pt | 4.9 MB | 2026-10-25 | 18731e83ae51 |
+| e123/e24_D7_j1eqs2_at75/model.pt | 4.9 MB | 2026-10-25 | 3b8b920f3687 |
+| e123/e24_D7_j1eqs3/model.pt | 4.9 MB | 2026-10-27 | 2ef16e509269 |
+| e123/e24_D7_j1eqs3/model_at25.pt | 4.9 MB | 2026-10-27 | d54e2690979c |
+| e123/e24_D7_j1eqs3/model_at50.pt | 4.9 MB | 2026-10-27 | 4df3bc6ee6be |
+| e123/e24_D7_j1eqs3/model_at75.pt | 4.9 MB | 2026-10-27 | cae9f2fff367 |
+| e123/e24_D7_j1eqs3_at25/model.pt | 4.9 MB | 2026-10-27 | d54e2690979c |
+| e123/e24_D7_j1eqs3_at50/model.pt | 4.9 MB | 2026-10-27 | 4df3bc6ee6be |
+| e123/e24_D7_j1eqs3_at75/model.pt | 4.9 MB | 2026-10-27 | cae9f2fff367 |
+| e123/e24_D7_j1exs0/model.pt | 4.9 MB | 2026-10-25 | 0c5413887da8 |
+| e123/e24_D7_j1exs0/model_at25.pt | 4.9 MB | 2026-10-25 | 1383be990f09 |
+| e123/e24_D7_j1exs0/model_at50.pt | 4.9 MB | 2026-10-25 | 6f0b2092b22c |
+| e123/e24_D7_j1exs0/model_at75.pt | 4.9 MB | 2026-10-25 | 360029a7ffe7 |
+| e123/e24_D7_j1exs1/model.pt | 4.9 MB | 2026-10-25 | 1664a9a1ed70 |
+| e123/e24_D7_j1exs1/model_at25.pt | 4.9 MB | 2026-10-25 | 3a739465b66d |
+| e123/e24_D7_j1exs1/model_at50.pt | 4.9 MB | 2026-10-25 | 9e51836e2f58 |
+| e123/e24_D7_j1exs1/model_at75.pt | 4.9 MB | 2026-10-25 | 714c8f060a3f |
+| e123/e24_D7_j1phds0/model_at25.pt | 4.9 MB | 2026-10-26 | 8a185c0fa914 |
+| e123/e24_D7_j1phds0/model_at50.pt | 4.9 MB | 2026-10-26 | be99d15894d8 |
+| e123/e24_D7_j1phds0_at50/model.pt | 4.9 MB | 2026-10-26 | be99d15894d8 |
+| e123/e24_D7_j1rcs2/model.pt | 4.9 MB | 2026-10-25 | 7420fae86b80 |
+| e123/e24_D7_j1rcs2/model_at25.pt | 4.9 MB | 2026-10-25 | 029f3889242b |
+| e123/e24_D7_j1rcs2/model_at50.pt | 4.9 MB | 2026-10-25 | b59030d83f1a |
+| e123/e24_D7_j1rcs2/model_at75.pt | 4.9 MB | 2026-10-25 | ffeb8fa41503 |
+| e123/e24_D7_j1rcs2_at25/model.pt | 4.9 MB | 2026-10-25 | 029f3889242b |
+| e123/e24_D7_j1rcs2_at50/model.pt | 4.9 MB | 2026-10-25 | b59030d83f1a |
+| e123/e24_D7_j1rcs2_at75/model.pt | 4.9 MB | 2026-10-25 | ffeb8fa41503 |
+| e123/e24_D7_j1rcs3/model.pt | 4.9 MB | 2026-10-27 | a20c65b2cf61 |
+| e123/e24_D7_j1rcs3/model_at25.pt | 4.9 MB | 2026-10-26 | f797f9425d2c |
+| e123/e24_D7_j1rcs3/model_at50.pt | 4.9 MB | 2026-10-27 | 9dcf10132c2a |
+| e123/e24_D7_j1rcs3/model_at75.pt | 4.9 MB | 2026-10-27 | a9b38e963e70 |
+| e123/e24_D7_j1rcs3_at25/model.pt | 4.9 MB | 2026-10-26 | f797f9425d2c |
+| e123/e24_D7_j1rcs3_at50/model.pt | 4.9 MB | 2026-10-27 | 9dcf10132c2a |
+| e123/e24_D7_j1rcs3_at75/model.pt | 4.9 MB | 2026-10-27 | a9b38e963e70 |
+| e123/e25_D7_j1phd2s0/model.pt | 4.9 MB | 2026-10-27 | 559c06e40d30 |
+| e123/e25_D7_j1phd2s0/model_at25.pt | 4.9 MB | 2026-10-27 | 037fba8d343f |
+| e123/e25_D7_j1phd2s0/model_at50.pt | 4.9 MB | 2026-10-27 | db03cefdc2cf |
+| e123/e25_D7_j1phd2s0/model_at75.pt | 4.9 MB | 2026-10-27 | 47d0532ea314 |
 | e123/smoke_D1/model.pt | 4.2 MB | 2026-10-23 | 062c7c97378e |
 | e123/smoke_D2/model.pt | 5.8 MB | 2026-10-23 | e1ee7d423b8e |
 | e123/smoke_D3/model.pt | 5.7 MB | 2026-10-23 | 41b9df83185e |
@@ -139,14 +198,18 @@
 | e123/smoke_junc/model.pt | 4.3 MB | 2026-10-23 | a5c51abf5241 |
 | e123/smoke_nojunc/model.pt | 4.2 MB | 2026-10-23 | 9bab5162daca |
 | e123/smoke_time/model.pt | 4.2 MB | 2026-10-23 | fb6f33decd3a |
+| e18_joint2_a0/ckpt.pt | 23.1 MB | 2026-10-25 | 9cea4ff68c2c |
+| e18_joint2_a0/model.pt | 2.8 MB | 2026-10-25 | 83b59cb4eb3d |
+| e18_joint2_c0/ckpt.pt | 23.1 MB | 2026-10-25 | ad175d630f3e |
+| e18_joint2_c0/model.pt | 2.8 MB | 2026-10-25 | 9a67e3c33598 |
 | e18_joint_a0/ckpt.pt | 23.1 MB | 2026-10-25 | aa69f4b3bcce |
 | e18_joint_a0/model.pt | 2.8 MB | 2026-10-25 | 2bf358190616 |
-| e18_joint_a1/ckpt.pt | 23.1 MB | 2026-10-25 | 559bff067be5 |
+| e18_joint_a1/ckpt.pt | 23.1 MB | 2026-10-25 | 7c4ef8857910 |
+| e18_joint_a1/model.pt | 2.8 MB | 2026-10-25 | 90d50b0ab235 |
 | e18_joint_c0/ckpt.pt | 23.1 MB | 2026-10-25 | 15af78d7a941 |
 | e18_joint_c0/model.pt | 2.8 MB | 2026-10-25 | 65c668301fe7 |
-| e18_joint_c1/ckpt.pt | 23.1 MB | 2026-10-25 | 9a8206402f78 |
-| e18_smoke_joint/ckpt.pt | 23.1 MB | 2026-10-24 | cf857be79cb7 |
-| e18_smoke_joint/model.pt | 2.8 MB | 2026-10-24 | c63926b97441 |
+| e18_joint_c1/ckpt.pt | 23.1 MB | 2026-10-25 | 6f43dd0eb803 |
+| e18_joint_c1/model.pt | 2.8 MB | 2026-10-25 | 61a80f800276 |
 | e27_gcar/model.pt | 11.0 MB | 2026-10-13 | 9932b1fee48c |
 | e30_base2/model.pt | 11.0 MB | 2026-10-14 | 0110b380c41e |
 | e30_s4_diverged/model.pt | 11.0 MB | 2026-10-14 | daf135852145 |
