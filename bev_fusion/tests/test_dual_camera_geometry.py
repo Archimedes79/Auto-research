@@ -1,4 +1,4 @@
-"""t10 gate (layer 0, CPU, a few seconds): do the two feature branches of camera_features "dual" put the same image pixel at the same BEV cell?
+"""Geometry test of camera_features "dual" (t10; layer 0, CPU, a few seconds): do the two feature branches put the same image pixel at the same BEV cell?
 
 tests/test_camera_features.py covers shapes, branch select, gradients and refusals. This adds what it does not: the GEOMETRY of the pair with the
 real image transforms of the two caches (DualBEV: nuscenes_front_ida, cell centres at 16 k + 7.5; BEVFusion: bevfusion_ida 0.48 / crop 32, 176,
@@ -12,7 +12,7 @@ branches. A silent mix-up (wrong ida, wrong cell convention, a cache made with a
  G7c  the two branches agree with each other on the common cells (< 1 pixel), at least 3000 cells compared (not vacuous)
  G8   sensitivity: lifting branch 2 with the DualBEV ida (the mix-up) makes the error > 10 pixels; the gate can see it
 
-Run: wsl bash tools/env/_py14.sh temp/t10/gate.py     (CPU; OMP_NUM_THREADS=2 while a training runs)"""
+Run: wsl bash ../bev_fusion_lane_center/tools/env/_py14.sh tests/test_dual_camera_geometry.py   (CPU; OMP_NUM_THREADS=2 while a training runs)"""
 import json
 import os
 import sys
@@ -20,7 +20,7 @@ import sys
 import torch
 
 torch.set_num_threads(2)
-ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [os.path.join(ROOT, "training")]
 from bevfusion_camera import bevfusion_ida  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
@@ -122,7 +122,5 @@ mixed_err = float(torch.maximum((mixed[0] - ax).abs(), (mixed[1] - ay).abs())[bo
 res["G8"] = {"err_with_wrong_ida_px": mixed_err, "pass": bool(mixed_err > 10.0)}
 res["all_pass"] = all(v["pass"] for v in res.values() if isinstance(v, dict))
 print(json.dumps(res, indent=1))
-os.makedirs(os.path.join(ROOT, "temp", "t10"), exist_ok=True)
-json.dump(res, open(os.path.join(ROOT, "temp", "t10", "gate_result.json"), "w"), indent=1)
-assert res["all_pass"], "t10 gate FAILED"
-print("t10 gate ok: both branches put the same image pixel at the same BEV cell (real idas), the mix-up is visible")
+assert res["all_pass"], "dual camera geometry FAILED"
+print("test_dual_camera_geometry ok: both branches put the same image pixel at the same BEV cell (real idas), the mix-up is visible")

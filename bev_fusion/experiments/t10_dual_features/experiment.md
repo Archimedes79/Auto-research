@@ -74,7 +74,7 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
 - 2026-10-31 (evening): the lane owner built the option (cc9fbde: `camera_features "dual"`, `feature_cache2`, `store2`, `prob2` / `ctx2` / `ida2`, `lift2`, `cam_reduce2`, `cam_merge`; 27.8 M parameters;
   start script 5bb32c6) and queued the run through `run.py` as `t10.dual_s0` (status waiting: starts when GPU memory in use falls below 3 GB; `t7_rgb_s1` is training). GT signature 15efbde2d1 as in
   t8_ctl / t8_bevfeat. Gate: G1 - G5 are covered by `tests/test_camera_features.py` (shapes, branch select [I,0] / [0,I], gradients to both reductions and the merge, refusals, defaults untouched; CPU, passes).
-  G6 (peak memory, s/step) is read from the first real steps in `runs/t10_dual_s0/train.log`. Added by this chat, `temp/t10/gate.py`: the geometry of the pair with the real image transforms.
+  G6 (peak memory, s/step) is read from the first real steps in `runs/t10_dual_s0/train.log`. Added by this chat, `tests/test_dual_camera_geometry.py` (first run as a scratch `temp/t10/gate.py`, moved into tests/ the same evening): the geometry of the pair with the real image transforms.
   Each branch gets a feature map storing the original-image pixel (x, y) of every cell (ramp; DualBEV cells at 16 k + 7.5 with `nuscenes_front_ida`, BEVFusion cells at j (W - 1) / (w - 1) with
   `bevfusion_ida`), the model's own lifts (`md.lift`, `md.lift2`, oversample 4) carry it into the BEV, and the result is compared with the analytic projection of every voxel: G7a DualBEV branch
   max error 0.0005 original pixel (55,379 voxels), G7b BEVFusion branch 0.0006 pixel (52,657 voxels), G7c the two branches agree to 0.0006 pixel on 52,649 common voxels, G8 the mix-up (branch 2 lifted
