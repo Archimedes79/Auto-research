@@ -1,9 +1,0 @@
-== extraction 09:38:42
-extraction exit 0 10:41:38
-== t8_bevfeat_s0 train 10:41:38
-t8_bevfeat_s0 exit 1 11:47:19
-t8_bevfeat_s0: no .done, skipped evaluation
-== t8_bevfeat_s1 train 11:47:19
-t8_bevfeat_s1 exit 1 12:25:13
-t8_bevfeat_s1: no .done, skipped evaluation
-lane4 finished 12:25:13
