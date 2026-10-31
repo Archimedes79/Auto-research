@@ -103,12 +103,18 @@ Line numbers are those of 2026-10-31, 21:00.
 | C2 | `bev_suite.py:183-190` | After a resume, the detection part of the `scene_records` pickle covers only a subset of the scenes. | medium | **Fixed on this side:** the pickle is written only when this process saw every stored frame. An existing pickle that fits the store (same frames, same GT) is kept; otherwise it is renamed `.stale`. The evalsuite side (`on_frame` for resumed frames) is in another chat's uncommitted work. |
 | C3 | = A2 | | | |
 | C4 | `bev_suite.py:215-231` | Results are overwritten by an evaluation with another n. The new `board.py` compares without checking n. | low-medium | **Fixed:** copies in `eval/by_n/` (`metrics<tag>_n<n>.json`, `card...`, `table...`); a subfolder, so globs such as `metrics_ctl_*.json` do not count them twice. `board.py` (another chat's) should check `info/n_samples`. |
-| C5 | `nuscenes_gt.py:309`, `bev_views.py:39-43` | The FOV mask uses the full image, but the BEVFusion crop drops 3.4 % of the GT divider cells, which biases against t8_bevfeat. | low-medium | **Decision** (the metric changes). |
-| C6 | `metrics.py:202-206` | The detection wedge reaches beyond the grid (\|y\| <= 26 m for x > 41 m), so 1.8 % of the GT boxes can never be matched. | low-medium | **Decision.** |
-| C7 | `metrics.py:56,192` | The moving threshold is 0.5 m/s, autogt's is 1 m/s. `ave_skill_static` is unbounded. | low | **Decision.** |
+| C5 | `nuscenes_gt.py:309`, `bev_views.py:39-43` | The FOV mask uses the full image, but the BEVFusion crop cannot see 4.9 % of its cells (3.4 % of the GT drivable, 3.1 % of the GT lane-divider cells), which biases against t8_bevfeat. | low-medium | **Decision D30** (the metric changes). |
+| C6 | `metrics.py:202-206` | The detection wedge reaches beyond the grid (\|y\| <= 26 m for x > 41 m), so 1.6 % of the scored GT boxes (4.9 % at x >= 40 m) can never be matched. | low-medium | **Decision D31.** |
+| C7 | `metrics.py:56,192` | The moving threshold is 0.5 m/s, autogt's statistics use 1 m/s. `ave_skill_static` is unbounded. | low | **No decision** (measured, below): the GT generator's stationary rule is 0.5 m/s too (`autogt/flow.py` `v_stat`), so metric and GT agree; 1 m/s is only in autogt's statistics (`checks.py` O2 / O6), its self-test and its video. `ave_skill_static` divides by ave0_static (0.029 m/s in t10_dual_s0): **open**, for the owner of the velocity split (8eb5587). |
 | C8 | `autogt/cli.py:98` | `build --workers` uses spawn: the workers re-import the generator, so an edit can be stored under the old key. | low | **Open.** |
 | C9 | `autogt/clean.py:51-60` | `index.json` is overwritten by the last build and there is no lock, so `clean` can move a folder that is still being written. | low | **Open.** |
-| C10 | `bev_adapter.setup_paths` | **The evaluation GT comes from the run's own snapshot.**<br>Runs older than the autogt shim (t2_ref, 2026-10-30) are scored on their own generator (962e788566), newer runs on the live autogt.<br>Object numbers of old against new runs are therefore not comparable (vehicle layer differs in 94 of 120 frames). The maps are identical across 962e788566, 7fe1149566 and 15efbde2d1. | medium (design) | **Proposal 2.** The t7 decision uses the same-GT control t8_ctl. |
+| C10 | `bev_adapter.setup_paths` | **The evaluation GT comes from the run's own snapshot.**<br>Runs older than the autogt shim (t2_ref, 2026-10-30) are scored on their own generator (962e788566), newer runs on the live autogt.<br>Object numbers of old against new runs are therefore not comparable (vehicle layer differs in 94 of 120 frames). The maps are identical across 962e788566, 7fe1149566 and 15efbde2d1. | medium (design) | **Proposal 2, decision D29.** The t7 decision uses the same-GT control t8_ctl. |
+
+**Measured for the decisions** (2026-10-31 23:40; the 1000 val frames of the t8_ctl_s0 evaluation, GT 15efbde2d1; one-off script and output `bev_fusion/temp/review/measure_metric_decisions.{py,txt}`; the recomputed full-image camera mask equals the stored one in every cell):
+- C5: the BEVFusion crop (original columns 66.7-1533.3) cannot see 4.9 % of the field-of-view cells, 3.4 % of the GT drivable cells and 3.1 % of the GT lane-divider cells. The reviewer's sample of 120 frames gave 5.0 / 3.4 / 3.4 %. Decision D30.
+- C6: 84 of 5,389 scored GT boxes (1.6 %) have their centre outside the grid: vehicles 63 of 3,635, pedestrians 21 of 1,581, two-wheelers 0 of 173. At x >= 40 m it is 84 of 1,715 (4.9 %). Decision D31.
+- C7: 255 of the 2,245 boxes moving at > 0.5 m/s are slower than 1 m/s (vehicles 85 of 1,199, pedestrians 164 of 997). The GT itself calls a track stationary below 0.5 m/s, so the metric's threshold is the GT's. No decision.
+- `lane_divider:zc` F1 at 0.5 m (dt 0, every evaluated run): 0.000-0.068 for the runs without BEVFusion features (recall at most 0.036), but 0.19 and 0.22 for t8_bevfeat s0 / s1 (recall 0.11 / 0.13) and 0.12 for t10_dual_s0. Precision is 0.44-0.89, except four t2 / t3 arms (0-0.35) and the 24-frame golden copy (1.0). It is low, not degenerate, and it separates the feature pipelines, so it stays in the headline (proposal 9 is withdrawn for it). No decision.
 
 ### autoresearch tools and the launch path
 Several of these files have uncommitted work of another chat (`decide.py`, `run.py`, `project.py`, `card.py`, `experiment.py`, `evalsuite/{quantitative,store,selftest}.py`). They were not edited here; the findings are for that owner.
@@ -147,7 +153,7 @@ The fixes the first review reported as done are in HEAD (124 exit code, `wait_af
 
 ## 4. Proposals, ranked
 1. **The box velocity:** find why the branch does not learn (section 2). Until then, every AVE in a table is "the zero predictor" and should be printed next to `ave0`.
-2. **One measuring stick for the GT:**
+2. **One measuring stick for the GT** (decision D29):
    - the evaluation builds the GT from the live `autogt/` for every run, not from the run's snapshot, and records the signature;
    - training refuses to start unless the GT store covers its split under the current signature (prefill with `gt_cache_build.py`; no GT building in loader workers, which is what killed t7_rgb_s1);
    - one GT store instead of two (`data/cache/gt` has 13 versions and about 76 k files).
@@ -162,11 +168,10 @@ The fixes the first review reported as done are in HEAD (124 exit code, `wait_af
 8. **Speed (ms per frame):**
    - the time mover runs once per head per dt: 6 calls for 3 dts, two of them identity splats at dt 0, plus a third motion pass for `v_hat`;
    - `cam_temporal: none` still lifts and reduces all 3 frames.
-9. **Metric decisions for Mirko:**
-   - C5: score the FOV of the run's own image transform, or the intersection of the compared pipelines;
-   - C6: limit the detection wedge to the grid;
-   - C7: one moving threshold, 1 m/s as in autogt;
-   - `lane_divider:zc` F1 is degenerate (r@0.5 0.001-0.01): take it out of the headline.
+9. **Metric decisions for Mirko** (filed 2026-10-31 in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`):
+   - C5, D30: keep the full image as the headline and add the intersection of the compared pipelines' views when their crops differ;
+   - C6, D31: limit the detection wedge to the grid;
+   - withdrawn after measuring: one moving threshold (C7: the metric already uses the GT's 0.5 m/s) and taking `lane_divider:zc` out of the headline (not degenerate; see "Measured for the decisions" in section 2).
 10. **Cheap probes:** the resize filter (A9); refusing carry mode for `seq_len` 1 (A5); the radar-off velocity channel `aux_rad radar_stationary`, which is never supervised.
 
 ## 5. Open, by owner
@@ -176,4 +181,5 @@ The fixes the first review reported as done are in HEAD (124 exit code, `wait_af
   - proposals 2-8.
 - **Owner of the uncommitted tools work:** D1, D2 (and the selftest that asserts the wrong KEEP), D4, D6, D7, the `experiment.py` `KeyError: 'no card for Q'` in the work in progress, and its `code_drift` step: it runs while nothing updates the heartbeat, and it flags drift on every bev_fusion run although `run_ar.sh` trains from the snapshot.
 - **evalsuite owner:** D8; C2 on the evalsuite side (in progress).
-- **Mirko:** C5-C7 and the `zc` headline; D10 (protected `guard_hook.py`); proposal 2 (the GT measuring stick) as a decision, since it changes how old runs are scored.
+- **Mirko:** decisions D29 (proposal 2, the GT measuring stick: it changes how old runs are scored), D30 (C5) and D31 (C6) in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`; finding D10 (protected `guard_hook.py`), not filed yet.
+- **Overnight lead of 2026-10-31 (D28):** the t7 re-evaluation (`bev_fusion/temp/t7/finish4.sh`, stopped before it ran so that it cannot share the GPU with the overnight trainings) and the `run_ar.sh` fixes above, handed over at 23:45.
