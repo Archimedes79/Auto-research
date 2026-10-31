@@ -8,11 +8,12 @@ Model (all learned except the fixed geometry: ego alignment, backward warp, ray 
     E(F_k), E(F_k-1) moved to k with the ego motion only (exact splat)
     per level l = 2 m, 1 m, 0.5 m (coarse to fine), v_up = the coarser level's velocity (0 at the start):
         W   = E(F_k-1) sampled where each cell of k was at k-1 under v_up (backward warp, p - v_up dt)
-        C   = local correlation of E(F_k) with W, +-4 / 2 / 1 cells (+-8 m, +-2 m, +-0.5 m)
-        h   = v_up - sum softmax(beta C) d / dt                    (the soft frame hypothesis: no argmax)
-        R   = radar raster pooled to l (count, mean Doppler vr, mean ray u, age) and the Doppler comparison of v_up and of h
+        R   = radar raster pooled to l (count, mean Doppler vr, mean ray u, age) and the Doppler comparison of v_up
               (u . v - vr at the cells with a detection)
-        v_l = v_up + net_l([E(F_k), C, h, v_up, R, ray / range of the cell])
+        v_l = v_up + net_l([E(F_k), W, v_up, R, ray / range of the cell])
+    --corr (off since 2026-10-31: a tie with it, 0.93 / 0.99 vs 0.96 / 1.04 m/s on moving vehicles, so the cheaper one;
+    Mirko: "Yes, drop it") replaces W by the local correlation C of E(F_k) with W (+-4 / 2 / 1 cells) and its soft frame
+    hypothesis h = v_up - sum softmax(beta C) d / dt (no argmax), with the Doppler comparison of h added to R.
 The same loss is applied to the velocity of EVERY level (upsampled to 0.5 m, weight 1 each: "equal for both").
 Loss terms (--loss a,b,..., and --then x,y --pre f: switch to the second set after the fraction f of the steps, the
 "intermediate loss first, then end to end" proxy):
@@ -22,15 +23,15 @@ Loss terms (--loss a,b,..., and --then x,y --pre f: switch to the second set aft
   warp    the RAW maps of k moved with v (ego + v) match k+1 and k-1 (MSE x 3; label-free, the end-to-end signal)
   dop     the radial part of v matches the radar Doppler at cells with a detection (Huber; label-free)
   smooth  edge-aware smoothness of v (weight 0.05; label-free)
-Arms: --no-dop (no radar input), --no-corr (no correlation / hypothesis: W is concatenated, the network must find the
-displacement itself), --levels 1 (2 m only, upsampled), --ray (the heads output (radial, tangential) in the ray frame of the
+Arms: --no-dop (no radar input), --corr (the correlation / hypothesis above instead of the concatenated W; the runs of
+plan 7.4 before 2026-10-31 had it on by default and --no-corr as the arm), --levels 1 (2 m only, upsampled), --ray (the heads output (radial, tangential) in the ray frame of the
 cell instead of (x, y)), --dop-sim (Doppler simulated from the GT velocity instead of the real radar: the input of
 tests/test_flow_explains.py, for comparison only).
 Data: nuScenes GT cache (one generator signature, SIG), radar cache (all 5 radars, 0.5 s window, moved to the camera
 time of k with the Doppler shift); scene split 1 in 5 held out; samples with a moving vehicle (> 1 m/s) at k.
 Run from the bev_fusion folder:
   wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_fused.py [--loss vel,box,static] [--then warp,dop] [--pre 0.5]
-      [--no-dop] [--no-corr] [--levels 1] [--ray] [--dop-sim] [--quick] [--seed N] [--iters N]
+      [--no-dop] [--corr] [--levels 1] [--ray] [--dop-sim] [--quick] [--seed N] [--iters N]
 """
 import glob
 import math
@@ -58,10 +59,10 @@ QUICK, SEED = "--quick" in sys.argv, arg("--seed", 0)
 LOSS = arg("--loss", "vel,box,static").split(",")
 THEN = arg("--then", "").split(",") if "--then" in sys.argv else None
 PRE = arg("--pre", 0.5)
-DOP, CORR, RAY, DOPSIM = "--no-dop" not in sys.argv, "--no-corr" not in sys.argv, "--ray" in sys.argv, "--dop-sim" in sys.argv
+DOP, CORR, RAY, DOPSIM = "--no-dop" not in sys.argv, "--corr" in sys.argv, "--ray" in sys.argv, "--dop-sim" in sys.argv
 LEVELS = arg("--levels", 3)
 TAG = "_" + "+".join(LOSS) + (f"_then_{'+'.join(THEN)}{PRE:g}" if THEN else "") + ("" if DOP else "_nodop") \
-    + ("" if CORR else "_nocorr") + (f"_L{LEVELS}" if LEVELS != 3 else "") + ("_ray" if RAY else "") \
+    + ("_corr" if CORR else "") + (f"_L{LEVELS}" if LEVELS != 3 else "") + ("_ray" if RAY else "") \
     + ("_dopsim" if DOPSIM else "") + (f"_s{SEED}" if SEED else "") + ("_quick" if QUICK else "")
 G = Grid(x_min=0.0, x_max=60.0, y_min=-26.0, y_max=26.0, res=0.5)            # 120 x 104, as data/cache/gt
 SIG = "962e788566"                                  # the GT generator signature that covers every sample (with radar)
