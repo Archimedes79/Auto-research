@@ -2,7 +2,7 @@
 other cells (is it a threshold / thin-structure problem or is nothing learned)?"""
 import sys, torch
 sys.argv += ["--quick"]
-sys.path.insert(0, "tests"); sys.path.insert(0, "training")
+sys.path.insert(0, "tests"); sys.path.insert(0, "training"); sys.path.insert(0, "training/legacy")
 import test_camera_only as T
 from camera_decoder import CameraOnlyDecoder
 train, _ = torch.load("temp/checks/camera_only_data_150_16_thr0.05_0.5_0.25.pt")

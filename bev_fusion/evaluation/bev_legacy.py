@@ -24,11 +24,12 @@ SEG_METRIC = {"drivable_area": "iou@0", "walkway": "iou@0", "lane_divider": "iou
 LEGACY_SEG_KEYS = {"drivable_area": "fov", "walkway": "fov", "lane_divider": "fov", "lane_divider:zc": "fov", "vehicle": "obj"}
 
 
-def write_scene_records(path, seg_metric, store, det_rec, detr_rec=None):
-    """Write `scene_records.pkl` in the former format from a suite run (`bev_suite.py eval` does it, so that the study tools that read
-    it keep working across runs evaluated before and after the suite): per scene the SegMeter counts of the headline layers at dt 0
-    (tolerances 0 and 0.5 m) summed from the stored per-frame counts, and per scene and dt the detection frames (dets, gt boxes)
-    collected while the frames were run (det_rec[scene][dt] = [(dets, gts), ...]; detr_rec the same for refined boxes)."""
+def write_scene_records(path, seg_metric, store, det_rec, detr_rec=None, meta=None):
+    """Write `scene_records.pkl` in the former format from a suite run (`bev_suite.py eval` does it, as scene_records<tag>_n<N>.pkl, so
+    that the study tools that read it keep working across runs evaluated before and after the suite): per scene the SegMeter counts of
+    the headline layers at dt 0 (tolerances 0 and 0.5 m) summed from the stored per-frame counts, and per scene and dt the detection
+    frames (dets, gt boxes) collected while the frames were run (det_rec[scene][dt] = [(dets, gts), ...]; detr_rec the same for refined
+    boxes); meta (optional): {"frames": the frame keys, "gt_signature": ...}, which `bev_suite.py compare` checks before pairing."""
     seg = {}
     for scene, counts in store.by_scene(seg_metric.name).items():
         want = {f"{m}|+0.00|{layer}|all|all" for layer, m in LEGACY_SEG_KEYS.items()}
@@ -40,7 +41,7 @@ def write_scene_records(path, seg_metric, store, det_rec, detr_rec=None):
                 rec[layer] = {(0.0, layer, "all", "all"): {"cnt": a[0][:2], "n_gt": a[1], "err": a[2], "n_err": a[3]}}
         seg[scene] = rec
     with open(path, "wb") as f:
-        pickle.dump({"seg": seg, "det": det_rec, "detr": detr_rec or {s: {} for s in det_rec}}, f)
+        pickle.dump({"seg": seg, "det": det_rec, "detr": detr_rec or {s: {} for s in det_rec}, "meta": meta or {}}, f)
 
 
 def _seg_value(counts, metric):
@@ -93,12 +94,13 @@ def det_ap(frames_by_scene, scenes, cls, thr=2.0):
 
 
 def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0, tag=""):
-    """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval. det_a / det_b: the box set of each run
+    """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval (draws: evalsuite.stats.scene_picks, the same stream for
+    every number; since 2026-10-31, D24 - intervals of earlier compares used numpy default_rng draws and differ in the random part only). det_a / det_b: the box set of each run
     ('det' = plain decode, 'detr' = refined by S5c); dt: the target time of the detection numbers (the map numbers are at dt 0).
     -> ({name: (b - a, lo, hi, a, b)}, text)"""
     ra = pickle.load(open(os.path.join(run_a, "eval", f"scene_records{tag}.pkl"), "rb"))    # tag: "" cold, "_warm" ...
     rb = pickle.load(open(os.path.join(run_b, "eval", f"scene_records{tag}.pkl"), "rb"))
-    rng = np.random.default_rng(seed)
+    from evalsuite.stats import percentile_interval, scene_picks    # the one scene bootstrap of the research system (D24)
     lines = [f"paired scene bootstrap ({n_boot} resamples), b - a; a = {run_a} ({det_a}), b = {run_b} ({det_b}); val; "
              f"maps at dt 0, boxes at dt {dt:+.1f}"]
     res = {}
@@ -109,10 +111,9 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0,
         A, Bc = np.stack([ca[s] for s in sc]), np.stack([cb[s] for s in sc])
         point = _seg_value(Bc.sum(0), metric) - _seg_value(A.sum(0), metric)
         ds = []
-        for _ in range(n_boot):
-            ix = rng.integers(0, len(sc), len(sc))
+        for ix in scene_picks(len(sc), n_boot, seed):
             ds.append(_seg_value(Bc[ix].sum(0), metric) - _seg_value(A[ix].sum(0), metric))
-        lo, hi = np.percentile(ds, [2.5, 97.5])
+        lo, hi, _ = percentile_interval(ds)
         res[f"{layer} {metric}"] = (point, lo, hi, _seg_value(A.sum(0), metric), _seg_value(Bc.sum(0), metric))
     fa = {s: r[dt] for s, r in ra[det_a].items() if dt in r}
     fb = {s: r[dt] for s, r in rb[det_b].items() if dt in r}
@@ -124,11 +125,10 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0,
             fl_a, fl_b = scene_flags(fa, sc, cls, thr), scene_flags(fb, sc, cls, thr)
             a0, b0 = ap_from_flags(fl_a, sc), ap_from_flags(fl_b, sc)
             ds = []
-            for _ in range(n_boot):
-                ix = rng.integers(0, len(sc), len(sc))
+            for ix in scene_picks(len(sc), n_boot, seed):
                 s_ix = [sc[i] for i in ix]
                 ds.append(ap_from_flags(fl_b, s_ix) - ap_from_flags(fl_a, s_ix))
-            lo, hi = np.percentile(ds, [2.5, 97.5])
+            lo, hi, _ = percentile_interval(ds)
             res[f"{cls} AP@{thr:g}"] = (b0 - a0, lo, hi, a0, b0)
     for k, (d, lo, hi, a, b) in res.items():
         lines.append(f"{k:28s} a {a:.4f}  b {b:.4f}  b-a {d:+.4f}  95% [{lo:+.4f}, {hi:+.4f}]"

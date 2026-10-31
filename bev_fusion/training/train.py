@@ -499,6 +499,32 @@ def _clear_control(run_dir):
             os.replace(p, p + ".old")
 
 
+def record_gt(out_dir, datasets):
+    """runs/<name>/gt.json = {"gt_signature": ...}: the identity of the GT the run trains and validates on (FrontRadarDataset.gt_signature:
+    grid res, supersampling, autogt source + flags). A pinned code snapshot does not pin the GT (autogt is read live), so this file is
+    what `evaluation/bev_suite.py compare` checks. A resume on another GT keeps the earlier signatures and warns. -> the signature(s)"""
+    sigs = sorted({d.gt_signature() for d in datasets if hasattr(d, "gt_signature")})
+    if not sigs:
+        return None
+    sig = sigs[0] if len(sigs) == 1 else sigs
+    path = os.path.join(out_dir, "gt.json")
+    rec = {"gt_signature": sig}
+    if os.path.exists(path):
+        with open(path) as f:
+            old = json.load(f)
+        rec["earlier"] = list(old.get("earlier", []))
+        if old.get("gt_signature") != sig:
+            rec["earlier"].append(old.get("gt_signature"))
+            print(f"WARNING: the GT changed since this run started ({old.get('gt_signature')} -> {sig}): the run mixes two GT versions",
+                  flush=True)
+        if not rec["earlier"]:
+            del rec["earlier"]
+    with open(path + ".tmp", "w") as f:
+        json.dump(rec, f, indent=1)
+    os.replace(path + ".tmp", path)
+    return sig
+
+
 def train(cfg, eval_fn=None, datasets=None):
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -509,6 +535,7 @@ def train(cfg, eval_fn=None, datasets=None):
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
     train_ds, val_ds = datasets or make_datasets(cfg)
+    record_gt(out_dir, (train_ds, val_ds))                      # the GT is not pinned by the code snapshot: record which one is used
     if cfg.seq_len > 1:                                         # clips of consecutive keyframes, the memory carried through
         train_ds, val_ds = ClipDataset(train_ds, cfg.seq_len), ClipDataset(val_ds, cfg.seq_len)
     train_loader = make_loader(train_ds, cfg, True)
@@ -722,6 +749,8 @@ def _selftest():
         before = {k: v.clone() for k, v in model.state_dict().items() if k.startswith("cam_reduce")}
         model2, loss2, ema, last = train(cfg, datasets=(base, base))
         assert last["total"] == last["total"], "logged"
+        gt_rec = json.load(open(os.path.join(tmp, "selftest", "gt.json")))          # the GT identity of the run (F3 of the review)
+        assert gt_rec == {"gt_signature": base.gt_signature()} and base.gt_signature().startswith("0.5_4_"), gt_rec
         ckpts = sorted(f for f in os.listdir(os.path.join(tmp, "selftest")) if f.endswith(".pt"))
         assert len(ckpts) == 2, ckpts                                              # keep = 2
         ck = torch.load(os.path.join(tmp, "selftest", ckpts[-1]), weights_only=False)

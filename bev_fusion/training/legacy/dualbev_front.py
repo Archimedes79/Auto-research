@@ -15,22 +15,22 @@ The module and tensor names equal the checkpoint's: every tensor loads (only the
 Differences to the original, stated: (1) the other five cameras are absent (the front area is what is visible), (2) test
 boxes come from 3 x 3 peak extraction + a score threshold, not from the rotated-IoU NMS of the original test config,
 (3) heading and size are decoded as in CenterPoint but not used by the front-area comparison (centre-distance AP only).
-Run the self-test: python training/dualbev_front.py   (needs models/pretrained/dualbev-r50-cbgs.pth)
+Run the self-test: python training/legacy/dualbev_front.py   (needs models/pretrained/dualbev-r50-cbgs.pth)
 """
 import math
 import os
+import sys
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
-try:
-    from .bev_trunk import BEVBackbone, FPNLSS
-    from .camera_encoder import CustomFPN, DepthNet
-except ImportError:                                   # run as a script
-    from bev_trunk import BEVBackbone, FPNLSS
-    from camera_encoder import CustomFPN, DepthNet
+_TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
+from bev_trunk import BEVBackbone, FPNLSS  # noqa: E402
+from camera_encoder import CustomFPN, DepthNet  # noqa: E402
 
 N_DEPTH, D0, DSTEP = 118, 1.0, 0.5
 BEV_N, BEV_RES, BEV_MIN = 128, 0.8, -51.2
@@ -289,7 +289,7 @@ def decode(outs, k=100, threshold=0.05):
 
 
 def _selftest():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "models", "pretrained", "dualbev-r50-cbgs.pth")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "models", "pretrained", "dualbev-r50-cbgs.pth")
     m = DualBEVFront().eval()
     rep = m.load_pretrained(path)
     assert rep["missing"] == [] and rep["unexpected"] == ["img_view_transformer.prob.ce_loss.pos_weight"], rep

@@ -1,4 +1,4 @@
-"""Gate of the camera-only decoder (training/camera_decoder.py): semantic map + all objects from one camera alone.
+"""Gate of the camera-only decoder (training/legacy/camera_decoder.py): semantic map + all objects from one camera alone.
 
 Synthetic world (tests/synthetic_world.py): per sample a random scene at the output time and the same scene 0.5 s
 earlier (Scene.step(-0.5)); both are rendered by the ray-cast front camera (128 x 352, f = 280, 1.5 m high) with exact
@@ -22,6 +22,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path.insert(0, "training/legacy")                 # camera_decoder (off the chain since 2026-10-31)
 sys.path.insert(0, "tests")
 from camera_decoder import DEPTH_CENTRES, SEM_CLASSES, Z_LEVELS, CameraOnlyDecoder  # noqa: E402
 

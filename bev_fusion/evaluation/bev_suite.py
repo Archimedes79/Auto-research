@@ -12,8 +12,10 @@
                                                 suite over the val frames, writes eval/metrics<tag>.json + eval/table<tag>.txt
     time                                        ms per frame of the chain (idle GPU only) -> eval/latency.json
     memory [--clips 600]                        does the carried memory help? warm vs cold on the same frames -> eval/memory.json + txt
-    compare RUN_A RUN_B [--tag _warm] [--n N]   paired scene bootstrap between two evaluated runs (b - a; runs evaluated before the
-                                                suite: their scene_records.pkl through evaluation/bev_legacy.py)
+    compare RUN_A RUN_B [--tag _warm] [--n N] [--force]   paired scene bootstrap between two evaluated runs (b - a; runs evaluated
+                                                before the suite: their scene_records pickles through evaluation/bev_legacy.py, only on
+                                                the same frames); refused when the recorded GT signatures (evaluation: metrics / manifest,
+                                                training: RUN/gt.json) differ, a warning when one is not recorded; --force overrides
 Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train  --ckpt-dir DIR (moved checkpoints)
                 --control shuffle_radar|zero_radar|shuffle_cam|zero_cam  --out DIR (default RUN/eval/suite)  --state carry|reset
 Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/EXTENSIONS.md chapter 5 for what each command writes.
@@ -82,6 +84,19 @@ def headline_table(flat: dict) -> str:
     return "\n".join(lines)
 
 
+def _read_json(path: str):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def train_gt(run: str):
+    """the GT signature a run trained on (runs/<name>/gt.json, written by training/train.py since 2026-10-31); None = not recorded"""
+    return (_read_json(os.path.join(run, "gt.json")) or {}).get("gt_signature")
+
+
 def make_suite(a, prior: int = 0, state: str = None):
     from evalsuite import EvalSuite
     from evaluation.bev_adapter import build
@@ -137,12 +152,15 @@ def cmd_eval(a, rest) -> int:
                              history="full" if e.warm else "none", state=state)
     out_dir = os.path.join(a.run, "eval")
     os.makedirs(out_dir, exist_ok=True)
+    gt_sig = suite.source.describe().get("gt_signature")                 # the GT scored against (autogt is read live, not pinned)
     with open(os.path.join(out_dir, f"metrics{tag}.json"), "w") as f:
         json.dump({"run": a.run, "checkpoint": subj.get("checkpoint"), "split": a.split, "weights": "EMA",
                    "memory": "carried over the whole scene" if e.warm else "empty (cold)", "code": subj.get("code"),
+                   "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
                    "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "latency": lat}, f, indent=1, default=float)
-    from evaluation import bev_legacy
-    bev_legacy.write_scene_records(os.path.join(out_dir, f"scene_records{tag}.pkl"), suite.task.metrics()[0], store, det_rec, detr_rec)
+    from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
+    bev_legacy.write_scene_records(os.path.join(out_dir, f"scene_records{tag}_n{e.n or 'all'}.pkl"), suite.task.metrics()[0], store,
+                                   det_rec, detr_rec, meta={"frames": [fr["key"] for fr in store.frames], "gt_signature": gt_sig})
     table = headline_table(flat)
     with open(os.path.join(out_dir, f"table{tag}.txt"), "w") as f:
         f.write(table + "\n")
@@ -244,6 +262,75 @@ def _task_only(run: str):
     return BEVTask(model.grid, model.spec, [g for g, _ in ns.NUSC_GROUPS], refine=refine)
 
 
+def gt_check(run_a: str, run_b: str, ids: dict, force: bool = False) -> list:
+    """refuse (SystemExit) when the recorded GT identities of two runs differ; ids = {"evaluation GT": (sig_a, sig_b), "training GT":
+    (sig_a, sig_b)}, None = not recorded (runs trained / evaluated before 2026-10-31: a warning only). force: warn instead of refusing.
+    -> the warning lines"""
+    warn, bad = [], []
+    for what, (sa, sb) in ids.items():
+        if sa is None or sb is None:
+            who = " and ".join(r for r, s in ((run_a, sa), (run_b, sb)) if s is None)
+            warn.append(f"WARNING: {what} signature not recorded for {who}: the GT identity is unchecked")
+        elif sa != sb:
+            bad.append(f"{what} {sa} ({run_a}) vs {sb} ({run_b})")
+    if bad:
+        msg = "the two runs used different GT: " + "; ".join(bad)
+        if not force:
+            raise SystemExit(f"compare refused: {msg}. Their numbers are not comparable: evaluate (train) both on the same autogt "
+                             "version, or pass --force")
+        warn.append(f"WARNING (--force): {msg}")
+    return warn
+
+
+def legacy_record(run: str, tag: str, n: str):
+    """the pickle record of a run for the legacy compare -> (file tag, frame keys or None, number of frames or None, evaluation GT
+    signature or None), or None. New evaluations write scene_records<tag>_n<N>.pkl with the frame keys inside; an older
+    scene_records<tag>.pkl was written together with metrics<tag>.json (its suite store names the frames; before the suite: unknown)."""
+    import pickle
+    path = os.path.join(run, "eval", f"scene_records{tag}_n{n}.pkl")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            meta = pickle.load(f).get("meta") or {}
+        fr = meta.get("frames")
+        return f"{tag}_n{n}", fr, (len(fr) if fr is not None else None), meta.get("gt_signature")
+    if not os.path.exists(os.path.join(run, "eval", f"scene_records{tag}.pkl")):
+        return None
+    m = _read_json(os.path.join(run, "eval", f"metrics{tag}.json")) or {}
+    frames, fj = None, os.path.join(run, m["suite_run"], "frames.jsonl") if m.get("suite_run") else ""
+    if fj and os.path.exists(fj):
+        with open(fj) as f:
+            frames = [json.loads(line)["key"] for line in f if line.strip()]
+    n_rec = len(frames) if frames is not None else (m.get("metrics") or {}).get("info/n_samples")
+    return tag, frames, n_rec, m.get("gt_signature")
+
+
+def frames_check(run_a: str, run_b: str, ra, rb, n: str, force: bool = False) -> list:
+    """the legacy records hold per-scene sums, so they can only be paired when both runs saw the SAME frames: refuse (SystemExit)
+    when the frame sets differ, when a record's frame count is not the requested --n, or when only one side names its frames;
+    two records without frame keys (both evaluated before the suite) need equal frame counts. force: warn instead. -> warnings"""
+    (_, fa, na, _), (_, fb, nb, _) = ra, rb
+    bad, warn = [], []
+    for run, nr in ((run_a, na), (run_b, nb)):
+        if n != "all" and nr is not None and int(nr) != int(n):
+            bad.append(f"{run} holds {nr} frames, not --n {n}")
+    if fa is not None and fb is not None:
+        if set(fa) != set(fb):
+            bad.append(f"different frame sets ({len(set(fa) & set(fb))} common of {len(set(fa))} / {len(set(fb))})")
+    elif fa is not None or fb is not None:
+        bad.append(f"the frames of {run_a if fa is None else run_b} are not recorded (evaluated before the suite): their identity "
+                   "cannot be checked; evaluate it with `bev_suite.py RUN eval --n N`")
+    elif na is None or nb is None or int(na) != int(nb):
+        bad.append(f"frame counts {na} / {nb} (records without frame keys)")
+    else:
+        warn.append(f"note: neither record names its frames (both evaluated before the suite); same count {na} assumed to be the same frames")
+    if bad:
+        msg = "; ".join(bad)
+        if not force:
+            raise SystemExit(f"compare refused (legacy records): {msg}. Or pass --force")
+        warn.append(f"WARNING (--force): {msg}")
+    return warn
+
+
 def cmd_compare(argv) -> int:
     p = argparse.ArgumentParser(prog="compare")
     p.add_argument("run_a")
@@ -255,17 +342,30 @@ def cmd_compare(argv) -> int:
     p.add_argument("--det-a", default="det", help="legacy records only: box set of run a (det | detr)")
     p.add_argument("--det-b", default="det")
     p.add_argument("--dt", type=float, default=0.0, help="legacy records only: target time of the detection numbers")
+    p.add_argument("--force", action="store_true", help="compare even when the GT signatures or (legacy records) the frame sets differ")
     c = p.parse_args(argv)
     from evalsuite.quantitative import Quantitative
     name = f"eval{c.tag}_n{c.n}"
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
+    train_ids = (train_gt(c.run_a), train_gt(c.run_b))
     if not all(os.path.exists(s) for s in stores):
-        recs = [os.path.join(r, "eval", f"scene_records{c.tag}.pkl") for r in (c.run_a, c.run_b)]
-        if all(os.path.exists(r) for r in recs):                 # runs evaluated before the suite: the former pickle records
+        ra, rb = (legacy_record(r, c.tag, c.n) for r in (c.run_a, c.run_b))
+        if ra is not None and rb is not None:                   # runs evaluated before the suite: the former pickle records
+            if ra[0] != rb[0]:
+                raise SystemExit(f"compare refused (legacy records): {c.run_a} has scene_records{ra[0]}.pkl, {c.run_b} scene_records{rb[0]}.pkl"
+                                 " - one of them was evaluated before the suite; evaluate it with `bev_suite.py RUN eval --n N`")
+            warn = gt_check(c.run_a, c.run_b, {"evaluation GT": (ra[3], rb[3]), "training GT": train_ids}, c.force)
+            warn += frames_check(c.run_a, c.run_b, ra, rb, c.n, c.force)
+            for w in warn:
+                print(w)
             from evaluation import bev_legacy
-            bev_legacy.compare(c.run_a, c.run_b, c.boot, c.seed, c.det_a, c.det_b, c.dt, c.tag)
+            bev_legacy.compare(c.run_a, c.run_b, c.boot, c.seed, c.det_a, c.det_b, c.dt, ra[0])
             return 0
         raise SystemExit(f"no evaluation '{name}' of both runs ({stores}); run `bev_suite.py RUN eval --n ...` on both")
+    mans = [_read_json(s) or {} for s in stores]
+    for w in gt_check(c.run_a, c.run_b, {"evaluation GT": tuple((m.get("source") or {}).get("gt_signature") for m in mans),
+                                         "training GT": train_ids}, c.force):
+        print(w)
     task = _task_only(c.run_a)
     q = Quantitative(SimpleNamespace(out=os.path.join(c.run_a, "eval", "suite"), task=task))
     res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed)

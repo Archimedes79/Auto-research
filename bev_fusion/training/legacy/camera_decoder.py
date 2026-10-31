@@ -10,22 +10,22 @@ Same techniques as the fusion decoder (plan.md sections 2, 6-8), only the radar 
   (training/splat.py splat_window, mass channel kept); the trunk learns object motion from the displacement
 - trunk: training/bev_trunk.py; heads: a semantic head (lane lines, vehicles, pedestrians) and the object head of
   training/object_head.py for ALL objects (static and moving: a camera sees both)
-Run the self-test: python training/camera_decoder.py
+Run the self-test: python training/legacy/camera_decoder.py
 """
+import os
+import sys
+
 import torch
 import torch.nn as nn
 import torchvision
 
-try:
-    from .bev_trunk import BEVTrunk
-    from .lift_pd import Grid, LiftPD
-    from .object_head import GROUPS, ObjectHead
-    from .splat import splat_window
-except ImportError:                                   # run as a script
-    from bev_trunk import BEVTrunk
-    from lift_pd import Grid, LiftPD
-    from object_head import GROUPS, ObjectHead
-    from splat import splat_window
+_TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
+from bev_trunk import BEVTrunk  # noqa: E402
+from lift_pd import Grid, LiftPD  # noqa: E402
+from object_head import GROUPS, ObjectHead  # noqa: E402
+from splat import splat_window  # noqa: E402
 
 DEPTH_CENTRES = 1.25 + 0.5 * torch.arange(118, dtype=torch.float32)    # the camera head's bins (1-60 m, 0.5 m)
 Z_LEVELS = (-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)                   # with a slice at the road plane z = 0

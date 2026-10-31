@@ -29,13 +29,11 @@ import torch
 
 try:
     from .camera_encoder import FrontCameraEncoder, camera_vector
-    from .gt_bev import pose_matrix
-    from .nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate
+    from .nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate, pose_matrix
 except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from camera_encoder import FrontCameraEncoder, camera_vector
-    from gt_bev import pose_matrix
-    from nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate
+    from nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate, pose_matrix
 
 N_PROB, N_CTX, FEAT_HW = 118, 80, (16, 44)
 CHECKPOINT = "models/pretrained/dualbev-r50-cbgs.pth"

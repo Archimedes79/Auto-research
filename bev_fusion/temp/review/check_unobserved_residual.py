@@ -1,9 +1,9 @@
 """Review check: after the losses.py fix, what weight do unobserved boxes keep at their centre cell, and does the head's
 heatmap target contain them? Run: wsl ~/miniconda3/envs/gcar/bin/python temp/review/check_unobserved_residual.py"""
 import math, os, sys
-sys.path.insert(0, "training")
+sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
 import torch
-from gt_bev import NuScenesGT
+from autogt.nuscenes_gt import NuScenesGT
 from lift_pd import Grid
 from losses import NUSC_GROUPS, build_layer_targets, head_box, object_head_terms
 grid = Grid()

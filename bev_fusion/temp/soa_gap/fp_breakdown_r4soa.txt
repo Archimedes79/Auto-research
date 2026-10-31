@@ -1,0 +1,10 @@
+3109 frames, 54 frames whose observed GT differs from the record (must be 0)
+observed GT only (the evaluation as run)      vehicle mean AP 0.521 two_wheeler mean AP 0.203 pedestrian mean AP 0.202  mAP 0.309
+all GT incl. unobserved boxes                 vehicle mean AP 0.504 two_wheeler mean AP 0.177 pedestrian mean AP 0.176  mAP 0.286
+
+classification of all detections with score >= 0.3 in the front field of view (10395):
+  true positive-ish (same-group observed GT within 2 m; includes duplicates of it)                      8206 (78.9 %)   by range 0-20 / 20-40 / 40-60 m: 2313 / 4126 / 1767
+  background (no GT within 4 m)                                                                         1127 (10.8 %)   by range 0-20 / 20-40 / 40-60 m: 123 / 422 / 582
+  2-4 m from a same-group GT (localisation / duplicate)                                                  785 ( 7.6 %)   by range 0-20 / 20-40 / 40-60 m: 134 / 420 / 231
+  on an UNOBSERVED GT box of the same group (within 2 m)                                                 198 ( 1.9 %)   by range 0-20 / 20-40 / 40-60 m: 2 / 55 / 141
+  on an observed GT box of ANOTHER group (class confusion between vehicle / pedestrian / two-wheeler)     79 ( 0.8 %)   by range 0-20 / 20-40 / 40-60 m: 13 / 50 / 16

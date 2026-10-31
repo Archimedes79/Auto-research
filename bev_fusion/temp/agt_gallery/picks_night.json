@@ -1,0 +1,32 @@
+{
+ "examples": [
+  {
+   "scene": "scene-1077",
+   "k": 8,
+   "tok": "1ddf7a48af3d43be8763f154974f09ce",
+   "title": "night",
+   "note": "night: the GT does not use the image",
+   "loc": "singapore-hollandvillage",
+   "desc": "Night, big street, bus stop, high speed, construction vehicle"
+  },
+  {
+   "scene": "scene-1094",
+   "k": 10,
+   "tok": "d1136fce62f14400a069613e274f46f7",
+   "title": "night",
+   "note": "night: the GT does not use the image",
+   "loc": "singapore-hollandvillage",
+   "desc": "Night, after rain, many peds, PMD, ped with bag, jaywalker, truck, scooter"
+  },
+  {
+   "scene": "scene-1100",
+   "k": 8,
+   "tok": "2c77ee386aa0444aaf27140fe6cc8364",
+   "title": "night",
+   "note": "night: the GT does not use the image",
+   "loc": "singapore-hollandvillage",
+   "desc": "Night, peds in sidewalk, peds cross crosswalk, scooter, PMD, difficult lighting"
+  }
+ ],
+ "thumbs": []
+}

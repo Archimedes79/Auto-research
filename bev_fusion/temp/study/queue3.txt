@@ -1,4 +1,0 @@
-cfg:t3_ref_long:1a6b8d8
-train:trunk_second
-train:lift_s
-train:trunk_small

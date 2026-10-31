@@ -21,23 +21,22 @@ PRESETS (everything not listed is the same, so a preset differs from another in 
   simplebev   lift P (pull, no depth weight) on Simple-BEV's choice: the 8 default slices as channels, no oversampling
   lss         lift S (forward splat of every pixel x bin, BEVPoolV2's sum), heights summed, trunk width 0.5
 `CameraBEVSeg(S1Config.preset("dualbev"))` etc.; any field can be overridden. Learned parts: reduce, trunk, head (the image
-heads are cached and frozen). Run the self-test: python training/s1_camera.py
+heads are cached and frozen). Run the self-test: python training/legacy/s1_camera.py
 """
+import os
+import sys
 from dataclasses import dataclass, field, replace
 
 import torch
 import torch.nn as nn
 
-try:
-    from .bev_trunk import BEVTrunk, SemanticHead
-    from .camera_encoder import depth_centres
-    from .fallbacks import LiftS
-    from .lift_pd import Grid, LiftPD
-except ImportError:                                   # run as a script
-    from bev_trunk import BEVTrunk, SemanticHead
-    from camera_encoder import depth_centres
-    from fallbacks import LiftS
-    from lift_pd import Grid, LiftPD
+_TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
+from bev_trunk import BEVTrunk, SemanticHead  # noqa: E402
+from camera_encoder import depth_centres  # noqa: E402
+from fallbacks import LiftS  # noqa: E402
+from lift_pd import Grid, LiftPD  # noqa: E402
 
 Z_OURS = (-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)                       # a slice at the road plane z = 0
 Z_GRID = Grid().z_levels                                                   # (-0.75 ... 2.75): Simple-BEV-like 8 heights

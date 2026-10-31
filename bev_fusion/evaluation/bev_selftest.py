@@ -395,26 +395,80 @@ def _():
         pass
 
 
-@check("evaluate_run.py stub: the old command line is translated to bev_suite (eval, time, compare, controls, train split)")
-def _():
-    import importlib.util
-    seen = []
-    spec = importlib.util.spec_from_file_location("evaluate_run_stub", os.path.join(ROOT, "evaluation", "evaluate_run.py"))
-    stub = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(stub)
-    sys.modules["bev_suite"] = type(sys)("bev_suite")
-    sys.modules["bev_suite"].main = lambda argv: seen.append(argv) or 0
+def refused(fn) -> str:
+    """the message of the SystemExit that fn must raise ('' if it returned)"""
     try:
-        stub.main(["runs/x", "--n", "1000", "--workers", "4", "--batch", "4", "--control", "zero_radar", "--ckpt-dir", "ck", "--warm", "--prior", "500", "--images", "8", "--time"])
-        stub.main(["runs/x", "--time-only"])
-        stub.main(["--compare", "runs/a", "runs/b", "--boot", "300"])
-        stub.main(["runs/x", "--n", "800", "--on-train"])
-    finally:
-        del sys.modules["bev_suite"]
-    assert seen[0] == ["runs/x", "--workers", "4", "--control", "zero_radar", "--ckpt-dir", "ck", "eval", "--n", "1000", "--prior", "500",
-                       "--images", "8", "--time", "--warm"], seen[0]
-    assert seen[1] == ["runs/x", "--workers", "4", "time"] and seen[2][:3] == ["compare", "runs/a", "runs/b"]
-    assert seen[3][:4] == ["runs/x", "--workers", "4", "--split"] and "train" in seen[3]
+        fn()
+    except SystemExit as e:
+        return str(e)
+    return ""
+
+
+@check("compare: refused on different GT signatures (evaluation / training) or different frames of legacy records, warned when not "
+       "recorded, --force; the legacy record's name carries n (review 2026-10-31 F3, F4)")
+def _():
+    import contextlib
+    import io
+    # the GT rule alone
+    same_sig = {"evaluation GT": ("0.5_4_aaa", "0.5_4_aaa"), "training GT": ("0.5_4_aaa", "0.5_4_aaa")}
+    assert bev_suite.gt_check("a", "b", same_sig) == []
+    w = bev_suite.gt_check("a", "b", {"evaluation GT": ("0.5_4_aaa", None), "training GT": (None, None)})
+    assert len(w) == 2 and "not recorded for b" in w[0] and "a and b" in w[1], w
+    assert "different GT" in refused(lambda: bev_suite.gt_check("a", "b", {"evaluation GT": ("0.5_4_aaa", "0.5_4_bbb")}))
+    assert "different GT" in refused(lambda: bev_suite.gt_check("a", "b", {"training GT": ("0.5_4_aaa", "0.5_4_bbb")}))
+    assert "--force" in bev_suite.gt_check("a", "b", {"evaluation GT": ("0.5_4_aaa", "0.5_4_bbb")}, force=True)[0]
+    # legacy records through the command line
+    with tempfile.TemporaryDirectory() as d:
+        suite = make_suite(d)
+        det_rec = {}
+
+        def keep(sample, pred):
+            for dt, o in pred.outputs["dt"].items():
+                det_rec.setdefault(sample.ref.scene, {}).setdefault(dt, []).append((list(o["dets"]), gt_boxes(sample.reference[dt], suite.task.groups)))
+        st = suite.quant.run(name="x", progress=0, on_frame=keep)
+        m0, keys = suite.task.metrics()[0], [fr["key"] for fr in st.frames]
+        assert len(keys) == 48
+
+        def run(name, frames=None, sig="0.5_4_aaa", n=48, train_sig=None, old=False, metrics=None):
+            r = os.path.join(d, name)
+            os.makedirs(os.path.join(r, "eval"), exist_ok=True)
+            pkl = "scene_records.pkl" if old else f"scene_records_n{n}.pkl"
+            bev_legacy.write_scene_records(os.path.join(r, "eval", pkl), m0, st, det_rec,
+                                           meta=None if old else {"frames": frames if frames is not None else keys, "gt_signature": sig})
+            if metrics is not None:
+                json.dump(metrics, open(os.path.join(r, "eval", "metrics.json"), "w"))
+            if train_sig:
+                json.dump({"gt_signature": train_sig}, open(os.path.join(r, "gt.json"), "w"))
+            return r
+
+        def cmp(*args):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = bev_suite.cmd_compare(list(args) + ["--boot", "20"])
+            return rc, out.getvalue()
+        a, b = run("a", train_sig="0.5_4_aaa"), run("b", train_sig="0.5_4_aaa")
+        rc, out = cmp(a, b, "--n", "48")
+        assert rc == 0 and "b-a +0.0000" in out and "WARNING" not in out, out            # the same records: zero difference, no warning
+        assert "no evaluation" in refused(lambda: cmp(a, b, "--n", "24"))              # another n: another file name, never the newest eval
+        c = run("c", frames=keys[:-1] + ["another-frame"])
+        assert "different frame sets (47 common" in refused(lambda: cmp(a, c, "--n", "48"))
+        e = run("e", sig="0.5_4_bbb", train_sig="0.5_4_aaa")
+        assert "evaluation GT 0.5_4_aaa" in refused(lambda: cmp(a, e, "--n", "48"))
+        rc, out = cmp(a, e, "--n", "48", "--force")
+        assert rc == 0 and "WARNING (--force)" in out
+        f_ = run("f", train_sig="0.5_4_ccc")
+        assert "training GT 0.5_4_aaa" in refused(lambda: cmp(a, f_, "--n", "48"))
+        rc, out = cmp(a, run("g"), "--n", "48")                                         # training GT not recorded on one side: a warning
+        assert rc == 0 and "WARNING: training GT signature not recorded for" in out, out
+        # the F4 case: a suite-written record whose store names its frames against a pre-suite record (frames unknown) -> refused
+        h = run("h", old=True, metrics={"suite_run": os.path.relpath(st.path, os.path.join(d, "h")), "metrics": {"info/n_samples": 48}})
+        p_ = run("p", old=True, metrics={"metrics": {"info/n_samples": 48}})
+        assert "are not recorded" in refused(lambda: cmp(h, p_, "--n", "48"))
+        assert "evaluated before the suite" in refused(lambda: cmp(a, p_, "--n", "48"))     # a new record against a pre-suite one
+        q = run("q", old=True, metrics={"metrics": {"info/n_samples": 1000}})
+        assert "frame counts 48 / 1000" in refused(lambda: cmp(p_, q))                 # two pre-suite records: equal counts needed
+        rc, out = cmp(p_, run("r", old=True, metrics={"metrics": {"info/n_samples": 48}}), "--n", "48")
+        assert rc == 0 and "same count 48 assumed" in out, out
 
 
 # ------------------------------------------------------------------------------------------------ optional: real data

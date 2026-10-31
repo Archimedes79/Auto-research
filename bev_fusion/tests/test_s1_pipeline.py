@@ -1,5 +1,5 @@
 """Gate of the camera-only S1 pipeline on synthetic data (experiments/s1a_lift_pd_vs_p, section 3; plan.md 10.1): the REAL
-module (training/s1_camera.py), the REAL driver (training/train_s1.py: loss, training loop, per-scene SegMeters, null baseline,
+module (training/legacy/s1_camera.py), the REAL driver (training/legacy/train_s1.py: loss, training loop, per-scene SegMeters, null baseline,
 paired scene bootstrap) trained and tested on artificial data with a known answer (tests/synthetic_s1_data.py: the real
 cache format at the real feature resolution, stride 16). What it proves: the pipeline is wired (it can overfit), it learns
 (above the prior-map null), the depth weight helps exactly when the depth carries information, and the presets of the
@@ -32,6 +32,7 @@ import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "training"))
+sys.path.insert(0, os.path.join(HERE, "..", "training", "legacy"))          # s1_camera, train_s1 (off the chain since 2026-10-31)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, ".."))
 import synthetic_s1_data as D  # noqa: E402

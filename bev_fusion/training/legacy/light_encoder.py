@@ -11,19 +11,20 @@ of the FLOPs.
 Same call as the teacher: `image_features(img, cam_vec) -> (prob (B, 118, h, w), ctx (B, 80, h, w))`. The distillation loss
 (`distill_loss`) pools the student's 2 x 2 cells onto the teacher's 16 x 44 grid (cell centres align: stride-8 cells 2j and 2j + 1
 are centred at 16 j + 4 and 16 j + 12, the teacher's cell j at 16 j + 8) and compares probabilities (KL) and context (relative MSE).
-Run the self-test: python training/light_encoder.py   (FLOPs of the candidates: temp/checks/encoder_flops.py)
+Run the self-test: python training/legacy/light_encoder.py   (FLOPs of the candidates: temp/checks/encoder_flops.py)
 """
 import os
+import sys
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as tvm
 
-try:
-    from .camera_encoder import Mlp, SELayer, depth_centres
-except ImportError:                                   # run as a script
-    from camera_encoder import Mlp, SELayer, depth_centres
+_TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
+from camera_encoder import Mlp, SELayer, depth_centres  # noqa: E402
 
 WEIGHTS = {"resnet18": "resnet18-f37072fd.pth", "efficientnet_b0": "efficientnet_b0_rwightman-7f5810bc.pth",
            "efficientnet_b2": "efficientnet_b2_rwightman-c35c1473.pth"}

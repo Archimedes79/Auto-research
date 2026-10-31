@@ -13,13 +13,13 @@ Set by Mirko. Every design and every code change is checked against this file; a
 | R-GEO-3 | **Not learned.** Which image position and depth a 3D point corresponds to is computed from the calibration, never learned. Learned parts decide what is at those positions (features, depth and height distributions). *Clarification (proposal, Mirko to confirm):* which 3D points are sampled (for example the height levels) may be fixed or learned; how a sampled point projects is fixed. | `tests/test_projection_general.py` D: the lift tables (PD, P, S) have no parameters, and with learned heights switched on `z_levels` is the only one | met |
 | R-GEO-4 | **No idealised virtual cameras.** No virtual upright, level or zero-roll camera, no re-rendering of the image into a canonical view, no assumed camera height or horizon. Resizing, cropping, rotating or flipping the image (input size, augmentation) is allowed only as an explicit 2D transform folded into the projection. | by construction: no virtual camera in the code; the draft with the virtual upright camera (`plan_draft2.md`) was dropped on 2026-10-25; the image transform is the `ida` argument of the table (tests A and C); review rule for every new lift or encoder | met (by design) |
 
-## 2 Problem and data (earlier statements of Mirko, carried over for confirmation)
+## 2 Problem and data (earlier statements of Mirko; confirmed by Mirko 2026-10-30)
 | id | requirement | source | how it is checked | status |
 |---|---|---|---|---|
 | R-DATA-1 | nuScenes is a dataset, not the problem. Calibration and timestamps are inputs; no block contains a nuScenes constant; the product is a BEV model for a vehicle with any number of cameras and radars at any mounting. | 2026-10-25: "Do not understand Nuscenes as Problem space. There is a real world outside Nuscenes." (plan section 0) | review rule; R-GEO-1 gate for the camera; radar: `radar_bev.to_vehicle` takes the sensor pose, self-test "rig independence" | by construction |
 | R-DATA-2 | Every sensor has its own timestamps; the fusion handles individual sensor times (dt of each sensor to the target time is an input, nothing assumes synchronised sensors). | 2026-10-25: a plan "how to consider individual timings of the sensors" | splat and temporal gates (`tests/test_temporal*.py`, `training/splat.py` self-test) with explicit dt | met in the synthetic gates, open on real data |
 
-## 3 Method rules (Mirko, from the conversation)
+## 3 Method rules (Mirko, from the conversation; confirmed 2026-10-30)
 | id | requirement | source |
 |---|---|---|
 | R-METH-1 | Every block is founded on a paper and its code, and has a documented fallback to a proven component. | 2026-10-25 "found every block on papers and paper code"; 2026-10-26 "plan a fallback to a proven network component" |
@@ -27,5 +27,5 @@ Set by Mirko. Every design and every code change is checked against this file; a
 | R-METH-3 | Stay anchored to the state of the art: published designs run through the same code and the same test as ours (`training/s1_camera.py` presets, `tests/test_s1_pipeline.py`); new ideas are compared against them. | 2026-10-26 "make sure that we do not go away totally from SOA here" |
 | R-METH-4 | Efficient and fast; milliseconds per frame are measured on an idle GPU (batch 1). | first message "super efficient bev transform"; `temp/timing/time_s1_chain.py` |
 
-## 4 Goals of the first message (scope; to confirm or strike)
+## 4 Goals of the first message (scope; confirmed 2026-10-30)
 BEV grid at 0.5 m; the transform encodes distance uncertainty (lift PD keeps the depth distribution); temporal fusion for moving and non-moving targets and for lane markings; radar encoded with sensor direction, Doppler, RCS and position; a pre-trained image backbone is allowed; a semantic segmentation head and an object detection head; later an SDF decoding into 3D with a reconstruction loss in the image. Decisions taken since: front camera first, 60 m range, no horizon strip for now (a strip stays a later option, plan 2.7), lift PD as the first fixed building block (its value against the plain pull is the S1a experiment).

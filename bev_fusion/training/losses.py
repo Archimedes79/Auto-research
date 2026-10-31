@@ -1,6 +1,6 @@
 """Losses of the BEV system (plan.md section 8.4, the loss specification; proposal of 2026-10-26).
 
-    per target time dt: GT of t_c + dt (training/gt_bev.py layout) -> per-layer targets + per-cell weights (masks)
+    per target time dt: GT of t_c + dt (autogt layout) -> per-layer targets + per-cell weights (masks)
       -> per-output losses: areas, lines (+ centre-lines), dense objects (semantic head), object head stage 1,
          motion head, splat correction penalty, camera / radar auxiliary heads, radar stationary-structure hook
       -> task groups (areas, lines, objects, motion), each term normalised by its own count
@@ -16,6 +16,8 @@ distance channels are metres, linear).
 Run the self-test: python training/losses.py   (from the bev_fusion folder; CPU, one thread, 1-5 minutes)
 """
 import math
+import os
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -23,14 +25,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+_BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+while not os.path.isdir(os.path.join(_BEV_FUSION, "autogt")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
+    _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
+if _BEV_FUSION not in sys.path:
+    sys.path.append(_BEV_FUSION)                     # the GT layout: the standalone suite bev_fusion/autogt/
+from autogt.layers import AREAS, DIST_MAX, LINES, OBJECTS  # noqa: E402
+
 try:
-    from .gt_bev import AREAS, DIST_MAX, LINES, OBJECTS
     from .lift_pd import Grid
     from .loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from .object_head import _gather, build_targets, head_loss, refine_loss
     from .timed_head import MotionHead
 except ImportError:                                   # run as a script
-    from gt_bev import AREAS, DIST_MAX, LINES, OBJECTS
     from lift_pd import Grid
     from loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from object_head import _gather, build_targets, head_loss, refine_loss
@@ -371,18 +378,21 @@ def dt_weight(dt, step_frac=1.0, cfg=None):
     return w
 
 
-def nominal_dt(dt, step=0.5):
-    return round(float(dt) / step) * step
+SIDE_DT = {"cur": 0.0, "prev": -0.5, "next": 0.5}     # nominal target time of each keyframe of a training sample
 
 
 def sample_targets(samples):
-    """gt_bev training samples ({'cur', 'prev', 'next'}, a list = a batch) -> {nominal dt: [GT dict per sample]}."""
+    """autogt training samples ({'cur', 'prev', 'next'}, a list = a batch) -> {nominal dt: [GT dict per sample]}, keyed by SIDE
+    (prev -0.5, cur 0, next +0.5), never by the rounded true gap: every list has one entry per sample, in batch order, aligned
+    with the model's predictions at that dt (a 0.75 s keyframe gap, scene-0994, used to round to -1.0 and leave B - 1 targets
+    for B predictions). The true gap stays in meta['dt'] / meta['steps']: train.batch_ego decodes each sample with it."""
     out = {}
-    for s in samples:
-        for key in ("cur", "prev", "next"):
-            if key in s:
-                dt = 0.0 if key == "cur" else nominal_dt(s[key]["meta"]["dt"])
-                out.setdefault(dt, []).append(s[key])
+    for key, dt in SIDE_DT.items():
+        have = [key in s for s in samples]
+        if any(have):
+            if not all(have):
+                raise ValueError(f"sample_targets: '{key}' is missing in {have.count(False)} of {len(samples)} samples (no batch alignment)")
+            out[dt] = [s[key] for s in samples]
     return out
 
 
@@ -514,10 +524,7 @@ def synthetic_gt(scene, grid):
     camera fan +-50 deg from (1.5, 0), radar fan +-60 deg from (3.5, 0) up to 70 m; radar_stationary = parked boxes +
     a 1 m band inside the drivable edge (the 8.4 proxy)."""
     import synthetic_world as sw
-    try:
-        from .gt_bev import cell_centres, occlusion
-    except ImportError:
-        from gt_bev import cell_centres, occlusion
+    from autogt.layers import cell_centres, occlusion
     gx, gy = cell_centres(grid)
     base = sw.gt_bev(scene, grid)
     x0, y0, yaw = scene.lane_pose

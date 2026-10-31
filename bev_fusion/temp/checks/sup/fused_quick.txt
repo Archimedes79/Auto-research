@@ -1,0 +1,4 @@
+fq_sup --quick --loss vel,box,static
+fq_sup_nodop --quick --loss vel,box,static --no-dop
+fq_sup_nocorr --quick --loss vel,box,static --no-corr
+fq_free --quick --loss warp,dop,smooth

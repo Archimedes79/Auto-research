@@ -10,8 +10,8 @@ One sample = keyframe k (it needs a previous and a next keyframe, for the GT at 
   optionally, its measured radial motion vr * u * age (the only object motion a radar measures); per detection:
   b (sample index after collation), x, y (m), r (range from its sensor), psi (ray direction in the current frame), vr
   (ego-compensated radial velocity, m/s), rcs, dt (age, s), sensor (0..4) - the format of training/radar_bev.py
-- GT: `gt_bev.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
-  float16 npz in a cache folder of this project (derived data, not in git)
+- GT: `autogt.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
+  float16 npz in a cache folder of this project (derived data, not in git; written atomically, a broken file is rebuilt)
 - meta: tokens, timestamps, the ego speed and yaw rate of the last camera frame
 Raw data is read through the WSL views (~/data/nuscenes_full, ~/data/nuscenes for mini; datasets/NuScenes/README.md).
 Splits: official nuScenes train / val scene names restricted to the scenes on disk (`available_scenes`).
@@ -19,19 +19,26 @@ Run the self-test (nuScenes mini): python training/nuscenes_dataset.py
 """
 import math
 import os
+import sys
 
 import numpy as np
 import torch
 from PIL import Image
 from pyquaternion import Quaternion
 
+_BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+while not os.path.isdir(os.path.join(_BEV_FUSION, "autogt")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
+    _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
+if _BEV_FUSION not in sys.path:
+    sys.path.append(_BEV_FUSION)                     # the GT generator: the standalone suite bev_fusion/autogt/
+from autogt.nuscenes_adapter import pose_matrix  # noqa: E402
+from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
+
 try:
     from .camera_encoder import IMG_MEAN, IMG_STD, camera_vector, nuscenes_front_ida
-    from .gt_bev import NuScenesGT, pose_matrix
     from .lift_pd import Grid
 except ImportError:                                   # run as a script
     from camera_encoder import IMG_MEAN, IMG_STD, camera_vector, nuscenes_front_ida
-    from gt_bev import NuScenesGT, pose_matrix
     from lift_pd import Grid
 
 RADARS = ("RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT")
@@ -143,19 +150,33 @@ class FrontRadarDataset(torch.utils.data.Dataset):
         return out
 
     # ---- GT (optionally cached)
+    def gt_signature(self):
+        """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (autogt source + flags), the suffix of its GT
+        cache files; recorded by train.py (runs/<name>/gt.json) and by the evaluation (metrics.json, the suite's manifest)"""
+        return f"{self.grid.res}_{self.gt_ss}_{self.gt.signature()}"
+
     def _gt(self, token):
-        # the generator signature (gt_bev.py source + flags) is part of the key: GT cached by an older generator is never reused
-        path = (os.path.join(self.cache_dir, f"{token}_{self.grid.res}_{self.gt_ss}_{self.gt.signature()}.npz")
-                if self.cache_dir else None)
+        # the generator signature is part of the key: GT cached by an older generator is never reused
+        path = os.path.join(self.cache_dir, f"{token}_{self.gt_signature()}.npz") if self.cache_dir else None
         if path and os.path.exists(path):
-            z = np.load(path, allow_pickle=True)
-            return z["gt"].item()
+            try:
+                with np.load(path, allow_pickle=True) as z:
+                    return z["gt"].item()
+            except Exception:                         # noqa: BLE001  an empty / truncated file of a killed writer: built again
+                pass
         g = self.gt.training_sample(token, self.grid, self.gt_ss)
         if path:
             os.makedirs(self.cache_dir, exist_ok=True)
             small = {k: {n: (a.astype(np.float16) if isinstance(a, np.ndarray) and a.dtype == np.float32 else a)
                          for n, a in v.items()} for k, v in g.items()}
-            np.savez_compressed(path, gt=np.array(small, dtype=object))
+            tmp = f"{path}.tmp.{os.getpid()}"         # a file object: savez would append .npz to a name without it
+            try:
+                with open(tmp, "wb") as f:
+                    np.savez_compressed(f, gt=np.array(small, dtype=object))
+                os.replace(tmp, path)                 # atomic: a reader (or a killed writer) never leaves a partial file
+            finally:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
         return g
 
     def __getitem__(self, i):

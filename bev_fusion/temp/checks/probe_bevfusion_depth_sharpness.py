@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-sys.path.insert(0, "training")
+sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
 from bevfusion_camera import DEPTHS, BEVFusionImageSide, load_image  # noqa: E402
 from camera_encoder import IMG_MEAN, IMG_STD, FrontCameraEncoder, camera_vector, depth_centres, nuscenes_front_ida  # noqa: E402
 
@@ -33,7 +33,7 @@ for smp in nusc.sample[::34][:12]:
     w, h = int(round(img.width * s)), int(round(img.height * s))
     x = (torch.tensor(np.asarray(img.resize((w, h), Image.BILINEAR).crop((0, h - 256, 704, h))), dtype=torch.float32) - torch.tensor(IMG_MEAN)) / torch.tensor(IMG_STD)
     K = torch.tensor(cs["camera_intrinsic"], dtype=torch.float32)
-    from gt_bev import pose_matrix  # noqa: E402
+    from autogt.nuscenes_adapter import pose_matrix  # noqa: E402
     T = torch.tensor(pose_matrix(cs), dtype=torch.float32)
     cv = camera_vector(K[None], ida[None, :2, :2], ida[None, :2, 2], T[None])
     with torch.no_grad():

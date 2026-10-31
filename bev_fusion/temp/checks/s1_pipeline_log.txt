@@ -1,1 +1,92 @@
-15:34:32 no t1 round runs: waiting for a free GPU
+synthetic_s1_data selftest ok: shapes of the real cache format, histograms sum to 1, blur sd 0.0 m at 3 m and 9.1 m at 51 m, 129 vehicle cells, 7864 visible cells
+train_s1 selftest ok: loss (perfect < wrong, masked cells weigh 0), meters per scene (perfect 1.0, shift of one cell: strict 0, 0.5 m tolerance 1), range bands, paired bootstrap (identical 0 in the interval; better in every scene above 0), null prior map, tiny training 1.56 -> 0.95
+s1_camera selftest ok: presets run with shapes (B, 3, 120, 104) and gradients to trunk and head (ours 6.9 M, dualbev 27.2 M, simplebev 6.9 M, lss 6.9 M); presets differ in the named choices only; DualBEV preset: 13 heights summed to 80 channels without reduce; one-hot depth reaches only its own depth
+data: 300 train / 60 held-out synthetic scenes, device cuda
+null (prior map, thresholds [0.1, 0.02, 0.5]): 0.318 (0.34/0.32/0.30) | 0.032 (0.04/0.03/0.03) | 0.000 (0.00/0.00/0.00) | 0.116
+G1 overfit one scene, IoU@0.5 m: lanes 1.000, vehicles 1.000, pedestrians 1.000
+arm ours PD oracle, seed 0, 1200 steps
+    step     1 loss 1.1035 (0 s)
+    step   250 loss 0.8695 (67 s)
+    step   500 loss 0.5968 (103 s)
+    step   750 loss 0.3777 (175 s)
+    step  1000 loss 0.2564 (247 s)
+  -> 0.700 (0.99/0.82/0.44) | 0.824 (0.88/0.88/0.71) | 0.832 (0.76/0.84/0.83) | 0.785 | 306 s, 6.9 M parameters
+arm ours PD oracle, seed 1, 1200 steps
+    step     1 loss 1.1049 (0 s)
+    step   250 loss 0.8591 (72 s)
+    step   500 loss 0.6156 (144 s)
+    step   750 loss 0.3848 (215 s)
+    step  1000 loss 0.2475 (287 s)
+  -> 0.696 (0.99/0.82/0.43) | 0.832 (0.89/0.89/0.72) | 0.890 (0.78/0.87/0.93) | 0.806 | 346 s, 6.9 M parameters
+arm ours P, seed 0, 1200 steps
+    step     1 loss 1.1055 (0 s)
+    step   250 loss 0.9893 (67 s)
+    step   500 loss 0.8776 (133 s)
+    step   750 loss 0.6983 (200 s)
+    step  1000 loss 0.5398 (267 s)
+  -> 0.477 (0.88/0.54/0.24) | 0.280 (0.72/0.26/0.10) | 0.000 (0.00/0.00/0.00) | 0.252 | 321 s, 6.9 M parameters
+arm ours P, seed 1, 1200 steps
+    step     1 loss 1.1193 (0 s)
+    step   250 loss 0.9911 (61 s)
+    step   500 loss 0.8106 (120 s)
+    step   750 loss 0.6424 (182 s)
+    step  1000 loss 0.5176 (249 s)
+  -> 0.547 (0.92/0.59/0.33) | 0.293 (0.78/0.27/0.10) | 0.000 (0.00/0.00/0.00) | 0.280 | 303 s, 6.9 M parameters
+arm ours PD blurred, seed 0, 1200 steps
+    step     1 loss 1.1061 (0 s)
+    step   250 loss 0.9681 (73 s)
+    step   500 loss 0.7918 (145 s)
+    step   750 loss 0.6428 (217 s)
+    step  1000 loss 0.5291 (289 s)
+  -> 0.619 (0.97/0.72/0.35) | 0.435 (0.85/0.52/0.17) | 0.000 (0.00/0.00/0.00) | 0.351 | 348 s, 6.9 M parameters
+arm ours PD shuffled, seed 0, 1200 steps
+    step     1 loss 1.1187 (0 s)
+    step   250 loss 0.9837 (72 s)
+    step   500 loss 0.8203 (144 s)
+    step   750 loss 0.7440 (216 s)
+    step  1000 loss 0.6914 (288 s)
+  -> 0.685 (0.99/0.78/0.41) | 0.477 (0.72/0.53/0.30) | 0.000 (0.00/0.00/0.00) | 0.388 | 346 s, 6.9 M parameters
+arm simplebev (P, 8 slices), seed 0, 1200 steps
+    step     1 loss 1.1164 (0 s)
+    step   250 loss 0.9883 (57 s)
+    step   500 loss 0.7978 (114 s)
+    step   750 loss 0.6238 (170 s)
+    step  1000 loss 0.4993 (226 s)
+  -> 0.522 (0.91/0.60/0.27) | 0.288 (0.75/0.28/0.08) | 0.000 (0.00/0.00/0.00) | 0.270 | 273 s, 6.9 M parameters
+arm lss (S, heights summed), seed 0, 1200 steps
+    step     1 loss 1.0993 (2 s)
+    step   250 loss 0.8769 (57 s)
+    step   500 loss 0.6227 (112 s)
+    step   750 loss 0.4170 (168 s)
+    step  1000 loss 0.2888 (223 s)
+  -> 0.690 (0.98/0.80/0.42) | 0.796 (0.83/0.86/0.69) | 0.860 (0.76/0.87/0.87) | 0.782 | 269 s, 6.9 M parameters
+arm dualbev (13 heights summed, width 1.0), seed 0, 1200 steps
+    step     1 loss 1.1156 (1 s)
+    step   250 loss 0.8292 (135 s)
+    step   500 loss 0.6126 (289 s)
+    step   750 loss 0.4249 (441 s)
+    step  1000 loss 0.2538 (593 s)
+  -> 0.699 (0.98/0.78/0.46) | 0.814 (0.85/0.88/0.71) | 0.846 (0.78/0.87/0.83) | 0.787 | 718 s, 27.2 M parameters
+
+held-out synthetic scenes (60); IoU@0.5 m all (0-20 / 20-40 / 40-60 m) per class: lanes | vehicles | pedestrians | class mean
+null (prior map)                           | 0.318 (0.34/0.32/0.30) | 0.032 (0.04/0.03/0.03) | 0.000 (0.00/0.00/0.00) | 0.116
+ours PD oracle s0                          | 0.700 (0.99/0.82/0.44) | 0.824 (0.88/0.88/0.71) | 0.832 (0.76/0.84/0.83) | 0.785
+ours PD oracle s1                          | 0.696 (0.99/0.82/0.43) | 0.832 (0.89/0.89/0.72) | 0.890 (0.78/0.87/0.93) | 0.806
+ours P s0                                  | 0.477 (0.88/0.54/0.24) | 0.280 (0.72/0.26/0.10) | 0.000 (0.00/0.00/0.00) | 0.252
+ours P s1                                  | 0.547 (0.92/0.59/0.33) | 0.293 (0.78/0.27/0.10) | 0.000 (0.00/0.00/0.00) | 0.280
+ours PD blurred s0                         | 0.619 (0.97/0.72/0.35) | 0.435 (0.85/0.52/0.17) | 0.000 (0.00/0.00/0.00) | 0.351
+ours PD shuffled s0                        | 0.685 (0.99/0.78/0.41) | 0.477 (0.72/0.53/0.30) | 0.000 (0.00/0.00/0.00) | 0.388
+simplebev (P, 8 slices) s0                 | 0.522 (0.91/0.60/0.27) | 0.288 (0.75/0.28/0.08) | 0.000 (0.00/0.00/0.00) | 0.270
+lss (S, heights summed) s0                 | 0.690 (0.98/0.80/0.42) | 0.796 (0.83/0.86/0.69) | 0.860 (0.76/0.87/0.87) | 0.782
+dualbev (13 heights summed, width 1.0) s0  | 0.699 (0.98/0.78/0.46) | 0.814 (0.85/0.88/0.71) | 0.846 (0.78/0.87/0.83) | 0.787
+paired scene bootstrap PD - P, lanes, IoU@0.5 m (seed 0, 60 scenes): +0.223 [+0.185, +0.260]
+paired scene bootstrap PD - P, vehicles, IoU@0.5 m (seed 0, 60 scenes): +0.544 [+0.479, +0.604]
+paired scene bootstrap PD - P, pedestrians, IoU@0.5 m (seed 0, 60 scenes): +0.832 [+0.731, +0.919]
+seed spread of ours PD oracle (class mean over two seeds): sd 0.010
+PASS  G1 wiring: every class >= 0.9 on the overfit scene
+PASS  G2 learning: ours PD oracle >= null + 0.15 on both seeds
+PASS  G3 depth: vehicles PD - P = +0.542 >= +0.05
+FAIL  G4 control: vehicles shuffled 0.477 <= P 0.286 + 0.03
+PASS  G5a anchors learn: simplebev 0.270, lss 0.782, dualbev 0.787 >= null 0.116 + 0.15
+PASS  G5b ours 0.796 >= best anchor 0.787 - 0.02
+GATE S1 pipeline (synthetic): FAIL

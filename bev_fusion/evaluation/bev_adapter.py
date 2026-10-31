@@ -3,7 +3,8 @@
     build(run="runs/t1_r4_soa", device="cuda", split="val", workers=2, ckpt_dir=None, control="", prior=0)  ->  (Source, Subject, Task)
 
     BEVSource      the val (or train) keyframes of the run's config, grouped into scenes (videos) in time order; one frame =
-                   the cached-feature batch of the training code (batch of 1) + the GT of -0.5 / 0 / +0.5 s; worker processes read ahead
+                   the cached-feature batch of the training code (batch of 1) + the GT of -0.5 / 0 / +0.5 s; worker processes read ahead;
+                   describe() carries `gt_signature` (the GT identity: the snapshot pins the code, not autogt, which is read live)
     BEVSubject     the run's last checkpoint under its EMA weights (the run's own code snapshot `runs/<name>/code` when it exists, so
                    a run is evaluated with the code it was trained with), the chain's state carried frame to frame along a scene,
                    forward hooks for the taps
@@ -84,6 +85,15 @@ def freeze_scenes(cfg) -> None:
         cfg.train_scenes, cfg.val_scenes = cfg.train_scenes or frozen["train"], frozen["val"]
 
 
+def gt_signature(ds) -> Optional[str]:
+    """identity of the GT a dataset scores against: '<res>_<ss>_<generator signature>' (the suffix of its GT cache files, the same as
+    FrontRadarDataset.gt_signature of the current code); None for a code snapshot whose generator has no signature"""
+    try:
+        return f"{ds.grid.res}_{ds.gt_ss}_{ds.gt.signature()}"
+    except Exception:                                                         # noqa: BLE001
+        return None
+
+
 def layer_index(spec):
     return {name: (i, kind, key) for i, (name, kind, key) in enumerate(spec)}
 
@@ -134,7 +144,8 @@ def _make_source_class():
 
         def describe(self) -> Dict[str, Any]:
             return {"class": "BEVSource", "dataset": "nuScenes " + self.cfg.version, "split": self.split, "scenes": len(self._frames),
-                    "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None}
+                    "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None,
+                    "gt_signature": gt_signature(self.ds)}
 
         # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
         def prefetch(self, refs: Sequence[FrameRef]) -> None:

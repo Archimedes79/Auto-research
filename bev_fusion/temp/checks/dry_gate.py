@@ -1,5 +1,5 @@
 import random, sys, torch
-sys.argv += ["--quick", "--data", "nuscenes", "--gate", "--sharp", "--pyr", "--doppler", "--rawwarp", "3.0", "--prior", "0.03", "--smooth", "0.05"]
+sys.argv += ["--quick", "--data", "nuscenes", "--gate-doppler", "--sharp", "--pyr", "--doppler", "--rawwarp", "3.0", "--prior", "0.03", "--smooth", "0.05"]
 sys.path.insert(0, "tests"); sys.path.insert(0, "training")
 import test_flow_explains as T
 T.DEV = "cpu"

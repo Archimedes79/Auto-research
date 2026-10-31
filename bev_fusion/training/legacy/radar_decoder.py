@@ -9,25 +9,23 @@ Same techniques as the fusion decoder (plan.md sections 4-8), only the camera br
 - trunk: training/bev_trunk.py (3-stage ResNet pyramid + FPN back to 0.5 m)
 - heads: a stationary-map head (1 logit per cell: occupied by something that does not move - road edges, guard rails,
   parked objects) and the object head of training/object_head.py for MOVING objects (oriented boxes, circles, velocity)
-Run the self-test: python training/radar_decoder.py
+Run the self-test: python training/legacy/radar_decoder.py
 """
 import math
+import os
+import sys
 
 import torch
 import torch.nn as nn
 
-try:
-    from .bev_trunk import BEVTrunk
-    from .lift_pd import Grid
-    from .object_head import GROUPS, ObjectHead
-    from .radar_bev import RadarBEV
-    from .splat import chain_positions
-except ImportError:                                   # run as a script
-    from bev_trunk import BEVTrunk
-    from lift_pd import Grid
-    from object_head import GROUPS, ObjectHead
-    from radar_bev import RadarBEV
-    from splat import chain_positions
+_TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
+if _TRAINING not in sys.path:
+    sys.path.insert(0, _TRAINING)
+from bev_trunk import BEVTrunk  # noqa: E402
+from lift_pd import Grid  # noqa: E402
+from object_head import GROUPS, ObjectHead  # noqa: E402
+from radar_bev import RadarBEV  # noqa: E402
+from splat import chain_positions  # noqa: E402
 
 
 def to_output_time(xy, psi, vr, steps, use_doppler=True):

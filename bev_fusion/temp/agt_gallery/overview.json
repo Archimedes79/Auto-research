@@ -1,0 +1,226 @@
+{
+ "title": "autoGT quality overview",
+ "pages": [
+  {
+   "title": "autoGT ground truth: quality overview",
+   "lines": [
+    "Question: how good is the ground truth autoGT generates from nuScenes, and where does it fail?",
+    "",
+    "What 'good' can mean here. autoGT labels nothing itself: it rasterises the HD map, the human 3D box annotations, the ego poses and the radar returns",
+    "into BEV layers. So four things can be checked: (1) faithfulness to those sources, (2) physical and bookkeeping consistency, (3) plausibility against the",
+    "camera image, (4) where it breaks. What cannot be checked is accuracy against an independent truth: no lidar is on disk, and the annotations ARE the truth",
+    "that is inherited (their own error is not estimated here).",
+    "",
+    "Versions and data behind the numbers",
+    "  generator signature 15efbde2d1: moving boxes at the CAMERA time (decision 2026-10-31). The rebuild of nuScenes trainval with it is running: 480 of 850",
+    "  sequences were stored when this was written.",
+    "  [T] complete trainval run, 850 sequences / 34,149 keyframes, 0 failed, with the earlier signature 7fe1149566 (boxes at the annotation time; everything",
+    "      except the positions of moving boxes is identical). Report PDF autogt/reports/autogt_report_v1.0-trainval_2026-10-30.pdf.",
+    "  [M] nuScenes mini at the final signature: 10 sequences, 404 keyframes, all checks + the leave-one-radar-out radar test (autogt_report_v1.0-mini_2026-10-31.pdf).",
+    "  [S] a scan of the stored GT of the final signature: 458 sequences, 9246 keyframes (every 2nd keyframe), split by map and weather. These are the",
+    "      sequences with the lowest numbers: Boston-heavy and daytime; night sequences are shown from mini (scene-1077 / 1094 / 1100) until the rebuild reaches them.",
+    "  Pictures: 96 random keyframes (thumbnails), 38 examples with 4 panels each, 7 full-resolution camera close-ups. Captions say 'Observed' where I looked at",
+    "  the picture and described what I saw, and 'Selected by' where the picture was chosen by a rule and not inspected individually.",
+    "",
+    "Verdict in one paragraph",
+    "  Where the map exists, the GT is consistent and plausible: boxes enclose the cars and pedestrians in the camera image (day, rain, night), map lines lie on",
+    "  the paint within a few decimetres (Boston close-ups), moving vehicles stand on the drivable area (97.6 %), the velocity field is consistent with the radar (radial error median",
+    "  0.2 m/s) and nothing that is stationary drifts (0.00 cm). The weak spots are all INHERITED or modelling limits, not generator bugs: map holes (no road under",
+    "  the ego car in 0.5 % of the keyframes, Boston construction sequences), roads outside the 2D map (2.4 % of the moving vehicles drive outside the drivable",
+    "  area, 6-9 % in two Singapore maps; the two cases inspected are elevated roads), the 2D occlusion mask (hides 11 % of boxes the annotators rate as clearly",
+    "  visible), 22 % of the boxes off the ego ground plane (hills, overpasses), and the radial-only radar check of velocity. The consequence for training is in",
+    "  section 4 of autogt/AGENTS.md."
+   ]
+  },
+  {
+   "title": "Scorecard per layer group",
+   "lines": [
+    "layer group                 source                      verified how                                                                                                              verdict",
+    "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------",
+    "map areas (drivable,        nuScenes map expansion      self-test: areas exact (< 0.3 %); static layers of the next keyframe = the current ones moved by the exact ego motion     GOOD where the map exists; map holes",
+    "crossing, walkway, stop                                 (IoU 0.988); ego car on the road in 99.7 % [T] / 99.5 % [S] of the keyframes; moving vehicles on the drivable area 98.6   and elevated roads are inherited",
+    "line, car park)                                         % [T] (Boston 99.0, Singapore One-North 93.6, Queenstown 91.0 [S])",
+    "",
+    "lane / road dividers,       map vectors, exact          7 full-resolution close-ups: in the 3 Boston ones with visible paint (scene-0094 day, 0200 cloudy, 0441 heavy rain) the   GOOD; Boston map lines 0.3-0.7 m off",
+    "centre-lines with           polylines in meta           lines lie on the paint within about 0.1-0.3 m; the Singapore close-ups show map arcs and no paint to compare; centre-     in places (earlier check)",
+    "direction                                               line and divider cells on the drivable area 100 % [T]. An earlier map check found 0.3-0.7 m offsets in places in Boston",
+    "                                                        (no per-frame correction is allowed); the Boston close-ups seen here show none",
+    "",
+    "objects (vehicle,           nuScenes 3D annotations     instance layer consistent 100 % of 312,263 boxes [T]; stationary boxes do not move (0.00 cm, 136,733 pairs [T]); boxes    GOOD; bound by the annotation",
+    "pedestrian, two-wheeler) +  with >= 1 lidar / radar     enclose the objects in every close-up; 8.7 % of the boxes have no lidar / radar point and go to 'ignore' [S]; 3,159       quality, which is not independently",
+    "ignore                      point                       overlapping observed vehicle pairs (IoU > 0.10) over the 34,149 keyframes [T]                                             checked",
+    "",
+    "box time = camera time      annotation + v * dt         41,249 moved box-observations in [S]: shift median 6 cm, 95 % 41 cm, max 79 cm; direction and size of the operator        PLAUSIBLE; no lidar to prove the",
+    "                                                        confirmed on raw radar POSITIONS (mini, 340 observations, autogt/README.md); front-camera offset only (-35.9 ms)          last centimetre",
+    "",
+    "velocity / flow (m/s)       annotation velocity +       held-out radar Doppler (leave-one-radar-out, mini [M]): radial RMSE 1.41 m/s (zero predictor 6.47), median 0.198 (track   GOOD radially; the tangential part",
+    "                            radar Doppler (Bayes)       only 0.215), 79.9 % within 0.5 m/s (track only 77.8 %); flags [T]: override 1,497, conflict 146, short track 4,986,       comes from the annotations only",
+    "                                                        unobserved 49,241 of 885k boxes; flow = ego flow + velocity exact (1.9e-6)",
+    "",
+    "masks: camera, radar,       projection / radar fan /    camera: exact projection; radar: 99.9 % of the detections inside +-60 deg [T]; occluded: 2D cast from the camera - share  WEAKEST layer (occlusion); usable as",
+    "occluded, undefined         box shadows                 of boxes whose centre is marked occluded by annotator visibility 0-40 / 40-60 / 60-80 / 80-100 %: 74 / 57 / 39 / 10 %     a soft mask",
+    "                                                        [T] (11.4 % for the 80-100 % class in [S])",
+    ""
+   ],
+   "size": 7.2,
+   "wrap": 250
+  },
+  {
+   "title": "Quality by condition",
+   "lines": [
+    "Quality by condition [S] (every 2nd keyframe of the sequences stored at the final signature; ratios of sums over the keyframes)",
+    "",
+    "group                      sequences keyframes boxes/kf  ignored  moving vehicles   pedestrians on    boxes >0.5 m off   visible boxes     ego off",
+    "                                                        share    on drivable area  a map surface     the ground plane   marked occluded   the map",
+    "all (finished sequences)         458      9246      9.6     8.7%             97.6%           82.0%              22.5%           11.4%      0.5%",
+    "Boston Seaport                   255      5158     11.9     8.4%             99.0%           88.2%              19.2%           11.2%      0.9%",
+    "Singapore One-North              149      2988      7.7     9.6%             93.6%           71.8%              28.2%           12.9%      0.0%",
+    "Singapore Queenstown              35       710      5.3     8.8%             91.0%           82.7%              38.8%            9.7%      0.0%",
+    "Singapore Holland Village         19       390      3.3     5.2%             99.4%           65.9%              20.1%            4.9%      0.0%",
+    "rain (Boston + Singapore)         45       927     10.1     9.9%             99.5%           90.0%              17.7%            9.3%      0.0%",
+    "",
+    "How to read it",
+    "  ignored share = boxes without any lidar / radar point / all boxes in range; moving vehicles = known velocity > 1 m/s; pedestrians on a map surface = centre cell on",
+    "  drivable area, walkway or crossing (coverage >= 0.3): the rest stand on grass, in parks, car parks or where the map has no walkway; ground plane = box bottom more than",
+    "  0.5 m above or below the ego ground plane within 40 m (hills, overpasses: a limit for a flat-ground camera lift, not an error of the box); visible boxes marked occluded =",
+    "  boxes the annotators rate 80-100 % visible whose centre cell lies in our occlusion mask; ego off the map = fewer than half of the cells just in front of the ego car are drivable.",
+    "",
+    "Findings",
+    "  Map holes: the ego car is off the map road in 45 of 9246 keyframes (0.49%), in 5 sequences, all Boston Seaport: scene-0502 (17), scene-0517 (11), scene-0499 (7), scene-0515 (6), scene-0501 (4) (Pier 4 construction area).",
+    "  Moving vehicles off the drivable area: 247 of 10127 (2.4%); the ten worst sequences hold 48% of them",
+    "  (scene-0357 24, scene-0397 17, scene-0131 16, scene-0361 13, scene-0133 9, scene-0358 9). In the two sequences inspected (scene-0131, 0361) they are cars on elevated roads, box bottoms",
+    "  2-3 m above the ego road, which the 2D drivable area does not contain; the others were not inspected.",
+    "  Pedestrians: 88% of the Boston pedestrians stand on a map surface, but only 72% (One-North) and 66% (Holland Village): the Singapore maps have fewer walkway polygons, and people stand in car parks and on grass - so a pedestrian head must not rely on 'walkway' as a prior.",
+    "  Unknown velocity ('short track'): 0.4% of the observed boxes; radar override 0.10%, conflict 0.013%.",
+    "  Speed: 31 keyframes have a box faster than 60 km/h, 1 faster than 80 km/h; mean 9.6 observed boxes and 1.1 moving vehicles per keyframe: most of the scene is static, which is why the loss must balance moving and static cells."
+   ],
+   "size": 7.5,
+   "wrap": 215
+  },
+  {
+   "title": "Qualitative review: what the pictures show",
+   "lines": [
+    "What I saw in the pictures (21 four-panel examples and 7 close-ups were inspected one by one, the thumbnails as a whole)",
+    "  Right:",
+    "  - Boxes enclose the real objects in all close-ups: cars at 5-30 m, a walking pedestrian, a group of about 12 people at a Singapore junction boxed person by person, a",
+    "    van behind a parked row, cars behind bushes. In rain with a wet lens and at night the boxes are as good: the GT does not use the image.",
+    "  - Map lines follow the road geometry in every close-up; where paint is visible (3 Boston close-ups: dashed lane divider, faded double yellow in rain, the road centre line) the line lies",
+    "    on it within about 0.1-0.3 m. Lane-connector centre-lines turn correctly through junctions (they are map arcs, not paint, so they cross painted areas).",
+    "  - Parked rows are stationary (white rim, zero velocity), moving cars carry arrows and km/h that match the lane direction (oncoming lanes point toward the ego car).",
+    "  - Thumbnails of 96 random keyframes (2 sheets): roads, junctions, crossings, car parks and ramps look like the scene; objects sit on the roads and in the car parks.",
+    "  Wrong or doubtful:",
+    "  - Map holes: scene-0501 has an EMPTY map under the ego car on a marked road; scene-0499 has a single grey blob and no lane lines (construction zone).",
+    "  - Roads outside the 2D map: scene-0131 / scene-0361 have cars at 38-55 km/h on elevated roads (box bottoms 2.2-2.8 m above the ego road) that the drivable area",
+    "    does not contain, so they look 'off the drivable area'.",
+    "  - Occlusion mask: in dense car parks (scene-0382, 0395) and behind buses (scene-0236, 0286) the 2D mask hides everything behind the first row, including boxes the annotators",
+    "    list as visible; it is a conservative mask, not a visibility ground truth.",
+    "  - Height: scene-0128 has a vehicle of 80 km/h whose box bottom is 1.7 m above the ego road: it hangs above the road in the image (an elevated road behind a fence);",
+    "    the GT is 3D and consistent, a flat-ground image lift would put it in the wrong place.",
+    "  - Two oncoming cars of 73 and 81 km/h in scene-0094 stand outside the camera view; the 81 km/h one is radar-corrected, neither can be checked by eye.",
+    "  - Ignored boxes (scene-0236: 46) are objects behind the bus without a lidar / radar point: they are neither object nor free space, which is right, but a lot of area in a busy street."
+   ]
+  }
+ ],
+ "notes": {
+  "scene-0033_k06": "Observed: sparse Singapore road, one car 30 m ahead - the box sits on it; lane dividers (yellow) and centre-lines (cyan, with direction arrows) follow the lane. An easy keyframe: the GT is almost empty.",
+  "scene-0321_k24": "Observed: Boston junction with 13 vehicles and 8 pedestrians. Parked row at the left = stationary (white rim), moving cars carry arrows and km/h, pedestrians on the crossing. The blue occluded area behind the white truck at the left is large.",
+  "scene-0499_k12": "Observed (random draw): a MAP HOLE. The map has one grey blob and no lane dividers or centre-lines for this construction street; the camera panel shows no map lines. Boxes (workers, parked cars) are fine.",
+  "scene-0238_k02": "Selected by: busiest Boston keyframe. Full-resolution close-up on a later page: boxes enclose the SUV and the sedan, the pedestrians at the far crossing, lane-connector centre-lines turn through the junction.",
+  "scene-0276_k10": "Selected by: busiest One-North keyframe. Close-up on a later page: a group of about 12 people at the left is boxed person by person, cars at the right.",
+  "scene-0317_k02": "Observed: Queenstown, bus ahead, a row of pedestrians along the kerb (27 pedestrians), roundabout lanes in the map. Large occluded wedge behind the bus; moving car at 20 km/h far ahead.",
+  "scene-1077_k08": "Observed: night on a big Singapore road; all 17 vehicles are boxed although the image is dark; the oncoming lanes (right) carry arrows toward the ego car at 30-65 km/h, the car ahead in the ego lane moves away at 42 km/h.",
+  "scene-1094_k10": "Observed: night after rain, 38 pedestrians and 3 scooters at a junction: the GT is as dense as by day, pedestrians boxed individually; lane connectors cross the junction.",
+  "scene-0479_k02": "Observed: rain, wet lens, Boston street with 42 vehicles and 31 pedestrians. Parked rows are stationary; slow queueing cars at the right bottom have small non-zero velocities (dark red in the motion panel), the car 33 m ahead moves at 32 km/h.",
+  "scene-0441_k20": "Observed: heavy rain / mist; the road divider (orange) follows the faded yellow dashes (close-up page), cars in the car parks on both sides are boxed.",
+  "scene-0323_k14": "Observed: pedestrians crossing at a Boston crosswalk (51 pedestrians): the walking man and the groups at the far fence are boxed; the motion panel shows pedestrians as small slow dots.",
+  "scene-0538_k36": "Observed: a park next to the road, 43 pedestrians (most on a surface the map does not have as walkway: right side black), parked scooters (orange). The ped boxes are many and small; occluded wedges behind parked scooters.",
+  "scene-0094_k00": "Observed: Boston wide road. Two oncoming cars (73 and 81 km/h, the 81 km/h one radar-corrected) are outside the camera view. Close-up on a later page: the lane divider lies on the dashed paint within about 0.15 m.",
+  "scene-0128_k34": "Observed: the 80 km/h vehicle (25 m ahead, 22 m left; its box moved 0.78 m to the camera time) has its box bottom 1.7 m above the ego road: it hangs above the road in the image (an elevated road behind the fence). The 3D GT is consistent, a flat-ground lift would misplace it.",
+  "scene-0200_k10": "Observed (close-up on a later page): the orange road divider lies on the painted double yellow line within about 0.2 m; the stationary cars at the right and the van ahead are boxed one by one.",
+  "scene-0194_k14": "Selected by: most radar-conflict flags. A flagged track keeps its annotation velocity (flag '!' in the objects panel when drawn in range). Singapore curve with two bicycles lying on the grass (orange) and a moving car 20 km/h.",
+  "scene-0286_k38": "Observed: radar overrides ('o' next to the km/h labels): the radar fixed the track speed of boxes at the intersection; the big bus at the right is boxed and occludes most of the right half of the BEV.",
+  "scene-0284_k38": "Selected by: most 'short track' boxes (velocity unknown: weight 0 in flow_weight, box NOT moved to the camera time). They are not marked in the picture. Boston street, 25 stationary boxes along the kerb: the velocity panel is black.",
+  "scene-0030_k08": "Selected by: highest share of boxes off the ego ground plane (> 0.5 m); the picture looks right (curving road, parked scooters, many ignored pedestrian boxes at the left).",
+  "scene-0168_k00": "Observed (off-plane pick): a long row of parked cars in a car park at the right, all stationary; the car park polygon (blue-grey) contains them. Nothing wrong in the GT.",
+  "scene-0382_k06": "Observed (occlusion pick): dense Singapore car park with 50 stationary vehicles; the 2D occlusion mask (blue) marks everything behind the first row, although many of those boxes are rated visible by the annotators. Yellow = ignored boxes without a point.",
+  "scene-0395_k18": "Observed (occlusion pick): Boston car park left and right of the road; cells between the parked cars are marked occluded (blue) - conservative, not a visibility truth.",
+  "scene-0131_k08": "Observed (off-road pick): three cars at 48-51 km/h with box bottoms 2.2-2.7 m above the ego road: an elevated road, not in the 2D drivable area (the right half of the BEV is black). A map limit, not a box error.",
+  "scene-0361_k04": "Observed (off-road pick): moving cars (38-55 km/h) on an elevated road beyond the grass strip (box bottoms 2.2-2.8 m above the ego road); the drivable area ends before them.",
+  "scene-0236_k10": "Observed (ignored pick): busy Boston street with 32 pedestrians; 46 boxes have no lidar / radar point (yellow dots at the left, behind the bus). They are ignored, neither object nor free space.",
+  "scene-0501_k32": "Observed (ego-off-map pick): a MAP HOLE: the ego car stands on a marked road but the map has no drivable area, no dividers and no centre-lines in range; the BEV panel is empty. 0.5 % of the keyframes are like this; leave them out of the map loss.",
+  "scene-0071_k28": "Selected by: seeded random draw (sequence and keyframe), not inspected individually.",
+  "scene-0374_k30": "Selected by: seeded random draw (sequence and keyframe), not inspected individually.",
+  "scene-0544_k40": "Selected by: seeded random draw (sequence and keyframe), not inspected individually.",
+  "scene-0520_k24": "Selected by: seeded random draw (sequence and keyframe), not inspected individually.",
+  "scene-0171_k30": "Selected by: seeded random draw (sequence and keyframe), not inspected individually.",
+  "scene-0063_k00": "Selected by: seeded random draw (sequence and keyframe), not inspected individually.",
+  "scene-0399_k08": "Selected by: busy keyframe of this map (not inspected individually).",
+  "scene-1100_k08": "Selected by: night: the GT does not use the image (not inspected individually).",
+  "scene-0045_k00": "Selected by: bicycles / motorcycles (not inspected individually).",
+  "scene-0061_k10": "Selected by: unusual layout (not inspected individually).",
+  "scene-0255_k22": "Selected by: radar and track velocity disagree; track kept (flag !) (not inspected individually).",
+  "scene-0007_k36": "Selected by: the radar fixed the track speed (flag o) (not inspected individually)."
+ },
+ "extra": [
+  {
+   "png": "temp/agt_gallery/close/scene-0094_k00.png",
+   "title": "close-up scene-0094 k0 (Boston, daylight)",
+   "note": "Observed: the yellow lane divider lies on the dashed white paint within about 15 px (0.1-0.2 m at 8-10 m); the left lines run along the kerb; the box at the right bottom encloses a car hidden by bushes."
+  },
+  {
+   "png": "temp/agt_gallery/close/scene-0238_k02.png",
+   "title": "close-up scene-0238 k2 (Boston junction)",
+   "note": "Observed: the boxes enclose the silver SUV and the black sedan with the visible extent of the cars; a pedestrian and a cyclist at the far side are boxed; centre-line connectors turn through the junction."
+  },
+  {
+   "png": "temp/agt_gallery/close/scene-0200_k10.png",
+   "title": "close-up scene-0200 k10 (Boston, cloudy)",
+   "note": "Observed: the orange road divider follows the painted double yellow line within about 30 px (0.15-0.2 m); parked cars at the right and a van ahead are boxed one by one."
+  },
+  {
+   "png": "temp/agt_gallery/close/scene-0441_k20.png",
+   "title": "close-up scene-0441 k20 (Boston, heavy rain)",
+   "note": "Observed: a wet lens and mist do not affect the GT; the orange divider follows the faded yellow dashes, cars in the lots on both sides are boxed."
+  },
+  {
+   "png": "temp/agt_gallery/close/scene-0276_k10.png",
+   "title": "close-up scene-0276 k10 (Singapore junction)",
+   "note": "Observed: about 12 people standing at the left are boxed person by person (some overlap in depth); cars at the right; the cyan lane-connector arcs cross the whole junction."
+  },
+  {
+   "png": "temp/agt_gallery/close/scene-0323_k14.png",
+   "title": "close-up scene-0323 k14 (Boston crossing)",
+   "note": "Observed: the walking man and the groups at the far fence are boxed; the yellow / orange / cyan lines of the cross street run along the far side; the near crosswalk paint is not drawn by the GT."
+  },
+  {
+   "png": "temp/agt_gallery/close/scene-0128_k34.png",
+   "title": "close-up scene-0128 k34 (Singapore, dusk)",
+   "note": "Observed: the large box at the upper left is the 80 km/h vehicle with its bottom 1.7 m above the ego road (an elevated road behind the fence); cars and two pedestrians at the right are boxed; the cyan arcs are the junction's centre-lines."
+  }
+ ],
+ "tail": [
+  {
+   "title": "What this overview does not show, and what to do about it",
+   "lines": [
+    "Not verified (no independent truth on disk)",
+    "  - The positions and sizes of the boxes: they are the nuScenes annotations; no lidar point cloud is available to re-measure them. Annotation noise stays in the GT.",
+    "  - The box shift to the camera time: direction and size checked with raw radar positions only; at the real 36 ms the three variants (annotation / camera / opposite) are within noise there.",
+    "  - Velocity across the line of sight: the radar measures the radial part only; the tangential part is the annotation's.",
+    "  - The other five cameras: their offsets to the annotation time were not measured (front camera only); the GT is defined in the front-camera frame.",
+    "  - Night and rain beyond three mini sequences and 45 daytime rain sequences: the rebuild will bring them into the same table.",
+    "",
+    "Recommendations for use (they are also in autogt/AGENTS.md)",
+    "  1. Leave keyframes with the ego car off the map (drivable_area[2:8, 50:54].mean() < 0.5, 0.3-0.5 %) out of the map loss; do not read 'no road' as 'free space' there.",
+    "  2. Treat the occlusion mask as soft: do not zero the object loss behind a box for boxes the annotators call visible (visibility '4').",
+    "  3. Balance moving and static cells in every velocity loss; report errors split by moving / static with the zero predictor next to them.",
+    "  4. Compare models only on the same GT signature; the signature 15efbde2d1 is the camera-time GT.",
+    "  5. For a headline number on boxes use `boxes_at='annotation'` additionally if the comparison is against nuScenes-style evaluation.",
+    "",
+    "Possible next steps (not started)",
+    "  - a per-keyframe `map_valid` flag in meta (ego off the map / drivable layer empty) so that nobody has to re-derive it;",
+    "  - a lidar or scene-flow check of boxes and velocities if the lidar sweeps are downloaded (needs the user's OK);",
+    "  - the other five cameras' time offsets, if a multi-camera GT is wanted."
+   ]
+  }
+ ]
+}

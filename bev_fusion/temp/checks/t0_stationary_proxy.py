@@ -15,8 +15,8 @@ import cv2
 import numpy as np
 import torch
 
-sys.path.insert(0, "training")
-from gt_bev import NuScenesGT  # noqa: E402
+sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
+from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 
 step = int(sys.argv[1]) if len(sys.argv) > 1 else 7

@@ -15,7 +15,7 @@ import time
 
 import torch
 
-sys.path.insert(0, "training")
+sys.path.insert(0, "training"); sys.path.insert(0, "training/legacy")
 sys.path.insert(0, ".")
 from camera_encoder import FrontCameraEncoder  # noqa: E402
 from evaluation.metrics import ms_per_frame  # noqa: E402

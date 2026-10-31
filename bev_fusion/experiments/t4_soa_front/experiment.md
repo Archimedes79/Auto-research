@@ -1,7 +1,7 @@
 # t4_soa_front - state-of-the-art comparison with only the front area visible
 
 Started 2026-10-30 (request of Mirko: "Do a state of the art comparison considering only the front area as visible").
-Code: `training/dualbev_front.py` (self-test), `temp/t4/dualbev_front_eval.py`, `temp/t4/compare_front.py`.
+Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-10-31), `temp/t4/dualbev_front_eval.py`, `temp/t4/compare_front.py`.
 
 ## 1 Card
 

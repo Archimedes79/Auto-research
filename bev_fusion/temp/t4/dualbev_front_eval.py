@@ -13,7 +13,7 @@ import time
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-sys.path[:0] = [ROOT, os.path.join(ROOT, "training")]
+sys.path[:0] = [ROOT, os.path.join(ROOT, "training"), os.path.join(ROOT, "training", "legacy")]
 from evaluation.bev_probe import gt_boxes as _gt_boxes  # noqa: E402
 from evaluation.metrics import DetMeter, report  # noqa: E402
 from dualbev_front import DualBEVFront, decode  # noqa: E402

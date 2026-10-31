@@ -1,4 +1,4 @@
-"""Gate of the radar-only decoder (training/radar_decoder.py): stationary map + moving objects from radar alone.
+"""Gate of the radar-only decoder (training/legacy/radar_decoder.py): stationary map + moving objects from radar alone.
 
 Synthetic world (tests/synthetic_world.py): per sample a random scene at the output time; its past is reconstructed
 with Scene.step(-age) for 6 sweeps at 12 Hz (ages 0 .. 5/12 s) and measured by 3 radars (front; front-left /
@@ -23,6 +23,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path.insert(0, "training/legacy")                 # radar_decoder (off the chain since 2026-10-31)
 sys.path.insert(0, "tests")
 from lift_pd import Grid  # noqa: E402
 from object_head import GROUPS, build_targets, decode, head_loss  # noqa: E402

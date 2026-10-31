@@ -18,9 +18,9 @@ import sys
 import numpy as np
 import torch
 
-sys.path.insert(0, "training")
+sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
 from feature_cache import CachedFrontRadarDataset, FeatureStore  # noqa: E402
-from gt_bev import pose_matrix  # noqa: E402
+from autogt.nuscenes_adapter import pose_matrix  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from camera_encoder import depth_centres  # noqa: E402
 from nuscenes.nuscenes import NuScenes  # noqa: E402

@@ -15,8 +15,9 @@ import sys
 import numpy as np
 import torch
 
-sys.path.insert(0, "training")
-from gt_bev import NuScenesGT, category_group, pose_matrix  # noqa: E402
+sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
+from autogt.nuscenes_adapter import category_group, pose_matrix  # noqa: E402
+from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
 from splat import ego_speed_yawrate, splat_positions  # noqa: E402
 
 gt = NuScenesGT(os.path.expanduser("~/data/nuscenes"), "v1.0-mini")

@@ -1,0 +1,18 @@
+ff_sup_s0 --loss vel,box,static
+ff_sup_nodop_s0 --loss vel,box,static --no-dop
+ff_sup_nocorr_s0 --loss vel,box,static --no-corr
+ff_box_s0 --loss box,static
+ff_sup_then_free_s0 --loss vel,box,static --then warp,dop,smooth --pre 0.5
+ff_all_s0 --loss vel,box,static,warp,dop,smooth
+ff_sup_L1_s0 --loss vel,box,static --levels 1
+ff_sup_ray_s0 --loss vel,box,static --ray
+ff_sup_s1 --loss vel,box,static --seed 1
+ff_sup_nodop_s1 --loss vel,box,static --no-dop --seed 1
+ff_sup_nocorr_s1 --loss vel,box,static --no-corr --seed 1
+ff_box_s1 --loss box,static --seed 1
+ff_sup_then_free_s1 --loss vel,box,static --then warp,dop,smooth --pre 0.5 --seed 1
+ff_all_s1 --loss vel,box,static,warp,dop,smooth --seed 1
+ff_sup_L1_s1 --loss vel,box,static --levels 1 --seed 1
+ff_sup_ray_s1 --loss vel,box,static --ray --seed 1
+ff_free_s0 --loss warp,dop,smooth
+ff_free_s1 --loss warp,dop,smooth --seed 1

@@ -1,0 +1,28 @@
+15:32:37 t1 rounds done or flag set: waiting for a free GPU
+15:33:37 GPU free (util 0 %, 1033 MiB): starting /home/ml/miniconda3/envs/gcar/bin/python tests/test_box_optimality.py --configs 4000:6000
+device cuda; configs (training scenes : iterations) [(4000, 6000)]
+B  IoU of a perfect box shifted / rotated by an error (analytic, shapely)
+   error                    car 4.5 x 1.8    pedestrian r 0.3
+   centre 0.02 m (lateral)           0.978               0.919
+   centre 0.05 m (lateral)           0.946               0.808
+   centre 0.10 m (lateral)           0.895               0.651
+   centre 0.15 m (lateral)           0.846               0.521
+   centre 0.25 m (lateral)           0.756               0.320
+   centre 0.50 m (lateral)           0.565               0.041
+   yaw 2 deg                        0.952                   -
+   yaw 5 deg                        0.887                   -
+   yaw 10 deg                       0.796                   -
+   forecast: a velocity error sigma_v moves a box by sigma_v x dt (the centre rows above): at dt = 0.5 s
+   sigma_v 0.2 m/s                  0.895   (car, shift 0.10 m)
+   sigma_v 0.5 m/s                  0.756   (car, shift 0.25 m)
+   sigma_v 1.0 m/s                  0.565   (car, shift 0.50 m)
+   sigma_v 2.0 m/s                  0.286   (car, shift 1.00 m)
+
+A  analytic decoder from the same input (50 held-out scenes): the information ceiling
+                                  car AP@1     car IoU  car centre  car yaw/pi    car size     car vel  truck AP@1    ped AP@1     ped IoU  ped centre  ped radius
+A analytic ceiling                   0.879       0.976       0.025       0.660       0.033       0.215       0.796       1.000       0.772       0.019       0.040
+
+C  learned: the same network trained with more steps and scenes (held-out scenes; the last column set = 20 training scenes)
+  iter     0 loss 18.087 (hm 10.581) 1 s
+  iter  1200 loss 1.437 (hm 0.193) 148 s
+  iter  2400 loss 1.236 (hm 0.162) 294 s

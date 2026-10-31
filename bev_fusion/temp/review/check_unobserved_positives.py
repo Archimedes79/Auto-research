@@ -12,8 +12,8 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, "training")
-from gt_bev import NuScenesGT  # noqa: E402
+sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
+from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from losses import NUSC_GROUPS, build_layer_targets, head_box  # noqa: E402
 
