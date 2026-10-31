@@ -1,6 +1,6 @@
 # comparison - the one place where a prediction is compared with the ground truth
 
-`autoresearch/evalsuite/comparison/`. Two files do the comparing, a third joins them to the suite. Nothing else in the suite computes a comparison (`render/figure.error_counts`, the minimal and the toy adapter call this core).
+`autoresearch/evalsuite/comparison/`. Two files do the comparing, a third joins them to the suite. Nothing else computes a comparison: `render/figure.error_counts`, the minimal and the toy adapter and the BEV system's `bev_fusion/evaluation/metrics.py` call this core.
 
 | file | compares | read it for |
 |---|---|---|
@@ -9,7 +9,7 @@
 | `metrics.py` | (the join) `MapMetric` and `BoxMetric`: ready-made suite `Metric`s on the two files above | how an adapter plugs in |
 | `mutation_check.py` | (the proof) breaks the core one rule at a time and checks that the tests notice | how well the tests guard the core |
 
-**Not here, on purpose.** Parsing a dataset or a network output (an adapter's `extract` function does that), thresholding a probability map, plotting (`render/figure.py` only draws), lane polylines and graphs (`../lanes/measures.py`), and everything specific to one problem: the BEV system's range bins, field of view, classes and dt keys stay in `bev_fusion/evaluation/metrics.py`. That file still carries its own copies of the comparison (`match`, `ap_nuscenes`, `ap_all_points`, `tp_errors`, `dilate`; it is the system's golden-checked evaluator); this core reproduces them (`_REF` in the selftest is a frozen copy), but the BEV numbers are not computed by it yet. To switch: the BEV `match(frames, thr)` is `boxes.match_frames`, not `boxes.match`; `DetMeter` needs `ties="list"` to keep its numbers; and `bev_selftest.py --golden` has to reproduce the golden numbers first.
+**Not here, on purpose.** Parsing a dataset or a network output (an adapter's `extract` function does that), thresholding a probability map, plotting (`render/figure.py` only draws), lane polylines and graphs (`../lanes/measures.py`), and everything specific to one problem: the BEV system's range bins, field of view, classes and dt keys stay in `bev_fusion/evaluation/metrics.py`. That file used to carry its own copies of the comparison; since 2026-10-31 its `match` (= `boxes.match_frames`), `ap_nuscenes`, `ap_all_points`, `tp_errors` and `dilate` are this core's, `SegMeter` counts with `maps.tolerant_counts` and `DetMeter` builds its rows with `boxes.match_flags` and reduces them with `boxes.detection_numbers(..., ties="list")`. The former copies are frozen as `_REF` in the selftest. The switch was checked three ways: the same numbers bit for bit on random worlds with ties (16 `DetMeter` worlds, `SegMeter` with tolerances, masks, known / unknown and lines), `bev_selftest.py --golden` (the 3738 stored numbers of the former `evaluate_run.py` reproduced to 1e-9, with the old file and with the new one) and the BEV selftests.
 
 ## Rules the core keeps
 1. **Plain inputs.** numpy arrays (boolean or 0 / 1 integer maps) and dicts. No `Sample`, no `Prediction`, no torch, no dataset. Float maps are refused: threshold first (`prob > 0.5`), a nonzero probability is not a set cell; so are integer maps with other values (an 255 = "ignore" label belongs in `valid`). `render/figure.error_counts` is the lenient caption helper: it casts any array to bool before it calls this core.
@@ -21,7 +21,7 @@
 ## maps.py
 Maps are boolean arrays of one shape; `valid` (optional) restricts what is counted.
 - `confusion(pred, gt, valid)` -> `[tp, fp, fn, tn]` (int64, any rank). `scores(counts)` -> iou = tp / (tp + fp + fn), precision = tp / (tp + fp), recall = tp / (tp + fn), f1 = harmonic mean of the two.
-- `tolerant_confusion(pred, gt, tol_cells, valid)` -> `[p_hit, p_miss, g_hit, g_miss]` for thin structures that cannot be hit cell by cell: a predicted cell is a hit if a ground-truth cell lies within `tol_cells` of it (centre distance, a disc), a ground-truth cell is hit if a predicted cell lies within `tol_cells`. Tolerance 0 is the plain comparison and works for any rank; a tolerance above 0 needs 2-D maps; a negative one is refused. The dilation uses the whole maps, `valid` only chooses what is counted. `tolerant_scores(counts)`: precision = p_hit / (p_hit + p_miss), recall = g_hit / (g_hit + g_miss), f1 from both, iou = tp / (tp + p_miss + g_miss) with tp = (p_hit + g_hit) / 2.
+- `tolerant_confusion(pred, gt, tol_cells, valid)` (the dilation and `tolerant_counts(pred, gt, near_gt, near_pred, valid)`, the counting) -> `[p_hit, p_miss, g_hit, g_miss]` for thin structures that cannot be hit cell by cell: a predicted cell is a hit if a ground-truth cell lies within `tol_cells` of it (centre distance, a disc), a ground-truth cell is hit if a predicted cell lies within `tol_cells`. Tolerance 0 is the plain comparison and works for any rank; a tolerance above 0 needs 2-D maps; a negative one is refused. The dilation uses the whole maps, `valid` only chooses what is counted. `tolerant_scores(counts)`: precision = p_hit / (p_hit + p_miss), recall = g_hit / (g_hit + g_miss), f1 from both, iou = tp / (tp + p_miss + g_miss) with tp = (p_hit + g_hit) / 2.
 - `dilate(mask, radius_cells)`: the disc dilation both use (2-D; a radius that is an integer up to float noise, like 0.3 / 0.1, is that integer).
 
 ## boxes.py
@@ -55,7 +55,8 @@ Without the suite, the functions are used directly: `maps.scores(maps.confusion(
 
 ## What a reviewer should look at
 - **Where the rules differ from the nuScenes devkit** (all three only matter at exact ties; on data without them the average precision is identical to the devkit's, tested on random frames): a distance of exactly the threshold is a hit here (the devkit's `<` says no); of two free boxes exactly equally near the later is taken (the devkit takes the first); equal scores are served in list order here (the devkit serves the later one first). The first two are the BEV system's rules, pinned by its own tests.
-- `ties="pessimistic"` is new; `ties="list"` is what the BEV numbers have always used.
+- `ties="pessimistic"` is new; `ties="list"` is what the BEV numbers have always used (and what `DetMeter` passes). The mean TP errors are summed in rank order, which keeps the BEV numbers bit for bit (pinned by an exact-equality test and a mutant).
+- `maps.tolerant_counts` exists for callers that count one pair of maps under many `valid` selections (the BEV range bands): they dilate once. Its dilations are the caller's responsibility, only the shapes are checked.
 - The mean TP errors are not the devkit's (see `metrics.py` above); the "class not found = 1.0" rule is `BoxMetric`'s, `DetMeter` drops such a class from the mean.
 - `tp_errors` needs shapely only for `biou`. The circle polygon (shapely `buffer(r, 32)`, 128 vertices) approximates the circle from inside, its area is 0.04 % too small; the IoU of concentric circles is exact (measured), of offset circles it is off by about that much at most.
 - `ase` for rectangles ignores height (bird's-eye view); the devkit's scale error includes it.

@@ -205,6 +205,14 @@ def _():
         near_g, near_p = brute_near(np.ones_like(g), g, tol), brute_near(np.ones_like(p), p, tol)
         want = [(p & near_g & valid).sum(), (p & ~near_g & valid).sum(), (g & near_p & valid).sum(), (g & ~near_p & valid).sum()]
         assert M.tolerant_confusion(p, g, tol, valid).tolist() == want, tol
+        assert M.tolerant_counts(p, g, brute_near(np.ones_like(g), g, tol), near_p, valid).tolist() == want, "the counting step with dilations given"
+        for bad_near in (near_p[:1], near_p[:, :1]):                             # a dilation of another shape (numpy would broadcast it) is refused
+            try:
+                M.tolerant_counts(p, g, bad_near, near_p, valid)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("a dilation of the wrong shape must be refused")
     one = np.zeros((9, 9), bool)
     one[4, 4] = True
     assert (M.dilate(one, 0.3 / 0.1) == M.dilate(one, 3)).all() and M.dilate(one, 3).sum() == 29, "a radius that is 3 up to float noise (0.3 / 0.1) is 3"
@@ -459,6 +467,10 @@ def _():
     err = np.array([[1.0, 0.1, 0.2, np.nan, 0.5], [3.0, 0.3, 0.4, 2.0, 0.7]])          # the first true positive has no velocity (ave nan)
     mixed = B.detection_numbers(np.array([0.9, 0.8]), np.ones((2, 1)), err, 2, (2.0,), 2.0)
     assert same(mixed["ate"], 2.0) and same(mixed["ave"], 2.0) and same(mixed["ase"], 0.2) and mixed["n_tp"] == 2, mixed
+    # the mean of an error is summed in rank order (best score first), so the BEV numbers stay bit for bit what they always were:
+    # ranks 0.2, 0.3, 0.1 give 0.19999999999999998, the row order 0.1, 0.2, 0.3 would give 0.20000000000000004 (exact equality on purpose)
+    ranked = B.detection_numbers(np.array([0.5, 0.9, 0.7]), np.ones((3, 1)), np.tile([[0.1], [0.2], [0.3]], (1, 5)), 3, (2.0,), 2.0)["ate"]
+    assert ranked == (0.2 + 0.3 + 0.1) / 3 and ranked != (0.1 + 0.2 + 0.3) / 3, ranked
     no_tp = numbers(frames, tp_thr=None)
     assert "ate" not in no_tp and "n_tp" not in no_tp and all(same(no_tp[k], got[k]) for k in no_tp)
     f, e = B.match_flags([], [{"cx": 0.0, "cy": 0.0}], thresholds, 2.0)

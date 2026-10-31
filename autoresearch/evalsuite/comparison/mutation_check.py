@@ -19,13 +19,13 @@ MUTANTS = [
     ("maps.py", '"iou": ratio(tp, tp + fp + fn), "precision": p', '"iou": ratio(tp, tp + fp), "precision": p', "scores: iou without fn"),
     ("maps.py", "return 2.0 * precision * recall / (precision + recall) if", "return precision * recall / (precision + recall) if", "f1: not doubled"),
     ("maps.py", "if dx * dx + dy * dy <= radius_cells * radius_cells + 1e-9:", "if dx * dx + dy * dy < radius_cells * radius_cells - 1e-9:", "dilate: disc open"),
-    ("maps.py", "[(p & near_gt & v).sum(), (p & ~near_gt & v).sum(), (g & near_pred & v).sum(), (g & ~near_pred & v).sum()]",
-     "[(p & near_pred & v).sum(), (p & ~near_pred & v).sum(), (g & near_gt & v).sum(), (g & ~near_gt & v).sum()]", "tolerant: dilations swapped"),
+    ("maps.py", "[(p & near_g & v).sum(), (p & ~near_g & v).sum(), (g & near_p & v).sum(), (g & ~near_p & v).sum()]",
+     "[(p & near_p & v).sum(), (p & ~near_p & v).sum(), (g & near_g & v).sum(), (g & ~near_g & v).sum()]", "tolerant: dilations swapped"),
     ("maps.py", "tp = (p_hit + g_hit) / 2.0", "tp = p_hit", "tolerant iou: tp is not the mean"),
     ("maps.py", 'if a.dtype.kind == "f":', "if False:", "float maps accepted"),
     ("maps.py", "return float(num) / float(den) if den else NAN", "return float(num) / float(den) if den else 0.0", "ratio: 0 instead of nan"),
     ("maps.py", "    _same_shape(p, g, v)\n    return np.array([(p & g & v)", "    return np.array([(p & g & v)", "confusion: shape check removed"),
-    ("maps.py", "    _same_shape(p, g, v)\n    near_gt, near_pred", "    near_gt, near_pred", "tolerant_confusion: shape check removed"),
+    ("maps.py", "(g, p) if tol_cells == 0 else", "(p, g) if tol_cells == 0 else", "tolerant_confusion: tolerance 0 uses the maps swapped"),
     ("boxes.py", "            if dist <= best_dist:", "            if dist < best_dist:", "match: threshold / tie rule strict"),
     ("boxes.py", "key=lambda i: -scores[i]", "key=lambda i: scores[i]", "match: worst score first"),
     ("boxes.py", "            taken.add(best)\n", "            pass\n", "match: boxes can be taken twice"),
@@ -65,7 +65,10 @@ MUTANTS = [
     ("boxes.py", "    frames = list(frames) ", "    frames = frames ", "match_frames: a one-shot iterator is read once"),
     ("maps.py", "r = int(math.floor(radius_cells + 1e-9))", "r = int(math.floor(radius_cells))", "dilate: no tolerance for float noise in the radius"),
     ("maps.py", "if tol_cells < 0:", "if False:", "tolerant_confusion: negative tolerance accepted"),
+    ("maps.py", "_same_shape(p, g, near_g, near_p, v)", "_same_shape(p, g, v)", "tolerant_counts: dilations of another shape accepted"),
+    ("maps.py", "(g & near_p & v).sum(), (g & ~near_p & v).sum()]", "(g & near_g & v).sum(), (g & ~near_g & v).sum()]", "tolerant_counts: g_hit from the wrong dilation"),
     ("maps.py", 'if a.dtype.kind in "iu" and a.size and (a.min() < 0 or a.max() > 1):', "if False:", "_as_mask: integer map with 255 accepted"),
+    ("boxes.py", "v = errors[order, j][tp] ", "v = errors[:, j][flags[:, k] > 0] ", "detection_numbers: error means summed in row order, not rank order"),
 ]
 
 

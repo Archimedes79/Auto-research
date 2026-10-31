@@ -89,7 +89,7 @@ The probing causes: missed lane near / far, hole (gap), truncated, displaced (a 
 **Files** (from `autoresearch/evalsuite/`):
 - *core* (about 2,100 lines, numpy + matplotlib): `contracts.py` boxes and data, `suite.py`, `runner.py` order of calls and state, `sampling.py` video-then-frame draws, `store.py` run store, `stats.py` robust z, leave-one-out, bootstrap, `qualitative.py`, `quantitative.py`, `cli.py`, `render/figure.py` `report.py` `taps.py` (pictures of tapped tensors) `video.py` (H.264 with libx264, read back and checked; an animated GIF without ffmpeg).
 - *small modules loaded when used*: `cost.py` (chapter 5), `probing.py` (chapter 6), `check.py` (contract checker), `torch_taps.py` (hooks and `count_ops`).
-- *the comparison core, to be read and reviewed as one piece*: `comparison/` (`README.md` first): `maps.py` two pixel maps, `boxes.py` two lists of boxes, `metrics.py` the join to the suite (`MapMetric`, `BoxMetric`). `render/figure.error_counts` and the toy adapter use it; the BEV system's own `bev_fusion/evaluation/metrics.py` still carries its own copies (frozen as `_REF` in `selftest_comparison.py`, which proves the core reproduces them).
+- *the comparison core, to be read and reviewed as one piece*: `comparison/` (`README.md` first): `maps.py` two pixel maps, `boxes.py` two lists of boxes, `metrics.py` the join to the suite (`MapMetric`, `BoxMetric`). `render/figure.error_counts`, the toy adapter and the BEV system's `bev_fusion/evaluation/metrics.py` use it (the former BEV copies are frozen as `_REF` in `selftest_comparison.py`).
 - *libraries the core never imports*: `lanes/` (chapter 7), `adapters/`.
 - tests: `selftest.py`, `selftest_cost.py`, `selftest_comparison.py`, `selftest_lanes.py`.
 
