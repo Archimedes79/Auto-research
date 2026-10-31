@@ -178,6 +178,17 @@ def run(root=None, verbose=True):
         fig = stored(tok2, None, data=d)
         assert len(fig.axes) >= 5 and fig.axes[0].images, "stored-GT figure"
         plt.close(fig)
+        from .view import motion_arrows                                                # the arrows of the motion panel point the way the car goes
+        fl = np.zeros((2, g.nx, g.ny), np.float32)
+        fl[0, 40:48, 60:64], fl[1, 40:48, 60:64] = 5.0, 3.0                            # 5 m/s forward and 3 m/s to the left (+y)
+        fig_a, ax_a = plt.subplots()
+        ax_a.set_xlim(26, -26)                                                         # the panel's axes: y inverted (left = +y), x forward up
+        ax_a.set_ylim(0, 60)
+        q = motion_arrows(ax_a, fl)
+        fig_a.canvas.draw()
+        step = ax_a.transData.transform(np.c_[q.X + q.U, q.Y + q.V]) - ax_a.transData.transform(np.c_[q.X, q.Y])
+        assert len(step) and (step[:, 0] < 0).all() and (step[:, 1] > 0).all(), f"motion arrows must point up-left on the screen: {step}"
+        plt.close(fig_a)
         try:
             load_stored("0" * 32, data=d)
             raise AssertionError("load of an unknown keyframe must fail")

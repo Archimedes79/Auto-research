@@ -31,6 +31,7 @@ run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py
 run "GT cache, targets" "$PY" tests/test_gt_cache_targets.py
+run "orientation"       "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s
 if [ "${1:-}" = "--all" ]; then

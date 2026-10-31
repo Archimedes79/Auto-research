@@ -43,6 +43,12 @@ def _px(x, y):
     return int(round((26.0 - y) * PXM)), int(round((60.0 - x) * PXM))
 
 
+def _bev_image(rgb):
+    """a (nx, ny, 3) map in 0..1 -> the BGR picture of the video's bird's-eye panel: x forward = up, +y left = left (the overlay uses _px)."""
+    return cv2.resize((np.clip(np.flip(np.flip(rgb, 0), 1), 0, 1) * 255).astype(np.uint8)[..., ::-1],
+                      (int(52 * PXM), int(60 * PXM)), interpolation=cv2.INTER_NEAREST)
+
+
 def _corners(o, z, yaw_e_xy):
     """3D corners of an ObjectFlow in the world frame."""
     c, s = math.cos(o.yaw), math.sin(o.yaw)
@@ -86,8 +92,7 @@ def render(layers, scene, sd, kf_token, header, root, use_radar):
             _seg(img, K, P[i], P[j], col, 2)
     cam_panel = cv2.resize(img, (960, 540), interpolation=cv2.INTER_AREA)
     rgb = semantic_rgb(gt) * (1 - 0.55 * (1 - gt["camera"]))[..., None]
-    bev = cv2.resize((np.clip(np.flip(np.flip(rgb, 0), 1), 0, 1) * 255).astype(np.uint8)[..., ::-1],
-                     (int(52 * PXM), int(60 * PXM)), interpolation=cv2.INTER_NEAREST)
+    bev = _bev_image(rgb)
     Rinv = T_g2e[:2, :2]
     for o, ce in foot:
         fp = ce[:4, :2]

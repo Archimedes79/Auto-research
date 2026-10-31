@@ -100,6 +100,27 @@ def flow_rgb(f):
     return rgb
 
 
+def colour_wheel(n=41):
+    """the key of the motion panel, ready for imshow: centre = 0 m/s (black), rim = SAT m/s, forward (+vx) up, left (+vy) left."""
+    c = (n - 1) / 2
+    ii, jj = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    wf = np.stack([(ii - c) / c * SAT, (jj - c) / c * SAT]).astype(np.float32)
+    wheel = flow_rgb(wf)
+    wheel[np.hypot(*wf) > SAT] = 1.0
+    return np.flip(np.flip(wheel, 0), 1)
+
+
+def motion_arrows(ax, fl):
+    """white arrows on a motion panel: one cell in 6 (every 3 m) where the speed is above 0.3 m/s, the arrow = the velocity. The panel's
+    data coordinates are (y, x) and its y axis is drawn inverted (left = +y), so the arrow takes (vy, vx) as it is: a car that drives
+    forward-left points up-left on the screen, like the cyan arrow of the objects panel (a minus sign here made them point right)."""
+    nx, ny = fl.shape[1:]
+    gx = 0.25 + 0.5 * np.arange(nx)[:, None] + 0 * np.arange(ny)[None, :]
+    gy = -26 + 0.25 + 0.5 * np.arange(ny)[None, :] + 0 * np.arange(nx)[:, None]
+    sel = (np.arange(nx)[:, None] % 6 == 3) & (np.arange(ny)[None, :] % 6 == 3) & (np.hypot(*fl) > 0.3)
+    return ax.quiver(gy[sel], gx[sel], fl[1][sel], fl[0][sel], color="white", angles="xy", scale_units="xy", scale=6, width=0.003)
+
+
 def show(ax, rgb, title):
     ax.imshow(np.flip(np.flip(rgb, 0), 1), extent=EXT, interpolation="nearest")
     ax.set_xlim(26, -26)
@@ -169,19 +190,9 @@ def figure(gt_gen, name, k, out_dir, total=False, gt=None):
     fl = np.where((gt["flow_weight"] > 0)[None], gt["flow"] if total else gt["velocity"], 0)
     show(ax[3], flow_rgb(fl), "total apparent flow = static world + objects [m/s]" if total
          else "motion relative to the static world [m/s] (static world = black = wheel centre)")
-    nx, ny = gt["drivable_area"].shape
-    gx = 0.25 + 0.5 * np.arange(nx)[:, None] + 0 * np.arange(ny)[None, :]
-    gy = -26 + 0.25 + 0.5 * np.arange(ny)[None, :] + 0 * np.arange(nx)[:, None]
-    sel = (np.arange(nx)[:, None] % 6 == 3) & (np.arange(ny)[None, :] % 6 == 3) & (np.hypot(*fl) > 0.3)
-    ax[3].quiver(gy[sel], gx[sel], -fl[1][sel], fl[0][sel], color="white", angles="xy", scale_units="xy", scale=6, width=0.003)
-    n = 41
-    c = (n - 1) / 2
-    ii, jj = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    wf = np.stack([(ii - c) / c * SAT, (jj - c) / c * SAT]).astype(np.float32)
-    wheel = flow_rgb(wf)
-    wheel[np.hypot(*wf) > SAT] = 1.0
+    motion_arrows(ax[3], fl)
     w = fig.add_axes([0.925, 0.06, 0.06, 0.12])
-    w.imshow(np.flip(np.flip(wheel, 0), 1), interpolation="nearest")
+    w.imshow(colour_wheel(), interpolation="nearest")
     w.set_xticks([])
     w.set_yticks([])
     w.set_title("0..12 m/s, up = fwd", fontsize=6)
