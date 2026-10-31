@@ -19,6 +19,16 @@ DP_ORACLE = 14.3  # vertices per 100 m, Douglas-Peucker at 0.3 m on the ground t
 
 KEEP = ("P@0.5", "R@0.5", "F1@0.5", "P@1.0", "R@1.0", "F1@1.0", "P@1.5", "R@1.5", "F1@1.5", "F1o2o@1.0", "lanes_found", "false_len_frac", "split6_P", "split6_R", "split6_F1", "merge6_P", "merge6_R", "merge6_F1",
         "split_F1", "merge_F1", "dir_acc", "n_samples")
+# the direction of every metric of card_any(): lower is better for these, higher for the others except the counts / ratios no rule judges
+# (NO_DIRECTION). evaluate.py writes better(m) into every metric card ("better", the evaluator contract), so ../autoresearch/tools/decide.py
+# reads each metric's direction from the card instead of knowing lane metric names (D24)
+LOWER_IS_BETTER = ("false_len_frac", "vert100", "verts_per_frame", "dup_frac")
+NO_DIRECTION = ("n_samples", "len_ratio")
+
+
+def better(metrics):
+    """{metric: 'lower' | 'higher'} of a card's metrics (counts and ratios without a direction are left out)"""
+    return {k: ("lower" if k in LOWER_IS_BETTER else "higher") for k in metrics if k not in NO_DIRECTION}
 
 
 def vert100(preds):

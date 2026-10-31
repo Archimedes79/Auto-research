@@ -66,6 +66,14 @@ def validate(card, headline=(), legacy_ok=True):
     missing = [m for m in headline if m not in card["metrics"]]
     if missing:
         bad.append("headline metrics missing: " + ", ".join(missing))
+    for where, blk in (("", card), ("compare.", card.get("compare") if isinstance(card.get("compare"), dict) else {})):
+        bt = blk.get("better")
+        if bt is None:
+            continue
+        if not isinstance(bt, dict) or any(v not in ("lower", "higher") for v in bt.values()):
+            bad.append(f"{where}better must map metric names to 'lower' or 'higher'")
+        elif any(k not in blk.get("metrics", {}) for k in bt):
+            bad.append(f"{where}better names a metric the card does not hold: " + ", ".join(k for k in bt if k not in blk.get("metrics", {}))[:120])
     cmp = card.get("compare")
     if cmp is not None:
         if not isinstance(cmp.get("name"), str) or not isinstance(cmp.get("metrics"), dict):

@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-from decide import lower_names  # noqa: E402
+from decide import card_lower, lower_names  # noqa: E402
 import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
@@ -103,8 +103,6 @@ def check(exp, path):
     for a, arm in arms.items():
         if not any(k in arm for k in ("names", "cards", "recipe", "command")):
             bad.append(f"arm {a}: needs names / cards (results) or recipe / command (how to run)")
-    if exp["metric"] in lower_names(root) and exp["direction"] != "lower":
-        bad.append(f"metric {exp['metric']} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
     pred = exp["prediction"]
     if not isinstance(pred.get("value"), (int, float)) or pred.get("vs") not in arms:
         bad.append("prediction needs {value: number, vs: <arm letter>}")
@@ -124,6 +122,7 @@ def check(exp, path):
         bad.append(f"no clause on the headline metric {exp['metric']}")
     if not isinstance(exp["evaluate"].get("split"), str) or not exp["evaluate"]["split"].strip():
         bad.append("evaluate.split must name the split or benchmark set (val | test | confirm | <benchmark>)")
+    every = []  # the cards of all arms: the directions they declare must agree (decide.card_lower)
     for a in arms:
         try:
             cards = arm_cards(exp, a, root)
@@ -132,11 +131,24 @@ def check(exp, path):
             continue
         for s, lst in cards.items():
             for m, full, ref in lst:
+                every.append((m, full, ref))
                 if full is not None:  # a full card follows the evaluator contract (legacy cards without the schema field pass); a bare metrics dict is accepted as is
                     bad += [f"arm {a}: card {ref}: {b}" for b in CARD.validate(full, P.cfg_of(root).get("headline_metrics", []))]
                 for c in exp["rule"]:
                     if isinstance(c, dict) and c.get("metric") and c["metric"] not in m and (not c.get("subsets") or s in c["subsets"]):
                         bad.append(f"arm {a}{' ' + s if s else ''}: card {ref} has no metric {c['metric']}")
+    for metric in dict.fromkeys([exp["metric"]] + [c["metric"] for c in exp["rule"] if isinstance(c, dict) and c.get("metric")]):
+        try:
+            said = card_lower(metric, every, root)
+        except ValueError as e:
+            bad.append(str(e))
+            continue
+        if metric != exp["metric"]:
+            continue
+        if said is not None and said != (exp["direction"] == "lower"):
+            bad.append(f"direction {exp['direction']} contradicts the cards: their evaluator declares {metric} {'lower' if said else 'higher'}-is-better")
+        elif said is None and metric in lower_names(root) and exp["direction"] != "lower":
+            bad.append(f"metric {metric} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
     return bad
 
 

@@ -3,7 +3,7 @@
   "schema": 1,
   "required": ["schema", "name", "split", "metrics", "commit", "date"],
   "one_of": [["frames", "n"]],
-  "types": {"schema": "int", "name": "str", "split": "str", "subset": "str", "fresh": "bool", "frames": "int", "n": "int", "metrics": "dict", "commit": "str", "date": "str", "registry": "dict", "overrides": "dict", "info": "dict", "compare": "dict", "settings": "dict"},
+  "types": {"schema": "int", "name": "str", "split": "str", "subset": "str", "fresh": "bool", "frames": "int", "n": "int", "metrics": "dict", "commit": "str", "date": "str", "registry": "dict", "overrides": "dict", "info": "dict", "compare": "dict", "settings": "dict", "better": "dict"},
   "fields": {
     "schema": "the version of this contract (1)",
     "name": "the registry name of the system evaluated (models/registry.json for lcr; any stable name for another problem)",
@@ -12,7 +12,8 @@
     "fresh": "true when the numbers were computed without the evaluator's cache",
     "frames": "the denominator: number of frames (lcr) - or",
     "n": "the denominator: number of samples / benchmark runs / test cases (generic name; a card has frames or n)",
-    "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); lower-is-better metrics are known by the experiment file's direction, else by name (project.json lower_is_better, plus the generic ms names of decide.py LOWER)",
+    "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); the direction of each is in better",
+    "better": "{metric: 'lower' | 'higher'} for the metrics of this card (the compare block carries its own map for compare.metrics), declared by the evaluator that defines them; a metric without an entry (e.g. a count) is undeclared. decide.py takes a metric's direction from here (the experiment's direction wins for its headline metric; cards that disagree are refused); for undeclared metrics and cards written without this field it falls back to project.json lower_is_better and the generic names",
     "commit": "the code commit the numbers were made with ('+dirty' when tracked files differed, '+?' when unknown)",
     "date": "YYYY-MM-DD HH:MM",
     "registry": "the registry entry used (checkpoint, config, standard settings) - lcr",

@@ -15,7 +15,8 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
   * deterministic: true (the arms share the checkpoint, e.g. a post-processing change): no training seed exists, so a single pair with an
     interval that excludes 0 counts as agreeing seeds
   * bands: the experiment's band for its headline metric, a clause's own band, else 0.010; lower-is-better: the experiment's direction for its
-    headline metric, else the generic cost names (LOWER) plus the problem's project.json "lower_is_better" list
+    headline metric, else the cards' own "better" map (the evaluator declares every metric it writes; cards that disagree are refused), else
+    for older cards the generic cost names (LOWER) plus the problem's project.json "lower_is_better" list
   * the headline is judged for its evidence (one seed, a disagreeing seed, an interval containing 0) also when its clause is a guard (max_loss)
     or it has no min_effect clause: a better headline on one seed is INCONCLUSIVE, not KEEP
   * --write writes decision.json next to the experiment file and appends "decide.py <date>: VERDICT (effect)" to the decision column of the
@@ -60,7 +61,7 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
 
 # TEMPORARY (D24, 2026-10-31): the lane problem's names (tag prefix lcr), used only while its project.json has no "lower_is_better" key
 # (that file is protected and the grant is pending); remove this set once the key is there
-LEGACY_LANE_LOWER = {"vert100", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"}
+LEGACY_LANE_LOWER = {"vert100", "verts_per_frame", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"}
 
 
 def lower_names(root=None):
@@ -75,11 +76,39 @@ def lower_names(root=None):
     return LOWER | (LEGACY_LANE_LOWER if c.get("tag_prefix") == "lcr" else set())
 
 
-def is_lower(metric, exp=None, root=None):
-    """lower is better: the experiment's direction for its headline metric, else the problem's names (lower_names)"""
+def card_lower(metric, cards=(), root=None):
+    """the direction the cards declare for a metric: True (lower is better) / False, or None when no card declares it. cards: (metrics,
+    card, ref) tuples; only cards that HOLD the metric count. A card declares through its "better" map ({metric: "lower" | "higher"},
+    written by its evaluator for every metric it writes, card contract); a card that holds the metric without declaring it (written
+    before the field, or a metric a script added) is undeclared and is read by the fallback lower_names. Refused (ValueError): declaring
+    cards that disagree, and a declaration that contradicts how the undeclared cards of the same comparison would be read"""
+    said, undeclared = {}, []
+    for m, c, ref in cards:
+        if not isinstance(m, dict) or metric not in m:
+            continue
+        b = c.get("better") if isinstance(c, dict) else None
+        if isinstance(b, dict) and b.get(metric) in ("lower", "higher"):
+            said.setdefault(b[metric] == "lower", []).append(str(ref))
+        else:
+            undeclared.append(str(ref))
+    if len(said) > 1:
+        raise ValueError(f"the cards disagree whether {metric} is lower-is-better (lower: {', '.join(said[True])}; higher: {', '.join(said[False])})")
+    if not said:
+        return None
+    low = next(iter(said))
+    if undeclared and low != (metric in lower_names(root)):
+        raise ValueError(f"{metric}: {', '.join(said[low])} declare it {'lower' if low else 'higher'}-is-better, but the older cards "
+                         f"{', '.join(undeclared)} would be read the other way (fallback: project.json lower_is_better); fix the fallback")
+    return low
+
+
+def is_lower(metric, exp=None, root=None, cards=()):
+    """lower is better: the experiment's direction for its headline metric, else what the cards declare (card_lower), else the
+    problem's names (lower_names: project.json, the generic LOWER, the temporary lane list) for cards written before the field existed"""
     if exp is not None and metric == exp.get("metric"):
         return exp.get("direction") == "lower"
-    return metric in lower_names(root)
+    declared = card_lower(metric, cards, root)
+    return declared if declared is not None else metric in lower_names(root)
 
 
 def paired_effect(metric, v_cards, c_cards, lower=None):
@@ -115,7 +144,7 @@ def judge_clause(clause, exp, cards, root=None):
     parts = []
     for s in subsets:
         vc, cc = cards[variant].get(s, []), cards[vs].get(s, [])
-        effect, diffs, interval = paired_effect(metric, vc, cc, is_lower(metric, exp, root))
+        effect, diffs, interval = paired_effect(metric, vc, cc, is_lower(metric, exp, root, list(vc) + list(cc)))
         flags = []
         if len(vc) != len(cc):
             flags.append(f"seed counts differ ({len(vc)} vs {len(cc)}): unpaired, counts as one seed")
@@ -222,7 +251,10 @@ def main():
         if bad:
             sys.exit(f"{exp.get('id')}: experiment file not ready: " + "; ".join(bad))
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path))))
-        d = decide_experiment(exp, root)
+        try:
+            d = decide_experiment(exp, root)
+        except ValueError as e:  # e.g. cards that disagree about a metric's direction
+            sys.exit(f"{exp.get('id')}: not decided: {e}")
         print(f"{d['id']}: {d['verdict']}: {d['why']}")
         for c in d["clauses"]:
             print(f"  {'ok  ' if c['ok'] else 'MISS'} {c['text']}" + (f"  flags: {', '.join(c['flags'])}" if c["flags"] else ""))

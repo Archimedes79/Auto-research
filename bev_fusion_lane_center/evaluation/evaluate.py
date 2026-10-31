@@ -167,7 +167,7 @@ def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=Fal
         info["nan_metrics"] = nan
         m = {k: v for k, v in m.items() if k not in nan}
     card = dict(schema=1, name=name, split=split, subset=subset or "", fresh=bool(fresh), frames=len(gts), registry=reg[name], overrides=dict(asm=over, tau=tau),
-                info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m)
+                info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m, better=SM.better(m))  # each metric's direction (card contract)
     if compare:
         import bootstrap as SB
         import topo_metrics as TM
@@ -176,7 +176,8 @@ def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=Fal
         sc = scenes(split, ks)
         pr = SB.paired(SB.frame_records(g, gts), SB.frame_records(g2, gts), sc, B=1000)
         pr.update(TM.paired([TM.frame_record(p, q) for p, q in zip(g, gts)], [TM.frame_record(p, q) for p, q in zip(g2, gts)], sc, B=1000))
-        card["compare"] = dict(name=compare, metrics=SM.card_any(g2, gts, extra=True), paired=pr)
+        m2 = SM.card_any(g2, gts, extra=True)
+        card["compare"] = dict(name=compare, metrics=m2, better=SM.better(m2), paired=pr)
     os.makedirs(f"{R}/runs/eval/{name}", exist_ok=True)
     out = f"{R}/runs/eval/{name}/{split}{'_' + subset if subset else ''}{'_fresh' if fresh else ''}{'_' + tag if tag else ''}.json"
     json.dump(card, open(out, "w", encoding="utf-8"), indent=1, default=float)

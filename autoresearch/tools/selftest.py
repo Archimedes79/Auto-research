@@ -252,6 +252,40 @@ try:
     json.dump(dict({k: v for k, v in pj.items() if k != "lower_is_better"}, tag_prefix="lcr"), open(f"{T}/project.json", "w"))
     assert "vert100" in DC.lower_names(T), "no key, the lane problem: the legacy list until its key is written"
     json.dump(pj, open(f"{T}/project.json", "w"))
+    # the evaluator declares each metric's direction in its cards ("better"): decide.py reads it there, not from names (D24)
+    def fcard(q, err, bt):
+        return dict(full, name="x", metrics=dict(Q=q, err=err), **({"better": bt} if bt is not None else {}))
+    LOW, HIGH = dict(Q="higher", err="lower"), dict(Q="higher", err="higher")
+    json.dump(dict(a=fcard(0.76, 0.20, LOW), b=fcard(0.75, 0.21, LOW), ca=fcard(0.73, 0.10, LOW), cb=fcard(0.72, 0.11, LOW),
+                   na=fcard(0.76, 0.20, None), nb=fcard(0.75, 0.21, None), nca=fcard(0.73, 0.10, None), ncb=fcard(0.72, 0.11, None),
+                   xa=fcard(0.76, 0.20, HIGH), xb=fcard(0.75, 0.21, HIGH), qa=fcard(0.76, 0.20, dict(Q="higher")),
+                   ta=dict(full, name="t", metrics=dict(ms=10.0), better=dict(ms="lower")), tc=dict(full, name="t", metrics=dict(ms=12.0), better=dict(ms="lower"))),
+              open(f"{T}/dir.json", "w"))
+    arm = lambda *ks: dict(cards=[f"dir.json#{k}" for k in ks])  # noqa: E731
+    errguard = [dict(metric="Q", min_effect=0.01), dict(metric="err", max_loss=0.02)]
+    assert verdict(arms=dict(a=arm("a", "b"), c=arm("ca", "cb")), rule=errguard) == "CUT", "err declared lower by the cards: +0.10 breaks the guard"
+    assert verdict(arms=dict(a=arm("na", "nb"), c=arm("nca", "ncb")), rule=errguard) == "KEEP", "no declaration, err not a known name: read higher"
+    # a card that holds err without declaring it is undeclared (read by the fallback), not "higher": next to cards declaring it lower that is refused
+    for arms_, why in ((dict(a=arm("xa", "xb"), c=arm("ca", "cb")), "disagree"), (dict(a=arm("a", "b"), c=arm("nca", "ncb")), "other way"),
+                       (dict(a=arm("qa", "b"), c=arm("ca", "cb")), "other way")):
+        try:
+            verdict(arms=arms_, rule=errguard)
+            raise AssertionError(f"must be refused: {why}")
+        except ValueError as e:
+            assert why in str(e), str(e)
+    import experiment as X
+    ef = f"{T}/experiments/E1_x/experiment.json"
+    contra = dict(base, arms=dict(a=arm("a", "b"), c=arm("ca", "cb")), metric="err", direction="higher", rule=[dict(metric="err", min_effect=0.01)])
+    assert any("contradicts the cards" in b for b in X.check(contra, ef)), X.check(contra, ef)
+    assert not any("contradicts" in b or "disagree" in b for b in X.check(dict(contra, direction="lower"), ef))
+    assert any("disagree" in b for b in X.check(dict(base, arms=dict(a=arm("xa", "xb"), c=arm("ca", "cb")), rule=errguard), ef)), "a guard's disagreement is found by check"
+    timing = dict(base, metric="err", direction="lower", rule=[dict(metric="err", min_effect=0.01), dict(metric="ms", max_loss=1.0, subsets=["t"])],
+                  arms=dict(a=dict(cards={"": ["dir.json#a", "dir.json#b"], "t": ["dir.json#ta"]}), c=dict(cards={"": ["dir.json#ca", "dir.json#cb"], "t": ["dir.json#tc"]})))
+    assert not any("disagree" in b or "contradicts" in b for b in X.check(timing, ef)), ("cards without the metric do not count", X.check(timing, ef))
+    import card as CARD
+    assert any("better" in b for b in CARD.validate(dict(full, name="x", metrics=dict(Q=1.0), better=dict(Q="up"))))
+    assert any("does not hold" in b for b in CARD.validate(dict(full, name="x", metrics=dict(Q=1.0), better=dict(err="lower"))))
+    assert CARD.validate(dict(full, name="x", metrics=dict(Q=1.0), better=dict(Q="higher"))) == []
     json.dump(dict(a=dict(Q=0.76, F=0.9), b=dict(Q=0.74, F=0.9), ca=dict(Q=0.73, F=0.9), cb=dict(Q=0.72, F=0.9)), open(f"{T}/cards.json", "w"))
     import experiment as X
     assert any("lower-is-better" in b for b in X.check(dict(base, arms=two, metric="vert100", direction="higher", rule=[dict(metric="vert100", min_effect=0.1)]), f"{T}/experiments/E1_x/experiment.json"))

@@ -31,6 +31,8 @@ Headline metrics (see `PROTOCOL.md`): **Q** at <= 14.3 vertices per 100 m, **top
 | [PROTOCOL.md](PROTOCOL.md) | splits, seeds, noise band, failure series, map-error protocol, timing protocol, TEST discipline |
 | [TEST_USAGE_LOG.md](TEST_USAGE_LOG.md) | every use of the TEST split |
 
+Every card of `evaluate.py` declares the direction of each of its metrics (`"better": {metric: "lower" | "higher"}`, also in the compare block; from `sparse_lanes/sparse_metrics.py` `better()`: lower for false length, vertices per 100 m, vertices per frame, duplicates, higher for the rest, none for counts; since 2026-10-31, D24): `../../autoresearch/tools/decide.py` takes each metric's direction from the cards it compares. A new lower-is-better metric goes into `LOWER_IS_BETTER` there, not into the tools.
+
 ## What the checks say (2026-10-25, `evaluate.py`, VAL 873 frames, paired over 22 scenes)
 - `evaluate.py` reproduces the stored cards exactly (champion with fork pruning S 0.769 / F1@1 0.870 / J 0.409 / lanes found 0.695; without pruning S 0.746 / J 0.265; recall variant Q 0.740 / lanes found 0.767).
 - The new metrics respond where S and Q are blind (`METRIC_RESPONSE.md`): broken lanes (60 % broken: topo R 0.69, F1 0.996, Q 0.995), reversed direction (topo F1 0.004), parallel duplicates (dup 0.34 at 30 %, ground truth 0.011).
