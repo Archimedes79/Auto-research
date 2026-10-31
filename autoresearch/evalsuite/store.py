@@ -5,7 +5,9 @@
     <run dir>/counts_<metric>_<chunk>.npz   the Counts of `CHUNK` consecutive frames of one metric (arrays '<pos>|<name>')
 
 Frames are appended in chunks (counts file first, then the frames.jsonl lines of that chunk), so a run that dies leaves a
-consistent prefix and `RunStore.open(...).done()` tells what to skip when it is resumed. Any shapes are allowed per frame
+consistent prefix and `RunStore.open(...).done()` tells what to skip when it is resumed (a frames.jsonl line cut off by the crash is dropped
+on open, and cut away when the store is opened for writing; a run directory has ONE writer: opening it for writing while another process still
+appends would cut that process's half-written line). Any shapes are allowed per frame
 (fixed or ragged); the store never interprets a count.
 """
 from __future__ import annotations
@@ -68,6 +70,36 @@ def warn_gained(gained: List[str], where: str) -> None:
               "keys both have)", file=sys.stderr, flush=True)
 
 
+def _read_frames(fp: str, repair: bool) -> List[Dict[str, Any]]:
+    """the frames of frames.jsonl. A cut-off LAST line (the run died inside a flush: a line is written with its newline, so a cut-off one is
+    the text after the last newline) is dropped; with repair the file is cut back to the last whole line, so the next flush appends cleanly
+    and the dropped frame is run again. Any other bad line (not JSON, not an object, or newline-terminated) is a damaged file: an error."""
+    with open(fp, "rb") as f:
+        raw = f.read()
+    frames, end, offset = [], 0, 0                                        # end: the byte after the last whole line
+    lines = raw.split(b"\n")
+    for n, line in enumerate(lines, 1):
+        offset += len(line) + 1
+        if line.strip(b" \t\r\0"):
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                if n == len(lines):                                       # nothing after it, not even a newline: cut off by the crash
+                    break
+                raise ValueError(f"{fp}: line {n} is not valid JSON: the file is damaged") from None
+            if not isinstance(rec, dict) or not {"label", "chunk", "pos"} <= rec.keys():
+                raise ValueError(f"{fp}: line {n} is not a frame record: the file is damaged")
+            frames.append(rec)
+        end = min(offset, len(raw))
+    if repair and end < len(raw):
+        with open(fp, "r+b") as f:
+            f.truncate(end)
+    elif repair and raw and not raw.endswith(b"\n"):
+        with open(fp, "ab") as f:
+            f.write(b"\n")
+    return frames
+
+
 class RunStore:
     def __init__(self, path: str, manifest: Dict[str, Any], mode: str):
         self.path, self.manifest, self.mode = path, manifest, mode
@@ -87,12 +119,17 @@ class RunStore:
         if os.path.exists(os.path.join(path, "manifest.json")):
             if not resume:
                 raise FileExistsError(f"{path} already holds a run (resume it or choose another name)")
-            st = cls.open(path, mode="a")
+            st = cls.open(path, mode="a", repair=False)                   # nothing is touched before it is clear that this is the same run
             gained: List[str] = []
             diff = [] if force else _identity_differences(st.manifest, manifest, gained=gained)
             if diff:
                 raise ValueError(f"{path} holds a different run ({'; '.join(diff)}): choose another name, or force=True to resume it anyway")
+            if os.path.exists(os.path.join(path, "frames.jsonl")):
+                st._frames = _read_frames(os.path.join(path, "frames.jsonl"), repair=True)
             warn_gained(gained, f"resume of {path}")
+            if any("frames_sha" in g for g in gained):
+                print(f"evalsuite warning: resume of {path}: the stored run predates the frame-list check (selection: frames_sha), its frames are not verified "
+                      "against this selection", file=sys.stderr, flush=True)
             old = {k: st.manifest.get(k) for k in _IDENTITY_KEYS}
             st.manifest.update({k: v for k, v in manifest.items() if k not in ("created",)})
             if gained and not force:                                       # the stored frames predate the new keys: keep the stored
@@ -112,14 +149,14 @@ class RunStore:
         return st
 
     @classmethod
-    def open(cls, path: str, mode: str = "r") -> "RunStore":
+    def open(cls, path: str, mode: str = "r", repair: Optional[bool] = None) -> "RunStore":
+        """repair (default: when opened for writing): cut a torn last line of frames.jsonl away (_read_frames)"""
         with open(os.path.join(path, "manifest.json"), encoding="utf-8") as f:
             manifest = json.load(f)
         st = cls(path, manifest, mode)
         fp = os.path.join(path, "frames.jsonl")
         if os.path.exists(fp):
-            with open(fp, encoding="utf-8") as f:
-                st._frames = [json.loads(line) for line in f if line.strip()]
+            st._frames = _read_frames(fp, repair=mode != "r" if repair is None else repair)
         st._n_chunks = 1 + max((fr["chunk"] for fr in st._frames), default=-1)
         return st
 

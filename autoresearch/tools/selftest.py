@@ -4,7 +4,7 @@
 
 Tests: run.py (done flag only on success, retry only on a CUDA unknown error, timeout, card check, TEST guard, --after waits / blocks / sees a
 stalled run, snapshot commit + tag per run through a temporary index, a finished id is refused without --again, a failed or stalled id is resumed
-and keeps its first tag, a planned ledger row keeps its prediction, GPU slots reclaim dead owners and block on live ones, no git identity refused),
+and keeps its first tag, a planned ledger row keeps its prediction, GPU slots reclaim dead owners one launcher at a time and block on live ones, code edited during a run is recorded as drift, no git identity refused), project.locked (renewed by a live holder, a dead holder's lock taken over),
 tick.py (dry run, derived states that are never written back, gpu slots from the slot directories, dependencies, commands from the schedule or the experiment arm, blocked items), ledger.py (concurrent notes under the lock, sync, tail with the runs in progress), decide.py (typed scores and experiment files with cards: seeds, interval, guards, subsets, deterministic), experiment.py (check), card.py (the evaluator contract, a benchmark script as a non-ML problem through the same loop, the holdout split from project.json), check_numbers.py, schedule.py (next, derived states), clean_temp.py.
 """
 import csv
@@ -202,7 +202,8 @@ try:
     json.dump(dict(full, name="c", metrics=dict(Q=0.730, F=0.9)), open(f"{T}/runs/eval/c/val.json", "w"))
     json.dump(dict(a=dict(Q=0.76, F=0.9), b=dict(Q=0.74, F=0.9), ca=dict(Q=0.73, F=0.9), cb=dict(Q=0.72, F=0.9)), open(f"{T}/cards.json", "w"))
     base = dict(id="E1", title="t", kind="variant", metric="Q", direction="higher", band=0.01, prediction=dict(value=0.03, vs="c"), control="c",
-                rule=[dict(metric="Q", min_effect=0.01), dict(metric="F", max_loss=0.01)], evaluate=dict(split="val", compare="c"))
+                rule=[dict(metric="Q", min_effect=0.01), dict(metric="F", max_loss=0.01)], evaluate=dict(split="val", compare="c"),
+                pairing="position")  # these fixtures carry no seed identities: card i against card i is declared (see the pairing tests below)
     def verdict(**kw):
         exp = dict(base, **kw)
         json.dump(exp, open(f"{T}/experiments/E1_x/experiment.json", "w"))
@@ -296,6 +297,98 @@ try:
     assert any("no metric" in b for b in X.check(dict(exp, rule=[dict(metric="Q", min_effect=0.01), dict(metric="nope", max_loss=0.1)]), f"{T}/experiments/E1_x/experiment.json"))
     assert subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write"], capture_output=True, text=True, env=env).returncode == 0
     assert os.path.exists(f"{T}/experiments/E1_x/decision.json")
+    # evidence that cannot be compared is refused, not decided (review 2026-10-31: seeds paired by position, other splits / frame counts, infinity)
+    def fc(name, q, **kw):
+        return dict(full, name=name, metrics=dict(Q=q), **kw)
+    onlyq = [dict(metric="Q", min_effect=0.01)]
+    nopair = lambda **kw: {k: v for k, v in dict(base, **kw).items() if k != "pairing"}  # noqa: E731
+    json.dump(dict(v0=fc("v0", 0.76), v1=fc("v1", 0.72), c0=fc("c0", 0.71), c1=fc("c1", 0.74)), open(f"{T}/seeds.json", "w"))
+    refs = lambda *ks: [f"seeds.json#{k}" for k in ks]  # noqa: E731
+    # the control lists its seeds in the other order: by position every difference would be positive (KEEP); by seed seed 1 is worse
+    by_seed = dict(a=dict(cards=refs("v0", "v1"), seeds=[0, 1]), c=dict(cards=refs("c1", "c0"), seeds=[1, 0]))
+    assert verdict(arms=by_seed, rule=onlyq, pairing="") == "INCONCLUSIVE", "seeds are paired by identity, not by list position"
+    assert DC.decide_experiment(nopair(arms=by_seed, rule=onlyq), T)["pairing"] == "seed"
+    for arms_, why in ((dict(a=dict(cards=refs("v0", "v1")), c=dict(cards=refs("c0", "c1"))), "no seed identities"),
+                       (dict(a=dict(cards=refs("v0", "v1"), seeds=[0, 1]), c=dict(cards=refs("c0", "c1"), seeds=[0, 2])), "not the same"),
+                       (dict(a=dict(cards=refs("v0", "v1"), seeds=[0, 0]), c=dict(cards=refs("c0", "c1"), seeds=[0, 0])), "twice")):
+        try:
+            verdict(arms=arms_, rule=onlyq, pairing="")
+            raise AssertionError(f"must be refused: {why}")
+        except ValueError as e:
+            assert why in str(e), str(e)
+        assert any("cannot be decided" in b and why in b for b in X.check(nopair(arms=arms_, rule=onlyq), ef)), "check finds what decide refuses"
+    json.dump(dict(t=fc("t", 0.80, split="test", frames=30), v10=fc("v10", 0.76, frames=10), c10=fc("c10", 0.71, frames=10), c20=fc("c20", 0.71, frames=20)),
+              open(f"{T}/compat.json", "w"))
+    one_card = lambda a, c: dict(a=dict(cards=[f"compat.json#{a}"]), c=dict(cards=[f"compat.json#{c}"]))  # noqa: E731
+    for arms_, why in ((one_card("t", "c10"), "split"), (one_card("v10", "c20"), "denominator")):
+        try:
+            verdict(arms=arms_, rule=onlyq)
+            raise AssertionError(f"must be refused: {why}")
+        except ValueError as e:
+            assert "not evaluated on the same thing" in str(e) and why in str(e), str(e)
+        assert any("cannot be decided" in b for b in X.check(dict(base, arms=arms_, rule=onlyq), ef))
+    assert verdict(arms=one_card("v10", "c10"), rule=onlyq) == "INCONCLUSIVE", "same split and frames: decided (one seed)"
+    assert verdict(arms=one_card("v10", "c20"), rule=onlyq, evaluate=dict(split="val", compare="c", allow=["denominator"])) == "INCONCLUSIVE", "a known difference is allowed"
+    # a field that only one card has is a difference (a new `protocol` against an old card); an arm the rule does not use is not compared; allow must be a list
+    json.dump(dict(pa=fc("pa", 0.76, protocol="gt-v2"), pb=fc("pb", 0.71), o99=fc("o99", 0.5, frames=99)), open(f"{T}/proto.json", "w"))
+    proto = dict(a=dict(cards=["proto.json#pa"]), c=dict(cards=["proto.json#pb"]))
+    try:
+        verdict(arms=proto, rule=onlyq)
+        raise AssertionError("a protocol on one side only must be refused")
+    except ValueError as e:
+        assert "protocol" in str(e) and "missing" in str(e), str(e)
+    assert verdict(arms=proto, rule=onlyq, evaluate=dict(split="val", compare="c", allow=["protocol"])) == "INCONCLUSIVE"
+    assert verdict(arms=dict(one_card("v10", "c10"), o=dict(cards=["compat.json#c20", "proto.json#o99"])), rule=onlyq) == "INCONCLUSIVE", "an unused arm is not compared"
+    try:
+        verdict(arms=one_card("v10", "c20"), rule=onlyq, evaluate=dict(split="val", compare="c", allow="denominator"))
+        raise AssertionError("allow as a string must be refused")
+    except ValueError as e:
+        assert "allow must be a list" in str(e), str(e)
+    assert any("allow must be a list" in b for b in X.check(dict(base, arms=two, evaluate=dict(split="val", allow="denominator")), ef))
+    # pairing: the experiment-level seeds declare one common order (position); an arm's own wrong-length seeds are an error; position overrides the
+    # card seeds (two models of one seed); one card against one card is no pairing at all
+    assert DC.decide_experiment(nopair(arms=dict(a=dict(cards=refs("v0", "v1")), c=dict(cards=refs("c0", "c1"))), seeds=[0, 1], rule=onlyq), T)["pairing"] == "position"
+    try:
+        verdict(arms=dict(a=dict(cards=refs("v0", "v1"), seeds=[0, 1, 2]), c=dict(cards=refs("c0", "c1"), seeds=[0, 1])), rule=onlyq, pairing="")
+        raise AssertionError("seeds of the wrong length must be refused")
+    except ValueError as e:
+        assert "3 seeds for 2 cards" in str(e), str(e)
+    json.dump(dict(m0=fc("m0", 0.76, seed=0), m1=fc("m1", 0.75, seed=0), n0=fc("n0", 0.71, seed=0), n1=fc("n1", 0.72, seed=0), s1=fc("s1", 0.76, seed=1), s0=fc("s0", 0.71, seed=0)),
+              open(f"{T}/models.json", "w"))
+    models = dict(a=dict(cards=["models.json#m0", "models.json#m1"]), c=dict(cards=["models.json#n0", "models.json#n1"]))
+    try:
+        verdict(arms=models, rule=onlyq, pairing="")
+        raise AssertionError("two models of one seed cannot be paired by seed")
+    except ValueError as e:
+        assert "twice" in str(e), str(e)
+    assert verdict(arms=models, rule=onlyq) == "KEEP", "pairing: position is the declared way for two models per arm that carry the same seed"
+    assert verdict(arms=dict(a=dict(cards=["models.json#s1"]), c=dict(cards=["models.json#s0"])), rule=onlyq, pairing="") == "INCONCLUSIVE", "one card against one: nothing to pair"
+    # check never raises on a malformed file: it reports it
+    json.dump(dict(pl=fc("pl", 0.76, compare=dict(name="c0", metrics=dict(Q=0.7), paired=dict(Q=dict(lo=0.01))))), open(f"{T}/edge.json", "w"))
+    for arms_ in (dict(a=dict(cards=[]), c=dict(cards=refs("c0"))), dict(a=dict(cards=["edge.json#pl"]), c=dict(cards=refs("c0")))):
+        found = X.check(dict(base, arms=arms_, rule=onlyq), ef)
+        assert any("cannot be decided" in b for b in found), found
+    for exp_, why in ((dict(base, arms=dict(a=5, c=dict(cards=refs("c0")))), "must be an object"), (dict(base, arms=dict(a=dict(cards="seeds.json#v0"), c=dict(cards=refs("c0")))), "cards must be"),
+                      (dict(base, arms=two, rule=[dict(metric=["Q"], min_effect=0.01)]), "must be strings"), (dict(base, arms=two, variant="c"), "is the control")):
+        found = X.check(exp_, ef)                                          # typing errors in the file are reported, never raised
+        assert any(why in b for b in found), (why, found)
+    # the pairing recorded is the weakest used anywhere: a clause against an arm without identities pairs by order, whatever the headline does
+    json.dump(dict(sa0=fc("sa0", 0.76, seed=0), sa1=fc("sa1", 0.74, seed=1), sc0=fc("sc0", 0.71, seed=0), sc1=fc("sc1", 0.72, seed=1)), open(f"{T}/idseeds.json", "w"))
+    json.dump(dict(d0=dict(Q=0.70), d1=dict(Q=0.70)), open(f"{T}/bare.json", "w"))
+    mixed3 = dict(a=dict(cards=["idseeds.json#sa0", "idseeds.json#sa1"]), c=dict(cards=["idseeds.json#sc1", "idseeds.json#sc0"]), d=dict(cards=["bare.json#d0", "bare.json#d1"]))
+    assert DC.decide_experiment(nopair(arms=mixed3, seeds=[0, 1], rule=onlyq), T)["pairing"] == "seed"
+    assert DC.decide_experiment(nopair(arms=mixed3, seeds=[0, 1], rule=onlyq + [dict(metric="Q", min_effect=0.01, vs="d")]), T)["pairing"] == "position"
+    assert any("must be a finite number" in b for b in X.check(dict(base, arms=two, rule=[dict(metric="Q", min_effect="0.01")]), ef))
+    assert any("infinite" in b for b in CARD.validate(dict(full, name="x", metrics=dict(Q=10 ** 400)))), "an int beyond the float range is refused, not an OverflowError"
+    json.dump(dict(i=dict(Q=float("inf")), j=dict(Q=0.7)), open(f"{T}/inf.json", "w"))
+    for call in (lambda: verdict(arms=dict(a=dict(cards=["inf.json#i"]), c=dict(cards=["inf.json#j"])), rule=onlyq), lambda: DC.decide([float("inf"), 0.9], [0.7, 0.7])):
+        try:
+            call()
+            raise AssertionError("an infinite score must be refused")
+        except ValueError as e:
+            assert "finite" in str(e), str(e)
+    assert any("finite" in b for b in X.check(dict(base, band=float("inf"), arms=two), ef)) and any("finite" in b for b in X.check(dict(base, arms=two, rule=[dict(metric="Q", min_effect=float("inf"))]), ef))
+    json.dump(dict(base, arms=two), open(f"{T}/experiments/E1_x/experiment.json", "w"))  # the file the next steps read
     # tick: item states are derived from the run records and never written back; start what fits (gpu slots = the launchers' own slot directories), commands from the schedule or the experiment arm
     import schedule as SC
     for rid in ("S.ta", "S.tb"):
@@ -573,6 +666,111 @@ try:
     guard_hook.selftest()
     import metrics  # P3: loop table from ledger, decision files and TEST log
     metrics.selftest()
+    # review 2026-10-31, defect 4: launchers that judge the same stale GPU slot stale reclaim it one at a time, and a late release of a reclaimed holder keeps the new owner's slot
+    slots = f"{T}/runs/.race_slots"
+    late = RUN.GpuSlot(f"{T}/runs", 1, "S.late", f"{T}/runs/S.late", base=slots)
+    assert late.try_take()
+    json.dump(dict(id="S.late", pid=999999, run_dir=f"{T}/runs/S.late", token=late.token), open(f"{slots}/0/run.json", "w"))  # judged dead (here: a dead pid)
+    sync = threading.Barrier(4)
+
+    class Racy(RUN.GpuSlot):
+        judged = False
+
+        def stale(self, s):                      # all four launchers judge the slot stale at the same moment
+            r = super().stale(s)
+            if not self.judged:
+                self.judged = True
+                sync.wait(10)
+            return r
+    racers = [Racy(f"{T}/runs", 1, f"S.race{i}", f"{T}/runs/S.race{i}", base=slots) for i in range(4)]
+    real_rmtree = shutil.rmtree
+
+    def slow_rmtree(p, *a, **k):                 # and then remove the old slot at their own pace: the first has taken the slot before the next one begins
+        name = threading.current_thread().name
+        time.sleep(0.15 * int(name[4:]) if name.startswith("race") else 0)
+        real_rmtree(p, *a, **k)
+    took = {}
+    ths = [threading.Thread(target=lambda g=g: took.update({g.id: g.try_take()}), name=f"race{i}") for i, g in enumerate(racers)]
+    shutil.rmtree = slow_rmtree
+    try:
+        for th in ths:
+            th.start()
+        for th in ths:
+            th.join()
+    finally:
+        shutil.rmtree = real_rmtree
+    winner = [g for g in racers if took[g.id]]
+    assert len(winner) == 1, f"{len(winner)} launchers own one slot: {took}"
+    for g in racers:
+        if g is not winner[0]:
+            g.release()                          # the losers hold nothing
+    late.release()                               # the old holder's release comes late: the slot has a new owner
+    assert RUN.record(f"{slots}/0").get("id") == winner[0].id, "a release removed the reservation of the launcher that reclaimed the slot"
+    winner[0].release()
+    assert not os.path.exists(f"{slots}/0")
+    # review 2026-10-31, defect 8: the holder renews its lock, so one inside its block for longer than stale_s is not taken over; a dead holder's lock is;
+    # a lock that was taken over is not removed by its old holder
+    PJ, lk = RUN.P, f"{T}/state.csv"
+    with PJ.locked(lk, stale_s=1):
+        time.sleep(2.5)
+        try:
+            with PJ.locked(lk, wait_s=0.5, stale_s=1):
+                raise AssertionError("a lock of a live holder was taken over")
+        except TimeoutError:
+            pass
+        real_getmtime = os.path.getmtime         # a waiter that read an old mtime of a lock that was renewed since must put the lock back
+        os.path.getmtime = lambda p: time.time() - 99 if p == lk + ".lock" else real_getmtime(p)
+        try:
+            with PJ.locked(lk, wait_s=0.5, stale_s=1):
+                raise AssertionError("a lock of a live holder was taken over from an old reading")
+        except TimeoutError:
+            pass
+        finally:
+            os.path.getmtime = real_getmtime
+        assert os.path.exists(lk + ".lock") and not [f for f in os.listdir(T) if ".stale." in f]
+    assert not os.path.exists(lk + ".lock")
+    open(lk + ".lock", "w").write("999999 0 deadbeef")
+    os.utime(lk + ".lock", (time.time() - 5, time.time() - 5))
+    with PJ.locked(lk, wait_s=2, stale_s=1):
+        assert "deadbeef" not in open(lk + ".lock").read(), "the lock of a dead holder was not taken over"
+    with PJ.locked(lk, stale_s=1):
+        os.remove(lk + ".lock")                  # taken over by another context
+        open(lk + ".lock", "w").write("1 1 newholder")
+    assert open(lk + ".lock").read() == "1 1 newholder", "the old holder removed the lock of the new one"
+    os.remove(lk + ".lock")
+    # review 2026-10-31, defect 3: a code file that changes on disk while the run goes is recorded (run record and ledger row), an unedited run has no drift key
+    dr = go("S.drift", ["bash", "-c", f"echo 'x = 3' > {T}/code/a.py; echo ran"])
+    assert dr.returncode == 0 and RUN.record(f"{T}/runs/S.drift").get("code_drift") == {"n": 1, "paths": ["code/a.py"]} \
+        and "code on disk changed" in rows()["S.drift"]["notes"], (dr.stdout, RUN.record(f"{T}/runs/S.drift"))
+    ctl = go("S.nodrift", ["bash", "-c", "echo ran"])
+    assert ctl.returncode == 0 and not {"code_drift", "code_drift_check"} & set(RUN.record(f"{T}/runs/S.nodrift")) and "code on disk" not in rows()["S.nodrift"]["notes"], ctl.stdout
+    # the same in a repository with a HEAD: a commit that HEAD gains outside the code folders is no drift; a check that fails reports why and does not raise
+    T3 = tempfile.mkdtemp(prefix="ar_drift_")
+    G3 = ["git", "-c", "safe.directory=*", "-C", T3]
+    os.makedirs(f"{T3}/code")
+    for f in ("code/a.py", "other.txt"):
+        open(f"{T3}/{f}", "w").write("1\n")
+    for args in (["init", "-q"], ["config", "user.name", "selftest"], ["config", "user.email", "selftest@example.invalid"], ["add", "-A"], ["commit", "-q", "-m", "c0"]):
+        subprocess.run(G3 + args, check=True, capture_output=True)
+    cfg3 = dict(code_dirs=["code"], fingerprint_extra=[])
+    before = RUN.drift_hash(T3, cfg3)  # what main() takes before the snapshot and right after it
+    snap = RUN.git_snapshot(T3, cfg3, "t", "S.d3", "m")[0]
+    spec = RUN.snapshot_spec(T3, cfg3)[1]
+    open(f"{T3}/other.txt", "w").write("2\n")
+    subprocess.run(G3 + ["commit", "-q", "-a", "-m", "c1"], check=True, capture_output=True)
+    assert RUN.code_drift(T3, cfg3, snap, before, spec) == ({}, ""), RUN.code_drift(T3, cfg3, snap, before, spec)
+    open(f"{T3}/code/doc.md", "w").write("notes\n")  # a file that is no code: not even a different hash, never drift
+    assert RUN.code_drift(T3, cfg3, snap, before, spec) == ({}, "")
+    open(f"{T3}/code/a.py", "w").write("2\n")
+    assert RUN.code_drift(T3, cfg3, snap, before, spec) == ({"n": 1, "paths": ["code/a.py"]}, "")
+    assert RUN.code_drift(T3, cfg3, "0123456789", before, spec)[1].startswith("failed:")
+    assert RUN.code_drift(T3, cfg3, snap, before, None)[1].startswith("failed:"), "no launch paths: reported, not guessed"
+    shutil.rmtree(f"{T3}/code")  # a whole code folder removed and committed away while the run went is drift too (the launch paths are used)
+    subprocess.run(G3 + ["commit", "-q", "-a", "-m", "gone"], check=True, capture_output=True)
+    assert RUN.code_drift(T3, cfg3, snap, before, spec) == ({"n": 1, "paths": ["code/a.py"]}, "")
+    shutil.rmtree(T3, ignore_errors=True)
+    nochk = go("S.nochk", ["bash", "-c", f"echo 'x = 4' > {T}/code/a.py; echo ran"], "--no-drift-check")
+    assert nochk.returncode == 0 and not {"code_drift", "code_drift_check"} & set(RUN.record(f"{T}/runs/S.nochk")), "--no-drift-check skips the check"
     strict = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc.md", f"{T}/src.json", "--strict"], capture_output=True, text=True)
     assert strict.returncode == 1, "check_numbers --strict must fail on a number missing from the sources"
     print("autoresearch tools selftest passed")

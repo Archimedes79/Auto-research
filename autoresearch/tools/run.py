@@ -18,7 +18,13 @@ What it does (paths from the problem's project.json, see project.py):
                 on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
                 user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger.
                 Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
-                fixed by the metric card, which names the registry entry and the commit)
+                fixed by the metric card, which names the registry entry and the commit). Guaranteed: the commit names the code at LAUNCH. That the
+                command ran it is the command's job (it runs `git archive $AR_COMMIT`); every other command runs from the working tree. So when the
+                run ends the code files on disk (.py / .sh of the code folders and of autoresearch/, fingerprint_extra) are looked at again: a
+                hash like the launch one (about a second) says whether anything changed; only then are they compared with the snapshot (the paths
+                of the launch, a temporary index): a difference is written into the run record (code_drift: n, paths = the first 10) and as a note
+                into the ledger row; no difference leaves no key, a check that itself fails leaves code_drift_check = "failed: <reason>" and never
+                fails the run; --no-drift-check skips it. Not seen: an edit made between the first hash and the snapshot and undone before the end
   * id reuse    an id that is still running (fresh heartbeat) or finished with exit 0 is refused (a new id, or --again for a deliberate repeat);
                 a failed / blocked / stalled id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
                 and a note "code changed since attempt 1" (when the fingerprint differs) go into the record; result and decision of the earlier
@@ -32,10 +38,11 @@ What it does (paths from the problem's project.json, see project.py):
   * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under project.json gpu_slots_dir
                 (relative to the problem folder; problems that share one GPU name the same folder AND the same gpu_slots count), default
                 <run_records>/.gpu_slots, taken
-                with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed); --gpu-max-mb
+                with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed, one launcher at a time
+                (lock <slots dir>/.reclaim.lock); the owner file holds a token and a launcher releases only a slot that still carries its own); --gpu-max-mb
                 additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes (720), then status gpu_busy (exit 1). The
                 owner check needs launcher and slot owner in the same process namespace (all WSL or all Windows)
-  * environment the command gets AR_RUN_ID and, with a snapshot, AR_COMMIT / AR_TAG (the commit this attempt ran; the tag names attempt 1)
+  * environment the command gets AR_RUN_ID and, with a snapshot, AR_COMMIT / AR_TAG (the commit this attempt was launched from; the tag names attempt 1)
   * timeout     --timeout <minutes>: the command and its process group are killed after the limit (status timeout, exit 124)
   * retry       a run whose LAST attempt printed a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
   * stalled     a record in state running / waiting whose heartbeat is older than AR_STALE_S seconds (default 300) counts as stalled for --after,
@@ -57,6 +64,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
@@ -102,40 +110,59 @@ def git_identity_error(root):
     return "" if r.returncode == 0 else (r.stderr.strip() or "git var GIT_COMMITTER_IDENT failed")[:160]
 
 
-def git_snapshot(root, cfg, prefix, run_id, msg):
-    """commit the code through a temporary index (shared index and branches untouched) and tag it prefix/run_id; returns (commit, tag, note)"""
-    idx = None
+def snapshot_spec(root, cfg):
+    """(repository top, the paths a snapshot covers relative to it, HEAD or ''): code_dirs, fingerprint_extra and the research system itself"""
+    top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
+    rel = os.path.relpath(root, top).replace("\\", "/")
+    rel = "" if rel == "." else rel + "/"
+    spec = [rel + d for d in cfg["code_dirs"]] + [rel + x for x in cfg["fingerprint_extra"]]
+    ar = os.path.relpath(P.AR, top).replace("\\", "/")
+    if not ar.startswith(".."):  # the research system itself, when it lives in the same repository
+        spec.append(ar)
+    head = git(top, "rev-parse", "-q", "--verify", "HEAD").stdout.strip()
+    in_head = set(git(top, "ls-tree", "-r", "--name-only", "HEAD").stdout.split()) if head else set()
+    spec = [s for s in spec if os.path.exists(os.path.join(top, s)) or any(h == s or h.startswith(s + "/") for h in in_head)]  # a deleted folder leaves the snapshot too
+    return top, spec, head
+
+
+def write_tree(top, spec, head):
+    """tree id of HEAD with the spec paths replaced by the working tree, made in a TEMPORARY index (the shared index is untouched); returns (tree, error text)"""
+    fd, idx = tempfile.mkstemp(prefix="ar_index_")
+    os.close(fd)
+    os.remove(idx)
     try:
-        if git(root, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
-            return "no-git", "", ""
-        top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
-        tag = f"{prefix}/{run_id}"
-        rel = os.path.relpath(root, top).replace("\\", "/")
-        rel = "" if rel == "." else rel + "/"
-        spec = [rel + d for d in cfg["code_dirs"]] + [rel + x for x in cfg["fingerprint_extra"]]
-        ar = os.path.relpath(P.AR, top).replace("\\", "/")
-        if not ar.startswith(".."):  # the research system itself, when it lives in the same repository
-            spec.append(ar)
-        head = git(top, "rev-parse", "-q", "--verify", "HEAD").stdout.strip()
-        in_head = set(git(top, "ls-tree", "-r", "--name-only", "HEAD").stdout.split()) if head else set()
-        spec = [s for s in spec if os.path.exists(os.path.join(top, s)) or any(h == s or h.startswith(s + "/") for h in in_head)]  # a deleted folder leaves the snapshot too
-        fd, idx = tempfile.mkstemp(prefix="ar_index_")
-        os.close(fd)
-        os.remove(idx)
         env = dict(os.environ, GIT_INDEX_FILE=idx)
         if head:
             r = git(top, "read-tree", "HEAD", env=env)
             if r.returncode != 0:
-                return "git-error", "", "read-tree: " + r.stderr.strip()[:120]
+                return "", "read-tree: " + r.stderr.strip()[:120]
         r = git(top, "add", "-A", "--", *spec, env=env)
         if r.returncode != 0:
-            return "git-error", "", "add: " + r.stderr.strip()[:120]
-        tree = git(top, "write-tree", env=env).stdout.strip()
+            return "", "add: " + r.stderr.strip()[:120]
+        r = git(top, "write-tree", env=env)
+        if r.returncode != 0:
+            return "", "write-tree: " + r.stderr.strip()[:120]
+        return r.stdout.strip(), ""
+    finally:
+        if os.path.exists(idx):
+            os.remove(idx)
+
+
+def git_snapshot(root, cfg, prefix, run_id, msg):
+    """commit the code through a temporary index (shared index and branches untouched) and tag it prefix/run_id; returns (commit, tag, note)"""
+    try:
+        if git(root, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
+            return "no-git", "", ""
+        tag = f"{prefix}/{run_id}"
+        top, spec, head = snapshot_spec(root, cfg)
+        tree, err = write_tree(top, spec, head)
+        if err:
+            return "git-error", "", err
         if head and tree == git(top, "rev-parse", "HEAD^{tree}").stdout.strip():
             commit = head
         else:
             args = ["commit-tree", tree, "-m", f"{run_id}: {msg}"[:200]] + (["-p", head] if head else [])
-            r = git(top, *args, env=env)
+            r = git(top, *args)
             if r.returncode != 0:
                 return "git-error", "", "commit-tree: " + r.stderr.strip()[:120]
             commit = r.stdout.strip()
@@ -154,9 +181,34 @@ def git_snapshot(root, cfg, prefix, run_id, msg):
         return commit[:10], tag, note
     except Exception as e:
         return "git-error", "", repr(e)[:120]
-    finally:
-        if idx and os.path.exists(idx):
-            os.remove(idx)
+
+
+def drift_hash(root, cfg):
+    """code_hash over the code folders AND the research system's own .py / .sh: the cheap first look of the drift check"""
+    return code_hash(root, dict(cfg, code_dirs=[*cfg["code_dirs"], os.path.relpath(P.AR, root)]))
+
+
+def code_drift(root, cfg, commit, before, spec):
+    """did the code files on disk change while the run went? before = drift_hash and spec = the snapshot's paths, both taken at launch; commit = the
+    snapshot. The same hash now -> ({}, '') at once. Else the working tree (temporary index) is compared with the snapshot over the LAUNCH paths (HEAD
+    may have moved on, a folder may be gone), keeping the code files (.py / .sh, fingerprint_extra): ({'n': differing files, 'paths': the first 10}, '')
+    or ({}, '') without one; a check that fails gives ({}, 'failed: <reason>'), it never raises"""
+    try:
+        if spec is None or before is None:
+            return {}, "failed: no launch state (snapshot paths or hash)"
+        if drift_hash(root, cfg) == before:
+            return {}, ""
+        top, spec_now, head = snapshot_spec(root, cfg)
+        live, err = write_tree(top, spec_now, head)
+        if err:
+            return {}, "failed: " + err
+        r = git(top, "diff-tree", "-r", "--name-only", commit, live, "--", *spec)
+        if r.returncode != 0:
+            return {}, "failed: diff-tree: " + r.stderr.strip()[:100]
+        paths = [p for p in r.stdout.splitlines() if p.endswith((".py", ".sh")) or any(p.endswith(x) for x in cfg["fingerprint_extra"])]
+        return ({"n": len(paths), "paths": paths[:10]} if paths else {}), ""
+    except Exception as e:
+        return {}, "failed: " + repr(e)[:100]
 
 
 def gpu_used_mb():
@@ -339,10 +391,13 @@ def take_claim(d):
 
 
 class GpuSlot:
-    """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed"""
+    """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed
+    (under a lock, so two launchers that judge the same slot stale do not both take it); the owner file carries a token and release() removes only
+    the slot that still carries it"""
 
     def __init__(self, records, n, run_id, run_dir, base=None):
         self.base, self.n, self.id, self.run_dir, self.held = base or os.path.join(records, ".gpu_slots"), n, run_id, run_dir, None
+        self.token = uuid.uuid4().hex
 
     def stale(self, s):
         if not os.path.exists(os.path.join(s, "run.json")):
@@ -359,6 +414,24 @@ class GpuSlot:
         owner = o.get("run_dir", "")
         return not pid_alive(o.get("pid")) or (owner and os.path.isdir(owner) and state_of(owner) != "running")
 
+    def own(self, s):
+        """write the owner file of slot s"""
+        save_rec(os.path.join(s, "run.json"), dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now(), token=self.token), indent=None)
+        self.held = s
+
+    def reclaim(self, s):
+        """take a slot that looked stale: serialised, the judgement is repeated inside the lock (a launcher that got there first has a live owner now)"""
+        try:
+            with P.locked(os.path.join(self.base, ".reclaim"), wait_s=10, stale_s=30):
+                if not self.stale(s):
+                    return False
+                shutil.rmtree(s, ignore_errors=True)
+                os.mkdir(s)
+                self.own(s)
+                return True
+        except OSError:  # FileExistsError: a launcher took the freed slot with a plain mkdir; TimeoutError: the lock stays busy; both: next round
+            return False
+
     def try_take(self):
         os.makedirs(self.base, exist_ok=True)
         for i in range(self.n):
@@ -366,22 +439,17 @@ class GpuSlot:
             try:
                 os.mkdir(s)
             except FileExistsError:
-                if not self.stale(s):
-                    continue
-                shutil.rmtree(s, ignore_errors=True)
-                try:
-                    os.mkdir(s)
-                except FileExistsError:
-                    continue
-            save_rec(os.path.join(s, "run.json"), dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now()), indent=None)
-            self.held = s
+                if self.stale(s) and self.reclaim(s):
+                    return True
+                continue
+            self.own(s)
             return True
         return False
 
     def release(self):
-        if self.held:
+        if self.held and record(self.held).get("token") == self.token:  # a slot that was reclaimed belongs to its new owner
             shutil.rmtree(self.held, ignore_errors=True)
-            self.held = None
+        self.held = None
 
 
 def slot_dir(root, cfg, records):
@@ -459,6 +527,7 @@ def main():
     ap.add_argument("--again", action="store_true", help="repeat an id that finished with exit 0 (otherwise refused)")
     ap.add_argument("--result", default="", help="json file the command writes its metrics to; embedded in the ledger when it exists")
     ap.add_argument("--no-git", action="store_true", help="do not snapshot and tag the code")
+    ap.add_argument("--no-drift-check", action="store_true", help="do not look at the end of the run whether the code on disk changed since the snapshot")
     ap.add_argument("--cwd", default=root, help="working directory of the command (default: problem folder)")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
@@ -558,6 +627,10 @@ def main():
         ch = code_hash(root, cfg)
         if prev.get("code_hash") and prev["code_hash"] != ch:
             notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")
+        try:
+            before = drift_hash(root, cfg)  # before the snapshot: a change while the snapshot is made counts, the precise check at the end tells
+        except OSError:  # a scratch file that vanished during the walk must not stop the launch: no hash, no drift check
+            before = None
         commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
         if gnote:
             notes.append(gnote)
@@ -566,8 +639,13 @@ def main():
         t1 = time.time()
         rc, attempt, tail, timed_out = 1, 0, "", False
         # the command learns which code snapshot it is (a launcher that trains from `git archive $AR_COMMIT` runs exactly the recorded code,
-        # also on a resumed id whose tag still names attempt 1)
-        cmd_env = dict(os.environ, AR_RUN_ID=a.id, **({"AR_COMMIT": commit, "AR_TAG": tag or prev.get("tag", "")} if commit not in ("skipped", "no-git", "git-error") else {}))
+        # also on a resumed id whose tag still names attempt 1; any other command runs from the working tree: see code_drift below)
+        snapshotted = commit not in ("skipped", "no-git", "git-error")
+        try:
+            launch_spec = snapshot_spec(root, cfg)[1] if snapshotted and not a.no_drift_check else None
+        except Exception:
+            launch_spec = None
+        cmd_env = dict(os.environ, AR_RUN_ID=a.id, **({"AR_COMMIT": commit, "AR_TAG": tag or prev.get("tag", "")} if snapshotted else {}))
         while attempt <= a.retries:
             attempt += 1
             try:
@@ -593,6 +671,14 @@ def main():
             res = json.dumps(json.load(open(a.result)))[:400]
         except Exception:
             res = "(result file unreadable)"
+    if snapshotted and not a.no_drift_check:  # the commit names the code at launch; did the code on disk change while the command ran?
+        drift, drift_err = code_drift(root, cfg, commit, before, launch_spec)
+        if drift:
+            rec["code_drift"] = drift
+            notes.append(f"code on disk changed while the run was going ({drift['n']} files, e.g. {', '.join(drift['paths'][:3])}): the commit/tag names the code at launch, "
+                         "which a command that does not execute AR_COMMIT may not have run")
+        if drift_err:
+            rec["code_drift_check"] = drift_err
     status = "ok" if rc == 0 else "timeout" if timed_out else "failed"  # a command's own exit 124 is a failure, not the launcher's timeout
     rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
     try:

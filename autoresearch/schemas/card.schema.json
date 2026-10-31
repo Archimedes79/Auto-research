@@ -10,6 +10,8 @@
     "split": "the data split or benchmark set the numbers come from (val | test | confirm | <benchmark name>); the holdout split (project.json holdout_split, default test) needs a logged id",
     "subset": "a named subset of the split (val250) or empty",
     "fresh": "true when the numbers were computed without the evaluator's cache",
+    "seed": "optional int or string: the training seed / repeat id of the system evaluated; decide.py pairs the cards of two arms by it (else by an arm's own `seeds` list, else by order: the experiment's `seeds` or `pairing`)",
+    "protocol": "optional string or dict: what the evaluator says about its ground truth, cache and frame list (a version, a hash); decide.py refuses cards of one comparison whose protocols differ",
     "frames": "the denominator: number of frames (lcr) - or",
     "n": "the denominator: number of samples / benchmark runs / test cases (generic name; a card has frames or n)",
     "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); the direction of each is in better",

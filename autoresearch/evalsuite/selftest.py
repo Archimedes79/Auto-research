@@ -168,6 +168,42 @@ def _():
         del st                                                          # no close(): the last 10 frames never reached disk
         r3 = RunStore.open(os.path.join(d, "c"))
         assert len(r3.frames) == CHUNK and len(r3.counts("m")) == CHUNK
+        # a crash inside a flush leaves a cut-off last line: readers ignore it, the store opened for writing cuts it away and goes on
+        fp = os.path.join(d, "c", "frames.jsonl")
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write('{"label": "s/999", "scene": "s", "ind')
+        assert len(RunStore.open(os.path.join(d, "c")).frames) == CHUNK, "a cut-off last line is ignored"
+        assert open(fp, encoding="utf-8").read().endswith("ind"), "reading does not change the file"
+        r4 = RunStore.create(os.path.join(d, "c"), {"name": "c"}, resume=True)
+        assert len(r4.frames) == CHUNK and not open(fp, encoding="utf-8").read().endswith("ind")
+        r4.add(FrameRef("s", 999), {"m": {"x": np.ones(2)}}, {}, {}, [], {})
+        r4.close()
+        r5 = RunStore.open(os.path.join(d, "c"))
+        assert len(r5.frames) == CHUNK + 1 and r5.frames[-1]["label"] == "s/999" and len(r5.counts("m")) == CHUNK + 1
+        d2 = os.path.join(d, "d2")                                         # damage that is not a cut-off record is refused, never repaired away
+        st2 = RunStore.create(d2, {"name": "d2"})
+        for i in range(3):
+            st2.add(FrameRef("s", i), {"m": {"x": np.ones(2)}}, {}, {}, [], {})
+        st2.close()
+        for tail, why in (("12", "not a frame record"), ("{}\n", "not a frame record"), ("garbage\n", "not valid JSON")):
+            with open(os.path.join(d2, "frames.jsonl"), "a", encoding="utf-8") as f:
+                f.write(tail)
+            try:
+                RunStore.create(d2, {"name": "d2"}, resume=True)
+                raise AssertionError(f"{tail!r} must be refused")
+            except ValueError as e:
+                assert why in str(e), e
+            raw = open(os.path.join(d2, "frames.jsonl"), "rb").read()
+            assert raw.endswith(tail.encode()), "refused, so not changed"
+            open(os.path.join(d2, "frames.jsonl"), "wb").write(raw[:-len(tail)])
+        lines = open(fp, encoding="utf-8").read().split("\n")
+        lines[3] = lines[3][:20]                                         # a damaged line that is not the last one: an error, not a repair
+        open(fp, "w", encoding="utf-8").write("\n".join(lines))
+        try:
+            RunStore.open(os.path.join(d, "c"))
+            raise AssertionError("a damaged interior line must be refused")
+        except ValueError as e:
+            assert "line 4" in str(e), e
         assert r.frame("s0/3") is r.frame("s0/003") is r.frame("s0:3"), "an unpadded label names the same frame"
         try:
             r.frame("s9/0")
@@ -425,6 +461,24 @@ def _():
             pass
         r = suite.quant.run(frames=gap, state="reset", name="g", progress=0)
         assert {f.label for f in gap} == set(r.labels())
+        one, two = [FrameRef("toy-01", 0)], [FrameRef("toy-01", 3)]         # another frame list under the same name is another run
+        suite.quant.run(frames=one, state="reset", name="pick", progress=0)
+        assert len(suite.quant.run(frames=one, state="reset", name="pick", progress=0).frames) == 1, "the same frames resume"
+        try:
+            suite.quant.run(frames=two, state="reset", name="pick", progress=0)
+            raise AssertionError("another frame selection under the same run name must be refused")
+        except ValueError as e:
+            assert "frames_sha" in str(e), e
+        import contextlib
+        import io
+        import json
+        mf = os.path.join(suite.quant.dir, "pick", "manifest.json")       # a run stored before the frame list was part of the identity: resumes, with a warning
+        old = json.load(open(mf))
+        old["selection"].pop("frames_sha")
+        json.dump(old, open(mf, "w"))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            suite.quant.run(frames=one, state="reset", name="pick", progress=0)
+        assert "frames_sha" in err.getvalue() and "not verified" in err.getvalue(), err.getvalue()
         # interrupted run: a failing source in the middle; the resumed run gives the same numbers as an undisturbed one
         full = suite.quant.table(suite.quant.run(name="full", progress=0))
 

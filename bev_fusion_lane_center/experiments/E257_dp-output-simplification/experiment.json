@@ -12,7 +12,7 @@
   "vs": "c"
  },
  "variant": "a",
- "control": "c",
+ "control": "c", "pairing": "position",
  "arms": {
   "a": {
    "recipe": "assemble at the registry settings, then simplify_dp(g, 0.3): per polyline keep ends, nodes shared with another polyline and the Douglas-Peucker vertices (tolerance 0.3 m) between them; temp/loop21/e257_simplify.py writes the cards val_dp03.json",

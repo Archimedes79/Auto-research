@@ -4,8 +4,14 @@
     python decide.py --variant 0.746,0.741 --control 0.725,0.722 [--band 0.010] [--lower-better] [--cost-variant 31 --cost-control 628] [--id E123.D7 --write]
 
 Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.schema.json):
-  * effect = mean(variant) - mean(control) on the headline metric; with equal seed counts the seeds are paired (seed i against seed i)
-  * |effect| <= band                                   -> TIE: take the cheaper arm
+  * effect = mean(variant) - mean(control) on the headline metric; with equal seed counts the seeds are paired (pair_arms): "pairing": "position"
+    in the experiment = card i against card i; else BY SEED IDENTITY (the card's `seed`, else the arm's own `seeds` list; a seed only one arm
+    ran or a duplicate is refused); else the experiment-level `seeds` list declares one common order of the lists (= position); else two or more
+    seeds are refused. The decision records how (pairing: seed | position | single | unpaired). The typed interface pairs by position. Values
+    must be finite numbers
+  * the cards of the arms the rule uses must be measurements of the same thing (`incompatible`: split = evaluate.split, subset, denominator,
+    protocol, a field missing on one card counts as different; evaluate.allow lists a known difference), else nothing is decided
+  * |effect| <= band                                  -> TIE: take the cheaper arm
   * beyond the band in the worse direction              -> CUT
   * beyond the band in the better direction, but one seed only, a paired seed on the other side, or the paired scene-bootstrap interval
     (compare block of the card, when the card was made with evaluate.py --compare <control>) contains 0 -> INCONCLUSIVE: add a seed, do not adopt
@@ -32,13 +38,17 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from card import is_number  # noqa: E402  (a finite number: NaN, infinity and text are no decision inputs)
 
 LOWER = {"ms", "ms_per_frame"}  # generic cost names; problem metrics are listed in project.json "lower_is_better"
 DEFAULT_BAND = 0.010
 
 
 def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, cost_control=None):
-    """typed scores, one per seed (the loop-18 interface)"""
+    """typed scores, one per seed (the loop-18 interface): the position IS the pairing, seed i of the variant against seed i of the control
+    (experiment files pair by seed identity instead: pair_arms)"""
+    if not variant or not control or not all(is_number(x) for x in [*variant, *control, band]):
+        raise ValueError("scores and band must be finite numbers, at least one score per arm")
     sgn = -1.0 if lower_better else 1.0
     mv, mc = sum(variant) / len(variant), sum(control) / len(control)
     effect = sgn * (mv - mc)
@@ -120,6 +130,8 @@ def paired_effect(metric, v_cards, c_cards, lower=None):
     c = [m[metric] for m, _, _ in c_cards]
     if not v or not c:
         raise KeyError(f"no card for {metric}")
+    if not all(is_number(x) for x in [*v, *c]):
+        raise ValueError(f"{metric}: a card holds a value that is not a finite number (NaN, infinity or text)")
     effect = sgn * (sum(v) / len(v) - sum(c) / len(c))
     diffs = [sgn * (a - b) for a, b in zip(v, c)] if len(v) == len(c) else [effect]
     interval = None
@@ -134,6 +146,83 @@ def paired_effect(metric, v_cards, c_cards, lower=None):
     return effect, diffs, interval
 
 
+def seed_ids(exp, a, cards, key=""):
+    """the seed identity of each card of arm a, as strings in card order, or None when unknown: the card's own `seed`, else the arm's own `seeds`
+    list. The experiment-level `seeds` is NOT an identity (it says which seeds the arms run, not in which order their cards are listed: see
+    pair_arms). An arm `seeds` list of the wrong length for the whole-split cards (key "") is an error"""
+    own = [(c or {}).get("seed") for _, c, _ in cards]
+    if cards and all(s is not None for s in own):
+        return [str(s) for s in own]
+    declared = exp["arms"][a].get("seeds")
+    if isinstance(declared, list) and cards:
+        if len(declared) == len(cards):
+            return [str(s) for s in declared]
+        if key == "":
+            raise ValueError(f"arm {a} lists {len(declared)} seeds for {len(cards)} cards")
+    return None
+
+
+def pair_arms(exp, a, b, cards_a, cards_b, key=""):
+    """(cards_a, cards_b in the order of cards_a, how): the cards of arms a and b paired seed by seed. Unequal counts are not paired (how =
+    "unpaired": the caller counts them as one seed); fewer than two cards are one pair ("single"). Otherwise: "pairing": "position" in the
+    experiment pairs card i with card i ("position", the lists' order is the pairing); else by seed identity (seed_ids; a duplicate or a seed
+    only one arm ran is a ValueError) ("seed"); else the experiment-level `seeds` list, as long as the cards, declares one common order of the
+    lists ("position"); else ValueError (nothing says which cards belong together)."""
+    if len(cards_a) != len(cards_b):
+        return cards_a, cards_b, "unpaired"
+    if len(cards_a) < 2:
+        return cards_a, cards_b, "single"
+    if exp.get("pairing") == "position":
+        return cards_a, cards_b, "position"
+    ids_a, ids_b = seed_ids(exp, a, cards_a, key), seed_ids(exp, b, cards_b, key)
+    if ids_a is not None and ids_b is not None:
+        for arm, ids in ((a, ids_a), (b, ids_b)):
+            if len(set(ids)) != len(ids):
+                raise ValueError(f"arm {arm} lists a seed twice ({', '.join(ids)}): the arms cannot be paired")
+        if set(ids_a) != set(ids_b):
+            raise ValueError(f"the seeds of arm {a} ({', '.join(ids_a)}) and arm {b} ({', '.join(ids_b)}) are not the same: a seed that only one arm ran has no pair")
+        by_seed = dict(zip(ids_b, cards_b))
+        return cards_a, [by_seed[s] for s in ids_a], "seed"
+    if isinstance(exp.get("seeds"), list) and len(exp["seeds"]) == len(cards_a):
+        return cards_a, cards_b, "position"
+    raise ValueError(f"arms {a} and {b} have {len(cards_a)} cards each but no seed identities to pair them by: give every card a `seed`, or each arm a `seeds` "
+                     "list as long as its cards, or declare the common order with a `seeds` list of the experiment, or \"pairing\": \"position\" (card i against card i)")
+
+
+def incompatible(exp, cards):
+    """the reasons why the cards of the arms are not measurements of the same thing, from the cards' own fields: split (must be the experiment's
+    evaluate.split), subset (of whole-split cards, when the card has the field: evaluate.subset), the denominator (frames / n) and the optional
+    protocol (what the evaluator says about ground truth, cache, frame list) must be the same on every card of one subset key; a card that lacks
+    a field that another card has counts as different. Only the arms the rule uses are compared (the variant, the control, the clauses' `vs`).
+    A bare metrics dict holds no fields and passes. exp["evaluate"]["allow"] lists fields that are knowingly different (split | subset |
+    denominator | protocol)."""
+    ev = exp.get("evaluate", {})
+    allow = ev.get("allow") or []
+    if not isinstance(allow, list):
+        raise ValueError("evaluate.allow must be a list of fields (split, subset, denominator, protocol)")
+    allow = set(allow)
+    variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
+    used = {variant, exp["control"], *[c.get("vs", exp["control"]) for c in exp["rule"] if isinstance(c, dict)]}
+    out, seen = [], {}
+    for a in sorted(used):
+        for s, lst in cards[a].items():
+            for _, card, ref in lst:
+                if not card:
+                    continue
+                if card.get("split") is not None and "split" not in allow and card["split"] != ev.get("split"):
+                    out.append(f"{ref}: split {card['split']!r}, the experiment evaluates {ev.get('split')!r}")
+                if s == "" and "subset" in card and "subset" not in allow and (card["subset"] or "") != ev.get("subset", ""):
+                    out.append(f"{ref}: subset {card['subset']!r}, the experiment evaluates {ev.get('subset', '')!r}")
+                for field, value in (("denominator", card.get("frames", card.get("n"))), ("protocol", card.get("protocol"))):
+                    if field not in allow:
+                        seen.setdefault((s, field), {}).setdefault(json.dumps(value, sort_keys=True), []).append(str(ref))
+    for (s, field), values in sorted(seen.items()):
+        if len(values) > 1:
+            out.append(f"{'subset ' + s + ': ' if s else ''}the cards differ in {field}: " + "; ".join(
+                f"{'missing' if v == 'null' else json.loads(v)!r} ({', '.join(refs[:2])})" for v, refs in values.items()))
+    return out
+
+
 def judge_clause(clause, exp, cards, root=None):
     """one clause -> dict(ok, effect, diffs, interval, flags, text); subsets are judged one by one"""
     import experiment as X  # noqa: F401  (same folder)
@@ -144,7 +233,7 @@ def judge_clause(clause, exp, cards, root=None):
     subsets = clause.get("subsets") or ([""] if "" in cards[variant] else sorted(cards[variant]))  # a plain clause on subset-only arms: every subset
     parts = []
     for s in subsets:
-        vc, cc = cards[variant].get(s, []), cards[vs].get(s, [])
+        vc, cc, how = pair_arms(exp, variant, vs, cards[variant].get(s, []), cards[vs].get(s, []), s)
         effect, diffs, interval = paired_effect(metric, vc, cc, is_lower(metric, exp, root, list(vc) + list(cc)))
         flags = []
         if len(vc) != len(cc):
@@ -162,7 +251,7 @@ def judge_clause(clause, exp, cards, root=None):
         else:
             ok = effect >= -clause["max_loss"]
             want = f">= {-clause['max_loss']:+.3f}"
-        parts.append(dict(subset=s, ok=ok, effect=effect, diffs=diffs, interval=interval, flags=flags, text=f"{metric}{' ' + s if s else ''} {variant}-{vs} {effect:+.4f} (want {want}{', band ' + str(band) if metric == exp['metric'] else ''})"))
+        parts.append(dict(subset=s, ok=ok, effect=effect, diffs=diffs, interval=interval, flags=flags, how=how, text=f"{metric}{' ' + s if s else ''} {variant}-{vs} {effect:+.4f} (want {want}{', band ' + str(band) if metric == exp['metric'] else ''})"))
     need = clause.get("at_least", len(parts))
     ok = sum(p["ok"] for p in parts) >= need
     flags = sorted({f for p in parts if p["ok"] for f in p["flags"]})
@@ -174,14 +263,25 @@ def decide_experiment(exp, root):
     """verdict from the experiment file and its cards: dict(verdict, effect, why, clauses)"""
     import experiment as X
     cards = {a: X.arm_cards(exp, a, root) for a in exp["arms"]}
+    bad = incompatible(exp, cards)
+    if bad:
+        raise ValueError("the arms were not evaluated on the same thing: " + "; ".join(bad) + " (a known difference goes into evaluate.allow)")
     variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
     head_metric, band = exp["metric"], exp["band"]
     sgn = 1.0  # paired_effect already turns lower-is-better around; exp["direction"] is for the reader
     def head(arm):  # the whole-split cards, else the subset cards in subset order (then the "seeds" of the headline are the subsets)
         return cards[arm].get("") or [c for s in sorted(cards[arm]) for c in cards[arm][s]]
-    effect, diffs, interval = paired_effect(head_metric, head(variant), head(exp["control"]), is_lower(head_metric, exp, root))
+    if cards[variant].get("") or cards[exp["control"]].get(""):  # whole-split cards: paired seed by seed
+        head_v, head_c, how = pair_arms(exp, variant, exp["control"], cards[variant].get("", []), cards[exp["control"]].get("", []))
+    else:  # subset-only cards: the subsets are the pairs, both arms must hold the same ones
+        if set(cards[variant]) != set(cards[exp["control"]]):
+            raise ValueError(f"arm {variant} has the subsets {sorted(cards[variant])}, arm {exp['control']} {sorted(cards[exp['control']])}: nothing to pair")
+        head_v, head_c, how = head(variant), head(exp["control"]), "subset"
+    effect, diffs, interval = paired_effect(head_metric, head_v, head_c, is_lower(head_metric, exp, root))
     effect *= sgn
     clauses = [judge_clause(c, exp, cards, root) for c in exp["rule"]]
+    hows = {how} | {p["how"] for c in clauses for p in c["parts"]}  # the pairing recorded is the weakest used anywhere: a clause against another arm may pair by order
+    how = next((h for h in ("unpaired", "position", "seed", "subset") if h in hows), "single")
     guards = [c for c in clauses if c["kind"] == "max_loss" and not c["ok"]]
     hc = next(c for c in clauses if c["metric"] == head_metric and c["kind"] == "min_effect") if any(c["metric"] == head_metric and c["kind"] == "min_effect" for c in clauses) else None
     missed = [c for c in clauses if c["kind"] == "min_effect" and not c["ok"] and c is not hc]
@@ -226,7 +326,7 @@ def decide_experiment(exp, root):
     if isinstance(pred.get("value"), (int, float)) and pred.get("vs") == exp["control"]:
         pred_txt = f"prediction {pred['value']:+.3f}, measured {effect:+.4f} (error {effect - pred['value']:+.4f})"
     subset_effects = {p["subset"]: round(p["effect"], 5) for p in hc["parts"]} if hc is not None and len(hc["parts"]) > 1 else None
-    return dict(id=exp["id"], verdict=verdict, metric=head_metric, variant=variant, control=exp["control"], effect=round(effect, 5), diffs=[round(d, 5) for d in diffs],
+    return dict(id=exp["id"], verdict=verdict, metric=head_metric, variant=variant, control=exp["control"], effect=round(effect, 5), diffs=[round(d, 5) for d in diffs], pairing=how,
                 subset_effects=subset_effects, effect_note="effect is pooled over the subset cards; the verdict uses subset_effects" if subset_effects else "",
                 interval=[round(x, 5) for x in interval] if interval else None, why=why, prediction=pred_txt, clauses=[dict(text=c["text"], ok=c["ok"], flags=c["flags"]) for c in clauses],
                 date=time.strftime("%Y-%m-%d %H:%M"))

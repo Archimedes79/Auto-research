@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-from decide import card_lower, named_lower  # noqa: E402
+from decide import card_lower, decide_experiment, named_lower  # noqa: E402
 import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
@@ -100,12 +100,31 @@ def check(exp, path):
     variant = exp.get("variant") or next((a for a in arms if a != exp["control"]), None)
     if variant is None or variant not in arms:
         bad.append("no variant arm (an arm other than the control)")
+    elif variant == exp["control"]:
+        bad.append("the variant arm is the control")
+    clauses = [c for c in exp["rule"] if isinstance(c, dict)]
+    typed = [f"arm {a} must be an object" for a, arm in arms.items() if not isinstance(arm, dict)]  # hand-typing errors are reported, never raised
+    for a, arm in arms.items():
+        if isinstance(arm, dict) and "names" in arm and not (isinstance(arm["names"], list) and all(isinstance(n, str) for n in arm["names"])):
+            typed.append(f"arm {a}: names must be a list of strings")
+        if isinstance(arm, dict) and "cards" in arm and not isinstance(arm["cards"], (list, dict)):
+            typed.append(f"arm {a}: cards must be a list or an object")
+    if not isinstance(exp["prediction"].get("vs"), str) or any(not isinstance(c.get("metric", ""), str) or not isinstance(c.get("vs", ""), str) for c in clauses):
+        typed.append("prediction.vs, and the metric and vs of every clause, must be strings (arm letters, metric names)")
+    if typed:
+        return bad + typed
     for a, arm in arms.items():
         if not any(k in arm for k in ("names", "cards", "recipe", "command")):
             bad.append(f"arm {a}: needs names / cards (results) or recipe / command (how to run)")
     pred = exp["prediction"]
     if not isinstance(pred.get("value"), (int, float)) or pred.get("vs") not in arms:
         bad.append("prediction needs {value: number, vs: <arm letter>}")
+    thresholds = [("band", exp["band"]), ("prediction.value", pred.get("value"))] + [
+        (f"clause {i} {k}", c[k]) for i, c in enumerate(exp["rule"]) if isinstance(c, dict) for k in ("min_effect", "max_loss", "band") if k in c]
+    bad += [f"{name} must be a finite number" for name, v in thresholds if not CARD.is_number(v)]
+    allow = exp["evaluate"].get("allow", [])
+    if not isinstance(allow, list) or any(x not in ("split", "subset", "denominator", "protocol") for x in allow):
+        bad.append("evaluate.allow must be a list of: split, subset, denominator, protocol")
     if not exp["rule"]:
         bad.append("rule has no clause")
     for i, c in enumerate(exp["rule"]):
@@ -123,12 +142,17 @@ def check(exp, path):
     if not isinstance(exp["evaluate"].get("split"), str) or not exp["evaluate"]["split"].strip():
         bad.append("evaluate.split must name the split or benchmark set (val | test | confirm | <benchmark>)")
     every = []  # the cards of all arms: the directions they declare must agree (decide.card_lower)
+    resolved = 0  # arms whose cards exist: with all of them the decision itself is tried below
     for a in arms:
         try:
             cards = arm_cards(exp, a, root)
         except (FileNotFoundError, KeyError, ValueError) as e:
             bad.append(f"arm {a}: {e}")
             continue
+        except Exception as e:  # noqa: BLE001  (a card ref of the wrong type, ...: reported, never raised)
+            bad.append(f"arm {a}: cannot read its cards ({type(e).__name__}: {e})")
+            continue
+        resolved += bool(cards)
         for s, lst in cards.items():
             for m, full, ref in lst:
                 every.append((m, full, ref))
@@ -149,6 +173,13 @@ def check(exp, path):
             bad.append(f"direction {exp['direction']} contradicts the cards: their evaluator declares {metric} {'lower' if said else 'higher'}-is-better")
         elif said is None and named_lower(metric, root) and exp["direction"] != "lower":
             bad.append(f"metric {metric} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
+    if not bad and resolved == len(arms):  # every card is there and sound: the decision must not refuse them (same split / frames, seeds that pair)
+        try:
+            decide_experiment(exp, root)
+        except ValueError as e:
+            bad.append(f"cannot be decided: {e}")
+        except (KeyError, TypeError, AttributeError, OverflowError, StopIteration) as e:  # a malformed file is reported, check never raises
+            bad.append(f"cannot be decided: {type(e).__name__}: {e}")
     return bad
 
 

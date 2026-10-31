@@ -12,6 +12,7 @@ otherwise complete) is a LEGACY card: accepted when legacy_ok (the default; `che
 import argparse
 import glob
 import json
+import math
 import os
 import sys
 
@@ -28,7 +29,13 @@ def schema():
 
 
 def is_number(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v
+    """a finite number: NaN and infinity are not decision inputs"""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    try:
+        return math.isfinite(v)
+    except OverflowError:  # an int beyond the float range
+        return False
 
 
 def is_legacy(card):
@@ -58,8 +65,12 @@ def validate(card, headline=(), legacy_ok=True):
     for k, v in card["metrics"].items():
         if isinstance(v, bool) or not isinstance(v, (int, float)):
             bad.append(f"metric {k} is not a number")
-        elif v != v:
-            bad.append(f"metric {k} is NaN")
+        elif not is_number(v):
+            bad.append(f"metric {k} is {'NaN' if v != v else 'infinite'}")
+    if "seed" in card and (isinstance(card["seed"], bool) or not isinstance(card["seed"], (int, str))):
+        bad.append("seed must be an int or a string (the training seed / repeat id that decide.py pairs the arms by)")
+    if "protocol" in card and not isinstance(card["protocol"], (str, dict)):
+        bad.append("protocol must be a string or a dict (what the evaluator says about its ground truth, cache and frame list)")
     n = card.get("frames", card.get("n"))
     if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
         bad.append("the denominator (frames / n) must be a positive integer")
@@ -87,7 +98,9 @@ def validate(card, headline=(), legacy_ok=True):
             for m, pr in paired.items():
                 if not isinstance(pr, dict):
                     continue
-                if "diff" in pr and not ("lo" in pr and "hi" in pr):
+                if "diff" in pr and not is_number(pr["diff"]):
+                    bad.append(f"compare.paired.{m}: diff must be a finite number")
+                elif "diff" in pr and not ("lo" in pr and "hi" in pr):
                     bad.append(f"compare.paired.{m} has diff but no lo / hi")
                 elif "lo" in pr and "hi" in pr and (not is_number(pr["lo"]) or not is_number(pr["hi"]) or pr["lo"] > pr["hi"]):
                     bad.append(f"compare.paired.{m}: lo / hi must be numbers with lo <= hi")
@@ -146,6 +159,11 @@ def selftest():
     assert any("missing field commit" in b for b in validate({k: v for k, v in good.items() if k != "commit"}))
     assert any("NaN" in b for b in validate(dict(good, metrics=dict(Q=float("nan")))))
     assert any("NaN" in b for b in validate(json.loads('{"schema": 1, "name": "v", "split": "val", "frames": 1, "metrics": {"Q": NaN}, "commit": "c", "date": "d"}')))
+    assert any("infinite" in b for b in validate(dict(good, metrics=dict(Q=float("inf")))))
+    assert any("must be numbers" in b for b in validate(dict(good, compare=dict(name="c", metrics=dict(Q=float("-inf"))))))
+    assert any("lo / hi" in b for b in validate(dict(good, compare=dict(name="c", metrics={}, paired=dict(Q=dict(diff=0.1, lo=float("-inf"), hi=0.2))))))
+    assert validate(dict(good, seed=1, protocol="gt-v2")) == [] and validate(dict(good, seed="s0", protocol=dict(gt="v2"))) == []
+    assert any("seed must be" in b for b in validate(dict(good, seed=1.5))) and any("protocol must be" in b for b in validate(dict(good, protocol=3)))
     assert any("not a number" in b for b in validate(dict(good, metrics=dict(Q="0.7"))))
     assert any("headline" in b for b in validate(good, headline=["Q", "J"]))
     assert validate(dict(good, compare=dict(name="c", metrics=dict(Q=0.6), paired=dict(Q=dict(diff=0.1, lo=0.05, hi=0.15))))) == []
