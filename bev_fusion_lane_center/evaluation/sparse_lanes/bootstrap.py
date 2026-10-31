@@ -4,15 +4,24 @@
     rec_b = SB.frame_records(preds_b, gts)
     SB.pooled(rec_a)                                # == sparse_metrics.card_any(preds_a, gts) for the same frames (tested)
     SB.interval(rec_a, scenes, B=1000)              # mean and 95 % interval of every metric over resampled scenes
-    SB.paired(rec_a, rec_b, scenes, B=1000)         # difference a - b with 95 % interval, share of draws a > b, verdict against the noise band
+    SB.paired(rec_a, rec_b, scenes, B=1000)         # difference a - b (a = variant, b = control) with 95 % interval, share of draws a > b, verdict against the noise band
 
 Frames of one scene are correlated, so whole scenes are drawn with replacement (the same draw for both systems = paired). Pooled metrics are re-aggregated from the per-frame counts of every draw, exactly as `graph_eval.aggregate` does for the full set.
-Verdict: "better" if the interval of the S difference lies above the noise band (0.010), "worse" if below minus the band, "tie" if the interval contains values within the band, otherwise "within noise band but resolvable" is reported as "tie (resolved, small)".
+The draws and the intervals are the ONE implementation of the repository, `autoresearch/evalsuite/stats.py` (scene_draws, paired_draws, interval_draws; D24, 2026-10-31); its draw sequence is the one this module always used, so stored numbers are reproduced exactly. Draws that cannot be scored (non-finite) are dropped and a result then carries `n_valid`.
+Verdict on S: "better" if the interval of the S difference lies above the noise band (0.010), "worse" if below minus the band, otherwise a "tie (...)" that says whether the interval is positive, negative or contains 0.
 """
+import os
+import sys
+
 import numpy as np
 
+import bflc_paths as BP  # project paths from the location of this checkout
 import graph_eval as GE
 import sparse_metrics as SM
+
+if os.path.join(BP.REPO, "autoresearch") not in sys.path:
+    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
+from evalsuite import stats as ST  # noqa: E402  (the shared scene bootstrap)
 
 BAND = 0.010
 KEYS = ("S", "Q", "F1@1.0", "F1@0.5", "F1o2o@1.0", "J", "Sp", "vert100", "len_ratio", "false_len_frac", "lanes_found", "split6_F1", "merge6_F1", "R@1.0", "P@1.0")
@@ -64,20 +73,19 @@ def pooled(rec, idx=None):
     return m
 
 
-def _scene_draws(scenes, B, seed):
-    scenes = np.asarray(scenes)
-    ids, inv = np.unique(scenes, return_inverse=True)
-    members = [np.nonzero(inv == s)[0] for s in range(len(ids))]
-    rng = np.random.RandomState(seed)
-    for _ in range(B):
-        pick = rng.randint(0, len(ids), len(ids))
-        yield np.concatenate([members[s] for s in pick])
+def _lane_fields(v, names):
+    """the fields this module has always returned, plus n_valid when some draws were not scorable (non-finite: the interval is then
+    conditional on the n_valid scorable draws)"""
+    out = {k: v[k] for k in names}
+    if v["n_valid"] < v["n_draws"]:
+        out["n_valid"] = v["n_valid"]
+    return out
 
 
 def interval(rec, scenes, B=1000, seed=0, keys=KEYS):
-    base = pooled(rec)
-    draws = [pooled(rec, idx) for idx in _scene_draws(scenes, B, seed)]
-    return {k: dict(value=base[k], lo=float(np.percentile([d[k] for d in draws], 2.5)), hi=float(np.percentile([d[k] for d in draws], 97.5)), sd=float(np.std([d[k] for d in draws]))) for k in keys if k in base}
+    """mean and 95 % interval of every metric over resampled scenes (one system)"""
+    res = ST.interval_draws(lambda idx: pooled(rec, idx), ST.scene_draws(scenes, B, seed), keys)
+    return {k: _lane_fields(v, ("value", "lo", "hi", "sd")) for k, v in res.items()}
 
 
 def verdict(lo, hi, band=BAND):
@@ -93,20 +101,10 @@ def verdict(lo, hi, band=BAND):
 
 
 def paired(rec_a, rec_b, scenes, B=1000, seed=0, keys=KEYS):
-    """a - b per metric: value on all frames, 95 % interval over scene draws, share of draws with a > b"""
-    base_a, base_b = pooled(rec_a), pooled(rec_b)
-    da = {k: [] for k in keys}
-    for idx in _scene_draws(scenes, B, seed):
-        ma, mb = pooled(rec_a, idx), pooled(rec_b, idx)
-        for k in keys:
-            if k in ma:
-                da[k].append(ma[k] - mb[k])
-    out = {}
-    for k in keys:
-        if k not in base_a or not da[k]:
-            continue
-        d = np.array(da[k])
-        out[k] = dict(a=base_a[k], b=base_b[k], diff=base_a[k] - base_b[k], lo=float(np.percentile(d, 2.5)), hi=float(np.percentile(d, 97.5)), p_a_better=float((d > 0).mean()))
+    """a - b per metric (a = variant, b = control): value on all frames, 95 % interval over scene draws, p_a_better = share of draws
+    with a - b > 0 (NOT direction-aware: for vert100 / false_len_frac a share near 1 means a is worse); verdict on S"""
+    res = ST.paired_draws(lambda idx: pooled(rec_a, idx), lambda idx: pooled(rec_b, idx), ST.scene_draws(scenes, B, seed), keys)
+    out = {k: dict(_lane_fields(v, ("a", "b", "diff", "lo", "hi")), p_a_better=v["p_gt0"]) for k, v in res.items()}
     if "S" in out:
         out["S"]["verdict"] = verdict(out["S"]["lo"], out["S"]["hi"])
     return out

@@ -8,6 +8,31 @@ import graph_eval as GE
 import p16_common as OLD
 import sparse_metrics as SM
 
+
+def spec_graph_from_vertices():
+    """spec of graph_from_vertices (review bug L1, D24): maximal chains between vertices with in- or out-degree != 1, every edge in exactly one piece"""
+    def pieces(edges, n=8):
+        xy = np.stack([np.arange(n, dtype=np.float64), np.zeros(n)], 1)
+        g = SM.graph_from_vertices(xy, edges)
+        assert sum(len(c) - 1 for c in g["nodes"]) == len({(a, b) for a, b in edges if a != b}), "every edge in exactly one piece"
+        assert all(np.array_equal(p, xy[c]) for p, c in zip(g["pts"], g["nodes"]))
+        return g["nodes"], sorted(g["edges"])
+    cases = {  # name: (edges, pieces, piece edges)
+        "isolated chain": ([(0, 1), (1, 2), (2, 3)], [[0, 1, 2, 3]], []),
+        "fork": ([(0, 1), (1, 2), (2, 3), (3, 4), (2, 5), (5, 6)], [[0, 1, 2], [2, 3, 4], [2, 5, 6]], [(0, 1), (0, 2)]),
+        "merge": ([(0, 1), (1, 2), (3, 4), (4, 2), (2, 5), (5, 6)], [[0, 1, 2], [2, 5, 6], [3, 4, 2]], [(0, 1), (2, 1)]),
+        "fork at the first vertex": ([(0, 1), (1, 2), (0, 3), (3, 4)], [[0, 1, 2], [0, 3, 4]], []),
+        "pure cycle": ([(1, 2), (2, 0), (0, 1)], [[0, 1, 2, 0]], []),
+        "cycle with an entry": ([(3, 0), (0, 1), (1, 2), (2, 0)], [[0, 1, 2, 0], [3, 0]], [(1, 0)]),
+        "two chains, self-loop and repeated edge dropped": ([(0, 1), (1, 2), (1, 2), (4, 4), (5, 6), (6, 7)], [[0, 1, 2], [5, 6, 7]], []),
+    }
+    for name, (edges, want_nodes, want_edges) in cases.items():
+        got = pieces(edges)
+        assert got == (want_nodes, want_edges), f"graph_from_vertices {name}: {got} != {(want_nodes, want_edges)}"
+    print(f"graph_from_vertices spec: {len(cases)} cases passed (fork, merge, cycles, isolated chain)")
+
+
+spec_graph_from_vertices()
 HOME = __import__("os").path.expanduser("~")
 gts = pickle.load(open(f"{HOME}/exp_gcar_b123/graph_gt_val.pkl", "rb"))
 print("gt graphs:", len(gts), "| keys of one graph:", sorted(gts[0].keys()) if isinstance(gts[0], dict) else type(gts[0]))

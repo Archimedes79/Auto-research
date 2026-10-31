@@ -33,7 +33,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(BP.REPO, "autoresearch"))
 from evalsuite.contracts import FrameRef, Metric, Prediction, Sample, Source, Subject  # noqa: E402
-from evalsuite.lanes import Grid, LaneConfig, LaneGraph, LaneTask, rasterize  # noqa: E402
+from lane_task import Grid, LaneConfig, LaneGraph, LaneTask, rasterize  # noqa: E402  (the lane Task, evaluation/lane_task/)
 
 HOME = os.path.expanduser("~")
 B123 = f"{HOME}/exp_gcar_b123"

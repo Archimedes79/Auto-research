@@ -2,7 +2,7 @@
 
 You write three small classes for your network. The suite then gives you **pictures** (a frame with ground truth, prediction and the errors; random frames; result videos), **numbers** (the metrics over all videos, which scenes and frames drag them down, whether run B is really better than run A) and **cost** (ms and operations per frame, and where each run sits on the quality-against-cost curve).
 
-Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 (an animated GIF without), the lane part and the full selftest also need scipy. The suite imports no torch and knows no dataset. Run it from `autoresearch/`.
+Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($FFMPEG, the PATH or imageio-ffmpeg; an animated GIF without), the full selftest also needs scipy. The suite imports no torch and knows no dataset. Run it from `autoresearch/`.
 
 ## Try it
 The whole adapter is `adapters/minimal.py` (about 70 lines): a moving disc in noise, a thresholding "network", one metric.
@@ -32,7 +32,7 @@ A frame is named `scene/index` (`demo-1/3`; the files and tables write `demo-1/0
 | result videos | `qual videos 2` | mp4 per video + a strip of the per-frame scores |
 | numbers over all videos | `quant run --name a`, `quant table a` | the counts of every frame stored; the dataset-level numbers; ms per frame of the run |
 | where the numbers come from | `quant outliers a`, `quant report a` | the scenes and frames that drag the numbers down, each with the command that draws it |
-| is B better than A | `quant compare a b` | paired scene bootstrap of the headline numbers |
+| is B better than A | `quant compare a b` | paired scene bootstrap of the headline numbers, b - a = variant - control (refused when the runs differ in source or task) |
 | how fast, how big | `quant timing --run a`, `Subject.ops()` | ms per frame (idle benchmark) and GMACs stored with the run |
 | position on the Pareto curve | `quant pareto a b c` | quality against ms and GMACs, the runs that no other run beats on both |
 
@@ -56,4 +56,4 @@ Every comparison of a prediction with the ground truth lives in `comparison/` (r
 5. `python -m evalsuite --adapter path/to/my_adapter.py:build selftest-adapter` checks the contracts and says what is wrong. Then `qual random 5` and `quant run`.
 
 ## More
-`EXTENSIONS.md` covers what a bigger project needs: a network with memory, looking inside the network (taps, torch), outlier details, stored runs, cost and the Pareto front, probing the causes of errors, the ready-made lane-centre-line task, the real adapters and a map of the files. The design notes of the first build are in `../history/evalsuite_architecture_2026-10-30.md`.
+`EXTENSIONS.md` covers what a bigger project needs: a network with memory, looking inside the network (taps, torch), outlier details, stored runs, cost and the Pareto front, probing the causes of errors, where the lane-centre-line task went (the lane project), the real adapters and a map of the files. The design notes of the first build are in `../history/evalsuite_architecture_2026-10-30.md`.

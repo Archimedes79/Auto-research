@@ -13,9 +13,9 @@
 ## 1. Another layout of the run directory
 A `trainsuite.json` in the run directory names what differs; every key is optional:
 ```
-{"log": "metrics.jsonl", "text_log": "run.log", "loss": "loss", "steps": 3000}
+{"log": "metrics.jsonl", "text_log": "run.log", "loss": "loss", "steps": 3000, "progress": "it "}
 ```
-`log` is the metrics stream, `text_log` the text output (crash detection, skipped steps), `loss` the optimised value, `steps` the total (else `config.json["steps"]`). Rows must be flat or nested one level (`{"val": {...}}` becomes `val.total`); strings, lists and booleans are ignored. A row without `step` is skipped. Without `t` in the rows the speed is the trainer's own `s_per_step` (an average since the process start, so a slowdown shows late).
+`log` is the metrics stream, `text_log` the text output (crash detection, skipped steps), `loss` the optimised value, `steps` the total (else `config.json["steps"]`), `progress` how a progress line of the text log starts (default `"step "`, the bev_fusion trainer): a traceback counts as a crash unless such a line follows it, so a trainer that logs a handled exception and goes on is not reported failed when its own prefix is named here. Rows must be flat or nested one level (`{"val": {...}}` becomes `val.total`); strings, lists and booleans are ignored. A row without `step` is skipped. Without `t` in the rows the speed is the trainer's own `s_per_step` (an average since the process start, so a slowdown shows late).
 
 ## 2. Thresholds
 Module constants in `health.py`: `SPIKE_K` 8, `RISE_K` 3, `SHIFT_K` 5 / `SHIFT_REL` 0.3, `RAMP_FRAC` 0.5, `SLOW_FACTOR` 1.5, `GPU_LIMIT_GB` 11, `REF_TOL` 0.10 / `REF_K` 3 / `REF_ROWS` 50, `MIN_ROWS` 40; `TS_STALE_S` (environment) 900 s for `stalled`, raised automatically to 10 row intervals when the rows are far apart. A validation pass or a checkpoint of a large model can be quiet for longer: raise `TS_STALE_S` for that project. The age of the last output is the file mtime against the clock of the machine running the suite: after a host sleep the WSL clock can be off by minutes and show a false `stalled` (or hide a real one); the stop protocol does not depend on clocks. Every test compares window means and uses the spread of the window, because the loss of one batch is noisy (bev_fusion: sd about 2 on a mean of 11).

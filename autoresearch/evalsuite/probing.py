@@ -1,10 +1,11 @@
 """Probing: where do the errors come from, and where is it worth looking? Works on a stored quantitative run, no network needed.
 
-A Task that implements `probe()` stores for every frame, next to its counts, descriptors of the situation ('tag.*': a lane crossing,
-the curvature, the range ...) and the error assigned to causes ('cause.*', one unit that adds up: metres of lane). From these the
-Prober builds
+A Task that implements `probe()` stores for every frame, next to its counts, descriptors of the situation ('tag.*': a junction,
+the curvature, the range, night ...) and the error assigned to causes ('cause.*', one unit that adds up: metres, cells, objects). From
+these the Prober builds
 
-  budget(run)              the error of the whole run split by cause (with what it is and what to improve: model / code / evaluation)
+  budget(run)              the error of the whole run split by cause (what it is, what to improve, and where to work: the place the
+                           Task gives in causes(), e.g. model / code / evaluation; without one the cause name)
   situations(run)          groups of frames that share a property (a tag, a dominant cause, the worst decile, a plausibility flag) with
                            their share of the frames, their share of the error (excess = error share - frame share: the situations that
                            cost more than their size) and the headline scores inside / outside
@@ -12,8 +13,8 @@ Prober builds
   scan(run)                budget + the situations that cost most + k random examples of each, drawn, as one html page: an impression of
                            where the errors come from, and for each example the command that opens it in the qualitative suite
 
-Reading a result: a cause with a large share and a code / evaluation fix is the cheapest place to start (a broken lane that a linking rule
-cuts, a ghost lane where the ground truth is simply not mapped); a large share with a model fix is the research problem; a situation
+Reading a result: a cause with a large share and a code / evaluation fix is the cheapest place to start (an error made by a rule of
+the post-processing, or by ground truth that is simply missing there); a large share with a model fix is the research problem; a situation
 with a large excess tells under which conditions it happens.
 """
 from __future__ import annotations
@@ -31,12 +32,10 @@ from .render.figure import render_page
 from .store import RunStore
 
 
-def target_of(fix: str) -> str:
-    """'model' | 'code' | 'evaluation' (or 'model/evaluation' when the fix text names both) from a cause's fix text"""
-    f = fix.lower()
-    found = [t for t, keys in (("evaluation", ("evaluation", "gt ", "ground truth")), ("code", ("assembly", "code", "pruning", "linking")),
-                               ("model", ("model", "calibration"))) if any(k in f for k in keys)]
-    return "/".join(found) if found else "model"
+def place_of(cause: str, info: tuple) -> str:
+    """where to work on a cause: the third entry of Task.causes()[cause] (e.g. 'model', 'code', 'evaluation', 'model/evaluation' = shared
+    equally), supplied by the Task; without it the cause name itself (the core knows no words of any problem)"""
+    return str(info[2]) if len(info) > 2 and info[2] else cause
 
 
 class Prober:
@@ -59,7 +58,9 @@ class Prober:
         return rows
 
     def _key_scores(self, st: RunStore, rows) -> List[str]:
-        keys = []
+        keys: List[str] = []
+        if not rows:
+            return keys
         for name, m in st.manifest.get("metrics", {}).items():
             for k in m.get("headline", []):
                 if f"{name}.{k}" in rows[0]["scores"]:
@@ -78,9 +79,9 @@ class Prober:
         allv = sum(tot.values())
         out = []
         for c in sorted(names, key=lambda c: -tot[c]):
-            what, fix = info.get(c, ("", ""))
+            what, fix = (tuple(info.get(c, ())) + ("", ""))[:2]
             out.append({"cause": c, "amount": tot[c], "share": tot[c] / allv if allv > 0 else 0.0, "frames": sum(r["causes"].get(c, 0.0) > 0 for r in sel),
-                        "what": what, "fix": fix, "target": target_of(fix) if fix else ""})
+                        "what": what, "fix": fix, "target": place_of(c, tuple(info.get(c, ())))})
         return out
 
     def targets(self, budget: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -96,6 +97,8 @@ class Prober:
     def situations(self, run, min_frames: int = 3, quantile: float = 0.75, dominant: float = 0.5) -> List[Dict[str, Any]]:
         st = self.s.quant.open(run)
         rows = self.frames(st)
+        if not rows:                                         # an empty run has no situations
+            return []
         n, E = len(rows), sum(r["error"] for r in rows)
         keys = self._key_scores(st, rows)
         cand: List[tuple] = []

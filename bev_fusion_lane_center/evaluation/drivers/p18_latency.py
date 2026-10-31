@@ -1,6 +1,7 @@
 """Loop 18 (copy of p17_latency.py with the assembly path and the fork pruning as options). Original text: Loop 17 / E137 (copy of p16_pipeline.py): the whole chain per frame, plus the memory stage (warp + learned gate) and the option of the time recursion on / off. Original text: the whole chain per frame, fast (reference implementation of the deployment path) and its stage times.
 frame features -> builder (CUDA graph) -> assembly (CPU) -> route input (vertex tokens, points every <= 4 m) -> route head along the edges (CUDA graphs per padded size) -> planner consumer (CUDA graph).
-Usage (gcar, GPU, idle machine): p16_pipeline.py --name e123_D7_r3_f1 [--n 60]"""
+Usage (gcar, GPU, idle machine): p18_latency.py --name e123_D7_r3_f1 [--n 60] [--rec 0|1] [--union 1|2] [--fork_prune 0.3]   -> runs/e18/latency/*.json
+(the timing driver of evaluation/PROTOCOL.md since 2026-10-31; p17_latency.py, now in evaluation/loops/loop17/, = --union 1 --fork_prune 0 with output in runs/e17/latency)"""
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json

@@ -22,7 +22,7 @@ import numpy as np
 
 import lane_suite as LS
 from evalsuite import EvalSuite
-from evalsuite.lanes import measures as M
+from lane_task import measures as M
 
 CARD = f"{BP.ROOT}/runs/eval/champion/val.json"
 KEYS_PROJECT = ("S", "Q", "F1@0.5", "F1@1.0", "F1@1.5", "J", "lanes_found", "vert100", "false_len_frac", "len_ratio")

@@ -69,10 +69,13 @@ def _slug(text: str) -> str:
 
 
 def pareto(quant, runs: Sequence[Any], y: Optional[str] = None, costs: Sequence[str] = ("ms", "gmacs"),
-           out: Optional[str] = None) -> Dict[str, Any]:
+           out: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
     """quality `y` ('metric.key', default the first headline number) of every run on the common frames, against ms per frame and
-    GMACs; -> {'rows', 'y', 'better', 'n_common_frames', 'ms_source', 'notes', 'png', 'json'} and the picture below `quant/`."""
+    GMACs; -> {'rows', 'y', 'better', 'n_common_frames', 'ms_source', 'notes', 'png', 'json'} and the picture below `quant/`.
+    The runs must come from the same source and task (quantitative.same_question; force=True skips the check)."""
+    from .quantitative import same_question
     stores = [quant.open(r) for r in runs]
+    same_question(*stores, force=force)
     common = set.intersection(*[set(s.labels()) for s in stores])
     if not common:
         raise ValueError("the runs have no frame in common")

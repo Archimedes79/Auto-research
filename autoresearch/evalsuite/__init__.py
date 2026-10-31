@@ -5,7 +5,7 @@
     suite.qual.frame("scene-0061/12", views=("overview", "debug"));  suite.qual.random(6);  suite.qual.videos(2)
     run = suite.quant.run(n_scenes=20);  suite.quant.report(run)
 Command line: python -m evalsuite --adapter pkg.module:build [--arg key=value] <qual|quant|selftest|selftest-adapter> ...
-See README.md (use, one page) and EXTENSIONS.md (memory, taps, probing, lanes, files).
+See README.md (use, one page) and EXTENSIONS.md (memory, taps, probing, files; the lane Task lives in the lane project).
 """
 from .contracts import (Counts, Flag, FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, TapSpec, Task,
                         View, ViewContext)

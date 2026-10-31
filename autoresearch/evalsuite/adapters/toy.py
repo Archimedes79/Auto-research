@@ -9,6 +9,8 @@ so an outlier search must find exactly them (and, with the memory carried, the f
 Subject ("network"): 3x3 box blur -> memory (running average with the previous frame, carried along the scene) -> logits; taps
 'blur', 'memory', 'logits', 'features' (3 channels). `bias` shifts the decision threshold (a worse network for compare tests).
 
+Probing: tags 'planted', 'gt_cells'; causes fn / fp cells in the near and far half, with the place to work (fn.far without one).
+
 Metrics: 'seg' (additive TP / FP / FN counts for the near and far half of the plane -> iou, iou_near, iou_far, precision, recall),
 'objs' (ragged: centre error of every GT box to the nearest predicted blob + blob counts -> center_err, count_abs_err).
 """
@@ -216,6 +218,21 @@ class ToyTask(Task):
 
     def guide(self) -> str:
         return "toy world: dark = rectangles; in the error panel red = false positive, blue = false negative, grey = true positive."
+
+    def probe(self, sample: Sample, pred: Prediction) -> Dict[str, float]:
+        """for the probing: tags of the situation and the error cells split by cause (near / far half of the plane)"""
+        p, g = pred.outputs["mask"], sample.reference["mask"]
+        h = SIZE // 2
+        return {"tag.planted": float(bool(sample.meta.get("planted"))), "tag.gt_cells": float(g.sum()),
+                "cause.fn.near": float((~p & g)[:, :h].sum()), "cause.fn.far": float((~p & g)[:, h:].sum()),
+                "cause.fp.near": float((p & ~g)[:, :h].sum()), "cause.fp.far": float((p & ~g)[:, h:].sum())}
+
+    def causes(self) -> Dict[str, Tuple[str, ...]]:
+        """the place to work is the third entry; fn.far has none, so the probing books it under its own name"""
+        return {"fn.near": ("missed cells in the near half", "model: recall", "model"),
+                "fn.far": ("missed cells in the far half", "model: range"),
+                "fp.near": ("false cells in the near half", "threshold of the post-processing", "code"),
+                "fp.far": ("false cells in the far half", "model or ground truth", "model/evaluation")}
 
 
 def build(n_scenes: int = 8, n_frames: int = 12, bias: float = 0.0, memory: float = 0.5, seed: int = 0, name: str = "toy"):

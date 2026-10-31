@@ -8,9 +8,11 @@
     qual random N [--seed S] [--view ...]                N frames: a random video first, then a random frame in it
     qual videos M [--seed S] [--view V] [--fps F] [--max-frames N] [--scenes s1 s2]
     quant run [--n-scenes N | --scenes s1 s2] [--spread N] [--max-frames N] [--seed S] [--name NAME]
-    quant table RUN | per-scene RUN | outliers RUN [--k K] [--z Z] | trace RUN LABEL | report RUN [--render K]
-    quant compare RUN_A RUN_B [--boot N] | timing [--frame SPEC] [--n N] [--run RUN]
-    quant pareto RUN [RUN ...] [--y metric.key] [--cost ms gmacs]   quality against runtime / operations, the runs not beaten on both
+    quant table RUN | per-scene RUN | outliers RUN [--k K] [--z Z] | trace RUN LABEL (scene/3 = scene/003) | report RUN [--render K]
+    quant compare CONTROL VARIANT [--boot N] [--seed S] [--force]   paired scene bootstrap, diff = variant - control; refused when the two
+                                                         runs differ in source or task (GT version, cache) unless --force
+    quant timing [--frame SPEC] [--n N] [--run RUN]
+    quant pareto RUN [RUN ...] [--y metric.key] [--cost ms gmacs] [--force]   quality against runtime / operations, the runs not beaten on both
     selftest                                             the core against known answers on the toy adapter (no --adapter)
     selftest-adapter                                     the contract checker on --adapter
 `build(**kv)` of an adapter returns (Source, Subject, Task). RUN is a run name below <out>/quant or a run directory.
@@ -132,10 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
             a.add_argument("--k", type=int, default=10)
             a.add_argument("--z", type=float, default=3.5)
             a.add_argument("--min-support", type=float, default=1.0)
-    c = n.add_parser("compare")
-    c.add_argument("run_a")
-    c.add_argument("run_b")
+    c = n.add_parser("compare", help="paired scene bootstrap: diff = b - a = variant - control")
+    c.add_argument("run_a", help="the control (reference)")
+    c.add_argument("run_b", help="the variant")
     c.add_argument("--boot", type=int, default=1000)
+    c.add_argument("--seed", type=int, default=0)
+    c.add_argument("--force", action="store_true", help="compare even if the runs differ in source or task (dataset, split, GT version, cache)")
     t = n.add_parser("timing")
     t.add_argument("--frame", default=None)
     t.add_argument("--n", type=int, default=30)
@@ -145,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("runs", nargs="+", help="runs of the same task; quality is taken on the frames all of them have")
     pa.add_argument("--y", default=None, help="quality axis, 'metric.key' (default: the first headline number)")
     pa.add_argument("--cost", nargs="+", default=["ms", "gmacs"], choices=["ms", "gmacs"], help="cost axes")
+    pa.add_argument("--force", action="store_true", help="even if the runs differ in source or task")
     pr = sub.add_parser("probe").add_subparsers(dest="mode", required=True)
     for name in ("budget", "situations", "sample", "scan"):
         a = pr.add_parser(name)
@@ -245,10 +250,10 @@ def main(argv=None) -> int:
             elif a.mode == "report":
                 print(qt.report(a.run, a.render))
             elif a.mode == "compare":
-                print(json.dumps(qt.compare(a.run_a, a.run_b, a.boot), indent=1))
+                print(json.dumps(qt.compare(a.run_a, a.run_b, a.boot, a.seed, force=a.force), indent=1))
             elif a.mode == "pareto":
                 from .cost import format_table
-                res = qt.pareto(a.runs, a.y, a.cost)
+                res = qt.pareto(a.runs, a.y, a.cost, force=a.force)
                 print(format_table(res))
                 print(f"picture: {res['png']}" if res["png"] else "no cost to draw: no run has ms or GMACs")
             elif a.mode == "timing":

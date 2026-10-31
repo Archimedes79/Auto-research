@@ -89,7 +89,12 @@ def frontier_scalars(curve):
 
 def graph_from_vertices(xy, edges, order=None):
     """vertex list + directed edges (a -> b) -> graph_eval pieces: maximal chains between vertices with in-degree != 1 or out-degree != 1.
-    xy [n,2]; edges list of (a, b). Returns dict(pts, edges, nodes)."""
+    A vertex with in = out = 1 is interior; a chain starts at every out-edge of a non-interior vertex and runs while its end is interior,
+    so a fork 0-1-2 -> 2-3-4 / 2-5-6 gives [0,1,2], [2,3,4], [2,5,6] and a merge cuts the same way. A cycle of interior vertices only
+    becomes one closed piece [a, ..., a] that starts at its smallest edge. Self-loops and repeated edges are dropped.
+    Fixed 2026-10-31 (D24, review bug L1): before, a split vertex with one predecessor never started a chain, so each split gave stubs
+    [3,4], [5,6] plus the two-vertex leftovers [2,3], [2,5], and a pure cycle gave one 2-vertex piece per edge.
+    xy [n,2]; edges list of (a, b); `order` is unused (kept for old callers). Returns dict(pts, edges, nodes)."""
     n = len(xy)
     outs = [[] for _ in range(n)]
     ins = [[] for _ in range(n)]
@@ -101,24 +106,26 @@ def graph_from_vertices(xy, edges, order=None):
         seen.add((a, b))
         outs[a].append(b)
         ins[b].append(a)
-    pieces, nodes = [], []
+    pieces = []
     used = set()
-    starts = [v for v in range(n) if outs[v] and (len(ins[v]) != 1 or len(outs[ins[v][0]]) != 1)]
+
+    def walk(s, nxt):
+        chain = [s, nxt]
+        used.add((s, nxt))
+        while len(outs[chain[-1]]) == 1 and len(ins[chain[-1]]) == 1 and (chain[-1], outs[chain[-1]][0]) not in used:
+            a, b = chain[-1], outs[chain[-1]][0]
+            used.add((a, b))
+            chain.append(b)
+        pieces.append(chain)
+
+    starts = [v for v in range(n) if outs[v] and (len(ins[v]) != 1 or len(outs[v]) != 1)]
     for s in starts:
         for nxt in outs[s]:
-            if (s, nxt) in used:
-                continue
-            chain = [s, nxt]
-            used.add((s, nxt))
-            while len(outs[chain[-1]]) == 1 and len(ins[chain[-1]]) == 1 and (chain[-1], outs[chain[-1]][0]) not in used:
-                a, b = chain[-1], outs[chain[-1]][0]
-                used.add((a, b))
-                chain.append(b)
-            pieces.append(chain)
-    for a, b in sorted(seen):  # cycles / leftovers
+            if (s, nxt) not in used:
+                walk(s, nxt)
+    for a, b in sorted(seen):  # only cycles of interior vertices are left: one closed piece each
         if (a, b) not in used:
-            pieces.append([a, b])
-            used.add((a, b))
+            walk(a, b)
     pts = [np.asarray([xy[v] for v in c], np.float64) for c in pieces]
     first = {}
     for i, c in enumerate(pieces):

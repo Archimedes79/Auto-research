@@ -6,7 +6,7 @@ Source, a handful of frames, and reports every check as ok / fail with the reaso
 Checks: scenes and frames (non-empty, indices 0..n-1 in order, find() round trip by label / tuple / key), a frame loads with the
 right ref, the Subject predicts a Prediction and its taps are the declared ones with finite numpy arrays, every Metric returns
 Counts of numpy arrays whose reduce() works on one frame, on several, on none, whose headline keys are produced, whose scores are
-numbers, order invariance (reduce of the same frames in another order gives the same numbers), every View renders a Page that draws, the Task has an 'overview', state handling (reset gives the same prediction twice).
+numbers, order invariance (reduce of the same frames in another order gives the same numbers), every View renders a Page that draws, the Task has an 'overview', state handling (after reset() the same frame gives the same taps AND outputs, so a Subject without taps is checked too).
 """
 from __future__ import annotations
 
@@ -25,6 +25,45 @@ def _run(results: List[Dict[str, Any]], name: str, fn: Callable[[], Any]) -> Any
         results.append({"name": name, "ok": True, "note": "" if note is None else str(note)})
     except Exception as e:                                              # noqa: BLE001
         results.append({"name": name, "ok": False, "note": f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}"})
+
+
+def _differs(x: Any, y: Any, path: str = "outputs") -> Any:
+    """None when two predictions agree, else where they differ. Arrays and numbers: within 1e-5 + 1e-3 of the scale (float noise of a
+    GPU network grows with depth, 1e-4 of the scale; a leaked state is of the scale itself); dicts, lists, tuples and objects with
+    attributes (dataclasses) are compared entry by entry; anything else with ==."""
+    if isinstance(x, dict) and isinstance(y, dict):
+        if set(x) != set(y):
+            return f"{path}: keys {sorted(map(str, x))} vs {sorted(map(str, y))}"
+        for k in x:
+            bad = _differs(x[k], y[k], f"{path}[{k!r}]")
+            if bad:
+                return bad
+        return None
+    if isinstance(x, (list, tuple)) and isinstance(y, (list, tuple)):
+        if len(x) != len(y):
+            return f"{path}: length {len(x)} vs {len(y)}"
+        for i, (u, v) in enumerate(zip(x, y)):
+            bad = _differs(u, v, f"{path}[{i}]")
+            if bad:
+                return bad
+        return None
+    if isinstance(x, (np.ndarray, np.generic, int, float, bool)) and isinstance(y, (np.ndarray, np.generic, int, float, bool)):
+        a, b = np.asarray(x), np.asarray(y)
+        if a.shape != b.shape:
+            return f"{path}: shape {a.shape} vs {b.shape}"
+        if a.dtype.kind not in "biuf" or b.dtype.kind not in "biuf":
+            return None if np.array_equal(a, b) else f"{path}: values differ"
+        a, b = a.astype(np.float64), b.astype(np.float64)
+        tol = 1e-5 + 1e-3 * (np.nanmax(np.abs(a)) if a.size and np.isfinite(a).any() else 0.0)
+        if not np.allclose(a, b, atol=tol, rtol=0, equal_nan=True):
+            return f"{path}: max difference {np.nanmax(np.abs(a - b)):.3g}"
+        return None
+    if hasattr(x, "__dict__") and type(x) is type(y) and not callable(x):
+        return _differs(vars(x), vars(y), path)
+    try:
+        return None if bool(x == y) else f"{path}: {x!r} != {y!r}"[:200]
+    except Exception:                                                   # noqa: BLE001  (not comparable: not checked)
+        return None
 
 
 def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
@@ -93,10 +132,11 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
         subj.predict(f1, ())                                      # change the state ...
         subj.reset()                                              # ... and forget it
         b = subj.predict(f0, list(declared))
-        for n in a.taps:                                          # float noise of a GPU network grows with depth (1e-4 of the scale), a leaked state is of the scale itself
-            x, y = np.asarray(a.taps[n], np.float64), np.asarray(b.taps[n], np.float64)
-            tol = 1e-5 + 1e-3 * (np.nanmax(np.abs(x)) if x.size and np.isfinite(x).any() else 0.0)
-            assert np.allclose(x, y, atol=tol, rtol=0, equal_nan=True), f"after reset() the same frame gave another tap {n} (max difference {np.nanmax(np.abs(x - y)):.3g})"
+        for n in a.taps:
+            bad = _differs(a.taps[n], b.taps[n])
+            assert bad is None, f"after reset() the same frame gave another tap {n} ({bad})"
+        bad = _differs(a.outputs, b.outputs)                       # a Subject without taps is checked through its outputs
+        assert bad is None, f"after reset() the same frame gave other outputs ({bad})"
     _run(R, "subject: reset() restores the start state", reset_same)
 
     def warm():

@@ -21,13 +21,14 @@ What it does
   * golden: evaluation/golden.json holds one entry per (name, split, subset, fresh) with the metrics of GOLD_KEYS rounded to 4 decimals, the
     commit and the tolerance; `--golden check` re-evaluates every entry and compares (the check writes cards with the tag `golden_check`, which git
     ignores; `--golden write` writes the committed `golden` card, never the standard card); a golden entry changes only together with a ledger row that says why (a metric fix, a new champion)
-Timing of the network (ms per frame on an idle GPU) is not measured here: evaluation/drivers/p17_latency.py (protocol in PROTOCOL.md).
+Timing of the network (ms per frame on an idle GPU) is not measured here: evaluation/drivers/p18_latency.py (protocol in PROTOCOL.md).
 """
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
 import pickle
+import re
 import subprocess
 import sys
 import time
@@ -63,9 +64,13 @@ def commit():
         return h + "+?"
 
 
-def test_allowed(test_id):
-    log = open(f"{R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8").read()
-    return bool(test_id) and test_id in log
+def test_allowed(test_id, log=None):
+    """True if the TEST usage log names test_id as a whole id, the rule of autoresearch/tools/run.py (review bug L2, D24: a substring test let `E` or `2026` pass)"""
+    if not test_id:
+        return False
+    if log is None:
+        log = open(f"{R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8").read()
+    return re.search(r"(?<![\w.])" + re.escape(test_id) + r"(?![\w.])", log) is not None
 
 
 def subset_ks(split, subset):

@@ -3,7 +3,7 @@
     python -m evalsuite selftest            (from autoresearch/)      or      python autoresearch/evalsuite/selftest.py
 
 Every check states what it proves; a failing check prints its traceback. Each function of contracts / sampling / store / stats /
-runner / qualitative / quantitative / render / check / cli is covered; the planted outlier frames of the toy world are the ground
+runner / qualitative / quantitative / probing / render / check / cli is covered; the planted outlier frames of the toy world are the ground
 truth of the outlier search.
 """
 from __future__ import annotations
@@ -168,6 +168,84 @@ def _():
         del st                                                          # no close(): the last 10 frames never reached disk
         r3 = RunStore.open(os.path.join(d, "c"))
         assert len(r3.frames) == CHUNK and len(r3.counts("m")) == CHUNK
+        assert r.frame("s0/3") is r.frame("s0/003") is r.frame("s0:3"), "an unpadded label names the same frame"
+        try:
+            r.frame("s9/0")
+            raise AssertionError("an unknown frame must raise")
+        except KeyError:
+            pass
+
+
+@check("RunStore / timing / compare: a description key that is NEW (absent from the stored run, e.g. a GT signature added to the adapter) is tolerated with a warning; a key on both sides with another value still refuses")
+def _():
+    import io
+    import contextlib
+
+    class NewSource(toy.ToySource):                                     # the adapter after the change: one more key in describe()
+        def __init__(self, sig="abc", **kw):
+            super().__init__(**kw)
+            self.sig = sig
+
+        def describe(self):
+            return dict(super().describe(), gt_signature=self.sig)
+    with tempfile.TemporaryDirectory() as d:
+        old = EvalSuite(toy.ToySource(n_scenes=2, n_frames=3), toy.ToySubject(), toy.ToyTask(), out=d)
+        old.quant.run(name="a", progress=0)                             # written by the old adapter: no gt_signature
+        new = EvalSuite(NewSource(n_scenes=2, n_frames=3), toy.ToySubject(), toy.ToyTask(), out=d)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            st = new.quant.run(name="a", progress=0)                    # resume: accepted
+            new.quant.timing(n=2, run="a")                              # a benchmark attached to the old store: accepted
+            new.quant.run(name="b", progress=0)
+            cmp = new.quant.compare("a", "b", boot=10)                  # old store vs new store: accepted
+        assert "gt_signature" in err.getvalue() and "predates" in err.getvalue(), err.getvalue()
+        assert "gt_signature" not in st.manifest["source"] and st.manifest["predates_keys"] == ["source: gt_signature"]
+        assert cmp["n_common_frames"] == 6 and RunStore.open(os.path.join(d, "quant", "a")).manifest["cost"]["bench"]["n"] == 2
+        other = EvalSuite(NewSource("xyz", n_scenes=2, n_frames=3), toy.ToySubject(), toy.ToyTask(), out=d)
+        for fn in (lambda: other.quant.run(name="b", progress=0), lambda: other.quant.timing(n=2, run="b")):
+            try:                                                        # the key on both sides, another value: refused
+                fn()
+                raise AssertionError("another gt_signature must be refused")
+            except ValueError as e:
+                assert "gt_signature" in str(e), e
+        other.quant.run(name="c", progress=0)
+        try:
+            other.quant.compare("b", "c", boot=10)
+            raise AssertionError("compare of two signatures must be refused")
+        except ValueError as e:
+            assert "gt_signature" in str(e), e
+
+
+@check("RunStore + quant: a metric that returns {} for a whole chunk (nothing to count there) still gives tables, compare and outliers (S5)")
+def _():
+    class Sparse(toy.SegMetric):                                        # counts only in scene toy-01; {} elsewhere
+        name, headline = "sparse", ("iou",)
+
+        def frame(self, sample, pred):
+            return super().frame(sample, pred) if sample.ref.scene == "toy-01" else {}
+
+        def reduce(self, counts, keys=None):
+            return super().reduce([c for c in counts if c])
+
+        def score(self, counts):
+            return super().score(counts) if counts else {}
+
+        def support(self, counts):
+            return super().support(counts) if counts else {}
+
+    class T(toy.ToyTask):
+        def metrics(self):
+            return [toy.SegMetric(), Sparse()]
+    with tempfile.TemporaryDirectory() as d:
+        suite = EvalSuite(toy.ToySource(n_scenes=3, n_frames=CHUNK), toy.ToySubject(), T(), out=d)
+        st = suite.quant.run(name="a", progress=0)                     # chunk 0 = toy-00 (all {}), chunk 1 = toy-01, chunk 2 = toy-02 ({})
+        assert all(os.path.exists(os.path.join(st.path, f"counts_sparse_{k:05d}.npz")) for k in range(3))
+        os.remove(os.path.join(st.path, "counts_sparse_00000.npz"))     # a run stored before the fix: the file is missing
+        tab = suite.quant.table("a")
+        direct = toy.SegMetric().reduce(suite.quant.open("a").counts("seg", [f.label for f in suite.source.frames("toy-01")]))
+        assert abs(tab["sparse.iou"] - direct["iou"]) < 1e-12, (tab, direct)
+        assert suite.quant.compare("a", "a", boot=20)["metrics"]["sparse.iou"]["diff"] == 0
+        assert suite.quant.outliers("a", k=2)["scenes"]
 
 
 @check("stats: robust_z, MAD = 0 fallback, IQR fences against numpy")
@@ -194,15 +272,54 @@ def _():
     rng = np.random.default_rng(0)
     a = {f"s{i}": [{"x": np.array(rng.normal(0.5, 0.1))} for _ in range(4)] for i in range(12)}
     b = {k: [{"x": c["x"] + 0.2} for c in v] for k, v in a.items()}
-    out = bootstrap_scenes(a, b, red, ["mean"], n=300, seed=1)["mean"]
-    assert abs(out["diff"] - 0.2) < 1e-9 and out["lo"] > 0 and out["p_b_ge_a"] == 1.0, out
+    out = bootstrap_scenes(a, b, red, ["mean"], n=300, seed=1)["mean"]          # a = control, b = variant: diff = b - a
+    assert abs(out["diff"] - 0.2) < 1e-9 and out["lo"] > 0 and out["p_b_better"] == 1.0 and out["n_valid"] == out["n_draws"] == 300, out
+    low = bootstrap_scenes(a, b, red, ["mean"], n=100, seed=1, better={"mean": "low"})["mean"]
+    assert low["p_b_better"] == 0.0 and low["p_diff_gt0"] == 1.0, "for a lower-is-better number a higher b is never better"
     same = bootstrap_scenes(a, a, red, ["mean"], n=200, seed=1)["mean"]
-    assert same["diff"] == 0 and same["lo"] == 0 and same["hi"] == 0, same
+    assert same["diff"] == 0 and same["lo"] == 0 and same["hi"] == 0 and same["p_b_better"] == 0.0, same
     try:
         bootstrap_scenes({"x": []}, {"y": []}, red, ["mean"])
         raise AssertionError("must raise")
     except ValueError:
         pass
+
+
+@check("stats: the ONE scene bootstrap - the draw stream is the lane project's (RandomState randint, = choice), paired a - b, non-finite draws counted (n_valid), direction-aware share")
+def _():
+    from evalsuite.stats import paired_draws, interval_draws, percentile_interval, scene_draws, scene_picks
+    assert list(next(scene_picks(5, 1, 0))) == [4, 0, 3, 3, 3], "np.random.RandomState(0).randint(0, 5, 5): the stream every stored lane interval rests on"
+    scenes = ["s-07", "s-01", "s-07", "s-30", "s-01", "s-12", "s-30", "s-30"]
+
+    def lane_draws_2026(scenes, B, seed):                              # sparse_lanes/bootstrap.py._scene_draws as it was before D24, verbatim
+        scenes = np.asarray(scenes)
+        ids, inv = np.unique(scenes, return_inverse=True)
+        members = [np.nonzero(inv == s)[0] for s in range(len(ids))]
+        rng = np.random.RandomState(seed)
+        for _ in range(B):
+            pick = rng.randint(0, len(ids), len(ids))
+            yield np.concatenate([members[s] for s in pick])
+    assert all(np.array_equal(x, y) for x, y in zip(scene_draws(scenes, 50, 3), lane_draws_2026(scenes, 50, 3)))
+    us, rng = np.unique(scenes), np.random.RandomState(4)                # topo_metrics.paired drew with choice(): the same stream
+    assert all(np.array_equal(us[p], rng.choice(us, len(us), replace=True)) for p in scene_picks(len(us), 50, 4))
+    # paired a - b on frame values; key 'far' has no number when scene 0 is not drawn (like R@1 far without far points)
+    va, vb = np.arange(1.0, 7.0), np.arange(1.0, 7.0) + 0.5
+    sc = [f"s{i}" for i in range(6)]
+
+    def stat(v):
+        return lambda idx: {"mean": float(v[idx].mean()) if idx is not None else float(v.mean()),
+                            "far": float(v[0]) if idx is None or 0 in idx else float("nan")}
+    res = paired_draws(stat(va), stat(vb), scene_draws(sc, 400, 2), ["mean", "far"], better={"mean": "low"})
+    m, f = res["mean"], res["far"]
+    assert m["diff"] == -0.5 and abs(m["lo"] + 0.5) < 1e-12 and abs(m["hi"] + 0.5) < 1e-12 and m["n_valid"] == 400, m
+    assert m["p_gt0"] == 0.0 and m["p_a_better"] == 1.0, "a is lower in every draw: better for a 'low' number"
+    with_0 = sum(0 in p for p in scene_picks(6, 400, 2))
+    assert f["n_valid"] == with_0 < f["n_draws"] == 400 and f["lo"] == f["hi"] == -0.5 and f["p_a_better"] == 0.0, (f, with_0)
+    lo, hi, nv = percentile_interval([np.nan, 1.0, 2.0, np.inf, 3.0])
+    assert (lo, hi, nv) == (float(np.percentile([1, 2, 3], 2.5)), float(np.percentile([1, 2, 3], 97.5)), 3)
+    assert np.isnan(percentile_interval([np.nan])[0]) and percentile_interval([np.nan])[2] == 0
+    iv = interval_draws(stat(va), scene_draws(sc, 300, 1), ["mean", "far"])
+    assert iv["mean"]["value"] == 3.5 and iv["mean"]["lo"] < 3.5 < iv["mean"]["hi"] and iv["far"]["n_valid"] < 300 and iv["far"]["sd"] == 0.0
 
 
 # ------------------------------------------------------------------------------------------------ runner, metrics, state
@@ -407,8 +524,18 @@ def _():
         suite = make(d)
         cmp = suite.quant.compare("a", "b", boot=300)
         iou = cmp["metrics"]["seg.iou"]
-        assert iou["diff"] < -0.02 and iou["hi"] < 0 and iou["p_b_ge_a"] == 0.0, iou
+        assert iou["diff"] < -0.02 and iou["hi"] < 0 and iou["p_b_better"] == 0.0 and iou["n_valid"] == 300, iou
         assert cmp["n_common_frames"] == 96
+        # S8: runs of another source (here another world seed = other ground truth on the same frame labels) are refused
+        other = make(d, seed=1).quant.run(name="o", progress=0)
+        for fn in (lambda **kw: suite.quant.compare("a", "o", boot=20, **kw), lambda **kw: suite.quant.pareto(["a", "o"], **kw)):
+            try:
+                fn()
+                raise AssertionError("runs of another source must be refused")
+            except ValueError as e:
+                assert "same source and task" in str(e) and "seed" in str(e), e
+            fn(force=True)                                                  # force compares anyway
+        assert other.manifest["source"]["seed"] == 1
         same = suite.quant.compare("a", "a", boot=100)["metrics"]["seg.iou"]
         assert same["diff"] == 0 and same["lo"] == 0 and same["hi"] == 0
         carry_vs_reset = make(d).quant.run(name="r", state="reset", progress=0)
@@ -495,9 +622,10 @@ def _():
         assert len(out) == 2 and out[0]["scene"] != out[1]["scene"]
         for o in out:
             v = o["video"]
-            assert os.path.exists(v["path"]) and v["frames"] == 12 and v["size"][0] % 2 == 0 and v["size"][1] % 2 == 0, v
+            assert os.path.exists(v["path"]) and v["frames"] == 12, v
             assert v["codec"] in ("h264", "gif") and os.path.exists(o["scores_strip"])
-            if v["codec"] == "h264":
+            if v["codec"] == "h264":                                            # H.264 needs an even size (the gif fallback does not)
+                assert v["size"][0] % 2 == 0 and v["size"][1] % 2 == 0, v
                 video.verify(v["path"], 12)
         part = suite.qual.videos(1, scenes=["toy-04"], max_frames=5, render_every=2)[0]
         assert part["video"]["frames"] == 3, "render_every 2 of 5 frames = 3 pictures"
@@ -577,12 +705,21 @@ def _():
     with tempfile.TemporaryDirectory() as d:
         frames = [np.full((75, 101, 3), 30 * i + 20, np.uint8) for i in range(5)]
         info = video.encode(frames, os.path.join(d, "v.mp4"), fps=2)
-        assert info["frames"] == 5 and info["size"][0] % 2 == 0 and info["size"][1] % 2 == 0, info
+        assert info["frames"] == 5 and (info["codec"] == "gif" or (info["size"][0] % 2 == 0 and info["size"][1] % 2 == 0)), info
         try:
             video.encode([], os.path.join(d, "x.mp4"))
             raise AssertionError("must raise")
         except ValueError:
             pass
+    with open(video.__file__, encoding="utf-8") as f:                       # where ffmpeg is looked up: no path of one machine
+        assert "/mnt/c" not in f.read()
+    old = os.environ.get("FFMPEG")
+    try:
+        os.environ["FFMPEG"] = "/no/such/ffmpeg"
+        assert next(video._candidates()) == "/no/such/ffmpeg", "$FFMPEG is looked at first"
+    finally:
+        os.environ.pop("FFMPEG") if old is None else os.environ.__setitem__("FFMPEG", old)
+    assert video._wsl_exe("ffmpeg.exe") == (os.name == "posix") and not video._wsl_exe("/usr/bin/ffmpeg"), "no wslpath under native Windows"
 
 
 @check("report: tables, images and links; links_in finds every target")
@@ -637,6 +774,46 @@ def _():
     m(x)
 
 
+# ------------------------------------------------------------------------------------------------ probing
+@check("probing: the budget adds up to the error cells counted directly; the place to work comes from Task.causes() (the cause name when it gives none); situations find the planted frames; sample / scan / CLI; an empty run has no situations")
+def _():
+    import io
+    import contextlib
+    from evalsuite.cli import main
+    with tempfile.TemporaryDirectory() as d:
+        suite = make(d)
+        st = suite.quant.run(name="a", progress=0)
+        src, subj = suite.source, suite.subject
+        want = {"fn.near": 0.0, "fn.far": 0.0, "fp.near": 0.0, "fp.far": 0.0}
+        for sc in src.scenes():                                       # the error cells without the suite (carry: reset per scene)
+            subj.reset()
+            for ref in src.frames(sc):
+                s = src.load(ref)
+                p, g = subj.predict(s).outputs["mask"], s.reference["mask"]
+                for half, sl in (("near", slice(0, toy.SIZE // 2)), ("far", slice(toy.SIZE // 2, None))):
+                    want[f"fn.{half}"] += float((~p & g)[:, sl].sum())
+                    want[f"fp.{half}"] += float((p & ~g)[:, sl].sum())
+        bud = {b["cause"]: b for b in suite.probe.budget(st)}
+        assert all(abs(bud[c]["amount"] - want[c]) < 1e-6 for c in want), (bud, want)
+        assert abs(sum(b["share"] for b in bud.values()) - 1) < 1e-12
+        assert bud["fp.near"]["target"] == "code" and bud["fn.near"]["target"] == "model" and bud["fn.far"]["target"] == "fn.far"
+        tg, sh = suite.probe.targets(list(bud.values())), {c: b["share"] for c, b in bud.items()}
+        assert abs(tg["evaluation"] - sh["fp.far"] / 2) < 1e-12 and abs(tg["model"] - sh["fn.near"] - sh["fp.far"] / 2) < 1e-12 and abs(tg["fn.far"] - sh["fn.far"]) < 1e-12
+        sits = {s["name"]: s for s in suite.probe.situations(st, min_frames=1)}
+        planted = {f"{s}/{i:03d}" for (s, i) in toy.PLANTED}
+        assert set(sits["planted"]["labels"]) == planted and sits["planted"]["excess"] > 0, sits.get("planted")
+        smp = suite.probe.sample(st, "planted", 2, seed=1, render=False)
+        assert len(smp) == 2 and {x["label"] for x in smp} <= planted
+        res = suite.probe.scan(st, k=1, top=2, seed=0, render=False)
+        assert os.path.exists(os.path.join(res["dir"], "budget.csv")) and os.path.exists(res["index"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            assert main(["--adapter", "evalsuite.adapters.toy:build", "--arg", "n_scenes=3", "--out", d, "probe", "budget", "a"]) == 0
+        assert "fp.near (code)" in buf.getvalue() and "fn.far (fn.far)" in buf.getvalue()
+        empty = suite.quant.run(frames=[], name="e", progress=0)
+        assert len(empty.frames) == 0 and suite.probe.situations("e") == [] and suite.probe.budget("e") == []
+
+
 # ------------------------------------------------------------------------------------------------ the contract checker and the CLI
 @check("check_adapter: a good adapter passes; broken adapters are caught with the reason")
 def _():
@@ -661,6 +838,20 @@ def _():
         class Stateful(toy.ToySubject):
             def reset(self): pass
         assert "subject: reset() restores the start state" in failed(EvalSuite(toy.ToySource(), Stateful(), toy.ToyTask(), out=d))
+
+        from evalsuite.adapters import minimal                         # S6: a Subject WITHOUT taps whose reset() forgets nothing
+
+        class LeakyNoTaps(minimal.MinSubject):
+            def __init__(self):
+                super().__init__()
+                self.mem = None
+
+            def predict(self, sample, taps=()):
+                x = np.asarray(sample.inputs, float)
+                self.mem = x if self.mem is None else 0.5 * self.mem + 0.5 * x          # a memory that reset() never clears
+                return Prediction(outputs=self.mem > self.threshold)
+        assert "subject: reset() restores the start state" in failed(EvalSuite(minimal.MinSource(), LeakyNoTaps(), minimal.MinTask(), out=d))
+        assert not failed(EvalSuite(*minimal.build(), out=d)), "the stateless minimal adapter passes the reset check through its outputs"
 
         class OrderDep(toy.SegMetric):
             def reduce(self, counts, keys=None):
@@ -747,6 +938,7 @@ def _():
         call("quant", "table", "a")
         call("quant", "per-scene", "a")
         call("quant", "report", "a", "--render", "1")
+        call("quant", "trace", "a", "demo-1/3")                               # the unpadded label (stored as demo-1/003)
         call("quant", "timing", "--n", "3", "--run", "a")
         assert "checks passed" in call("selftest-adapter")
         call("--arg", "threshold=0.1", "quant", "run", "--name", "b")
@@ -772,11 +964,10 @@ def _():
 
 
 def main(only=()) -> int:
-    from evalsuite.selftest_lanes import CHECKS as LANE_CHECKS
     from evalsuite.selftest_cost import CHECKS as COST_CHECKS
     from evalsuite.selftest_comparison import CHECKS as COMPARISON_CHECKS
-    checks = CHECKS + COST_CHECKS + COMPARISON_CHECKS + LANE_CHECKS
-    if only:                                                               # name filter: python -m evalsuite selftest lane
+    checks = CHECKS + COST_CHECKS + COMPARISON_CHECKS                     # the lane Task's tests live in the lane project (D24)
+    if only:                                                               # name filter: python -m evalsuite selftest compare
         checks = [c for c in checks if any(o in c[0] for o in only)]
     t0 = time.time()
     bad = 0

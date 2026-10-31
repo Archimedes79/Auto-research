@@ -329,6 +329,8 @@ class Task(ABC):
         adds up over frames (e.g. metres of lane). Cheap, deterministic, no network access."""
         return {}
 
-    def causes(self) -> Dict[str, Tuple[str, str]]:
-        """optional: cause name (without the 'cause.' prefix) -> (what it is, what to improve: model / code / evaluation)"""
+    def causes(self) -> Dict[str, Tuple[str, ...]]:
+        """optional: cause name (without the 'cause.' prefix) -> (what it is, what to improve[, where to work]). The third entry is the
+        place the probing books the cause to (e.g. 'model', 'code', 'evaluation'; 'model/evaluation' shares it equally); without it the
+        cause name is the place."""
         return {}

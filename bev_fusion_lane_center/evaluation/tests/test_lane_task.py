@@ -1,22 +1,29 @@
-"""Known-answer tests of the lane suite (`lanes/`, `probing.py`, `adapters/lanes_synth.py`). Registered into the core self-test
-(`python -m evalsuite selftest`); every number is compared with a hand calculation or an independent brute-force computation, and the
+"""Known-answer tests of the lane Task of the evalsuite (`../lane_task/`: geometry, raster, measures, causes, task, views, the synthetic
+world `synth.py`) and of the core probing on it. Moved out of `autoresearch/evalsuite/selftest_lanes.py` on 2026-10-31 (D24); the evalsuite
+selftest no longer runs lane checks.   tools/env/_py14.sh test_lane_task.py [name filter ...]
+Every number is compared with a hand calculation or an independent brute-force computation, and the
 planted causes of the synthetic world must be found where they were planted."""
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
+import time
+import traceback
 from typing import Callable, List, Tuple
 
 import numpy as np
 
-from . import EvalSuite
-from .adapters import lanes_synth as LS
-from .lanes import Grid, LaneGraph, LaneTask, rasterize, resample, simplify, skeleton_graph, thin
-from .lanes import causes as C
-from .lanes import measures as M
-from .lanes import task as T
-from .lanes.raster import edt
-from .render import report
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))   # evaluation/: the lane_task package
+from lane_task import Grid, LaneGraph, LaneTask, rasterize, resample, simplify, skeleton_graph, thin  # noqa: E402  (puts the evalsuite on the path)
+from lane_task import causes as C  # noqa: E402
+from lane_task import measures as M  # noqa: E402
+from lane_task import synth as LS  # noqa: E402
+from lane_task import task as T  # noqa: E402
+from lane_task.raster import edt  # noqa: E402
+
+from evalsuite import EvalSuite  # noqa: E402
+from evalsuite.render import report  # noqa: E402
 
 CHECKS: List[Tuple[str, Callable]] = []
 
@@ -307,9 +314,9 @@ def t_lane_suite():
         except KeyError:
             pass
         # the same through the command line
-        from .cli import main
+        from evalsuite.cli import main
         out = os.path.join(d, "cli")
-        base = ["--adapter", "evalsuite.adapters.lanes_synth:build", "--arg", "n_frames=4", "--out", out]
+        base = ["--adapter", "lane_task.synth:build", "--arg", "n_frames=4", "--out", out]
         assert main(base + ["quant", "run", "--name", "c"]) == 0
         assert main(base + ["probe", "budget", "c"]) == 0 and main(base + ["probe", "situations", "c"]) == 0
         assert main(base + ["probe", "sample", "c", "dominated by fn.gap", "-n", "1"]) == 0
@@ -318,8 +325,8 @@ def t_lane_suite():
 
 @check("lane views: the overview has the six panels; blue = ground truth without prediction, red = prediction without ground truth at the planted places")
 def t_lane_views():
-    from .contracts import ViewContext
-    from .render.figure import FN_COLOR, FP_COLOR, render_page
+    from evalsuite.contracts import ViewContext
+    from evalsuite.render.figure import FN_COLOR, FP_COLOR, render_page
     src, subj, task = LS.build(n_frames=3)
     v = task.views()["overview"]
     sm = src.load(src.frames("road-06")[0])                                                    # short: lanes end at 30 m
@@ -333,3 +340,52 @@ def t_lane_views():
     assert [s for s in pg.panels[2].shapes if tuple(s.color) == tuple(FP_COLOR)] and not [s for s in pg.panels[2].shapes if tuple(s.color) == tuple(FN_COLOR)]
     img = render_page(pg)
     assert img.ndim == 3 and img.shape[0] > 300 and img.shape[1] > 600
+
+
+@check("lane probe of a constant prediction (S1): a Subject that hands out ONE LaneGraph (or one Prediction) for every frame gets each frame's own tags and error budget")
+def t_constant_prediction():
+    from evalsuite.contracts import Prediction, Subject
+
+    class Const(Subject):                                    # a null baseline / a prior: the same object for every frame
+        def __init__(self, g, same_prediction=False):
+            self.g, self.p = g, (Prediction({"lanes": g}) if same_prediction else None)
+
+        def predict(self, sample, taps=()):
+            return self.p if self.p is not None else Prediction({"lanes": self.g})
+
+    src, _, task = LS.build(n_frames=3)
+    frames = [src.load(r) for sc in src.scenes()[:4] for r in src.frames(sc)]
+    for g in (LaneGraph([]), LaneGraph([line(0, 0, 0, 50, 26)])):
+        for same in (False, True):
+            subj = Const(g, same)
+            for smp in frames:
+                own = task.probe(smp, Prediction({"lanes": LaneGraph([p.copy() for p in g.lines])}))   # a fresh object: nothing cached
+                got = task.probe(smp, subj.predict(smp))
+                assert got == own, (smp.ref.label, same, {k: (got[k], own[k]) for k in own if got.get(k) != own[k]})
+                d = T.lane_data(task.cfg, smp, subj.predict(smp))
+                assert d.gt is not None and abs(d.gt.length() - LaneGraph.of(smp.reference["lanes"]).length()) < 1e-9   # the frame's own ground truth
+    with tempfile.TemporaryDirectory() as d:                 # end to end: the stored probe tags of a run of the empty baseline
+        s = EvalSuite(src, Const(LaneGraph([])), task, out=d)
+        st = s.quant.run(scenes=src.scenes()[:4], name="null", progress=0)
+        gl = {fr["label"]: fr["info"]["probe"]["tag.gt_len"] for fr in st.frames}
+        want = {smp.ref.label: round(LaneGraph.of(smp.reference["lanes"]).length(), 4) for smp in frames}
+        assert gl == want and len(set(gl.values())) > 1, (gl, want)
+
+
+def main(only=()) -> int:
+    checks = [c for c in CHECKS if not only or any(o in c[0] for o in only)]
+    t0, bad = time.time(), 0
+    for name, fn in checks:
+        t = time.time()
+        try:
+            fn()
+            print(f"ok    {name}  ({time.time() - t:.1f} s)")
+        except Exception:                                                  # noqa: BLE001
+            bad += 1
+            print(f"FAIL  {name}\n{traceback.format_exc()}")
+    print(f"lane task tests: {len(checks) - bad}/{len(checks)} checks passed in {time.time() - t0:.0f} s")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

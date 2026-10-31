@@ -9,7 +9,8 @@
                              each listed frame with its own drag on the headline numbers, (3) plausibility flags;
                              every row carries the frame label and the command that draws it
     trace(run, label)        draw such a frame (overview + debug) through the qualitative suite
-    compare(a, b)            paired scene bootstrap of the headline numbers between two stored runs (same frames), no network
+    compare(a, b)            paired scene bootstrap of the headline numbers between two stored runs (a = control, b = variant: b - a;
+                             same frames, same source and task), no network
     report(run)              html: tables, outliers with pictures of the worst frames
     timing(run=)             ms per frame of the Subject (only valid on an idle machine; the load is recorded); run() itself records
                              the ms per frame of its own frames and Subject.ops (cost.py), pareto() sets runs against each other
@@ -30,7 +31,7 @@ from .render import report as html
 from .runner import Runner
 from .sampling import Sampler
 from .stats import bootstrap_scenes, loo_influence, robust_z
-from .store import RunStore, _identity_differences
+from .store import RunStore, _identity_differences, warn_gained
 
 
 def _slug(text: str) -> str:
@@ -242,9 +243,15 @@ class Quantitative:
         return self.s.qual.frame((fr["scene"], fr["index"]), views, out_dir=os.path.join(st.path, "trace"), history=history, state=state)
 
     # -------------------------------------------------------------------------------------- compare
-    def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0) -> Dict[str, Any]:
-        """Paired scene bootstrap, b - a, of the headline numbers on the frames both runs have. -> {'metric.key': {...}}"""
+    def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0, force: bool = False
+                ) -> Dict[str, Any]:
+        """Paired scene bootstrap of the headline numbers on the frames both runs have: run_a = the CONTROL (reference), run_b = the
+        VARIANT, diff = b - a = variant - control (the sign autoresearch/tools/decide.py reads, the same as the lane project's
+        SB.paired(variant, control)). -> {'metric.key': {a, b, diff, lo, hi, p_b_better (direction-aware), p_diff_gt0, n_valid, ...}}.
+        Both runs must come from the same Source and Task (their manifests' `source` and `task` entries: dataset, split, ground-truth
+        version, caches); otherwise the counts are of different questions and the comparison is refused (force=True compares anyway)."""
         a, b = self.open(run_a), self.open(run_b)
+        same_question(a, b, force=force)
         common = set(a.labels()) & set(b.labels())
         if not common:
             raise ValueError("the runs have no frame in common")
@@ -255,7 +262,7 @@ class Quantitative:
             if not hk:
                 continue
             ca, cb = _by_scene(a, name, common), _by_scene(b, name, common)
-            for key, v in bootstrap_scenes(ca, cb, m.reduce, hk, n=boot, seed=seed).items():
+            for key, v in bootstrap_scenes(ca, cb, m.reduce, hk, n=boot, seed=seed, better={k: m.direction(k) for k in hk}).items():
                 v["better"] = m.direction(key)
                 out["metrics"][f"{name}.{key}"] = v
         return out
@@ -317,11 +324,12 @@ class Quantitative:
 
     # -------------------------------------------------------------------------------------- timing
     def pareto(self, runs: Sequence[Union[str, RunStore]], y: Optional[str] = None, costs: Sequence[str] = ("ms", "gmacs"),
-               out: Optional[str] = None) -> Dict[str, Any]:
+               out: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
         """quality (`y` = 'metric.key', default the first headline number) against ms and GMACs per frame for several runs, on the
-        frames all of them have; marks the runs no other run beats on both (see cost.py); writes quant/pareto_<y>.png and .json"""
+        frames all of them have; marks the runs no other run beats on both (see cost.py); writes quant/pareto_<y>.png and .json;
+        the runs must share source and task (force=True skips that check)"""
         from . import cost
-        return cost.pareto(self, runs, y, costs, out)
+        return cost.pareto(self, runs, y, costs, out, force=force)
 
     def timing(self, spec: Any = None, n: int = 30, run: Optional[Union[str, RunStore]] = None, force: bool = False) -> Dict[str, Any]:
         """ms per frame of the Subject on one frame (the first frame of the first scene, or `spec`). Only valid on an idle
@@ -330,8 +338,11 @@ class Quantitative:
         Source and Task of this suite must be those of the run (force=True skips the check)."""
         st = self.open(run) if run is not None else None
         if st is not None and not force:
+            gained: List[str] = []
             diff = _identity_differences(st.manifest, {"source": self.s.source.describe(), "subject": self.s.subject.describe(),
-                                                       "task": self.s.task.name}, ("source", "subject", "task"))
+                                                       "task": self.s.task.name}, ("source", "subject", "task"), gained=gained)
+            if not diff:
+                warn_gained(gained, f"timing attached to run {st.manifest.get('name')}")
             if diff:
                 raise ValueError(f"this suite is not the one that made run {st.manifest.get('name')} ({'; '.join(diff)}): a benchmark of "
                                  "another network must not be attached to it (force=True does it anyway)")
@@ -347,6 +358,23 @@ class Quantitative:
         if st is not None:
             st.set_cost("bench", dict(res))
         return res
+
+
+def same_question(*stores: RunStore, force: bool = False) -> None:
+    """refuse runs whose manifests differ in `source` or `task` (dataset, split, ground-truth version, caches: the bev_fusion GT signature
+    trap) unless force=True; the first run is the reference"""
+    if force or len(stores) < 2:
+        return
+    bad = []
+    for st in stores[1:]:
+        gained: List[str] = []
+        diff = _identity_differences(stores[0].manifest, st.manifest, ("source", "task"), gained=gained, either=True)
+        warn_gained(gained, f"comparing {st.manifest.get('name', st.path)} with {stores[0].manifest.get('name', stores[0].path)}")
+        if diff:
+            bad.append(f"{st.manifest.get('name', st.path)} vs {stores[0].manifest.get('name', stores[0].path)}: {'; '.join(diff)}")
+    if bad:
+        raise ValueError("the runs do not come from the same source and task, so their numbers answer different questions ("
+                         + " | ".join(bad) + "); evaluate both on the same data, or force=True (--force) to compare anyway")
 
 
 def _cost_rows(man: Dict[str, Any]) -> List[list]:

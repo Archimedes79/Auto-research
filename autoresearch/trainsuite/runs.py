@@ -2,7 +2,7 @@
 
 A run directory follows the contract of README.md: `config.json` (key `steps`), the metrics stream `log.jsonl`, the text log `train.log`,
 the flag `.done` (only for exit code 0), the control files `CONTROL` / `STOPPED`. Layouts that differ are described in an optional
-`trainsuite.json` inside the run directory: {"log": "metrics.jsonl", "text_log": "run.log", "loss": "loss", "steps": 3000}.
+`trainsuite.json` inside the run directory: {"log": "metrics.jsonl", "text_log": "run.log", "loss": "loss", "steps": 3000, "progress": "it "}.
 """
 import json
 import math
@@ -67,6 +67,7 @@ class Run:
         self.log_name = opt.get("log", "log.jsonl")
         self.text_name = opt.get("text_log", "train.log")
         self.loss_key = opt.get("loss", loss)
+        self.progress = str(opt.get("progress", "step "))      # how a progress line of the text log starts (crash detection)
         self.total = int(opt.get("steps") or self.cfg.get("steps") or 0)
         self.train, self.evals, self.restarts = read_log(self.p(self.log_name))
 
@@ -104,13 +105,15 @@ class Run:
 
     def crash_reason(self):
         """the last line of a traceback when the text log ends in one (a crashed process writes nothing more), else ''.
-        The last traceback of the final 20 KB counts if no `step ...` line follows it."""
+        The last traceback of the final 20 KB counts unless a progress line follows it: a line that starts with `self.progress`
+        (trainsuite.json "progress", default "step ", the bev_fusion trainer). Not "any line after it": a crash message can run over
+        several lines (CUDA errors do), and launchers print after a crash."""
         text = self.text_tail()
         i = text.rfind("Traceback (most recent call last)")
         if i < 0:
             return ""
         after = [x for x in text[i:].splitlines() if x.strip()]
-        if any(x.startswith("step ") for x in after[1:]):
+        if self.progress and any(x.startswith(self.progress) for x in after[1:]):
             return ""
         return after[-1].strip()[:200]
 

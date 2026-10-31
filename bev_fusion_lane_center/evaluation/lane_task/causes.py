@@ -44,6 +44,15 @@ FN = [k for k in CAUSES if k.startswith("fn.")]
 FP = [k for k in CAUSES if k.startswith("fp.")]
 
 
+def target_of(fix: str) -> str:
+    """where to work on a cause: 'model' | 'code' | 'evaluation' (or 'model/evaluation' when the fix text names both), read from the lane
+    words of its fix text (moved here from evalsuite/probing.py: the core takes the place from Task.causes(), see LaneTask.causes)"""
+    f = fix.lower()
+    found = [t for t, keys in (("evaluation", ("evaluation", "gt ", "ground truth")), ("code", ("assembly", "code", "pruning", "linking")),
+                               ("model", ("model", "calibration"))) if any(k in f for k in keys)]
+    return "/".join(found) if found else "model"
+
+
 def best_shift(P: np.ndarray, G: np.ndarray, tau: float, smax: float, step: float):
     """translation (du, dv) of the prediction that fits both sets best (triangular kernel of width tau: the peak is the true displacement,
     a count within tau would be flat over a whole range of shifts)

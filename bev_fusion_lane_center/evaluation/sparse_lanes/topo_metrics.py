@@ -15,12 +15,20 @@ and where along the range the misses are. These metrics close them; graph format
     extra(preds, gts) -> dict(topo_P, topo_R, topo_F1, dup_frac, R@1_near, R@1_mid, R@1_far, P@1_near, P@1_mid, P@1_far)
 Self-test: python topo_metrics.py
 """
+import os
+import sys
+
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
+import bflc_paths as BP  # project paths from the location of this checkout
 import graph_eval as GE
+
+if os.path.join(BP.REPO, "autoresearch") not in sys.path:
+    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
+from evalsuite import stats as ST  # noqa: E402  (the shared scene bootstrap)
 
 CLIP = 48.0
 BINS = (("near", 0.0, 20.0), ("mid", 20.0, 40.0), ("far", 40.0, 1e9))
@@ -182,24 +190,16 @@ def extra(preds, gts):
 
 
 def paired(recs_a, recs_b, scenes, B=1000, seed=0, keys=("topo_F1", "topo_R", "topo_P", "dup_frac", "R@1_far", "R@1_mid", "R@1_near")):
-    """a - b with a 95 % interval over resampled scenes (same draw for both systems), like bootstrap.paired for the card metrics"""
-    scenes = np.asarray(scenes)
-    us = np.unique(scenes)
-    idx = {s: np.nonzero(scenes == s)[0] for s in us}
-    rng = np.random.RandomState(seed)
-    base_a, base_b = pooled(recs_a), pooled(recs_b)
-    draws = {k: [] for k in keys}
-    for _ in range(B):
-        fr = np.concatenate([idx[s] for s in rng.choice(us, len(us), replace=True)])
-        pa, pb = pooled([recs_a[i] for i in fr]), pooled([recs_b[i] for i in fr])
-        for k in keys:
-            draws[k].append(pa[k] - pb[k])
+    """a - b (a = variant, b = control) with a 95 % interval over resampled scenes (same draw for both systems), like bootstrap.paired for the
+    card metrics and with the same draws (the shared evalsuite.stats bootstrap). Draws without a number (a range bin with no point: NaN) are
+    dropped; then the key carries n_valid. p_a_better = share of the valid draws with a - b > 0 (for dup_frac, lower is better)."""
+    res = ST.paired_draws(lambda idx: pooled(recs_a if idx is None else [recs_a[i] for i in idx]),
+                          lambda idx: pooled(recs_b if idx is None else [recs_b[i] for i in idx]), ST.scene_draws(scenes, B, seed), keys)
     out = {}
-    for k in keys:
-        d = np.asarray(draws[k], float)
-        d = d[np.isfinite(d)]
-        out[k] = dict(a=base_a[k], b=base_b[k], diff=base_a[k] - base_b[k], lo=float(np.percentile(d, 2.5)) if len(d) else float("nan"),
-                      hi=float(np.percentile(d, 97.5)) if len(d) else float("nan"), p_a_better=float((d > 0).mean()) if len(d) else float("nan"))
+    for k, v in res.items():
+        out[k] = dict(a=v["a"], b=v["b"], diff=v["diff"], lo=v["lo"], hi=v["hi"], p_a_better=v["p_gt0"])
+        if v["n_valid"] < v["n_draws"]:
+            out[k]["n_valid"] = v["n_valid"]
     return out
 
 

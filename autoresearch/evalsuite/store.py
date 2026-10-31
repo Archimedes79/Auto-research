@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -35,20 +36,35 @@ _IDENTITY_KEYS = ("state", "source", "subject", "task", "selection")
 _VOLATILE = {"subject": ("device",)}
 
 
-def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDENTITY_KEYS) -> List[str]:
-    """the manifest entries that make a resume (or a benchmark attached to a run) another run (what differs, stored -> new)"""
+def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDENTITY_KEYS, gained: Optional[List[str]] = None,
+                          either: bool = False) -> List[str]:
+    """the manifest entries that make a resume (or a benchmark attached to a run) another run (what differs, stored -> new).
+    A key of a description (source / subject / task dict) that is NEW in `new` and absent from `stored` is not a difference: the
+    stored run predates it (an adapter that later adds e.g. a ground-truth signature must not orphan its older stores); it is
+    appended to `gained` ("source: gt_signature") for a warning. either=True (two stored runs compared) tolerates a key that only
+    one side has, in both directions. A key present on both sides with another value always differs."""
     out = []
     for k in keys:
         a, b = stored.get(k), new.get(k)
         if isinstance(a, dict) and isinstance(b, dict):
             drop = _VOLATILE.get(k, ())
             a, b = {x: v for x, v in a.items() if x not in drop}, {x: v for x, v in b.items() if x not in drop}
-            bad = sorted(x for x in set(a) | set(b) if a.get(x) != b.get(x))
+            only = sorted(set(b) - set(a)) + (sorted(set(a) - set(b)) if either else [])
+            if only and gained is not None:
+                gained.append(f"{k}: {', '.join(map(str, only))}")
+            bad = sorted(x for x in set(a) | set(b) if x not in only and a.get(x) != b.get(x))
             if bad:
                 out.append(f"{k}: " + ", ".join(f"{x} {a.get(x)!r} -> {b.get(x)!r}" for x in bad[:3]))
         elif a != b:
             out.append(f"{k}: {a!r} -> {b!r}")
     return out
+
+
+def warn_gained(gained: List[str], where: str) -> None:
+    """the warning for tolerated description keys (stderr: PYTHONWARNINGS=ignore must not hide it)"""
+    if gained:
+        print(f"evalsuite warning: {where}: description gained keys: {'; '.join(gained)}; the stored run predates them (compared on the "
+              "keys both have)", file=sys.stderr, flush=True)
 
 
 class RunStore:
@@ -64,15 +80,25 @@ class RunStore:
     def create(cls, path: str, manifest: Dict[str, Any], resume: bool = True, force: bool = False) -> "RunStore":
         """a new run directory, or (resume) the existing one: frames already stored are kept. A resume must be the SAME run (state,
         source, subject, task, selection as in the stored manifest, the device aside): otherwise the stored counts would be mixed
-        into the numbers of another checkpoint / seed / frame set. force=True skips that check."""
+        into the numbers of another checkpoint / seed / frame set. force=True skips that check. A description key that is new in
+        `manifest` and absent from the stored run (an adapter that added e.g. a ground-truth signature) is tolerated with a warning; the
+        stored descriptions are then kept and the keys listed under `predates_keys`."""
         if os.path.exists(os.path.join(path, "manifest.json")):
             if not resume:
                 raise FileExistsError(f"{path} already holds a run (resume it or choose another name)")
             st = cls.open(path, mode="a")
-            diff = [] if force else _identity_differences(st.manifest, manifest)
+            gained: List[str] = []
+            diff = [] if force else _identity_differences(st.manifest, manifest, gained=gained)
             if diff:
                 raise ValueError(f"{path} holds a different run ({'; '.join(diff)}): choose another name, or force=True to resume it anyway")
+            warn_gained(gained, f"resume of {path}")
+            old = {k: st.manifest.get(k) for k in _IDENTITY_KEYS}
             st.manifest.update({k: v for k, v in manifest.items() if k not in ("created",)})
+            if gained and not force:                                       # the stored frames predate the new keys: keep the stored
+                for k, v in old.items():                                   # descriptions, so the manifest does not claim them
+                    if isinstance(v, dict):
+                        st.manifest[k] = v
+                st.manifest["predates_keys"] = sorted(set(st.manifest.get("predates_keys", [])) | set(gained))
             st.manifest["resumed"] = st.manifest.get("resumed", 0) + 1
             return st
         os.makedirs(path, exist_ok=True)
@@ -113,6 +139,7 @@ class RunStore:
         by_metric: Dict[str, Dict[str, np.ndarray]] = {}
         for pos, fr in enumerate(self._buf):
             for metric, counts in fr["_counts"].items():
+                by_metric.setdefault(metric, {})                         # a metric with empty counts for the whole chunk still gets its file
                 for k, v in counts.items():
                     by_metric.setdefault(metric, {})[f"{pos}|{k}"] = np.asarray(v)
         for metric, arrays in by_metric.items():
@@ -171,10 +198,12 @@ class RunStore:
             if len(self._cache) > 6:
                 self._cache.pop(next(iter(self._cache)))
             out: Dict[int, Counts] = {}
-            with np.load(os.path.join(self.path, f"counts_{metric}_{chunk:05d}.npz")) as z:
-                for name in z.files:
-                    pos, k = name.split("|", 1)
-                    out.setdefault(int(pos), {})[k] = z[name]
+            fn = os.path.join(self.path, f"counts_{metric}_{chunk:05d}.npz")
+            if os.path.exists(fn):                                           # missing (a run stored before 2026-10-31 whose metric gave {} for a
+                with np.load(fn) as z:                                       # whole chunk): the frames of the chunk have empty counts
+                    for name in z.files:
+                        pos, k = name.split("|", 1)
+                        out.setdefault(int(pos), {})[k] = z[name]
             self._cache[key] = out
         return self._cache[key]
 
@@ -195,7 +224,13 @@ class RunStore:
         return res
 
     def frame(self, label: str) -> Dict[str, Any]:
+        """the stored frame by its label; 'scene/3', 'scene:3' and 'scene/003' name the same frame (FrameRef.parse)"""
         for fr in self._frames:
             if fr["label"] == label:
                 return fr
-        raise KeyError(label)
+        parsed = FrameRef.parse(str(label))
+        if parsed is not None:
+            for fr in self._frames:
+                if (fr["scene"], int(fr["index"])) == parsed:
+                    return fr
+        raise KeyError(f"{label!r}: no such frame in this run (labels look like {self._frames[0]['label']!r})" if self._frames else f"{label!r}: the run has no frames")

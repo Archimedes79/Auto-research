@@ -10,7 +10,31 @@ import torch
 import grid_eval as GR
 
 R = BP.ROOT
-prob = torch.from_numpy(np.load(f"{R}/runs/e37_final/prob_val.npy"))
+
+
+def spec_hysteresis_with_range():
+    """skeletons with low and rg both set (review bug L3, D24): every seed pixel (D <= thr * (1 + rg r / 48)) survives the hysteresis, weak pixels
+    (seed threshold < D <= low) survive only when connected to a seed. Synthetic distance field on the CPU."""
+    D = np.full((1, 200, 200), 10.0, np.float32)
+    D[0, 195:198, 180:199] = 1.0  # far (r > 60 m): a seed at rg = 1 (threshold > 1.1) but above low = 0.8
+    D[0, 100:103, 100:111] = 0.3  # near seed
+    D[0, 100:103, 111:121] = 0.7  # weak, connected to the near seed (threshold there < 0.61)
+    D[0, 100:103, 80:91] = 0.7  # weak, isolated
+    old, GR.dev = GR.dev, "cpu"
+    try:
+        sk = GR.skeletons(D, thr=0.5, low=0.8, rg=1.0)[0]
+        sk0 = GR.skeletons(D, thr=0.5, low=0.8, rg=0.0)[0]
+    finally:
+        GR.dev = old
+    assert sk[195:198, 180:199].any(), "far seed dropped by the hysteresis"
+    assert sk[100:103, 111:121].any() and sk[100:103, 100:111].any(), "connected weak pixels not grown"
+    assert not sk[100:103, 80:91].any(), "isolated weak pixels kept"
+    assert not sk0[195:198, 180:199].any() and sk0[100:103, 111:121].any(), "rg = 0: far line is no seed, the weak run still grows"
+    print("skeletons hysteresis + range threshold spec passed")
+
+
+spec_hysteresis_with_range()
+prob =torch.from_numpy(np.load(f"{R}/runs/e37_final/prob_val.npy"))
 ids = np.load(f"{R}/runs/e37_final/ids_val.npy")
 stored = json.load(open(f"{R}/runs/e37_final/metrics.json"))["val"]
 taus = (0.3, 0.5, 0.7)

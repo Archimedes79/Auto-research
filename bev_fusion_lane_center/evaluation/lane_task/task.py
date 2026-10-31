@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from ..contracts import Flag, Metric, Prediction, Sample, Task
+from evalsuite.contracts import Flag, Metric, Prediction, Sample, Task
 from . import causes as C
 from . import measures as M
 from .geometry import LaneGraph
@@ -65,13 +65,16 @@ class LaneData:
     visible: Optional[np.ndarray]
     pred_from: str            # 'lanes' | 'prob' (read from the picture)
     gt_from: str
+    probe: Optional[Dict[str, float]] = None   # lane_probe() of this frame, computed once
 
 
 def lane_data(cfg: LaneConfig, sample: Sample, pred: Prediction) -> LaneData:
-    """the graph and the image form of ground truth and prediction of one frame, computed once and cached on the Prediction"""
+    """the graph and the image form of ground truth and prediction of one frame, computed once and cached on the Prediction together
+    with the frame it belongs to (a Subject may hand out one constant Prediction or LaneGraph for every frame: a null baseline, a prior)"""
     cache = pred.info.setdefault("_lane", {})
-    if id(cfg) in cache:
-        return cache[id(cfg)]
+    hit = cache.get(id(cfg))
+    if hit is not None and hit[0] == sample.ref:
+        return hit[1]
     ref, out = sample.reference or {}, pred.outputs or {}
     # ground truth
     if ref.get("lanes") is not None:
@@ -94,7 +97,7 @@ def lane_data(cfg: LaneConfig, sample: Sample, pred: Prediction) -> LaneData:
         pg, pf = skeleton_graph(prob >= cfg.thr, cfg.grid, cfg.skeleton_min_len, cfg.skeleton_tol), "prob"
     d = LaneData(gt, pg, mask, prob, None if ref.get("valid") is None else np.asarray(ref["valid"], bool),
                  None if ref.get("visible") is None else np.asarray(ref["visible"], bool), pf, gf)
-    cache[id(cfg)] = d
+    cache[id(cfg)] = (sample.ref, d)
     return d
 
 
@@ -191,10 +194,10 @@ class LaneTopoMetric(Metric):
 
 
 def lane_probe(cfg: LaneConfig, d: LaneData) -> Dict[str, float]:
-    """descriptors ('tag.*') and the error budget ('cause.*', metres of lane) of one frame"""
-    cache = d.pred.meta
-    if "probe" in cache:
-        return cache["probe"]
+    """descriptors ('tag.*') and the error budget ('cause.*', metres of lane) of one frame, cached on the frame's LaneData (never on the
+    LaneGraph: a constant prediction object would carry the first frame's tags into every other frame)"""
+    if d.probe is not None:
+        return d.probe
     gt, pr = d.gt, d.pred
     glen, plen = gt.length(), pr.length()
     dg = gt.dense(cfg.ds, cfg.box)
@@ -207,7 +210,7 @@ def lane_probe(cfg: LaneConfig, d: LaneData) -> Dict[str, float]:
            "tag.len_ratio": plen / glen if glen > 0 else 0.0, "tag.vert100": 100.0 * pr.vertices() / plen if plen > 0 else 0.0,
            "tag.shift": float(np.hypot(eb["shift_u"], eb["shift_v"]))}
     out.update({f"cause.{k}": eb[k] for k in C.CAUSES})
-    cache["probe"] = out
+    d.probe = out
     return out
 
 
@@ -253,8 +256,9 @@ class LaneTask(Task):
             out.update({f"tag.{k}": float(v) for k, v in self.extra_tags(sample).items()})
         return out
 
-    def causes(self) -> Dict[str, Tuple[str, str]]:
-        return dict(C.CAUSES)
+    def causes(self) -> Dict[str, Tuple[str, str, str]]:
+        """cause -> (what it is, what to improve, where to work: model / code / evaluation)"""
+        return {k: (what, fix, C.target_of(fix)) for k, (what, fix) in C.CAUSES.items()}
 
     def guide(self) -> str:
         c = self.cfg

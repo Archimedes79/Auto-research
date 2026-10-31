@@ -1,6 +1,9 @@
 """Szenen-Bootstrap (Schleife 4, E54): gepaarte 95-%-Intervalle der Kopfzahlen und ihrer Differenzen.
 Je System und Menge werden die Einzelergebnisse (GE.eval_sample, wie evaluate_parallel) berechnet und gepuffert (out/loop2/e54_boot/cache_<name>_<menge>.pkl); danach 2000 Ziehungen der Szenen mit Zuruecklegen (dieselbe Ziehung fuer alle Systeme)
--> Intervalle der Metriken F1@1 m, Route F, Split-/Merge-F1 (6 m), Richtung sowie der Differenzen zu einem Bezugssystem.  Aufruf (gcar): boot_eval.py [--sets val,test] [--draws 2000] [--workers 6]   Ausgabe: out/loop2/e54_boot/boot.json"""
+-> Intervalle der Metriken F1@1 m, Route F, Split-/Merge-F1 (6 m), Richtung sowie der Differenzen zu einem Bezugssystem.  Aufruf (gcar): boot_eval.py [--sets val,test] [--draws 2000] [--workers 6]   Ausgabe: out/loop2/e54_boot/boot.json
+Since D24 (2026-10-31) the scene draws and the intervals come from the one shared bootstrap, autoresearch/evalsuite/stats.py (scene_picks,
+interval_draws, paired_draws; the RandomState stream of sparse_lanes/bootstrap.py): a re-run gives the same method on other random draws
+than the stored E54 boot.json (loop 4 used numpy default_rng(0)). For new comparisons use sparse_lanes/bootstrap.py (evaluate.py --compare)."""
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
@@ -14,6 +17,10 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import graph_eval as GE  # noqa: E402
 import graph_from_dense as GD  # noqa: E402
+
+if os.path.join(BP.REPO, "autoresearch") not in sys.path:
+    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
+from evalsuite import stats as ST  # noqa: E402  (the shared scene bootstrap)
 
 OUT = BP.RUNS
 HOME = os.path.expanduser("~")
@@ -72,7 +79,6 @@ def main():
     scene = np.load(f"{HOME}/exp_gcar_b123/poses_val.npz")["scene"]
     want = set(a.systems.split(",")) if a.systems else None
     res = {}
-    rng = np.random.default_rng(0)
     for st in a.sets.split(","):
         per = {}
         ids_ref = None
@@ -104,23 +110,25 @@ def main():
         sc = scene[np.array(ids_ref)]
         us = np.unique(sc)
         inv = np.searchsorted(us, sc)
-        idx = rng.integers(0, len(us), size=(a.draws, len(us)))
-        W = np.zeros((a.draws, len(us)))
-        for b in range(a.draws):
-            W[b] = np.bincount(idx[b], minlength=len(us))
-        Tb = {}
+        W = np.stack([np.bincount(p, minlength=len(us)) for p in ST.scene_picks(len(us), a.draws, seed=0)]).astype(np.float64)  # draw b: how often each scene is in it
+        Tb, FULL, BS = {}, {}, {}
         out = dict(n_scenes=int(len(us)), n_samples=int(len(ids_ref)), systems={}, pairs={})
+
+        def stat(b, n):
+            """numbers of system n on all frames (b None) or on scene draw b (the draws are the rows of W)"""
+            return FULL[n] if b is None else {k: v[b] for k, v in BS[n].items()}
+
         for name, comp in per.items():
             S = np.zeros((len(us), comp.shape[1]))
             np.add.at(S, inv, comp)
             Tb[name] = W @ S
-            full, bs = metrics(comp.sum(0)), metrics(Tb[name])
-            out["systems"][name] = {k: dict(value=float(full[k]), lo=float(np.percentile(bs[k], 2.5)), hi=float(np.percentile(bs[k], 97.5))) for k in METRICS}
+            FULL[name], BS[name] = metrics(comp.sum(0)), metrics(Tb[name])
+            iv = ST.interval_draws(lambda b, n=name: stat(b, n), range(a.draws), METRICS)
+            out["systems"][name] = {k: dict(value=float(v["value"]), lo=v["lo"], hi=v["hi"]) for k, v in iv.items()}
         for x, y in PAIRS:
             if x in per and y in per:
-                fx, fy = metrics(per[x].sum(0)), metrics(per[y].sum(0))
-                bx, by = metrics(Tb[x]), metrics(Tb[y])
-                out["pairs"][f"{x}-{y}"] = {k: dict(diff=float(fx[k] - fy[k]), lo=float(np.percentile(bx[k] - by[k], 2.5)), hi=float(np.percentile(bx[k] - by[k], 97.5)), p_pos=float(np.mean((bx[k] - by[k]) > 0))) for k in METRICS}
+                pr = ST.paired_draws(lambda b: stat(b, x), lambda b: stat(b, y), range(a.draws), METRICS)
+                out["pairs"][f"{x}-{y}"] = {k: dict(diff=v["diff"], lo=v["lo"], hi=v["hi"], p_pos=v["p_gt0"]) for k, v in pr.items()}
         res[st] = out
     prev = json.load(open(f"{B}/boot.json")) if os.path.exists(f"{B}/boot.json") else {}
     prev.update(res)

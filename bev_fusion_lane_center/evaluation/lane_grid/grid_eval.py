@@ -22,7 +22,8 @@ HALF = 50.0
 
 
 def gauss_blur(H, sigma_px):
-    """H [B,200,200] -> geglaettet, Spitzenhoehe bleibt (Kern auf Maximum 1 normiert, dann auf Summe der Eingabe skaliert)."""
+    """H [B,200,200] -> separable Gaussian blur (sigma in pixels, replicate padding). The kernel is normalised to sum 1, so the mean of H is kept
+    and a narrow peak gets lower (a constant field is unchanged); the old docstring said the peak height is kept, which the code never did."""
     k = int(math.ceil(3 * sigma_px))
     x = torch.arange(-k, k + 1, device=H.device).float()
     g = torch.exp(-x * x / (2 * sigma_px**2))
@@ -143,7 +144,7 @@ def skeletons(D, thr=0.5, blur=0.0, low=None, min_comp=0, bs=16, rg=0.0):
         db = gauss_blur(d, blur) if blur > 0 else d
         blob = db <= thr_map[None]
         if low is not None and low > thr:
-            lowm = db <= low
+            lowm = db <= torch.clamp(thr_map, min=low)[None]  # grow mask >= seed threshold per pixel, so a far seed (thr_map > low when rg > 0) always survives (review bug L3, D24)
             m = blob
             for _ in range(80):
                 m2 = (F.max_pool2d(m.float()[:, None], 3, 1, 1)[:, 0] > 0) & lowm

@@ -158,13 +158,21 @@ def main():
             + "RuntimeError: boom\n"
         assert Run(make(tmp, "fail_long", rows(2), text=long_tb)).crash_reason() == "RuntimeError: boom"
         assert Run(make(tmp, "tb_then_steps", rows(2), text=tb + "step 60: total 10.0\n")).state() != "failed"
+        handled = "it 40 loss 11.0\nTraceback (most recent call last):\n  File x\nValueError: bad sample, skipped\nit 41 loss 10.9\n"   # S4: another log format
+        assert Run(make(tmp, "tb_other_fmt", rows(2), text=handled)).state() == "failed", "without a layout file only 'step ' lines count"
+        with open(os.path.join(tmp, "tb_other_fmt", "trainsuite.json"), "w") as f:
+            json.dump({"progress": "it "}, f)
+        r = Run(os.path.join(tmp, "tb_other_fmt"))
+        assert r.crash_reason() == "" and r.state() != "failed", "trainsuite.json 'progress' names the trainer's progress lines"
+        r = Run(make(tmp, "tb_cuda_multiline", rows(2), text=tb + "CUDA kernel errors might be asynchronously reported\nFor debugging consider CUDA_LAUNCH_BLOCKING=1.\n"))
+        assert r.state() == "failed", "a crash message over several lines is still a crash"
         assert Run(make(tmp, "end", rows(150), total=3000, age=3600)).state() == "ended"
         assert Run(make(tmp, "fin", rows(150), done=True)).state() == "done"
         os.makedirs(os.path.join(tmp, "empty"))
         assert Run(os.path.join(tmp, "empty")).state() == "new"
         slowrows = Run(make(tmp, "rowslow", rows(50, t0=now - 50 * 400, sec=20.0, every=20), age=1500))     # a row every 400 s
         assert slowrows.stale_limit() >= 4000 and slowrows.state() == "running", (slowrows.stale_limit(), slowrows.state())
-        ok("states: stalled, failed (a long traceback too; not when steps follow it), ended, done, new; the stall limit grows with the row interval")
+        ok("states: stalled, failed (a long traceback too; not when progress lines follow it, their prefix set in trainsuite.json), ended, done, new; the stall limit grows with the row interval")
 
         # 5 skipped steps, resume dedupe, eval rows
         txt = "".join(f"step {i}: non-finite loss, skipped ({k} in a row)\n" for i, k in ((10, 1), (11, 2), (12, 3)))

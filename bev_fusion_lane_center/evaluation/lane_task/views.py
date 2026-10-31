@@ -6,8 +6,8 @@ from typing import List
 
 import numpy as np
 
-from ..contracts import Page, Panel, Prediction, Sample, Shape, View, ViewContext
-from ..render.figure import ERROR_LEGEND, FN_COLOR, FP_COLOR, SKIP_COLOR, TP_COLOR
+from evalsuite.contracts import Page, Panel, Prediction, Sample, Shape, View, ViewContext
+from evalsuite.render.figure import ERROR_LEGEND, FN_COLOR, FP_COLOR, SKIP_COLOR, TP_COLOR
 from .geometry import Dense
 from .measures import nn_dist
 from .raster import edt

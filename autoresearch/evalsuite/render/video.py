@@ -4,8 +4,9 @@
 
 frames: image files (png / jpg) or arrays (H, W, 3 uint8) in order. Why not cv2.VideoWriter('mp4v'): that is MPEG-4 part 2, which
 browsers, the Claude app and most players refuse (2026-10-30: the first scene video did not play). H.264 needs an ffmpeg with
-libx264, looked up in $FFMPEG, the PATH and the ffmpeg.exe builds installed on the Windows side (called through WSL interop,
-`CANDIDATES`). Without any ffmpeg an animated GIF is written instead and the result says so. After encoding the file is decoded
+libx264, looked up in $FFMPEG (a path; under WSL it may be a Windows ffmpeg.exe, called through interop), the PATH
+(`ffmpeg`, under WSL also a Windows `ffmpeg.exe` on the PATH) and the pip package imageio-ffmpeg; no path of a particular machine is
+written here. Without any ffmpeg an animated GIF is written instead and the result says so. After encoding the file is decoded
 with OpenCV: frame count and a non-black first frame must match, otherwise the call fails (a video that does not play is never
 reported as done).
 """
@@ -19,13 +20,22 @@ from typing import Sequence, Union
 
 import numpy as np
 
-CANDIDATES = ("/mnt/c/Program Files/DownloadHelper CoApp/ffmpeg.exe",
-              "/mnt/c/Program Files (x86)/Digiarty/VideoProc Converter AI/ffmpeg.exe")
+
+def _candidates():
+    """$FFMPEG, then ffmpeg on the PATH (and ffmpeg.exe: Windows programs on the PATH of WSL), then imageio-ffmpeg's binary"""
+    yield os.environ.get("FFMPEG")
+    yield shutil.which("ffmpeg")
+    yield shutil.which("ffmpeg.exe")
+    try:
+        import imageio_ffmpeg                                           # optional (pip install imageio-ffmpeg)
+        yield imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:                                                   # noqa: BLE001
+        yield None
 
 
 def find_ffmpeg():
     """path of an ffmpeg with libx264, or None"""
-    for c in [os.environ.get("FFMPEG"), shutil.which("ffmpeg"), *CANDIDATES]:
+    for c in _candidates():
         if c and os.path.exists(c):
             try:
                 out = subprocess.run([c, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=30).stdout
@@ -36,9 +46,17 @@ def find_ffmpeg():
     return None
 
 
+def _wsl_exe(ff: str) -> bool:
+    """a Windows ffmpeg.exe called from Linux (WSL interop): it needs Windows paths. Under native Windows nothing is translated."""
+    return os.name == "posix" and ff.lower().endswith(".exe")
+
+
 def _native(path: str) -> str:
-    """a path the ffmpeg binary understands: the Windows form for a .exe under WSL interop"""
-    return subprocess.run(["wslpath", "-w", path], capture_output=True, text=True).stdout.strip() or path
+    """a path a Windows ffmpeg.exe understands when called from WSL (wslpath -w); unchanged when that fails"""
+    try:
+        return subprocess.run(["wslpath", "-w", path], capture_output=True, text=True, timeout=30).stdout.strip() or path
+    except (OSError, subprocess.SubprocessError):
+        return path
 
 
 def verify(path: str, n_frames: int) -> dict:
@@ -83,11 +101,11 @@ def encode(frames: Sequence[Union[str, np.ndarray]], out: str, fps: float = 2.0,
             seq = os.path.join(tmp, "seq")
             os.makedirs(seq)
             for i, f in enumerate(files):                          # a numbered copy: ffmpeg's image2 pattern
-                if os.name == "posix" and not ff.endswith(".exe"):
+                if os.name == "posix" and not _wsl_exe(ff):
                     os.symlink(os.path.abspath(f), os.path.join(seq, f"{i:05d}.png"))
                 else:
                     shutil.copyfile(f, os.path.join(seq, f"{i:05d}.png"))
-            win = ff.endswith(".exe")
+            win = _wsl_exe(ff)
             cmd = [ff, "-y", "-hide_banner", "-loglevel", "error", "-framerate", str(fps), "-i",
                    _native(os.path.join(seq, "%05d.png")) if win else os.path.join(seq, "%05d.png"),
                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p", "-c:v", "libx264", "-crf", str(crf),
