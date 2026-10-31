@@ -81,3 +81,21 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
   with the DualBEV ida) gives 61 pixels, so the gate can see it: PASS. (The first version failed on the DualBEV branch by 5.9 pixels at an image row 0.5 pixel from the border: not a lift error, the
   sub-heights of a slice spread its row and one of them was clamped by the border padding; the gate now keeps all sub-heights inside, margin by fy dz / z_c.) What the gate does not cover: the content of the
   caches (that every BEVFusion shard was built with the crop of `bevfusion_ida`: the builder and `bevfusion_ida` take the same constants 0.48 / crop 32, 176, checked by hand, not by a test).
+- 2026-10-31 (night): `t10.dual_s0` ran 3000 steps (run.py exit 0, 6900 s, GT signature 15efbde2d1) and was evaluated cold on VAL 1000 / 82 scenes (`evaluation/bev_suite.py runs/t10_dual_s0 eval --n 1000`; scripts `temp/t10/eval.sh`, `compare.sh`, `maps.py`).
+  Result (maps = full area, boxes = front sector x < 50 m, `results_x50.md`; control = `t8_ctl_s0`, same code and GT signature, one seed; bevfeat = s0 / s1):
+
+  | metric | t8_ctl_s0 | t10_dual_s0 | t8_bevfeat_s0 / s1 |
+  |---|---|---|---|
+  | lane divider IoU@0.5 | 0.191 | 0.335 | 0.351 / 0.345 |
+  | drivable IoU@0.5 | 0.716 | 0.806 | 0.803 / 0.809 |
+  | walkway IoU | 0.178 | 0.340 | 0.339 / 0.342 |
+  | ped crossing IoU | 0.002 | 0.154 | 0.145 / 0.165 |
+  | front mAP2 | 0.367 | 0.361 | 0.183 / 0.180 |
+  | ped AP@2 (front) | 0.210 | 0.199 | 0.001 / 0.002 |
+  | vehicle seg IoU | 0.415 | 0.413 | 0.309 / 0.305 |
+  | pedestrian seg IoU | 0.000 | 0.091 | 0.000 / 0.000 |
+
+  mAP2 difference to the control -0.006 [-0.016, -0.000] (paired scene bootstrap, 100 draws): inside the 0.054 band. Rule: **E1** (lane divider within 0.02 of bevfeat, drivable and walkway equal, mAP2 >= ctl - 0.054):
+  the two frozen feature sets together keep the maps of BEVFusion AND the objects of DualBEV. Prediction hit on all five numbers (front mAP2 0.33 (0.25-0.38) -> 0.361; lane divider 0.34 -> 0.335; drivable 0.80 -> 0.806;
+  walkway 0.33 -> 0.340; ped AP@2 0.15 -> 0.199, better than predicted). Caveats: one seed, the control also one seed (s1 crashed), no latency measured (two image encoders: not a product design, an
+  information test); the maps of dual vs bevfeat are within the band, so "no loss" not "gain". Decision: seed twin `t10.dual_s1` next (E1), then the cost question (can the map side be had with one encoder).
