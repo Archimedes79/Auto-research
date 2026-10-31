@@ -100,14 +100,15 @@ one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), 
   box is neither stationary nor moving.
   About 80 % of the supervised object cells are static, so a loss over all cells is minimised by predicting 0: weight moving and
   static cells separately and report speed errors split by moving / static with the zero predictor next to them.
-- **Map holes**: nuScenes' HD map misses roads built or changed after it was made. In about 0.3-0.5 % of the keyframes (Boston, the
-  Pier 4 construction sequences scene-0499 ... 0517) there is no road under the ego car and the map layers are empty or a single
-  blob; the GT then says "no road" where there is one. Detect it per keyframe with `g["drivable_area"][2:8, 50:54].mean() < 0.5` and
-  leave those keyframes out of the map loss. Moving vehicles outside the drivable area (2.4 % of them; in the two sequences
-  inspected they are cars on elevated roads, box bottoms 2-3 m above the ego road) are a limit of the 2D map, not a box error.
+- **Map holes**: nuScenes' HD map misses roads built or changed after it was made. In about 0.3 % of the trainval keyframes (45 of
+  17,245 scanned; five Boston Pier 4 construction sequences: scene-0499, 0501, 0502, 0515, 0517) there is no road under the ego car and
+  the map layers are empty or a single blob; the GT then says "no road" where there is one. Detect it per keyframe with
+  `g["drivable_area"][2:8, 50:54].mean() < 0.5` and leave those keyframes out of the map loss. Moving vehicles outside the drivable
+  area (1.5 % of them over trainval; 5.9 % in Singapore One-North, 2.0 % Queenstown, 0.8 % Boston; in the two sequences inspected they
+  are cars on elevated roads, box bottoms 2-3 m above the ego road) are a limit of the 2D map, not a box error.
 - **Honest limits** (full list in README.md): boxes exist at 2 Hz only (yaw is not extrapolated); the 36 ms offset was measured for
   the FRONT camera only; Boston map lines are 0.3-0.7 m off the paint in places; about 22 % of the boxes stand > 0.5 m above or
-  below the ego ground plane (hills, overpasses); the occlusion mask is 2D and hides about 12 % of boxes that annotators rate 80-100 %
+  below the ego ground plane (hills, overpasses); the occlusion mask is 2D and hides about 11 % of boxes that annotators rate 80-100 %
   visible; radar gives only the radial velocity (the tangential part comes from the annotations); no lidar on disk, so no point-cloud check.
 - **A new number needs its GT version**: say VAL or TEST, the signature, and the denominator.
 

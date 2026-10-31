@@ -1,5 +1,6 @@
 """scratch: write overview.json (the text of the GT quality overview PDF). Numbers come from tables.json / scan_<sig>.json / the report PDFs
-(typed ones are tagged [T] trainval report 2026-10-30 (signature 7fe1149566), [M] mini report 2026-10-31 (15efbde2d1), [S] scan of the stored GT)."""
+(typed ones are tagged [F] complete trainval report 2026-10-31 (final signature 15efbde2d1), [M] mini report 2026-10-31 (15efbde2d1), [S] scan of the
+stored GT; refreshed after the trainval rebuild finished: the example pictures and their captions are those of the first version (picks.json unchanged))."""
 import collections
 import json
 import sys
@@ -24,9 +25,10 @@ n_obs = T["all"]["obs"]
 
 rows = ["group                      sequences keyframes boxes/kf  ignored  moving vehicles   pedestrians on    boxes >0.5 m off   visible boxes     ego off",
         "                                                        share    on drivable area  a map surface     the ground plane   marked occluded   the map"]
-names = {"all": "all (finished sequences)", "boston-seaport": "Boston Seaport", "singapore-onenorth": "Singapore One-North",
-         "singapore-queenstown": "Singapore Queenstown", "singapore-hollandvillage": "Singapore Holland Village", "rain": "rain (Boston + Singapore)"}
-for k in ("all", "boston-seaport", "singapore-onenorth", "singapore-queenstown", "singapore-hollandvillage", "rain"):
+names = {"all": "all of trainval", "boston-seaport": "Boston Seaport", "singapore-onenorth": "Singapore One-North",
+         "singapore-queenstown": "Singapore Queenstown", "singapore-hollandvillage": "Singapore Holland Village", "rain": "rain (Boston, Holland V.)",
+         "night": "night (Singapore only)", "day": "day"}
+for k in ("all", "boston-seaport", "singapore-onenorth", "singapore-queenstown", "singapore-hollandvillage", "day", "night", "rain"):
     t = T[k]
     rows.append(f"{names[k]:26s} {t['seq']:9d} {t['kf']:9d} {t['obs'] / t['kf']:8.1f} {t['ign_share']:8.1%} {t['mov_veh_road']:17.1%} {t['ped_ok']:15.1%} "
                 f"{t['off_plane']:18.1%} {t['vis4_occ']:15.1%} {t['ego_bad']:9.1%}")
@@ -39,24 +41,31 @@ page1 = ["Question: how good is the ground truth autoGT generates from nuScenes,
          "that is inherited (their own error is not estimated here).",
          "",
          "Versions and data behind the numbers",
-         f"  generator signature 15efbde2d1: moving boxes at the CAMERA time (decision 2026-10-31). The rebuild of nuScenes trainval with it is running: {done_seq} of 850",
-         "  sequences were stored when this was written.",
-         "  [T] complete trainval run, 850 sequences / 34,149 keyframes, 0 failed, with the earlier signature 7fe1149566 (boxes at the annotation time; everything",
-         "      except the positions of moving boxes is identical). Report PDF autogt/reports/autogt_report_v1.0-trainval_2026-10-30.pdf.",
+         "  generator signature 15efbde2d1: moving boxes at the CAMERA time (decision 2026-10-31). The rebuild of nuScenes trainval with it is COMPLETE ({} sequences".format(done_seq),
+         "  of 850 scanned below, 34,149 keyframes stored, 0 failed).",
+         "  [F] the check report of that complete trainval run (autogt/reports/autogt_report_v1.0-trainval_2026-10-31.pdf), 850 sequences / 34,149 keyframes, 26,474 s.",
+         "      The earlier run with signature 7fe1149566 (boxes at the annotation time) differs only in the positions of moving boxes.",
          "  [M] nuScenes mini at the final signature: 10 sequences, 404 keyframes, all checks + the leave-one-radar-out radar test (autogt_report_v1.0-mini_2026-10-31.pdf).",
-         f"  [S] a scan of the stored GT of the final signature: {T['all']['seq']} sequences, {T['all']['kf']} keyframes (every 2nd keyframe), split by map and weather. These are the",
-         "      sequences with the lowest numbers: Boston-heavy and daytime; night sequences are shown from mini (scene-1077 / 1094 / 1100) until the rebuild reaches them.",
+         f"  [S] a scan of the stored GT of the final signature: {T['all']['seq']} sequences, {T['all']['kf']} keyframes (every 2nd keyframe), split by map, day / night and rain.",
+         "      Version 1 of this overview (2026-10-31, 458 sequences, daytime-heavy) is replaced: the tables below cover all of trainval; the examples and close-ups are",
+         "      the ones picked and inspected from the first 458 sequences (plus three night sequences from mini), their captions are unchanged.",
          f"  Pictures: 96 random keyframes (thumbnails), {len(picks['examples'])} examples with 4 panels each, 7 full-resolution camera close-ups. Captions say 'Observed' where I looked at",
          "  the picture and described what I saw, and 'Selected by' where the picture was chosen by a rule and not inspected individually.",
          "",
          "Verdict in one paragraph",
          "  Where the map exists, the GT is consistent and plausible: boxes enclose the cars and pedestrians in the camera image (day, rain, night), map lines lie on",
-         "  the paint within a few decimetres (Boston close-ups), moving vehicles stand on the drivable area (97.6 %), the velocity field is consistent with the radar (radial error median",
-         "  0.2 m/s) and nothing that is stationary drifts (0.00 cm). The weak spots are all INHERITED or modelling limits, not generator bugs: map holes (no road under",
-         "  the ego car in 0.5 % of the keyframes, Boston construction sequences), roads outside the 2D map (2.4 % of the moving vehicles drive outside the drivable",
-         "  area, 6-9 % in two Singapore maps; the two cases inspected are elevated roads), the 2D occlusion mask (hides 11 % of boxes the annotators rate as clearly",
-         "  visible), 22 % of the boxes off the ego ground plane (hills, overpasses), and the radial-only radar check of velocity. The consequence for training is in",
-         "  section 4 of autogt/AGENTS.md."]
+         "  the paint within a few decimetres (Boston close-ups), moving vehicles stand on the drivable area (98.5 % [F]),",
+         "  the velocity field is consistent with the radar (radial error median 0.2 m/s) and nothing that is stationary drifts (0.00 cm).",
+         "  The weak spots are all INHERITED or modelling limits, not generator bugs: map holes (no road under",
+         "  the ego car in 0.3 % of the keyframes, five Boston construction sequences), roads outside the 2D map (1.5 % of the moving vehicles drive outside the drivable",
+         "  area, 5.9 % in Singapore One-North; the two cases inspected are elevated roads), the 2D occlusion mask (hides 11 % of boxes the annotators rate as clearly",
+         "  visible), 22 % of the boxes off the ego ground plane (hills, overpasses), and the radial-only radar check of velocity. Night (99 sequences, Singapore only)",
+         "  and rain (165 sequences, Boston and Holland Village) score like day on the map and velocity checks (part of each difference is the map, not the light); the GT does not use",
+         "  the image. Only the pictures of three night sequences were looked at.",
+         "  The consequence for training is in section 4 of autogt/AGENTS.md.",
+         "",
+         "What changed against version 1 of this overview: the numbers of the first 458 sequences were not representative of the map where they differ most:",
+         "  moving vehicles on the drivable area in Queenstown 91.0 % -> 98.0 %, ego off the map 0.5 % -> 0.3 %, moving cars off the drivable area 2.4 % -> 1.5 %."]
 
 score_old = ["layer group            source                     verified how                                                                          verdict",
          "-" * 175,
@@ -101,31 +110,31 @@ def table(header, rows, widths):
 score = table(["layer group", "source", "verified how", "verdict"], [
     ["map areas (drivable, crossing, walkway, stop line, car park)", "nuScenes map expansion",
      "self-test: areas exact (< 0.3 %); static layers of the next keyframe = the current ones moved by the exact ego motion (IoU 0.988); ego car on the road in 99.7 % "
-     "[T] / 99.5 % [S] of the keyframes; moving vehicles on the drivable area 98.6 % [T] (Boston 99.0, Singapore One-North 93.6, Queenstown 91.0 [S])",
+     "of the keyframes [F, S]; moving vehicles on the drivable area 98.5 % [F] (Boston 99.2, Holland Village 99.7, Queenstown 98.0, One-North 94.1 [S])",
      "GOOD where the map exists; map holes and elevated roads are inherited"],
     ["lane / road dividers, centre-lines with direction", "map vectors, exact polylines in meta",
      "7 full-resolution close-ups: in the 3 Boston ones with visible paint (scene-0094 day, 0200 cloudy, 0441 heavy rain) the lines lie on the paint within about 0.1-0.3 m; the Singapore close-ups show map arcs and no paint to compare; centre-line and divider cells on the drivable area "
-     "100 % [T]. An earlier map check found 0.3-0.7 m offsets in places in Boston (no per-frame correction is allowed); the Boston close-ups seen here show none",
+     "100 % [F]. An earlier map check found 0.3-0.7 m offsets in places in Boston (no per-frame correction is allowed); the Boston close-ups seen here show none",
      "GOOD; Boston map lines 0.3-0.7 m off in places (earlier check)"],
     ["objects (vehicle, pedestrian, two-wheeler) + ignore", "nuScenes 3D annotations with >= 1 lidar / radar point",
-     "instance layer consistent 100 % of 312,263 boxes [T]; stationary boxes do not move (0.00 cm, 136,733 pairs [T]); boxes enclose the objects in every close-up; "
-     "8.7 % of the boxes have no lidar / radar point and go to 'ignore' [S]; 3,159 overlapping observed vehicle pairs (IoU > 0.10) over the 34,149 keyframes [T]",
+     "instance layer consistent 100 % of 312,320 boxes [F]; stationary boxes do not move (0.00 cm, 136,733 pairs [F]); boxes enclose the objects in every close-up; "
+     "9.7 % of the boxes have no lidar / radar point and go to 'ignore' (31,592 of 326,830) [F]; 3,161 overlapping observed vehicle pairs (IoU > 0.10) over the 34,149 keyframes [F]",
      "GOOD; bound by the annotation quality, which is not independently checked"],
     ["box time = camera time", "annotation + v * dt",
-     f"{n_shift:,} moved box-observations in [S]: shift median 6 cm, 95 % 41 cm, max {shift_max * 100:.0f} cm; direction and size of the operator confirmed on raw radar "
+     "96,563 moved box-observations [F]: shift median 6 cm, 95 % 41 cm, max 88 cm; direction and size of the operator confirmed on raw radar "
      "POSITIONS (mini, 340 observations, autogt/README.md); front-camera offset only (-35.9 ms)",
      "PLAUSIBLE; no lidar to prove the last centimetre"],
     ["velocity / flow (m/s)", "annotation velocity + radar Doppler (Bayes)",
      "held-out radar Doppler (leave-one-radar-out, mini [M]): radial RMSE 1.41 m/s (zero predictor 6.47), median 0.198 (track only 0.215), 79.9 % within 0.5 m/s "
-     "(track only 77.8 %); flags [T]: override 1,497, conflict 146, short track 4,986, unobserved 49,241 of 885k boxes; flow = ego flow + velocity exact (1.9e-6)",
+     "(track only 77.8 %); flags [F]: override 1,497, conflict 146, short track 4,986, unobserved 49,241 of 885k boxes; flow = ego flow + velocity exact (1.9e-6)",
      "GOOD radially; the tangential part comes from the annotations only"],
     ["masks: camera, radar, occluded, undefined", "projection / radar fan / box shadows",
-     "camera: exact projection; radar: 99.9 % of the detections inside +-60 deg [T]; occluded: 2D cast from the camera - share of boxes whose centre is marked occluded "
-     "by annotator visibility 0-40 / 40-60 / 60-80 / 80-100 %: 74 / 57 / 39 / 10 % [T] (11.4 % for the 80-100 % class in [S])",
+     "camera: exact projection; radar: 99.9 % of the detections inside +-60 deg [F]; occluded: 2D cast from the camera - share of boxes whose centre is marked occluded "
+     "by annotator visibility 0-40 / 40-60 / 60-80 / 80-100 %: 74 / 57 / 39 / 11 % [F] (10.8 % for the 80-100 % class in [S])",
      "WEAKEST layer (occlusion); usable as a soft mask"],
 ], [26, 26, 120, 36])
 
-cond = ["Quality by condition [S] (every 2nd keyframe of the sequences stored at the final signature; ratios of sums over the keyframes)",
+cond = ["Quality by condition [S] (all 850 sequences of trainval at the final signature, every 2nd keyframe; ratios of sums over the keyframes)",
         ""] + rows + [
         "",
         "How to read it",
@@ -139,7 +148,10 @@ cond = ["Quality by condition [S] (every 2nd keyframe of the sequences stored at
         + ", ".join(f"{s} ({n})" for s, n in bad_seq.most_common()) + " (Pier 4 construction area).",
         f"  Moving vehicles off the drivable area: {sum(r['mov_veh'] - r['mov_veh_road'] for r in S)} of {T['all']['mov_veh']} ({1 - T['all']['mov_veh_road']:.1%}); the ten worst sequences hold {top10:.0%} of them",
         "  (" + ", ".join(f"{s} {n}" for s, n in off.most_common(6)) + "). In the two sequences inspected (scene-0131, 0361) they are cars on elevated roads, box bottoms",
-        "  2-3 m above the ego road, which the 2D drivable area does not contain; the others were not inspected.",
+        "  2-3 m above the ego road, which the 2D drivable area does not contain; the others were not inspected. By map: " + ", ".join(
+            f"{names[k].replace('Singapore ', '')} {1 - T[k]['mov_veh_road']:.1%}" for k in ("boston-seaport", "singapore-onenorth", "singapore-queenstown", "singapore-hollandvillage")) + ".",
+        f"  Night and rain: night (Singapore only) {1 - T['night']['mov_veh_road']:.1%} and rain {1 - T['rain']['mov_veh_road']:.1%} of the moving vehicles off the drivable area, against {1 - T['day']['mov_veh_road']:.1%} by day; the box, map and velocity",
+        "  layers do not use the image, so the weather and light cannot change them; what changes with night and rain is how well a camera network can see (not measured here).",
         f"  Pedestrians: {T['boston-seaport']['ped_ok']:.0%} of the Boston pedestrians stand on a map surface, but only {T['singapore-onenorth']['ped_ok']:.0%} (One-North) and {T['singapore-hollandvillage']['ped_ok']:.0%} (Holland Village): the Singapore maps have fewer walkway polygons, and people stand in car parks and on grass - so a pedestrian head must not rely on 'walkway' as a prior.",
         f"  Unknown velocity ('short track'): {fl['short_track'] / max(1, n_obs):.1%} of the observed boxes; radar override {fl['radar_override'] / n_obs:.2%}, conflict {fl['radar_conflict'] / n_obs:.3%}.",
         f"  Speed: {sum(r['vmax'] > 60 for r in S)} keyframes have a box faster than 60 km/h, {sum(r['vmax'] > 80 for r in S)} faster than 80 km/h; mean {sum(r['veh'] + r['ped'] + r['two'] for r in S) / len(S):.1f} observed boxes and "
@@ -171,10 +183,11 @@ tail = [{"title": "What this overview does not show, and what to do about it", "
     "  - The box shift to the camera time: direction and size checked with raw radar positions only; at the real 36 ms the three variants (annotation / camera / opposite) are within noise there.",
     "  - Velocity across the line of sight: the radar measures the radial part only; the tangential part is the annotation's.",
     "  - The other five cameras: their offsets to the annotation time were not measured (front camera only); the GT is defined in the front-camera frame.",
-    "  - Night and rain beyond three mini sequences and 45 daytime rain sequences: the rebuild will bring them into the same table.",
+    "  - Night and rain by eye: the tables cover 99 night and 165 rain sequences, but the pictures I looked at are from three mini night sequences and two rain keyframes of the first 458",
+    "    sequences (scene-0479, 0441); no night close-up at full resolution was reviewed.",
     "",
     "Recommendations for use (they are also in autogt/AGENTS.md)",
-    "  1. Leave keyframes with the ego car off the map (drivable_area[2:8, 50:54].mean() < 0.5, 0.3-0.5 %) out of the map loss; do not read 'no road' as 'free space' there.",
+    "  1. Leave keyframes with the ego car off the map (drivable_area[2:8, 50:54].mean() < 0.5; 0.3 % of the keyframes, 0.5 % in Boston) out of the map loss; do not read 'no road' as 'free space' there.",
     "  2. Treat the occlusion mask as soft: do not zero the object loss behind a box for boxes the annotators call visible (visibility '4').",
     "  3. Balance moving and static cells in every velocity loss; report errors split by moving / static with the zero predictor next to them.",
     "  4. Compare models only on the same GT signature; the signature 15efbde2d1 is the camera-time GT.",

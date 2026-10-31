@@ -48,6 +48,8 @@ print(f"{'group':26s}" + "".join(f"{h:>13s}" for h in hdr))
 for k, t in tables.items():
     print(f"{k:26s}" + "".join(f"{t[h]:13.3f}" if isinstance(t[h], float) else f"{t[h]:13d}" for h in hdr))
 
+if "--tables-only" in sys.argv:       # refresh of the numbers: the picks (and the captions written for them) stay as they are
+    sys.exit(0)
 picks, used = [], set()
 
 
