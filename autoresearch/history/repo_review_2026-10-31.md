@@ -21,14 +21,14 @@ Minor:
 `project.json` "loops" ends with `"19": [234, null]`, so `metrics.py` counts loops 20 and 21 under loop 19. This is decision D17 (open), not a code bug, but the loop table in `LEDGER.md` is wrong until D17 is answered.
 
 ### autoresearch/evalsuite and trainsuite
-Both selftests pass (evalsuite 44/44, trainsuite 15/15, in `gcar`). Some of this code is uncommitted work of another chat (all of `trainsuite/`, the evalsuite cost parts). The bugs:
+Both selftests pass (evalsuite 44/44, trainsuite 15/15, in `gcar`). `trainsuite/` was committed by another chat during the review (5d3bdae); the evalsuite cost parts are still uncommitted work of that chat. The bugs:
 
 | # | where | failure case | severity |
 |---|---|---|---|
 | S1 | `evalsuite/lanes/task.py:195-210` (committed) | `lane_probe` caches its result in `d.pred.meta["probe"]`, and `LaneGraph.of()` returns the object it is given. A Subject that returns one constant `LaneGraph` (an empty null baseline, a prior) gets frame 0's probe tags and error budget for every frame. Exactly the null baselines CLAUDE.md requires are corrupted in `probe budget`, `situations` and `scan`. | high (confirmed) |
-| S2 | `trainsuite/cli.py:125,138` (untracked) | `stopped_by` is keyed by rule text only. `watch a b --kill "..." --enforce` with both runs over the limit writes `CONTROL` into `a` only; `b` trains on. Key it on (run, rule). | high (confirmed) |
-| S3 | `trainsuite/kill.py:12,42` (untracked) | The rule regex ends in `\s*$`; only whole-line comments are skipped. A rule copied from the README with an inline `# ...` comment raises `ValueError`, and `status` / `watch` die. | high (confirmed) |
-| S4 | `trainsuite/runs.py:105-110` (untracked) | A `Traceback` in the last 60 log lines marks a run `failed` unless the last line starts with `"step "` (the bev_fusion log format). A trainer that logs a handled exception and goes on is reported failed, and `watch` stops watching it. | medium (confirmed) |
+| S2 | `trainsuite/cli.py:125,138` (committed in 5d3bdae during the review) | `stopped_by` is keyed by rule text only. `watch a b --kill "..." --enforce` with both runs over the limit writes `CONTROL` into `a` only; `b` trains on. Key it on (run, rule). | high; **fixed in 90d2314** (keyed by run and rule) |
+| S3 | `trainsuite/kill.py:12,42` (5d3bdae) | The rule regex ends in `\s*$`; only whole-line comments are skipped. A rule copied from the README with an inline `# ...` comment raises `ValueError`, and `status` / `watch` die. | high; **fixed in 90d2314** (comments stripped, bad lines reported) |
+| S4 | `trainsuite/runs.py:107-117` (90d2314) | A `Traceback` in the tail marks a run crashed unless a later line starts with `"step "` (the bev_fusion log format). A trainer that logs a handled exception and goes on with another line format is reported failed, and `watch` stops watching it. | medium (still open in 90d2314) |
 | S5 | `evalsuite/store.py:114-121,174` (committed) | A metric that returns `{}` for a whole chunk gets no counts file, and `table` / `compare` / `outliers` then raise `FileNotFoundError`. | medium (confirmed) |
 | S6 | `evalsuite/check.py:88-99` (committed) | The reset check compares only taps. A Subject without taps (`adapters/minimal.py`) whose `reset()` forgets nothing passes. | medium (confirmed) |
 | S7 | `evalsuite/stats.py:68,84-88` (committed) | The bootstrap drops NaN draws without reporting how many, so the interval is conditional on scorable resamples (matters on 21 TEST scenes). `p_b_ge_a` ignores the metric direction, so for lower-is-better metrics it is the probability that b is worse. | medium (by reading) |
