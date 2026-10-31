@@ -4,7 +4,9 @@
     python ledger.py add E240.a --hyp "..." --pred "..." --rule "..." [--status planned]     a row before the run (planned)
     python ledger.py note E240.a --result "Q 0.741" --decision "KEEP" [--notes "..."]        the judgement columns after the run
     python ledger.py tail [--loop 19] [-n 15]                 the last rows (of one loop) in short form, then the runs in progress, for a wake-up
-    python ledger.py sync [--dry-run]                         add the row of every ended run that has none, also a run whose launcher died (stalled); facts from its run record
+    python ledger.py sync [--dry-run]                         add the row of every ended run that has none, also a run whose launcher died (stalled); facts from its run record.
+                                                              Also replaces the finished row of an EARLIER attempt of an id by the record of a later one (a re-run whose own
+                                                              final write failed); the earlier result and decision are kept as a note of the new row
 
 Rule: a card row exists BEFORE the run (planned, optional), run.py writes the facts when the run ENDS (status, commit, duration), and the reader of the numbers
 writes result + decision. A run in progress is not a ledger row: it is read from the run records (`tail`, schedule.py show), so there is one place for it.
@@ -83,7 +85,7 @@ def tail(loop=None, n=15):
         print(f"{r['id']:12} {r.get('status', ''):8} {(r.get('started') or '')[5:16]:11} | {(r.get('result') or '')[:70]} | {(r.get('decision') or '')[:60]}")
     lost = [rid for rid, d, st in missing(inside)]
     if lost:
-        print(f"{len(lost)} run(s) ended or lost without a ledger row ({', '.join(lost[:6])}{' ...' if len(lost) > 6 else ''}): run `ledger.py sync`")
+        print(f"{len(lost)} run(s) ended or lost without a current ledger row ({', '.join(lost[:6])}{' ...' if len(lost) > 6 else ''}): run `ledger.py sync`")
     live = [(rid, d) for rid, d in run_dirs() if inside(rid) and RUN.state_of(d) in ("running", "stalled")]
     if live:
         print("in progress (from the run records):")
@@ -94,14 +96,17 @@ def tail(loop=None, n=15):
 
 
 def missing(inside=lambda rid: True):
-    """(id, run directory, state) of every run record that has ended (or whose launcher died: stalled) and has no ledger row, or only a planned / running / stalled one"""
+    """(id, run directory, state) of every run record that has ended (or whose launcher died: stalled) and has no ledger row, or only a planned / running /
+    stalled one, or one of an EARLIER attempt (the record started later: a re-run whose own final ledger write failed)"""
     import run as RUN
     have = {r["id"]: r for r in load()}
     out = []
     for rid, d in run_dirs():
-        st, row = RUN.state_of(d), have.get(rid, {}).get("status")
+        st, old = RUN.state_of(d), have.get(rid, {})
+        row = old.get("status")
         if inside(rid) and st in ("done", "ok", "failed", "timeout", "blocked", "gpu_busy", "stalled") \
-                and (row in (None, "", "planned", "running") or (row == "stalled" and st != "stalled")):  # a stalled row stays until the run really ends
+                and (row in (None, "", "planned", "running") or (row == "stalled" and st != "stalled")  # a stalled row stays until the run really ends
+                     or RUN.later_attempt(RUN.record(d), old)):
             out.append((rid, d, st))
     return out
 

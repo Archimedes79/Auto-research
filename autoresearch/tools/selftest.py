@@ -147,12 +147,16 @@ try:
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "S.ok2", "--decision", "KEEP"], check=True, env=env, capture_output=True)
     assert go("S.ok2", ["bash", "-c", "echo again"], "--again").returncode == 0 and rows()["S.ok2"]["decision"] == "", rows()["S.ok2"]["decision"]
     # the heartbeat is kept while a launcher waits for --after (a waiting chain member is not stalled)
-    fast = dict(env, AR_STALE_S="1", AR_HEARTBEAT_S="0.3")
-    pa = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.slowA", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 4"], env=fast, stdout=subprocess.DEVNULL)
+    fast = dict(env, AR_STALE_S="6", AR_HEARTBEAT_S="0.3")
+    pa = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.slowA", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 14"], env=fast, stdout=subprocess.DEVNULL)
     time.sleep(0.5)
     pb = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.waitB", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.slowA", "--", "bash", "-c", "echo b"], env=fast, stdout=subprocess.DEVNULL)
-    time.sleep(2.5)
-    assert RUN.record(f"{T}/runs/S.waitB").get("status") == "waiting" and RUN.heartbeat_age(f"{T}/runs/S.waitB") < 1.5, "a waiting launcher must beat"
+    for _ in range(150):  # polled: on a loaded box the launcher needs seconds to start
+        time.sleep(0.2)
+        if RUN.record(f"{T}/runs/S.waitB").get("status") == "waiting":
+            break
+    time.sleep(7)  # longer than AR_STALE_S: only a launcher that keeps beating while it waits is still alive afterwards
+    assert RUN.record(f"{T}/runs/S.waitB").get("status") == "waiting" and RUN.heartbeat_age(f"{T}/runs/S.waitB") < 3, "a waiting launcher must beat"
     assert pa.wait() == 0 and pb.wait() == 0
     # a ledger that stays busy does not kill the launcher (its exit code is the command's); `ledger.py sync` adds the row from the run record afterwards
     open(f"{T}/LEDGER.csv.lock", "w").write("held")
@@ -565,11 +569,52 @@ try:
     os.utime(f"{T}/runs/S.dead/heartbeat", (time.time() - 3600, time.time() - 3600))
     assert SC.derived([dict(item="S.deadi", state="planned", run_ids="S.dead", resource="gpu")], f"{T}/runs")[0]["state"] == "failed", "a stalled record is a failed item"
     lt = subprocess.run([sys.executable, f"{HERE}/ledger.py", "tail"], capture_output=True, text=True, env=env)
-    assert "without a ledger row" in lt.stdout and "S.dead" in lt.stdout, lt.stdout
+    assert "without a current ledger row" in lt.stdout and "S.dead" in lt.stdout, lt.stdout
     sy = subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env)
     assert rows()["S.dead"]["status"] == "stalled" and "launcher gone" in rows()["S.dead"]["notes"] and "1 row(s) added" in sy.stdout, (rows()["S.dead"], sy.stdout)
     assert "0 row(s) added" in subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env).stdout, "a second sync adds nothing"
     assert RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.ok", status="failed"), fill=True) is False and rows()["S.ok"]["status"] == "ok", "a finished row is not replaced by a fill"
+    # L1: the re-run of a failed id succeeded but its own final ledger write failed: the row still says failed (an earlier attempt); sync replaces it
+    # with the newer attempt's facts and drops the earlier attempt's judgement, and never replaces the row of the SAME attempt
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1", status="failed", started="2026-10-24T10:00:00", exit="1", result="old result", decision="CUT", notes="attempt 1", hypothesis="h"))
+    os.makedirs(f"{T}/runs/S.l1", exist_ok=True)
+    json.dump(dict(id="S.l1", status="ok", exit=0, started="2026-10-25T10:00:00", ended="2026-10-25T10:05:00", duration_s=300, launcher_pid=1), open(f"{T}/runs/S.l1/run.json", "w"))
+    open(f"{T}/runs/S.l1/done", "w").write("x")
+    dry_sync = lambda: subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync", "--dry-run"], capture_output=True, text=True, env=env).stdout  # noqa: E731
+    assert "would add S.l1" in dry_sync(), "a finished row of an earlier attempt is outdated"
+    sy = subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env)
+    got = rows()["S.l1"]
+    assert got["status"] == "ok" and got["started"] == "2026-10-25T10:00:00" and got["result"] == "" and got["decision"] == "" and "attempt 1" not in got["notes"] \
+        and got["hypothesis"] == "h" and "1 row(s) added" in sy.stdout, (got, sy.stdout)
+    assert "old result" in got["notes"] and "CUT" in got["notes"], "the replaced judgement is kept as a note, never lost silently"
+    # the times are compared to the second and parsed: a space instead of T, microseconds or a cut-off value are the SAME attempt, never outdated (a good row must not be erased);
+    # a time that cannot be read is no reason to replace; a run that never started (blocked) is dated by its `ended`; a stalled re-run does not inherit the old attempt's facts
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1f", status="ok", started="2026-10-25 10:00:00", exit="0", result="Q 0.7", decision="KEEP", notes="my note", hypothesis="h"))
+    os.makedirs(f"{T}/runs/S.l1f", exist_ok=True)
+    json.dump(dict(id="S.l1f", status="ok", exit=0, started="2026-10-25T10:00:00.250000", ended="2026-10-25T10:05:00", launcher_pid=1), open(f"{T}/runs/S.l1f/run.json", "w"))
+    open(f"{T}/runs/S.l1f/done", "w").write("x")
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1g", status="ok", started="not a time", exit="0", result="r", decision="KEEP", hypothesis="h"))
+    os.makedirs(f"{T}/runs/S.l1g", exist_ok=True)
+    json.dump(dict(id="S.l1g", status="ok", exit=0, started="2026-10-26T10:00:00", ended="2026-10-26T10:05:00", launcher_pid=1), open(f"{T}/runs/S.l1g/run.json", "w"))
+    open(f"{T}/runs/S.l1g/done", "w").write("x")
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1b", status="failed", started="2026-10-24T10:00:00", exit="1", result="r1", decision="CUT", hypothesis="h"))
+    os.makedirs(f"{T}/runs/S.l1b", exist_ok=True)
+    json.dump(dict(id="S.l1b", status="blocked", ended="2026-10-25T10:00:00", created="2026-10-25T09:59:00", launcher_pid=1), open(f"{T}/runs/S.l1b/run.json", "w"))
+    RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1s", status="ok", started="2026-10-24T10:00:00", ended="2026-10-24T11:00:00", exit="0", duration_s="3600", result="r", hypothesis="h"))
+    os.makedirs(f"{T}/runs/S.l1s", exist_ok=True)
+    json.dump(dict(id="S.l1s", status="running", started="2026-10-25T10:00:00", created="2026-10-25T09:59:00", command="c", launcher_pid=1), open(f"{T}/runs/S.l1s/run.json", "w"))
+    open(f"{T}/runs/S.l1s/heartbeat", "w").write("x")
+    os.utime(f"{T}/runs/S.l1s/heartbeat", (time.time() - 3600, time.time() - 3600))
+    listed = dry_sync()
+    assert "S.l1f" not in listed and "S.l1g" not in listed and "would add S.l1b" in listed and "would add S.l1s" in listed, listed
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env)
+    assert rows()["S.l1f"]["result"] == "Q 0.7" and rows()["S.l1f"]["decision"] == "KEEP" and rows()["S.l1f"]["notes"] == "my note", rows()["S.l1f"]
+    assert rows()["S.l1g"]["result"] == "r", "a row whose time cannot be read is not replaced"
+    assert rows()["S.l1b"]["status"] == "blocked" and rows()["S.l1b"]["result"] == "" and "r1" in rows()["S.l1b"]["notes"], rows()["S.l1b"]
+    st_ = rows()["S.l1s"]
+    assert st_["status"] == "stalled" and st_["started"] == "2026-10-25T10:00:00" and st_["ended"] == "" and st_["exit"] == "" and st_["duration_s"] == "" and st_["hypothesis"] == "h", st_
+    assert "S.l1" not in dry_sync() and RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1", status="failed", started="2026-10-25T10:00:00"), fill=True) is False, \
+        "the row of the same attempt is never replaced"
     # tick: an item `A;B` whose A is done starts B (not A again); a dry run writes nothing, also when an item cannot be started; a real run marks it blocked
     for rid in ("S.m2", "S.c1", "S.c2", "S.race"):
         subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", rid, "--hyp", "t", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)

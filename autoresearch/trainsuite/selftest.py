@@ -190,7 +190,19 @@ def main():
         assert [e["step"] for e in r.evals] == [1000, 2000] and r.series("val.total")[-1] == (2000.0, 13.5) and "overfit" in codes(r, "warn")
         r = Run(make(tmp, "emptyval", rows(10), evals=[(200, {})]))            # an eval row with an empty val dict is NOT the train row of step 200
         assert [x["step"] for x in r.train][-1] == 200 and len(r.evals) == 1 and r.restarts == 0, (r.train[-1], r.evals, r.restarts)
-        ok("skipped steps counted from the text log; after a resume the later attempt wins; eval rows kept apart (an empty one too); over-fitting warned")
+        chrono = []                                             # an attempt up to step 1000 with evaluations at 500 and 1000, then a resume from the checkpoint at 500
+        for x in rows(50):
+            chrono.append(x)
+            if x["step"] in (500, 1000):
+                chrono.append({"step": x["step"], "val": {"total": 12.0}})
+        d = make(tmp, "rollback", [])
+        with open(os.path.join(d, "log.jsonl"), "w") as fh:
+            for x in chrono + rows(30)[25:]:                    # the later attempt's rows: steps 520 ... 600
+                fh.write(json.dumps(x) + "\n")
+        r = Run(d)
+        assert [e["step"] for e in r.evals] == [500] and r.train[-1]["step"] == 600 and r.restarts == 1, (r.evals, r.train[-1], r.restarts)
+        assert Rule("val.total@1000 > 11").evaluate(r)[0] == "pending", "an evaluation of the superseded training suffix must not trigger a kill rule"
+        ok("skipped steps counted from the text log; after a resume the later attempt wins, its evaluations too; eval rows kept apart (an empty one too); over-fitting warned")
 
         # 6 reference run
         ref = Run(make(tmp, "ref", rows(100)))
