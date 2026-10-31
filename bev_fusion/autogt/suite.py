@@ -13,7 +13,8 @@ class AutoGT(NuScenesGT):
     keyframes(scene_name)    sample tokens of a scene in time order
     scenes()                 scene names
     signature()              cache key of the generator (source + options)
-    options: stationary_fix, map_offsets, use_flow, use_radar, flow_config (autogt.flow.Config)
+    options: stationary_fix, map_offsets, use_flow, use_radar, flow_config (autogt.flow.Config), boxes_at ("camera" = moving
+    boxes moved to the camera time by v * dt, default; "annotation" = as annotated)
     light=True: a memory-light devkit (CAM_FRONT + radars only, autogt/light_nusc.py); scenes=[names]: only these sequences are
     loaded (v1.0-trainval: ~0.7 GB for 85 sequences instead of 8+ GB for all)
     """

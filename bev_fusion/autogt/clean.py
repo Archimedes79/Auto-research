@@ -52,7 +52,7 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
             import types
             from .nuscenes_gt import NuScenesGT
             current_signature = NuScenesGT.signature(types.SimpleNamespace(      # the signature of the default options
-                stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None))
+                stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at="camera"))
         for d in sorted(os.listdir(stale_caches)):
             p = os.path.join(stale_caches, d)
             if os.path.isdir(p) and os.path.exists(os.path.join(p, "index.json")) and d != current_signature:

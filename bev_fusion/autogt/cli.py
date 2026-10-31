@@ -106,6 +106,11 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
     return done
 
 
+def _boxes_option(a):
+    """the generator option of --boxes-at (nothing for the default, so the default options stay empty in the records)."""
+    return {} if a.boxes_at == "camera" else {"boxes_at": a.boxes_at}
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m autogt", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -120,6 +125,8 @@ def main(argv=None):
     b.add_argument("--workers", type=int, default=1)
     b.add_argument("--no-flow", action="store_true")
     b.add_argument("--no-radar", action="store_true")
+    b.add_argument("--boxes-at", choices=("camera", "annotation"), default="camera",
+                   help="time of the moving boxes: the camera time (default) or the annotation time")
     c = sub.add_parser("check")
     c.add_argument("--dataroot", default="~/data/nuscenes")
     c.add_argument("--version", default="v1.0-mini")
@@ -144,6 +151,8 @@ def main(argv=None):
     r.add_argument("--stride", type=int, default=1)
     r.add_argument("--samples", type=int, default=10, help="sample pictures in the report (evenly spread over the sequences)")
     r.add_argument("--holdout", action="store_true", help="add the leave-one-radar-out test of the radar correction")
+    r.add_argument("--boxes-at", choices=("camera", "annotation"), default="camera",
+                   help="time of the moving boxes: the camera time (default) or the annotation time")
     cl = sub.add_parser("clean", help="list / move / delete generated videos, pictures, old outputs, stale caches")
     cl.add_argument("--videos", action="store_true")
     cl.add_argument("--pictures", action="store_true")
@@ -164,7 +173,7 @@ def main(argv=None):
         run()
     elif a.cmd == "build":
         build(os.path.expanduser(a.dataroot), a.version, a.out, a.scenes, a.stride, a.workers, a.res,
-              use_flow=not a.no_flow, use_radar=not a.no_radar)
+              use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))
     elif a.cmd == "check":
         from .checks import run
         run(os.path.expanduser(a.dataroot), a.version, a.scenes, a.stride, a.holdout)
@@ -182,7 +191,7 @@ def main(argv=None):
         data = None if a.no_data else (a.data or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt"))
         root = a.dataroot or ("~/data/nuscenes_full" if "trainval" in a.version else "~/data/nuscenes")
         report(os.path.expanduser(root), a.version, out, data, a.scenes, a.stride, a.holdout, a.samples, a.workers,
-               a.light or "trainval" in a.version)
+               a.light or "trainval" in a.version, **_boxes_option(a))
     elif a.cmd == "clean":
         from .clean import clean
         clean(delete=a.delete, move=a.move, videos=a.videos, pictures=a.pictures, reports=a.reports, old_outputs=a.old_outputs,

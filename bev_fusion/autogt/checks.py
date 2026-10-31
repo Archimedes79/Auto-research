@@ -9,7 +9,7 @@ Objects
   O3 no two observed vehicle footprints overlap (IoU > 0.10)
   O4 boxes without lidar / radar points (ignored): share and range
   O5 our occlusion mask against the annotators' visibility (should fall monotonically with visibility)
-  O6 timing: camera time minus annotation time, and what it does to moving boxes (v * dt)
+  O6 timing: camera time minus annotation time, and the shift v * dt applied to the moving boxes (unknown velocity: kept)
   O7 instance layer points at an observed box of the group whose layer covers the cell
   O8 stationary boxes keep their world pose between keyframes
 Map
@@ -84,8 +84,10 @@ class Checks:
             c = _cell(g, x, y)
             if b["group"] == "vehicle" and sp > 1 and c:
                 st["O2"].append(da[c] > 0)
-            if sp > 1:
-                st["O6_shift_cm"].append(sp * abs(st["dt_ms"][-1]) * 0.1)
+            if sp > 1 and b.get("shift_s", 0.0) != 0.0:
+                st["O6_shift_cm"].append(math.hypot(*b["shift"]) * 100)
+            if not b["stationary"] and not b["vel_known"]:
+                st["O6_kept"].append(1)                          # unknown velocity: stays at the annotation time
             if c and gk["camera"][c] > 0:
                 st[f"O5_vis{b['visibility']}"].append(gk["occluded"][c] > 0)
             if b["stationary"]:
@@ -135,7 +137,10 @@ class Checks:
                f"{np.median(ur) if len(ur) else float('nan'):.0f} m)",
                "O5 centre cell in our occlusion mask by annotator visibility 0-40 / 40-60 / 60-80 / 80-100 %: " +
                " / ".join(f"{np.mean(st[f'O5_vis{v}']):.0%}" if st[f"O5_vis{v}"] else "-" for v in "1234"),
-               f"O6 moving boxes: v * (camera - annotation time) median {np.median(sh):.0f} cm, 95 % {np.percentile(sh, 95):.0f} cm, max {sh.max():.0f} cm",
+               f"O6 moving boxes (> 1 m/s) moved from the annotation to the camera time by v * dt: {len(sh)}, shift median "
+               f"{np.median(sh) if len(sh) else float('nan'):.0f} cm, 95 % {np.percentile(sh, 95) if len(sh) else float('nan'):.0f} cm, "
+               f"max {sh.max() if len(sh) else float('nan'):.0f} cm; observed boxes of unknown velocity kept at the annotation time: "
+               f"{len(st['O6_kept'])}",
                f"O7 instance layer consistent: {rate(st['O7'])}",
                f"O8 stationary boxes, world motion between keyframes: max {max(st['O8_move_cm'], default=0):.2f} cm (n = {len(st['O8_move_cm'])})",
                f"M1 ego on the road: median {np.median(st['M1']):.2f}, < 0.5 in {np.mean(np.array(st['M1']) < 0.5):.1%}; "

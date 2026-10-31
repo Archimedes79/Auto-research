@@ -20,7 +20,11 @@ Rules (Mirko, 2026-10-26): stationary GT is temporally stable. Map layers come f
 a correction is allowed only per map element in WORLD coordinates (`map_offsets`: element token -> (dx, dy) m, the same in
 every frame), never per frame. Stationary objects (autogt.flow.is_stationary: all speeds < 0.5 m/s, all positions < 1 m from
 the median) get ONE world pose for all their keyframes and velocity 0.
-Boxes are drawn at the ANNOTATION time into the camera-time ego frame (open decision: plan 9.5, 35.5 ms offset).
+Boxes are at the CAMERA time (decided by Mirko 2026-10-31, the way Waymo's camera_synced_box works): the keyframe is annotated
+at the lidar time, the front camera took its image about 36 ms earlier, so a box of known velocity is moved by v * (t_camera -
+t_annotation) (constant velocity, size, height and yaw unchanged). Stationary boxes (one world pose, v = 0) and boxes of unknown
+velocity do not move. Per box in meta: `center`, `corners`, `world` at camera time; `world_ann` the annotation-time world pose,
+`shift` (ego axes, m) and `shift_s` (s) what was applied. `boxes_at="annotation"` keeps the annotation positions.
 Conventions: sub-pixel centres at x_min + (i + 0.5) s; rasterised with OpenCV / an exact point test on the supersampled grid.
 """
 import hashlib
@@ -44,11 +48,13 @@ class NuScenesGT:
     """GT per keyframe and training samples from a nuScenes copy (the WSL views ~/data/nuscenes, ~/data/nuscenes_full)."""
 
     def __init__(self, dataroot, version, nusc=None, stationary_fix=True, map_offsets=None, use_flow=True, use_radar=True,
-                 flow_config=None):
+                 flow_config=None, boxes_at="camera"):
         from nuscenes.nuscenes import NuScenes
+        assert boxes_at in ("camera", "annotation"), boxes_at
         self.nusc = nusc or NuScenes(version=version, dataroot=dataroot, verbose=False)
         self.dataroot = dataroot
         self._maps = {}
+        self.boxes_at = boxes_at                       # time of the moving boxes: "camera" (default) or "annotation"
         self.stationary_fix = stationary_fix
         self.map_offsets = map_offsets or {}
         self.use_flow, self.use_radar, self.flow_config = use_flow, use_radar, flow_config
@@ -97,7 +103,7 @@ class NuScenesGT:
         for name in SIGNATURE_FILES:
             h.update(open(os.path.join(here, name), "rb").read())
         h.update(repr((self.stationary_fix, sorted((k, tuple(v)) for k, v in self.map_offsets.items()), self.use_flow,
-                       self.use_radar, self.flow_config)).encode())
+                       self.use_radar, self.flow_config, self.boxes_at)).encode())
         return h.hexdigest()[:10]
 
     def stationary_instances(self, scene_token):
@@ -215,6 +221,8 @@ class NuScenesGT:
         if self.use_flow:
             fobj = {o.id: o for o in self.scene(sample["scene_token"]).flow(sample_token, None, at="annotation",
                                                                               use_radar=self.use_radar).objects}
+        # the GT time of the boxes: the annotations are at the keyframe (lidar) time, the ego frame is that of `sd`
+        t_cam = (sd["timestamp"] - sample["timestamp"]) * 1e-6 if self.boxes_at == "camera" else 0.0
         for i, atok in enumerate(sample["anns"]):
             a = nusc.get("sample_annotation", atok)
             grp = category_group(a["category_name"])
@@ -225,11 +233,6 @@ class NuScenesGT:
                 trans, yaw, size = fixed[a["instance_token"]]
             else:
                 trans, yaw, size = np.array(a["translation"]), Quaternion(a["rotation"]).yaw_pitch_roll[0], a["size"]
-            w, l = size[0], size[1]
-            c, s_ = math.cos(yaw), math.sin(yaw)
-            loc = np.array([[l / 2, w / 2], [l / 2, -w / 2], [-l / 2, -w / 2], [-l / 2, w / 2]])
-            cg_ = loc @ np.array([[c, s_], [-s_, c]]) + np.asarray(trans)[:2]
-            ce = to_ego(cg_)
             o = fobj.get(a["instance_token"])
             if stationary:
                 v, known, source, vflag, vsig = np.zeros(2), True, "stationary", "ok", 0.05
@@ -240,6 +243,17 @@ class NuScenesGT:
             else:                                                # unknown (short track, flow off): never a silent zero
                 v, known, source, vflag, vsig = np.zeros(2), False, "unknown", "short_track", float("nan")
             ve = Rg2e[:2, :2] @ v
+            # annotation time -> GT time: constant velocity over t_cam; a stationary box (v = 0) and a box of unknown
+            # velocity stay where the annotation (or the fixed world pose) puts them; z, size and yaw are kept
+            trans_ann = np.asarray(trans, float)
+            shifted = known and not stationary and t_cam != 0.0
+            shift = v * t_cam if shifted else np.zeros(2)
+            trans = trans_ann + np.r_[shift, 0.0]
+            w, l = size[0], size[1]
+            c, s_ = math.cos(yaw), math.sin(yaw)
+            loc = np.array([[l / 2, w / 2], [l / 2, -w / 2], [-l / 2, -w / 2], [-l / 2, w / 2]])
+            cg_ = loc @ np.array([[c, s_], [-s_, c]]) + np.asarray(trans)[:2]
+            ce = to_ego(cg_)
             one = R.fill(R.canvas(), [(ce, [])])
             observed = a["num_lidar_pts"] + a["num_radar_pts"] > 0
             if observed:
@@ -257,7 +271,8 @@ class NuScenesGT:
                           "size": list(size), "yaw": yaw - yaw_e, "vel": ve, "vel_source": source, "vel_flag": vflag,
                           "vel_sigma": vsig, "vel_known": known, "visibility": a["visibility_token"], "token": atok,
                           "instance": a["instance_token"], "stationary": stationary, "observed": observed,
-                          "world": np.asarray(trans)})
+                          "world": np.asarray(trans), "world_ann": trans_ann, "shift": Rg2e[:2, :2] @ shift,
+                          "shift_s": float(t_cam) if shifted else 0.0})
         for k in OBJECTS:
             out[k] = R.coverage(objs[k])
         out["ignore"] = R.coverage(ignore)
@@ -292,6 +307,7 @@ class NuScenesGT:
         out["radar"] = radar_coverage(self, sample, gx, gy).astype(np.float32)
         out["undefined"] = ((out["camera"] == 0) & (out["radar"] == 0)).astype(np.float32)
         out["meta"] = {"sample": sample_token, "scene": sample["scene_token"], "timestamp": sd["timestamp"],
+                       "annotation_timestamp": sample["timestamp"], "boxes_at": self.boxes_at,
                        "T_e2g": T_e2g, "boxes": boxes, "res": grid.res, "cam_file": sd["filename"], "K": K,
                        "T_c2e": T_c2e, "vectors": vectors}
         return out

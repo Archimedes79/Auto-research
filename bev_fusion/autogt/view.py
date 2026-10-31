@@ -201,8 +201,8 @@ def run(out_dir, picks=None, dataroot="~/data/nuscenes", version="v1.0-mini", to
     return [figure(gen, n, int(k), out_dir, total) for n, k in (picks or DEFAULT)]
 
 
-LEGEND = ["camera: 3D boxes (vehicle red, pedestrian magenta, two-wheeler orange; white rim = stationary, fixed in the world; "
-          "grey = no lidar/radar point, ignored); map lines (lane divider yellow, road divider orange, centre-line cyan)",
+LEGEND = ["camera: 3D boxes at the camera time (vehicle red, pedestrian magenta, two-wheeler orange; white rim = stationary, fixed in "
+          "the world; grey = no lidar/radar point, ignored); map lines (lane divider yellow, road divider orange, centre-line cyan)",
           "semantic BEV 0.5 m (x forward 0-60 m, y left +-26 m): drivable grey, walkway purple, car park blue, crossing light, "
           "stop line red, dividers, centre-lines with direction arrows",
           "objects: velocity of 1 s (cyan) and km/h, '!' radar conflict, 'o' radar override, occluded blue, ignored yellow; "

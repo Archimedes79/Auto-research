@@ -7,7 +7,8 @@
   ego steps add up to the keyframe gap
 4 velocity / flow layers: flow = flow_ego + velocity, ego flow = the exact pose change per camera frame, stationary velocity 0,
   moving boxes' speeds close to the devkit's, unknown velocity never a silent zero (weight 0), weights 0 on ignored boxes,
-  a 12 Hz sweep frame (sd=) gives a ground-consistent frame
+  a 12 Hz sweep frame (sd=) gives a ground-consistent frame, moving boxes at the camera time (centre = annotation + v * dt,
+  stationary / unknown-velocity boxes unchanged, boxes_at="annotation" restores the annotations)
 5 the build command writes and reloads a cache that is keyed by the generator signature
 """
 import math
@@ -102,6 +103,27 @@ def run(root=None, verbose=True):
     no_obj = (k["vehicle"] + k["pedestrian"] + k["two_wheeler"]) == 0                 # no observed box in the cell: no velocity
     assert np.abs(k["velocity"][:, no_obj]).max() == 0 and (k["flow_weight"][k["ignore"] > 0.9] == 0).all()
     assert k["flow_weight"].min() == 0 and k["flow_weight"].max() == 1
+    # boxes at the camera time: constant velocity over (camera - annotation time); stationary / unknown boxes stay
+    ann = NuScenesGT(root, "v1.0-mini", nusc=gt.nusc, boxes_at="annotation")
+    assert ann.signature() != gt.signature()
+    ka = ann.keyframe_gt(tok, g)
+    t_cam = (gt.cam(tok)["timestamp"] - gt.nusc.get("sample", tok)["timestamp"]) * 1e-6
+    assert -0.06 < t_cam < -0.01 and k["meta"]["boxes_at"] == "camera" and ka["meta"]["boxes_at"] == "annotation", t_cam
+    Re = k["meta"]["T_e2g"][:2, :2]
+    n_moved = 0
+    for b_, a_ in zip(k["meta"]["boxes"], ka["meta"]["boxes"]):
+        assert b_["token"] == a_["token"] and a_["shift_s"] == 0.0 and np.allclose(a_["world"], b_["world_ann"])
+        if b_["stationary"] or not b_["vel_known"]:
+            assert b_["shift_s"] == 0.0 and np.allclose(b_["world"], b_["world_ann"]) and np.allclose(b_["center"], a_["center"])
+        else:
+            n_moved += 1
+            assert abs(b_["shift_s"] - t_cam) < 1e-12 and np.allclose(b_["shift"], b_["vel"] * t_cam, atol=1e-9)
+            # (the 2 x 2 block of a tilted ego rotation is not exactly orthogonal: millimetres)
+            assert np.allclose(b_["world"][:2] - b_["world_ann"][:2], Re @ b_["vel"] * t_cam, atol=3e-3)
+            assert b_["world"][2] == b_["world_ann"][2] and b_["yaw"] == a_["yaw"] and list(b_["size"]) == list(a_["size"])
+            assert np.allclose(b_["center"][:2] - a_["center"][:2], b_["shift"], atol=1e-9)
+    assert n_moved and any(b_["shift_s"] != 0.0 for b_ in k["meta"]["boxes"])
+    assert np.array_equal(k["drivable_area"], ka["drivable_area"]) and not np.array_equal(k["vehicle"], ka["vehicle"])
     short = gt.keyframe_gt(sc61["first_sample_token"], g)           # first keyframe: tracks without history
     assert all(b_["vel_known"] or (b_["vel"] == 0).all() for b_ in short["meta"]["boxes"])     # never a silent nonzero
     track = gt.camera_track(tok)                                  # ego flow = the exact pose change per camera frame

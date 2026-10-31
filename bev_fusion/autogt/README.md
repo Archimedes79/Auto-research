@@ -42,6 +42,14 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
   velocity of a static world point from the ego motion, -(v + omega x r)), `flow` = sum, `flow_weight` (0 = unknown),
   `flow_sigma`; per box `vel`, `vel_source`, `vel_flag`, `vel_sigma`, `vel_known`. A displacement over any dt is `flow * dt`
 - masks `camera occluded radar undefined`; `meta` with boxes, ego pose, camera, exact map vectors
+- **box time = camera time** (Mirko, 2026-10-31; Waymo does the same with its `camera_synced_box`): nuScenes annotates a keyframe
+  at the lidar time, the front camera took its image 36 ms earlier (median -35.9 ms, range -42.5 .. -32.6 ms), so a moving box of
+  known velocity is moved by `v * (t_camera - t_annotation)` (constant velocity; size, height and yaw unchanged: median 6 cm,
+  95 % 41 cm, max 88 cm on trainval). Stationary boxes (one world pose) and boxes of unknown velocity do not move. Per box in
+  meta: `center`, `corners`, `world` at the camera time, `world_ann` (the annotation-time world pose), `shift` (ego axes, m),
+  `shift_s` (s); `meta["annotation_timestamp"]`. `AutoGT(..., boxes_at="annotation")` / `--boxes-at annotation` gives the
+  annotation positions again (nuScenes-style evaluation). The decoder needs a dt only to predict to ANOTHER time (the +-0.5 s
+  keyframes: `meta["dt"]`, `meta["steps"]`); the GT of every frame is at its own camera time
 - rules: stationary GT does not move (stationary objects have ONE world pose and velocity 0; map corrections only per element in
   world coordinates, `map_offsets`, never per frame)
 
@@ -71,13 +79,19 @@ covariance, source, flag; plus the dense arrays when a grid is given)
   agree with the radar to about 0.2 m/s; the radar adds a small gain and the flags (57 overrides, 2 conflicts over all boxes of
   mini); the remaining RMSE is outlier detections (2.6 % beyond 2 m/s: ghosts, wheels)
 - the radar mask assumption: 99.9 % of all detections lie within +-60 deg of the sensor axis (measured)
+- the box shift v * dt (temp/checks/radar_box_shift.py, mini, 340 moving observed vehicles >= 5 m/s, 5..45 m ahead; raw radar
+  POSITIONS, which the velocity did not use; points inside the footprint + 1 m per box and radar sweep within +-0.45 s): the
+  moved box keeps its 0.37 - 0.41 points at every offset, the annotation pose falls from 0.38 to 0.19 and the opposite shift to
+  0.07 (|dt| 0.3 .. 0.45 s); at the real 36 ms the three variants are within noise (0.40 / 0.39 / 0.36), the check is of the
+  direction and the size of the operator, not of the last centimetre. No lidar on disk, so no point-cloud check
 - stationary rule of the flow box vs the devkit-speed rule of the old gt_bev: agree on 98.6 % of track-keyframes; the static layers
   of the new generator are bit-identical to the old ones, objects differ in 3 scenes by a few stationary boxes
 
 ## Known limits
-- boxes exist at 2 Hz only and are drawn at the ANNOTATION time into the camera-time ego frame: moving boxes are 5 cm (median),
-  45 cm (95 %), 71 cm (max) away from where the camera saw them (35.5 ms offset). The video interpolates to the camera time;
-  the GT layers do not - open decision (plan 9.5)
+- boxes exist at 2 Hz only; the yaw of a moving box is not extrapolated (a yaw rate is unknown, < 1 deg over 36 ms); a moving box
+  of unknown velocity (short track, 0.6 % of the boxes) stays at the annotation time, up to v * 36 ms away from the camera view;
+  a 12 Hz sweep frame (`keyframe(sd=)`) moves the keyframe's boxes by v * dt over up to +-0.25 s, a first-order extrapolation
+- the offset is measured for the FRONT camera only; the other five cameras have other offsets to the annotation time
 - Boston map lines are 0.3-0.7 m off the paint in places (map / localisation error); only per-element world corrections are
   allowed (`map_offsets`), and no estimator is built yet
 - 25 % of the boxes stand more than 0.5 m above or below the ego ground plane (hills, overpasses): a ground-plane assumption of
