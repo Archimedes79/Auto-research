@@ -11,6 +11,8 @@
   "splits": ["val", "test", "confirm"],
   "cards": "runs/eval",
   "headline_metrics": ["Q", "topo_F1", "lanes_found", "R@1_far"],
+  "_lower_is_better": "the directions of cards written before their \"better\" map (2026-10-31); new cards declare it themselves (evaluation/sparse_lanes/sparse_metrics.py LOWER_IS_BETTER)",
+  "lower_is_better": ["vert100", "verts_per_frame", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"],
   "code_dirs": ["training", "evaluation", "tools", "reports/build", "temp"],
   "fingerprint_extra": ["data/splits.json", "models/registry.json"],
   "scratch": "temp",

@@ -242,15 +242,15 @@ try:
     json.dump(dict(n=dict(a=dict(Q=0.80), c=dict(Q=0.70)), b=dict(a=dict(Q=0.80), c=dict(Q=0.70)), x=dict(a=dict(Q=0.69), c=dict(Q=0.70))), open(f"{T}/subq.json", "w"))
     subq = dict(a=dict(cards={k: f"subq.json#{k}/a" for k in "nbx"}), c=dict(cards={k: f"subq.json#{k}/c" for k in "nbx"}))
     assert verdict(arms=subq, rule=[dict(metric="Q", max_loss=0.05, subsets=["n", "b", "x"], at_least=2)]) == "KEEP", "subset-only guard: no seed flags"
-    # lower-is-better names: project.json "lower_is_better" replaces the legacy lane list, which only a problem with tag prefix lcr gets
+    # lower-is-better names (the fallback for undeclared metrics): project.json "lower_is_better" plus the generic LOWER, no built-in problem list
     assert "vert100" in DC.lower_names(T)
+    assert DC.named_lower("det/dt+0.00/vehicle/all/vert100", T) and not DC.named_lower("vert100/x", T) and not DC.named_lower("vert1000", T), \
+        "a path-like card key is matched by its last part only"
     pj = json.load(open(f"{T}/project.json"))
     json.dump(dict(pj, lower_is_better=[]), open(f"{T}/project.json", "w"))
     assert "vert100" not in DC.lower_names(T) and "ms" in DC.lower_names(T), "an empty list: vert100 reads higher-is-better"
-    json.dump({k: v for k, v in pj.items() if k != "lower_is_better"}, open(f"{T}/project.json", "w"))
-    assert "vert100" not in DC.lower_names(T), "no key, tag prefix t: no lane names"
     json.dump(dict({k: v for k, v in pj.items() if k != "lower_is_better"}, tag_prefix="lcr"), open(f"{T}/project.json", "w"))
-    assert "vert100" in DC.lower_names(T), "no key, the lane problem: the legacy list until its key is written"
+    assert DC.lower_names(T) == DC.LOWER, "no key: only the generic names, whatever the tag prefix (the lane list moved to its project.json)"
     json.dump(pj, open(f"{T}/project.json", "w"))
     # the evaluator declares each metric's direction in its cards ("better"): decide.py reads it there, not from names (D24)
     def fcard(q, err, bt):

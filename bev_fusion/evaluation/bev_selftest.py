@@ -331,6 +331,40 @@ def _():
     assert not any(k.startswith(("seg.", "loss.")) for k in leg)
     assert "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0" in bev_suite.headline_table(leg)
     assert bev_suite.tag_of(True, True, "zero_radar") == "_warm_train_ctl_zero_radar" and bev_suite.tag_of(False, False, "") == ""
+    # the card's "better" map (read by autoresearch/tools/decide.py): every number but the counts, each by its metric's own direction
+    bt = bev_suite.better_of(tab, suite.task.metrics())
+    assert set(bt) <= set(leg) and all(v in ("lower", "higher") for v in bt.values())
+    assert set(leg) - set(bt) == {k for k in leg if k.rsplit("/", 1)[-1] == "n" or k.rsplit("/", 1)[-1].startswith("n_")}, "only counts undeclared"
+    assert bt["seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"] == "higher" and bt["det/dt+0.00/vehicle/all/ap@2"] == "higher"
+    assert bt["det/dt+0.00/vehicle/all/ate"] == bt["detr/dt+0.00/vehicle/all/ave_moving"] == bt["val_loss/total"] == "lower"
+    assert bt["seg_fov/seg/dt+0.00/lane_divider:zc/all/all/field_mae"] == "lower" and bt["det/dt+0.00/vehicle/all/ave_skill_moving"] == "higher"
+    assert bev_suite.better_of(tab, suite.task.metrics(), "prior")["prior_fov/seg/dt+0.00/drivable_area/all/all/iou@0"] == "higher"
+    assert bev_suite.ms_better({"ms/median_ms": 3.0, "ms/idle": True, "info/step": 5}) == {"ms/median_ms": "lower"}
+    assert bt["val_loss/group.areas"] == "lower", "every loss term is lower-is-better, not only the total"
+    # the fallback of autoresearch for cards without the map (project.json lower_is_better, matched by the key's last part) reads every
+    # declared number the same way
+    sys.path.insert(0, os.path.join(bev_suite.ROOT, "..", "autoresearch", "tools"))
+    import decide as DC
+    import card as CARD
+    import experiment as EXP
+    assert not [k for k in bt if (bt[k] == "lower") != DC.named_lower(k, bev_suite.ROOT)], "project.json lower_is_better disagrees with the evaluator"
+    # the prior-map baseline adds its map numbers only (its det / loss numbers would carry the model's names and overwrite them)
+    pflat, pbt = bev_suite.prior_numbers(tab, suite.task.metrics())
+    assert pflat and all(k.startswith("prior_") for k in [*pflat, *pbt]) and set(pbt) <= set(pflat)
+    # the contract card: valid, finite numbers only, read by decide.py with its directions
+    run = tempfile.mkdtemp()
+    json.dump({"seed": 3}, open(os.path.join(run, "config.json"), "w"))
+    flat = dict(leg, **{"info/step": 7, "ms/idle": True, "ms/median_ms": 4.0, "det/dt+0.00/vehicle/all/nanx": float("nan")})
+    card = bev_suite.contract_card(run, "val", "_warm", flat, dict(bt, **{"ms/median_ms": "lower", "det/dt+0.00/vehicle/all/nanx": "lower"}),
+                                   24, "sig1")
+    assert CARD.validate(card) == [], CARD.validate(card)
+    assert card["commit"] == "+?" and card["seed"] == 3 and card["name"] == os.path.basename(run) + "_warm" and card["protocol"] == {"gt_signature": "sig1"}
+    assert "info/step" not in card["metrics"] and "ms/idle" not in card["metrics"] and "det/dt+0.00/vehicle/all/nanx" not in card["better"]
+    path = os.path.join(run, "card_warm.json")
+    json.dump(card, open(path, "w"))
+    m, full, _ = EXP.card_ref(path, run)
+    assert full is not None and DC.card_lower("det/dt+0.00/vehicle/all/ate", [(m, full, "a")]) is True
+    assert DC.card_lower("seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0", [(m, full, "a")]) is False
 
 
 @check("views: overview / outputs / dashboard / stages (with taps) render pages with the error colours; camera panel carries the projected GT")

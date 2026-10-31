@@ -58,7 +58,7 @@ class BevSegMetric(Metric):
             "lane_divider_iou": "fov/dt+0.00/lane_divider/all/all/iou@0.5", "lane_divider_f1": "fov/dt+0.00/lane_divider:zc/all/all/f1@0.5",
             "vehicle_iou": "obj/dt+0.00/vehicle/all/all/iou@0"}
     headline = tuple(HEAD.values())
-    better = {}                                                            # all numbers: higher is better
+    better = {}                                                            # higher is better, but for the distance-field error (direction)
 
     def __init__(self, grid, spec):
         self.grid, self.spec = grid, spec
@@ -133,7 +133,7 @@ class BevSegMetric(Metric):
         return {n: float(acc[_flat_to_ikey(k + "/n_gt")][1]) if _flat_to_ikey(k + "/n_gt") in acc else 0.0 for n, k in keys.items()}
 
     def direction(self, key):
-        return "high"
+        return "low" if key.endswith("/field_mae") else "high"
 
 
 # ------------------------------------------------------------------------------------------------ boxes
@@ -218,6 +218,9 @@ class BevLossMetric(Metric):
     name = "loss"
     headline = ("mean/total",)
     better = {"mean/total": "low", "total": "low"}
+
+    def direction(self, key):
+        return "low"                                                       # every loss term
 
     def frame(self, sample: Sample, pred: Prediction):
         d = pred.info.get("loss") or {}

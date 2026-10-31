@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-from decide import card_lower, lower_names  # noqa: E402
+from decide import card_lower, named_lower  # noqa: E402
 import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
@@ -147,7 +147,7 @@ def check(exp, path):
             continue
         if said is not None and said != (exp["direction"] == "lower"):
             bad.append(f"direction {exp['direction']} contradicts the cards: their evaluator declares {metric} {'lower' if said else 'higher'}-is-better")
-        elif said is None and metric in lower_names(root) and exp["direction"] != "lower":
+        elif said is None and named_lower(metric, root) and exp["direction"] != "lower":
             bad.append(f"metric {metric} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
     return bad
 

@@ -10,6 +10,7 @@
     list [scene]                                the val scenes and frames
     eval [--n 1000] [--warm] [--prior 500] [--images 8] [--time]   the evaluation of a run (replaces evaluate_run.py): runs the
                                                 suite over the val frames, writes eval/metrics<tag>.json + eval/table<tag>.txt
+                                                + eval/card<tag>.json (the metric card of decide.py / experiment.py)
     time                                        ms per frame of the chain (idle GPU only) -> eval/latency.json
     memory [--clips 600]                        does the carried memory help? warm vs cold on the same frames -> eval/memory.json + txt
     compare RUN_A RUN_B [--tag _warm] [--n N] [--force]   paired scene bootstrap between two evaluated runs (b - a; runs evaluated
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -43,20 +45,72 @@ def tag_of(warm: bool, on_train: bool, control: str) -> str:
     return ("_warm" if warm else "") + ("_train" if on_train else "") + (f"_ctl_{control}" if control else "")
 
 
+def _flat_name(m: str, rest: str, prefix_seg: str):
+    if m == "seg":
+        mask, r = rest.split("/", 1)
+        return f"{prefix_seg}_{mask}/seg/{r}"
+    if m in ("det", "detr"):
+        return f"{m}/{rest}"
+    if m == "loss":
+        return "val_loss/" + rest.split("/", 1)[1]
+    return None
+
+
 def to_legacy(table: dict, prefix_seg: str = "seg") -> dict:
     """suite table ('seg.fov/dt+0.00/drivable_area/all/all/iou@0', 'det.dt+0.00/vehicle/all/ap@2', ...) -> the flat names of the former
     evaluate_run metrics.json ('seg_fov/seg/dt+0.00/...', 'det/dt+0.00/...', 'detr/...', 'val_loss/total')"""
     flat = {}
     for k, v in table.items():
-        m, rest = k.split(".", 1)
-        if m == "seg":
-            mask, r = rest.split("/", 1)
-            flat[f"{prefix_seg}_{mask}/seg/{r}"] = v
-        elif m in ("det", "detr"):
-            flat[f"{m}/{rest}"] = v
-        elif m == "loss":
-            flat["val_loss/" + rest.split("/", 1)[1]] = v
+        f = _flat_name(*k.split(".", 1), prefix_seg)
+        if f is not None:
+            flat[f] = v
     return flat
+
+
+def better_of(table: dict, metrics, prefix_seg: str = "seg") -> dict:
+    """the card's "better" map of the flat names of to_legacy ({name: 'lower' | 'higher'}, card contract, read by
+    autoresearch/tools/decide.py), from each metric's own direction(); counts (n, n_gt, n_tp_*) have no direction and are left out"""
+    by = {m.name: m for m in metrics}
+    out = {}
+    for k in table:
+        m, rest = k.split(".", 1)
+        f, last = _flat_name(m, rest, prefix_seg), rest.rsplit("/", 1)[-1]
+        if f is not None and m in by and last != "n" and not last.startswith("n_"):
+            out[f] = "lower" if by[m].direction(rest) == "low" else "higher"
+    return out
+
+
+def ms_better(flat: dict) -> dict:
+    """the timing numbers (ms/...) are lower-is-better; the idle flag and info/... have no direction"""
+    return {k: "lower" for k, v in flat.items() if k.startswith("ms/") and isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+
+def prior_numbers(ptab: dict, metrics) -> tuple:
+    """(flat, better) of the prior-map baseline: its map numbers only (prior_*); it predicts no boxes and no loss, and its det / detr / loss
+    numbers carry the model's names, so they would overwrite the model's own"""
+    flat, better = to_legacy(ptab, prefix_seg="prior"), better_of(ptab, metrics, prefix_seg="prior")
+    return ({k: v for k, v in flat.items() if k.startswith("prior_")}, {k: v for k, v in better.items() if k.startswith("prior_")})
+
+
+def contract_card(run: str, split: str, tag: str, flat: dict, better: dict, n_frames: int, gt_sig) -> dict:
+    """the metric card of this evaluation in the evaluator contract (autoresearch/schemas/card.schema.json): the file decide.py and
+    experiment.py read (eval/card<tag>.json). The finite numbers of metrics.json (no info/*, no NaN, no flags) with their directions;
+    commit = the run's code snapshot (code/SNAPSHOT.txt of run_ar.sh / run_cfg.sh, '+?' when unknown); seed from the run's config.json;
+    protocol = the GT signature scored against (decide.py refuses a comparison across protocols)"""
+    metrics = {k: float(v) for k, v in flat.items()
+               if not k.startswith("info/") and isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)}
+    try:
+        words = open(os.path.join(run, "code", "SNAPSHOT.txt")).read().split()
+        commit = words[words.index("commit") + 1]
+    except (OSError, ValueError, IndexError):
+        commit = "+?"
+    card = {"schema": 1, "name": os.path.basename(os.path.normpath(run)) + tag, "split": split, "frames": int(n_frames), "metrics": metrics,
+            "better": {k: v for k, v in better.items() if k in metrics}, "commit": commit, "date": time.strftime("%Y-%m-%d %H:%M"),
+            "protocol": {"gt_signature": gt_sig}}
+    seed = (_read_json(os.path.join(run, "config.json")) or {}).get("seed")
+    if isinstance(seed, (int, str)) and not isinstance(seed, bool):
+        card["seed"] = seed
+    return card
 
 
 def headline_table(flat: dict) -> str:
@@ -134,7 +188,8 @@ def cmd_eval(a, rest) -> int:
             if o.get("detr") is not None:
                 detr_rec.setdefault(sc, {}).setdefault(dt, []).append((list(o["detr"]), gb))
     store = suite.quant.run(scenes=e.scenes if not e.n else None, frames=frames, state=state, name=name, progress=50, on_frame=keep_boxes)
-    flat = to_legacy(suite.quant.table(store))
+    tab = suite.quant.table(store)
+    flat, better = to_legacy(tab), better_of(tab, suite.task.metrics())
     subj = suite.subject.describe()
     flat["info/step"], flat["info/n_samples"], flat["info/n_scenes"] = subj.get("step"), len(store.frames), len(store.scene_names())
     lat = None
@@ -145,8 +200,11 @@ def cmd_eval(a, rest) -> int:
         psuite = make_suite(a, prior=e.prior, state="reset")
         pstore = psuite.quant.run(frames=frames or [f for s in suite.source.scenes() for f in suite.source.frames(s)], state="reset",
                                   name=f"prior{e.prior}_n{e.n or 'all'}", progress=50)
-        flat.update(to_legacy(psuite.quant.table(pstore), prefix_seg="prior"))
+        pflat, pbetter = prior_numbers(psuite.quant.table(pstore), psuite.task.metrics())
+        flat.update(pflat)
+        better.update(pbetter)
         psuite.close()
+    better.update(ms_better(flat))
     if e.images:
         for ref in Sampler(suite.source, 0).spread(e.images):
             suite.qual.frame(ref, ("overview", "outputs"), out_dir=os.path.join(a.run, "eval", "images"),
@@ -158,7 +216,10 @@ def cmd_eval(a, rest) -> int:
         json.dump({"run": a.run, "checkpoint": subj.get("checkpoint"), "split": a.split, "weights": "EMA",
                    "memory": "carried over the whole scene" if e.warm else "empty (cold)", "code": subj.get("code"),
                    "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
-                   "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "latency": lat}, f, indent=1, default=float)
+                   "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better, "latency": lat}, f, indent=1,
+                  default=float)
+    with open(os.path.join(out_dir, f"card{tag}.json"), "w") as f:      # the same numbers in the evaluator contract, for decide.py
+        json.dump(contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig), f, indent=1)
     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
     rec_path = os.path.join(out_dir, f"scene_records{tag}_n{e.n or 'all'}.pkl")
     bev_legacy.write_scene_records(rec_path, suite.task.metrics()[0], store,
