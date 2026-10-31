@@ -9,7 +9,8 @@
     qual videos M [--seed S] [--view V] [--fps F] [--max-frames N] [--scenes s1 s2]
     quant run [--n-scenes N | --scenes s1 s2] [--spread N] [--max-frames N] [--seed S] [--name NAME]
     quant table RUN | per-scene RUN | outliers RUN [--k K] [--z Z] | trace RUN LABEL | report RUN [--render K]
-    quant compare RUN_A RUN_B [--boot N] | timing [--frame SPEC] [--n N]
+    quant compare RUN_A RUN_B [--boot N] | timing [--frame SPEC] [--n N] [--run RUN]
+    quant pareto RUN [RUN ...] [--y metric.key] [--cost ms gmacs]   quality against runtime / operations, the runs not beaten on both
     selftest                                             the core against known answers on the toy adapter (no --adapter)
     selftest-adapter                                     the contract checker on --adapter
 `build(**kv)` of an adapter returns (Source, Subject, Task). RUN is a run name below <out>/quant or a run directory.
@@ -34,10 +35,15 @@ def _auto(v: str) -> Any:
 
 
 def load_adapter(spec: str, kv: Dict[str, Any]):
-    mod, _, fn = spec.partition(":")
-    if not fn:
-        raise SystemExit("--adapter must be module:function")
+    mod, _, fn = spec.rpartition(":")
+    if not mod or not fn.isidentifier():
+        raise SystemExit("--adapter must be module:function or path/to/file.py:function")
     sys.path.insert(0, os.getcwd())
+    if mod.endswith(".py"):                                          # a file: its folder joins the path, the file is imported by name
+        if not os.path.isfile(mod):
+            raise SystemExit(f"adapter file not found: {mod}")
+        sys.path.append(os.path.dirname(os.path.abspath(mod)))
+        mod = os.path.splitext(os.path.basename(mod))[0]
     built = getattr(importlib.import_module(mod), fn)(**kv)
     if len(built) != 3:
         raise SystemExit("an adapter's build() must return (source, subject, task)")
@@ -133,6 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
     t = n.add_parser("timing")
     t.add_argument("--frame", default=None)
     t.add_argument("--n", type=int, default=30)
+    t.add_argument("--run", default=None, help="also store the result in this run (cost.bench), where `quant pareto` finds it")
+    t.add_argument("--force", action="store_true", help="attach the benchmark to --run even if the Subject / Source are not those of the run")
+    pa = n.add_parser("pareto")
+    pa.add_argument("runs", nargs="+", help="runs of the same task; quality is taken on the frames all of them have")
+    pa.add_argument("--y", default=None, help="quality axis, 'metric.key' (default: the first headline number)")
+    pa.add_argument("--cost", nargs="+", default=["ms", "gmacs"], choices=["ms", "gmacs"], help="cost axes")
     pr = sub.add_parser("probe").add_subparsers(dest="mode", required=True)
     for name in ("budget", "situations", "sample", "scan"):
         a = pr.add_parser(name)
@@ -213,6 +225,13 @@ def main(argv=None) -> int:
                             frames=frames, state=state, name=a.name)
                 print(f"run {st.path}: {len(st.frames)} frames, {len(st.scene_names())} scenes")
                 print(_fmt_table(_headline(suite, qt.table(st))))
+                c = st.manifest.get("cost") or {}
+                if c.get("run_ms"):
+                    r = c["run_ms"]
+                    print(f"ms per frame in this run: median {r['median_ms']:.2f}, p90 {r['p90_ms']:.2f} (n {r['n']}, load {r['load'].get('load1', '?')}; "
+                          f"an idle benchmark: quant timing --run {st.manifest['name']})")
+                if (c.get("ops") or {}).get("gmacs") is not None:
+                    print(f"GMACs per frame: {c['ops']['gmacs']:.4g} ({c['ops'].get('method', '?')})")
             elif a.mode == "table":
                 print(_fmt_table(qt.table(a.run) if a.all else _headline(suite, qt.table(a.run))))
             elif a.mode == "per-scene":
@@ -227,8 +246,13 @@ def main(argv=None) -> int:
                 print(qt.report(a.run, a.render))
             elif a.mode == "compare":
                 print(json.dumps(qt.compare(a.run_a, a.run_b, a.boot), indent=1))
+            elif a.mode == "pareto":
+                from .cost import format_table
+                res = qt.pareto(a.runs, a.y, a.cost)
+                print(format_table(res))
+                print(f"picture: {res['png']}" if res["png"] else "no cost to draw: no run has ms or GMACs")
             elif a.mode == "timing":
-                print(json.dumps(qt.timing(a.frame, a.n), indent=1))
+                print(json.dumps(qt.timing(a.frame, a.n, a.run, a.force), indent=1))
     finally:
         suite.close()
     return 0

@@ -11,6 +11,8 @@
 
 # the general research system
 !/autoresearch/
+# what `python -m evalsuite` writes below autoresearch/ with the default --out (runs, pictures, stored counts: results, not code)
+/autoresearch/eval_out/
 
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/

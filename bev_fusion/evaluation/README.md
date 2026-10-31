@@ -1,6 +1,6 @@
 # evaluation - evaluating the BEV system (qualitative + quantitative suite, metrics)
 
-Every number and every picture of a training run comes from here. The machinery is the problem-independent **evaluation suite** `../../autoresearch/evalsuite/` (design: its `ARCHITECTURE.md`, use: its `README.md`); this folder is the BEV *adapter* (the three boxes Source / Subject / Task for a run `runs/<name>`) and the metric library. Run from the `bev_fusion` folder with the `gcar` environment: `wsl ~/miniconda3/envs/gcar/bin/python evaluation/bev_suite.py RUN ...`.
+Every number and every picture of a training run comes from here. The machinery is the problem-independent **evaluation suite** `../../autoresearch/evalsuite/` (use: its `README.md`, bigger projects: its `EXTENSIONS.md`); this folder is the BEV *adapter* (the three boxes Source / Subject / Task for a run `runs/<name>`) and the metric library. Run from the `bev_fusion` folder with the `gcar` environment: `wsl ~/miniconda3/envs/gcar/bin/python evaluation/bev_suite.py RUN ...`.
 
 ## Use
 
@@ -27,7 +27,7 @@ Global options: `--device cuda|cpu --workers N --split val|train --ckpt-dir DIR 
 | file | content | test |
 |---|---|---|
 | `bev_suite.py` | the command line of this folder: the suite's commands on a run + `eval`, `time`, `memory`, `compare` and the legacy exports | `bev_selftest.py` |
-| `bev_adapter.py` | `build(run, ...) -> (Source, Subject, Task)`: `BEVSource` (val / train keyframes of the run's config grouped into scenes in time order, worker processes read ahead), `BEVSubject` (the run's EMA weights under its own code snapshot `runs/<name>/code`, the chain's state carried frame to frame, forward hooks for ten taps, batch-1 latency), `BEVPriorSubject` (per-cell GT mean as a constant prediction), the controls | contract checker `selftest-adapter` + `--real` |
+| `bev_adapter.py` | `build(run, ...) -> (Source, Subject, Task)`: `BEVSource` (val / train keyframes of the run's config grouped into scenes in time order, worker processes read ahead), `BEVSubject` (the run's EMA weights under its own code snapshot `runs/<name>/code`, the chain's state carried frame to frame, forward hooks for ten taps, batch-1 latency, GMACs of the cached chain: `ops()`), `BEVPriorSubject` (per-cell GT mean as a constant prediction), the controls | contract checker `selftest-adapter` + `--real` |
 | `bev_task.py` | `BEVTask`: metrics `seg` (SegMeter counts of the masks fov / seen / out / obj per frame), `det` and `detr` (DetMeter rows: true-positive flags of every detection), `loss`; plausibility checks of a frame | equals the direct meters on every key |
 | `bev_views.py` | the pictures as `Page`s: `overview` (camera with the projected GT boxes and map lines), `outputs`, `stages`, `dashboard` | renders; error colours at the right cells |
 | `bev_probe.py` | library for one-off scripts that probe a run: pinned code on the path, the chain's functions by name, `load_run`, `load_all`, `run_frame`, `predictions`, `masks`, `gt_boxes`, `add_sample`, `perturb` | static check of all callers |

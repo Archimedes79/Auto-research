@@ -28,10 +28,17 @@ class EvalSuite:
         os.makedirs(self.out, exist_ok=True)
         from .qualitative import Qualitative
         from .quantitative import Quantitative
-        from .probing import Prober
         self.qual = Qualitative(self)
         self.quant = Quantitative(self)
-        self.probe = Prober(self)
+        self._probe = None
+
+    @property
+    def probe(self):
+        """the probing (see probing.py): loaded when it is first used, needs a Task that implements probe()"""
+        if self._probe is None:
+            from .probing import Prober
+            self._probe = Prober(self)
+        return self._probe
 
     def check(self) -> List[Dict[str, Any]]:
         """run the contract checker of the adapter (see check.py); a list of {name, ok, note}"""

@@ -265,6 +265,15 @@ def _make_subject_classes():
                     "seq_len": self.cfg.seq_len, "refine": self.refine,
                     "code": os.path.relpath(self.ns.code, ROOT)}
 
+        def ops(self, sample):
+            """GMACs of the cached chain at batch 1 with dts -0.5 / 0 / +0.5 (the path `benchmark` times), counted by torch; the pre-trained
+            camera heads are a fixed cost that is not in it"""
+            from evalsuite.torch_taps import count_ops
+            b1 = self.ns.T.to_device(sample.inputs, self.device)
+            r = count_ops(lambda: self.model(b1, dts=(-0.5, 0.0, 0.5)))
+            r["note"] += "; the cached chain at batch 1 with dts -0.5 / 0 / +0.5 (what benchmark() times), without the pre-trained camera heads"
+            return r
+
         def predict(self, sample, taps=()):
             import torch
             ns, T = self.ns, self.ns.T

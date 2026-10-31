@@ -243,6 +243,14 @@ class Subject(ABC):
         return {"median_ms": float(np.median(t)), "p90_ms": float(t[int(0.9 * (len(t) - 1))]), "mean_ms": float(t.mean()),
                 "n": n}
 
+    def ops(self, sample: Sample) -> Dict[str, Any]:
+        """optional: the operations of ONE forward pass on this frame, {"gmacs": float, "method": "measured" | "estimated" | "mixed",
+        "note": what is counted and what is not, "parts": {name: gmacs}} (a MAC is a multiply-add = 2 FLOPs). `torch_taps.count_ops`
+        measures what torch can see (convolutions, matrix products, attention); `cost.with_estimate` adds a part nobody counts (a custom
+        CUDA op, numpy code) as an estimate with its formula. Called once per quantitative run, before the first frame; it must not
+        depend on the memory state (the suite calls reset() afterwards). {} = not known."""
+        return {}
+
     def close(self) -> None:
         """release the network"""
 
@@ -256,8 +264,9 @@ class Metric(ABC):
     reduce(): the numbers of that set, a flat dict 'name' -> float (nan allowed); with `keys` only those numbers are needed
         (a metric may use that to skip expensive ones: the bootstrap calls it thousands of times). The dataset-level number is
         reduce(all), never a mean of per-frame numbers.
-    score(): per-frame scalars (e.g. the frame's own IoU) to rank frames; support(): how much evidence each score rests on
-        (e.g. the GT cell count), so a frame with nothing to find is not ranked as an outlier.
+    score(): per-frame scalars (e.g. the frame's own IoU) to rank frames; optional, the default is the headline numbers of the frame
+        alone (reduce of this one frame). support(): how much evidence each score rests on (e.g. the GT cell count), so a frame
+        with nothing to find is not ranked as an outlier; optional, default 1 for every score.
     headline: the reduce() keys that tables, outlier search and bootstrap use; better: per key 'high' | 'low' (default high)."""
     name: str = "metric"
     headline: Tuple[str, ...] = ()
@@ -272,7 +281,10 @@ class Metric(ABC):
         """numbers of a set of frames (all keys, or at least `keys`)"""
 
     def score(self, counts: Counts) -> Dict[str, float]:
-        return {}
+        if not self.headline:
+            return {}
+        own = self.reduce([{k: np.asarray(v) for k, v in counts.items()}], keys=list(self.headline))
+        return {k: float(own[k]) for k in self.headline if k in own}
 
     def support(self, counts: Counts) -> Dict[str, float]:
         return {}

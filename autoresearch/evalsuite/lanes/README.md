@@ -1,6 +1,6 @@
 # evalsuite/lanes - lane centre lines (picture and graph), common metrics, error causes
 
-A ready-made Task for networks that output lane centre lines. No project knowledge, no torch: numpy + scipy (matplotlib for the views). Overview and use: `../README.md`, design: `../ARCHITECTURE.md` section 8.
+A ready-made Task for networks that output lane centre lines. No project knowledge, no torch: numpy + scipy (matplotlib for the views). Overview and use: `../EXTENSIONS.md` chapter 7, design history: `../../history/evalsuite_architecture_2026-10-30.md` section 8.
 
 | file | content |
 |---|---|

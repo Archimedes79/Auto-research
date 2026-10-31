@@ -35,10 +35,10 @@ _IDENTITY_KEYS = ("state", "source", "subject", "task", "selection")
 _VOLATILE = {"subject": ("device",)}
 
 
-def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any]) -> List[str]:
-    """the manifest entries that make a resume a different run (what differs, stored -> new)"""
+def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDENTITY_KEYS) -> List[str]:
+    """the manifest entries that make a resume (or a benchmark attached to a run) another run (what differs, stored -> new)"""
     out = []
-    for k in _IDENTITY_KEYS:
+    for k in keys:
         a, b = stored.get(k), new.get(k)
         if isinstance(a, dict) and isinstance(b, dict):
             drop = _VOLATILE.get(k, ())
@@ -134,6 +134,11 @@ class RunStore:
         self.manifest["finished"] = bool(finished)
         self.manifest["n_frames"] = len(self._frames)
         self.manifest["scenes"] = sorted({fr["scene"] for fr in self._frames})
+        self._write_manifest()
+
+    def set_cost(self, key: str, value: Dict[str, Any]) -> None:
+        """store a cost entry (run_ms, bench, ops; see cost.py) in the manifest of this run and write it"""
+        self.manifest.setdefault("cost", {})[key] = value
         self._write_manifest()
 
     def _write_manifest(self) -> None:

@@ -1,5 +1,9 @@
 # evalsuite - architecture (planned before the code, built 2026-10-30; section 7 lists what changed)
 
+> Design history, not the user guide. Moved here from `evalsuite/ARCHITECTURE.md` on 2026-10-31 when the description was cut to
+> `evalsuite/README.md` (one page) and `evalsuite/EXTENSIONS.md` (the chapters for bigger projects). Read it for the rationale,
+> the proof plan (section 5) and the migration of the old scripts (section 6).
+
 Goal (Mirko): look into any network problem with two suites on one core.
 
 - **qualitative**: pictures of results over ground truth with the errors highlighted, for a concrete frame (scene + frame, or token), for n random frames (first a random video, then a random frame in it), with a debug view into the network parts, and result videos of m random sequences;

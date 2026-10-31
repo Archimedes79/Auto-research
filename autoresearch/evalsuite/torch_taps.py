@@ -10,7 +10,8 @@
 A Hook names the module by its dotted attribute path ('trunk.head', 'blocks.3'), whether the OUTPUT or the INPUT (first positional
 argument) is taken, a `pick` to select from a tuple/dict output, and `select`: 'last' (the last call wins), 'first', or 'list'
 (every call, for modules called once per frame / per sample; read() returns the list stacked on a new axis 0). Nothing is
-recorded for taps that are not armed, so the hooks cost nothing in a normal forward. torch is imported only here.
+recorded for taps that are not armed, so the hooks cost nothing in a normal forward. The hooks use only the tensors' own methods
+(no torch import); `count_ops(fn)` imports torch lazily and counts the operations of one forward pass (see below).
 """
 from __future__ import annotations
 
@@ -106,3 +107,25 @@ class TapRecorder:
         for h in self._handles:
             h.remove()
         self._handles = []
+
+
+def count_ops(fn: Callable[[], Any], depth: int = 2) -> Dict[str, Any]:
+    """Operations of ONE call of fn() (a forward pass on one frame), counted by torch's FlopCounterMode, in GMACs (a MAC is 2 FLOPs).
+    It is exact for what torch can see - convolutions, matrix products (linear layers), attention - and blind to everything else:
+    element-wise ops, norms, interpolation, grid_sample, scatter / splat, custom CUDA ops, numpy / numba code. The result says so in
+    `note`; add what is missing with `cost.with_estimate`. `parts` = GMACs per module, from the children of the root module down to
+    `depth` levels below it (a nested module is also counted in its parent; operations outside every module are only in the total).
+    Call it with the model in eval() mode: a forward pass in train mode updates the BatchNorm statistics.
+    -> {"gmacs", "method": "measured", "note", "parts"}; use it from `Subject.ops`."""
+    import torch
+    from torch.utils.flop_counter import FlopCounterMode
+    with torch.no_grad(), FlopCounterMode(display=False) as fc:
+        fn()
+    counts = fc.get_flop_counts()
+    total = float(fc.get_total_flops())
+    top = [k for k in counts if k != "Global" and "." not in k]
+    drop = {"Global", *(top if len(top) == 1 else [])}                  # one root module = the total again
+    parts = {k: sum(v.values()) / 2e9 for k, v in counts.items() if k not in drop and k.count(".") <= depth}
+    return {"gmacs": total / 2e9, "method": "measured", "parts": parts,
+            "note": "torch FlopCounterMode: convolutions, matrix products and attention only; not counted: element-wise ops, norms, "
+                    "interpolation, grid_sample, scatter, custom CUDA ops, numpy / numba code"}

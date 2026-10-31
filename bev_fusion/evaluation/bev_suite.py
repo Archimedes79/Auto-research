@@ -16,7 +16,7 @@
                                                 suite: their scene_records.pkl through evaluation/bev_legacy.py)
 Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train  --ckpt-dir DIR (moved checkpoints)
                 --control shuffle_radar|zero_radar|shuffle_cam|zero_cam  --out DIR (default RUN/eval/suite)  --state carry|reset
-Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/README.md for what each command writes.
+Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/EXTENSIONS.md chapter 5 for what each command writes.
 """
 from __future__ import annotations
 

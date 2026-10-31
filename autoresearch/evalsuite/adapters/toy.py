@@ -1,6 +1,6 @@
 """The toy adapter: synthetic videos, a numpy "network" with a memory, two metrics, an overview view. It is the test bed of the
-suite (selftest.py checks every function against known answers on it) and the TEMPLATE for porting the suite to a real network:
-copy this file, replace the three classes' bodies, keep the shapes of what they return.
+suite (selftest.py checks every function against known answers on it): memory, taps, planted outlier frames, two metrics. The
+template for porting the suite to a real network is the smaller `minimal.py`; this file shows what a bigger adapter adds.
 
 World: scenes toy-00 ... with `n_frames` frames of a 48 x 48 plane; two rectangles move with constant velocity; the ground
 truth is their mask and boxes. The input is the mask plus noise. PLANTED frames are corrupted on purpose (a noise burst, a hole),
@@ -95,6 +95,12 @@ class ToySubject(Subject):
 
     def describe(self) -> Dict[str, Any]:
         return {"class": "ToySubject", "name": self.name, "bias": self.bias, "memory": self.memory}
+
+    def ops(self, sample: Sample) -> Dict[str, Any]:
+        """an ESTIMATE written by hand, as an example: the 3 x 3 box blur is 9 MACs per pixel, the memory update 2 per pixel"""
+        h, w = np.asarray(sample.inputs).shape
+        return {"gmacs": h * w * 11 / 1e9, "method": "estimated", "parts": {"blur": h * w * 9 / 1e9, "memory": h * w * 2 / 1e9},
+                "note": "by hand: blur 9 MAC / pixel + memory update 2 MAC / pixel; the thresholding is not counted"}
 
     def predict(self, sample: Sample, taps: Sequence[str] = ()) -> Prediction:
         x = np.asarray(sample.inputs, np.float32)

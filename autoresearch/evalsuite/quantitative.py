@@ -11,7 +11,8 @@
     trace(run, label)        draw such a frame (overview + debug) through the qualitative suite
     compare(a, b)            paired scene bootstrap of the headline numbers between two stored runs (same frames), no network
     report(run)              html: tables, outliers with pictures of the worst frames
-    timing()                 ms per frame of the Subject (only valid on an idle machine; the load is recorded)
+    timing(run=)             ms per frame of the Subject (only valid on an idle machine; the load is recorded); run() itself records
+                             the ms per frame of its own frames and Subject.ops (cost.py), pareto() sets runs against each other
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from .render import report as html
 from .runner import Runner
 from .sampling import Sampler
 from .stats import bootstrap_scenes, loo_influence, robust_z
-from .store import RunStore
+from .store import RunStore, _identity_differences
 
 
 def _slug(text: str) -> str:
@@ -82,6 +83,13 @@ class Quantitative:
                                   "max_frames": max_frames, "seed": seed}}
         store = RunStore.create(os.path.join(self.dir, run_name), manifest, resume=resume)
         done = store.done()
+        n_before = len(store.frames)
+        cost = store.manifest.setdefault("cost", {})
+        if "ops" not in cost:
+            ops = self._ops(next((r for refs in plan.values() for r in refs), None), run_name)
+            if ops:
+                cost["ops"] = ops
+        load0 = machine_load()                                # before the first frame: what else was running while we started
         runner = Runner(src, subj, state)
         t0, n = time.perf_counter(), 0
         total = manifest["selection"]["n_frames_planned"]
@@ -115,9 +123,33 @@ class Quantitative:
                               flush=True)
             finished = True
         finally:                                              # an interrupted run keeps a consistent prefix and can be resumed
+            store.flush()                                     # the frames of this session are safe before anything slow (nvidia-smi) happens
+            ms = [float(fr["info"]["predict_ms"]) for fr in store.frames if "predict_ms" in fr.get("info", {})]
+            if ms and len(store.frames) > n_before:           # every stored frame, also those of earlier sessions of a resumed run
+                a = np.sort(np.asarray(ms))
+                cost["run_ms"] = {"median_ms": float(np.median(a)), "p90_ms": float(a[int(0.9 * (len(a) - 1))]),
+                                  "mean_ms": float(a.mean()), "n": len(a), "load": load0, "load_end": machine_load()}
             store.manifest["wall_s"] = round(store.manifest.get("wall_s", 0) + time.perf_counter() - t0, 1)
             store.close(finished=finished)
         return store
+
+    def _ops(self, ref, run_name: str) -> Dict[str, Any]:
+        """Subject.ops on the first frame of the run; an estimate that fails must not stop a run (it is tried again on a resume)"""
+        if ref is None:
+            return {}
+        try:
+            ops = self.s.subject.ops(self.s.source.load(ref)) or {}
+            if not isinstance(ops, dict):
+                raise TypeError(f"ops() must return a dict with 'gmacs', not {type(ops).__name__}")
+            ops = json.loads(json.dumps(ops, default=_json_number))              # what the manifest holds on disk (numpy scalars become numbers)
+            if ops and not isinstance(ops.get("gmacs"), (int, float)):
+                raise TypeError("ops() must return a number under 'gmacs'")
+            return ops
+        except Exception as e:                                                         # noqa: BLE001
+            print(f"[quant {run_name}] operations not counted: {type(e).__name__}: {e}", flush=True)
+            return {}
+        finally:
+            self.s.subject.reset()
 
     # -------------------------------------------------------------------------------------- numbers
     def table(self, run: Union[str, RunStore], labels: Optional[Sequence[str]] = None) -> Dict[str, float]:
@@ -239,7 +271,7 @@ class Quantitative:
                                          ["frames", len(st.frames)], ["scenes", len(st.scene_names())],
                                          ["subject", json.dumps(man.get("subject"), default=str)[:200]],
                                          ["source", json.dumps(man.get("source"), default=str)[:200]],
-                                         ["commit", man.get("commit")], ["wall s", man.get("wall_s")]], left_cols=(0, 1)))]
+                                         ["commit", man.get("commit")], ["wall s", man.get("wall_s")]] + _cost_rows(man), left_cols=(0, 1)))]
         head = []
         for name, m in self._metrics().items():
             head += [[f"{name}.{key}", tab.get(f"{name}.{key}", float("nan")), m.direction(key)] for key in m.headline]
@@ -284,18 +316,48 @@ class Quantitative:
         return path
 
     # -------------------------------------------------------------------------------------- timing
-    def timing(self, spec: Any = None, n: int = 30) -> Dict[str, Any]:
+    def pareto(self, runs: Sequence[Union[str, RunStore]], y: Optional[str] = None, costs: Sequence[str] = ("ms", "gmacs"),
+               out: Optional[str] = None) -> Dict[str, Any]:
+        """quality (`y` = 'metric.key', default the first headline number) against ms and GMACs per frame for several runs, on the
+        frames all of them have; marks the runs no other run beats on both (see cost.py); writes quant/pareto_<y>.png and .json"""
+        from . import cost
+        return cost.pareto(self, runs, y, costs, out)
+
+    def timing(self, spec: Any = None, n: int = 30, run: Optional[Union[str, RunStore]] = None, force: bool = False) -> Dict[str, Any]:
         """ms per frame of the Subject on one frame (the first frame of the first scene, or `spec`). Only valid on an idle
-        machine: the load average (and the GPU utilisation, if nvidia-smi exists) are recorded next to the numbers."""
+        machine: the load average (and the GPU utilisation, if nvidia-smi exists) are read BEFORE the benchmark and recorded next to
+        the numbers. With `run` the result is also stored in that run's manifest (cost.bench), where `pareto` finds it; the Subject,
+        Source and Task of this suite must be those of the run (force=True skips the check)."""
+        st = self.open(run) if run is not None else None
+        if st is not None and not force:
+            diff = _identity_differences(st.manifest, {"source": self.s.source.describe(), "subject": self.s.subject.describe(),
+                                                       "task": self.s.task.name}, ("source", "subject", "task"))
+            if diff:
+                raise ValueError(f"this suite is not the one that made run {st.manifest.get('name')} ({'; '.join(diff)}): a benchmark of "
+                                 "another network must not be attached to it (force=True does it anyway)")
         ref = self.s.source.find(spec) if spec is not None else self.s.source.frames(self.s.source.scenes()[0])[0]
         sample, _ = Runner(self.s.source, self.s.subject, self.s.state).run_to(ref)
+        load = machine_load()
         res = self.s.subject.benchmark(sample, n=n)
-        res["load"] = machine_load()
+        res["load"] = load
         res["frame"] = ref.label
         os.makedirs(self.dir, exist_ok=True)
         with open(os.path.join(self.dir, "timing.json"), "w") as f:
             json.dump(res, f, indent=1)
+        if st is not None:
+            st.set_cost("bench", dict(res))
         return res
+
+
+def _cost_rows(man: Dict[str, Any]) -> List[list]:
+    """the cost entries of a manifest as rows of the report's run table"""
+    c, rows = man.get("cost") or {}, []
+    for key, label in (("run_ms", "ms per frame, measured in the run"), ("bench", "ms per frame, benchmark")):
+        if c.get(key):
+            rows.append([label, f"median {c[key]['median_ms']:.2f}, p90 {c[key]['p90_ms']:.2f} (n {c[key]['n']}, load {c[key].get('load', {}).get('load1', '?')})"])
+    if (c.get("ops") or {}).get("gmacs") is not None:
+        rows.append(["GMACs per frame", f"{c['ops']['gmacs']:.4g} ({c['ops'].get('method', '?')})"])
+    return rows
 
 
 def _by_scene(st: RunStore, metric: str, labels: set) -> Dict[str, list]:
@@ -306,6 +368,15 @@ def _by_scene(st: RunStore, metric: str, labels: set) -> Dict[str, list]:
     return res
 
 
+def _json_number(o: Any) -> Any:
+    """json.dumps default: numpy scalars and arrays become plain numbers and lists (the manifest's own default=str would make strings of them)"""
+    if isinstance(o, np.generic):
+        return o.item()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    raise TypeError(f"{type(o).__name__} is not JSON serialisable")
+
+
 def _plain(v: Any) -> Any:
     if isinstance(v, (np.generic,)):
         return v.item()
@@ -313,16 +384,19 @@ def _plain(v: Any) -> Any:
 
 
 def machine_load() -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+    """the state of the machine now: load average, CPU count, host name, GPU utilisation / memory / name (what a timing must say about itself)"""
+    import platform
+    out: Dict[str, Any] = {"host": platform.node()}
     try:
         out["load1"] = os.getloadavg()[0]
+        out["cpus"] = os.cpu_count()
     except (OSError, AttributeError):
         pass
     try:
         import subprocess
-        r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits"],
+        r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,name", "--format=csv,noheader,nounits"],
                            capture_output=True, text=True, timeout=20).stdout.strip().split(",")
-        out["gpu_util_percent"], out["gpu_mem_mib"] = float(r[0]), float(r[1])
+        out["gpu_util_percent"], out["gpu_mem_mib"], out["gpu_name"] = float(r[0]), float(r[1]), r[2].strip()
     except Exception:                                                              # noqa: BLE001
         pass
     return out
