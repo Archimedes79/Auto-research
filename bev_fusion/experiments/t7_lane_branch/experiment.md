@@ -85,3 +85,5 @@ touching the image encoder: a side branch.
   `temp/t7/finish.sh` (log `temp/t7/finish.log`) waits for the four, re-evaluates `t2_ref_s0` / `s1` with the current suite
   (legacy metrics copied to `metrics_legacy_2026-10-28.json` first: layer-1 check), writes the paired comparisons
   `temp/t7/compare_<arm>_s<seed>.txt` and the timing if the GPU is idle. `temp/t7/wait_step1000.sh <run>` = the kill check.
+- 2026-10-31 kill check `t7_res4_s0`: `group.lines` mean over steps 900-1000 = 1.267 (reference 1.253 / 1.217, threshold 1.48):
+  passes, the run continues. The same check is armed for `t7_rgb_s0`, `t7_res4_s1`, `t7_rgb_s1`.
