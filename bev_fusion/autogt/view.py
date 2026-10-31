@@ -1,4 +1,7 @@
-"""Pictures of the GT: python -m autogt view OUT_DIR [scene:keyframe ...]  and  python -m autogt sheets OUT_DIR
+"""Pictures of the GT: python -m autogt view OUT_DIR [scene:keyframe | TOKEN ...]  and  python -m autogt sheets OUT_DIR
+
+`scene:keyframe` (nuScenes mini, generated now) or a sample TOKEN (any stored keyframe, mini or trainval, drawn from the stored GT
+of the current generator, no devkit).
 
 One figure per keyframe, four panels (all from the generator, nothing re-computed):
 1 front camera: 3D boxes (vehicle red, pedestrian magenta, two-wheeler orange; white rim = stationary, fixed in the world;
@@ -16,6 +19,7 @@ One figure per keyframe, four panels (all from the generator, nothing re-compute
 import colorsys
 import math
 import os
+import types
 
 import matplotlib
 matplotlib.use("Agg")
@@ -195,10 +199,37 @@ def figure(gt_gen, name, k, out_dir, total=False, gt=None):
     return p
 
 
+def stored(token, out_dir=None, total=False, data=None):
+    """the figure of a keyframe by sample TOKEN, drawn from the STORED GT of the current generator (mini or trainval, no devkit:
+    the scene list and the keyframe order come from the nuScenes json tables)."""
+    from .suite import DATA, default_root, json_tables, load, scene_tokens
+    gt = load(token, data or DATA)
+    for version in ("v1.0-mini", "v1.0-trainval"):                                  # mini first: its tables are tiny (mini = a subset of trainval)
+        root = default_root(version)
+        if os.path.exists(os.path.join(root, version, "scene.json")):
+            scenes, _ = json_tables(root, version)
+            if any(s["token"] == gt["meta"]["scene"] for s in scenes):
+                break
+    else:
+        raise FileNotFoundError(f"scene of keyframe {token} is in neither v1.0-trainval nor v1.0-mini")
+    name = next(s["name"] for s in scenes if s["token"] == gt["meta"]["scene"])
+    gen = types.SimpleNamespace(dataroot=root, nusc=types.SimpleNamespace(scene=scenes),
+                                keyframes=lambda n: scene_tokens(n, version, root))           # what `figure` needs from the generator
+    return figure(gen, name, scene_tokens(name, version, root).index(token), out_dir, total, gt=gt)
+
+
 def run(out_dir, picks=None, dataroot="~/data/nuscenes", version="v1.0-mini", total=False):
+    """picks: [(scene, keyframe index)] generated now from nuScenes mini, or [(sample token,)] drawn from the stored GT (any version)."""
     os.makedirs(out_dir, exist_ok=True)
-    gen = AutoGT(dataroot, version)
-    return [figure(gen, n, int(k), out_dir, total) for n, k in (picks or DEFAULT)]
+    gen = None
+    out = []
+    for p in (picks or DEFAULT):
+        if len(p) == 1:
+            out.append(stored(p[0], out_dir, total))
+        else:
+            gen = gen or AutoGT(dataroot, version)
+            out.append(figure(gen, p[0], int(p[1]), out_dir, total))
+    return out
 
 
 LEGEND = ["camera: 3D boxes at the camera time (vehicle red, pedestrian magenta, two-wheeler orange; white rim = stationary, fixed in "

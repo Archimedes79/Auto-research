@@ -205,6 +205,14 @@ def _():
         near_g, near_p = brute_near(np.ones_like(g), g, tol), brute_near(np.ones_like(p), p, tol)
         want = [(p & near_g & valid).sum(), (p & ~near_g & valid).sum(), (g & near_p & valid).sum(), (g & ~near_p & valid).sum()]
         assert M.tolerant_confusion(p, g, tol, valid).tolist() == want, tol
+        assert M.tolerant_counts(p, g, brute_near(np.ones_like(g), g, tol), near_p, valid).tolist() == want, "the counting step with dilations given"
+        for bad_near in (near_p[:1], near_p[:, :1]):                             # a dilation of another shape (numpy would broadcast it) is refused
+            try:
+                M.tolerant_counts(p, g, bad_near, near_p, valid)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("a dilation of the wrong shape must be refused")
     one = np.zeros((9, 9), bool)
     one[4, 4] = True
     assert (M.dilate(one, 0.3 / 0.1) == M.dilate(one, 3)).all() and M.dilate(one, 3).sum() == 29, "a radius that is 3 up to float noise (0.3 / 0.1) is 3"

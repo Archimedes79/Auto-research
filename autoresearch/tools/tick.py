@@ -54,10 +54,10 @@ def resource_of(item):
     return item.get("resource") or KIND_RESOURCE.get(item.get("kind", ""), "agent")
 
 
-def free_gpu_slots(records, n):
+def free_gpu_slots(records, n, base=None):
     """n minus the slot directories that are held by a live launcher (run.py GpuSlot is the semaphore; a stale directory does not count)"""
-    base = os.path.join(records, ".gpu_slots")
-    probe = RUN.GpuSlot(records, n, "tick", "")
+    base = base or os.path.join(records, ".gpu_slots")
+    probe = RUN.GpuSlot(records, n, "tick", "", base=base)
     held = sum(1 for i in range(n) if os.path.isdir(os.path.join(base, str(i))) and not probe.stale(os.path.join(base, str(i))))
     return max(0, n - held)
 
@@ -198,7 +198,7 @@ def tick_pass(dry, max_start):
     root, cfg = P.root(), P.cfg()
     records, ledger = P.path("run_records"), P.path("ledger")
     rows = SC.derived(SC.load())
-    free = free_gpu_slots(records, int(cfg.get("gpu_slots", 2)))
+    free = free_gpu_slots(records, int(cfg.get("gpu_slots", 2)), RUN.slot_dir(root, cfg, records))
     cpu_free = int(cfg.get("cpu_slots", 1)) - sum(1 for r in rows if r["state"] == "running" and resource_of(r) == "cpu")  # the box is shared: evaluations one at a time
     started, waiting, lead, nocmd, blocked = [], [], [], [], []
     for r in SC.ready(rows):

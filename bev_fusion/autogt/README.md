@@ -3,13 +3,15 @@
 One standalone tool: it turns the raw nuScenes data (maps, annotations, ego poses, radar) into training-ready GT per keyframe -
 static BEV layers, objects, masks, and a **velocity / flow field in m/s** - and checks, shows and caches it. Nothing in it
 imports `training/`; `training/gt_bev.py` is only a shim for the older code. Everything is time-based (seconds), never per frame.
+**Agents: read `AGENTS.md` first** (entry points, run rules, every layer and box field, the rules for using it); this file is the reference.
 
 ```python
-from autogt import AutoGT                       # run from the bev_fusion folder
-gt = AutoGT("~/data/nuscenes", "v1.0-mini")     # one object (options: use_flow, use_radar, stationary_fix, map_offsets, flow_config)
+from autogt import AutoGT, load                 # run from the bev_fusion folder
+gt = AutoGT("~/data/nuscenes", "v1.0-mini")     # one object (options: use_flow, use_radar, stationary_fix, map_offsets, flow_config, boxes_at)
 g = gt.keyframe(sample_token)                   # dict of float32 layers [ix, iy] + meta
 s = gt.training_sample(sample_token)            # {"prev", "cur", "next"} + the ego steps between them
 gt.signature()                                  # cache key: changes with every edit of the generator or its options
+g = load(sample_token)                          # the STORED GT of a keyframe (data/autogt/<current_signature()>/), no nuScenes needed
 ```
 ```
 python -m autogt selftest                                   # all tests (synthetic world + real keyframes + build)
@@ -30,7 +32,8 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_adapter.py` | devkit records -> `Track` / `Ego` / `RadarFrame` (`NuScenesScene`); the only place that knows nuScenes' radar and annotation format |
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
-| `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade; commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video` |
+| `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`; commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
+| `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
 | `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
 
 ## What a keyframe contains (ego frame at the front-camera time, x forward 0-60 m, y left +-26 m, 0.5 m or 0.25 m)

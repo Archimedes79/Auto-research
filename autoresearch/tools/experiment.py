@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-from decide import LOWER  # noqa: E402
+from decide import lower_names  # noqa: E402
 import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
@@ -93,6 +93,7 @@ def check(exp, path):
             bad.append(f"{k} must be one of {allowed}")
     if bad:
         return bad
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path)))) if "experiments" in path.replace("\\", "/") else P.root()
     arms = exp["arms"]
     if exp["control"] not in arms:
         bad.append(f"control {exp['control']} is not an arm")
@@ -102,8 +103,8 @@ def check(exp, path):
     for a, arm in arms.items():
         if not any(k in arm for k in ("names", "cards", "recipe", "command")):
             bad.append(f"arm {a}: needs names / cards (results) or recipe / command (how to run)")
-    if exp["metric"] in LOWER and exp["direction"] != "lower":
-        bad.append(f"metric {exp['metric']} is lower-is-better (decide.LOWER) but direction is {exp['direction']}")
+    if exp["metric"] in lower_names(root) and exp["direction"] != "lower":
+        bad.append(f"metric {exp['metric']} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
     pred = exp["prediction"]
     if not isinstance(pred.get("value"), (int, float)) or pred.get("vs") not in arms:
         bad.append("prediction needs {value: number, vs: <arm letter>}")
@@ -123,7 +124,6 @@ def check(exp, path):
         bad.append(f"no clause on the headline metric {exp['metric']}")
     if not isinstance(exp["evaluate"].get("split"), str) or not exp["evaluate"]["split"].strip():
         bad.append("evaluate.split must name the split or benchmark set (val | test | confirm | <benchmark>)")
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path)))) if "experiments" in path.replace("\\", "/") else P.root()
     for a in arms:
         try:
             cards = arm_cards(exp, a, root)

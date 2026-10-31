@@ -147,6 +147,8 @@ def main():
         if row is None:
             row = dict(id=a.id, status="planned")
             rows.append(row)
+            if a.cmd == "note":  # a typo in an id would otherwise pass silently as a new planned row
+                print(f"note: {a.id} had no ledger row; a new planned row was made (check the id)", file=sys.stderr)
         for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"), ("notes", "notes"),
                        ("status", "status"), ("pred", "prediction"), ("rule", "rule")):
             if getattr(a, k) is not None:

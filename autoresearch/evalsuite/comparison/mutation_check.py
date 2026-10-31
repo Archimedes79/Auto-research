@@ -65,6 +65,8 @@ MUTANTS = [
     ("boxes.py", "    frames = list(frames) ", "    frames = frames ", "match_frames: a one-shot iterator is read once"),
     ("maps.py", "r = int(math.floor(radius_cells + 1e-9))", "r = int(math.floor(radius_cells))", "dilate: no tolerance for float noise in the radius"),
     ("maps.py", "if tol_cells < 0:", "if False:", "tolerant_confusion: negative tolerance accepted"),
+    ("maps.py", "_same_shape(p, g, near_g, near_p, v)", "_same_shape(p, g, v)", "tolerant_counts: dilations of another shape accepted"),
+    ("maps.py", "(g & near_p & v).sum(), (g & ~near_p & v).sum()]", "(g & near_g & v).sum(), (g & ~near_g & v).sum()]", "tolerant_counts: g_hit from the wrong dilation"),
     ("maps.py", 'if a.dtype.kind in "iu" and a.size and (a.min() < 0 or a.max() > 1):', "if False:", "_as_mask: integer map with 255 accepted"),
 ]
 

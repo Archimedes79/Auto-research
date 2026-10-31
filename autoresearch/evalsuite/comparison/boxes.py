@@ -198,11 +198,12 @@ def detection_numbers(scores: np.ndarray, flags: np.ndarray, errors: np.ndarray,
     row: Dict[str, float] = {}
     for k, t in enumerate(thresholds):
         order = np.argsort(-scores, kind="stable") if ties == "list" else np.lexsort((flags[:, k], -scores))   # lexsort: score first, then flag 0 before 1
-        row["ap@%g" % t], row["ap_all@%g" % t] = ap_nuscenes(flags[order, k], n_gt), ap_all_points(flags[order, k], n_gt)
+        ranked = flags[order, k]
+        row["ap@%g" % t], row["ap_all@%g" % t] = ap_nuscenes(ranked, n_gt), ap_all_points(ranked, n_gt)
         if tp_threshold is not None and t == tp_threshold:
-            tp = flags[:, k] > 0
+            tp = ranked > 0
             for j, name in enumerate(TP_ERROR_KEYS):
-                v = errors[tp, j]
+                v = errors[order, j][tp]                                  # summed in rank order, as the BEV numbers always were
                 v = v[v == v]
                 row[name] = float(v.mean()) if len(v) else NAN
             row["n_tp"] = int(tp.sum())

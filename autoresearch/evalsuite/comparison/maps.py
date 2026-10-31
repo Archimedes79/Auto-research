@@ -96,10 +96,19 @@ def tolerant_confusion(pred, gt, tol_cells: float, valid=None) -> np.ndarray:
     if tol_cells < 0:
         raise ValueError("tol_cells must not be negative")
     p, g = _as_mask(pred, "pred"), _as_mask(gt, "gt")
-    v = np.ones_like(p) if valid is None else _as_mask(valid, "valid")
-    _same_shape(p, g, v)
     near_gt, near_pred = (g, p) if tol_cells == 0 else (dilate(g, tol_cells), dilate(p, tol_cells))
-    return np.array([(p & near_gt & v).sum(), (p & ~near_gt & v).sum(), (g & near_pred & v).sum(), (g & ~near_pred & v).sum()], dtype=np.int64)
+    return tolerant_counts(p, g, near_gt, near_pred, valid)
+
+
+def tolerant_counts(pred, gt, near_gt, near_pred, valid=None) -> np.ndarray:
+    """The counting step of `tolerant_confusion`, for callers that count the same maps under several `valid` selections (range bands,
+    known / unknown cells) and so dilate only once: near_gt = dilate(gt, tol), near_pred = dilate(pred, tol), of the whole maps.
+    -> [p_hit, p_miss, g_hit, g_miss] over the valid cells (int64). The dilations are the caller's responsibility, only their shapes are checked."""
+    p, g = _as_mask(pred, "pred"), _as_mask(gt, "gt")
+    near_g, near_p = _as_mask(near_gt, "near_gt"), _as_mask(near_pred, "near_pred")
+    v = np.ones_like(p) if valid is None else _as_mask(valid, "valid")
+    _same_shape(p, g, near_g, near_p, v)
+    return np.array([(p & near_g & v).sum(), (p & ~near_g & v).sum(), (g & near_p & v).sum(), (g & ~near_p & v).sum()], dtype=np.int64)
 
 
 def tolerant_scores(counts) -> Dict[str, float]:

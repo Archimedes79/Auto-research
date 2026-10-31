@@ -29,7 +29,8 @@ What it does (paths from the problem's project.json, see project.py):
                 (project.json test_log)
   * chains      a launcher waits for its dependencies (--wait-after, default 720 min) and then for a GPU slot (--wait-gpu, default 720 min) before it
                 gives up; give-up marks it blocked / gpu_busy and its own dependents are blocked in turn
-  * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under <run_records>/.gpu_slots taken
+  * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under project.json gpu_slots_dir
+                (relative to the problem folder; problems that share one GPU name the same folder), default <run_records>/.gpu_slots, taken
                 with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed); --gpu-max-mb
                 additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes (720), then status gpu_busy (exit 1). The
                 owner check needs launcher and slot owner in the same process namespace (all WSL or all Windows)
@@ -310,7 +311,7 @@ def wait_after(records, ids, minutes, hb=None):
         missing = []
         for i in ids:
             st = state_of(os.path.join(records, i))
-            if st == "done":
+            if st in ("done", "ok"):  # ok = exit 0 whose done flag could not be written
                 continue
             if st in ("failed", "gpu_busy", "blocked", "timeout", "stalled"):
                 return f"dependency {i} {st}"
@@ -338,8 +339,8 @@ def take_claim(d):
 class GpuSlot:
     """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed"""
 
-    def __init__(self, records, n, run_id, run_dir):
-        self.base, self.n, self.id, self.run_dir, self.held = os.path.join(records, ".gpu_slots"), n, run_id, run_dir, None
+    def __init__(self, records, n, run_id, run_dir, base=None):
+        self.base, self.n, self.id, self.run_dir, self.held = base or os.path.join(records, ".gpu_slots"), n, run_id, run_dir, None
 
     def stale(self, s):
         if not os.path.exists(os.path.join(s, "run.json")):
@@ -381,6 +382,12 @@ class GpuSlot:
             self.held = None
 
 
+def slot_dir(root, cfg, records):
+    """the folder of the GPU slots: project.json gpu_slots_dir (relative to the problem folder; shared by the problems of one machine), else per problem"""
+    d = cfg.get("gpu_slots_dir")
+    return os.path.normpath(os.path.join(root, d)) if d else os.path.join(records, ".gpu_slots")
+
+
 def kill_tree(p):
     """kill the command and everything it started (its process group on POSIX, the process tree on Windows)"""
     try:
@@ -398,21 +405,21 @@ def kill_tree(p):
 
 
 def run_once(cmd, cwd, log_path, hb_path, timeout_s):
-    """one attempt: returns (exit code, text the attempt wrote, pid); the heartbeat is touched while the command runs"""
+    """one attempt: returns (exit code, text the attempt wrote, pid, killed by the timeout); the heartbeat is touched while the command runs"""
     start = os.path.getsize(log_path) if os.path.exists(log_path) else 0
     with open(log_path, "a", encoding="utf-8", errors="replace") as lg:
         lg.write(f"=== attempt {now()}: {' '.join(cmd)}\n")
         lg.flush()
         p = subprocess.Popen(cmd, cwd=cwd, stdout=lg, stderr=subprocess.STDOUT, start_new_session=POSIX)
         t0, last = time.time(), 0
-        rc = None
+        rc, timed_out = None, False
         while rc is None:
             if time.time() - last >= HEARTBEAT_S:
                 beat(hb_path, f"pid {p.pid}")
                 last = time.time()
             if timeout_s and time.time() - t0 > timeout_s:
                 kill_tree(p)
-                rc = 124
+                rc, timed_out = 124, True
                 lg.write(f"=== killed after {timeout_s / 60:.0f} min (timeout)\n")
                 break
             try:
@@ -422,7 +429,7 @@ def run_once(cmd, cwd, log_path, hb_path, timeout_s):
     with open(log_path, "r", encoding="utf-8", errors="replace") as f:
         f.seek(start)
         out = f.read()
-    return rc, out, p.pid
+    return rc, out, p.pid, timed_out
 
 
 def main():
@@ -528,7 +535,7 @@ def main():
             ledger_safe(ledger, dict(rec, exit=3, duration_s=0), clear)
             print(f"[{a.id}] blocked: {why}")
             return 3
-    slot = GpuSlot(records, a.gpu_slots, a.id, d) if (a.gpu or a.gpu_max_mb) else None
+    slot = GpuSlot(records, a.gpu_slots, a.id, d, base=slot_dir(root, cfg, records)) if (a.gpu or a.gpu_max_mb) else None
     try:
         if slot:
             t0 = time.time()
@@ -553,11 +560,11 @@ def main():
         rec.update(status="running", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
         save_rec(os.path.join(d, "run.json"), rec)
         t1 = time.time()
-        rc, attempt, tail = 1, 0, ""
+        rc, attempt, tail, timed_out = 1, 0, "", False
         while attempt <= a.retries:
             attempt += 1
             try:
-                rc, out, pid = run_once(cmd, a.cwd, os.path.join(d, "run.log"), hb, a.timeout * 60)
+                rc, out, pid, timed_out = run_once(cmd, a.cwd, os.path.join(d, "run.log"), hb, a.timeout * 60)
             except Exception as e:  # the command could not even be started (not found, bad cwd): a failed run, not a dead launcher
                 rc, pid = 127, None
                 out = f"launcher could not start the command: {type(e).__name__}: {e}"
@@ -565,7 +572,7 @@ def main():
                     lg.write(out + "\n")
             rec["pid"] = pid
             tail = out[-3000:]
-            if rc == 0 or rc == 124 or not CUDA_RETRY.search(out):
+            if rc == 0 or timed_out or not CUDA_RETRY.search(out):
                 break
             if attempt <= a.retries:
                 time.sleep(15)
@@ -579,7 +586,7 @@ def main():
             res = json.dumps(json.load(open(a.result)))[:400]
         except Exception:
             res = "(result file unreadable)"
-    status = "ok" if rc == 0 else "timeout" if rc == 124 else "failed"
+    status = "ok" if rc == 0 else "timeout" if timed_out else "failed"  # a command's own exit 124 is a failure, not the launcher's timeout
     rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
     try:
         save_rec(os.path.join(d, "run.json"), rec)
