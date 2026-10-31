@@ -33,8 +33,10 @@ import inspect
 import json
 import math
 import os
+import pickle
 import sys
 import time
+import zipfile
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -198,12 +200,16 @@ def collate_clips(clips, fn):
     return [fn([c[t] for c in clips]) for t in range(len(clips[0]))]
 
 
-def make_loader(ds, cfg, train):
+def make_loader(ds, cfg, train, workers=None, generator=None):
+    """workers: default cfg.workers. The validation loader of train() gets at most 2 workers that are not kept alive between evaluations,
+    and its own generator: a worker that builds a missing GT loads the map files, and t7_rgb_s1 died of ENOMEM in validation worker 4 at
+    its first evaluation (2026-10-31); with the generator an evaluation no longer draws from the training's random stream."""
     fn = collate_cached if cfg.feature_cache else collate
     if cfg.seq_len > 1:
         fn = functools.partial(collate_clips, fn=fn)
-    return torch.utils.data.DataLoader(ds, batch_size=cfg.batch_size, shuffle=train, num_workers=cfg.workers,
-                                       collate_fn=fn, drop_last=train, persistent_workers=cfg.workers > 0)
+    n = cfg.workers if workers is None else workers
+    return torch.utils.data.DataLoader(ds, batch_size=cfg.batch_size, shuffle=train, num_workers=n, collate_fn=fn, drop_last=train,
+                                       persistent_workers=train and n > 0, generator=generator)
 
 
 def to_device(batch, device):
@@ -278,8 +284,8 @@ def save_checkpoint(path, model, loss, opt, ema, step, cfg, extra=None):
     os.replace(tmp, path)
 
 
-def load_checkpoint(path, model, loss, opt, ema):
-    ck = torch.load(path, map_location="cpu", weights_only=False)
+def load_checkpoint(path, model, loss, opt, ema, ck=None):
+    ck = ck if ck is not None else torch.load(path, map_location="cpu", weights_only=False)
     sd = ck["state"]
     m = model.load_state_dict({k[6:]: v for k, v in sd.items() if k.startswith("model.")}, strict=False)
     assert all(k.startswith("camera.") for k in m.missing_keys) and not m.unexpected_keys, m
@@ -295,6 +301,63 @@ def prune_checkpoints(out_dir, keep):
     cks = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
     for f in cks[:-keep]:
         os.remove(os.path.join(out_dir, f))
+
+
+RESUME_FREE = ("name", "out_root", "data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers",
+               "device", "log_every", "eval_every", "eval_batches", "save_every", "keep", "max_bad_steps", "grad_diag_every")
+
+
+def check_resume(old, cfg, name):
+    """refuses to resume from a checkpoint made with another configuration: a resumed run must be the run it continues. A changed
+    `steps` restarts the cosine schedule high (lr factor 0.001 at step 2999 of 3000 -> 0.54 at step 3000 of 6000), a changed model,
+    loss or data trains another experiment under the old name. Paths, workers and the logging / saving cadence (RESUME_FREE) may
+    change; BF_RESUME_ANY=1 overrides the refusal (review 2026-10-31 pass 2)."""
+    norm = lambda d: json.loads(json.dumps(d, default=str))                 # noqa: E731 - tuples and lists compare equal
+    a, b = norm(old), norm(dataclasses.asdict(cfg))
+    diff = sorted(k for k in a if k not in RESUME_FREE and a[k] != b.get(k))
+    if diff and os.environ.get("BF_RESUME_ANY") != "1":
+        raise SystemExit(f"{name}: the configuration differs from the checkpoint's in {diff}; start a new run name "
+                         f"(or set BF_RESUME_ANY=1)")
+
+
+def supersede_log(out_dir, step):
+    """on a resume from `step`: the rows of log.jsonl above it (the steps redone after a crash) move to log_superseded.jsonl, so the log
+    has one row per step again (before 2026-10-31 a resumed run had steps 520 - 1000 twice)"""
+    path = os.path.join(out_dir, "log.jsonl")
+    if not os.path.exists(path):
+        return
+    keep, gone = [], []
+    for ln in open(path, encoding="utf-8"):
+        try:
+            s = json.loads(ln).get("step", 0)
+        except ValueError:                                     # a row cut by the crash
+            s = step + 1
+        (gone if s > step else keep).append(ln if ln.endswith("\n") else ln + "\n")
+    if gone:
+        with open(os.path.join(out_dir, "log_superseded.jsonl"), "a", encoding="utf-8") as f:
+            f.writelines(gone)
+        with open(path + ".tmp", "w", encoding="utf-8") as f:
+            f.writelines(keep)
+        try:
+            os.replace(path + ".tmp", path)
+        except OSError as e:                                   # a reader on the Windows side holds log.jsonl open: keep appending
+            os.remove(path + ".tmp")
+            print(f"WARNING: log.jsonl not rewritten ({type(e).__name__}: {e}); its rows above step {step} stay in it", flush=True)
+
+
+def val_logged(out_dir, step):
+    """True if log.jsonl has the validation row of `step`"""
+    path = os.path.join(out_dir, "log.jsonl")
+    if not os.path.exists(path):
+        return False
+    for ln in open(path, encoding="utf-8"):
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        if r.get("step") == step and "val" in r:
+            return True
+    return False
 
 
 # ------------------------------------------------------------------------------------------------ loop
@@ -545,20 +608,42 @@ def train(cfg, eval_fn=None, datasets=None):
     if cfg.seq_len > 1:                                         # clips of consecutive keyframes, the memory carried through
         train_ds, val_ds = ClipDataset(train_ds, cfg.seq_len), ClipDataset(val_ds, cfg.seq_len)
     train_loader = make_loader(train_ds, cfg, True)
-    val_loader = make_loader(val_subset(val_ds, cfg.eval_batches * cfg.batch_size), cfg, False)     # fixed, spread over all scenes
+    val_loader = make_loader(val_subset(val_ds, cfg.eval_batches * cfg.batch_size), cfg, False,      # fixed, spread over all scenes
+                             workers=min(cfg.workers, 2), generator=torch.Generator().manual_seed(cfg.seed))
     if cfg.gap_ego and not supports_ego(model):
         print("WARNING: gap_ego is on but model.forward has no `ego` argument: dt = +-0.5 s is decoded with the nominal "
               "gap and the last step's ego motion (0.2-0.35 m of label error)", flush=True)
     opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr, betas=(0.9, 0.999))
     ema = EMA(model, cfg.ema)
-    step = 0
+    step, damaged = 0, []
     ckpts = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
-    if ckpts:
-        step, _ = load_checkpoint(os.path.join(out_dir, ckpts[-1]), model, loss, opt, ema)
-        print(f"resumed from {ckpts[-1]} at step {step}", flush=True)
+    for name in reversed(ckpts):                                # the newest READABLE checkpoint: a damaged one falls back to the one before
+        try:
+            ck = torch.load(os.path.join(out_dir, name), map_location="cpu", weights_only=False)
+        except (zipfile.BadZipFile, pickle.UnpicklingError, EOFError, RuntimeError) as e:
+            if isinstance(e, RuntimeError) and "zip archive" not in str(e) and "PytorchStreamReader" not in str(e):
+                raise                                           # not a damaged file (e.g. out of memory): no fallback
+            os.replace(os.path.join(out_dir, name), os.path.join(out_dir, name + ".damaged"))   # kept, no longer listed or pruned
+            damaged.append(name)
+            print(f"WARNING: {name} is damaged ({type(e).__name__}: {e}), kept as {name}.damaged; trying the one before", flush=True)
+            continue
+        check_resume(ck.get("cfg", {}), cfg, name)
+        step, _ = load_checkpoint(os.path.join(out_dir, name), model, loss, opt, ema, ck=ck)
+        print(f"resumed from {name} at step {step}", flush=True)
+        break
+    else:
+        if damaged:
+            raise SystemExit(f"no readable checkpoint in {out_dir} (damaged: {damaged}): a restart at step 0 would mix two runs in "
+                             f"one folder")
+    supersede_log(out_dir, step)                                # also after a crash before the first save (rows of the lost steps)
     with open(os.path.join(out_dir, "config.json"), "w") as f:
         json.dump(dataclasses.asdict(cfg), f, indent=1)
     log = open(os.path.join(out_dir, "log.jsonl"), "a")
+    if step and cfg.eval_every and step % cfg.eval_every == 0 and not val_logged(out_dir, step):   # the run died inside the evaluation
+        ev = evaluate(model, loss, ema, val_loader, 10 ** 9, device, cfg.amp, eval_fn, cfg)            # of this step (the checkpoint is
+        log.write(json.dumps({"step": step, "val": ev}) + "\n")                                         # saved before it): evaluate now
+        log.flush()
+        print(f"step {step}: val total {ev.get('total', float('nan')):.4f} (the evaluation a crash had cut)", flush=True)
     model.train()
     it = iter(train_loader)
 
@@ -598,19 +683,19 @@ def train(cfg, eval_fn=None, datasets=None):
             if dg:
                 acc["diag"] = dg
         gn = torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip) if finite else None
-        if gn is None or not torch.isfinite(gn):
+        skipped = gn is None or not torch.isfinite(gn)
+        if skipped:
             bad += 1
             opt.zero_grad(set_to_none=True)
             print(f"step {step}: non-finite {'loss' if gn is None else 'gradient'}, skipped ({bad} in a row)", flush=True)
             if bad >= cfg.max_bad_steps:
                 raise RuntimeError("too many non-finite steps in a row")
-            step += 1
-            continue
-        bad = 0
-        opt.step()
-        ema.update(model, step)
+        else:
+            bad = 0
+            opt.step()
+            ema.update(model, step)
         step += 1
-        if step % cfg.log_every == 0 or step == 1 or "diag" in acc:
+        if not skipped and (step % cfg.log_every == 0 or step == 1 or "diag" in acc):
             rec = {"step": step, "t": time.time(), "lr": cfg.lr * f, "grad_norm": float(gn),
                    "s_per_step": (time.time() - t0) / max(1, step - step0), **acc}
             if device.startswith("cuda"):
@@ -619,14 +704,14 @@ def train(cfg, eval_fn=None, datasets=None):
             log.write(json.dumps(rec) + "\n")
             log.flush()
             print(f"step {step}: total {rec['total']:.4f} lr {rec['lr']:.2e} grad {rec['grad_norm']:.2f}", flush=True)
+        if cfg.save_every and step % cfg.save_every == 0:       # before the evaluation (and also after a skipped step): an evaluation
+            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg)   # that dies no longer
+            prune_checkpoints(out_dir, cfg.keep)                                                                 # costs the steps since the last save
         if cfg.eval_every and step % cfg.eval_every == 0:
             ev = evaluate(model, loss, ema, val_loader, 10 ** 9, device, cfg.amp, eval_fn, cfg)
             log.write(json.dumps({"step": step, "val": ev}) + "\n")
             log.flush()
             print(f"step {step}: val total {ev.get('total', float('nan')):.4f}", flush=True)
-        if cfg.save_every and step % cfg.save_every == 0:
-            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg)
-            prune_checkpoints(out_dir, cfg.keep)
     save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg)
     prune_checkpoints(out_dir, cfg.keep)
     return model, loss, ema, last
@@ -763,11 +848,60 @@ def _selftest():
         assert ck["step"] == 4 and not any(k.startswith("model.camera.") for k in ck["state"])
         changed = any(not torch.equal(before[k], v) for k, v in model2.state_dict().items() if k in before)
         assert changed, "parameters changed"
-        # 3 resume: a run with steps = 6 continues from step 4 and ends at 6; the EMA differs from the weights
+        # 3 resume: a resume with another configuration (here steps 4 -> 6, which would restart the cosine LR) is refused; with
+        # BF_RESUME_ANY=1 the run continues from step 4 and ends at 6; the EMA differs from the weights. A damaged newest checkpoint
+        # falls back to the one before, and the log rows above the resumed step move to log_superseded.jsonl
         cfg2 = dataclasses.replace(cfg, steps=6)
-        _, _, ema2, last2 = train(cfg2, datasets=(base, base))
+        msg = ""
+        try:
+            train(cfg2, datasets=(base, base))
+        except SystemExit as e:
+            msg = str(e.code)
+        assert "steps" in msg, f"a resume with another `steps` must be refused: {msg!r}"
+        os.environ["BF_RESUME_ANY"] = "1"
+        try:
+            _, _, ema2, last2 = train(cfg2, datasets=(base, base))
+        finally:
+            os.environ.pop("BF_RESUME_ANY")
         ck2 = sorted(f for f in os.listdir(os.path.join(tmp, "selftest")) if f.endswith(".pt"))[-1]
         assert torch.load(os.path.join(tmp, "selftest", ck2), weights_only=False)["step"] == 6
+        rdir = os.path.join(tmp, "selftest")
+        with open(os.path.join(rdir, "log.jsonl"), "a") as fh:     # rows of steps a crash would make the run redo
+            fh.write(json.dumps({"step": 7, "total": 1.0}) + "\n" + '{"step": 8, "tot')
+        with open(os.path.join(rdir, ck2), "wb") as fh:           # the newest checkpoint damaged (a cut write)
+            fh.write(b"PK\x03\x04 cut")
+        cfg3 = dataclasses.replace(cfg2, eval_every=0, save_every=0)
+        os.environ["BF_RESUME_ANY"] = "1"                         # (eval_every / save_every are free anyway; steps differ from ckpt 4)
+        try:
+            train(cfg3, datasets=(base, base))                    # falls back to ckpt 4 and trains to 6 again
+        finally:
+            os.environ.pop("BF_RESUME_ANY")
+        steps_logged = [json.loads(ln)["step"] for ln in open(os.path.join(rdir, "log.jsonl")) if '"val"' not in ln]
+        assert max(steps_logged) == 6 and len(steps_logged) == len(set(steps_logged)), steps_logged
+        assert any('"step": 7' in ln for ln in open(os.path.join(rdir, "log_superseded.jsonl"))), "superseded rows kept aside"
+        assert os.path.exists(os.path.join(rdir, ck2 + ".damaged")), "the damaged checkpoint is kept aside, not pruned"
+        # 3c a run that dies inside the evaluation of step 2 (t7_rgb_s1: ENOMEM in a validation worker) keeps ckpt 2, saved before
+        # the evaluation, and makes the evaluation of step 2 up when it resumes
+        ev_cfg = dataclasses.replace(cfg, name="evalcrash", steps=2, eval_every=2, save_every=2)
+        edir, real_eval, crash = os.path.join(tmp, "evalcrash"), globals()["evaluate"], [True]
+
+        def eval_crash_once(*a, **k):
+            if crash[0]:
+                crash[0] = False
+                raise MemoryError("simulated ENOMEM in a validation worker")
+            return real_eval(*a, **k)
+        globals()["evaluate"] = eval_crash_once
+        try:
+            try:
+                train(ev_cfg, datasets=(base, base))
+                raise AssertionError("the simulated crash must end the run")
+            except MemoryError:
+                pass
+            assert os.path.exists(os.path.join(edir, "ckpt_00000002.pt")) and not val_logged(edir, 2), "saved before the evaluation"
+            train(ev_cfg, datasets=(base, base))
+        finally:
+            globals()["evaluate"] = real_eval
+        assert val_logged(edir, 2), "the evaluation the crash cut is made up on the resume"
         # 3b stop request (autoresearch/trainsuite): CONTROL / STOPPED of an earlier stop are moved aside at the start (no clocks compared); a
         # request that arrives while training stops the run at a step boundary with a checkpoint, a STOPPED marker and exit code 75 (not 0:
         # no `.done`); the run resumes from that checkpoint; the log rows carry the time `t`

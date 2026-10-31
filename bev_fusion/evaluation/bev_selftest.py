@@ -492,6 +492,53 @@ def _():
         raise AssertionError("must raise")
     except AttributeError:
         pass
+    import torch                                     # the camera controls take EVERY camera input away (t10 prob2 / ctx2, t7 lane_img)
+    keys = ("prob", "ctx", "prob2", "ctx2", "img", "lane_img")
+    batch = {"tokens": ["a", "b"], **{k: torch.arange(2.0).view(2, 1) + 1 for k in keys}}
+    P.perturb(batch, "zero_cam")
+    assert all(float(batch[k].abs().sum()) == 0 for k in keys), {k: batch[k] for k in keys}
+    batch = {"tokens": ["a", "b"], **{k: torch.arange(2.0).view(2, 1) for k in keys}}
+    P.perturb(batch, "shuffle_cam")
+    assert all(batch[k].view(-1).tolist() == [1.0, 0.0] for k in keys), {k: batch[k] for k in keys}
+    # the same on one dataset item (the path of `bev_suite.py eval --control`): every frame key and the lane image
+    def item(v):
+        return {"frames": [{k: torch.full((2,), float(v)) for k in A.CAMERA_FRAME_KEYS} | {"token": "t"} for _ in range(3)],
+                "lane_img": torch.full((3, 2), v, dtype=torch.uint8)}
+    it, other = item(5), item(9)
+    A.perturb_camera(it, other, "zero_cam")
+    assert all(float(f[k].abs().sum()) == 0 for f in it["frames"] for k in A.CAMERA_FRAME_KEYS) and int(it["lane_img"].sum()) == 0
+    it = item(5)
+    A.perturb_camera(it, other, "shuffle_cam")
+    assert all(float(f[k][0]) == 9 for f in it["frames"] for k in A.CAMERA_FRAME_KEYS) and int(it["lane_img"][0, 0]) == 9
+    try:
+        A.perturb_camera({"frames": [{"prob3": torch.ones(1)}]}, {"frames": [{"prob3": torch.ones(1)}]}, "zero_cam")
+        raise AssertionError("an unknown camera key must be refused")
+    except ValueError:
+        pass
+
+
+@check("eval: a stored run of another or an unrecorded GT is refused (a resume would label old counts with the new GT); "
+       "--force-resume only for an unrecorded one; a legacy pickle that fits the store is kept (review 2026-10-31 pass 2)")
+def _():
+    import tempfile
+    from evaluation import bev_suite as S
+    with tempfile.TemporaryDirectory() as d:
+        assert S.gt_conflict(os.path.join(d, "none"), "0.5_4_new", False) == (None, "0.5_4_new"), "no stored run: no conflict"
+        for name, src in (("old", {"gt_signature": "0.5_4_old"}), ("unrec", {}), ("same", {"gt_signature": "0.5_4_new"})):
+            os.makedirs(os.path.join(d, name))
+            with open(os.path.join(d, name, "manifest.json"), "w") as f:
+                json.dump({"source": src}, f)
+        assert S.gt_conflict(os.path.join(d, "same"), "0.5_4_new", False) == (None, "0.5_4_new")
+        msg, _ = S.gt_conflict(os.path.join(d, "old"), "0.5_4_new", True)
+        assert msg and "0.5_4_old" in msg, "another recorded GT is refused even with --force-resume"
+        msg, _ = S.gt_conflict(os.path.join(d, "unrec"), "0.5_4_new", False)
+        assert msg and "--force-resume" in msg
+        assert S.gt_conflict(os.path.join(d, "unrec"), "0.5_4_new", True) == (None, "mixed:unrecorded+0.5_4_new")
+        import pickle
+        p = os.path.join(d, "rec.pkl")
+        with open(p, "wb") as f:
+            pickle.dump({"meta": {"frames": ["a", "b"], "gt_signature": "0.5_4_new"}}, f)
+        assert S.pickle_meta(p) == {"frames": ["a", "b"], "gt_signature": "0.5_4_new"} and S.pickle_meta(os.path.join(d, "x")) is None
 
 
 def refused(fn) -> str:

@@ -370,9 +370,12 @@ def consistency_term(obj_vel, v_hat, t):
 
 # ------------------------------------------------------------------------------------------------ time, task groups
 def dt_weight(dt, step_frac=1.0, cfg=None):
-    """w(dt) of the nearest nominal |dt|, times the warm-up ramp for dt != 0 (0 for step_frac < hold, then linear)."""
+    """w(dt) of the nearest nominal |dt|, times the warm-up ramp for dt != 0 (0 for step_frac < hold, then linear). A |dt| with no
+    listed weight within 0.1 s is refused: `[[0, 1]]` alone used to give dt = +-0.5 the weight 1 of dt = 0 (review 2026-10-31 pass 2)."""
     cfg = cfg or LossConfig()
-    w = min(cfg.dt_weights, key=lambda kv: abs(abs(float(dt)) - kv[0]))[1]
+    near, w = min(cfg.dt_weights, key=lambda kv: abs(abs(float(dt)) - kv[0]))
+    if abs(abs(float(dt)) - near) > 0.1:
+        raise ValueError(f"dt_weights {cfg.dt_weights} list no weight for |dt| = {abs(float(dt)):.2f} (nearest: {near})")
     if abs(float(dt)) > 1e-6:
         w *= min(1.0, max(0.0, (step_frac - cfg.warmup_hold) / max(cfg.warmup_ramp, EPS)))
     return w
@@ -781,6 +784,14 @@ def _selftest():
     _, g0 = map_terms(s0, Ta, spec, {"area": w1, "line": w1, "object": w1}, arm, step_frac=0.0)
     _, g1 = map_terms(s0, Ta, spec, {"area": w1, "line": w1, "object": w1}, arm, step_frac=1.0)
     assert float(g1["lines"]) > float(g0["lines"]), (g0["lines"], g1["lines"])
+    # dt weights: every nominal |dt| needs a listed weight; [[0, 1]] alone (the old no-time control) gave dt = +-0.5 the weight 1
+    assert [dt_weight(d) for d in (0.0, 0.5, -0.5, 1.0)] == [1.0, 0.5, 0.5, 0.25]
+    assert dt_weight(0.5, cfg=LossConfig(dt_weights=((0.0, 1.0), (0.5, 0.0)))) == 0.0
+    try:
+        dt_weight(0.5, cfg=LossConfig(dt_weights=((0.0, 1.0),)))
+        raise AssertionError("an |dt| without a listed weight must be refused")
+    except ValueError:
+        pass
     print(f"losses selftest ok ({time.time() - t0:.0f} s): soft BCE = analytic {exp:.5f}, tolerant Dice 0 at a 1-cell "
           f"shift / {d3:.2f} at 3 cells, Huber 0 for the exact field, weight-0 cells: zero gradient (all heads), "
           f"doubled map: every term unchanged (max rel. diff {worst:.1e}), Kendall s in [-3, 1], dt weights + warm-up, "

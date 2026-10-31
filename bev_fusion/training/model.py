@@ -94,6 +94,9 @@ class ModelConfig:
     cam_collapse: str = "zconv"        # try 7: "zconv" (1x1 conv over Z x 80 channels) | "zsum" (sum over heights, then 1x1; blocks_new.ZSumReduce)
     cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
     camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
+    p_drop: float = 0.2                # modality dropout of the fusion in training (fusion.drop_modality: per sample the camera or the
+                                       # radar input is zeroed, p / 2 each); forced to 0 when a sensor is off (camera_off, radar_kind
+                                       # "off"): dropping the only live sensor would blank the sample (review 2026-10-31 pass 2)
     lane_branch: str = ""              # t7: stride-4 lane branch of the current frame added to the camera BEV after the temporal
                                        # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch)
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
@@ -183,6 +186,8 @@ class BEVFusionModel(nn.Module):
         if cfg.lane_branch:
             if cfg.camera_features != "dualbev" or cfg.lift == "s":
                 raise ValueError("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
+            if cfg.camera_off:                                    # the branch reads the current image: a "camera off" arm would still see it
+                raise ValueError("lane_branch reads the camera image: it cannot be combined with camera_off")
             self.lane = LaneBranch(self.grid, depth_centres(), kind=cfg.lane_branch, c_out=cfg.c_cam,
                                    oversample=cfg.oversample, pretrained=cfg.lane_pretrained)
         # radar branch
@@ -194,15 +199,16 @@ class BEVFusionModel(nn.Module):
             raise ValueError(cfg.radar_kind)
         self.rad_temporal = _temporal(cfg.rad_temporal, cfg.c_rad, self.grid)
         # fusion, trunk (CMX is its own four-stage pyramid + decoder: it replaces both)
+        p_drop = 0.0 if (cfg.camera_off or cfg.radar_kind == "off") else cfg.p_drop
         if cfg.fusion == "cmx":
             self.fusion = None
             c = 128
-            self.trunk = _fallbacks().CMXTrunk(cfg.c_cam, cfg.c_rad, embed=cfg.c_fuse, c_out=c)
+            self.trunk = _fallbacks().CMXTrunk(cfg.c_cam, cfg.c_rad, embed=cfg.c_fuse, c_out=c, p_drop=p_drop)
         else:
             if cfg.fusion == "concat":
-                self.fusion = ConcatFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse)
+                self.fusion = ConcatFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
             elif cfg.fusion == "gate":
-                self.fusion = GateFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse)
+                self.fusion = GateFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
             else:
                 raise ValueError(cfg.fusion)
             if cfg.trunk_kind == "second":
@@ -376,6 +382,14 @@ def _selftest():
     from nuscenes_dataset import FrontRadarDataset, collate
     torch.manual_seed(0)
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))        # the bev_fusion folder
+    assert BEVFusionModel(ModelConfig(pretrained="")).fusion.p_drop == 0.2
+    for off in (dict(camera_off=True), dict(radar_kind="off")):    # one sensor off: no modality dropout (it would blank the sample)
+        assert BEVFusionModel(ModelConfig(pretrained="", **off)).fusion.p_drop == 0.0, off
+    try:
+        BEVFusionModel(ModelConfig(pretrained="", camera_off=True, lane_branch="rgb"))
+        raise AssertionError("lane_branch with camera_off was accepted")
+    except ValueError:
+        pass
     ds = FrontRadarDataset(os.path.expanduser("~/data/nuscenes"), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
     batch = collate([ds[10], ds[200]])                       # mid-scene keyframes: GT of k-1, k, k+1 exist
     gts = sample_targets(batch["gt"])

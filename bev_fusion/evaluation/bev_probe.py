@@ -120,9 +120,9 @@ def perturb(batch, control):
         batch["radar"]["b"] = (batch["radar"]["b"] + 1) % B
     elif control == "zero_radar":
         batch["radar"] = {k: v[:0] for k, v in batch["radar"].items()}
-    elif control == "shuffle_cam":
-        batch["prob"], batch["ctx"] = torch.roll(batch["prob"], 1, 0), torch.roll(batch["ctx"], 1, 0)
-    elif control == "zero_cam":
-        batch["prob"], batch["ctx"] = torch.zeros_like(batch["prob"]), torch.zeros_like(batch["ctx"])
+    elif control in ("shuffle_cam", "zero_cam"):          # every camera input of the batch: both feature caches (t10), the lane image (t7)
+        for k in ("prob", "ctx", "prob2", "ctx2", "img", "lane_img"):
+            if k in batch:
+                batch[k] = torch.roll(batch[k], 1, 0) if control == "shuffle_cam" else torch.zeros_like(batch[k])
     else:
         raise ValueError(f"unknown control {control}")

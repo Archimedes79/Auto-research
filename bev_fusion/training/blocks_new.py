@@ -52,7 +52,12 @@ class RadarPillars(nn.Module):
         d = {k: v[inside] for k, v in det.items()}
         feats = torch.cat([properties(d, self.v_max, self.harmonics), (fx - ix - 0.5)[inside][:, None],
                            (fy - iy - 0.5)[inside][:, None]], -1)
-        h = self.pfn(feats) if feats.shape[0] > 1 else self.pfn.eval()(feats)
+        if feats.shape[0] > 1 or not self.pfn.training:
+            h = self.pfn(feats)
+        else:                                  # BatchNorm cannot normalise a single point in training: use its running statistics for this
+            self.pfn.eval()                    # call and restore the mode (before 2026-10-31 the block stayed in eval mode until the next
+            h = self.pfn(feats)                # model.train(), i.e. until after the next validation)
+            self.pfn.train()
         cell = (d["b"] * g.nx + ix[inside]) * g.ny + iy[inside]
         out = torch.zeros(B * g.nx * g.ny, self.c_pfn, device=dev, dtype=h.dtype)
         out.scatter_reduce_(0, cell[:, None].expand_as(h), h, reduce="amax", include_self=False)
@@ -145,6 +150,9 @@ def _selftest():
     out.mean().backward()
     assert all(q.grad is not None for q in m.parameters()), "gradient reaches every radar-pillar parameter"
     assert torch.isfinite(m({k: v[:0] for k, v in det.items()}, 2)).all(), "no detections"
+    one = {k: v[:1] for k, v in det.items()}                     # a single detection: BatchNorm runs on its running statistics once
+    one["x"], one["y"] = torch.tensor([10.0]), torch.tensor([0.0])
+    assert torch.isfinite(m(one, 2)).all() and m.pfn.training, "one detection must not leave the point net in eval mode"
     t = SecondTrunk(cin=96).train()
     x = torch.randn(2, 96, g.nx, g.ny, requires_grad=True)
     y = t.features(x)

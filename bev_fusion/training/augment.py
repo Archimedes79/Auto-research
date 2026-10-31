@@ -115,8 +115,8 @@ def _selftest():
             return set(x) == set(y) and all(eq(x[k], y[k]) for k in x)
         if isinstance(x, (list, tuple)) and not isinstance(x, np.ndarray):
             return len(x) == len(y) and all(eq(p, q) for p, q in zip(x, y))
-        if isinstance(x, (np.ndarray, float, int)) and not isinstance(x, bool):
-            return bool(np.allclose(np.asarray(x, float), np.asarray(y, float), atol=1e-9))
+        if isinstance(x, (np.ndarray, float, int)) and not isinstance(x, bool):     # equal_nan: boxes of unknown velocity carry
+            return bool(np.allclose(np.asarray(x, float), np.asarray(y, float), atol=1e-9, equal_nan=True))   # vel_sigma = NaN
         return x == y
 
     def same_gt(a, b):
@@ -171,7 +171,8 @@ def _selftest():
     want = R0[0].flip(-1).clone()
     want[3] = -want[3]                                                                 # channel 3 = sin psi
     want[-1] = -want[-1]                                                               # last channel = dy
-    assert torch.allclose(R1[0], want, atol=1e-5) and torch.equal(R1[1], R0[1])
+    assert torch.allclose(R1[0], want, atol=1e-5) and torch.allclose(R1[1], R0[1], atol=1e-5)    # not torch.equal: scatter sums on
+                                                                                              # several CPU threads are not bit-exact
     # 4 the ego steps: the gap-mean motion mirrors (omega -> -omega), a chain of steps ends at the mirrored pose
     st = orig["gt"][0]["next"]["meta"]["steps"]
     a, b = gap_ego_motion(st), gap_ego_motion(one["gt"][0]["next"]["meta"]["steps"])

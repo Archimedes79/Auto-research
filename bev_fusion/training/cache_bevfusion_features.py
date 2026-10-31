@@ -25,9 +25,9 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bevfusion_camera import BEVFusionImageSide, load_image  # noqa: E402
-from feature_cache import N_CTX, N_PROB, FeatureStore  # noqa: E402
+from feature_cache import FEAT_HW_OF, N_CTX, N_PROB, FeatureStore, shard_complete, write_shard  # noqa: E402
 
-FEAT_HW = (32, 88)
+FEAT_HW = FEAT_HW_OF["bevfusion"]
 
 
 def _stream_records(path, chunk=1 << 24):
@@ -111,8 +111,7 @@ def build(src_root, out_root, dataroot, version, device="cpu", batch=8, keyframe
             toks = toks[:max_frames]
         if not toks:
             continue
-        idx_path = os.path.join(out_root, scene + ".index.npz")
-        if os.path.exists(idx_path) and set(np.load(idx_path)["tokens"].tolist()) >= set(toks):
+        if shard_complete(out_root, scene, set(toks)):
             continue
         arr = np.zeros((len(toks), N_PROB + N_CTX) + FEAT_HW, np.float16)
         for i in range(0, len(toks), batch):
@@ -121,8 +120,7 @@ def build(src_root, out_root, dataroot, version, device="cpu", batch=8, keyframe
             with torch.no_grad():
                 prob, ctx = model.image_features(torch.stack(imgs).to(device))
             arr[i:i + len(chunk)] = torch.cat([prob, ctx], 1).cpu().numpy().astype(np.float16)
-        np.save(os.path.join(out_root, scene + ".npy"), arr)
-        np.savez(idx_path, tokens=np.array(toks, dtype="U40"))
+        write_shard(out_root, scene, arr, toks)
         n_done += len(toks)
         if verbose:
             print(f"{scene}: {len(toks)} frames ({n_done} done, {time.time() - t0:.0f} s)", flush=True)

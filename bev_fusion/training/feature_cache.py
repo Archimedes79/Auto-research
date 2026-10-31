@@ -39,15 +39,20 @@ N_PROB, N_CTX, FEAT_HW = 118, 80, (16, 44)
 CHECKPOINT = "models/pretrained/dualbev-r50-cbgs.pth"
 
 
+FEAT_HW_OF = {"dualbev": FEAT_HW, "bevfusion": (32, 88)}    # feature size of each camera_features cache (bevfusion:
+                                                            # cache_bevfusion_features.py, stride 8 of the 256 x 704 crop)
+
+
 class FeatureStore:
-    """Read access to the shards of `root` (token -> (probability (118, 16, 44), context (80, 16, 44)), float16)."""
+    """Read access to the shards of `root` (token -> (probability (118, h, w), context (80, h, w)), float16)."""
 
     def __init__(self, root):
-        self.root, self.index, self.shards, self._mm = root, {}, [], {}
+        self.root, self.index, self.shards, self.counts, self._mm = root, {}, [], [], {}
         for f in sorted(glob.glob(os.path.join(root, "*.index.npz"))):
             toks = np.load(f)["tokens"]
             sid = len(self.shards)
             self.shards.append(f[:-len(".index.npz")] + ".npy")
+            self.counts.append(len(toks))
             for r, t in enumerate(toks):
                 self.index[str(t)] = (sid, r)
 
@@ -57,12 +62,58 @@ class FeatureStore:
     def has(self, token):
         return token in self.index
 
+    def feature_hw(self):
+        """(h, w) of the stored features (header of the first shard), None for an empty store"""
+        return tuple(np.load(self.shards[0], mmap_mode="r").shape[2:]) if self.shards else None
+
     def get(self, token):
         sid, r = self.index[token]
         if sid not in self._mm:
-            self._mm[sid] = np.load(self.shards[sid], mmap_mode="r")
+            mm = np.load(self.shards[sid], mmap_mode="r")
+            if mm.shape[0] != self.counts[sid]:
+                raise RuntimeError(f"{self.shards[sid]} has {mm.shape[0]} rows, its index names {self.counts[sid]} tokens "
+                                   f"(a build was cut between the two files): rebuild that scene")
+            self._mm[sid] = mm
         a = torch.from_numpy(np.array(self._mm[sid][r]))
         return a[:N_PROB], a[N_PROB:]
+
+
+def check_feature_hw(store, camera_features, name="feature_cache"):
+    """refuses a cache whose feature size is not the one of camera_features (e.g. the DualBEV and BEVFusion caches swapped):
+    the lift would otherwise use the wrong camera geometry on the features without any error"""
+    hw, want = store.feature_hw(), FEAT_HW_OF[camera_features]
+    if hw is not None and hw != want:
+        raise ValueError(f"{name} {store.root} holds {hw} features, camera_features {camera_features!r} needs {want}")
+
+
+def write_shard(root, scene, arr, toks):
+    """<scene>.npy and <scene>.index.npz through temporary names and os.replace, the index last: a reader never sees a half-written
+    file, and a build cut between the two replaces leaves a row count that FeatureStore.get refuses (a scene rebuilt with the same
+    number of other tokens would still pair silently, so a rebuild should not be cut)"""
+    npy, idx = os.path.join(root, scene + ".npy"), os.path.join(root, scene + ".index.npz")
+    tmp = os.path.join(root, f".{scene}.tmp{os.getpid()}")          # no *.index.npz name: FeatureStore never lists a temporary file
+    try:
+        with open(tmp + "_npy", "wb") as f:
+            np.save(f, arr)
+        with open(tmp + "_idx", "wb") as f:
+            np.savez(f, tokens=np.array(toks, dtype="U40"))
+        os.replace(tmp + "_npy", npy)
+        os.replace(tmp + "_idx", idx)
+    finally:
+        for t in (tmp + "_npy", tmp + "_idx"):
+            if os.path.exists(t):
+                os.remove(t)
+
+
+def shard_complete(root, scene, tokens):
+    """True if the scene's shard holds `tokens` (a set) and its row count equals its index length: a build skips only such a scene,
+    so a shard that FeatureStore.get refuses (a cut build) is rebuilt instead of skipped"""
+    idx = os.path.join(root, scene + ".index.npz")
+    try:
+        toks = np.load(idx)["tokens"]
+        return set(toks.tolist()) >= tokens and np.load(os.path.join(root, scene + ".npy"), mmap_mode="r").shape[0] == len(toks)
+    except (OSError, ValueError, KeyError):
+        return False
 
 
 def used_frames(ds, sample_tokens=None):
@@ -100,8 +151,7 @@ def build(ds, root, sample_tokens=None, device="cpu", batch=16, checkpoint=CHECK
     todo = used_frames(ds, sample_tokens)
     n_done, t0 = 0, time.time()
     for scene, tokens in sorted(todo.items()):
-        idx_path = os.path.join(root, scene + ".index.npz")
-        if os.path.exists(idx_path) and set(np.load(idx_path)["tokens"].tolist()) >= tokens:
+        if shard_complete(root, scene, tokens):
             continue
         toks = sorted(tokens)
         arr = np.zeros((len(toks), N_PROB + N_CTX) + FEAT_HW, np.float16)
@@ -112,8 +162,7 @@ def build(ds, root, sample_tokens=None, device="cpu", batch=16, checkpoint=CHECK
             with torch.no_grad():
                 prob, ctx = camera.image_features(img, cv)
             arr[i:i + len(chunk)] = torch.cat([prob, ctx], 1).cpu().numpy().astype(np.float16)
-        np.save(os.path.join(root, scene + ".npy"), arr)
-        np.savez(idx_path, tokens=np.array(toks, dtype="U40"))
+        write_shard(root, scene, arr, toks)
         n_done += len(toks)
         if verbose:
             print(f"{scene}: {len(toks)} frames ({n_done} done, {time.time() - t0:.0f} s)", flush=True)
@@ -140,6 +189,10 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         frame also carries prob2 / ctx2 and the item ida2 = bevfusion_ida()."""
         super().__init__(*args, **kw)
         self.store, self.radar_cache, self.lane_images, self.store2 = store, radar_cache, lane_images, store2
+        if store is not None:
+            check_feature_hw(store, "bevfusion" if camera_features == "bevfusion" else "dualbev")
+        if store2 is not None:
+            check_feature_hw(store2, "bevfusion", "feature_cache2")
         if camera_features == "dual" or store2 is not None:
             if camera_features != "dual" or store2 is None:
                 raise ValueError("camera_features 'dual' needs store2, and store2 needs camera_features 'dual'")
@@ -170,13 +223,20 @@ class CachedFrontRadarDataset(FrontRadarDataset):
             return super()._radar(sample, cur_sd)
         path = self._radar_path(sample, cur_sd)
         if os.path.exists(path):
-            z = np.load(path)
-            return {k: torch.from_numpy(z[k]) for k in z.files}
+            try:
+                with np.load(path) as z:
+                    return {k: torch.from_numpy(z[k]) for k in z.files}
+            except Exception as e:                         # noqa: BLE001 - an empty or cut file (a replace on /mnt/c is not atomic
+                print(f"radar cache {os.path.basename(path)} unreadable ({type(e).__name__}), rebuilt", flush=True)  # for a reader)
         out = super()._radar(sample, cur_sd)
         os.makedirs(self.radar_cache, exist_ok=True)
         tmp = path[:-4] + f".tmp{os.getpid()}.npz"
-        np.savez(tmp, **{k: v.numpy() for k, v in out.items()})
-        os.replace(tmp, path)                              # atomic: a reader never sees a partial file
+        try:
+            np.savez(tmp, **{k: v.numpy() for k, v in out.items()})
+            os.replace(tmp, path)                          # atomic for the writer: no half-written file under the final name
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
         return out
 
     def __getitem__(self, i):
@@ -287,6 +347,7 @@ def _model_cfg():
 
 def _selftest():
     import tempfile
+    _selftest_shards()
     os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))                 # the bev_fusion folder
     try:
         from .model import BEVFusionModel, ModelConfig
@@ -383,8 +444,45 @@ def _selftest_radar():
           f"{'checked' if item_checked else 'NOT checked (no mini feature cache)'}")
 
 
+def _selftest_shards():
+    """write_shard / FeatureStore without nuScenes: round trip, the feature-size guard, a cut build (row count != index)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        a = np.random.rand(3, N_PROB + N_CTX, *FEAT_HW).astype(np.float16)
+        write_shard(d, "scene-x", a, ["t0", "t1", "t2"])
+        assert sorted(os.listdir(d)) == ["scene-x.index.npz", "scene-x.npy"], os.listdir(d)
+        s = FeatureStore(d)
+        p, c = s.get("t2")
+        assert torch.equal(torch.cat([p, c]), torch.from_numpy(a[2])) and s.feature_hw() == FEAT_HW
+        check_feature_hw(s, "dualbev")
+        try:
+            check_feature_hw(s, "bevfusion")
+            raise AssertionError("a DualBEV-size cache passed as BEVFusion features")
+        except ValueError:
+            pass
+        np.savez(os.path.join(d, "scene-x.index.npz"), tokens=np.array(["t0", "t1"], dtype="U40"))   # a build cut between the files
+        try:
+            FeatureStore(d).get("t0")
+            raise AssertionError("a shard whose row count differs from its index was read")
+        except RuntimeError:
+            pass
+        assert not shard_complete(d, "scene-x", {"t0", "t1"}), "a cut shard is rebuilt by the next build, not skipped"
+        write_shard(d, "scene-x", a, ["t0", "t1", "t2"])
+        assert shard_complete(d, "scene-x", {"t0", "t1"}) and not shard_complete(d, "scene-x", {"t9"})
+        failed = False
+        try:
+            write_shard(d, "scene-y", np.array([lambda: 0], dtype=object), ["t0"])      # np.save cannot pickle it
+        except Exception:                                                               # noqa: BLE001
+            failed = True
+        assert failed and not any(".tmp" in n for n in os.listdir(d)), os.listdir(d)
+    print("feature store selftest ok: atomic shard round trip (no temporary file left after a failure), feature-size guard, cut build "
+          "refused and rebuilt")
+
+
 def _cli(argv):
     import argparse
+    if argv[:1] == ["shards-selftest"]:
+        return _selftest_shards()
     if argv[:1] == ["camera-off-selftest"]:
         return _selftest_camera_off()
     if argv[:1] == ["radar-selftest"]:

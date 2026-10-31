@@ -26,6 +26,23 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 AUTORESEARCH = os.path.abspath(os.path.join(ROOT, "..", "autoresearch"))
+CAMERA_FRAME_KEYS = ("prob", "ctx", "img", "prob2", "ctx2")     # the camera inputs of a frame dict (the camera controls replace all of them)
+
+
+def perturb_camera(item, other, control):
+    """in place, the camera sanity controls on one dataset item: EVERY camera input replaced by `other`'s (shuffle_cam) or zeroed
+    (zero_cam): the frames' CAMERA_FRAME_KEYS (both feature caches of t10 "dual", the image) and the lane branch's key-frame image (t7).
+    Before 2026-10-31 only prob / ctx / img were replaced, so t7 / t10 controls kept camera information. An unknown camera-like key
+    is refused rather than left in."""
+    for f, o in zip(item["frames"], other["frames"]):
+        unknown = [k for k in f if k.startswith(("prob", "ctx", "img")) and k not in CAMERA_FRAME_KEYS]
+        if unknown:
+            raise ValueError(f"camera control: frame keys {unknown} are not handled (add them to CAMERA_FRAME_KEYS)")
+        for k in CAMERA_FRAME_KEYS:
+            if k in f:
+                f[k] = o[k] if control == "shuffle_cam" else f[k] * 0
+    if "lane_img" in item:
+        item["lane_img"] = other["lane_img"] if control == "shuffle_cam" else item["lane_img"] * 0
 
 
 def setup_paths(run: Optional[str] = None) -> str:
@@ -174,10 +191,7 @@ def _make_source_class():
             elif c == "zero_radar":
                 item["radar"] = {k: v[:0] for k, v in item["radar"].items()}
             elif c in ("shuffle_cam", "zero_cam"):
-                for f, o in zip(item["frames"], other["frames"]):
-                    for k in ("prob", "ctx", "img"):
-                        if k in f:
-                            f[k] = o[k] if c == "shuffle_cam" else f[k] * 0
+                perturb_camera(item, other, c)
             else:
                 raise ValueError(f"unknown control {c}")
 

@@ -147,6 +147,35 @@ def _read_json(path: str):
         return None
 
 
+def pickle_meta(path: str):
+    """the meta dict of a legacy scene_records pickle (frames, gt_signature), None if there is none or it cannot be read"""
+    import pickle
+    try:
+        with open(path, "rb") as f:
+            return pickle.load(f).get("meta")
+    except (OSError, EOFError, pickle.UnpicklingError, AttributeError, ValueError):
+        return None
+
+
+def stored_gt(stored: str):
+    """the GT signature a stored suite run was scored on: None = no stored run, 'unrecorded' = made before the signature was kept"""
+    man = _read_json(os.path.join(stored, "manifest.json"))
+    return None if man is None else ((man.get("source") or {}).get("gt_signature") or "unrecorded")
+
+
+def gt_conflict(stored: str, gt_sig, force_unrecorded: bool):
+    """(refusal message or None, the label of the result): a resume computes only the missing frames, so a stored run of another GT
+    would carry the current label. A run of another RECORDED GT is always refused (the evalsuite store refuses it too); a run made
+    before the signature was recorded is resumed only with force_unrecorded, labelled 'mixed:unrecorded+<current>'."""
+    old = stored_gt(stored)
+    if old is None or old == gt_sig:
+        return None, gt_sig
+    if old == "unrecorded" and force_unrecorded:
+        return None, f"mixed:unrecorded+{gt_sig}"
+    return (f"refused: the stored run {stored} was scored on GT {old}, the current GT is {gt_sig}; move it aside for a fresh evaluation"
+            + (" (or --force-resume: it was made before the signature was recorded)" if old == "unrecorded" else "")), gt_sig
+
+
 def train_gt(run: str):
     """the GT signature a run trained on (runs/<name>/gt.json, written by training/train.py since 2026-10-31); None = not recorded"""
     return (_read_json(os.path.join(run, "gt.json")) or {}).get("gt_signature")
@@ -168,6 +197,8 @@ def cmd_eval(a, rest) -> int:
     p.add_argument("--images", type=int, default=0)
     p.add_argument("--time", action="store_true")
     p.add_argument("--scenes", nargs="*", default=None)
+    p.add_argument("--force-resume", action="store_true",
+                   help="resume a stored run made before the GT signature was recorded (labelled 'mixed'); another recorded GT is always refused")
     e = p.parse_args(rest)
     tag = tag_of(e.warm, a.split == "train", a.control)
     state = "carry" if e.warm else "reset"
@@ -175,12 +206,22 @@ def cmd_eval(a, rest) -> int:
     from evalsuite.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
     name = f"eval{tag}_n{e.n or 'all'}"
+    gt_now = suite.source.describe().get("gt_signature")                 # the GT scored against (autogt is read live, not pinned)
+    quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
+    refusal, gt_sig = gt_conflict(os.path.join(quant_dir, name), gt_now, e.force_resume)
+    if refusal is None and e.prior:                                        # the prior baseline's stored run as well
+        refusal = gt_conflict(os.path.join(quant_dir, f"prior{e.prior}_n{e.n or 'all'}"), gt_now, e.force_resume)[0]
+    if refusal:
+        print(refusal, flush=True)
+        suite.close()
+        return 2
     t0 = time.time()
     from evaluation.bev_views import gt_boxes
     groups = list(suite.task.groups)
-    det_rec, detr_rec = {}, {}
+    det_rec, detr_rec, seen = {}, {}, set()
 
     def keep_boxes(sample, pred):                          # the boxes of every frame, for the legacy scene_records.pkl
+        seen.add(sample.ref.key)
         sc = sample.ref.scene
         for dt, o in pred.outputs["dt"].items():
             gb = gt_boxes(sample.reference[dt], groups)
@@ -211,24 +252,37 @@ def cmd_eval(a, rest) -> int:
                              history="full" if e.warm else "none", state=state)
     out_dir = os.path.join(a.run, "eval")
     os.makedirs(out_dir, exist_ok=True)
-    gt_sig = suite.source.describe().get("gt_signature")                 # the GT scored against (autogt is read live, not pinned)
-    with open(os.path.join(out_dir, f"metrics{tag}.json"), "w") as f:
-        json.dump({"run": a.run, "checkpoint": subj.get("checkpoint"), "split": a.split, "weights": "EMA",
-                   "memory": "carried over the whole scene" if e.warm else "empty (cold)", "code": subj.get("code"),
-                   "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
-                   "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better, "latency": lat}, f, indent=1,
-                  default=float)
-    with open(os.path.join(out_dir, f"card{tag}.json"), "w") as f:      # the same numbers in the evaluator contract, for decide.py
-        json.dump(contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig), f, indent=1)
+    n_tag = f"_n{e.n or 'all'}"
+    os.makedirs(os.path.join(out_dir, "by_n"), exist_ok=True)
+
+    def write_both(stem, ext, text):     # by_n/<stem><tag>_n<n> keeps the eval of each n (an early check with --n 200 no longer replaces
+        for path in (os.path.join(out_dir, "by_n", f"{stem}{tag}{n_tag}.{ext}"),   # the 1000-frame numbers); the plain name is the
+                     os.path.join(out_dir, f"{stem}{tag}.{ext}")):                  # latest eval, as before (by_n/: globs such as
+            with open(path, "w") as f:                                              # metrics_ctl_*.json do not see the copies)
+                f.write(text)
+    write_both("metrics", "json", json.dumps({"run": a.run, "checkpoint": subj.get("checkpoint"), "split": a.split, "weights": "EMA",
+                                              "memory": "carried over the whole scene" if e.warm else "empty (cold)", "code": subj.get("code"),
+                                              "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
+                                              "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better,
+                                              "latency": lat}, indent=1, default=float))
+    write_both("card", "json", json.dumps(contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig), indent=1))  # for decide.py
     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
-    rec_path = os.path.join(out_dir, f"scene_records{tag}_n{e.n or 'all'}.pkl")
-    bev_legacy.write_scene_records(rec_path, suite.task.metrics()[0], store,
-                                   det_rec, detr_rec, meta={"frames": [fr["key"] for fr in store.frames], "gt_signature": gt_sig})
+    rec_path, plain = os.path.join(out_dir, f"scene_records{tag}{n_tag}.pkl"), os.path.join(out_dir, f"scene_records{tag}.pkl")
+    keys = [fr["key"] for fr in store.frames]
     import shutil                                                        # the plain name too, always replaced: the temp readers (collect.py,
-    shutil.copyfile(rec_path, os.path.join(out_dir, f"scene_records{tag}.pkl"))  # build_tables.py, ...) read it next to metrics<tag>.json
+    if seen >= set(keys):                                                # build_tables.py, ...) read it next to metrics<tag>.json
+        bev_legacy.write_scene_records(rec_path, suite.task.metrics()[0], store, det_rec, detr_rec, meta={"frames": keys, "gt_signature": gt_sig})
+        shutil.copyfile(rec_path, plain)
+    elif (pickle_meta(rec_path) or {}).get("frames") == keys and pickle_meta(rec_path).get("gt_signature") == gt_sig:
+        shutil.copyfile(rec_path, plain)                                 # a re-run of a finished store (e.g. --time): its pickle still fits
+    else:                                # a resumed store: the frames stored before were not run in this process, so the boxes of their
+        print(f"WARNING: scene_records not written: this process saw {len(seen & set(keys))} of {len(keys)} frames (resumed store), its "
+              f"detection part would cover a subset of the scenes; evaluate into a fresh store for the legacy pickle", flush=True)
+        for stale in (rec_path, plain):
+            if os.path.exists(stale):
+                os.replace(stale, stale + ".stale")
     table = headline_table(flat)
-    with open(os.path.join(out_dir, f"table{tag}.txt"), "w") as f:
-        f.write(table + "\n")
+    write_both("table", "txt", table + "\n")
     print(table)
     print(f"done: {len(store.frames)} {a.split} frames, {len(store.scene_names())} scenes, {time.time() - t0:.0f} s -> {out_dir} (suite run {store.path})")
     suite.close()

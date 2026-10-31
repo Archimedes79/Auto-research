@@ -1,5 +1,7 @@
 # Repository review 2026-10-31
 
+Second pass of the same evening (architecture, code, cleanup; bev_fusion in depth, the autoresearch launch and decision path): `repo_review_2026-10-31_pass2.md`.
+
 The whole repository was reviewed read-only: `autoresearch/` file by file, then `bev_fusion_lane_center/`, `bev_fusion/` and `datasets/NuScenes/`. The review answers Mirko's six questions. Three sub-reviews (evalsuite + trainsuite, the lane project, bev_fusion + datasets) ran in parallel, and their high-severity claims were re-checked in the code. A claim marked "confirmed" was reproduced with a throw-away script or traced line by line; "by reading" means it was not executed. Line numbers are those of 2026-10-31.
 
 The cleanup moves and doc fixes of this review were committed at the same time (section 4 and section 6). No tool, metric or protected file was changed.
