@@ -239,3 +239,13 @@ These jobs were running during the review and were not touched:
   - D18: metric directions in `project.json`;
   - D23: bev_fusion under `run.py`;
   - the truth-kit pin of section 5, as a new decision if wanted.
+
+## 8. What was done (D23, D24, same day)
+Mirko's answer (recorded as D23 and D24 in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`): fix the bugs first, move the lane-specific code out of `autoresearch/`, keep one paired scene bootstrap, run bev_fusion inside `run.py`, remove unnecessary code. Commits 144fb94, 1db792f, 423f093, a3ea642, eae2ff4, a41df85; a fresh `ar-reviewer` pass over the tools and one over the evaluation code, their findings fixed.
+- Fixed: T1, S1-S8 (S2 / S3 already by the trainsuite chat), L2, L3, F1-F5, the small evalsuite items; the reviewer's later finds (compare refused the t8 feature swap, `--force` not passed, legacy pickle name, tensors in the reset check, the exception line of a crash, `n_valid`).
+- L1: the fixed cut is in `graph_from_vertices`, but the product path keeps the old cut (`legacy_cut=True`) until route success and the consumer are re-measured on the GPU; no golden number changed.
+- Moved out of `autoresearch/`: `evalsuite/lanes` -> `bev_fusion_lane_center/evaluation/lane_task/`; the lane metric names of `decide.py` go to `project.json` "lower_is_better" (the lane problem's key waits for a grant: the session's permission check refused the grant command, so `decide.py` keeps the lane names as a fallback for tag prefix lcr).
+- One bootstrap: `autoresearch/evalsuite/stats.py` (`scene_picks`); the lane intervals byte-identical; `topo_metrics`, `boot_eval`, `bev_legacy` use it.
+- bev_fusion: `project.json`, `records/`, `temp/train/run_ar.sh` (trains from the run's snapshot commit, exits with the trainer's code); GPU slots shared with the lane problem.
+- Removed / moved: dead p16 code and loop-16/18 drivers, off-chain bev_fusion modules (`training/legacy/`, `_to_delete/off_chain_2026-10-31/`), the `evaluate_run.py` stub.
+- Open: route-success measurement for L1, the lane `lower_is_better` grant, `training/augment.py` selftest fails (radar mirror, older than this work), the gained-key tolerance hides a GT change of a store that predates the GT signature (warning only), one intermittent failure of the autoresearch selftest seen once under full load (`S.slowA/run.log` missing; not reproduced in six runs).
