@@ -1,8 +1,55 @@
-"""The one-object interface of the autoGT suite."""
+"""The one-object interface of the autoGT suite (see autogt/AGENTS.md for the short guide)."""
+import functools
+import json
 import os
+import types
 
+from .cli import load_keyframe
 from .grid import GridSpec
 from .nuscenes_gt import NuScenesGT
+
+DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt")       # bev_fusion/data/autogt
+
+
+def current_signature(**options):
+    """cache key (folder name of the stored GT) of THIS source with these generator options, without loading nuScenes."""
+    opt = dict(stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at="camera")
+    opt.update(options)
+    return NuScenesGT.signature(types.SimpleNamespace(**opt))
+
+
+def load(token, data=DATA, **options):
+    """the stored GT of one keyframe (written by `python -m autogt report` / `build`) for the current source and options:
+    dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""
+    sig_dir = os.path.join(data, current_signature(**options))
+    if not os.path.exists(os.path.join(sig_dir, token + ".npz")):
+        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d))) if os.path.isdir(data) else []
+        raise FileNotFoundError(f"no stored GT for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
+                                "`python -m autogt report --version <v>` or `build`, or the generator source changed since it was stored")
+    return load_keyframe(sig_dir, token)
+
+
+def default_root(version):
+    return os.path.expanduser("~/data/nuscenes_full" if "trainval" in version else "~/data/nuscenes")
+
+
+@functools.lru_cache(maxsize=4)
+def json_tables(dataroot, version):
+    """(scene records, sample token -> next sample token) from the nuScenes json tables, read once per process."""
+    tab = os.path.join(dataroot, version)
+    return (json.load(open(os.path.join(tab, "scene.json"))),
+            {r["token"]: r["next"] for r in json.load(open(os.path.join(tab, "sample.json")))})
+
+
+def scene_tokens(scene, version="v1.0-mini", dataroot=None):
+    """the sample tokens of a sequence in time order, from the nuScenes json tables only: a few seconds even for trainval, no devkit
+    (`AutoGT(...).keyframes(scene)` gives the same list). dataroot default: ~/data/nuscenes (mini) / ~/data/nuscenes_full (trainval)."""
+    scenes, nxt = json_tables(os.path.expanduser(dataroot) if dataroot else default_root(version), version)
+    out, tok = [], next(s["first_sample_token"] for s in scenes if s["name"] == scene)
+    while tok:
+        out.append(tok)
+        tok = nxt[tok]
+    return out
 
 
 class AutoGT(NuScenesGT):

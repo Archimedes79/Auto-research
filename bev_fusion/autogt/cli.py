@@ -8,8 +8,9 @@
       generator is never mixed in
   python -m autogt check  [--version v1.0-mini] [--scenes ...] [--stride 1] [--holdout]
       automatic consistency checks of the GT over keyframes (see autogt/checks.py); --holdout adds the leave-one-radar-out test
-  python -m autogt view   OUT_DIR [scene:keyframe ...] [--total]   sample pictures (camera, semantic BEV, objects + velocity,
-      motion relative to the static world; --total shows the total apparent flow instead)
+  python -m autogt view   OUT_DIR [scene:keyframe | TOKEN ...] [--total]   sample pictures (camera, semantic BEV, objects + velocity,
+      motion relative to the static world; --total shows the total apparent flow instead); scene:keyframe = nuScenes mini,
+      generated now; TOKEN = a stored keyframe of mini or trainval (needs the stored GT of the current generator)
   python -m autogt sheets OUT_DIR                            overview sheets of the sample pictures
   python -m autogt video  SCENE OUT.mp4 [seconds]            driving through the GT at 12 Hz
   python -m autogt report [--version v1.0-mini|v1.0-trainval] [--out REPORT.pdf] [--data DIR | --no-data] [--scenes ..] [--stride N]
@@ -135,7 +136,7 @@ def main(argv=None):
     c.add_argument("--holdout", action="store_true")
     v = sub.add_parser("view")
     v.add_argument("out")
-    v.add_argument("picks", nargs="*")
+    v.add_argument("picks", nargs="*", help="scene-0061:8 (mini, generated now) or a sample token (stored GT, mini or trainval)")
     v.add_argument("--total", action="store_true", help="4th panel: total apparent flow (ego motion included) instead of motion relative to the static world")
     s = sub.add_parser("sheets")
     s.add_argument("out")

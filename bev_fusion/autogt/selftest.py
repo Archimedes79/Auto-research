@@ -9,7 +9,8 @@
   moving boxes' speeds close to the devkit's, unknown velocity never a silent zero (weight 0), weights 0 on ignored boxes,
   a 12 Hz sweep frame (sd=) gives a ground-consistent frame, moving boxes at the camera time (centre = annotation + v * dt,
   stationary / unknown-velocity boxes unchanged, boxes_at="annotation" restores the annotations)
-5 the build command writes and reloads a cache that is keyed by the generator signature
+5 the build command writes and reloads a cache that is keyed by the generator signature; `load` / `current_signature` of the
+  top-level API; AGENTS.md names every layer, meta entry and box field of a real keyframe
 """
 import math
 import os
@@ -166,8 +167,27 @@ def run(root=None, verbose=True):
         sig_dir = os.path.join(d, gt.signature())
         files = sorted(os.listdir(sig_dir))
         assert n == len(files) - 1 and "index.json" in files, files
-        g2 = load_keyframe(sig_dir, [f for f in files if f.endswith(".npz")][0][:-4])
+        tok2 = [f for f in files if f.endswith(".npz")][0][:-4]
+        g2 = load_keyframe(sig_dir, tok2)
         assert g2["flow"].shape == (2, g.nx, g.ny) and g2["meta"]["sample"]
+        from . import current_signature, load as load_stored                          # the two helpers of the top-level API
+        assert current_signature() == gt.signature() and current_signature(boxes_at="annotation") == ann.signature()
+        assert np.array_equal(load_stored(tok2, data=d)["flow"], g2["flow"])
+        from .view import stored                                                       # a picture straight from the stored GT
+        import matplotlib.pyplot as plt
+        fig = stored(tok2, None, data=d)
+        assert len(fig.axes) >= 5 and fig.axes[0].images, "stored-GT figure"
+        plt.close(fig)
+        try:
+            load_stored("0" * 32, data=d)
+            raise AssertionError("load of an unknown keyframe must fail")
+        except FileNotFoundError as e:
+            assert gt.signature() in str(e)
+    # the agent guide names every layer, meta entry and box field the generator produces (so it cannot drift from the code)
+    guide = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "AGENTS.md"), encoding="utf-8").read()
+    keys = [k for k in g2 if k != "meta"] + list(g2["meta"]) + list(g2["meta"]["boxes"][0]) + ["dt", "steps"]
+    missing = [k for k in keys if f"`{k}`" not in guide]
+    assert not missing, f"autogt/AGENTS.md does not mention (in backticks): {missing}"
     from .report import report                                                        # 7 the report: one PDF, no picture files
     with tempfile.TemporaryDirectory() as d:
         rep = report(root, "v1.0-mini", os.path.join(d, "r.pdf"), os.path.join(d, "data"), scenes=["scene-0061", "scene-1077"], stride=20,
@@ -182,6 +202,8 @@ def run(root=None, verbose=True):
     full = AutoGT(root, "v1.0-mini", ss=4)
     light = AutoGT(root, "v1.0-mini", ss=4, light=True)
     tk = full.keyframes("scene-0061")[8]
+    from . import scene_tokens
+    assert scene_tokens("scene-0061", "v1.0-mini", root) == full.keyframes("scene-0061")        # the devkit-free list is the same
     a, b2 = full.keyframe(tk), light.keyframe(tk)
     assert all(np.array_equal(a[k_], b2[k_]) for k_ in a if k_ != "meta"), "light devkit must give identical GT"
     assert len(light.nusc.sample_data) < 0.7 * len(full.nusc.sample_data)

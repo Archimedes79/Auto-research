@@ -50,11 +50,9 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
                   if os.path.exists(os.path.join(all_caches, d, "index.json"))]          # only what autogt marked as its cache
     if stale_caches and os.path.isdir(stale_caches):
         if current_signature is None:
-            import types
-            from .nuscenes_gt import NuScenesGT
+            from .suite import current_signature as sig_of
             # the signatures of the current source with the default options and with the annotation-time boxes
-            current_signature = {NuScenesGT.signature(types.SimpleNamespace(
-                stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at=b)) for b in ("camera", "annotation")}
+            current_signature = {sig_of(boxes_at=b) for b in ("camera", "annotation")}
         keep = {current_signature} if isinstance(current_signature, str) else set(current_signature)
         for d in sorted(os.listdir(stale_caches)):
             p = os.path.join(stale_caches, d)
