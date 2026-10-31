@@ -317,9 +317,30 @@ def ledger_row(ledger, run_id):
         return next((r for r in csv.DictReader(f) if r["id"] == run_id), {})
 
 
+def _attempt_time(d):
+    """when the attempt of a run record or ledger row began, to the second (spaces, microseconds and the like do not matter): its `started`, else its
+    `ended` (a run that never started: blocked, gpu_busy); None when it has neither or cannot be read"""
+    for k in ("started", "ended"):
+        s = str(d.get(k) or "").strip()
+        if s:
+            try:
+                return dt.datetime.strptime(s[:19].replace(" ", "T"), "%Y-%m-%dT%H:%M:%S")
+            except ValueError:
+                return None
+    return None
+
+
+def later_attempt(rec, row):
+    """is the attempt of the run record `rec` later than the one the ledger `row` describes? An unreadable or missing time on either side: no"""
+    a, b = _attempt_time(rec), _attempt_time(row)
+    return a is not None and b is not None and a > b
+
+
 def ledger_write(ledger, row, clear=(), fill=False):
     """merge one row into the ledger under the lock (a planned row keeps what was written before the run; `clear` names columns of the old row to drop).
-    fill=True (ledger.py sync): only a missing row or a planned / running / stalled one is filled in, a finished row is never replaced; returns whether it wrote"""
+    fill=True (ledger.py sync): a missing row or a planned / running / stalled one is filled in; a finished row is replaced only by the row of a LATER
+    attempt (later_attempt: the re-run whose own final write failed): only the card columns of the old row stay, its result and decision are kept as
+    a note of the new row; the same attempt's row is never replaced; returns whether it wrote"""
     with P.locked(ledger):
         rows = []
         if os.path.exists(ledger):
@@ -327,7 +348,12 @@ def ledger_write(ledger, row, clear=(), fill=False):
                 rows = list(csv.DictReader(f))
         old = next((r for r in rows if r["id"] == row["id"]), {})
         if fill and old.get("status") not in (None, "", "planned", "running", "stalled"):
-            return False
+            if not later_attempt(row, old):
+                return False
+            gone = "; ".join(f"{k} {old[k]}" for k in ("result", "decision") if old.get(k))
+            old = {k: v for k, v in old.items() if k in ("id", "hypothesis", "basis", "seed", "prediction", "rule")}  # the card, not the earlier attempt's facts
+            if gone:
+                row = dict(row, notes=(row["notes"] + "; " if row.get("notes") else "") + f"replaced the row of the earlier attempt ({gone[:200]})")
         if fill and old.get("notes"):
             row = dict(row, notes=old["notes"] + "; " + row.get("notes", ""))
         old = {k: v for k, v in old.items() if k not in clear}
