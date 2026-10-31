@@ -133,12 +133,22 @@ class CachedFrontRadarDataset(FrontRadarDataset):
     are stored once per sample as .npz and read back exactly (float32 / int64 as computed): reading the ~35 sweep files of a
     sample costs ~0.3-0.6 s, the cached entry ~5 ms (t1, 2026-10-26: the loader was the bottleneck of training)."""
 
-    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", lane_images=None, **kw):
+    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", lane_images=None, store2=None, **kw):
         """lane_images (folder, optional): the key-frame image cache of the lane branch (lane_branch.py, experiment t7); the
-        item then carries the current frame as uint8 "lane_img" (3, H, W)."""
+        item then carries the current frame as uint8 "lane_img" (3, H, W).
+        camera_features "dual" (t10): `store` = the DualBEV cache (ida stays the DualBEV transform), `store2` = the BEVFusion cache; every
+        frame also carries prob2 / ctx2 and the item ida2 = bevfusion_ida()."""
         super().__init__(*args, **kw)
-        self.store, self.radar_cache, self.lane_images = store, radar_cache, lane_images
-        if camera_features == "bevfusion":                 # the cache was made with BEVFusion's test pipeline (scale 0.48, crop 32 / 176)
+        self.store, self.radar_cache, self.lane_images, self.store2 = store, radar_cache, lane_images, store2
+        if camera_features == "dual" or store2 is not None:
+            if camera_features != "dual" or store2 is None:
+                raise ValueError("camera_features 'dual' needs store2, and store2 needs camera_features 'dual'")
+            try:
+                from .bevfusion_camera import bevfusion_ida
+            except ImportError:
+                from bevfusion_camera import bevfusion_ida
+            self.ida2 = bevfusion_ida()
+        elif camera_features == "bevfusion":                 # the cache was made with BEVFusion's test pipeline (scale 0.48, crop 32 / 176)
             try:
                 from .bevfusion_camera import bevfusion_ida
             except ImportError:
@@ -173,6 +183,10 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         item = super().__getitem__(i)
         for f in item["frames"]:
             f["prob"], f["ctx"] = self.store.get(f["token"])
+            if self.store2 is not None:
+                f["prob2"], f["ctx2"] = self.store2.get(f["token"])
+        if self.store2 is not None:
+            item["ida2"] = self.ida2
         if self.lane_images:
             try:
                 from .lane_branch import load_image
@@ -211,6 +225,10 @@ def collate_cached(items):
     batch["prob"] = torch.stack([torch.stack([f["prob"] for f in it["frames"]]) for it in items])      # (B, F, 118, 16, 44)
     batch["ctx"] = torch.stack([torch.stack([f["ctx"] for f in it["frames"]]) for it in items])        # (B, F, 80, 16, 44)
     batch["hw"] = DST_HW
+    if "ida2" in items[0]:                                                                              # camera_features "dual"
+        batch["prob2"] = torch.stack([torch.stack([f["prob2"] for f in it["frames"]]) for it in items])   # (B, F, 118, 32, 88)
+        batch["ctx2"] = torch.stack([torch.stack([f["ctx2"] for f in it["frames"]]) for it in items])     # (B, F, 80, 32, 88)
+        batch["ida2"] = items[0]["ida2"]
     if "lane_img" in items[0]:
         batch["lane_img"] = torch.stack([it["lane_img"] for it in items])                               # (B, 3, H, W) uint8
     return batch
@@ -236,7 +254,13 @@ def CachedBEVFusionModel(cfg=None):
             for b in range(B):                                          # one calibration per sample (scenes differ)
                 vol = self.lift(ctx[b], prob[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida"])
                 bevs.append(self.cam_reduce(vol))
-            return torch.stack(bevs)
+            bevs = torch.stack(bevs)
+            if self.cfg.camera_features != "dual":
+                return bevs
+            prob2, ctx2 = batch["prob2"].float(), batch["ctx2"].float()   # branch 2: BEVFusion features, own depth centres / ida
+            bevs2 = torch.stack([self.cam_reduce2(self.lift2(ctx2[b], prob2[b], batch["K"][b, 0], batch["T_cam_car"][b, 0],
+                                                            batch["hw"], batch["ida2"])) for b in range(B)])
+            return self.cam_merge(torch.cat([bevs, bevs2], 2).flatten(0, 1)).view_as(bevs)
 
     import dataclasses
     m = _Cached(dataclasses.replace(cfg, pretrained=""))                  # no checkpoint: the heads are dropped below

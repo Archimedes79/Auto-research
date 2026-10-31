@@ -76,7 +76,7 @@ def _fallbacks():
 
 @dataclass
 class ModelConfig:
-    camera_features: str = "dualbev"   # "dualbev" (frozen DualBEV heads, stride 16) | "bevfusion" (cached BEVFusion features, stride 8; needs feature_cache)
+    camera_features: str = "dualbev"   # "dualbev" (frozen DualBEV heads, stride 16) | "bevfusion" (cached BEVFusion features, stride 8; needs feature_cache) | "dual" (both, needs feature_cache + feature_cache2)
     lift: str = "pd"
     cam_temporal: str = "window_memory"
     rad_temporal: str = "none"
@@ -139,8 +139,10 @@ class BEVFusionModel(nn.Module):
             self.camera.freeze_camera_heads()
         del self.camera.lift, self.camera.out_conv                   # replaced by the model's own lift
         n_ctx, nz = 80, len(cfg.z_levels)
-        if cfg.camera_features not in ("dualbev", "bevfusion"):
+        if cfg.camera_features not in ("dualbev", "bevfusion", "dual"):
             raise ValueError(cfg.camera_features)
+        if cfg.camera_features == "dual" and (cfg.lift == "s" or cfg.cam_adapter):
+            raise ValueError("camera_features='dual' is not supported with lift 's' or cam_adapter")
         if cfg.camera_features == "bevfusion":                       # cached BEVFusion features: stride 8, frustum conventions
             if cfg.lift == "s":
                 raise ValueError("camera_features='bevfusion' is not supported with lift 's'")
@@ -165,6 +167,17 @@ class BEVFusionModel(nn.Module):
                                             nn.ReLU(True))
         else:
             raise ValueError(cfg.cam_collapse)
+        if cfg.camera_features == "dual":    # t10: second branch = cached BEVFusion features (stride 8, frustum cells), merged 2 c_cam -> c_cam
+            try:
+                from .bevfusion_camera import DEPTHS
+            except ImportError:
+                from bevfusion_camera import DEPTHS
+            self.lift2 = LiftPD(self.grid, depth_centres=DEPTHS, use_depth=(cfg.lift == "pd"), oversample=cfg.oversample,
+                                frustum_cells=True)
+            self.cam_reduce2 = (ZSumReduce(nz, n_ctx, cfg.c_cam) if cfg.cam_collapse == "zsum" else
+                                nn.Sequential(nn.Conv2d(nz * n_ctx, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam), nn.ReLU(True)))
+            self.cam_merge = nn.Sequential(nn.Conv2d(2 * cfg.c_cam, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
+                                           nn.ReLU(True))
         self.cam_temporal = _temporal(cfg.cam_temporal, cfg.c_cam, self.grid)
         self.lane = None
         if cfg.lane_branch:
@@ -234,6 +247,8 @@ class BEVFusionModel(nn.Module):
         B, Fn = img.shape[:2]
         if self.cfg.camera_off:
             return torch.zeros(B, Fn, self.cfg.c_cam, self.grid.nx, self.grid.ny, device=img.device)
+        if self.cfg.camera_features != "dualbev":
+            raise ValueError(f"camera_features={self.cfg.camera_features!r} reads cached features (CachedBEVFusionModel)")
         with torch.set_grad_enabled(torch.is_grad_enabled() and not self.cfg.freeze_camera):
             prob, ctx = self.camera.image_features(img.flatten(0, 1), batch["cam_vec"].flatten(0, 1))
         prob, ctx = prob.view(B, Fn, *prob.shape[1:]), ctx.view(B, Fn, *ctx.shape[1:])

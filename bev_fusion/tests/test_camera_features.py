@@ -77,3 +77,50 @@ for feats, scale in (("bevfusion", 0.48), ("dualbev", float(ida0[0, 0]))):
     if feats == "bevfusion":
         assert float(ds.ida[0, 2]) == -32 and float(ds.ida[1, 2]) == -176
 print("test_camera_features ok: default path identical, bevfusion lift (frustum cells, centres 1.0 + 0.5 i) and ida, refusals")
+
+# (c) "dual" (t10): both cached feature sets, merged back to c_cam; branches use their own depth centres / frustum convention / ida
+md = build(camera_features="dual")
+assert md.lift.frustum_cells is False and md.lift2.frustum_cells is True
+assert torch.equal(md.lift.depth_centres, depth_centres()) and float(md.lift2.depth_centres[0]) == 1.0
+bd = {**batch(16, 44, ida0), "ida2": bevfusion_ida()}
+b2 = batch(32, 88, bevfusion_ida())
+bd["prob2"], bd["ctx2"] = b2["prob"], b2["ctx"]
+with torch.no_grad():
+    od = md.camera_bevs(bd)
+assert od.shape == o0.shape and torch.isfinite(od).all() and float(od.abs().sum()) > 0, od.shape
+# merge [I, 0] / [0, I] reproduces each single-branch camera BEV (eval-mode BN set to identity, ReLU on non-negative maps)
+c = md.cfg.c_cam
+conv, bn = md.cam_merge[0], md.cam_merge[1]
+bn.weight.data.fill_(1.0), bn.bias.data.zero_(), bn.running_mean.zero_(), bn.running_var.fill_(1.0 - bn.eps)
+with torch.no_grad():
+    bev1 = torch.stack([md.cam_reduce(md.lift(bd["ctx"].float()[b], bd["prob"].float()[b], K, T, (256, 704), ida0)) for b in range(2)])
+    bev2 = torch.stack([md.cam_reduce2(md.lift2(bd["ctx2"].float()[b], bd["prob2"].float()[b], K, T, (256, 704), bd["ida2"])) for b in range(2)])
+    for sel, ref in ((0, bev1), (1, bev2)):
+        w = torch.zeros(c, 2 * c, 1, 1)
+        w[torch.arange(c), torch.arange(c) + sel * c] = 1.0
+        conv.weight.data.copy_(w)
+        got = md.camera_bevs(bd)
+        assert torch.allclose(got, torch.relu(ref), atol=1e-5), ("branch select", sel, float((got - torch.relu(ref)).abs().max()))
+# gradients reach both reductions and the merge (random merge: the selector above kills one branch on purpose)
+conv.weight.data.normal_(0, 0.3)
+md.train()
+md.camera_bevs(bd).square().mean().backward()
+for nm in ("cam_reduce", "cam_reduce2", "cam_merge"):
+    g = sum(float(p.grad.abs().sum()) for p in getattr(md, nm).parameters() if p.grad is not None)
+    assert g > 0, f"no gradient in {nm}"
+# refusals and the dataset pairing
+for kw in (dict(camera_features="dual", lift="s"), dict(camera_features="dual", cam_adapter=True)):
+    try:
+        build(**kw)
+        raise AssertionError(f"{kw} must be refused")
+    except ValueError:
+        pass
+try:
+    FrontRadarDataset.__init__ = lambda self, *a, **k: setattr(self, "ida", ida0)
+    CachedFrontRadarDataset(None, None, store=None, camera_features="dual")
+    raise AssertionError("dual without store2 must be refused")
+except ValueError:
+    pass
+finally:
+    FrontRadarDataset.__init__ = orig
+print("test_camera_features dual ok: shapes, branch select [I,0] / [0,I], gradients to both reductions and the merge, refusals")
