@@ -25,13 +25,27 @@ numbers) and is keyed by the prediction time offset dt (seconds; dt = 0 is the c
 - report: one flat dict "task/dt+0.00/name/.../metric" (flatten / unflatten round trip) and a printable table.
 Box dicts as training/object_head.py decode(): group, score, cx, cy (m, ego frame), length, width, yaw or radius, vx,
 vy; gt_boxes_from_meta() converts training/gt_bev.py meta["boxes"].
+The comparison itself (cell counts and tolerant counts, matching, the errors of a matched pair, average precision) is not here but in
+autoresearch/evalsuite/comparison/ (maps.py, boxes.py; read its README.md): this file adds what is specific to the BEV system (range bins,
+field of view, circles for pedestrians, dt keys, the known / unknown split, the lines) and calls that core. `match`, `ap_nuscenes`,
+`ap_all_points`, `tp_errors`, `dilate` and TP_ERR_KEYS stay importable from here under their old names (`match` is the core's
+`match_frames`). DetMeter reduces with ties="list": equal scores keep frame order, then detection order, as it always did.
+Two differences from the code before the core: a detection whose score is nan (a diverged model) raises a ValueError at its frame (it used to
+rank last and give garbage numbers); and importing this file imports the evalsuite package (numpy only), so a broken evalsuite breaks this file.
 Run the self-test: wsl ~/miniconda3/envs/gcar/bin/python evaluation/metrics.py
 """
 import math
+import os
 import re
+import sys
 import time
 
 import numpy as np
+
+_AUTORESEARCH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "autoresearch"))
+if _AUTORESEARCH not in sys.path:
+    sys.path.append(_AUTORESEARCH)                       # the comparison core is in the autoresearch folder next to this problem
+from evalsuite.comparison import boxes as _boxes, maps as _maps  # noqa: E402
 
 RANGE_BINS = ((0.0, 20.0), (20.0, 40.0), (40.0, 60.0))
 TOLERANCES = (0.0, 0.5, 1.0)
@@ -69,19 +83,9 @@ def cell_bins(shape, grid, bins=RANGE_BINS):
 
 
 def dilate(m, radius_cells):
-    """boolean dilation of m (X, Y) by a disc: a cell is set if a set cell's centre lies within radius_cells."""
-    m = np.asarray(m, bool)
-    r = int(math.floor(radius_cells + 1e-9))
-    if r <= 0:
-        return m.copy()
-    X, Y = m.shape
-    p = np.pad(m, r)
-    out = np.zeros_like(m)
-    for dx in range(-r, r + 1):
-        for dy in range(-r, r + 1):
-            if dx * dx + dy * dy <= radius_cells * radius_cells + 1e-9:
-                out |= p[r + dx:r + dx + X, r + dy:r + dy + Y]
-    return out
+    """boolean dilation of m (X, Y) by a disc: a cell is set if a set cell's centre lies within radius_cells (comparison.maps.dilate:
+    2-D maps only; any array is read as boolean here)."""
+    return _maps.dilate(np.asarray(m, bool), radius_cells)
 
 
 def line_cells(dist, res):
@@ -128,7 +132,7 @@ class SegMeter:
                 key = (round(float(dt), 3), key_name, sname, "all" if b == "all" else bin_label(b))
                 acc = self.c.setdefault(key, {"cnt": np.zeros((len(self.tol), 4)), "n_gt": 0, "err": 0.0, "n_err": 0})
                 for i, (DG, DP) in enumerate(dil):
-                    acc["cnt"][i] += [(P & DG & cm).sum(), (P & ~DG & cm).sum(), (G & DP & cm).sum(), (G & ~DP & cm).sum()]
+                    acc["cnt"][i] += _maps.tolerant_counts(P, G, DG, DP, cm)             # [p_hit, p_miss, g_hit, g_miss]
                 acc["n_gt"] += int((G & cm).sum())
                 if extra is not None:
                     err, valid = extra
@@ -199,85 +203,12 @@ def in_front(b, x_max=60.0, half_fov=FRONT_HALF_FOV):
     return half_fov is None or abs(math.atan2(b["cy"], b["cx"])) <= half_fov
 
 
-def _shape(b):
-    from shapely.geometry import Point, Polygon
-    if "radius" in b:
-        return Point(b["cx"], b["cy"]).buffer(b["radius"], 32)
-    c, s = math.cos(b["yaw"]), math.sin(b["yaw"])
-    hl, hw = b["length"] / 2, b["width"] / 2
-    return Polygon([(b["cx"] + c * a - s * w, b["cy"] + s * a + c * w) for a, w in ((hl, hw), (hl, -hw), (-hl, -hw), (-hl, hw))])
-
-
-def _as_circle(b):
-    return b if "radius" in b else dict(b, radius=max(b["length"], b["width"]) / 2)
-
-
-def tp_errors(d, g):
-    """ATE, ASE, AOE, AVE, BIoU of one matched pair (AOE nan for circles, AVE nan if a velocity is nan)."""
-    if "radius" in d or "radius" in g:
-        d, g = _as_circle(d), _as_circle(g)
-        rmin, rmax = sorted((d["radius"], g["radius"]))
-        ase, aoe = 1.0 - (rmin / rmax) ** 2, float("nan")
-    else:
-        inter = min(d["length"], g["length"]) * min(d["width"], g["width"])
-        ase = 1.0 - inter / (d["length"] * d["width"] + g["length"] * g["width"] - inter)
-        aoe = abs(math.remainder(d["yaw"] - g["yaw"], 2 * math.pi))
-    sd, sg = _shape(d), _shape(g)
-    u = sd.union(sg).area
-    return {"ate": math.hypot(d["cx"] - g["cx"], d["cy"] - g["cy"]), "ase": ase, "aoe": aoe,
-            "ave": math.hypot(d["vx"] - g["vx"], d["vy"] - g["vy"]), "biou": sd.intersection(sg).area / u if u else 0.0}
-
-
-def match(frames, thr):
-    """frames: list of (dets, gts) of one class -> (list of (score, is_tp, det, gt or None) in score order, n_gt).
-    Greedy: each detection, highest score first over all frames, takes the nearest unmatched GT of its frame within
-    thr (centre distance, m)."""
-    cand = sorted(((d["score"], f, d) for f, (ds, _) in enumerate(frames) for d in ds), key=lambda c: -c[0])
-    used, out = set(), []
-    for sc, f, d in cand:
-        best, bd = None, thr
-        for j, g in enumerate(frames[f][1]):
-            if (f, j) in used:
-                continue
-            dist = math.hypot(d["cx"] - g["cx"], d["cy"] - g["cy"])
-            if dist <= bd:
-                best, bd = j, dist
-        if best is not None:
-            used.add((f, best))
-        out.append((sc, best is not None, d, None if best is None else frames[f][1][best]))
-    return out, sum(len(gs) for _, gs in frames)
-
-
-def ap_nuscenes(tp_flags, n_gt, min_recall=0.1, min_precision=0.1):
-    """nuScenes AP: precision at 101 recall points (np.interp, 0 beyond the last recall), recall bins <= min_recall
-    dropped, precision - min_precision clipped at 0, mean / (1 - min_precision)."""
-    if n_gt == 0:
-        return float("nan")
-    if len(tp_flags) == 0:
-        return 0.0
-    f = np.asarray(tp_flags, float)
-    tp, fp = np.cumsum(f), np.cumsum(1 - f)
-    prec, rec = tp / (tp + fp), tp / n_gt
-    p = np.interp(np.linspace(0, 1, 101), rec, prec, right=0)
-    p = p[int(round(100 * min_recall)) + 1:] - min_precision
-    p[p < 0] = 0
-    return float(np.mean(p)) / (1.0 - min_precision)
-
-
-def ap_all_points(tp_flags, n_gt):
-    """all-point AP: area under the precision-recall curve with the monotone precision envelope."""
-    if n_gt == 0:
-        return float("nan")
-    if len(tp_flags) == 0:
-        return 0.0
-    f = np.asarray(tp_flags, float)
-    tp, fp = np.cumsum(f), np.cumsum(1 - f)
-    prec, rec = tp / (tp + fp), tp / n_gt
-    prec = np.maximum.accumulate(prec[::-1])[::-1]
-    return float(np.sum(prec * np.diff(np.r_[0.0, rec])))
-
-
-TP_ERR_KEYS = ("ate", "ase", "aoe", "ave", "biou")
+# the comparison of a detection with the ground truth is evalsuite/comparison/boxes.py (read its README.md); the old names stay
+tp_errors = _boxes.tp_errors              # ATE, ASE, AOE, AVE, BIoU of one matched pair (AOE nan for circles, AVE nan if a velocity is missing)
+match = _boxes.match_frames               # match(frames, thr): frames = [(dets, gts)] of ONE class -> (rows (score, is_tp, det, gt) in score order, n_gt)
+ap_nuscenes = _boxes.ap_nuscenes          # nuScenes AP: precision at 101 recall points, recall <= 0.1 and precision <= 0.1 clipped
+ap_all_points = _boxes.ap_all_points      # all-point AP with the monotone precision envelope
+TP_ERR_KEYS = _boxes.TP_ERROR_KEYS
 
 
 class DetMeter:
@@ -312,57 +243,34 @@ class DetMeter:
         range bin (T), TP errors of the match at TP_THRESHOLD among all (5), among its bin (5)]; errors are nan where the
         detection is no true positive at TP_THRESHOLD. n_gt column 0 = all, then one per bin."""
         T, nb = len(self.thr), len(self.bins)
+        tp_thr = TP_THRESHOLD if TP_THRESHOLD in self.thr else None             # (reduce_rows' 'mean' needs the errors: thresholds include TP_THRESHOLD)
         rows, n_gt = [], np.zeros((len(classes), 1 + nb), int)
         for ci, cls in enumerate(classes):
             ds = [d for d in dets if d["group"] == cls]
             gs = [g for g in gts if g["group"] == cls]
-            bin_of = {id(d): range_bin(d["cx"], self.bins) for d in ds}
-            scopes = [(ds, gs)] + [([d for d in ds if bin_of[id(d)] == i], [g for g in gs if range_bin(g["cx"], self.bins) == i])
-                                   for i in range(nb)]
-            n_gt[ci] = [len(g) for _, g in scopes]
-            flag = [{}, {}]                                # scope 0 / own bin -> {id(det): [tp per threshold]}
-            err = [{}, {}]
-            for si, (sd, sg) in enumerate(scopes):
-                tgt = 0 if si == 0 else 1
-                for k, t in enumerate(self.thr):
-                    m, _ = match([(sd, sg)], t)
-                    for _, ok, d, g in m:
-                        flag[tgt].setdefault((id(d), si), [0.0] * T)[k] = float(ok)
-                        if ok and t == TP_THRESHOLD:
-                            err[tgt][(id(d), si)] = tp_errors(d, g)
-            for d in ds:
-                bi = bin_of[id(d)]
-                a = flag[0].get((id(d), 0), [0.0] * T)
-                b = flag[1].get((id(d), 1 + bi), [0.0] * T) if bi is not None else [0.0] * T
-                ea = err[0].get((id(d), 0))
-                eb = err[1].get((id(d), 1 + bi)) if bi is not None else None
-                rows.append([ci, -1 if bi is None else bi, d["score"], *a, *b,
-                             *[(ea[k] if ea else float("nan")) for k in TP_ERR_KEYS],
-                             *[(eb[k] if eb else float("nan")) for k in TP_ERR_KEYS]])
+            bins = [range_bin(d["cx"], self.bins) for d in ds]
+            gt_bins = [range_bin(g["cx"], self.bins) for g in gs]
+            n_gt[ci] = [len(gs)] + [gt_bins.count(i) for i in range(nb)]
+            flags_all, errs_all = _boxes.match_flags(ds, gs, self.thr, tp_thr)            # matched among ALL boxes of the class
+            flags_bin, errs_bin = np.zeros((len(ds), T)), np.full((len(ds), len(TP_ERR_KEYS)), np.nan)
+            for i in range(nb):                                                           # matched among the boxes of its own range bin
+                idx = [j for j, b in enumerate(bins) if b == i]
+                if idx:
+                    flags_bin[idx], errs_bin[idx] = _boxes.match_flags([ds[j] for j in idx], [g for g, b in zip(gs, gt_bins) if b == i],
+                                                                       self.thr, tp_thr)
+            for j, d in enumerate(ds):
+                rows.append([ci, -1 if bins[j] is None else bins[j], d["score"], *flags_all[j], *flags_bin[j], *errs_all[j], *errs_bin[j]])
         return {"rows": np.asarray(rows, float).reshape(-1, self.n_cols), "n_gt": n_gt}
 
     # ---- any set of frames -> numbers
     def _scope_row(self, rr, n_gt, si):
-        """the numbers of one (class, scope) from its rows rr (all rows of the scope) and its GT count"""
-        T = len(self.thr)
-        order = np.argsort(-rr[:, 2], kind="stable")          # score order; ties keep frame order, then detection order
-        rr = rr[order]
+        """the numbers of one (class, scope) from its rows rr (all rows of the scope) and its GT count: comparison.boxes.detection_numbers
+        with ties="list" (rows with equal scores keep frame order, then detection order)"""
+        T, E = len(self.thr), len(TP_ERR_KEYS)
         c0 = 3 if si == 0 else 3 + T
-        row = {}
-        for k, t in enumerate(self.thr):
-            flags = rr[:, c0 + k]
-            row["ap@%g" % t], row["ap_all@%g" % t] = ap_nuscenes(flags, n_gt), ap_all_points(flags, n_gt)
-            if t == TP_THRESHOLD:
-                tp = flags > 0
-                e0 = 3 + 2 * T + (0 if si == 0 else len(TP_ERR_KEYS))
-                for j, name in enumerate(TP_ERR_KEYS):
-                    v = rr[tp, e0 + j]
-                    v = v[v == v]
-                    row[name] = float(v.mean()) if len(v) else float("nan")
-                row["n_tp"] = int(tp.sum())
-        row["n_gt"] = int(n_gt)
-        row["n_det"] = len(rr)
-        return row
+        e0 = 3 + 2 * T + (0 if si == 0 else E)
+        return _boxes.detection_numbers(rr[:, 2], rr[:, c0:c0 + T], rr[:, e0:e0 + E], n_gt, self.thr,
+                                        TP_THRESHOLD if TP_THRESHOLD in self.thr else None, ties="list")
 
     def reduce_rows(self, frames, classes, only=None):
         """frames: list of frame_rows() results. -> {class: {bin: {...}}, 'mean': {'all': {...}}} as result()[dt];
@@ -611,17 +519,20 @@ def _selftest():
           {"group": "vehicle", "size": [1.8, 4.5, 1.5], "center": [40.0, 0.0, 0.0], "vel": [0.0, 0.0], "yaw": 0.0}]
     assert len(gt_boxes_from_meta(mb)) == 2 and len(gt_boxes_from_meta(mb, observed_only=False)) == 3
 
-    # 5c the per-frame rows (frame_rows / reduce_rows) give the numbers of the ORIGINAL global greedy matching (oracle below:
-    #    the former DetMeter code, kept here only as the test's reference) on random frames with ties, empty frames, circles and
-    #    boxes outside the field of view; the reduction is order-independent; `only` computes just the asked scopes
+    # 5c the per-frame rows (frame_rows / reduce_rows) give the numbers of the ORIGINAL global greedy matching (oracle below: the
+    #    frozen copy of the former DetMeter code in evalsuite/selftest_comparison.py, independent of the core that DetMeter calls now)
+    #    on random frames with ties, empty frames, circles and boxes outside the field of view; the reduction is order-independent;
+    #    `only` computes just the asked scopes
+    from evalsuite.selftest_comparison import _REF
+
     def oracle_eval(frames):
         row = {}
         for t in DIST_THRESHOLDS:
-            mm, n_gt = match(frames, t)
+            mm, n_gt = _REF.match(frames, t)
             fl = [x[1] for x in mm]
-            row["ap@%g" % t], row["ap_all@%g" % t] = ap_nuscenes(fl, n_gt), ap_all_points(fl, n_gt)
+            row["ap@%g" % t], row["ap_all@%g" % t] = _REF.ap_nuscenes(fl, n_gt), _REF.ap_all_points(fl, n_gt)
             if t == TP_THRESHOLD:
-                errs = [tp_errors(d, g) for _, ok, d, g in mm if ok]
+                errs = [_REF.tp_errors(d, g) for _, ok, d, g in mm if ok]
                 for k in ("ate", "ase", "aoe", "ave", "biou"):
                     v = [e[k] for e in errs if e[k] == e[k]]
                     row[k] = float(np.mean(v)) if v else float("nan")
@@ -669,6 +580,14 @@ def _selftest():
     rows = [uni.frame_rows(ds, gs, classes) for ds, gs in uni.frames[0.0]]
     a, b = flatten({"x": uni.reduce_rows(rows, classes)}), flatten({"x": uni.reduce_rows(rows[::-1], classes)})
     assert a.keys() == b.keys() and all((a[k] == b[k]) or (a[k] != a[k] and b[k] != b[k]) or abs(a[k] - b[k]) < 1e-12 for k in a)
+    # a detection without a score (nan: a diverged model) is refused at its frame, not ranked last
+    nan_det = {"group": "vehicle", "cx": 5.0, "cy": 0.0, "length": 4.5, "width": 1.8, "yaw": 0.0, "vx": 0.0, "vy": 0.0, "score": float("nan")}
+    try:
+        DetMeter(classes=classes).frame_rows([nan_det], [dict(nan_det, score=1.0)], classes)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("a nan score must be refused")
 
     # 6 latency helper (CPU callable here; timing itself only on an idle GPU)
     import torch
