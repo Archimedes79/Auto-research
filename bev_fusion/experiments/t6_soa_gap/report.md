@@ -94,8 +94,8 @@ the numbers, not yet isolated by an experiment.
 | M3 | too little data (overfitting) | not the first limit for the big areas (strong), partly for thin and rare classes | train ~ val for drivable (0.711 / 0.698) and the area loss (1.034 / 1.077); train > val for dividers 0.346 / 0.274, carpark 0.296 / 0.162; our TRAIN IoU is below the SOA's VAL IoU on every layer |
 | M4 | BEV trunk, fusion, temporal block | NOT the lever (strong) | the block swaps of t3 (gate, CMX, ConvGRU, no temporal block, pillars, adapter, z-sum) tie within the band 0.054 on walkway and dividers; a random-init trunk and a lift without depth are marginally WORSE, nothing is better; the stride-1 detail path (t1_r4_soa) and the corrected FPN order (t4) give nothing at 3000-7000 steps |
 | M5 | label quality | not a relative cause (strong) | nuScenes divider layers miss visible paint (t5: 0 m lost by our query), but the SOA scores 0.69 on the same labels |
-| M6 | frozen, detection-trained, stride-16 image features (80-channel context) | main candidate | the SOA recipes (BEVFusion camera-only 81.7 drivable / 46.4 divider, GaussianCaR) use stride-8 features trained with the map loss; ours were trained for detection and are frozen (the camera BEV only needs vehicles); t5 probe v1 is INCONCLUSIVE (its RGB control failed); v2 passes its control but is a TIE (stride-16 context F1 0.450, prior 0.437, RGB CNN from scratch 0.488, only the stride-4 stage is better, +0.043 [0.024, 0.061]): a low-resolution probe that cannot rank the features, neither supporting nor refuting M6; the pictures show blurred bands; not isolated |
-| M7 | detection dominates the shared trunk | candidate | gradient norm at the BEV feature at step 7000: objects 0.111, lines 0.012, areas 0.005 (9-22 x) although the learned Kendall weights down-weight the objects (areas 0.94, lines 0.84, objects 0.37); not isolated (no maps-only run) |
+| M6 | frozen, detection-trained, stride-16 image features (80-channel context) | main candidate | the SOA recipes (BEVFusion camera-only 81.7 drivable / 46.4 divider, GaussianCaR) use stride-8 features trained with the map loss; ours were trained for detection and are frozen (the camera BEV only needs vehicles); t5 probe v1 is INCONCLUSIVE (its RGB control failed); v2 passes its control but is a TIE (stride-16 context F1 0.450, prior 0.437, RGB CNN from scratch 0.488, only the stride-4 stage is better, +0.043 [0.024, 0.061]): a low-resolution probe that cannot rank the features, neither supporting nor refuting M6; the pictures show blurred bands; not isolated. New evidence (t7, another chat, one seed, 2026-10-31): a frozen stride-4 ResNet branch lifted into the BEV lifts the lane divider by +0.065 and the road divider by +0.125 over `ref_s0` but leaves walkway (+0.009), carpark (+0.024) and crossing (-0.002) where they are: resolution is part of it for thin lines, the semantic classes need more than resolution |
+| M7 | detection dominates the shared trunk | MEASURED, SMALL (about a tenth of the gap) | gradient norm at the BEV feature at step 7000: objects 0.111, lines 0.012, areas 0.005 (9-22 x). The maps-only run (objects, motion and radar aux off, `experiment.md` section 3, 2026-10-31) gains drivable +0.015, walkway +0.037, carpark +0.040, crossing +0.040, lane divider +0.047, road divider +0.051 over `ref_s0` - one-signed, but inside the band 0.054 and below the gain of doubling the steps (+0.054): 7 - 12 % of the gap to the SOA. R2 of the card |
 | M8 | training length | contributes, does not close it | dividers 0.181 -> 0.273 and walkway 0.191 -> 0.246 from 3000 to 7000 x 2 steps (still rising); the SOA trains 20-40 epochs on 700 scenes, we ran 2.6 epochs on 428 |
 
 ### 3.2 Detection
@@ -111,8 +111,8 @@ the numbers, not yet isolated by an experiment.
 
 ### 3.3 What would settle the open candidates (ranked by information per cost)
 
-1. Maps-only run (areas + lines, objects and motion weight 0, same steps, same features): if the maps reach SOA-like IoU, the cause is M7
-   (task balance); if they stay near 0.7, the cause is the features (M6). One GPU run of 3000 steps, about 1.5 h.
+1. DONE 2026-10-31 - maps-only run (areas + lines, objects and motion weight 0, same steps, same features): the maps gain 0.015 - 0.051, 7 - 12 %
+   of the gap: the cause is not the task balance, it is upstream (M6 features, M8 budget). Result in `experiment.md` section 3.
 2. Bridge test: our trunk + semantic head trained on the cached GaussianCaR decoder features of the same frames: if it reaches the SOA level,
    everything downstream of the features is fine and the gap is the image side. About 1-2 h GPU plus a data loader for the 54 GB cache.
 3. A SOA camera + radar detector (CRN r50, front camera only, the 4-key-frame input) scored on the same 1000 frames: turns D2 into a number.
@@ -166,8 +166,9 @@ Why the maps underfit (ranked; the first two are supported by measurements, the 
    loss sits near "predict nothing" for a long time on such classes (focal losses or class weights shorten that plateau - a mechanism, not
    tested here; GaussianCaR trains 9 - 27 x longer).
 3. Task competition: at the BEV feature the gradient of the objects is 9 - 22 x that of lines and areas (step 7000: 0.111 / 0.012 / 0.005) although
-   the Kendall weights down-weight the objects. Indication that the fit of the maps is not set by the number of steps alone: t1_r4_soa (7000 x 2
-   steps, several changes at once: velocity weight x5, mirror augmentation, pre-trained trunk) fits the TRAIN lane dividers worse (0.346) than
-   t1_r0 with fewer steps (0.446); the cause is not isolated.
+   the Kendall weights down-weight the objects. TESTED (maps-only run, 2026-10-31): it is real but small - removing the objects and the motion
+   head lifts the thin layers by 0.037 - 0.051 and the drivable area by 0.015 (about a tenth of the gap), so it is a minor factor. The earlier
+   observation that t1_r4_soa fits the TRAIN lane dividers worse (0.346) than t1_r0 (0.446) despite more steps is therefore not explained by
+   this alone (that run changed several things at once).
 4. Data: 428 of 700 scenes; thin classes overfit a little (0.346 train / 0.274 val), the large areas not.
 

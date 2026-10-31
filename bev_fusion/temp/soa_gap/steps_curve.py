@@ -1,5 +1,5 @@
-import json, os
-runs = ["t2_ref_s0", "t2_ref_s1", "t3_ref_long", "t3_eval_r4soa", "t1_r4_soa"]
+import json, os, sys
+runs = sys.argv[1:] or ["t2_ref_s0", "t2_ref_s1", "t3_ref_long", "t3_eval_r4soa", "t1_r4_soa"]
 keys = [("drivable", "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"), ("walkway", "seg_fov/seg/dt+0.00/walkway/all/all/iou@0"),
         ("carpark", "seg_fov/seg/dt+0.00/carpark_area/all/all/iou@0"), ("ped_cross", "seg_fov/seg/dt+0.00/ped_crossing/all/all/iou@0"),
         ("lane_div@.5", "seg_fov/seg/dt+0.00/lane_divider/all/all/iou@0.5"), ("road_div@.5", "seg_fov/seg/dt+0.00/road_divider/all/all/iou@0.5")]
