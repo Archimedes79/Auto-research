@@ -19,4 +19,5 @@ The velocity / flow estimator alone (dataset independent, numpy only): autogt.fl
 from .flow import Config, FlowGT, ObjectFlow, Track, estimate_flow  # noqa: F401
 from .cli import generate  # noqa: F401
 from .grid import GridSpec  # noqa: F401
-from .suite import AutoGT, current_signature, load, scene_tokens  # noqa: F401
+from . import versions  # noqa: F401
+from .suite import AutoGT, current_signature, current_version, load, missing, scene_tokens  # noqa: F401

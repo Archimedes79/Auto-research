@@ -86,7 +86,8 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
             version = old["version"]
         names = sorted(set(old["scenes"]) | set(names))
         n_keyframes = len([f for f in os.listdir(sig_dir) if f.endswith(".npz") and ".tmp" not in f])
-    idx = {"signature": gen.signature(), "version": version, "res": gen.grid.res, "ss": gen.ss,
+    from .versions import version_of
+    idx = {"signature": gen.signature(), "gt_version": version_of(gen.signature()) or "unreleased", "version": version, "res": gen.grid.res, "ss": gen.ss,
            "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
            "complete": complete}
     tmp = os.path.join(sig_dir, "index.json.tmp")
@@ -177,7 +178,8 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     scenes     names such as ["scene-0061"]; default all sequences of the version
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
     workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see AutoGT)
-    -> {"out": the folder written, "signature", "version", "scenes", "keyframes": wanted, "written": new files}
+    -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
+        "written": new files}
 
     Memory-light and resumable: the sequences are read in groups of GROUP_SCENES with the light devkit (the GT is identical to the
     full devkit's), files that exist are skipped, so an interrupted run continues where it stopped. A folder of another resolution
@@ -209,10 +211,25 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         del gen
         gc.collect()
     write_index(sig_dir, ident, version, names, stride, n_total, options)
+    from .versions import version_of
+    gt_version = version_of(ident.signature()) or "unreleased"
     if verbose:
-        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}\n"
+        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version})\n"
               f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
-    return {"out": sig_dir, "signature": ident.signature(), "version": version, "scenes": len(names), "keyframes": n_total, "written": done}
+    return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
+            "keyframes": n_total, "written": done}
+
+
+def _print_versions():
+    """the table of versions.csv: key, signature, date, CURRENT for this source, stored when its folder exists in data/autogt"""
+    from . import versions
+    from .suite import DATA, current_signature
+    cur, rows = current_signature(), versions.table()
+    for r in rows:
+        print(f"{r['version']:3s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == cur else '       '}  "
+              f"{'stored    ' if os.path.isdir(os.path.join(DATA, r['signature'])) else 'not stored'}  {r['tag']:11s} {r['what_changed'][:80]}")
+    if cur not in {r["signature"] for r in rows}:
+        print(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased); add a row, commit, tag autogt/v<N>")
 
 
 def _boxes_option(a):
@@ -224,6 +241,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m autogt", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("selftest")
+    sub.add_parser("versions", help="the GT versions (autogt/versions.csv, D29): the current one marked, which GT is stored")
     ge = sub.add_parser("generate", help="read nuScenes from DATAROOT and write the GT of every keyframe (the entry point)")
     ge.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
     ge.add_argument("--out", default=None, help="folder of the stored GT (default data/autogt); the files go to OUT/<signature>/")
@@ -292,6 +310,8 @@ def main(argv=None):
     if a.cmd == "selftest":
         from .selftest import run
         run()
+    elif a.cmd == "versions":
+        _print_versions()
     elif a.cmd == "generate":
         generate(a.dataroot, a.out, a.version, a.scenes, a.stride, a.res, workers=a.workers,
                  use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))

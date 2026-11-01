@@ -50,6 +50,7 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_adapter.py` | devkit records -> `Track` / `Ego` / `RadarFrame` (`NuScenesScene`); the only place that knows nuScenes' radar and annotation format |
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
+| `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
 | `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
@@ -121,6 +122,28 @@ covariance, source, flag; plus the dense arrays when a grid is given)
 - the occlusion mask is 2D: it also hides about 12 % of boxes that annotators rate as 80-100 % visible (pedestrians behind cars)
 - radar gives only the radial velocity; the tangential part comes from the annotations. Not validated against lidar scene flow
   (no lidar on disk)
+
+## Versions (decision D29, 2026-11-01)
+The GT may change, but every state of the generator is a **version** with a key, so that an old GT and the training on it can be
+reconstructed. The signature (a hash of the five generator files + options) names the folder of the stored GT; the version key `vN`
+is its human name. A version is three things: a row in `versions.csv` (key, signature, tag, date, generator, what changed), a git
+tag `autogt/vN` on the commit that holds that generator, and `gt_version` in the `index.json` of the stored GT.
+`python -m autogt versions` lists them; `autogt.current_version()` is the key of this source; `autogt.missing(tokens)` tells before a
+training which keyframes the store lacks.
+
+| key | signature | what it is |
+|---|---|---|
+| v1, v2 | 85f096748f, 962e788566 | the generator before the suite, `training/gt_bev.py` of the commits 7f5cb10 / 7c8f12e; its GT is in the trainer's cache `bev_fusion/data/cache/gt` |
+| v3 | 7fe1149566 | the standalone suite, moving boxes at the annotation time |
+| v4 | fefd519974 | boxes at the camera time, first state (superseded after 18 minutes) |
+| v5 | 15efbde2d1 | review fixes; the generator of the t10 runs; **current** |
+
+**When you edit one of the five files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py`) the signature changes and
+`python -m autogt selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild
+the GT, tell the others. **To rebuild an old version** (v3 and later): `git worktree add temp/gt_v3 autogt/v3`, then in that checkout
+`PYTHONPATH=temp/gt_v3/bev_fusion python -m autogt generate <nuScenes folder> --out <folder>` (the tag holds the package under
+`bev_fusion/autogt/`; since v5 + the move of 2026-11-01 under `autogt/`). v1 and v2 are `bev_fusion/training/gt_bev.py` at their tag
+(`NuScenesGT.keyframe_gt`, no `generate`). Tags are local until someone pushes them (`git push origin autogt/v1 ...`).
 
 ## Adding a dataset
 Write an adapter that builds the four inputs of `estimate_flow` (`Track`, `Ego`, `RadarFrame`, `GridSpec`) and a generator for

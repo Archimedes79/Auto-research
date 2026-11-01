@@ -1,0 +1,6 @@
+version,signature,tag,date,generator,what_changed
+v1,85f096748f,autogt/v1,2026-10-26,bev_fusion/training/gt_bev.py (commit 7f5cb10),"first generator signature (source hash + flags) in the GT cache key, so cached GT of an older generator (e.g. without the Holland Village / Queenstown road) is never reused"
+v2,962e788566,autogt/v2,2026-10-26,bev_fusion/training/gt_bev.py (commit 7c8f12e),"keyframe_gt 8x faster (big polygons cut to the grid window first); output bit-identical to v1 on 10 mini keyframes; the generator of the runs up to t2_ref"
+v3,7fe1149566,autogt/v3,2026-10-30,bev_fusion/autogt (commit 354caef),"the standalone suite: radar-corrected velocity / flow in m/s, masks, one stationary rule; moving boxes at the ANNOTATION time"
+v4,fefd519974,autogt/v4,2026-10-31,bev_fusion/autogt (commit 769aafc),"moving boxes at the CAMERA time (option boxes_at); superseded 18 minutes later by v5, no run was trained on it"
+v5,15efbde2d1,autogt/v5,2026-10-31,bev_fusion/autogt (commit a49bbd3; since 79c916f autogt/),"review fixes (signature computed once at construction, world_ann is a copy); the generator of the t10 runs"

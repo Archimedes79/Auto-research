@@ -92,6 +92,12 @@ one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), 
   runs, tell the owner of the training code before you do, and put the signature next to every number you report. Edits of
   `checks.py view.py video.py report.py cli.py suite.py clean.py encode.py selftest.py` do not change it. Never compare two models on
   different signatures.
+- **A GT version has a key (decision D29).** Every signature is a version `vN` in `autogt/versions.csv` (`python -m autogt versions`
+  lists them, `autogt.current_version()` is the one of this source, the `index.json` of a store carries `gt_version`), and a git tag
+  `autogt/vN` sits on the commit that holds that generator. Edit one of the five files and the selftest fails until the table has a row
+  for the new signature: add the row, commit, `git tag -a autogt/v<N> -m "<what changed>"`, rebuild the GT, tell the others. To
+  reproduce an old GT: `git worktree add temp/gt_v3 autogt/v3`, then run that checkout's package (README.md, section Versions). Before a
+  training starts, `autogt.missing(tokens)` says which keyframes the store lacks (none may be built inside a data-loader worker).
 - **Boxes are at the camera time** (decided by the user 2026-10-31, like Waymo's `camera_synced_box`): a moving box of known
   velocity is moved by `v * (t_camera - t_annotation)` (about -36 ms, median 6 cm, max 88 cm); stationary boxes and boxes of
   unknown velocity are not moved. `AutoGT(..., boxes_at="annotation")` / `--boxes-at annotation` restores the annotation positions

@@ -18,6 +18,23 @@ def current_signature(**options):
     return NuScenesGT.signature(types.SimpleNamespace(**opt))
 
 
+def current_version(**options):
+    """the version key (autogt/versions.csv, decision D29) of THIS source: "v5"; with non-default options "v5+boxes_at='annotation'";
+    "unreleased" when the signature has no row yet (an edit of a signature file that was not versioned: `autogt selftest` fails then)"""
+    from .versions import version_of
+    base = version_of(current_signature())
+    if base is None:
+        return "unreleased"
+    return base + ("+" + ",".join(f"{k}={v!r}" for k, v in sorted(options.items())) if options else "")
+
+
+def missing(tokens, data=DATA, **options):
+    """the sample tokens of `tokens` without a stored GT for the current source and options ([] = the store covers them): the check
+    before a training starts, so that nothing has to be generated in a data-loader worker"""
+    sig_dir = os.path.join(data, current_signature(**options))
+    return [t for t in tokens if not os.path.exists(os.path.join(sig_dir, t + ".npz"))]
+
+
 def load(token, data=DATA, **options):
     """the stored GT of one keyframe (written by `python -m autogt report` / `build`) for the current source and options:
     dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""

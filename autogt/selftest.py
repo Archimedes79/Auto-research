@@ -161,6 +161,15 @@ def run(root=None, verbose=True):
         assert abs(b_["shift_s"] - (sd3["timestamp"] - t0a) * 1e-6) < 1e-12
     assert len(errs) >= 3 and np.median(errs) < 0.3 and np.median(wrong) > 2 * np.median(errs), (len(errs), np.median(errs), np.median(wrong))
 
+    # 4b the GT versions (D29): the table is complete and in order, and THIS source has a row: an edit of a signature file without a new
+    #    row (and, after the commit, a tag autogt/vN) fails here
+    from . import current_version, versions as V
+    rows_ = V.table()
+    assert [r["version"] for r in rows_] == [f"v{i + 1}" for i in range(len(rows_))] and len({r["signature"] for r in rows_}) == len(rows_)
+    assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: add one, "
+                                                      "commit, tag autogt/v<N> (decision D29)")
+    assert current_version() == V.version_of(gt.signature()) and current_version(boxes_at="annotation").startswith(current_version() + "+")
+
     # 5 the build command (cache keyed by the signature)
     from .cli import build, load_keyframe
     with tempfile.TemporaryDirectory() as d:
@@ -174,6 +183,8 @@ def run(root=None, verbose=True):
         from . import current_signature, load as load_stored                          # the two helpers of the top-level API
         assert current_signature() == gt.signature() and current_signature(boxes_at="annotation") == ann.signature()
         assert np.array_equal(load_stored(tok2, data=d)["flow"], g2["flow"])
+        from . import missing                                                          # the store covers a token that is there, not another
+        assert missing([tok2, "0" * 32], data=d) == ["0" * 32] and missing([tok2], data=d) == []
         from .view import stored                                                       # a picture straight from the stored GT
         import matplotlib.pyplot as plt
         fig = stored(tok2, None, data=d)
@@ -210,6 +221,7 @@ def run(root=None, verbose=True):
         assert r["version"] == "v1.0-mini" and r["scenes"] == 2 and r["keyframes"] == r["written"] == 4 and again["written"] == 0, (r, again)
         held = json.load(open(os.path.join(r["out"], "index.json")))
         assert held["scenes"] == ["scene-0061", "scene-0103"] and held["keyframes"] == 4 and held["complete"] is True, held
+        assert held["gt_version"] == r["gt_version"] == current_version(), (held, r)                      # the version key is stamped
         mine = load_keyframe(r["out"], tok2)                                           # the keyframe `build` wrote above, from the full devkit
         assert all(np.array_equal(mine[k], g2[k]) for k in ("drivable_area", "vehicle", "velocity", "flow", "instance")), "light == full"
         for bad, why in ((dict(scenes=["scene-9999"]), "unknown scene"), (dict(version="v1.0-trainval"), "version")):
