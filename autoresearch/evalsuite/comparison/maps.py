@@ -70,22 +70,45 @@ def scores(counts) -> Dict[str, float]:
 
 
 # ------------------------------------------------------------------------------------------------ tolerant comparison
+try:                                                       # OpenCV makes the dilation about 8x faster; the plain loop below gives the same map
+    import cv2
+except ImportError:                                         # pragma: no cover
+    cv2 = None
+
+
+def _cells(radius_cells: float) -> int:
+    """the whole cells of a radius (an integer up to float noise, like 0.3 / 0.1, is that integer)"""
+    return int(math.floor(radius_cells + 1e-9))
+
+
+def _disc(radius_cells: float) -> np.ndarray:
+    """the structuring element of a dilation: (2r + 1)^2 booleans, set where the offset (dx, dy) lies within radius_cells"""
+    r = _cells(radius_cells)
+    d = np.arange(-r, r + 1)
+    return (d[:, None] ** 2 + d[None, :] ** 2) <= radius_cells * radius_cells + 1e-9
+
+
+def dilate_loop(m: np.ndarray, radius_cells: float) -> np.ndarray:
+    """the dilation written out: OR of the map shifted to every offset of the disc (the reference of `dilate`)"""
+    r = _cells(radius_cells)
+    rows, cols = m.shape
+    padded = np.pad(m, r)
+    out = np.zeros_like(m)
+    for dx, dy in zip(*np.nonzero(_disc(radius_cells))):
+        out |= padded[dx:dx + rows, dy:dy + cols]
+    return out
+
+
 def dilate(mask, radius_cells: float) -> np.ndarray:
     """boolean dilation of a 2-D mask by a disc: a cell is set if a set cell's centre lies within radius_cells of its centre."""
     m = _as_mask(mask, "mask")
     if m.ndim != 2:
         raise ValueError("dilate works on 2-D maps")
-    r = int(math.floor(radius_cells + 1e-9))
-    if r <= 0:
+    if _cells(radius_cells) <= 0:
         return m.copy()
-    rows, cols = m.shape
-    padded = np.pad(m, r)
-    out = np.zeros_like(m)
-    for dx in range(-r, r + 1):
-        for dy in range(-r, r + 1):
-            if dx * dx + dy * dy <= radius_cells * radius_cells + 1e-9:
-                out |= padded[r + dx:r + dx + rows, r + dy:r + dy + cols]
-    return out
+    if cv2 is None:
+        return dilate_loop(m, radius_cells)
+    return cv2.dilate(np.ascontiguousarray(m, np.uint8), _disc(radius_cells).astype(np.uint8)).astype(bool)      # outside the map counts as empty, as the zero padding of the loop
 
 
 def tolerant_confusion(pred, gt, tol_cells: float, valid=None) -> np.ndarray:
@@ -109,6 +132,24 @@ def tolerant_counts(pred, gt, near_gt, near_pred, valid=None) -> np.ndarray:
     v = np.ones_like(p) if valid is None else _as_mask(valid, "valid")
     _same_shape(p, g, near_g, near_p, v)
     return np.array([(p & near_g & v).sum(), (p & ~near_g & v).sum(), (g & near_p & v).sum(), (g & ~near_p & v).sum()], dtype=np.int64)
+
+
+def tolerant_counts_many(pred, gt, nears, valids) -> np.ndarray:
+    """`tolerant_counts` for several tolerances and several selections at once: nears = T pairs (near_gt, near_pred), valids = S boolean maps of the same
+    shape -> int64 (T, S, 4), [t, i] = tolerant_counts(pred, gt, *nears[t], valids[i]).
+    A count is a sum of 0 / 1 products over the cells, i.e. a dot product of a selection with an indicator map, so all T x S x 4 counts are ONE matrix
+    product (S x cells) @ (cells x 4T); float32 holds the counts exactly (up to 2^24 cells)."""
+    p, g = _as_mask(pred, "pred"), _as_mask(gt, "gt")
+    V = np.stack([_as_mask(v, "valid").ravel() for v in valids]).astype(np.float32)
+    if p.size >= 1 << 24:
+        raise ValueError("more than 2^24 cells: float32 counts would no longer be exact")
+    cols = []
+    for near_gt, near_pred in nears:
+        near_g, near_p = _as_mask(near_gt, "near_gt"), _as_mask(near_pred, "near_pred")
+        _same_shape(p, g, near_g, near_p, np.asarray(valids[0], bool))
+        cols += [(p & near_g).ravel(), (p & ~near_g).ravel(), (g & near_p).ravel(), (g & ~near_p).ravel()]
+    out = np.rint(V @ np.stack(cols, 1).astype(np.float32)).astype(np.int64)         # (S, 4T)
+    return out.reshape(len(valids), len(nears), 4).transpose(1, 0, 2)
 
 
 def tolerant_scores(counts) -> Dict[str, float]:

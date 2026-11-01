@@ -206,6 +206,13 @@ def _():
         want = [(p & near_g & valid).sum(), (p & ~near_g & valid).sum(), (g & near_p & valid).sum(), (g & ~near_p & valid).sum()]
         assert M.tolerant_confusion(p, g, tol, valid).tolist() == want, tol
         assert M.tolerant_counts(p, g, brute_near(np.ones_like(g), g, tol), near_p, valid).tolist() == want, "the counting step with dilations given"
+        assert (M.dilate_loop(g, tol) == M.dilate(g, tol)).all(), "the OpenCV dilation and the plain loop give the same map (the border included)"
+        sels = [valid, ~valid, np.ones_like(valid), rng.random(valid.shape) > 0.5]
+        many = M.tolerant_counts_many(p, g, [(near_g, near_p), (g, p)], sels)           # two tolerances (the second is tolerance 0: the maps themselves) x four selections
+        assert many.shape == (2, 4, 4) and many.dtype == np.int64
+        for t, (ng, np_) in enumerate(((near_g, near_p), (g, p))):
+            for i, v in enumerate(sels):
+                assert many[t, i].tolist() == M.tolerant_counts(p, g, ng, np_, v).tolist(), (tol, t, i, "one matrix product = the counts one selection at a time")
         for bad_near in (near_p[:1], near_p[:, :1]):                             # a dilation of another shape (numpy would broadcast it) is refused
             try:
                 M.tolerant_counts(p, g, bad_near, near_p, valid)
@@ -213,6 +220,10 @@ def _():
                 pass
             else:
                 raise AssertionError("a dilation of the wrong shape must be refused")
+    big_p, big_g = rng.random((120, 104)) > 0.3, rng.random((120, 104)) > 0.3                     # the BEV grid: counts of thousands of cells (float16 would round them)
+    big_v = [np.ones_like(big_p), rng.random(big_p.shape) > 0.3]
+    bn = [(M.dilate(big_g, 2), M.dilate(big_p, 2))]
+    assert M.tolerant_counts_many(big_p, big_g, bn, big_v)[0].tolist() == [M.tolerant_counts(big_p, big_g, bn[0][0], bn[0][1], v).tolist() for v in big_v], "exact on a full grid"
     one = np.zeros((9, 9), bool)
     one[4, 4] = True
     assert (M.dilate(one, 0.3 / 0.1) == M.dilate(one, 3)).all() and M.dilate(one, 3).sum() == 29, "a radius that is 3 up to float noise (0.3 / 0.1) is 3"
