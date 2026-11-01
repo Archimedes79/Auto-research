@@ -3,12 +3,12 @@
   python -m autogt clean --videos --pictures --reports --old-outputs --stale-caches DIR | --all-caches DIR [--older-than DAYS] [--move | --delete]
 
 Without --move / --delete it only lists what it would remove and the size (dry run). --move puts the items into
-bev_fusion/_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace), --delete removes them.
+_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace), --delete removes them.
 - videos / pictures: *.mp4 / *.gif and *.png in data/autogt/examples (they are reproducible: `python -m autogt video / view / sheets`)
 - reports: *.pdf in data/autogt/reports (what `python -m autogt report` writes by default; the report is self-contained, its sample pictures
   are drawn straight into the PDF and never exist as files)
-(everything autogt generates lives under bev_fusion/data/autogt/, outside the code package autogt/ and outside git)
-- old-outputs: bev_fusion/_to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
+(everything autogt generates lives under data/autogt/, outside the code package autogt/ and outside git)
+- old-outputs: _to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
 - stale-caches DIR: the cache folders `DIR/<signature>` of `python -m autogt build` / `report` whose signature is not a current
   one (the default options or `--boxes-at annotation`; every edit of the generator changes the signature, GT of older versions
   is never read again); all-caches DIR: every
@@ -22,7 +22,7 @@ import shutil
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = os.path.dirname(HERE)                                   # the bev_fusion folder
+BASE = os.path.dirname(HERE)                                   # the repository root
 RUNNING_S = 3600                                               # a folder with a provisional index that changed within this long may have a build running
 
 

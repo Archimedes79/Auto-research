@@ -9,7 +9,7 @@ sequences / 404 keyframes, trainval = 850 / 34,149).
 | I want | do this |
 |---|---|
 | the GT of keyframes that are already generated (training, analysis) | `autogt.load(token)` - 0.1 s, no nuScenes needed; the tokens of a sequence: `autogt.scene_tokens("scene-0561", "v1.0-trainval")` (json tables, 1 s) |
-| to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `autogt.generate("~/data/nuscenes_full")` (or `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing), returns `{"out", "signature", "version", "scenes", "keyframes", "written"}`; trainval 5-8 h; default `out` = `bev_fusion/data/autogt` -> `<signature>/<token>.npz` + `index.json` |
+| to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `autogt.generate("~/data/nuscenes_full")` (or `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing), returns `{"out", "signature", "version", "scenes", "keyframes", "written"}`; trainval 5-8 h; default `out` = `data/autogt` -> `<signature>/<token>.npz` + `index.json` |
 | to generate single keyframes in code (other options, a quick look) | `AutoGT(dataroot, version).keyframe(token)` |
 | prev / cur / next keyframe + the ego motion between them | `AutoGT(...).training_sample(token)` (section 5) |
 | GT of ALL sequences stored + every check + one PDF | `python -m autogt report --version v1.0-mini` (trainval: `--version v1.0-trainval`, 5-8 h, resumable) |
@@ -35,13 +35,13 @@ provisional folder alone for an hour after its last write. CLI details: `python 
 `view`, `selftest`.
 
 ## 2. Run it (this box is shared)
-All commands run **from the `bev_fusion` folder inside WSL** with the conda env `gcar`; from Windows prefix `wsl`:
+All commands run **from the repository root (`C:Auto-research`) inside WSL** with the conda env `gcar`; from Windows prefix `wsl`:
 `wsl bash autogt/run_nice.sh -m autogt selftest` (nice 15, one thread; runs any script the same way:
 `... run_nice.sh my_script.py`; a running `report` is stopped with `wsl bash -c "pkill -f '[a]utogt report'"`). Rules: one process, no worker pools while a training round runs (`uptime`, `free -m` first),
 the full trainval devkit needs 8+ GB (use `light=True, scenes=[...]`; `report` does it automatically), run long jobs in the
 background and wait with a bounded loop. Data: `~/data/nuscenes` (mini, 10 sequences, 404 keyframes), `~/data/nuscenes_full`
-(trainval, 850 sequences, 34,149 keyframes). Code and output are apart: the code is the package `bev_fusion/autogt/` (in git); everything
-autogt generates is under `bev_fusion/data/autogt/` (not in git): stored GT `<signature>/<token>.npz` + `index.json`, reports (PDF)
+(trainval, 850 sequences, 34,149 keyframes). Code and output are apart: the code is the package `autogt/` at the repository root (in git); everything
+autogt generates is under `data/autogt/` (not in git): stored GT `<signature>/<token>.npz` + `index.json`, reports (PDF)
 `reports/`, example videos / pictures `examples/`. Stored GT is derived data and can always be rebuilt (5-8 h for trainval); the raw
 nuScenes data is on D: (`~/data/nuscenes*` are links to it) and is never written to.
 
@@ -149,4 +149,4 @@ cur["flow"] * dt                         # first-order displacement of every cel
 `suite.py` (`AutoGT`, `load`, `current_signature`), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
 `nuscenes_adapter.py` (the only code that knows the nuScenes formats), `layers.py` + `grid.py` (exact rasteriser, occlusion, `GridSpec`),
 `checks.py` (consistency checks), `report.py`, `view.py`, `video.py`, `encode.py` (H.264 with a read-back check), `clean.py`,
-`light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../plan.md` section 9.5, `README.md` (validation numbers).
+`light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan.md` section 9.5, `README.md` (validation numbers).

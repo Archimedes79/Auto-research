@@ -20,7 +20,7 @@ import sys
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for p in (ROOT, os.path.join(ROOT, "..", "autoresearch"), os.path.join(ROOT, "tests")):
+for p in (ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch"), os.path.join(ROOT, "tests")):   # ".." = the repository root: import autogt
     sys.path.insert(0, p)
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")

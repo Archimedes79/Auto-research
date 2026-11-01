@@ -24,6 +24,7 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, ".."))                          # the repository root: `import autogt` (the suite lives there since 2026-11-01)
 sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 from evaluation import bev_adapter as A  # noqa: E402
 

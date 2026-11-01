@@ -8,7 +8,7 @@ from .cli import load_keyframe
 from .grid import GridSpec
 from .nuscenes_gt import NuScenesGT
 
-DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt")       # bev_fusion/data/autogt
+DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt")       # <repository root>/data/autogt
 
 
 def current_signature(**options):

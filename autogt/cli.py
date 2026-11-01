@@ -1,10 +1,10 @@
-"""Command line of the autoGT suite (from the bev_fusion folder):
+"""Command line of the autoGT suite (from the repository root):
 
   python -m autogt selftest
   python -m autogt generate DATAROOT [--out DIR] [--version V] [--scenes scene-0061 ...] [--stride 1] [--res 0.5] [--workers 1]
                           [--no-flow] [--no-radar] [--boxes-at camera|annotation]
       THE entry point: reads nuScenes from DATAROOT (e.g. ~/data/nuscenes_full) and writes one compressed file per keyframe to
-      DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json; DIR default bev_fusion/data/autogt (where
+      DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json; DIR default data/autogt (where
       autogt.load reads); memory-light (groups of 60 sequences), resumable (existing files are skipped); the signature changes
       with every edit of the generator, so GT of an older generator is never mixed in
   python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] ...   the low-level writer behind it (full devkit)
@@ -171,7 +171,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     """THE entry point of the suite: read nuScenes from `dataroot` and write the GT of every keyframe.
 
     dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
-    out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default bev_fusion/data/autogt, the
+    out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default data/autogt, the
                place `autogt.load(token)` reads from (not in git)
     version    v1.0-mini / v1.0-trainval; default: the one found in dataroot (an error if there are several)
     scenes     names such as ["scene-0061"]; default all sequences of the version
@@ -226,7 +226,7 @@ def main(argv=None):
     sub.add_parser("selftest")
     ge = sub.add_parser("generate", help="read nuScenes from DATAROOT and write the GT of every keyframe (the entry point)")
     ge.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
-    ge.add_argument("--out", default=None, help="folder of the stored GT (default bev_fusion/data/autogt); the files go to OUT/<signature>/")
+    ge.add_argument("--out", default=None, help="folder of the stored GT (default data/autogt); the files go to OUT/<signature>/")
     ge.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the one found in DATAROOT)")
     ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
     ge.add_argument("--res", type=float, default=0.5)
@@ -266,7 +266,7 @@ def main(argv=None):
     r.add_argument("--workers", type=int, default=1, help="processes (fork, one sequence per task); a finished sequence is saved, reruns resume")
     r.add_argument("--light", action="store_true", help="memory-light devkit (automatic for trainval)")
     r.add_argument("--out", default=None, help="report PDF (default data/autogt/reports/autogt_report_<version>_<date>.pdf)")
-    r.add_argument("--data", default=None, help="cache directory (default bev_fusion/data/autogt); --no-data: do not store")
+    r.add_argument("--data", default=None, help="cache directory (default data/autogt); --no-data: do not store")
     r.add_argument("--no-data", action="store_true")
     r.add_argument("--scenes", nargs="*")
     r.add_argument("--stride", type=int, default=1)

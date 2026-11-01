@@ -7,8 +7,8 @@ imports `training/`; `training/gt_bev.py` is only a shim for the older code. Eve
 
 **The entry point - read nuScenes from a folder, write the GT of every keyframe** (memory-light, resumable, no GPU):
 ```python
-import autogt                                   # run from the bev_fusion folder (or put it on PYTHONPATH)
-r = autogt.generate("~/data/nuscenes_full")     # all of trainval (5-8 h in one process); out=None -> bev_fusion/data/autogt/<signature>/
+import autogt                                   # run from the repository root (or put it on PYTHONPATH)
+r = autogt.generate("~/data/nuscenes_full")     # all of trainval (5-8 h in one process); out=None -> data/autogt/<signature>/
 r = autogt.generate("~/data/nuscenes", out="/data/gt", scenes=["scene-0061"], stride=2)    # a mini sequence, every 2nd keyframe, elsewhere
 # -> {"out": folder written, "signature", "version", "scenes", "keyframes": wanted, "written": new files}; one <sample token>.npz per keyframe
 #    + index.json; the version is found in the folder (pass version= if it holds several); a rerun writes only what is missing
@@ -51,7 +51,7 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
-| `run_nice.sh` | runs any module or script of bev_fusion at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
+| `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
 | `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
 
@@ -130,7 +130,7 @@ the static layers; `layers.py` and `flow.py` are reusable as they are.
 The generator was `training/gt_bev.py` (+ the first flow version `training/gt_flow.py`) and about twenty one-off scripts in
 `temp/checks/` (projection checks, pitch / time-offset tests, Boston debug, map-alignment per location, viewers, videos); they
 are folded into this suite and removed - git history before the commit "autogt suite" has them. What they found is in
-`../plan.md` section 9.5.
+`../bev_fusion/plan.md` section 9.5.
 
 ## Using the velocity targets in a loss (note from the t1_r4_soa review, 2026-10-30)
 About 80 % of the supervised object cells are static (velocity 0) and 20 % move: an L1 / MSE over all object cells is minimised by

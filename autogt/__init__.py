@@ -2,7 +2,7 @@
 
     import autogt
     autogt.generate("~/data/nuscenes_full")               # THE entry point: read nuScenes from a folder, write the GT of every keyframe
-                                                          #   to bev_fusion/data/autogt/<signature>/ (or out=...); resumable, memory-light
+                                                          #   to data/autogt/<signature>/ (or out=...); resumable, memory-light
     from autogt import AutoGT
     gt = AutoGT("~/data/nuscenes", "v1.0-mini")          # one object, for single keyframes in code
     g = gt.keyframe(sample_token)                         # every layer of one keyframe (dict of arrays + meta)
@@ -12,7 +12,7 @@
     g = load(sample_token)                                #   (data/autogt/<current_signature()>/<token>.npz)
     autogt.scene_tokens("scene-0561", "v1.0-trainval")    # the tokens of a sequence from the json tables, no devkit
 
-Command line (from the bev_fusion folder): python -m autogt {generate,selftest,check,view,sheets,video,report,clean,build} ...
+Command line (from the repository root): python -m autogt {generate,selftest,check,view,sheets,video,report,clean,build} ...
 Guide for agents: autogt/AGENTS.md; reference: autogt/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): autogt.flow.estimate_flow.
 """
