@@ -117,6 +117,7 @@ class SegMeter:
     def __init__(self, grid, tolerances=TOLERANCES, bins=RANGE_BINS, known_threshold=0.5):
         self.grid, self.tol, self.bins, self.known_threshold = grid, tolerances, bins, known_threshold
         self.c = {}                                       # (dt, name, subset, bin) -> counts
+        self._bins = {}                                   # map shape -> range bin of every cell
 
     def _subsets(self, shape, mask, mass):
         m = np.ones(shape, bool) if mask is None else _np(mask).astype(bool)
@@ -127,20 +128,25 @@ class SegMeter:
         return out
 
     def _count(self, key_name, P, G, subsets, dt, extra=None):
-        bins = cell_bins(P.shape, self.grid, self.bins)
+        if P.shape not in self._bins:
+            self._bins[P.shape] = cell_bins(P.shape, self.grid, self.bins)       # the same for every layer and frame of a grid
+        bins = self._bins[P.shape]
         dil = [(dilate(G, t / self.grid.res), dilate(P, t / self.grid.res)) for t in self.tol]
+        keys, cms = [], []                                                      # every selection of cells: (subset, range bin)
         for sname, sm in subsets.items():
             for b in list(range(len(self.bins))) + ["all"]:
-                cm = sm & ((bins >= 0) if b == "all" else (bins == b))
-                key = (round(float(dt), 3), key_name, sname, "all" if b == "all" else bin_label(b))
-                acc = self.c.setdefault(key, {"cnt": np.zeros((len(self.tol), 4)), "n_gt": 0, "err": 0.0, "n_err": 0})
-                for i, (DG, DP) in enumerate(dil):
-                    acc["cnt"][i] += _maps.tolerant_counts(P, G, DG, DP, cm)             # [p_hit, p_miss, g_hit, g_miss]
-                acc["n_gt"] += int((G & cm).sum())
-                if extra is not None:
-                    err, valid = extra
-                    acc["err"] += float(err[valid & cm].sum())
-                    acc["n_err"] += int((valid & cm).sum())
+                cms.append(sm & ((bins >= 0) if b == "all" else (bins == b)))
+                keys.append((round(float(dt), 3), key_name, sname, "all" if b == "all" else bin_label(b)))
+        cnt = _maps.tolerant_counts_many(P, G, dil, cms)                        # (tolerances, selections, 4): [p_hit, p_miss, g_hit, g_miss], one matrix product
+        for j, (key, cm) in enumerate(zip(keys, cms)):
+            acc = self.c.setdefault(key, {"cnt": np.zeros((len(self.tol), 4)), "n_gt": 0, "err": 0.0, "n_err": 0})
+            for i in range(len(self.tol)):
+                acc["cnt"][i] += cnt[i, j]
+            acc["n_gt"] += int((G & cm).sum())
+            if extra is not None:
+                err, valid = extra
+                acc["err"] += float(err[valid & cm].sum())
+                acc["n_err"] += int((valid & cm).sum())
 
     def add(self, pred, gt, mask=None, mass=None, dt=0.0, threshold=0.5):
         """pred, gt: dict layer -> (X, Y) probability / coverage (cell set if > threshold); mask: defined cells (True =
