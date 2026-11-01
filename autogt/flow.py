@@ -169,10 +169,19 @@ def _rot(a):
 
 
 def ego_velocity(ego, t, h=0.09):
-    """(vx, vy, omega) in the ego frame at t [m/s, m/s, rad/s] from the poses at t -+ h (real time difference)."""
-    (xa, ya, wa), (xb, yb, wb) = ego.pose(t - h), ego.pose(t + h)
-    v = _rot(ego.pose(t)[2]).T @ np.array([xb - xa, yb - ya]) / (2 * h)
-    return float(v[0]), float(v[1]), float((wb - wa) / (2 * h))
+    """(vx, vy, omega) in the ego frame at t [m/s, m/s, rad/s] from the poses at t -+ h (real time difference). Inside h of the first or
+    last pose the window is moved to lie inside the poses (a one-sided difference over 2 h), never clamped: `Ego.pose` holds its end
+    values outside the range, which halved the speed at the first and the last keyframe of a sequence."""
+    lo, hi = t - h, t + h
+    if lo < ego.t[0]:
+        lo, hi = ego.t[0], min(ego.t[0] + 2 * h, ego.t[-1])
+    elif hi > ego.t[-1]:
+        lo, hi = max(ego.t[-1] - 2 * h, ego.t[0]), ego.t[-1]
+    if hi <= lo:                                                    # fewer than two poses: no motion can be told
+        return 0.0, 0.0, 0.0
+    (xa, ya, wa), (xb, yb, wb) = ego.pose(lo), ego.pose(hi)
+    v = _rot(ego.pose(t)[2]).T @ np.array([xb - xa, yb - ya]) / (hi - lo)
+    return float(v[0]), float(v[1]), float((wb - wa) / (hi - lo))
 
 
 def is_stationary(tr, cfg):

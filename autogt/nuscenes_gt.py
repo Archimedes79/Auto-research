@@ -286,16 +286,21 @@ class NuScenesGT:
         pc = R.at_centres(pres.astype(np.float32))
         out["velocity"] = (np.stack([R.at_centres(vel[0]), R.at_centres(vel[1])]) / np.maximum(pc, 1e-6)
                            * (pc > 0)).astype(np.float32)
-        out["instance"] = inst.reshape(grid.nx, ss, grid.ny, ss)[:, ss // 2, :, ss // 2]
+        # instance = the box index in the same central sub-pixels as velocity and flow_sigma (the highest index when boxes overlap), so
+        # that a cell with a velocity always names its box (meta["boxes"][instance])
+        c_ = ss // 2
+        a_ = inst.reshape(grid.nx, ss, grid.ny, ss)
+        out["instance"] = (a_[:, c_ - 1:c_ + 1, :, c_ - 1:c_ + 1] if ss % 2 == 0 else a_[:, c_:c_ + 1, :, c_:c_ + 1]).max((1, 3))
         # flow: the static world moves with the ego (camera time), objects with their own velocity; weight 0 where unknown
         if self.use_flow:
             sc = self.scene(sample["scene_token"])
-            out["flow_ego"] = flowmod.ego_flow_field(grid, flowmod.ego_velocity(sc.ego, sd["timestamp"] * 1e-6))
+            out["flow_ego"] = flowmod.ego_flow_field(grid, flowmod.ego_velocity(sc.ego, sd["timestamp"] * 1e-6,
+                                                                               (self.flow_config or flowmod.Config()).ego_half_window))
         else:
             out["flow_ego"] = np.zeros((2, grid.nx, grid.ny), np.float32)
         out["flow"] = out["flow_ego"] + out["velocity"]
         out["flow_weight"] = ((R.at_centres(ignore) == 0) & (R.at_centres(unknown) == 0)).astype(np.float32)
-        out["flow_sigma"] = np.where(out["instance"] >= 0, R.at_centres(sig), 0.1).astype(np.float32)
+        out["flow_sigma"] = np.where(out["instance"] >= 0, R.at_centres(sig) / np.maximum(pc, 1e-6), 0.1).astype(np.float32)    # mean over the covered sub-pixels, like velocity
 
         # masks: camera coverage (ground points in the image), occlusion behind boxes, radar fans
         cs = nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])

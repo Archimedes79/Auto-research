@@ -18,6 +18,12 @@ import os
 
 FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "versions.csv")
 
+# the modules of this package that do NOT shape the GT (command line, storage, reports, pictures, checks, scene sets, the light devkit loader,
+# this table). Every other module is hashed into the signature (nuscenes_gt.SIGNATURE_FILES); `python -m autogt selftest` fails for a module
+# that is in neither list, and for a hashed module that nuscenes_gt.py does not import, so a change of the generator cannot slip past a version.
+NOT_GENERATOR = ("__init__.py", "__main__.py", "checks.py", "clean.py", "cli.py", "encode.py", "light_nusc.py", "rawdata.py", "report.py",
+                 "selftest.py", "sets.py", "suite.py", "versions.py", "video.py", "view.py")
+
 
 def table():
     """the rows of versions.csv, oldest first"""

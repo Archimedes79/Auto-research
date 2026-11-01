@@ -30,6 +30,14 @@ def run(root=None, verbose=True):
     import torch
     import torch.nn.functional as F
     flowmod._selftest()                                                                               # 1
+    # 1b ego velocity at the ends of a sequence (v6): a drive at 10 m/s along world x with a yaw rate of 0.2 rad/s, poses every 0.1 s over 1 s; the
+    #    first and the last pose give the same speed as the middle (the clamped window of v5 gave half of it)
+    tt_ = np.arange(0, 1.01, 0.1)
+    ego_ = flowmod.Ego(t=tt_, x=10.0 * tt_, y=np.zeros(11), yaw=0.2 * tt_)
+    for t_ in (0.0, 0.03, 0.5, 0.97, 1.0):
+        v_ = flowmod.ego_velocity(ego_, t_)
+        assert abs(np.hypot(v_[0], v_[1]) - 10.0) < 1e-3 and abs(v_[2] - 0.2) < 1e-6, (t_, v_)       # speed (the car drives along world x, the ego frame turns)
+    assert flowmod.ego_velocity(flowmod.Ego(t=[0.0], x=[0.0], y=[0.0], yaw=[0.0]), 0.0) == (0.0, 0.0, 0.0)
     g = GridSpec()
     R = Raster(g, 4)                                                                                  # 2
     sq = np.array([[10.0, -1.0], [12.0, -1.0], [12.0, 1.0], [10.0, 1.0]])
@@ -102,6 +110,12 @@ def run(root=None, verbose=True):
     assert np.median(diffs) < 0.5, np.median(diffs)                                      # close to the devkit's speeds
     cells = (k["instance"] == moving[0]) & (k[bx[moving[0]]["group"]] > 0)
     assert cells.any() and np.allclose(k["velocity"][:, cells], bx[moving[0]]["vel"][:, None], atol=1e-3)   # edge cells too
+    # v6: a cell with a velocity names its box; the sigma of an edge cell is the box's sigma, not a coverage-scaled one
+    assert (k["instance"][np.abs(k["velocity"]).sum(0) > 0] >= 0).all(), "velocity without an instance"
+    sg_ = bx[moving[0]]["vel_sigma"]
+    assert not np.isfinite(sg_) or np.allclose(k["flow_sigma"][cells], sg_, atol=1e-4), (sg_, np.unique(k["flow_sigma"][cells]))
+    wide = NuScenesGT(root, "v1.0-mini", nusc=gt.nusc, flow_config=flowmod.Config(ego_half_window=0.3))      # the option reaches the dense ego flow
+    assert wide.signature() != gt.signature() and not np.array_equal(wide.keyframe_gt(tok, g)["flow_ego"], k["flow_ego"])
     no_obj = (k["vehicle"] + k["pedestrian"] + k["two_wheeler"]) == 0                 # no observed box in the cell: no velocity
     assert np.abs(k["velocity"][:, no_obj]).max() == 0 and (k["flow_weight"][k["ignore"] > 0.9] == 0).all()
     assert k["flow_weight"].min() == 0 and k["flow_weight"].max() == 1
@@ -164,6 +178,24 @@ def run(root=None, verbose=True):
     # 4b the GT versions (D29): the table is complete and in order, and THIS source has a row: an edit of a signature file without a new
     #    row (and, after the commit, a tag autogt/vN) fails here
     from . import current_version, versions as V
+    import ast                                                # every module of the package is part of the signature or listed as not shaping the GT
+    from .nuscenes_gt import SIGNATURE_FILES
+    here_ = os.path.dirname(os.path.abspath(__file__))
+    todo_, reach_ = ["nuscenes_gt"], set()
+    while todo_:
+        mod_ = todo_.pop()
+        if mod_ in reach_:
+            continue
+        reach_.add(mod_)
+        for n_ in ast.walk(ast.parse(open(os.path.join(here_, mod_ + ".py"), encoding="utf-8").read())):
+            if isinstance(n_, ast.ImportFrom) and n_.level == 1:
+                todo_ += [n_.module] if n_.module else [a_.name for a_ in n_.names]
+    assert {m_ + ".py" for m_ in reach_} == set(SIGNATURE_FILES), (
+        f"the modules nuscenes_gt.py imports are {sorted(reach_)} but SIGNATURE_FILES is {SIGNATURE_FILES}: a module that shapes the GT must be hashed")
+    loose_ = sorted(set(f_ for f_ in os.listdir(here_) if f_.endswith(".py")) - set(SIGNATURE_FILES) - set(V.NOT_GENERATOR))
+    assert not loose_, (
+        f"{loose_} is neither in SIGNATURE_FILES (nuscenes_gt.py) nor in versions.NOT_GENERATOR: decide whether it shapes the GT "
+        "(then it is hashed and a change needs a new version row) or not (then list it)")
     rows_ = V.table()
     assert [r["version"] for r in rows_] == [f"v{i + 1}" for i in range(len(rows_))] and len({r["signature"] for r in rows_}) == len(rows_)
     assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: add one, "
