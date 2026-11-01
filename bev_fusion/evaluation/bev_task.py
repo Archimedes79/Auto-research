@@ -265,6 +265,9 @@ class BEVTask(Task):
         ms: List[Metric] = [BevSegMetric(self.grid, self.spec), BevDetMetric(self.groups, "det", "dets")]
         if self.refine:
             ms.append(BevDetMetric(self.groups, "detr", "detr"))
+        if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
+            from evaluation.bev_curves import BevCurveMetric
+            ms.append(BevCurveMetric(self.spec, self.groups))
         ms.append(BevLossMetric())
         return ms
 

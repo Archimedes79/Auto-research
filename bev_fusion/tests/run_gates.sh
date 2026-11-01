@@ -40,6 +40,13 @@ else
   echo "SKIP  velocity hurdle  | runs/t10_dual_s0/ckpt_00003000.pt missing (G4 needs it)"
 fi
 run "slots, every kind" "$PY" tests/test_slots.py                   # five-layer build: contract test of every kind of every slot; CPU, no data, about 1 min
+run "curve metrics"     "$PY" evaluation/bev_curves.py --selftest      # AP / AUC / Brier against the exact curves of sorted scores, additivity, one-class / NaN / float16
+if ls data/cache/gt/*_15efbde2d1.npz > /dev/null 2>&1; then    # the evaluation on real cached GT: GT as the prediction must reach every ceiling, degraded copies fall, the GT frames agree with their poses
+  run "GT against GT"   "$PY" evaluation/bev_gtcheck.py --selftest     # CPU, about 1 min, no model
+  run "response test"   "$PY" evaluation/bev_response.py --selftest    # CPU, about 2 min, no model: GT worsened by known amounts, every number must move by exactly that amount
+else
+  echo "SKIP  GT against GT  | no cached GT of signature 15efbde2d1 in data/cache/gt"
+fi
 run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s

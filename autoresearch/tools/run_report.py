@@ -30,8 +30,8 @@ def fmt(v):
     return "-" if v is None else (f"{v:.4g}" if isinstance(v, float) else html.escape(str(v)))
 
 
-def read_table(path, limit=40):
-    """eval/table.txt: 'key   value' per line -> [(key, float)] (first `limit` lines)"""
+def read_table(path, limit=None):
+    """eval/table.txt: 'key   value' per line -> [(key, float)] (all lines, or the first `limit`)"""
     out = []
     if os.path.exists(path):
         for line in open(path, encoding="utf-8", errors="replace"):
@@ -41,7 +41,7 @@ def read_table(path, limit=40):
                     out.append((parts[0], float(parts[-1])))
                 except ValueError:
                     pass
-            if len(out) >= limit:
+            if limit and len(out) >= limit:
                 break
     return out
 
@@ -92,6 +92,61 @@ def curves(run, out_png):
         return False
 
 
+def data_block(rundir):
+    """Which data, GT, code and weights made the numbers (the card's provenance block), for each stored evaluation (val, and train when evaluated):
+    enough to find the same frames again; a value the evaluation did not record says so instead of staying silent."""
+    rows = []
+    for label, name in (("val", "card.json"), ("train", "card_train.json")):
+        try:
+            c = json.load(open(os.path.join(rundir, "eval", name), encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        pv = c.get("provenance") or {}
+        d, gt, sub, ev = pv.get("data") or {}, pv.get("gt") or {}, pv.get("subject") or {}, pv.get("evaluator") or {}
+        use = d.get("use") or {}
+        tg = sub.get("train_gt") or {}
+        nr = "not recorded"
+        rows.append((label, [("split rule", use.get("split_rule") or d.get("split") or nr),
+                             ("scenes", f"{use.get('scenes_evaluated', nr)} evaluated of {use.get('scenes_available', nr)} available of {use.get('scenes_official', nr)} in the official split"),
+                             ("frames", f"{use.get('frames_evaluated', c.get('frames', nr))}, list hash {d.get('frame_hash', nr)}, raw data {d.get('dataset', nr)} (manifest {d.get('manifest_hash', nr)})"),
+                             ("GT scored against", f"version {gt.get('version', nr)}, signature {gt.get('signature', nr)}"),
+                             ("GT the model was trained on", f"version {tg.get('version', nr)}, signature {tg.get('signature', nr)}"),
+                             ("evaluator", f"code hash {ev.get('code_hash', nr)}, commit {ev.get('commit', nr)}, dirty: {ev.get('dirty', nr)}"),
+                             ("weights", f"{sub.get('ckpt', nr)} (hash {sub.get('ckpt_hash', nr)}), step {sub.get('step', nr)}, seed {pv.get('seed', nr)}"),
+                             ("scene names", ", ".join(use.get("scene_names", [])) or nr)]))
+    if not rows:
+        return ""
+    out = ["<h2>Data used (traceable)</h2>"]
+    for label, items in rows:
+        out.append(f"<h3 style='font-size:14px'>{label}</h3><table>" + "".join(f"<tr><th class='l'>{html.escape(k)}</th><td class='l' style='max-width:1000px'>{html.escape(str(v))}</td></tr>" for k, v in items) + "</table>")
+    return "".join(out)
+
+
+def gap_block(rundir, card, val_path=None, train_path=None):
+    """Training against validation: the same numbers on frames the network was trained on and on frames it never saw (eval/table_train.txt next to
+    eval/table.txt). The training number is what this architecture, data and schedule can FIT (EMA weights, no augmentation, cold memory), the gap to
+    the validation number is what is lost in generalisation. Only for runs evaluated on both splits (`bev_suite.py RUN generalisation`)."""
+    tr = read_table(train_path or os.path.join(rundir, "eval", "table_train.txt"))
+    va = dict(read_table(val_path or os.path.join(rundir, "eval", "table.txt")))
+    if not tr or not va:
+        return ""
+    rows = []
+    for key, t in tr:
+        if key not in va:
+            continue
+        v = va[key]
+        gap = t - v
+        worse = (gap < 0) if lower_is_better(key, card) else (gap > 0)                  # training better than validation = the usual overfit direction
+        rows.append(f"<tr><td class='l'>{html.escape(key)}</td><td>{fmt(t)}</td><td>{fmt(v)}</td><td>{gap:+.4f}</td>"
+                    f"<td>{(100 * gap / t if t else float('nan')):+.1f} %</td><td>{'train better' if worse and abs(gap) > 1e-9 else ''}</td></tr>")
+    return ("<h2>Training against validation (generalisation)</h2><table><tr><th class='l'>metric</th><th>train</th><th>val</th><th>train - val</th><th>relative</th><th></th></tr>"
+            + "".join(rows) + "</table><p class='note'>train = frames the network was trained on (what it can fit: the practical ceiling of this architecture, data and schedule); "
+            "val = scenes it never saw; the gap is the generalisation loss. Both with the EMA weights, no augmentation and an empty memory, same number of frames "
+            "spread over the scenes of each split. The TEST split is not used here (it needs a logged row under a recorded decision). Caveat: the frozen image heads "
+            "(pre-trained DualBEV / BEVFusion) saw the nuScenes train scenes too, so part of a train-val gap can come from them and not from the trainable network.</p>")
+
+
+GAP = {}                                           # explicit table paths of the train-vs-val block (bev_suite generalisation), else eval/table.txt and eval/table_train.txt
 OPS = {"fps": 10.0, "util": 0.3, "extra": []}      # set from the command line: frame rate, share of the peak a real accelerator reaches, fixed parts [(name, GOPs)]
 
 
@@ -134,7 +189,7 @@ table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #bbb;paddin
 .card{display:inline-block;vertical-align:top;margin:6px;padding:6px;border:1px solid #ccc;width:440px}.card img,.card video{width:100%}
 textarea{width:100%;height:42px}select{margin:2px 0}code{background:#f3f3f3;padding:1px 3px}button{padding:6px 12px;margin:4px 0}"""
 
-JS = """const KEY='review:'+document.title;const items=[...document.querySelectorAll('.card')];
+JS = """const KEY='review:'+location.pathname+':'+document.title;const items=[...document.querySelectorAll('.card')];
 function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||'{}');items.forEach(c=>{const x=d[c.dataset.f];if(x){c.querySelector('select').value=x.mark;c.querySelector('textarea').value=x.comment}});
 document.getElementById('overall').value=d._overall||'';document.getElementById('who').value=d._who||''}catch(e){}}
 function collect(){const d={};items.forEach(c=>{d[c.dataset.f]={mark:c.querySelector('select').value,comment:c.querySelector('textarea').value}});
@@ -188,26 +243,28 @@ def build(rundir, vs, run_id, note, max_pic, out_dir):
     h.append("<h2>Numbers</h2>")
     if cols[0][1]:
         ref = dict(cols[1][1]) if len(cols) > 1 else {}
-        h.append("<table><tr><th class='l'>metric</th>" + "".join(f"<th>{html.escape(n)}</th>" for n, _ in cols) + ("<th>delta vs " + html.escape(cols[1][0]) + "</th>" if ref else "") + "</tr>")
+        h.append("<div style='max-height:640px;overflow:auto;display:inline-block'><table><tr><th class='l'>metric</th>" + "".join(f"<th>{html.escape(n)}</th>" for n, _ in cols) + ("<th>delta vs " + html.escape(cols[1][0]) + "</th>" if ref else "") + "</tr>")
         maps = [dict(t) for _, t in cols]
         for key, v in cols[0][1]:
             cells = "".join(f"<td>{fmt(m.get(key))}</td>" for m in maps)
             d = ""
-            if ref and key in ref:
+            if ref and key in ref and v == v and ref[key] == ref[key]:
                 diff = v - ref[key]
                 good = (diff < 0) == lower_is_better(key, card)
                 d = f"<td class='{'ok' if good else 'bad'}'>{diff:+.4f}</td>" if diff else "<td>0</td>"
             elif ref:
                 d = "<td>-</td>"
             h.append(f"<tr><td class='l'>{html.escape(key)}</td>{cells}{d}</tr>")
-        h.append("</table><p class='note'>green = better than the first reference, red = worse; a difference inside the noise band of the card "
+        h.append("</table></div><p class='note'>green = better than the first reference, red = worse; a difference inside the noise band of the card "
                  "is a tie (decide.py gives the verdict, not this page). Full list: eval/table.txt.</p>")
     else:
         h.append("<p class='note'>no eval/table.txt yet: run the evaluation first.</p>")
+    h.append(gap_block(rundir, card, GAP.get('val'), GAP.get('train')))
+    h.append(data_block(rundir))
     try:
         lat = json.load(open(os.path.join(rundir, "eval", "latency.json"), encoding="utf-8")).get("latency", {})
         h.append("<h2>Cost</h2><table>" + "".join(f"<tr><th class='l'>{k}</th><td>{fmt(v)}</td></tr>" for k, v in lat.items() if isinstance(v, (int, float)) and "median" in k or k == "p90_ms") + "</table>"
-                 "<p class='note'>ms per frame as measured by the evaluation; valid only if it ran on an idle GPU (eval/latency.json records the load).</p>")
+                 f"<p class='note'>ms per frame as measured by the evaluation; valid only if it ran on an idle GPU (recorded: idle = {lat.get('idle', 'not recorded')}).</p>")
     except (OSError, ValueError):
         pass
     h.append(ops_block(rundir))
@@ -236,15 +293,18 @@ def build(rundir, vs, run_id, note, max_pic, out_dir):
 
 def ingest(rundir, src):
     d = json.load(open(src, encoding="utf-8"))
+    name = os.path.basename(os.path.normpath(rundir))
+    if d.get("run") not in (None, name):
+        raise SystemExit(f"this review is of run '{d.get('run')}', not of '{name}': not filed")
     out = os.path.join(rundir, "report", "review.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     if os.path.exists(out):
-        os.replace(out, out + time.strftime(".%Y%m%d_%H%M%S.old"))
+        os.replace(out, out + time.strftime(".%Y%m%d_%H%M%S") + f"_{int(time.time() * 1000) % 1000:03d}.old")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(d, f, indent=1)
     marks = [i.get("mark") or "-" for i in d.get("items", [])]
     cnt = {m: marks.count(m) for m in sorted(set(marks))}
-    print(f"review of {d.get('run')} by {d.get('reviewer') or '?'}: {cnt}; overall: {d.get('overall', '')[:300]}")
+    print(f"review of {d.get('run')} by {d.get('reviewer') or '?'}: {cnt}; overall: {(d.get('overall') or '')[:300]}")
     print("ledger note to write: ledger.py note <id> --result '... review by", d.get("reviewer") or "?", cnt, "...'")
     return out
 
@@ -265,15 +325,23 @@ def selftest():
         open(os.path.join(d, "train.log"), "w").write("step 200: total 0.25\nresumed from ckpt_00000100.pt at step 100\n")
         if done:
             open(os.path.join(d, ".done"), "w").close()
-        open(os.path.join(d, "eval", "table.txt"), "w").write(f"seg_fov/seg/dt+0.00/walkway/all/all/iou@0   {val}\nseg_fov/det/mATE   0.50\n")
+        open(os.path.join(d, "eval", "table.txt"), "w").write(f"seg_fov/seg/dt+0.00/walkway/all/all/iou@0   {val}\nseg_fov/det/mATE   0.50\n"
+                                                              + "".join(f"seg_fov/extra/k{i}   {1.0 - i / 100:.3f}\n" for i in range(60)))         # more than 40 rows: none may be cut
         open(os.path.join(d, "eval", "suite", "qualitative", "frame_a.png"), "wb").write(b"\x89PNG\r\n")
         return d
 
     ref, run = make("ref", 200, True, 0.30), make("run", 400, False, 0.34)
+    open(os.path.join(run, "eval", "table_train.txt"), "w").write("seg_fov/seg/dt+0.00/walkway/all/all/iou@0   0.50\nseg_fov/det/mATE   0.40\n"
+                                                                  + "".join(f"seg_fov/extra/k{i}   {1.0 - i / 100 + 0.05:.3f}\n" for i in range(60)))
+    qd = os.path.join(run, "eval", "suite", "quant", "eval_n1")
+    os.makedirs(qd)
+    json.dump({"cost": {"ops": {"gmacs": 100.0, "method": "measured", "note": "test"}}}, open(os.path.join(qd, "manifest.json"), "w"))
     path, n = build(run, [ref], "selftest.run", "a note", 10, os.path.join(run, "report"))
     page = open(path, encoding="utf-8").read()
     assert n == 1 and "Not finished" in page and "+0.0400" in page and "class='ok'" in page and "resumed at step 100" in page, page[:600]
     assert page.count("class='card'") == 1 and "exportReview" in page and "<select>" in page
+    assert page.count("seg_fov/extra/k") >= 2 * 60 and "k59" in page, "the numbers and the gap table show every row, not the first 40"
+    assert "Training against validation" in page and "train better" in page and "Compute (TOPS)" in page and "<b>2.00 TOPS</b>" in page
     rev = os.path.join(tmp, "review_run.json")
     json.dump({"run": "run", "reviewer": "x", "overall": "fine", "items": [{"file": "a.png", "mark": "ok", "comment": ""}, {"file": "b.png", "mark": "wrong", "comment": "c"}]}, open(rev, "w"))
     out = ingest(run, rev)
@@ -295,11 +363,14 @@ def main():
     ap.add_argument("--extra-gops", nargs="*", default=[], metavar="NAME=GOPS", help="fixed parts the suite does not count, e.g. 'frozen image heads=71'")
     ap.add_argument("--out", default="")
     ap.add_argument("--ingest", default="", help="a review.json exported from the page")
+    ap.add_argument("--val-table", default="", help="table of the validation numbers for the train-vs-val block (default eval/table.txt)")
+    ap.add_argument("--train-table", default="", help="table of the train numbers (default eval/table_train.txt)")
     a = ap.parse_args()
     rundir = os.path.abspath(a.run)
     if a.ingest:
         print(ingest(rundir, a.ingest))
         return
+    GAP.update(val=a.val_table or None, train=a.train_table or None)
     OPS.update(fps=a.fps, util=a.util, extra=[(x.rsplit("=", 1)[0], float(x.rsplit("=", 1)[1])) for x in a.extra_gops])
     name = os.path.basename(rundir.rstrip("/\\"))
     rid = a.id or name.replace("_", ".", 1)
