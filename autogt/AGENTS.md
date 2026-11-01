@@ -131,6 +131,9 @@ run it live) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, 
   reproduce an old GT: `git worktree add temp/gt_v5 autogt/v5`, then run that checkout's `build` (exact command and the check that it is
   the checkout's package that runs: README.md, section Versions; the old tags have no `generate`). Before a
   training starts, `autogt.missing(tokens)` says which keyframes the store lacks (none may be built inside a data-loader worker).
+- **A faster generator is not always a new GT**: when the new code makes the same GT byte for byte (`python -m autogt digest` in both trees, then
+  `digest --compare`), name the older version in the column `same_gt_as` of `versions.csv`: the store, `load` and `generate` stay on the older
+  folder and `gt_version` stays the older key (README.md, "Same GT, new code").
 - **Boxes are at the camera time** (decided by the user 2026-10-31, like Waymo's `camera_synced_box`): a moving box of known
   velocity is moved by `v * (t_camera - t_annotation)` (about -36 ms, median 6 cm, max 88 cm); stationary boxes and boxes of
   unknown velocity are not moved. `AutoGT(..., boxes_at="annotation")` / `--boxes-at annotation` restores the annotation positions

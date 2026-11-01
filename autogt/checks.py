@@ -30,6 +30,7 @@ import numpy as np
 from shapely.geometry import Polygon
 
 from . import flow as flowmod
+from .grid import GridSpec
 from .nuscenes_adapter import RADARS, NuScenesScene
 from .suite import AutoGT
 
@@ -156,6 +157,46 @@ class Checks:
         """per sequence: (name, keyframes, observed boxes, moving, stationary, ignored, overrides + conflicts, drivable share)."""
         return [(n, c["keyframes"], c["observed"], c["moving"], c["stationary"], c["ignored"],
                  c["radar_override"] + c["radar_conflict"], c["drivable"] / max(c["keyframes"], 1)) for n, c in self.per_scene.items()]
+
+
+def _feed(h, x):
+    if isinstance(x, np.ndarray):
+        h.update(f"A{x.dtype}{x.shape}".encode())
+        h.update(np.ascontiguousarray(x).tobytes())
+    elif isinstance(x, dict):
+        for key in sorted(x, key=str):
+            h.update(f"K{key}".encode())
+            _feed(h, x[key])
+    elif isinstance(x, (list, tuple)):
+        h.update(f"L{len(x)}".encode())
+        for v in x:
+            _feed(h, v)
+    else:
+        h.update(f"{type(x).__name__}{x!r}".encode())
+
+
+def digests(dataroot, version="v1.0-mini", stride=2, sweeps=("scene-0061", "scene-1077", "scene-0796")):
+    """one digest per frame (every array byte and every meta entry) of every `stride`-th keyframe of all sequences and of a few 12 Hz sweep
+    frames: the evidence that two generators make the same GT (`same_gt_as` in versions.csv). Run `python -m autogt digest OUT.json` in both
+    source trees and compare the files (`digest --compare A.json B.json`). -> {signature, digests: {token or token@k: sha1}}"""
+    dataroot = os.path.expanduser(dataroot)
+    gen = AutoGT(dataroot, version, light=True)
+    from .suite import scene_tokens
+    out = {}
+    for name in sorted({s["name"] for s in gen.nusc.scene}):
+        for tok in scene_tokens(name, version, dataroot)[::stride]:
+            h = hashlib.sha1()
+            _feed(h, gen.keyframe(tok))
+            out[tok] = h.hexdigest()
+    for name in sweeps:
+        tok = scene_tokens(name, version, dataroot)[8]
+        track = gen.camera_track(tok)
+        i = [x["token"] for x in track].index(gen.cam(tok)["token"])
+        for j in (1, 3):
+            h = hashlib.sha1()
+            _feed(h, gen.keyframe_gt(tok, GridSpec(), sd=track[i + j]))
+            out[f"{tok}@{j}"] = h.hexdigest()
+    return {"signature": gen.signature(), "digests": out}
 
 
 def run(dataroot, version="v1.0-mini", scenes=None, stride=1, holdout=False):

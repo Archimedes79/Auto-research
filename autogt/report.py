@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .cli import _flat, check_resume, run_manifest, save_keyframe, write_index  # noqa: E402
+from .cli import _flat, canonical_of, check_resume, run_manifest, save_keyframe, write_index  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
 from .suite import AutoGT  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
@@ -111,7 +111,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
         names = scenes or gen0.scenes()
     sig = gen0.signature()
     grid = gen0.grid
-    sig_dir = os.path.join(data_dir, sig) if data_dir else None
+    sig_dir = os.path.join(data_dir, canonical_of(sig)) if data_dir else None
     if sig_dir:
         check_resume(sig_dir, grid, gen0.ss)                    # a folder of another resolution / supersampling is not continued
         os.makedirs(sig_dir, exist_ok=True)
@@ -178,7 +178,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
             fig = figure(gen, name, k, None, gt=gk)
             pdf.savefig(fig)
             plt.close(fig)
-    info = {"pdf": os.path.abspath(out_pdf), "signature": sig, "keyframes": n_kf, "written": written, "stored": sig_dir,
+    info = {"pdf": os.path.abspath(out_pdf), "signature": canonical_of(sig), "keyframes": n_kf, "written": written, "stored": sig_dir,
             "samples": list(held), "failed": failed}
     if verbose:
         print(f"report: {info['pdf']} ({os.path.getsize(out_pdf) / 1e6:.1f} MB), {len(held)} samples, signature {sig}, "

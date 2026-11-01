@@ -9,7 +9,8 @@ and tag (`git tag -a autogt/v6 -m "..."`), rebuild the GT, tell the others. An o
 command and the check that it is the checkout's package that runs: README.md, section Versions).
 
     autogt.versions.table()          the rows (dicts)
-    autogt.versions.version_of(sig)  "v5" or None; autogt.current_version() the version of THIS source with the default options
+    autogt.versions.version_of(sig)  "v5" or None; autogt.current_version() the GT version of THIS source with the default options
+    autogt.versions.canonical(sig)   the signature of the store that `sig`'s code fills (`same_gt_as`: v9 makes the GT of v8, so it uses its store)
     autogt.versions.version_of_key(k) the same for a training cache key '0.5_4_<signature>' (what runs/<name>/gt.json and the cards record)
     python -m autogt versions        the table, the current version marked, which GT is stored
     autogt.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
@@ -37,10 +38,20 @@ def version_of(signature):
     return next((r["version"] for r in table() if r["signature"] == signature), None)
 
 
+def canonical(signature):
+    """the signature of the stored GT that the code of `signature` makes: a version whose code makes the same GT byte for byte as an older one
+    (faster or tidier code, column `same_gt_as` of versions.csv) shares that version's store; any other signature is its own"""
+    row = next((r for r in table() if r["signature"] == signature), None)
+    while row and row.get("same_gt_as"):
+        row = row_of(row["same_gt_as"])
+    return row["signature"] if row else signature
+
+
 def version_of_key(key):
-    """the version of a GT cache key whose last part is the generator signature, such as the training's '0.5_4_15efbde2d1' or
-    '0.5_x0_40_y-20_20_4_15efbde2d1' (or a bare signature): "v5", or None when it is not a released version (or has other options)"""
-    return version_of(str(key).rsplit("_", 1)[-1])
+    """the GT version of a GT cache key whose last part is the generator signature, such as the training's '0.5_4_15efbde2d1' or
+    '0.5_x0_40_y-20_20_4_15efbde2d1' (or a bare signature): "v5", or None when it is not a released version (or has other options). A
+    version that makes the same GT as an older one gives the older key: the key names the GT, the signature the code."""
+    return version_of(canonical(str(key).rsplit("_", 1)[-1]))
 
 
 def row_of(version):

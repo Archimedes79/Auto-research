@@ -14,16 +14,23 @@ DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 _SIGNATURES = {}
 
 
-def current_signature(**options):
-    """cache key (folder name of the stored GT) of THIS source with these generator options, without loading nuScenes. Computed on the
-    first call of a process and kept: like an AutoGT object it holds the key of the source it started with, so a process that reads the
-    store (`load`, `missing`) does not change folders when a signature file is edited while it runs."""
+def code_signature(**options):
+    """the signature (hash of the generator files and options) of THIS source, without loading nuScenes. Computed on the first call of a
+    process and kept: like an AutoGT object it holds the key of the source it started with, so a process that reads the store (`load`,
+    `missing`) does not change folders when a signature file is edited while it runs."""
     key = repr(sorted(options.items()))
     if key not in _SIGNATURES:
         opt = dict(stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at="camera")
         opt.update(options)
         _SIGNATURES[key] = NuScenesGT.signature(types.SimpleNamespace(**opt))
     return _SIGNATURES[key]
+
+
+def current_signature(**options):
+    """the folder name of the stored GT that THIS source makes and reads (data/autogt/<this>/): its own signature, or that of the older
+    version whose GT it makes byte for byte (`same_gt_as` in versions.csv)"""
+    from .versions import canonical
+    return canonical(code_signature(**options))
 
 
 def current_version(**options):

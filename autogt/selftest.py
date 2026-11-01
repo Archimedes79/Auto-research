@@ -285,9 +285,12 @@ def run(root=None, verbose=True):
     assert [r["version"] for r in rows_] == [f"v{i + 1}" for i in range(len(rows_))] and len({r["signature"] for r in rows_}) == len(rows_)
     assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: add one, "
                                                       "commit, tag autogt/v<N> (decision D29)")
-    assert current_version() == V.version_of(gt.signature()) and current_version(boxes_at="annotation").startswith(current_version() + "+")
-    assert V.version_of_key("0.5_4_" + gt.signature()) == V.version_of(gt.signature()) == V.version_of_key("0.5_x0_40_y-20_20_4_" + gt.signature())
-    assert V.version_of_key("0.5_4_deadbeef00") is None and V.version_of_key(gt.signature()) == V.version_of(gt.signature())
+    store_sig = V.canonical(gt.signature())                       # the folder of the stored GT: the signature itself, or the older one whose GT this code makes
+    assert current_version() == V.version_of(store_sig) and current_version(boxes_at="annotation").startswith(current_version() + "+")
+    assert store_sig == V.canonical(store_sig) and V.canonical("deadbeef00") == "deadbeef00", "same_gt_as ends at a signature that is its own store"
+    assert all(V.row_of(r["same_gt_as"]) for r in rows_ if r.get("same_gt_as")), "same_gt_as names a version of the table"
+    assert V.version_of_key("0.5_4_" + gt.signature()) == V.version_of(store_sig) == V.version_of_key("0.5_x0_40_y-20_20_4_" + gt.signature())
+    assert V.version_of_key("0.5_4_deadbeef00") is None and V.version_of_key(gt.signature()) == V.version_of(store_sig)
     import subprocess                                       # the older rows are final, so their git tag exists (the last row is tagged after its commit)
     repo_ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if os.path.exists(os.path.join(repo_, ".git")):
@@ -301,7 +304,7 @@ def run(root=None, verbose=True):
             print(f"note: the newest version {rows_[-1]['version']} has no git tag {rows_[-1]['tag']} yet: commit, then tag it")
     from . import suite as suite_mod2                       # the key of a process is computed once: a second call does not hash the files again
     suite_mod2._SIGNATURES.clear()
-    first_, gt_sig_ = suite_mod2.current_signature(), gt.signature()
+    first_, gt_sig_ = suite_mod2.current_signature(), store_sig
     real_sig = suite_mod2.NuScenesGT.signature
 
     def _no_hashing(self):
@@ -316,14 +319,14 @@ def run(root=None, verbose=True):
     from .cli import build, load_keyframe
     with tempfile.TemporaryDirectory() as d:
         n = build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, workers=1, res=0.5, verbose=False)
-        sig_dir = os.path.join(d, gt.signature())
+        sig_dir = os.path.join(d, store_sig)
         files = sorted(os.listdir(sig_dir))
         assert n == len(files) - 1 and "index.json" in files, files
         tok2 = [f for f in files if f.endswith(".npz")][0][:-4]
         g2 = load_keyframe(sig_dir, tok2)
         assert g2["flow"].shape == (2, g.nx, g.ny) and g2["meta"]["sample"]
         from . import current_signature, load as load_stored                          # the two helpers of the top-level API
-        assert current_signature() == gt.signature() and current_signature(boxes_at="annotation") == ann.signature()
+        assert current_signature() == store_sig and current_signature(boxes_at="annotation") == ann.signature()
         assert np.array_equal(load_stored(tok2, data=d)["flow"], g2["flow"])
         from . import missing                                                          # the store covers a token that is there, not another
         assert missing([tok2, "0" * 32], data=d) == ["0" * 32] and missing([tok2], data=d) == []
@@ -347,7 +350,7 @@ def run(root=None, verbose=True):
             load_stored("0" * 32, data=d)
             raise AssertionError("load of an unknown keyframe must fail")
         except FileNotFoundError as e:
-            assert gt.signature() in str(e)
+            assert store_sig in str(e)
     # 5b generate, the entry point: version found in the folder, groups of sequences with the light devkit give the same GT as the full
     #    devkit, a rerun writes nothing, a wrong scene or a wrong folder is refused with a message
     from . import cli as cli_mod
@@ -364,7 +367,7 @@ def run(root=None, verbose=True):
                 suite_mod.AutoGT = real_gen
         finally:
             cli_mod.GROUP_SCENES = old_group
-        assert r["signature"] == gt.signature() and r["out"] == os.path.join(d, gt.signature()), r
+        assert r["signature"] == store_sig and r["out"] == os.path.join(d, store_sig), r
         assert r["version"] == "v1.0-mini" and r["scenes"] == 2 and r["keyframes"] == r["written"] == 4 and again["written"] == 0, (r, again)
         held = json.load(open(os.path.join(r["out"], "index.json")))
         assert held["scenes"] == ["scene-0061", "scene-0103"] and held["keyframes"] == 4 and held["complete"] is True, held
@@ -404,7 +407,7 @@ def run(root=None, verbose=True):
     cs = V.code_state()
     assert set(cs) == {"commit", "dirty"} and (cs["commit"] is None) == (cs["dirty"] is None), cs
     with tempfile.TemporaryDirectory() as d:
-        sd5 = os.path.join(d, gt.signature())
+        sd5 = os.path.join(d, store_sig)
         os.makedirs(sd5)
         for t in small_tokens[1:]:
             open(os.path.join(sd5, t + ".npz"), "wb").write(b"x")
@@ -460,7 +463,7 @@ def run(root=None, verbose=True):
     # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts
     #    nor marks an interrupted run complete; strides that differ are said so
     with tempfile.TemporaryDirectory() as d:
-        sd6 = os.path.join(d, gt.signature())
+        sd6 = os.path.join(d, store_sig)
         os.makedirs(sd6)
         for i in range(5):
             open(os.path.join(sd6, f"t{i}.npz"), "wb").write(b"x")
@@ -517,6 +520,22 @@ def run(root=None, verbose=True):
         bad_ = sets.check_raw(d, scenes=["scene-0061"])                                 # tables only: no image, no radar file, no map
         assert bad_["missing"] == ok_["camera"] + ok_["radar"] and len(bad_["examples"]) == 10 and bad_["maps"], bad_
         assert "missing" in sets.report_raw(bad_) and "all on disk" in sets.report_raw(ok_)
+    # 5g the digests that show two generators make the same GT (`same_gt_as`): a digest per frame, and the compare finds a changed one
+    import argparse
+    from . import checks as checks_mod
+    dg1 = checks_mod.digests(root, "v1.0-mini", stride=40, sweeps=("scene-0061",))
+    assert len(dg1["digests"]) >= 11 and dg1["signature"] == gt.signature(), dg1["signature"]
+    with tempfile.TemporaryDirectory() as d:
+        pa, pb = os.path.join(d, "a.json"), os.path.join(d, "b.json")
+        json.dump(dg1, open(pa, "w"))
+        json.dump(dg1, open(pb, "w"))
+        cli_mod._cmd_digest(argparse.Namespace(compare=[pa, pb], out=None, stride=2))               # identical: no exit
+        json.dump({**dg1, "digests": {**dg1["digests"], next(iter(dg1["digests"])): "0" * 40}}, open(pb, "w"))
+        try:
+            cli_mod._cmd_digest(argparse.Namespace(compare=[pa, pb], out=None, stride=2))
+            raise AssertionError("a changed frame must be found")
+        except SystemExit as e_:
+            assert e_.code == 1
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         cli_mod._print_sets()

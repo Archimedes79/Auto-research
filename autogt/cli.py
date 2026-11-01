@@ -92,7 +92,13 @@ def run_manifest(sig_dir, version, dataroot, set_name=None):
     """what a finished run records about itself in index.json: the set asked for, the commit and dirty flag of autogt/, and the
     sets that the folder now holds in full (see sets.py)"""
     from . import sets, versions
-    return {"set": set_name, **versions.code_state(), "sets_complete": sets.complete_in(sig_dir, version, dataroot)}
+    from .suite import code_signature
+    return {"set": set_name, **versions.code_state(), "generator": code_signature(), "sets_complete": sets.complete_in(sig_dir, version, dataroot)}
+
+
+def canonical_of(signature):
+    from .versions import canonical
+    return canonical(signature)
 
 
 def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True, run=None):
@@ -107,7 +113,7 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
             old = json.load(f)
     except (OSError, ValueError):
         old = {}
-    same = old.get("signature") == gen.signature() and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
+    same = old.get("signature") == canonical_of(gen.signature()) and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
     if same and not set(old.get("scenes", [])) <= set(names):
         # mini is a subset of trainval and both share the folder of their signature: a smaller run (the mini report after the trainval
         # one) must not shrink the record of what the folder holds, nor mark an interrupted bigger run as complete
@@ -120,19 +126,20 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
     if complete and os.path.isdir(sig_dir):
         from .sets import held
         n_keyframes = len(held(sig_dir))                           # what the folder holds, whatever this run wanted
-    from .versions import version_of
-    gt_version = version_of(gen.signature())                       # None: a signature without a row in versions.csv (unreleased): no key
-    idx = {"signature": gen.signature(), **({"gt_version": gt_version} if gt_version else {}), "version": version, "res": gen.grid.res,
+    from .versions import canonical, version_of
+    store_sig = canonical(gen.signature())                         # the folder of the GT this code makes (see `same_gt_as` in versions.csv)
+    gt_version = version_of(store_sig)                             # None: a signature without a row in versions.csv (unreleased): no key
+    idx = {"signature": store_sig, **({"gt_version": gt_version} if gt_version else {}), "version": version, "res": gen.grid.res,
            "ss": gen.ss, "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
            "complete": complete}
     kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
     sets_complete = sorted(set(kept.get("sets_complete", [])) | set((run or {}).get("sets_complete", [])))
     if run is None:
-        idx.update({k: kept[k] for k in ("set", "commit", "dirty", "release") if k in kept})
+        idx.update({k: kept[k] for k in ("set", "generator", "commit", "dirty", "release") if k in kept})
         if "release" in idx and not complete:
             idx["release"] = False                                 # a run in progress (its provisional index) is not a release
     else:
-        idx.update(set=run.get("set"), commit=run.get("commit"), dirty=run.get("dirty"),
+        idx.update(set=run.get("set"), generator=run.get("generator"), commit=run.get("commit"), dirty=run.get("dirty"),
                    release=bool(complete and gt_version and run.get("dirty") is False and "full" in sets_complete))
     if sets_complete:
         idx["sets_complete"] = sets_complete
@@ -204,7 +211,7 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
     if stride < 1:
         raise ValueError(f"stride must be 1 or more, got {stride}")
     gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
-    sig_dir = os.path.join(out, gt.signature())
+    sig_dir = os.path.join(out, canonical_of(gt.signature()))
     check_resume(sig_dir, gt.grid, ss)
     os.makedirs(sig_dir, exist_ok=True)
     names = gt.scenes() if scenes is None else list(dict.fromkeys(scenes))
@@ -313,11 +320,13 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
 def _print_versions():
     """the table of versions.csv: key, signature, date, CURRENT for this source, stored when its folder exists in data/autogt"""
     from . import versions
-    from .suite import DATA, current_signature
-    cur, rows = current_signature(), versions.table()
+    from .suite import DATA, code_signature
+    cur, rows = code_signature(), versions.table()
     for r in rows:
+        same = f" (the GT of {r['same_gt_as']})" if r.get("same_gt_as") else ""
         print(f"{r['version']:3s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == cur else '       '}  "
-              f"{'stored    ' if os.path.isdir(os.path.join(DATA, r['signature'])) else 'not stored'}  {r['tag']:11s} {r['what_changed'][:80]}")
+              f"{'stored    ' if os.path.isdir(os.path.join(DATA, versions.canonical(r['signature']))) else 'not stored'}  {r['tag']:11s} "
+              f"{r['what_changed'][:70]}{same}")
     if cur not in {r["signature"] for r in rows}:
         print(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased); add a row, commit, tag autogt/v<N>")
 
@@ -382,6 +391,10 @@ def _parser():
     ge.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all of trainval)")
     ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
     ge.add_argument("--scenes-file", help="a file of sequence names, one per line (instead of --scenes)")
+    dg = sub.add_parser("digest", help="a digest per frame of nuScenes mini: two generators that make the same GT give the same file (same_gt_as)")
+    dg.add_argument("out", nargs="?", help="write the digests to this json file")
+    dg.add_argument("--compare", nargs=2, metavar=("A", "B"), help="compare two digest files: exit 1 when any frame differs")
+    dg.add_argument("--stride", type=int, default=2)
     hv = sub.add_parser("have", help="is the stored GT of the current generator there for these sequences? exit 0 or 1 (the check before a training)")
     hv.add_argument("--set", dest="set_name", default=None, help="small | full")
     hv.add_argument("--scenes", nargs="*")
@@ -449,6 +462,23 @@ def _cmd_generate(a):
     generate(a.dataroot, a.out, a.version, _scene_names(a), a.stride, a.res, workers=a.workers, set_name=a.set_name, **_options(a))
 
 
+def _cmd_digest(a):
+    import json
+    if a.compare:
+        x, y = (json.load(open(p)) for p in a.compare)
+        bad = [k for k in x["digests"] if x["digests"][k] != y["digests"].get(k)] + [k for k in y["digests"] if k not in x["digests"]]
+        print(f"{len(x['digests'])} frames, signatures {x['signature']} and {y['signature']}: {len(bad)} differ {bad[:3]}")
+        if bad:
+            raise SystemExit(1)
+        return
+    if not a.out:
+        raise ValueError("give the file to write, or --compare A B")
+    from .checks import digests
+    r = digests("~/data/nuscenes", "v1.0-mini", a.stride)
+    json.dump(r, open(a.out, "w"))
+    print(f"{len(r['digests'])} digests of signature {r['signature']} -> {a.out}")
+
+
 def _cmd_have(a):
     from . import current_version, sets
     want = sets.scenes(a.set_name) if a.set_name else _scene_names(a)
@@ -502,10 +532,10 @@ def _cmd_video(a):
     run(a.scene, a.mp4, a.seconds, dataroot=a.dataroot or default_root(a.version), version=a.version)
 
 
-COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "have": _cmd_have,
+COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "digest": _cmd_digest, "have": _cmd_have,
             "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets,
             "report": _cmd_report, "clean": _cmd_clean, "video": _cmd_video}
-CHECKS_ARGUMENTS = ("data", "generate", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
+CHECKS_ARGUMENTS = ("data", "digest", "generate", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
 
 
 def main(argv=None):

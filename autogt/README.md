@@ -184,7 +184,14 @@ training which keyframes the store lacks.
 | v6 | 02a1217742 | generator fixes: ego velocity at the first / last pose of a sequence, instance / velocity / flow_sigma on the same sub-pixels, `ego_half_window` |
 | v7 | b84e8ac9b2 | coverage (D36 - D38): boxes hide by their height (softer `occluded`), `coverage.py`, per box `share_camera` / `share_radar` / `share_fusion` and the nuScenes point counts; `camera`, `radar`, `undefined` unchanged. Never built for trainval (superseded by v8 before it finished) |
 | v8 | c643a7539d | v7 made fast, the same GT (bit-identical on 34 keyframes of four maps): radar files read in parallel, map polygons and centre-line points made once, the box shares in one pass, `keyframe_gt` split into methods (the first trainval store of the coverage GT) |
-| v9 | 6a7aa7864a | v8 made twice as fast, the same GT (211 frames of all ten mini sequences byte for byte equal to v7 / v8): the map's record-in-patch test with the geometry made once, `inside_quad` for four edges at once; its store is the v8 store (same bytes); **current** |
+| v9 | 6a7aa7864a | v8 made twice as fast, the same GT (211 frames of all ten mini sequences byte for byte equal to v7 / v8): the map's record-in-patch test with the geometry made once, `inside_quad` for four edges at once; it shares the store of v8 (`same_gt_as`); **current** |
+
+**Same GT, new code.** A version whose code makes the same GT as an older one byte for byte (faster or tidier code) names it in the column
+`same_gt_as` of `versions.csv` (v9 names v8) and needs no store of its own: `load`, `missing`, `generate` and `have` use the folder of the older
+version, `gt_version` in its manifest is the older key (the key names the GT, the signature the code; the manifest's `generator` names the code that
+wrote it). The proof is `python -m autogt digest A.json` in the source tree of each version (a worktree of the older tag and the new tree) and
+`python -m autogt digest --compare A.json B.json`: a digest per frame, every array byte and meta entry, of every other keyframe of all ten mini sequences and
+a few 12 Hz frames.
 
 **When you edit one of the six files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py coverage.py`) the signature changes and
 `python -m autogt selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild
