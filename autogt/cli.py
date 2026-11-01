@@ -87,8 +87,9 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
         names = sorted(set(old["scenes"]) | set(names))
         n_keyframes = len([f for f in os.listdir(sig_dir) if f.endswith(".npz") and ".tmp" not in f])
     from .versions import version_of
-    idx = {"signature": gen.signature(), "gt_version": version_of(gen.signature()) or "unreleased", "version": version, "res": gen.grid.res, "ss": gen.ss,
-           "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
+    gt_version = version_of(gen.signature())                       # None: a signature without a row in versions.csv (unreleased): no key
+    idx = {"signature": gen.signature(), **({"gt_version": gt_version} if gt_version else {}), "version": version, "res": gen.grid.res,
+           "ss": gen.ss, "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
            "complete": complete}
     tmp = os.path.join(sig_dir, "index.json.tmp")
     with open(tmp, "w") as f:
