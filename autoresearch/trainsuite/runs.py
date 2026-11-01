@@ -210,6 +210,32 @@ class Run:
         sp = self.s_per_step()
         return sp * max(0, self.total - self.step) if sp and self.total else None
 
+    def phase(self, state=None):
+        """where the run is in its life: new (nothing written) - starting (output, no row yet: imports, caches, first batch) - training - finishing (all steps
+        logged, the process has not exited with 0) - and the ends: done, failed, stopped, stalled, ended. `state` = a state read a moment ago (one look, one answer)"""
+        st = state or self.state()
+        if st in ("done", "failed", "stopped", "stalled", "ended", "new"):
+            return st
+        if not self.train:
+            return "starting"
+        return "finishing" if self.total and self.step >= self.total else "training"
+
+    def ready_pct(self, state=None):
+        """how much of the run is ready, 0..100 (None: the number of steps is unknown). The share of the steps that are logged, held at 99 until the run has
+        exited with code 0 (`.done`): a run whose last step is logged but whose final checkpoint or evaluation is still being written is not ready. A failed or stopped
+        run keeps the share it reached"""
+        if (state or self.state()) == "done":
+            return 100.0
+        if not self.total or self.total < 1:
+            return None
+        return min(99.0, 100.0 * self.step / self.total)
+
+    def ready_at(self, state=None):
+        """unix time at which the last step of a running run should be logged (None: not running, or the speed is unknown); the final checkpoint and the evaluation
+        come after it, so the run is ready a little later (the percentage stays at 99 until then)"""
+        eta = self.eta_s()
+        return time.time() + eta if eta is not None and (state or self.state()) == "running" else None
+
     # ---- values
     def series(self, key):
         rows = self.evals if key.startswith("val.") else self.train

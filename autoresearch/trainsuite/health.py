@@ -9,6 +9,7 @@ import math
 import statistics
 from collections import namedtuple
 
+from . import modules
 from .runs import fmt_dur, median_mad
 
 Finding = namedtuple("Finding", "level code text")
@@ -20,6 +21,11 @@ SLOW_FACTOR = 1.5        # recent s/step against the typical one
 GPU_LIMIT_GB = 11.0      # project rule: GPU < 11 GB
 REF_TOL, REF_K, REF_ROWS = 0.10, 3.0, 50     # against a reference: relative gap, standard errors, rows per window
 MIN_ROWS = 40
+DEAD_GRAD = 1e-10        # a module whose gradient norm (median of the last 20 rows) is not above this learns nothing (detached, dead activations, frozen by mistake)
+GRAD_MODULE_K = 10.0     # a module's gradient norm this many times its own median before the window
+UPD_LOW, UPD_HIGH = 1e-7, 0.2     # update-to-weight ratio per step: below, the module does not move; above, one step changes its weights by 20 % (Adam moves each weight by about lr,
+                         # 3e-4 .. 6e-4, and weights are 0.01 .. 0.05: 1e-2 is normal; not calibrated on a real probe run yet, see README)
+DATA_BOUND = 0.30        # the part of a step that waits for the data loader
 RAMP_FRAC = 0.5          # before this share of the steps a rising loss is only info: the bev_fusion `total` rises from 8.5 to 12.5 between
                          # steps 500 and 1300 in every run (cause not analysed), also in the references; the reliable early check is the
                          # comparison with a reference run (`vs_ref`)
@@ -115,6 +121,21 @@ def check(run, ref=None, since_step=None):
     gpu = [r["gpu_gb"] for r in rows if "gpu_gb" in r]
     if gpu and gpu[-1] > GPU_LIMIT_GB:
         add("warn", "gpu", f"the trainer's peak GPU allocation {gpu[-1]:.1f} GB is above the {GPU_LIMIT_GB:g} GB limit")
+    for m in modules.module_table(run):
+        if m["frozen"] or m["rows"] < 10:
+            continue
+        if m["grad"] is not None and m["grad"] <= DEAD_GRAD:
+            add("warn", "dead_module", f"{m['module']}: gradient norm {m['grad']:.2g} over the last {m['rows']} rows (detached, frozen by mistake, or unused on purpose: a switched-off branch, a loss weight of 0?)")
+        elif m["grad"] is not None and m["grad_base"] and m["grad"] > GRAD_MODULE_K * m["grad_base"]:
+            add("warn", "grad_module", f"{m['module']}: gradient norm {m['grad']:.3g} is {m['grad'] / m['grad_base']:.0f} times its earlier median {m['grad_base']:.3g}")
+        if m["upd"] is not None and not (UPD_LOW <= m["upd"] <= UPD_HIGH) and m["grad"] and m["grad"] > DEAD_GRAD:
+            add("warn", "update_ratio", f"{m['module']}: one step changes its weights by {m['upd']:.2g} of their size (expected {UPD_LOW:g} .. {UPD_HIGH:g})")
+    tm = modules.timing(run)
+    if tm and tm["share"] > DATA_BOUND:
+        add("warn", "data_bound", f"{100 * tm['share']:.0f} % of a step ({tm['t_data']:.2f} of {tm['t_step']:.2f} s) waits for the data loader")
+    inc = modules.incidents(run)
+    if inc:
+        add("warn", "incident", f"{len(inc)} incident dump(s), the last at step {inc[-1]['step']}: {inc[-1]['kind']} ({inc[-1]['file']})")
     ev = [(s, v) for s, v in run.series("val.total") if math.isfinite(v)]
     if len(ev) >= 2 and ev[-1][1] > 1.05 * ev[-2][1] and len(vals) >= MIN_ROWS:
         a, b = run.window_mean(key, ev[-2][0]), run.window_mean(key, ev[-1][0])

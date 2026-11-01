@@ -1,4 +1,4 @@
-"""Command line of the training suite: python -m trainsuite <status|health|curves|stop|resume|watch|early|selftest> ... (run from autoresearch/)."""
+"""Command line of the training suite: python -m trainsuite <status|health|curves|stop|resume|watch|early|compose|start|selftest> ... (run from autoresearch/)."""
 import argparse
 import json
 import os
@@ -6,7 +6,7 @@ import re
 import sys
 import time
 
-from . import control, health
+from . import control, health, modules
 from .health import Finding
 from .kill import load_rules
 from .runs import Run, fmt_dur
@@ -27,6 +27,17 @@ def open_run(arg, root, loss):
     return Run(path, loss)
 
 
+def clock(t):
+    """'HH:MM' of a unix time, with the day when it is not today; '-' for none"""
+    if not t:
+        return "-"
+    try:
+        lt, now = time.localtime(t), time.localtime()
+        return time.strftime("%H:%M", lt) if lt[:3] == now[:3] else time.strftime("%a %H:%M", lt)
+    except (OverflowError, OSError, ValueError):               # a step total of 10**30 gives a time no clock has
+        return "-"
+
+
 def split_ref(arg):
     """'run' or 'run:reference' -> (run, reference or None): a reference of its own for this run"""
     skip = 2 if len(arg) > 2 and arg[1] == ":" and arg[0].isalpha() and arg[2] in "/" + chr(92) else 0     # a Windows drive letter is no separator
@@ -35,6 +46,7 @@ def split_ref(arg):
 
 
 def summary(run, ref=None, extra_rules=(), since_step=None):
+    st = run.state()                                          # read first and once: the fields of one summary agree (a `.done` that appears meanwhile cannot make a running run 100 %)
     findings = health.check(run, ref, since_step)
     rules, problems = load_rules(run, extra_rules)
     findings += [Finding("alert", "kill_rule", p) for p in problems]
@@ -42,8 +54,9 @@ def summary(run, ref=None, extra_rules=(), since_step=None):
     findings += [Finding("warn", "kill_key", f"kill rule {r.text!r}: the run passed step {r.step} and never logged {r.key!r}")
                  for r, st, _ in kills if st == "unknown"]
     loss = run.last(run.loss_key)
-    return dict(run=run.name, state=run.state(), step=run.step, total=run.total,
-                pct=100.0 * run.step / run.total if run.total else None, s_per_step=run.s_per_step(), eta_s=run.eta_s(), loss=loss,
+    ready = run.ready_pct(st)
+    return dict(run=run.name, state=st, phase=run.phase(st), step=run.step, total=run.total, pct=ready, ready_pct=ready, ready_at=run.ready_at(st),
+                s_per_step=run.s_per_step(), eta_s=run.eta_s(), loss=loss,
                 restarts=run.restarts, findings=[f._asdict() for f in findings],
                 kill=[dict(rule=r.text, status=s, value=v) for r, s, v in kills]), findings, kills
 
@@ -74,16 +87,17 @@ def cmd_status(a):
     if not rows:
         print(f"no runs with metrics or a text log under {a.root} (use --all for the old ones)")
         return 0
-    print(f"{'run':<24}{'state':<9}{'step/total':<13}{'%':>4}  {'s/step':>6}  {'ETA':>7}  {'loss':>8}  flags")
+    print(f"{'run':<24}{'state':<9}{'step/total':<13}{'ready':>5}  {'s/step':>6}  {'ETA':>7}  {'last step':>9}  {'loss':>8}  flags")
     for s, f, k in rows:
         flags = ",".join(sorted({x.code for x in f if x.level != "info"})) or "-"
         flags += "".join(f" KILL[{r.text}]" for r, st, _ in k if st == "hit")
         prog = "%d/%s" % (s["step"], s["total"] or "?")
-        pct = "-" if s["pct"] is None else "%.0f" % s["pct"]
+        pct = "-" if s["ready_pct"] is None else "%.0f%%" % s["ready_pct"]
         sp = "-" if not s["s_per_step"] else "%.2f" % s["s_per_step"]
         eta = fmt_dur(s["eta_s"]) if s["state"] == "running" else "-"
+        at = clock(s["ready_at"])
         loss = "-" if s["loss"] is None else "%.4g" % s["loss"]
-        print(f"{s['run']:<24}{s['state']:<9}{prog:<13}{pct:>4}  {sp:>6}  {eta:>7}  {loss:>8}  {flags}")
+        print(f"{s['run']:<24}{s['state']:<9}{prog:<13}{pct:>5}  {sp:>6}  {eta:>7}  {at:>9}  {loss:>8}  {flags}")
     if len(rows) == 1:
         return cmd_detail(runs[0][0], rows[0])
     return 0
@@ -106,9 +120,17 @@ def events_of(run, n=5):
     return out[-n:]
 
 
+def _num(x, fmt="%.3g"):
+    return "-" if x is None else fmt % x
+
+
 def cmd_detail(run, row):
     s, findings, kills = row
     print()
+    if s["ready_pct"] is not None:
+        print(f"  phase {s['phase']}, ready {s['ready_pct']:.0f} %" + (f", ETA {fmt_dur(s['eta_s'])} (last step about {clock(s['ready_at'])})" if s["ready_at"] else ""))
+    else:
+        print(f"  phase {s['phase']}, the number of steps is not known (no `steps` in config.json): no percentage")
     for f in findings:
         print(f"  [{f.level:<5}] {f.code}: {f.text}")
     for r, st, v in kills:
@@ -118,6 +140,26 @@ def cmd_detail(run, row):
             f"{k[4:]} {v:.4g}" for k, v in run.evals[-1].items() if k.startswith("val.") and "last" not in k)))
     if run.restarts:
         print(f"  the stream was resumed {run.restarts} time(s); the later attempt of each step is used")
+    groups = [k for k in run.keys() if k.startswith("group.")]
+    if groups:
+        print("  loss groups (mean of the first 10 logged values -> the last 10):")
+        for k in groups:
+            v = [x for _, x in run.series(k)]
+            print(f"    {k:<28}{_num(sum(v[:10]) / len(v[:10]))} -> {_num(sum(v[-10:]) / len(v[-10:]))}")
+    mt = modules.module_table(run)
+    if mt:
+        print(f"  modules (median of the last {modules.WINDOW} rows; grad x = against the rows before; update = |dw| / |w| per step):")
+        for m in mt:
+            x = "-" if m["grad"] is None or not m["grad_base"] else "%.1f" % (m["grad"] / m["grad_base"])
+            print(f"    {m['module']:<24}grad {_num(m['grad']):>9}  x{x:>5}  update {_num(m['upd']):>9}" + ("   (frozen on purpose)" if m["frozen"] else ""))
+    tm = modules.timing(run)
+    if tm:
+        print(f"  time: {tm['t_step']:.2f} s per step, {tm['t_data']:.2f} s of it waiting for the data ({100 * tm['share']:.0f} %)")
+    inc = modules.incidents(run)
+    if inc:
+        print(f"  incidents ({len(inc)}; the dump has the batch ids, replay it with the trainer's debug mode):")
+        for i in inc[-3:]:
+            print(f"    step {i['step']}: {i['kind']} ({i['file']})")
     ev = events_of(run, 5)
     if ev:
         print("  last events of `watch` (trainsuite_events.jsonl):")
@@ -234,7 +276,7 @@ def cmd_watch(a):
     specs = [split_ref(x) for x in a.runs]
     runs = {n: Run(resolve(n, a.root), a.loss) for n, _ in specs}
     refs = {n: (open_run(r or a.vs, a.root, a.loss) if (r or a.vs) else None) for n, r in specs}
-    snaps = {n: dict(state=None, find={}, kill={}, evals=0, step=None, restarts=None, since=time.time(), initial=True, req=None, rewrote=False) for n in runs}
+    snaps = {n: dict(state=None, find={}, kill={}, evals=0, step=None, restarts=None, mile=None, since=time.time(), initial=True, req=None, rewrote=False) for n in runs}
     stopped_by = set()
     while runs:
         for key in list(runs):
@@ -251,6 +293,11 @@ def cmd_watch(a):
                     snap["initial"] = False
                 snap["since"] = now
                 _event(run, f"{s['state']} at step {s['step']}/{s['total'] or '?'}", "state")
+            if s["ready_pct"] is not None and s["state"] == "running":              # one line per 10 % of readiness: the progress of a run that is otherwise silent
+                mile = int(s["ready_pct"] // 10) * 10
+                if snap["mile"] is not None and mile > snap["mile"]:
+                    _event(run, f"ready {mile} %: step {s['step']}/{s['total']}" + (f", ETA {fmt_dur(s['eta_s'])}, last step about {clock(s['ready_at'])}" if s["ready_at"] else ""), "progress")
+                snap["mile"] = mile
             here = {(f.code, re.sub(r"[\d.]+", "#", f.text)[:60]): f for f in findings if f.level != "info"}     # one latch per finding (numbers in the text change every poll)
             for code, f in here.items():
                 if code not in snap["find"]:
@@ -295,6 +342,78 @@ def cmd_watch(a):
         if a.once or not runs:
             break
         time.sleep(a.every)
+    return 0
+
+
+def cmd_compose(a):
+    from . import compose as C
+    try:
+        base = C.load(a.base)
+        cfg, changes = C.compose(base, a.preset, a.set, a.presets_dir)
+        print(f"{a.base}: {len(changes)} change(s)")
+        print("\n".join(C.describe(changes, C.keys_of(base))))
+        if a.out:
+            C.write(cfg, a.out)
+            print(f"written {a.out}")
+    except C.ComposeError as e:
+        print(f"compose: {e}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_start(a):
+    """compose the config, run the project's check, print the exact run.py command; with --go start it (detached). The same command again resumes the run."""
+    import shlex
+    import subprocess
+    from . import compose as C
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+    sys.path.insert(0, tools)
+    if a.project:
+        os.environ["AR_PROJECT"] = a.project
+    import project as P
+    cfg, root = P.cfg(), P.root()
+    block = cfg.get("trainsuite")
+    if not block:
+        print('start: project.json has no "trainsuite" block ({"presets", "out", "check", "train", "runs"}; see compose.py)', file=sys.stderr)
+        return 2
+    try:
+        plan = C.plan_start(root, block, a.base, a.id, a.preset, a.set, a.hyp, a.pred, a.rule, a.no_card, a.run_arg, tools, os.path.join(root, cfg["run_records"]))
+    except C.ComposeError as e:
+        print(f"start: {e}", file=sys.stderr)
+        return 2
+    print(f"{a.base} -> {os.path.relpath(plan['composed'], root)}: {len(plan['changes'])} change(s)")
+    print("\n".join(C.describe(plan["changes"], plan["base_keys"])))
+    target, check = (plan["composed"], plan["check"]) if a.go else (plan["preview"], plan["check_preview"])      # a preview must not touch the file a running (or retrying) run reads
+    C.write(plan["config"], target)
+    for n in plan["notes"]:
+        print(f"  note: {n}")
+    if check and not a.no_check:
+        r = subprocess.run(check, cwd=root, capture_output=True, text=True)
+        out = (r.stdout + r.stderr).strip().splitlines()
+        print(f"check: {' '.join(check)} -> exit {r.returncode}")
+        print("\n".join("  " + x for x in out[-15:]))
+        if r.returncode:
+            print("start: the check found problems; nothing started")
+            return 1
+    line = " ".join(shlex.quote(x) for x in plan["argv"])
+    print(f"cd {root} && AR_PROJECT={root} {line}")
+    if not a.go:
+        print("(nothing started: add --go)")
+        return 0
+    os.makedirs(os.path.dirname(plan["log"]), exist_ok=True)
+    with open(plan["log"], "ab") as lf:
+        proc = subprocess.Popen(plan["argv"], cwd=root, env=dict(os.environ, AR_PROJECT=root), stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        rc = proc.wait(timeout=a.wait)                          # run.py refuses a held, running, finished or card-less id within a second: say so instead of "started"
+    except subprocess.TimeoutExpired:
+        rc = None
+    if rc is not None:
+        with open(plan["log"], encoding="utf-8", errors="replace") as lf:
+            tail = lf.read().strip().splitlines()[-6:]
+        print(f"the launcher ended after {a.wait:g} s with exit {rc}: nothing runs\n" + "\n".join("  " + x for x in tail))
+        return 1
+    runs = os.path.join(root, block.get("runs", "runs"))
+    print(f"started, pid {proc.pid}, launcher log {plan['log']}\n  watch it: python -m trainsuite --root {runs} watch {a.id.replace('.', '_')}")
     return 0
 
 
@@ -345,6 +464,26 @@ def main(argv=None):
     p.add_argument("--pair", action="append", default=[], help="--calibrate: variant:control pair (repeatable; default: every two finished runs with the same name prefix)")
     p.add_argument("--group", choices=("prefix", "all"), default="prefix", help="--calibrate automatic pairing: same name prefix before the first _ (default) or all")
     p.set_defaults(fn=cmd_early)
+    p = sub.add_parser("compose", help="a base config + presets + --set overrides -> the composed config, with every change listed")
+    p.add_argument("base")
+    p.add_argument("--preset", action="append", default=[], help="name of a preset file in the presets folder (repeatable, merged in this order)")
+    p.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="override one value, a.b=c (json when it parses; repeatable)")
+    p.add_argument("--presets-dir")
+    p.add_argument("--out", help="write the composed config here")
+    p.set_defaults(fn=cmd_compose)
+    p = sub.add_parser("start", help="compose, check, and print (--go: start) the run.py command of a training; the same command again resumes it")
+    p.add_argument("base")
+    p.add_argument("--id", required=True, help="run id (ledger id; the run folder is the id with . as _)")
+    p.add_argument("--preset", action="append", default=[])
+    p.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
+    p.add_argument("--hyp"), p.add_argument("--pred"), p.add_argument("--rule")
+    p.add_argument("--no-card", action="store_true", help="a diagnostic run: no hypothesis / prediction / rule (it never feeds a verdict)")
+    p.add_argument("--no-check", action="store_true", help="skip the project's static check of the composed config")
+    p.add_argument("--go", action="store_true", help="start it (detached); without it the command is only printed and the composed config goes to <id>.preview.json")
+    p.add_argument("--wait", type=float, default=3.0, help="seconds to see whether the launcher stays alive (it refuses a held / running / finished id at once)")
+    p.add_argument("--run-arg", action="append", default=[], help="an argument for run.py itself (repeatable), e.g. --run-arg=--seed --run-arg=1")
+    p.add_argument("--project", help="project folder (default: AR_PROJECT)")
+    p.set_defaults(fn=cmd_start)
     sub.add_parser("selftest", help="check the suite on synthetic runs").set_defaults(fn=None)
     a = ap.parse_args(argv)
     if a.cmd == "selftest":
