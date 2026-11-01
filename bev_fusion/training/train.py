@@ -963,7 +963,9 @@ def _selftest():
         model2, loss2, ema, last = train(cfg, datasets=(base, base))
         assert last["total"] == last["total"], "logged"
         gt_rec = json.load(open(os.path.join(tmp, "selftest", "gt.json")))          # the GT identity of the run (F3 of the review)
-        assert gt_rec == {"gt_signature": base.gt_signature()} and base.gt_signature().startswith("0.5_4_"), gt_rec
+        from autogt.versions import version_of_key                                  # D29: the version key next to the signature, for a released one
+        want_rec = {"gt_signature": base.gt_signature(), **({"gt_version": version_of_key(base.gt_signature())} if version_of_key(base.gt_signature()) else {})}
+        assert gt_rec == want_rec and base.gt_signature().startswith("0.5_4_"), gt_rec
         ckpts = sorted(f for f in os.listdir(os.path.join(tmp, "selftest")) if f.endswith(".pt"))
         assert len(ckpts) == 2, ckpts                                              # keep = 2
         ck = torch.load(os.path.join(tmp, "selftest", ckpts[-1]), weights_only=False)
