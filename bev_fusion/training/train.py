@@ -298,6 +298,8 @@ def save_checkpoint(path, model, loss, opt, ema, step, cfg, extra=None, slim=Fal
         ck["slim"] = True
     tmp = path + ".tmp"
     torch.save(ck, tmp)
+    with open(tmp, "rb") as fh:
+        os.fsync(fh.fileno())                                   # on the disk before os.replace and before older checkpoints are pruned
     os.replace(tmp, path)
 
 
@@ -346,6 +348,9 @@ def prune_checkpoints(out_dir, keep):
     cks = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
     for f in cks[:-keep]:
         os.remove(os.path.join(out_dir, f))
+    for f in os.listdir(out_dir):                               # a write that failed (disk full) leaves ckpt_*.pt.tmp behind
+        if f.startswith("ckpt_") and f.endswith(".pt.tmp"):
+            os.remove(os.path.join(out_dir, f))
 
 
 RESUME_FREE = ("name", "out_root", "data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers",
@@ -953,6 +958,10 @@ def _selftest():
         train(dataclasses.replace(scfg, slim_at_end=False), datasets=(base, base))
         sck2 = torch.load(os.path.join(sdir, "ckpt_00000004.pt"), weights_only=False)
         assert sck2["slim"] and "opt" not in sck2 and sorted(f for f in os.listdir(sdir) if f.startswith("ckpt_")) == ["ckpt_00000004.pt"]
+        # the leftover of a failed checkpoint write is removed by the next prune, the checkpoint itself stays
+        open(os.path.join(sdir, "ckpt_00000009.pt.tmp"), "wb").write(b"half written")
+        prune_checkpoints(sdir, 1)
+        assert not os.path.exists(os.path.join(sdir, "ckpt_00000009.pt.tmp")) and os.path.exists(os.path.join(sdir, "ckpt_00000004.pt"))
         # 3 resume: a resume with another configuration (here steps 4 -> 6, which would restart the cosine LR) is refused; with
         # BF_RESUME_ANY=1 the run continues from step 4 and ends at 6; the EMA differs from the weights. A damaged newest checkpoint
         # falls back to the one before, and the log rows above the resumed step move to log_superseded.jsonl
