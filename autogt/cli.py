@@ -8,6 +8,8 @@
       of the generator code, the sets held in full, release); DIR default data/autogt (where autogt.load reads); memory-light
       (groups of 60 sequences), resumable (existing files are skipped); the signature changes with every edit of the generator, so GT
       of an older generator is never mixed in
+  python -m autogt data DATAROOT [--set small|full | --scenes ...]
+      are the raw files the generator reads on disk (json tables, map expansion, CAM_FRONT, the five radars)? exit 1 if not
   python -m autogt sets       the scene sets small (mini, small experiments) and full (trainval, releases) and how much of each is stored
   python -m autogt versions   the GT versions (versions.csv), the current one marked
   python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] ...   the low-level writer behind it (full devkit)
@@ -17,7 +19,7 @@
       motion relative to the static world; --total shows the total apparent flow instead); scene:keyframe = nuScenes mini,
       generated now; TOKEN = a stored keyframe of mini or trainval (needs the stored GT of the current generator)
   python -m autogt sheets OUT_DIR                            overview sheets of the sample pictures
-  python -m autogt video  SCENE OUT.mp4 [seconds]            driving through the GT at 12 Hz
+  python -m autogt video  SCENE OUT.mp4 [seconds] [--version v1.0-trainval] [--dataroot DIR]   driving through the GT at 12 Hz
   python -m autogt report [--version v1.0-mini|v1.0-trainval] [--out REPORT.pdf] [--data DIR | --no-data] [--scenes ..] [--stride N]
                           [--samples N] [--holdout] [--workers N] [--light]
       GT evaluation of all sequences in one pass: store the GT (as `build`), run every check, write ONE PDF report (summary, table
@@ -314,6 +316,11 @@ def main(argv=None):
     sub.add_parser("selftest")
     sub.add_parser("versions", help="the GT versions (autogt/versions.csv, D29): the current one marked, which GT is stored")
     sub.add_parser("sets", help="the scene sets small / full (autogt/sets/): sequences, keyframes, how much of each is stored")
+    da = sub.add_parser("data", help="check that the raw nuScenes files the generator reads are on disk (tables, maps, CAM_FRONT, radars)")
+    da.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
+    da.add_argument("--version", default=None)
+    da.add_argument("--set", dest="set_name", default=None, help="check only the sequences of a set: small | full")
+    da.add_argument("--scenes", nargs="*")
     ge = sub.add_parser("generate", help="read nuScenes from DATAROOT and write the GT of every keyframe (the entry point)")
     ge.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
     ge.add_argument("--out", default=None, help="folder of the stored GT (default data/autogt); the files go to OUT/<signature>/")
@@ -376,10 +383,12 @@ def main(argv=None):
     cl.add_argument("--older-than", type=float, metavar="DAYS")
     cl.add_argument("--move", action="store_true")
     cl.add_argument("--delete", action="store_true")
-    d = sub.add_parser("video")
+    d = sub.add_parser("video", help="drive through the GT of one sequence at 12 Hz (H.264); mini by default, any trainval sequence with --version")
     d.add_argument("scene")
     d.add_argument("mp4")
     d.add_argument("seconds", nargs="?", type=float, default=0.0)
+    d.add_argument("--version", default="v1.0-mini", help="v1.0-mini | v1.0-trainval")
+    d.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
     a = p.parse_args(argv)
     if a.cmd == "selftest":
         from .selftest import run
@@ -388,6 +397,15 @@ def main(argv=None):
         _print_versions()
     elif a.cmd == "sets":
         _print_sets()
+    elif a.cmd == "data":
+        from . import rawdata
+        try:
+            r = rawdata.check(a.dataroot, a.version, a.set_name, a.scenes)
+        except ValueError as e:
+            raise SystemExit(f"error: {e}") from None
+        print(rawdata.report(r))
+        if r["missing"] or r["maps"]:
+            raise SystemExit(1)
     elif a.cmd == "generate":
         try:
             generate(a.dataroot, a.out, a.version, a.scenes, a.stride, a.res, workers=a.workers, set_name=a.set_name,
@@ -423,8 +441,9 @@ def main(argv=None):
         except ValueError as e:
             raise SystemExit(f"error: {e}") from None
     elif a.cmd == "video":
+        from .suite import default_root
         from .video import run
-        run(a.scene, a.mp4, a.seconds)
+        run(a.scene, a.mp4, a.seconds, dataroot=a.dataroot or default_root(a.version), version=a.version)
 
 
 if __name__ == "__main__":

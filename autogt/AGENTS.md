@@ -11,10 +11,11 @@ sequences / 404 keyframes, trainval = 850 / 34,149).
 | the GT of keyframes that are already generated (training, analysis) | `autogt.load(token)` - 0.1 s, no nuScenes needed; the tokens of a sequence: `autogt.scene_tokens("scene-0561", "v1.0-trainval")` (json tables, 1 s) |
 | to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `autogt.generate("~/data/nuscenes_full")` (or `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing, a finished group loads no devkit), returns `{"out", "signature", "gt_version", "version", "scenes", "keyframes", "written", "release"}`; trainval 5-8 h; default `out` = `data/autogt` -> `<signature>/<token>.npz` + `index.json`; one generate / report per folder at a time |
 | a small or a full run | `autogt.generate(dataroot, set_name="small")` (the 10 sequences of mini, ~25 min, small experiments) or `"full"` (all 850 of trainval, 5-8 h, releases); shell `--set small|full`; `python -m autogt sets` shows how much of each is stored; the manifest in `index.json` (`gt_version`, `commit`, `dirty`, `sets_complete`, `release`) says what a folder is: `release: true` = complete, released GT version, clean tree, `full` held |
+| to know that the raw nuScenes files are all on disk before a long run | `python -m autogt data '~/data/nuscenes_full' [--set small|full]` (exit 1 and the missing files if not; trainval takes minutes); fetching / verifying / linking the raw data is `../datasets/NuScenes/` (downloads only with the user's OK) |
 | to generate single keyframes in code (other options, a quick look) | `AutoGT(dataroot, version).keyframe(token)` |
 | prev / cur / next keyframe + the ego motion between them | `AutoGT(...).training_sample(token)` (section 5) |
 | GT of ALL sequences stored + every check + one PDF | `python -m autogt report --version v1.0-mini` (trainval: `--version v1.0-trainval`, 5-8 h, resumable) |
-| to look at a keyframe / drive through a sequence | `python -m autogt view OUT_DIR <token>` (any STORED keyframe, mini or trainval) or `... view OUT_DIR scene-0061:8` (mini, generated now) / `python -m autogt video scene-0061 out.mp4 [seconds]` (mini) |
+| to look at a keyframe / drive through a sequence | `python -m autogt view OUT_DIR <token>` (any STORED keyframe, mini or trainval) or `... view OUT_DIR scene-0061:8` (mini, generated now) / `python -m autogt video scene-0061 out.mp4 [seconds]` (mini; a trainval sequence: `python -m autogt video scene-0441 out.mp4 20 --version v1.0-trainval`) |
 | to be sure after editing the generator | `python -m autogt selftest` (about 5 min; also checks that this file lists every key) |
 | to remove what autogt generated | `python -m autogt clean --stale-caches data/autogt` (dry run; `--move` / `--delete` to act; the caches of released GT versions are left alone, `--include-released` lists them and they can only be moved) |
 
@@ -156,7 +157,7 @@ cur["flow"] * dt                         # first-order displacement of every cel
   (numpy only) and a generator for the static layers (`layers.py` is reusable).
 
 ## 6. Files
-`suite.py` (`AutoGT`, `load`, `current_signature`), `cli.py` (`generate`, the commands), `sets.py` + `sets/` (scene sets), `versions.py` + `versions.csv` (GT versions), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
+`suite.py` (`AutoGT`, `load`, `current_signature`), `cli.py` (`generate`, the commands), `sets.py` + `sets/` (scene sets), `rawdata.py` (raw-data check), `versions.py` + `versions.csv` (GT versions), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
 `nuscenes_adapter.py` (the only code that knows the nuScenes formats), `layers.py` + `grid.py` (exact rasteriser, occlusion, `GridSpec`),
 `checks.py` (consistency checks), `report.py`, `view.py`, `video.py`, `encode.py` (H.264 with a read-back check), `clean.py`,
-`light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan.md` section 9.5, `README.md` (validation numbers).
+`light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan/plan.md` section 9.5, `README.md` (validation numbers).

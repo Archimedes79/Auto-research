@@ -119,7 +119,8 @@ def render(layers, scene, sd, kf_token, header, root, use_radar):
 
 def run(scene_name, out_path, max_s=0.0, dataroot="~/data/nuscenes", version="v1.0-mini", use_radar=True):
     root = os.path.expanduser(dataroot)
-    layers = AutoGT(root, version, use_flow=False)                    # map layers per frame; velocities come from autogt.flow
+    # map layers per frame; velocities come from autogt.flow; the memory-light devkit of this one sequence (the same GT, and trainval fits)
+    layers = AutoGT(root, version, use_flow=False, light=True, scenes=[scene_name])
     scene = NuScenesScene(layers.nusc, root, scene_name)
     toks = layers.keyframes(scene_name)
     key_t = [layers.nusc.get("sample", t)["timestamp"] * 1e-6 for t in toks]

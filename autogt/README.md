@@ -35,6 +35,11 @@ GT version, the tree was clean and `full` is complete. Use a folder with `releas
 folder with `dirty: true` or no `gt_version` is scratch. The network input that a model precomputes from the GT (it needs the
 backbone) is not made here; it is a product of the model code and carries its own version and the `gt_version` it stands on.
 
+**The whole chain.** get the raw data (`../datasets/NuScenes/`: its README says what is on D: and which parts are there; its `tools/` list,
+download, verify and unpack the archives and link the WSL views `~/data/nuscenes*`; downloads only with the user's OK) -> `python -m autogt
+data ~/data/nuscenes_full [--set small|full]` (are all raw files the generator reads on disk: json tables, map expansion, CAM_FRONT, the
+five radars; `rawdata.py`) -> `generate` (above) -> look: `report` (every check, one PDF), `view`, `sheets`, `video`.
+
 One keyframe at a time in code:
 ```python
 from autogt import AutoGT, load
@@ -55,7 +60,7 @@ python -m autogt report [--version v1.0-mini] [--holdout] [--samples N]   # ALL 
                                                             # (data/autogt/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
 python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move|--delete]
                                                             # removes only what autogt generated; dry run by default, --move puts it into _to_delete/
-python -m autogt video SCENE OUT.mp4 [seconds]              # driving through the GT at 12 Hz (H.264, read back); the examples so far: scene-0061, scene-1077, scene-0655 in data/autogt/examples/
+python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # driving through the GT at 12 Hz (H.264, read back; any sequence, the light devkit of just that one); examples in data/autogt/examples/
 ```
 
 ## Layout
@@ -66,6 +71,7 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
+| `rawdata.py` | `check(dataroot, ...)`: are the raw files the generator reads on disk; `python -m autogt data` |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
 | `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
@@ -172,7 +178,7 @@ the static layers; `layers.py` and `flow.py` are reusable as they are.
 The generator was `training/gt_bev.py` (+ the first flow version `training/gt_flow.py`) and about twenty one-off scripts in
 `temp/checks/` (projection checks, pitch / time-offset tests, Boston debug, map-alignment per location, viewers, videos); they
 are folded into this suite and removed - git history before the commit "autogt suite" has them. What they found is in
-`../bev_fusion/plan.md` section 9.5.
+`../bev_fusion/plan/plan.md` section 9.5.
 
 ## Using the velocity targets in a loss (note from the t1_r4_soa review, 2026-10-30)
 About 80 % of the supervised object cells are static (velocity 0) and 20 % move: an L1 / MSE over all object cells is minimised by
