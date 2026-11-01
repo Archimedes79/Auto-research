@@ -1,15 +1,19 @@
 """Architecture drawing and the code it stands for, kept in step: a JSON spec -> SVG + file map, and a check against the code.
 
-    python archdraw.py render <spec.json>      # writes <spec>.svg and <spec>.md next to the spec
+    python archdraw.py render <spec.json>      # writes <spec>.svg and the file map of <spec>.md next to the spec
     python archdraw.py check <spec.json>       # exit 1 when a box points at nothing, code is in no box, or svg / md are stale
     python archdraw.py --selftest
+
+<spec>.md may be a hand-written document: only the part between `<!-- archdraw:begin ... -->` and `<!-- archdraw:end -->` is generated
+(the file map); everything outside the markers is kept as it is. Without the markers the whole file is generated.
 
 The spec (one per system, next to its code; a minimal example is in `--selftest`):
   title, subtitle, root (folder the code paths are relative to, relative to the spec),
   kinds {name: {label, fill, stroke, class, dashed}}  (omitted: the defaults of a neural pipeline; class = learned | fixed | frozen | rule | other),
   nodes [{id, label ("\\n" breaks), kind, col, row, w, h (cells spanned, default 1), hpx (a thinner box, e.g. a gate band), code ["path", "path::Symbol", "dir/"], sub, note, why, replace_with, catch}],
-  edges [{from, to, label, dashed, bold, both (arrowheads at both ends), via [[col, row], ...]}]  (via: waypoints in grid units; integers are the gaps between boxes: a routed arrow), groups [{label, nodes [ids], caption (text in the side column; the spec's extra_w pixels of width hold it)}],
+  edges [{from, to, label, dashed, bold, both (arrowheads at both ends), via [[col, row], ...]}]  (via: waypoints in grid units; integers are the gaps between boxes: a routed arrow), groups [{label, nodes [ids], fill, caption (text in the side column; the spec's extra_w pixels of width hold it)}],
   main_path {from, to}  (the stages between an input and an output: counted by class, drawn bold),
+  steps [{col, label}]  (a numbered header above a column), spans [{from, to, label}]  (a shaded block of columns, e.g. an inner loop),
   covers [{dir, glob, recursive}] + not_drawn {path: reason}  (every file found must be in a box's code or in not_drawn).
 `check` is what keeps drawing and code honest in both directions: box -> code (path and symbol exist) and code -> box (no file without a box
 or a stated reason); the svg / md are generated, so a drawing cannot drift from its spec.
@@ -38,9 +42,10 @@ CLASS_WORD = {"learned": "learned", "fixed": "fixed-differentiable", "frozen": "
 
 
 def load(path):
-    global COLW, ROWH
+    global COLW, ROWH, TITLE_H
     spec = json.load(open(path, encoding="utf-8"))
     COLW, ROWH = spec.get("colw", 200), spec.get("rowh", 100)
+    TITLE_H = 78 + (30 if spec.get("steps") else 0)                # room for the step headers
     spec.setdefault("kinds", DEFAULT_KINDS)
     spec.setdefault("edges", [])
     spec.setdefault("groups", [])
@@ -201,13 +206,21 @@ def render_svg(spec):
          f'<text x="{MARGIN}" y="50" font-size="12" fill="#475569">{escape(spec.get("subtitle", ""))}</text>']
     if badge(spec):
         o.append(f'<text x="{MARGIN}" y="67" font-size="12" font-weight="600" fill="#b91c1c">{escape(badge(spec))}</text>')
+    for s in spec.get("spans", []):                                # shaded blocks of columns, behind everything
+        x0, x1 = MARGIN + s["from"] * COLW + 6, MARGIN + (s["to"] + 1) * COLW - 6
+        y0, y1 = TITLE_H - 28, TITLE_H + rows * ROWH + 4
+        o.append(f'<rect x="{x0}" y="{y0}" width="{x1 - x0}" height="{y1 - y0}" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-dasharray="6 4"/>')
+        o.append(f'<text x="{(x0 + x1) / 2:.1f}" y="{y1 - 6}" font-size="11" font-weight="600" text-anchor="middle" fill="#c2410c">{escape(s["label"])}</text>')
+    for s in spec.get("steps", []):                                # numbered headers of the columns
+        o.append(f'<text x="{MARGIN + s["col"] * COLW + COLW / 2:.1f}" y="{TITLE_H - 10}" font-size="12" font-weight="700" text-anchor="middle" '
+                 f'fill="#334155">{escape(s["label"])}</text>')
     glabels = []
-    for g in spec["groups"]:                                       # frames of real groups, behind everything
+    for g in spec["groups"]:                                       # frames of real groups, behind the boxes
         xs = [box(spec["_by_id"][i]) for i in g["nodes"]]
         x0, y0 = min(b[0] for b in xs) - 12, min(b[1] for b in xs) - 24
         xn, y1 = max(b[0] + b[2] for b in xs) + 12, max(b[1] + b[3] for b in xs) + 12
         x1 = xn + extra - 12 if g.get("caption") else xn
-        o.append(f'<rect x="{x0:.1f}" y="{y0:.1f}" width="{x1 - x0:.1f}" height="{y1 - y0:.1f}" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>')
+        o.append(f'<rect x="{x0:.1f}" y="{y0:.1f}" width="{x1 - x0:.1f}" height="{y1 - y0:.1f}" rx="10" fill="{g.get("fill", "#f8fafc")}" stroke="#cbd5e1" stroke-dasharray="4 3"/>')
         glabels.append(f'<text x="{x0 + 10:.1f}" y="{y0 + 15:.1f}" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" '
                        f'paint-order="stroke">{escape(g["label"])}</text>')
         if g.get("caption"):
@@ -266,11 +279,21 @@ def cell(s):
     return str(s).replace("|", "\\|").replace("\n", " ")
 
 
-def render_md(spec):
+END = "<!-- archdraw:end -->"
+
+
+def render_md(spec, current=None):
+    """the markdown file: `current` (a hand-written document) with its marked part replaced by the file map, or a whole generated file."""
     stem = spec["_stem"]
-    o = [f"<!-- generated by autoresearch/tools/archdraw.py from {stem}.json: edit the JSON, then `archdraw.py render`; `archdraw.py check` fails when this file is stale -->",
-         f"# {spec['title']}", "", f"![{spec['title']}]({stem}.svg)", "", spec.get("subtitle", ""), ""]
-    o += ["## File map: every box and the code it stands for", "", "| box | kind | code | note |", "|---|---|---|---|"]
+    begin = f"<!-- archdraw:begin: generated from {stem}.json by autoresearch/tools/archdraw.py; edit the spec, then `archdraw.py render` -->"
+    block = begin + "\n" + file_map(spec) + END
+    if current and "<!-- archdraw:begin" in current and END in current:
+        return current[:current.index("<!-- archdraw:begin")] + block + current[current.index(END) + len(END):]
+    return "\n".join([f"# {spec['title']}", "", f"![{spec['title']}]({stem}.svg)", "", spec.get("subtitle", ""), "", block]) + "\n"
+
+
+def file_map(spec):
+    o = ["## File map: every box and the code it stands for", "", "| box | kind | code | note |", "|---|---|---|---|"]
     for n in sorted(spec["nodes"], key=lambda n: (n["col"], n["row"])):
         o.append(f"| {cell(n['label'])} | {spec['kinds'][n['kind']]['label']} | {cell(', '.join('`' + c + '`' for c in n.get('code', [])))} | {cell(n.get('note', ''))} |")
     labelled = [e for e in spec["edges"] if e.get("label")]
@@ -362,7 +385,9 @@ def problems(spec):
 
 
 def outputs(spec):
-    return {"svg": render_svg(spec), "md": render_md(spec)}
+    md = os.path.join(spec["_dir"], f"{spec['_stem']}.md")
+    current = open(md, encoding="utf-8", newline="").read() if os.path.exists(md) else None
+    return {"svg": render_svg(spec), "md": render_md(spec, current)}
 
 
 def check(path):
@@ -417,6 +442,20 @@ def selftest():
         open(f"{t}/architecture.svg", "a").write("<!-- edited -->")                       # a hand-edited drawing is stale
         assert any("stale" in e for e in check(p)[1])
         render(p)
+        doc = "# Design\n\nhand-written text\n\n<!-- archdraw:begin -->\nold map\n" + END + "\n\nmore text\n"  # a document around the file map
+        open(f"{t}/architecture.md", "w", newline="\n").write(doc)
+        render(p)
+        md = open(f"{t}/architecture.md").read()
+        assert md.startswith("# Design\n\nhand-written text") and md.endswith("more text\n") and "soft peak" in md and "old map" not in md, md
+        open(f"{t}/architecture.md", "a").write("a line the author adds\n")              # text outside the markers is free
+        assert check(p)[1] == [], check(p)[1]
+        open(f"{t}/architecture.md", "w").write(open(f"{t}/architecture.md").read().replace("soft peak", "hard peak"))
+        assert any("stale" in e for e in check(p)[1])                                     # the generated part is not
+        render(p)
+        spec2 = dict(spec, steps=[{"col": 0, "label": "1 in"}], spans=[{"from": 1, "to": 2, "label": "inner loop"}])
+        json.dump(spec2, open(p, "w"))
+        svg = render_svg(load(p))
+        assert ">1 in<" in svg and ">inner loop<" in svg and TITLE_H == 108, TITLE_H
         bad = json.loads(json.dumps(spec))
         bad["nodes"][1]["code"] = ["code/a.py::Missing"]                                  # a box whose symbol is gone
         bad["nodes"][3]["code"] = ["code/nope.py"]
@@ -426,7 +465,8 @@ def selftest():
         errs = " | ".join(check(p)[1])
         for want in ("has no Missing", "nope.py does not exist", "c.py: in no box", "overlaps o"):
             assert want in errs, (want, errs)
-    print("archdraw selftest ok: render (svg + md deterministic), main-path count, symbol / path / coverage / overlap / stale checks")
+    print("archdraw selftest ok: render (svg + md deterministic), main-path count, symbol / path / coverage / overlap / stale checks, "
+          "hand-written text around the file map kept, step headers and spans")
 
 
 def main():
