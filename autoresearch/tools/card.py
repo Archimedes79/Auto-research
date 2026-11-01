@@ -71,6 +71,13 @@ def validate(card, headline=(), legacy_ok=True):
         bad.append("seed must be an int or a string (the training seed / repeat id that decide.py pairs the arms by)")
     if "protocol" in card and not isinstance(card["protocol"], (str, dict)):
         bad.append("protocol must be a string or a dict (what the evaluator says about its ground truth, cache and frame list)")
+    if isinstance(card.get("provenance"), dict):         # the blocks that are there must be dicts (tools/provenance.py); a missing block is fine: an old card keeps what it has
+        for blk in ("gt", "evaluator", "data", "subject", "environment"):
+            if blk in card["provenance"] and not isinstance(card["provenance"][blk], dict):
+                bad.append(f"provenance.{blk} must be a dict")
+        dirty = (card["provenance"].get("evaluator") or {}).get("dirty") if isinstance(card["provenance"].get("evaluator"), dict) else None
+        if dirty is not None and dirty != "unknown" and not isinstance(dirty, list):      # "unknown" is what provenance.collect writes when it could not check
+            bad.append("provenance.evaluator.dirty must be a list of the files that differ from the commit (empty = clean) or 'unknown'")
     n = card.get("frames", card.get("n"))
     if not isinstance(n, int) or isinstance(n, bool) or n <= 0:
         bad.append("the denominator (frames / n) must be a positive integer")
@@ -137,6 +144,13 @@ def main():
             m = card.get("metrics", {})
             print(f"{card.get('name')} on {card.get('split')}{' ' + card['subset'] if card.get('subset') else ''}, n {card.get('frames', card.get('n'))}, commit {card.get('commit')}, {card.get('date')}: "
                   + "  ".join(f"{k} {m[k]:.4f}" for k in (headline or list(m)[:8]) if k in m))
+            pv = card.get("provenance") if isinstance(card.get("provenance"), dict) else None
+            if pv:                                           # one more line: what it needs to reproduce the card
+                g, e, d = (pv.get(x) if isinstance(pv.get(x), dict) else {} for x in ("gt", "evaluator", "data"))
+                dirty = e.get("dirty")
+                state = f" ({len(dirty)} file(s) differ from the commit)" if isinstance(dirty, list) and dirty else "" if isinstance(dirty, list) else " (not checked against the commit)"
+                print(f"    provenance: GT {g.get('version', 'unknown')} {g.get('signature', 'unknown')}, evaluator {e.get('code_hash', 'unknown')}{state}, "
+                      f"frames {d.get('frame_hash', 'unknown')}")
             continue
         try:
             bad = validate(card, headline, legacy_ok=not a.strict)
@@ -164,6 +178,13 @@ def selftest():
     assert any("lo / hi" in b for b in validate(dict(good, compare=dict(name="c", metrics={}, paired=dict(Q=dict(diff=0.1, lo=float("-inf"), hi=0.2))))))
     assert validate(dict(good, seed=1, protocol="gt-v2")) == [] and validate(dict(good, seed="s0", protocol=dict(gt="v2"))) == []
     assert any("seed must be" in b for b in validate(dict(good, seed=1.5))) and any("protocol must be" in b for b in validate(dict(good, protocol=3)))
+    prov = dict(gt=dict(version="v5", signature="s"), evaluator=dict(code_hash="abc", dirty=[]), data=dict(frame_hash="f"))
+    assert validate(dict(good, provenance=prov)) == [] and validate(dict(good, provenance={})) == [], "an optional provenance block"
+    assert any("provenance must be dict" in b for b in validate(dict(good, provenance="x")))
+    assert any("provenance.gt must be a dict" in b for b in validate(dict(good, provenance=dict(gt="v5"))))
+    assert any("dirty must be a list" in b for b in validate(dict(good, provenance=dict(evaluator=dict(dirty="a.py")))))
+    assert validate(dict(good, provenance=dict(evaluator=dict(dirty="unknown")))) == [], "provenance.collect writes 'unknown' when it could not check"
+    assert any("dirty must be a list" in b for b in validate(dict(good, provenance=dict(evaluator=dict(dirty=True)))))
     assert any("not a number" in b for b in validate(dict(good, metrics=dict(Q="0.7"))))
     assert any("headline" in b for b in validate(good, headline=["Q", "J"]))
     assert validate(dict(good, compare=dict(name="c", metrics=dict(Q=0.6), paired=dict(Q=dict(diff=0.1, lo=0.05, hi=0.15))))) == []
@@ -175,6 +196,33 @@ def selftest():
     assert validate(legacy) == [] and is_legacy(legacy), "a card from before the contract is accepted"
     assert any("missing field schema" in b for b in validate(legacy, legacy_ok=False))
     assert any("frames must be int" in b for b in validate(dict(good, frames=True)))
+    import io
+    import tempfile
+    from contextlib import redirect_stdout
+    with tempfile.TemporaryDirectory() as tmp:                                   # `show` prints the provenance line; a card without the block prints none
+        for name, c in (("with.json", dict(good, provenance=dict(prov, evaluator=dict(code_hash="abc", dirty=["a.py", "b.py"])))), ("without.json", good),
+                        ("unknown.json", dict(good, provenance=dict(prov, evaluator=dict(code_hash="abc", dirty="unknown")))),
+                        ("odd.json", dict(good, provenance=dict(prov, evaluator=dict(code_hash="abc", dirty=True))))):      # `show` never fails on a card it prints
+            json.dump(c, open(os.path.join(tmp, name), "w"))
+        os.makedirs(os.path.join(tmp, "proj"))
+        json.dump({}, open(os.path.join(tmp, "proj", "project.json"), "w"))          # `show` reads the problem's project.json (headline metrics): a throw-away one
+        outs = []
+        for name in ("with.json", "without.json", "unknown.json", "odd.json"):
+            buf = io.StringIO()
+            old_argv, old_proj, sys.argv = sys.argv, os.environ.get("AR_PROJECT"), ["card.py", "show", os.path.join(tmp, name)]
+            os.environ["AR_PROJECT"] = os.path.join(tmp, "proj")
+            try:
+                with redirect_stdout(buf):
+                    main()
+            finally:
+                sys.argv = old_argv
+                if old_proj is None:
+                    os.environ.pop("AR_PROJECT", None)
+                else:
+                    os.environ["AR_PROJECT"] = old_proj
+            outs.append(buf.getvalue())
+        assert "provenance: GT v5 s, evaluator abc (2 file(s) differ from the commit), frames f" in outs[0] and "provenance" not in outs[1], outs
+        assert "evaluator abc (not checked against the commit), frames f" in outs[2] and "evaluator abc (not checked against the commit), frames f" in outs[3], outs
     print("card selftest passed")
 
 

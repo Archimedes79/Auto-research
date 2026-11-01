@@ -10,7 +10,9 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
     seeds are refused. The decision records how (pairing: seed | position | single | unpaired). The typed interface pairs by position. Values
     must be finite numbers
   * the cards of the arms the rule uses must be measurements of the same thing (`incompatible`: split = evaluate.split, subset, denominator,
-    protocol, a field missing on one card counts as different; evaluate.allow lists a known difference), else nothing is decided
+    protocol, a field missing on one card counts as different; evaluate.allow lists a known difference), else nothing is decided. Cards with a
+    `provenance` block (tools/provenance.py) are compared in GT version, GT signature, evaluator code hash, frame hash and raw-data manifest hash, and a card whose evaluator
+    differs from its commit is not used (`provenance_check`; allow "provenance"); a value a card does not know is named in the verdict as 'cannot tell'
   * |effect| <= band                                  -> TIE: take the cheaper arm
   * beyond the band in the worse direction              -> CUT
   * beyond the band in the better direction, but one seed only, a paired seed on the other side, or the paired scene-bootstrap interval
@@ -201,10 +203,9 @@ def incompatible(exp, cards):
     ev = exp.get("evaluate", {})
     allow = ev.get("allow") or []
     if not isinstance(allow, list):
-        raise ValueError("evaluate.allow must be a list of fields (split, subset, denominator, protocol)")
+        raise ValueError("evaluate.allow must be a list of fields (split, subset, denominator, protocol, provenance)")
     allow = set(allow)
-    variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
-    used = {variant, exp["control"], *[c.get("vs", exp["control"]) for c in exp["rule"] if isinstance(c, dict)]}
+    used = used_arms(exp)
     out, seen = [], {}
     for a in sorted(used):
         for s, lst in cards[a].items():
@@ -222,7 +223,63 @@ def incompatible(exp, cards):
         if len(values) > 1:
             out.append(f"{'subset ' + s + ': ' if s else ''}the cards differ in {field}: " + "; ".join(
                 f"{'missing' if v == 'null' else json.loads(v)!r} ({', '.join(refs[:2])})" for v, refs in values.items()))
+    if "provenance" not in allow:
+        out += provenance_check(exp, cards)[0]
     return out
+
+
+def used_arms(exp):
+    """the arms a decision compares: the variant, the control and the `vs` of every clause"""
+    variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
+    return {variant, exp["control"], *[c.get("vs", exp["control"]) for c in exp["rule"] if isinstance(c, dict)]}
+
+
+def _prov_value(p, key):
+    """one value of a provenance block (None when the block or the value is missing)"""
+    for k in key:
+        p = p.get(k) if isinstance(p, dict) else None
+    return p
+
+
+def provenance_check(exp, cards):
+    """(differences, cannot_tell) over the `provenance` blocks (tools/provenance.py, autoresearch/reproducibility.md) of the cards one decision compares, per subset
+    key and over ALL cards of the group (not each against the first: an unknown value on one card must not hide a mismatch between the others). Per key of
+    provenance.COMPARE_KEYS (GT version, GT signature, evaluator code hash, frame hash, raw-data manifest hash): two or more distinct known values are a
+    difference (it blocks the comparison); a card that does not know the value (a missing block, 'unknown') is listed as 'cannot tell', never a refusal. The state of
+    the evaluator is a blocker of its own, once per card: it differs from its commit (`evaluator.dirty` lists files), or it was not checked (anything that is no
+    list: 'unknown', missing). Nothing at all when no card in the group carries a block (the feature is not in use yet: an old card keeps what it has).
+    evaluate.allow ["provenance"] waives the differences (decide_experiment records what was waived)"""
+    import provenance as PV
+    groups = {}
+    for a in sorted(used_arms(exp)):
+        for s, lst in cards[a].items():
+            for _, card, ref in lst:
+                if card:
+                    p = card.get("provenance")
+                    groups.setdefault(s, []).append((str(ref), p if isinstance(p, dict) and p else None))
+    diffs, unknown = [], []
+    for s, items in sorted(groups.items()):
+        if not any(p for _, p in items):
+            continue
+        for ref, p in items:
+            if p is None:
+                continue
+            dirty = _prov_value(p, ("evaluator", "dirty"))
+            if isinstance(dirty, list) and dirty:
+                diffs.append(f"{ref}: the evaluator differs from its commit ({len(dirty)} file(s), e.g. {dirty[0]}): the card is not used for a verdict")
+            elif not isinstance(dirty, list):
+                diffs.append(f"{ref}: whether the evaluator differs from its commit was not checked: the card is not used for a verdict")
+        for key in PV.COMPARE_KEYS:
+            name, known = ".".join(key), {}
+            for ref, p in items:
+                v = _prov_value(p, key) if p else None
+                if v is None or v == PV.UNKNOWN:
+                    unknown.append(f"{name} ({ref})")
+                else:
+                    known.setdefault(json.dumps(v, sort_keys=True), []).append(ref)
+            if len(known) > 1:
+                diffs.append(f"{'subset ' + s + ': ' if s else ''}the cards differ in {name}: " + "; ".join(f"{json.loads(v)!r} ({', '.join(refs[:3])})" for v, refs in known.items()))
+    return list(dict.fromkeys(diffs)), list(dict.fromkeys(unknown))
 
 
 def judge_clause(clause, exp, cards, root=None):
@@ -325,7 +382,12 @@ def decide_experiment(exp, root):
     if isinstance(pred.get("value"), (int, float)) and pred.get("vs") == exp["control"]:
         pred_txt = f"prediction {pred['value']:+.3f}, measured {effect:+.4f} (error {effect - pred['value']:+.4f})"
     subset_effects = {p["subset"]: round(p["effect"], 5) for p in hc["parts"]} if hc is not None and len(hc["parts"]) > 1 else None
-    return dict(id=exp["id"], verdict=verdict, metric=head_metric, variant=variant, control=exp["control"], effect=round(effect, 5), diffs=[round(d, 5) for d in diffs], pairing=how,
+    waived, unknown = provenance_check(exp, cards)               # differences exist here only when evaluate.allow named "provenance" (else the decision was refused above)
+    if waived:
+        why += "; provenance differences waived by evaluate.allow: " + " | ".join(waived)[:400]
+    if unknown:                                                  # values the provenance blocks of the cards do not tell (never a refusal)
+        why += "; provenance: cannot tell " + ", ".join(sorted({k.split(" ")[0] for k in unknown}))
+    return dict(id=exp["id"], cannot_tell=unknown, provenance_waived=waived, verdict=verdict, metric=head_metric, variant=variant, control=exp["control"], effect=round(effect, 5), diffs=[round(d, 5) for d in diffs], pairing=how,
                 subset_effects=subset_effects, effect_note="effect is pooled over the subset cards; the verdict uses subset_effects" if subset_effects else "",
                 interval=[round(x, 5) for x in interval] if interval else None, why=why, prediction=pred_txt, clauses=[dict(text=c["text"], ok=c["ok"], flags=c["flags"]) for c in clauses],
                 date=time.strftime("%Y-%m-%d %H:%M"))

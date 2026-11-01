@@ -387,6 +387,65 @@ try:
     except ValueError as e:
         assert "allow must be a list" in str(e), str(e)
     assert any("allow must be a list" in b for b in X.check(dict(base, arms=two, evaluate=dict(split="val", allow="denominator")), ef))
+    # provenance blocks (autoresearch/reproducibility.md): cards of one comparison that differ in GT version / signature, evaluator code hash, frame hash or raw-data manifest are refused,
+    # an evaluator that differs from its commit is not used, a value a card does not know is named as 'cannot tell' (never a refusal), allow ["provenance"] waives the
+    # refusals, and with no block on any card nothing changes
+    def prov(**kw):
+        p = dict(gt=dict(version="v5", signature="s1"), evaluator=dict(code_hash="e1", dirty=[]), data=dict(frame_hash="f1", manifest_hash="m1"))
+        for k, v in kw.items():
+            blk, key = k.split("__")
+            p[blk] = dict(p[blk], **{key: v})
+        return p
+    json.dump(dict(pv_a=fc("pv_a", 0.76, provenance=prov()), pv_b=fc("pv_b", 0.71, provenance=prov()), pv_gt=fc("pv_gt", 0.71, provenance=prov(gt__version="v4")),
+                   pv_sig=fc("pv_sig", 0.71, provenance=prov(gt__signature="s2")), pv_ev=fc("pv_ev", 0.71, provenance=prov(evaluator__code_hash="e2")),
+                   pv_fr=fc("pv_fr", 0.71, provenance=prov(data__frame_hash="f2")), pv_man=fc("pv_man", 0.71, provenance=prov(data__manifest_hash="m2")), pv_dirty=fc("pv_dirty", 0.71, provenance=prov(evaluator__dirty=["bev_suite.py", "x.py"])),
+                   pv_none=fc("pv_none", 0.71), pv_unk=fc("pv_unk", 0.71, provenance=prov(gt__version="unknown"))), open(f"{T}/prov.json", "w"))
+    pv = lambda c: dict(a=dict(cards=["prov.json#pv_a"]), c=dict(cards=[f"prov.json#{c}"]))  # noqa: E731
+    allow_pv = dict(split="val", compare="c", allow=["provenance"])
+    assert verdict(arms=pv("pv_b"), rule=onlyq) == "INCONCLUSIVE" and DC.decide_experiment(nopair(arms=pv("pv_b"), rule=onlyq), T)["cannot_tell"] == [], "equal blocks: decided"
+    for c, what in (("pv_gt", "gt.version"), ("pv_sig", "gt.signature"), ("pv_ev", "evaluator.code_hash"), ("pv_fr", "data.frame_hash"), ("pv_man", "data.manifest_hash"), ("pv_dirty", "differs from its commit")):
+        try:
+            verdict(arms=pv(c), rule=onlyq)
+            raise AssertionError(f"must be refused: {what}")
+        except ValueError as e:
+            assert "not evaluated on the same thing" in str(e) and what in str(e), str(e)
+        assert any("cannot be decided" in b and what in b for b in X.check(dict(base, arms=pv(c), rule=onlyq), ef)), "check finds what decide refuses"
+        assert verdict(arms=pv(c), rule=onlyq, evaluate=allow_pv) == "INCONCLUSIVE", f"allow provenance waives: {what}"
+    assert not any("allow must be a list" in b for b in X.check(dict(base, arms=pv("pv_b"), rule=onlyq, evaluate=dict(split="val", allow=["provenance"])), ef))
+    r_unk = DC.decide_experiment(nopair(arms=pv("pv_unk"), rule=onlyq), T)
+    assert r_unk["cannot_tell"] == ["gt.version (prov.json#pv_unk)"] and "provenance: cannot tell gt.version" in r_unk["why"], r_unk
+    r_none = DC.decide_experiment(nopair(arms=pv("pv_none"), rule=onlyq), T)
+    assert sorted(k.split(" ")[0] for k in r_none["cannot_tell"]) == ["data.frame_hash", "data.manifest_hash", "evaluator.code_hash", "gt.signature", "gt.version"], r_none["cannot_tell"]
+    assert DC.decide_experiment(nopair(arms=one_card("v10", "c10"), rule=onlyq), T)["cannot_tell"] == [], "no card has a block: nothing to say"
+    # (critic pass) all cards of a group are compared, not each against the first: an unknown value on the first card must not hide a mismatch between the others
+    import provenance as PV
+    json.dump(dict(h0=fc("h0", 0.76, seed=0, provenance=prov(gt__version="unknown")), h1=fc("h1", 0.75, seed=1, provenance=prov()),
+                   k0=fc("k0", 0.71, seed=0, provenance=prov(gt__version="v6")), k1=fc("k1", 0.70, seed=1, provenance=prov(gt__version="v6"))), open(f"{T}/prov2.json", "w"))
+    hide = dict(a=dict(cards=["prov2.json#h0", "prov2.json#h1"], seeds=[0, 1]), c=dict(cards=["prov2.json#k0", "prov2.json#k1"], seeds=[0, 1]))
+    try:
+        verdict(arms=hide, rule=onlyq, pairing="")
+        raise AssertionError("v5 against v6 must be refused although the first card does not know its version")
+    except ValueError as e:
+        assert "the cards differ in gt.version" in str(e) and "prov2.json#h1" in str(e) and "prov2.json#k0" in str(e), str(e)
+    # the pairwise rule of provenance.compare and the n-way rule of decide.py name the same keys for every single difference
+    for c, what in (("pv_gt", "gt.version"), ("pv_sig", "gt.signature"), ("pv_ev", "evaluator.code_hash"), ("pv_fr", "data.frame_hash"), ("pv_man", "data.manifest_hash")):
+        pair = PV.compare(json.load(open(f"{T}/prov.json"))["pv_a"], json.load(open(f"{T}/prov.json"))[c])
+        assert [x.split(":")[0] for x in pair[0]] == [what], (c, pair)
+    # the state of the evaluator: unchecked ('unknown', a missing key, an odd type) blocks like a dirty one, nothing crashes on an odd type, allow waives and the result says what
+    json.dump(dict(u_unk=fc("u_unk", 0.71, provenance=prov(evaluator__dirty="unknown")), u_true=fc("u_true", 0.71, provenance=prov(evaluator__dirty=True)),
+                   u_none=fc("u_none", 0.71, provenance=dict(prov(), evaluator=dict(code_hash="e1"))), u_str=fc("u_str", 0.71, provenance=dict(prov(), evaluator="unknown"))), open(f"{T}/prov3.json", "w"))
+    for c in ("u_unk", "u_true", "u_none", "u_str"):
+        arms_ = dict(a=dict(cards=["prov.json#pv_a"]), c=dict(cards=[f"prov3.json#{c}"]))
+        try:
+            verdict(arms=arms_, rule=onlyq)
+            raise AssertionError(f"an unchecked evaluator must be refused: {c}")
+        except ValueError as e:
+            assert "was not checked" in str(e), (c, str(e))
+        r_w = DC.decide_experiment(nopair(arms=arms_, rule=onlyq, evaluate=allow_pv), T)
+        assert r_w["verdict"] == "INCONCLUSIVE" and r_w["provenance_waived"] and "waived by evaluate.allow" in r_w["why"] and "was not checked" in r_w["why"], r_w
+    r_w2 = DC.decide_experiment(nopair(arms=pv("pv_gt"), rule=onlyq, evaluate=allow_pv), T)
+    assert r_w2["provenance_waived"] == ["the cards differ in gt.version: 'v5' (prov.json#pv_a); 'v4' (prov.json#pv_gt)"] and "gt.version" in r_w2["why"], r_w2
+    assert DC.decide_experiment(nopair(arms=pv("pv_b"), rule=onlyq), T)["provenance_waived"] == []
     # pairing: the experiment-level seeds declare one common order (position); an arm's own wrong-length seeds are an error; position overrides the
     # card seeds (two models of one seed); one card against one card is no pairing at all
     assert DC.decide_experiment(nopair(arms=dict(a=dict(cards=refs("v0", "v1")), c=dict(cards=refs("c0", "c1"))), seeds=[0, 1], rule=onlyq), T)["pairing"] == "position"
@@ -474,6 +533,10 @@ try:
     hold = lambda rid, split: subprocess.run([sys.executable, f"{HERE}/run.py", "--id", rid, "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", split, "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)  # noqa: E731
     assert hold("S.final.ok", "final").returncode == 0, "the renamed holdout with a logged id runs"
     assert hold("S.final2", "Final").returncode == 2 and hold("S.final3", " FINAL ").returncode == 2, "spelling does not bypass the holdout guard"
+    for k, argv in enumerate((["--split", "final"], ["--split=FINAL"])):          # the command itself asks for the holdout under another launcher split
+        r = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", f"S.cmdfinal{k}", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "val", "--",
+                            "bash", "-c", "echo x", "evaluate.py", *argv], capture_output=True, text=True, env=env)
+        assert r.returncode == 2 and "asks for the holdout split" in r.stdout, r.stdout
     json.dump(dict(json.load(open(f"{T}/project.json")), splits=["val", "final"]), open(f"{T}/project.json", "w"))
     assert "not one of the project's splits" in hold("S.other", "other").stdout
     json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k not in ("holdout_split", "splits")}, open(f"{T}/project.json", "w"))
@@ -504,10 +567,6 @@ try:
     for _ in range(100):
         if RUN.record(f"{T}/runs/S.live2").get("status") == "running":
             break
-    for k, argv in enumerate((["--split", "final"], ["--split=FINAL"])):          # the command itself asks for the holdout under another launcher split
-        r = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", f"S.cmdfinal{k}", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "val", "--",
-                            "bash", "-c", "echo x", "evaluate.py", *argv], capture_output=True, text=True, env=env)
-        assert r.returncode == 2 and "asks for the holdout split" in r.stdout, r.stdout
         time.sleep(0.1)
     time.sleep(0.5)
     assert shown()["S.live"]["state"] == "running" and raw()["S.live"]["state"] == "planned", "the schedule shows a hand-started launcher; the file is untouched"

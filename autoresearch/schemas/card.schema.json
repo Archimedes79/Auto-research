@@ -3,7 +3,7 @@
   "schema": 1,
   "required": ["schema", "name", "split", "metrics", "commit", "date"],
   "one_of": [["frames", "n"]],
-  "types": {"schema": "int", "name": "str", "split": "str", "subset": "str", "fresh": "bool", "frames": "int", "n": "int", "metrics": "dict", "commit": "str", "date": "str", "registry": "dict", "overrides": "dict", "info": "dict", "compare": "dict", "settings": "dict", "better": "dict"},
+  "types": {"schema": "int", "name": "str", "split": "str", "subset": "str", "fresh": "bool", "frames": "int", "n": "int", "metrics": "dict", "commit": "str", "date": "str", "registry": "dict", "overrides": "dict", "info": "dict", "compare": "dict", "settings": "dict", "better": "dict", "provenance": "dict"},
   "fields": {
     "schema": "the version of this contract (1)",
     "name": "the registry name of the system evaluated (models/registry.json for lcr; any stable name for another problem)",
@@ -12,6 +12,7 @@
     "fresh": "true when the numbers were computed without the evaluator's cache",
     "seed": "optional int or string: the training seed / repeat id of the system evaluated; decide.py pairs the cards of two arms by it (else by an arm's own `seeds` list, else by order: the experiment's `seeds` or `pairing`)",
     "protocol": "optional string or dict: what the evaluator says about its ground truth, cache and frame list (a version, a hash); decide.py refuses cards of one comparison whose protocols differ",
+    "provenance": "optional dict (reproducibility.md, tools/provenance.py collect): gt {version, signature, res, ss, options, index_hash}, evaluator {commit, dirty, code_hash, settings}, data {dataset, manifest_hash, split, n, frame_hash}, subject {run, ckpt_hash, step, config_hash, gt}, environment {python, torch, cuda, gpu, host, seed}; a value that is not known reads 'unknown'. decide.py refuses cards of one comparison that differ in gt version, gt signature, evaluator code hash, frame hash or raw-data manifest hash, or whose evaluator differs from its commit (dirty), unless the experiment's evaluate.allow names it",
     "frames": "the denominator: number of frames (lcr) - or",
     "n": "the denominator: number of samples / benchmark runs / test cases (generic name; a card has frames or n)",
     "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); the direction of each is in better",
