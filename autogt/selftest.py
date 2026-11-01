@@ -154,6 +154,91 @@ def run(root=None, verbose=True):
     c = np.array([gx[ix, iy], gy[ix, iy]])
     err = np.abs((c + k["flow_ego"][:, ix, iy] * dt) - (np.r_[c, 0, 1] @ Tn.T)[:2]).max()
     assert err < 0.05, err
+    # 4a coverage (v7, autogt/coverage.py): the camera layer is the old ground-plane projection, boxes hide with their height, every box
+    #    carries the observed shares of its footprint, and the helpers have known answers
+    from . import coverage as C
+    from .nuscenes_adapter import pose_matrix
+    cs_ = gt.nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
+    K_, Tc_ = np.array(cs_["camera_intrinsic"]), pose_matrix(cs_)
+    P_ = np.stack([gx.ravel(), gy.ravel(), np.zeros(gx.size), np.ones(gx.size)], 1) @ np.linalg.inv(Tc_).T
+    old_cam = (P_[:, 2] > 0.5) & (K_[0, 0] * P_[:, 0] / np.maximum(P_[:, 2], 1e-6) + K_[0, 2] >= 0) & (K_[0, 0] * P_[:, 0] / np.maximum(P_[:, 2], 1e-6) + K_[0, 2] < sd["width"]) \
+        & (K_[1, 1] * P_[:, 1] / np.maximum(P_[:, 2], 1e-6) + K_[1, 2] >= 0) & (K_[1, 1] * P_[:, 1] / np.maximum(P_[:, 2], 1e-6) + K_[1, 2] < sd["height"])
+    assert np.array_equal(k["camera"] > 0, old_cam.reshape(gx.shape)), "the camera layer is the ground-plane projection of CAM_FRONT"
+    old_occ = occlusion(gx, gy, Tc_[:2, 3], [b_["corners"] for b_ in bx if b_["observed"]])
+    assert ((k["occluded"] > 0) <= old_occ).all() and (k["occluded"] > 0).sum() <= old_occ.sum(), "soft hiding hides a subset of the old rule"
+    for b_ in bx:
+        s_ = (b_["share_camera"], b_["share_radar"], b_["share_fusion"])
+        assert all(0.0 <= x_ <= 1.0 for x_ in s_) and s_[2] <= min(s_[0], s_[1]) + 1e-9, s_
+        assert isinstance(b_["num_lidar_pts"], int) and isinstance(b_["num_radar_pts"], int)
+        assert (b_["num_lidar_pts"] + b_["num_radar_pts"] > 0) == b_["observed"]
+    assert any(0 < b_["share_fusion"] < 1 for b_ in bx) and any(b_["share_fusion"] == 0 for b_ in bx), "shares are not all 0 or 1"
+    fus_ = C.fusion_cells(k)
+    assert np.array_equal(fus_, (k["camera"] > 0) & (k["occluded"] == 0) & (k["radar"] > 0))
+    assert np.array_equal(C.coverage_for(k, "map"), fus_) and np.array_equal(C.coverage_for(k, "radar_aux"), k["radar"] > 0)
+    assert np.array_equal(C.coverage_for(k, "camera_aux"), (k["camera"] > 0) & (k["occluded"] == 0))
+    cam_ = np.array([1.5, 0.0, 1.6])                                                   # known answers on the synthetic scene
+    low = (np.array([[20.0, -1], [24, -1], [24, 1], [20, 1]]), 0.0, 0.5)               # a 0.5 m high box, x 20..24: its shadow ends at
+    hid = C.hidden_cells(gx, gy, cam_, [low])                                          # 1.5 + (24 - 1.5) * 1.6 / (1.6 - 0.5) = 34.2 m
+    row = gx[:, 52][hid[:, 52]]
+    assert 24 < row.min() < 24.6 and 33.5 < row.max() < 34.5, (row.min(), row.max())
+    tall = (low[0], 0.0, 50.0)
+    assert np.array_equal(C.hidden_cells(gx, gy, cam_, [tall]), C.hidden_cells(gx, gy, cam_, [tall], soft=False)), "infinite height = the old rule"
+    assert not C.hidden_cells(gx, gy, cam_, [low])[(gx > 20.3) & (gx < 23.7) & (np.abs(gy) < 0.7)].any(), "a box does not hide its own cells"
+    Kt_, Tt_ = np.array([[1260.0, 0, 800], [0, 1260.0, 450], [0, 0, 1]]), np.eye(4)
+    Tt_[:3, :3], Tt_[:3, 3] = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], float), cam_
+    car_ = (np.array([[10.0, -1], [14, -1], [14, 1], [10, 1]]), 0.0, 1.5)
+    ped_ = {"corners": np.array([[17.0, -0.3], [17.6, -0.3], [17.6, 0.3], [17.0, 0.3]]), "size": [0.6, 0.6, 1.7]}
+    kid_ = dict(ped_, size=[0.6, 0.6, 1.0])
+    assert C.object_shares(ped_, [car_], cam_, Kt_, Tt_, (1600, 900), [], g)["camera"] == 1.0, "a 1.7 m pedestrian behind a 1.5 m car is seen"
+    assert C.object_shares(kid_, [car_], cam_, Kt_, Tt_, (1600, 900), [], g)["camera"] == 0.0, "a 1.0 m high object behind it is hidden"
+    half_ = np.array([[10.0, -1], [12, -1], [12, 1], [10, 1]])
+    assert C.footprint_share(half_, gy > 0, g) == 0.5 and C.footprint_share(np.array([[58.0, -1], [62, -1], [62, 1], [58, 1]]), np.ones((g.nx, g.ny), bool), g) == 0.5
+    fan_ = C.radar_cells(np.array([10.0, 10.0, 80.0, -5.0]), np.array([0.0, 20.0, 0.0, 0.0]), [np.eye(4)])
+    assert fan_.tolist() == [True, False, False, False], fan_                          # in the fan, 63 deg off axis, beyond 70 m, behind
+    rig_ = C.radar_cells(gx, gy, C.rig_radar_poses())                                  # the table of the rig = the fans of a real keyframe
+    assert (rig_ != (k["radar"] > 0)).mean() < 0.01 and len(C.rig_radar_poses()) == 5, (rig_ != (k["radar"] > 0)).mean()
+    for b_ in bx:                                                                      # one rule for ground truth and detections: the stored
+        assert C.shares_in(k, b_["corners"], b_["size"][2])["fusion"] == b_["share_fusion"], b_["token"]   # share is what a detection of that footprint gets
+    assert C.shares_in(k, bx[0]["corners"], group="pedestrian")["fusion"] >= 0.0 and set(k["meta"]) >= {"image_size", "radar_poses"}
+    # the blocking test against an exact reference (shapely: the segment clipped by the footprint, then the height interval); the cases
+    # include long boxes right next to the camera, where a pre-filter by angle once dropped points (found by the review of 2026-11-01)
+    from shapely.geometry import LineString, Point
+    rng_ = np.random.default_rng(7)
+
+    def ref_blocked(cam, pt, fp, z_hi):
+        poly = ShPolygon(fp)
+        if fp[:, 0].max() < cam[0] or poly.buffer(1e-9).contains(Point(pt[:2])):
+            return False
+        inter = LineString([cam[:2], pt[:2]]).intersection(poly)
+        if inter.is_empty:
+            return False
+        ts = [np.hypot(*(np.array(c_) - cam[:2])) / np.hypot(*(pt[:2] - cam[:2])) for c_ in inter.coords]
+        zz = [cam[2] + t_ * (pt[2] - cam[2]) for t_ in (min(ts), max(ts))]
+        return max(zz) >= 0 and min(zz) <= z_hi
+    repro = np.array([[3, 1.2], [3, 3.7], [-5, 3.7], [-5, 1.2]], float)
+    assert C.blocked(np.array([[20.0, 8.1, 0.0]]), np.array([0, 0, 1.5]), [(repro, 0.0, 3.5)])[0], "long box next to the camera"
+    cam3_, bad_n, total_n = np.array([0.0, 0.0, 1.5]), 0, 0
+    for _ in range(120):
+        c_ = rng_.uniform([-2, -6], [25, 6])
+        L_, W_, yw_ = rng_.uniform(1.5, 12), rng_.uniform(0.6, 2.6), rng_.uniform(0, np.pi)
+        R_ = np.array([[np.cos(yw_), -np.sin(yw_)], [np.sin(yw_), np.cos(yw_)]])
+        fp_ = c_ + np.array([[L_ / 2, W_ / 2], [L_ / 2, -W_ / 2], [-L_ / 2, -W_ / 2], [-L_ / 2, W_ / 2]]) @ R_.T
+        if ShPolygon(fp_).contains(Point(0, 0)):
+            continue
+        z_hi_ = rng_.uniform(0.5, 3.5)
+        pts_ = np.c_[rng_.uniform([0, -15], [40, 15], (40, 2)), rng_.choice([0.0, 0.8, 1.7], 40)]
+        got_ = C.blocked(pts_, cam3_, [(fp_, 0.0, z_hi_)])
+        want_ = np.array([ref_blocked(cam3_, p_, fp_, z_hi_) for p_ in pts_])
+        bad_n, total_n = bad_n + int((got_ != want_).sum()), total_n + len(pts_)
+    assert bad_n == 0 and total_n > 3000, (bad_n, total_n)
+    ped_pts = [C.footprint_share(np.array([[10.0, -0.3], [10.6, -0.3], [10.6, 0.3], [10.0, 0.3]]) + [0, s_], gy > 0.0, g) for s_ in np.linspace(-0.1, 0.1, 9)]
+    exact_ = [(0.3 + s_) / 0.6 for s_ in np.linspace(-0.1, 0.1, 9)]
+    assert max(abs(a_ - b_) for a_, b_ in zip(ped_pts, exact_)) < 0.05, "a 0.6 m footprint: share within 0.05 of the exact area share"
+    try:
+        C.footprint_samples(np.array([[0, 0], [1, 0], [0, 1], [1, 1.0]]))
+        raise AssertionError("corners that are not consecutive must be refused")
+    except ValueError:
+        pass
     sw = gt.keyframe_gt(tok, g, sd=nx_)                           # a 12 Hz sweep frame
     assert abs(sw["meta"]["timestamp"] - nx_["timestamp"]) == 0 and sw["drivable_area"].mean() > 0.05
     # boxes at a sweep 0.2 s after the annotation (sd=): the constant-velocity shift must agree with the straight line between the
