@@ -98,6 +98,34 @@ try:
     assert rows()["S.stop"]["status"] == "stopped" and "stopped on request" in rows()["S.stop"]["notes"], rows()["S.stop"]
     assert os.path.exists(f"{T}/runs/S.stop/HOLD") and json.load(open(f"{T}/runs/S.stop/HOLD"))["who"] == "run.py" and "ON HOLD" in rows()["S.stop"]["notes"]
     assert RUN.state_of(f"{T}/runs/S.stop") == "held" and RUN.record(f"{T}/runs/S.stop")["status"] == "stopped", "the record says stopped, the state says held (a hold marker lies on it)"
+    # the provenance manifest (provenance.py manifest) at the end of every run whose run folder exists, any status; its failure is a warning, never the run's result
+    man = lambda rid: f"{T}/results/{rid}/provenance.json"          # noqa: E731
+    assert os.path.exists(man("S.ok")) and os.path.exists(man("S.bad")) and os.path.exists(man("S.stop")) and json.load(open(man("S.bad"))), "a manifest for a run of any status"
+    os.makedirs(f"{T}/results", exist_ok=True)
+    open(f"{T}/results/S.mfail", "w").write("a file where the result folder of the manifest should be")
+    mf = go("S.mfail", ["bash", "-c", "exit 3"])
+    assert mf.returncode == 3 and "warning: provenance manifest not written" in mf.stdout and rows()["S.mfail"]["status"] == "failed", (mf.returncode, mf.stdout)
+    import types
+    fake = types.ModuleType("provenance")
+    calls, real_prov = [], sys.modules.get("provenance")
+    fake.find_run_dir = lambda rid: None
+    fake.manifest = lambda rid, *a, **k: calls.append(rid)
+    sys.modules["provenance"] = fake
+    try:
+        RUN.write_manifest("S.nofolder")
+        assert calls == [], "no run folder (an evaluation, a data job): no manifest"
+        fake.find_run_dir = lambda rid: "/x"
+        RUN.write_manifest("S.folder")
+        assert calls == ["S.folder"]
+        fake.manifest = lambda rid, *a, **k: sys.exit("no run record")                  # manifest() exits with a message when the record is missing
+        RUN.write_manifest("S.exit")
+        fake.manifest = lambda rid, *a, **k: 1 / 0
+        RUN.write_manifest("S.crash")                                                    # neither SystemExit nor any other error escapes
+    finally:
+        if real_prov is None:
+            sys.modules.pop("provenance", None)
+        else:
+            sys.modules["provenance"] = real_prov
     import metrics as MET
     assert "stopped" not in MET.FAILED, "a stop on request is no failed run"
     import schedule as SC0

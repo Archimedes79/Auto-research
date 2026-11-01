@@ -448,6 +448,17 @@ def ledger_safe(ledger, row, clear=(), tries=3):
     return msg
 
 
+def write_manifest(run_id):
+    """the provenance manifest of the run (provenance.py manifest: GT, config, checkpoint, code tag, the model bundle), once at the end of every run of any status whose run
+    folder exists (a training; an evaluation or a data job has none). Only a warning when it fails: it must never change the result or the exit code of the run"""
+    try:
+        import provenance
+        if provenance.find_run_dir(run_id):
+            provenance.manifest(run_id)
+    except (Exception, SystemExit) as e:          # SystemExit: manifest() exits with a message when the run record is missing
+        print(f"[{run_id}] warning: provenance manifest not written ({type(e).__name__}: {str(e)[:160]})", flush=True)
+
+
 def wait_after(records, ids, minutes, hb=None):
     """wait for the done flags of ids; returns '' when all are done, else the reason; touches the heartbeat while waiting"""
     t0 = time.time()
@@ -811,6 +822,7 @@ def main():
     if a.no_card and missing:
         notes.append("no card")
     ledger_safe(ledger, dict(rec, result=res, notes="; ".join(notes)), clear)
+    write_manifest(a.id)
     print(f"[{a.id}] {status} (exit {rc}, {dur} s, {attempt} attempt(s)), code {commit} {rec['tag']}; log {os.path.join(d, 'run.log')}")
     return rc
 
