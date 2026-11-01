@@ -105,6 +105,8 @@ def block_inputs(frames, steps, radar, grid, old=-1):
     k = old % Fn
     if k == 0:
         raise ValueError(f"the motion block needs an older camera frame (n_cam >= 2), got {Fn} frame(s)")
+    if not steps[k]:
+        raise ValueError(f"the older frame {k} has no ego steps to the current time")
     w, m = splat_window([(frames[:, k], steps[k])], grid, head=None, mass_gate=True)
     with torch.no_grad():
         rad = radar_raster(radar, B, grid)
@@ -246,11 +248,23 @@ def _selftest():
     assert cur.shape == (1, 2, X, Y) and abs(float(dt[0]) - 0.33) < 1e-6 and float(rad[0, 2, 40, 52]) == -2.0
     xc = float((old_al[0, 0] * gx).sum() / old_al[0, 0].sum())
     assert abs(xc - (30.25 - 3.3)) < 0.3, xc                               # the ego drove 3.3 m towards it
-    try:
-        block_inputs(fr[:, :1], steps[:1], det, g)
-        raise AssertionError("one frame must be refused")
-    except ValueError:
-        pass
+    for bad in ((fr[:, :1], steps[:1]), (fr, [[], [], []])):              # one frame; an older frame without ego steps
+        try:
+            block_inputs(bad[0], bad[1], det, g)
+            raise AssertionError("must be refused")
+        except ValueError:
+            pass
+    # turning and two hops: a point of the oldest frame lands where chain_positions puts it (the ego turns 0.4 rad/s, 10 m/s)
+    from splat import chain_positions
+    fr2 = torch.zeros(1, 3, 2, X, Y)
+    fr2[0, 2, 0, 70, 60] = 1.0                                           # x 35.25 m, y 4.25 m
+    hop = tuple(torch.tensor([t]) for t in (0.165, 10.0, 0.4))
+    st2 = [[], [hop], [hop, hop]]
+    _, al2, _, _, dt2 = block_inputs(fr2, st2, det, g)
+    p_exp = chain_positions(torch.tensor([[[35.25, 4.25]]]), [hop, hop])[0, 0]
+    xc2 = float((al2[0, 0] * gx).sum() / al2[0, 0].sum())
+    yc2 = float((al2[0, 0] * gy).sum() / al2[0, 0].sum())
+    assert abs(float(dt2[0]) - 0.33) < 1e-6 and abs(xc2 - float(p_exp[0])) < 0.3 and abs(yc2 - float(p_exp[1])) < 0.3, (xc2, yc2, p_exp)
     print(f"block_inputs ok: older frame ego-aligned (x {xc:.2f} m, expected {30.25 - 3.3:.2f}), dt, radar raster, one frame refused")
     print("motion_block self-test passed")
 

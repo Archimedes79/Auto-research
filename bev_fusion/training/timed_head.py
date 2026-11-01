@@ -55,7 +55,7 @@ class MotionHead(nn.Module):
 
 class TimeMover(nn.Module):
     """Move the state to t_c + dt (either sign): ego motion + velocity head + bilinear splat with a mass channel.
-    Shared by all heads. Returns (state at t_c + dt, mass (B, 1, X, Y), v_hat)."""
+    Shared by all heads. Returns (state at t_c + dt, mass (B, 1, X, Y), v_hat), with `carry` a 4th output (the carried channels)."""
 
     def __init__(self, c, grid=None, hidden=64, v_max=40.0, corr=None):
         super().__init__()
@@ -66,9 +66,13 @@ class TimeMover(nn.Module):
         """v_field (B, 2, X, Y): a velocity computed elsewhere (the motion block, ModelConfig.motion_block) used instead of
         self.motion; carry (B, K, X, Y): extra channels moved with the state (the field itself, for the box velocity at dt),
         returned as a 4th output."""
-        head = self.motion if v_field is None else (lambda _s: v_field)
+        if v_field is None and self.motion is None:
+            raise ValueError("TimeMover without its velocity head (ModelConfig.motion_block) needs v_field on every call")
         if carry is None:
+            head = self.motion if v_field is None else (lambda _s: v_field)
             return splat_bev(state, self.grid, dt, v, omega, head=head, corr=self.corr)
+        vf = self.motion(state) if v_field is None else v_field   # the head reads the state only, never the carried channels
+        head = lambda _s: vf  # noqa: E731
         if self.corr is not None:
             raise ValueError("carry with a position correction: the correction would read the carried channels")
         C = state.shape[1]
@@ -94,6 +98,8 @@ class TimedHead(nn.Module):
         if carry is None:
             moved, mass, v_hat = self.mover(state, dt, v, omega, v_field=v_field)
             carried = None
+        elif not return_aux:
+            raise ValueError("carry is returned in the aux dict: call with return_aux=True")
         else:
             moved, mass, v_hat, carried = self.mover(state, dt, v, omega, v_field=v_field, carry=carry)
         gamma, beta = self.film(dt_embedding(dt, B, state)).unsqueeze(-1).unsqueeze(-1).chunk(2, 1)
@@ -156,7 +162,28 @@ def _selftest():
     assert torch.equal(y2, y) and aux2["carry"].shape == vf.shape
     landed = aux2["mass"][0, 0] > 0.99
     assert torch.allclose(aux2["carry"][0, 0][landed], torch.full_like(aux2["carry"][0, 0][landed], 4.0), atol=1e-4)
-    assert torch.equal(th(S, 0.5, 3.0, 0.1), th(S, 0.5, 3.0, 0.1, v_field=None, carry=None))
+    # a NON-constant carry is moved, not copied: a ramp r(x) = x carried with the ego driving 10 m/s for 0.5 s reads r(x + 5) where it landed
+    ramp = xs.view(1, 1, X, 1).expand(1, 1, X, Y).clone()
+    _, aux3 = th(S, 0.5, 10.0, 0.0, return_aux=True, v_field=torch.zeros(1, 2, X, Y), carry=ramp)
+    inner = (aux3["mass"][0, 0] > 0.99) & (xs.view(X, 1) < xs[-1] - 6.0)
+    exp = (xs.view(X, 1) + 5.0).expand(X, Y)
+    assert inner.sum() > 1000 and torch.allclose(aux3["carry"][0, 0][inner], exp[inner], atol=1e-3), "the carry is moved with the state"
+    # the loose edges: carry without v_field uses the head on the STATE only; carry needs return_aux; a mover without head needs v_field
+    _, aux4 = th(S, 0.5, 0.0, 0.0, return_aux=True, carry=ramp)
+    assert aux4["carry"].shape == ramp.shape and torch.equal(aux4["v_hat"], mover.motion(S))
+    try:
+        th(S, 0.5, 0.0, 0.0, carry=ramp)
+        raise AssertionError("carry without return_aux must raise")
+    except ValueError:
+        pass
+    headless = TimeMover(C, grid)
+    headless.motion = None
+    try:
+        headless(S, 0.5, 0.0, 0.0)
+        raise AssertionError("a mover without its head must refuse a call without v_field")
+    except ValueError:
+        pass
+    assert torch.equal(headless(S, 0.5, 0.0, 0.0, v_field=vf)[0], mover(S, 0.5, 0.0, 0.0, v_field=vf)[0])
     # 4 the motion loss: zero for the right velocity, background pulled to rest, parked objects (< 1 m/s) count as 0
     v_gt = torch.zeros(1, 2, X, Y)
     v_gt[0, 0, 40:50, 50:55] = 6.0

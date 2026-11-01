@@ -38,7 +38,7 @@ KINDS = [("camera_features", "dualbev"), ("camera_features", "bevfusion"), ("cam
          ("radar_kind", "raster"), ("radar_kind", "pillars"), ("radar_kind", "off"),
          ("fusion", "concat"), ("fusion", "gate"), ("fusion", "cmx"),
          ("trunk_kind", "dualbev"), ("trunk_kind", "second"),
-         ("object_direction", True), ("object_moving", True), ("motion_block", True), ("motion_strides", (4, 2))]
+         ("object_direction", True), ("object_moving", True), ("motion_block", True)]
 # parts a kind builds but cannot train, with the reason (a finding, not hidden): the radar branch has no past frames, so the camera's
 # window block reads no window (relevance, temperature) and its velocity head reaches the output only through the memory write of a
 # later call; the measured Doppler is the radar memory's own static gate (rad_static_gate, checked by gate_check below)
@@ -57,9 +57,9 @@ INVALID = [dict(rad_static_gate=True), dict(rad_static_gate=True, rad_temporal="
            dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 
-COMBOS += [{"motion_block": True, "box_vel_from_field": True}, {"motion_block": True, "box_vel_from_field": True, "object_moving": True}]   # t15
+COMBOS += [{"motion_block": True, "motion_strides": (4, 2)}, {"motion_block": True, "box_vel_from_field": True}, {"motion_block": True, "box_vel_from_field": True, "object_moving": True}]   # t15
 INVALID += [dict(box_vel_from_field=True), dict(motion_block=True, radar_kind="off"), dict(motion_block=True, camera_off=True),
-            dict(motion_block=True, motion_strides=(1, 2))]
+            dict(motion_block=True, motion_strides=(1, 2)), dict(motion_block=True, motion_strides=(4, 3))]
 
 
 def batch_for(cfg, B=2, Fn=3, seed=0):

@@ -40,6 +40,14 @@ network) reuses the M runs as its B0+M row and does not run them again (agreed w
   mutants and a code critic pass; the frames spread deterministically over the val scenes, the frame hash on the card, `compare
   --velocity` refuses other frames or another GT signature); maps / front mAP2 / thresholded IoU are the `seg` / `det` numbers of
   the same evaluation. Both controls are RE-SCORED with the final committed evaluator (step 0), never read from older stores.
+- **Recipe differences of M that are part of the arm (named, not hidden).** (i) Supervision: M's motion group is the MEAN of its level
+  terms (finest + the coarser ones, `losses.py`), so the group keeps the weight of the controls' one head under the Kendall weights;
+  the deep supervision itself (the coarser levels see the same velocity target) is the difference. (A sum would have given M about 3x
+  the controls' velocity supervision on the shared camera BEV while Kendall s moves slowly: the control's s.motion is -0.07 at step 580,
+  -0.17 at the end.) (ii) The field is not bounded (the controls' VelocityHead caps it at 40 tanh(v / 40)); the trainer's non-finite
+  guard and the kill (b) cover a blow-up. (iii) The 1 x 1 velocity head of the time mover is built and then removed (it draws from the
+  RNG: the flags-off path is untouched, the M arm's initial weights differ from the control's beyond the new block). (iv) M starts from
+  scratch: `warm_start` from an existing checkpoint refuses an M model (the `mover.motion.*` keys), by design for these arms.
 - **Definitions (the suite's, for every arm; t12's own definition differs and its numbers are not compared with these).** VAL,
   `eval --n 1000`, dt 0. Moving = GT speed > 0.5 m/s (`MOVING_SPEED`); cells and boxes of unknown velocity left out. Headline: field
   EPE on the moving vehicle cells of the camera view, `vel/dt+0.00/cells/vehicle_moving/epe` (vehicles: 89 % of the moving cells in
@@ -59,8 +67,11 @@ network) reuses the M runs as its B0+M row and does not run them again (agreed w
      wide). Per metric: band = max(floor, the 95 % half-width of the paired scene bootstrap of the control pair `t10_dual_s0` vs `s1`,
      |s0 - s1| of the controls on that metric) - the bootstrap measures scene sampling, |s0 - s1| the training noise; floors: headline
      and centre 0.10 m/s, static EPE 0.02 m/s, maps 0.010, mAP2 0.010. Written into section 2 with the bootstrap command.
-  3. Control parity: the M config with both flags OFF, seed 0, 20 steps on the GPU, against `runs/t10_dual_s0/log.jsonl`: the loss of
-     every step equal within 1e-3 relative (else the code or the data path drifted and nothing is run).
+  3. Control parity: the M config with both flags OFF, seed 0, 40 steps on the GPU, against `runs/t10_dual_s0/log.jsonl` (it logs
+     every 20 steps: steps 1, 20, 40): step 1 within 3e-3 relative (same seed and first batch; the GPU scatter noise is up to 3e-3,
+     `training/architecture.md`), steps 20 and 40 within 3e-2 as a drift check; plus the exact CPU equivalence of the flags-off model
+     against the `t10_dual_s0` checkpoint (`tests/equivalence.py`, max abs diff 0). Else the code or the data path drifted and nothing
+     is run.
   4. GT pinned: `runs/<arm>/gt.json` names `0.5_4_15efbde2d1` and the evaluation store's source names the same signature (compare
      refuses otherwise); the run folder holds the copy of autogt v5 (the BEV system chat's side at launch).
   5. Smoke run (20 steps through run.py, M config): every tensor of `motion_block` has a non-zero gradient and a non-zero update at

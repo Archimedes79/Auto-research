@@ -54,6 +54,7 @@ try:
     from .radar_bev import RadarBEV
     from .radar_encoder import RadarEncoder, n_channels
     from .temporal_fusion import TemporalFusion
+    from .motion_block import MotionBlock, block_inputs
     from .timed_head import TimedHead, TimeMover
 except ImportError:                                   # run as a script
     from augment import flip_cam
@@ -70,6 +71,7 @@ except ImportError:                                   # run as a script
     from radar_bev import RadarBEV
     from radar_encoder import RadarEncoder, n_channels
     from temporal_fusion import TemporalFusion
+    from motion_block import MotionBlock, block_inputs
     from timed_head import TimedHead, TimeMover
 
 Z_LEVELS = (-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)        # a slice at the road plane (oracle-lift gate fix)
@@ -239,6 +241,10 @@ def check_config(cfg):
         errs.append("box_vel_from_field reads the motion block's field: it needs motion_block")
     if cfg.motion_block and (not cfg.motion_strides or list(cfg.motion_strides) != sorted(cfg.motion_strides, reverse=True)):
         errs.append(f"motion_strides must be a non-empty decreasing tuple of cell strides, is {cfg.motion_strides}")
+    elif cfg.motion_block:
+        g = Grid(z_levels=cfg.z_levels, **cfg.grid_kwargs)
+        if any(g.nx % s or g.ny % s for s in cfg.motion_strides):
+            errs.append(f"motion_strides {cfg.motion_strides} must divide the grid {g.nx} x {g.ny}")
     if errs:
         raise ValueError("; ".join(errs))
 
@@ -294,10 +300,9 @@ class BEVFusionModel(nn.Module):
             raise ValueError(f"n_sem {cfg.n_sem} != len(layer_spec) {len(self.spec)}")
         self.mover = TimeMover(c, self.grid)
         self.motion_block = None
-        if cfg.motion_block:                                     # t15: the field comes from the block; the 1x1 head is not built (it would
-            from motion_block import MotionBlock                 # get no gradient); TimeMover then needs v_field on every call
-            self.motion_block = MotionBlock(cfg.c_cam, self.grid, strides=tuple(cfg.motion_strides))
-            self.mover.motion = None
+        if cfg.motion_block:                                     # t15: the field comes from the block; the 1x1 head is removed (built by
+            self.motion_block = MotionBlock(cfg.c_cam, self.grid, strides=tuple(cfg.motion_strides))   # TimeMover, then dropped: it would
+            self.mover.motion = None                             # get no gradient; TimeMover then needs v_field on every call)
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
         self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction, moving=cfg.object_moving),
                                   c, self.mover)
@@ -400,7 +405,6 @@ class BEVFusionModel(nn.Module):
             cam_frames = flip_cam(cam_frames, None, flip)[0]     # (the visibility map is mirrored by the precompute step)
         v_levels = None
         if self.motion_block is not None:                        # t15: the velocity field from two camera frames + radar (motion_block.py)
-            from motion_block import block_inputs
             v_levels = self.motion_block(*block_inputs(cam_frames, steps, batch["radar"], self.grid))
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
         if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam
@@ -449,8 +453,8 @@ class BEVFusionModel(nn.Module):
                 p["lines"] = soft_line_map(sem[:, self._dist_idx].float().clamp(min=0), self.grid.res)   # clamped as the evaluation does
             if abs(float(dt)) < 1e-6:
                 p["v_hat"] = self.mover.motion(S) if v_levels is None else v_levels[-1]
-                if v_levels is not None and len(v_levels) > 1:
-                    p["v_levels"] = v_levels[:-1]                  # the coarser levels: the same motion term (deep supervision, losses.py)
+                if v_levels is not None and len(v_levels) > 1:     # the coarser levels, coarse to fine: the same motion term (deep supervision,
+                    p["v_levels"] = {f"l{i}": v for i, v in enumerate(v_levels[:-1])}   # losses.py); a dict: the trainer casts tensors / dicts
                 if self.cfg.aux_heads and self.training:
                     p["cam_aux"], p["radar_aux"] = self.aux_cam(cam), self.aux_rad(rad)
             out[float(dt)] = p

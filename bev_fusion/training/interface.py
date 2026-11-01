@@ -62,7 +62,7 @@ OUTPUTS_PER_DT = {
 }
 OPTIONAL_PER_DT = {"boxes": "dense box output (extract.dense_boxes): peak weight w (B, G, X, Y) and the box parameters per cell",
                    "lines": "soft line map (B, n_lines, X, Y) from the distance channels (extract.soft_line_map)",
-                   "v_hat": "velocity field at dt = 0", "v_levels": "motion block (t15): the coarser levels' fields at dt = 0, list of (B, 2, X, Y)",
+                   "v_hat": "velocity field at dt = 0", "v_levels": "motion block (t15): the coarser levels' fields at dt = 0, dict l0, l1, ... (coarse to fine) of (B, 2, X, Y)",
                    "cam_aux": "camera aux head (training)", "radar_aux": "radar aux head (training)",
                    "obj_feat": "refiner features", "obj_dt": "refiner dt", "refine": "refiner training targets"}
 OPTIONAL_OUTPUTS = {"radar_side": "radar_kind 'delta_slots': {'features': (B, C, X, Y) encoder output, 'state': (B, 61, X, Y) lossless slot raster}, "
@@ -133,7 +133,7 @@ def check_outputs(res, dts, raise_on=False):
             shape = shape or s
             if s != shape:
                 errs.append(f"dt {dt}: sem (B, X, Y) {s} != {shape}")
-        for k, v in list(p.items()) + list((p.get("obj") or {}).items()) + list((p.get("boxes") or {}).items()):
+        for k, v in list(p.items()) + list((p.get("obj") or {}).items()) + list((p.get("boxes") or {}).items()) + list((p.get("v_levels") or {}).items()):
             if torch.is_tensor(v) and v.is_floating_point() and not torch.isfinite(v).all():
                 errs.append(f"dt {dt}: {k} not finite")
     if raise_on and errs:

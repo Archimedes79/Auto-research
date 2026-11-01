@@ -476,10 +476,10 @@ class BEVLoss(nn.Module):
             add("objects", cfg.w_refine * lr["total"])
         if "v_hat" in p and abs(float(dt)) < 1e-6:
             terms["motion"] = motion_term(p["v_hat"], T, cfg)
-            add("motion", terms["motion"])
-            for i, vl in enumerate(p.get("v_levels") or ()):     # t15: the motion block's coarser levels (deep supervision, as in t12)
-                terms[f"motion_l{i}"] = motion_term(vl, T, cfg)
-                add("motion", terms[f"motion_l{i}"])
+            lv = [motion_term(v, T, cfg) for v in (p.get("v_levels") or {}).values()]
+            for i, t in enumerate(lv):                           # t15: the motion block's coarser levels (deep supervision, as in t12)
+                terms[f"motion_l{i}"] = t
+            add("motion", (terms["motion"] + sum(lv)) / (1 + len(lv)))   # the mean over the levels: the group keeps the weight of one head
             if cfg.consistency and tt is not None:
                 terms["motion_consistency"] = consistency_term(p["obj"]["vel"], p["v_hat"], tt)
                 add("motion", cfg.w_consistency * terms["motion_consistency"])
