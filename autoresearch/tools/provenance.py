@@ -6,7 +6,9 @@ code, which frames, which model and environment made a card, so that the experim
         the `provenance` block; the writer of a card puts it under card["provenance"] (and the launcher into run.json). A card writer calls
         collect() from its own interpreter (the environment block describes the interpreter that runs collect: torch and CUDA are filled
         when torch is already imported there); the command line describes the shell's python
-    python3 provenance.py repro <run id> [--card card.json]     what to check out and run to reproduce a run (prints, changes nothing)
+    python3 provenance.py manifest <run id> [--run-dir d]       the provenance of a TRAINING run from its run record and run folder (GT it trained on,
+                                                                checkpoint, config, code tag, core code state) -> <run_records>/<id>/provenance.json
+    python3 provenance.py repro <run id> [--card card.json]     what to check out and run to reproduce a run (prints, changes nothing; reads that manifest)
     python3 provenance.py compare a.json b.json                 exit 0 comparable, 1 they differ, 2 not shown comparable (a value is unknown)
     python3 provenance.py --selftest
 
@@ -23,6 +25,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +39,8 @@ SCHEMA = 1
 CODE_SUFFIX = (".py", ".sh", ".ps1", ".json", ".yaml", ".yml")
 COMPARE_KEYS = (("gt", "version"), ("gt", "signature"), ("evaluator", "code_hash"), ("data", "frame_hash"), ("data", "manifest_hash"))
 UNKNOWN = "unknown"
+BUNDLE_ROOTS = ("model.py", "losses.py")   # the network and its losses; the bundle is every module of the same folder they import, transitively
+BUNDLE_EXCLUDE = ("train.py", "nuscenes_dataset.py", "feature_cache.py")   # the training loop and the data loaders are not part of the network: not followed, but reported when the bundle imports them
 
 
 def git(repo, *args):
@@ -265,6 +270,17 @@ def repro(run_id, card_path=None):
     L += [f"command: {r.get('command')}   (cwd {r.get('cwd')})",
           f"recorded: python {r.get('python')}, {r.get('gpu')}; this machine: python {platform.python_version()}, torch {torch_here}"]
     prov = json.load(open(card_path, encoding="utf-8")).get("provenance") if card_path else None
+    pj = os.path.join(os.path.dirname(rj), "provenance.json")
+    if not card_path and os.path.isfile(pj):  # the run's own manifest (`manifest <run id>`): GT, model and settings of the training
+        prov = json.load(open(pj, encoding="utf-8"))
+        L.append(f"manifest of the run: {pj} (made {prov.get('made')})")
+        rs, bd = prov.get("run_status") or {}, prov.get("bundle") or {}
+        if rs and not rs.get("final"):
+            L.append(f"WARNING: the run is not final (status {rs.get('status')}, exit {rs.get('exit')}): its checkpoint is not a finished model")
+        for key, what in (("missing_roots", "root modules missing"), ("unparsed", "files that do not parse (their imports are unknown)"), ("imports_excluded", "the network imports the loop or a loader"),
+                          ("external_local", "repository code outside the bundle (its version is the run's GT version / tag)"), ("dynamic_imports", "files that import by name at run time")):
+            if bd.get(key):
+                L.append(f"bundle: {what}: {', '.join(bd[key][:6])}")
     if card_path and not prov:
         L.append(f"the card {card_path} has no provenance block: GT version, evaluator hash and frames are unknown")
     elif prov:
@@ -275,14 +291,205 @@ def repro(run_id, card_path=None):
         L += [f"GT: version {g.get('version')} (signature {g.get('signature')}, dataset {g.get('dataset')}, options {g.get('options')}), code: git show {tag}",
               (f"the GT store {store} is present" if os.path.isdir(store) else
                f"the GT store {store} is MISSING: rebuild it with the code of {tag} (git worktree add ../autogt_{v} {tag}) and the options above"),
-              f"evaluator: commit {e.get('commit')}, code hash {e.get('code_hash')}" + (f", NOT CLEAN or unchecked: {e.get('dirty')}" if e.get("dirty") else ""),
+              (f"evaluator: commit {e.get('commit')}, code hash {e.get('code_hash')}" + (f", NOT CLEAN or unchecked: {e.get('dirty')}" if e.get("dirty") else "")) if e else
+              f"training code: tag {_get(prov, ('code', 'tag'))}, commit {_get(prov, ('code', 'commit'))}",
+              (f"model bundle (network + losses): {len(_get(prov, ('bundle', 'files')) or [])} files, hash {_get(prov, ('bundle', 'code_hash'))}"
+               + (f", copied to {_get(prov, ('bundle', 'copied_to'))}/" if _get(prov, ("bundle", "copied_to")) else "")) if prov.get("bundle") else "",
               f"frames: split {d.get('split')}, {d.get('n')} frames, hash {d.get('frame_hash')}",
               f"model: run {s.get('run')}, checkpoint {s.get('ckpt')} ({s.get('ckpt_hash')}), step {s.get('step')}, config {s.get('config_hash')}; "
               f"trained on GT {_get(s, ('train_gt', 'version'))}",
               f"seed {prov.get('seed')}; recorded torch {_get(prov, ('environment', 'torch'))}, CUDA {_get(prov, ('environment', 'cuda'))}"]
     else:
         L.append("no card given: pass --card <card.json> for the GT version, the evaluator hash and the frames")
-    print("\n".join(L))
+    print("\n".join(x for x in L if x))
+
+
+def import_closure(code_dir, roots=BUNDLE_ROOTS, exclude=(), info=None):
+    """the files (relative, sorted) of code_dir that the root modules import, transitively: the network and its losses. Only modules found under
+    code_dir count; a parent package of an imported module counts too (python runs its __init__). A module in `exclude` (the training loop, the
+    data loaders) is not followed and not in the result. `info` (a dict, optional) collects what the closure cannot say by itself: "skipped"
+    ("importer -> excluded module"), "unparsed" (files that do not parse: their imports are unknown), "external" (top-level names of absolute
+    imports that are neither in code_dir nor in the standard library), "dynamic" (files that import by name at run time)"""
+    import ast
+    info = info if info is not None else {}
+    for k in ("skipped", "unparsed", "external", "dynamic"):
+        info.setdefault(k, set())
+    mods = {}
+    for dp, dn, fn in os.walk(code_dir):
+        dn[:] = [d for d in dn if d != "__pycache__"]
+        for f in fn:
+            if f.endswith(".py"):
+                rel = os.path.relpath(os.path.join(dp, f), code_dir).replace("\\", "/")
+                name = rel[:-3].replace("/", ".")
+                mods[name[:-9] if name.endswith(".__init__") else name] = rel
+    byfile = {v: k for k, v in mods.items()}
+    todo, seen = [r for r in roots if r in byfile], set()
+    std = getattr(sys, "stdlib_module_names", ())
+    while todo:
+        rel = todo.pop()
+        if rel in seen:
+            continue
+        seen.add(rel)
+        try:
+            tree = ast.parse(open(os.path.join(code_dir, rel), encoding="utf-8-sig").read())   # utf-8-sig: a BOM (Notepad) is no syntax error
+        except (OSError, SyntaxError, ValueError):
+            info["unparsed"].add(rel)
+            continue
+        name = byfile[rel]
+        pkg = name if rel.endswith("__init__.py") else (name.rsplit(".", 1)[0] if "." in name else "")
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call) and ((isinstance(n.func, ast.Name) and n.func.id == "__import__") or (isinstance(n.func, ast.Attribute) and n.func.attr == "import_module")):
+                info["dynamic"].add(rel)
+            cands, absolute = [], False
+            if isinstance(n, ast.Import):
+                cands, absolute = [a.name for a in n.names], True
+            elif isinstance(n, ast.ImportFrom):
+                base = n.module or ""
+                absolute = not n.level
+                if n.level:
+                    up = pkg.split(".") if pkg else []
+                    up = up[:len(up) - (n.level - 1)] if n.level > 1 else up
+                    base = ".".join(up + ([n.module] if n.module else []))
+                cands = [base] + [f"{base}.{a.name}" if base else a.name for a in n.names]
+            for c in cands:
+                parts = c.split(".") if c else []
+                prefixes = [".".join(parts[:i]) for i in range(1, len(parts) + 1)]
+                hit = [p for p in prefixes if p in mods]
+                if absolute and not hit and parts and parts[0] not in std:
+                    info["external"].add(parts[0])
+                for p in hit:
+                    if mods[p] in exclude:
+                        info["skipped"].add(f"{rel} -> {mods[p]}")
+                    elif mods[p] not in seen:
+                        todo.append(mods[p])
+    return sorted(seen)
+
+
+def _hash_files(root, files):
+    h = hashlib.sha256()
+    for rel in files:
+        h.update(rel.encode() + b"\0" + open(os.path.join(root, rel), "rb").read().replace(b"\r\n", b"\n") + b"\0")
+    return h.hexdigest()[:12]
+
+
+def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_EXCLUDE):
+    """The model bundle of a run: the network and loss modules (import_closure of `roots` under code_dir) with a hash over their text (line endings
+    normalised), and the run's config. into = a folder to copy them to (runs/<id>/bundle/), so the model can be rebuilt from that folder and the
+    checkpoint alone; it is made next to the target, checked against the hash and moved into place, and an existing non-empty folder is left alone.
+    What the files do NOT carry is listed, never hidden: missing_roots, unparsed (their imports are unknown), imports_excluded (the network imports
+    the loop or a loader), external_local (repository folders such as autogt that the code imports: they are not in the bundle, their version is the
+    GT version of the run), dynamic_imports. Nothing found reads "unknown", never an empty hash"""
+    if not code_dir or not os.path.isdir(code_dir):
+        return {"code_hash": UNKNOWN, "files": [], "source": UNKNOWN}
+    info = {}
+    files = import_closure(code_dir, roots, exclude, info)
+    if not files:
+        return {"code_hash": UNKNOWN, "files": [], "source": code_dir, "note": f"none of {list(roots)} found"}
+    local = sorted(t for t in info["external"] if any(os.path.isdir(os.path.join(b, t)) for b in (repo_root(), P.root())))
+    out = {"code_hash": _hash_files(code_dir, files), "files": files, "roots": list(roots), "missing_roots": [r for r in roots if r not in files],
+           "excluded": list(exclude), "imports_excluded": sorted(info["skipped"]), "unparsed": sorted(info["unparsed"]), "external_local": local,
+           "dynamic_imports": sorted(info["dynamic"]), "source": os.path.basename(os.path.dirname(code_dir.rstrip("/\\"))) + "/" + os.path.basename(code_dir.rstrip("/\\"))}
+    if config and os.path.isfile(config):
+        out["config_hash"] = file_hash(config)
+    if into:
+        if os.path.isdir(into) and os.listdir(into):
+            out["copy_skipped"] = f"{os.path.basename(into)}/ exists and is not empty: left as it is"
+        else:
+            tmp = into.rstrip("/\\") + ".tmp"
+            shutil.rmtree(tmp, ignore_errors=True)
+            for rel in files:
+                os.makedirs(os.path.dirname(os.path.join(tmp, rel)) or tmp, exist_ok=True)
+                shutil.copy2(os.path.join(code_dir, rel), os.path.join(tmp, rel))
+            if config and os.path.isfile(config):
+                shutil.copy2(config, os.path.join(tmp, "config.json"))
+            if _hash_files(tmp, files) != out["code_hash"]:
+                shutil.rmtree(tmp, ignore_errors=True)
+                out["copy_skipped"] = "the copy did not read back equal"
+            else:
+                if os.path.isdir(into):
+                    os.rmdir(into)   # empty (checked above)
+                os.replace(tmp, into)
+                out["copied_to"] = os.path.basename(into)
+    return out
+
+
+def find_run_dir(run_id):
+    """the folder a run writes into: <cards folder>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists"""
+    root = P.root()
+    base = P.cfg_of(root).get("cards", "runs")
+    for name in (run_id, run_id.replace(".", "_")):
+        d = os.path.join(root, base, name)
+        if os.path.isdir(d):
+            return d
+    return None
+
+
+def final_ckpt(run_dir):
+    """(path, step) of the last checkpoint of a run folder: the highest ckpt_<step>.pt, else model.pt / block.pt / ckpt.pt; (None, None) when there is none"""
+    best = None
+    for f in os.listdir(run_dir):
+        m = re.fullmatch(r"ckpt_(\d+)\.pt", f)
+        if m and (best is None or int(m.group(1)) > best[1]):
+            best = (os.path.join(run_dir, f), int(m.group(1)))
+    if best:
+        return best
+    for f in ("model.pt", "block.pt", "ckpt.pt"):
+        if os.path.isfile(os.path.join(run_dir, f)):
+            return os.path.join(run_dir, f), None
+    return None, None
+
+
+def manifest(run_id, run_dir=None, write=True, force=False):
+    """The provenance block of a TRAINING run, made from its run record and its run folder: GT it trained on (gt.json), checkpoint, config, split,
+    seed, the run's status, the code tag and commit, and the model bundle (network + losses) from the run's own code snapshot (<run folder>/code;
+    the live tree is never used: it is not what ran). Written to <run_records>/<id>/provenance.json (`repro` reads it); an existing manifest or
+    bundle/ is not rebuilt without force, so a later call cannot replace a good record by one made after the folder was slimmed. A missing piece
+    reads "unknown"; nothing here changes the run. The environment comes from the run record: this tool runs in the launcher's interpreter, not
+    the trainer's, so torch stays unknown"""
+    rj = os.path.join(P.path("run_records"), run_id, "run.json")
+    if not os.path.isfile(rj):
+        sys.exit(f"no run record {rj}")
+    out = os.path.join(os.path.dirname(rj), "provenance.json")
+    if write and os.path.isfile(out) and not force:
+        return json.load(open(out, encoding="utf-8"))
+    r = json.load(open(rj, encoding="utf-8"))
+    run_dir = run_dir or find_run_dir(run_id)
+    have_dir = bool(run_dir and os.path.isdir(run_dir))
+    sig = cfg = ck = step = seed = None
+    if have_dir:
+        g = os.path.join(run_dir, "gt.json")
+        if os.path.isfile(g):
+            try:
+                sig = json.load(open(g, encoding="utf-8")).get("gt_signature")
+            except (OSError, ValueError, AttributeError):
+                sig = None
+        cfg = os.path.join(run_dir, "config.json")
+        cfg = cfg if os.path.isfile(cfg) else None
+        ck, step = final_ckpt(run_dir)
+        if cfg:
+            try:
+                seed = json.load(open(cfg, encoding="utf-8")).get("seed")
+            except (OSError, ValueError, AttributeError):
+                seed = None
+    seed = seed if seed not in (None, "") else (r.get("seed") if r.get("seed") not in (None, "") else None)
+    block = collect(gt_key=sig, split=r.get("split"), run=run_id, ckpt=ck, config=cfg, step=step, run_dir=run_dir if have_dir else None, seed=seed)
+    block.pop("evaluator", None)  # a training run has no evaluator; its code is the run's commit
+    drift = r.get("code_drift") or {}
+    block["code"] = {"tag": r.get("tag") or UNKNOWN, "commit": r.get("commit") or UNKNOWN, "code_hash": r.get("code_hash") or UNKNOWN,
+                     "drift_files": drift.get("paths", []) if drift.get("n") else [], "command": r.get("command"), "cwd": r.get("cwd")}
+    block["run_status"] = {"status": r.get("status") or UNKNOWN, "exit": r.get("exit"), "final": r.get("status") in ("ok", "done") and r.get("exit") == 0}
+    snap = os.path.join(run_dir, "code") if have_dir else None
+    if snap and os.path.isdir(snap):
+        block["bundle"] = bundle(snap, into=os.path.join(run_dir, "bundle") if write else None, config=cfg)
+    else:
+        block["bundle"] = {"code_hash": UNKNOWN, "files": [], "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag " + str(r.get("tag"))}
+    block["environment"] = {"python": r.get("python") or UNKNOWN, "gpu": r.get("gpu") or UNKNOWN, "host": r.get("host") or UNKNOWN,
+                            "conda_env": r.get("conda_env") or UNKNOWN, "torch": UNKNOWN, "source": "run record"}
+    if not have_dir:
+        block["run_dir"] = UNKNOWN
+    if write:
+        P.atomic_write(out, json.dumps(block, indent=1) + "\n")
+    return block
 
 
 def selftest():
@@ -401,6 +608,91 @@ def selftest():
             repro("r1")
         txt = buf.getvalue()
         assert "tag tg/r1" in txt and "WARNING: 1 file(s)" in txt and "autogt/v5" in txt and "frames: split val, 2 frames" in txt and "no card given" in txt, txt
+        # the model bundle (network + losses = the import closure of model.py and losses.py) and the manifest of a training run
+        tr = os.path.join(proj, "runs", "r2")
+
+        def put(root, rel, text):
+            os.makedirs(os.path.dirname(os.path.join(root, rel)), exist_ok=True)
+            open(os.path.join(root, rel), "w").write(text)
+        snap = os.path.join(tr, "code")
+        for root in (snap,):
+            put(root, "model.py", "import fusion\nfrom pkg import head\n")
+            put(root, "fusion.py", "import blocks\n")
+            put(root, "blocks.py", "X = 1\n")
+            put(root, "pkg/__init__.py", "")
+            put(root, "pkg/head.py", "from . import act\n")
+            put(root, "pkg/act.py", "Y = 2\n")
+            put(root, "losses.py", "from loss_extras import f\n")
+            put(root, "loss_extras.py", "def f(): pass\n")
+            put(root, "data.py", "import model\n")                  # imports the network, is not imported by it: not in the bundle
+            put(root, "train.py", "import model, data, losses\n")
+        want = ["blocks.py", "fusion.py", "loss_extras.py", "losses.py", "model.py", "pkg/__init__.py", "pkg/act.py", "pkg/head.py"]
+        assert import_closure(snap) == want, import_closure(snap)
+        h0 = bundle(snap)["code_hash"]
+        put(snap, "data.py", "import model  # edited\n")
+        put(snap, "train.py", "# edited\n")
+        assert bundle(snap)["code_hash"] == h0, "an edit of the data loader or the training loop does not change the bundle"
+        put(snap, "blocks.py", "X = 2\n")
+        assert bundle(snap)["code_hash"] != h0, "an edit of a network module does"
+        put(snap, "blocks.py", "X = 1\n")
+        put(snap, "pkg/act.py", "import train\nY = 2\n")                # a network module that imports the training loop: reported, the loop stays out
+        bx = bundle(snap, exclude=("train.py",))
+        assert "train.py" not in bx["files"] and bx["imports_excluded"] == ["pkg/act.py -> train.py"] and "train.py" in import_closure(snap), bx
+        put(snap, "pkg/act.py", "Y = 2\n")
+        assert bundle(os.path.join(tmp, "nowhere"))["code_hash"] == UNKNOWN and bundle(tmp, roots=("none.py",))["code_hash"] == UNKNOWN, "nothing found reads unknown"
+        json.dump({"gt_signature": "abc123"}, open(os.path.join(tr, "gt.json"), "w"))
+        json.dump({"seed": 3}, open(os.path.join(tr, "config.json"), "w"))
+        for n in (100, 200):
+            open(os.path.join(tr, f"ckpt_{n:08d}.pt"), "wb").write(b"w" * n)
+        os.makedirs(os.path.join(proj, "rr", "r2"))
+        json.dump({"id": "r2", "status": "ok", "exit": 0, "tag": "tg/r2", "commit": "def", "code_hash": "h2", "command": "bash t.sh", "cwd": "/x", "split": "train",
+                   "python": "3.10", "gpu": "RTX"}, open(os.path.join(proj, "rr", "r2", "run.json"), "w"))
+        m = manifest("r2")
+        assert m["subject"]["ckpt"] == "ckpt_00000200.pt" and m["subject"]["step"] == 200 and m["seed"] == 3 and m["code"]["tag"] == "tg/r2", m
+        assert m["bundle"]["files"] == want and os.path.isfile(os.path.join(tr, "bundle", "pkg", "head.py")) and os.path.isfile(os.path.join(tr, "bundle", "config.json")), m["bundle"]
+        assert not os.path.exists(os.path.join(tr, "bundle", "data.py")), "the bundle holds the network and the losses only"
+        assert json.load(open(os.path.join(proj, "rr", "r2", "provenance.json")))["code"]["commit"] == "def" and "evaluator" not in m and m["environment"]["torch"] == UNKNOWN
+        assert m["run_status"] == {"status": "ok", "exit": 0, "final": True} and m["bundle"]["missing_roots"] == [] and m["bundle"]["copied_to"] == "bundle", m
+        put(tr, "bundle/stale.py", "old\n")
+        assert manifest("r2") == m, "an existing manifest is returned, not rebuilt"
+        m2f = manifest("r2", force=True)
+        assert "copy_skipped" in m2f["bundle"] and os.path.isfile(os.path.join(tr, "bundle", "stale.py")), "a bundle/ that exists is left alone"
+        # hard cases of the closure: BOM, parent packages with code, level-2 relative imports, missing root, broken file, dynamic import, external local code
+        s2 = os.path.join(tmp, "snap2")
+        open(os.path.join(s2 if os.path.isdir(s2) else (os.makedirs(s2) or s2), "model.py"), "w", encoding="utf-8-sig").write("import pkg.head\nimport autogt\nimport torch\nimport broken\nimport importlib\nimportlib.import_module('x')\n")
+        put(s2, "pkg/__init__.py", "from .reg import R\n")
+        put(s2, "pkg/reg.py", "R = 1\n")
+        put(s2, "pkg/head.py", "from .. import top\nfrom ..lib import leaf\n")
+        put(s2, "top.py", "T = 1\n")
+        put(s2, "lib/__init__.py", "")
+        put(s2, "lib/leaf.py", "L = 1\n")
+        put(s2, "broken.py", "def (:\n")
+        os.makedirs(os.path.join(tmp, "autogt"), exist_ok=True)
+        b2 = bundle(s2)
+        assert b2["files"] == ["broken.py", "lib/__init__.py", "lib/leaf.py", "model.py", "pkg/__init__.py", "pkg/head.py", "pkg/reg.py", "top.py"] or b2["files"] == sorted(b2["files"]), b2["files"]
+        for f in ("model.py", "pkg/__init__.py", "pkg/reg.py", "pkg/head.py", "lib/leaf.py", "top.py"):
+            assert f in b2["files"], (f, b2["files"])
+        assert b2["unparsed"] == ["broken.py"] and b2["missing_roots"] == ["losses.py"] and b2["dynamic_imports"] == ["model.py"], b2
+        assert "torch" not in b2["external_local"] and "os" not in b2["external_local"], "stdlib and installed packages are not repository code"
+        # a run folder without a code snapshot: the live tree is not used; a run that is not final says so
+        os.makedirs(os.path.join(proj, "rr", "r3"))
+        os.makedirs(os.path.join(proj, "runs", "r4"))
+        os.makedirs(os.path.join(proj, "rr", "r4"))
+        json.dump({"id": "r4", "status": "stopped", "exit": 75, "tag": "tg/r4"}, open(os.path.join(proj, "rr", "r4", "run.json"), "w"))
+        m4 = manifest("r4")
+        assert m4["bundle"]["code_hash"] == UNKNOWN and "no code snapshot" in m4["bundle"]["note"] and m4["run_status"]["final"] is False, m4
+        buf4 = io.StringIO()
+        with contextlib.redirect_stdout(buf4):
+            repro("r4")
+        assert "WARNING: the run is not final (status stopped, exit 75)" in buf4.getvalue(), buf4.getvalue()
+        json.dump({"id": "r3", "status": "failed", "exit": 1}, open(os.path.join(proj, "rr", "r3", "run.json"), "w"))
+        m3 = manifest("r3")
+        assert m3["subject"].get("ckpt") is None and m3["run_dir"] == UNKNOWN and m3["bundle"]["code_hash"] == UNKNOWN, m3
+        assert m3["gt"]["version"] == UNKNOWN and m3["seed"] == UNKNOWN, "a run without a folder reads unknown, it does not crash"
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            repro("r2")
+        assert "manifest of the run" in buf.getvalue() and "model bundle (network + losses): 8 files" in buf.getvalue(), buf.getvalue()
         print("provenance selftest passed")
     finally:
         if old_env is None:
@@ -412,7 +704,7 @@ def selftest():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", nargs="?", choices=["collect", "repro", "compare"])
+    ap.add_argument("cmd", nargs="?", choices=["collect", "repro", "compare", "manifest"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--gt-key")
@@ -426,6 +718,7 @@ def main():
     ap.add_argument("--seed")
     ap.add_argument("--run-dir")
     ap.add_argument("--card")
+    ap.add_argument("--force", action="store_true", help="manifest: rebuild an existing provenance.json")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -434,12 +727,15 @@ def main():
         print(json.dumps(collect(a.gt_key, a.split, toks, a.evaluator, a.run, a.ckpt, a.config, a.step, a.run_dir, a.seed), indent=1))
     elif a.cmd == "repro" and a.args:
         repro(a.args[0], a.card)
+    elif a.cmd == "manifest" and a.args:
+        b = manifest(a.args[0], a.run_dir, force=a.force)
+        print(f"written: {os.path.join(P.path('run_records'), a.args[0], 'provenance.json')} (GT {_get(b, ('gt', 'version'))}, checkpoint {_get(b, ('subject', 'ckpt'))}, code {_get(b, ('code', 'tag'))})")
     elif a.cmd == "compare" and len(a.args) == 2:
         text, code = verdict(*compare(*(json.load(open(x, encoding="utf-8")) for x in a.args)))
         print(text)
         sys.exit(code)
     else:
-        ap.error("collect | repro <run id> | compare a.json b.json | --selftest")
+        ap.error("collect | repro <run id> | manifest <run id> [--run-dir d] | compare a.json b.json | --selftest")
 
 
 if __name__ == "__main__":
