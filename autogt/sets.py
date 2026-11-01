@@ -88,6 +88,18 @@ def stored_for(want, data=None, version=None, dataroot=None, stride=1, **options
     return {"version": version, "scenes": len(list(want)), "total": len(toks), "have": len(toks) - len(missing), "missing": missing}
 
 
+def checkable(version, dataroot):
+    """the sets (by name) whose sequences all are in this nuScenes version (small is in mini and in trainval, full only in trainval)"""
+    out = []
+    for name in names():
+        try:
+            tokens(name, version, dataroot)
+        except ValueError:
+            continue
+        out.append(name)
+    return out
+
+
 def complete_in(sig_dir, version, dataroot):
     """the sets (by name) whose every keyframe has a file in the store folder sig_dir; a set with scenes that `version` does not have
     is skipped (small can be complete in a trainval store, full cannot be in a mini store)"""

@@ -444,6 +444,22 @@ def run(root=None, verbose=True):
         m = manifest(None)                                                             # a report / build run keeps the manifest keys
         assert m["release"] is True and m["commit"] == "abc1234" and m["sets_complete"] == ["full", "small"], m
         assert manifest(None, complete=False)["release"] is False, "the provisional index of a running job is no release"
+        # review of 2026-11-02: the sets a run could check are taken from ITS list (a deleted keyframe must remove `full`), a set that this
+        # nuScenes version cannot check keeps its old entry
+        assert sets.checkable("v1.0-mini", root) == ["small"], sets.checkable("v1.0-mini", root)
+        m = manifest({**ok, "sets_complete": ["small"], "sets_checked": ["small"]})
+        assert m["sets_complete"] == ["full", "small"] and m["release"] is True, "mini cannot check full: its entry stays"
+        m = manifest({**ok, "sets_complete": [], "sets_checked": ["full", "small"]})
+        assert m.get("sets_complete", []) == [] and m["release"] is False, "a hole in full takes the set out and the release with it"
+        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": cli_mod._environment()})
+        assert m["sets_complete"] == ["full", "small"] and m["release"] is True and set(m["environment"]) >= {"numpy", "shapely"}, m
+        # a job that runs for hours refuses a generator that changed meanwhile (a pool worker imports the source tree afresh)
+        cli_mod._same_generator(gen5, gen5.signature())
+        try:
+            cli_mod._same_generator(gen5, "deadbeef00")
+            raise AssertionError("a changed generator must be refused")
+        except RuntimeError as e:
+            assert "changed while this job runs" in str(e)
         os.remove(os.path.join(sd5, "index.json"))
         assert manifest({"set": None, "commit": "abc1234", "dirty": False, "sets_complete": ["small"]})["release"] is False, "no full set"
     with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as sets_dir:
@@ -458,6 +474,15 @@ def run(root=None, verbose=True):
         held = json.load(open(os.path.join(r["out"], "index.json")))
         assert held["set"] == "tiny" and held["scenes"] == ["scene-0061", "scene-0103"] and r["keyframes"] == 4, (held, r)
         assert held["complete"] is True and held["release"] is False and r["release"] is False and "commit" in held and "dirty" in held, held
+        calls = []                                                                       # a rerun with nothing to do does not flag the store incomplete
+        real_write = cli_mod.write_index
+        cli_mod.write_index = lambda *a, **k: (calls.append(k.get("complete", True)), real_write(*a, **k))[1]
+        sets.DIR = sets_dir
+        try:
+            r2 = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+        finally:
+            cli_mod.write_index, sets.DIR = real_write, old_dir
+        assert r2["written"] == 0 and calls == [True], calls
         r_opt = cli_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
         assert r_opt["signature"] == _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"], use_flow=False).signature() != r["signature"]
     # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts

@@ -1,9 +1,9 @@
 """GT versions (decision D29, 2026-11-01): every change of the generator signature is a version vN.
 
-The signature (10 hex chars over the five files grid.py, layers.py, flow.py, nuscenes_adapter.py, nuscenes_gt.py and the options) names the
+The signature (10 hex chars over the six files grid.py, layers.py, flow.py, nuscenes_adapter.py, nuscenes_gt.py and the options) names the
 folder of the stored GT; the version is its human key. A version is: a row in versions.csv (next to this file), a git tag `autogt/vN`
 on the commit that holds that generator, and the key `gt_version` in the index.json of the stored GT. The rule when you edit one of the
-five files: the signature changes, `python -m autogt selftest` fails until versions.csv has a row for the new signature, then commit
+six files: the signature changes, `python -m autogt selftest` fails until versions.csv has a row for the new signature, then commit
 and tag (`git tag -a autogt/v6 -m "..."`), rebuild the GT, tell the others. An old GT is rebuilt from its tag:
 `git worktree add temp/gt_v5 autogt/v5`, then run `build` of the package in that checkout (the old tags have no `generate`; exact
 command and the check that it is the checkout's package that runs: README.md, section Versions).
@@ -59,15 +59,25 @@ def row_of(version):
 
 
 def code_state():
-    """{"commit": short hash of HEAD, "dirty": True when anything in autogt/ differs from it (edited or new files)}; both None when
-    git is not available here. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one."""
+    """{"commit": short hash of HEAD, "dirty": True when anything in autogt/ differs from it (edited or new files)}; both None, with a warning,
+    when git cannot tell. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one. A worktree
+    that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then."""
+    import shutil
     import subprocess
     here = os.path.dirname(os.path.abspath(__file__))
-    try:
-        head = subprocess.run(["git", "-C", here, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=30)
-        status = subprocess.run(["git", "-C", here, "status", "--porcelain", "--", "."], capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.SubprocessError):
-        return {"commit": None, "dirty": None}
-    if head.returncode or status.returncode:
-        return {"commit": None, "dirty": None}
-    return {"commit": head.stdout.strip(), "dirty": bool(status.stdout.strip())}
+    attempts = [("git", here)]
+    if shutil.which("git.exe"):
+        win = subprocess.run(["wslpath", "-w", here], capture_output=True, text=True).stdout.strip()
+        attempts.append(("git.exe", win or here))
+    for exe, where in attempts:
+        try:
+            head = subprocess.run([exe, "-C", where, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=30)
+            status = subprocess.run([exe, "-C", where, "status", "--porcelain", "--", "."], capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if not (head.returncode or status.returncode):
+            return {"commit": head.stdout.strip(), "dirty": bool(status.stdout.strip())}
+    import sys
+    print("WARNING: git cannot tell the commit and the state of autogt/ here: the manifest gets no commit and the store is no release; "
+          "run `python -m autogt generate` again from a clean checkout to stamp it", file=sys.stderr, flush=True)
+    return {"commit": None, "dirty": None}

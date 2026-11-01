@@ -93,7 +93,20 @@ def run_manifest(sig_dir, version, dataroot, set_name=None):
     sets that the folder now holds in full (see sets.py)"""
     from . import sets, versions
     from .suite import code_signature
-    return {"set": set_name, **versions.code_state(), "generator": code_signature(), "sets_complete": sets.complete_in(sig_dir, version, dataroot)}
+    return {"set": set_name, **versions.code_state(), "generator": code_signature(), "environment": _environment(),
+            "sets_complete": sets.complete_in(sig_dir, version, dataroot), "sets_checked": sets.checkable(version, dataroot)}
+
+
+def _environment():
+    """the versions of the libraries whose behaviour shapes the stored bytes (the generator signature hashes our files, not these)"""
+    from importlib import metadata
+    out = {}
+    for pkg in ("numpy", "shapely", "opencv-python", "matplotlib", "nuscenes-devkit", "pyquaternion"):
+        try:
+            out[pkg] = metadata.version(pkg)
+        except metadata.PackageNotFoundError:
+            out[pkg] = "?"
+    return out
 
 
 def canonical_of(signature):
@@ -133,13 +146,15 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
            "ss": gen.ss, "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
            "complete": complete}
     kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
-    sets_complete = sorted(set(kept.get("sets_complete", [])) | set((run or {}).get("sets_complete", [])))
+    # the sets this run could check are taken from its fresh list (a deleted keyframe removes `full`); a set that this nuScenes version cannot
+    # check (small is in mini, full is not) keeps its old entry
+    sets_complete = sorted((set(kept.get("sets_complete", [])) - set((run or {}).get("sets_checked", []))) | set((run or {}).get("sets_complete", [])))
     if run is None:
-        idx.update({k: kept[k] for k in ("set", "generator", "commit", "dirty", "release") if k in kept})
+        idx.update({k: kept[k] for k in ("set", "generator", "environment", "commit", "dirty", "release") if k in kept})
         if "release" in idx and not complete:
             idx["release"] = False                                 # a run in progress (its provisional index) is not a release
     else:
-        idx.update(set=run.get("set"), generator=run.get("generator"), commit=run.get("commit"), dirty=run.get("dirty"),
+        idx.update(set=run.get("set"), generator=run.get("generator"), environment=run.get("environment"), commit=run.get("commit"), dirty=run.get("dirty"),
                    release=bool(complete and gt_version and run.get("dirty") is False and "full" in sets_complete))
     if sets_complete:
         idx["sets_complete"] = sets_complete
@@ -152,15 +167,24 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
 def _group_task(args):
     """one worker, one group of sequences: its memory-light devkit is loaded once (that takes minutes on a busy box), then its missing
     keyframes are written one after the other -> (label, keyframes written, seconds)"""
-    label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose = args
+    code_sig, label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose = args
     t0 = time.time()
     _init(dataroot, version, res, ss, options, grp)
+    _same_generator(_STATE["gt"], code_sig)
     done = 0
     for i, t in enumerate(todo):
         done += _work((t, sig_dir))
         if verbose and i % 500 == 0:
             print(f"[{label}] {i}/{len(todo)} keyframes, {time.time() - t0:.0f} s", flush=True)
     return label, done, time.time() - t0
+
+
+def _same_generator(gen, code_sig):
+    """a job that runs for hours must not mix two generators: a worker imports the source tree afresh, so a hashed file edited meanwhile
+    would write the later groups with new code into the folder of the old signature"""
+    if gen.signature() != code_sig:
+        raise RuntimeError(f"a generator file changed while this job runs (signature {code_sig} at the start, {gen.signature()} now): "
+                           "stop and start it again from a clean tree (a worktree of the tag)")
 
 
 def check_resume(sig_dir, grid, ss):
@@ -260,7 +284,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
     import gc
     from . import sets
-    from .suite import AutoGT, DATA, current_signature, json_tables, scene_tokens
+    from .suite import AutoGT, DATA, code_signature, current_signature, json_tables, scene_tokens
     if set_name and scenes is not None:
         raise ValueError(f"pass either scenes= or set_name= ({set_name!r}), not both")
     if stride < 1:
@@ -282,7 +306,6 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     except SystemExit as e:                                                                          # a library call raises, it does not exit
         raise ValueError(str(e)) from None
     os.makedirs(sig_dir, exist_ok=True)
-    write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)           # before the first keyframe, also on a resume
     stored = sets.held(sig_dir)
     size = min(GROUP_SCENES, max(1, -(-len(names) // workers)))           # with several workers every worker gets a group of its own
     groups = []
@@ -291,15 +314,19 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         todo = [t for n in grp for t in tokens[n] if t not in stored]
         if todo:                                                          # a finished group needs no devkit load
             groups.append((f"group {g0 // size + 1}/{-(-len(names) // size)}", grp, todo))
+    code_sig = code_signature(**options)
+    if groups:                                                        # a finished store is not flagged incomplete by a rerun that has nothing to do
+        write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)       # before the first keyframe, also on a resume
     done = 0
     if workers <= 1 or len(groups) <= 1:
         for label, grp, todo in groups:
             gen = AutoGT(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
+            _same_generator(gen, code_sig)
             done += _write_tokens(gen, todo, sig_dir, 1, None, verbose)
             del gen
             gc.collect()
     else:                       # one group per worker: the devkit of a group is loaded once, by the worker that writes it, not once per worker
-        jobs = [(label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose) for label, grp, todo in groups]
+        jobs = [(code_sig, label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose) for label, grp, todo in groups]
         with mp.get_context("spawn").Pool(min(workers, len(jobs)), maxtasksperchild=1) as pool:
             for label, n, secs in pool.imap_unordered(_group_task, jobs):
                 done += n

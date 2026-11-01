@@ -30,7 +30,7 @@ per line, `#` starts a comment. `python -m autogt sets` lists them and how much 
 (`autogt.sets.status(name)` in code). Small is a part of full and both share the signature folder, so running small first is not wasted.
 The `index.json` of a folder is its manifest: `gt_version` (key of `versions.csv`, only for a released signature), `commit` (short hash of
 HEAD when the last run was made) and `dirty` (anything in `autogt/` differed from it), `set` (the set the last run asked for),
-`sets_complete` (the sets whose every keyframe has a file) and `release`: true when the folder is complete, its signature is a released
+`sets_complete` (the sets whose every keyframe has a file; a run takes the sets it can check from its own listing, so a deleted keyframe removes `full` and the release), `environment` (versions of numpy, shapely, opencv, matplotlib, nuscenes-devkit: the generator signature hashes our files, not these) and `release`: true when the folder is complete, its signature is a released
 GT version, the tree was clean and `full` is complete. Use a folder with `release: true` for a number you report as a release; a
 folder with `dirty: true` or no `gt_version` is scratch. The network input that a model precomputes from the GT (it needs the
 backbone) is not made here; it is a product of the model code and carries its own version and the `gt_version` it stands on.
