@@ -224,8 +224,13 @@ def compare(a, b):
         elif x != y:
             diff.append(f"{'.'.join(k)}: {x} != {y}")
     for side, d in (("first", a), ("second", b)):
+        if d.get("error"):
+            diff.append(f"the provenance of the {side} card could not be collected: {d['error']}")
+            continue
         dirty = _get(d, ("evaluator", "dirty"))
-        if dirty == UNKNOWN:
+        if dirty is None:
+            unknown.append(f"evaluator.dirty ({side} card)")
+        elif dirty == UNKNOWN:
             diff.append(f"the evaluator of the {side} card was not checked against its commit")
         elif dirty:
             diff.append(f"the evaluator of the {side} card differs from its commit ({len(dirty)} file(s), e.g. {dirty[0]})")
@@ -368,6 +373,9 @@ def selftest():
         assert compare({"provenance": a}, {"provenance": a}) == ([], []), "a whole card is accepted"
         e = dict(a, evaluator=dict(a["evaluator"], dirty=UNKNOWN))
         assert any("not checked" in x for x in compare(a, e)[0]), "an unchecked evaluator blocks"
+        err = {"schema": 1, "error": "collector failed"}
+        assert any("could not be collected" in x for x in compare(a, err)[0]) and verdict(*compare(a, err))[1] == 1, "an error-only block blocks like decide.provenance_check"
+        assert verdict(*compare(a, dict(a, evaluator={})))[1] == 2, "a block without the evaluator is not shown comparable"
         # checkpoints: the partial hash sees the head and the tail, marks itself, and the small one is whole
         big = os.path.join(tmp, "big.bin")
         with open(big, "wb") as f:
