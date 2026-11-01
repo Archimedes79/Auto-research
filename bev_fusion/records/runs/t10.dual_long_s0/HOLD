@@ -1,0 +1,7 @@
+{
+ "id": "t10.dual_long_s0",
+ "who": "tools chat (request of the autoresearch core chat)",
+ "when": "2026-11-01T17:35:40",
+ "why": "stopped twice at the person's request (exit 75 at step 4773 and 5030 of 6000); resume only on the person's own word",
+ "words": "second-hand, from the ledger decision of the BEV system chat (commit 64a853e): the user answered no to finishing it before the new long run and chose a complete network next; resume only on the word of the user"
+}
