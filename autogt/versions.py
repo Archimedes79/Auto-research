@@ -10,6 +10,7 @@ command and the check that it is the checkout's package that runs: README.md, se
 
     autogt.versions.table()          the rows (dicts)
     autogt.versions.version_of(sig)  "v5" or None; autogt.current_version() the version of THIS source with the default options
+    autogt.versions.version_of_key(k) the same for a training cache key '0.5_4_<signature>' (what runs/<name>/gt.json and the cards record)
     python -m autogt versions        the table, the current version marked, which GT is stored
     autogt.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
 """
@@ -34,6 +35,12 @@ def table():
 def version_of(signature):
     """the version key of a generator signature (default options), or None when it is not a released version"""
     return next((r["version"] for r in table() if r["signature"] == signature), None)
+
+
+def version_of_key(key):
+    """the version of a GT cache key whose last part is the generator signature, such as the training's '0.5_4_15efbde2d1' or
+    '0.5_x0_40_y-20_20_4_15efbde2d1' (or a bare signature): "v5", or None when it is not a released version (or has other options)"""
+    return version_of(str(key).rsplit("_", 1)[-1])
 
 
 def row_of(version):

@@ -102,6 +102,15 @@ def freeze_scenes(cfg) -> None:
         cfg.train_scenes, cfg.val_scenes = cfg.train_scenes or frozen["train"], frozen["val"]
 
 
+def gt_version(sig) -> Optional[str]:
+    """the GT version key (D29: v5, ...) of a GT identity '<res>_<ss>_<generator signature>'; None when it is not a released version"""
+    try:
+        from autogt.versions import version_of_key
+        return version_of_key(sig) if sig else None
+    except ImportError:
+        return None
+
+
 def gt_signature(ds) -> Optional[str]:
     """identity of the GT a dataset scores against: '<res>_<ss>_<generator signature>' (the suffix of its GT cache files, the same as
     FrontRadarDataset.gt_signature of the current code); None for a code snapshot whose generator has no signature"""
@@ -162,9 +171,10 @@ def _make_source_class():
             return self._frames[scene]
 
         def describe(self) -> Dict[str, Any]:
+            sig = gt_signature(self.ds)
             return {"class": "BEVSource", "dataset": "nuScenes " + self.cfg.version, "split": self.split, "scenes": len(self._frames),
                     "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None,
-                    "gt_signature": gt_signature(self.ds)}
+                    "gt_signature": sig, "gt_version": gt_version(sig)}
 
         # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
         def prefetch(self, refs: Sequence[FrameRef]) -> None:

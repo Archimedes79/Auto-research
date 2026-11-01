@@ -668,7 +668,13 @@ def record_gt(out_dir, datasets):
         return None
     sig = sigs[0] if len(sigs) == 1 else sigs
     path = os.path.join(out_dir, "gt.json")
-    rec = {"gt_signature": sig}
+    try:                                                      # D29: the human key of the GT version (v5, ...) next to the signature; none for an unreleased source
+        from autogt.versions import version_of_key
+        ver = [version_of_key(s) for s in sigs]
+        ver = None if None in ver else (ver[0] if len(ver) == 1 else ver)
+    except ImportError:
+        ver = None
+    rec = {"gt_signature": sig, **({"gt_version": ver} if ver else {})}
     if not os.path.exists(path) and any(f.startswith("ckpt_") and f.endswith(".pt") for f in os.listdir(out_dir)):
         rec["earlier"] = ["unknown: the run has checkpoints from before gt.json existed"]   # a resume of a run started before 2026-10-31
     if os.path.exists(path):

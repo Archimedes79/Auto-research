@@ -138,6 +138,11 @@ def check_f3():
         T.record_gt(d, (D("0.5_4_bbb"), D("0.5_4_bbb")))                          # other GT on resume: recorded, the earlier kept
         assert json.load(open(os.path.join(d, "gt.json"))) == {"gt_signature": "0.5_4_bbb", "earlier": ["0.5_4_aaa"]}
         assert T.record_gt(d, (object(),)) is None                                 # datasets without a GT identity: nothing written
+    from autogt.versions import table
+    v5 = next(r for r in table() if r["version"] == "v5")["signature"]
+    with tempfile.TemporaryDirectory() as d2:                                      # D29: a released signature also gets its version key
+        T.record_gt(d2, (D("0.5_4_" + v5), D("0.5_4_" + v5)))
+        assert json.load(open(os.path.join(d2, "gt.json"))) == {"gt_signature": "0.5_4_" + v5, "gt_version": "v5"}
     print("F3 ok: gt.json records the GT identity of a run (grid, supersampling, autogt signature); a GT change on resume is kept")
 
 

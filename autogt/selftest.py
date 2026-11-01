@@ -286,6 +286,8 @@ def run(root=None, verbose=True):
     assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: add one, "
                                                       "commit, tag autogt/v<N> (decision D29)")
     assert current_version() == V.version_of(gt.signature()) and current_version(boxes_at="annotation").startswith(current_version() + "+")
+    assert V.version_of_key("0.5_4_" + gt.signature()) == V.version_of(gt.signature()) == V.version_of_key("0.5_x0_40_y-20_20_4_" + gt.signature())
+    assert V.version_of_key("0.5_4_deadbeef00") is None and V.version_of_key(gt.signature()) == V.version_of(gt.signature())
     import subprocess                                       # the older rows are final, so their git tag exists (the last row is tagged after its commit)
     repo_ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if os.path.exists(os.path.join(repo_, ".git")):
