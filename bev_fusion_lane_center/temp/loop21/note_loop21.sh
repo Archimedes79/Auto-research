@@ -1,7 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")/../.."
-L=../autoresearch/tools/ledger.py
-python3 $L note E257.a0 --result "DP simplification 0.3 m: vert100 14.98 -> 8.99 (fast_recall), 14.83 -> 8.52 (champion); Q -0.0008 / -0.0014; F1@0.5 -0.0037 / -0.0053; J unchanged; eps 0.2: 9.86 / 9.52 vertices, Q -0.0003 / -0.0005, F1@0.5 -0.0017 / -0.0017" --decision "KEEP by decide.py (pooled guards); per model the champion misses the F1@0.5 guard at eps 0.3 by 0.0003, eps 0.2 holds both; prediction -5.0 hit (-6.0 / -6.3); D20 filed (vertex budget counting)"
-python3 $L note E258.p0 --result "profile of assemble() (200 frames, load 4.2): relocate_forks 21 %, anchor_junctions_fast 16 %, path union place 16 %, simplify 11 %, prune_forks 6 %" --decision "two stages above 15 % (prediction hit); step 1b: stage removal variants"
-python3 $L note E258.a0 --result "fast_recall: reloc off Q -0.0111 J -0.054; anchor off Q -0.0004 J -0.0042 vert +0.04, -2.7 ms relative; champion: reloc off Q -0.011 J -0.052; anchor off Q -0.0076 J -0.036" --decision "reloc stays; anchoring off only a candidate for the j1 family (outside the rule for the champion)"
-python3 $L note E258.b0 --result "anchoring off on four j1rc seeds: dQ -0.0004 / +0.0005 / -0.0010 / -0.0011, dJ -0.0042 / -0.0003 / -0.0068 / -0.0072, dvert100 +0.04 .. +0.05; relative saving 2.5 - 4.1 ms on a loaded machine (about a fifth of the assembly)" --decision "holds on 4 of 4 seeds (prediction 3 of 4): fast_recall_na registry entry; absolute saving to be measured in an idle window"

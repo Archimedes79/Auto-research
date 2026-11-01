@@ -1,3 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")/../.."
-python3 ../autoresearch/tools/ledger.py note E252.a0 --result "VAL 873 has two cities only (Boston 396 frames / 10 scenes, One-North 477 / 12). Q Boston - Singapore +0.052 (champion), +0.049 (j1eq s0), +0.070 (j1rc s0): Boston HIGHER, prediction -0.03 missed in sign. Correct points with |lateral offset| > 0.5 m: 22.4 % Boston vs 26.7 % Singapore (ratio 0.84, needed >= 1.5). Per-scene median signed offset within +-0.04 m, 1 of 22 scenes beyond 0.15 m. Identity check passed" --decision "cap NOT supported; report metrics by city next to the pooled number; third city only via the b456 loader"

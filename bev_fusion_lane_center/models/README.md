@@ -19,3 +19,6 @@ The checkpoint files stay in `../runs/` (the live code loads them by those paths
 | learned gate | `e17/e134_gate/*_gate.pkl`, `e17/e140_gateB` | 12.5 k-parameter stabiliser (spatial memory gate) | `p17_gate.py` |
 
 Rules: a checkpoint is registered here when it supports a number in a report; the run folder keeps `log.txt` and `status.json`. Do not overwrite a checkpoint - new runs get new folders (`CLAUDE.md`). Remove unreferenced checkpoints only via `_to_delete/`.
+
+## The best three
+`../experiment_execution/keep3.json` (made by `../../autoresearch/tools/keep3.py`) names the best three networks, one slot per checkpoint, ranked by Q on the full VAL split (card `../runs/eval/<name>/val.json`, band 0.010). Their checkpoints stay complete; every other checkpoint may be slimmed or archived, never deleted. `python3 ../../autoresearch/tools/keep3.py candidates` lists the networks, `consider <name> [--ledger <id> | --by-hand "reason"] [--apply]` takes one in. When the three change, commit the text records and push (rule: root `CLAUDE.md`, "Git").

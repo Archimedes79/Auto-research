@@ -1,4 +1,0 @@
-device cuda; 1500 steps x batch 8, 2 seeds; 64 test scenes; one-cell-wide lines, input blurred (sigma 1 cell) + noise
-arm                            IoU  F1 (+-1 cell)  thickness
-T2 (default)                 0.995          1.000       1.00   (IoU per seed 0.995, 0.995)
-T2 + detail path (32 ch)     0.995          1.000       1.00   (IoU per seed 0.995, 0.995)

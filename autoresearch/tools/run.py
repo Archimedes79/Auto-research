@@ -59,6 +59,7 @@ import io
 import json
 import os
 import platform
+import posixpath
 import re
 import shutil
 import signal
@@ -128,8 +129,26 @@ def snapshot_spec(root, cfg):
     return top, spec, head
 
 
-def write_tree(top, spec, head):
-    """tree id of HEAD with the spec paths replaced by the working tree, made in a TEMPORARY index (the shared index is untouched); returns (tree, error text)"""
+def scratch_scripts(top, root, cfg):
+    """the .py / .sh files below the scratch folder (project.json scratch), relative to the repository top, when that folder lies inside a snapshotted code
+    folder, else []. The .gitignore keeps scratch out of ordinary commits (check_git.py), so the snapshot adds these by force: a run's tag and clean_temp.py
+    still hold the scripts of a loop"""
+    norm = lambda x: posixpath.normpath(x.replace("\\", "/")).strip("/")
+    s = norm(cfg.get("scratch") or "")
+    if not s or s == "." or not any(norm(d) in (".", "") or s == norm(d) or s.startswith(norm(d) + "/") for d in cfg["code_dirs"]):
+        return []
+    out = []
+    for dp, dn, fns in os.walk(os.path.join(root, s)):
+        dn[:] = [d for d in dn if d != "__pycache__" and not d.startswith("literature_backup_")]  # never in git (the old .gitignore rule)
+        out += [os.path.relpath(os.path.join(dp, fn), top).replace("\\", "/") for fn in fns if fn.endswith((".py", ".sh"))]
+    return sorted(out)
+
+
+def write_tree(top, spec, head, force=None):
+    """tree id of HEAD with the spec paths replaced by the working tree, made in a TEMPORARY index (the shared index is untouched); returns (tree, error text).
+    A spec path that is a file (fingerprint_extra) is added even when a .gitignore rule matches it (named on purpose). `force` = a function that returns more
+    files to add by force (the scratch scripts); it is called AFTER the slow `add -A`, so a script that is moved while the index is built is not named, and
+    a file that is gone at the add is skipped"""
     fd, idx = tempfile.mkstemp(prefix="ar_index_")
     os.close(fd)
     os.remove(idx)
@@ -139,9 +158,22 @@ def write_tree(top, spec, head):
             r = git(top, "read-tree", "HEAD", env=env)
             if r.returncode != 0:
                 return "", "read-tree: " + r.stderr.strip()[:120]
-        r = git(top, "add", "-A", "--", *spec, env=env)
-        if r.returncode != 0:
-            return "", "add: " + r.stderr.strip()[:120]
+        files = [s for s in spec if os.path.isfile(os.path.join(top, s))]
+        dirs = [s for s in spec if s not in files]  # a folder, or a file that is gone from disk but still in HEAD (its deletion is recorded)
+        for args in ((("-A",), dirs), (("-f", "-A"), files)):
+            if args[1]:
+                r = git(top, "add", *args[0], "--", *args[1], env=env)
+                if r.returncode != 0:
+                    return "", "add: " + r.stderr.strip()[:120]
+        lit = dict(env, GIT_LITERAL_PATHSPECS="1")  # a name with [ or * is no pattern
+        more = [f for f in (force() if force else []) if os.path.lexists(os.path.join(top, f))]
+        for i in range(0, len(more), 100):  # chunks keep the command line short
+            chunk = more[i:i + 100]
+            if git(top, "add", "-f", "--", *chunk, env=lit).returncode != 0:  # one file went between the check and the add: one by one, the gone ones are skipped
+                for f in chunk:
+                    r = git(top, "add", "-f", "--", f, env=lit)
+                    if r.returncode != 0 and os.path.lexists(os.path.join(top, f)):
+                        return "", "add -f: " + r.stderr.strip()[:120]
         r = git(top, "write-tree", env=env)
         if r.returncode != 0:
             return "", "write-tree: " + r.stderr.strip()[:120]
@@ -158,7 +190,7 @@ def git_snapshot(root, cfg, prefix, run_id, msg):
             return "no-git", "", ""
         tag = f"{prefix}/{run_id}"
         top, spec, head = snapshot_spec(root, cfg)
-        tree, err = write_tree(top, spec, head)
+        tree, err = write_tree(top, spec, head, lambda: scratch_scripts(top, root, cfg))
         if err:
             return "git-error", "", err
         if head and tree == git(top, "rev-parse", "HEAD^{tree}").stdout.strip():
@@ -202,7 +234,7 @@ def code_drift(root, cfg, commit, before, spec):
         if drift_hash(root, cfg) == before:
             return {}, ""
         top, spec_now, head = snapshot_spec(root, cfg)
-        live, err = write_tree(top, spec_now, head)
+        live, err = write_tree(top, spec_now, head, lambda: scratch_scripts(top, root, cfg))
         if err:
             return {}, "failed: " + err
         r = git(top, "diff-tree", "-r", "--name-only", commit, live, "--", *spec)

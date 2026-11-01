@@ -1,3 +1,0 @@
-#!/bin/bash
-cd "$(dirname "$0")/../.."
-python3 ../autoresearch/tools/ledger.py note E244.a0 --result "CUT by the lead at 02:33 (iteration 3200 of 4800, 2 h 12 min): the machine was shared with other chats (load average 30-64, a second GPU process for 100 min), 100 iterations took 1400-2400 s instead of 60-110 s, 1600 iterations would not finish before 04:00. Only model_at25 / model_at50 exist. Not a verdict on the Poisson loss; the loss curve is healthy (phd 1.54 flat, rec 1.05)" --decision "no decision; model_at50 evaluated as a labelled partial reading against the E241 seed-2 checkpoints at 50 %; E244.a1, E240.a3 / c3, E244.b1 launchers (waiting, never started) cancelled; next loop: rerun a0 / a1 on a quiet machine"

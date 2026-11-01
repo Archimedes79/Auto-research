@@ -1,8 +1,0 @@
-58 keyframes of nuScenes mini; static returns = |ego-compensated radial velocity| < 0.5 m/s, 0.5 s window
-range    static / frame  recall proxy  recall NULL  precision proxy  precision NULL
-0-20 m              114         39.4%        21.8%            18.8%            9.7%
-20-40 m             229         26.8%        22.0%            19.3%           16.5%
-40-60 m             168         19.7%        13.4%            17.8%           13.8%
-all                 511         27.2%        19.1%            18.7%           13.7%
-where the static returns are: in a stationary box 10.0 %; within 1 m of the drivable edge (band) 9.8 %; inside the drivable area (> 1 m from the edge) 7.0 %; outside the drivable area (> 1 m from the edge) 73.3 %
-distance of static returns from the drivable area (m): median 5.6, share within 1 / 2 / 5 / 10 m: 24 % / 31 % / 48 % / 61 %

@@ -69,14 +69,11 @@
 /bev_fusion_lane_center/literature/code/*
 !/bev_fusion_lane_center/literature/code/README.md
 !/bev_fusion_lane_center/literature/code/_TEMPLATE.md
-# scratch: only the scripts (a run's tag keeps them after the loop's clean-up)
+# scratch: never in an ordinary commit (`git add -A` does not sweep it in; autoresearch/tools/check_git.py refuses it before a push); a run's tag and clean_temp.py keep the scripts,
+# because the launcher's snapshot adds the .py / .sh files of the scratch folder by force (run.py scratch_scripts)
 !/bev_fusion_lane_center/temp/
 /bev_fusion_lane_center/temp/**
-!/bev_fusion_lane_center/temp/**/
-!/bev_fusion_lane_center/temp/**/*.py
-!/bev_fusion_lane_center/temp/**/*.sh
 !/bev_fusion_lane_center/temp/README.md
-/bev_fusion_lane_center/temp/literature_backup_*/
 
 # not in git: wsl/ (the WSL disk image) and the raw data itself (nuScenes is on D:). In git: the description and the download / check tools of the raw data (recipes)
 !/datasets/
@@ -90,13 +87,13 @@
 !/bev_fusion/
 /bev_fusion/runs/*
 !/bev_fusion/runs/README.md
-# scratch of problem 2 (as for the lane problem): only the scripts; results, logs, feature dumps, patches and JSON of a one-off stay out
-# (what is tracked already stays tracked)
+# scratch of problem 2: not in git (as for the lane problem); only the two launch scripts that the snapshot lists in project.json fingerprint_extra stay in
 /bev_fusion/temp/**
-!/bev_fusion/temp/**/
-!/bev_fusion/temp/**/*.py
-!/bev_fusion/temp/**/*.sh
 !/bev_fusion/temp/README.md
+!/bev_fusion/temp/train/
+/bev_fusion/temp/train/**
+!/bev_fusion/temp/train/run_ar.sh
+!/bev_fusion/temp/train/run_cfg.sh
 # staged for deletion: the history of what was tracked stays, only the list (README.md) is a record
 /bev_fusion/_to_delete/**
 !/bev_fusion/_to_delete/README.md

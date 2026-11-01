@@ -674,6 +674,8 @@ try:
     guard_hook.selftest()
     import metrics  # P3: loop table from ledger, decision files and TEST log
     metrics.selftest()
+    import keep3  # the best three networks: the band, one slot per checkpoint, the evidence, the lock
+    keep3.selftest()
     # review 2026-10-31, defect 4: launchers that judge the same stale GPU slot stale reclaim it one at a time, and a late release of a reclaimed holder keeps the new owner's slot
     slots = f"{T}/runs/.race_slots"
     late = RUN.GpuSlot(f"{T}/runs", 1, "S.late", f"{T}/runs/S.late", base=slots)
@@ -777,6 +779,41 @@ try:
     subprocess.run(G3 + ["commit", "-q", "-a", "-m", "gone"], check=True, capture_output=True)
     assert RUN.code_drift(T3, cfg3, snap, before, spec) == ({"n": 1, "paths": ["code/a.py"]}, "")
     shutil.rmtree(T3, ignore_errors=True)
+    # scratch stays out of ordinary commits (.gitignore) but the snapshot adds its scripts by force: the tag holds them (also a name with [ ] and a space), HEAD does not,
+    # a result file is not added, and the drift check sees the same tree
+    T4 = tempfile.mkdtemp(prefix="ar_scratch_")
+    G4 = ["git", "-c", "safe.directory=*", "-C", T4]
+    os.makedirs(f"{T4}/code")
+    os.makedirs(f"{T4}/temp/loop1")
+    open(f"{T4}/.gitignore", "w").write("/temp/**\n!/temp/README.md\n")
+    for f, c in (("code/a.py", "1\n"), ("temp/README.md", "scratch\n"), ("temp/loop1/p1.py", "a = 1\n"), ("temp/loop1/run [x].sh", "echo 1\n"), ("temp/loop1/result.json", "{}\n")):
+        open(f"{T4}/{f}", "w").write(c)
+    for args in (["init", "-q"], ["config", "user.name", "selftest"], ["config", "user.email", "selftest@example.invalid"], ["add", "-A"], ["commit", "-q", "-m", "c0"]):
+        subprocess.run(G4 + args, check=True, capture_output=True)
+    lsf = lambda ref: subprocess.run(G4 + ["ls-tree", "-r", "--name-only", "-z", ref], capture_output=True, text=True).stdout.split("\0")
+    assert "temp/README.md" in lsf("HEAD") and not [x for x in lsf("HEAD") if x.startswith("temp/loop1")], lsf("HEAD")
+    cfg4 = dict(code_dirs=["code", "temp"], fingerprint_extra=[], scratch="temp")
+    assert RUN.scratch_scripts(T4, T4, cfg4) == ["temp/loop1/p1.py", "temp/loop1/run [x].sh"], RUN.scratch_scripts(T4, T4, cfg4)
+    assert RUN.scratch_scripts(T4, T4, dict(code_dirs=["code"], scratch="temp")) == [] and RUN.scratch_scripts(T4, T4, dict(code_dirs=["code"])) == [], \
+        "a scratch folder outside the code folders is not in the snapshot"
+    before4 = RUN.drift_hash(T4, cfg4)
+    sc, stag, _ = RUN.git_snapshot(T4, cfg4, "t", "S.sc", "m")
+    assert stag == "t/S.sc" and {"temp/loop1/p1.py", "temp/loop1/run [x].sh", "temp/README.md"} <= set(lsf(stag)) and "temp/loop1/result.json" not in lsf(stag), lsf(stag)
+    spec4 = RUN.snapshot_spec(T4, cfg4)[1]
+    assert RUN.code_drift(T4, cfg4, sc, before4, spec4) == ({}, "")
+    open(f"{T4}/temp/loop1/p1.py", "w").write("a = 2\n")
+    assert RUN.code_drift(T4, cfg4, sc, before4, spec4) == ({"n": 1, "paths": ["temp/loop1/p1.py"]}, ""), RUN.code_drift(T4, cfg4, sc, before4, spec4)
+    # review 2026-11-01: a script that is gone when the files are added (moved by another chat while the slow `add -A` ran) is skipped, the snapshot still gives a tree
+    top4, spec4b, head4 = RUN.snapshot_spec(T4, cfg4)
+    tree4, err4 = RUN.write_tree(top4, spec4b, head4, lambda: ["temp/loop1/gone.sh", "temp/loop1/p1.py"])
+    assert not err4 and "temp/loop1/p1.py" in subprocess.run(G4 + ["ls-tree", "-r", "--name-only", tree4], capture_output=True, text=True).stdout.split("\n"), err4
+    # a file named in fingerprint_extra is added although a .gitignore rule matches it (else `git add -A` refuses the whole snapshot and the run has no tag)
+    os.makedirs(f"{T4}/temp/train/sub")
+    open(f"{T4}/temp/train/sub/helper.sh", "w").write("echo 2\n")
+    cfg4b = dict(code_dirs=["code"], fingerprint_extra=["temp/train/sub/helper.sh"], scratch="temp")
+    _, ftag, fnote = RUN.git_snapshot(T4, cfg4b, "t", "S.fp", "m")
+    assert ftag == "t/S.fp" and "temp/train/sub/helper.sh" in lsf(ftag), (ftag, fnote)
+    shutil.rmtree(T4, ignore_errors=True)
     nochk = go("S.nochk", ["bash", "-c", f"echo 'x = 4' > {T}/code/a.py; echo ran"], "--no-drift-check")
     assert nochk.returncode == 0 and not {"code_drift", "code_drift_check"} & set(RUN.record(f"{T}/runs/S.nochk")), "--no-drift-check skips the check"
     strict = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc.md", f"{T}/src.json", "--strict"], capture_output=True, text=True)
