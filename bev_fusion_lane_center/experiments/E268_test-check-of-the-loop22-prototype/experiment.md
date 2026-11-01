@@ -34,7 +34,7 @@ One file per experiment; it grows from card (P2) to detail plan (P3 start) to su
 - **Run**: E268.p (`lcr/E268.p`, 06:10 - 06:13, fresh network outputs on the GPU), logged in `evaluation/TEST_USAGE_LOG.md` before the run (grant D28); card `runs/eval/recall_sp0_dp/test.json`. The prototype was fixed on VAL by the PLAN.md rule before the run: E265 KEEP -> S; E261 CUT (no W); E264 not adopted (no U); E266 KEEP (R: lanes found 0.774, below S's 0.781, so S stays); E267 CUT (SR). **Report only.**
 - **Numbers** (TEST, 833 frames, 21 scenes; VAL-selected system, nothing tuned on TEST):
 
-| | Q | lanes found | R@1 far | topo F1 | J | false length | dup | vertices / 100 m |
+| | Q | lanes found | R@1 far | topo F1 | J | false length | dup | nodes delivered / 100 m (D25) |
 |---|---|---|---|---|---|---|---|---|
 | prototype `recall_sp0_dp` | 0.727 | 0.740 | 0.749 | 0.705 | 0.468 | 0.079 | 0.092 | 12.6 (after the output stage) |
 | control E94 (same frames) | 0.712 | 0.762 | 0.776 | 0.722 | 0.406 | 0.089 | 0.133 | 22.0 |

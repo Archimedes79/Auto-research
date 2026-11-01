@@ -12,7 +12,7 @@ wsl bash tools/env/_py14.sh lane_prototype.py recall_sp0_dp --scenes 23 7 --vide
 
 Output: `runs/prototype/recall_sp0_dp/scenes/<scene>.json` (per frame the lane centre lines in the ego frame, x forward / y left, in travel direction, with vertex ids, confidence and successor edges; format in `tools/prototype/README.md`), `summary.md`; video `runs/prototype/recall_sp0_dp_video/recall_sp0_dp_val.mp4` (poster `recall_sp0_dp_val_poster.png`).
 
-| system | split | Q | lanes found | R@1 far | topo F1 | vertices / 100 m | ms per frame |
+| system | split | Q | lanes found | R@1 far | topo F1 | nodes delivered / 100 m (D25; budget basis in the text) | ms per frame |
 |---|---|---|---|---|---|---|---|
 | `recall_dp` (packaged yesterday evening) | VAL | 0.740 | 0.767 | 0.771 | 0.742 | 10.4 | estimates: lane graph ~21, full chain ~27 (stored rc1 session measured without the time recursion + the recursion cost measured on f1) |
 | **`recall_sp0_dp` (prototype)** | VAL | **0.742** | **0.781** | **0.779** | 0.741 | 10.9 | not measured (one clean-up step skipped, but more vertices: DP 12.82 -> 13.70) |
