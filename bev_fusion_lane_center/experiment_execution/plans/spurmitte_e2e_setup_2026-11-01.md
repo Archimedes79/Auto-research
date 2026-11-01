@@ -22,7 +22,7 @@ Asked by Mirko: prepare a Spurmitte experiment in a prepared set-up, take over w
 
 ## Steps
 - **Step 0 (no behaviour change), done today:** `p16_interface.py` (contract of `Builder.forward`, selftest), `e2e_gradient_report.py` (selftest passed; the real run on `e123_D7_r3_f1` is in the section above). Still to do, needs a critic pass because the files are shared: call `check_outputs` on the first batch in `p16_train.py` and in `p16_infer.predict`.
-- **Step 1, card E269:** soft graph tokens, so that the route loss reaches positions, validity and edges (the three earlier joint fine-tunes reached only the node tokens). Gate G1: the gradient report shows the silent groups lit by the route loss.
+- **Step 1, card E269 (revised after three critic passes):** first a cheap proxy, a straight-through gradient from the route loss to the node positions with the old head, read-out and evaluator unchanged; the full soft-node design (validity, links, node read-out) is the follow-up E270, written only if the proxy shows an effect. Order: gradient report of the route loss alone through the old path (no new code), then the build, then four trainings.
 - **Step 2:** builder on the BEV trunk S (frozen, then trainable image features), against the champion on frozen GaussianCaR features on the same frames. Risk: the GaussianCaR features carry the lane skill (E27 +0.24 F1), the BEV maps are weaker; coordinate with the BEV chat (D26 plan 8.5 S4) and the machine lock (D19).
 - **Step 3:** replace rule steps in order of measured value (fork pruning J 0.265 -> 0.409 first, then the time recursion, anchoring, relocation), each reproducing the reference before it counts.
 
