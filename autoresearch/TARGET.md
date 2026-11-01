@@ -2,6 +2,18 @@
 
 The goal of the restructuring that starts here: adopted by Mirko on 2026-11-01, **not built yet**. Today's system is drawn in `architecture.svg`; this page says where it goes and in which steps. It replaces the target packages of `ROADMAP.md` once step 1 below is done.
 
+![autoresearch target: two loops through four layers](architecture_target.svg)
+
+The picture is generated from `architecture_target.json` and checked against today's code by `tools/archdraw.py` ([file map](architecture_target.md)); dashed purple boxes do not exist yet. When the migration is done, the target drawing becomes `architecture.svg`.
+
+## Why it looks like this
+- **Files are the only interface.** Agents read and write files; code reads files and writes records. A round can be resumed, reviewed in git and explained from its folder.
+- **Few rules, but those in code.** A capable agent can argue its way around a rule in prose, so the five transition points below refuse in code; everything else is advice.
+- **A role is a different context, not a different step.** Separate agents only for fresh eyes (critic) and parallel work (scouts, lenses).
+- **The inner loop runs without a chat.** That is where the hours go.
+- **Versions are first class.** Every card names the version it starts from; the set of n best is what a round updates. That is why one round can branch from several versions and the outer loop stays sequential.
+- **Build on the second use, remove what is unused, clean up every round.**
+
 ## Four layers
 | layer | what is in it | what it does |
 |---|---|---|
@@ -45,3 +57,17 @@ Each step ends with the selftests green, `architecture.json` redrawn to the new 
 | 5 | layer folders in `autoresearch/` (`core/`, `suites/`, `report/`, `contracts/`) and `problem.json`; bev_fusion first, the lane project after one full loop on the new paths | a decision: `project.json` is protected; no chain may be running |
 
 Not part of it: new suites, a service or daemon, templates beyond the card and the version entry.
+
+## Migrating while trainings run
+- **Where the work happens.** The branch `ar/layered-design` lives in its own worktree (`_wt/layered`, inside the workspace, ignored by main). Running chains keep calling `autoresearch/tools/run.py` in the main checkout and never see the branch. The old rule "worktrees need M7" is about running experiments: a worktree has no runs, data or ledger. So nothing is trained or evaluated in the worktree; selftests run there (they use a throw-away project), and the one real run each step requires happens in the main checkout after the merge.
+- **Old paths keep working.** A tool that moves leaves a forwarding file at its old path for one full loop (`tools/run.py` imports and calls `core/run.py`); agent roles are installed under their new names beside the old ones, and the old names go after the loop that used them.
+- **Derived before deleted.** A view that becomes derived (ledger, schedule, board) is first generated next to the hand-kept file and compared on the live records; the old file goes only when the two agree for a whole loop.
+- **bev_fusion first**, the lane project after one full loop on the new paths.
+- **Merge gate.** A step is merged only when no chain is running (no live `run.py` heartbeat, `pgrep -f tools/run.py` empty), its selftests pass, `archdraw.py check` passes on both drawings, and the files it touches carry no other chat's uncommitted work (today: `run.py`, `ledger.py`, `selftest.py`, `evalsuite/`). Their owners are asked first.
+
+## Points of concern
+- **RAM, not GPU,** limited the night of 2026-11-01 (2-4 GB free, swap in use) while the launcher counts only GPU slots; a parallel inner loop needs the slot to count memory too.
+- **An agent-drafted problem** can make the approval a rubber stamp: the draft shows only its changes against the last approved version.
+- **Problem code creeping into the core:** the board and the package qualify (two problems need them); the literature catalogue not yet.
+- **Leanness is measured, not claimed:** today 16 tools with 4,400 lines, two suites with 7,400 lines, about 8,700 words of method documents. A step that makes these larger needs a reason.
+- **"The inner loop runs without a chat" is tested:** a variant card goes from card to verdict in the selftest with no chat involved.
