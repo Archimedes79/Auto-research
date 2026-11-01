@@ -16,6 +16,7 @@ The finished checkpoints of a training run are slimmed by train.py itself (Train
 import contextlib
 import glob
 import os
+import pickle
 import re
 import shutil
 import sys
@@ -41,12 +42,20 @@ def size_gb(path):
     return total / 1e9
 
 
-def guard(nbytes, keep_free_gb=None, budget_gb=None):
-    """raise ScratchError if writing `nbytes` would leave less than keep_free_gb free on the drive of temp/ or push temp/ over budget_gb"""
+def _existing(path):
+    p = os.path.abspath(path)
+    while not os.path.exists(p) and os.path.dirname(p) != p:
+        p = os.path.dirname(p)
+    return p
+
+
+def guard(nbytes, keep_free_gb=None, budget_gb=None, path=None):
+    """raise ScratchError if writing `nbytes` would leave less than keep_free_gb free on the drive of `path` (default: temp/) or push temp/
+    over budget_gb"""
     keep = float(os.environ.get("BF_SCRATCH_KEEP_FREE_GB", 15.0)) if keep_free_gb is None else keep_free_gb
     budget = float(os.environ.get("BF_SCRATCH_BUDGET_GB", 10.0)) if budget_gb is None else budget_gb
     gb = nbytes / 1e9
-    free = shutil.disk_usage(ROOT).free / 1e9
+    free = shutil.disk_usage(_existing(path or ROOT)).free / 1e9
     if free - gb < keep:
         raise ScratchError(f"writing {gb:.1f} GB would leave {free - gb:.1f} GB free (limit {keep:.0f} GB): clean up or move scratch first "
                            f"(python training/scratch.py report)")
@@ -68,16 +77,20 @@ def tmpdir(name="run"):
             print(f"scratch kept: {d}", flush=True)
         else:
             shutil.rmtree(d, ignore_errors=True)
+            if os.path.exists(d):
+                print(f"scratch: could not remove {d} completely (a file in use?); delete it by hand", flush=True)
 
 
 def newest_mtime(deps):
     """mtime of the newest of deps: a file, a FOLDER (its own time: it changes when a file is added, removed or replaced by rename, and costs
-    one stat where a glob over 20 000 files on /mnt/c takes minutes) or a glob pattern; 0 for none"""
+    one stat where a glob over 20 000 files on /mnt/c takes minutes) or a glob pattern; 0 for no deps. A dep that does not exist (or a glob
+    that matches nothing) raises: a rule that cannot see its input would never call the cache outdated."""
     newest = 0.0
     for dep in deps:
-        for p in (glob.glob(dep) if any(c in dep for c in "*?[") else [dep]):
-            if os.path.exists(p):
-                newest = max(newest, os.path.getmtime(p))
+        hits = glob.glob(dep) if any(c in dep for c in "*?[") else ([dep] if os.path.exists(dep) else [])
+        if not hits:
+            raise ScratchError(f"cache dependency {dep!r} does not exist (relative paths are read from the current folder)")
+        newest = max([newest] + [os.path.getmtime(p) for p in hits])
     return newest
 
 
@@ -92,18 +105,27 @@ def source_sig(*funcs):
 
 
 def _meta(path, write=None):
+    """the sidecar of a cache: written through a process-unique temporary file, read tolerantly (missing or half-written = None)"""
     import json
     p = path + ".meta"
     if write is not None:
-        with open(p, "w") as f:
+        tmp = f"{p}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
             json.dump(write, f)
-    return json.load(open(p)) if os.path.exists(p) else None
+        os.replace(tmp, p)
+    try:
+        with open(p) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
 
 
 def _remove(path):
     for p in (path, path + ".meta"):
-        if os.path.exists(p):
+        try:
             os.remove(p)
+        except FileNotFoundError:
+            pass
 
 
 def cached(kind, build, n, deps=(), split="", root=None, sig=None):
@@ -129,17 +151,25 @@ def cached(kind, build, n, deps=(), split="", root=None, sig=None):
             _remove(p)                                                # outdated: an input or the builder changed after it was made
             del found[k]
             print(f"scratch: deleted the outdated cache {os.path.basename(p)}", flush=True)
-    bigger = [k for k in found if k >= n]
-    if bigger:
-        obj = torch.load(found[min(bigger)], weights_only=False)      # our own scratch cache
+    for k in sorted(k for k in found if k >= n):                      # the smallest cache that is big enough; one another process just
+        try:                                                          # deleted or a half-written file counts as missing
+            obj = torch.load(found[k], weights_only=False)            # our own scratch cache
+        except (OSError, EOFError, RuntimeError, pickle.UnpicklingError):
+            continue
+        if not isinstance(obj, list):
+            raise TypeError(f"{found[k]} holds a {type(obj).__name__}: cached() serves lists (an ordered build whose first n items are the n-build)")
         return obj[:n]
     obj = build(n)
+    if not isinstance(obj, list):
+        raise TypeError(f"build({n}) returned a {type(obj).__name__}: cached() serves lists (an ordered build whose first n items are the n-build)")
     path = os.path.join(d, f"{stem}{n}.pt")
-    tmp = path + ".tmp"
+    tmp = f"{path}.{os.getpid()}.tmp"                                 # process-unique: two writers do not corrupt each other
     torch.save(obj, tmp)
     os.replace(tmp, path)
     _meta(path, {"sig": sig, "deps": newest})                         # the deps' state BEFORE the build: a change during it shows next time
     for p in found.values():                                          # superseded: a smaller cache is a prefix of this one
+        if p == path:                                                 # (the unreadable file of the same n was just replaced)
+            continue
         _remove(p)
         print(f"scratch: deleted {os.path.basename(p)} (contained in {os.path.basename(path)})", flush=True)
     return obj
@@ -158,8 +188,10 @@ def dump(kind, key, shape, dtype, root=None):
             raise ScratchError(f"{p} holds {a.shape} {a.dtype}, wanted {shape} {dtype}: delete it or use another key")
         done = os.path.exists(p + ".done")
         return (a if done else np.load(p, mmap_mode="r+")), p, done
-    guard(int(np.prod(shape)) * dtype.itemsize)
+    guard(int(np.prod(shape)) * dtype.itemsize, path=os.path.dirname(p))
     os.makedirs(os.path.dirname(p), exist_ok=True)
+    if os.path.exists(p + ".done"):                                   # the marker of a dump that no longer exists
+        os.remove(p + ".done")
     return np.lib.format.open_memmap(p, "w+", dtype, shape), p, False
 
 
@@ -264,6 +296,33 @@ def selftest():
             wrong = True
         check("dump: the same key with another shape raises", wrong)
 
+        b, pb, _ = dump("selftest", "b", (8, 8), np.uint8, root=d)                   # finished, then the file is deleted by hand
+        b[:] = 1
+        b.flush()
+        mark_done(pb)
+        del b
+        os.remove(pb)
+        b2, pb2, done_b = dump("selftest", "b", (8, 8), np.uint8, root=d)
+        check("dump: the marker of a deleted dump does not make a new, unfilled one complete", (not done_b) and not os.path.exists(pb2 + ".done"))
+        del b2
+
+        try:
+            cached("t", lambda m: tuple(range(m)), 3, root=d)
+            tup = False
+        except TypeError:
+            tup = True
+        check("cached: a build that is not a list raises (a tuple would not be sliced to n)", tup)
+        try:
+            cached("t", build, 3, deps=(os.path.join(d, "no_such_input"),), root=d)
+            missing = False
+        except ScratchError:
+            missing = True
+        check("cached: a dependency that does not exist raises instead of being ignored", missing)
+        open(os.path.join(d, "u_5.pt"), "wb").write(b"half written")                 # a cache that cannot be read counts as missing
+        open(os.path.join(d, "u_5.pt.meta"), "w").write("")                          # and an empty sidecar as none
+        u = cached("u", build, 5, root=d)
+        check("cached: an unreadable cache and an empty sidecar are rebuilt, not a crash", u == build(5) and not any(f.endswith(".tmp") for f in os.listdir(d)))
+
     guard(0)
     try:
         guard(10 ** 18)
@@ -276,6 +335,13 @@ def selftest():
     except ScratchError:
         budget = True
     check("guard: passes for nothing, refuses 1 EB (drive) and a zero budget", big and budget)
+    try:
+        guard(10 ** 18, budget_gb=1e9)                                    # the budget cannot trip: only the drive check can
+        drive = False
+    except ScratchError:
+        drive = True
+    guard(0, path=os.path.join(TEMP, "no", "such", "folder"))              # the drive of a folder that does not exist yet
+    check("guard: the drive check alone refuses 1 EB, a path below a missing folder is checked on its existing parent", drive)
     print("%d of %d checks passed" % (sum(ok), len(ok)))
     return 0 if all(ok) else 1
 

@@ -282,6 +282,9 @@ def save_checkpoint(path, model, loss, opt, ema, step, cfg, extra=None, slim=Fal
     ck = {"state": trainable_state(model, loss), "opt": opt.state_dict(),
           "ema": {k: v.cpu() for k, v in ema.shadow.items()}, "step": step, "cfg": dataclasses.asdict(cfg),
           "rng": {"torch": torch.get_rng_state(), "numpy": np.random.get_state()}, "extra": extra or {}}
+    if slim:                                                    # weights only (finished run): no optimiser state, no RNG
+        del ck["opt"], ck["rng"]
+        ck["slim"] = True
     tmp = path + ".tmp"
     torch.save(ck, tmp)
     os.replace(tmp, path)
@@ -293,9 +296,6 @@ def load_checkpoint(path, model, loss, opt, ema, ck=None):
     m = model.load_state_dict({k[6:]: v for k, v in sd.items() if k.startswith("model.")}, strict=False)
     assert all(k.startswith("camera.") for k in m.missing_keys) and not m.unexpected_keys, m
     loss.load_state_dict({k[5:]: v for k, v in sd.items() if k.startswith("loss.")})
-    if slim:                                                    # weights only (finished run): no optimiser state, no RNG
-        del ck["opt"], ck["rng"]
-        ck["slim"] = True
     if "opt" in ck:                                             # a slim checkpoint (finished run) has no optimiser state and no RNG
         opt.load_state_dict(ck["opt"])
     ema.shadow = {k: v.to(next(model.parameters()).device) for k, v in ck["ema"].items()}
@@ -326,6 +326,14 @@ def check_resume(old, cfg, name):
     if diff and os.environ.get("BF_RESUME_ANY") != "1":
         raise SystemExit(f"{name}: the configuration differs from the checkpoint's in {diff}; start a new run name "
                          f"(or set BF_RESUME_ANY=1)")
+
+
+def refuse_slim_resume(ck, step, cfg, name):
+    """a slim checkpoint (a finished run: no optimiser state) evaluates and warm-starts but cannot continue training: a resume below the
+    configured end is refused, at the end (a re-invocation of a finished run) it is accepted"""
+    if ck.get("slim") and step < cfg.steps:
+        raise SystemExit(f"{name} is a slim checkpoint (no optimiser state): it evaluates and warm-starts (init_from), it cannot "
+                         f"continue training; start a new run name")
 
 
 def supersede_log(out_dir, step):
@@ -623,7 +631,7 @@ def train(cfg, eval_fn=None, datasets=None):
               "gap and the last step's ego motion (0.2-0.35 m of label error)", flush=True)
     opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr, betas=(0.9, 0.999))
     ema = EMA(model, cfg.ema)
-    step, damaged = 0, []
+    step, damaged, was_slim = 0, [], False
     ckpts = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
     for name in reversed(ckpts):                                # the newest READABLE checkpoint: a damaged one falls back to the one before
         try:
@@ -637,6 +645,8 @@ def train(cfg, eval_fn=None, datasets=None):
             continue
         check_resume(ck.get("cfg", {}), cfg, name)
         step, _ = load_checkpoint(os.path.join(out_dir, name), model, loss, opt, ema, ck=ck)
+        refuse_slim_resume(ck, step, cfg, name)
+        was_slim = bool(ck.get("slim"))
         print(f"resumed from {name} at step {step}", flush=True)
         break
     else:
@@ -691,9 +701,6 @@ def train(cfg, eval_fn=None, datasets=None):
             if dg:
                 acc["diag"] = dg
         gn = torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip) if finite else None
-        if ck.get("slim") and step < cfg.steps:
-            raise SystemExit(f"{name} is a slim checkpoint (no optimiser state): it evaluates and warm-starts (init_from), it cannot "
-                             f"continue training; start a new run name")
         skipped = gn is None or not torch.isfinite(gn)
         if skipped:
             bad += 1
@@ -723,8 +730,8 @@ def train(cfg, eval_fn=None, datasets=None):
             log.write(json.dumps({"step": step, "val": ev}) + "\n")
             log.flush()
             print(f"step {step}: val total {ev.get('total', float('nan')):.4f}", flush=True)
-    save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, slim=cfg.slim_at_end)
-    prune_checkpoints(out_dir, 1 if cfg.slim_at_end else cfg.keep)         # a finished run: the final weights only
+    save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, slim=cfg.slim_at_end or was_slim)
+    prune_checkpoints(out_dir, 1 if (cfg.slim_at_end or was_slim) else cfg.keep)         # a finished run: the final weights only
     return model, loss, ema, last
 
 
@@ -859,6 +866,32 @@ def _selftest():
         assert ck["step"] == 4 and not any(k.startswith("model.camera.") for k in ck["state"])
         changed = any(not torch.equal(before[k], v) for k, v in model2.state_dict().items() if k in before)
         assert changed, "parameters changed"
+        # 2b slim_at_end (the default): a finished run keeps ONE checkpoint without optimiser state and RNG, and evaluation still loads it
+        scfg = dataclasses.replace(cfg, name="slimrun", slim_at_end=True)
+        _, _, sema, _ = train(scfg, datasets=(base, base))
+        sdir = os.path.join(tmp, "slimrun")
+        assert sorted(f for f in os.listdir(sdir) if f.startswith("ckpt_")) == ["ckpt_00000004.pt"], os.listdir(sdir)
+        sck = torch.load(os.path.join(sdir, "ckpt_00000004.pt"), weights_only=False)
+        assert sck["slim"] and "opt" not in sck and "rng" not in sck and sck["step"] == 4
+        assert os.path.getsize(os.path.join(sdir, "ckpt_00000004.pt")) < 0.75 * os.path.getsize(os.path.join(tmp, "selftest", ckpts[-1]))
+        m3, l3, _ = build(scfg)
+        o3 = torch.optim.AdamW(param_groups(m3, l3, scfg.lr, scfg.weight_decay), lr=scfg.lr)
+        e3 = EMA(m3, scfg.ema)
+        assert load_checkpoint(os.path.join(sdir, "ckpt_00000004.pt"), m3, l3, o3, e3)[0] == 4
+        assert all(torch.equal(e3.shadow[k].cpu(), sema.shadow[k].cpu()) for k in sema.shadow), "the EMA weights survive the slimming"
+        # a slim checkpoint is refused as a resume below the configured end and accepted at the end
+        for end, refused in ((6, True), (4, False)):
+            try:
+                refuse_slim_resume(sck, 4, dataclasses.replace(scfg, steps=end), "slimrun")
+                got = False
+            except SystemExit:
+                got = True
+            assert got == refused, (end, got)
+        # re-invoking the finished slim run, even with slimming off, trains nothing and does not turn it into a "full" checkpoint with an
+        # empty optimiser
+        train(dataclasses.replace(scfg, slim_at_end=False), datasets=(base, base))
+        sck2 = torch.load(os.path.join(sdir, "ckpt_00000004.pt"), weights_only=False)
+        assert sck2["slim"] and "opt" not in sck2 and sorted(f for f in os.listdir(sdir) if f.startswith("ckpt_")) == ["ckpt_00000004.pt"]
         # 3 resume: a resume with another configuration (here steps 4 -> 6, which would restart the cosine LR) is refused; with
         # BF_RESUME_ANY=1 the run continues from step 4 and ends at 6; the EMA differs from the weights. A damaged newest checkpoint
         # falls back to the one before, and the log rows above the resumed step move to log_superseded.jsonl
@@ -919,19 +952,6 @@ def _selftest():
         stop_cfg = dataclasses.replace(cfg, name="stoprun", steps=1, save_every=0, eval_every=0)
         sdir = os.path.join(tmp, "stoprun")
         os.makedirs(sdir)
-        # 2b slim_at_end (the default): a finished run keeps ONE checkpoint without optimiser state and RNG, and evaluation still loads it
-        scfg = dataclasses.replace(cfg, name="slimrun", slim_at_end=True)
-        _, _, sema, _ = train(scfg, datasets=(base, base))
-        sdir = os.path.join(tmp, "slimrun")
-        assert sorted(f for f in os.listdir(sdir) if f.startswith("ckpt_")) == ["ckpt_00000004.pt"], os.listdir(sdir)
-        sck = torch.load(os.path.join(sdir, "ckpt_00000004.pt"), weights_only=False)
-        assert sck["slim"] and "opt" not in sck and "rng" not in sck and sck["step"] == 4
-        assert os.path.getsize(os.path.join(sdir, "ckpt_00000004.pt")) < 0.75 * os.path.getsize(os.path.join(tmp, "selftest", ckpts[-1]))
-        m3, l3, _ = build(scfg)
-        o3 = torch.optim.AdamW(param_groups(m3, l3, scfg.lr, scfg.weight_decay), lr=scfg.lr)
-        e3 = EMA(m3, scfg.ema)
-        assert load_checkpoint(os.path.join(sdir, "ckpt_00000004.pt"), m3, l3, o3, e3)[0] == 4
-        assert all(torch.equal(e3.shadow[k].cpu(), sema.shadow[k].cpu()) for k in sema.shadow), "the EMA weights survive the slimming"
         for n in ("CONTROL", "STOPPED"):
             with open(os.path.join(sdir, n), "w") as fh:
                 json.dump({"cmd": "stop", "reason": "old"}, fh)
