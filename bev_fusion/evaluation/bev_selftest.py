@@ -366,6 +366,78 @@ def _():
     assert DC.card_lower("seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0", [(m, full, "a")]) is False
 
 
+@check("provenance: the card carries the reproducibility block (GT, evaluator hash, frame hash, model, seed); a collector that cannot run leaves a marked gap, not a lost evaluation")
+def _():
+    import hashlib
+    from types import SimpleNamespace
+    sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch", "tools"))
+    import card as CARD
+    run = tempfile.mkdtemp()
+    json.dump({"seed": 3}, open(os.path.join(run, "config.json"), "w"))
+    json.dump({"gt_signature": "0.5_4_15efbde2d1"}, open(os.path.join(run, "gt.json"), "w"))
+    with open(os.path.join(run, "ckpt_00000007.pt"), "wb") as f:
+        f.write(b"checkpoint bytes")
+    keys = ["scene-0001/1", "scene-0001/0"]
+    store = SimpleNamespace(frames=[{"key": k} for k in keys])
+    a, e = SimpleNamespace(run=run, split="val", control="", ckpt_dir=None), SimpleNamespace(n=2, warm=False, prior=0)
+    subj = {"checkpoint": "ckpt_00000007.pt", "step": 7}
+    pv = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset")
+    assert "error" not in pv, pv
+    assert pv["subject"]["run"] == os.path.basename(run) and pv["subject"]["step"] == 7 and pv["subject"]["ckpt"] == "ckpt_00000007.pt"
+    assert pv["subject"]["ckpt_hash"] not in (None, "unknown") and pv["subject"]["config_hash"] not in (None, "unknown"), pv["subject"]
+    assert pv["subject"]["train_gt"]["signature"] == "15efbde2d1", pv["subject"]
+    assert pv["data"]["n"] == 2 and pv["data"]["split"] == "val"
+    assert pv["data"]["frame_hash"] == hashlib.sha256("\n".join(sorted(keys)).encode()).hexdigest()[:12], "the frame hash is over the sorted keys"
+    assert pv["gt"]["signature"] == "15efbde2d1" and pv["gt"]["key"] == "0.5_4_15efbde2d1"
+    assert pv["evaluator"]["paths"] == ["bev_fusion/evaluation", "autoresearch/evalsuite"] and pv["evaluator"]["code_hash"] not in (None, "unknown"), pv["evaluator"]
+    assert pv["evaluator"]["settings"]["n"] == 2 and pv["evaluator"]["settings"]["weights"] == "EMA" and pv["seed"] == 3
+    name = "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"
+    card = bev_suite.contract_card(run, "val", "", {name: 0.5}, {name: "higher"}, 2, "0.5_4_15efbde2d1")
+    card["provenance"] = pv
+    assert CARD.validate(card) == [], CARD.validate(card)                      # the card with the block stays valid
+    moved = tempfile.mkdtemp()                                                 # a checkpoint that was moved is found through --ckpt-dir
+    os.replace(os.path.join(run, "ckpt_00000007.pt"), os.path.join(moved, "ckpt_00000007.pt"))
+    a.ckpt_dir = moved
+    assert bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset")["subject"]["ckpt_hash"] == pv["subject"]["ckpt_hash"]
+    keep, bev_suite.PROVENANCE_DIR = bev_suite.PROVENANCE_DIR, os.path.join(run, "nowhere")
+    try:                                                                       # no collector: a marked gap, the evaluation goes on
+        gap = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset")
+    finally:
+        bev_suite.PROVENANCE_DIR = keep
+    assert gap.get("error") and gap["schema"] == 1, gap
+    # the START of the evaluation: hashes taken before the first frame; a change while it runs is marked, not hidden; the card stays serialisable
+    import contextlib
+    import io
+    before = list(sys.path)
+    suite0 = SimpleNamespace(subject=SimpleNamespace(ckpt=os.path.join(moved, "ckpt_00000007.pt")))
+    start = bev_suite.provenance_start(suite0)
+    assert sys.path == before, "loading the collector must not leave its folder first on sys.path"
+    assert start["tree"] and start["ckpt"] and "error" not in start, start
+    ok = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset", start=start)
+    assert "changed_during_run" not in ok["evaluator"] and "changed_during_run" not in ok["subject"], ok
+    json.dumps(dict(card, provenance=ok))
+    assert ok["evaluator"]["settings"]["store"] == {"created": None, "resumed": None, "commit": None} and "device" in ok["evaluator"]["settings"]
+    edited = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset", start=dict(start, tree="000000000000"))
+    assert edited["evaluator"]["dirty"] == "unknown" and edited["evaluator"]["changed_during_run"], edited["evaluator"]
+    assert edited["evaluator"]["code_hash_at_start"] == "000000000000", edited["evaluator"]
+    with open(os.path.join(moved, "ckpt_00000007.pt"), "ab") as f:                     # the checkpoint is rewritten while the evaluation runs
+        f.write(b"more")
+    swapped = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset", start=start)
+    assert swapped["subject"]["ckpt_hash"] == "unknown" and swapped["subject"]["changed_during_run"], swapped["subject"]
+    os.remove(os.path.join(moved, "ckpt_00000007.pt"))                                  # ... or pruned: the hash of the start stands
+    gone = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset", start=start)
+    assert gone["subject"]["ckpt_hash"] == start["ckpt"] and gone["subject"]["gone_at_end"], gone["subject"]
+    buf = io.StringIO()                                                                 # a collector that cannot be loaded is said loudly: at the start and at the end
+    bev_suite.PROVENANCE_DIR = os.path.join(run, "nowhere")
+    try:
+        with contextlib.redirect_stdout(buf):
+            bad0 = bev_suite.provenance_start(suite0)
+            bad1 = bev_suite.provenance_block(a, e, store, subj, "g", "", "reset", start=bad0)
+    finally:
+        bev_suite.PROVENANCE_DIR = keep
+    assert buf.getvalue().count("WARNING: provenance") == 2 and bad0.get("error") and bad1.get("error"), buf.getvalue()
+
+
 @check("views: overview / outputs / dashboard / stages (with taps) render pages with the error colours; camera panel carries the projected GT")
 def _():
     suite = make_suite(tempfile.mkdtemp(), shift=1)                 # a 1-cell shift: false positives and misses on every boundary
@@ -661,6 +733,9 @@ def golden():
         shutil.rmtree(old_store)
     rc = bev_suite.main([scratch, "--ckpt-dir", ckpt_dir, "--device", "cpu", "--workers", "0", "eval", "--n", "24"])
     assert rc == 0
+    prov = json.load(open(os.path.join(scratch, "eval", "card.json"))).get("provenance") or {}      # the wiring of cmd_eval (a card written by hand would not show it)
+    assert "error" not in prov and prov["data"]["n"] == 24 and prov["subject"]["ckpt_hash"] not in (None, "unknown"), prov
+    assert prov["evaluator"]["code_hash"] and not prov["evaluator"].get("changed_during_run"), prov["evaluator"]
     new = json.load(open(os.path.join(scratch, "eval", "metrics.json")))["metrics"]
     old = json.load(open(fixture))["metrics"]
     missing = [k for k in old if k not in new]

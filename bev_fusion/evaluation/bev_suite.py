@@ -10,7 +10,8 @@
     list [scene]                                the val scenes and frames
     eval [--n 1000] [--warm] [--prior 500] [--images 8] [--time]   the evaluation of a run (replaces evaluate_run.py): runs the
                                                 suite over the val frames, writes eval/metrics<tag>.json + eval/table<tag>.txt
-                                                + eval/card<tag>.json (the metric card of decide.py / experiment.py)
+                                                + eval/card<tag>.json (the metric card of decide.py / experiment.py, with its `provenance` block:
+                                                GT version, evaluator code hash, frame hash, raw-data manifest hash, model)
     report [--vs RUN ...] [--frames 6]          ONE PAGE for a person without code: state, resumes, the card's prediction / rule, curves, the numbers next to
                                                 the --vs runs (first = control), cost, random frames + a video (made first when the run has none) and a
                                                 review field per picture; -> RUN/report/index.html (autoresearch/tools/run_report.py; --ingest there
@@ -121,6 +122,74 @@ def contract_card(run: str, split: str, tag: str, flat: dict, better: dict, n_fr
     return card
 
 
+PROVENANCE_DIR = os.path.join(ROOT, "..", "autoresearch", "tools")
+EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "evalsuite"))
+
+
+def _provenance_module():
+    """autoresearch/tools/provenance.py loaded by path (tools/ is not a package); the folder it puts first on sys.path is taken away again, so the run's pinned
+    code snapshot keeps its place"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("provenance", os.path.join(PROVENANCE_DIR, "provenance.py"))
+    mod = importlib.util.module_from_spec(spec)
+    keep = list(sys.path)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path[:] = keep
+    return mod
+
+
+def provenance_start(suite) -> dict:
+    """what is fixed when the evaluation STARTS: the hash of the evaluator's source files and of the checkpoint. The block is written 15 - 30 minutes later, in a
+    working tree that other chats edit; a change in between is then marked in the block, not hidden. A collector that cannot be loaded is said here, at minute 0."""
+    try:
+        mod = _provenance_module()
+        ckpt = getattr(suite.subject, "ckpt", None)
+        return {"tree": mod.tree_hash([os.path.abspath(p) for p in EVALUATOR_PATHS], mod.repo_root()),
+                "ckpt_path": ckpt, "ckpt": mod.file_hash(ckpt) if ckpt and os.path.isfile(ckpt) else None}
+    except Exception as ex:
+        print(f"WARNING: provenance collector not usable ({type(ex).__name__}: {ex}); the card will carry a gap", flush=True)
+        return {"error": f"{type(ex).__name__}: {ex}"}
+
+
+def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, start: dict = None) -> dict:
+    """the `provenance` block of the card (design autoresearch/reproducibility.md, collector autoresearch/tools/provenance.py): GT version and
+    signature, the hash of the evaluator's code (evaluation/ and autoresearch/evalsuite/) with the files that differ from its commit, the frame
+    list, the raw-data manifest, the model (run, checkpoint hash and step, config hash, its training GT), the settings and the environment of THIS
+    interpreter. `start` = provenance_start(): when the evaluator's source hash or the checkpoint's hash at the end differs from the one at the start,
+    the block says so (evaluator.dirty = 'unknown', changed_during_run) and decide.py refuses the card as unchecked. A failure to collect never stops an
+    evaluation: the block then holds the error, a WARNING is printed, and decide.py refuses the card as unchecked."""
+    try:
+        mod = _provenance_module()
+        start = start or {}
+        cfg, ckpt = os.path.join(a.run, "config.json"), start.get("ckpt_path") or subj.get("checkpoint")
+        if not (ckpt and os.path.isfile(ckpt)) and subj.get("checkpoint"):    # a checkpoint that was moved (--ckpt-dir) is found there
+            for d in (getattr(a, "ckpt_dir", None), a.run):
+                if d and os.path.isfile(os.path.join(d, subj["checkpoint"])):
+                    ckpt = os.path.join(d, subj["checkpoint"])
+                    break
+        man = getattr(store, "manifest", None) or {}
+        pv = mod.collect(gt_key=gt_sig, split=a.split, tokens=[fr["key"] for fr in store.frames], evaluator=list(EVALUATOR_PATHS),
+                         run=os.path.basename(os.path.normpath(a.run)), ckpt=ckpt, config=cfg, step=subj.get("step"), run_dir=a.run,
+                         seed=(_read_json(cfg) or {}).get("seed"),
+                         settings={"tag": tag, "n": e.n, "warm": bool(e.warm), "prior": e.prior, "control": a.control or None, "state": state,
+                                   "weights": "EMA", "device": subj.get("device") or getattr(a, "device", None), "code": subj.get("code"),
+                                   "store": {k: man.get(k) for k in ("created", "resumed", "commit")}})
+        ev, sub = pv.get("evaluator", {}), pv.get("subject", {})
+        if start.get("tree") and ev.get("code_hash") != start["tree"]:       # the evaluator's code changed while the evaluation ran
+            ev.update(dirty="unknown", changed_during_run=True, code_hash_at_start=start["tree"])
+        if start.get("ckpt") and sub.get("ckpt_hash") is None:               # the checkpoint is gone at the end (pruned, archived): the hash of the start stands
+            sub.update(ckpt=os.path.basename(start["ckpt_path"]), ckpt_hash=start["ckpt"], gone_at_end=True)
+        elif start.get("ckpt") and sub.get("ckpt_hash") != start["ckpt"]:
+            sub.update(ckpt_hash="unknown", changed_during_run=True)
+        return pv
+    except Exception as ex:                                                  # a marked gap in the record, not a lost evaluation
+        err = f"{type(ex).__name__}: {ex}"
+        print(f"WARNING: provenance not collected: {err}", flush=True)
+        return {"schema": 1, "error": err}
+
+
 def headline_table(flat: dict) -> str:
     keys = []
     for pre in ("seg_fov", "prior_fov"):
@@ -211,6 +280,7 @@ def cmd_eval(a, rest) -> int:
     tag = tag_of(e.warm, a.split == "train", a.control)
     state = "carry" if e.warm else "reset"
     suite = make_suite(a, state=state)
+    prov0 = provenance_start(suite)                                         # the evaluator's and the checkpoint's hash NOW, before any frame is scored
     from evalsuite.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
     name = f"eval{tag}_n{e.n or 'all'}"
@@ -273,7 +343,9 @@ def cmd_eval(a, rest) -> int:
                                               "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
                                               "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better,
                                               "latency": lat}, indent=1, default=float))
-    write_both("card", "json", json.dumps(contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig), indent=1))  # for decide.py
+    card = contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig)                                     # for decide.py
+    card["provenance"] = provenance_block(a, e, store, subj, gt_sig, tag, state, start=prov0)  # which GT, evaluator, frames, data and model made it
+    write_both("card", "json", json.dumps(card, indent=1))
     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
     rec_path, plain = os.path.join(out_dir, f"scene_records{tag}{n_tag}.pkl"), os.path.join(out_dir, f"scene_records{tag}.pkl")
     keys = [fr["key"] for fr in store.frames]
