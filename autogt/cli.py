@@ -142,6 +142,20 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
     os.replace(tmp, os.path.join(sig_dir, "index.json"))
 
 
+def _group_task(args):
+    """one worker, one group of sequences: its memory-light devkit is loaded once (that takes minutes on a busy box), then its missing
+    keyframes are written one after the other -> (label, keyframes written, seconds)"""
+    label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose = args
+    t0 = time.time()
+    _init(dataroot, version, res, ss, options, grp)
+    done = 0
+    for i, t in enumerate(todo):
+        done += _work((t, sig_dir))
+        if verbose and i % 500 == 0:
+            print(f"[{label}] {i}/{len(todo)} keyframes, {time.time() - t0:.0f} s", flush=True)
+    return label, done, time.time() - t0
+
+
 def check_resume(sig_dir, grid, ss):
     """The folder is named by the generator signature, which contains neither the resolution nor the supersampling: continuing a
     build of another one would reuse its keyframes silently. The index says what the folder holds. A folder of an interrupted build
@@ -232,7 +246,8 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         "written": new files, "release": the folder is a release (see write_index)}
     The index.json of the folder is the manifest: gt_version, commit and dirty flag of the generator code, the sets it holds in full.
 
-    Memory-light and resumable: the sequences are read in groups of GROUP_SCENES with the light devkit (the GT is identical to the
+    Memory-light and resumable: the sequences are read in groups of GROUP_SCENES (fewer with several workers: every worker takes a group
+    of its own, so the devkit of a group is loaded once) with the light devkit (the GT is identical to the
     full devkit's), files that exist are skipped, so an interrupted run continues where it stopped. A folder of another resolution
     or supersampling is never continued. The signature changes with every edit of the generator, so GT of an older generator is
     never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
@@ -261,16 +276,28 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         raise ValueError(str(e)) from None
     os.makedirs(sig_dir, exist_ok=True)
     write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)           # before the first keyframe, also on a resume
-    done, stored = 0, sets.held(sig_dir)
-    for g0 in range(0, len(names), GROUP_SCENES):
-        grp = names[g0:g0 + GROUP_SCENES]
+    stored = sets.held(sig_dir)
+    size = min(GROUP_SCENES, max(1, -(-len(names) // workers)))           # with several workers every worker gets a group of its own
+    groups = []
+    for g0 in range(0, len(names), size):
+        grp = names[g0:g0 + size]
         todo = [t for n in grp for t in tokens[n] if t not in stored]
-        if not todo:
-            continue                                                                                # a finished group needs no devkit load
-        gen = AutoGT(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
-        done += _write_tokens(gen, todo, sig_dir, workers, (dataroot, version, res, ss, options, grp), verbose)
-        del gen
-        gc.collect()
+        if todo:                                                          # a finished group needs no devkit load
+            groups.append((f"group {g0 // size + 1}/{-(-len(names) // size)}", grp, todo))
+    done = 0
+    if workers <= 1 or len(groups) <= 1:
+        for label, grp, todo in groups:
+            gen = AutoGT(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
+            done += _write_tokens(gen, todo, sig_dir, 1, None, verbose)
+            del gen
+            gc.collect()
+    else:                       # one group per worker: the devkit of a group is loaded once, by the worker that writes it, not once per worker
+        jobs = [(label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose) for label, grp, todo in groups]
+        with mp.get_context("spawn").Pool(min(workers, len(jobs)), maxtasksperchild=1) as pool:
+            for label, n, secs in pool.imap_unordered(_group_task, jobs):
+                done += n
+                if verbose:
+                    print(f"{label} done: {n} keyframes written in {secs:.0f} s", flush=True)
     write_index(sig_dir, ident, version, names, stride, n_total, options, run=run_manifest(sig_dir, version, dataroot, set_name))
     with open(os.path.join(sig_dir, "index.json")) as f:
         idx = json.load(f)
