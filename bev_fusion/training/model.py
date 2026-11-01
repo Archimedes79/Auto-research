@@ -25,6 +25,7 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 "ego_gru"        FIERY-style ego warp + ConvGRU - training/fallbacks.py EgoWarpGRU (control arm A)
                 "none"           current frame only
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
+                (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
                 4-stage fuser + decoder, training/fallbacks.py CMXTrunk: replaces fusion AND backbone)
   heads         semantic (channels = losses.layer_spec) and objects (CenterPoint, S5a), both decoded at any dt by
@@ -88,6 +89,9 @@ class ModelConfig:
     lift: str = "pd"
     cam_temporal: str = "window_memory"
     rad_temporal: str = "none"
+    rad_static_gate: bool = False      # the radar memory writes only where the measured Doppler says static (precompute.radar_static), not
+                                       # everywhere a detection is (radar_hits): a moving car is not remembered; needs rad_temporal
+    rad_static_vr: float = 1.0         # the Doppler (m/s) at which a detection counts as 1/e static: weight exp(-(vr / rad_static_vr)^2)
     fusion: str = "concat"
     c_cam: int = 64
     c_rad: int = 32
@@ -223,6 +227,10 @@ def check_config(cfg):
         errs.append("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
     if cfg.radar_kind == "delta_slots" and cfg.c_rad < n_channels():
         errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
+    if cfg.rad_static_gate and (cfg.rad_temporal == "none" or cfg.radar_kind == "off"):
+        errs.append("rad_static_gate gates the write of the radar memory: it needs rad_temporal 'window_memory' / 'ego_gru' and a radar")
+    if cfg.rad_static_vr <= 0:
+        errs.append(f"rad_static_vr must be positive (m/s), is {cfg.rad_static_vr}")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
     if cfg.motion_block and (cfg.camera_off or cfg.radar_kind == "off"):
@@ -269,6 +277,7 @@ class BEVFusionModel(nn.Module):
         # radar slot
         self.radar = RADARS[cfg.radar_kind](self.grid, cfg.c_rad)
         self.rad_temporal = TEMPORALS[cfg.rad_temporal](cfg.c_rad, self.grid)
+        self._rad_mask = "radar_static" if cfg.rad_static_gate else "radar_hits"        # the write mask of the radar memory (precompute.MAPS)
         # fusion + backbone slots (CMX is its own four-stage pyramid + decoder: it replaces both)
         p_drop = 0.0 if (cfg.camera_off or cfg.radar_kind == "off") else cfg.p_drop
         self.fusion = None if cfg.fusion == "cmx" else FUSIONS[cfg.fusion](cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
@@ -380,7 +389,7 @@ class BEVFusionModel(nn.Module):
         key stays the nominal dt."""
         state = state or {}
         need = (("vis_cam",) if self.cam_temporal is not None else ()) + \
-               (("radar_hits",) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
+               ((self._rad_mask,) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
         batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
         cam_frames = self.camera_bevs(batch)                                         # the batch's frame (kept when precomputed)
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
@@ -410,8 +419,9 @@ class BEVFusionModel(nn.Module):
             radar_side = {"features": rad, "state": rstate}
         else:
             rad = self.radar(batch["radar"], cam.shape[0])
-        rad_obs = batch["radar_hits"].to(rad) if "radar_hits" in batch else None   # radar memory: write where it measured (no
-                                                                                   # radar points: no mask = everywhere)
+        rad_obs = batch[self._rad_mask].to(rad) if self._rad_mask in batch else None   # radar memory: write where it measured (with
+                                                                                       # rad_static_gate: where it measured the static world);
+                                                                                       # no radar points: no mask = everywhere
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:

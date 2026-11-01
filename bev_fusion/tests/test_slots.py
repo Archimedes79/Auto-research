@@ -41,7 +41,7 @@ KINDS = [("camera_features", "dualbev"), ("camera_features", "bevfusion"), ("cam
          ("object_direction", True), ("object_moving", True), ("motion_block", True), ("motion_strides", (4, 2))]
 # parts a kind builds but cannot train, with the reason (a finding, not hidden): the radar branch has no past frames, so the camera's
 # window block reads no window (relevance, temperature) and its velocity head reaches the output only through the memory write of a
-# later call - the radar memory needs its own static gate (the measured Doppler) or past radar BEVs (training/architecture.md)
+# later call; the measured Doppler is the radar memory's own static gate (rad_static_gate, checked by gate_check below)
 KNOWN_UNUSED = {("rad_temporal", "window_memory"): ("rad_temporal.log_tau", "rad_temporal.head.", "rad_temporal.relevance."),
                 ("radar_kind", "off"): ("radar.", "aux_rad.net.0.weight", "aux_rad.net.1.weight", "trunk.fuser.pr."),   # the study arm keeps the radar
                 # block's weights (same checkpoint layout), never runs it; the radar aux head sees a zero radar BEV
@@ -51,8 +51,10 @@ KNOWN_UNUSED = {("rad_temporal", "window_memory"): ("rad_temporal.log_tau", "rad
 COMBOS = [{"camera_features": "dual", "cam_temporal": "ego_gru"}, {"fusion": "cmx", "radar_kind": "off"},
           {"rad_temporal": "window_memory", "radar_kind": "pillars"}, {"camera_off": True, "fusion": "gate"},
           {"camera_features": "bevfusion", "cam_collapse": "zsum", "trunk_kind": "second"}]
-COMBOS += [{"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "delta_slots", "c_rad": 64, "rad_temporal": "window_memory"}]
-INVALID = [dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
+COMBOS += [{"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "delta_slots", "c_rad": 64, "rad_temporal": "window_memory"},
+           {"rad_temporal": "window_memory", "rad_static_gate": True}, {"rad_temporal": "ego_gru", "rad_static_gate": True}]
+INVALID = [dict(rad_static_gate=True), dict(rad_static_gate=True, rad_temporal="window_memory", radar_kind="off"), dict(rad_static_vr=0.0),
+           dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 
 COMBOS += [{"motion_block": True, "box_vel_from_field": True}, {"motion_block": True, "box_vel_from_field": True, "object_moving": True}]   # t15
@@ -145,8 +147,27 @@ def one(name, value, extra=None):
     return sum(q.numel() for q in m.parameters() if q.requires_grad)
 
 
+def gate_check():
+    """the Doppler static gate with a known answer: the same detections, once static (vr 0) and once moving (vr 6 m/s); the radar memory's
+    confidence after the first call. Without the gate both write the same, with it the moving ones write (almost) nothing and the static
+    ones as much as without the gate."""
+    w = {}
+    for gate in (False, True):
+        m = CachedBEVFusionModel(ModelConfig(**dict(BASE, rad_temporal="window_memory", rad_static_gate=gate))).eval()
+        for name, vr in (("static", 0.0), ("moving", 6.0)):
+            b = batch_for(m.cfg)
+            b["radar"]["vr"] = torch.full_like(b["radar"]["vr"], vr)
+            with torch.no_grad():
+                w[gate, name] = float(m(b, dts=(0.0,))["state"]["rad"]["W"].sum())
+    assert w[False, "static"] > 0 and abs(w[False, "static"] - w[False, "moving"]) < 1e-4 * w[False, "static"], w
+    assert abs(w[True, "static"] - w[False, "static"]) < 1e-4 * w[False, "static"] and w[True, "moving"] < 1e-3 * w[True, "static"], w
+    print(f"  ok  radar static gate: memory confidence static {w[True, 'static']:.2f} / moving {w[True, 'moving']:.4f} (without the gate "
+          f"{w[False, 'static']:.2f} / {w[False, 'moving']:.2f})")
+
+
 def main():
     t0 = time.time()
+    gate_check()
     for bad in INVALID:
         try:
             check_config(ModelConfig(**dict(BASE, **bad)))

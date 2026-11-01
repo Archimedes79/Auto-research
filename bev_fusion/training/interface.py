@@ -37,6 +37,8 @@ INPUTS = {
     "vis_radar": (False, "(B, 1, X, Y) cells the radar rig can see, the fans (precompute.py; D36)"),
     "vis_fusion": (False, "(B, 1, X, Y) the fusion area = vis_cam x vis_radar (precompute.py; D37: fusion results are scored here)"),
     "radar_hits": (False, "(B, 1, X, Y) cells with radar detections of this frame (precompute.py): the radar memory's write mask"),
+    "radar_static": (False, "(B, 1, X, Y) the same cells weighted by how static their detections are by the measured Doppler (precompute.py): "
+                            "the radar memory's write mask with rad_static_gate"),
     "gt": (False, "list (B) of GT dicts; read inside the network only by the refiner option (training)"),
     "tokens": (False, "list (B) of sample tokens (bookkeeping)"),
     "steps_raw": (False, "per sample the steps as python floats (bookkeeping)"),
@@ -90,7 +92,7 @@ def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=Fa
                 errs.append(f"{k}: {batch[k].shape[0]} samples != B = {B}")
         if "radar_poses" in batch and tuple(batch["radar_poses"].shape[1:]) != (5, 4, 4):
             errs.append(f"radar_poses: shape {tuple(batch['radar_poses'].shape)} != (B, 5, 4, 4)")
-        for k in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits"):
+        for k in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits", "radar_static"):
             if k in batch and tuple(batch[k].shape[:2]) != (B, 1):
                 errs.append(f"{k}: leading shape {tuple(batch[k].shape[:2])} != (B, 1) = {(B, 1)}")
         if "steps" in batch and len(batch["steps"]) != Fn:

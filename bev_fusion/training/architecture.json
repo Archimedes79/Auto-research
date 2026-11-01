@@ -432,9 +432,10 @@
    "code": [
     "training/precompute.py::Precompute",
     "training/precompute.py::radar_hits",
+    "training/precompute.py::radar_static",
     "training/lift_pd.py::camera_visibility"
    ],
-   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans of the calibrated poses (D36; autogt.coverage.radar_cells, cached per rig), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
+   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans of the calibrated poses (D36; autogt.coverage.radar_cells, cached per rig), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask), radar_static = the same weighted by the measured Doppler (the write mask with rad_static_gate); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
   }
  ],
  "edges": [

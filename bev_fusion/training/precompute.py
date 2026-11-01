@@ -6,10 +6,8 @@ steps, compensated radar points and the frozen image features come from the data
     batch = pre(batch [, keys])             # adds the maps below (default all), (B, 1, X, Y) in [0, 1], each in the batch's frame
                                             # (mirrored for flipped samples); a key already present is kept
 
-On its own (no network), from the bev_fusion folder:
-    python training/precompute.py check  <config.json> [--split val] [--n 8 | --scene scene-0003]    build the network input, check it
-    python training/precompute.py frames <config.json> [...] [--out DIR]     also write one .pt per frame (the BEVInputs + maps, no GT)
-                                                                             and index.json (code commit, cover of every map per frame)
+On its own (no network): `python runner/bev_runner.py check | precompute <config.json> ...` (the runner builds the network input of chosen
+frames through this step with the dataset; the data loaders are not part of this file, which belongs to the network's bundle).
 
 The network asks only for what its memories read (no extra work on the training and timing paths); the training (D36 loss masks)
 and the evaluation (D36 / D37 scoring masks) call the step themselves.
@@ -26,8 +24,12 @@ vis_fusion the fusion area (D37: fusion results are reported on cells observed b
            removes the cells hidden behind a GT box (autogt.coverage.hidden_by_boxes) on top.
 radar_hits the cells with at least one radar detection of this frame's compensated sweeps, widened by `dilate` cells (radar points are
            mirrored by the augmentation already): where the radar measured now, the write mask of the radar memory.
+radar_static the same cells, each weighted by how static its detections are by the measured Doppler (mean of exp(-(vr / v_static)^2),
+           vr ego-compensated, so a return of the static world has vr ~ 0): the write mask of the radar memory with ModelConfig.
+           rad_static_gate - only the static world is remembered, a moving car (not in the same place next frame) is not.
 Run the self-test: python training/precompute.py
 """
+import math
 import os
 import sys
 
@@ -55,7 +57,26 @@ def _radar_cells():
     return coverage.radar_cells
 
 
-MAPS = ("vis_cam", "vis_radar", "vis_fusion", "radar_hits")
+MAPS = ("vis_cam", "vis_radar", "vis_fusion", "radar_hits", "radar_static")
+
+
+def radar_static(radar, B, grid, v_static=1.0, dilate=1):
+    """(B, 1, X, Y): per cell the mean static weight exp(-(vr / v_static)^2) of its detections (vr = the ego-compensated Doppler, about 0
+    for a return of the static world), 0 where there is no detection, widened by `dilate` cells like radar_hits (max)"""
+    n = B * grid.nx * grid.ny
+    dev = radar["x"].device if len(radar.get("x", [])) else "cpu"
+    wsum, cnt = torch.zeros(n, device=dev), torch.zeros(n, device=dev)
+    if len(radar.get("x", [])):
+        ix = ((radar["x"] - grid.x_min) / grid.res).floor().long()
+        iy = ((radar["y"] - grid.y_min) / grid.res).floor().long()
+        inside = (ix >= 0) & (ix < grid.nx) & (iy >= 0) & (iy < grid.ny)
+        idx = (radar["b"][inside] * grid.nx + ix[inside]) * grid.ny + iy[inside]
+        vr = torch.nan_to_num(radar["vr"][inside].float(), nan=float("inf"))          # a Doppler that was not measured is not static
+        w = torch.exp(-(vr / v_static) ** 2)
+        wsum.index_add_(0, idx, w)
+        cnt.index_add_(0, idx, torch.ones_like(w))
+    m = (wsum / cnt.clamp(min=1)).view(B, 1, grid.nx, grid.ny)
+    return F.max_pool2d(m, 2 * dilate + 1, 1, dilate) if dilate > 0 else m
 
 
 def radar_hits(radar, B, grid, dilate=1):
@@ -72,13 +93,13 @@ def radar_hits(radar, B, grid, dilate=1):
 
 
 class Precompute:
-    def __init__(self, grid, z_levels, depth_centres, oversample=1, radar_dilate=1):
+    def __init__(self, grid, z_levels, depth_centres, oversample=1, radar_dilate=1, radar_static_vr=1.0):
         self.grid, self.z_levels, self.depth_centres = grid, z_levels, depth_centres
-        self.oversample, self.radar_dilate = oversample, radar_dilate
+        self.oversample, self.radar_dilate, self.radar_static_vr = oversample, radar_dilate, radar_static_vr
 
     @classmethod
     def from_model(cls, model):
-        return cls(model.grid, model.cfg.z_levels, model.lift.depth_centres, model.cfg.oversample)
+        return cls(model.grid, model.cfg.z_levels, model.lift.depth_centres, model.cfg.oversample, radar_static_vr=model.cfg.rad_static_vr)
 
     @classmethod
     def from_config(cls, mcfg):
@@ -97,7 +118,8 @@ class Precompute:
             dc = DEPTHS
         else:
             dc = depth_centres()
-        return cls(Grid(z_levels=mcfg.z_levels, **mcfg.grid_kwargs), mcfg.z_levels, torch.as_tensor(dc, dtype=torch.float32), mcfg.oversample)
+        return cls(Grid(z_levels=mcfg.z_levels, **mcfg.grid_kwargs), mcfg.z_levels, torch.as_tensor(dc, dtype=torch.float32), mcfg.oversample,
+                   radar_static_vr=mcfg.rad_static_vr)
 
     def camera(self, batch):
         K, T = batch["K"], batch["T_cam_car"]
@@ -137,6 +159,8 @@ class Precompute:
             batch["vis_fusion"] = batch["vis_cam"] * batch["vis_radar"]
         if "radar_hits" in need and "radar_hits" not in batch and "radar" in batch:
             batch["radar_hits"] = radar_hits(batch["radar"], B, self.grid, self.radar_dilate).to(dev)
+        if "radar_static" in need and "radar_static" not in batch and "radar" in batch:
+            batch["radar_static"] = radar_static(batch["radar"], B, self.grid, self.radar_static_vr, self.radar_dilate).to(dev)
         return batch
 
 
@@ -157,7 +181,8 @@ def _selftest():
     rig = torch.stack([pose(3.41, 0.0, 0.0), pose(2.42, 0.8, 1.04), pose(2.42, -0.8, -1.04), pose(-1.0, 0.9, 2.1), pose(-1.0, -0.9, -2.1)])
     batch = {"K": K.expand(B, 3, 3, 3).clone(), "T_cam_car": T.expand(B, 3, 4, 4).clone(), "hw": hw, "ida": None,
              "radar_poses": rig.expand(B, 5, 4, 4).clone(),
-             "radar": {"x": torch.tensor([10.2, 30.0, 500.0]), "y": torch.tensor([0.3, -5.0, 0.0]), "b": torch.tensor([0, 1, 1])}}
+             "radar": {"x": torch.tensor([10.2, 30.0, 500.0]), "y": torch.tensor([0.3, -5.0, 0.0]), "b": torch.tensor([0, 1, 1]),
+                       "vr": torch.tensor([0.0, 3.0, 0.0])}}
     pre = Precompute(grid, grid.z_levels, depth_centres(), oversample=1)
     out = pre(dict(batch))
     ref = camera_visibility(grid, grid.z_levels, depth_centres(), K, T, hw, None, 1)
@@ -191,6 +216,15 @@ def _selftest():
     hits = out["radar_hits"]
     assert hits.shape == (B, 1, grid.nx, grid.ny) and hits[0].sum() == 9 and hits[1].sum() == 9, (hits[0].sum(), hits[1].sum())   # 3 x 3 each
     assert hits[0, 0, ix(10.2), iy(0.3)] == 1 and hits[1, 0, ix(10.2), iy(0.3)] == 0
+    st = out["radar_static"]                                      # the Doppler gate: a static return 1, a return at 3 m/s exp(-9), none 0
+    assert st.shape == hits.shape and abs(float(st[0, 0, ix(10.2), iy(0.3)]) - 1.0) < 1e-6 and float(st[1, 0, ix(10.2), iy(0.3)]) == 0
+    assert abs(float(st[1, 0, ix(30.0), iy(-5.0)]) - math.exp(-9)) < 1e-6 and float(st[0].sum()) == 9 and (st <= hits).all(), "static <= hits"
+    mix = {"x": torch.tensor([10.2, 10.3]), "y": torch.tensor([0.3, 0.3]), "b": torch.tensor([0, 0]), "vr": torch.tensor([0.0, 3.0])}
+    sm = radar_static(mix, B, grid, 1.0, 0)
+    assert abs(float(sm[0, 0, ix(10.2), iy(0.3)]) - (1 + math.exp(-9)) / 2) < 1e-6, "the mean of the detections in a cell"
+    assert abs(float(radar_static(mix, B, grid, 4.0, 0)[0, 0, ix(10.2), iy(0.3)]) - (math.exp(-0) + math.exp(-(3 / 4) ** 2)) / 2) < 1e-6
+    nan = {"x": torch.tensor([10.2]), "y": torch.tensor([0.3]), "b": torch.tensor([0]), "vr": torch.tensor([float("nan")])}
+    assert torch.isfinite(radar_static(nan, B, grid, 1.0, 1)).all() and radar_static(nan, B, grid, 1.0, 1).sum() == 0, "a NaN Doppler is not static"
     kept = pre(dict(batch, vis_cam=torch.zeros(B, 1, grid.nx, grid.ny)))
     assert kept["vis_cam"].sum() == 0 and kept["vis_fusion"].sum() == 0, "an existing map must be kept and used"
     empty = pre(dict(batch, radar={"x": torch.zeros(0), "y": torch.zeros(0), "b": torch.zeros(0, dtype=torch.long)}))
@@ -216,88 +250,5 @@ def _selftest():
           "radar hits from the detections, existing keys kept, maps mirrored, from_config = from_model")
 
 
-# ------------------------------------------------------------------------------------------- the step on its own
-def _frames(ds, args):
-    """the dataset indices to run: one scene, or n frames spread over the split"""
-    if args.scene:
-        names = {s["token"]: s["name"] for s in ds.nusc.scene}
-        idx = [i for i, t in enumerate(ds.samples) if names[ds.nusc.get("sample", t)["scene_token"]] == args.scene]
-        if not idx:
-            raise SystemExit(f"no frame of {args.scene} in the split")
-        return idx
-    n = min(args.n, len(ds))
-    return [int(i * (len(ds) - 1) / max(n - 1, 1)) for i in range(n)]
-
-
-def main(argv=None):
-    """precompute on its own: the network input of chosen frames, checked against interface.INPUTS, optionally written to disk"""
-    import argparse
-    import json
-    import os
-    import subprocess
-    import time
-    ap = argparse.ArgumentParser(description="the precompute step (layer 1) on its own: the network input of chosen frames")
-    ap.add_argument("cmd", choices=["check", "frames"], help="check: build and check, write nothing; frames: also write one .pt per frame")
-    ap.add_argument("config", help="a training config (training/configs/*.json or runs/<name>/config.json): data, caches, model grid")
-    ap.add_argument("--split", choices=["val", "train"], default="val")
-    ap.add_argument("--n", type=int, default=8, help="frames spread over the split (ignored with --scene)")
-    ap.add_argument("--scene", default="", help="all frames of one scene, e.g. scene-0003")
-    ap.add_argument("--out", default="", help="frames: output folder (default temp/precompute/<config name>_<split>)")
-    a = ap.parse_args(argv)
-    here = os.path.dirname(os.path.abspath(__file__))
-    root = os.path.abspath(os.path.join(here, ".."))
-    os.chdir(root)
-    try:
-        from . import train as T
-        from .feature_cache import collate_cached
-        from .interface import check_inputs
-        from .model import ModelConfig
-        from .nuscenes_dataset import collate
-    except ImportError:
-        import train as T
-        from feature_cache import collate_cached
-        from interface import check_inputs
-        from model import ModelConfig
-        from nuscenes_dataset import collate
-    t0 = time.time()
-    cfg = T.read_config(a.config)
-    mcfg = ModelConfig(**cfg.model)
-    train_ds, val_ds = T.make_datasets(cfg)
-    ds = val_ds if a.split == "val" else train_ds
-    fn = collate_cached if cfg.feature_cache else collate
-    pre = Precompute.from_config(mcfg)
-    out = a.out or os.path.join("temp", "precompute", f"{os.path.basename(a.config).replace('.json', '')}_{a.split}")
-    if a.cmd == "frames":
-        os.makedirs(out, exist_ok=True)
-    rows = []
-    fan_gt = []
-    for i in _frames(ds, a):
-        batch = pre(fn([ds[i]]))
-        if "gt" in batch:                                         # the one definition: the fan equals the ground truth's own radar layer
-            g = torch.as_tensor(np.asarray(batch["gt"][0]["cur"]["radar"])) > 0
-            fan_gt.append(float(((batch["vis_radar"][0, 0] > 0) == g).float().mean()) if g.shape == batch["vis_radar"].shape[-2:] else float("nan"))
-        batch.pop("gt", None)                                     # the network input: no ground truth
-        check_inputs(batch, raise_on=True)
-        token = batch["tokens"][0]
-        cover = {k: round(float(batch[k].mean()), 4) for k in MAPS if k in batch}
-        rows.append({"index": i, "token": token, **{f"cover_{k}": v for k, v in cover.items()}})
-        if a.cmd == "frames":
-            torch.save(batch, os.path.join(out, f"{token}.pt"))
-    commit = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "-C", root, "status", "--porcelain", "--", "training"], capture_output=True, text=True).stdout.strip())
-    summary = {"config": a.config, "split": a.split, "frames": len(rows), "code": commit + ("+dirty" if dirty else ""),
-               "maps": list(MAPS), "radar_fan": "autogt.coverage.radar_cells of the calibrated radar poses", "rows": rows}
-    if a.cmd == "frames":
-        json.dump(summary, open(os.path.join(out, "index.json"), "w"), indent=1)
-    if fan_gt:
-        assert min(fan_gt) >= 0.999, f"vis_radar differs from the ground truth's radar layer (share of equal cells per frame: {fan_gt})"
-        summary["fan_equals_gt_share"] = [round(x, 5) for x in fan_gt]
-    mean = {k: round(sum(r[f"cover_{k}"] for r in rows) / len(rows), 3) for k in MAPS if f"cover_{k}" in rows[0]}
-    print(f"precompute {a.cmd}: {len(rows)} frames of {a.split} pass interface.check_inputs ({time.time() - t0:.0f} s), mean cover {mean}"
-          + (f", fan equals the GT's radar layer on {min(fan_gt):.4f} or more of the cells" if fan_gt else "")
-          + (f"; written to {out}" if a.cmd == "frames" else ""))
-
-
 if __name__ == "__main__":
-    import sys
-    main() if len(sys.argv) > 1 else _selftest()
+    _selftest()
