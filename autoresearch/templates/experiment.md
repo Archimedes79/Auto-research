@@ -32,7 +32,7 @@ One file per experiment, in the experiment folder; it grows from card (P2) to de
 - **Cost** (GPU hours, coding days, risk) and **kill criterion**:
 - **Inputs** (ready / to build: data, code blocks, tests):
 - **Starts from** (the version or run it changes):
-- **Referee** (verdict and reason, written by the planner from ar-critic's report):
+- **Referee** (one line: the critic's verdict and a link to its report):
 
 ## 2. Detail plan (block experiments only; written by ar-planner when the loop reaches the card)
 What would make it fail, in our own words: ...
