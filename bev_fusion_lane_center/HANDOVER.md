@@ -11,12 +11,12 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
 - Method change today (Mirko, no D entry): research only on a trigger, roles inline; `autoresearch/METHOD.md` "Planning a round", step 0 of `research_steps.md`.
 
 ## Decided today
-D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex sentence; D29 one GT version + autogt tags (v1-v5 done; evaluation default, run records and training start check after the freeze); D30 one image region for all pipelines; D33 hook gaps; D35 key-level protection; D36 coverage rule; D37 fusion numbers on the fusion area only; D38 front-only rig: outside the fusion area don't care on both sides (settles D31).
+D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex sentence; D29 one GT version + autogt tags (v1-v5 done; evaluation default, run records and training start check after the freeze); D30 one image region for all pipelines; D33 hook gaps; D35 key-level protection; D36 coverage rule; D37 fusion numbers on the fusion area only; D38 front-only rig: outside the fusion area don't care on both sides (settles D31); object visibility = footprint share; aux heads: own area, debug tool, off in final E2E.
 
 ## Open for Mirko
 - D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). "D1." (unclear, asked back).
 - D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start when the freeze ends (no date).
-- D36 details, one at a time: radar rule open (Mirko: no per-box gate; radar should see moving objects in line of sight; maybe weights), cells hidden behind a box, object: footprint share, not centre (D38 b); aux heads: own area, debug tool, off in final E2E. GT chat plans v6 after the freeze.
+- D36/D38 open: radar rule (Mirko: no per-box gate; radar should see moving objects in line of sight; maybe weights); thresholds of the footprint share come from the data. GT chat plans v6 after the freeze.
 
 ## Next
 1. Next lane loop: precision at range, idle timing of ring / union / prototype, route success on spur-kept graphs.
