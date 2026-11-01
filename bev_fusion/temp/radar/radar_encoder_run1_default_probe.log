@@ -1,0 +1,10 @@
+RadarEncoder on real nuScenes mini: 324 train frames, 80 held-out frames, 2000 steps, C = 64
+oracle (decode the raster itself): held-out 95.0%, train 95.7%
+mode         | task F1 held-out | kept held-out | kept train | gap  | violating % per field (pos (m), dist (m), dir (deg), vr (m/s), rcs (dB), age (s))
+aux only     |            0.195 |         76.4% |      80.2% | +3.8 | 22, 22, 22, 22, 22, 23
+task only    |            0.983 |         21.3% |      22.1% | +0.8 | 45, 41, 41, 41, 68, 60
+task + aux   |            0.983 |         77.3% |      81.0% | +3.7 | 18, 18, 18, 20, 20, 20
+  FAIL task + aux keeps >= 90 % of the oracle on held-out scenes (77.3% vs 95.0%)
+  ok   the side loss does not cost the task (F1 0.983 vs task only 0.983)
+task only keeps 21.3% (what the task alone throws away: 73.6 points of the oracle)
+RADAR ENCODER GATE: FAIL (1)

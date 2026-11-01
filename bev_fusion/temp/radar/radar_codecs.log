@@ -1,0 +1,20 @@
+D  codecs of the stored fields, same probe (2 x 3x3 conv + 1x1 decoder), tolerance-weighted loss, 2000 steps
+  codec abs      oracle (decode the raster itself, own slot or remainder mean): recovered 95.0%
+  ok   codec abs: as lossless as abs (within 0.5 points)
+  codec delta    oracle (decode the raster itself, own slot or remainder mean): recovered 95.2%
+  ok   codec delta: as lossless as abs (within 0.5 points)
+  codec phys     oracle (decode the raster itself, own slot or remainder mean): recovered 95.2%
+  ok   codec phys: as lossless as abs (within 0.5 points)
+  codec fourier  oracle (decode the raster itself, own slot or remainder mean): recovered 95.0%
+  ok   codec fourier: as lossless as abs (within 0.5 points)
+  ceiling = 95.0% (the strict own-slot share is 87.7%; the remainder mean also matches redundant sweeps)
+  codec / variant     | channels in | C   | held-out | train | gap  | held-out median: pos (m), dist (m), dir (deg), vr (m/s), rcs (dB), age (s)
+  abs / ae            |          57 |  64 |    25.3% | 25.0% | -0.3 | 0.192, 0.430, 0.927, 0.071, 1.097, 0.032
+  delta / ae          |          53 |  64 |    70.6% | 69.7% | -0.9 | 0.045, 0.049, 0.130, 0.028, 0.625, 0.017
+  phys / ae           |          45 |  64 |    67.1% | 66.2% | -0.8 | 0.051, 0.026, 0.056, 0.025, 0.618, 0.015
+  fourier / ae        |          81 |  64 |    12.8% | 12.8% | +0.1 | 0.189, 0.863, 0.566, 0.079, 1.578, 0.038
+  abs / ae            |          57 | 128 |    42.8% | 43.9% | +1.0 | 0.095, 0.363, 0.755, 0.048, 0.885, 0.025
+  delta / ae          |          53 | 128 |    84.4% | 84.5% | +0.1 | 0.024, 0.040, 0.125, 0.019, 0.329, 0.013
+  phys / ae           |          45 | 128 |    85.7% | 85.0% | -0.7 | 0.031, 0.017, 0.034, 0.020, 0.335, 0.015
+  delta / skip        |          53 |  32 |    82.0% | 84.0% | +2.0 | 0.012, 0.044, 0.118, 0.010, 0.117, 0.007
+RADAR CODEC GATE: PASS

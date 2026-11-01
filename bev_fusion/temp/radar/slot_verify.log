@@ -1,0 +1,13 @@
+/mnt/c/Auto-research/bev_fusion/temp/radar/_scratch_patches/verify/bev_fusion/tests/test_radar_slot.py:68: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  check("radar_aux" in out and abs(float(out["total"]) - float(out["total_main"]) - w * float(out["radar_aux"])) < 1e-4 * max(1.0, float(out["total"])),
+  ok   delta_slots with c_rad = 32 is refused (radar_kind='delta_slots' needs c_rad >= 61 (one channel per input chan...)
+  ok   radar_side = encoder features (2, 64, X, Y) + lossless raster (2, 61, X, Y)
+  ok   the output contract passes with the extra key
+  ok   total = main + 0.218 x side loss (3.454)
+  ok   the gradient reaches the encoder convs, the side-loss decoder and the downstream blocks
+  ok   radar_aux = 0: nothing added, the decoder gets no gradient
+  ok   validation logs radar_kept (0.850) and adds no side loss
+  ok   radar_kind raster: no radar_side, radar_aux changes nothing (identical loss)
+RADAR SLOT GATE: PASS
+exit 0

@@ -1,0 +1,24 @@
+D  codecs of the stored fields, same probe (2 x 3x3 conv + 1x1 decoder), tolerance-weighted loss, 5 steps
+  codec abs      oracle (decode the raster itself, own slot or remainder mean): recovered 95.0%
+  ok   codec abs: as lossless as abs (within 0.5 points)
+  codec delta    oracle (decode the raster itself, own slot or remainder mean): recovered 95.2%
+  ok   codec delta: as lossless as abs (within 0.5 points)
+  codec phys     oracle (decode the raster itself, own slot or remainder mean): recovered 95.2%
+  ok   codec phys: as lossless as abs (within 0.5 points)
+  codec fourier  oracle (decode the raster itself, own slot or remainder mean): recovered 95.0%
+  ok   codec fourier: as lossless as abs (within 0.5 points)
+  ceiling = 95.0% (the strict own-slot share is 87.7%; the remainder mean also matches redundant sweeps)
+  codec / variant     | channels in | C   | held-out | train | gap  | held-out median: pos (m), dist (m), dir (deg), vr (m/s), rcs (dB), age (s)
+  abs / ae            |          57 |  64 |     0.0% |  0.0% | +0.0 | 0.199, 17.656, 30.826, 16.782, 4.663, 0.220
+  delta / ae          |          53 |  64 |     0.0% |  0.0% | +0.0 | 0.201, 0.117, 0.271, 14.837, 6.817, 0.125
+  phys / ae           |          45 |  64 |     0.1% |  0.2% | +0.1 | 0.206, 0.122, 0.233, 2.041, 4.110, 0.123
+  fourier / ae        |          81 |  64 |     0.0% |  0.0% | +0.0 | 0.199, 10.823, 51.385, 1.671, 4.721, 0.238
+  abs / ae            |          57 | 128 |     0.0% |  0.0% | +0.0 | 0.203, 11.830, 30.437, 3.406, 4.748, 0.117
+  delta / ae          |          53 | 128 |     1.1% |  0.6% | -0.5 | 0.194, 0.172, 0.322, 0.290, 5.456, 0.141
+/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/numpy/core/fromnumeric.py:3504: RuntimeWarning: Mean of empty slice.
+  return _methods._mean(a, axis=axis, dtype=dtype,
+/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/numpy/core/_methods.py:129: RuntimeWarning: invalid value encountered in divide
+  ret = ret.dtype.type(ret / rcount)
+  phys / ae           |          45 | 128 |     0.0% |  0.0% | +0.0 | nan, nan, nan, nan, nan, nan
+  delta / skip        |          53 |  32 |     0.5% |  0.5% | +0.0 | 0.198, 0.128, 0.434, 18.097, 5.191, 0.200
+RADAR CODEC GATE: PASS

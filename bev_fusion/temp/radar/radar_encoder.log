@@ -1,0 +1,11 @@
+07:57:14 GPU free (util 46 %, 5764 MiB): starting /home/ml/miniconda3/envs/gcar/bin/python -u tests/test_radar_encoder.py 2000
+RadarEncoder on real nuScenes mini: 324 train frames, 80 held-out frames, 2000 steps, C = 64
+oracle (decode the raster itself): held-out 95.0%, train 95.7%
+mode         | task F1 held-out | kept held-out | kept train | gap  | own dec. | violating % per field (pos (m), dist (m), dir (deg), vr (m/s), rcs (dB), age (s))
+aux only     |            0.194 |         94.1% |      94.7% | +0.6 |     94.5% | 1, 1, 1, 1, 2, 5
+task only    |            0.983 |         52.3% |      45.9% | -6.4 |       n/a | 17, 16, 16, 22, 35, 30
+task + aux   |            0.983 |         93.0% |      94.1% | +1.1 |     94.1% | 2, 2, 2, 2, 3, 5
+  ok   task + aux keeps >= 90 % of the oracle on held-out scenes (93.0% vs 95.0%)
+  ok   the side loss does not cost the task (F1 0.983 vs task only 0.983)
+task only keeps 52.3% (what the task alone throws away: 42.6 points of the oracle)
+RADAR ENCODER GATE: PASS

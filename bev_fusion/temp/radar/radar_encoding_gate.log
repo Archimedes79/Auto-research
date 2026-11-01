@@ -1,0 +1,26 @@
+A  unit tests with known answers
+  ok   simple raster: one detection per cell, counted per frame
+  ok   slot raster: three single detections -> three slots, no remainder
+  ok   slot raster: detection 0 decoded exactly (max error 4.8e-07)
+  ok   slot raster: detection 1 decoded exactly (max error 4.8e-07)
+  ok   slot raster: detection 2 decoded exactly (max error 1.9e-06)
+  ok   slot raster: 1 in one cell -> 1 exact slots, remainder empty
+  ok   slot raster: 3 in one cell -> 3 exact slots, remainder empty
+  ok   slot raster: 5 in one cell -> 3 exact slots, remainder with 2
+  ok   Doppler near the wrap (+-29.9 m/s) exact
+B  ceiling of the representation on real nuScenes mini (held-out scenes 8, 9; 0.5 s of sweeps, all radars)
+  0.5 m grid: detections by cell occupancy 1..9, >=10: [20771, 9600, 5523, 3552, 2530, 1986, 2191, 3568, 225, 766]
+  0.25 m grid: detections by cell occupancy 1..9, >=10: [29955, 8378, 3870, 2136, 1565, 1080, 1309, 2152, 63, 204]
+  B2 represented share (some stored entry of the cell within all tolerances), 0.5 m: K=1 85.5%, K=2 92.3%, K=3 96.6%
+  recoverable share | simple raster | slots K=1 | K=2 | K=3 | K=4 | K=6
+   0.5 m, 50712 det. |  41.0% |  68.6% |  80.9% |  87.7% |  92.1% |  97.3%
+  0.25 m, 50712 det. |  59.1% |  81.1% |  89.2% |  93.2% |  95.7% |  98.7%
+C  learned encoder (2 x 3x3 conv) + 1x1 decoder, slot raster K = 3, 2000 steps; recovered = all fields within tolerance; ceiling (B, K = 3, 0.5 m) 87.7%
+  variant           | held-out | train | gap  | held-out median: pos (m), dist (m), dir (deg), vr (m/s), rcs (dB), age (s)
+  plain C=64        |    24.9% | 23.8% | -1.0 | 0.015, 0.804, 0.990, 0.044, 0.591, 0.021
+  tolweight C=64    |    26.2% | 25.8% | -0.5 | 0.190, 0.427, 0.976, 0.067, 1.095, 0.032
+  tolweight C=128   |    43.1% | 43.7% | +0.6 | 0.104, 0.364, 0.775, 0.045, 0.898, 0.026
+  skip C=32         |    49.4% | 50.1% | +0.7 | 0.065, 0.300, 0.436, 0.032, 0.966, 0.009
+  FAIL tolweight C=64 keeps >= 90 % of the ceiling on held-out scenes (26.2% vs 87.7%)
+  ok   train - held-out gap <= 3 points (-0.5)
+RADAR ENCODING GATE: FAIL (1)
