@@ -11,6 +11,10 @@
     eval [--n 1000] [--warm] [--prior 500] [--images 8] [--time]   the evaluation of a run (replaces evaluate_run.py): runs the
                                                 suite over the val frames, writes eval/metrics<tag>.json + eval/table<tag>.txt
                                                 + eval/card<tag>.json (the metric card of decide.py / experiment.py)
+    report [--vs RUN ...] [--frames 6]          ONE PAGE for a person without code: state, resumes, the card's prediction / rule, curves, the numbers next to
+                                                the --vs runs (first = control), cost, random frames + a video (made first when the run has none) and a
+                                                review field per picture; -> RUN/report/index.html (autoresearch/tools/run_report.py; --ingest there
+                                                takes the review.json the page exports)
     time                                        ms per frame of the chain (idle GPU only) -> eval/latency.json
     memory [--clips 600]                        does the carried memory help? warm vs cold on the same frames -> eval/memory.json + txt
     compare RUN_A RUN_B [--tag _warm] [--n N] [--force]   paired scene bootstrap between two evaluated runs (b - a; runs evaluated
@@ -27,6 +31,7 @@ Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/EXTENSI
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import math
 import os
@@ -499,6 +504,33 @@ def cmd_compare(argv) -> int:
     return 0
 
 
+REPORT_NOTE = ("maps are scored on `seg_fov` = the grid cells the front camera sees (62 % of the grid; today's fusion area, D37), objects inside "
+               "+-32.3 deg and x < 60 m; boxes without a lidar / radar point are dropped from the GT, a detection on one still counts as a false "
+               "detection (D38 will make that two-sided). dt +-0.5 s = the neighbouring keyframe in its own ego frame.")
+
+
+def cmd_report(a, rest) -> int:
+    """pictures (6 random frames + one video) when the run has none yet, then the one-page report (autoresearch/tools/run_report.py)"""
+    import subprocess
+    p = argparse.ArgumentParser(prog="report", allow_abbrev=False)
+    p.add_argument("--vs", nargs="*", default=[], help="reference runs, the first one is the control of the delta column")
+    p.add_argument("--frames", type=int, default=6)
+    p.add_argument("--no-pictures", action="store_true")
+    r = p.parse_args(rest)
+    suite_dir = os.path.join(a.run, "eval", "suite")
+    have = [f for f in glob.glob(os.path.join(suite_dir, "**", "*.png"), recursive=True) if os.sep + "quant" + os.sep not in f]
+    if not r.no_pictures and not have:
+        g = ["--device", a.device, "--workers", str(a.workers), "--split", a.split, "--state", a.state]
+        for cmd in (["qual", "random", str(r.frames), "--seed", "1"], ["qual", "videos", "1"]):
+            code = main([a.run] + g + cmd)
+            if code:
+                print(f"report: `{' '.join(cmd)}` failed ({code}); the page is made without those pictures")
+    env = dict(os.environ, AR_PROJECT=ROOT)
+    tool = os.path.join(ROOT, "..", "autoresearch", "tools", "run_report.py")
+    extra = ["--extra-gops", "frozen DualBEV image heads (71 GFLOPs per frame as stated in training/feature_cache.py; the BEVFusion heads of a dual chain are not counted)=71"]
+    return subprocess.call([sys.executable, tool, a.run, "--note", REPORT_NOTE] + extra + (["--vs"] + r.vs if r.vs else []), env=env)
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "compare":
@@ -526,6 +558,8 @@ def main(argv=None) -> int:
         return cmd_time(a, a.command[1:])
     if a.command[0] == "memory":
         return cmd_memory(a, a.command[1:])
+    if a.command[0] == "report":
+        return cmd_report(a, a.command[1:])
     from evalsuite.cli import main as suite_main
     out = a.out or os.path.join(a.run, "eval", "suite")
     pre = ["--adapter", "evaluation.bev_adapter:build", "--arg", f"run={a.run}", "--arg", f"device={a.device}", "--arg", f"workers={a.workers}",

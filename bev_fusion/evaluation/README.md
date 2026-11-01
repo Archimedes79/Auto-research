@@ -10,6 +10,7 @@ python evaluation/bev_suite.py runs/t1_r4_soa qual frame scene-0061/12 --view ov
 python evaluation/bev_suite.py runs/t1_r4_soa qual debug scene-0061/12              # + the stages of the chain (taps), statistics, plausibility flags, raw taps .npz
 python evaluation/bev_suite.py runs/t1_r4_soa qual random 6 --seed 1                # 6 frames: a random video first, then a random frame in it
 python evaluation/bev_suite.py runs/t1_r4_soa qual videos 2 --seed 1                # 2 random scenes as H.264 videos (dashboard view, memory carried along)
+python evaluation/bev_suite.py runs/t1_r4_soa report --vs runs/t8_ctl_s0                # ONE PAGE for a person without code: runs/t1_r4_soa/report/index.html (state, prediction / rule, curves, numbers next to the control, TOPS, 6 random frames + a video, review fields; made first when missing)
 python evaluation/bev_suite.py runs/t1_r4_soa quant run --n-scenes 20               # numbers over many videos, stored per frame (state carry)
 python evaluation/bev_suite.py runs/t1_r4_soa quant outliers eval_n1000             # where the numbers come from: scenes / frames / flags, each with the command that draws it
 python evaluation/bev_suite.py runs/t1_r4_soa quant report eval_n1000               # html report with the worst frames drawn
