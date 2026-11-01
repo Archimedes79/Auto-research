@@ -106,7 +106,9 @@ def gt_signature(ds) -> Optional[str]:
     """identity of the GT a dataset scores against: '<res>_<ss>_<generator signature>' (the suffix of its GT cache files, the same as
     FrontRadarDataset.gt_signature of the current code); None for a code snapshot whose generator has no signature"""
     try:
-        return f"{ds.grid.res}_{ds.gt_ss}_{ds.gt.signature()}"
+        if hasattr(ds, "gt_signature"):                                       # one formula: the dataset's own (it holds the grid extents of a non-default grid)
+            return ds.gt_signature()
+        return f"{ds.grid.res}_{ds.gt_ss}_{ds.gt.signature()}"                # a code snapshot from before the method existed
     except Exception:                                                         # noqa: BLE001
         return None
 

@@ -127,26 +127,31 @@ def run(scene_name, out_path, max_s=0.0, dataroot="~/data/nuscenes", version="v1
     frames = [sd for sd in track if key_t[0] <= sd["timestamp"] * 1e-6 <= key_t[-1]]
     if max_s:
         frames = frames[:int(max_s * 12)]
-    tmp = tempfile.mkdtemp(dir=os.path.dirname(os.path.abspath(out_path)))
-    paths = []
-    for n, sd in enumerate(frames):
-        t = sd["timestamp"] * 1e-6
-        kf = toks[int(np.argmin([abs(t - kt) for kt in key_t]))]
-        i = track.index(sd)
-        sp = 0.0
-        if i + 1 < len(track):
-            rel = np.linalg.inv(layers.ego_pose(sd)) @ layers.ego_pose(track[i + 1])
-            sp = rel[0, 3] / max((track[i + 1]["timestamp"] - sd["timestamp"]) * 1e-6, 1e-3)
-        head = (f"{scene_name}: {scene.scene['description'][:60]} | t = {t - key_t[0]:5.1f} s | ego {sp * 3.6:3.0f} km/h | "
-                f"{'KEYFRAME' if sd['is_key_frame'] else 'sweep'}",
-                "map layers exact per frame; boxes: 2 Hz annotations interpolated, radar-corrected velocity (km/h); white rim = stationary")
-        frame = render(layers, scene, sd, kf, head, root, use_radar)
-        paths.append(os.path.join(tmp, f"f{n:05d}.png"))
-        cv2.imwrite(paths[-1], frame)
-        if n % 24 == 0:
-            print(f"{n}/{len(frames)} frames", flush=True)
-    res = encode(paths, out_path, fps=12)
-    import shutil
-    shutil.rmtree(tmp, ignore_errors=True)
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    os.makedirs(out_dir, exist_ok=True)
+    tmp = tempfile.mkdtemp(dir=out_dir)
+    try:                                                                  # a rendering or encoding error leaves no temporary pictures behind
+        paths = []
+        for n, sd in enumerate(frames):
+            t = sd["timestamp"] * 1e-6
+            kf = toks[int(np.argmin([abs(t - kt) for kt in key_t]))]
+            i = track.index(sd)
+            sp = 0.0
+            if i + 1 < len(track):
+                rel = np.linalg.inv(layers.ego_pose(sd)) @ layers.ego_pose(track[i + 1])
+                sp = rel[0, 3] / max((track[i + 1]["timestamp"] - sd["timestamp"]) * 1e-6, 1e-3)
+            head = (f"{scene_name}: {scene.scene['description'][:60]} | t = {t - key_t[0]:5.1f} s | ego {sp * 3.6:3.0f} km/h | "
+                    f"{'KEYFRAME' if sd['is_key_frame'] else 'sweep'}",
+                    "map layers exact per frame; boxes: 2 Hz annotations interpolated, radar-corrected velocity (km/h); white rim = stationary")
+            frame = render(layers, scene, sd, kf, head, root, use_radar)
+            paths.append(os.path.join(tmp, f"f{n:05d}.png"))
+            if not cv2.imwrite(paths[-1], frame):                         # imwrite reports a failed write by its return value, not by an exception
+                raise OSError(f"could not write {paths[-1]}")
+            if n % 24 == 0:
+                print(f"{n}/{len(frames)} frames", flush=True)
+        res = encode(paths, out_path, fps=12)
+    finally:
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
     print("saved", res["path"], f"{res['frames']} frames, {res['frames'] / 12:.1f} s, {res['codec']} via {res['method']}")
     return res
