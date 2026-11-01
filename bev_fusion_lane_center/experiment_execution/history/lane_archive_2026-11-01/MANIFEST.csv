@@ -1,0 +1,616 @@
+entry,relpath,bytes,reason
+_loop1_crn,_loop1_crn/fields_cnt.npy,136480128,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/fields_fcn+unet64+cnt.npy,136480128,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/fields_fcn.npy,136480128,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/fields_fcn8k.npy,136480128,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/fields_fcncoord8k.npy,136480128,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/fields_unet64.npy,136480128,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/b123_cnt/heatnet.pt,19486741,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/b123_fcn8k/heatnet.pt,1202961,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/b123_fcncoord8k/heatnet.pt,1208145,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/b123_unet64/heatnet.pt,13859688,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/r4/unet48/heatnet.pt,7964776,legacy driver mention only (>100 MB)
+_loop1_crn,_loop1_crn/test_cnt/heatnet.pt,19486741,legacy driver mention only (>100 MB)
+e105_tok,e105_tok/graphs_cam_front3_off_ema_all_0.7.pkl,58271875,history records only
+e105_tok,e105_tok/graphs_cam_front3_off_ema_hold_mon_0.5.pkl,57917096,history records only
+e105_tok,e105_tok/graphs_cam_front3_off_single.pkl,58977967,history records only
+e105_tok,e105_tok/graphs_dark_ema_all_0.7.pkl,37846030,history records only
+e105_tok,e105_tok/graphs_dark_ema_hold_mon_0.5.pkl,48848800,history records only
+e105_tok,e105_tok/graphs_dark_single.pkl,36877054,history records only
+e113_a,e113_a/train_data.pkl,308986785,legacy driver mention only (>100 MB)
+e114_tok,e114_tok/graphs_blur_ema_hold_mon_0.5.pkl,24674636,records only
+e114_tok,e114_tok/graphs_blur_maxdecay_0.95.pkl,30907210,records only
+e114_tok,e114_tok/graphs_blur_single.pkl,21844547,records only
+e114_tok,e114_tok/graphs_cam_front3_off_ema_hold_mon_0.5.pkl,57920011,records only
+e114_tok,e114_tok/graphs_cam_front3_off_maxdecay_0.95.pkl,81012839,records only
+e114_tok,e114_tok/graphs_cam_front3_off_single.pkl,58980882,records only
+e114_tok,e114_tok/graphs_dark_ema_hold_mon_0.5.pkl,48851715,records only
+e114_tok,e114_tok/graphs_dark_maxdecay_0.95.pkl,58953367,records only
+e114_tok,e114_tok/graphs_dark_single.pkl,36879969,records only
+e116_valfail,e116_valfail/graphs_blur_ema_hold_mon_0.5.pkl,13114721,loop script / scratch
+e116_valfail,e116_valfail/graphs_blur_maxdecay_0.95.pkl,15935960,loop script / scratch
+e116_valfail,e116_valfail/graphs_blur_single.pkl,11667537,loop script / scratch
+e116_valfail,e116_valfail/graphs_cam_front3_off_ema_hold_mon_0.5.pkl,15700635,loop script / scratch
+e116_valfail,e116_valfail/graphs_cam_front3_off_maxdecay_0.95.pkl,20967432,loop script / scratch
+e116_valfail,e116_valfail/graphs_cam_front3_off_single.pkl,16168559,loop script / scratch
+e116_valfail,e116_valfail/graphs_dark_ema_hold_mon_0.5.pkl,12596747,loop script / scratch
+e116_valfail,e116_valfail/graphs_dark_maxdecay_0.95.pkl,14762501,loop script / scratch
+e116_valfail,e116_valfail/graphs_dark_single.pkl,9860195,loop script / scratch
+e119_a,e119_a/model_frozen_s0.pt,3224587,records only
+e119_a,e119_a/model_frozen_s1.pt,3224587,records only
+e119_a,e119_a/model_joint0_s0.pt,3224587,records only
+e119_a,e119_a/model_joint0_s1.pt,3224587,records only
+e119_a,e119_a/model_joint1_s0.pt,3224587,records only
+e119_a,e119_a/model_joint1_s1.pt,3224587,records only
+e119_a,e119_a/model_scratch0l_s0.pt,3225067,records only
+e119_a,e119_a/model_scratch0_s0.pt,3224907,records only
+e119_a,e119_a/model_scratch1_s0.pt,3224907,records only
+e17/dense_e37,e17/dense_e37/cam_front_off_dir.npy,46560128,history records only
+e17/dense_e37,e17/dense_e37/cam_front_off_prob.npy,23280128,history records only
+e17/dense_e37,e17/dense_e37/clean_dir.npy,139680128,history records only
+e17/dense_e37,e17/dense_e37/clean_prob.npy,69840128,history records only
+e17/dense_e37,e17/dense_e37/extr3_dir.npy,46560128,history records only
+e17/dense_e37,e17/dense_e37/extr3_prob.npy,23280128,history records only
+e17/dense_e37,e17/dense_e37/fog_dir.npy,46560128,history records only
+e17/dense_e37,e17/dense_e37/fog_prob.npy,23280128,history records only
+e17/dense_e37,e17/dense_e37/radar_off_dir.npy,46560128,history records only
+e17/dense_e37,e17/dense_e37/radar_off_prob.npy,23280128,history records only
+e17/dense_ftall,e17/dense_ftall/blur_dir.npy,46560128,history records only
+e17/dense_ftall,e17/dense_ftall/blur_prob.npy,23280128,history records only
+e17/dense_ftall,e17/dense_ftall/cam_front3_off_dir.npy,46560128,history records only
+e17/dense_ftall,e17/dense_ftall/cam_front3_off_prob.npy,23280128,history records only
+e17/dense_ftall,e17/dense_ftall/clean_dir.npy,139680128,history records only
+e17/dense_ftall,e17/dense_ftall/clean_prob.npy,69840128,history records only
+e17/dense_ftall,e17/dense_ftall/dark_dir.npy,46560128,history records only
+e17/dense_ftall,e17/dense_ftall/dark_prob.npy,23280128,history records only
+e17/e130b_more,e17/e130b_more/cam_front_off_maxdecay_0.95_e37.pkl,4243201,loop script / scratch
+e17/e130b_more,e17/e130b_more/cam_front_off_single_e37.pkl,4028756,loop script / scratch
+e17/e130b_more,e17/e130b_more/extr3_maxdecay_0.95_e37.pkl,4615370,loop script / scratch
+e17/e130b_more,e17/e130b_more/extr3_single_e37.pkl,4005357,loop script / scratch
+e17/e130b_more,e17/e130b_more/fog_maxdecay_0.95_e37.pkl,4216434,loop script / scratch
+e17/e130b_more,e17/e130b_more/fog_single_e37.pkl,4034965,loop script / scratch
+e17/e130b_more,e17/e130b_more/radar_off_maxdecay_0.95_e37.pkl,4162310,loop script / scratch
+e17/e130b_more,e17/e130b_more/radar_off_single_e37.pkl,4016926,loop script / scratch
+e17/e131_hold,e17/e131_hold/blur_ema_hold_mon_0.5.pkl,3933222,loop script / scratch
+e17/e131_hold,e17/e131_hold/blur_maxdecay_0.95.pkl,4167895,loop script / scratch
+e17/e131_hold,e17/e131_hold/cam_front3_off_ema_hold_mon_0.5.pkl,4087421,loop script / scratch
+e17/e131_hold,e17/e131_hold/cam_front3_off_maxdecay_0.95.pkl,4338864,loop script / scratch
+e17/e131_hold,e17/e131_hold/dark_ema_hold_mon_0.5.pkl,3899354,loop script / scratch
+e17/e131_hold,e17/e131_hold/dark_maxdecay_0.95.pkl,4110447,loop script / scratch
+e17/e132_norec,e17/e132_norec/blur_maxdecay_0.95.pkl,4106462,loop script / scratch
+e17/e132_norec,e17/e132_norec/blur_single.pkl,3808705,loop script / scratch
+e17/e132_norec,e17/e132_norec/cam_front3_off_maxdecay_0.95.pkl,4284973,loop script / scratch
+e17/e132_norec,e17/e132_norec/cam_front3_off_single.pkl,4065377,loop script / scratch
+e17/e132_norec,e17/e132_norec/dark_maxdecay_0.95.pkl,4048421,loop script / scratch
+e17/e132_norec,e17/e132_norec/dark_single.pkl,3693107,loop script / scratch
+e17/e133a_ftall,e17/e133a_ftall/blur_maxdecay_0.95_ftall.pkl,4218743,loop script / scratch
+e17/e133a_ftall,e17/e133a_ftall/blur_single_ftall.pkl,3969734,loop script / scratch
+e17/e133a_ftall,e17/e133a_ftall/cam_front3_off_maxdecay_0.95_ftall.pkl,4321522,loop script / scratch
+e17/e133a_ftall,e17/e133a_ftall/cam_front3_off_single_ftall.pkl,4191294,loop script / scratch
+e17/e133a_ftall,e17/e133a_ftall/dark_maxdecay_0.95_ftall.pkl,4184446,loop script / scratch
+e17/e133a_ftall,e17/e133a_ftall/dark_single_ftall.pkl,3915356,loop script / scratch
+e17/e133b_k0,e17/e133b_k0/blur_ema_hold_mon_0.5.pkl,4041239,records only
+e17/e133b_k0,e17/e133b_k0/blur_maxdecay_0.95.pkl,4305589,records only
+e17/e133b_k0,e17/e133b_k0/blur_single.pkl,3966103,records only
+e17/e133b_k0,e17/e133b_k0/cam_front3_off_ema_hold_mon_0.5.pkl,4336687,records only
+e17/e133b_k0,e17/e133b_k0/cam_front3_off_maxdecay_0.95.pkl,4637781,records only
+e17/e133b_k0,e17/e133b_k0/cam_front3_off_single.pkl,4358206,records only
+e17/e133b_k0,e17/e133b_k0/dark_ema_hold_mon_0.5.pkl,3999275,records only
+e17/e133b_k0,e17/e133b_k0/dark_maxdecay_0.95.pkl,4218769,records only
+e17/e133b_k0,e17/e133b_k0/dark_single.pkl,3834285,records only
+e17/e133b_k1,e17/e133b_k1/blur_ema_hold_mon_0.5.pkl,4032428,records only
+e17/e133b_k1,e17/e133b_k1/blur_maxdecay_0.95.pkl,4288002,records only
+e17/e133b_k1,e17/e133b_k1/blur_single.pkl,3961582,records only
+e17/e133b_k1,e17/e133b_k1/cam_front3_off_ema_hold_mon_0.5.pkl,4316294,records only
+e17/e133b_k1,e17/e133b_k1/cam_front3_off_maxdecay_0.95.pkl,4613706,records only
+e17/e133b_k1,e17/e133b_k1/cam_front3_off_single.pkl,4361135,records only
+e17/e133b_k1,e17/e133b_k1/dark_ema_hold_mon_0.5.pkl,3989167,records only
+e17/e133b_k1,e17/e133b_k1/dark_maxdecay_0.95.pkl,4214919,records only
+e17/e133b_k1,e17/e133b_k1/dark_single.pkl,3830564,records only
+e17/e138_map,e17/e138_map/blur_maxdecay_0.95_m0.pkl,4206631,loop script / scratch
+e17/e138_map,e17/e138_map/blur_maxdecay_0.95_m2.pkl,4204080,loop script / scratch
+e17/e138_map,e17/e138_map/blur_maxdecay_0.95_mnone.pkl,4194587,loop script / scratch
+e17/e138_map,e17/e138_map/blur_maxdecay_0.95_mwrong.pkl,4211890,loop script / scratch
+e17/e138_map,e17/e138_map/blur_single_m0.pkl,3924674,loop script / scratch
+e17/e138_map,e17/e138_map/blur_single_m2.pkl,3913420,loop script / scratch
+e17/e138_map,e17/e138_map/blur_single_mnone.pkl,3881157,loop script / scratch
+e17/e138_map,e17/e138_map/blur_single_mwrong.pkl,3910106,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_maxdecay_0.95_m0.pkl,4375549,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_maxdecay_0.95_m2.pkl,4375248,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_maxdecay_0.95_mnone.pkl,4356852,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_maxdecay_0.95_mwrong.pkl,4391548,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_single_m0.pkl,4221269,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_single_m2.pkl,4214328,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_single_mnone.pkl,4160261,loop script / scratch
+e17/e138_map,e17/e138_map/cam_front3_off_single_mwrong.pkl,4193329,loop script / scratch
+e17/e138_map,e17/e138_map/dark_maxdecay_0.95_m0.pkl,4128601,loop script / scratch
+e17/e138_map,e17/e138_map/dark_maxdecay_0.95_m2.pkl,4132844,loop script / scratch
+e17/e138_map,e17/e138_map/dark_maxdecay_0.95_mnone.pkl,4113387,loop script / scratch
+e17/e138_map,e17/e138_map/dark_maxdecay_0.95_mwrong.pkl,4131940,loop script / scratch
+e17/e138_map,e17/e138_map/dark_single_m0.pkl,3790021,loop script / scratch
+e17/e138_map,e17/e138_map/dark_single_m2.pkl,3788279,loop script / scratch
+e17/e138_map,e17/e138_map/dark_single_mnone.pkl,3763957,loop script / scratch
+e17/e138_map,e17/e138_map/dark_single_mwrong.pkl,3786812,loop script / scratch
+e17/e139_b,e17/e139_b/blur_maxdecay_0.95_m0.pkl,4406092,loop script / scratch
+e17/e139_b,e17/e139_b/blur_maxdecay_0.95_m2.pkl,4444685,loop script / scratch
+e17/e139_b,e17/e139_b/blur_maxdecay_0.95_mnone.pkl,4303923,loop script / scratch
+e17/e139_b,e17/e139_b/blur_maxdecay_0.95_mwrong.pkl,4542092,loop script / scratch
+e17/e139_b,e17/e139_b/blur_single_m0.pkl,4347672,loop script / scratch
+e17/e139_b,e17/e139_b/blur_single_m2.pkl,4353623,loop script / scratch
+e17/e139_b,e17/e139_b/blur_single_mnone.pkl,4062350,loop script / scratch
+e17/e139_b,e17/e139_b/blur_single_mwrong.pkl,4348838,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_maxdecay_0.95_m0.pkl,4475535,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_maxdecay_0.95_m2.pkl,4513688,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_maxdecay_0.95_mnone.pkl,4355775,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_maxdecay_0.95_mwrong.pkl,4678969,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_single_m0.pkl,4350031,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_single_m2.pkl,4375049,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_single_mnone.pkl,4184301,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front3_off_single_mwrong.pkl,4434987,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front_off_maxdecay_0.95_e37_m0.pkl,4327632,loop script / scratch
+e17/e139_b,e17/e139_b/cam_front_off_single_e37_m0.pkl,4164928,loop script / scratch
+e17/e139_b,e17/e139_b/dark_maxdecay_0.95_m0.pkl,4366246,loop script / scratch
+e17/e139_b,e17/e139_b/dark_maxdecay_0.95_m2.pkl,4406534,loop script / scratch
+e17/e139_b,e17/e139_b/dark_maxdecay_0.95_mnone.pkl,4243952,loop script / scratch
+e17/e139_b,e17/e139_b/dark_maxdecay_0.95_mwrong.pkl,4457441,loop script / scratch
+e17/e139_b,e17/e139_b/dark_single_m0.pkl,4335175,loop script / scratch
+e17/e139_b,e17/e139_b/dark_single_m2.pkl,4366014,loop script / scratch
+e17/e139_b,e17/e139_b/dark_single_mnone.pkl,3997603,loop script / scratch
+e17/e139_b,e17/e139_b/dark_single_mwrong.pkl,4316658,loop script / scratch
+e17/e139_b,e17/e139_b/extr3_maxdecay_0.95_e37_m0.pkl,4490477,loop script / scratch
+e17/e139_b,e17/e139_b/extr3_single_e37_m0.pkl,4067672,loop script / scratch
+e17/e139_b,e17/e139_b/fog_maxdecay_0.95_e37_m0.pkl,4256190,loop script / scratch
+e17/e139_b,e17/e139_b/fog_single_e37_m0.pkl,4115385,loop script / scratch
+e17/e139_b,e17/e139_b/radar_off_maxdecay_0.95_e37_m0.pkl,4187450,loop script / scratch
+e17/e139_b,e17/e139_b/radar_off_single_e37_m0.pkl,4054657,loop script / scratch
+e17/e139_c,e17/e139_c/blur_maxdecay_0.95_mnone.pkl,4426032,loop script / scratch
+e17/e139_c,e17/e139_c/blur_single_mnone.pkl,4234797,loop script / scratch
+e17/e139_c,e17/e139_c/cam_front3_off_maxdecay_0.95_mnone.pkl,4683880,loop script / scratch
+e17/e139_c,e17/e139_c/cam_front3_off_single_mnone.pkl,4410045,loop script / scratch
+e17/e139_c,e17/e139_c/cam_front_off_maxdecay_0.95_e37_mnone.pkl,4361861,loop script / scratch
+e17/e139_c,e17/e139_c/cam_front_off_single_e37_mnone.pkl,4130467,loop script / scratch
+e17/e139_c,e17/e139_c/dark_maxdecay_0.95_mnone.pkl,4391730,loop script / scratch
+e17/e139_c,e17/e139_c/dark_single_mnone.pkl,4248164,loop script / scratch
+e17/e139_c,e17/e139_c/extr3_maxdecay_0.95_e37_mnone.pkl,4515637,loop script / scratch
+e17/e139_c,e17/e139_c/extr3_single_e37_mnone.pkl,4063318,loop script / scratch
+e17/e139_c,e17/e139_c/fog_maxdecay_0.95_e37_mnone.pkl,4300067,loop script / scratch
+e17/e139_c,e17/e139_c/fog_single_e37_mnone.pkl,4103047,loop script / scratch
+e17/e139_c,e17/e139_c/radar_off_maxdecay_0.95_e37_mnone.pkl,4241804,loop script / scratch
+e17/e139_c,e17/e139_c/radar_off_single_e37_mnone.pkl,4067267,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/blur_gateB_m0.pkl,4255038,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/blur_gateB_m1.pkl,4272612,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/blur_gateB_m2.pkl,4291841,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/blur_gateB_mnone.pkl,4159142,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/blur_gateB_mwrong.pkl,4398728,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/cam_front3_off_gateB_m0.pkl,4325559,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/cam_front3_off_gateB_m1.pkl,4315267,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/cam_front3_off_gateB_m2.pkl,4360167,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/cam_front3_off_gateB_mnone.pkl,4199848,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/cam_front3_off_gateB_mwrong.pkl,4515895,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/dark_gateB_m0.pkl,4240662,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/dark_gateB_m1.pkl,4276169,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/dark_gateB_m2.pkl,4288406,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/dark_gateB_mnone.pkl,4122383,loop script / scratch
+e17/e140_gateB,e17/e140_gateB/dark_gateB_mwrong.pkl,4354263,loop script / scratch
+e17/e141_clean,e17/e141_clean/blur_gate_cleanref.pkl,4031631,loop script / scratch
+e17/e141_clean,e17/e141_clean/blur_maxdecay_0.95_cleanref.pkl,4079769,loop script / scratch
+e17/e141_clean,e17/e141_clean/blur_single_cleanref.pkl,3955032,loop script / scratch
+e17/e141_clean,e17/e141_clean/cam_front3_off_gate_cleanref.pkl,4031641,loop script / scratch
+e17/e141_clean,e17/e141_clean/cam_front3_off_maxdecay_0.95_cleanref.pkl,4079779,loop script / scratch
+e17/e141_clean,e17/e141_clean/cam_front3_off_single_cleanref.pkl,3955042,loop script / scratch
+e17/e141_clean,e17/e141_clean/dark_gate_cleanref.pkl,4031631,loop script / scratch
+e17/e141_clean,e17/e141_clean/dark_maxdecay_0.95_cleanref.pkl,4079769,loop script / scratch
+e17/e141_clean,e17/e141_clean/dark_single_cleanref.pkl,3955032,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/blur_gateB_cleanref_m0.pkl,4060875,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/blur_maxdecay_0.95_cleanref_C.pkl,4190835,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/blur_maxdecay_0.95_cleanref_m0.pkl,4143486,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/blur_single_cleanref_C.pkl,4041438,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/blur_single_cleanref_m0.pkl,4036079,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/cam_front3_off_gateB_cleanref_m0.pkl,4060885,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/cam_front3_off_maxdecay_0.95_cleanref_C.pkl,4190845,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/cam_front3_off_maxdecay_0.95_cleanref_m0.pkl,4143496,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/cam_front3_off_single_cleanref_C.pkl,4041448,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/cam_front3_off_single_cleanref_m0.pkl,4036089,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/dark_gateB_cleanref_m0.pkl,4060875,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/dark_maxdecay_0.95_cleanref_C.pkl,4190835,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/dark_maxdecay_0.95_cleanref_m0.pkl,4143486,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/dark_single_cleanref_C.pkl,4041438,loop script / scratch
+e17/e141_cleanB,e17/e141_cleanB/dark_single_cleanref_m0.pkl,4036079,loop script / scratch
+e17/e142,e17/e142/blur_maxdecay_0.95_B2m0.pkl,4254232,loop script / scratch
+e17/e142,e17/e142/blur_maxdecay_0.95_B2none.pkl,4188081,loop script / scratch
+e17/e142,e17/e142/blur_maxdecay_0.95_C2none.pkl,4285351,loop script / scratch
+e17/e142,e17/e142/blur_single_B2m0.pkl,4082435,loop script / scratch
+e17/e142,e17/e142/blur_single_B2none.pkl,3899507,loop script / scratch
+e17/e142,e17/e142/blur_single_C2none.pkl,3960371,loop script / scratch
+e17/e142,e17/e142/dark_maxdecay_0.95_B2m0.pkl,4168168,loop script / scratch
+e17/e142,e17/e142/dark_maxdecay_0.95_B2none.pkl,4074908,loop script / scratch
+e17/e142,e17/e142/dark_maxdecay_0.95_C2none.pkl,4164105,loop script / scratch
+e17/e142,e17/e142/dark_single_B2m0.pkl,3916308,loop script / scratch
+e17/e142,e17/e142/dark_single_B2none.pkl,3782862,loop script / scratch
+e17/e142,e17/e142/dark_single_C2none.pkl,3826377,loop script / scratch
+e17/e18_j1fam,e17/e18_j1fam/blur_maxdecay_0.95_j1.pkl,3895146,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_maxdecay_0.95_j1eq.pkl,3931540,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_maxdecay_0.95_j1eqs1.pkl,3915825,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_maxdecay_0.95_j1rc.pkl,4191665,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_maxdecay_0.95_j1rcs1.pkl,4208207,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_single_j1.pkl,3693071,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_single_j1eq.pkl,3704676,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_single_j1eqs1.pkl,3705405,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_single_j1rc.pkl,3902563,records only
+e17/e18_j1fam,e17/e18_j1fam/blur_single_j1rcs1.pkl,3911851,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_maxdecay_0.95_j1.pkl,3982002,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_maxdecay_0.95_j1eq.pkl,4001272,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_maxdecay_0.95_j1eqs1.pkl,4010277,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_maxdecay_0.95_j1rc.pkl,4431365,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_maxdecay_0.95_j1rcs1.pkl,4378819,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_single_j1.pkl,3861545,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_single_j1eq.pkl,3876988,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_single_j1eqs1.pkl,3875046,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_single_j1rc.pkl,4235062,records only
+e17/e18_j1fam,e17/e18_j1fam/cam_front3_off_single_j1rcs1.pkl,4198502,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_maxdecay_0.95_j1.pkl,3871707,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_maxdecay_0.95_j1eq.pkl,3877587,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_maxdecay_0.95_j1eqs1.pkl,3896405,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_maxdecay_0.95_j1rc.pkl,4144475,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_maxdecay_0.95_j1rcs1.pkl,4146219,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_single_j1.pkl,3607051,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_single_j1eq.pkl,3622458,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_single_j1eqs1.pkl,3633721,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_single_j1rc.pkl,3776416,records only
+e17/e18_j1fam,e17/e18_j1fam/dark_single_j1rcs1.pkl,3786124,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_R62_s1.pkl,4397674,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_R62_s2.pkl,4356670,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_R62_s3.pkl,4363015,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_R62_wrong.pkl,4375023,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_R75_s2.pkl,4338907,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_R75_wrong.pkl,4314337,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_Rnotrust_s2.pkl,4393914,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_U_s1.pkl,4428743,records only
+e17/e18_r21,e17/e18_r21/blur_maxdecay_0.95_U_s3.pkl,4457091,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_R62_s1.pkl,4411849,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_R62_s2.pkl,4406055,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_R62_s3.pkl,4437892,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_R62_wrong.pkl,4414812,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_R75_s2.pkl,4388370,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_R75_wrong.pkl,4360857,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_Rnotrust_s2.pkl,4437067,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_U_s1.pkl,4487792,records only
+e17/e18_r21,e17/e18_r21/cam_front3_off_maxdecay_0.95_U_s3.pkl,4555542,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_R62_s1.pkl,4322889,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_R62_s2.pkl,4306074,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_R62_s3.pkl,4325397,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_R62_wrong.pkl,4309641,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_R75_s2.pkl,4299690,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_R75_wrong.pkl,4254081,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_Rnotrust_s2.pkl,4344842,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_U_s1.pkl,4378331,records only
+e17/e18_r21,e17/e18_r21/dark_maxdecay_0.95_U_s3.pkl,4423245,records only
+e17/e18_r21b,e17/e18_r21b/blur_gateB_R62_s1.pkl,4237290,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/blur_gateB_R62_s2.pkl,4239972,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/blur_gateB_R62_s3.pkl,4246672,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/blur_gateB_R62_wrong.pkl,4231269,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/blur_gateB_R75_s2.pkl,4197142,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/blur_gateB_R75_wrong.pkl,4172724,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/cam_front3_off_gateB_R62_s1.pkl,4248750,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/cam_front3_off_gateB_R62_s2.pkl,4251425,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/cam_front3_off_gateB_R62_s3.pkl,4267891,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/cam_front3_off_gateB_R62_wrong.pkl,4248013,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/cam_front3_off_gateB_R75_s2.pkl,4241276,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/cam_front3_off_gateB_R75_wrong.pkl,4205790,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/dark_gateB_R62_s1.pkl,4210985,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/dark_gateB_R62_s2.pkl,4195944,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/dark_gateB_R62_s3.pkl,4191090,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/dark_gateB_R62_wrong.pkl,4188231,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/dark_gateB_R75_s2.pkl,4181060,loop script / scratch
+e17/e18_r21b,e17/e18_r21b/dark_gateB_R75_wrong.pkl,4134565,loop script / scratch
+e17/e18_r21c,e17/e18_r21c/blur_gateB_R062_s0.pkl,4246209,records only
+e17/e18_r21c,e17/e18_r21c/blur_gateB_R075_s0.pkl,4200872,records only
+e17/e18_r21c,e17/e18_r21c/blur_maxdecay_0.95_R062_s0.pkl,4401513,records only
+e17/e18_r21c,e17/e18_r21c/blur_maxdecay_0.95_R075_s0.pkl,4354488,records only
+e17/e18_r21c,e17/e18_r21c/cam_front3_off_gateB_R062_s0.pkl,4303006,records only
+e17/e18_r21c,e17/e18_r21c/cam_front3_off_gateB_R075_s0.pkl,4265162,records only
+e17/e18_r21c,e17/e18_r21c/cam_front3_off_maxdecay_0.95_R062_s0.pkl,4431348,records only
+e17/e18_r21c,e17/e18_r21c/cam_front3_off_maxdecay_0.95_R075_s0.pkl,4419435,records only
+e17/e18_r21c,e17/e18_r21c/dark_gateB_R062_s0.pkl,4216799,records only
+e17/e18_r21c,e17/e18_r21c/dark_gateB_R075_s0.pkl,4180667,records only
+e17/e18_r21c,e17/e18_r21c/dark_maxdecay_0.95_R062_s0.pkl,4332183,records only
+e17/e18_r21c,e17/e18_r21c/dark_maxdecay_0.95_R075_s0.pkl,4313676,records only
+e17/e19_e238,e17/e19_e238/blur_gateB_R62_d1.pkl,4232952,loop script / scratch
+e17/e19_e238,e17/e19_e238/blur_gateB_R62_d2.pkl,4234551,loop script / scratch
+e17/e19_e238,e17/e19_e238/blur_gateB_U2_d1.pkl,4301253,loop script / scratch
+e17/e19_e238,e17/e19_e238/blur_gateB_U2_d2.pkl,4319773,loop script / scratch
+e17/e19_e238,e17/e19_e238/cam_front3_off_gateB_R62_d1.pkl,4266386,loop script / scratch
+e17/e19_e238,e17/e19_e238/cam_front3_off_gateB_R62_d2.pkl,4288471,loop script / scratch
+e17/e19_e238,e17/e19_e238/cam_front3_off_gateB_U2_d1.pkl,4365467,loop script / scratch
+e17/e19_e238,e17/e19_e238/cam_front3_off_gateB_U2_d2.pkl,4374108,loop script / scratch
+e17/e19_e238,e17/e19_e238/dark_gateB_R62_d1.pkl,4217859,loop script / scratch
+e17/e19_e238,e17/e19_e238/dark_gateB_R62_d2.pkl,4225579,loop script / scratch
+e17/e19_e238,e17/e19_e238/dark_gateB_U2_d1.pkl,4292068,loop script / scratch
+e17/e19_e238,e17/e19_e238/dark_gateB_U2_d2.pkl,4318986,loop script / scratch
+e27_gcar,e27_gcar/dir_test.npy,133280128,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/dir_train_eval.npy,168320128,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/dir_val.npy,139680128,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/model.pt,10986079,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/prob_test.npy,66640128,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/prob_train_eval.npy,84160128,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/prob_val.npy,69840128,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/props_relax_test.pkl,4703226,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/props_relax_val.pkl,3892233,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/props_strict_val.pkl,3766485,legacy driver mention only (>100 MB)
+e27_gcar,e27_gcar/props_wide_val.pkl,4021289,legacy driver mention only (>100 MB)
+e30_base2,e30_base2/dir_test.npy,133280128,records only
+e30_base2,e30_base2/dir_train_eval.npy,168320128,records only
+e30_base2,e30_base2/dir_val.npy,139680128,records only
+e30_base2,e30_base2/model.pt,10986335,records only
+e30_base2,e30_base2/prob_test.npy,66640128,records only
+e30_base2,e30_base2/prob_train_eval.npy,84160128,records only
+e30_base2,e30_base2/prob_val.npy,69840128,records only
+e30_s4_diverged,e30_s4_diverged/dir_test.npy,133280128,records only
+e30_s4_diverged,e30_s4_diverged/dir_train_eval.npy,168320128,records only
+e30_s4_diverged,e30_s4_diverged/dir_val.npy,139680128,records only
+e30_s4_diverged,e30_s4_diverged/model.pt,10986143,records only
+e30_s4_diverged,e30_s4_diverged/prob_test.npy,66640128,records only
+e30_s4_diverged,e30_s4_diverged/prob_train_eval.npy,84160128,records only
+e30_s4_diverged,e30_s4_diverged/prob_val.npy,69840128,records only
+e30_scene11,e30_scene11/dir_test.npy,133280128,records only
+e30_scene11,e30_scene11/dir_valB.npy,69600128,records only
+e30_scene11,e30_scene11/model.pt,10986335,records only
+e30_scene11,e30_scene11/prob_test.npy,66640128,records only
+e30_scene11,e30_scene11/prob_valB.npy,34800128,records only
+e32_main,e32_main/dir_test.npy,133280128,legacy driver mention only (>100 MB)
+e32_main,e32_main/dir_train_eval.npy,168320128,legacy driver mention only (>100 MB)
+e32_main,e32_main/dir_val.npy,139680128,legacy driver mention only (>100 MB)
+e32_main,e32_main/heat_test.npy,66640128,legacy driver mention only (>100 MB)
+e32_main,e32_main/heat_train_eval.npy,84160128,legacy driver mention only (>100 MB)
+e32_main,e32_main/heat_val.npy,69840128,legacy driver mention only (>100 MB)
+e32_main,e32_main/model.pt,17462359,legacy driver mention only (>100 MB)
+e32_main,e32_main/pred_test.npz,16900365,legacy driver mention only (>100 MB)
+e32_main,e32_main/pred_train_eval.npz,21129756,legacy driver mention only (>100 MB)
+e32_main,e32_main/pred_val.npz,17503473,legacy driver mention only (>100 MB)
+e34_nomap_ft,e34_nomap_ft/dir_test.npy,133280128,records only
+e34_nomap_ft,e34_nomap_ft/dir_train_eval.npy,168320128,records only
+e34_nomap_ft,e34_nomap_ft/dir_val.npy,139680128,records only
+e34_nomap_ft,e34_nomap_ft/heat_test.npy,66640128,records only
+e34_nomap_ft,e34_nomap_ft/heat_train_eval.npy,84160128,records only
+e34_nomap_ft,e34_nomap_ft/heat_val.npy,69840128,records only
+e34_nomap_ft,e34_nomap_ft/model.pt,17462359,records only
+e34_nomap_ft,e34_nomap_ft/pred_test.npz,16813737,records only
+e34_nomap_ft,e34_nomap_ft/pred_train_eval.npz,20938289,records only
+e34_nomap_ft,e34_nomap_ft/pred_val.npz,17366834,records only
+e35_A,e35_A/dir_test.npy,133280128,records only
+e35_A,e35_A/dir_train_eval.npy,168320128,records only
+e35_A,e35_A/dir_val.npy,139680128,records only
+e35_A,e35_A/heat_test.npy,66640128,records only
+e35_A,e35_A/heat_train_eval.npy,84160128,records only
+e35_A,e35_A/heat_val.npy,69840128,records only
+e35_A,e35_A/model.pt,17531479,records only
+e35_A,e35_A/pred_test.npz,16744620,records only
+e35_A,e35_A/pred_train_eval.npz,20873324,records only
+e35_A,e35_A/pred_val.npz,17321476,records only
+e37_ens,e37_ens/dir_test.npy,133280128,legacy driver mention only (>100 MB)
+e37_ens,e37_ens/dir_val.npy,139680128,legacy driver mention only (>100 MB)
+e37_ens,e37_ens/prob_test.npy,66640128,legacy driver mention only (>100 MB)
+e37_ens,e37_ens/prob_val.npy,69840128,legacy driver mention only (>100 MB)
+e39_fp1,e39_fp1/model.pt,3053555,records only
+e39_fp1,e39_fp1/refined_oofA.pkl,32326742,records only
+e39_fp1,e39_fp1/refined_test.pkl,11568274,records only
+e39_fp1,e39_fp1/refined_val.pkl,9754235,records only
+e39_reg,e39_reg/model.pt,3053555,records only
+e39_reg,e39_reg/refined_oofA.pkl,32326742,records only
+e39_reg,e39_reg/refined_test.pkl,11568274,records only
+e39_reg,e39_reg/refined_val.pkl,9754235,records only
+e40_clean,e40_clean/dir_test.npy,133280128,records only
+e40_clean,e40_clean/dir_train_eval.npy,168320128,records only
+e40_clean,e40_clean/dir_val.npy,139680128,records only
+e40_clean,e40_clean/model.pt,10991519,records only
+e40_clean,e40_clean/prob_test.npy,66640128,records only
+e40_clean,e40_clean/prob_train_eval.npy,84160128,records only
+e40_clean,e40_clean/prob_val.npy,69840128,records only
+e40_clean,e40_clean/props_relax_test.pkl,4588089,records only
+e40_clean,e40_clean/props_relax_val.pkl,3881038,records only
+e40_nomap_ft,e40_nomap_ft/dir_test.npy,133280128,records only
+e40_nomap_ft,e40_nomap_ft/dir_train_eval.npy,168320128,records only
+e40_nomap_ft,e40_nomap_ft/dir_val.npy,139680128,records only
+e40_nomap_ft,e40_nomap_ft/model.pt,10986399,records only
+e40_nomap_ft,e40_nomap_ft/prob_test.npy,66640128,records only
+e40_nomap_ft,e40_nomap_ft/prob_train_eval.npy,84160128,records only
+e40_nomap_ft,e40_nomap_ft/prob_val.npy,69840128,records only
+e40_nomap_ft,e40_nomap_ft/props_relax_test.pkl,4604779,records only
+e40_nomap_ft,e40_nomap_ft/props_relax_val.pkl,3886662,records only
+e41_A,e41_A/dir_test.npy,133280128,records only
+e41_A,e41_A/dir_train_eval.npy,168320128,records only
+e41_A,e41_A/dir_val.npy,139680128,records only
+e41_A,e41_A/model.pt,11055455,records only
+e41_A,e41_A/prob_test.npy,66640128,records only
+e41_A,e41_A/prob_train_eval.npy,84160128,records only
+e41_A,e41_A/prob_val.npy,69840128,records only
+e41_A,e41_A/props_relax_test.pkl,4558620,records only
+e41_A,e41_A/props_relax_val.pkl,3877093,records only
+e41_Btr,e41_Btr/model.pt,3053555,records only
+e41_Btr,e41_Btr/refined_test.pkl,12084152,records only
+e41_Btr,e41_Btr/refined_val.pkl,10083670,records only
+e43,e43/graphs_e37_final_noprop_test.pkl,8031507,legacy driver mention only (>100 MB)
+e43,e43/graphs_e37_final_noprop_val.pkl,6974444,legacy driver mention only (>100 MB)
+e43,e43/graphs_e37_final_test.pkl,8137443,legacy driver mention only (>100 MB)
+e43,e43/graphs_e37_final_val.pkl,7045323,legacy driver mention only (>100 MB)
+e43,e43/graphs_e40_clean_noprop_test.pkl,8082257,legacy driver mention only (>100 MB)
+e43,e43/graphs_e40_clean_noprop_val.pkl,7013115,legacy driver mention only (>100 MB)
+e43,e43/graphs_e40_noise_align_noprop_test.pkl,8066900,legacy driver mention only (>100 MB)
+e43,e43/graphs_e40_noise_align_noprop_val.pkl,6990392,legacy driver mention only (>100 MB)
+e43,e43/graphs_e41_A_test.pkl,8041269,legacy driver mention only (>100 MB)
+e43,e43/graphs_e41_A_val.pkl,6995263,legacy driver mention only (>100 MB)
+e43,e43/graphs_e43_joint_noprop_test.pkl,8073358,legacy driver mention only (>100 MB)
+e43,e43/graphs_e43_joint_noprop_val.pkl,7021170,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e37_final_noprop_test.pkl,7999107,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e37_final_noprop_val.pkl,6947863,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e37_final_test.pkl,8103766,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e37_final_val.pkl,7017791,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e40_clean_noprop_test.pkl,8050159,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e40_clean_noprop_val.pkl,6986478,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e40_noise_align_noprop_test.pkl,8034438,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e40_noise_align_noprop_val.pkl,6964160,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e41_A_test.pkl,8008804,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e41_A_val.pkl,6969110,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e43_joint_noprop_test.pkl,8041174,legacy driver mention only (>100 MB)
+e43,e43/graphs_rule_e43_joint_noprop_val.pkl,6993834,legacy driver mention only (>100 MB)
+e44_nodes,e44_nodes/model.pt,10985631,legacy driver mention only (>100 MB)
+e44_nodes,e44_nodes/prob_test.npy,133280128,legacy driver mention only (>100 MB)
+e44_nodes,e44_nodes/prob_train_eval.npy,168320128,legacy driver mention only (>100 MB)
+e44_nodes,e44_nodes/prob_val.npy,139680128,legacy driver mention only (>100 MB)
+e57_blur,e57_blur/dir_test.npy,66720128,records only
+e57_blur,e57_blur/graphs_test.pkl,3326699,records only
+e57_blur,e57_blur/prob_test.npy,33360128,records only
+e57_blur_valset,e57_blur_valset/dir_val.npy,46560128,history records only
+e57_blur_valset,e57_blur_valset/prob_val.npy,23280128,history records only
+e57_cam_front3_off,e57_cam_front3_off/dir_test.npy,133280128,records only
+e57_cam_front3_off,e57_cam_front3_off/graphs_test.pkl,13313972,records only
+e57_cam_front3_off,e57_cam_front3_off/prob_test.npy,66640128,records only
+e57_cam_front3_off_valset,e57_cam_front3_off_valset/dir_val.npy,46560128,history records only
+e57_cam_front3_off_valset,e57_cam_front3_off_valset/prob_val.npy,23280128,history records only
+e57_cam_front_off,e57_cam_front_off/dir_test.npy,133280128,records only
+e57_cam_front_off,e57_cam_front_off/graphs_test.pkl,14691305,records only
+e57_cam_front_off,e57_cam_front_off/prob_test.npy,66640128,records only
+e57_dark,e57_dark/dir_test.npy,133280128,records only
+e57_dark,e57_dark/graphs_test.pkl,3646740,records only
+e57_dark,e57_dark/prob_test.npy,66640128,records only
+e57_dark_valset,e57_dark_valset/dir_val.npy,46560128,history records only
+e57_dark_valset,e57_dark_valset/prob_val.npy,23280128,history records only
+e57_extr3,e57_extr3/dir_test.npy,66720128,records only
+e57_extr3,e57_extr3/graphs_test.pkl,7975585,records only
+e57_extr3,e57_extr3/prob_test.npy,33360128,records only
+e57_fog,e57_fog/dir_test.npy,133280128,records only
+e57_fog,e57_fog/graphs_test.pkl,15453918,records only
+e57_fog,e57_fog/prob_test.npy,66640128,records only
+e57_radar_off,e57_radar_off/dir_test.npy,66720128,records only
+e57_radar_off,e57_radar_off/graphs_test.pkl,7972378,records only
+e57_radar_off,e57_radar_off/prob_test.npy,33360128,records only
+e57_stored_s2,e57_stored_s2/dir_test.npy,66720128,records only
+e57_stored_s2,e57_stored_s2/graphs_test.pkl,7968688,records only
+e57_stored_s2,e57_stored_s2/prob_test.npy,33360128,records only
+e60_main,e60_main/dir_test.npy,129440128,legacy driver mention only (>100 MB)
+e60_main,e60_main/dir_train.npy,150400128,legacy driver mention only (>100 MB)
+e60_main,e60_main/dir_val.npy,131680128,legacy driver mention only (>100 MB)
+e60_main,e60_main/model.pt,10993247,legacy driver mention only (>100 MB)
+e60_main,e60_main/prob_test.npy,64720128,legacy driver mention only (>100 MB)
+e60_main,e60_main/prob_train.npy,75200128,legacy driver mention only (>100 MB)
+e60_main,e60_main/prob_val.npy,65840128,legacy driver mention only (>100 MB)
+e60_main,e60_main/rprob_test.npy,64720128,legacy driver mention only (>100 MB)
+e60_main,e60_main/rprob_train.npy,75200128,legacy driver mention only (>100 MB)
+e60_main,e60_main/rprob_val.npy,65840128,legacy driver mention only (>100 MB)
+e65_e65_faug_blur,e65_e65_faug_blur/dir_test.npy,66720128,records only
+e65_e65_faug_blur,e65_e65_faug_blur/graphs_test.pkl,3575907,records only
+e65_e65_faug_blur,e65_e65_faug_blur/prob_test.npy,33360128,records only
+e65_e65_faug_cam_front3_off,e65_e65_faug_cam_front3_off/dir_test.npy,133280128,records only
+e65_e65_faug_cam_front3_off,e65_e65_faug_cam_front3_off/graphs_test.pkl,14038233,records only
+e65_e65_faug_cam_front3_off,e65_e65_faug_cam_front3_off/prob_test.npy,66640128,records only
+e65_e65_faug_cam_front_off,e65_e65_faug_cam_front_off/dir_test.npy,133280128,records only
+e65_e65_faug_cam_front_off,e65_e65_faug_cam_front_off/graphs_test.pkl,14789278,records only
+e65_e65_faug_cam_front_off,e65_e65_faug_cam_front_off/prob_test.npy,66640128,records only
+e65_e65_faug_dark,e65_e65_faug_dark/dir_test.npy,133280128,records only
+e65_e65_faug_dark,e65_e65_faug_dark/graphs_test.pkl,3948867,records only
+e65_e65_faug_dark,e65_e65_faug_dark/prob_test.npy,66640128,records only
+e65_e65_faug_extr3,e65_e65_faug_extr3/dir_test.npy,66720128,records only
+e65_e65_faug_extr3,e65_e65_faug_extr3/graphs_test.pkl,7970422,records only
+e65_e65_faug_extr3,e65_e65_faug_extr3/prob_test.npy,33360128,records only
+e65_e65_faug_fog,e65_e65_faug_fog/dir_test.npy,133280128,records only
+e65_e65_faug_fog,e65_e65_faug_fog/graphs_test.pkl,15569916,records only
+e65_e65_faug_fog,e65_e65_faug_fog/prob_test.npy,66640128,records only
+e65_e65_faug_radar_off,e65_e65_faug_radar_off/dir_test.npy,66720128,history records only
+e65_e65_faug_radar_off,e65_e65_faug_radar_off/graphs_test.pkl,7979511,history records only
+e65_e65_faug_radar_off,e65_e65_faug_radar_off/prob_test.npy,33360128,history records only
+e65_e65_faug_stored,e65_e65_faug_stored/dir_test.npy,133280128,history records only
+e65_e65_faug_stored,e65_e65_faug_stored/graphs_test.pkl,15868507,history records only
+e65_e65_faug_stored,e65_e65_faug_stored/prob_test.npy,66640128,history records only
+e65_e65_faug_stored_s2,e65_e65_faug_stored_s2/dir_test.npy,66720128,history records only
+e65_e65_faug_stored_s2,e65_e65_faug_stored_s2/graphs_test.pkl,7988324,history records only
+e65_e65_faug_stored_s2,e65_e65_faug_stored_s2/prob_test.npy,33360128,history records only
+e65_e65_ft_blur,e65_e65_ft_blur/dir_test.npy,66720128,history records only
+e65_e65_ft_blur,e65_e65_ft_blur/graphs_test.pkl,5409671,history records only
+e65_e65_ft_blur,e65_e65_ft_blur/prob_test.npy,33360128,history records only
+e65_e65_ft_cam_front3_off,e65_e65_ft_cam_front3_off/dir_test.npy,133280128,history records only
+e65_e65_ft_cam_front3_off,e65_e65_ft_cam_front3_off/graphs_test.pkl,16095955,history records only
+e65_e65_ft_cam_front3_off,e65_e65_ft_cam_front3_off/prob_test.npy,66640128,history records only
+e65_e65_ft_cam_front_off,e65_e65_ft_cam_front_off/dir_test.npy,133280128,history records only
+e65_e65_ft_cam_front_off,e65_e65_ft_cam_front_off/graphs_test.pkl,15525418,history records only
+e65_e65_ft_cam_front_off,e65_e65_ft_cam_front_off/prob_test.npy,66640128,history records only
+e65_e65_ft_dark,e65_e65_ft_dark/dir_test.npy,133280128,history records only
+e65_e65_ft_dark,e65_e65_ft_dark/graphs_test.pkl,8791205,history records only
+e65_e65_ft_dark,e65_e65_ft_dark/prob_test.npy,66640128,history records only
+e65_e65_ft_extr3,e65_e65_ft_extr3/dir_test.npy,66720128,history records only
+e65_e65_ft_extr3,e65_e65_ft_extr3/graphs_test.pkl,8050293,history records only
+e65_e65_ft_extr3,e65_e65_ft_extr3/prob_test.npy,33360128,history records only
+e65_e65_ft_fog,e65_e65_ft_fog/dir_test.npy,133280128,history records only
+e65_e65_ft_fog,e65_e65_ft_fog/graphs_test.pkl,15998430,history records only
+e65_e65_ft_fog,e65_e65_ft_fog/prob_test.npy,66640128,history records only
+e65_e65_ft_radar_off,e65_e65_ft_radar_off/dir_test.npy,66720128,history records only
+e65_e65_ft_radar_off,e65_e65_ft_radar_off/graphs_test.pkl,8107083,history records only
+e65_e65_ft_radar_off,e65_e65_ft_radar_off/prob_test.npy,33360128,history records only
+e65_e65_ft_stored,e65_e65_ft_stored/dir_test.npy,133280128,history records only
+e65_e65_ft_stored,e65_e65_ft_stored/graphs_test.pkl,15976729,history records only
+e65_e65_ft_stored,e65_e65_ft_stored/prob_test.npy,66640128,history records only
+e65_e65_ft_stored_s2,e65_e65_ft_stored_s2/dir_test.npy,66720128,history records only
+e65_e65_ft_stored_s2,e65_e65_ft_stored_s2/graphs_test.pkl,8041237,history records only
+e65_e65_ft_stored_s2,e65_e65_ft_stored_s2/prob_test.npy,33360128,history records only
+e65_e65_ftall_blur,e65_e65_ftall_blur/dir_test.npy,66720128,history records only
+e65_e65_ftall_blur,e65_e65_ftall_blur/graphs_test.pkl,5443114,history records only
+e65_e65_ftall_blur,e65_e65_ftall_blur/prob_test.npy,33360128,history records only
+e65_e65_ftall_cam_front3_off,e65_e65_ftall_cam_front3_off/dir_test.npy,133280128,history records only
+e65_e65_ftall_cam_front3_off,e65_e65_ftall_cam_front3_off/graphs_test.pkl,13878550,history records only
+e65_e65_ftall_cam_front3_off,e65_e65_ftall_cam_front3_off/prob_test.npy,66640128,history records only
+e65_e65_ftall_cam_front_off,e65_e65_ftall_cam_front_off/dir_test.npy,133280128,history records only
+e65_e65_ftall_cam_front_off,e65_e65_ftall_cam_front_off/graphs_test.pkl,15436507,history records only
+e65_e65_ftall_cam_front_off,e65_e65_ftall_cam_front_off/prob_test.npy,66640128,history records only
+e65_e65_ftall_dark,e65_e65_ftall_dark/dir_test.npy,133280128,history records only
+e65_e65_ftall_dark,e65_e65_ftall_dark/graphs_test.pkl,9085101,history records only
+e65_e65_ftall_dark,e65_e65_ftall_dark/prob_test.npy,66640128,history records only
+e65_e65_ftall_extr3,e65_e65_ftall_extr3/dir_test.npy,66720128,history records only
+e65_e65_ftall_extr3,e65_e65_ftall_extr3/graphs_test.pkl,8073670,history records only
+e65_e65_ftall_extr3,e65_e65_ftall_extr3/prob_test.npy,33360128,history records only
+e65_e65_ftall_fog,e65_e65_ftall_fog/dir_test.npy,133280128,history records only
+e65_e65_ftall_fog,e65_e65_ftall_fog/graphs_test.pkl,16004105,history records only
+e65_e65_ftall_fog,e65_e65_ftall_fog/prob_test.npy,66640128,history records only
+e65_e65_ftall_radar_off,e65_e65_ftall_radar_off/dir_test.npy,66720128,history records only
+e65_e65_ftall_radar_off,e65_e65_ftall_radar_off/graphs_test.pkl,8119535,history records only
+e65_e65_ftall_radar_off,e65_e65_ftall_radar_off/prob_test.npy,33360128,history records only
+e65_e65_ftall_stored,e65_e65_ftall_stored/dir_test.npy,133280128,history records only
+e65_e65_ftall_stored,e65_e65_ftall_stored/graphs_test.pkl,16006214,history records only
+e65_e65_ftall_stored,e65_e65_ftall_stored/prob_test.npy,66640128,history records only
+e65_e65_ftall_stored_s2,e65_e65_ftall_stored_s2/dir_test.npy,66720128,history records only
+e65_e65_ftall_stored_s2,e65_e65_ftall_stored_s2/graphs_test.pkl,8070234,history records only
+e65_e65_ftall_stored_s2,e65_e65_ftall_stored_s2/prob_test.npy,33360128,history records only
+e65_e65_ftaug_blur,e65_e65_ftaug_blur/dir_test.npy,66720128,history records only
+e65_e65_ftaug_blur,e65_e65_ftaug_blur/graphs_test.pkl,5466993,history records only
+e65_e65_ftaug_blur,e65_e65_ftaug_blur/prob_test.npy,33360128,history records only
+e65_e65_ftaug_cam_front3_off,e65_e65_ftaug_cam_front3_off/dir_test.npy,133280128,history records only
+e65_e65_ftaug_cam_front3_off,e65_e65_ftaug_cam_front3_off/graphs_test.pkl,16774669,history records only
+e65_e65_ftaug_cam_front3_off,e65_e65_ftaug_cam_front3_off/prob_test.npy,66640128,history records only
+e65_e65_ftaug_cam_front_off,e65_e65_ftaug_cam_front_off/dir_test.npy,133280128,history records only
+e65_e65_ftaug_cam_front_off,e65_e65_ftaug_cam_front_off/graphs_test.pkl,15697699,history records only
+e65_e65_ftaug_cam_front_off,e65_e65_ftaug_cam_front_off/prob_test.npy,66640128,history records only
+e65_e65_ftaug_dark,e65_e65_ftaug_dark/dir_test.npy,133280128,history records only
+e65_e65_ftaug_dark,e65_e65_ftaug_dark/graphs_test.pkl,9307774,history records only
+e65_e65_ftaug_dark,e65_e65_ftaug_dark/prob_test.npy,66640128,history records only
+e65_e65_ftaug_extr3,e65_e65_ftaug_extr3/dir_test.npy,66720128,history records only
+e65_e65_ftaug_extr3,e65_e65_ftaug_extr3/graphs_test.pkl,8082778,history records only
+e65_e65_ftaug_extr3,e65_e65_ftaug_extr3/prob_test.npy,33360128,history records only
+e65_e65_ftaug_fog,e65_e65_ftaug_fog/dir_test.npy,133280128,history records only
+e65_e65_ftaug_fog,e65_e65_ftaug_fog/graphs_test.pkl,16037753,history records only
+e65_e65_ftaug_fog,e65_e65_ftaug_fog/prob_test.npy,66640128,history records only
+e65_e65_ftaug_radar_off,e65_e65_ftaug_radar_off/dir_test.npy,66720128,history records only
+e65_e65_ftaug_radar_off,e65_e65_ftaug_radar_off/graphs_test.pkl,8097059,history records only
+e65_e65_ftaug_radar_off,e65_e65_ftaug_radar_off/prob_test.npy,33360128,history records only
+e65_e65_ftaug_stored,e65_e65_ftaug_stored/dir_test.npy,133280128,history records only
+e65_e65_ftaug_stored,e65_e65_ftaug_stored/graphs_test.pkl,16030745,history records only
+e65_e65_ftaug_stored,e65_e65_ftaug_stored/prob_test.npy,66640128,history records only
+e65_e65_ftaug_stored_s2,e65_e65_ftaug_stored_s2/dir_test.npy,66720128,history records only
+e65_e65_ftaug_stored_s2,e65_e65_ftaug_stored_s2/graphs_test.pkl,8079447,history records only
+e65_e65_ftaug_stored_s2,e65_e65_ftaug_stored_s2/prob_test.npy,33360128,history records only
+e65_faug,e65_faug/dir_test.npy,133280128,records only
+e65_faug,e65_faug/dir_train_eval.npy,168320128,records only
+e65_faug,e65_faug/dir_val.npy,139680128,records only
+e65_faug,e65_faug/model.pt,10986399,records only
+e65_faug,e65_faug/prob_test.npy,66640128,records only
+e65_faug,e65_faug/prob_train_eval.npy,84160128,records only
+e65_faug,e65_faug/prob_val.npy,69840128,records only
+e73_p7_ema,e73_p7_ema/model.pt,10994015,history records only
+e73_p7_ema,e73_p7_ema/model_ema.pt,10997207,history records only
