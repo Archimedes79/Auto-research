@@ -11,12 +11,12 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
 - Method change today (Mirko, no D entry): research only on a trigger, roles inline; `autoresearch/METHOD.md` "Planning a round", step 0 of `research_steps.md`.
 
 ## Decided today
-D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex sentence; D29 one GT version + autogt tags (v1-v5 done; evaluation default, run records and training start check after the freeze); D30 one image region for all pipelines; D33 hook gaps; D35 key-level protection; D36 coverage rule.
+D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex sentence; D29 one GT version + autogt tags (v1-v5 done; evaluation default, run records and training start check after the freeze); D30 one image region for all pipelines; D33 hook gaps; D35 key-level protection; D36 coverage rule; D37 fusion numbers on the fusion area (camera and radar both observe) only.
 
 ## Open for Mirko
 - D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). D31: wedge vs grid, folds into D36 if he agrees. "D1." (unclear, asked back).
 - D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start when the freeze ends (no date); fused objects: where either sensor sees (to confirm).
-- D36 details, ask Mirko one at a time (list in the note): report by coverage class, radar rule open (Mirko: no per-box gate; radar should see moving objects in line of sight; maybe weights), cells hidden behind a box. GT chat plans v6 after the freeze.
+- D36 details, ask Mirko one at a time (list in the note): radar rule open (Mirko: no per-box gate; radar should see moving objects in line of sight; maybe weights), cells hidden behind a box. GT chat plans v6 after the freeze.
 
 ## Next
 1. Next lane loop: precision at range, idle timing of ring / union / prototype, route success on spur-kept graphs.
