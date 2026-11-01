@@ -18,7 +18,7 @@ State 2026-10-25 17:06: raw data copied to D: and verified (787,847 + 27,300 fil
 | `downloads/` | archives: `nuscenes_camera/pNN/` (camera parts), `nuscenes_radar_456/`; one log per part |
 | `manifests/` | file lists (path, size) of the copy from WSL, used to check it |
 | `occ3d/`, `downloads/occ3d/` | Occ3D-nuScenes labels (third-party labels derived from nuScenes lidar; MIT + nuScenes non-commercial terms), downloaded 2026-10-26 with Mirko's OK from the public Google Drive folder of github.com/CVPR2023-3D-Occupancy-Prediction/CVPR2023-3D-Occupancy-Prediction (`gts.tar.gz` 2.74 GB -> `occ3d/gts/<scene>/<sample token>/labels.npz`, `annotations.json` 0.15 GB; NOT the 30.7 GB images); 0.4 m voxels, x / y +-40 m, z -1..5.4 m, 17 classes, `mask_lidar` / `mask_camera`; used for the radar stationary-structure target (bev_fusion plan 8.4) |
-| `_to_delete/` | scratch of tests (empty folders / small files) |
+| `_to_delete/` | (deleted on 2026-11-01 on Mirko's word, decision D41: speed and unpack tests of 2026-10-25, 502 files, 1.2 GB; nothing read them) |
 
 ## What is on disk (2026-10-25)
 | sensor data | parts | status |
