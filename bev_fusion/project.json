@@ -37,8 +37,8 @@
   },
   "structure": {
     "root_files": ["README.md", "project.json"],
-    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runs", "temp", "tests", "training"],
-    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runs", "temp", "training"],
+    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "temp", "tests", "training"],
+    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "temp", "training"],
     "living": [],
     "skip_parts": [],
     "index_dirs": ["training", "evaluation", "../autogt", "tests", "temp"],
