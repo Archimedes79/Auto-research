@@ -131,3 +131,67 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
   smoke test through it has passed, and it is the first real run of the new system (the start line above is written for today's `run.py` / `run_ar.sh` and is adapted to the new interface then).
 - **Decision of Mirko (chat, 2026-11-01 about 02:50, button "Yes, keep it on"):** "cancel the 09:30 shutdown; the machine stays on until the 6000-step run and its evaluation are done." The
   planned shutdown of D28 is therefore not to be executed; the lead of the overnight round owns it and was told.
+
+### 3b Amendment (2026-11-01 08:15, before any run): the lead's version of the 6000-step run
+
+Source of the change: the lead of the overnight round (`../../records/morning_2026-11-01.md` section 4 and `../t11_vel_hurdle/experiment.md` section 3: the run "should carry the hurdle + accumulation 2"), relayed
+by the queue owner as Mirko's wish; Mirko's own quoted words in D28 name only "the 6000 step run". The start is after the Architecture merge and smoke test, so Mirko can still veto the version below (the cost is the second bullet).
+
+- **Design change.** `t10_dual_long_s0` = `t10_dual_s0` + `steps` 6000 + `eval_every` 2000 (§3 as written) + `accum` 2 (effective batch 6) + `model.object_moving` true (the velocity hurdle of `../t11_vel_hurdle`
+  from step 0; `init_from` empty, `warmup_hold` / `warmup_ramp` at the t10 defaults). Samples seen: 6000 x 6 = 36,000 against 9,000 of the 3000-step chain (4x; the budget of the `t1_r4_soa` recipe, 7000 x 2).
+  Config `training/configs/t10_dual_long_s0.json` (its `diff` to `t10_dual_s0.json`: name, steps, eval_every, accum, object_moving, a comment).
+- **Cost.** Arm B2 needed 5.06 s per optimiser step (ledger `t11.vel_hurdle_acc2`: 5056 s for 1000 steps with 2 in-training evaluations; `t10_dual_s0` 2.30 s per step): 6000 steps are about 8.4 h, plus about 15 min
+  for the evaluation, on the whole GPU (a t10-size job holds 11 of 12 GB). Started at 10:00 it ends about 18:30. The cheaper variant (accum 1, hurdle, 6000 steps) would take about 3.8 h, but arm B' showed that at batch 3 the
+  static error misses the 0.30 clause (0.336).
+- **What it tests now: three changes at once, so nobody reads it as one.** (i) the training budget x4 on the maps: the lane divider rule of §3 is unchanged and read as "the lever is 4x the samples (2x the optimiser steps)";
+  attributing the gain to the budget assumes that the hurdle does not move the maps: B2 against `t10_dual_s0` was within 0.01 on the maps (drivable 0.757 / 0.756, walkway 0.345 / 0.340, lane divider 0.343 / 0.335; band 0.02), an argument and
+  not a test (no arm without the hurdle at this budget exists); (ii) the hurdle from scratch (so far only as a 1000-step warm start of `t10_dual_s0` with a fresh velocity branch); (iii) the first real run of the
+  restructured autoresearch (merge and smoke test come first).
+- **Prediction** (cold VAL 1000, 82 scenes, before the run; the maps from the old-feature ladder: 3000 x 1 -> 6000 x 1 gave +0.053 lane divider, 3000 x 1 -> 7000 x 2 gave +0.092 on the same 1000 frames (0.273 against 0.181; corrected in 3c: version 1 of this line said "+0.093 on a different frame set", the 3109-frame number), times 0.75 because the dual chain
+  starts higher; velocity and static error from B2 with a margin for the from-scratch start):
+
+  | metric | t10_dual_s0 / s1 (3000 x 1) | predicted (range) |
+  |---|---|---|
+  | lane divider IoU@0.5 | 0.335 / 0.350 | 0.41 (0.36 - 0.46) |
+  | walkway IoU@0 | 0.340 / 0.354 | 0.39 (0.35 - 0.44) |
+  | crossing IoU@0 | 0.154 / 0.173 | 0.22 (0.17 - 0.30) |
+  | drivable IoU@0 | 0.756 / 0.757 | 0.78 (0.765 - 0.80) |
+  | front mAP2 (0 - 50 m) | 0.361 / 0.364 | 0.355 (0.33 - 0.385): about +0.01 from the longer training, -0.014 from the hurdle (B2) |
+  | vehicle velocity skill on moving cars (`ave_skill_moving`) | 0.000 / 0.000 (B2 0.566) | 0.55 (0.35 - 0.70) |
+  | vehicle static error `ave_static` (m/s) | 0.029 / 0.029 (B2 0.284) | 0.25 (0.15 - 0.35) |
+
+- **Decision rule** (written now). Lever 1 as in §3: lane divider gain over the mean of the two dual seeds (0.3425) >= +0.04 KEEP, < +0.02 CUT (drop "the SOA is reachable on this hardware"), between INCONCLUSIVE (one seed; the seed
+  spread of the dual chain on this layer is 0.015). Hurdle from scratch: vehicle `ave_skill_moving` >= 0.50 and `ave_static` <= 0.30 -> holds (criterion b of the case is then met by a from-scratch run, still one seed); skill
+  0.25 - 0.50 or static error above 0.30 -> partly; skill < 0.25 -> the warm-start result is not a recipe. Guards: front mAP2 >= 0.307 (0.361 - 0.054), walkway and crossing move with the same sign as the lane divider.
+  Reading when the guards or the hurdle fail but the maps gain: the budget lever stands, the hurdle goes back to a warm-start step.
+- **Gate / kill.** As §3 (loss rule at step 1000: `group.lines` mean over steps 900 - 1000 above 1.48 -> stop); at step 2000 the in-training val `objhead.mov@+0.0` below 0.531 (20 % under the base-rate level) says the hurdle has started,
+  above it is a note, not a stop; NaN or a CUDA unknown error: resume once from the last checkpoint (a resume with accumulation 2 has never been exercised: the code review checks it). Preconditions: (1) the Architecture merge and
+  smoke test passed; (2) the `ar-reviewer` code pass on the t11 code (the hurdle, `init_from` / `init_reset`, logging) has no open blocker and the code is committed; (3) the GPU is free (the map scoring `pitch.maps_lfl` ended);
+  (4) Mirko did not veto the version. If the run is not done by 19:00, the last checkpoint (step >= 4000) is evaluated and labelled as such. (Superseded in 3c: item d.)
+
+### 3c Amendment 2 (2026-11-01 08:50, before any run): the critic's six fixes and the code review
+
+Sources: the `ar-critic` read of this card (smoke step b of the D32 merge, 08:25, verdict "revise", G2 "no", six text fixes: `../../temp/smoke_d32/critic_long_run_card.md`) and the `ar-reviewer` code pass on the t11
+code (08:30, mode code). Everything below supersedes the lines of 3b it names; the run starts only after these edits.
+
+- **a. One run cannot cut a claim.** The noise band of this card's own rule is max(0.02, 2 |s0 - s1|) = 0.029 on the lane divider (s0 0.3352, s1 0.3498). Tool: `autoresearch/tools/decide.py --variant <long lane divider IoU@0.5>
+  --control 0.3352,0.3498 --band 0.029 --id t10.dual_long_s0 --write` (one variant seed against the two dual seeds, unpaired); by that tool a gain inside the band is a TIE and a gain beyond it on one seed is INCONCLUSIVE (never KEEP).
+  Actions on the gain g = long - 0.3425: **g >= +0.04**: lever 1 continues provisionally (the tool says INCONCLUSIVE until the seed twin of the long run exists, so no headline claim yet); **+0.029 < g < +0.04**: INCONCLUSIVE, the
+  twin decides; **g <= +0.029**: INCONCLUSIVE for the claim, nothing is dropped on one run (the 3b rule "< +0.02 = CUT" is withdrawn; the tool's TIE only means that the cheaper 3000-step arm stays the base for other work); a second long run (the seed twin, or the arm without `object_moving`, about 8 h each) decides, and
+  only a mean gain of the two long runs below +0.02 drops "the SOA is reachable on this hardware". Because the three changes of 3b come together and no equal-budget arm without the hurdle exists, a null result is read as "this bundle
+  did not move the maps", not as "more training does not help".
+- **b. Hypothesis and prediction on one ladder.** Two statements, so that a hit and a decision cannot disagree: the decision hypothesis is "at 4x the samples the lane divider gains at least +0.04" (0.75 x the +0.053 of the old
+  features at 2x the samples, the KEEP threshold); the expectation is +0.07 (0.75 x their +0.092 at 4x the samples, the prediction 0.41). A gain of +0.04 to +0.07 is a KEEP-side result that falls short of the expectation (a prediction
+  miss on the low side). The predicted range 0.36 - 0.46 stays as written (the honest uncertainty); its lower part (0.36 - 0.3825) is INCONCLUSIVE, no longer a CUT.
+- **c. Matched references and tools.** The old-feature reference for 4x the samples is `t1_r4_soa` (7000 x 2: lane divider 0.273 on the same 1000 frames, walkway 0.246), next to `t3_ref_long` (6000 x 1: 0.234); the new frame-set remark of 3b
+  is withdrawn (all rows are VAL-1000; the 3109-frame stored number of `t1_r4_soa` is 0.274). Maps: `evaluation/bev_suite.py compare runs/t10_dual_s0 runs/t10_dual_long_s0` and the same against `t10_dual_s1` (paired scene
+  bootstrap, refused when the GT signatures differ); front mAP2: `temp/t4/compare_front.py` (100 paired scene draws), as for t11; the verdict through the `decide.py` line of item a, written into the ledger.
+- **d. Intermediate checkpoints carry no verdict.** The 19:00 fallback of 3b is withdrawn (the cosine schedule is still at lr x 0.25 at step 4000, so that checkpoint cannot be compared with the annealed 3000-step chain; the machine
+  stays on until the run is done, by Mirko's decision). If the run is not finished when the numbers are needed, the deck says "running"; an evaluation of a checkpoint at step 4000 may be added as a labelled note, no verdict.
+- **e. Validity: the GT signature.** `runs/t10_dual_long_s0/gt.json` and the final card must carry `0.5_4_15efbde2d1`; `bev_suite.py compare` refuses otherwise. The five autogt signature files (grid, layers, flow, nuscenes_adapter,
+  nuscenes_gt) and `bev_fusion/training/*.py` stay unchanged on disk during the run (a resume after an out-of-memory kill snapshots the working tree again; the reviewer's note).
+- **f. Owner of precondition (2), and a referee line.** Owner: this chat (the case chat, BEV system), executor an `ar-reviewer`. Result 08:30: **no blocker for the run** (the hurdle code passes its gate G1 - G5 on CPU, bit-identical
+  default paths, hurdle edge cases clean, main's code makes the gate fail, 20-step smoke run with exactly this config shape passed through run.py at 08:1x); **blockers for the commit to main only**: main's own `train.py` has a broken
+  slim-checkpoint path (NameError on resume and evaluation load; the working tree repairs it) and four test gaps (the velocity terms in `log.jsonl`, `w_obj_mov`, the `mov` bias, the new test missing from `run_gates.sh`); the fixes follow after the launch
+  and are recorded in this card (3d) when done: the test gaps are being closed by an `ar-coder` in tests/ only (training/ stays untouched), the commit of the reviewed code to main follows. The run trains from the snapshot of the working tree through run.py (tag `bf/t10.dual_long_s0`), never from the older tag `bf/t11.vel_hurdle_acc2` (its config file is the old one).
+  Referee: `ar-critic` 08:25 revise (this amendment answers it); a second pass on the amended card is requested before the start; its verdict is written here: [pending].
