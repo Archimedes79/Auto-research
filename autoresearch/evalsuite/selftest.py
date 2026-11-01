@@ -24,7 +24,7 @@ if __package__ in (None, ""):                                          # run as 
 from evalsuite import EvalSuite, FrameRef, Page, Panel, Prediction, Sample, TapSpec                 # noqa: E402
 from evalsuite.adapters import toy                                                                  # noqa: E402
 from evalsuite.check import check_adapter                                                           # noqa: E402
-from evalsuite.contracts import Flag, Metric, Source, Subject, Task                                 # noqa: E402
+from evalsuite.contracts import Flag, Source                                                        # noqa: E402
 from evalsuite.render import figure, report, taps as tapmod, video                                  # noqa: E402
 from evalsuite.sampling import Sampler                                                              # noqa: E402
 from evalsuite.stats import bootstrap_scenes, iqr_fences, loo_influence, robust_z                   # noqa: E402
@@ -573,8 +573,8 @@ def _():
 @check("compare: a worse network is detected (b - a < 0, interval below 0); a run against itself gives exactly 0")
 def _():
     with tempfile.TemporaryDirectory() as d:
-        a = make(d).quant.run(name="a", progress=0)
-        b = make(d, bias=0.35, name="worse").quant.run(name="b", progress=0)
+        make(d).quant.run(name="a", progress=0)
+        make(d, bias=0.35, name="worse").quant.run(name="b", progress=0)
         suite = make(d)
         cmp = suite.quant.compare("a", "b", boot=300)
         iou = cmp["metrics"]["seg.iou"]
@@ -592,10 +592,10 @@ def _():
         assert other.manifest["source"]["seed"] == 1
         same = suite.quant.compare("a", "a", boot=100)["metrics"]["seg.iou"]
         assert same["diff"] == 0 and same["lo"] == 0 and same["hi"] == 0
-        carry_vs_reset = make(d).quant.run(name="r", state="reset", progress=0)
+        make(d).quant.run(name="r", state="reset", progress=0)
         cm = suite.quant.compare("r", "a", boot=100)
         assert cm["n_common_frames"] == 96 and abs(cm["metrics"]["seg.iou"]["diff"]) > 0
-        part = make(d).quant.run(scenes=["toy-00", "toy-01"], name="p", progress=0)
+        make(d).quant.run(scenes=["toy-00", "toy-01"], name="p", progress=0)
         assert suite.quant.compare("p", "a", boot=50)["n_common_frames"] == 24, "compare uses the frames both runs have"
 
 
