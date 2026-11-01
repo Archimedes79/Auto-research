@@ -38,7 +38,8 @@ if [ -f runs/t10_dual_s0/ckpt_00003000.pt ]; then               # its G4 warm-st
 else
   echo "SKIP  velocity hurdle  | runs/t10_dual_s0/ckpt_00003000.pt missing (G4 needs it)"
 fi
-run "orientation"       "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
+run "slots, every kind" "$PY" tests/test_slots.py                   # five-layer build: contract test of every kind of every slot; CPU, no data, about 1 min
+run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s
 if [ "${1:-}" = "--all" ]; then
