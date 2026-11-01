@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T21:17:19",
+ "made": "2026-11-01T21:37:44",
  "run": "t10.dual_s0",
  "run_dir": "runs/t10_dual_s0",
  "status": {
@@ -19,7 +19,7 @@
   "signature": "15efbde2d1"
  },
  "bundle": {
-  "code_hash": "bd2205365084",
+  "code_hash": "5dba25b35c4d",
   "files": 17
  },
  "model": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "626809435ce9"
+  "hash": "45a279e76c68"
  },
  "metrics": {
   "eval/metrics.json": {},

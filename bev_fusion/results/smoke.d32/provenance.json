@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T21:17:13",
+ "made": "2026-11-01T21:37:38",
  "gt": {
   "key": "0.5_4_15efbde2d1",
   "signature": "15efbde2d1",
@@ -62,7 +62,7 @@
   "final": true
  },
  "bundle": {
-  "code_hash": "f050545bf0a4",
+  "code_hash": "265c6f404c09",
   "files": [
    "augment.py",
    "bev_trunk.py",
@@ -82,6 +82,15 @@
    "temporal_fusion.py",
    "timed_head.py"
   ],
+  "repo_files": [
+   "bev_fusion/autogt/__init__.py",
+   "bev_fusion/autogt/layers.py"
+  ],
+  "repo_imports_unfollowed": [
+   "bev_fusion/autogt/__init__.py -> bev_fusion/autogt/flow.py",
+   "bev_fusion/autogt/__init__.py -> bev_fusion/autogt/grid.py",
+   "bev_fusion/autogt/__init__.py -> bev_fusion/autogt/suite.py"
+  ],
   "roots": [
    "model.py",
    "losses.py"
@@ -92,19 +101,19 @@
    "nuscenes_dataset.py",
    "feature_cache.py"
   ],
-  "imports_excluded": [
+  "imports_excluded": [],
+  "test_imports": [
    "augment.py -> nuscenes_dataset.py",
    "augment.py -> train.py",
    "lane_branch.py -> train.py",
    "model.py -> nuscenes_dataset.py"
   ],
   "unparsed": [],
-  "external_local": [
-   "autogt"
-  ],
+  "external_local": [],
   "dynamic_imports": [],
   "source": "smoke_d32/code",
+  "repo_files_from": "bf/smoke.d32",
   "config_hash": "094b190294f5",
-  "copy_skipped": "bundle/ exists and is not empty: left as it is"
+  "copied_to": "bundle"
  }
 }

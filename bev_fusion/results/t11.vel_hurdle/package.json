@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T21:17:26",
+ "made": "2026-11-01T21:37:54",
  "run": "t11.vel_hurdle",
  "run_dir": "runs/t11_vel_hurdle",
  "status": {
@@ -19,7 +19,7 @@
   "signature": "15efbde2d1"
  },
  "bundle": {
-  "code_hash": "f050545bf0a4",
+  "code_hash": "265c6f404c09",
   "files": 17
  },
  "model": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "cb4862ef2b31"
+  "hash": "c630eb9f48be"
  },
  "metrics": {
   "eval/metrics.json": {}

@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T21:17:33",
+ "made": "2026-11-01T21:38:01",
  "run": "t12.hurdle_ctl",
  "run_dir": "runs/t12_hurdle_ctl",
  "status": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "ecbb82643516"
+  "hash": "9b2c127d6911"
  },
  "metrics": {},
  "metric_files": {},

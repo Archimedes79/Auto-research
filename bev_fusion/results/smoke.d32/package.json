@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T21:17:16",
+ "made": "2026-11-01T21:37:40",
  "run": "smoke.d32",
  "run_dir": "runs/smoke_d32",
  "status": {
@@ -19,7 +19,7 @@
   "signature": "15efbde2d1"
  },
  "bundle": {
-  "code_hash": "f050545bf0a4",
+  "code_hash": "265c6f404c09",
   "files": 17
  },
  "model": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "dfd7abe5e588"
+  "hash": "284b78147dd7"
  },
  "metrics": {
   "eval/metrics.json": {}

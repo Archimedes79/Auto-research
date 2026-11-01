@@ -278,7 +278,8 @@ def repro(run_id, card_path=None):
         if rs and not rs.get("final"):
             L.append(f"WARNING: the run is not final (status {rs.get('status')}, exit {rs.get('exit')}): its checkpoint is not a finished model")
         for key, what in (("missing_roots", "root modules missing"), ("unparsed", "files that do not parse (their imports are unknown)"), ("imports_excluded", "the network imports the loop or a loader"),
-                          ("external_local", "repository code outside the bundle (its version is the run's GT version / tag)"), ("dynamic_imports", "files that import by name at run time")):
+                          ("external_local", "repository code outside the bundle (its version is the run's GT version / tag)"), ("dynamic_imports", "files that import by name at run time"),
+                          ("test_imports", "only selftests / command-line tools import (not part of the bundle)")):
             if bd.get(key):
                 L.append(f"bundle: {what}: {', '.join(bd[key][:6])}")
     if card_path and not prov:
@@ -293,7 +294,7 @@ def repro(run_id, card_path=None):
                f"the GT store {store} is MISSING: rebuild it with the code of {tag} (git worktree add ../autogt_{v} {tag}) and the options above"),
               (f"evaluator: commit {e.get('commit')}, code hash {e.get('code_hash')}" + (f", NOT CLEAN or unchecked: {e.get('dirty')}" if e.get("dirty") else "")) if e else
               f"training code: tag {_get(prov, ('code', 'tag'))}, commit {_get(prov, ('code', 'commit'))}",
-              (f"model bundle (network + losses): {len(_get(prov, ('bundle', 'files')) or [])} files, hash {_get(prov, ('bundle', 'code_hash'))}"
+              (f"model bundle (network + losses): {len(_get(prov, ('bundle', 'files')) or [])} files + {len(_get(prov, ('bundle', 'repo_files')) or [])} repository files, hash {_get(prov, ('bundle', 'code_hash'))}"
                + (f", copied to {_get(prov, ('bundle', 'copied_to'))}/" if _get(prov, ("bundle", "copied_to")) else "")) if prov.get("bundle") else "",
               f"frames: split {d.get('split')}, {d.get('n')} frames, hash {d.get('frame_hash')}",
               f"model: run {s.get('run')}, checkpoint {s.get('ckpt')} ({s.get('ckpt_hash')}), step {s.get('step')}, config {s.get('config_hash')}; "
@@ -304,15 +305,64 @@ def repro(run_id, card_path=None):
     print("\n".join(x for x in L if x))
 
 
+TEST_SCOPES = ("_selftest", "selftest", "_cli", "cli", "main", "_main")   # functions beside the network (tests, command-line tools): their imports are listed, not followed
+
+
+def _is_main_test(test):
+    import ast
+    return (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and test.left.id == "__name__" and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)
+            and len(test.comparators) == 1 and isinstance(test.comparators[0], ast.Constant) and test.comparators[0].value == "__main__")
+
+
+def _imports(tree):
+    """[(import node, in_test_scope)] of every import of a module, function level included. In a test scope = inside a MODULE-LEVEL function named
+    in TEST_SCOPES (a method or a nested function of that name is part of the network) or in the body of an `if __name__ == "__main__"` block"""
+    import ast
+    out = []
+
+    def visit(c, scoped, top):
+        if isinstance(c, (ast.Import, ast.ImportFrom)):
+            out.append((c, scoped))
+            return
+        if top and isinstance(c, (ast.FunctionDef, ast.AsyncFunctionDef)) and c.name in TEST_SCOPES:
+            scoped = True
+        if isinstance(c, ast.If) and _is_main_test(c.test):
+            for st in c.body:
+                visit(st, True, False)
+            for st in c.orelse:
+                visit(st, scoped, False)
+            return
+        for ch in ast.iter_child_nodes(c):
+            visit(ch, scoped, False)
+    for st in tree.body:
+        visit(st, False, True)
+    return out
+
+
+def _names(n, pkg):
+    """(candidate dotted names, absolute?) of an import node found in a module of package `pkg`"""
+    import ast
+    if isinstance(n, ast.Import):
+        return [a.name for a in n.names], True
+    base = n.module or ""
+    if n.level:
+        up = pkg.split(".") if pkg else []
+        up = up[:len(up) - (n.level - 1)] if n.level > 1 else up
+        base = ".".join(up + ([n.module] if n.module else []))
+    return [base] + [f"{base}.{a.name}" if base else a.name for a in n.names], not n.level
+
+
 def import_closure(code_dir, roots=BUNDLE_ROOTS, exclude=(), info=None):
     """the files (relative, sorted) of code_dir that the root modules import, transitively: the network and its losses. Only modules found under
     code_dir count; a parent package of an imported module counts too (python runs its __init__). A module in `exclude` (the training loop, the
-    data loaders) is not followed and not in the result. `info` (a dict, optional) collects what the closure cannot say by itself: "skipped"
-    ("importer -> excluded module"), "unparsed" (files that do not parse: their imports are unknown), "external" (top-level names of absolute
-    imports that are neither in code_dir nor in the standard library), "dynamic" (files that import by name at run time)"""
+    data loaders) is not followed and not in the result. Imports inside a test scope (a `_selftest` or `_cli` function, an `if __name__` block) are
+    not followed. `info` (a dict, optional) collects what the closure cannot say by itself: "skipped" ("importer -> excluded module"), "test_imports"
+    ("importer -> module" found only in a test scope), "unparsed" (files that do not parse: their imports are unknown), "external" (top-level names
+    of absolute imports that are neither in code_dir nor in the standard library), "external_mods" (their dotted names), "dynamic" (files that
+    import by name at run time)"""
     import ast
     info = info if info is not None else {}
-    for k in ("skipped", "unparsed", "external", "dynamic"):
+    for k in ("skipped", "test_imports", "unparsed", "external", "external_mods", "dynamic"):
         info.setdefault(k, set())
     mods = {}
     for dp, dn, fn in os.walk(code_dir):
@@ -340,10 +390,11 @@ def import_closure(code_dir, roots=BUNDLE_ROOTS, exclude=(), info=None):
         for n in ast.walk(tree):
             if isinstance(n, ast.Call) and ((isinstance(n.func, ast.Name) and n.func.id == "__import__") or (isinstance(n.func, ast.Attribute) and n.func.attr == "import_module")):
                 info["dynamic"].add(rel)
+        for n, scoped in _imports(tree):
             cands, absolute = [], False
             if isinstance(n, ast.Import):
                 cands, absolute = [a.name for a in n.names], True
-            elif isinstance(n, ast.ImportFrom):
+            else:
                 base = n.module or ""
                 absolute = not n.level
                 if n.level:
@@ -355,8 +406,13 @@ def import_closure(code_dir, roots=BUNDLE_ROOTS, exclude=(), info=None):
                 parts = c.split(".") if c else []
                 prefixes = [".".join(parts[:i]) for i in range(1, len(parts) + 1)]
                 hit = [p for p in prefixes if p in mods]
+                if scoped:
+                    for p in hit:
+                        info["test_imports"].add(f"{rel} -> {mods[p]}")
+                    continue
                 if absolute and not hit and parts and parts[0] not in std:
                     info["external"].add(parts[0])
+                    info["external_mods"].add(c)
                 for p in hit:
                     if mods[p] in exclude:
                         info["skipped"].add(f"{rel} -> {mods[p]}")
@@ -365,30 +421,136 @@ def import_closure(code_dir, roots=BUNDLE_ROOTS, exclude=(), info=None):
     return sorted(seen)
 
 
-def _hash_files(root, files):
+def _hash_files(items):
+    """12 hex over (label, absolute path) pairs: the label and the text of each file, line endings normalised, in the order given"""
     h = hashlib.sha256()
-    for rel in files:
-        h.update(rel.encode() + b"\0" + open(os.path.join(root, rel), "rb").read().replace(b"\r\n", b"\n") + b"\0")
+    for label, full in items:
+        h.update(label.encode() + b"\0" + open(full, "rb").read().replace(b"\r\n", b"\n") + b"\0")
     return h.hexdigest()[:12]
 
 
-def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_EXCLUDE):
-    """The model bundle of a run: the network and loss modules (import_closure of `roots` under code_dir) with a hash over their text (line endings
-    normalised), and the run's config. into = a folder to copy them to (results/<id>/bundle/), so the model can be rebuilt from that folder and the
-    checkpoint alone; it is made next to the target, checked against the hash and moved into place, and an existing non-empty folder is left alone.
-    What the files do NOT carry is listed, never hidden: missing_roots, unparsed (their imports are unknown), imports_excluded (the network imports
-    the loop or a loader), external_local (repository folders such as autogt that the code imports: they are not in the bundle, their version is the
-    GT version of the run), dynamic_imports. Nothing found reads "unknown", never an empty hash"""
+def git_bytes(repo, ref, rel):
+    """the content of <ref>:<rel> as bytes, None when the tag has no such file"""
+    try:
+        r = subprocess.run(["git", "--no-optional-locks", "-C", repo, "show", f"{ref}:{rel}"], capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+_TREES = {}
+
+
+def tree_names(repo, ref):
+    """the set of file paths of a tag (one `git ls-tree -r`), cached; empty when git cannot say"""
+    key = (repo, ref)
+    if key not in _TREES:
+        try:
+            r = subprocess.run(["git", "--no-optional-locks", "-C", repo, "ls-tree", "-r", "--name-only", "-z", ref], capture_output=True, timeout=120)
+            _TREES[key] = {x.decode("utf-8", "replace") for x in r.stdout.split(b"\0") if x} if r.returncode == 0 else set()
+        except (OSError, subprocess.SubprocessError):
+            _TREES[key] = set()
+    return _TREES[key]
+
+
+def repo_modules(dotted_names, repo, ref=None, prefixes=None):
+    """the files of the repository that absolute imports like `autogt.layers` name: for each dotted name the longest prefix that is a module file or a
+    package, plus the __init__.py of its parent packages; paths relative to the repository root, sorted. The name is looked for under the repository
+    root and under the problem folder (code puts it on sys.path: bev_fusion/autogt before autogt moved to the top level). Names that are not
+    repository code (torch.nn, numpy) find nothing. With `ref` (a tag) the files are looked for in that tag, not in the working tree"""
+    out = set()
+    if prefixes is None:
+        pr = os.path.relpath(P.root(), repo).replace("\\", "/")
+        prefixes = [""] + ([] if pr in (".", "") or pr.startswith("..") else [pr + "/"])
+
+    def has(rel):
+        return rel in tree_names(repo, ref) if ref else os.path.isfile(os.path.join(repo, rel))
+    for dotted in dotted_names:
+        parts = dotted.split(".")
+        for pre in prefixes:
+            found = False
+            for i in range(len(parts), 0, -1):
+                rels = [pre + "/".join(parts[:i]) + ".py", pre + "/".join(parts[:i]) + "/__init__.py"]
+                f = next((r for r in rels if has(r)), None)
+                if f:
+                    out.add(f)
+                    for k in range(1, i):
+                        init = pre + "/".join(parts[:k]) + "/__init__.py"
+                        if has(init):
+                            out.add(init)
+                    found = True
+                    break
+            if found:
+                break
+    return sorted(out)
+
+
+def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_EXCLUDE, repo_ref=None):
+    """The model bundle of a run: the network and loss modules (import_closure of `roots` under code_dir), the repository modules they import
+    (`repo_files`: autogt/layers.py, the label layout the losses need) with a hash over all of them (line endings normalised), and the run's config.
+    into = a folder to copy them to (results/<id>/bundle/, repository files under _repo/): the files that define the network and its losses, to read and
+    to hash, not an installable package (see repo_imports_unfollowed); it is made next to the target, checked against the hash and moved into place, and an existing non-empty folder is left alone.
+    What it still does NOT carry is listed, never hidden: missing_roots, unparsed (their imports are unknown), imports_excluded (the network imports
+    the loop or a loader at module level), test_imports (only a selftest or a command-line tool imports them), external_local (repository folders
+    named by an import that no file was found for), dynamic_imports; the imports of the repository files themselves are not followed but listed (repo_imports_unfollowed: `autogt/__init__.py` imports
+    more of autogt, which the bundle does not carry: its version is the run's GT version and code tag). repo_ref = the
+    code tag of the run: the repository files are taken from that tag (git show), so they are the ones the run saw, not today's.
+    Nothing found reads "unknown", never an empty hash"""
     if not code_dir or not os.path.isdir(code_dir):
         return {"code_hash": UNKNOWN, "files": [], "source": UNKNOWN}
     info = {}
     files = import_closure(code_dir, roots, exclude, info)
     if not files:
         return {"code_hash": UNKNOWN, "files": [], "source": code_dir, "note": f"none of {list(roots)} found"}
-    local = sorted(t for t in info["external"] if any(os.path.isdir(os.path.join(b, t)) for b in (repo_root(), P.root())))
-    out = {"code_hash": _hash_files(code_dir, files), "files": files, "roots": list(roots), "missing_roots": [r for r in roots if r not in files],
-           "excluded": list(exclude), "imports_excluded": sorted(info["skipped"]), "unparsed": sorted(info["unparsed"]), "external_local": local,
-           "dynamic_imports": sorted(info["dynamic"]), "source": os.path.basename(os.path.dirname(code_dir.rstrip("/\\"))) + "/" + os.path.basename(code_dir.rstrip("/\\"))}
+    repo = repo_root()
+    repo_files = repo_modules(info["external_mods"], repo, repo_ref)
+    local = sorted(t for t in info["external"] if (os.path.isdir(os.path.join(repo, t)) or os.path.isdir(os.path.join(P.root(), t))) and not any(t in f.split("/")[:2] for f in repo_files))
+    keep_tmp = tempfile.mkdtemp() if repo_ref else None      # the files of the tag, written out so that they can be hashed and copied like the others
+    try:
+        return _bundle_rest(code_dir, roots, into, config, exclude, repo_ref, repo, files, info, repo_files, local, keep_tmp)
+    finally:
+        if keep_tmp:
+            shutil.rmtree(keep_tmp, ignore_errors=True)
+
+
+def _bundle_rest(code_dir, roots, into, config, exclude, repo_ref, repo, files, info, repo_files, local, keep_tmp):
+    import ast
+    repo_items = []
+    for rel in repo_files:
+        if repo_ref:
+            data = git_bytes(repo, repo_ref, rel)
+            if data is None:
+                continue
+            full = os.path.join(keep_tmp, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            open(full, "wb").write(data)
+        else:
+            full = os.path.join(repo, rel)
+        repo_items.append(("_repo/" + rel, full))
+    got = [label[len("_repo/"):] for label, _ in repo_items]
+    std = getattr(sys, "stdlib_module_names", ())
+    unfollowed = set()                                       # what the repository files import and the bundle does not carry (autogt/__init__.py pulls in half of autogt)
+    for label, full in repo_items:
+        rel = label[len("_repo/"):]
+        mod = rel[:-3].replace("/", ".")
+        pkg = mod[:-9] if mod.endswith(".__init__") else (mod.rsplit(".", 1)[0] if "." in mod else "")
+        try:
+            tree = ast.parse(open(full, encoding="utf-8-sig").read())
+        except (OSError, SyntaxError, ValueError):
+            unfollowed.add(f"{rel} (does not parse)")
+            continue
+        names = set()
+        for n, scoped in _imports(tree):
+            if not scoped:
+                names.update(c for c in _names(n, pkg)[0] if c and c.split(".")[0] not in std)
+        for f in repo_modules(sorted(names), repo, repo_ref):
+            if f not in got:
+                unfollowed.add(f"{rel} -> {f}")
+    items = [(rel, os.path.join(code_dir, rel)) for rel in files] + repo_items
+    out = {"code_hash": _hash_files(items), "files": files, "repo_files": got, "repo_imports_unfollowed": sorted(unfollowed), "roots": list(roots), "missing_roots": [r for r in roots if r not in files],
+           "excluded": list(exclude), "imports_excluded": sorted(info["skipped"]), "test_imports": sorted(x for x in info["test_imports"] if x.split(" -> ")[1] not in files), "unparsed": sorted(info["unparsed"]),
+           "external_local": local, "dynamic_imports": sorted(info["dynamic"]),
+           "source": os.path.basename(os.path.dirname(code_dir.rstrip("/\\"))) + "/" + os.path.basename(code_dir.rstrip("/\\")), "repo_files_from": (repo_ref if got or not repo_files else f"{repo_ref} (the files named are not in that tag)") if repo_ref else "the working tree"}
     if config and os.path.isfile(config):
         out["config_hash"] = file_hash(config)
     if into:
@@ -397,12 +559,13 @@ def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_
         else:
             tmp = into.rstrip("/\\") + ".tmp"
             shutil.rmtree(tmp, ignore_errors=True)
-            for rel in files:
-                os.makedirs(os.path.dirname(os.path.join(tmp, rel)) or tmp, exist_ok=True)
-                shutil.copy2(os.path.join(code_dir, rel), os.path.join(tmp, rel))
+            for label, full in items:
+                dst = os.path.join(tmp, label)
+                os.makedirs(os.path.dirname(dst) or tmp, exist_ok=True)
+                shutil.copy2(full, dst)
             if config and os.path.isfile(config):
                 shutil.copy2(config, os.path.join(tmp, "config.json"))
-            if _hash_files(tmp, files) != out["code_hash"]:
+            if _hash_files([(label, os.path.join(tmp, label)) for label, _ in items]) != out["code_hash"]:
                 shutil.rmtree(tmp, ignore_errors=True)
                 out["copy_skipped"] = "the copy did not read back equal"
             else:
@@ -432,21 +595,44 @@ def repro_prepare(run_id, dest=None):
     if not tag or git(repo, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}") is None:
         sys.exit(f"the code tag {tag} of {run_id} does not exist here (git fetch --tags): nothing to check out")
     dest = os.path.abspath(dest or os.path.join(repo, "temp", "repro", run_id))
+    if os.path.isdir(dest):                                          # a leftover folder is reused only when it is exactly this tag
+        have = (git(dest, "rev-parse", "HEAD") or "").strip() if os.path.exists(os.path.join(dest, ".git")) else ""   # a folder inside the repository without its own .git would answer with the repository's HEAD
+        want = (git(repo, "rev-parse", f"{tag}^{{commit}}") or "").strip()
+        if not have or have != want:
+            sys.exit(f"{dest} exists and is not a checkout of {tag} (HEAD {have[:10] or 'none'}, wanted {want[:10]}): remove it with `git worktree remove --force` or pass another --dir")
     if not os.path.isdir(dest):
         if git(repo, "worktree", "add", "--detach", dest, tag, timeout=3600) is None:   # a checkout on the Windows disk from WSL is slow
             git(repo, "worktree", "unlock", dest)                      # a failed or timed-out checkout leaves a locked, half-made worktree: take it away again
             git(repo, "worktree", "remove", "--force", dest)
             sys.exit(f"git worktree add {dest} {tag} failed (the half-made worktree was removed; check the leftovers in that folder; never run `git worktree prune` from WSL: it drops the registration of worktrees with Windows paths)")
+    notes = []
     for rel in ("data", os.path.join(os.path.relpath(P.root(), repo), "data")):
         src, dst = os.path.join(repo, rel), os.path.join(dest, rel)
-        if os.path.isdir(src) and not os.path.lexists(dst):
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            os.symlink(src, dst)
+        if not os.path.isdir(src):
+            continue
+        try:
+            if not os.path.lexists(dst):
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                os.symlink(src, dst)
+            elif os.path.isdir(dst) and not os.path.islink(dst):     # a partly tracked folder (README, split files): link what is not tracked into it
+                for child in os.listdir(src):
+                    if not os.path.lexists(os.path.join(dst, child)):
+                        os.symlink(os.path.join(src, child), os.path.join(dst, child))
+        except OSError as e:
+            notes.append(f"could not link {rel}: {e}")
     cwd = r.get("cwd") or P.root()
-    rel = os.path.relpath(cwd, repo) if os.path.commonpath([os.path.abspath(cwd), repo]) == repo else os.path.relpath(P.root(), repo)
+    try:
+        inside_repo = os.path.normcase(os.path.commonpath([os.path.abspath(cwd), repo])) == os.path.normcase(repo)
+    except ValueError:
+        inside_repo = False
+    if not inside_repo:
+        notes.append(f"the recorded cwd {cwd} is not inside {repo}: the problem folder is used")
+    rel = os.path.relpath(cwd, repo) if inside_repo else os.path.relpath(P.root(), repo)
     work = os.path.normpath(os.path.join(dest, rel))
     cmd = (f"cd {work} && AR_PROJECT=. python3 ../autoresearch/tools/run.py --id {run_id}.repro --hyp \"repetition of {run_id}\" "
            f"--pred \"same code, same GT, same seed: the numbers agree within seed noise\" --rule \"by hand: a repetition, no verdict\" --no-card -- {r.get('command')}")
+    if notes:
+        print("WARNING: " + "; ".join(notes), file=sys.stderr)
     return dest, cmd
 
 
@@ -490,7 +676,9 @@ def trainer_python(r):
         f = os.path.join(cwd, tok)
         if tok.endswith(".sh") and os.path.isfile(f):
             try:
-                cands += re.findall(r"(~?/[\w./-]*/bin/python[\d.]*)", open(f, encoding="utf-8", errors="replace").read())
+                text = open(f, encoding="utf-8", errors="replace").read().replace("${HOME}", "~").replace("$HOME", "~")
+                code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))      # a commented-out old interpreter does not count
+                cands += re.findall(r"(~?/[\w./-]*/bin/python[\d.]*)", code)
             except OSError:
                 pass
     for c in cands:
@@ -507,9 +695,11 @@ def trainer_env(r):
     if not py:
         return {}
     try:
-        out = subprocess.run([py, "-c", PROBE], capture_output=True, text=True, timeout=30)
+        out = subprocess.run([py, "-I", "-c", PROBE], capture_output=True, text=True, timeout=30, cwd=tempfile.gettempdir())
         d = json.loads(out.stdout.strip().splitlines()[-1])
     except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return {}
+    if not isinstance(d, dict):
         return {}
     m = re.search(r"\+cu(\d+)", d.get("torch") or "")
     d["cuda"] = f"{m.group(1)[:-1]}.{m.group(1)[-1]}" if m else None
@@ -558,7 +748,9 @@ def manifest(run_id, run_dir=None, write=True, force=False):
     block["run_status"] = {"status": r.get("status") or UNKNOWN, "exit": r.get("exit"), "final": r.get("status") in ("ok", "done") and r.get("exit") == 0}
     snap = os.path.join(run_dir, "code") if have_dir else None
     if snap and os.path.isdir(snap):
-        block["bundle"] = bundle(snap, into=os.path.join(results_dir(run_id), "bundle") if write else None, config=cfg)
+        tag = r.get("tag")
+        ref = tag if tag and git(repo_root(), "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}") is not None else None
+        block["bundle"] = bundle(snap, into=os.path.join(results_dir(run_id), "bundle") if write else None, config=cfg, repo_ref=ref)
     else:
         block["bundle"] = {"code_hash": UNKNOWN, "files": [], "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag " + str(r.get("tag"))}
     env = trainer_env(r)
@@ -700,6 +892,12 @@ def selftest():
             assert os.path.islink(os.path.join(wt, "data")) and os.path.realpath(os.path.join(wt, "data")) == os.path.realpath(os.path.join(tmp, "data")), "data is linked"
             assert "--id r1.repro" in cmd and "--no-card" in cmd and "bash e.sh" in cmd and cmd.startswith("cd "), cmd
             assert repro_prepare("r1")[0] == wt, "a second call reuses the worktree"
+            os.makedirs(os.path.join(tmp, "elsewhere_wt"))
+            try:
+                repro_prepare("r1", os.path.join(tmp, "elsewhere_wt"))
+                raise AssertionError("a leftover folder that is not a checkout of the tag must be refused")
+            except SystemExit as e:
+                assert "is not a checkout of" in str(e), e
             assert not os.path.exists(os.path.join(tmp, "temp", "repro", "r1", "ckpt.pt")) and os.path.isfile(os.path.join(tmp, "ev", "m.py")), "the checkout is separate"
             try:
                 repro_prepare("r2")
@@ -708,6 +906,20 @@ def selftest():
                 assert "does not exist" in str(e) or "no run record" in str(e), e
         finally:
             globals()["repo_root"] = real_root
+        # scopes: `!=` and else are no test scope, a method or nested function named main is part of the network, a module-level _selftest is a test scope
+        import ast as _ast
+        tr_ = _ast.parse("if __name__ != '__main__':\n    import a1\nif __name__ == '__main__':\n    import a2\nelse:\n    import a3\nclass C:\n    def main(self):\n        import a4\n"
+                         "def forward():\n    def main():\n        import a5\ndef main():\n    import a6\n")
+        got_ = {n.names[0].name: sc for n, sc in _imports(tr_)}
+        assert got_ == {"a1": False, "a2": True, "a3": False, "a4": False, "a5": False, "a6": True}, got_
+        # the interpreter probe ignores a commented-out interpreter, expands $HOME, and takes only a dict answer
+        fakehome = os.path.join(tmp, "fh")
+        os.makedirs(os.path.join(fakehome, "env", "bin"))
+        open(os.path.join(fakehome, "env", "bin", "python"), "w").write("#!/bin/sh\necho '[1]'\n")
+        os.chmod(os.path.join(fakehome, "env", "bin", "python"), 0o755)
+        open(os.path.join(tmp, "tr.sh"), "w").write("#!/bin/bash\n# old: " + os.path.join(fakehome, "gone", "bin", "python") + "\n" + os.path.join(fakehome, "env", "bin", "python") + " -u t.py\n")
+        assert trainer_python({"command": "bash tr.sh", "cwd": tmp}) == os.path.join(fakehome, "env", "bin", "python"), "the live line, not the comment"
+        assert trainer_env({"command": "bash tr.sh", "cwd": tmp}) == {}, "an answer that is not a dict reads unknown"
         # the model bundle (network + losses = the import closure of model.py and losses.py) and the manifest of a training run
         tr = os.path.join(proj, "runs", "r2")
 
@@ -739,6 +951,60 @@ def selftest():
         bx = bundle(snap, exclude=("train.py",))
         assert "train.py" not in bx["files"] and bx["imports_excluded"] == ["pkg/act.py -> train.py"] and "train.py" in import_closure(snap), bx
         put(snap, "pkg/act.py", "Y = 2\n")
+        # test scopes and repository files: the imports of a selftest are listed, `autogt.layers` (a repository module) is part of the bundle
+        s3 = os.path.join(tmp, "snap3")
+        put(s3, "model.py", "import autogt.layers\nimport torch.nn\nimport helper\n\ndef _selftest():\n    import loader\n    import train\n\nif __name__ == '__main__':\n    import loader2\n")
+        for f in ("helper.py", "loader.py", "loader2.py", "train.py"):
+            put(s3, f, "X = 1\n")
+        put(s3, "losses.py", "from autogt.layers import AREAS\n")
+        put(tmp, "autogt/__init__.py", "")
+        put(tmp, "autogt/layers.py", "AREAS = 1\n")
+        put(tmp, "autogt/other.py", "OTHER = 1\n")
+        real_root3 = repo_root
+        globals()["repo_root"] = lambda start=None: tmp
+        try:
+            b3 = bundle(s3, into=os.path.join(tmp, "out3"), exclude=("train.py",))
+            assert b3["files"] == ["helper.py", "losses.py", "model.py"], b3["files"]
+            assert b3["repo_files"] == ["autogt/__init__.py", "autogt/layers.py"], b3["repo_files"]
+            assert b3["test_imports"] == ["model.py -> loader.py", "model.py -> loader2.py", "model.py -> train.py"] and b3["imports_excluded"] == [], b3
+            assert b3["external_local"] == [] and b3["copied_to"] == "out3" and os.path.isfile(os.path.join(tmp, "out3", "_repo", "autogt", "layers.py")), b3
+            h3 = b3["code_hash"]
+            put(tmp, "autogt/layers.py", "AREAS = 2\n")
+            assert bundle(s3, exclude=("train.py",))["code_hash"] != h3, "a change of the repository module changes the hash"
+            put(tmp, "autogt/other.py", "OTHER = 2\n")
+            put(tmp, "autogt/layers.py", "AREAS = 1\n")
+            assert bundle(s3, exclude=("train.py",))["code_hash"] == h3, "a repository module that is not imported does not"
+            put(s3, "model.py", "import autogt.missing\nimport numpy\n")
+            put(s3, "losses.py", "Y = 1\n")
+            b4 = bundle(s3)
+            assert b4["repo_files"] == ["autogt/__init__.py"] and b4["external_local"] == [], b4   # a name that is no module still finds its package; numpy is not repository code
+            put(tmp, "autogt/__init__.py", "from .layers import AREAS\nfrom . import sets\n")
+            put(tmp, "autogt/sets.py", "S = 1\n")
+            run("add", "autogt")
+            run("commit", "-q", "-m", "autogt")
+            run("tag", "tg/layers")
+            put(tmp, "autogt/layers.py", "AREAS = 99  # edited after the run\n")
+            put(s3, "model.py", "import autogt.layers\n")
+            put(s3, "losses.py", "Y = 1\n")
+            bt = bundle(s3, into=os.path.join(tmp, "out4"), repo_ref="tg/layers")
+            assert bt["repo_files"] == ["autogt/__init__.py", "autogt/layers.py"] and bt["repo_files_from"] == "tg/layers", bt
+            assert open(os.path.join(tmp, "out4", "_repo", "autogt", "layers.py")).read() == "AREAS = 1\n", "the copy is the file of the tag, not today's"
+            assert bundle(s3, repo_ref="tg/layers")["code_hash"] != bundle(s3)["code_hash"], "the tag's file and the edited working file differ in the hash"
+            assert bundle(s3, repo_ref="tg/layers")["code_hash"] == bt["code_hash"] and bundle(s3, repo_ref="tg/nonexistent")["repo_files"] == [], "a ref without the files finds none"
+            assert bt["repo_imports_unfollowed"] == ["autogt/__init__.py -> autogt/sets.py"], bt["repo_imports_unfollowed"]   # the package __init__ imports more than the bundle carries
+            assert bundle(s3, repo_ref="tg/nonexistent")["repo_files_from"] == "tg/nonexistent" or "not in that tag" in bundle(s3, repo_ref="tg/nonexistent")["repo_files_from"]
+            before = set(os.listdir(tempfile.gettempdir()))
+            bundle(s3, into=os.path.join(tmp, "out5"), repo_ref="tg/layers")
+            assert set(os.listdir(tempfile.gettempdir())) - before == set(), "the temp folder of the tag's files is removed"
+            put(proj, "pk/__init__.py", "")
+            put(proj, "pk/mod.py", "M = 1\n")
+            run("add", "proj/pk")
+            run("commit", "-q", "-m", "pk")
+            run("tag", "tg/pk")
+            put(s3, "model.py", "import pk.mod\n")
+            assert bundle(s3, repo_ref="tg/pk")["repo_files"] == ["proj/pk/__init__.py", "proj/pk/mod.py"], bundle(s3, repo_ref="tg/pk")["repo_files"]   # under the problem folder (sys.path of the run), as in bev_fusion/autogt before the move
+        finally:
+            globals()["repo_root"] = real_root3
         assert bundle(os.path.join(tmp, "nowhere"))["code_hash"] == UNKNOWN and bundle(tmp, roots=("none.py",))["code_hash"] == UNKNOWN, "nothing found reads unknown"
         json.dump({"gt_signature": "abc123"}, open(os.path.join(tr, "gt.json"), "w"))
         json.dump({"seed": 3}, open(os.path.join(tr, "config.json"), "w"))
@@ -803,7 +1069,7 @@ def selftest():
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             repro("r2")
-        assert "manifest of the run" in buf.getvalue() and "model bundle (network + losses): 8 files" in buf.getvalue(), buf.getvalue()
+        assert "manifest of the run" in buf.getvalue() and "model bundle (network + losses): 8 files + 0 repository files" in buf.getvalue(), buf.getvalue()
         print("provenance selftest passed")
     finally:
         if old_env is None:
