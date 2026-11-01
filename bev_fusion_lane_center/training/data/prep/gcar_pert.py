@@ -140,7 +140,7 @@ def main():
         dec = np.load(f"{out_dir}/{pre}_dec32.npy", mmap_mode="r+")
         lg = np.load(f"{out_dir}/{pre}_logit7.npy", mmap_mode="r+")
         todo = [k for k in range(N) if float(np.abs(np.asarray(lg[k], np.float32)).max()) == 0.0]
-        print(f"{a.pert}: Fortsetzung, {len(todo)} von {N} Zeilen fehlen", flush=True)
+        print(f"{a.pert}: resuming, {len(todo)} of {N} rows are missing", flush=True)
     else:
         dec = np.lib.format.open_memmap(f"{out_dir}/{pre}_dec32.npy", mode="w+", dtype=np.float16, shape=(N, 32, 200, 200))
         lg = np.lib.format.open_memmap(f"{out_dir}/{pre}_logit7.npy", mode="w+", dtype=np.float16, shape=(N, 7, 200, 200))

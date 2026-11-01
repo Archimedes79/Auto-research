@@ -28,3 +28,9 @@ wsl bash -c 'AR_PROJECT=../bev_fusion nohup python3 ../autoresearch/tools/run.py
 - A planned row first (`ledger.py add <run id> --hyp ... --pred ... --rule ...`) lets the start line carry only `--id`; chains wait with `--after <run id>`.
 
 Not yet under the launcher: the queue scripts in `temp/study/` (`lane*.sh`); they keep working, but their runs have no ledger row. The GT that a training reads is built from the live `autogt/` (the tag records its state; the GT signature in the run's config is item F3 of the repository review).
+
+## The best three networks (keep3.json)
+
+
+
+`keep3.json` (tool: `autoresearch/tools/keep3.py`, `AR_PROJECT=../bev_fusion`) holds the best three ARMS of this problem with all their seed checkpoints (standing instruction of Mirko, 2026-11-01). Ranking value `board7` = the mean of the six map IoUs and the mAP of `evaluation/board.py`, averaged over the seeds, on `val` and GT signature `0.5_4_15efbde2d1`, band 0.02; a convention for ordering, not a verdict (the card rule decides). Held today, chosen by hand: `t11_vel_hurdle_acc2` (best value), `t10_dual` (the new base, D39) and `t8_ctl` (the control, pinned). A new arm comes in with `keep3.py consider <arm> --apply --ledger <id>` (a KEEP row) or `--by-hand "reason"`; then commit `records/keep3.json` and push (`git fetch`, `check_git.py`). Other checkpoints may be slimmed or archived, never deleted.

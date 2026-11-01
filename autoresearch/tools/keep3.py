@@ -23,12 +23,18 @@ the decision, and their text names the candidate or its run) or `--by-hand "reas
 the record, so two chats cannot lose each other's entry. Whenever the list changes, push (after `git fetch` and check_git.py): the printout names the
 files to commit and the checkpoints that left (archive candidates; this tool moves nothing and commits nothing).
 Ranking cards: <card pattern> with {name} and {split}; the card is a json with "metrics" {metric: value}, "split", "frames", "subset" and "commit"
-(evaluation/evaluate.py of the lane problem). A problem whose results have another shape needs its own ranking rule first (bev_fusion: open).
+(evaluation/evaluate.py of the lane problem).
+ARMS (bev_fusion, since 2026-11-01): `init --source arms --metric board7 --metric-keys k1,k2,... --gt-signature S --band 0.02 --ckpt "runs/{run}/ckpt_*.pt"
+--card "runs/{name}/eval/metrics.json"`: a candidate is an ARM (runs/<arm>_s0, _s1, ... are one network family; a run without a seed suffix is its own arm), its
+value is the mean of the given keys of the flat metrics.json of each seed run (all keys higher-is-better), averaged over the seeds, and every seed of the arm must be
+evaluated on the ranking split and GT signature (another GT is another question); the NEWEST checkpoint of each seed run is kept, so an arm holds all its seed checkpoints.
+For bev_fusion the keys are the six map IoUs and the mAP of evaluation/board.py (a composite chosen by convention: it is a ranking, not a verdict; the card's rule decides).
 """
 import argparse
 import contextlib
 import csv
 import datetime as dt
+import glob
 import hashlib
 import io
 import json
@@ -60,7 +66,24 @@ def write(st, path):
     P.atomic_write(path, json.dumps(st, indent=1, ensure_ascii=False) + "\n")
 
 
+def arm_of(run):
+    """the arm a run belongs to: t8_ctl_s1 -> t8_ctl (seed runs are one network family), a run without a seed suffix is its own arm"""
+    return re.sub(r"_s\d+$", "", run)
+
+
 def registry_of(st, root):
+    if st.get("source") == "arms":                    # no registry: every arm with an evaluated run folder (runs/<arm>_s<N> or runs/<arm>)
+        arms, (pre, post) = {}, st["card"].split("{name}")
+        dirs = sorted(glob.glob(os.path.join(root, pre, "*")))
+        for d in dirs:
+            if os.path.isfile(os.path.join(d, post.format(split=st["split"]).strip("/\\"))):
+                run = os.path.basename(d)
+                arms.setdefault(arm_of(run), {"run": arm_of(run), "runs": []})["runs"].append(run)
+        for d in dirs:                                 # a seed run of an arm that is not evaluated yet is listed too: the arm then names it as the reason it is no candidate
+            run = os.path.basename(d)
+            if os.path.isdir(d) and arm_of(run) in arms and run not in arms[arm_of(run)]["runs"] and run != arm_of(run):
+                arms[arm_of(run)]["runs"].append(run)
+        return arms
     return {k: v for k, v in json.load(open(os.path.join(root, st["registry"]), encoding="utf-8-sig")).items() if isinstance(v, dict) and not k.startswith("_")}
 
 
@@ -72,10 +95,53 @@ def sha256(f):
     return h.hexdigest()
 
 
+def ckpt_file(st, root, run, prefer=None):
+    """the checkpoint path (relative to the problem folder) of a run: the pattern as it is, or with a * the match named `prefer` (the file a card was made
+    from) when there is one, else the newest (highest number in the name); None when absent"""
+    rel = st["ckpt"].format(run=run)
+    if "*" not in rel:
+        return rel if os.path.exists(os.path.join(root, rel)) else None
+    hits = glob.glob(os.path.join(root, rel))
+    named = [h for h in hits if prefer and os.path.basename(h) == prefer]
+    if named:
+        return os.path.relpath(named[0], root).replace(chr(92), "/")
+    num = lambda f: int(re.findall(r"\d+", os.path.basename(f))[-1]) if re.findall(r"\d+", os.path.basename(f)) else -1  # noqa: E731
+    return os.path.relpath(max(hits, key=num), root).replace(chr(92), "/") if hits else None
+
+
+def info_arm(st, root, reg, name):
+    """an ARM (all its seed runs): the value is the mean over the seeds of the mean of st['metric_keys'] in each run's metrics.json (a flat card
+    {"split", "gt_signature", "metrics": {...}}); every seed must carry every key, the split and the GT signature of the ranking, and a checkpoint"""
+    runs, vals, cards, files = reg[name]["runs"], [], [], []
+    for r in runs:
+        cp = os.path.join(root, st["card"].format(name=r, split=st["split"]))
+        if not os.path.exists(cp):
+            return None, f"seed run {r} of the arm has no evaluation ({os.path.relpath(cp, root)}): every seed must be evaluated"
+        c = json.load(open(cp, encoding="utf-8-sig"))
+        ck = ckpt_file(st, root, r, prefer=c.get("checkpoint"))
+        if not ck:
+            return None, f"the checkpoint of {r} does not exist (archived?): a network is kept with its weights"
+        if c.get("checkpoint") and os.path.basename(ck) != c["checkpoint"]:
+            return None, f"{r} was evaluated on {c['checkpoint']}, which does not exist (only {os.path.basename(ck)}): the weights must be the evaluated ones"
+        files.append(ck)
+        m = c.get("metrics", {})
+        miss = [k for k in st["metric_keys"] if not isinstance(m.get(k), (int, float)) or m[k] != m[k] or abs(m[k]) == float("inf")]
+        if miss:
+            return None, f"{r} has no finite value for {len(miss)} of the {len(st['metric_keys'])} ranking keys (e.g. {miss[0]})"
+        if c.get("split") != st["split"] or (st.get("gt_signature") and c.get("gt_signature") != st["gt_signature"]):
+            return None, f"{r} was not evaluated on the ranking question ({c.get('split')}, GT {c.get('gt_signature')} against {st['split']}, GT {st.get('gt_signature')})"
+        vals.append(sum(float(m[k]) for k in st["metric_keys"]) / len(st["metric_keys"]))
+        cards.append(os.path.relpath(cp, root).replace(chr(92), "/"))
+    order = sorted(range(len(runs)), key=lambda i: runs[i])
+    return dict(name=name, key=name, runs=[runs[i] for i in order], ckpts=[files[i] for i in order], value=sum(vals) / len(vals), vert100=None, card=cards[0], commit="", asm_ms=None), ""
+
+
 def info(st, root, reg, name):
     """(facts of one registry name on the ranking card, ''), or (None, why it is no candidate)"""
     if name not in reg:
         return None, f"{name} is not in the registry"
+    if st.get("source") == "arms":
+        return info_arm(st, root, reg, name)
     run = reg[name].get("run")
     if not run:
         return None, f"{name} has no checkpoint of its own (stored graphs, or a union of other networks)"
@@ -95,10 +161,10 @@ def info(st, root, reg, name):
                 commit=c.get("commit", ""), asm_ms=(c.get("info") or {}).get("asm_ms")), ""
 
 
-def checkpoints(st, root, runs):
+def checkpoints(st, root, runs, files=None):
     out = []
-    for r in runs:
-        rel = st["ckpt"].format(run=r)
+    for i, r in enumerate(runs):
+        rel = files[i] if files else ckpt_file(st, root, r)
         f = os.path.join(root, rel)
         out.append(dict(path=rel, bytes=os.path.getsize(f), sha256=sha256(f)))
     return out
@@ -178,10 +244,16 @@ def cmd_init(a, root):
     path = state_path()
     if os.path.exists(path):
         sys.exit(f"{path} exists: change it with `consider ... --apply`")
-    if a.metric in P.cfg().get("lower_is_better", []):
-        sys.exit(f"{a.metric} is a metric where lower is better (project.json lower_is_better): the ranking would put the worst network first")
-    st = dict(about="the best three networks of this problem (autoresearch/tools/keep3.py); one slot per checkpoint; a text record in git", metric=a.metric, split=a.split,
-              frames=a.frames, slots=a.slots, band=a.band, registry=a.registry, ckpt=a.ckpt, card=a.card, entries=[], left=[])
+    keys = [k for k in a.metric_keys.split(",") if k]
+    low = set(P.cfg().get("lower_is_better", []))
+    if a.metric in low or any(k in low or k.rsplit("/", 1)[-1] in low for k in keys):
+        sys.exit(f"{a.metric} or one of its keys is a metric where lower is better (project.json lower_is_better): the ranking would put the worst network first")
+    if bool(keys) != (a.source == "arms") or (a.source != "arms" and not a.registry):
+        sys.exit("--source arms needs --metric-keys (the value is their mean over the seeds); a registry ranking needs --registry and no --metric-keys")
+    st = dict(about="the best three networks of this problem (autoresearch/tools/keep3.py); one slot per checkpoint (per arm with all its seeds); a text record in git", metric=a.metric,
+              split=a.split, frames=a.frames, slots=a.slots, band=a.band, registry=a.registry, ckpt=a.ckpt, card=a.card, entries=[], left=[])
+    if a.source == "arms":
+        st.update(source="arms", metric_keys=keys, gt_signature=a.gt_signature)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with P.locked(path):
         write(st, path)
@@ -223,7 +295,7 @@ def cmd_consider(a, root):
         print("nothing to apply")
         return
     ev = evidence(a, cand)
-    ck = checkpoints(st, root, cand["runs"])        # hashed once, before the lock: it can take seconds
+    ck = checkpoints(st, root, cand["runs"], cand.get("ckpts"))        # hashed once, before the lock: it can take seconds
     with P.locked(sp):
         st = load()                                  # the state as it is now: another chat may have changed it while we hashed
         action, text = decide(st, cand)
@@ -307,7 +379,7 @@ def selftest():
             w.writerows([dict(id="E1.a", decision="decide.py 2026-11-01: CUT (effect -0.01)", hypothesis="rd and rb"), dict(id="E3.a", decision="decide.py: TIE first, then KEEP (effect +0.02)", hypothesis="the rd network"),
                          dict(id="E10", decision="KEEP", hypothesis="rd rb ra"), dict(id="E4", decision="KEEP then CUT", hypothesis="rd")])
         ns = lambda **k: argparse.Namespace(**{**dict(metric="Q", split="val", frames=100, slots=3, band=0.01, registry="registry.json", ckpt="runs/ck/{run}.pt", card="cards/{name}/{split}.json",
-                                                      hash=False, top=10, apply=False, ledger="", by_hand=""), **k})
+                                                      hash=False, top=10, apply=False, ledger="", by_hand="", source="registry", metric_keys="", gt_signature=""), **k})
         refused = lambda **k: _raises(lambda: cmd_consider(ns(**k), T))
         _raises(lambda: cmd_init(ns(metric="vert100"), T))   # lower is better: refused, nothing written
         assert not os.path.exists(state_path())
@@ -378,8 +450,8 @@ def selftest():
         card("e", 0.80)
         real = checkpoints
 
-        def racing(st_, root_, runs_):
-            out = real(st_, root_, runs_)
+        def racing(st_, root_, runs_, files_=None):
+            out = real(st_, root_, runs_, files_)
             globals()["checkpoints"] = real
             cmd_consider(ns(name="g", apply=True, by_hand="the other chat"), T)
             return out
@@ -435,6 +507,56 @@ def selftest():
         assert cmd_show(ns(), T) == 0 and cmd_show(ns(hash=True), T) == 1, "same size, other bytes: only the hash sees it"
         open(f"{T}/runs/ck/rd.pt", "wb").write(b"short")
         assert cmd_show(ns(), T) == 1
+        # an arms project (the bev_fusion shape): a flat metrics.json per seed run, the newest checkpoint of a glob, value = mean of the keys, then the mean over the seeds
+        T2 = tempfile.mkdtemp(prefix="ar_keep3b_")
+        try:
+            os.environ["AR_PROJECT"] = T2
+            os.makedirs(f"{T2}/records")
+            json.dump(dict(ledger="records/LEDGER.csv", ledger_md="records/LEDGER.md", lower_is_better=["ave"]), open(f"{T2}/project.json", "w"))
+
+            def arm_run(run, a_, b_, sig="S1", split="val", omit=None, ck=None):
+                os.makedirs(f"{T2}/runs/{run}/eval")
+                for s in (1000, 3000):
+                    open(f"{T2}/runs/{run}/ckpt_{s:08d}.pt", "wb").write(f"{run}{s}".encode())
+                m = {"m/a": a_, "m/b": b_}
+                if omit:
+                    del m[omit]
+                json.dump(dict(split=split, gt_signature=sig, metrics=m, **({"checkpoint": ck} if ck else {})), open(f"{T2}/runs/{run}/eval/metrics.json", "w"))
+            for r, v in (("x_s0", .5), ("x_s1", .6), ("y_s0", .7), ("z", .3)):
+                arm_run(r, v, v)
+            arm_run("o_s0", .9, .9, sig="S2")
+            arm_run("p_s0", .9, .9, omit="m/b")
+            arm_run("q_s0", .9, .9, split="test")
+            arm_run("w_s0", .4, .4, ck="ckpt_00001000.pt")       # evaluated on an OLDER checkpoint than the newest one: that file is the network
+            arm_run("v_s0", .4, .4, ck="ckpt_00002000.pt")       # evaluated on a checkpoint that does not exist any more
+            arm_run("u_s0", .4, .4)
+            os.makedirs(f"{T2}/runs/u_s1")                       # a seed that is trained but not evaluated
+            arms = dict(source="arms", metric="board", metric_keys="m/a,m/b", registry="", ckpt="runs/{run}/ckpt_*.pt", card="runs/{name}/eval/metrics.json", gt_signature="S1", frames=0, band=0.02)
+            _raises(lambda: cmd_init(ns(**{**arms, "metric_keys": "m/a,ave"}), T2))      # a lower-is-better key: refused
+            _raises(lambda: cmd_init(ns(**{**arms, "metric_keys": ""}), T2))             # arms without keys: refused
+            _raises(lambda: cmd_init(ns(**{**arms, "source": "registry", "registry": ""}), T2))
+            assert not os.path.exists(f"{T2}/records/keep3.json")
+            cmd_init(ns(**arms), T2)
+            st2 = load()
+            rg2 = registry_of(st2, T2)
+            assert sorted(rg2) == ["o", "p", "q", "u", "v", "w", "x", "y", "z"] and sorted(rg2["x"]["runs"]) == ["x_s0", "x_s1"], sorted(rg2)
+            ix = info(st2, T2, rg2, "x")[0]
+            assert abs(ix["value"] - 0.55) < 1e-12 and ix["runs"] == ["x_s0", "x_s1"] and ix["key"] == "x", ix
+            assert checkpoints(st2, T2, ["x_s0"])[0]["path"] == "runs/x_s0/ckpt_00003000.pt", "the newest checkpoint of the glob"
+            iw = info(st2, T2, rg2, "w")[0]
+            assert iw["ckpts"] == ["runs/w_s0/ckpt_00001000.pt"] and checkpoints(st2, T2, iw["runs"], iw["ckpts"])[0]["path"] == "runs/w_s0/ckpt_00001000.pt", iw
+            assert "does not exist" in info(st2, T2, rg2, "v")[1] or "evaluated on" in info(st2, T2, rg2, "v")[1]
+            assert info(st2, T2, rg2, "v")[0] is None and "every seed must be evaluated" in info(st2, T2, rg2, "u")[1], info(st2, T2, rg2, "u")
+            assert "ranking question" in info(st2, T2, rg2, "o")[1] and "ranking question" in info(st2, T2, rg2, "q")[1] and "finite value" in info(st2, T2, rg2, "p")[1]
+            for n in ("x", "y", "z"):
+                cmd_consider(ns(**{**arms, "name": n, "apply": True, "by_hand": "selftest"}), T2)
+            held = {e["name"]: e for e in load()["entries"]}
+            assert sorted(held) == ["x", "y", "z"] and [c["path"] for c in held["x"]["checkpoints"]] == ["runs/x_s0/ckpt_00003000.pt", "runs/x_s1/ckpt_00003000.pt"]
+            assert cmd_show(ns(**arms), T2) == 0
+            os.remove(f"{T2}/runs/x_s1/ckpt_00003000.pt")
+            assert cmd_show(ns(**arms), T2) == 1, "a lost seed checkpoint of a held arm is seen"
+        finally:
+            shutil.rmtree(T2, ignore_errors=True)
         print("keep3 selftest passed")
     finally:
         if old is None:
@@ -463,7 +585,10 @@ def main():
     i.add_argument("--frames", type=int, default=0)
     i.add_argument("--slots", type=int, default=3)
     i.add_argument("--band", type=float, default=0.010)
-    i.add_argument("--registry", required=True)
+    i.add_argument("--registry", default="")
+    i.add_argument("--source", choices=("registry", "arms"), default="registry", help="arms: no registry, every arm of the run folders (seed runs are one family); needs --metric-keys")
+    i.add_argument("--metric-keys", default="", help="arms: comma separated keys of the flat metrics.json; the value is their mean (all higher-is-better), then the mean over the seeds")
+    i.add_argument("--gt-signature", default="", help="arms: only runs evaluated on this GT signature are candidates")
     i.add_argument("--ckpt", required=True, help="checkpoint path per run, relative to the problem folder, with {run}")
     i.add_argument("--card", required=True, help="ranking card per registry name, with {name} and {split}")
     c = sub.add_parser("candidates")

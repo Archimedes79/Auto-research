@@ -12,6 +12,7 @@ An experiment is found by its id (prefix of a folder under experiments/), by its
 problem folder, optionally '#a/b/c' into the JSON; a card has its metrics under 'metrics' (evaluate.py cards), a flat dict is the metrics itself.
 """
 import argparse
+import csv
 import datetime
 import glob
 import json
@@ -21,6 +22,7 @@ import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
 import project as P  # noqa: E402
 from decide import card_lower, decide_experiment, named_lower  # noqa: E402
 import card as CARD  # noqa: E402
@@ -295,11 +297,61 @@ def migrate(folder, root):
     return f"{name}: migrated (json in {os.path.relpath(dest, root)})"
 
 
+def kill_rules(exp):
+    """the kill criterion of a card as trainsuite kill rules (one per line or after a ';'): (rules, problems). Prose that is no rule is a problem, not a rule"""
+    sys.path.insert(0, os.path.dirname(HERE))   # autoresearch/ holds the package trainsuite
+    from trainsuite.kill import Rule
+    rules, bad = [], []
+    lines = [ln.split("#", 1)[0] for ln in (exp.get("kill") or "").splitlines()]       # a comment ends at the line, a ';' inside it is no separator
+    for part in (p.strip() for ln in lines for p in ln.split(";")):
+        if not part:
+            continue
+        try:
+            rules.append(Rule(part).text)
+        except ValueError as e:
+            bad.append(str(e))
+    return rules, bad
+
+
+def write_kill_rules(rules, run_dir):
+    """append the rules that kill.txt of the run folder does not hold yet (an existing file is kept, also without a final newline): (new, already there)"""
+    if not os.path.isdir(run_dir):
+        raise ValueError(f"{run_dir} is not an existing run folder (a stray folder with only a kill.txt would be listed as a run)")
+    sys.path.insert(0, os.path.dirname(HERE))
+    from trainsuite.kill import read_text
+    kp = os.path.join(run_dir, "kill.txt")
+    if os.path.exists(kp):
+        with open(kp, "rb") as f:
+            if f.read(2) in (b"\xff\xfe", b"\xfe\xff"):
+                raise ValueError(f"{kp} is UTF-16 (PowerShell >): convert it to UTF-8 first, appending would corrupt it")
+        txt = read_text(kp)
+    else:
+        txt = ""
+    norm = lambda s: " ".join(s.split())            # spacing is no difference between two rules
+    have = [norm(h.split("#", 1)[0]) for h in txt.splitlines()]
+    new = [r for r in rules if norm(r) not in have]
+    with open(kp, "a", encoding="utf-8") as f:
+        f.write(("\n" if txt and not txt.endswith("\n") and new else "") + "".join(r + "\n" for r in new))
+    return len(new), len(rules) - len(new)
+
+
+def spent_gpu_h(exp_id, root=None):
+    """(hours, rows): the duration of the ledger rows E<n> and E<n>.* (the planned budget_gpu_h is compared with it in `show`)"""
+    path = P.path("ledger") if root is None else os.path.join(root, P.cfg_of(root).get("ledger", "LEDGER.csv"))
+    if not os.path.exists(path):
+        return 0.0, 0
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = [r for r in csv.DictReader(f) if re.fullmatch(re.escape(exp_id) + r"(\..*)?", r.get("id", ""))]
+    return sum(float(r.get("duration_s") or 0) for r in rows) / 3600.0, len(rows)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["check", "show", "migrate"])
+    ap.add_argument("cmd", choices=["check", "show", "migrate", "kill"])
     ap.add_argument("exp", nargs="?")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--run", help="kill: the run folder whose kill.txt gets the rules of the card")
+    ap.add_argument("--write", action="store_true", help="kill: write them (default: print)")
     a = ap.parse_args()
     if not a.all and not a.exp:
         ap.error("name an experiment (E240, a folder or a file) or pass --all")
@@ -322,8 +374,28 @@ def main():
             bad = check(exp, f)
             print(f"{exp.get('id', '?'):8} {'ready' if not bad else 'NOT READY'}  {os.path.relpath(f, P.root())}" + "".join(f"\n    - {b}" for b in bad))
             rc |= bool(bad)
+        elif a.cmd == "kill":
+            rules, bad = kill_rules(exp)
+            if bad or not rules:
+                print(f"{exp['id']}: " + ("; ".join(bad) if bad else "the card has no kill criterion") + " - write it as trainsuite kill rules (key@step > value)")
+                rc = 1
+                continue
+            print(f"{exp['id']}: {len(rules)} kill rule(s): " + " | ".join(rules))
+            if a.write:
+                if not a.run:
+                    ap.error("--write needs --run <run folder>")
+                try:
+                    new, old = write_kill_rules(rules, a.run)
+                except (ValueError, UnicodeDecodeError) as e:
+                    print(f"  not written: {e}")
+                    rc = 1
+                    continue
+                print(f"  wrote {new} new rule(s) to {os.path.join(a.run, 'kill.txt')} ({old} were there)")
         else:
             print(f"{exp['id']} {exp['title']} [{exp['kind']}] headline {exp['metric']} ({exp['direction']}, band {exp['band']}), control {exp['control']}")
+            if exp.get("budget_gpu_h"):
+                h, n = spent_gpu_h(exp["id"])
+                print(f"  budget {exp['budget_gpu_h']:g} GPU h, spent {h:.1f} h in {n} ledger row(s)" + ("  OVER BUDGET" if h > exp["budget_gpu_h"] else ""))
             for letter in exp["arms"]:
                 for s, lst in arm_cards(exp, letter).items():
                     for m, card, ref in lst:

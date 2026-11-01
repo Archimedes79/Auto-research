@@ -1,0 +1,109 @@
+{
+ "about": "the best three networks of this problem (autoresearch/tools/keep3.py); one slot per checkpoint (per arm with all its seeds); a text record in git",
+ "metric": "board7",
+ "split": "val",
+ "frames": 0,
+ "slots": 3,
+ "band": 0.02,
+ "registry": "",
+ "ckpt": "runs/{run}/ckpt_*.pt",
+ "card": "runs/{name}/eval/metrics.json",
+ "entries": [
+  {
+   "name": "t11_vel_hurdle_acc2",
+   "key": "t11_vel_hurdle_acc2",
+   "runs": [
+    "t11_vel_hurdle_acc2"
+   ],
+   "value": 0.3640875282772365,
+   "vert100": null,
+   "asm_ms": null,
+   "card": "runs/t11_vel_hurdle_acc2/eval/metrics.json",
+   "commit": "",
+   "checkpoints": [
+    {
+     "path": "runs/t11_vel_hurdle_acc2/ckpt_00001000.pt",
+     "bytes": 223167269,
+     "sha256": "6b22a85d61493eacf34b39d0957849649411156e8847eaab2ab52997c85ca91f"
+    }
+   ],
+   "since": "2026-11-01",
+   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: best board7 (0.364, inside the band of t10_dual) and the velocity-hurdle recipe with accumulation 2; its twin t11_vel_hurdle takes no slot"
+  },
+  {
+   "name": "t10_dual",
+   "key": "t10_dual",
+   "runs": [
+    "t10_dual_s0",
+    "t10_dual_s1"
+   ],
+   "value": 0.36137263003151204,
+   "vert100": null,
+   "asm_ms": null,
+   "card": "runs/t10_dual_s0/eval/metrics.json",
+   "commit": "",
+   "checkpoints": [
+    {
+     "path": "runs/t10_dual_s0/ckpt_00003000.pt",
+     "bytes": 222876927,
+     "sha256": "5f1e184b2005b0e5e728ecbc6d4ed833d255b1734ee2bb4c169cc93c6fc903ed"
+    },
+    {
+     "path": "runs/t10_dual_s1/ckpt_00003000.pt",
+     "bytes": 222877055,
+     "sha256": "13677841a887f535e2e45550719ea577cc91e78da9b157841ee616dcd54d0182"
+    }
+   ],
+   "since": "2026-11-01",
+   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request (decide the best ones): the new base of the BEV arms (D39), two seeds, board7 0.361, within the band of the best"
+  },
+  {
+   "name": "t8_ctl",
+   "key": "t8_ctl",
+   "runs": [
+    "t8_ctl_s0",
+    "t8_ctl_s1"
+   ],
+   "value": 0.24527722603845503,
+   "vert100": null,
+   "asm_ms": null,
+   "card": "runs/t8_ctl_s0/eval/metrics.json",
+   "commit": "",
+   "checkpoints": [
+    {
+     "path": "runs/t8_ctl_s0/ckpt_00003000.pt",
+     "bytes": 222470535,
+     "sha256": "8e522e20c4894997b604f485a747a6ebdfb65873b87115fb94d5e9e2d21c2139"
+    },
+    {
+     "path": "runs/t8_ctl_s1/ckpt_00003000.pt",
+     "bytes": 222470599,
+     "sha256": "504509f72b06fe0f8f75d0059f9d68041c66db4d4140a6724b6c3c561d6ea7ed"
+    }
+   ],
+   "since": "2026-11-01",
+   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the control of the BEV board (records/champion.json base, D39: t8_ctl stays the control), two seeds, board7 0.245",
+   "pinned": "the control every BEV card is compared against (records/champion.json base): never pushed out by a better newcomer"
+  }
+ ],
+ "left": [],
+ "source": "arms",
+ "metric_keys": [
+  "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0.5",
+  "seg_fov/seg/dt+0.00/walkway/all/all/iou@0",
+  "seg_fov/seg/dt+0.00/carpark_area/all/all/iou@0",
+  "seg_fov/seg/dt+0.00/ped_crossing/all/all/iou@0",
+  "seg_fov/seg/dt+0.00/lane_divider/all/all/iou@0.5",
+  "seg_fov/seg/dt+0.00/road_divider/all/all/iou@1",
+  "det/dt+0.00/mean/all/mAP"
+ ],
+ "gt_signature": "0.5_4_15efbde2d1",
+ "pin_log": [
+  {
+   "name": "t8_ctl",
+   "action": "pin",
+   "reason": "the control every BEV card is compared against (records/champion.json base): never pushed out by a better newcomer",
+   "date": "2026-11-01"
+  }
+ ]
+}

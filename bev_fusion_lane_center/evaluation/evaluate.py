@@ -9,6 +9,9 @@
     tools/env/_py14.sh evaluate.py --golden write [names ...]                # (re)write golden entries: all registry names on VAL from the cache
     tools/env/_py14.sh evaluate.py --golden write champion --subset val250 --fresh --tol 0.002   # the uncached entry (idle GPU)
     tools/env/_py14.sh evaluate.py --list
+    tools/env/_py14.sh evaluate.py champion --route --failure dark,blur,cam_front3_off --timing   # parts (eval_parts.py): route success, failure series, ms per frame (GPU); card tag `parts`
+    tools/env/_py14.sh evaluate.py champion --route --route-tokens tok_p18_f1pr_val_clean         # route success from stored tokens (CPU)
+    tools/env/_py14.sh evaluate.py champion --failure dark,blur --series-dir e130_champion         # failure graph metrics per phase from stored series graphs (CPU)
 
 What it does
   * builder: the raw network outputs of (run, split, M, K0, every other `set` field) are computed once on the GPU and cached in
@@ -24,7 +27,10 @@ What it does
   * golden: evaluation/golden.json holds one entry per (name, split, subset, fresh) with the metrics of GOLD_KEYS rounded to 4 decimals, the
     commit and the tolerance; `--golden check` re-evaluates every entry and compares (the check writes cards with the tag `golden_check`, which git
     ignores; `--golden write` writes the committed `golden` card, never the standard card); a golden entry changes only together with a ledger row that says why (a metric fix, a new champion)
-Timing of the network (ms per frame on an idle GPU) is not measured here: evaluation/drivers/p18_latency.py (protocol in PROTOCOL.md).
+  * parts (W11, eval_parts.py): --route (route success), --failure (graph metrics per phase of a failure series, with --route also the route success per phase),
+    --timing (ms per frame of the whole chain, drivers/p18_latency.py on an idle GPU; protocol in PROTOCOL.md); they call the code of the loop drivers, run the network
+    unless a stored input is named (--route-tokens, --series-dir), and join the card as `metrics` (keys in eval_parts.py), `better` and `info.parts`; without --tag the
+    card is written as <split>_parts.json, never over the standard card
 """
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
@@ -38,6 +44,8 @@ import sys
 import time
 
 import numpy as np
+
+import eval_parts as EP  # route success, failure series, timing (parts of a card)
 
 R = BP.ROOT
 HOME = os.path.expanduser("~")
@@ -111,6 +119,16 @@ def entry_cfg(e):
     return extra
 
 
+def build_net(e, dev="cuda"):
+    """(network, config) of a builder entry with its trained weights, on dev"""
+    import torch
+    import p16_train as PT
+    net, cfg = PT.build(e["design"], entry_cfg(e))
+    net = net.to(dev)
+    net.load_state_dict(torch.load(f"{R}/runs/e123/{e['run']}/model.pt", map_location=dev), strict=False)
+    return net, cfg
+
+
 def builder_raw(e, split, ks=None, fresh=False, require_cache=False, dev="cuda"):
     """(raw node outputs, ground truths, source) of the frames ks of the split (None = all). Unless fresh is set they come from the cache of the
     whole split (cache_paths; frames ks taken from it); without a cache the network runs on dev, and only a whole split computed on the GPU
@@ -125,13 +143,9 @@ def builder_raw(e, split, ks=None, fresh=False, require_cache=False, dev="cuda")
                 return [raw[int(k)] for k in ks], [gts[int(k)] for k in ks], f"{p} [{len(ks)} frames]"
     if require_cache:
         raise RuntimeError(f"no cached network outputs for {e['run']} {e['set']} on {split} (would need the GPU)")
-    import torch
     import p16_data as PD
     import p16_infer as PI
-    import p16_train as PT
-    net, cfg = PT.build(e["design"], entry_cfg(e))
-    net = net.to(dev)
-    net.load_state_dict(torch.load(f"{R}/runs/e123/{e['run']}/model.pt", map_location=dev), strict=False)
+    net, cfg = build_net(e, dev)
     ds = PD.BuilderData(SPLITS[split][0], ks=ks, train=False, with_prev=cfg.temporal)
     raw = []
     _, gts, _ = PI.predict(net, ds, list(range(len(ds))), taus=(e["tau"],), bs=8, workers=2, raw=raw, dev=dev)
@@ -245,22 +259,37 @@ def seed_of(entry):
     return s if isinstance(s, (int, str)) and not isinstance(s, bool) else None
 
 
-def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=False, compare=None, tag="", require_cache=False):
-    """one card: the registry name on the split (or its subset), written to runs/eval/<name>/; returns the card"""
+def effective(e, over, tau):
+    """the registry entry with the overrides of the card applied (--asm, --tau)"""
+    return dict(e, asm={**e.get("asm", {}), **(over or {})}, tau=e.get("tau") if tau is None else tau)
+
+
+def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=False, compare=None, tag="", require_cache=False, parts=None):
+    """one card: the registry name on the split (or its subset), written to runs/eval/<name>/; returns the card. parts = {route, failure, timing} options of
+    eval_parts.run: their numbers join the card (metrics, better, info.parts); they run the network (GPU) except from stored inputs, on the whole split"""
     import sparse_metrics as SM
     over = over or {}
     ks = subset_ks(split, subset)
+    if parts and (subset or fresh):
+        raise ValueError("route / failure / timing run on the whole split, without --subset and --fresh")
     g, gts, info = graphs_of(name, reg[name], split, over, tau, ks, fresh, require_cache)
     protocol = dict(gt_sha=digest(gts))  # the ground truth scored against (before the minute of scoring: a ground truth that cannot be digested fails early)
     t0 = time.time()
     m = SM.card_any(g, gts, extra=True)
     info["metric_s"] = time.time() - t0
+    better = SM.better(m)  # each metric's direction (card contract)
+    if parts:  # last: the timing wants a machine that does nothing else
+        add = EP.run(effective(reg[name], over, tau), reg, split, parts, build_net)
+        m.update(add["metrics"])
+        better.update(add["better"])
+        info["parts"] = add["info"]
     nan = [k for k, v in m.items() if isinstance(v, float) and v != v]
     if nan:  # the contract wants numbers: a metric without a value is named in info, not written as NaN
         info["nan_metrics"] = nan
         m = {k: v for k, v in m.items() if k not in nan}
+        better = {k: v for k, v in better.items() if k in m}
     card = dict(schema=1, name=name, split=split, subset=subset or "", fresh=bool(fresh), frames=len(gts), registry=reg[name], overrides=dict(asm=over, tau=tau),
-                info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m, better=SM.better(m),  # each metric's direction (card contract)
+                info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m, better=better,
                 protocol=protocol)  # decide.py refuses cards of one comparison that differ in it
     seed = seed_of(reg[name])
     if seed is not None:
@@ -288,6 +317,9 @@ def show(card):
     what = f"{card['name']} on {card['split']}{' ' + card['subset'] if card['subset'] else ''}{' fresh' if card['fresh'] else ''}"
     print(f"{what} ({card['frames']} frames), commit {card['commit']}, assembly {card['info']['asm_ms']:.1f} ms per frame (CPU), metrics {card['info']['metric_s']:.0f} s")
     print("  " + "  ".join(f"{k} {m[k]:.3f}" for k in SHOW if k in m))
+    parts = [k for k in m if k.startswith(("route_", "ms_per_frame")) or (k.startswith("series.") and k.endswith((".S", ".Q", ".route_success")))]
+    if parts:  # the parts of eval_parts: route success, the failure series per phase, the time of the chain
+        print("  " + "  ".join(f"{k} {m[k]:.3f}" for k in parts))
     if "compare" in card:
         c2, cmp = card["compare"]["metrics"], card["compare"]["name"]
         print(f"{cmp}:")
@@ -378,6 +410,18 @@ def main():
     ap.add_argument("--cached-only", action="store_true", help="--golden check without the fresh (GPU) entries")
     ap.add_argument("--fresh-only", action="store_true", help="--golden check of the fresh (GPU) entries only")
     ap.add_argument("--tol", type=float, default=TOL, help="tolerance stored with a golden entry on --golden write")
+    ap.add_argument("--route", action="store_true", help="part: route success on the split (builder -> assembly -> route input -> route head; GPU, or CPU with --route-tokens)")
+    ap.add_argument("--route-tokens", default="", help="stored route tokens (~/exp_gcar_b123/p10/<name>.pkl): route success from them, no builder run (CPU)")
+    ap.add_argument("--route-head", default=EP.ROUTE_HEAD, help="route head (runs/<name>/model.pt); a route comparison needs seeds s0 and s1")
+    ap.add_argument("--route-step", type=float, default=4.0, help="route input: points every <= step m of an edge")
+    ap.add_argument("--failure", default="", help="part: failure series, perturbations separated by commas (dark,blur,cam_front3_off,...); needs the series input of p17_series.py (GPU) or --series-dir")
+    ap.add_argument("--variant", default="single", help="input variant of the series (single, maxdecay_0.95, ema_hold_mon_0.5, gate, ...)")
+    ap.add_argument("--series-dir", default="", help="read the stored graphs of a series run (runs/e17/<dir>/<pert>_<variant><suffix>.pkl) instead of running the builder (CPU)")
+    ap.add_argument("--series-suffix", default="", help="file name suffix of the stored series graphs (e.g. _fp03)")
+    ap.add_argument("--series-bs", type=int, default=4)
+    ap.add_argument("--series-workers", type=int, default=2, help="data loader workers of the series run")
+    ap.add_argument("--timing", action="store_true", help="part: ms per frame of the whole chain (drivers/p18_latency.py), IDLE GPU only, nothing else running")
+    ap.add_argument("--timing-n", type=int, default=60, help="frames timed")
     a = ap.parse_args()
     reg = registry()
     if a.list or (not a.name and not a.golden):
@@ -393,7 +437,16 @@ def main():
     if len(a.name) != 1:
         sys.exit("one registry name (or --golden / --list)")
     over = {k: float(v) for k, v in (x.split("=") for x in a.asm)}
-    card = evaluate(a.name[0], reg, a.split, over, a.tau, a.subset or None, a.fresh, a.compare, a.tag)
+    parts = {}
+    if a.route:
+        parts["route"] = dict(head=a.route_head, tokens=a.route_tokens, step=a.route_step)
+    if a.failure:
+        parts["failure"] = dict(perts=a.failure.split(","), variant=a.variant, series_dir=a.series_dir, suffix=a.series_suffix, bs=a.series_bs, workers=a.series_workers)
+    if a.timing:
+        parts["timing"] = dict(n=a.timing_n, tag=f"_ev_{a.name[0]}")
+    if parts and not a.tag:
+        a.tag = "parts"  # a card with parts never replaces the standard card of the split (the experiments read that one)
+    card = evaluate(a.name[0], reg, a.split, over, a.tau, a.subset or None, a.fresh, a.compare, a.tag, parts=parts or None)
     show(card)
     m = card["metrics"]
     bad = [f"{k} {m.get(k, float('nan')):.4f} != {v}" for k, v in (x.split("=") for x in a.expect) if not abs(m.get(k, float("nan")) - float(v)) <= TOL]

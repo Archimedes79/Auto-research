@@ -185,9 +185,11 @@ def _make_source_class():
             return self.ds[self._idx[ref.key]]
 
         def _perturb(self, item, ref):
-            """sanity controls: the radar / camera features of another frame, or nothing"""
+            """sanity controls: the radar / camera features of another frame, or nothing. The other frame lies half the split away, i.e. in another
+            scene (the samples are in scene order: 7 keyframes later was the same street 3.5 s on, which kept the static layers and made the control weaker than it claims;
+            sanity numbers recorded before 2026-11-01 used the +7 frame)"""
             c = self.control
-            other = self.ds[(self._idx[ref.key] + 7) % len(self.ds)]
+            other = self.ds[(self._idx[ref.key] + len(self.ds) // 2) % len(self.ds)]
             if c == "shuffle_radar":
                 item["radar"] = other["radar"]
             elif c == "zero_radar":

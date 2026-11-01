@@ -136,7 +136,7 @@ LINKS = {
     "SoftRank": ["https://arxiv.org/abs/1903.06059", "https://arxiv.org/abs/2002.08871", "https://arxiv.org/abs/1903.08850", "https://arxiv.org/abs/1802.04223"],
     "SparseDETR": ["https://arxiv.org/abs/2111.14330"], "FocusDETR": ["https://arxiv.org/abs/2307.12612"], "DQDETR": ["https://arxiv.org/abs/2404.03507"], "SparseOcc": ["https://arxiv.org/abs/2312.17118"],
     "MachMap": ["https://arxiv.org/abs/2306.10301"], "VecRoad": [], "ImaiIri": ["https://arxiv.org/abs/1803.03550"], "PolyWorld": ["https://arxiv.org/abs/2111.15491"], "NeuralSparse": [],
-    "_placeholder": [], "own": [],
+    "own": [],
     "CRN": ["https://arxiv.org/abs/2304.00670"], "GaussianCaR": ["https://arxiv.org/abs/2602.08784"], "U-Net": ["https://arxiv.org/abs/1505.04597"], "ConvNeXtV2": ["https://arxiv.org/abs/2301.00808"],
     "BEVFormer": ["https://arxiv.org/abs/2203.17270"], "LSS": ["https://arxiv.org/abs/2008.05711"], "nuScenes": ["https://arxiv.org/abs/1903.11027"],
     "CMX_DPT_PTv3": ["https://arxiv.org/abs/2203.04838", "https://arxiv.org/abs/2103.13413", "https://arxiv.org/abs/2312.10035"],

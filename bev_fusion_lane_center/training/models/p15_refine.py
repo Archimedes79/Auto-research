@@ -125,7 +125,6 @@ class RLayer(nn.Module):
     def forward(self, h, p, t, f0, f1, vm):
         B, N, _ = p.shape
         nrm = torch.stack([-t[..., 1], t[..., 0]], -1)
-        off = self.du[:, None, None] * 0 + 0  # placeholder to keep the shape logic explicit
         uu = self.du[:, None].expand(len(DU), len(DV)).reshape(-1)
         vv = self.dv[None, :].expand(len(DU), len(DV)).reshape(-1)
         q = p[:, :, None, :] + uu[None, None, :, None] * t[:, :, None, :] + vv[None, None, :, None] * nrm[:, :, None, :]  # [B,N,P,2]
