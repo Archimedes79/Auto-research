@@ -498,16 +498,15 @@ def run(root=None, verbose=True):
         dup = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0061"], stride=20, verbose=False)
         assert dup["scenes"] == 1 and dup["keyframes"] == 2, dup                       # a name twice is one sequence
     # 5f the raw-data check: complete on mini, and a data root without files is reported (every listed file, the map expansion)
-    from . import rawdata
-    ok_ = rawdata.check(root, "v1.0-mini", scenes=["scene-0061"])
+    ok_ = sets.check_raw(root, "v1.0-mini", scenes=["scene-0061"])
     assert ok_["missing"] == 0 and not ok_["maps"] and ok_["camera"] > 100 and ok_["radar"] > 500, ok_
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, "v1.0-mini"))
         for t in ("scene", "sample", "log", "sample_data"):
             os.symlink(os.path.join(root, "v1.0-mini", t + ".json"), os.path.join(d, "v1.0-mini", t + ".json"))
-        bad_ = rawdata.check(d, scenes=["scene-0061"])                                 # tables only: no image, no radar file, no map
+        bad_ = sets.check_raw(d, scenes=["scene-0061"])                                 # tables only: no image, no radar file, no map
         assert bad_["missing"] == ok_["camera"] + ok_["radar"] and len(bad_["examples"]) == 10 and bad_["maps"], bad_
-        assert "missing" in rawdata.report(bad_) and "all on disk" in rawdata.report(ok_)
+        assert "missing" in sets.report_raw(bad_) and "all on disk" in sets.report_raw(ok_)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         cli_mod._print_sets()

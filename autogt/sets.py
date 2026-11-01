@@ -12,6 +12,9 @@ much of a set the store of the current generator holds. The store folder is shar
     sets.scenes(name)             the scene names of a set
     sets.tokens(name, ...)        the sample tokens of those scenes (json tables only, no devkit)
     sets.status(name, ...)        {"set", "version", "have", "total", "complete"} for the current generator signature
+    sets.check_raw(dataroot, ...) are the raw files the generator reads on disk (tables, map expansion, CAM_FRONT, the five radars)?
+                                  `python -m autogt data`; sets.report_raw(result) prints it. The tools that fetch, verify and link the raw
+                                  data are `datasets/NuScenes/tools/` (its README describes the layout on D:)
 """
 import os
 
@@ -83,3 +86,62 @@ def complete_in(sig_dir, version, dataroot):
         if toks and have >= set(toks):
             out.append(name)
     return out
+
+
+# ---- the raw files a run needs
+# autogt reads the json tables, the map expansion of the cities of the sequences, and per keyframe and radar sweep the files of CAM_FRONT
+# and the five radars (the image is needed to look at the GT, the radar files for the velocity correction). One pass over the tables (no
+# devkit) and one listing per sensor folder; a file counts as present by its name, its content is not read.
+
+
+def check_raw(dataroot, version=None, set_name=None, scenes=None, examples=10):
+    from .cli import detect_version
+    from .light_nusc import _KEEP, _records, _value
+    import json
+    root = os.path.expanduser(dataroot)
+    version = version or detect_version(root)
+    tab = os.path.join(root, version)
+    with open(os.path.join(tab, "scene.json")) as f:
+        by_name = {s["name"]: s for s in json.load(f)}
+    names = scenes(set_name) if set_name else list(by_name) if scenes is None else list(scenes)
+    lost = [n for n in names if n not in by_name]
+    if lost or not names:
+        raise ValueError(f"unknown scene(s) {lost or 'none given'} in {version} of {root}")
+    want = {by_name[n]["token"] for n in names}
+    with open(os.path.join(tab, "sample.json")) as f:
+        samples = {s["token"] for s in json.load(f) if s["scene_token"] in want}
+    with open(os.path.join(tab, "log.json")) as f:
+        logs = {r["token"]: r["location"] for r in json.load(f)}
+    cities = sorted({logs[by_name[n]["log_token"]] for n in names})
+    maps = [f"maps/expansion/{c}.json" for c in cities if not os.path.exists(os.path.join(root, "maps", "expansion", f"{c}.json"))]
+    n_cam = n_radar = n_missing = 0
+    shown = []
+    listed = {}                                                    # folder -> the names in it: one listing per folder, not one call per file
+
+    def present(rel):
+        d, name = os.path.split(rel)
+        if d not in listed:
+            try:
+                listed[d] = set(os.listdir(os.path.join(root, d)))
+            except OSError:
+                listed[d] = set()
+        return name in listed[d]
+    for buf, text in _records(os.path.join(tab, "sample_data.json")):
+        if not any(k in text for k in _KEEP) or _value(buf, "sample_token") not in samples:
+            continue
+        rel = json.loads(text)["filename"]
+        n_cam, n_radar = n_cam + ("/CAM_FRONT/" in rel), n_radar + ("/RADAR_" in rel)
+        if not present(rel):
+            n_missing += 1
+            if len(shown) < examples:
+                shown.append(rel)
+    return {"version": version, "scenes": len(names), "camera": n_cam, "radar": n_radar, "missing": n_missing, "examples": shown, "maps": maps}
+
+
+def report_raw(r):
+    """a few lines for a result of `check`"""
+    ok = not r["missing"] and not r["maps"]
+    lines = [f"{r['version']}: {r['scenes']} sequences, {r['camera']} CAM_FRONT and {r['radar']} radar files listed: "
+             f"{'all on disk' if ok else str(r['missing']) + ' missing'}"]
+    lines += [f"  missing: {p}" for p in r["examples"]] + [f"  missing map file: {p}" for p in r["maps"]]
+    return "\n".join(lines)

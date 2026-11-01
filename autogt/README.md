@@ -38,7 +38,7 @@ backbone) is not made here; it is a product of the model code and carries its ow
 **The whole chain.** get the raw data (`../datasets/NuScenes/`: its README says what is on D: and which parts are there; its `tools/` list,
 download, verify and unpack the archives and link the WSL views `~/data/nuscenes*`; downloads only with the user's OK) -> `python -m autogt
 data ~/data/nuscenes_full [--set small|full]` (are all raw files the generator reads on disk: json tables, map expansion, CAM_FRONT, the
-five radars; `rawdata.py`) -> `generate` (above) -> look: `report` (every check, one PDF), `view`, `sheets`, `video`.
+five radars; `sets.check_raw`) -> `generate` (above) -> look: `report` (every check, one PDF), `view`, `sheets`, `video`.
 
 One keyframe at a time in code:
 ```python
@@ -72,12 +72,11 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
 | `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
-| `rawdata.py` | `check(dataroot, ...)`: are the raw files the generator reads on disk; `python -m autogt data` |
-| `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets` |
+| `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m autogt data` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
 | `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
-| `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
+| `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `selftest.py` | the tools behind the commands (`video.py` also holds `encode`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
 
 ## What a keyframe contains (ego frame at the front-camera time, x forward 0-60 m, y left +-26 m, 0.5 m or 0.25 m)
 - areas `drivable_area ped_crossing walkway stop_line carpark_area` (coverage fraction, exact 4 x 4 supersampling); lines
@@ -183,7 +182,8 @@ training which keyframes the store lacks.
 | v4 | fefd519974 | boxes at the camera time, first state (superseded after 18 minutes) |
 | v5 | 15efbde2d1 | review fixes; the generator of the t10 runs (GT stored for all of trainval) |
 | v6 | 02a1217742 | generator fixes: ego velocity at the first / last pose of a sequence, instance / velocity / flow_sigma on the same sub-pixels, `ego_half_window` |
-| v7 | see `versions.csv` | coverage (D36 - D38): boxes hide by their height (softer `occluded`), `coverage.py`, per box `share_camera` / `share_radar` / `share_fusion` and the nuScenes point counts; `camera`, `radar`, `undefined` unchanged; **current** |
+| v7 | b84e8ac9b2 | coverage (D36 - D38): boxes hide by their height (softer `occluded`), `coverage.py`, per box `share_camera` / `share_radar` / `share_fusion` and the nuScenes point counts; `camera`, `radar`, `undefined` unchanged. Never built for trainval (superseded by v8 before it finished) |
+| v8 | c643a7539d | v7 made fast, the same GT (bit-identical on 34 keyframes of four maps): radar files read in parallel, map polygons and centre-line points made once, the box shares in one pass, `keyframe_gt` split into methods; **current** |
 
 **When you edit one of the six files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py coverage.py`) the signature changes and
 `python -m autogt selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild

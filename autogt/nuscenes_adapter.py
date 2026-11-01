@@ -11,6 +11,7 @@ Needs only the metadata and the radar files - no lidar, no maps.
 """
 import collections
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from pyquaternion import Quaternion
@@ -46,6 +47,7 @@ class NuScenesScene:
         self.ego = self._ego()
         self._radar_cache = collections.OrderedDict()
         self._max_cache = max_radar_cache
+        self._points = {}                                  # radar files read ahead by `_prefetch`, taken by `_radar_frame`
         self._sample_times = None
 
     # ---- builders
@@ -93,7 +95,7 @@ class NuScenesScene:
         from nuscenes.utils.data_classes import RadarPointCloud
         nusc = self.nusc
         sample = self._nearest_sample(t)
-        frames = []
+        want = []
         for ch in (only or RADARS):
             sd0 = nusc.get("sample_data", sample["data"][ch])
             cands = [sd0]
@@ -104,12 +106,24 @@ class NuScenesScene:
                     if abs(sd["timestamp"] * 1e-6 - t) > self.radar_window:
                         break
                     cands.append(sd)
-            for sd in cands:
-                if abs(sd["timestamp"] * 1e-6 - t) <= self.radar_window:
-                    fr = self._radar_frame(sd, ch, RadarPointCloud)
-                    if fr is not None:
-                        frames.append(fr)
+            want += [(sd, ch) for sd in cands if abs(sd["timestamp"] * 1e-6 - t) <= self.radar_window]
+        self._prefetch([sd for sd, _ in want], RadarPointCloud)
+        frames = []
+        for sd, ch in want:
+            fr = self._radar_frame(sd, ch, RadarPointCloud)
+            if fr is not None:
+                frames.append(fr)
         return frames
+
+    def _prefetch(self, sds, RadarPointCloud):
+        """read the radar files that are not cached yet in parallel: opening a file on the raw-data disk takes about 50 ms, a keyframe needs
+        10 - 15 of them, and the frames are made from the points in the same order as before (the result does not change)"""
+        todo = [sd for sd in sds if sd["token"] not in self._radar_cache and sd["token"] not in self._points]
+        if len(todo) < 2:
+            return
+        with ThreadPoolExecutor(max_workers=min(8, len(todo))) as ex:
+            for sd, pts in zip(todo, ex.map(lambda s: RadarPointCloud.from_file(os.path.join(self.root, s["filename"])).points, todo)):
+                self._points[sd["token"]] = pts
 
     def _radar_frame(self, sd, ch, RadarPointCloud):
         key = sd["token"]
@@ -118,7 +132,9 @@ class NuScenesScene:
         nusc = self.nusc
         cs = nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
         Tg = pose_matrix(nusc.get("ego_pose", sd["ego_pose_token"])) @ pose_matrix(cs)       # world <- sensor
-        pts = RadarPointCloud.from_file(os.path.join(self.root, sd["filename"])).points
+        pts = self._points.pop(key, None)
+        if pts is None:
+            pts = RadarPointCloud.from_file(os.path.join(self.root, sd["filename"])).points
         if pts.shape[1] == 0:
             fr = None
         else:

@@ -120,7 +120,7 @@ run it live) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, 
   nuscenes_adapter.py nuscenes_gt.py coverage.py`) plus the options. ANY edit of those files makes every stored GT unreadable by the new code
   (a rebuild of trainval takes 5-8 h) and a running job that imports the live tree keeps its old key. So: never edit them while a job
   runs, tell the owner of the training code before you do, and put the signature next to every number you report. Edits of
-  `checks.py view.py video.py report.py cli.py suite.py clean.py encode.py selftest.py sets.py` do not change it. `light_nusc.py` (the
+  `checks.py view.py video.py report.py cli.py suite.py clean.py selftest.py sets.py` do not change it. `light_nusc.py` (the
   memory-light devkit that `generate` uses) also does not change it, although it decides which records the GT sees: after an edit run
   the selftest, which compares light and full GT. A process keeps the key it computed first (`current_signature()` is memoised): restart
   a reader after an edit. Never compare two models on different signatures.
@@ -186,7 +186,7 @@ cur["flow"] * dt                         # first-order displacement of every cel
   (numpy only) and a generator for the static layers (`layers.py` is reusable).
 
 ## 6. Files
-`suite.py` (`AutoGT`, `load`, `current_signature`), `cli.py` (`generate`, the commands), `sets.py` + `sets/` (scene sets), `rawdata.py` (raw-data check), `versions.py` + `versions.csv` (GT versions), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
+`suite.py` (`AutoGT`, `load`, `current_signature`), `cli.py` (`generate`, the commands), `sets.py` + `sets/` (scene sets, and the raw-data check),  `versions.py` + `versions.csv` (GT versions), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
 `nuscenes_adapter.py` (the only code that knows the nuScenes formats), `layers.py` + `grid.py` (exact rasteriser, occlusion, `GridSpec`),
-`checks.py` (consistency checks), `report.py`, `view.py`, `video.py`, `encode.py` (H.264 with a read-back check), `clean.py`,
+`checks.py` (consistency checks), `report.py`, `view.py`, `video.py` (with `encode`: H.264 with a read-back check), `clean.py`,
 `coverage.py` (what the sensors observe, the footprint share), `light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan/plan.md` section 9.5, `README.md` (validation numbers).
