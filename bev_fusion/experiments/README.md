@@ -1,6 +1,6 @@
 # experiments - one folder per experiment of bev_fusion
 
-Each folder holds one growing file `experiment.md` (card -> detail plan -> summary, in the form of `../../autoresearch/templates/experiment.md`). Ids follow the stages of `../plan.md` section 11 (S1a = first experiment of stage S1).
+Each folder holds one growing file `experiment.md` (card -> detail plan -> summary, in the form of `../../autoresearch/templates/experiment.md`). Ids follow the stages of `../plan.md` section 11 (S1a = first experiment of stage S1). The last line of every card is `scratch left behind: <size of its temp/ files, caches and checkpoints>, keep / move to D: / delete` (rules: `../temp/README.md`, helpers: `../training/scratch.py`).
 
 | folder | question | status |
 |---|---|---|

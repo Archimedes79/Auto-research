@@ -42,6 +42,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
+import scratch  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402
 from flow_viz import flow_rgb, wheel  # noqa: E402
@@ -83,14 +84,12 @@ def frames_seeded(seed):
 
 def dataset(seeds, name):
     """render the sequences of the given seeds (4 processes), cached in temp/checks/ (scratch, not in git)."""
-    path = f"temp/checks/flow_explains_{name}_dt{DT}_ss{SS}_{seeds[0]}_{len(seeds)}.pt"
-    if os.path.exists(path):
-        return torch.load(path, weights_only=False)        # our own scratch cache
-    import multiprocessing as mp
-    with mp.get_context("fork").Pool(4) as pool:
-        out = pool.map(frames_seeded, seeds, chunksize=8)
-    torch.save(out, path)
-    return out
+    def build(m):
+        import multiprocessing as mp
+        with mp.get_context("fork").Pool(4) as pool:
+            return pool.map(frames_seeded, seeds[:m], chunksize=8)
+    # temp/checks/flow_explains_<name>_dt<DT>_ss<SS>_<first seed>_<n>.pt: a bigger cache serves a smaller n; one built by another frames() is deleted
+    return scratch.cached(f"flow_explains_{name}_dt{DT}_ss{SS}_{seeds[0]}", build, len(seeds), sig=scratch.source_sig(frames, frames_seeded))
 
 
 def frames(rng):
@@ -139,21 +138,20 @@ def nuscenes_items(test, n, with_v1=False):
     sets), files in a fixed pseudo-random order (sorted by token). Cached in temp/checks (scratch)."""
     import glob
     import numpy as np
-    path = f"temp/checks/flow_explains_nusc_{'test' if test else 'train'}_{n}{'_v1' if with_v1 else ''}.pt"
-    if os.path.exists(path):
-        return torch.load(path, weights_only=False)        # our own scratch cache
-    out = []
-    for f in sorted(glob.glob("data/cache/gt/*_0.5_4_*.npz")):
-        scene = np.load(f, allow_pickle=True)["gt"].item()["cur"]["meta"]["scene"]
-        if (int(scene[:8], 16) % 5 == 0) != test:
-            continue
-        it = nuscenes_item(f, with_v1)
-        if it is not None:
-            out.append(it)
-            if len(out) == n:
-                break
-    torch.save(out, path)
-    return out
+    def build(m):
+        out = []
+        for f in sorted(glob.glob("data/cache/gt/*_0.5_4_*.npz")):
+            scene = np.load(f, allow_pickle=True)["gt"].item()["cur"]["meta"]["scene"]
+            if (int(scene[:8], 16) % 5 == 0) != test:
+                continue
+            it = nuscenes_item(f, with_v1)
+            if it is not None:
+                out.append(it)
+                if len(out) == m:
+                    break
+        return out
+    return scratch.cached("flow_explains_nusc" + ("_v1" if with_v1 else ""), build, n, split="test" if test else "train",
+                          deps=("data/cache/gt",), sig=scratch.source_sig(nuscenes_item))
 
 
 def radar_measure(f0, vgt, sigma_d=0.1, rate=0.5):

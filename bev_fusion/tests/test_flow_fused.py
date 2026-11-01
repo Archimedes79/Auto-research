@@ -47,6 +47,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, "training")
 sys.path.insert(0, "tests")
+import scratch  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from temporal import propagate  # noqa: E402
 
@@ -165,23 +166,24 @@ def item(path):
 
 
 def items(test, n):
-    path = f"temp/checks/flow_fused_nusc_{'test' if test else 'train'}_{n}.pt"
-    if os.path.exists(path):
-        return torch.load(path, weights_only=False)                    # our own scratch cache
-    out = []
-    for f in sorted(os.listdir("data/cache/radar")):                    # token -> its radar file (one per sample)
-        RADAR.setdefault(f.split("_")[0], []).append(os.path.join("data/cache/radar", f))
-    for f in sorted(glob.glob(f"data/cache/gt/*_0.5_4_{SIG}.npz")):
-        scene = np.load(f, allow_pickle=True)["gt"].item()["cur"]["meta"]["scene"]
-        if (int(scene[:8], 16) % 5 == 0) != test:
-            continue
-        it = item(f)
-        if it is not None:
-            out.append(it)
-            if len(out) == n:
-                break
-    torch.save(out, path)
-    return out
+    def build(m):
+        out = []
+        for f in sorted(os.listdir("data/cache/radar")):                # token -> its radar file (one per sample)
+            RADAR.setdefault(f.split("_")[0], []).append(os.path.join("data/cache/radar", f))
+        for f in sorted(glob.glob(f"data/cache/gt/*_0.5_4_{SIG}.npz")):
+            scene = np.load(f, allow_pickle=True)["gt"].item()["cur"]["meta"]["scene"]
+            if (int(scene[:8], 16) % 5 == 0) != test:
+                continue
+            it = item(f)
+            if it is not None:
+                out.append(it)
+                if len(out) == m:
+                    break
+        return out
+    # temp/checks/flow_fused_nusc_<split>_<n>.pt: a bigger cache serves a smaller n; one older than the GT or radar cache folder (any file added
+    # or replaced since) or built by another item() is deleted
+    return scratch.cached("flow_fused_nusc", build, n, split="test" if test else "train", sig=scratch.source_sig(item),
+                          deps=("data/cache/gt", "data/cache/radar"))
 
 
 def batch_of(data, idx):
