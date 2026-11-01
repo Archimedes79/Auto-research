@@ -13,7 +13,8 @@ What it does (paths from the problem's project.json, see project.py):
                 derived from the records, never synced between files)
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
   * stop        exit code 75 (trainsuite: the trainer was asked to stop and saved a checkpoint) is status "stopped": no done flag, no retry (not even when the log tail
-                holds a CUDA error of an earlier attempt), not counted as a failure in metrics.py; the id can be started again to resume; --after dependents are blocked
+                holds a CUDA error of an earlier attempt), not counted as a failure in metrics.py; the id is put ON HOLD (a HOLD file in its run record, hold.py): it is
+                refused ("held") and starts again only after the person's words (hold.py clear ID --words ...); --after dependents are blocked
   * card        a run needs its card: --hyp / --pred / --rule on the command line, else from the planned ledger row (ledger.py add); without
                 one it is refused (--no-card for smoke tests and data preparation, the ledger row then says "no card")
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
@@ -72,6 +73,7 @@ import time
 import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import hold as HOLD  # noqa: E402
 import machine_lock  # noqa: E402
 import project as P  # noqa: E402
 
@@ -356,7 +358,8 @@ def save_rec(path, rec, indent=1):
 
 
 def state_of(d):
-    """done | ok | failed | stopped | blocked | gpu_busy | timeout | running | stalled | '' from a run directory"""
+    """done | ok | failed | stopped | held | blocked | gpu_busy | timeout | running | stalled | '' from a run directory. `held`: the run id has a HOLD marker
+    (hold.py) and nothing runs: it does not start until the person's words clear it"""
     if os.path.exists(os.path.join(d, "done")):
         return "done"
     rec = record(d)
@@ -365,7 +368,7 @@ def state_of(d):
         if "launcher_pid" not in rec and not os.path.exists(os.path.join(d, "heartbeat")):
             return "running"  # a record of the launcher before heartbeats: nothing to judge it by
         return "stalled" if heartbeat_age(d) > STALE_S else "running"
-    return st
+    return "held" if HOLD.read(d) is not None else st
 
 
 def beat(hb, text=""):
@@ -456,7 +459,7 @@ def wait_after(records, ids, minutes, hb=None):
             st = state_of(os.path.join(records, i))
             if st in ("done", "ok"):  # ok = exit 0 whose done flag could not be written
                 continue
-            if st in ("failed", "gpu_busy", "blocked", "timeout", "stalled", "stopped"):
+            if st in ("failed", "gpu_busy", "blocked", "timeout", "stalled", "stopped", "held"):
                 return f"dependency {i} {st}"
             missing.append(i)
         if not missing:
@@ -659,6 +662,10 @@ def main():
             print(f"[{a.id}] refused: git cannot commit the snapshot here ({err}); set user.name / user.email in the repository, or --no-git")
             return 2
     d = os.path.join(records, a.id)
+    held = HOLD.read(d)
+    if held is not None:       # the person's decisions are acted on only when recorded (hard rule 6): a stopped run waits for their words, not for a chat's judgement
+        print(f"[{a.id}] refused: this run id is on HOLD ({HOLD.line(a.id, held)}). It starts again after the person's words: hold.py clear {a.id} --words \"<their words>\"")
+        return 2
     os.makedirs(d, exist_ok=True)
     claim = take_claim(d)  # two launchers of one id (two ticks, two chats) must not both start: the first to make the directory goes on
     if claim is None:
@@ -789,7 +796,9 @@ def main():
             rec["code_drift_check"] = drift_err
     status = "ok" if rc == 0 else "timeout" if timed_out else "stopped" if rc == EXIT_STOPPED else "failed"  # a command's own exit 124 is a failure, not the launcher's timeout
     if status == "stopped":
-        notes.append("stopped on request (exit 75 = the trainsuite stop code, a checkpoint should have been saved): start the same id again to resume; its dependents are blocked meanwhile")
+        HOLD.write(d, "run.py", "exit 75: the trainer was stopped on request (trainsuite), a checkpoint should have been saved", "(none recorded: ask the person; the stop request is in the run folder's STOPPED file)")
+        notes.append("stopped on request (exit 75 = the trainsuite stop code, a checkpoint should have been saved) and ON HOLD: the same id starts again only after the person's words "
+                     "(hold.py clear); its dependents are blocked meanwhile")
     rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
     try:
         save_rec(os.path.join(d, "run.json"), rec)

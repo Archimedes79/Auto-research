@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# ledger note of pitch.maps_lfl (single-quoted strings: no re-parse of parentheses or slashes)
+cd "$(dirname "$0")/../.." || exit 1
+export AR_PROJECT=../bev_fusion
+python3 ../autoresearch/tools/ledger.py note pitch.maps_lfl \
+  --result 'GPU scoring, 400 identical frames (43 val scenes), both systems at threshold 0.5, share of GaussianCaR; dual chain seed 0 / seed 1: drivable 0.94 / 0.94, walkway 0.57 / 0.62, carpark 0.34 / 0.31, crossing 0.26 / 0.31, lane divider 0.50 / 0.52, road divider 0.72 / 0.76. BEVFusion-only (same layer order): 0.93 / 0.59 / 0.46 / 0.27 / 0.53 / 0.74; image-only control: 0.82 / 0.33 / 0.27 / 0.00 / 0.28 / 0.38. Each system at its best of 3 thresholds: lane divider 0.46 / 0.48 and road divider 0.66 / 0.70 (GaussianCaR gains more from its best threshold: 0.691 -> 0.761, 0.634 -> 0.697), the other layers move by at most 0.03. Prediction: seed 1 inside all six ranges, seed 0 inside four (walkway 0.567 against 0.57, crossing 0.26 against 0.28-0.35); correction of 2026-11-01 09:40 after the numbers review (the first note said five of six for both seeds). Tables: temp/pitch/maps_lfl.md' \
+  --decision 'measurement: replaces the indicative shares (brief section 4, deck slide soa); the identical-frames estimate of the brief was within 0.06 on every layer (carpark seed 1 0.31 against 0.36-0.37); criterion a of the case today: 4 of 6 layers at >= 0.50 (drivable 0.94 against 0.90 needed), carpark and crossing below; the GPU path is checked by pitch.maps_lfl_check'
+python3 ../autoresearch/tools/ledger.py tail 2>&1 | grep -E "pitch.maps" | cut -c1-200

@@ -124,3 +124,77 @@ except ValueError:
 finally:
     FrontRadarDataset.__init__ = orig
 print("test_camera_features dual ok: shapes, branch select [I,0] / [0,I], gradients to both reductions and the merge, refusals")
+
+# (d) the camera slot table (model.CAMERAS): the one place that names the feature sources of every kind. The dataset, collate_cached, the cached
+# model and train.build read it; the checks below pin what a checkpoint and a batch depend on (names, order), not the kinds' strings.
+import dataclasses  # noqa: E402
+
+import feature_cache  # noqa: E402
+from interface import INPUTS  # noqa: E402
+from model import CAMERAS, CAMERA_FEATURES  # noqa: E402
+import train as _train  # noqa: E402
+
+assert tuple(CAMERAS) == CAMERA_FEATURES == ("dualbev", "bevfusion", "dual"), CAMERA_FEATURES
+tcfg = {f.name for f in dataclasses.fields(_train.TrainConfig)}
+for kind, srcs in CAMERAS.items():
+    assert srcs[0].suffix == "" and all(s.suffix for s in srcs[1:]) and len({s.suffix for s in srcs}) == len(srcs), (kind, srcs)
+    for s in srcs:                                              # every batch field a source reads is in the input contract
+        assert s.cache in tcfg, (kind, s.cache)
+        assert "prob" + s.suffix in INPUTS and "ctx" + s.suffix in INPUTS, (kind, s)
+        assert s.suffix == "" or "ida" + s.suffix in INPUTS, (kind, s)
+assert [(s.features, s.cache, s.suffix) for s in CAMERAS["dual"]] == [("dualbev", "feature_cache", ""), ("bevfusion", "feature_cache2", "2")]
+assert len(CAMERAS["dualbev"]) == len(CAMERAS["bevfusion"]) == 1
+# what an existing checkpoint depends on: key names of the second source and the merge, and the order the parameters are registered in
+keys = set(md.state_dict())
+for k in ("lift2.depth_centres", "lift2.z_levels", "cam_reduce2.0.weight", "cam_reduce2.1.weight", "cam_merge.0.weight", "cam_merge.1.running_mean"):
+    assert k in keys, f"checkpoint key {k} missing from the dual model"
+assert "lift3.depth_centres" not in keys and "cam_merge.0.weight" not in set(m0.state_dict()), "single-source kinds must not carry the merge"
+first = {}
+for i, (n, _) in enumerate(md.named_parameters()):
+    first.setdefault(n.split(".")[0], i)
+assert first["cam_reduce"] < first["cam_reduce2"] < first["cam_merge"] < first["fusion"], first      # optimizer states are positional
+
+# the dataset and the collate follow the table (fake stores, fake base item: no data is read)
+class _Store:
+    def __init__(self, n_prob, hw):
+        self.n_prob, self.hw, self.root = n_prob, hw, "fake_cache"
+
+    def feature_hw(self):
+        return self.hw
+
+    def get(self, token):
+        return torch.rand(self.n_prob, *self.hw), torch.rand(80, *self.hw)
+
+
+try:
+    orig_init, orig_get = FrontRadarDataset.__init__, FrontRadarDataset.__getitem__
+    orig_collate = feature_cache.collate
+    FrontRadarDataset.__init__ = lambda self, *a, **k: setattr(self, "ida", ida0)
+    FrontRadarDataset.__getitem__ = lambda self, i: {"token": "t", "frames": [{"token": "a"}, {"token": "b"}], "ida": self.ida}
+    feature_cache.collate = lambda items: {"ida": items[0]["ida"]}
+    d1 = CachedFrontRadarDataset(None, None, store=_Store(118, (16, 44)), camera_features="dualbev")
+    d2 = CachedFrontRadarDataset(None, None, store=_Store(118, (16, 44)), store2=_Store(118, (32, 88)), camera_features="dual")
+    db = CachedFrontRadarDataset(None, None, store=_Store(118, (32, 88)), camera_features="bevfusion")
+    assert [s.suffix for s in d2.sources] == ["", "2"] and d2.stores[1] is not None
+    assert torch.equal(d2.ida, ida0) and torch.equal(d2.ida2, bevfusion_ida()) and torch.equal(db.ida, bevfusion_ida()) and torch.equal(d1.ida, ida0)
+    it1, it2, itb = d1[0], d2[0], db[0]
+    assert "ida2" not in it1 and "prob2" not in it1["frames"][0] and "ida2" not in itb
+    assert torch.equal(it2["ida2"], bevfusion_ida()) and torch.equal(it2["ida"], ida0)
+    assert it2["frames"][0]["prob2"].shape == (118, 32, 88) and it2["frames"][0]["ctx2"].shape == (80, 32, 88) and it2["frames"][1]["prob"].shape == (118, 16, 44)
+    b1, b2 = feature_cache.collate_cached([it1, it1]), feature_cache.collate_cached([it2, it2])
+    assert b1["prob"].shape == (2, 2, 118, 16, 44) and b1["ctx"].shape == (2, 2, 80, 16, 44) and not any(k.endswith("2") for k in b1), sorted(b1)
+    assert b2["prob2"].shape == (2, 2, 118, 32, 88) and b2["ctx2"].shape == (2, 2, 80, 32, 88) and torch.equal(b2["ida2"], bevfusion_ida())
+    assert torch.equal(b2["ida"], ida0) and b2["hw"] == feature_cache.DST_HW
+    for bad in (dict(store=_Store(118, (16, 44)), store2=_Store(118, (32, 88)), camera_features="dualbev"),     # store2 for a one-source kind
+                dict(store=_Store(118, (16, 44)), camera_features="dual"),                                       # a second source without store2
+                dict(store=_Store(118, (32, 88)), camera_features="dualbev"),                                    # caches swapped: feature size
+                dict(store=_Store(118, (16, 44)), store2=_Store(118, (16, 44)), camera_features="dual"),
+                dict(store=_Store(118, (16, 44)), camera_features="nonsense")):
+        try:
+            CachedFrontRadarDataset(None, None, **bad)
+            raise AssertionError(f"{sorted(bad)} {bad['camera_features']} must be refused")
+        except ValueError:
+            pass
+finally:
+    FrontRadarDataset.__init__, FrontRadarDataset.__getitem__, feature_cache.collate = orig_init, orig_get, orig_collate
+print("test_camera_features table ok: CAMERAS names, checkpoint keys and registration order, dataset items and collate per source, refusals")

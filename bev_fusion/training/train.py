@@ -49,7 +49,7 @@ try:
     from .interface import check_inputs, check_outputs
     from .loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from .losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
-    from .model import BEVFusionModel, ModelConfig
+    from .model import CAMERAS, BEVFusionModel, ModelConfig
     from .nuscenes_dataset import FrontRadarDataset, available_scenes, collate
     from .radar_encoder import aux_weight
 except ImportError:                                   # run as a script
@@ -59,7 +59,7 @@ except ImportError:                                   # run as a script
     from interface import check_inputs, check_outputs
     from loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
-    from model import BEVFusionModel, ModelConfig
+    from model import CAMERAS, BEVFusionModel, ModelConfig
     from nuscenes_dataset import FrontRadarDataset, available_scenes, collate
     from radar_encoder import aux_weight
 
@@ -150,8 +150,9 @@ def build(cfg):
     cached = bool(cfg.feature_cache)
     if mcfg.camera_features != "dualbev" and not cached:
         raise ValueError(f"camera_features={mcfg.camera_features!r} needs a feature_cache")
-    if (mcfg.camera_features == "dual") != bool(cfg.feature_cache2):
-        raise ValueError("camera_features 'dual' needs feature_cache2 (the BEVFusion cache), and feature_cache2 needs 'dual'")
+    if (("feature_cache2" in {s.cache for s in CAMERAS[mcfg.camera_features]}) != bool(cfg.feature_cache2)):
+        raise ValueError(f"camera_features {mcfg.camera_features!r} and feature_cache2 do not match: the kinds with a second feature source "
+                         "('dual') need feature_cache2 (the BEVFusion cache), and feature_cache2 needs such a kind")
     if mcfg.lane_branch and cached and not cfg.lane_images:
         raise ValueError("model.lane_branch with a feature_cache needs lane_images (lane_branch.py build-cache)")
     model = CachedBEVFusionModel(mcfg) if cached else BEVFusionModel(mcfg)

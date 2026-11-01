@@ -95,14 +95,30 @@ try:
     stp = go("S.stop", ["bash", "-c", "echo 'CUDA error: unknown error'; exit 75"])
     assert stp.returncode == 75 and "1 attempt" in stp.stdout and " stopped (exit 75" in stp.stdout and not os.path.exists(f"{T}/runs/S.stop/done"), stp.stdout
     assert rows()["S.stop"]["status"] == "stopped" and "stopped on request" in rows()["S.stop"]["notes"], rows()["S.stop"]
-    assert RUN.state_of(f"{T}/runs/S.stop") == "stopped"
+    assert os.path.exists(f"{T}/runs/S.stop/HOLD") and json.load(open(f"{T}/runs/S.stop/HOLD"))["who"] == "run.py" and "ON HOLD" in rows()["S.stop"]["notes"]
+    assert RUN.state_of(f"{T}/runs/S.stop") == "held" and RUN.record(f"{T}/runs/S.stop")["status"] == "stopped", "the record says stopped, the state says held (a hold marker lies on it)"
     import metrics as MET
     assert "stopped" not in MET.FAILED, "a stop on request is no failed run"
     import schedule as SC0
     assert SC0.derived([dict(item="S.stopi", state="planned", run_ids="S.stop", resource="gpu")], f"{T}/runs")[0]["state"] == "blocked"
     aft = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.afterstop", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.stop", "--wait-after", "0", "--", "bash", "-c", "echo x"],
                          capture_output=True, text=True, env=env)       # --wait-after is an integer (minutes): 0, so a missing fix fails the test instead of waiting for hours
-    assert aft.returncode == 3 and "dependency S.stop stopped" in aft.stdout, aft.stdout
+    assert aft.returncode == 3 and "dependency S.stop held" in aft.stdout, aft.stdout
+    # hold marker (autoresearch/coordination.md): the same id is refused, the stopped record is not overwritten, a chat's own judgement does not clear it, the person's words do and
+    # the ledger row keeps them; then the id resumes
+    refused_ = go("S.stop", ["bash", "-c", "echo resumed"])
+    assert refused_.returncode == 2 and "on HOLD" in refused_.stdout and "hold.py clear S.stop" in refused_.stdout and RUN.record(f"{T}/runs/S.stop")["status"] == "stopped", refused_.stdout
+    hold_cmd = lambda *a: subprocess.run([sys.executable, f"{HERE}/hold.py", *a], capture_output=True, text=True, env=env)  # noqa: E731
+    nowords = hold_cmd("clear", "S.stop")
+    assert nowords.returncode != 0 and os.path.exists(f"{T}/runs/S.stop/HOLD") and hold_cmd("clear", "S.stop", "--words", "  ").returncode != 0
+    assert "S.stop: since" in hold_cmd("show").stdout and "no holds" in hold_cmd("show", "S.afterstop").stdout
+    cleared = hold_cmd("clear", "S.stop", "--words", "Mirko: resume it")
+    assert cleared.returncode == 0 and not os.path.exists(f"{T}/runs/S.stop/HOLD") and "Mirko: resume it" in rows()["S.stop"]["notes"] and "hold cleared" in rows()["S.stop"]["notes"], (cleared.stdout, rows()["S.stop"])
+    assert RUN.state_of(f"{T}/runs/S.stop") == "stopped"
+    hold_cmd("set", "S.ok", "--by", "selftest", "--reason", "a finished id the person wants left alone", "--words", "relayed by selftest: do not run it again")      # a hold on a finished id too
+    again = go("S.ok", ["bash", "-c", "echo again"], "--again")
+    assert again.returncode == 2 and "on HOLD" in again.stdout and os.path.exists(f"{T}/runs/S.ok/done"), again.stdout
+    assert hold_cmd("clear", "S.ok", "--words", "Mirko: fine").returncode == 0
     res = go("S.stop", ["bash", "-c", "echo resumed"])
     assert res.returncode == 0 and rows()["S.stop"]["status"] == "ok" and "attempt after stopped" in rows()["S.stop"]["notes"], (res.stdout, rows()["S.stop"])
     # a stopped run whose launcher died before the ledger write: `ledger.py sync` adds its row from the record, with the status "stopped"
