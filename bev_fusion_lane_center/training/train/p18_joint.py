@@ -139,6 +139,7 @@ def main():
         dl = torch.utils.data.DataLoader(ds, batch_size=a.bs, shuffle=False, sampler=sampler, num_workers=a.workers, collate_fn=PD.collate, drop_last=True, persistent_workers=True, prefetch_factor=3)
     else:
         ds, dl = PD.loader("train", bs=a.bs, workers=a.workers, with_prev=False)
+    bad_steps = 0                                  # consecutive steps with a non-finite loss: a run that never gets a finite one must fail, not loop for ever
     while it < a.iters:
         for b in dl:
             b = {k: (v.to(DEV, non_blocking=True) if torch.is_tensor(v) else v) for k, v in b.items()}
@@ -182,7 +183,11 @@ def main():
             loss = lroute + a.lam * lb
             if not torch.isfinite(loss):
                 opt.zero_grad(set_to_none=True)
+                bad_steps += 1
+                if bad_steps >= 20:
+                    raise RuntimeError(f"{bad_steps} non-finite losses in a row at step {it}: the run is failed (no done flag)")
                 continue
+            bad_steps = 0
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.unscale_(opt)

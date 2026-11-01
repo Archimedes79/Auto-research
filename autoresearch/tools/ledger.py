@@ -137,6 +137,7 @@ def main():
         ap.add_argument("--" + c, default=None)
     ap.add_argument("-n", type=int, default=15)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true", help="change the hypothesis / prediction / rule of a row that has started (the old text goes into the notes)")
     a = ap.parse_args()
     if a.cmd in ("note", "add") and not a.id:
         ap.error(f"{a.cmd} needs a run id (a row without an id would be written)")
@@ -154,10 +155,16 @@ def main():
             rows.append(row)
             if a.cmd == "note":  # a typo in an id would otherwise pass silently as a new planned row
                 print(f"note: {a.id} had no ledger row; a new planned row was made (check the id)", file=sys.stderr)
-        for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"), ("notes", "notes"),
-                       ("status", "status"), ("pred", "prediction"), ("rule", "rule")):
-            if getattr(a, k) is not None:
-                row[col] = getattr(a, k)
+        new = {col: getattr(a, k) for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"),
+                                                 ("notes", "notes"), ("status", "status"), ("pred", "prediction"), ("rule", "rule")) if getattr(a, k) is not None}
+        started = row.get("status") not in (None, "", "planned")
+        frozen = [c for c in ("hypothesis", "prediction", "rule") if started and row.get(c) and c in new and row[c] != new[c]]
+        if frozen and not a.force:    # hard rule 4: the rule is written before the run; a started row keeps it (nothing is saved)
+            sys.exit(f"{a.id}: the {', '.join(frozen)} of a row with status {row.get('status')} is written before the run and stays; --force changes it (the old text goes into the notes)")
+        old_texts = {c: row[c] for c in frozen}
+        row.update(new)
+        for c, txt in old_texts.items():
+            row["notes"] = ((row.get("notes") or "") + f" | {c} before the change: {txt}").strip(" |")
         save(rows)
     render()
 

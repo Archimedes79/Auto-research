@@ -243,6 +243,17 @@ try:
     # ledger note + render
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "S.ok", "--result", "x 1", "--decision", "KEEP"], check=True, env=env, capture_output=True)
     assert "KEEP" in open(f"{T}/LEDGER.md", encoding="utf-8").read()
+    # the card of a row that has started (hypothesis, prediction, rule) is written before the run and stays; --force changes it and keeps the old text in the notes
+    led = lambda *args: subprocess.run([sys.executable, f"{HERE}/ledger.py", *args], capture_output=True, text=True, env=env)  # noqa: E731
+    rows_ = lambda: {x["id"]: x for x in csv.DictReader(open(f"{T}/LEDGER.csv", newline="", encoding="utf-8"))}
+    assert rows_()["S.ok"]["status"] == "ok" and rows_()["S.ok"]["prediction"] == "x >= 1"
+    bad_ = led("note", "S.ok", "--pred", "x >= 0.5")
+    assert bad_.returncode != 0 and "written before the run" in bad_.stdout + bad_.stderr and rows_()["S.ok"]["prediction"] == "x >= 1", (bad_.stdout, bad_.stderr)
+    assert led("note", "S.ok", "--pred", "x >= 1", "--result", "r").returncode == 0, "the same text is no change"
+    assert led("note", "S.ok", "--pred", "x >= 0.5", "--force").returncode == 0
+    assert rows_()["S.ok"]["prediction"] == "x >= 0.5" and "prediction before the change: x >= 1" in rows_()["S.ok"]["notes"]
+    assert led("add", "S.fresh", "--pred", "a").returncode == 0 and led("add", "S.fresh", "--pred", "b").returncode == 0, "a planned row may still be rewritten"
+    led("note", "S.ok", "--pred", "x >= 1", "--force")
     # decide
     from decide import decide
     assert decide([0.746, 0.741], [0.725, 0.722])[0] == "KEEP"

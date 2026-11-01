@@ -20,7 +20,7 @@ The big derived arrays live in the **WSL home** (`\\wsl$\Ubuntu-22.04\home\ml`, 
 | `~/exp_gcar_b123/p8, p10, p14` | 11 / 5.4 / 6.4 GB | token caches and chain data of loops 8-16 | `p8_*`, `p10_*`, `p14_chain_data.py`, `p16_chain_data.py` |
 | `~/exp_gcar_b123/*.npy, *.pkl, *.npz` | ~4 GB | ground-truth graphs (`graph_gt_{train,val}.pkl`), direction / node / route maps, poses, SD-map priors and registrations | `training/data/prep/make_*.py`, `prior_precompute.py`, `sd_precompute.py` |
 | `~/exp_crn_b123`, `~/exp_crn_mini`, `~/exp_gcar_mini` | 12 / 5.7 GB / small | CRN features (loop 1), dense ground-truth points `*_gt_pts_exact.npy`, mini caches | `training/data/prep/crn_*` |
-| `~/work/CRN`, `gaussiancar`, `bevfusion`, `gaussiancar_ckpt` | 2.4 GB | clones of the foundation code and weights | `../literature/repos/README.md` |
+| `~/work/CRN`, `gaussiancar`, `bevfusion`, `gaussiancar_ckpt` | 2.4 GB | clones of the foundation code and weights | `../literature/code/README.md` |
 | `~/miniconda3/envs/gcar` | | environment, package list in `../tools/env/environment_gcar.txt` / `.yml` | `tools/env/setup/setup_gcar_env.sh` |
 
 Rebuilding a cache from nothing: download nuScenes (ask first), run the `data_prep` scripts in the order of the loop-1/2 notes (`experiment_execution/history/`), then the feature extraction (long on one RTX 3060; timings are in the loop-2 notes). Do not delete these caches to "clean up".
