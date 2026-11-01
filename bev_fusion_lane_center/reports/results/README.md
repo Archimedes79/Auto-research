@@ -1,7 +1,8 @@
-# results - the status results of a week, one folder per week
+# results - the status results of a week, one folder per report
 
 Each `weekN/` folder holds the short result record in git (`WeekN_Results.md`) and, **not in git** (binaries are ignored by `.gitignore`), the extensive report as PDF (`WeekN_Status_Report_EN.pdf`), its figures (`figures/`) and example videos (`video/`). The builders are `../build/reports/fig_w3_status.py` and `build_w3_status_report.py`, the PDF is printed by `../build/reports/print_weekly.ps1`.
 
 | folder | content |
 |---|---|
-| `week3/` | 27 October - 2 November 2026: the lane prototype of record, the BEV velocity head, the E2E set-up, tools and disk (`Week3_Results.md`; PDF with 10 pages, two example videos) |
+| `week3/` | 27 October - 2 November 2026, **Spurmitte on the frozen GaussianCaR features only**: the prototype of record, the week's experiments, the limits of the design (`Week3_Results.md`; PDF, one example video) |
+| `week3_framework/` | assets for a separate report that is not written yet: the BEV system, the end-to-end set-up (gradient measurements, card E269), the tools and the disk work of the same week (figures and one dashboard video, not in git; the first combined version of the report builder is git commit `c0734ec`) |
