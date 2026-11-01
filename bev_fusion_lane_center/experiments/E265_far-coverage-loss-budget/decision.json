@@ -1,0 +1,61 @@
+{
+ "id": "E265",
+ "verdict": "KEEP",
+ "metric": "lanes_found",
+ "variant": "a",
+ "control": "c",
+ "effect": 0.01146,
+ "diffs": [
+  0.01285,
+  0.01021,
+  0.01143,
+  0.01134
+ ],
+ "pairing": "position",
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": [
+  0.00997,
+  0.01614
+ ],
+ "why": "headline lanes_found a-c +0.0115 beyond the band 0.01, interval [+0.010, +0.016], 4 paired seed(s); every clause holds",
+ "prediction": "prediction +0.012, measured +0.0115 (error -0.0005)",
+ "clauses": [
+  {
+   "text": "lanes_found a-c +0.0115 (want >= +0.010, band 0.01)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "R@1_far a-c +0.0065 (want >= +0.004)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "Q a-c +0.0039 (want >= -0.003)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "topo_F1 a-c -0.0008 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "false_len_frac a-c -0.0016 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "dup_frac a-c -0.0006 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "P@1_far a-c -0.0029 (want >= -0.010)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-11-01 04:03"
+}

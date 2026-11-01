@@ -11,14 +11,17 @@ screening study of blocks, not a final system.
 Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps (`../t4_soa_front`, `../t6_soa_gap`, `../t7_lane_branch`, `../t8_bevfeat`,
 `../t10_dual_features`, `../t11_vel_cause`). Numbers: cold VAL, the same 1000 keyframes of the 82 validation scenes unless a row says otherwise; maps from
 `runs/*/eval/metrics.json` (`temp/pitch/ladder.py`), objects in the front sector (0-50 m, +-32.3 deg) from `../t4_soa_front/results_*.md` and
-`../t10_dual_features/results_x50.md` (`temp/t4/compare_front.py`). Seeds: most arms have one seed; where a seed twin exists the row says so.
+`../t10_dual_features/results_x50.md` and `results_x50_2seeds.md` (`temp/t4/compare_front.py`). Seeds: most arms have one seed; where a seed twin exists the row says so.
+Counts and dates as of 2026-11-01 04:30. Reviewed against the primary files by a fresh reviewer at 04:20 (its corrections are applied).
 
 ### What changes in the bottom line
 
-1. **The lever is the image features, not the blocks.** Eleven block exchanges tied; swapping the frozen detection-trained stride-16 image features for map-trained
-   stride-8 BEVFusion features nearly doubled the maps (lane divider 0.191 -> 0.351 / 0.345, walkway 0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165) and halved
-   the objects (front mAP2 0.367 / 0.368 -> 0.183 / 0.180). Both feature sets in one chain keep both, on two seeds: lane divider 0.335 / 0.350, walkway 0.340 / 0.354, drivable
-   0.806 / 0.807, front mAP2 0.361 / 0.364 against the control's 0.367 / 0.368 (the seed twin ran on a later code snapshot and was resumed once). The 3000-step dual chain beats the start recipe trained with 4.7 x the optimiser steps (7000 x accumulation 2; a different config and frame set)
+1. **The lever is the image features, not the blocks.** Eight swaps of the trunk, fusion, temporal and radar blocks tied (the study's eleven exchanges: 7 ties, 4 worse); swapping the frozen
+   detection-trained stride-16 image features for map-trained stride-8 BEVFusion features raised lane divider, walkway and road divider x1.8 - 2.0 (lane divider 0.191 -> 0.351 / 0.345, walkway
+   0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165; drivable x1.1, carpark x1.5) and halved the objects (front mAP2 0.367 / 0.368 -> 0.183 / 0.180). Both feature sets in one chain keep
+   the maps and nearly keep the objects, on two seeds: lane divider 0.335 / 0.350, walkway 0.340 / 0.354, drivable 0.806 / 0.807 (drivable@0.5 m), front mAP2 0.361 / 0.364 against the control's
+   0.367 / 0.368 (0.003 - 0.007 lower in every pairing, inside the rule's 0.054 band, bootstrap intervals touching zero; both second seeds were resumed after a crash on a later code snapshot).
+   The 3000-step dual chain beats the start recipe trained with 4.7 x the training samples (7000 steps at accumulation 2 = 2.3 x the steps at double the batch; a different config and frame set)
    on five of six map layers (ladder below). The better features are a published, map-trained model's: the saving is partly borrowed compute. The swap is a bundle (backbone,
    stride, objective and depth head differ), planned in plan 2.8 with a qualitative rule, not a numeric card. Not claimed: the rare two-wheeler class and the 3-class mAP
    (two-wheeler AP@2 control 0.121 / 0.051, dual 0.016 / 0.061; 3-class mAP control 0.251 / 0.235, dual 0.221 / 0.234: inside the control's own seed spread); an earlier one-seed gain of
@@ -27,7 +30,7 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
    branches); 24 of the 29 classified runs are dead. Try 9 (loss weight x10) could not help a dead ReLU layer. The radar Doppler read-out at the GT boxes holds 0.79 of the
    velocity of moving vehicles (upper bound, GT heading), our best learned heads 0.22 - 0.25.
 3. **The SOA gap is measured like for like where a published system can be run on our frames**: DualBEV (front camera only) 0.250 front mAP2 against our camera-only 0.242 and
-   camera + radar 0.359 - 0.400; GaussianCaR on the maps (section 8 of the update below). Still not comparable with published leaderboards.
+   camera + radar 0.359 - 0.400; GaussianCaR on the maps (tables below). Still not comparable with published leaderboards.
 4. **Three errors found since** (they continue the list of section 9): the FPN-LSS inputs of our trunk were concatenated in the wrong order for the pre-trained weights
    (`t4_fpn_order`: a tie); the GT cache is built from live code, so runs of different days had different object targets (same-code controls, decision D29);
    the velocity branch was dead (above).
@@ -38,12 +41,12 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 |---|---|---|---|---|---|
 | 9 | does a larger velocity loss weight make the head learn? | `t3_vel10`: weight 10 | - | front mAP2 0.360 (reference 0.375 / 0.359); the velocity output stays zero (largest predicted speed 0.031 m/s) | no effect, not adopted; cause found in 16 |
 | 10 | does the wrong FPN-LSS input order of our trunk matter? | `t4_fpn_order`: original order (flag) | - | front mAP2 0.367 against 0.375 / 0.359 | TIE, flag stays default off |
-| 11 | how far is the system from a SOA camera detector in the front area? | DualBEV run with CAM_FRONT only, unchanged weights, same 1000 frames (`t4_soa_front`) | DualBEV 0.40 - 0.55 (miss) | DualBEV 0.250; ours camera-only 0.242; camera + radar 0.359 / 0.375 (3000 steps), 0.400 (7000 x 2) | camera path = SOA camera path; radar +0.11 - 0.15 (intervals exclude 0) |
-| 12 | why are the maps far from the SOA? | GaussianCaR scored by our metric, oracles, probes, a maps-only run (`t6_soa_gap`) | - | ours at 17 - 55 % of GaussianCaR except drivable (85 %); not range, threshold, over-fitting, BEV network or labels; task competition small (+0.015 - 0.051) | main candidate: frozen detection-trained stride-16 features (M6) plus the training budget |
+| 11 | how far is the system from a SOA camera detector in the front area? | DualBEV run with CAM_FRONT only, unchanged weights, same 1000 frames (`t4_soa_front`) | DualBEV 0.40 - 0.55 (miss) | DualBEV 0.250; ours camera-only 0.242; camera + radar 0.359 / 0.375 (3000 steps), 0.400 (7000 x 2) | camera path within 0.01 of the SOA port (-0.009, interval [-0.021, -0.002]); radar +0.11 - 0.15 above it (intervals [+0.093, +0.169]) |
+| 12 | why are the maps far from the SOA? | GaussianCaR scored by our metric, oracles, probes, a maps-only run (`t6_soa_gap`) | - | our 7000 x 2-step chain at 17 - 55 % of GaussianCaR on 400 frames except drivable (85 %); not range, threshold, over-fitting (big areas), BEV blocks (eight swaps tied) or labels; task competition small (+0.015 - 0.051) | main candidate: frozen detection-trained stride-16 features (M6) plus the training budget |
 | 13 | do stride-4 image details help the thin map classes? | `t7_res4` / `t7_rgb`: a frozen ResNet stride-4 branch lifted into the BEV | lane divider +0.04 | res4: lane divider +0.065 / +0.042 (two seeds), road divider IoU@1 +0.119 / +0.096, walkway and crossing unchanged; rgb +0.015 | helps the thin lines, not the area classes; verdict waits for the equal-GT control |
-| 14 | are frozen detection-trained features the limit of the maps? | `t8_bevfeat`: cached BEVFusion map-trained stride-8 features, same chain, same-code control `t8_ctl` | maps up | maps x1.8 - 1.9 (two seeds agree), front mAP2 0.367 -> 0.183 / 0.180, pedestrians gone | supports M6; neither feature set alone gives both |
+| 14 | are frozen detection-trained features the limit of the maps? | `t8_bevfeat`: cached BEVFusion map-trained stride-8 features, same chain, same-code control `t8_ctl` | maps up | lane divider, walkway, road divider x1.8 - 2.0, drivable x1.1, carpark x1.5 (two seeds agree); front mAP2 0.367 -> 0.183 / 0.180, pedestrians gone | supports M6; neither feature set alone gives both |
 | 15 | can both be had? | `t10_dual`: both caches, two lifts, merged by a 1x1 convolution | lane divider 0.34, drivable 0.80, walkway 0.33, front mAP2 0.33 (0.25 - 0.38), pedestrian AP@2 0.15 | seed 0 / seed 1: lane divider 0.335 / 0.350, drivable 0.806 / 0.807, walkway 0.340 / 0.354, front mAP2 0.361 / 0.364, pedestrian AP@2 0.199 / 0.202 | rule E1 holds on both seeds; the dual chain is the proposed new base (promotion is Mirko's) |
-| 16 | why is the box velocity zero in every 3000-step run? | diagnosis from stored checkpoints, detections and a probe (`t11_vel_cause`) | active share < 1 % at the centres; linear read-out skill >= 0.15 | 0.011 % (other branches 13 - 50 %); 24 of 29 classified runs dead (the live ones have an effective batch of 6 or more); the linear read-out gives 0.019 (that prediction failed) | a diagnosis, not yet a fix: fresh branch + moving / static gate (B') and with accumulation 2 (B2) queued, not run; BatchNorm is a ranked candidate without a card |
+| 16 | why is the box velocity zero in every 3000-step run? | diagnosis from stored checkpoints, detections and a probe (`t11_vel_cause`) | active share < 1 % at the centres; linear read-out skill >= 0.15 | 0.011 % (other branches 13 - 50 %); 24 of 29 classified runs dead (the live ones have an effective batch of 6 or more); the linear read-out gives 0.019 (that prediction failed) | a diagnosis, not yet a fix: B' (fresh branch + moving / static gate) has trained, its evaluation is pending; B2 (accumulation 2) is running; BatchNorm is a ranked candidate without a card |
 
 ### Maps: the ladder (same metric, VAL, `seg_fov`, dt 0)
 
@@ -51,7 +54,7 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 |---|---|---|---|---|---|---|---|---|---|
 | t2_ref_s0 | start, 3000 steps | 3000 | 1000 | 0.666 | 0.191 | 0.106 | 0.002 | 0.181 | 0.220 |
 | t3_ref_long | start, 6000 steps | 6000 | 1000 | 0.689 | 0.225 | 0.155 | 0.057 | 0.234 | 0.297 |
-| t1_r4_soa | start, 7000 x 2 steps (4.7 x the training) | 7000 | 3109 | 0.698 | 0.244 | 0.162 | 0.093 | 0.274 | 0.322 |
+| t1_r4_soa | start, 7000 x 2 steps (4.7 x the training samples) | 7000 | 3109 | 0.698 | 0.244 | 0.162 | 0.093 | 0.274 | 0.322 |
 | t8_ctl_s0 | same-code control of t8 / t10 | 3000 | 1000 | 0.668 | 0.178 | 0.115 | 0.002 | 0.191 | 0.224 |
 | t8_bevfeat_s0 | map-trained features | 3000 | 1000 | 0.754 | 0.339 | 0.173 | 0.145 | 0.351 | 0.437 |
 | t8_bevfeat_s1 | map-trained features, seed 1 | 3000 | 1000 | 0.759 | 0.342 | 0.168 | 0.165 | 0.345 | 0.439 |
@@ -60,12 +63,15 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 | t8_ctl_s1 | same-code control, seed 1 | 3000 | 1000 | 0.668 | 0.176 | 0.106 | 0.000 | 0.180 | 0.227 |
 
 The 3000-step dual chain is above the 7000 x 2-step start on drivable, walkway, crossing, lane divider and road divider and below it on carpark (0.144 against 0.162); the
-frame sets differ (3109 against 1000; the same model scores 0.719 on 400 frames against 0.698 on 3109, so the subset effect is about 0.02).
+frame sets differ (3109 against 1000 for the 7000 x 2 run, which differ by at most 0.003; the 400 GaussianCaR frames are easier, see below).
 
 ### Maps against the SOA (GaussianCaR), indicative until the same-frames re-score is done
 
 Share of the SOA's IoU per layer: our stored VAL-1000 numbers (`temp/pitch/indicative.py`) over GaussianCaR's numbers on the 400 frames of `../t6_soa_gap` (same metric, camera cells,
-threshold 0.5; the frame sets differ, so read the shares to about +-0.03). The same-frames re-score of `t10_dual_s0`, `t8_ctl_s0` and `t8_bevfeat_s0` with `temp/soa_gap/map_ref.py` is queued behind the trainings.
+threshold 0.5). The frame sets differ, and the 400 GaussianCaR frames are easier: our 7000 x 2 model scores x1.03 / 1.04 / 1.70 / 0.99 / 1.08 / 1.10 higher on them than on 1000 frames
+(drivable, walkway, carpark, crossing, lane divider, road divider; `temp/pitch/subset_effect.py`), so the shares below are conservative: scaled by those ratios the dual chain would stand at about
+92 / 59 - 62 / 36 - 37 / 28 - 32 / 52 - 54 / 76 % on identical frames (an estimate with another model's ratios). The same-frames re-score of `t10_dual_s0`, `t8_ctl_s0` and `t8_bevfeat_s0` with
+`temp/soa_gap/map_ref_dev.py` needs a quiet GPU window (a 400-frame CPU run takes 8 GB of host memory and cannot run next to a training on this box).
 
 | layer | GaussianCaR | start (`t2_ref_s0`) | same-code control | map-trained features | both feature sets |
 |---|---|---|---|---|---|
@@ -81,14 +87,14 @@ divider.
 
 ### Weak spots, ranked (replaces section 10)
 
-1. **Velocity**: the branch is dead; fresh branch, BatchNorm, gate and a Doppler read-out are queued (`t11_vel_hurdle`, `t11_motion_field`).
+1. **Velocity**: the branch is dead; B' (fresh branch + gate) has trained, its evaluation is pending, B2 is running; BatchNorm and a Doppler read-out are ranked candidates (`t11_vel_hurdle`, `t11_motion_field`).
 2. **Thin map classes and the training budget**: lane divider 0.335 against 0.691 for GaussianCaR; 3000 steps are 0.55 epoch of 428 scenes. Dual features trained longer, the
    stride-4 branch on top, all 700 scenes.
 3. **Objects at range**: precision of the confident detections falls from 0.89 (0 - 20 m) to 0.64 (40 - 60 m); far objects are mostly detected with low confidence (t6).
 4. **No SOA camera + radar detector was run on our frames** (CRN checkpoint on disk).
 5. **Per-block speed on an idle GPU** is still unmeasured.
-6. **Infrastructure**: C: was at 4.1 GB free overnight (36 GB after the probe dumps were archived; a full disk crashed a run once); the seed twin of the dual chain was killed once
-   by the out-of-memory killer and resumed on a later code snapshot; one GT version (D29) is open.
+6. **Infrastructure**: C: was at 4.1 GB free overnight (67 GB after the probe dumps were archived; a full disk crashed a run once); the dual seed twin was killed once by the out-of-memory
+   killer and the control's second seed resumed after a CUDA crash, both on later code snapshots; one GT version (D29) is open.
 
 ### Errors made and corrected since (continues section 9)
 
