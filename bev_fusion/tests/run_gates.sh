@@ -4,6 +4,7 @@
 # autoGT) only with --all (they take minutes on the CPU).
 # Usage (from the bev_fusion folder): wsl bash tests/run_gates.sh [--all]
 cd "$(dirname "$0")/.." || exit 1
+export PYTHONPATH="$(cd .. && pwd)${PYTHONPATH:+:$PYTHONPATH}"     # autogt lives at the repository root since 2026-11-01 (`-m autogt selftest`)
 PY="${PY:-$HOME/miniconda3/envs/gcar/bin/python}"
 fail=0
 run() {  # run <block> <command...>
@@ -32,6 +33,11 @@ run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py
 run "GT cache, targets" "$PY" tests/test_gt_cache_targets.py
+if [ -f runs/t10_dual_s0/ckpt_00003000.pt ]; then               # its G4 warm-starts from this real checkpoint (not in git)
+  run "velocity hurdle" "$PY" tests/test_velocity_hurdle.py     # t11; CPU, about 1 min, 2.2 GB peak
+else
+  echo "SKIP  velocity hurdle  | runs/t10_dual_s0/ckpt_00003000.pt missing (G4 needs it)"
+fi
 run "orientation"       "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s
