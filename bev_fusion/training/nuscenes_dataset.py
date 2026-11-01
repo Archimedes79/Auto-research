@@ -43,6 +43,38 @@ except ImportError:                                   # run as a script
 
 RADARS = ("RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT")
 DST_HW = (256, 704)
+_PCD_KINDS = {"F": "f", "I": "i", "U": "u"}
+_POOL = {}                                            # pid -> thread pool of the file reads (a forked loader worker makes its own)
+
+
+def parse_radar_pcd(raw, invalid_states=(0,), dynprop_states=range(7), ambig_states=(3,)):
+    """(18, n) float64 points of the bytes of a nuScenes radar .pcd (binary), the same numbers as nuscenes.utils.data_classes.RadarPointCloud.
+    from_file with its default filters (valid cluster, dynamic property 0 - 6, unambiguous Doppler) - without its Python loop over the
+    points and the fields (about 25 x faster); an empty cloud (a NaN in the first point) gives (18, 0). The self-test compares both."""
+    cut = raw.find(b"DATA binary\n")
+    assert cut >= 0, "not a binary .pcd"
+    head = {l.split(" ")[0]: l.split(" ")[1:] for l in raw[:cut].decode("utf-8").split("\n") if l and not l.startswith("#")}
+    assert all(c == "1" for c in head["COUNT"]) and int(head["HEIGHT"][0]) == 1, "only COUNT 1 and HEIGHT 1 are supported"
+    dt = np.dtype([(n, f"<{_PCD_KINDS[t]}{s}") for n, t, s in zip(head["FIELDS"], head["TYPE"], head["SIZE"])])
+    arr = np.frombuffer(raw, dtype=dt, count=int(head["WIDTH"][0]), offset=cut + len(b"DATA binary\n"))
+    pts = np.stack([arr[n].astype(np.float64) for n in dt.names])
+    if np.isnan(pts[:, 0]).any():
+        return np.zeros((pts.shape[0], 0))
+    pts = pts[:, np.isin(pts[-4], list(invalid_states))]                # invalid_state
+    pts = pts[:, np.isin(pts[3], list(dynprop_states))]                 # dyn_prop
+    return pts[:, np.isin(pts[11], list(ambig_states))]                 # ambig_state
+
+
+def read_files(paths, workers=8):
+    """the bytes of the files, read together by a thread pool (the open / read latency of the network file system overlaps; the order is kept)"""
+    def one(p):
+        with open(p, "rb") as f:
+            return f.read()
+    if len(paths) < 2:
+        return [one(p) for p in paths]
+    from concurrent.futures import ThreadPoolExecutor
+    pool = _POOL.setdefault(os.getpid(), ThreadPoolExecutor(workers))
+    return list(pool.map(one, paths))
 
 
 def available_scenes(nusc, split):
@@ -108,43 +140,45 @@ class FrontRadarDataset(torch.utils.data.Dataset):
 
     # ---- radar
     def _radar(self, sample, cur_sd):
-        from nuscenes.utils.data_classes import RadarPointCloud
         T_cur = pose_matrix(self.nusc.get("ego_pose", cur_sd["ego_pose_token"]))
         T_cur_inv = np.linalg.inv(T_cur)
         t_cur = cur_sd["timestamp"]
         cols = {k: [] for k in ("x", "y", "r", "psi", "vr", "rcs", "dt", "sensor")}
+        sweeps = []                                                         # (radar index, sample_data) of every sweep used, in the order of the loop
         for si, ch in enumerate(RADARS):
             sd = self.nusc.get("sample_data", sample["data"][ch])
             while sd["next"] and self.nusc.get("sample_data", sd["next"])["timestamp"] <= t_cur:
                 sd = self.nusc.get("sample_data", sd["next"])          # newest sweep not after the camera time
             while sd is not None and (t_cur - sd["timestamp"]) * 1e-6 <= self.radar_window:
                 if sd["timestamp"] <= t_cur:
-                    pc = RadarPointCloud.from_file(os.path.join(self.root, sd["filename"]))
-                    P = pc.points
-                    cs = self.nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
-                    T_s2e = pose_matrix(cs)
-                    T_e2g = pose_matrix(self.nusc.get("ego_pose", sd["ego_pose_token"]))
-                    T = T_cur_inv @ T_e2g @ T_s2e                           # sensor -> current ego frame (exact)
-                    xs, ys = P[0], P[1]
-                    phi = np.arctan2(ys, xs)                                # ray in the sensor frame
-                    vr = P[8] * np.cos(phi) + P[9] * np.sin(phi)            # vx_comp, vy_comp: the radial vector
-                    age = (t_cur - sd["timestamp"]) * 1e-6
-                    if self.doppler_shift:
-                        rng = np.hypot(xs, ys)
-                        scale = (rng + vr * age) / np.maximum(rng, 1e-6)    # radial motion along the ray
-                        xs, ys = xs * scale, ys * scale
-                    pts = np.stack([xs, ys, np.zeros_like(xs), np.ones_like(xs)])
-                    q = T @ pts
-                    sensor_now = T @ np.array([0.0, 0.0, 0.0, 1.0])
-                    cols["x"].append(q[0])
-                    cols["y"].append(q[1])
-                    cols["r"].append(np.hypot(q[0] - sensor_now[0], q[1] - sensor_now[1]))
-                    cols["psi"].append(np.arctan2(q[1] - sensor_now[1], q[0] - sensor_now[0]))
-                    cols["vr"].append(vr)
-                    cols["rcs"].append(P[5])
-                    cols["dt"].append(np.full(len(xs), age))
-                    cols["sensor"].append(np.full(len(xs), si))
+                    sweeps.append((si, sd))
                 sd = self.nusc.get("sample_data", sd["prev"]) if sd["prev"] else None
+        raws = read_files([os.path.join(self.root, sd["filename"]) for _, sd in sweeps])      # the files together: the open / read latency overlaps
+        for (si, sd), raw in zip(sweeps, raws):
+            P = parse_radar_pcd(raw)
+            cs = self.nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
+            T_s2e = pose_matrix(cs)
+            T_e2g = pose_matrix(self.nusc.get("ego_pose", sd["ego_pose_token"]))
+            T = T_cur_inv @ T_e2g @ T_s2e                           # sensor -> current ego frame (exact)
+            xs, ys = P[0], P[1]
+            phi = np.arctan2(ys, xs)                                # ray in the sensor frame
+            vr = P[8] * np.cos(phi) + P[9] * np.sin(phi)            # vx_comp, vy_comp: the radial vector
+            age = (t_cur - sd["timestamp"]) * 1e-6
+            if self.doppler_shift:
+                rng = np.hypot(xs, ys)
+                scale = (rng + vr * age) / np.maximum(rng, 1e-6)    # radial motion along the ray
+                xs, ys = xs * scale, ys * scale
+            pts = np.stack([xs, ys, np.zeros_like(xs), np.ones_like(xs)])
+            q = T @ pts
+            sensor_now = T @ np.array([0.0, 0.0, 0.0, 1.0])
+            cols["x"].append(q[0])
+            cols["y"].append(q[1])
+            cols["r"].append(np.hypot(q[0] - sensor_now[0], q[1] - sensor_now[1]))
+            cols["psi"].append(np.arctan2(q[1] - sensor_now[1], q[0] - sensor_now[0]))
+            cols["vr"].append(vr)
+            cols["rcs"].append(P[5])
+            cols["dt"].append(np.full(len(xs), age))
+            cols["sensor"].append(np.full(len(xs), si))
         out = {k: torch.tensor(np.concatenate(v) if v else np.zeros(0), dtype=torch.float32) for k, v in cols.items()}
         out["sensor"] = out["sensor"].long()
         return out
@@ -256,6 +290,34 @@ def _selftest():
     assert fr[0]["cam_vec"].shape == (27,)
     rad = it["radar"]
     assert len(rad["x"]) > 50 and float(rad["dt"].max()) <= ds.radar_window + 1e-6 and float(rad["dt"].min()) >= 0
+    # the vectorised .pcd parser gives the devkit's numbers (default filters) on real files of every radar, and for an empty cloud
+    from nuscenes.utils.data_classes import RadarPointCloud
+    n_pcd = 0
+    for i in (10, 150):
+        smp = ds.nusc.get("sample", ds.samples[i])
+        for ch in RADARS:
+            sd = ds.nusc.get("sample_data", smp["data"][ch])
+            for _ in range(3):
+                path = os.path.join(ds.root, sd["filename"])
+                ref, mine = RadarPointCloud.from_file(path).points, parse_radar_pcd(read_files([path, path])[0])
+                assert ref.shape == mine.shape and np.array_equal(ref, mine), (path, ref.shape, mine.shape)
+                n_pcd += 1
+                sd = ds.nusc.get("sample_data", sd["prev"])
+    import tempfile
+    raw = open(path, "rb").read()
+    cut = raw.find(b"DATA binary\n")
+    lines = [l for l in raw[:cut].decode().split("\n") if l]
+    dt = np.dtype([(n, f"<{_PCD_KINDS[t]}{s}") for n, t, s in zip(lines[2].split(" ")[1:], lines[4].split(" ")[1:], lines[3].split(" ")[1:])])
+    one = np.zeros(1, dt)
+    one["x"] = np.nan
+    empty = "\n".join(l.replace("WIDTH " + l.split(" ")[-1], "WIDTH 1").replace("POINTS " + l.split(" ")[-1], "POINTS 1") if l.startswith(("WIDTH", "POINTS")) else l
+                      for l in lines).encode() + b"\nDATA binary\n" + one.tobytes() + b"\0"
+    with tempfile.NamedTemporaryFile(suffix=".pcd", delete=False) as tf:
+        tf.write(empty)
+    try:
+        assert RadarPointCloud.from_file(tf.name).points.shape == parse_radar_pcd(empty).shape == (18, 0), "an empty cloud"
+    finally:
+        os.remove(tf.name)
     assert set(rad["sensor"].unique().tolist()) <= set(range(5)) and len(rad["sensor"].unique()) >= 3
     # static compensation is exact: a static radar point of an older sweep, transformed by the poses, is consistent
     # with the steps chain of splat.py (first-order translation per frame) to a few centimetres
