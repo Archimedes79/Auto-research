@@ -17,12 +17,12 @@ Problem folder: <path>. Loop <NN>. Plan, schedule, ledger, decisions: as named i
 
 Every wake-up (when a run record changes, else every 20-25 min)
 - `schedule.py show` and `ledger.py tail --loop <NN>` (state is read from the run records; run them in the WSL, the namespace of the launchers; when `tail` reports runs without a ledger row, `ledger.py sync` adds them), then `tick.py` to start ready items that have a command (a chain of `run.py --after` launchers is the same thing by hand); read the open decisions
-- do what needs a chat: detail plan (`ar-planner`), code (`ar-coder`; `ar-reviewer` mode code for shared code), decide (`decide.py --experiment E<id> --write` when the cards of an experiment are complete), summary (section 3 of the card's `experiment.md`); a run needs its card (experiment file or planned ledger row), run.py refuses otherwise
+- do what needs a chat: detail plan (`ar-planner` mode detail), code (`ar-coder`; `ar-critic` mode code for shared code), decide (`decide.py --experiment E<id> --write` when the cards of an experiment are complete), summary (section 3 of the card's `experiment.md`); a run needs its card (experiment file or planned ledger row), run.py refuses otherwise
 - at most <n> GPU jobs; checkpoint and resume; never kill another chat's jobs
 - write schedule, ledger notes, plan status, HANDOVER (<= 3 KB, rewrite); next wake-up
 
 At STOP_AT (P4)
-- end-of-loop section of the plan; report from the experiment summaries; `check_numbers.py`; `ar-reviewer` mode numbers
+- end-of-loop section of the plan; report from the experiment summaries; `check_numbers.py`; `ar-critic` mode numbers; `ar-planner` mode tracking (the best versions, a promotion proposal, the next round's open branches)
 - card statuses, closed questions, open points for the next cycle; decisions for the person into the decisions file
 - commit the experiment code (scratch included), then `clean_temp.py loop<NN> --move`; `check_structure.py`; tests
 - HANDOVER rewritten; mail / shutdown only as allowed above

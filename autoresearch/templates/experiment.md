@@ -16,7 +16,7 @@ One file per experiment, in the experiment folder; it grows from card (P2) to de
 | budget_gpu_h, kill | ..., ... |
 | evaluate | split, subset, compare |
 
-## 1. Card (written in P2, checked by ar-referee)
+## 1. Card (written in P2, checked by ar-critic, mode cards)
 | | |
 |---|---|
 | lens | state of the art / foundations / training and losses / past critic / system review / free |

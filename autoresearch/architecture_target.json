@@ -22,15 +22,15 @@
      "note": "the person's: a version becomes the deployed champion only with their OK and one TEST check, logged before it runs (run.py refuses otherwise)"},
     {"id": "a_problem", "label": "Planner\nproblem draft", "kind": "new", "col": 0, "row": 1, "code": ["agents/ar-planner.md"], "note": "new mode of the planner: drafts PROBLEM.md from the prompt; the file stays protected"},
     {"id": "a_research", "label": "Researcher\nscouts, summaries", "kind": "agent", "col": 1, "row": 1,
-     "code": ["agents/ar-scout.md", "agents/ar-summarizer.md", "prompts/research_steps.md"], "note": "scouts in parallel, one per topic, then a summary with its digest per problem group"},
+     "code": ["agents/ar-researcher.md", "prompts/research_steps.md"], "note": "scouts in parallel, one per topic, then a summary with its digest per problem group"},
     {"id": "a_branch", "label": "Planner: branches\n(one per lens); critic", "kind": "agent", "col": 2, "row": 1,
-     "code": ["agents/ar-hypothesis.md", "agents/ar-referee.md", "agents/ar-planner.md"],
+     "code": ["agents/ar-planner.md", "agents/ar-critic.md"],
      "note": "the planner writes cards once per lens, in parallel; the critic (fresh context) accepts, revises or rejects each card"},
-    {"id": "a_build", "label": "Planner, coder\n+ critic", "kind": "agent", "col": 3, "row": 1, "code": ["agents/ar-coder.md", "agents/ar-reviewer.md"],
+    {"id": "a_build", "label": "Planner, coder\n+ critic", "kind": "agent", "col": 3, "row": 1, "code": ["agents/ar-coder.md", "agents/ar-critic.md"],
      "note": "only for a block experiment (new code): detail plan naming the boxes it changes, code with its spec test, a critic pass on shared code; a variant needs no agent"},
     {"id": "a_track", "label": "Planner: tracking\nn best, next round", "kind": "agent", "col": 6, "row": 1, "code": ["agents/ar-planner.md"],
      "note": "reads the verdicts, updates the set of n best by the written rule, proposes a promotion, plans the next branches"},
-    {"id": "a_close", "label": "Critic\nnumbers of the report", "kind": "agent", "col": 7, "row": 1, "code": ["agents/ar-reviewer.md"], "note": "a fresh reviewer checks the round's report against the primary sources"},
+    {"id": "a_close", "label": "Critic\nnumbers of the report", "kind": "agent", "col": 7, "row": 1, "code": ["agents/ar-critic.md"], "note": "a fresh reviewer checks the round's report against the primary sources"},
     {"id": "g_write", "label": "WRITE GATE: protected truth files only with a grant under a decided D<n>; a card only when complete (G2)", "kind": "gate",
      "col": 0, "row": 2, "w": 8, "hpx": 34, "code": ["tools/guard_hook.py", "tools/experiment.py"], "note": "transition agents -> files"},
     {"id": "f_problem", "label": "problem.md\nproblem.json", "kind": "file", "col": 0, "row": 3, "code": ["templates/problem.md"]},
@@ -86,5 +86,12 @@
     {"dir": "tools", "glob": "*.py"}, {"dir": "agents", "glob": "*.md"}, {"dir": "templates", "glob": "*.md"}, {"dir": "prompts", "glob": "*.md"},
     {"dir": "schemas", "glob": "*.json"}, {"dir": "evalsuite", "glob": "*.py"}, {"dir": "trainsuite", "glob": "*.py"}
   ],
-  "not_drawn": {"tools/tick.py": "to be removed: it started 0 of 61 runs (D16); a run starts through run.py, a chain through --after"}
+  "not_drawn": {
+      "tools/tick.py": "to be removed: it started 0 of 61 runs (D16); a run starts through run.py, a chain through --after",
+      "agents/ar-scout.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-summarizer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-hypothesis.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-referee.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-reviewer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended"
+  }
 }

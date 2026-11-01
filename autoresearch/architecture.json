@@ -15,10 +15,10 @@
      "note": "champion promotion, PROBLEM.md changes, the gates, TEST and permissions are the person's; an agent writes the entry and waits for the recorded answer"},
     {"id": "d_lead", "label": "Lead chat\nruns the loop", "kind": "design", "col": 1, "row": 0, "code": ["prompts/loop.md", "prompts/research_steps.md"],
      "note": "the wake-up routine: read the state, start what is ready, do what needs a chat, write ledger notes, plan status and handover"},
-    {"id": "d_res", "label": "Research agents\nscout, summarizer,\nhypothesis, referee", "kind": "design", "col": 2, "row": 0,
-     "code": ["agents/ar-scout.md", "agents/ar-summarizer.md", "agents/ar-hypothesis.md", "agents/ar-referee.md"], "note": "P1 and P2: paper notes, group summaries, experiment cards, accept / revise / reject"},
-    {"id": "d_work", "label": "Work agents\nplanner, coder", "kind": "design", "col": 3, "row": 0, "code": ["agents/ar-planner.md", "agents/ar-coder.md"], "note": "plan and schedule, detail plan of a block experiment, code with its spec test"},
-    {"id": "d_rev", "label": "Reviewer\nfresh eyes on code\nand on numbers", "kind": "design", "col": 4, "row": 0, "code": ["agents/ar-reviewer.md"], "note": "mode code on a diff of shared code, mode numbers on a report against primary sources"},
+    {"id": "d_res", "label": "Researcher\nscan, deep, summary", "kind": "design", "col": 2, "row": 0,
+     "code": ["agents/ar-researcher.md"], "note": "P1: paper notes, port cards, group summaries with their digests"},
+    {"id": "d_work", "label": "Planner, coder\nall planning modes", "kind": "design", "col": 3, "row": 0, "code": ["agents/ar-planner.md", "agents/ar-coder.md"], "note": "plan and schedule, detail plan of a block experiment, code with its spec test"},
+    {"id": "d_rev", "label": "Critic\nfresh eyes: cards,\ncode, numbers", "kind": "design", "col": 4, "row": 0, "code": ["agents/ar-critic.md"], "note": "mode code on a diff of shared code, mode numbers on a report against primary sources"},
     {"id": "d_method", "label": "The method\nP0-P4, gates G1-G4", "kind": "design", "col": 5, "row": 0, "code": ["METHOD.md"], "note": "P0 frame, P1 research, P2 hypotheses + plan, P3 loop, P4 close; every phase ends in a gate"},
     {"id": "gate_write", "label": "WRITE GATE: only complete, permitted entries reach the files\nguard_hook.py refuses the protected files without a grant under a decided D<n>; experiment.py: a card names arms, seeds, metric, band and rule (G2)",
      "kind": "gate", "col": 0, "row": 1, "w": 6, "hpx": 46, "code": ["tools/guard_hook.py", "tools/experiment.py"],
@@ -65,5 +65,11 @@
     {"dir": "tools", "glob": "*.py"}, {"dir": "agents", "glob": "*.md"}, {"dir": "templates", "glob": "*.md"}, {"dir": "prompts", "glob": "*.md"},
     {"dir": "schemas", "glob": "*.json"}, {"dir": "evalsuite", "glob": "*.py"}, {"dir": "trainsuite", "glob": "*.py"}
   ],
-  "not_drawn": {}
+  "not_drawn": {
+      "agents/ar-scout.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-summarizer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-hypothesis.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-referee.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
+      "agents/ar-reviewer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended"
+  }
 }

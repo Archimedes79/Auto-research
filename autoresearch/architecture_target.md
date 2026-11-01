@@ -14,13 +14,13 @@ The outer loop runs left to right, one round after another; the shaded inner loo
 | WRITE GATE: protected truth files only with a grant under a decided D<n>; a card only when complete (G2) | transition point: refuses | `tools/guard_hook.py`, `tools/experiment.py` | transition agents -> files |
 | problem.md problem.json | plain file in the problem folder | `templates/problem.md` |  |
 | project.py install_agents.py | code: core and suites | `tools/project.py`, `tools/install_agents.py`, `config.json` |  |
-| Researcher scouts, summaries | agent role (mode) | `agents/ar-scout.md`, `agents/ar-summarizer.md`, `prompts/research_steps.md` | scouts in parallel, one per topic, then a summary with its digest per problem group |
+| Researcher scouts, summaries | agent role (mode) | `agents/ar-researcher.md`, `prompts/research_steps.md` | scouts in parallel, one per topic, then a summary with its digest per problem group |
 | notes, summaries K register | plain file in the problem folder | `templates/paper_note.md`, `templates/group_summary.md` |  |
 | the problem's literature tools | the problem's own code | `../bev_fusion_lane_center/tools/literature/catalogue.py` | no code in autoresearch/ yet; the lane problem's catalogue would move up once a second problem uses it |
-| Planner: branches (one per lens); critic | agent role (mode) | `agents/ar-hypothesis.md`, `agents/ar-referee.md`, `agents/ar-planner.md` | the planner writes cards once per lens, in parallel; the critic (fresh context) accepts, revises or rejects each card |
+| Planner: branches (one per lens); critic | agent role (mode) | `agents/ar-planner.md`, `agents/ar-critic.md` | the planner writes cards once per lens, in parallel; the critic (fresh context) accepts, revises or rejects each card |
 | experiments/<id>/ card.md + machine block | plain file in the problem folder | `templates/experiment.md`, `templates/plan.md`, `schemas/experiment.schema.json` | the round's plan: one table of branches; each card names its parent version and its decision rule |
 | experiment.py card.py, schemas | code: core and suites | `tools/experiment.py`, `tools/card.py`, `schemas/` |  |
-| Planner, coder + critic | agent role (mode) | `agents/ar-coder.md`, `agents/ar-reviewer.md` | only for a block experiment (new code): detail plan naming the boxes it changes, code with its spec test, a critic pass on shared code; a variant needs no agent |
+| Planner, coder + critic | agent role (mode) | `agents/ar-coder.md`, `agents/ar-critic.md` | only for a block experiment (new code): detail plan naming the boxes it changes, code with its spec test, a critic pass on shared code; a variant needs no agent |
 | detail plan, code tagged commit | plain file in the problem folder | `templates/experiment.md` |  |
 | spec tests selftest.py | code: core and suites | `tools/selftest.py` |  |
 | runs/<arm>.<seed>/ run.json, log.jsonl | plain file in the problem folder | `trainsuite/runs.py` | written by the launcher and the training; read by the train suite |
@@ -32,7 +32,7 @@ The outer loop runs left to right, one round after another; the shaded inner loo
 | Planner: tracking n best, next round | agent role (mode) | `agents/ar-planner.md` | reads the verdicts, updates the set of n best by the written rule, proposes a promotion, plans the next branches |
 | versions/ the n best | not built yet | `../bev_fusion_lane_center/models/registry.json`, `../bev_fusion/records/champion.json` | new: one registry per problem (tagged commit, config, weights, metric card per version) in place of the two formats of today |
 | board, registry, package (TEST once) | not built yet | `../bev_fusion/evaluation/board.py` | new in autoresearch: evalsuite package (run a version on the test set, write its results, measure ms, bundle it) and one board; today these are per-problem scripts (bev_fusion board.py; the two prototype scripts of 2026-11-01 are not committed yet) |
-| Critic numbers of the report | agent role (mode) | `agents/ar-reviewer.md` | a fresh reviewer checks the round's report against the primary sources |
+| Critic numbers of the report | agent role (mode) | `agents/ar-critic.md` | a fresh reviewer checks the round's report against the primary sources |
 | decisions.md handover.md | plain file in the problem folder | `templates/plan.md` |  |
 | cleanup, checks clean_temp, archdraw | transition point: refuses | `tools/clean_temp.py`, `tools/check_structure.py`, `tools/check_numbers.py`, `tools/metrics.py`, `tools/archdraw.py`, `architecture.json` | tags the scratch and moves temp/ away, finds dead paths, checks the report's numbers, the per-round table, these drawings |
 
