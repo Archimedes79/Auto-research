@@ -12,11 +12,11 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
 - bev_fusion: B2 (`runs/t11_vel_hurdle_acc2`) is the bev prototype (velocity revived, see `../bev_fusion/records/morning_2026-11-01.md`); its t11 code lives in tag `bf/t11.vel_hurdle_acc2` and is not on main yet (needs an ar-reviewer code pass and the backbone chat's train.py hunks kept apart).
 
 ## Next
-1. Mirko: read both morning pages; decide whether spurs kept becomes the recall-family default (D-entry), D4, D17.
-2. Next lane loop: precision at range (range-dependent threshold for edge seeds; union with a wider vertex merge), idle timing of ring and union, route success on spur-kept graphs.
+1. Mirko: read both morning pages; decide whether spurs kept becomes the recall-family default (D-entry).
+2. Next lane loop: precision at range (range-dependent threshold for edge seeds; union with a wider vertex merge), idle timing of ring and union, route success on spur-kept graphs, idle ms of the prototype (both decide D4).
 3. bev: code review + commit of the t11 code; seed twin of B2; the 6000-step run with the hurdle + accumulation 2.
 
-Decided 2026-11-01 and applied: D25 (PROBLEM.md vertex sentence), D18 (per-card bands), D19 (`autoresearch/tools/machine_lock.py`, run.py waits on another owner's exclusive lock), D33 (gate-hook gaps), D17 (loop ranges by hand, closed). Open for Mirko: D4 (to discuss), D29 - D31 (bev); Mirko's "D1." is asked back (DECISIONS.md).
+Decided 2026-11-01 and applied: D25 (PROBLEM.md vertex sentence), D18 (per-card bands), D19 (`autoresearch/tools/machine_lock.py`, run.py waits on another owner's exclusive lock), D33 (gate-hook gaps), D17 (loop ranges by hand, closed). Open for Mirko: D4 (prototype, after route success and timing), D29 - D31 (bev); Mirko's "D1." is asked back (DECISIONS.md).
 
 Method change 2026-11-01 (Mirko in chat, no D entry): research (P1) only on a trigger; planner / coder / researcher work inline unless context or fresh eyes need a spawn. A round starts with `autoresearch/prompts/research_steps.md` step 0 (ten lines, Mirko says OK); rules in `autoresearch/METHOD.md`, "Planning a round".
 
