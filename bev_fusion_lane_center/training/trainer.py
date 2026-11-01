@@ -10,11 +10,11 @@ What it adds to a plain loop (each of these was missing in a run that was lost):
   * checkpoint every `ckpt_every` steps (model, optimiser, scaler, schedule, step, RNG states, loss history), written atomically; `resume=True` continues from it after a crash or a kill
   * `model.pt` + status.json + the `.done` flag only after the last step succeeded; an exception writes status "failed" with the traceback and leaves the checkpoint for the next start
   * AMP (bf16 or fp16 with GradScaler), gradient clipping, AdamW with warm-up + one-cycle / cosine schedule
-  * guard against loss spikes and NaN: non-finite steps are skipped and counted; a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
+  * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of optimizer steps made
+  * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
 """
 import bflc_paths as BP  # project paths from the location of this checkout
-import itertools
 import json
 import math
 import os
@@ -93,8 +93,20 @@ def _lr_at(step, steps, lr, warmup, sched):
     return lr * (0.02 + 0.98 * 0.5 * (1 + math.cos(math.pi * t)))  # "onecycle": warm-up then cosine to 2 % of the peak
 
 
+def _endless(loader):
+    """the batches of a data loader, pass after pass; every pass iterates the loader anew (itertools.cycle would replay the batches of the
+    FIRST pass: no reshuffling, no new augmentation, and every batch of the epoch kept in memory)"""
+    while True:
+        n = 0
+        for batch in loader:
+            n += 1
+            yield batch
+        if n == 0:
+            raise ValueError("the data loader gave no batch (a generator or iterator can be read once: pass something re-iterable, e.g. a DataLoader or a list)")
+
+
 def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1e-4, betas=(0.9, 0.98), eps=1e-6, warmup=0.05, sched="onecycle", amp="bf16", clip=3.0,
-        ckpt_every=500, resume=True, eval_fn=None, eval_every=0, guard=True, guard_ratio=1.2, max_rollbacks=6, log_every=100, seed=0, device="cuda", args=None, params=None):
+        ckpt_every=500, resume=True, eval_fn=None, eval_every=0, guard=True, guard_ratio=1.2, max_rollbacks=6, log_every=100, seed=0, device="cuda", args=None, params=None, max_bad=20):
     assert (batch_fn is None) != (loader is None), "give batch_fn(step) or loader"
     seed_all(seed)
     model.to(device)
@@ -112,12 +124,23 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
         step, hist, n_skip, n_roll, lr_scale, best = s["step"], s["hist"], s["n_skip"], s["n_roll"], s["lr_scale"], s["best"]
         _set_rng(s["rng"])
         run.log(f"resumed from {ck} at step {step}")
-    it = None if batch_fn else itertools.cycle(loader)
+    it = None if batch_fn else _endless(loader)
+    bad = 0                                                              # non-finite steps in a row
 
     def save_ckpt():
         tmp = ck + ".tmp"
         torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), scaler=scaler.state_dict(), step=step, hist=hist, n_skip=n_skip, n_roll=n_roll, lr_scale=lr_scale, best=best, rng=_rng_state()), tmp)
         os.replace(tmp, ck)
+
+    def skipped_step(what):                                              # one non-finite step: counted, no update; too many in a row = diverged
+        nonlocal n_skip, bad, step
+        n_skip += 1
+        bad += 1
+        opt.zero_grad(set_to_none=True)
+        step += 1
+        run.log(f"step {step}: non-finite {what} skipped ({n_skip} so far, {bad} in a row)")
+        if bad >= max_bad:
+            raise RuntimeError(f"{bad} non-finite steps in a row: the run has diverged")
 
     run.status(state="running", steps=steps, args=args, started=time.strftime("%Y-%m-%d %H:%M:%S"))
     t0 = time.time()
@@ -129,22 +152,28 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                 g["lr"] = _lr_at(step, steps, lr, warmup, sched) * lr_scale
             with torch.autocast(device_type="cuda", dtype=dtype, enabled=use_amp):
                 loss, info = loss_fn(model, batch)
+            updated = False
             if not torch.isfinite(loss):
-                n_skip += 1
+                skipped_step("loss")
+            else:
                 opt.zero_grad(set_to_none=True)
-                step += 1
-                run.log(f"step {step}: non-finite loss skipped ({n_skip} so far)")
-                continue
-            opt.zero_grad(set_to_none=True)
-            scaler.scale(loss).backward()
-            if clip:
-                scaler.unscale_(opt)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
-            scaler.step(opt)
-            scaler.update()
-            step += 1
-            hist.append(float(loss))
-            if step % log_every == 0:
+                scaler.scale(loss).backward()
+                scaler.unscale_(opt)                                     # (a no-op without the fp16 scaler)
+                gn = torch.nn.utils.clip_grad_norm_(model.parameters(), clip if clip else float("inf"))     # (inf: only measures)
+                if not scaler.is_enabled() and not torch.isfinite(gn):   # a finite loss can have a non-finite gradient (sqrt at 0): no update
+                    skipped_step("gradient")
+                else:
+                    scale0 = scaler.get_scale()                          # (1.0 without the fp16 scaler)
+                    scaler.step(opt)
+                    scaler.update()
+                    if scaler.get_scale() < scale0:                      # fp16: the scaler found inf / nan gradients, skipped the update, lowered its scale
+                        skipped_step("gradient")
+                    else:
+                        bad = 0
+                        step += 1
+                        hist.append(float(loss))
+                        updated = True
+            if updated and step % log_every == 0:
                 cur = float(np.mean(hist[-log_every:]))
                 run.log(f"step {step}/{steps} loss {cur:.4f} lr {opt.param_groups[0]['lr']:.2e} {(time.time() - t0) / max(step, 1):.3f} s/step " + " ".join(f"{k} {v:.3f}" for k, v in (info or {}).items()))
                 if guard and step >= 4 * log_every and os.path.exists(ck):
@@ -155,6 +184,7 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                         opt.state.clear()
                         lr_scale *= 0.7
                         n_roll += 1
+                        bad = 0
                         step = s["step"]
                         run.log(f"ROLLBACK to step {step}: loss {cur:.3f} > {guard_ratio} x best {best:.3f}; fresh Adam moments, lr scale {lr_scale:.2f}")
                         continue
@@ -167,9 +197,12 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                 model.train()
                 run.status(**{f"eval_{step}": res})
                 run.log("eval", step, res)
+        if steps > 0 and not hist:                                       # every step skipped: no weight was ever updated, that is no finished run
+            raise RuntimeError(f"no optimizer update in {steps} steps ({n_skip} skipped as non-finite)")
         save_ckpt()
         torch.save(dict(state=model.state_dict(), args=args, steps=steps), run.path("model.pt"))
-        run.status(state="done", step=step, seconds=round(time.time() - t0, 1), final_loss=float(np.mean(hist[-log_every:])) if hist else None, skipped=n_skip, rollbacks=n_roll)
+        run.status(state="done", step=step, seconds=round(time.time() - t0, 1), final_loss=float(np.mean(hist[-log_every:])) if hist else None, skipped=n_skip, rollbacks=n_roll,
+                   updates=len(hist))
         run.mark_done()
         run.log("done", step)
     except BaseException as e:  # keep the checkpoint, tell the next start what happened

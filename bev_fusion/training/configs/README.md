@@ -19,6 +19,19 @@ the listed fields changed (copy the file, change the name and the fields, never 
 | `r2_rad_raster32_s0/s1`, `r2_rad_raster64_s0/s1`, `r2_rad_slots64_s0/s1` | experiment r2_radar_slot (run ids `r2.*`): radar-only (camera off) comparison of the radar slot, `t3_radar_only` with the t11 velocity recipe (`object_moving`, accum 2, 1500 steps, same 9000 samples): shipped raster block (c_rad 32), width-matched raster (c_rad 64), `delta_slots` (c_rad 64, side loss `radar_aux` 1.0 -> 0.05); two seeds each | 2026-11-01 |
 | `t6_maps_only.json` | experiment t6_soa_gap: `t2_ref_s0` with fixed task weights (areas 1, lines 1, objects 0, motion 0) and the radar aux head off, pinned to the code of `t2_ref_s0` (commit 0a3d73c): does detection competition hold the maps back? card `../../experiments/t6_soa_gap/experiment.md` | queued 2026-10-30 behind the lane |
 
+## Trunk settings of the configs (read from the files on 2026-11-01; plan section 6.1 tells how it came about)
+
+| `trunk_kind`, `trunk_width`, `trunk_detail`, start | configs | meaning |
+|---|---|---|
+| bevtrunk, 1.0, 32, pre-trained (DualBEV encoder) | 40: every config since `t1_r4_soa` except the four rows below (t2 reference and arms, t3, t6, t7, t8, t10, t11, r2) | **what runs**: T0 + detail path, 27 M parameters, 43 of 78 GMACs of the cached chain |
+| bevtrunk, 1.0, 32, pre-trained, `trunk_fpn_original` | `t4_fpn_order` | the same with the concatenation order the pre-trained weights expect (no gain) |
+| bevtrunk, 0.5, default (0), random | `t1_base`, `t1_r0`, `t1_r1a_dir`, `t1_r1b_uwso`, `t1_r3_combined` (2026-10-26) | the first round; the plan's T1 |
+| bevtrunk, 1.0, 32, random | `t2_trunk_rand` | null for the pre-training |
+| bevtrunk, 0.5, 32, random | `t2_trunk_small` | half width |
+| second, 1.0, 0, random | `t2_trunk_second` | SECOND + SECONDFPN |
+
+The defaults of `model.ModelConfig` (`trunk_width` 0.5, `trunk_detail` 0, `trunk_pretrained` empty) are the third row of the table (the first round), not the first (what runs), and `BEVTrunk(light_up=...)` (the plan's T2) has no `ModelConfig` field, so a config cannot ask for it. A config copied from the last one inherits all of this: state the trunk in the `_about` key when a config means to change it, and when it does not, leave the three fields as they are.
+
 Arms (fields to change against `t1_base.json`; none is run yet, every one is a proposal of plan 8.4):
 
 | arm | fields | question |

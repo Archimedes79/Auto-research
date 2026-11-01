@@ -38,3 +38,15 @@ Noise band for the verdict: 0.054 (2 x seed spread, `ref_s1`). Difference = arm 
 | fusion_cmx | -0.006 | +0.003 | -0.014* | +0.003 | -0.014* | +0.004 | +0.10 | +0.01 | -0.007 | -0.034* | -0.008* | TIE |
 
 `*` = paired bootstrap interval excludes 0. Velocity / heading errors (AVE, AOE) are lower-better and have no bootstrap; they are not used in the verdict.
+
+## Late arms: `trunk_small` and `trunk_second` (added 2026-11-01; they were queued behind the eight arms of t3 and their numbers were never entered above)
+
+Both are stored in `runs/t2_trunk_small` / `runs/t2_trunk_second` (same 3000 steps, cold VAL 1000 frames, EMA). Differences to `ref_s0` from `python evaluation/bev_suite.py compare runs/t2_ref_s0 runs/<arm> --boot 300` (paired scene bootstrap). The band per metric is the card's rule, max(0.010, 2 x |ref_s0 - ref_s1|): drivable 0.010, walkway 0.054, lane divider@0.5 0.010, vehicle AP@2 0.010, pedestrian AP@2 0.032. (The verdict column of the table above used ONE band, 0.054, for every metric, so it flags only the walkway; with the per-metric bands of the card more of the small differences count, e.g. the lane divider and vehicle AP@2 of `trunk_rand`.)
+
+| arm (vs `ref_s0`: width 1.0, pre-trained, detail 32) | drivable | walkway | lane div@0.5 | veh AP@2 | ped AP@2 | outside the band and the interval excludes 0 |
+|---|---|---|---|---|---|---|
+| `trunk_rand` (width 1.0, random, detail 32) | -0.012 | -0.055 | -0.032 | -0.014 | -0.026 | walkway, lane divider, vehicle AP@2 (table above: WORSE: walkway) |
+| `trunk_small` (width 0.5, random, detail 32) | -0.007 [-0.013, -0.001] | -0.047 [-0.056, -0.038] | -0.018 [-0.028, -0.009] | -0.013 [-0.022, -0.006] | -0.021 [-0.040, -0.007] | lane divider, vehicle AP@2 (walkway and pedestrian inside the band) |
+| `trunk_second` (SECOND + SECONDFPN, random) | -0.030 [-0.041, -0.022] | -0.066 [-0.085, -0.048] | -0.013 [-0.021, -0.003] | +0.013 [+0.006, +0.021] | -0.012 [-0.024, -0.002] | worse: drivable, walkway, lane divider; better: vehicle AP@2 (and AP@1 +0.014) |
+
+Reading: at random initialisation the half-width trunk is as good as the full-width one (`trunk_small` against `trunk_rand`: vehicle AP@2 0.593 / 0.592, walkway 0.145 / 0.136, lane divider 0.163 / 0.149), with a quarter of the parameters (about 6.8 M against 27 M) and about a quarter of the FLOPs (25 against 101 GFLOPs, plan section 6). What the wide trunk buys in this schedule is the PRE-TRAINING (0.01 - 0.05 on the maps, lane divider and vehicle AP@2 beyond the band), not the width. One seed per arm, 3000 steps: the 6000-step runs (`t10_dual_long_s0`) say whether the gap closes with a longer schedule.
