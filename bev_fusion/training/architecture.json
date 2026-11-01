@@ -1,113 +1,636 @@
 {
-  "title": "bev_fusion: camera + radar BEV system (base chain t8_ctl, variant t10_dual)",
-  "subtitle": "Front camera + radar detections + ego motion -> timed map layers, object maps, boxes, lines. Learned between the cached camera features and the head outputs; red = a rule step on the path.",
-  "root": "..",
-  "kinds": {
-    "input": {"label": "input", "fill": "#fef9c3", "stroke": "#ca8a04", "class": "other"},
-    "learned": {"label": "learned network (gradient flows)", "fill": "#dbeafe", "stroke": "#2563eb", "class": "learned"},
-    "fixed": {"label": "fixed math, differentiable", "fill": "#ccfbf1", "stroke": "#0d9488", "class": "fixed"},
-    "frozen": {"label": "frozen / cached (no gradient)", "fill": "#e5e7eb", "stroke": "#6b7280", "class": "frozen"},
-    "rule": {"label": "rule step (no gradient)", "fill": "#fee2e2", "stroke": "#dc2626", "class": "rule", "dashed": true},
-    "output": {"label": "delivered output", "fill": "#dcfce7", "stroke": "#16a34a", "class": "other"},
-    "train": {"label": "training only (data, GT, loss)", "fill": "#f3e8ff", "stroke": "#7c3aed", "class": "other"},
-    "alt": {"label": "alternative block (ModelConfig switch, not in the base chain)", "fill": "#fff7ed", "stroke": "#ea580c", "class": "other"}
+ "title": "bev_fusion: camera + radar BEV system in five layers",
+ "subtitle": "Built 2026-11-01 (Mirko's layered design). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, tests/test_slots.py) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.",
+ "root": "..",
+ "colw": 190,
+ "kinds": {
+  "input": {
+   "label": "sensor",
+   "fill": "#fef9c3",
+   "stroke": "#ca8a04",
+   "class": "other"
   },
-  "nodes": [
-    {"id": "in_cam", "label": "Front camera\nnow + 2 past frames", "kind": "input", "col": 0, "row": 1, "code": ["training/nuscenes_dataset.py::FrontRadarDataset"],
-     "note": "CAM_FRONT 1600 x 900 at 12 Hz, resized and cropped to 256 x 704 (cached features: the image is never read in training)"},
-    {"id": "in_rad", "label": "Radar detections\nall 5 radars, 0.5 s", "kind": "input", "col": 0, "row": 2, "code": ["training/nuscenes_dataset.py::FrontRadarDataset._radar"],
-     "note": "position, range, Doppler, RCS, age per detection"},
-    {"id": "in_ego", "label": "Ego motion\n(v, omega, gap)", "kind": "input", "col": 6, "row": 4, "code": ["training/train.py::gap_ego_motion"],
-     "note": "for the +-0.5 s outputs composed from the ground-truth poses of the target keyframe, in training AND in evaluation (evaluation/bev_adapter.py calls the same forward_loss); a deployed system has to supply odometry itself"},
-    {"id": "frozen", "label": "Frozen camera heads\nDualBEV R50 + depth", "kind": "frozen", "col": 1, "row": 1,
-     "code": ["training/camera_encoder.py::FrontCameraEncoder", "training/bevfusion_camera.py::BEVFusionImageSide", "training/feature_cache.py::CachedBEVFusionModel"],
-     "note": "pre-trained, run once offline and cached (float16: 118 depth probabilities + 80 context channels at stride 16); t10_dual adds the BEVFusion Swin-T side at stride 8",
-     "why": "the whole image evidence enters as cached features; no config sets freeze_camera false, so no loss reaches the image network (only t3_adapter / t3_cam_adapter add a trainable block in front of the lift)",
-     "replace_with": "train the image side: unfreeze (card t9 encoder 2 x 2, decision D26), a small adapter or LoRA on the frozen backbone, or distillation of a larger frozen teacher into a trainable student",
-     "catch": "the cache no longer applies (images are read and encoded at train time, a multiple of the cost on one 12 GB GPU) and a trainable encoder can drift from the depth prior it came with"},
-    {"id": "lift", "label": "Lift PD\ndepth-weighted gather", "kind": "fixed", "col": 2, "row": 1, "code": ["training/lift_pd.py::lift_pd", "training/lift_pd.py::LiftPD"],
-     "note": "two grid_sample gathers per frame through a calibration table (voxel -> pixel + depth bin), feature x p(depth); the table is a detached constant with a hard validity mask"},
-    {"id": "cam_reduce", "label": "Height collapse\n640 -> 64 channels", "kind": "learned", "col": 3, "row": 1, "code": ["training/model.py::BEVFusionModel"],
-     "note": "1 x 1 conv + BN + ReLU (cam_reduce; t10_dual: a second one and cam_merge)"},
-    {"id": "cam_temporal", "label": "Camera temporal fusion\nwindow + world memory", "kind": "learned", "col": 4, "row": 1,
-     "code": ["training/temporal_fusion.py::TemporalFusion", "training/splat.py::splat_window"],
-     "note": "2 past frames splatted to now with the ego motion and a learned velocity field, plus a world-aligned memory read by grid_sample"},
-    {"id": "recentre", "label": "Memory re-centre\nround + roll", "kind": "rule", "col": 4, "row": 0, "code": ["training/temporal_fusion.py::recentre"],
-     "note": "moves the memory window by whole cells when the ego drifts",
-     "why": "integer shift of the stored state (round, int, roll, zero strip): no gradient in the pose; the learned parts read the memory through grid_sample, so training still reaches them",
-     "replace_with": "a fixed world grid larger than the view (ring buffer, nothing shifted) or a sub-cell bilinear shift of the state",
-     "catch": "memory size and cost; the effect on quality is small (a storage detail), listed because it is on the path"},
-    {"id": "radar_pre", "label": "Sweeps to now\nego pose + Doppler", "kind": "rule", "col": 1, "row": 2, "code": ["training/nuscenes_dataset.py::FrontRadarDataset._radar"],
-     "note": "all sweeps of the last 0.5 s moved to the camera time with exact poses, Doppler shifted along the ray; runs in the data loader and is cached",
-     "why": "classical geometry on numpy points before the network (devkit point-cloud reader, rigid transform, Doppler shift); outside the gradient path",
-     "replace_with": "feed the raw sweeps with their relative poses and ages as a set and let a point encoder (PointNet / transformer over points) absorb the motion compensation",
-     "catch": "exact rigid motion is cheap to compute and easy to get wrong when learned; keep it as a fixed transform unless the odometry itself is learned"},
-    {"id": "raster", "label": "Hard raster\nfloor + mean per cell", "kind": "rule", "col": 2, "row": 2, "code": ["training/radar_bev.py::rasterize"],
-     "note": "14 channels per cell: count, mean of range, bearing, six Doppler harmonics, RCS, age, sub-cell offset",
-     "why": "each detection goes into the one cell it falls in (floor, index_add_, mean); nothing trainable sits upstream, so no gradient is lost, but all detail inside a cell is averaged away before any weight sees it",
-     "replace_with": "a learned point encoder (PointPillars-style PFN + scatter, already in the repo as RadarPillars, radar_kind pillars, arm t2_radar_pillars), a bilinear soft splat of point features, or cross-attention from BEV cells to the nearest detections",
-     "catch": "scatter still needs a cell index; attention costs time per frame (latency budget); the pillars arm has been tried once and is not the base"},
-    {"id": "radar_convs", "label": "Radar convs\n14 -> 32 channels", "kind": "learned", "col": 3, "row": 2, "code": ["training/radar_bev.py::RadarBEV"], "note": "two 3 x 3 convs after the raster"},
-    {"id": "fusion", "label": "Concat fusion\nmodality dropout 0.2", "kind": "learned", "col": 5, "row": 1, "h": 2, "code": ["training/fusion.py::ConcatFusion"],
-     "note": "camera (64) + radar (32) -> 3 x 3 conv -> 80 channels; one of the two sensors is blanked per sample in training"},
-    {"id": "trunk", "label": "BEV trunk\nResNet + FPN + detail", "kind": "learned", "col": 6, "row": 1, "h": 2, "code": ["training/bev_trunk.py::BEVTrunk"],
-     "note": "3-stage ResNet + FPN_LSS + stride-1 detail path, initialised from DualBEV and trained; head reduction to 96 channels follows"},
-    {"id": "mover", "label": "TimeMover\nvelocity + ego splat", "kind": "learned", "col": 6, "row": 3, "code": ["training/timed_head.py::TimeMover", "training/splat.py::splat_bev"],
-     "note": "moves the feature state to dt = -0.5 / 0 / +0.5 s: learned velocity field (zero start) + exact ego warp, bilinear softmax splat with a mass channel"},
-    {"id": "sem", "label": "Semantic head\nper dt", "kind": "learned", "col": 5, "row": 3, "code": ["training/timed_head.py::TimedHead", "training/bev_trunk.py::SemanticHead"],
-     "note": "FiLM(dt) refine block + conv head: 5 areas, 2 line masks, 2 line distance fields, 3 object footprints"},
-    {"id": "obj", "label": "Object head\nCenterPoint, per dt", "kind": "learned", "col": 5, "row": 4, "code": ["training/object_head.py::ObjectHead"],
-     "note": "heatmap, sub-cell offset, size, rotation, radius, velocity (vx, vy), direction logit: conv branches"},
-    {"id": "maps", "label": "Map layers\n12 channels per dt", "kind": "output", "col": 4, "row": 3, "code": ["training/model.py::BEVFusionModel"], "note": "logits from the semantic head: network layers only"},
-    {"id": "objmaps", "label": "Object maps\nhm off size rot vel dir", "kind": "output", "col": 4, "row": 4, "code": ["training/object_head.py::ObjectHead"], "note": "dense, network layers only; the box velocity is the vel branch read at a peak"},
-    {"id": "lines_x", "label": "Line extraction\nzero crossing", "kind": "rule", "col": 3, "row": 3, "code": ["evaluation/metrics.py::line_cells"],
-     "note": "consumer side",
-     "why": "cells that are a local minimum of the line distance field along x or y and below half a cell; lines stay pixel and field based, not vectors",
-     "replace_with": "deliver the distance field itself (differentiable, a planner can read its gradient) or a learned vectorisation (point-set queries per polyline, MapTR-style)",
-     "catch": "a vector head is a new head with its own matching-free loss; the field is the cheaper, already trained deliverable"},
-    {"id": "lines_out", "label": "Line cells", "kind": "output", "col": 2, "row": 3, "code": ["evaluation/metrics.py::line_cells"], "note": "scored in the evaluation as map lines"},
-    {"id": "decode", "label": "Box decode\npeak, top-k, threshold", "kind": "rule", "col": 3, "row": 4, "code": ["training/object_head.py::decode"],
-     "note": "consumer side; evaluation k = 100 and score 0.05, model.boxes k = 50 and 0.2",
-     "why": "3 x 3 max-pool equality keeps local maxima, top-k and a score threshold pick the detections, then exp(size), atan2(rot), a yaw fold by the direction logit and the velocity read at the chosen cell; no IoU NMS anywhere; dense losses train the maps, so this selection costs no gradient in training",
-     "replace_with": "keep the dense maps as the deliverable for a downstream network; or a learned selection: soft top-k (optimal transport), a learned NMS (relation network), or set prediction with queries (DETR3D family, trained with Sinkhorn / Hungarian matching)",
-     "catch": "the matching-based set losses are a rule step of their own during training; a downstream consumer of dense maps needs a planner interface for them"},
-    {"id": "boxes", "label": "Boxes\npose, size, yaw, velocity", "kind": "output", "col": 2, "row": 4, "code": ["evaluation/bev_adapter.py::predictions"], "note": "boxes of the three groups vehicle, two_wheeler, pedestrian (circle)"},
-    {"id": "gt", "label": "Ground truth\n(autogt)", "kind": "train", "col": 0, "row": 3, "code": ["autogt/"], "note": "layers, boxes, radar-corrected velocity, masks at -0.5 / 0 / +0.5 s; signature = sha1 of the generator files"},
-    {"id": "loss", "label": "Losses\nBEVLoss + Kendall", "kind": "train", "col": 1, "row": 3, "code": ["training/losses.py::BEVLoss", "training/loss_extras.py"],
-     "note": "areas, lines, objects, motion in four groups with learned weights; the gradient reaches every module from the camera reduce onward"},
-    {"id": "data", "label": "Data and caches", "kind": "train", "col": 0, "row": 4,
-     "code": ["training/feature_cache.py::FeatureStore", "training/nuscenes_dataset.py", "training/augment.py", "training/gt_cache_build.py", "training/cache_bevfusion_features.py"],
-     "note": "camera feature cache, radar cache, GT cache, mirror augmentation"},
-    {"id": "scratch", "label": "Scratch hygiene\ntmpdir, cached, dump", "kind": "train", "col": 0, "row": 5, "code": ["training/scratch.py"],
-     "note": "keeps bev_fusion/temp small: a fresh folder per smoke run removed on exit, list caches that are reused or deleted, dumps keyed by what they hold (written after C: was full with 18 GB of scratch)"},
-    {"id": "trainer", "label": "Trainer\nEMA, resume, stop", "kind": "train", "col": 1, "row": 4, "code": ["training/train.py"], "note": "AdamW + cosine, gradient accumulation, EMA 0.999, checkpoint before evaluation, resume, CONTROL / STOPPED"},
-    {"id": "alt", "label": "Alternatives\nin ModelConfig", "kind": "alt", "col": 5, "row": 0,
-     "code": ["training/blocks_new.py::RadarPillars", "training/fallbacks.py::EgoWarpGRU", "training/lane_branch.py"],
-     "note": "RadarPillars, second trunk, CMX / gate fusion, GRU temporal, LiftS, the t7 lane branch: control arms and add-ons"}
-  ],
-  "edges": [
-    {"from": "in_cam", "to": "frozen"}, {"from": "frozen", "to": "lift", "label": "prob, ctx"}, {"from": "lift", "to": "cam_reduce"},
-    {"from": "cam_reduce", "to": "cam_temporal"}, {"from": "cam_temporal", "to": "recentre", "label": "state"}, {"from": "recentre", "to": "cam_temporal"},
-    {"from": "cam_temporal", "to": "fusion"},
-    {"from": "in_rad", "to": "radar_pre"}, {"from": "radar_pre", "to": "raster"}, {"from": "raster", "to": "radar_convs"}, {"from": "radar_convs", "to": "fusion"},
-    {"from": "fusion", "to": "trunk"}, {"from": "trunk", "to": "mover"}, {"from": "in_ego", "to": "mover"},
-    {"from": "mover", "to": "sem"}, {"from": "mover", "to": "obj"},
-    {"from": "sem", "to": "maps"}, {"from": "maps", "to": "lines_x"}, {"from": "lines_x", "to": "lines_out"},
-    {"from": "obj", "to": "objmaps"}, {"from": "objmaps", "to": "decode"}, {"from": "decode", "to": "boxes"},
-    {"from": "gt", "to": "loss", "label": "targets"}, {"from": "loss", "to": "trainer"}, {"from": "data", "to": "trainer"}
-  ],
-  "groups": [
-    {"label": "camera branch", "nodes": ["frozen", "lift", "cam_reduce", "cam_temporal", "recentre"]},
-    {"label": "radar branch", "nodes": ["radar_pre", "raster", "radar_convs"]},
-    {"label": "consumer side: outside the model's forward", "nodes": ["lines_x", "lines_out", "decode", "boxes"]},
-    {"label": "training only", "nodes": ["gt", "loss", "data", "trainer", "scratch"]}
-  ],
-  "main_path": {"from": ["in_cam", "in_rad", "in_ego"], "to": ["maps", "objmaps", "lines_out", "boxes"]},
-  "covers": [{"dir": "training", "glob": "*.py"}],
-  "not_drawn": {
-    "training/temporal.py": "older multi-hypothesis temporal propagation, superseded by temporal_fusion.py; imported only by tests and scratch",
-    "training/radar_encoder.py": "delta-coded slot raster of plan 3.4, not imported by model.py or train.py",
-    "training/gt_bev.py": "compatibility shim that re-exports autogt",
-    "training/legacy": "S1 single-sensor pipeline and the t4 DualBEV front; nothing in model / train / evaluation imports it"
+  "pre": {
+   "label": "precompute: deterministic, cached with an identity, no weights learned before it",
+   "fill": "#e5e7eb",
+   "stroke": "#6b7280",
+   "class": "frozen"
+  },
+  "interface": {
+   "label": "interface: one typed contract (names, shapes, units, frames)",
+   "fill": "#ccfbf1",
+   "stroke": "#0d9488",
+   "class": "fixed"
+  },
+  "learned": {
+   "label": "network slot (learned, swapped by config)",
+   "fill": "#dbeafe",
+   "stroke": "#2563eb",
+   "class": "learned"
+  },
+  "fixed": {
+   "label": "fixed math, differentiable",
+   "fill": "#e0f2fe",
+   "stroke": "#0284c7",
+   "class": "fixed"
+  },
+  "rule": {
+   "label": "rule step (no gradient)",
+   "fill": "#fee2e2",
+   "stroke": "#dc2626",
+   "class": "rule",
+   "dashed": true
+  },
+  "output": {
+   "label": "delivered output",
+   "fill": "#dcfce7",
+   "stroke": "#16a34a",
+   "class": "other"
+  },
+  "train": {
+   "label": "training only (data, GT, loss, trainer)",
+   "fill": "#f3e8ff",
+   "stroke": "#7c3aed",
+   "class": "other"
+  },
+  "later": {
+   "label": "later (no code yet)",
+   "fill": "#fdf4ff",
+   "stroke": "#a21caf",
+   "class": "other",
+   "dashed": true
   }
+ },
+ "steps": [
+  {
+   "col": 0,
+   "label": "Sensors"
+  },
+  {
+   "col": 1,
+   "label": "1 Precompute (own step)"
+  },
+  {
+   "col": 2,
+   "label": "2 Input interface"
+  },
+  {
+   "col": 3,
+   "label": "3a Encoders"
+  },
+  {
+   "col": 4,
+   "label": "3b Temporal"
+  },
+  {
+   "col": 5,
+   "label": "3c Fusion"
+  },
+  {
+   "col": 6,
+   "label": "3d Backbone"
+  },
+  {
+   "col": 7,
+   "label": "3e Heads"
+  },
+  {
+   "col": 8,
+   "label": "4 Output interface"
+  },
+  {
+   "col": 9,
+   "label": "5 Post (goes later)"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "in_cam",
+   "label": "Cameras\nnow + past frames",
+   "kind": "input",
+   "col": 0,
+   "row": 0,
+   "code": [
+    "training/nuscenes_dataset.py::FrontRadarDataset"
+   ],
+   "note": "today the front camera; six cameras are one more entry of the interface, not a new chain"
+  },
+  {
+   "id": "in_rad",
+   "label": "Radars\ndetections, 0.5 s",
+   "kind": "input",
+   "col": 0,
+   "row": 1,
+   "code": [
+    "training/nuscenes_dataset.py::FrontRadarDataset._radar"
+   ],
+   "note": "all five radars"
+  },
+  {
+   "id": "in_ego",
+   "label": "Ego motion\nposes / CAN",
+   "kind": "input",
+   "col": 0,
+   "row": 2,
+   "code": [
+    "training/train.py::gap_ego_motion"
+   ],
+   "note": "from the poses in nuScenes; a deployed system supplies its own odometry"
+  },
+  {
+   "id": "pre_img",
+   "label": "Image features\nfrozen encoder, cached",
+   "kind": "pre",
+   "col": 1,
+   "row": 0,
+   "code": [
+    "training/camera_encoder.py::FrontCameraEncoder",
+    "training/bevfusion_camera.py",
+    "training/feature_cache.py::FeatureStore",
+    "training/cache_bevfusion_features.py"
+   ],
+   "note": "frozen DualBEV / BEVFusion image heads: depth probabilities + context per pixel; while frozen they are a cache (with a meta.json identity), once unfrozen the image encoder becomes the first network slot"
+  },
+  {
+   "id": "pre_radar",
+   "label": "Radar points to now\npose + Doppler, cached",
+   "kind": "pre",
+   "col": 1,
+   "row": 1,
+   "code": [
+    "training/nuscenes_dataset.py::FrontRadarDataset._radar",
+    "training/feature_cache.py::build_radar_cache"
+   ],
+   "note": "the sweeps of 0.5 s compensated to the current time and cached as points (not as a grid): the radar slot keeps the choice of raster or point encoder"
+  },
+  {
+   "id": "pre_ego",
+   "label": "Ego steps, calibration\n(dt, v, omega), K, T",
+   "kind": "pre",
+   "col": 1,
+   "row": 2,
+   "code": [
+    "training/train.py::gap_ego_motion",
+    "training/train.py::batch_ego",
+    "training/train.py::clip_step",
+    "training/nuscenes_dataset.py::FrontRadarDataset"
+   ],
+   "note": "the ego step from every past frame to now, the true gap to the target time, the memory step between calls, camera and radar calibration, the image crop; today partly built in train.py from the GT meta (also at evaluation)"
+  },
+  {
+   "id": "iface",
+   "label": "INPUT INTERFACE\nBEVInputs (typed dict + check): image features, lane image, K, T, ida, radar points, ego steps, gaps, flip",
+   "kind": "interface",
+   "col": 2,
+   "row": 0,
+   "h": 3,
+   "code": [
+    "training/interface.py::check_inputs",
+    "training/nuscenes_dataset.py::collate",
+    "training/feature_cache.py::collate_cached"
+   ],
+   "note": "BEVInputs = the batch dict with its contract in interface.INPUTS (names, shapes, units, frames) and check_inputs(); the forward arguments dts, state, step, ego in interface.CALL; the per-sample flip flag travels with it (the mirror is a BEV operation after the camera slot)"
+  },
+  {
+   "id": "cam_enc",
+   "label": "Camera BEV encoder\nlift + collapse; mirror in BEV",
+   "kind": "learned",
+   "col": 3,
+   "row": 0,
+   "code": [
+    "training/lift_pd.py::LiftPD",
+    "training/model.py::BEVFusionModel.camera_bevs",
+    "training/model.py::BEVFusionModel.camera_visibility",
+    "training/blocks_new.py::ZSumReduce"
+   ],
+   "note": "contract: BEVInputs -> (BEVs (B, F, C_cam, X, Y), visibility (B, 1, X, Y)), mirrored in BEV for flipped samples (cached perspective features cannot be mirrored); kinds dualbev, bevfusion, dual"
+  },
+  {
+   "id": "rad_enc",
+   "label": "Radar BEV encoder\nraster + convs | pillars | off",
+   "kind": "learned",
+   "col": 3,
+   "row": 1,
+   "code": [
+    "training/radar_bev.py::RadarBEV",
+    "training/radar_bev.py::rasterize",
+    "training/blocks_new.py::RadarPillars"
+   ],
+   "note": "contract: radar points -> (B, C_rad, X, Y); the raster is the first op, before any weight, so it costs no gradient; radar history is the sweeps inside the points"
+  },
+  {
+   "id": "temporal",
+   "label": "Temporal fusion\nper branch: camera, radar",
+   "kind": "learned",
+   "col": 4,
+   "row": 0,
+   "code": [
+    "training/temporal_fusion.py::TemporalFusion",
+    "training/temporal_fusion.py::recentre",
+    "training/splat.py::splat_window",
+    "training/fallbacks.py::EgoWarpGRU"
+   ],
+   "note": "the same block for both branches (TemporalFusion takes channels and grid); camera: window + world memory; radar: none today, world memory as the first arm (its 0.5 s history is in the points); contract: (BEV now, past BEVs with their ego steps, state, step since the last call, coverage) -> (BEV, state); the re-centre is a whole-cell roll, the gradient passes; finding (tests/test_slots.py): with no past radar frames the window part and the velocity head of the radar block get no gradient, so the radar memory needs its own static gate (the measured Doppler) or past radar BEVs"
+  },
+  {
+   "id": "fusion",
+   "label": "Fusion\nconcat | gate",
+   "kind": "learned",
+   "col": 5,
+   "row": 0,
+   "h": 2,
+   "code": [
+    "training/fusion.py::ConcatFusion",
+    "training/fusion.py::GateFusion",
+    "training/fusion.py::drop_modality"
+   ],
+   "note": "contract: (camera BEV, radar BEV) -> (B, C_fuse, X, Y); modality dropout lives here (off when a sensor is off)"
+  },
+  {
+   "id": "backbone",
+   "label": "BEV backbone + neck\nResNet + FPN | SECOND | CMX",
+   "kind": "learned",
+   "col": 6,
+   "row": 0,
+   "h": 2,
+   "code": [
+    "training/bev_trunk.py::BEVTrunk",
+    "training/blocks_new.py::SecondTrunk",
+    "training/fallbacks.py::CMXTrunk"
+   ],
+   "note": "contract: (B, C_fuse, X, Y) -> features S (B, C, X, Y), the optional 1x1 head reduction included; CMX replaces fusion and backbone together (a kind of this slot that takes both branch BEVs)"
+  },
+  {
+   "id": "motion",
+   "label": "Time mover\nvelocity + ego splat",
+   "kind": "learned",
+   "col": 7,
+   "row": 2,
+   "code": [
+    "training/timed_head.py::TimeMover",
+    "training/splat.py::splat_bev"
+   ],
+   "note": "moves S to a target time dt for every head (shared) and gives the velocity field v_hat at dt = 0"
+  },
+  {
+   "id": "maps_head",
+   "label": "Map head\nlayers per dt",
+   "kind": "learned",
+   "col": 7,
+   "row": 0,
+   "code": [
+    "training/bev_trunk.py::SemanticHead",
+    "training/timed_head.py::TimedHead"
+   ],
+   "note": "contract: (S moved to dt) -> map probabilities (B, L, X, Y); the aux heads read the branch BEVs, not S (training only)"
+  },
+  {
+   "id": "obj_head",
+   "label": "Object head\nCenterPoint maps per dt",
+   "kind": "learned",
+   "col": 7,
+   "row": 1,
+   "code": [
+    "training/object_head.py::ObjectHead",
+    "training/object_head.py::BoxRefiner"
+   ],
+   "note": "contract: (S moved to dt) -> heatmap, offset, size, yaw, velocity, moving maps; the refiner (option, off in the base chain) decodes top-k and matches the GT inside the training path: a rule step when it is on"
+  },
+  {
+   "id": "planner",
+   "label": "Planner (later)\nafter the system",
+   "kind": "later",
+   "col": 9,
+   "row": 3,
+   "note": "a consumer of the output interface, not part of the system; the outputs are dense and differentiable, so a later joint training lets its loss flow back into the fusion"
+  },
+  {
+   "id": "out_iface",
+   "label": "OUTPUT INTERFACE\nmaps, object maps per dt, v_hat, features S, state",
+   "kind": "output",
+   "col": 8,
+   "row": 0,
+   "h": 4,
+   "code": [
+    "training/interface.py::check_outputs",
+    "training/model.py::BEVFusionModel.forward"
+   ],
+   "note": "BEVOutputs = per dt the maps, the object maps, the dense boxes and the soft line map (interface.OUTPUTS_PER_DT / OPTIONAL_PER_DT, check_outputs), plus v_hat, the features S and the temporal state"
+  },
+  {
+   "id": "lines",
+   "label": "Line cells\nthreshold",
+   "kind": "rule",
+   "col": 9,
+   "row": 0,
+   "code": [
+    "evaluation/metrics.py::line_cells"
+   ],
+   "note": "thresholds the soft line map for the line metric; the metric's reference line_cells stays the definition and a test checks the two agree"
+  },
+  {
+   "id": "decode",
+   "label": "Select boxes\nlocal max, top-k, threshold",
+   "kind": "rule",
+   "col": 9,
+   "row": 1,
+   "code": [
+    "training/extract.py::select_boxes"
+   ],
+   "note": "the only box step left outside the network: picks cells of the dense box output for the metrics and the prototype; with the hard local maximum it gives exactly today's boxes"
+  },
+  {
+   "id": "consumers",
+   "label": "Boxes, lines\nmetrics, prototype",
+   "kind": "output",
+   "col": 9,
+   "row": 2,
+   "code": [
+    "evaluation/bev_adapter.py::predictions",
+    "evaluation/board.py"
+   ]
+  },
+  {
+   "id": "gt",
+   "label": "Ground truth\nautogt, cached",
+   "kind": "train",
+   "col": 1,
+   "row": 4,
+   "code": [
+    "../autogt/",
+    "training/gt_cache_build.py"
+   ]
+  },
+  {
+   "id": "data",
+   "label": "Datasets, caches\nclips, mirror, scratch",
+   "kind": "train",
+   "col": 2,
+   "row": 4,
+   "code": [
+    "training/feature_cache.py::CachedFrontRadarDataset",
+    "training/train.py::ClipDataset",
+    "training/augment.py::flip_batch",
+    "training/scratch.py"
+   ]
+  },
+  {
+   "id": "trainer",
+   "label": "Trainer + slot tables\ncheck_config",
+   "kind": "train",
+   "col": 4,
+   "row": 4,
+   "w": 2,
+   "code": [
+    "training/train.py::train",
+    "training/model.py::check_config",
+    "training/feature_cache.py::CachedBEVFusionModel"
+   ],
+   "note": "ModelConfig picks one kind per slot from the builder tables of model.py (LIFTS, COLLAPSES, TEMPORALS, RADARS, FUSIONS, BACKBONES); check_config refuses every unknown kind and unfitting combination in one place"
+  },
+  {
+   "id": "loss",
+   "label": "Loss\nBEVLoss + Kendall",
+   "kind": "train",
+   "col": 7,
+   "row": 4,
+   "code": [
+    "training/losses.py::BEVLoss",
+    "training/loss_extras.py"
+   ],
+   "note": "one module: the Kendall weights and the cross-head terms (motion and time consistency, refine) stay together; heads declare their output keys"
+  },
+  {
+   "id": "lane",
+   "label": "Lane add-on (option)\nstride 4, after temporal",
+   "kind": "learned",
+   "col": 4,
+   "row": 2,
+   "code": [
+    "training/lane_branch.py::LaneBranch"
+   ],
+   "note": "reads the lane image, K, T, ida and the DualBEV depth of the current frame; its BEV is added to the camera BEV after the temporal block; mirrored on its own"
+  },
+  {
+   "id": "soft",
+   "label": "Soft extraction\npeaks, box params, line map",
+   "kind": "fixed",
+   "col": 7,
+   "row": 3,
+   "code": [
+    "training/extract.py::dense_boxes",
+    "training/extract.py::soft_line_map"
+   ],
+   "note": "built from today's decode and line extraction: per cell a peak weight (heatmap x exp(-beta (maxpool - heatmap))), the box parameters (centre with offset, size, yaw with a soft direction sign, velocity x sigmoid(moving)) and a soft line map (near-zero distance x soft local minimum); fixed math, differentiable"
+  },
+  {
+   "id": "vis",
+   "label": "Visibility maps\ncamera, radar fan, fusion area",
+   "kind": "pre",
+   "col": 1,
+   "row": 3,
+   "code": [
+    "training/precompute.py::Precompute",
+    "training/precompute.py::radar_hits",
+    "training/lift_pd.py::camera_visibility"
+   ],
+   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans (D36; placeholder until autogt.coverage.radar_cells), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
+  }
+ ],
+ "edges": [
+  {
+   "from": "in_cam",
+   "to": "pre_img"
+  },
+  {
+   "from": "in_rad",
+   "to": "pre_radar"
+  },
+  {
+   "from": "in_ego",
+   "to": "pre_ego"
+  },
+  {
+   "from": "pre_img",
+   "to": "iface"
+  },
+  {
+   "from": "pre_radar",
+   "to": "iface"
+  },
+  {
+   "from": "pre_ego",
+   "to": "iface"
+  },
+  {
+   "from": "iface",
+   "to": "cam_enc"
+  },
+  {
+   "from": "iface",
+   "to": "rad_enc"
+  },
+  {
+   "from": "temporal",
+   "to": "fusion"
+  },
+  {
+   "from": "fusion",
+   "to": "backbone"
+  },
+  {
+   "from": "backbone",
+   "to": "maps_head"
+  },
+  {
+   "from": "backbone",
+   "to": "obj_head"
+  },
+  {
+   "from": "backbone",
+   "to": "motion"
+  },
+  {
+   "from": "maps_head",
+   "to": "out_iface"
+  },
+  {
+   "from": "obj_head",
+   "to": "out_iface"
+  },
+  {
+   "from": "motion",
+   "to": "out_iface"
+  },
+  {
+   "from": "out_iface",
+   "to": "lines"
+  },
+  {
+   "from": "out_iface",
+   "to": "decode"
+  },
+  {
+   "from": "lines",
+   "to": "consumers"
+  },
+  {
+   "from": "decode",
+   "to": "consumers"
+  },
+  {
+   "from": "gt",
+   "to": "data"
+  },
+  {
+   "from": "out_iface",
+   "to": "loss"
+  },
+  {
+   "from": "iface",
+   "to": "lane"
+  },
+  {
+   "from": "lane",
+   "to": "fusion"
+  },
+  {
+   "from": "cam_enc",
+   "to": "temporal",
+   "label": "visibility"
+  },
+  {
+   "from": "iface",
+   "to": "temporal"
+  },
+  {
+   "from": "rad_enc",
+   "to": "temporal",
+   "label": "radar"
+  },
+  {
+   "from": "maps_head",
+   "to": "soft"
+  },
+  {
+   "from": "obj_head",
+   "to": "soft"
+  },
+  {
+   "from": "soft",
+   "to": "out_iface"
+  },
+  {
+   "from": "out_iface",
+   "to": "planner",
+   "label": "dense, differentiable"
+  },
+  {
+   "from": "pre_ego",
+   "to": "vis",
+   "label": "calibration"
+  },
+  {
+   "from": "vis",
+   "to": "iface"
+  },
+  {
+   "from": "vis",
+   "to": "loss",
+   "label": "loss masks"
+  },
+  {
+   "from": "vis",
+   "to": "consumers",
+   "label": "scoring masks"
+  }
+ ],
+ "groups": [
+  {
+   "label": "3 network: one slot per block, the kind chosen in ModelConfig, a contract test per kind",
+   "nodes": [
+    "cam_enc",
+    "rad_enc",
+    "temporal",
+    "fusion",
+    "backbone",
+    "motion",
+    "maps_head",
+    "obj_head",
+    "lane",
+    "soft"
+   ]
+  },
+  {
+   "label": "training only",
+   "nodes": [
+    "gt",
+    "data",
+    "trainer",
+    "loss"
+   ]
+  }
+ ],
+ "main_path": {
+  "from": [
+   "in_cam",
+   "in_rad",
+   "in_ego"
+  ],
+  "to": [
+   "out_iface"
+  ]
+ },
+ "covers": [
+  {
+   "dir": "training",
+   "glob": "*.py"
+  }
+ ],
+ "not_drawn": {
+  "training/temporal.py": "older multi-hypothesis temporal propagation, superseded by temporal_fusion.py; imported only by tests and scratch",
+  "training/radar_encoder.py": "delta-coded slot raster of plan 3.4, not imported by model.py or train.py",
+  "training/gt_bev.py": "compatibility shim that re-exports autogt",
+  "training/legacy": "S1 single-sensor pipeline and the t4 DualBEV front; nothing in model / train / evaluation imports it"
+ }
 }

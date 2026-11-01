@@ -41,11 +41,13 @@ try:
     from .bev_trunk import BEVTrunk, SemanticHead
     from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
+    from .extract import dense_boxes, select_boxes, soft_line_map
     from .fusion import ConcatFusion, GateFusion
     from .lane_branch import LaneBranch
-    from .lift_pd import Grid, LiftPD, camera_visibility
+    from .lift_pd import Grid, LiftPD
     from .losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
     from .object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
+    from .precompute import Precompute
     from .radar_bev import RadarBEV
     from .temporal_fusion import TemporalFusion
     from .timed_head import TimedHead, TimeMover
@@ -54,11 +56,13 @@ except ImportError:                                   # run as a script
     from bev_trunk import BEVTrunk, SemanticHead
     from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
+    from extract import dense_boxes, select_boxes, soft_line_map
     from fusion import ConcatFusion, GateFusion
     from lane_branch import LaneBranch
-    from lift_pd import Grid, LiftPD, camera_visibility
+    from lift_pd import Grid, LiftPD
     from losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
     from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
+    from precompute import Precompute
     from radar_bev import RadarBEV
     from temporal_fusion import TemporalFusion
     from timed_head import TimedHead, TimeMover
@@ -116,24 +120,82 @@ class ModelConfig:
     freeze_camera: bool = True
     z_levels: tuple = Z_LEVELS
     grid_kwargs: dict = field(default_factory=dict)
+    dense_outputs: bool = False        # output interface: per dt the dense box output and the soft line map (extract.py); on for the
+                                       # planner and the prototype, off in training and timing (no loss reads them; stored ms stay comparable)
 
 
-def _temporal(kind, c, grid):
-    if kind == "window_memory":
-        return TemporalFusion(c, c, grid)
-    if kind == "ego_gru":
-        return _fallbacks().EgoWarpGRU(c, c, grid)
-    if kind == "none":
-        return None
-    raise ValueError(kind)
+# ------------------------------------------------------------------ the network slots: one builder table each (kind -> block)
+def _bevfusion_depths():
+    try:
+        from .bevfusion_camera import DEPTHS
+    except ImportError:
+        from bevfusion_camera import DEPTHS
+    return DEPTHS
+
+
+def _zconv(nz, n_ctx, c):
+    return nn.Sequential(nn.Conv2d(nz * n_ctx, c, 1, bias=False), nn.BatchNorm2d(c), nn.ReLU(True))
+
+
+def _dualbev_trunk(cfg, p_drop):
+    trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail, fpn_original_order=cfg.trunk_fpn_original)
+    if cfg.trunk_pretrained:                                          # detection-trained BEV encoder of DualBEV (SOA init)
+        rep = trunk.load_pretrained(cfg.trunk_pretrained)
+        if rep["missing"] or rep["shape_mismatch"]:
+            raise RuntimeError(f"trunk weights do not fit: {rep['missing'][:3]} {rep['shape_mismatch'][:3]}")
+    return trunk, trunk.img_bev_encoder_neck.out_channels + cfg.trunk_detail
+
+
+def _second_trunk(cfg, p_drop):
+    trunk = SecondTrunk(cin=cfg.c_fuse)
+    return trunk, trunk.out_channels
+
+
+def _cmx_trunk(cfg, p_drop):                                          # CMX: its own pyramid + decoder, replaces fusion AND backbone
+    return _fallbacks().CMXTrunk(cfg.c_cam, cfg.c_rad, embed=cfg.c_fuse, c_out=128, p_drop=p_drop), 128
+
+
+CAMERA_FEATURES = ("dualbev", "bevfusion", "dual")                    # camera slot: which cached / live image features feed the lift
+LIFTS = {"pd": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=True, oversample=cfg.oversample, depth_centres=depths, **kw),
+         "p": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=False, oversample=cfg.oversample, depth_centres=depths, **kw),
+         "s": lambda grid, depths, cfg, **kw: _fallbacks().LiftS(grid, depth_centres())}
+COLLAPSES = {"zconv": _zconv, "zsum": ZSumReduce}                     # height collapse of the lifted volume
+TEMPORALS = {"window_memory": lambda c, grid: TemporalFusion(c, c, grid),     # temporal slot, the same table for camera and radar
+             "ego_gru": lambda c, grid: _fallbacks().EgoWarpGRU(c, c, grid),
+             "none": lambda c, grid: None}
+RADARS = {"raster": lambda grid, c: RadarBEV(grid, c), "off": lambda grid, c: RadarBEV(grid, c),
+          "pillars": lambda grid, c: RadarPillars(grid, c)}
+FUSIONS = {"concat": ConcatFusion, "gate": GateFusion, "cmx": None}  # cmx: the backbone takes both branch BEVs
+TRUNKS = {"dualbev": _dualbev_trunk, "second": _second_trunk}
+BACKBONES = dict(TRUNKS, cmx=_cmx_trunk)
+
+
+def check_config(cfg):
+    """every unknown kind and every combination of slot kinds that does not fit, in one place (one ValueError naming all)"""
+    errs = [f"{name}={val!r}: one of {sorted(table)}" for name, val, table in
+            (("camera_features", cfg.camera_features, CAMERA_FEATURES), ("lift", cfg.lift, LIFTS), ("cam_collapse", cfg.cam_collapse, COLLAPSES),
+             ("cam_temporal", cfg.cam_temporal, TEMPORALS), ("rad_temporal", cfg.rad_temporal, TEMPORALS),
+             ("radar_kind", cfg.radar_kind, RADARS), ("fusion", cfg.fusion, FUSIONS), ("trunk_kind", cfg.trunk_kind, TRUNKS))
+            if val not in table]
+    if cfg.camera_features == "dual" and (cfg.lift == "s" or cfg.cam_adapter):
+        errs.append("camera_features='dual' is not supported with lift 's' or cam_adapter")
+    if cfg.camera_features == "bevfusion" and cfg.lift == "s":
+        errs.append("camera_features='bevfusion' is not supported with lift 's'")
+    if cfg.lane_branch and (cfg.camera_features != "dualbev" or cfg.lift == "s"):
+        errs.append("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
+    if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
+        errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
+    if errs:
+        raise ValueError("; ".join(errs))
 
 
 class BEVFusionModel(nn.Module):
     def __init__(self, cfg=None):
         super().__init__()
         self.cfg = cfg = cfg or ModelConfig()
+        check_config(cfg)
         self.grid = Grid(z_levels=cfg.z_levels, **cfg.grid_kwargs)
-        # camera branch: pre-trained image heads (only image_features is used) + our lift + reduce
+        # camera slot: pre-trained image heads (only image_features is used; the cached chain drops them) + lift + height collapse
         self.camera = FrontCameraEncoder()
         if cfg.pretrained:
             rep = self.camera.load_pretrained(cfg.pretrained)
@@ -143,88 +205,29 @@ class BEVFusionModel(nn.Module):
             self.camera.freeze_camera_heads()
         del self.camera.lift, self.camera.out_conv                   # replaced by the model's own lift
         n_ctx, nz = 80, len(cfg.z_levels)
-        if cfg.camera_features not in ("dualbev", "bevfusion", "dual"):
-            raise ValueError(cfg.camera_features)
-        if cfg.camera_features == "dual" and (cfg.lift == "s" or cfg.cam_adapter):
-            raise ValueError("camera_features='dual' is not supported with lift 's' or cam_adapter")
         if cfg.camera_features == "bevfusion":                       # cached BEVFusion features: stride 8, frustum conventions
-            if cfg.lift == "s":
-                raise ValueError("camera_features='bevfusion' is not supported with lift 's'")
-            try:
-                from .bevfusion_camera import DEPTHS
-            except ImportError:
-                from bevfusion_camera import DEPTHS
-            lift_kw = dict(depth_centres=DEPTHS, frustum_cells=True)
+            self.lift = LIFTS[cfg.lift](self.grid, _bevfusion_depths(), cfg, frustum_cells=True)
         else:
-            lift_kw = dict(depth_centres=depth_centres())
-        if cfg.lift in ("pd", "p"):
-            self.lift = LiftPD(self.grid, use_depth=(cfg.lift == "pd"), oversample=cfg.oversample, **lift_kw)
-        elif cfg.lift == "s":
-            self.lift = _fallbacks().LiftS(self.grid, depth_centres())
-        else:
-            raise ValueError(cfg.lift)
+            self.lift = LIFTS[cfg.lift](self.grid, depth_centres(), cfg)
         self.cam_adapter = CtxAdapter(n_ctx) if cfg.cam_adapter else None
-        if cfg.cam_collapse == "zsum":
-            self.cam_reduce = ZSumReduce(nz, n_ctx, cfg.c_cam)
-        elif cfg.cam_collapse == "zconv":
-            self.cam_reduce = nn.Sequential(nn.Conv2d(nz * n_ctx, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
-                                            nn.ReLU(True))
-        else:
-            raise ValueError(cfg.cam_collapse)
+        self.cam_reduce = COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam)
         if cfg.camera_features == "dual":    # t10: second branch = cached BEVFusion features (stride 8, frustum cells), merged 2 c_cam -> c_cam
-            try:
-                from .bevfusion_camera import DEPTHS
-            except ImportError:
-                from bevfusion_camera import DEPTHS
-            self.lift2 = LiftPD(self.grid, depth_centres=DEPTHS, use_depth=(cfg.lift == "pd"), oversample=cfg.oversample,
-                                frustum_cells=True)
-            self.cam_reduce2 = (ZSumReduce(nz, n_ctx, cfg.c_cam) if cfg.cam_collapse == "zsum" else
-                                nn.Sequential(nn.Conv2d(nz * n_ctx, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam), nn.ReLU(True)))
+            self.lift2 = LIFTS[cfg.lift](self.grid, _bevfusion_depths(), cfg, frustum_cells=True)
+            self.cam_reduce2 = COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam)
             self.cam_merge = nn.Sequential(nn.Conv2d(2 * cfg.c_cam, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
                                            nn.ReLU(True))
-        self.cam_temporal = _temporal(cfg.cam_temporal, cfg.c_cam, self.grid)
-        self.lane = None
-        if cfg.lane_branch:
-            if cfg.camera_features != "dualbev" or cfg.lift == "s":
-                raise ValueError("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
-            if cfg.camera_off:                                    # the branch reads the current image: a "camera off" arm would still see it
-                raise ValueError("lane_branch reads the camera image: it cannot be combined with camera_off")
-            self.lane = LaneBranch(self.grid, depth_centres(), kind=cfg.lane_branch, c_out=cfg.c_cam,
-                                   oversample=cfg.oversample, pretrained=cfg.lane_pretrained)
-        # radar branch
-        if cfg.radar_kind == "pillars":
-            self.radar = RadarPillars(self.grid, cfg.c_rad)
-        elif cfg.radar_kind in ("raster", "off"):
-            self.radar = RadarBEV(self.grid, cfg.c_rad)
-        else:
-            raise ValueError(cfg.radar_kind)
-        self.rad_temporal = _temporal(cfg.rad_temporal, cfg.c_rad, self.grid)
-        # fusion, trunk (CMX is its own four-stage pyramid + decoder: it replaces both)
+        # temporal slot, one block per branch (the same table)
+        self.cam_temporal = TEMPORALS[cfg.cam_temporal](cfg.c_cam, self.grid)
+        # lane add-on (option): stride-4 branch of the current frame, added after the camera's temporal block
+        self.lane = (LaneBranch(self.grid, depth_centres(), kind=cfg.lane_branch, c_out=cfg.c_cam, oversample=cfg.oversample,
+                                pretrained=cfg.lane_pretrained) if cfg.lane_branch else None)
+        # radar slot
+        self.radar = RADARS[cfg.radar_kind](self.grid, cfg.c_rad)
+        self.rad_temporal = TEMPORALS[cfg.rad_temporal](cfg.c_rad, self.grid)
+        # fusion + backbone slots (CMX is its own four-stage pyramid + decoder: it replaces both)
         p_drop = 0.0 if (cfg.camera_off or cfg.radar_kind == "off") else cfg.p_drop
-        if cfg.fusion == "cmx":
-            self.fusion = None
-            c = 128
-            self.trunk = _fallbacks().CMXTrunk(cfg.c_cam, cfg.c_rad, embed=cfg.c_fuse, c_out=c, p_drop=p_drop)
-        else:
-            if cfg.fusion == "concat":
-                self.fusion = ConcatFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
-            elif cfg.fusion == "gate":
-                self.fusion = GateFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
-            else:
-                raise ValueError(cfg.fusion)
-            if cfg.trunk_kind == "second":
-                self.trunk = SecondTrunk(cin=cfg.c_fuse)
-                c = self.trunk.out_channels
-            elif cfg.trunk_kind == "dualbev":
-                self.trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail,
-                                      fpn_original_order=cfg.trunk_fpn_original)
-                if cfg.trunk_pretrained:                              # detection-trained BEV encoder of DualBEV (SOA init)
-                    rep = self.trunk.load_pretrained(cfg.trunk_pretrained)
-                    if rep["missing"] or rep["shape_mismatch"]:
-                        raise RuntimeError(f"trunk weights do not fit: {rep['missing'][:3]} {rep['shape_mismatch'][:3]}")
-                c = self.trunk.img_bev_encoder_neck.out_channels + cfg.trunk_detail
-            else:
-                raise ValueError(cfg.trunk_kind)
+        self.fusion = None if cfg.fusion == "cmx" else FUSIONS[cfg.fusion](cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
+        self.trunk, c = BACKBONES["cmx" if cfg.fusion == "cmx" else cfg.trunk_kind](cfg, p_drop)
         if hasattr(self.trunk, "head"):
             del self.trunk.head                                      # the heads below decode the trunk features
         self.head_reduce = None
@@ -247,6 +250,7 @@ class BEVFusionModel(nn.Module):
             self.aux_cam = SemanticHead(cfg.c_cam, len(layer_spec(False, True)))
             self.aux_rad = SemanticHead(cfg.c_rad, len(radar_aux_spec(cfg.radar_stationary)))
         self.c_trunk = c
+        self._dist_idx = [i for i, s in enumerate(self.spec) if s[1] == "dist"]    # distance channels -> the soft line map
 
     # ---- camera
     def camera_bevs(self, batch):
@@ -274,11 +278,7 @@ class BEVFusionModel(nn.Module):
         """(B, 1, X, Y): the cells the current camera frame observes (LiftPD.visibility per sample) - the obs_mass of the
         camera branch's world memory, so the empty BEV outside the field of view does not overwrite what the memory saw
         (before 2026-10-26 the write used obs_mass = 1 everywhere)."""
-        hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
-        vis = [camera_visibility(self.grid, self.cfg.z_levels, self.lift.depth_centres, batch["K"][b, 0],
-                                 batch["T_cam_car"][b, 0], hw, batch.get("ida"), self.cfg.oversample)
-               for b in range(batch["K"].shape[0])]
-        return torch.stack(vis)[:, None].to(like)
+        return Precompute.from_model(self).camera(batch).to(like)
 
     @staticmethod
     def _branch_temporal(block, bevs, steps, state, step, obs_mass=None):
@@ -310,9 +310,9 @@ class BEVFusionModel(nn.Module):
     def boxes(self, res, dt=0.0, k=50, threshold=0.2, rescore=True):
         """Run time: decoded boxes at the target time dt of a forward result (list (B) of box dicts), refined by S5c
         when the model has a refiner (rescore: sqrt(score x predicted IoU))."""
-        p = res["out"][float(dt)]
-        dets = decode({kk: v.float().cpu() for kk, v in p["obj"].items()}, self.grid, NUSC_GROUPS, k=k,
-                      threshold=threshold)
+        p = res["out"][float(dt)]                                # post-processing: select cells of the dense box output
+        dense = dense_boxes({kk: v.double().cpu() for kk, v in p["obj"].items()}, self.grid, NUSC_GROUPS, soft=False)   # double: = decode
+        dets = select_boxes(dense, NUSC_GROUPS, k=k, threshold=threshold)
         if not self.cfg.refine or not any(dets):
             return dets
         return refine_boxes(self.refiner, p["obj_feat"], dets, self.grid, p["obj_dt"], rescore)
@@ -327,13 +327,16 @@ class BEVFusionModel(nn.Module):
         away, not the nominal 0.5 s); without it a head decodes at the nominal dt with the batch's v, omega. The output
         key stays the nominal dt."""
         state = state or {}
-        cam_frames = self.camera_bevs(batch)
+        need = (("vis_cam",) if isinstance(self.cam_temporal, TemporalFusion) else ()) + \
+               (("radar_hits",) if isinstance(self.rad_temporal, TemporalFusion) else ())
+        batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
+        cam_frames = self.camera_bevs(batch)                                         # the batch's frame (kept when precomputed)
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
                  for f in batch["steps"]]
-        cam_obs = self.camera_visibility(batch, cam_frames) if isinstance(self.cam_temporal, TemporalFusion) else None
+        cam_obs = batch["vis_cam"].to(cam_frames) if "vis_cam" in need else None
         flip = batch.get("flip")                                 # mirror augmentation (training/augment.py): the other inputs
         if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
-            cam_frames, cam_obs = flip_cam(cam_frames, cam_obs, flip)
+            cam_frames = flip_cam(cam_frames, None, flip)[0]     # (the visibility map is mirrored by the precompute step)
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
         if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
@@ -345,7 +348,8 @@ class BEVFusionModel(nn.Module):
             cam = cam + lane
         rad = (torch.zeros(cam.shape[0], self.cfg.c_rad, self.grid.nx, self.grid.ny, device=cam.device)
                if self.cfg.radar_kind == "off" else self.radar(batch["radar"], cam.shape[0]))
-        rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step)
+        rad_obs = batch["radar_hits"].to(rad) if "radar_hits" in need else None   # radar memory: write where it measured
+        rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:
             S = self.head_reduce(S)
@@ -363,6 +367,9 @@ class BEVFusionModel(nn.Module):
                 p["obj_dt"] = torch.as_tensor(dt_i).to(S).reshape(-1).expand(S.shape[0])
                 if len(refine_gt.get(float(dt), [])) == S.shape[0]:
                     p["refine"] = self._refine_train(obj, ao["state"], refine_gt[float(dt)], dt_i)
+            if self.cfg.dense_outputs:                           # output interface: dense, differentiable boxes and lines (extract.py)
+                p["boxes"] = dense_boxes({k: v.float() for k, v in obj.items()}, self.grid, NUSC_GROUPS)
+                p["lines"] = soft_line_map(sem[:, self._dist_idx].float().clamp(min=0), self.grid.res)   # clamped as the evaluation does
             if abs(float(dt)) < 1e-6:
                 p["v_hat"] = self.mover.motion(S)
                 if self.cfg.aux_heads and self.training:

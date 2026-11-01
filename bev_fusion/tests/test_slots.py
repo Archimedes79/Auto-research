@@ -1,0 +1,140 @@
+"""Contract test of every kind of every network slot (training/architecture.md) and of the main switches (camera_off, cam_adapter,
+head_channels, trunk_detail; the lane branch and the refiner have their own tests: test_lane_branch_chain.py, test_box_refine.py,
+because they need pre-trained weights or GT boxes): each kind is built on a
+small grid inside the cached chain (CachedBEVFusionModel), run on a synthetic cached batch through the precompute step, and must
+(1) refuse no valid combination and refuse the invalid ones in model.check_config, (2) pass interface.check_inputs / check_outputs,
+(3) give finite outputs including the dense boxes and the soft line map, (4) send a gradient to every trainable parameter on the
+second call of a clip (the first fills the memory: the radar branch has no past frames, so its memory blocks read nothing before),
+and (5) carry a temporal state into the next call. A new kind is a builder entry in model.py plus its line in KINDS below.
+Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_slots.py   (CPU, about 1-2 min, no data, no GPU)"""
+import dataclasses
+import os
+import sys
+import time
+
+import torch
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.join(ROOT, "training"))
+from bevfusion_camera import DEPTHS, bevfusion_ida  # noqa: E402
+from camera_encoder import nuscenes_front_ida  # noqa: E402
+from feature_cache import FEAT_HW, N_CTX, N_PROB, CachedBEVFusionModel  # noqa: E402
+from interface import check_inputs, check_outputs  # noqa: E402
+from lift_pd import _front_camera  # noqa: E402
+from model import ModelConfig, check_config  # noqa: E402
+from nuscenes_dataset import DST_HW  # noqa: E402
+
+GRID = {"x_max": 16.0, "y_min": -8.0, "y_max": 8.0}             # 32 x 32 cells
+BASE = dict(pretrained="", trunk_pretrained="", grid_kwargs=GRID, oversample=1, c_cam=16, c_rad=8, c_fuse=24, trunk_width=0.25,
+            p_drop=0.0, dense_outputs=True)                  # no modality dropout (it would zero a branch at random)
+KINDS = [("camera_features", "dualbev"), ("camera_features", "bevfusion"), ("camera_features", "dual"),
+         ("camera_off", True), ("cam_adapter", True), ("head_channels", 16), ("trunk_detail", 8),
+         ("lift", "pd"), ("lift", "p"), ("lift", "s"),
+         ("cam_collapse", "zconv"), ("cam_collapse", "zsum"),
+         ("cam_temporal", "window_memory"), ("cam_temporal", "ego_gru"), ("cam_temporal", "none"),
+         ("rad_temporal", "none"), ("rad_temporal", "window_memory"), ("rad_temporal", "ego_gru"),
+         ("radar_kind", "raster"), ("radar_kind", "pillars"), ("radar_kind", "off"),
+         ("fusion", "concat"), ("fusion", "gate"), ("fusion", "cmx"),
+         ("trunk_kind", "dualbev"), ("trunk_kind", "second"),
+         ("object_direction", True), ("object_moving", True)]
+# parts a kind builds but cannot train, with the reason (a finding, not hidden): the radar branch has no past frames, so the camera's
+# window block reads no window (relevance, temperature) and its velocity head reaches the output only through the memory write of a
+# later call - the radar memory needs its own static gate (the measured Doppler) or past radar BEVs (architecture_target.md)
+KNOWN_UNUSED = {("rad_temporal", "window_memory"): ("rad_temporal.log_tau", "rad_temporal.head.", "rad_temporal.relevance."),
+                ("radar_kind", "off"): ("radar.", "aux_rad.net.0.weight", "aux_rad.net.1.weight"),   # the study arm keeps the radar
+                # block's weights (same checkpoint layout), never runs it; the radar aux head sees a zero radar BEV
+                ("camera_off", True): ("cam_reduce.", "cam_temporal.head.net.0.weight", "cam_temporal.relevance.weight")}
+                # camera_off: the camera BEV is zero, its encoder never runs and the weights that see only that zero input get none
+INVALID = [dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
+           dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
+
+
+def batch_for(cfg, B=2, Fn=3, seed=0):
+    g = torch.Generator().manual_seed(seed)
+    K, T, _ = _front_camera(torch.float32)
+    K = K.clone()
+    K[:2] *= 2                                                   # the synthetic camera at the original 1600 x 900 resolution
+    bevf = cfg.camera_features == "bevfusion"                    # the cached BEVFusion features: own depth bins, stride 8, own crop
+    n_d, hw_f = (len(DEPTHS), (32, 88)) if bevf else (N_PROB, FEAT_HW)
+    prob = torch.rand(B, Fn, n_d, *hw_f, generator=g)
+    b = {"K": K.expand(B, Fn, 3, 3).clone(), "T_cam_car": T.expand(B, Fn, 4, 4).clone(),
+         "ida": bevfusion_ida() if bevf else nuscenes_front_ida(dst_hw=DST_HW),
+         "hw": DST_HW, "prob": prob / prob.sum(2, keepdim=True), "ctx": torch.randn(B, Fn, N_CTX, *hw_f, generator=g),
+         "v": torch.full((B,), 8.0), "omega": torch.full((B,), 0.05),
+         "steps": [[]] + [[(torch.full((B,), 1 / 12), torch.full((B,), 8.0), torch.full((B,), 0.05))] * k for k in range(1, Fn)],
+         "radar": {"x": torch.rand(40, generator=g) * 15, "y": torch.rand(40, generator=g) * 14 - 7, "z": torch.zeros(40),
+                   "vx": torch.randn(40, generator=g), "vy": torch.randn(40, generator=g), "rcs": torch.randn(40, generator=g),
+                   "b": torch.arange(40) % B}}
+    if cfg.camera_features == "dual":
+        p2 = torch.rand(B, Fn, len(DEPTHS), 32, 88, generator=g)
+        b.update(prob2=p2 / p2.sum(2, keepdim=True), ctx2=torch.randn(B, Fn, N_CTX, 32, 88, generator=g), ida2=bevfusion_ida())
+    return b
+
+
+def radar_fields():
+    """the detection fields radar_bev.properties reads, besides x, y, b"""
+    import inspect
+    import re
+    import radar_bev
+    return sorted(set(re.findall(r'det\["([a-z_]+)"\]', inspect.getsource(radar_bev.properties))))
+
+
+def one(name, value):
+    cfg = ModelConfig(**dict(BASE, **{name: value}))
+    torch.manual_seed(0)
+    m = CachedBEVFusionModel(cfg).train()
+    with torch.no_grad():                                        # zero-start branches (zero last layer) cut the gradient at init by
+        for q in m.parameters():                                 # design: give them small values, so the test checks the path
+            if q.requires_grad and q.abs().max() == 0:
+                q.normal_(0, 1e-2)
+    batch = batch_for(cfg)
+    for f in radar_fields():                                     # every field the radar raster / pillars read
+        batch["radar"].setdefault(f, torch.randn(len(batch["radar"]["x"])))
+    errs = check_inputs(batch)
+    assert not errs, (name, value, errs)
+    dts = (0.0, 0.5)
+    with torch.no_grad():                                        # the first call of a clip fills the memory (radar has no past frames:
+        state = m(batch, dts=(0.0,))["state"]                    # its memory blocks read nothing before it)
+    res = m(batch, dts=dts, state=state, step=(1 / 12, 8.0, 0.05))
+    errs = check_outputs(res, dts)
+    assert not errs, (name, value, errs)
+    p0 = res["out"][0.0]
+    assert "boxes" in p0 and "lines" in p0 and p0["lines"].shape[1] == len(m._dist_idx), (name, value)
+    total = res["features"].sum() * 0
+    for dt, p in res["out"].items():
+        for k, v in p.items():
+            for t in (v.values() if isinstance(v, dict) else [v]):
+                if torch.is_tensor(t) and t.is_floating_point():
+                    assert torch.isfinite(t).all(), (name, value, dt, k)
+                    if k not in ("boxes", "lines"):              # the gradient through what the loss reads (the dense outputs:
+                        total = total + (t.float() * torch.randn_like(t.float())).mean()   # extract.py's own test)
+    total.backward()
+    dead = [n for n, q in m.named_parameters() if q.requires_grad
+            and (q.grad is None or not torch.isfinite(q.grad).all() or q.grad.abs().max() == 0)]
+    known = KNOWN_UNUSED.get((name, value), ())
+    unexpected = [n for n in dead if not n.startswith(known)]
+    assert not unexpected, (name, value, "no gradient:", unexpected[:6], len(unexpected))
+    assert all(any(n.startswith(k) for n in dead) for k in known), (name, value, "a known-unused part now trains: update KNOWN_UNUSED", dead)
+    with torch.no_grad():                                        # a second call carries the temporal state
+        res2 = m(batch, dts=(0.0,), state=res["state"], step=(1 / 12, 8.0, 0.05))
+    assert not check_outputs(res2, (0.0,)), (name, value)
+    return sum(q.numel() for q in m.parameters() if q.requires_grad)
+
+
+def main():
+    t0 = time.time()
+    for bad in INVALID:
+        try:
+            check_config(ModelConfig(**dict(BASE, **bad)))
+            raise AssertionError(f"check_config accepted {bad}")
+        except ValueError:
+            pass
+    for name, value in KINDS:
+        n = one(name, value)
+        print(f"  ok  {name:16s} {str(value):14s} {n / 1e3:8.1f} k trainable parameters")
+    print(f"test_slots passed ({time.time() - t0:.0f} s): {len(KINDS)} slot kinds build, pass both interfaces, give finite dense "
+          f"outputs, reach every trainable parameter and carry state; {len(INVALID)} invalid combinations refused")
+
+
+if __name__ == "__main__":
+    main()

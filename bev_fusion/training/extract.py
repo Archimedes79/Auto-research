@@ -8,9 +8,10 @@ read and train through, and the one small post-processing step that picks discre
 Boxes: the peak weight is w = hm * exp(-beta * (maxpool3(hm) - hm)): the heatmap at a local maximum, smoothly lower elsewhere.
 The parameters per cell are those the head regresses there: centre = cell + offset (metres, vehicle frame), length / width
 (exp of the log size), radius, yaw from (sin, cos) - with the direction class the axis is mapped into [DIR_OFFSET, DIR_OFFSET + pi)
-and turned by pi where the class says "back" - and the velocity. soft=True (the dense output): the back / front choice is the
-heading vector times tanh(dir logit) and the velocity is scaled by sigmoid(moving logit), both differentiable; soft=False
-(selection): the hard choices of object_head.decode, so select_boxes(dense_boxes(..., soft=False)) returns its boxes.
+and turned by pi where the class says "back" - and the velocity. soft=True (the dense output) adds the heading vector (hx, hy) = the
+axis times tanh(dir logit) (its length is the front / back confidence; the angle `yaw` itself cannot carry a gradient to the class)
+and scales the velocity by sigmoid(moving logit), both differentiable; soft=False (selection): the hard choices of
+object_head.decode, so select_boxes(dense_boxes(..., soft=False)) returns its boxes (call it on double maps for exact equality).
 Lines: from the predicted distance field (metres): near = sigmoid(k (res/2 - d)), a local minimum along x or y = sigmoid(k
 (min of the two neighbours - d)); p = min(near, max(min_x, min_y)), so p >= 0.5 exactly when line_cells marks the cell.
 Run the self-test: python training/extract.py
@@ -49,12 +50,13 @@ def dense_boxes(obj, grid, groups, beta=10.0, soft=True, from_probabilities=Fals
         yaw = torch.atan2(obj["rot"][:, 0], obj["rot"][:, 1])
         if "dir" in obj:                                   # the box axis in [off, off + pi), then the half from the class
             axis = torch.remainder(yaw - DIR_OFFSET, math.pi) + DIR_OFFSET
-            if soft:
-                t = torch.tanh(obj["dir"][:, 0])
-                yaw = torch.atan2(t * torch.sin(axis), t * torch.cos(axis))
-            else:
-                back = obj["dir"][:, 0] < 0
-                yaw = torch.where(back, torch.remainder(axis + 2 * math.pi, 2 * math.pi) - math.pi, axis)
+            back = obj["dir"][:, 0] < 0
+            if soft:                                       # heading vector: the axis times tanh(dir) - its length is the front / back
+                t = torch.tanh(obj["dir"][:, 0])           # confidence, so the gradient reaches the dir logit (an angle cannot carry it)
+                out["hx"], out["hy"] = t * torch.cos(axis), t * torch.sin(axis)
+            yaw = torch.where(back, torch.remainder(axis + 2 * math.pi, 2 * math.pi) - math.pi, axis)
+        elif soft:
+            out["hx"], out["hy"] = torch.cos(yaw), torch.sin(yaw)
         out["yaw"] = yaw
     v = obj["vel"]
     if "mov" in obj:                                       # static (moving logit < 0): velocity 0 (the AVE-optimal answer)
@@ -137,13 +139,22 @@ def _selftest():
                 if key == "yaw":
                     dv = math.remainder(dv, 2 * math.pi)
                 assert abs(dv) < 1e-9, (key, r[key], g[key])
-    # 2. the dense output is differentiable and equals the heatmap at its peaks
+    # 2. the dense output is differentiable (each head map gets a real gradient, the dir logit through the heading vector,
+    #    also at dir = 0) and equals the heatmap at its peaks
     obj_g = {kk: v.clone().requires_grad_(True) for kk, v in obj.items()}
+    with torch.no_grad():
+        obj_g["dir"][0, 0, :4, :4] = 0.0                          # exactly undecided cells: no NaN
     dense = dense_boxes(obj_g, Grid, groups, soft=True)
-    total = sum(dense[kk].sum() for kk in ("w", "cx", "cy", "length", "width", "radius", "yaw", "vx", "vy"))
+    total = sum(dense[kk].sum() for kk in ("w", "cx", "cy", "length", "width", "radius", "hx", "hy", "vx", "vy"))
     total.backward()
     for kk, v in obj_g.items():
-        assert v.grad is not None and torch.isfinite(v.grad).all() and v.grad.abs().sum() > 0, kk
+        assert v.grad is not None and torch.isfinite(v.grad).all() and v.grad.abs().max() > 1e-3, (kk, v.grad.abs().max())
+    # 1b. float32 maps (the model's dtype): the same boxes as decode on the same float32 maps, values within float32 rounding
+    o32 = {kk: v.float() for kk, v in obj.items()}
+    r32 = decode(o32, Grid, groups, k=60, threshold=0.2)
+    g32 = select_boxes(dense_boxes({kk: v.double() for kk, v in o32.items()}, Grid, groups, soft=False), groups, k=60, threshold=0.2)
+    assert [[b["group"] for b in r] for r in r32] == [[b["group"] for b in g] for g in g32]
+    assert max(abs(math.remainder(r["yaw"] - g["yaw"], 2 * math.pi)) for rb, gb in zip(r32, g32) for r, g in zip(rb, gb) if "yaw" in r) < 1e-6
     hm = dense["hm"].detach()
     peak = hm == F.max_pool2d(hm, 3, 1, 1)
     assert torch.equal(dense["w"].detach()[peak], hm[peak]) and (dense["w"].detach() <= hm + 1e-12).all()
@@ -155,6 +166,9 @@ def _selftest():
         d[:, 7] = torch.round(d[:, 7] * 4) / 4                    # quantised column: more exact ties
         p = soft_line_map(d, Grid.res)
         assert np.array_equal(p.numpy() >= 0.5, line_cells(d.numpy(), Grid.res)), seed
+        neg = d - 0.3                                             # a head can predict negative distances: the model and the
+        p = soft_line_map(neg.clamp(min=0), Grid.res)             # evaluation (bev_adapter) clamp them at 0 first
+        assert np.array_equal(p.numpy() >= 0.5, line_cells(neg.clamp(min=0).numpy(), Grid.res)), seed
     dd = d.clone().requires_grad_(True)
     soft_line_map(dd, Grid.res).sum().backward()
     assert torch.isfinite(dd.grad).all() and dd.grad.abs().sum() > 0
