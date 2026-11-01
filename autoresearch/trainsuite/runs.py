@@ -22,7 +22,10 @@ def _flat(obj, prefix=""):
         if isinstance(v, dict):
             out.update(_flat(v, f"{prefix}{k}."))
         elif isinstance(v, (int, float)) and not isinstance(v, bool):
-            out[f"{prefix}{k}"] = float(v)
+            try:
+                out[f"{prefix}{k}"] = float(v)
+            except OverflowError:                         # an integer beyond the float range (json.loads reads any number of digits): no value, not a crash of every status
+                pass
     return out
 
 

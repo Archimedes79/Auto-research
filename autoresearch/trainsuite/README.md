@@ -39,7 +39,7 @@ The loss key is `total` (`--loss KEY`). A project with other names puts a `train
 | `rising` | same | window mean of `total` or a `group.*` rose by more than 3 standard errors |
 | `grad_norm`, `gpu`, `slow` | warn | grad norm > 10 x its median / the trainer's peak GPU allocation > 11 GB / s per step 1.5 x the typical one of the current attempt (rows with a time `t` only, running runs only) |
 | `overfit` | warn | `val.total` rose by 5 % while the training loss fell |
-| `vs_ref` | warn if 10 % **and** 3 standard errors worse over the last 50 rows after 20 % of the steps, else info | the loss against a reference run at the same step |
+| `vs_ref` | warn if 10 % **and** 3 standard errors worse over the last 50 rows after 20 % of the steps, else info | the loss against a reference run at the same step; a reference with another step total is on another schedule (warm-up, learning rate): info "not compared" |
 | `flat`, `no_metrics` | info | the loss did not move over the last rows / nothing logged yet |
 | `kill_rule`, `kill_key` | alert / warn | a line of `kill.txt` or `--kill` is not a rule / the run passed the rule's step and never logged its key (a typo) |
 

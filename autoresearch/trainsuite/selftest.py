@@ -293,9 +293,9 @@ def main():
         assert Run(d).state() != "stopped", "output 20 s after the marker: the run went on"
         nd = make(tmp, "nanstep", rows(20))                                    # NaN / Infinity as a step is no row (and no crash of int(step) in status)
         with open(os.path.join(nd, "log.jsonl"), "a") as fh:
-            fh.write('{"step": NaN, "total": 1.0}\n{"step": Infinity, "total": 1.0}\n')
+            fh.write('{"step": NaN, "total": 1.0}\n{"step": Infinity, "total": 1.0}\n{"step": 420, "total": 1.0, "huge": ' + "9" * 400 + "}\n")      # a 400-digit integer: no float
         rn = Run(nd)
-        assert rn.step == 400 and len(rn.train) == 20, (rn.step, len(rn.train))
+        assert rn.step == 420 and len(rn.train) == 21 and "huge" not in rn.train[-1], (rn.step, len(rn.train))
         rc, out = run_cli("--root", tmp, "status")
         assert rc is not None and "nanstep" in out, out
         assert control.honours_stop(os.path.join(tmp, "good")) is None
