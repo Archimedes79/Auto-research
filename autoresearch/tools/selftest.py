@@ -814,6 +814,24 @@ try:
     _, ftag, fnote = RUN.git_snapshot(T4, cfg4b, "t", "S.fp", "m")
     assert ftag == "t/S.fp" and "temp/train/sub/helper.sh" in lsf(ftag), (ftag, fnote)
     shutil.rmtree(T4, ignore_errors=True)
+    # a code folder OUTSIDE the problem folder (code_dirs "../shared": a repository-level suite such as autogt): the spec is the repository
+    # path, and the tag holds the files as they are in the working tree
+    T5 = tempfile.mkdtemp()
+    G5 = ["git", "-C", T5]
+    os.makedirs(f"{T5}/prob/code")
+    os.makedirs(f"{T5}/shared")
+    open(f"{T5}/prob/code/a.py", "w").write("a = 1\n")
+    open(f"{T5}/shared/s.py", "w").write("s = 1\n")
+    for args in (["init", "-q"], ["config", "user.name", "selftest"], ["config", "user.email", "selftest@example.invalid"], ["add", "-A"], ["commit", "-q", "-m", "c0"]):
+        subprocess.run(G5 + args, check=True, capture_output=True)
+    cfg5 = dict(code_dirs=["code", "../shared"], fingerprint_extra=[], scratch="")
+    spec5 = RUN.snapshot_spec(f"{T5}/prob", cfg5)[1]
+    assert spec5[:2] == ["prob/code", "shared"], spec5
+    open(f"{T5}/shared/s.py", "w").write("s = 2\n")
+    _, tag5, note5 = RUN.git_snapshot(f"{T5}/prob", cfg5, "t", "S.up", "m")
+    out5 = subprocess.run(G5 + ["show", f"{tag5}:shared/s.py"], capture_output=True, text=True).stdout
+    assert tag5 == "t/S.up" and out5 == "s = 2\n", (tag5, note5, out5)
+    shutil.rmtree(T5, ignore_errors=True)
     nochk = go("S.nochk", ["bash", "-c", f"echo 'x = 4' > {T}/code/a.py; echo ran"], "--no-drift-check")
     assert nochk.returncode == 0 and not {"code_drift", "code_drift_check"} & set(RUN.record(f"{T}/runs/S.nochk")), "--no-drift-check skips the check"
     strict = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc.md", f"{T}/src.json", "--strict"], capture_output=True, text=True)

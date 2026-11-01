@@ -15,21 +15,21 @@
   "lower_is_better": ["ate", "ase", "aoe", "ave", "mATE", "mASE", "mAOE", "mAVE", "ave_moving", "ave_static", "ave0_moving", "ave0_static",
                       "ave_slow_moving", "fp_hi", "field_mae", "total", "group.areas", "group.lines", "group.motion", "group.objects","median_ms", "p90_ms", "mean_ms", "bev_dt0_median", "bev_3dt_median",
                       "bev_dt0_refined_boxes_median", "camera_heads_median"],
-  "code_dirs": ["training", "evaluation", "autogt", "tests"],
+  "code_dirs": ["training", "evaluation", "../autogt", "tests"],
   "fingerprint_extra": ["temp/train/run_ar.sh", "temp/train/run_cfg.sh"],
   "scratch": "temp",
-  "live_code": ["training", "evaluation", "autogt"],
+  "live_code": ["training", "evaluation", "../autogt"],
   "trash": "_to_delete",
   "gpu_slots": 2,
   "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
   "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
   "structure": {
     "root_files": ["README.md", "plan.md", "plan_draft2.md", "radar_encoding.md", "requirements.md", "project.json"],
-    "root_dirs": ["_to_delete", "autogt", "data", "evaluation", "experiments", "literature", "models", "records", "runs", "temp", "tests", "training"],
-    "folders_with_readme": ["_to_delete", "autogt", "data", "evaluation", "experiments", "models", "records", "runs", "temp", "training"],
+    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "records", "runs", "temp", "tests", "training"],
+    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "records", "runs", "temp", "training"],
     "living": [],
     "skip_parts": [],
-    "index_dirs": ["training", "evaluation", "autogt", "tests", "temp"],
+    "index_dirs": ["training", "evaluation", "../autogt", "tests", "temp"],
     "extra_bases": []
   }
 }

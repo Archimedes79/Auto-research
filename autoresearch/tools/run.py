@@ -119,7 +119,8 @@ def snapshot_spec(root, cfg):
     top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
     rel = os.path.relpath(root, top).replace("\\", "/")
     rel = "" if rel == "." else rel + "/"
-    spec = [rel + d for d in cfg["code_dirs"]] + [rel + x for x in cfg["fingerprint_extra"]]
+    # normalised: a code folder outside the problem folder (code_dirs "../autogt") becomes the repository path "autogt"
+    spec = [posixpath.normpath(rel + d) for d in cfg["code_dirs"]] + [posixpath.normpath(rel + x) for x in cfg["fingerprint_extra"]]
     ar = os.path.relpath(P.AR, top).replace("\\", "/")
     if not ar.startswith(".."):  # the research system itself, when it lives in the same repository
         spec.append(ar)
