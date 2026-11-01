@@ -1,6 +1,7 @@
 """Self-test on synthetic runs with known answers (stdlib; curves are checked when matplotlib is installed).
 Run: python -m trainsuite selftest    (from autoresearch/, a few seconds, writes only to a temporary folder)"""
 import ast
+import codecs
 import contextlib
 import io
 import json
@@ -235,6 +236,30 @@ def main():
         rc, out = run_cli("--root", tmp, "status", "good")                      # a bad rule does not kill the status
         assert "kill_rule" in out and "good" in out
         ok("kill rules: ok / hit / pending / unknown key / NaN = hit, inline comments, a bad line is reported and the rest still works")
+
+        # 7b the encodings of kill.txt: UTF-8, UTF-8 with BOM, UTF-16 with BOM (PowerShell 5.1 `>`) all work; bytes that are no text are ONE problem, no exception,
+        # and `status` of a root that holds such a file still lists every run
+        rule_line = "group.lines@1000 > 0.9\r\n"
+        for label, data in (("utf-8", rule_line.encode("utf-8")), ("utf-8 bom", codecs.BOM_UTF8 + rule_line.encode("utf-8")),
+                            ("utf-16 le bom", codecs.BOM_UTF16_LE + rule_line.encode("utf-16-le")), ("utf-16 be bom", codecs.BOM_UTF16_BE + rule_line.encode("utf-16-be"))):
+            kd = make(tmp, "enc_" + label.replace(" ", "_"), rows(50))
+            with open(os.path.join(kd, "kill.txt"), "wb") as f:
+                f.write(data)
+            rs, pr = load_rules(Run(kd))
+            assert len(rs) == 1 and not pr and rs[0].key == "group.lines", (label, rs, pr)
+        fd_ = make(tmp, "enc_ff", rows(50))                      # a form feed or U+2028 in a comment is no line break: line numbers stay right
+        with open(os.path.join(fd_, "kill.txt"), "wb") as f:
+            f.write("# a\x0c b   c\ngroup.lines@1000 > 0.9\nnot a rule\n".encode("utf-8"))
+        rs, pr = load_rules(Run(fd_))
+        assert len(rs) == 1 and len(pr) == 1 and pr[0].startswith("kill.txt line 3:"), (rs, pr)
+        bd = make(tmp, "enc_garbage", rows(50))
+        with open(os.path.join(bd, "kill.txt"), "wb") as f:
+            f.write(b"\xff\xfe\xfd group.lines@1000 > 0.9\n\x80\x81")
+        rs, pr = load_rules(Run(bd))
+        assert rs == [] and len(pr) == 1 and "not text" in pr[0], (rs, pr)
+        rc, out = run_cli("--root", tmp, "status")
+        assert "enc_garbage" in out and "enc_utf-16_le_bom" in out and "good" in out, out
+        ok("kill.txt: UTF-8 / BOM / UTF-16 with BOM are read, bytes that are no text are one problem and status still lists all runs")
 
         # 8 control: stale files are moved aside, not compared by time; the copy in train.py agrees
         d = os.path.join(tmp, "good")

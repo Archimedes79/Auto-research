@@ -7,6 +7,7 @@ A `#` starts a comment (in `kill.txt` and in `--kill`). Rules come from `--kill 
 line). A rule is `pending` until the run has reached its step, then `ok` or `hit`; `unknown` when the run passed the step and never logged
 the key (a typo); a non-finite value is a `hit`. Nothing is stopped unless `watch --enforce` or `stop` is used.
 """
+import codecs
 import math
 import re
 
@@ -41,19 +42,33 @@ class Rule:
         return ("hit" if hit else "ok"), x
 
 
+def read_text(path):
+    """the text of a rule file: UTF-8 (a BOM is fine) or UTF-16 with a BOM, which is what PowerShell 5.1 (`>`, `Out-File`) writes; raises OSError for a
+    missing file and UnicodeDecodeError for bytes that are neither"""
+    with open(path, "rb") as f:
+        raw = f.read()
+    if raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return raw.decode("utf-16")
+    return raw.decode("utf-8-sig")
+
+
 def load_rules(run, extra=()):
-    """(rules, problems): problems are strings 'kill.txt line N: ...' / '--kill: ...' for lines that are not rules (the rest still works)"""
+    """(rules, problems): problems are strings 'kill.txt line N: ...' / '--kill: ...' for lines that are not rules (the rest still works); a kill.txt that is
+    no readable text is one problem, never an exception (one bad file must not stop the status of all runs)"""
     rules, problems = [], []
     try:
-        with open(run.p("kill.txt"), encoding="utf-8") as f:
-            for n, ln in enumerate(f, 1):
-                if ln.split("#", 1)[0].strip():
-                    try:
-                        rules.append(Rule(ln))
-                    except ValueError as e:
-                        problems.append(f"kill.txt line {n}: {e}")
+        text = read_text(run.p("kill.txt"))
     except OSError:
-        pass
+        text = ""
+    except UnicodeDecodeError as e:
+        text = ""
+        problems.append(f"kill.txt is not text in UTF-8 or UTF-16 with a BOM ({e.reason} at byte {e.start}; saved as ANSI / cp1252? save it as UTF-8): none of its rules is used")
+    for n, ln in enumerate(re.split(r"\r\n|\r|\n", text), 1):       # not splitlines(): it also breaks at form feed, U+2028 ... and would shift the line numbers
+        if ln.split("#", 1)[0].strip():
+            try:
+                rules.append(Rule(ln))
+            except ValueError as e:
+                problems.append(f"kill.txt line {n}: {e}")
     for t in extra:
         try:
             rules.append(Rule(t))
