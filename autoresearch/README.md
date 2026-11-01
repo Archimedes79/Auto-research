@@ -2,6 +2,10 @@
 
 General and problem-independent: the method (`METHOD.md`), seven agent roles (`agents/`), five templates (`templates/`), two prompts (`prompts/`) and the tools that make the method hold (`tools/`). A problem plugs in through its own folder. It is kept small on purpose: a new template or agent only when the same artifact has been produced twice by hand (`METHOD.md`, "Keeping the system small").
 
+![autoresearch: design, files, execution. People and agents design and write plain files; code reads the files, runs them and writes the records back](architecture.svg)
+
+The architecture in one picture: the **design layer** (the person, the lead chat and seven agent roles) decides what to do and writes it down as **plain files in the problem folder**; the **execution layer** (the tools and the two suites) reads those files, runs them and writes its records back. Nothing else passes between the layers, so every step can be read, diffed in git and resumed from the files. Between the layers sit three **transition points** that can refuse: the write gate (the gate hook and the card check), the start gate (`run.py`: a card, a logged TEST row, a GPU slot, a tagged snapshot) and, at the end of the loop, the cleanup of temporary data (`clean_temp.py` tags the scratch and moves it away). [Each box with the code it stands for](architecture.md). The drawings are generated from `architecture.json` (and the two problems' `training/architecture.json`) by `tools/archdraw.py`, which also fails when a box names a file or symbol that does not exist, or a code file is in no box (section "Examples").
+
 | folder / file | content |
 |---|---|
 | `METHOD.md` | the cycle P0 frame -> P1 research -> P2 hypotheses + plan -> P3 loop (variant and block experiments) -> P4 close, gates, disruptions, decisions of the person, code and git, roles |
@@ -13,6 +17,7 @@ General and problem-independent: the method (`METHOD.md`), seven agent roles (`a
 | `trainsuite/` | see, stop and judge a training run from the files it writes (contract: `log.jsonl` metrics stream, `train.log`, `.done` only for exit 0, `CONTROL` / `STOPPED` with exit code 75): `status` table with ETA, `health` checks (crash, stall, NaN, spike, rising loss, slowdown, GPU, over-fit, comparison with a reference run), kill rules of the card (`group.lines@1000 > 1.48`), `curves`, `stop`, `watch` (one line per change, for a Monitor; `--enforce` stops on a kill hit); standard library (curves: matplotlib); one-page `README.md`, `EXTENSIONS.md`; `python -m trainsuite selftest`; the training of `bev_fusion/` is the first user (D23) |
 | `history/` | design history, not read by the tools: the long roadmap and reviews of 2026-10-25, the D22 tool-fix spec (applied), the evalsuite architecture, the repository review of 2026-10-31 (`repo_review_2026-10-31.md`: bugs, leftovers, the trust cut, how to start a loop) |
 | `ROADMAP.md` | the reviews of the system (own, independent, and the loop-18 lead's second review with R1-R10 / P1-P10), weaknesses ranked by cost, target packages, the migration, and what the person decided |
+| `architecture.json` / `.svg` / `.md` | the drawing of this system: the spec (boxes, arrows, the code each box stands for), the generated picture and the generated file map; `python tools/archdraw.py check architecture.json` keeps picture and code together |
 | `config.json` | the default problem folder |
 
 ## Plug in a problem
@@ -41,6 +46,38 @@ python tools/check_numbers.py <report> <sources ...> [--strict]   # --strict: ex
 python tools/check_structure.py
 python tools/install_agents.py [--check]
 python tools/clean_temp.py loopNN [--move | --delete]
+python tools/archdraw.py render <spec.json> | check <spec.json> | --selftest   # architecture drawing <-> code (see "Examples")
 python tools/selftest.py
 ```
 All tools in `tools/` are standard-library Python 3 (any interpreter in the WSL or on Windows); `evalsuite/` needs numpy, scipy and matplotlib (the `gcar` environment).
+
+## Examples: two concrete architectures, one level down
+
+The method is the same for every problem; the product differs. Both products below are drawn the same way, and both aim at an end-to-end network: the path from the sensors to the delivered output should be learned or differentiable. The picture marks what is not: **red / orange boxes are classical steps on that path**, grey ones are frozen (cached) features that no loss reaches. The file map next to each picture names the code of every box and, for every red, orange or grey box, what the step does, what it measurably carries (where the repository documents that), which differentiable building block could stand in for it, and the catch.
+
+**bev_fusion**: camera + radar detections + ego motion -> map layers, object maps, boxes, lines at three times. [File map and the end-to-end table](../bev_fusion/training/architecture.md).
+
+![bev_fusion architecture: camera and radar branches fused, a BEV trunk, a time mover and two heads; red boxes are rule steps](../bev_fusion/training/architecture.svg)
+
+**bev_fusion_lane_center**: camera + radar BEV features -> lane-centre-line graph attached to an SD-map route, planner path. [File map and the end-to-end table](../bev_fusion_lane_center/training/architecture.md).
+
+![lane-centre system architecture: frozen foundation and dense head, the builder with its selections, assemble() in numpy, route head and consumer](../bev_fusion_lane_center/training/architecture.svg)
+
+| system | stages from input to output | learned | fixed, differentiable | frozen | rule steps on the path |
+|---|---|---|---|---|---|
+| bev_fusion (base `t8_ctl`, variant `t10_dual`) | 15 | 8 | 1 | 1 | 5: radar sweep preprocessing, radar hard raster, memory re-centring, box decode (peak, top-k, threshold), line extraction; the last two are on the consumer side, the dense map outputs are network layers only |
+| lane centre (`champion`, `fast_recall`, `recall`) | 24 | 8 | 2 | 2 | 12: 4 choices inside the builder (seed NMS, child choice, beam top-M, time recursion) and 8 post-processing steps without a gradient path (alive filter, path union, clean-up, junction anchoring, fork relocation, fork pruning, piece cut, Douglas-Peucker for `*_dp`) |
+
+The numbers are counted by `archdraw.py` from the drawing's arrows, so they change when the drawing changes. In both systems the foundation features are frozen and cached; the lane chain's losses are per head and no gradient reaches a head from the delivered graph (its one end-to-end attempt, the joint builder + route fine-tune, was negative three times). The bev_fusion box velocity is not learned in any main-chain run (a dead layer, `bev_fusion/experiments/t11_vel_cause/experiment.md`).
+
+### Keeping drawing and code together
+
+```
+python tools/archdraw.py render architecture.json          # spec -> architecture.svg + architecture.md (the file map)
+python tools/archdraw.py check ../bev_fusion/training/architecture.json     # exit 1 on any of the following
+```
+`check` fails when a box names a file or `file::Symbol` that does not exist, when a code file under the covered folders is in no box (or in the spec's `not_drawn` with a reason), when two boxes share a grid cell, an arrow names a missing box, or the picture or the file map is stale against the spec. So the drawing cannot describe code that is gone, code cannot grow without a box, and nobody edits the picture by hand. The spec of each problem sits next to the code it draws (`training/architecture.json`); its `main_path` (the inputs and the outputs) makes the tool count the stages in between by class. Run the three checks after a change in a drawn folder:
+
+```
+for s in architecture.json ../bev_fusion/training/architecture.json ../bev_fusion_lane_center/training/architecture.json; do python tools/archdraw.py check $s; done
+```

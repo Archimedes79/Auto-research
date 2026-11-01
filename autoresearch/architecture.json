@@ -1,0 +1,69 @@
+{
+  "title": "autoresearch: design, files, execution",
+  "subtitle": "People and agents design what to do and write it down as plain files; code reads the files, runs them and writes its records back. Between the layers sit gates that can refuse; at the end the temporary data is cleaned up.",
+  "root": ".",
+  "extra_w": 340,
+  "kinds": {
+    "design": {"label": "design layer: people and agents", "fill": "#e0e7ff", "stroke": "#4f46e5", "class": "other"},
+    "file": {"label": "plain file in the problem folder", "fill": "#fef9c3", "stroke": "#ca8a04", "class": "other"},
+    "exec": {"label": "execution layer: code", "fill": "#ccfbf1", "stroke": "#0d9488", "class": "other"},
+    "problem": {"label": "the problem's own code", "fill": "#dcfce7", "stroke": "#16a34a", "class": "other"},
+    "gate": {"label": "transition point: a check that can refuse", "fill": "#ffffff", "stroke": "#be123c", "class": "other"}
+  },
+  "nodes": [
+    {"id": "d_person", "label": "Person (Mirko)\ndecides, grants,\nowns PROBLEM.md", "kind": "design", "col": 0, "row": 0, "code": ["METHOD.md"],
+     "note": "champion promotion, PROBLEM.md changes, the gates, TEST and permissions are the person's; an agent writes the entry and waits for the recorded answer"},
+    {"id": "d_lead", "label": "Lead chat\nruns the loop", "kind": "design", "col": 1, "row": 0, "code": ["prompts/loop.md", "prompts/research_steps.md"],
+     "note": "the wake-up routine: read the state, start what is ready, do what needs a chat, write ledger notes, plan status and handover"},
+    {"id": "d_res", "label": "Research agents\nscout, summarizer,\nhypothesis, referee", "kind": "design", "col": 2, "row": 0,
+     "code": ["agents/ar-scout.md", "agents/ar-summarizer.md", "agents/ar-hypothesis.md", "agents/ar-referee.md"], "note": "P1 and P2: paper notes, group summaries, experiment cards, accept / revise / reject"},
+    {"id": "d_work", "label": "Work agents\nplanner, coder", "kind": "design", "col": 3, "row": 0, "code": ["agents/ar-planner.md", "agents/ar-coder.md"], "note": "plan and schedule, detail plan of a block experiment, code with its spec test"},
+    {"id": "d_rev", "label": "Reviewer\nfresh eyes on code\nand on numbers", "kind": "design", "col": 4, "row": 0, "code": ["agents/ar-reviewer.md"], "note": "mode code on a diff of shared code, mode numbers on a report against primary sources"},
+    {"id": "d_method", "label": "The method\nP0-P4, gates G1-G4", "kind": "design", "col": 5, "row": 0, "code": ["METHOD.md"], "note": "P0 frame, P1 research, P2 hypotheses + plan, P3 loop, P4 close; every phase ends in a gate"},
+    {"id": "gate_write", "label": "WRITE GATE: only complete, permitted entries reach the files\nguard_hook.py refuses the protected files without a grant under a decided D<n>; experiment.py: a card names arms, seeds, metric, band and rule (G2)",
+     "kind": "gate", "col": 0, "row": 1, "w": 6, "hpx": 46, "code": ["tools/guard_hook.py", "tools/experiment.py"],
+     "note": "transition design -> files"},
+    {"id": "f_prob", "label": "PROBLEM.md\nproject.json", "kind": "file", "col": 0, "row": 2, "code": ["templates/problem.md"], "note": "goal, chain, metrics, current best, gaps; paths, ledger, schedule, protected files"},
+    {"id": "f_dec", "label": "DECISIONS.md\nHANDOVER.md\nledger notes", "kind": "file", "col": 1, "row": 2, "code": ["templates/plan.md"], "note": "the person's channel, where we are, the journal of a loop"},
+    {"id": "f_lit", "label": "paper notes\n-> summaries + digest", "kind": "file", "col": 2, "row": 2, "code": ["templates/paper_note.md", "templates/group_summary.md"], "note": "a K id for every technique before it is used"},
+    {"id": "f_cards", "label": "experiment cards\nplan, schedule.csv", "kind": "file", "col": 3, "row": 2, "code": ["templates/experiment.md", "schemas/experiment.schema.json"], "note": "card -> detail plan -> summary, next to experiment.json (arms, seeds, metric, band, rule)"},
+    {"id": "f_rec", "label": "run records, ledger\nmetric cards, verdicts", "kind": "file", "col": 4, "row": 2, "code": ["schemas/card.schema.json"], "note": "written by the execution layer: prediction, rule, result, code commit, KEEP / CUT / TIE / INCONCLUSIVE"},
+    {"id": "f_fmt", "label": "formats\ntemplates, schemas", "kind": "file", "col": 5, "row": 2, "code": ["templates/", "schemas/"], "note": "five templates and two schemas fix what the files look like"},
+    {"id": "gate_start", "label": "START GATE: only a recorded, runnable experiment starts\nrun.py needs a card (hypothesis, prediction, rule), a logged row for the TEST split and a free GPU slot; it tags the code snapshot it ran",
+     "kind": "gate", "col": 0, "row": 3, "w": 6, "hpx": 46, "code": ["tools/run.py"], "note": "transition files -> execution"},
+    {"id": "e_proj", "label": "project.py\nfinds the problem", "kind": "exec", "col": 0, "row": 4, "code": ["tools/project.py", "tools/install_agents.py", "config.json"], "note": "AR_PROJECT or config.json; imported by every other tool; install_agents.py copies the agents into .claude/agents/"},
+    {"id": "e_lit", "label": "problem's catalogue tool\n(no code here)", "kind": "problem", "col": 2, "row": 4, "code": ["../bev_fusion_lane_center/tools/literature/catalogue.py"], "note": "research has agents and files but no code in autoresearch/; the lane problem turns papers.csv into catalogue and overview"},
+    {"id": "e_launch", "label": "Launcher\nschedule, tick,\nrun.py, ledger", "kind": "exec", "col": 3, "row": 4, "code": ["tools/schedule.py", "tools/tick.py", "tools/run.py", "tools/ledger.py"],
+     "note": "tick starts the ready schedule items through run.py: ledger row, snapshot commit + git tag per run, GPU slot, TEST guard, heartbeat, retries"},
+    {"id": "e_judge", "label": "evalsuite, trainsuite\ndecide", "kind": "exec", "col": 4, "row": 4, "code": ["evalsuite/", "trainsuite/", "tools/decide.py"],
+     "note": "evalsuite turns a model into metric cards, trainsuite judges a running training, decide.py applies the written rule"},
+    {"id": "e_check", "label": "validators and hygiene\nchecks, cleanup,\nthese drawings", "kind": "exec", "col": 5, "row": 4,
+     "code": ["tools/card.py", "tools/check_numbers.py", "tools/check_structure.py", "tools/clean_temp.py", "tools/metrics.py", "tools/selftest.py", "tools/archdraw.py", "architecture.json"],
+     "note": "the evaluator contract, numbers vs sources, structure, scratch cleanup, the per-loop table, selftest of the tools, archdraw.py"},
+    {"id": "prod", "label": "The product: the problem's own code\n(one tagged commit per run)", "kind": "problem", "col": 3, "row": 5, "w": 2,
+     "code": ["evalsuite/contracts.py"], "note": "what is being improved; the adapter is a Source / Subject / Task box that writes a metric card per system and split"},
+    {"id": "gate_clean", "label": "CLEANUP at the end of the loop: nothing temporary stays\nclean_temp.py commits and tags the scratch, then moves temp/loopNN away; check_structure.py finds dead paths; HANDOVER.md is rewritten",
+     "kind": "gate", "col": 0, "row": 6, "w": 6, "hpx": 46, "code": ["tools/clean_temp.py", "tools/check_structure.py"], "note": "transition loop -> next loop (gate G4)"}
+  ],
+  "edges": [
+    {"from": "d_person", "to": "f_prob", "both": true}, {"from": "d_lead", "to": "f_dec", "both": true}, {"from": "d_res", "to": "f_lit", "both": true},
+    {"from": "d_work", "to": "f_cards", "both": true}, {"from": "d_rev", "to": "f_rec", "both": true},
+    {"from": "f_prob", "to": "e_proj", "both": true}, {"from": "f_lit", "to": "e_lit", "both": true},
+    {"from": "f_cards", "to": "e_launch", "both": true}, {"from": "f_rec", "to": "e_judge", "both": true}, {"from": "f_fmt", "to": "e_check", "both": true},
+    {"from": "e_launch", "to": "f_rec"}, {"from": "e_launch", "to": "prod"}, {"from": "e_judge", "to": "prod"},
+    {"from": "prod", "to": "gate_clean"}, {"from": "e_check", "to": "gate_clean"}
+  ],
+  "groups": [
+    {"label": "DESIGN: people and agents decide what to do and write it down", "nodes": ["d_person", "d_lead", "d_res", "d_work", "d_rev", "d_method"],
+     "caption": "The edit layer. METHOD.md cuts one cycle into P0 frame, P1 research, P2 hypotheses + plan, P3 loop and P4 close, each ended by a gate. What is the person's goes through DECISIONS.md."},
+    {"label": "FILES: plain files in the problem folder, the only contract", "nodes": ["f_prob", "f_dec", "f_lit", "f_cards", "f_rec", "f_fmt"],
+     "caption": "The design layer writes them, the execution layer reads them and writes its records back; nothing else passes between the layers. Both layers read the records."},
+    {"label": "EXECUTION: code that reads the files and runs them", "nodes": ["e_proj", "e_lit", "e_launch", "e_judge", "e_check"],
+     "caption": "Standard-library python with selftests. The launcher runs what the schedule says, the suites judge it, the written rule decides, the validators keep the files honest."}
+  ],
+  "covers": [
+    {"dir": "tools", "glob": "*.py"}, {"dir": "agents", "glob": "*.md"}, {"dir": "templates", "glob": "*.md"}, {"dir": "prompts", "glob": "*.md"},
+    {"dir": "schemas", "glob": "*.json"}, {"dir": "evalsuite", "glob": "*.py"}, {"dir": "trainsuite", "glob": "*.py"}
+  ],
+  "not_drawn": {}
+}

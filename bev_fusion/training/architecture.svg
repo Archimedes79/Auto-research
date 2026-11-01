@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 650" width="1448" height="650" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<title>bev_fusion: camera + radar BEV system (base chain t8_ctl, variant t10_dual)</title>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
+<rect width="1448" height="650" fill="#ffffff"/>
+<text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion: camera + radar BEV system (base chain t8_ctl, variant t10_dual)</text>
+<text x="24" y="50" font-size="12" fill="#475569">Front camera + radar detections + ego motion -&gt; timed map layers, object maps, boxes, lines. Learned between the cached camera features and the head outputs; red = a rule step on the path.</text>
+<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 15 stages = 8 learned, 1 fixed-differentiable, 1 frozen, 5 rule steps</text>
+<rect x="232.0" y="73.0" width="784.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="232.0" y="273.0" width="584.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="432.0" y="373.0" width="384.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="373.0" width="384.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<path d="M204.0,228.0 C224.0,228.0 224.0,228.0 244.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M404.0,228.0 C424.0,228.0 424.0,228.0 444.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M604.0,228.0 C624.0,228.0 624.0,228.0 644.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M804.0,228.0 C824.0,228.0 824.0,228.0 844.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M924.0,197.0 C924.0,178.0 924.0,178.0 924.0,159.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M924.0,159.0 C924.0,178.0 924.0,178.0 924.0,197.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1004.0,228.0 C1024.0,228.0 1024.0,278.0 1044.0,278.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M204.0,328.0 C224.0,328.0 224.0,328.0 244.0,328.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M404.0,328.0 C424.0,328.0 424.0,328.0 444.0,328.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M604.0,328.0 C624.0,328.0 624.0,328.0 644.0,328.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M804.0,328.0 C924.0,328.0 924.0,278.0 1044.0,278.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1204.0,278.0 C1224.0,278.0 1224.0,278.0 1244.0,278.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1324.0,359.0 C1324.0,378.0 1324.0,378.0 1324.0,397.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1324.0,497.0 C1324.0,478.0 1324.0,478.0 1324.0,459.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1244.0,428.0 C1224.0,428.0 1224.0,428.0 1204.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1244.0,428.0 C1224.0,428.0 1224.0,528.0 1204.0,528.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1044.0,428.0 C1024.0,428.0 1024.0,428.0 1004.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M844.0,428.0 C824.0,428.0 824.0,428.0 804.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M644.0,428.0 C624.0,428.0 624.0,428.0 604.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1044.0,528.0 C1024.0,528.0 1024.0,528.0 1004.0,528.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M844.0,528.0 C824.0,528.0 824.0,528.0 804.0,528.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M644.0,528.0 C624.0,528.0 624.0,528.0 604.0,528.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M204.0,428.0 C224.0,428.0 224.0,428.0 244.0,428.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M324.0,459.0 C324.0,478.0 324.0,478.0 324.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M204.0,528.0 C224.0,528.0 224.0,528.0 244.0,528.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<g><title>in_cam: training/nuscenes_dataset.py::FrontRadarDataset</title><rect x="44" y="197.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="124.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Front camera</text>
+<text x="124.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">now + 2 past frames</text>
+<text x="124.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fro</text>
+</g>
+<g><title>in_rad: training/nuscenes_dataset.py::FrontRadarDataset._radar</title><rect x="44" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="124.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Radar detections</text>
+<text x="124.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">all 5 radars, 0.5 s</text>
+<text x="124.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fro</text>
+</g>
+<g><title>in_ego: training/train.py::gap_ego_motion</title><rect x="1244" y="497.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="1324.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ego motion</text>
+<text x="1324.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(v, omega, gap)</text>
+<text x="1324.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py::gap_ego_motion</text>
+</g>
+<g><title>frozen: training/camera_encoder.py::FrontCameraEncoder; training/bevfusion_camera.py::BEVFusionImageSide; training/feature_cache.py::CachedBEVFusionModel</title><rect x="244" y="197.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="324.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Frozen camera heads</text>
+<text x="324.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">DualBEV R50 + depth</text>
+<text x="324.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">camera_encoder.py::Front</text>
+</g>
+<g><title>lift: training/lift_pd.py::lift_pd; training/lift_pd.py::LiftPD</title><rect x="444" y="197.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="2.2"/>
+<text x="524.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lift PD</text>
+<text x="524.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">depth-weighted gather</text>
+<text x="524.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lift_pd.py::lift_pd +1</text>
+</g>
+<g><title>cam_reduce: training/model.py::BEVFusionModel</title><rect x="644" y="197.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="724.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Height collapse</text>
+<text x="724.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">640 -&gt; 64 channels</text>
+<text x="724.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">model.py::BEVFusionModel</text>
+</g>
+<g><title>cam_temporal: training/temporal_fusion.py::TemporalFusion; training/splat.py::splat_window</title><rect x="844" y="197.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="924.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Camera temporal fusion</text>
+<text x="924.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">window + world memory</text>
+<text x="924.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">temporal_fusion.py::Temp</text>
+</g>
+<g><title>recentre: training/temporal_fusion.py::recentre</title><rect x="844" y="97.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="924.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Memory re-centre</text>
+<text x="924.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">round + roll</text>
+<text x="924.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">temporal_fusion.py::rece</text>
+</g>
+<g><title>radar_pre: training/nuscenes_dataset.py::FrontRadarDataset._radar</title><rect x="244" y="297.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="324.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Sweeps to now</text>
+<text x="324.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ego pose + Doppler</text>
+<text x="324.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fro</text>
+</g>
+<g><title>raster: training/radar_bev.py::rasterize</title><rect x="444" y="297.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="524.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Hard raster</text>
+<text x="524.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">floor + mean per cell</text>
+<text x="524.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">radar_bev.py::rasterize</text>
+</g>
+<g><title>radar_convs: training/radar_bev.py::RadarBEV</title><rect x="644" y="297.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="724.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Radar convs</text>
+<text x="724.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">14 -&gt; 32 channels</text>
+<text x="724.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">radar_bev.py::RadarBEV</text>
+</g>
+<g><title>fusion: training/fusion.py::ConcatFusion</title><rect x="1044" y="197.0" width="160" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1124.0" y="268.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Concat fusion</text>
+<text x="1124.0" y="283.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">modality dropout 0.2</text>
+<text x="1124.0" y="297.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">fusion.py::ConcatFusion</text>
+</g>
+<g><title>trunk: training/bev_trunk.py::BEVTrunk</title><rect x="1244" y="197.0" width="160" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1324.0" y="268.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEV trunk</text>
+<text x="1324.0" y="283.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResNet + FPN + detail</text>
+<text x="1324.0" y="297.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::BEVTrunk</text>
+</g>
+<g><title>mover: training/timed_head.py::TimeMover; training/splat.py::splat_bev</title><rect x="1244" y="397.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1324.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">TimeMover</text>
+<text x="1324.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">velocity + ego splat</text>
+<text x="1324.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">timed_head.py::TimeMover</text>
+</g>
+<g><title>sem: training/timed_head.py::TimedHead; training/bev_trunk.py::SemanticHead</title><rect x="1044" y="397.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1124.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Semantic head</text>
+<text x="1124.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">per dt</text>
+<text x="1124.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">timed_head.py::TimedHead</text>
+</g>
+<g><title>obj: training/object_head.py::ObjectHead</title><rect x="1044" y="497.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1124.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Object head</text>
+<text x="1124.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">CenterPoint, per dt</text>
+<text x="1124.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::ObjectHe</text>
+</g>
+<g><title>maps: training/model.py::BEVFusionModel</title><rect x="844" y="397.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
+<text x="924.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Map layers</text>
+<text x="924.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">12 channels per dt</text>
+<text x="924.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">model.py::BEVFusionModel</text>
+</g>
+<g><title>objmaps: training/object_head.py::ObjectHead</title><rect x="844" y="497.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
+<text x="924.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Object maps</text>
+<text x="924.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">hm off size rot vel</text>
+<text x="924.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">dir</text>
+<text x="924.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::ObjectHe</text>
+</g>
+<g><title>lines_x: evaluation/metrics.py::line_cells</title><rect x="644" y="397.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="724.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Line extraction</text>
+<text x="724.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">zero crossing</text>
+<text x="724.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">metrics.py::line_cells</text>
+</g>
+<g><title>lines_out: evaluation/metrics.py::line_cells</title><rect x="444" y="397.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
+<text x="524.0" y="426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Line cells</text>
+<text x="524.0" y="440.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">metrics.py::line_cells</text>
+</g>
+<g><title>decode: training/object_head.py::decode</title><rect x="644" y="497.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="724.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Box decode</text>
+<text x="724.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">peak, top-k, threshold</text>
+<text x="724.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::decode</text>
+</g>
+<g><title>boxes: evaluation/bev_adapter.py::predictions</title><rect x="444" y="497.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
+<text x="524.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Boxes</text>
+<text x="524.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pose, size, yaw,</text>
+<text x="524.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">velocity</text>
+<text x="524.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_adapter.py::predicti</text>
+</g>
+<g><title>gt: autogt/</title><rect x="44" y="397.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="124.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ground truth</text>
+<text x="124.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(autogt)</text>
+<text x="124.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">autogt/</text>
+</g>
+<g><title>loss: training/losses.py::BEVLoss; training/loss_extras.py</title><rect x="244" y="397.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="324.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Losses</text>
+<text x="324.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEVLoss + Kendall</text>
+<text x="324.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">losses.py::BEVLoss +1</text>
+</g>
+<g><title>data: training/feature_cache.py::FeatureStore; training/nuscenes_dataset.py; training/augment.py; training/gt_cache_build.py; training/cache_bevfusion_features.py</title><rect x="44" y="497.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="124.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Data and caches</text>
+<text x="124.0" y="540.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Featur</text>
+</g>
+<g><title>trainer: training/train.py</title><rect x="244" y="497.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="324.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer</text>
+<text x="324.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">EMA, resume, stop</text>
+<text x="324.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py</text>
+</g>
+<g><title>alt: training/blocks_new.py::RadarPillars; training/fallbacks.py::EgoWarpGRU; training/lane_branch.py</title><rect x="1044" y="97.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#ea580c" stroke-width="1.4"/>
+<text x="1124.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Alternatives</text>
+<text x="1124.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">in ModelConfig</text>
+<text x="1124.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">blocks_new.py::RadarPill</text>
+</g>
+<text x="242.0" y="88.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">camera branch</text>
+<text x="242.0" y="288.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">radar branch</text>
+<text x="442.0" y="388.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">consumer side: outside the model&#x27;s forward</text>
+<text x="42.0" y="388.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training only</text>
+<text x="24" y="600" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
+<rect x="24" y="612" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="622" font-size="11" fill="#334155">input</text>
+<rect x="95.0" y="612" width="18" height="12" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/><text x="119.0" y="622" font-size="11" fill="#334155">learned network (gradient flows)</text>
+<rect x="333.4" y="612" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="357.4" y="622" font-size="11" fill="#334155">fixed math, differentiable</text>
+<rect x="534.6" y="612" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="558.6" y="622" font-size="11" fill="#334155">frozen / cached (no gradient)</text>
+<rect x="754.4000000000001" y="612" width="18" height="12" rx="3" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4 2"/><text x="778.4000000000001" y="622" font-size="11" fill="#334155">rule step (no gradient)</text>
+<rect x="937.0000000000001" y="612" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="961.0000000000001" y="622" font-size="11" fill="#334155">delivered output</text>
+<rect x="1076.2" y="612" width="18" height="12" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/><text x="1100.2" y="622" font-size="11" fill="#334155">training only (data, GT, loss)</text>
+<rect x="24" y="630" width="18" height="12" rx="3" fill="#fff7ed" stroke="#ea580c" stroke-width="1.4"/><text x="48" y="640" font-size="11" fill="#334155">alternative block (ModelConfig switch, not in the base chain)</text>
+</svg>

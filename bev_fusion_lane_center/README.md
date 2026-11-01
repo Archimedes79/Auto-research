@@ -1,12 +1,16 @@
 ﻿# bev_fusion_lane_center
 
 - Lane centre-line graph from camera + radar BEV features (nuScenes)
-- Fully differentiable chain: image -> sparse lane graph -> time -> SD-map route -> planner
+- Target: a fully differentiable chain, image -> sparse lane graph -> time -> SD-map route -> planner. Today 12 classical steps remain on that path (4 choices inside the builder, 8 post-processing steps in `assemble()`) next to a frozen foundation: red and orange in the drawing below, the replacement for each in its file map
 - Short graphs, correct graphs, fast (17.5 - 24 ms per frame)
 - New chat: read HANDOVER.md
 - The problem: PROBLEM.md (goal, chain, metrics, current best, gaps, problem groups, foundation topics); paths for the tools: project.json
 - The research system around it: `../autoresearch/` (METHOD.md, agents, templates, prompts, tools); rules for an AI session: CLAUDE.md
 - Folder tree with sizes on demand: `tools/maintenance/make_structure.py` (writes `temp/STRUCTURE.md`); structure and document check: `../autoresearch/tools/check_structure.py`
+
+![lane-centre system architecture: frozen foundation and dense head, the builder with its selections, assemble() in numpy, route head and consumer](training/architecture.svg)
+
+The delivered chain of `champion`, `fast_recall` and `recall`, drawn from the code ([file map with what each rule step carries and what could stand in for it](training/architecture.md)). `python ../autoresearch/tools/archdraw.py check training/architecture.json` fails when picture and code disagree.
 
 ## Folders (by role in the method)
 - research - literature/ : OVERVIEW.md (why, nine axes, findings, gaps), CATALOGUE.md (the one reference for 540 papers), papers.csv (the one table to edit), papers/ (404 notes), deep/ + code/ (extractions), register.md (K ids)

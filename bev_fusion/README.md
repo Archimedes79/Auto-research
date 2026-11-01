@@ -2,6 +2,10 @@
 
 The second problem of this repository: a camera + radar BEV perception system (lift with depth weight, radar raster, temporal fusion with ego motion and a world memory, semantic / object / motion heads at any dt) on nuScenes. Plan and decisions in `plan.md`; code in `training/`; ground truth in `autogt/`; evaluation in `evaluation/` (the BEV adapter of `../autoresearch/evalsuite/`); trained runs in `runs/` (`t1`-`t10`). Since decision D23 (2026-10-31) it is a problem of `../autoresearch/`: a training starts through the launcher `run.py` (card, ledger row, code tag `bf/<id>`; start line in `records/README.md`); the runs before (and the queue scripts of `temp/study/`) were launched by `temp/train/run_cfg.sh` from a pinned commit. Experiments are compared by cards in `experiments/` (reviews: `temp/review/` of 2026-10-30, `../autoresearch/history/repo_review_2026-10-31.md` and its second pass `repo_review_2026-10-31_pass2.md`).
 
+![bev_fusion architecture: camera and radar branches fused, a BEV trunk, a time mover and two heads; red boxes are rule steps on the path from input to output](training/architecture.svg)
+
+The architecture, drawn from the code ([file map and end-to-end table](training/architecture.md)): the base chain is learned from the cached camera features to the dense head outputs; the red boxes (radar preprocessing and hard raster, memory re-centring, box decode, line extraction) and the frozen camera heads are the places where the path from input to output is not yet network-only. `python ../autoresearch/tools/archdraw.py check training/architecture.json` fails when picture and code disagree.
+
 | file / folder | content |
 |---|---|
 | `requirements.md` | what the system must satisfy, set by Mirko (camera geometry from calibration data with a general, rolled-capable, not learned projection and no virtual cameras; problem and data; method rules), each with its check and status |
