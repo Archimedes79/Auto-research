@@ -1,0 +1,23 @@
+# E261 author's scratch re-score, 2026-10-31/11-01, VAL 873, in-sample; columns as printed by frontier_scratch.py (vdp = vert100_dp eps 0.3)
+e123_D7_r3_rc1 tau 0.5 {} Q 0.7389 lanes_found 0.7726 R@1_far 0.7764 P@1_far 0.7611 topo_F1 0.7419 F1@1.0 0.8763 false_len_frac 0.0536 dup_frac 0.0791 vert100 15.6522 vdp 13.06
+e123_D7_r3_rc1 tau 0.6 {} Q 0.7401 lanes_found 0.7713 R@1_far 0.7750 P@1_far 0.7651 topo_F1 0.7423 F1@1.0 0.8770 false_len_frac 0.0520 dup_frac 0.0775 vert100 15.5934 vdp 12.95
+e123_D7_r3_rc1 tau 0.8 {} Q 0.7418 lanes_found 0.7630 R@1_far 0.7671 P@1_far 0.7717 topo_F1 0.7430 F1@1.0 0.8775 false_len_frac 0.0488 dup_frac 0.0746 vert100 15.4669 vdp 12.65
+e123_D7_r3_rc1 tau 0.9 {} Q 0.7422 lanes_found 0.7468 R@1_far 0.7508 P@1_far 0.7768 topo_F1 0.7423 F1@1.0 0.8766 false_len_frac 0.0458 dup_frac 0.0697 vert100 15.3865 vdp 12.25
+e18_D7_rc2 tau 0.5 {} Q 0.7326 lanes_found 0.7956 R@1_far 0.7927 P@1_far 0.7378 topo_F1 0.7342 F1@1.0 0.8730 false_len_frac 0.0629 dup_frac 0.0900 vert100 16.3474 vdp 14.57
+e18_D7_rc2 tau 0.6 {} Q 0.7340 lanes_found 0.7949 R@1_far 0.7917 P@1_far 0.7411 topo_F1 0.7346 F1@1.0 0.8739 false_len_frac 0.0613 dup_frac 0.0892 vert100 16.2932 vdp 14.47
+e18_D7_rc2 tau 0.8 {} Q 0.7367 lanes_found 0.7902 R@1_far 0.7867 P@1_far 0.7493 topo_F1 0.7361 F1@1.0 0.8754 false_len_frac 0.0577 dup_frac 0.0873 vert100 16.1477 vdp 14.19
+e18_D7_rc2 tau 0.9 {} Q 0.7387 lanes_found 0.7805 R@1_far 0.7768 P@1_far 0.7572 topo_F1 0.7375 F1@1.0 0.8761 false_len_frac 0.0541 dup_frac 0.0832 vert100 15.9816 vdp 13.73
+e18_D7_rc2 tau 0.7 {'fork_prune': '0.5'} Q 0.7408 lanes_found 0.7929 R@1_far 0.7900 P@1_far 0.7441 topo_F1 0.7364 F1@1.0 0.8745 false_len_frac 0.0599 dup_frac 0.1127 vert100 16.6188 vdp 13.66
+e18_D7_rc2 tau 0.8 {'fork_prune': '0.5'} Q 0.7420 lanes_found 0.7901 R@1_far 0.7867 P@1_far 0.7493 topo_F1 0.7371 F1@1.0 0.8754 false_len_frac 0.0576 dup_frac 0.1111 vert100 16.5166 vdp 13.51
+e18_D7_rc2 tau 0.7 {'vtx_r': '1.7'} Q 0.7347 lanes_found 0.7917 R@1_far 0.7887 P@1_far 0.7454 topo_F1 0.7355 F1@1.0 0.8744 false_len_frac 0.0593 dup_frac 0.0880 vert100 15.9079 vdp 14.08
+control Q 0.7371 lanes_found 0.7999 R@1_far 0.8111 P@1_far 0.7576 topo_F1 0.7632 F1@1.0 0.8831 false_len_frac 0.0622 dup_frac 0.1292 vert100 21.7917 vdp 11.55
+e18_D7_f1eq tau 0.7 {} Q 0.7367 lanes_found 0.7069 R@1_far 0.7238 P@1_far 0.7869 topo_F1 0.7438 F1@1.0 0.8723 false_len_frac 0.0420 dup_frac 0.0558 vert100 15.1045 vdp 11.23
+e18_D7_rc1s1 tau 0.7 {} Q 0.7376 lanes_found 0.7695 R@1_far 0.7707 P@1_far 0.7650 topo_F1 0.7412 F1@1.0 0.8764 false_len_frac 0.0520 dup_frac 0.0771 vert100 15.5136 vdp 12.94
+e18_D7_rc4 tau 0.7 {} Q 0.7360 lanes_found 0.7700 R@1_far 0.7777 P@1_far 0.7594 topo_F1 0.7420 F1@1.0 0.8750 false_len_frac 0.0539 dup_frac 0.0804 vert100 15.4293 vdp 12.88
+e123_D7_r3_rc1 tau 0.3 {} Q 0.7368 lanes_found 0.7757 R@1_far 0.7799 P@1_far 0.7559 topo_F1 0.7406 F1@1.0 0.8753 false_len_frac 0.0559 dup_frac 0.0814 vert100 15.7573 vdp 13.30
+e123_D7_r3_rc1 tau 0.4 {} Q 0.7379 lanes_found 0.7743 R@1_far 0.7784 P@1_far 0.7588 topo_F1 0.7413 F1@1.0 0.8758 false_len_frac 0.0547 dup_frac 0.0804 vert100 15.7066 vdp 13.18
+e123_D7_r3_rc1 tau 0.7 {'fork_prune': '0.5'} Q 0.7420 lanes_found 0.7673 R@1_far 0.7715 P@1_far 0.7676 topo_F1 0.7431 F1@1.0 0.8771 false_len_frac 0.0507 dup_frac 0.0989 vert100 15.8451 vdp 12.21
+e123_D7_r3_rc1 tau 0.8 {'fork_prune': '0.5'} Q 0.7426 lanes_found 0.7631 R@1_far 0.7672 P@1_far 0.7718 topo_F1 0.7437 F1@1.0 0.8776 false_len_frac 0.0488 dup_frac 0.0964 vert100 15.7698 vdp 12.07
+# first call (foreground, same script, tau 0.7, registry assembly):
+e123_D7_r3_rc1 tau 0.7 {} Q 0.7404 lanes_found 0.7673 R@1_far 0.7714 P@1_far 0.7675 topo_F1 0.7423 F1@1.0 0.8770 false_len_frac 0.0508 dup_frac 0.0763 vert100 15.5305 vdp 12.82
+e18_D7_rc2 tau 0.7 {} Q 0.7351 lanes_found 0.7929 R@1_far 0.7900 P@1_far 0.7440 topo_F1 0.7353 F1@1.0 0.8745 false_len_frac 0.0599 dup_frac 0.0884 vert100 16.2358 vdp 14.35

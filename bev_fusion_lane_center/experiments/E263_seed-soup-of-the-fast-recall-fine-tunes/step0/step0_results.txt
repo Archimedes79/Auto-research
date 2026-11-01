@@ -1,0 +1,13 @@
+E263 step 0 (card author, 2026-11-01, read-only CPU diagnostics on stored checkpoints and cached VAL raw outputs; 2 threads, shared machine)
+
+1) peek_soup.py / peek_soup2.py / peek_soup3.py: relative weight distances ||a - b|| / ||b|| over all float parameters (BN running stats excluded in the totals)
+   j1rc seeds from the shared start e123_D7_r3_j1: 0.1549 / 0.1538 / 0.1532 / 0.1533 (s0 / s1 / s2 / s3)
+   seed to seed: 0.1623 - 0.1647 (cosine of the displacements about 0.43)
+   share of the s0-s1 squared distance (incl. buffers): seed_mlp.0.weight 0.334, stem BN running_var (c2.2, c1.2, c2.1, c1.1) 0.207 / 0.129 / 0.069 / 0.065
+   f1 lineage: rc1 from f1 0.041, rc1s1 from f1 0.0408, rc1 - rc1s1 0.0059 (nearly identical: no soup headroom), rc2 - rc1 0.0215, rc4 - rc1 0.0148, f1eq - rc1 0.0296; j1rc6 - j1rc 0.168
+   the stem has BatchNorm (6 BN layers, running_mean / running_var / num_batches_tracked)
+
+2) diag_seeds.py e24_j1rc_s0 e24_j1rc_s1 e24_j1rc_s2 e24_j1rc_s3 (assembled graphs at the registry settings; GT polylines densified to 0.25 m; hit = within 1.0 m of the predicted graph densified to 0.25 m; an approximation of R@1, not the evaluate.py metric)
+near: share of GT points hit by 0..4 seeds [0.022, 0.019, 0.025, 0.05, 0.883]; mean single recall 0.938, union 0.978, majority (>= 3) 0.934, disagreement (1..3) 0.094
+mid: share of GT points hit by 0..4 seeds [0.048, 0.033, 0.043, 0.075, 0.801]; mean single recall 0.887, union 0.952, majority (>= 3) 0.876, disagreement (1..3) 0.151
+far: share of GT points hit by 0..4 seeds [0.198, 0.074, 0.076, 0.11, 0.542]; mean single recall 0.681, union 0.802, majority (>= 3) 0.653, disagreement (1..3) 0.260

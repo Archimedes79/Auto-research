@@ -1,0 +1,10 @@
+_py14.sh: experiments/E265_far-coverage-loss-budget/ring_split.py
+recall       output       R@1 inner (< 45 m) 0.8014 (182570 pts)  ring (45 - 48 m) 0.7016 (78472 pts)  all far 0.7714
+recall       tree tau 0   R@1 inner (< 45 m) 0.8943 (182570 pts)  ring (45 - 48 m) 0.7995 (78472 pts)  all far 0.8658
+recall       tree tau 0.7 R@1 inner (< 45 m) 0.8391 (182570 pts)  ring (45 - 48 m) 0.7359 (78472 pts)  all far 0.8081
+recall       kept seeds (level 0, valid) with max(|x|,|y|) >= 45 m: 0.0550 of 251424
+control      output       R@1 inner (< 45 m) 0.8181 (182570 pts)  ring (45 - 48 m) 0.7948 (78472 pts)  all far 0.8111
+fast_recall  output       R@1 inner (< 45 m) 0.7556 (182570 pts)  ring (45 - 48 m) 0.6620 (78472 pts)  all far 0.7275
+fast_recall  tree tau 0   R@1 inner (< 45 m) 0.8144 (182570 pts)  ring (45 - 48 m) 0.7227 (78472 pts)  all far 0.7868
+fast_recall  tree tau 0.7 R@1 inner (< 45 m) 0.7913 (182570 pts)  ring (45 - 48 m) 0.6905 (78472 pts)  all far 0.7610
+fast_recall  kept seeds (level 0, valid) with max(|x|,|y|) >= 45 m: 0.0444 of 167616

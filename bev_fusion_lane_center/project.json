@@ -25,7 +25,7 @@
                 "models/registry.json": ["champion", "control"], "runs/e123_ladder/cards/e123_D7_r3_f1.json": null,
                 "../autoresearch/tools/guard_hook.py": null, "../.claude/settings.json": null, "../.claude/settings.local.json": null},
   "_loops": "experiment numbers per loop for metrics.py (the ledger starts with loop 18; null = open)",
-  "loops": {"18": [209, 233], "19": [234, null]},
+  "loops": {"18": [209, 233], "19": [234, 251], "20": [252, 256], "21": [257, 260], "22": [261, null]},
   "structure": {
     "root_files": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "project.json"],
     "root_dirs": ["data", "evaluation", "experiment_execution", "experiments", "literature", "models", "reports", "runs", "temp", "tools", "training", "_to_delete"],

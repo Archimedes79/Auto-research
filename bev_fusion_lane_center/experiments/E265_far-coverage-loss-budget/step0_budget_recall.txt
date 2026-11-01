@@ -1,0 +1,24 @@
+_py14.sh: experiments/E265_far-coverage-loss-budget/far_budget.py
+recall: 873 frames, cache /home/ml/exp_gcar_b123/p18/raw_val873_e123_D7_r3_rc1_288.pkl, asm {'cov_r': 0.5, 'vtx_r': 1.5, 'junc_thr': 0.5, 'reloc_thr': 0.4, 'reloc_shift': 12, 'reloc_tol': 1.6, 'fork_prune': 0.4, 'fast': 2}, tau 0.7
+tree, all valid nodes (tau 0)              R@1_far 0.8658  lanes_found(far lanes) 0.8443 (13054 lanes)  [172 s]
+tree, tau 0.3                              R@1_far 0.8182  lanes_found(far lanes) 0.7942 (13054 lanes)  [32 s]
+tree, admitted (tau 0.7)                   R@1_far 0.8081  lanes_found(far lanes) 0.7815 (13054 lanes)  [27 s]
+union, no clean-up / junction / pruning    R@1_far 0.7792  lanes_found(far lanes) 0.7434 (13054 lanes)  [26 s]
++ clean-up (spur / bubble)                 R@1_far 0.7678  lanes_found(far lanes) 0.7264 (13054 lanes)  [23 s]
++ junction anchoring                       R@1_far 0.7688  lanes_found(far lanes) 0.7278 (13054 lanes)  [36 s]
++ fork relocation                          R@1_far 0.7714  lanes_found(far lanes) 0.7299 (13054 lanes)  [36 s]
++ fork pruning = registry output           R@1_far 0.7714  lanes_found(far lanes) 0.7296 (13054 lanes)  [40 s]
+far GT points: 261042
+first lost at (share of all far points):
+  tree, all valid nodes (tau 0)              -> tree, tau 0.3                              lost 0.0476 gained 0.0000
+  tree, tau 0.3                              -> tree, admitted (tau 0.7)                   lost 0.0101 gained 0.0000
+  tree, admitted (tau 0.7)                   -> union, no clean-up / junction / pruning    lost 0.0333 gained 0.0044
+  union, no clean-up / junction / pruning    -> + clean-up (spur / bubble)                 lost 0.0121 gained 0.0007
+  + clean-up (spur / bubble)                 -> + junction anchoring                       lost 0.0001 gained 0.0011
+  + junction anchoring                       -> + fork relocation                          lost 0.0015 gained 0.0041
+  + fork relocation                          -> + fork pruning = registry output           lost 0.0004 gained 0.0003
+  never in the tree at tau 0: 0.1342
+final misses: 59674 of 261042 far points (0.2286)
+  distance to the all-valid tree: [0,1) 0.432  [1,2) 0.374  [2,3) 0.099  [3,5) 0.058  [5,10) 0.024  [10,inf) 0.012
+  distance to the output graph: [0,1) 0.000  [1,2) 0.624  [2,3) 0.173  [3,5) 0.120  [5,10) 0.038  [10,inf) 0.045
+  misses with max(|x|,|y|) >= 45 m (outside the seed lattice): 0.392 (all far points: 0.301)

@@ -1,20 +1,22 @@
-# HANDOVER - 2026-10-31 14:00
+# HANDOVER - 2026-10-31 23:45
 
 New chat: start in the repository folder (parent of autoresearch/ and this folder), say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB).
 
 ## Who does what
-- **Lead of loop 21 and owner of the lane-project experiments, code, PLAN, schedule, HANDOVER: this chat** (prompt: experiment_execution/history/prompts/PROGRAM_loop21.md; TEST closed, no mail, no shutdown). The tools chat owns `autoresearch/tools`. The "BEV system" chat (session local_ef1c1a32-671e-4989-9e6a-a1d4fe88f515) runs a ~20 h training lane (runs/t2_*, 12 GB GPU): GPU-free iterations only, no idle-GPU timing.
+- **Lead of loop 22 and of the overnight bev_fusion round, owner of the code of both: the repository-review chat (session 6e9638e0)**, prompt `experiment_execution/history/prompts/PROGRAM_loop22.md` (D28: prototype by 06:30, +2-3 h allowed, then shutdown; one TEST check; no mail). The tools chat owns `autoresearch/tools` (it has uncommitted work there: commit by path). BEV chats: idle tonight.
 
 ## Where we are
-- Loop 21 (CPU only, cached raw outputs): E257 Douglas-Peucker output stage (D20 adopted: default-off `assemble(dp_eps)`, registry `fast_recall_dp` / `champion_dp` / `recall_dp`), E258 profile (`fast_recall_na`), E259 clean-up stays, E260 dead options removed (graph hashes identical). Q stays 0.735 - 0.740.
-- **Review 2026-10-31 (fresh ar-reviewer, "correct with caveats"):** (1) the stage lowers the node-id count (15.0 -> 9.9) but NOT the count on the 14.3 budget's basis (per-piece DP 0.3 m: fast_recall 12.24 -> 12.23, champion 11.32 -> 11.32, recall 12.82; `experiments/E257_*/vertex_basis.txt`): it is a re-count, Q cannot change, S rises only through its sparsity term; (2) E257 KEEP was by the pooled mean, the champion misses the F1@0.5 guard at eps 0.3 and eps 0.2 was chosen after the sweep; (3) loop-21 timings are above the load rule (E258 step 2 load up to 9, E259 up to 15): relative and provisional only; (4) E258 as carded never ran its rule, `fast_recall_na` is a post-hoc per-family entry (J -0.004 .. -0.007). Fixed in the records: E258 header, E259 slips, registry text. Open: PROBLEM.md line 18 compares a node-id count with the budget (protected: needs a grant naming a decision, ask Mirko).
-- Status report with images and intermediate network outputs: `reports/weekly/Status_after_Loop21_EN.pdf` (builder `reports/build/reports/build_status21_report.py`, figures `temp/loop21/fig_status_*.py`).
-- Open decisions for Mirko: D4 fast variant, D5 purge, D17 (`project.json` loops: loop 21 not in it), D18 (per-metric bands), D19 (machine lease).
+- Loop 21 filed in its state (E257-E260 summaries, status report `reports/weekly/Status_after_Loop21_EN.pdf`, review); its scratch `temp/loop21/` stays because the loop-21 records point to it (it was lost from disk once on 2026-10-31 and written back from git; tag it with `clean_temp.py` only together with the record links). `project.json` loops now 19-22 (grant D28).
+- Loop 22 (E261 ff.): light research cycle on gap 1 (coverage at range), three hypothesis lenses (E261-E266), then referee + planner; GPU arms run after the bev_fusion trainings (one training fills the GPU).
+- Lane prototype: `tools/prototype/lane_prototype.py` (being built: `recall_dp`, planner-ready graph JSON, numbers, video).
+- bev_fusion: `t10.dual_s1` (seed twin, its rule E1) trains 23:24 - ~01:20; next a t11 card on the weakest head (motion term flat at 1.094 in every run) and / or t10 at 6000 steps.
 
 ## Next
-1. Idle-window timing (E253 driver) with `fast_recall_na`, `*_dp`, E259 stage ranking, once the BEV lane pauses; only then identical-graph speed-ups of `relocate_forks` / `anchor_junctions_fast`.
-2. Route success and map assignment on simplified graphs (needs route scores carried to the simplified polylines); decide whether the stage becomes the default.
-3. Coverage gap (lanes found 0.77 vs 0.80, R@1 far 0.77 vs 0.81, route success on TEST 0.85 vs 0.89): candidates in PLAN.md (seed-ensemble ceiling on cached outputs, GPU items when a slot is free). Commit by path (the BEV chat's files are not mine).
+1. Cards E261-E266 -> `ar-referee` -> `ar-planner` (PLAN.md loop 22, schedule).
+2. bev: decide t10 by its rule after s1 (`evaluation/board.py`), start t11.
+3. Lane GPU arms after bev; CPU arms now. 06:30: summaries, one TEST check of the lane prototype, check_numbers, reviewer, shutdown.
+
+Open decisions for Mirko: D25, D4, D18, D19 (DECISIONS.md).
 
 ## Pointers
-PROBLEM.md; METHOD.md; closed_questions.md; literature/OVERVIEW.md; old state in experiment_execution/history/; git: one repository, tag `lcr/<id>` per run, remote origin = github.com/Archimedes79/Auto-research (pushes only on request).
+PROBLEM.md; METHOD.md; closed_questions.md; literature/OVERVIEW.md; git: tag `lcr/<id>` per run (bev: `bf/<id>`), remote origin (pushes only on request).

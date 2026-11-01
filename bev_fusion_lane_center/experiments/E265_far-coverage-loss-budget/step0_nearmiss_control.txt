@@ -1,0 +1,5 @@
+_py14.sh: experiments/E265_far-coverage-loss-budget/far_near_miss.py
+control: far GT points 261042, R@1 0.8111, R@1.5 0.9036, R@2 0.9479, R@3 0.9706
+  hit <= 1 m         share 0.8111  radial error median +0.01 m (pred closer: 0.49)  lateral median 0.29 m  GT turning over 10 m: median 0.5 deg, > 10 deg 0.14  nearest segment median 6.0 m, > 12 m 0.00
+  near miss 1 - 2 m  share 0.1368  radial error median +0.11 m (pred closer: 0.44)  lateral median 1.26 m  GT turning over 10 m: median 1.0 deg, > 10 deg 0.27  nearest segment median 5.9 m, > 12 m 0.00
+  miss > 2 m         share 0.0521  radial error median -0.65 m (pred closer: 0.59)  lateral median 2.43 m  GT turning over 10 m: median 0.6 deg, > 10 deg 0.28  nearest segment median 5.9 m, > 12 m 0.00

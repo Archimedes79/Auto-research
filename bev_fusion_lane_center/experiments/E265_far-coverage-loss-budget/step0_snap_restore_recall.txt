@@ -1,0 +1,8 @@
+_py14.sh: experiments/E265_far-coverage-loss-budget/far_snap.py
+recall: 873 frames, /home/ml/exp_gcar_b123/p18/raw_val873_e123_D7_r3_rc1_288.pkl
+registry output                    Q 0.7404 lanes_found 0.7673 R@1_far 0.7714 topo_F1 0.7423 J 0.4277 F1@1 0.8770 FL 0.0508 dup 0.0763 vert100 15.53 vert100_dp 12.82  [48 s]
+scratch copy with cov_far 0.5 reproduces the registry graphs: yes
+(a) cov_r far (>= 40 m) 0.25       Q 0.7379 lanes_found 0.7686 R@1_far 0.7747 topo_F1 0.7400 J 0.4200 F1@1 0.8763 FL 0.0522 dup 0.0880 vert100 15.63 vert100_dp 13.12  [66 s]
+(a) cov_r far (>= 40 m) 0.05       Q 0.7340 lanes_found 0.7696 R@1_far 0.7775 topo_F1 0.7360 J 0.4053 F1@1 0.8758 FL 0.0527 dup 0.1085 vert100 15.81 vert100_dp 13.42  [69 s]
+(b) restore gap 2.0 m run 4.0 m    Q 0.7404 lanes_found 0.7676 R@1_far 0.7716 topo_F1 0.7423 J 0.4277 F1@1 0.8771 FL 0.0509 dup 0.0763 vert100 15.53 vert100_dp 12.83  [83 s]
+(b) restore gap 1.0 m run 2.0 m    Q 0.7407 lanes_found 0.7760 R@1_far 0.7766 topo_F1 0.7422 J 0.4277 F1@1 0.8783 FL 0.0521 dup 0.0759 vert100 15.78 vert100_dp 13.11  [89 s]

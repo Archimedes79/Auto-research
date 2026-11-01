@@ -1,0 +1,16 @@
+_py14.sh: experiments/E265_far-coverage-loss-budget/union_decomp.py
+recall: 873 frames, /home/ml/exp_gcar_b123/p18/raw_val873_e123_D7_r3_rc1_288.pkl
+union as is (no clean-up / junction)       R@1_far 0.7792 far-lanes found 0.7434  [32 s]
+has_path skip off                          R@1_far 0.7839 far-lanes found 0.7487  [26 s]
+has_path tight (1.1 x chord + 1 m)         R@1_far 0.7794 far-lanes found 0.7439  [26 s]
+vtx_r 0.75                                 R@1_far 0.7841 far-lanes found 0.7504  [32 s]
+vtx_r 1.0                                  R@1_far 0.7828 far-lanes found 0.7480  [27 s]
+has_path off + vtx_r 1.0                   R@1_far 0.7869 far-lanes found 0.7522  [28 s]
+cov_r 0.05 (no edge snap)                  R@1_far 0.8008 far-lanes found 0.7681  [39 s]
+minimal union: vtx_r / cov_r 0.05, has_path off R@1_far 0.8088 far-lanes found 0.7827  [61 s]
+registry output                            R@1_far 0.7714 far-lanes found 0.7296 | Q 0.7404 lanes_found 0.7673 R@1_far(card) 0.7714 topo_F1 0.7423 FL 0.0508 vert100 15.53 vert100_dp 12.82  [131 s]
+registry + has_path off                    R@1_far 0.7754 far-lanes found 0.7319 | Q 0.7323 lanes_found 0.7692 R@1_far(card) 0.7754 topo_F1 0.7331 FL 0.0534 vert100 15.65 vert100_dp 13.61  [129 s]
+registry + vtx_r 1.0                       R@1_far 0.7744 far-lanes found 0.7324 | Q 0.7416 lanes_found 0.7700 R@1_far(card) 0.7744 topo_F1 0.7409 FL 0.0512 vert100 16.40 vert100_dp 13.52  [100 s]
+registry + cov_r 0.25                      R@1_far 0.7854 far-lanes found 0.7454 | Q 0.7281 lanes_found 0.7820 R@1_far(card) 0.7854 topo_F1 0.7105 FL 0.0490 vert100 14.91 vert100_dp 14.28  [129 s]
+registry + cov_r 0.05                      R@1_far 0.7983 far-lanes found 0.7633 | Q 0.7185 lanes_found 0.7985 R@1_far(card) 0.7983 topo_F1 0.6187 FL 0.0335 vert100 13.57 vert100_dp 14.30  [238 s]
+registry + minimal union                   R@1_far 0.8053 far-lanes found 0.7731 | Q 0.7107 lanes_found 0.8090 R@1_far(card) 0.8053 topo_F1 0.5708 FL 0.0304 vert100 17.93 vert100_dp 17.21  [334 s]

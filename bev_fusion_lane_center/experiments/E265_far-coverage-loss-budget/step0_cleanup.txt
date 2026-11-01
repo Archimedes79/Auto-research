@@ -1,0 +1,7 @@
+_py14.sh: experiments/E265_far-coverage-loss-budget/cleanup_split.py
+recall       registry                   Q 0.7404 lanes_found 0.7673 R@1_far 0.7714 R@1_mid 0.9023 P@1_far 0.7675 topo_F1 0.7423 J 0.4277 F1@0.5 0.6915 FL 0.0508 dup 0.0763 vert100 15.53 vert100_dp 12.82 asm_ms 20.8  [64 s]
+recall       spurs kept (spur_len 0)    Q 0.7429 lanes_found 0.7807 R@1_far 0.7796 R@1_mid 0.9092 P@1_far 0.7631 topo_F1 0.7407 J 0.4386 F1@0.5 0.6917 FL 0.0534 dup 0.0767 vert100 16.06 vert100_dp 13.70 asm_ms 20.1  [65 s]
+recall       bubbles kept (bubble_r 0)  Q 0.7403 lanes_found 0.7699 R@1_far 0.7733 R@1_mid 0.9039 P@1_far 0.7668 topo_F1 0.7413 J 0.4261 F1@0.5 0.6924 FL 0.0511 dup 0.0812 vert100 15.55 vert100_dp 12.95 asm_ms 19.7  [70 s]
+fast_recall  registry                   Q 0.7392 lanes_found 0.7364 R@1_far 0.7275 R@1_mid 0.8868 P@1_far 0.7535 topo_F1 0.7369 J 0.4469 F1@0.5 0.6881 FL 0.0565 dup 0.0704 vert100 14.98 vert100_dp 12.24 asm_ms 19.2  [63 s]
+fast_recall  spurs kept (spur_len 0)    Q 0.7430 lanes_found 0.7485 R@1_far 0.7339 R@1_mid 0.8916 P@1_far 0.7513 topo_F1 0.7365 J 0.4617 F1@0.5 0.6888 FL 0.0579 dup 0.0713 vert100 15.33 vert100_dp 12.90 asm_ms 14.2  [47 s]
+fast_recall  bubbles kept (bubble_r 0)  Q 0.7394 lanes_found 0.7381 R@1_far 0.7297 R@1_mid 0.8881 P@1_far 0.7527 topo_F1 0.7356 J 0.4470 F1@0.5 0.6888 FL 0.0567 dup 0.0752 vert100 14.99 vert100_dp 12.37 asm_ms 12.7  [45 s]
