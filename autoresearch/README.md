@@ -18,6 +18,7 @@ The architecture in one picture: four layers (the person, agents, plain files in
 | `history/` | design history, not read by the tools: the long roadmap and reviews of 2026-10-25, the D22 tool-fix spec (applied), the evalsuite architecture, the repository review of 2026-10-31 (`repo_review_2026-10-31.md`: bugs, leftovers, the trust cut, how to start a loop) |
 | `ROADMAP.md` | the reviews of the system (own, independent, and the loop-18 lead's second review with R1-R10 / P1-P10), weaknesses ranked by cost, target packages, the migration, and what the person decided |
 | `architecture.json` / `.svg` / `.md` | the drawing of this system: the spec (boxes, arrows, the code each box stands for), the generated picture and the generated file map; `python tools/archdraw.py check architecture.json` keeps picture and code together |
+| `TARGET.md` | the target design (D32, 2026-11-01): four layers, two loops, four roles, the experiment folder as the one unit of data, and the five migration steps toward it; not built yet |
 | `config.json` | the default problem folder |
 
 ## Plug in a problem

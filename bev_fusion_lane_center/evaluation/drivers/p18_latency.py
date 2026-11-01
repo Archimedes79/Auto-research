@@ -1,6 +1,7 @@
 """Loop 18 (copy of p17_latency.py with the assembly path and the fork pruning as options). Original text: Loop 17 / E137 (copy of p16_pipeline.py): the whole chain per frame, plus the memory stage (warp + learned gate) and the option of the time recursion on / off. Original text: the whole chain per frame, fast (reference implementation of the deployment path) and its stage times.
 frame features -> builder (CUDA graph) -> assembly (CPU) -> route input (vertex tokens, points every <= 4 m) -> route head along the edges (CUDA graphs per padded size) -> planner consumer (CUDA graph).
-Usage (gcar, GPU, idle machine): p18_latency.py --name e123_D7_r3_f1 [--n 60] [--rec 0|1] [--union 1|2] [--fork_prune 0.3]   -> runs/e18/latency/*.json
+Usage (gcar, GPU, idle machine): p18_latency.py --name e123_D7_r3_f1 [--n 60] [--rec 0|1] [--union 1|2] [--fork_prune 0.3] [--name2 <run>]   -> runs/e18/latency/*.json
+(--name2: E264 output ensemble, the second builder as its own CUDA graph after the first, the two trees joined before the assembly)
 (the timing driver of evaluation/PROTOCOL.md since 2026-10-31; p17_latency.py, now in evaluation/loops/loop17/, = --union 1 --fork_prune 0 with output in runs/e17/latency)"""
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
@@ -97,12 +98,15 @@ def main():
     ap.add_argument("--rec", type=int, default=0, help="1: time recursion on (the champion as trained), 0: off")
     ap.add_argument("--union", type=int, default=2, help="assembly path: 1 = FastUnion (loop 16b), 2 = numba kernels (loop 18)")
     ap.add_argument("--fork_prune", type=float, default=0.3, help="fork pruning threshold (0 = off)")
+    ap.add_argument("--name2", default="", help="E264 output ensemble: a second run (same M / K0) whose tree is joined with the first one's before the assembly (p16_infer.union_raw)")
     ap.add_argument("--tag", default="", help="appended to the result file name")
     a = ap.parse_args()
     net, cfg = TM.load_builder(a.M, a.K0, a.name)
+    net2 = TM.load_builder(a.M, a.K0, a.name2)[0] if a.name2 else None
     if not a.rec:
-        cfg.temporal = False
-        net.cfg.temporal = False
+        for n_ in (net, net2):
+            if n_ is not None:
+                n_.cfg.temporal = False
     ks = C.val_subset()[: a.n]
     ds = PD.BuilderData("val_clean", ks=ks, train=False, with_prev=cfg.temporal)
     batches = [TM.to_gpu(PD.collate([ds[i]])) for i in range(a.n)]
@@ -117,6 +121,7 @@ def main():
             sdm, _, _ = L.draw_sd(sd, row, 0.0, 0.0, 1)
             ras.append(torch.from_numpy(SL.raster_sd(sdm))[None].cuda())
     fb = RT.FastBuilder(net, cfg, batches[0])
+    fb2 = RT.FastBuilder(net2, net2.cfg, batches[0]) if net2 is not None else None
     rnet = PN.RouteXNet().cuda()
     rnet.load_state_dict(torch.load(f"{L.OUT}/{a.route}/model.pt", map_location="cuda"))
     fr = FastRoute(rnet)
@@ -142,13 +147,15 @@ def main():
         for b, ra in zip(batches, ras):
             torch.cuda.synchronize()
             t0 = time.time()
-            r = fb.raw(b)
+            r = fb.raw(b) if fb2 is None else [fb.raw(b), fb2.raw(b)]
             t1 = time.time()
+            if fb2 is not None:  # the join is part of the assembly time
+                r = PI.union_raw(r)
             g, ax = PI.assemble(r, None, 0.7, cfg, aux=True, fast=a.union, fork_prune=a.fork_prune, **TM.ASM)
             t2 = time.time()
             if not len(ax["V"]):
                 continue
-            it = route_input(r, ax, g, fb.h_static, a.step, r["pi"])
+            it = route_input(r, ax, g, fb.h_static if fb2 is None else torch.cat([fb.h_static, fb2.h_static]), a.step, r["pi"])
             t3 = time.time()
             n = len(it["xy"])
             p = fr(torch.from_numpy(it["tok"].astype(np.float32))[None].cuda(), torch.from_numpy(it["xy"])[None].cuda(), torch.from_numpy(it["cp"])[None].cuda(), ra, n).cpu().numpy()
@@ -171,7 +178,7 @@ def main():
             nv.append((len(g["pts"]), n))
     res = {k: dict(median_ms=float(np.median(v)) * 1e3, p90_ms=float(np.percentile(v, 90)) * 1e3) for k, v in T.items()}
     res["points_per_frame_mean"] = float(np.mean([x[1] for x in nv]))
-    res["name"], res["M"], res["K0"] = a.name, a.M, a.K0
+    res["name"], res["name2"], res["M"], res["K0"] = a.name, a.name2, a.M, a.K0
     import p17_gate as GT
 
     mem = GT.Stabilizer().cuda().eval()
@@ -193,7 +200,7 @@ def main():
     print(json.dumps(res, indent=1))
     res["union"], res["fork_prune"] = a.union, a.fork_prune
     os.makedirs(BP.ROOT + "/runs/e18/latency", exist_ok=True)
-    json.dump(res, open(f"{BP.ROOT}/runs/e18/latency/latency_M{a.M}_rec{a.rec}_u{a.union}_fp{a.fork_prune}{a.tag}.json", "w"), indent=1)
+    json.dump(res, open(f"{BP.ROOT}/runs/e18/latency/latency_M{a.M}_rec{a.rec}_u{a.union}_fp{a.fork_prune}{'_ens2' if a.name2 else ''}{a.tag}.json", "w"), indent=1)
 
 
 if __name__ == "__main__":

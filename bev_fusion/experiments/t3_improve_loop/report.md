@@ -18,7 +18,10 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 1. **The lever is the image features, not the blocks.** Eleven block exchanges tied; swapping the frozen detection-trained stride-16 image features for map-trained
    stride-8 BEVFusion features nearly doubled the maps (lane divider 0.191 -> 0.351 / 0.345, walkway 0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165) and halved
    the objects (front mAP2 0.367 -> 0.183 / 0.180). Both feature sets in one chain keep both: lane divider 0.335, walkway 0.340, drivable 0.806, front mAP2 0.361 (one
-   seed; the seed twin is training). The 3000-step dual chain beats the start recipe trained 4.7 x longer on five of six map layers (ladder below).
+   seed; the seed twin is training). The 3000-step dual chain beats the start recipe trained with 4.7 x the optimiser steps (7000 x accumulation 2; a different config and frame set)
+   on five of six map layers (ladder below). The better features are a published, map-trained model's: the saving is partly borrowed compute. The swap is a bundle (backbone,
+   stride, objective and depth head differ), planned in plan 2.8 with a qualitative rule, not a numeric card. Not kept in the dual chain: the rare two-wheeler class
+   (AP@2 0.121 -> 0.016, 174 GT boxes), so the 3-class mAP falls 0.251 -> 0.221 while vehicle + pedestrian mAP2 stays inside the band.
 2. **The velocity head is dead, not slow.** The output of the branch is its bias; 0.011 % of its hidden units are active at the supervised centres (13 - 50 % for the other
    branches); 24 of the 29 classified runs are dead. Try 9 (loss weight x10) could not help a dead ReLU layer. The radar Doppler read-out at the GT boxes holds 0.79 of the
    velocity of moving vehicles (upper bound, GT heading), our best learned heads 0.22 - 0.25.
@@ -39,7 +42,7 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 | 13 | do stride-4 image details help the thin map classes? | `t7_res4` / `t7_rgb`: a frozen ResNet stride-4 branch lifted into the BEV | lane divider +0.04 | res4: lane divider +0.065 / +0.042 (two seeds), road divider IoU@1 +0.119 / +0.096, walkway and crossing unchanged; rgb +0.015 | helps the thin lines, not the area classes; verdict waits for the equal-GT control |
 | 14 | are frozen detection-trained features the limit of the maps? | `t8_bevfeat`: cached BEVFusion map-trained stride-8 features, same chain, same-code control `t8_ctl` | maps up | maps x1.8 - 1.9 (two seeds agree), front mAP2 0.367 -> 0.183 / 0.180, pedestrians gone | supports M6; neither feature set alone gives both |
 | 15 | can both be had? | `t10_dual`: both caches, two lifts, merged by a 1x1 convolution | lane divider 0.34, drivable 0.80, walkway 0.33, front mAP2 0.33 (0.25 - 0.38), pedestrian AP@2 0.15 | lane divider 0.335, drivable 0.806, walkway 0.340, front mAP2 0.361, pedestrian AP@2 0.199 | rule E1 holds (one seed); seed twin training |
-| 16 | why is the box velocity zero in every run? | diagnosis from stored checkpoints, detections and a probe (`t11_vel_cause`) | active share < 1 % at the centres | 0.011 % (other branches 13 - 50 %); 24 of 29 runs dead | fresh branch, BatchNorm, moving / static gate queued as arms |
+| 16 | why is the box velocity zero in every 3000-step run? | diagnosis from stored checkpoints, detections and a probe (`t11_vel_cause`) | active share < 1 % at the centres; linear read-out skill >= 0.15 | 0.011 % (other branches 13 - 50 %); 24 of 29 classified runs dead (the live ones have an effective batch of 6 or more); the linear read-out gives 0.019 (that prediction failed) | a diagnosis, not yet a fix: fresh branch + moving / static gate (B') and with accumulation 2 (B2) queued, not run; BatchNorm is a ranked candidate without a card |
 
 ### Maps: the ladder (same metric, VAL, `seg_fov`, dt 0)
 
@@ -56,7 +59,22 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 The 3000-step dual chain is above the 7000 x 2-step start on drivable, walkway, crossing, lane divider and road divider and below it on carpark (0.144 against 0.162); the
 frame sets differ (3109 against 1000; the same model scores 0.719 on 400 frames against 0.698 on 3109, so the subset effect is about 0.02).
 
-[[LIKE_FOR_LIKE_MAPS]]
+### Maps against the SOA (GaussianCaR), indicative until the same-frames re-score is done
+
+Share of the SOA's IoU per layer: our stored VAL-1000 numbers (`temp/pitch/indicative.py`) over GaussianCaR's numbers on the 400 frames of `../t6_soa_gap` (same metric, camera cells,
+threshold 0.5; the frame sets differ, so read the shares to about +-0.03). The same-frames re-score of `t10_dual_s0`, `t8_ctl_s0` and `t8_bevfeat_s0` with `temp/soa_gap/map_ref.py` is queued behind the trainings.
+
+| layer | GaussianCaR | start (`t2_ref_s0`) | same-code control | map-trained features | both feature sets |
+|---|---|---|---|---|---|
+| drivable (0 m) | 0.845 | 0.666 (0.79) | 0.668 (0.79) | 0.754 (0.89) | 0.756 (0.89) |
+| walkway (0 m) | 0.594 | 0.191 (0.32) | 0.178 (0.30) | 0.339 (0.57) | 0.340 (0.57) |
+| carpark (0 m) | 0.659 | 0.106 (0.16) | 0.115 (0.17) | 0.173 (0.26) | 0.144 (0.22) |
+| crossing (0 m) | 0.536 | 0.002 (0.00) | 0.002 (0.00) | 0.145 (0.27) | 0.154 (0.29) |
+| lane divider (0.5 m) | 0.691 | 0.181 (0.26) | 0.191 (0.28) | 0.351 (0.51) | 0.335 (0.48) |
+| road divider (0.5 m) | 0.634 | 0.220 (0.35) | 0.224 (0.35) | 0.437 (0.69) | 0.442 (0.70) |
+
+Reading: the swap moves every layer toward the SOA (carpark and crossing remain the farthest), but nothing is at 100 %; the largest remaining gaps are carpark, crossing and the lane
+divider.
 
 ### Weak spots, ranked (replaces section 10)
 
@@ -66,7 +84,8 @@ frame sets differ (3109 against 1000; the same model scores 0.719 on 400 frames 
 3. **Objects at range**: precision of the confident detections falls from 0.89 (0 - 20 m) to 0.64 (40 - 60 m); far objects are mostly detected with low confidence (t6).
 4. **No SOA camera + radar detector was run on our frames** (CRN checkpoint on disk).
 5. **Per-block speed on an idle GPU** is still unmeasured.
-6. **Infrastructure**: C: at 4.1 GB free (a full disk crashed a run once); one GT version (D29) is open.
+6. **Infrastructure**: C: was at 4.1 GB free overnight (36 GB after the probe dumps were archived; a full disk crashed a run once); the seed twin of the dual chain was killed once
+   by the out-of-memory killer and resumed on a later code snapshot; one GT version (D29) is open.
 
 ### Errors made and corrected since (continues section 9)
 

@@ -36,6 +36,13 @@ def samp(maps, q):
     return s[..., 0].permute(0, 2, 1).reshape(B, *lead, -1)
 
 
+def ring_points(g, a):
+    """seed candidates on the square ring at +-a: the positions g on each of its four sides and the four corners -> [4 len(g) + 4, 2]"""
+    s, c = torch.full_like(g, a), const((-a, a), g.device)
+    corners = torch.stack(torch.meshgrid(c, c, indexing="ij"), -1).reshape(-1, 2)
+    return torch.cat([torch.stack([-s, g], -1), torch.stack([s, g], -1), torch.stack([g, -s], -1), torch.stack([g, s], -1), corners])
+
+
 def unitv(th):
     return torch.stack([torch.cos(th), torch.sin(th)], -1)
 
@@ -97,6 +104,7 @@ class DefaultCfg:
     M = 96                # beam: tips kept per level
     K0 = 64               # seeds kept
     lattice = 5.0         # spacing (m) of the seed lattice
+    lattice_ring = 0.0    # E266: > 0 adds the square ring of seed candidates at +-lattice_ring m at inference (0 = off)
     n_anchor = 128
     tolerant = False
     stage_b = False       # HF1: refine children
@@ -242,6 +250,8 @@ class Builder(nn.Module):
         if c.seeds == "lattice":
             g = torch.arange(-45.0, 45.01, c.lattice, device=device)
             P = torch.stack(torch.meshgrid(g, g, indexing="ij"), -1).reshape(-1, 2)
+            if c.lattice_ring > 0 and not self.training:  # E266: the training jitter carries seeds to +-47.5 m, the inference lattice stops at +-45
+                P = torch.cat([P, ring_points(g, c.lattice_ring)])  # appended: the lattice candidates keep their index
             P = P[None].expand(B, -1, -1)
             if self.training:
                 P = P + (torch.rand_like(P) - 0.5) * c.lattice

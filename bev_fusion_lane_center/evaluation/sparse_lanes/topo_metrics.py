@@ -10,9 +10,10 @@ and where along the range the misses are. These metrics close them; graph format
   dup_frac  share of the predicted length that runs parallel (|cos| > 0.9) within 0.75 m of another predicted piece that is neither its
             neighbour nor its sibling in the graph, not counting the first and last 4 m of a piece (fork zones); parallel duplicates are
             invisible to point F1, FL and S.
-  range     recall / precision at 1 m by distance from the ego: near < 20 m, mid 20 - 40 m, far >= 40 m (R@1_far is the open gap of loop 18).
+  range     recall / precision at 1 m by distance from the ego: near < 20 m, mid 20 - 40 m, far >= 40 m (R@1_far is the open gap of loop 18);
+            the far bin is also split at max(|x|,|y|) = 45 m, the edge of the inference seed lattice (E266): far_inner (< 45) and far_ring (45 - 48).
 
-    extra(preds, gts) -> dict(topo_P, topo_R, topo_F1, dup_frac, R@1_near, R@1_mid, R@1_far, P@1_near, P@1_mid, P@1_far)
+    extra(preds, gts) -> dict(topo_P, topo_R, topo_F1, dup_frac, R@1_near / mid / far / far_inner / far_ring, P@1_ the same)
 Self-test: python topo_metrics.py
 """
 import os
@@ -32,6 +33,8 @@ from evalsuite import stats as ST  # noqa: E402  (the shared scene bootstrap)
 
 CLIP = 48.0
 BINS = (("near", 0.0, 20.0), ("mid", 20.0, 40.0), ("far", 40.0, 1e9))
+RING = 45.0  # E266: the far bin split by max(|x|,|y|) at the edge of the inference seed lattice: far_inner < 45 m <= far_ring (< CLIP)
+NAMES = tuple(b[0] for b in BINS) + ("far_inner", "far_ring")
 STEP, REACH, SNAP, TOL, COS_SNAP = 5, 30.0, 2.0, 1.0, 0.5
 
 
@@ -154,17 +157,20 @@ def dup_counts(pred, r=0.75, cos_min=0.9, end_zone=4.0):
 
 
 def range_counts(pred, gt, tau=1.0):
-    """per bin: (gt points within tau, gt points, pred points within tau, pred points)"""
+    """per row of NAMES (the range bins, then the far bin split at RING): (gt points within tau, gt points, pred points within tau, pred points)"""
     P, _, _ = GE.dense_points(pred)
     G, _, _ = GE.dense_points(gt)
-    out = np.zeros((len(BINS), 4))
+    out = np.zeros((len(NAMES), 4))
     if not len(G):
         return out
     dg = cKDTree(P).query(G)[0] if len(P) else np.full(len(G), np.inf)
     dp = cKDTree(G).query(P)[0] if len(P) else np.zeros(0)
-    rg, rp = np.linalg.norm(G, axis=1), np.linalg.norm(P, axis=1) if len(P) else np.zeros(0)
-    for b, (_, lo, hi) in enumerate(BINS):
-        kg, kp = (rg >= lo) & (rg < hi), (rp >= lo) & (rp < hi)
+    P = P.reshape(-1, 2)
+    rg, rp = np.linalg.norm(G, axis=1), np.linalg.norm(P, axis=1)
+    cg, cp = np.abs(G).max(1), np.abs(P).max(1)
+    far_g, far_p = rg >= BINS[-1][1], rp >= BINS[-1][1]
+    sel = [((rg >= lo) & (rg < hi), (rp >= lo) & (rp < hi)) for _, lo, hi in BINS] + [(far_g & (cg < RING), far_p & (cp < RING)), (far_g & (cg >= RING), far_p & (cp >= RING))]
+    for b, (kg, kp) in enumerate(sel):
         out[b] = (np.sum(dg[kg] <= tau), kg.sum(), np.sum(dp[kp] <= tau), kp.sum())
     return out
 
@@ -179,9 +185,9 @@ def pooled(recs):
     g = sum(r["rng"] for r in recs)
     P, R = t[0] / max(t[1], 1), t[0] / max(t[2], 1)
     out = {"topo_P": float(P), "topo_R": float(R), "topo_F1": float(2 * P * R / max(P + R, 1e-9)), "dup_frac": float(u[0] / max(u[1], 1))}
-    for b, (nm, _, _) in enumerate(BINS):  # NaN when a bin holds no points
-        out[f"R@1_{nm}"] = float(g[b, 0] / g[b, 1]) if g[b, 1] else float("nan")
-        out[f"P@1_{nm}"] = float(g[b, 2] / g[b, 3]) if g[b, 3] else float("nan")
+    for nm, row in zip(NAMES, g):  # NaN when a bin holds no points
+        out[f"R@1_{nm}"] = float(row[0] / row[1]) if row[1] else float("nan")
+        out[f"P@1_{nm}"] = float(row[2] / row[3]) if row[3] else float("nan")
     return out
 
 
@@ -189,7 +195,7 @@ def extra(preds, gts):
     return pooled([frame_record(p, g) for p, g in zip(preds, gts)])
 
 
-def paired(recs_a, recs_b, scenes, B=1000, seed=0, keys=("topo_F1", "topo_R", "topo_P", "dup_frac", "R@1_far", "R@1_mid", "R@1_near")):
+def paired(recs_a, recs_b, scenes, B=1000, seed=0, keys=("topo_F1", "topo_R", "topo_P", "dup_frac", "R@1_far", "R@1_mid", "R@1_near", "R@1_far_inner", "R@1_far_ring")):
     """a - b (a = variant, b = control) with a 95 % interval over resampled scenes (same draw for both systems), like bootstrap.paired for the
     card metrics and with the same draws (the shared evalsuite.stats bootstrap). Draws without a number (a range bin with no point: NaN) are
     dropped; then the key carries n_valid. p_a_better = share of the valid draws with a - b > 0 (for dup_frac, lower is better)."""
@@ -217,6 +223,12 @@ def _selftest():
     far = dict(pts=[p[np.linalg.norm(p, axis=1) < 40] for p in gt["pts"]], edges=gt["edges"])
     e = extra([far], [gt])
     assert e["R@1_far"] < 0.2 and e["R@1_near"] > 0.99, e  # far points 40 - 41 m are still within 1 m of the cut lane
+    lane = dict(pts=[np.stack([np.linspace(40, 47.5, 16), np.zeros(16)], 1)], edges=[])  # 40 - 47.5 m ahead: 10 inner points (< 45), 6 ring points
+    cut = dict(pts=[np.stack([np.linspace(40, 43.8, 20), np.zeros(20)], 1), np.stack([np.linspace(45, 47.5, 6), np.full(6, 10.0)], 1)], edges=[])
+    r = range_counts(cut, lane)
+    assert r[3, 1] == 10 and r[4, 1] == 6 and r[3, 1] + r[4, 1] == r[2, 1], r  # inner + ring = far
+    e = extra([cut], [lane])
+    assert e["R@1_far_inner"] == 1.0 and e["R@1_far_ring"] == 0.0 and e["P@1_far_inner"] == 1.0 and e["P@1_far_ring"] == 0.0 and abs(e["R@1_far"] - 10 / 16) < 1e-12, e
     print("topo_metrics selftest passed")
 
 
