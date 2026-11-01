@@ -155,21 +155,21 @@
 <text x="1829.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">threshold</text>
 <text x="1829.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">metrics.py::line_cells</text>
 </g>
-<g><title>decode: training/extract.py::select_boxes</title><rect x="1754" y="227.0" width="150" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
+<g><title>decode: training/extract.py::boxes_from_maps; training/extract.py::select_boxes</title><rect x="1754" y="227.0" width="150" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
 <text x="1829.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Select boxes</text>
 <text x="1829.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">local max, top-k,</text>
 <text x="1829.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">threshold</text>
-<text x="1829.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">extract.py::select_boxe</text>
+<text x="1829.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">extract.py::boxes_from_</text>
 </g>
 <g><title>consumers: evaluation/bev_adapter.py::predictions; evaluation/board.py</title><rect x="1754" y="327.0" width="150" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
 <text x="1829.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Boxes, lines</text>
 <text x="1829.0" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">metrics, prototype</text>
 <text x="1829.0" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_adapter.py::predict</text>
 </g>
-<g><title>gt: ../autogt/; training/gt_cache_build.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>gt: ../autogt/; training/gt_cache_build.py; training/gt_scenes.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="309.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ground truth</text>
 <text x="309.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">autogt, cached</text>
-<text x="309.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">autogt/ +1</text>
+<text x="309.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">autogt/ +2</text>
 </g>
 <g><title>data: training/feature_cache.py::CachedFrontRadarDataset; training/train.py::ClipDataset; training/augment.py::flip_batch; training/scratch.py</title><rect x="424" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="499.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Datasets, caches</text>
@@ -177,10 +177,10 @@
 <text x="499.0" y="571.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scratch</text>
 <text x="499.0" y="585.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Cache</text>
 </g>
-<g><title>trainer: training/train.py::train; training/model.py::check_config; training/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>trainer: training/train.py::train; training/freeze.py; training/probe.py; training/debug.py; training/model.py::check_config; training/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="974.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer + slot tables</text>
 <text x="974.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">check_config</text>
-<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py::train +2</text>
+<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py::train +5</text>
 </g>
 <g><title>loss: training/losses.py::BEVLoss; training/loss_extras.py</title><rect x="1374" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="1449.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Loss</text>

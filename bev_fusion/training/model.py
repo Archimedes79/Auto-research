@@ -16,7 +16,7 @@
 The five layers (training/architecture.md): precompute (precompute.py: the visibility maps, made at the entry of forward only where a
 memory reads them), input interface (interface.py), the network slots below (one builder table per slot, check_config), output
 interface (per dt the maps and object maps; with dense_outputs the dense boxes and the soft line map of extract.py), post-processing
-(boxes(): extract.select_boxes = object_head.decode).
+(boxes(): extract.boxes_from_maps, the one box extractor; object_head.decode is the same function).
 Every block is chosen in ModelConfig; each option is either the plan's design or its paper fallback:
   lift          "pd"  lift PD, pull with depth weight (DualBEV / FastBEV++ / FB-BEV) - default
                 "p"   pull without depth (Simple-BEV, Fast-BEV) - control
@@ -44,7 +44,7 @@ try:
     from .bev_trunk import BEVTrunk, SemanticHead
     from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
-    from .extract import dense_boxes, select_boxes, soft_line_map
+    from .extract import boxes_from_maps, dense_boxes, soft_line_map
     from .fusion import ConcatFusion, GateFusion
     from .lane_branch import LaneBranch
     from .lift_pd import Grid, LiftPD
@@ -61,7 +61,7 @@ except ImportError:                                   # run as a script
     from bev_trunk import BEVTrunk, SemanticHead
     from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
     from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
-    from extract import dense_boxes, select_boxes, soft_line_map
+    from extract import boxes_from_maps, dense_boxes, soft_line_map
     from fusion import ConcatFusion, GateFusion
     from lane_branch import LaneBranch
     from lift_pd import Grid, LiftPD
@@ -377,8 +377,7 @@ class BEVFusionModel(nn.Module):
         """Run time: decoded boxes at the target time dt of a forward result (list (B) of box dicts), refined by S5c
         when the model has a refiner (rescore: sqrt(score x predicted IoU))."""
         p = res["out"][float(dt)]                                # post-processing: select cells of the dense box output
-        dense = dense_boxes({kk: v.double().cpu() for kk, v in p["obj"].items()}, self.grid, NUSC_GROUPS, soft=False)   # double: = decode
-        dets = select_boxes(dense, NUSC_GROUPS, k=k, threshold=threshold)
+        dets = boxes_from_maps({kk: v.detach() for kk, v in p["obj"].items()}, self.grid, NUSC_GROUPS, k=k, threshold=threshold)
         if not self.cfg.refine or not any(dets):
             return dets
         return refine_boxes(self.refiner, p["obj_feat"], dets, self.grid, p["obj_dt"], rescore)

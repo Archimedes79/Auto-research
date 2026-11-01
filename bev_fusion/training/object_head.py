@@ -169,43 +169,23 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0):
 
 
 # ------------------------------------------------------------------------------------------------ decoding
+_boxes_from_maps = None
+
+
 @torch.no_grad()
 def decode(out, grid, groups=GROUPS, k=50, threshold=0.2, from_probabilities=False):
-    """out maps -> list (B) of box dicts with 'score'. from_probabilities: hm already in [0, 1] (self-test). With out['mov']
-    the velocity is 0 where sigmoid(mov) < 0.5 (static: the AVE-optimal answer of a two-point mixture; inference only)."""
-    hm = out["hm"] if from_probabilities else torch.sigmoid(out["hm"])
-    keep = (hm == F.max_pool2d(hm, 3, 1, 1)).float()
-    hm = hm * keep
-    B, G, X, Y = hm.shape
-    scores, idx = hm.reshape(B, -1).topk(min(k, G * X * Y))
-    res = []
-    for b in range(B):
-        boxes = []
-        for s, i in zip(scores[b].tolist(), idx[b].tolist()):
-            if s < threshold:
-                continue
-            g, cell = divmod(i, X * Y)
-            ix, iy = divmod(cell, Y)
-            ox, oy = out["off"][b, :, ix, iy].tolist()
-            bx = {"group": groups[g][0], "score": s,
-                  "cx": grid.x_min + (ix + ox + 0.5) * grid.res, "cy": grid.y_min + (iy + oy + 0.5) * grid.res,
-                  "vx": out["vel"][b, 0, ix, iy].item(), "vy": out["vel"][b, 1, ix, iy].item()}
-            if "mov" in out and out["mov"][b, 0, ix, iy].item() < 0:          # logit < 0 <=> sigmoid < 0.5
-                bx["vx"] = bx["vy"] = 0.0
-            if groups[g][1] == "box":
-                ll, lw = out["size"][b, :, ix, iy].tolist()
-                sn, cs = out["rot"][b, :, ix, iy].tolist()
-                yaw = math.atan2(sn, cs)
-                if "dir" in out:                           # axis in [off, off + pi), then the half from the class
-                    yaw = (yaw - DIR_OFFSET) % math.pi + DIR_OFFSET
-                    if out["dir"][b, 0, ix, iy].item() < 0:
-                        yaw = math.remainder(yaw + math.pi, 2 * math.pi)
-                bx.update(length=math.exp(ll), width=math.exp(lw), yaw=yaw)
-            else:
-                bx["radius"] = math.exp(out["rad"][b, 0, ix, iy].item())
-            boxes.append(bx)
-        res.append(boxes)
-    return res
+    """out maps -> list (B) of box dicts with 'score': the local maxima of the heatmap (3 x 3 max-pool), top-k, score threshold. With
+    out['mov'] the velocity is 0 where sigmoid(mov) < 0.5 (static: the AVE-optimal answer of a two-point mixture; inference only).
+    There is ONE extractor, extract.boxes_from_maps (vectorised, only the K peak cells are read); this is its name in the object head's
+    module. extract.py's self-test checks it box by box against the plain per-box loop. from_probabilities: hm already in [0, 1]."""
+    global _boxes_from_maps
+    if _boxes_from_maps is None:                           # imported on first use: extract imports this module (DIR_OFFSET)
+        try:
+            from .extract import boxes_from_maps
+        except ImportError:
+            from extract import boxes_from_maps
+        _boxes_from_maps = boxes_from_maps
+    return _boxes_from_maps(out, grid, groups, k, threshold, from_probabilities)
 
 
 class TimeObjectHead(ObjectHead):

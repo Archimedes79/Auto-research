@@ -335,9 +335,10 @@
    "col": 9,
    "row": 1,
    "code": [
+    "training/extract.py::boxes_from_maps",
     "training/extract.py::select_boxes"
    ],
-   "note": "select_boxes: the post-processing of model.boxes(); the evaluation adapter still scores with object_head.decode (equal box for box, extract.py self-test), so both stay until the adapter reads select_boxes"
+   "note": "ONE extractor: boxes_from_maps reads only the K peak cells of the head maps (vectorised, float64, the same _params as the dense output) and is what object_head.decode, model.boxes(), the evaluation adapter and the prototype call; select_boxes does the same on a dense output (planner side); extract.py's self-test checks both box by box against the plain per-box loop (6 mutants caught); 1.7 ms instead of 6.5 ms (decode) and 1.5 ms instead of 9.0 ms (model.boxes) per frame at 100 candidates, CPU"
   },
   {
    "id": "consumers",
@@ -358,7 +359,8 @@
    "row": 4,
    "code": [
     "../autogt/",
-    "training/gt_cache_build.py"
+    "training/gt_cache_build.py",
+    "training/gt_scenes.py"
    ]
   },
   {
@@ -383,6 +385,9 @@
    "w": 2,
    "code": [
     "training/train.py::train",
+    "training/freeze.py",
+    "training/probe.py",
+    "training/debug.py",
     "training/model.py::check_config",
     "training/feature_cache.py::CachedBEVFusionModel"
    ],

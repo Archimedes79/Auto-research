@@ -27,21 +27,11 @@ except ImportError:
     from object_head import DIR_OFFSET
 
 
-def _centres(grid, X, Y, off):
-    """cell index + offset -> metres (vehicle frame), as object_head.decode"""
-    ix = torch.arange(X, device=off.device, dtype=off.dtype).view(1, X, 1)
-    iy = torch.arange(Y, device=off.device, dtype=off.dtype).view(1, 1, Y)
-    return grid.x_min + (ix + off[:, 0] + 0.5) * grid.res, grid.y_min + (iy + off[:, 1] + 0.5) * grid.res
-
-
-def dense_boxes(obj, grid, groups, beta=10.0, soft=True, from_probabilities=False):
-    """obj: the object head maps (hm logits (B, G, X, Y), off, size, rot, rad, vel; optional dir, mov) -> dict of dense maps:
-    hm (heatmap in [0, 1]), w (peak weight), cx, cy, length, width, radius, yaw, vx, vy (each (B, X, Y); w and hm (B, G, X, Y))."""
-    hm = obj["hm"] if from_probabilities else torch.sigmoid(obj["hm"])
-    B, G, X, Y = hm.shape
-    w = hm * torch.exp(-beta * (F.max_pool2d(hm, 3, 1, 1) - hm))
-    cx, cy = _centres(grid, X, Y, obj["off"])
-    out = {"hm": hm, "w": w, "cx": cx, "cy": cy}
+def _params(obj, ix, iy, grid, soft):
+    """the box parameters of a set of cells from the head maps indexed on those cells: obj fields (B, C, *cells), ix / iy (B, *cells) the cell
+    indices (same dtype as the maps). One code for the dense output (every cell: cells = (X, Y)) and for the selection (the K peak
+    cells only: cells = (K,)). Returns cx, cy (metres, vehicle frame), length, width, radius, yaw, vx, vy and, soft, the heading vector."""
+    out = {"cx": grid.x_min + (ix + obj["off"][:, 0] + 0.5) * grid.res, "cy": grid.y_min + (iy + obj["off"][:, 1] + 0.5) * grid.res}
     if "size" in obj:
         out["length"], out["width"] = torch.exp(obj["size"][:, 0]), torch.exp(obj["size"][:, 1])
     if "rad" in obj:
@@ -66,29 +56,69 @@ def dense_boxes(obj, grid, groups, beta=10.0, soft=True, from_probabilities=Fals
     return out
 
 
-def select_boxes(dense, groups, k=50, threshold=0.2):
-    """the post-processing: hard local maximum of the heatmap, top-k, threshold -> list (B) of box dicts (object_head.decode's format)"""
-    hm = dense["hm"]
+def dense_boxes(obj, grid, groups, beta=10.0, soft=True, from_probabilities=False):
+    """obj: the object head maps (hm logits (B, G, X, Y), off, size, rot, rad, vel; optional dir, mov) -> dict of dense maps:
+    hm (heatmap in [0, 1]), w (peak weight), cx, cy, length, width, radius, yaw, vx, vy (each (B, X, Y); w and hm (B, G, X, Y))."""
+    hm = obj["hm"] if from_probabilities else torch.sigmoid(obj["hm"])
+    B, G, X, Y = hm.shape
+    w = hm * torch.exp(-beta * (F.max_pool2d(hm, 3, 1, 1) - hm))
+    ix = torch.arange(X, device=hm.device, dtype=hm.dtype).view(1, X, 1)
+    iy = torch.arange(Y, device=hm.device, dtype=hm.dtype).view(1, 1, Y)
+    return {"hm": hm, "w": w, **_params(obj, ix, iy, grid, soft)}
+
+
+def _peaks(hm, k):
+    """hard local maxima (3 x 3) of the heatmap (B, G, X, Y) -> top-k scores and the group / flat cell index of each, both (B, K)"""
     B, G, X, Y = hm.shape
     peaks = hm * (hm == F.max_pool2d(hm, 3, 1, 1)).to(hm.dtype)
     scores, idx = peaks.reshape(B, -1).topk(min(k, G * X * Y))
+    return scores, torch.div(idx, X * Y, rounding_mode="floor"), idx % (X * Y)
+
+
+_FIELDS = ("cx", "cy", "vx", "vy", "length", "width", "yaw", "radius")
+
+
+def _to_dicts(scores, group, vals, fields, groups, threshold):
+    """(B, K) scores / group index and (B, K, F) values -> list (B) of box dicts (object_head.decode's format), scores >= threshold; one
+    transfer to the host for the whole batch, no per-box tensor access"""
+    sc, gr, vl = scores.tolist(), group.tolist(), vals.tolist()
+    col = {f: i for i, f in enumerate(fields)}
     res = []
-    for b in range(B):
+    for b in range(len(sc)):
         boxes = []
-        for s, i in zip(scores[b].tolist(), idx[b].tolist()):
+        for s, g, v in zip(sc[b], gr[b], vl[b]):
             if s < threshold:
-                continue
-            g, cell = divmod(i, X * Y)
-            ix, iy = divmod(cell, Y)
-            bx = {"group": groups[g][0], "score": s, "cx": dense["cx"][b, ix, iy].item(), "cy": dense["cy"][b, ix, iy].item(),
-                  "vx": dense["vx"][b, ix, iy].item(), "vy": dense["vy"][b, ix, iy].item()}
+                break                                      # sorted: the rest is below as well
+            bx = {"group": groups[g][0], "score": s, "cx": v[col["cx"]], "cy": v[col["cy"]], "vx": v[col["vx"]], "vy": v[col["vy"]]}
             if groups[g][1] == "box":
-                bx.update(length=dense["length"][b, ix, iy].item(), width=dense["width"][b, ix, iy].item(), yaw=dense["yaw"][b, ix, iy].item())
+                bx.update(length=v[col["length"]], width=v[col["width"]], yaw=v[col["yaw"]])
             else:
-                bx["radius"] = dense["radius"][b, ix, iy].item()
+                bx["radius"] = v[col["radius"]]
             boxes.append(bx)
         res.append(boxes)
     return res
+
+
+def select_boxes(dense, groups, k=50, threshold=0.2):
+    """the post-processing of a dense box output (planner side): hard local maximum of the heatmap, top-k, threshold -> list (B) of box
+    dicts (object_head.decode's format); the K cells are gathered from the dense fields in one go"""
+    scores, group, cell = _peaks(dense["hm"], k)
+    fields = [f for f in _FIELDS if f in dense]
+    vals = torch.stack([dense[f].reshape(dense[f].shape[0], -1).gather(1, cell) for f in fields], -1)
+    return _to_dicts(scores, group, vals, fields, groups, threshold)
+
+
+def boxes_from_maps(obj, grid, groups, k=50, threshold=0.2, from_probabilities=False):
+    """THE box extractor: head maps -> list (B) of box dicts. Only the K peak cells are gathered from the raw maps (on the device of the
+    maps) and parametrised, in float64, by the same `_params` as the dense output; object_head.decode, BEVFusionModel.boxes, the evaluation
+    adapter and the prototype all come here. from_probabilities: hm already in [0, 1]."""
+    hm = obj["hm"] if from_probabilities else torch.sigmoid(obj["hm"])
+    scores, group, cell = _peaks(hm, k)
+    Y = hm.shape[3]
+    sub = {n: m.flatten(2).gather(2, cell[:, None, :].expand(-1, m.shape[1], -1)).double() for n, m in obj.items() if n != "hm"}
+    p = _params(sub, torch.div(cell, Y, rounding_mode="floor").double(), (cell % Y).double(), grid, soft=False)
+    fields = [f for f in _FIELDS if f in p]
+    return _to_dicts(scores, group, torch.stack([p[f] for f in fields], -1), fields, groups, threshold)
 
 
 def soft_line_map(dist, res, k=None):
@@ -103,13 +133,44 @@ def soft_line_map(dist, res, k=None):
     return torch.minimum(near, loc)
 
 
+def _decode_reference(out, grid, groups, k=50, threshold=0.2):
+    """the plain per-box loop of the old object_head.decode: the independent oracle of the self-test (python floats, one box at a time)"""
+    hm = torch.sigmoid(out["hm"])
+    hm = hm * (hm == F.max_pool2d(hm, 3, 1, 1)).float()
+    B, G, X, Y = hm.shape
+    scores, idx = hm.reshape(B, -1).topk(min(k, G * X * Y))
+    res = []
+    for b in range(B):
+        boxes = []
+        for s, i in zip(scores[b].tolist(), idx[b].tolist()):
+            if s < threshold:
+                continue
+            g, cell = divmod(i, X * Y)
+            ix, iy = divmod(cell, Y)
+            ox, oy = out["off"][b, :, ix, iy].tolist()
+            bx = {"group": groups[g][0], "score": s, "cx": grid.x_min + (ix + ox + 0.5) * grid.res, "cy": grid.y_min + (iy + oy + 0.5) * grid.res,
+                  "vx": out["vel"][b, 0, ix, iy].item(), "vy": out["vel"][b, 1, ix, iy].item()}
+            if "mov" in out and out["mov"][b, 0, ix, iy].item() < 0:
+                bx["vx"] = bx["vy"] = 0.0
+            if groups[g][1] == "box":
+                ll, lw = out["size"][b, :, ix, iy].tolist()
+                sn, cs = out["rot"][b, :, ix, iy].tolist()
+                yaw = math.atan2(sn, cs)
+                if "dir" in out:
+                    yaw = (yaw - DIR_OFFSET) % math.pi + DIR_OFFSET
+                    if out["dir"][b, 0, ix, iy].item() < 0:
+                        yaw = math.remainder(yaw + math.pi, 2 * math.pi)
+                bx.update(length=math.exp(ll), width=math.exp(lw), yaw=yaw)
+            else:
+                bx["radius"] = math.exp(out["rad"][b, 0, ix, iy].item())
+            boxes.append(bx)
+        res.append(boxes)
+    return res
+
+
 # ----------------------------------------------------------------------------------------------- self-test
 def _selftest():
     import numpy as np
-    try:
-        from .object_head import decode
-    except ImportError:
-        from object_head import decode
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "evaluation"))
@@ -125,9 +186,14 @@ def _selftest():
            "rot": torch.randn(B, 2, X, Y), "rad": torch.randn(B, 1, X, Y) * 0.2, "vel": torch.randn(B, 2, X, Y),
            "dir": torch.randn(B, 1, X, Y), "mov": torch.randn(B, 1, X, Y)}
     obj = {k: v.double() for k, v in obj.items()}
-    # 1. the hard selection reproduces object_head.decode box by box
-    ref = decode(obj, Grid, groups, k=60, threshold=0.2)
+    # 1. the vectorised selection (from the dense output AND straight from the maps, = object_head.decode) reproduces the plain loop box by box
+    ref = _decode_reference(obj, Grid, groups, k=60, threshold=0.2)
     got = select_boxes(dense_boxes(obj, Grid, groups, soft=False), groups, k=60, threshold=0.2)
+    direct = boxes_from_maps(obj, Grid, groups, k=60, threshold=0.2)
+    assert [len(a) for a in direct] == [len(b) for b in got] == [len(r) for r in ref], "the two entry points select the same boxes"
+    for db, gb in zip(direct, got):
+        for d_, g_ in zip(db, gb):
+            assert d_.keys() == g_.keys() and all(abs(d_[kk] - g_[kk]) < 1e-9 for kk in d_ if kk != "group") and d_["group"] == g_["group"]
     assert [len(r) for r in ref] == [len(g) for g in got] and sum(len(r) for r in ref) > 20, ([len(r) for r in ref], [len(g) for g in got])
     for rb, gb in zip(ref, got):
         for r, g in zip(rb, gb):
@@ -151,8 +217,8 @@ def _selftest():
         assert v.grad is not None and torch.isfinite(v.grad).all() and v.grad.abs().max() > 1e-3, (kk, v.grad.abs().max())
     # 1b. float32 maps (the model's dtype): the same boxes as decode on the same float32 maps, values within float32 rounding
     o32 = {kk: v.float() for kk, v in obj.items()}
-    r32 = decode(o32, Grid, groups, k=60, threshold=0.2)
-    g32 = select_boxes(dense_boxes({kk: v.double() for kk, v in o32.items()}, Grid, groups, soft=False), groups, k=60, threshold=0.2)
+    r32 = _decode_reference(o32, Grid, groups, k=60, threshold=0.2)
+    g32 = boxes_from_maps(o32, Grid, groups, k=60, threshold=0.2)
     assert [[b["group"] for b in r] for r in r32] == [[b["group"] for b in g] for g in g32]
     assert max(abs(math.remainder(r["yaw"] - g["yaw"], 2 * math.pi)) for rb, gb in zip(r32, g32) for r, g in zip(rb, gb) if "yaw" in r) < 1e-6
     hm = dense["hm"].detach()
@@ -172,7 +238,7 @@ def _selftest():
     dd = d.clone().requires_grad_(True)
     soft_line_map(dd, Grid.res).sum().backward()
     assert torch.isfinite(dd.grad).all() and dd.grad.abs().sum() > 0
-    print("extract selftest passed: hard selection = object_head.decode on", sum(len(r) for r in ref),
+    print("extract selftest passed: the vectorised selection = the plain per-box loop on", sum(len(r) for r in ref),
           "boxes, dense boxes differentiable, soft line map >= 0.5 = metrics.line_cells")
 
 
