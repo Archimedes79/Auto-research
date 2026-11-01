@@ -21,7 +21,7 @@ Why it looks like this (decided as D32 and finished in its lean form as D34, 202
 | WRITE GATE: protected truth files only with a grant under a decided D<n>; a card only when complete (G2) | transition point: refuses | `tools/guard_hook.py`, `tools/experiment.py` | transition agents -> files |
 | PROBLEM.md project.json | plain file in the problem folder | `templates/problem.md` |  |
 | project.py install_agents.py | code: core and suites | `tools/project.py`, `tools/install_agents.py`, `config.json` |  |
-| Researcher scouts, summaries | agent role (mode) | `agents/ar-researcher.md`, `prompts/research_steps.md` | scouts in parallel, one per topic, then a summary with its digest per problem group |
+| Researcher scouts, summaries | agent role (mode) | `agents/ar-researcher.md`, `prompts/research_steps.md` | only on a trigger (METHOD.md, Planning a round): scouts in parallel, one per topic, then a summary with its digest per problem group |
 | notes, summaries K register | plain file in the problem folder | `templates/paper_note.md`, `templates/group_summary.md` |  |
 | the problem's literature tools | the problem's own code | `../bev_fusion_lane_center/tools/literature/catalogue.py` | no code in autoresearch/ yet; the lane problem's catalogue would move up once a second problem uses it |
 | Planner: branches (one per lens); critic | agent role (mode) | `agents/ar-planner.md`, `agents/ar-critic.md` | the planner writes cards once per lens, in parallel; the critic (fresh context) accepts, revises or rejects each card |
@@ -31,17 +31,17 @@ Why it looks like this (decided as D32 and finished in its lean form as D34, 202
 | detail plan, code tagged commit | plain file in the problem folder | `templates/experiment.md` |  |
 | spec tests selftest.py | code: core and suites | `tools/selftest.py` |  |
 | run records run.json, log.jsonl | plain file in the problem folder | `trainsuite/runs.py` | written by the launcher and the training; read by the train suite |
-| START GATE card, slot, tag | transition point: refuses | `tools/run.py` | run.py starts a run only with a card (hypothesis, prediction, rule), a free GPU slot, the TEST split only with a logged row; it tags the code it ran |
+| START GATE card, slot, tag | transition point: refuses | `tools/run.py`, `tools/machine_lock.py` | run.py starts a run only with a card (hypothesis, prediction, rule), a free GPU slot, no other owner's exclusive machine lock (D19), the TEST split only with a logged row; it tags the code it ran |
 | launcher + train suite, kill rules | code: core and suites | `tools/run.py`, `tools/schedule.py`, `tools/ledger.py`, `trainsuite/` | a training is watched by code: the card's kill rules stop it; an alarm wakes the lead chat, no agent watches |
 | card.json, verdict (ledger derived) | plain file in the problem folder | `schemas/card.schema.json` |  |
 | eval suite (VAL) decide.py: the rule | transition point: refuses | `evalsuite/`, `tools/decide.py` | numbers, pictures and ms on VAL; decide.py turns the cards into KEEP / CUT / TIE / INCONCLUSIVE by the card's written rule |
 | Promotion: OK and TEST once | transition point: refuses | `tools/run.py` | the person's: a version becomes the deployed champion only with their OK and one TEST check, logged before it runs (run.py refuses otherwise) |
 | Planner: tracking n best, next round | agent role (mode) | `agents/ar-planner.md` | reads the verdicts, updates the set of n best by the written rule, proposes a promotion, plans the next branches |
 | the n best versions registry, champion | plain file in the problem folder | `../bev_fusion_lane_center/models/registry.json`, `../bev_fusion/records/champion.json` | the problem's list of good versions: lane models/registry.json (several named systems), bev_fusion records/champion.json (base, options); the tracking planner updates it, promotion stays the person's |
-| board, prototype (per problem) | the problem's own code | `../bev_fusion/evaluation/board.py`, `../bev_fusion_lane_center/tools/prototype/lane_prototype.py` | the deployment suite: each problem's prototype command runs a version on chosen frames, writes planner-ready outputs and copies the numbers of its metric card and the ms per frame of its timing record (bev_fusion: evaluation/bev_prototype.py); a shared tool only when a third problem needs one |
+| board, prototype (per problem) | the problem's own code | `../bev_fusion/evaluation/board.py`, `../bev_fusion_lane_center/tools/prototype/lane_prototype.py`, `tools/keep3.py` | tools/keep3.py keeps the best three networks complete (one slot per checkpoint); the deployment suite: each problem's prototype command runs a version on chosen frames, writes planner-ready outputs and copies the numbers of its metric card and the ms per frame of its timing record (bev_fusion: evaluation/bev_prototype.py); a shared tool only when a third problem needs one |
 | Critic numbers of the report | agent role (mode) | `agents/ar-critic.md` | a fresh reviewer checks the round's report against the primary sources |
 | DECISIONS.md HANDOVER.md | plain file in the problem folder | `templates/plan.md` |  |
-| cleanup, checks clean_temp, archdraw | transition point: refuses | `tools/clean_temp.py`, `tools/check_structure.py`, `tools/check_numbers.py`, `tools/metrics.py`, `tools/archdraw.py`, `architecture.json` | tags the scratch and moves temp/ away, finds dead paths, checks the report's numbers, the per-round table, these drawings |
+| cleanup, checks clean_temp, archdraw | transition point: refuses | `tools/clean_temp.py`, `tools/check_structure.py`, `tools/check_numbers.py`, `tools/metrics.py`, `tools/archdraw.py`, `tools/check_git.py`, `architecture.json` | tags the scratch and moves temp/ away, finds dead paths, checks the report's numbers, the per-round table, these drawings |
 
 ## Arrows
 

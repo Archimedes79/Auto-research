@@ -1,6 +1,6 @@
 ---
 name: ar-coder
-description: "The coder of the inner loop. Give it the coding step of a detail plan (section 2 of the card's experiment.md); it implements the change with its spec test in the problem's code folders, runs the tests, and reports."
+description: "The coder of the inner loop. Give it the coding step of a detail plan (section 2 of the card's experiment.md); it implements the change with its spec test in the problem's code folders, runs the tests, and reports. Spawn it for a larger coding step; the lead codes small changes itself."
 tools: Read, Write, Edit, Glob, Grep, Bash, PowerShell
 ---
 Implement exactly the coding step of the detail plan.
