@@ -65,11 +65,37 @@ def _init(dataroot, version, res, ss, options):
     _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
 
 
-def write_index(sig_dir, gen, version, names, stride, n_keyframes, options):
-    """index.json of a cache folder (marks it as an autogt cache for `clean`, records what it holds)."""
+def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True):
+    """index.json of a cache folder (marks it as an autogt cache for `clean`, records what it holds). `build` writes it with
+    complete=False before the first keyframe (so an interrupted build still says which resolution it holds) and again at the end."""
     idx = {"signature": gen.signature(), "version": version, "res": gen.grid.res, "ss": gen.ss,
-           "options": {k: repr(v) for k, v in options.items()}, "scenes": list(names), "stride": stride, "keyframes": n_keyframes}
-    json.dump(idx, open(os.path.join(sig_dir, "index.json"), "w"), indent=1)
+           "options": {k: repr(v) for k, v in options.items()}, "scenes": list(names), "stride": stride, "keyframes": n_keyframes,
+           "complete": complete}
+    tmp = os.path.join(sig_dir, "index.json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(idx, f, indent=1)
+    os.replace(tmp, os.path.join(sig_dir, "index.json"))
+
+
+def check_resume(sig_dir, grid, ss):
+    """The folder is named by the generator signature, which contains neither the resolution nor the supersampling: continuing a
+    build of another one would reuse its keyframes silently. The index says what the folder holds. A folder of an interrupted build
+    from before the provisional index has none: one stored keyframe is compared with the grid instead."""
+    idx_path = os.path.join(sig_dir, "index.json")
+    if os.path.exists(idx_path):
+        with open(idx_path) as f:
+            held = json.load(f)
+        if abs(held.get("res", grid.res) - grid.res) > 1e-9 or held.get("ss", ss) != ss:
+            raise SystemExit(f"{sig_dir} holds res {held.get('res')} / ss {held.get('ss')} (asked: res {grid.res} / ss {ss}): "
+                             "build into another output folder")
+        return
+    stored = [f for f in os.listdir(sig_dir) if f.endswith(".npz") and ".tmp" not in f] if os.path.isdir(sig_dir) else []
+    if stored:
+        with np.load(os.path.join(sig_dir, stored[0]), allow_pickle=True) as z:
+            shape = tuple(z["drivable_area"].shape) if "drivable_area" in z.files else None
+        if shape is not None and shape != (grid.nx, grid.ny):
+            raise SystemExit(f"{sig_dir} has no index.json (an interrupted build) and its keyframes have the cell grid {shape}, not "
+                             f"{(grid.nx, grid.ny)} (res {grid.res}): build into another output folder")
 
 
 def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=4, verbose=True, **options):
@@ -77,15 +103,11 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
     from .suite import AutoGT
     gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
     sig_dir = os.path.join(out, gt.signature())
-    idx_path = os.path.join(sig_dir, "index.json")
-    if os.path.exists(idx_path):               # the signature does not contain res / ss: existing files would be reused silently
-        held = json.load(open(idx_path))
-        if abs(held.get("res", res) - res) > 1e-9 or held.get("ss", ss) != ss:
-            raise SystemExit(f"{sig_dir} holds res {held.get('res')} / ss {held.get('ss')} (asked: res {res} / ss {ss}): "
-                             "build into another output folder")
+    check_resume(sig_dir, gt.grid, ss)
     os.makedirs(sig_dir, exist_ok=True)
     names = scenes or gt.scenes()
     tokens = [t for s in names for t in gt.keyframes(s)[::stride]]
+    write_index(sig_dir, gt, version, names, stride, len(tokens), options, complete=False)       # before the first keyframe, also on a resume
     t0 = time.time()
     if workers <= 1:
         _STATE["gt"] = gt

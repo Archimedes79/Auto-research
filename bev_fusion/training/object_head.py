@@ -26,6 +26,7 @@ def _branch(cin, hidden, cout, bias=0.0):
 
 
 DIR_OFFSET = -math.pi / 4      # direction classes split the heading circle at -45 deg / 135 deg (diagonal: rare on roads)
+MOVING_SPEED = 0.5             # m/s: target of the mov logit, = evaluation/metrics.py MOVING_SPEED (the AVE's moving / static split)
 
 
 def direction_class(yaw):
@@ -38,18 +39,22 @@ class ObjectHead(nn.Module):
     rot (2: sin, cos), rad (1: log r), vel (2). direction=True (t1 round 1, 2026-10-26): also dir (1 logit); the rot
     loss is then sign-free (the box axis) and the front / back half comes from dir, as SECOND (Yan et al. 2018) /
     PointPillars: the plain L1 on (sin, cos) did not learn front vs back on nuScenes in 2000 steps (rot loss stayed at
-    the level of random directions while the axis was right)."""
+    the level of random directions while the axis was right). moving=True (t11 hurdle, 2026-11-01): also mov (1 logit,
+    moving / static); the velocity is then regressed on moving centres only and decode zeroes it where mov says static:
+    the L1 over all centres, 64 % of them static, had its minimiser (the median) at 0 m/s."""
 
-    def __init__(self, cin, groups=GROUPS, hidden=64, direction=False):
+    def __init__(self, cin, groups=GROUPS, hidden=64, direction=False, moving=False):
         super().__init__()
         self.groups = groups
         self.shared = nn.Sequential(nn.Conv2d(cin, hidden, 3, padding=1), nn.BatchNorm2d(hidden), nn.ReLU())
         self.hm = _branch(hidden, hidden, len(groups), bias=-2.19)        # sigmoid(-2.19) = 0.1 (CenterNet init)
         self.off, self.size = _branch(hidden, hidden, 2), _branch(hidden, hidden, 2)
         self.rot, self.rad, self.vel = _branch(hidden, hidden, 2), _branch(hidden, hidden, 1), _branch(hidden, hidden, 2)
-        self.names = ("hm", "off", "size", "rot", "rad", "vel") + (("dir",) if direction else ())
+        self.names = ("hm", "off", "size", "rot", "rad", "vel") + (("dir",) if direction else ()) + (("mov",) if moving else ())
         if direction:
             self.dir = _branch(hidden, hidden, 1)
+        if moving:
+            self.mov = _branch(hidden, hidden, 1, bias=-1.39)             # sigmoid(-1.39) = 0.2: prior share of moving centres
 
     def forward(self, feat):
         x = self.shared(feat)
@@ -131,14 +136,17 @@ def _gather(m, ind):
     return m.reshape(B, C, -1).gather(2, ind.unsqueeze(1).expand(B, C, ind.shape[1])).permute(0, 2, 1)
 
 
-def head_loss(out, t, w_vel=0.2, w_dir=0.2):
+def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0):
     """dict of loss terms and their sum 'total'. With out['dir'] (ObjectHead(direction=True)): rot is the sign-free axis
-    loss min(L1(r, t), L1(r, -t)) and 'dir' the BCE of the direction class (weight w_dir, SECOND's 0.2)."""
+    loss min(L1(r, t), L1(r, -t)) and 'dir' the BCE of the direction class (weight w_dir, SECOND's 0.2). With out['mov']
+    (ObjectHead(moving=True)): 'mov' the BCE of moving (|vel| > MOVING_SPEED) at every centre (weight w_mov), and 'vel'
+    the L1 on the moving centres only (a hurdle model: the static ones no longer pull the regression to 0)."""
     dev = out["hm"].device
     t = {k: v.to(dev) for k, v in t.items()}
     m = t["mask"].unsqueeze(-1)
     mb = (t["mask"] * t["is_box"]).unsqueeze(-1)
     mc = (t["mask"] * (1 - t["is_box"])).unsqueeze(-1)
+    mv = m * (t["vel"].norm(dim=-1, keepdim=True) > MOVING_SPEED).float() if "mov" in out else m
 
     def l1(name, mask):
         return (F.l1_loss(_gather(out[name], t["ind"]), t[name], reduction="none") * mask).sum() / mask.sum().clamp(min=1)
@@ -149,10 +157,13 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2):
         e_rot = torch.minimum(e_rot, F.l1_loss(rot, -t["rot"], reduction="none").sum(-1, keepdim=True))
     losses = {"hm": focal_loss(out["hm"], t["hm"]), "off": l1("off", m), "size": l1("size", mb),
               "rot": (e_rot * mb).sum() / mb.sum().clamp(min=1),
-              "rad": l1("rad", mc), "vel": w_vel * l1("vel", m)}
+              "rad": l1("rad", mc), "vel": w_vel * l1("vel", mv)}
     if "dir" in out:
         bce = F.binary_cross_entropy_with_logits(_gather(out["dir"], t["ind"]), t["dir"], reduction="none")
         losses["dir"] = w_dir * (bce * mb).sum() / mb.sum().clamp(min=1)
+    if "mov" in out:
+        bce = F.binary_cross_entropy_with_logits(_gather(out["mov"], t["ind"]), (mv > 0).float(), reduction="none")
+        losses["mov"] = w_mov * (bce * m).sum() / m.sum().clamp(min=1)
     losses["total"] = sum(losses.values())
     return losses
 
@@ -160,7 +171,8 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2):
 # ------------------------------------------------------------------------------------------------ decoding
 @torch.no_grad()
 def decode(out, grid, groups=GROUPS, k=50, threshold=0.2, from_probabilities=False):
-    """out maps -> list (B) of box dicts with 'score'. from_probabilities: hm already in [0, 1] (self-test)."""
+    """out maps -> list (B) of box dicts with 'score'. from_probabilities: hm already in [0, 1] (self-test). With out['mov']
+    the velocity is 0 where sigmoid(mov) < 0.5 (static: the AVE-optimal answer of a two-point mixture; inference only)."""
     hm = out["hm"] if from_probabilities else torch.sigmoid(out["hm"])
     keep = (hm == F.max_pool2d(hm, 3, 1, 1)).float()
     hm = hm * keep
@@ -178,6 +190,8 @@ def decode(out, grid, groups=GROUPS, k=50, threshold=0.2, from_probabilities=Fal
             bx = {"group": groups[g][0], "score": s,
                   "cx": grid.x_min + (ix + ox + 0.5) * grid.res, "cy": grid.y_min + (iy + oy + 0.5) * grid.res,
                   "vx": out["vel"][b, 0, ix, iy].item(), "vy": out["vel"][b, 1, ix, iy].item()}
+            if "mov" in out and out["mov"][b, 0, ix, iy].item() < 0:          # logit < 0 <=> sigmoid < 0.5
+                bx["vx"] = bx["vy"] = 0.0
             if groups[g][1] == "box":
                 ll, lw = out["size"][b, :, ix, iy].tolist()
                 sn, cs = out["rot"][b, :, ix, iy].tolist()

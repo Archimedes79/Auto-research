@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .cli import _flat, write_index  # noqa: E402
+from .cli import _flat, check_resume, write_index  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
 from .suite import AutoGT  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
@@ -112,6 +112,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
     grid = gen0.grid
     sig_dir = os.path.join(data_dir, sig) if data_dir else None
     if sig_dir:
+        check_resume(sig_dir, grid, gen0.ss)                    # a folder of another resolution / supersampling is not continued
         os.makedirs(sig_dir, exist_ok=True)
     pick = set(names[i] for i in np.unique(np.linspace(0, len(names) - 1, min(samples, len(names))).round().astype(int))) if samples else set()
     results, t0, done = {}, time.time(), 0

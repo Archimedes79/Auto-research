@@ -107,6 +107,7 @@ class ModelConfig:
     n_sem: int = None                  # optional check: must equal len(layer_spec(...)) when given (train.py passes it)
     aux_heads: bool = True
     object_direction: bool = False     # object head: sign-free axis + front / back class (object_head.ObjectHead)
+    object_moving: bool = False        # object head: moving / static logit, velocity on moving centres only (t11 hurdle)
     refine: bool = False               # S5c: deformable box refinement (object_head.BoxRefiner, n = 1, dt-aware) on the
                                        # object head's features at the target time; trained on decoded + jittered GT
     refine_k: int = 50                 # candidates: top-k decoded boxes per sample + refine_jitter copies of each GT box
@@ -236,7 +237,8 @@ class BEVFusionModel(nn.Module):
             raise ValueError(f"n_sem {cfg.n_sem} != len(layer_spec) {len(self.spec)}")
         self.mover = TimeMover(c, self.grid)
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
-        self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction), c, self.mover)
+        self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction, moving=cfg.object_moving),
+                                  c, self.mover)
         if cfg.refine:
             import random
             self.refiner = BoxRefiner(c, groups=NUSC_GROUPS, use_dt=True)
