@@ -28,7 +28,7 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 ## Network slots
 | slot | contract | kinds (builder table) |
 |---|---|---|
-| camera encoder | `BEVInputs` -> BEVs (B, F, C_cam, X, Y); visibility from layer 1 | `camera_features` dualbev / bevfusion / dual; `LIFTS` pd / p / s; `COLLAPSES` zconv / zsum |
+| camera encoder | `BEVInputs` -> BEVs (B, F, C_cam, X, Y); visibility from layer 1 | `camera_features` dualbev / bevfusion / dual (the `CAMERAS` table); `LIFTS` pd / p / s; `COLLAPSES` zconv / zsum |
 | radar encoder | radar points -> (B, C_rad, X, Y); the raster is its first op, before any weight | `RADARS` raster / pillars / off |
 | temporal fusion | (BEV now, past BEVs with their ego steps, state, step, visibility) -> (BEV, state); the memory re-centre is a whole-cell roll, the gradient passes | `TEMPORALS` window_memory / ego_gru / none, one block per branch (`cam_temporal`, `rad_temporal`) |
 | lane add-on | (lane image, K, T, ida, the camera depth) -> a BEV added after the camera's temporal block | `lane_branch` res4 / rgb / off |
@@ -54,7 +54,7 @@ Fixed:
 
 Design gaps left (named, not fixed; the next decisions):
 1. **Layer 1 leaks into the trainer:** the true gap to the target time and the memory step between calls come from the GT meta (`train.batch_ego`, `clip_step`), so the network cannot run without GT; the dataset should make them from the poses.
-2. **The camera slot is not one builder entry:** a new camera kind still touches the live `camera_bevs`, the cached subclass in `feature_cache.py`, the cached dataset and `collate_cached`.
+2. ~~The camera slot is not one builder entry~~ **closed (c6abdbc):** a camera kind is a tuple of `CameraSource` entries in `model.CAMERAS` (cache field, ida, suffix of the extra lift / reduction modules); the model, the cached dataset, `collate_cached`, the cached subclass and `train.build` read the table, several sources are merged by `cam_merge`. Gates: `test_camera_features.py` (table section), `test_dual_camera_geometry.py`, `test_slots.py`, `equivalence.py` clip mode on `t10_dual_s0` and `t10_dual_long_s0` (max abs diff 0, keys identical).
 3. **The refiner puts GT matching inside the network** (`_refine_train`); it belongs in the loss (harmless while `refine` is off).
 4. **Two box extractors:** the evaluation adapter scores with `object_head.decode`, `model.boxes()` with `select_boxes` (equal box for box).
 
