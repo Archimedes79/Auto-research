@@ -1,11 +1,13 @@
 """Command line of the autoGT suite (from the bev_fusion folder):
 
   python -m autogt selftest
-  python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] [--scenes scene-0061 ...] [--res 0.5]
-                          [--stride 1] [--workers 1] [--no-flow] [--no-radar]
-      writes one compressed file per keyframe to DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json;
-      resumable (existing files are skipped); the signature changes with every edit of the generator, so GT of an older
-      generator is never mixed in
+  python -m autogt generate DATAROOT [--out DIR] [--version V] [--scenes scene-0061 ...] [--stride 1] [--res 0.5] [--workers 1]
+                          [--no-flow] [--no-radar] [--boxes-at camera|annotation]
+      THE entry point: reads nuScenes from DATAROOT (e.g. ~/data/nuscenes_full) and writes one compressed file per keyframe to
+      DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json; DIR default bev_fusion/data/autogt (where
+      autogt.load reads); memory-light (groups of 60 sequences), resumable (existing files are skipped); the signature changes
+      with every edit of the generator, so GT of an older generator is never mixed in
+  python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] ...   the low-level writer behind it (full devkit)
   python -m autogt check  [--version v1.0-mini] [--scenes ...] [--stride 1] [--holdout]
       automatic consistency checks of the GT over keyframes (see autogt/checks.py); --holdout adds the leave-one-radar-out test
   python -m autogt view   OUT_DIR [scene:keyframe | TOKEN ...] [--total]   sample pictures (camera, semantic BEV, objects + velocity,
@@ -26,6 +28,7 @@ import multiprocessing as mp
 import os
 import sys
 import time
+import types
 
 import numpy as np
 
@@ -60,9 +63,10 @@ def _work(args):
     return 1
 
 
-def _init(dataroot, version, res, ss, options):
+def _init(dataroot, version, res, ss, options, scenes=None):
+    """a worker's generator; scenes = names: the memory-light devkit of just these sequences (`generate`), else the full devkit"""
     from .suite import AutoGT
-    _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
+    _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, light=scenes is not None, scenes=scenes, **options)
 
 
 def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True):
@@ -112,8 +116,29 @@ def check_resume(sig_dir, grid, ss):
                              f"{(grid.nx, grid.ny)} (res {grid.res}): build into another output folder")
 
 
+def _write_tokens(gt, tokens, sig_dir, workers, init_args, verbose):
+    """write the keyframes `tokens` of the generator `gt` into sig_dir (existing files are skipped); -> the number written.
+    workers > 1: a pool of spawned processes, each builds its own generator from init_args (see _init)."""
+    t0 = time.time()
+    done = 0
+    if workers <= 1:
+        _STATE["gt"] = gt
+        for i, t in enumerate(tokens):
+            done += _work((t, sig_dir))
+            if verbose and i % 50 == 0:
+                print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
+    else:
+        with mp.get_context("spawn").Pool(workers, _init, init_args) as pool:
+            for i, r in enumerate(pool.imap_unordered(_work, [(t, sig_dir) for t in tokens], chunksize=4)):
+                done += r
+                if verbose and i % 200 == 0:
+                    print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
+    return done
+
+
 def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=4, verbose=True, **options):
-    """see the module docstring; returns the number of keyframes written (existing ones are skipped)."""
+    """the low-level writer (one full devkit, `out` required; `generate` is the entry point): returns the number of keyframes written
+    (existing ones are skipped)."""
     from .suite import AutoGT
     gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
     sig_dir = os.path.join(out, gt.signature())
@@ -122,25 +147,72 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
     names = scenes or gt.scenes()
     tokens = [t for s in names for t in gt.keyframes(s)[::stride]]
     write_index(sig_dir, gt, version, names, stride, len(tokens), options, complete=False)       # before the first keyframe, also on a resume
-    t0 = time.time()
-    if workers <= 1:
-        _STATE["gt"] = gt
-        done = 0
-        for i, t in enumerate(tokens):
-            done += _work((t, sig_dir))
-            if verbose and i % 50 == 0:
-                print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
-    else:
-        with mp.get_context("spawn").Pool(workers, _init, (dataroot, version, res, ss, options)) as pool:
-            done = 0
-            for i, r in enumerate(pool.imap_unordered(_work, [(t, sig_dir) for t in tokens], chunksize=4)):
-                done += r
-                if verbose and i % 200 == 0:
-                    print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
+    done = _write_tokens(gt, tokens, sig_dir, workers, (dataroot, version, res, ss, options), verbose)
     write_index(sig_dir, gt, version, names, stride, len(tokens), options)
     if verbose:
         print(f"{done} written, {len(tokens) - done} already there: {sig_dir}")
     return done
+
+
+GROUP_SCENES = 60            # sequences per devkit load: the memory-light devkit of 60 sequences needs 0.4 GB (the full trainval one 6.4 GB)
+
+
+def detect_version(dataroot):
+    """the nuScenes version inside `dataroot`: the one `v1.0-*` folder that holds a scene.json"""
+    root = os.path.expanduser(dataroot)
+    found = sorted(d for d in os.listdir(root) if d.startswith("v1.0-") and os.path.exists(os.path.join(root, d, "scene.json"))) \
+        if os.path.isdir(root) else []
+    if len(found) != 1:
+        raise ValueError(f"{root}: " + (f"several nuScenes versions {found}, pass version=" if found else "no v1.0-*/scene.json: not a nuScenes folder"))
+    return found[0]
+
+
+def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, **options):
+    """THE entry point of the suite: read nuScenes from `dataroot` and write the GT of every keyframe.
+
+    dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
+    out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default bev_fusion/data/autogt, the
+               place `autogt.load(token)` reads from (not in git)
+    version    v1.0-mini / v1.0-trainval; default: the one found in dataroot (an error if there are several)
+    scenes     names such as ["scene-0061"]; default all sequences of the version
+    stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
+    workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see AutoGT)
+    -> {"out": the folder written, "signature", "version", "scenes", "keyframes": wanted, "written": new files}
+
+    Memory-light and resumable: the sequences are read in groups of GROUP_SCENES with the light devkit (the GT is identical to the
+    full devkit's), files that exist are skipped, so an interrupted run continues where it stopped. A folder of another resolution
+    or supersampling is never continued. The signature changes with every edit of the generator, so GT of an older generator is
+    never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
+    import gc
+    from .suite import AutoGT, DATA, json_tables, scene_tokens
+    dataroot = os.path.expanduser(dataroot)
+    version = version or detect_version(dataroot)
+    out = os.path.expanduser(out) if out else DATA
+    known = [s["name"] for s in json_tables(dataroot, version)[0]]
+    names = list(scenes) if scenes else known
+    if not names or [n for n in names if n not in known]:
+        raise ValueError(f"unknown scene(s) {[n for n in names if n not in known] or 'none given'} in {version} of {dataroot}")
+    tokens = {n: scene_tokens(n, version, dataroot)[::stride] for n in names}                       # json tables only, no devkit
+    n_total = sum(len(t) for t in tokens.values())
+    sig_dir, ident, done = None, None, 0
+    for g0 in range(0, len(names), GROUP_SCENES):
+        grp = names[g0:g0 + GROUP_SCENES]
+        gen = AutoGT(dataroot, version, GridSpec(res=res), ss, light=True, scenes=grp, **options)
+        if sig_dir is None:
+            sig = gen.signature()
+            sig_dir = os.path.join(out, sig)
+            check_resume(sig_dir, gen.grid, ss)
+            os.makedirs(sig_dir, exist_ok=True)
+            write_index(sig_dir, gen, version, names, stride, n_total, options, complete=False)    # before the first keyframe, also on a resume
+            ident = types.SimpleNamespace(signature=lambda: sig, grid=gen.grid, ss=ss)               # what write_index needs, without the devkit
+        done += _write_tokens(gen, [t for n in grp for t in tokens[n]], sig_dir, workers, (dataroot, version, res, ss, options, grp), verbose)
+        del gen
+        gc.collect()
+    write_index(sig_dir, ident, version, names, stride, n_total, options)
+    if verbose:
+        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}\n"
+              f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
+    return {"out": sig_dir, "signature": ident.signature(), "version": version, "scenes": len(names), "keyframes": n_total, "written": done}
 
 
 def _boxes_option(a):
@@ -152,7 +224,19 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m autogt", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("selftest")
-    b = sub.add_parser("build")
+    ge = sub.add_parser("generate", help="read nuScenes from DATAROOT and write the GT of every keyframe (the entry point)")
+    ge.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
+    ge.add_argument("--out", default=None, help="folder of the stored GT (default bev_fusion/data/autogt); the files go to OUT/<signature>/")
+    ge.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the one found in DATAROOT)")
+    ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
+    ge.add_argument("--res", type=float, default=0.5)
+    ge.add_argument("--stride", type=int, default=1, help="every n-th keyframe")
+    ge.add_argument("--workers", type=int, default=1)
+    ge.add_argument("--no-flow", action="store_true")
+    ge.add_argument("--no-radar", action="store_true")
+    ge.add_argument("--boxes-at", choices=("camera", "annotation"), default="camera",
+                    help="time of the moving boxes: the camera time (default) or the annotation time")
+    b = sub.add_parser("build", help="the low-level writer of generate (one full devkit, --out required)")
     b.add_argument("--dataroot", default="~/data/nuscenes")
     b.add_argument("--version", default="v1.0-mini")
     b.add_argument("--out", required=True)
@@ -208,6 +292,9 @@ def main(argv=None):
     if a.cmd == "selftest":
         from .selftest import run
         run()
+    elif a.cmd == "generate":
+        generate(a.dataroot, a.out, a.version, a.scenes, a.stride, a.res, workers=a.workers,
+                 use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))
     elif a.cmd == "build":
         build(os.path.expanduser(a.dataroot), a.version, a.out, a.scenes, a.stride, a.workers, a.res,
               use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))

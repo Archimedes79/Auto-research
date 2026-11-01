@@ -5,8 +5,25 @@ static BEV layers, objects, masks, and a **velocity / flow field in m/s** - and 
 imports `training/`; `training/gt_bev.py` is only a shim for the older code. Everything is time-based (seconds), never per frame.
 **Agents: read `AGENTS.md` first** (entry points, run rules, every layer and box field, the rules for using it); this file is the reference.
 
+**The entry point - read nuScenes from a folder, write the GT of every keyframe** (memory-light, resumable, no GPU):
 ```python
-from autogt import AutoGT, load                 # run from the bev_fusion folder
+import autogt                                   # run from the bev_fusion folder (or put it on PYTHONPATH)
+r = autogt.generate("~/data/nuscenes_full")     # all of trainval (5-8 h in one process); out=None -> bev_fusion/data/autogt/<signature>/
+r = autogt.generate("~/data/nuscenes", out="/data/gt", scenes=["scene-0061"], stride=2)    # a mini sequence, every 2nd keyframe, elsewhere
+# -> {"out": folder written, "signature", "version", "scenes", "keyframes": wanted, "written": new files}; one <sample token>.npz per keyframe
+#    + index.json; the version is found in the folder (pass version= if it holds several); a rerun writes only what is missing
+g = autogt.load(token)                          # read one back (data="/data/gt" for another folder), no nuScenes needed
+```
+Same from the shell: `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--version V] [--scenes scene-0061 ...] [--stride N] [--workers N]`.
+Parameters of `generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, **options)`:
+`dataroot` the nuScenes folder; `out` where the GT goes (default the place `load` reads); `version` v1.0-mini / v1.0-trainval;
+`scenes` names (default all); `stride` every n-th keyframe; `res` / `ss` cell size in m / supersampling; `workers` processes;
+`options` the generator options of `AutoGT` below (`use_flow`, `use_radar`, `boxes_at`, ...). A folder written with another
+resolution or supersampling is never continued; the folder name is the generator signature, so GT of an older generator is never mixed in.
+
+One keyframe at a time in code:
+```python
+from autogt import AutoGT, load
 gt = AutoGT("~/data/nuscenes", "v1.0-mini")     # one object (options: use_flow, use_radar, stationary_fix, map_offsets, flow_config, boxes_at)
 g = gt.keyframe(sample_token)                   # dict of float32 layers [ix, iy] + meta
 s = gt.training_sample(sample_token)            # {"prev", "cur", "next"} + the ego steps between them
@@ -15,7 +32,8 @@ g = load(sample_token)                          # the STORED GT of a keyframe (d
 ```
 ```
 python -m autogt selftest                                   # all tests (synthetic world + real keyframes + build)
-python -m autogt build --version v1.0-mini --out DIR [--scenes ..] [--workers N] [--res 0.25]   # per-keyframe cache DIR/<signature>/
+python -m autogt generate DATAROOT [--out DIR] [--scenes ..] [--stride N] [--workers N]   # THE entry point (above): per-keyframe files DIR/<signature>/
+python -m autogt build --version v1.0-mini --out DIR [--scenes ..] [--workers N] [--res 0.25]   # its low-level writer (one full devkit, --out required)
 python -m autogt check [--holdout]                          # automatic consistency checks (+ leave-one-radar-out radar test)
 python -m autogt view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
 python -m autogt report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (data/autogt/<signature>/), run every check, write ONE PDF
@@ -32,7 +50,7 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_adapter.py` | devkit records -> `Track` / `Ego` / `RadarFrame` (`NuScenesScene`); the only place that knows nuScenes' radar and annotation format |
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
-| `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`; commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
+| `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
 | `run_nice.sh` | runs any module or script of bev_fusion at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
 | `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |

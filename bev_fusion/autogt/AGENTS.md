@@ -9,14 +9,15 @@ sequences / 404 keyframes, trainval = 850 / 34,149).
 | I want | do this |
 |---|---|
 | the GT of keyframes that are already generated (training, analysis) | `autogt.load(token)` - 0.1 s, no nuScenes needed; the tokens of a sequence: `autogt.scene_tokens("scene-0561", "v1.0-trainval")` (json tables, 1 s) |
-| to generate GT (other options, a new sequence, a quick look) | `AutoGT(dataroot, version).keyframe(token)` |
+| to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `autogt.generate("~/data/nuscenes_full")` (or `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing), returns `{"out", "signature", "version", "scenes", "keyframes", "written"}`; trainval 5-8 h; default `out` = `bev_fusion/data/autogt` -> `<signature>/<token>.npz` + `index.json` |
+| to generate single keyframes in code (other options, a quick look) | `AutoGT(dataroot, version).keyframe(token)` |
 | prev / cur / next keyframe + the ego motion between them | `AutoGT(...).training_sample(token)` (section 5) |
 | GT of ALL sequences stored + every check + one PDF | `python -m autogt report --version v1.0-mini` (trainval: `--version v1.0-trainval`, 5-8 h, resumable) |
 | to look at a keyframe / drive through a sequence | `python -m autogt view OUT_DIR <token>` (any STORED keyframe, mini or trainval) or `... view OUT_DIR scene-0061:8` (mini, generated now) / `python -m autogt video scene-0061 out.mp4 [seconds]` (mini) |
 | to be sure after editing the generator | `python -m autogt selftest` (about 5 min; also checks that this file lists every key) |
 | to remove what autogt generated | `python -m autogt clean --stale-caches data/autogt` (dry run; `--move` / `--delete` to act) |
 
-Python (all of it): `from autogt import AutoGT, load, scene_tokens, current_signature, GridSpec`.
+Python (all of it): `from autogt import generate, AutoGT, load, scene_tokens, current_signature, GridSpec`.
 ```python
 import autogt
 toks = autogt.scene_tokens("scene-0561", "v1.0-trainval")      # 40 sample tokens in time order (json tables only; mini: default version)

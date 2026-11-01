@@ -25,7 +25,8 @@ def load(token, data=DATA, **options):
     if not os.path.exists(os.path.join(sig_dir, token + ".npz")):
         have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d))) if os.path.isdir(data) else []
         raise FileNotFoundError(f"no stored GT for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
-                                "`python -m autogt report --version <v>` or `build`, or the generator source changed since it was stored")
+                                "`autogt.generate(<nuScenes folder>)` (shell: `python -m autogt generate`), or the generator source changed "
+                                "since it was stored")
     return load_keyframe(sig_dir, token)
 
 

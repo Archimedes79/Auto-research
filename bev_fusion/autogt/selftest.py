@@ -12,6 +12,7 @@
 5 the build command writes and reloads a cache that is keyed by the generator signature; `load` / `current_signature` of the
   top-level API; AGENTS.md names every layer, meta entry and box field of a real keyframe
 """
+import json
 import math
 import os
 import tempfile
@@ -194,6 +195,34 @@ def run(root=None, verbose=True):
             raise AssertionError("load of an unknown keyframe must fail")
         except FileNotFoundError as e:
             assert gt.signature() in str(e)
+    # 5b generate, the entry point: version found in the folder, groups of sequences with the light devkit give the same GT as the full
+    #    devkit, a rerun writes nothing, a wrong scene or a wrong folder is refused with a message
+    from . import cli as cli_mod
+    assert cli_mod.detect_version(root) == "v1.0-mini"
+    with tempfile.TemporaryDirectory() as d:
+        old_group, cli_mod.GROUP_SCENES = cli_mod.GROUP_SCENES, 1                      # two groups: the loop over devkit loads is exercised
+        try:
+            r = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+            again = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+        finally:
+            cli_mod.GROUP_SCENES = old_group
+        assert r["signature"] == gt.signature() and r["out"] == os.path.join(d, gt.signature()), r
+        assert r["version"] == "v1.0-mini" and r["scenes"] == 2 and r["keyframes"] == r["written"] == 4 and again["written"] == 0, (r, again)
+        held = json.load(open(os.path.join(r["out"], "index.json")))
+        assert held["scenes"] == ["scene-0061", "scene-0103"] and held["keyframes"] == 4 and held["complete"] is True, held
+        mine = load_keyframe(r["out"], tok2)                                           # the keyframe `build` wrote above, from the full devkit
+        assert all(np.array_equal(mine[k], g2[k]) for k in ("drivable_area", "vehicle", "velocity", "flow", "instance")), "light == full"
+        for bad, why in ((dict(scenes=["scene-9999"]), "unknown scene"), (dict(version="v1.0-trainval"), "version")):
+            try:
+                cli_mod.generate(root, d, verbose=False, **bad)
+                raise AssertionError(f"generate must refuse: {why}")
+            except (ValueError, OSError):
+                pass
+        try:
+            cli_mod.detect_version(d)
+            raise AssertionError("a folder that is not a nuScenes folder must be refused")
+        except ValueError as e:
+            assert "not a nuScenes folder" in str(e)
     # the agent guide names every layer, meta entry and box field the generator produces (so it cannot drift from the code)
     guide = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "AGENTS.md"), encoding="utf-8").read()
     keys = [k for k in g2 if k != "meta"] + list(g2["meta"]) + list(g2["meta"]["boxes"][0]) + ["dt", "steps"]
@@ -208,8 +237,7 @@ def run(root=None, verbose=True):
         assert not [f for _, _, fs in os.walk(d) for f in fs if f.lower().endswith((".png", ".jpg"))], "no picture files"
         stored = os.listdir(os.path.join(d, "data", rep["signature"]))
         assert "index.json" in stored and rep["written"] == len([f for f in stored if f.endswith(".npz")]), rep
-        import json                                                                    # a smaller run must not shrink the folder's index
-        from .cli import write_index
+        from .cli import write_index                                                   # a smaller run must not shrink the folder's index
         from .suite import AutoGT as _Gen
         sd_ = os.path.join(d, "data", rep["signature"])
         write_index(sd_, _Gen(root, "v1.0-mini", ss=4, light=True), "v1.0-mini", ["scene-0061"], 20, 1, {})
