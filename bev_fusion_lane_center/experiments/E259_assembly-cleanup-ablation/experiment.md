@@ -1,5 +1,55 @@
 # E259 Is the spur / bubble clean-up of the assembly needed?
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E259",
+ "card": "H21.S2",
+ "title": "the spur / bubble clean-up of the assembly (simplify, 11 % of the assembly time) adds nothing on top of fork pruning and can be removed",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "Q",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": -0.001,
+  "vs": "c"
+ },
+ "variant": "a",
+ "control": "c",
+ "arms": {
+  "a": {
+   "recipe": "assemble at the registry settings with clean=False (no spur / bubble removal), same raw outputs; temp/loop21/e259_clean.py",
+   "base": "e18_D7_j1rc",
+   "names": [
+    "fast_recall"
+   ]
+  },
+  "c": {
+   "recipe": "the registry settings (clean=True, spur 5 m, bubble 2.5 m)",
+   "base": "e18_D7_j1rc",
+   "names": [
+    "fast_recall"
+   ]
+  }
+ },
+ "rule": [
+  {
+   "metric": "Q",
+   "max_loss": 0.003,
+   "note": "read from the printout (script, not cards): the clean-up is dropped from the product (candidate; code route with ar-reviewer) only if on ALL seven models Q loses <= 0.003, J <= 0.01, F1@0.5 <= 0.005, vert100 changes <= 0.3, false length rises <= 0.01, with and without the output stage dp_eps 0.2, and the relative saving is >= 0.5 ms; otherwise it stays"
+  }
+ ],
+ "budget_gpu_h": 0.0,
+ "kill": "none (CPU, 1 thread, about 25 minutes); layer 1 failure (stored card not reproduced) stops the run",
+ "evaluate": {
+  "split": "val"
+ }
+}
+```
+
+
 ## 0. What the tools run (the fields of `experiment.json`)
 | field | value |
 |---|---|

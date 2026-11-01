@@ -8,6 +8,7 @@ and keeps its first tag, a planned ledger row keeps its prediction, GPU slots re
 ledger.py (concurrent notes under the lock, sync, tail with the runs in progress), decide.py (typed scores and experiment files with cards: seeds, interval, guards, subsets, deterministic), experiment.py (check), card.py (the evaluator contract, a benchmark script as a non-ML problem through the same loop, the holdout split from project.json), check_numbers.py, schedule.py (next, derived states), clean_temp.py.
 """
 import csv
+import datetime
 import json
 import os
 import shutil
@@ -355,6 +356,70 @@ try:
     assert any("no metric" in b for b in X.check(dict(exp, rule=[dict(metric="Q", min_effect=0.01), dict(metric="nope", max_loss=0.1)]), f"{T}/experiments/E1_x/experiment.json"))
     assert subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write"], capture_output=True, text=True, env=env).returncode == 0
     assert os.path.exists(f"{T}/experiments/E1_x/decision.json")
+    # the card as a block of experiment.md (fewer files, 2026-11-01): migrate, read, check, decide, and two truths are refused
+    bd = f"{T}/experiments/E9_blk"
+    os.makedirs(bd, exist_ok=True)
+    json.dump(exp, open(f"{bd}/experiment.json", "w"))
+    open(f"{bd}/experiment.md", "w").write("# E9 block\n\nthe idea in prose\n")
+    msg = X.migrate(bd, T)
+    assert "migrated" in msg and not os.path.exists(f"{bd}/experiment.json") and os.path.exists(f"{T}/_to_delete/experiment_json_{datetime.date.today().isoformat()}/E9_blk/experiment.json"), msg
+    assert X.block_of(f"{bd}/experiment.md") == exp and X.find(bd).endswith("experiment.md") and X.read(X.find(bd)) == exp
+    assert open(f"{bd}/experiment.md").read().startswith("# E9 block\n") and "the idea in prose" in open(f"{bd}/experiment.md").read(), "the prose stays"
+    assert X.check(exp, f"{bd}/experiment.md") == [], X.check(exp, f"{bd}/experiment.md")
+    r = subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", bd, "--write"], capture_output=True, text=True, env=env)
+    assert r.returncode == 0 and os.path.exists(f"{bd}/decision.json") and not os.path.exists(f"{bd}/decision.md"), r.stdout + r.stderr
+    json.dump(dict(exp, band=0.5), open(f"{bd}/experiment.json", "w"))  # a second, different truth next to the block
+    assert any("differ" in b for b in X.check(exp, f"{bd}/experiment.md")) and "differ" in X.migrate(bd, T), "two truths are refused, not merged"
+    assert os.path.isfile(f"{bd}/experiment.json"), "a refused migrate leaves the json where it is"
+    md = open(f"{bd}/experiment.md").read()
+    assert md.startswith("# E9 block\n") and md.count("```json card") == 1 and md.count("the idea in prose") == 1 and md.index("```json card") < md.index("the idea in prose"), "the block sits under the heading, the prose once"
+    os.remove(f"{bd}/experiment.json")
+    open(f"{bd}/experiment.md", "w").write("# no block\n")
+    assert X.source(bd) is None and X.block_of(f"{bd}/experiment.md") is None, "a md without a card block holds no card"
+    # hard cases of the format: CRLF kept, a heading inside a fence is no heading, a sample in a longer fence is prose, two blocks / bad json / an empty block are reported
+    json.dump(exp, open(f"{bd}/experiment.json", "w"))
+    open(f"{bd}/experiment.md", "w", newline="").write("```text\r\n# not a heading\r\n```\r\n# E9 crlf\r\n\r\nprose\r\n")
+    assert "migrated" in X.migrate(bd, T)
+    raw = open(f"{bd}/experiment.md", "rb").read()
+    assert b"\r\n" in raw and raw.count(b"\n") == raw.count(b"\r\n"), "a CRLF file stays CRLF"
+    assert raw.index(b"```json card") > raw.index(b"# E9 crlf") and X.block_of(f"{bd}/experiment.md") == exp, "after the real heading, not the one inside the fence"
+    open(f"{bd}/experiment.md", "w").write("# s\n\n````markdown\n```json card\n{\"id\": \"SAMPLE\"}\n```\n````\n\ntext\n")
+    assert X.block_of(f"{bd}/experiment.md") is None and X.source(bd) is None, "a sample inside a longer fence is prose"
+    twob = "```json card\n{\"id\": \"A\"}\n```\n\n```json card\n{\"id\": \"B\"}\n```\n"
+    open(f"{bd}/experiment.md", "w").write(twob)
+    for text, word in ((twob, "2 ```json card blocks"), ("```json card\n{\"id\": }\n```\n", "not valid json")):
+        open(f"{bd}/experiment.md", "w").write(text)
+        try:
+            X.read(f"{bd}/experiment.md")
+            raise AssertionError("a broken card block must be reported")
+        except ValueError as e:
+            assert word in str(e), str(e)
+    open(f"{bd}/experiment.md", "w").write("```json card\n```\n\ntext\n")
+    assert X.block_of(f"{bd}/experiment.md") is None, "an empty block is no card (and swallows no prose)"
+    json.dump(exp, open(f"{bd}/experiment.json", "w"))
+    open(f"{bd}/experiment.md", "w").write("# x\n\n```json card\n" + json.dumps(exp) + "\n```\n")
+    assert "migrated" in X.migrate(bd, T) and not os.path.exists(f"{bd}/experiment.json"), "a block that already equals the json: the json just moves"
+    json.dump(exp, open(f"{bd}/experiment.json", "w"))
+    assert "migrated" in X.migrate(bd, T) and len(os.listdir(f"{T}/_to_delete/experiment_json_{datetime.date.today().isoformat()}/E9_blk")) >= 2, "a second move the same day does not overwrite the first"
+    os.makedirs(f"{T}/experiments/E8_only", exist_ok=True)
+    json.dump(exp, open(f"{T}/experiments/E8_only/experiment.json", "w"))
+    assert "JSON-ONLY" in X.migrate(f"{T}/experiments/E8_only", T) and os.path.exists(f"{T}/experiments/E8_only/experiment.json"), "a json without experiment.md stays readable"
+    shutil.rmtree(bd)
+    shutil.rmtree(f"{T}/experiments/E8_only")
+    # plan.py status: the status of a plan node comes from the schedule and the ledger, not from a column of the plan
+    import plan as PL
+    ptxt = "| node | experiment | h |\n|---|---|---|\n| N1 | E265 spurs | a |\n| N2 | `t10.dual` long | b |\n| N3 | E26 other | c |\nnot a row | x\n"
+    assert PL.nodes(ptxt) == [("N1", "E265", "E265 spurs"), ("N2", "t10.dual", "`t10.dual` long"), ("N3", "E26", "E26 other")], PL.nodes(ptxt)
+    srows = [dict(item="E265.a", node="N1", state="done"), dict(item="E265.b", node="N1", state="running"), dict(item="x", node="N9", state="done")]
+    lrows = [dict(id="E265.a", status="ok", decision="x | decide.py 2026-11-01: KEEP (effect +0.02)", started="2"), dict(id="E265.b", status="ok", decision="CUT first", started="1"),
+             dict(id="E265.ev", status="ok", decision="prose: a TIE, same consequence; KEEP is not claimed", started="3"),
+             dict(id="E2650", status="ok", decision="decide.py 2026-11-01: TIE", started="4"),
+             dict(id="t10.dual_s0", status="ok", decision="", started="1"), dict(id="t10.dual_long_s0.eval", status="running", decision="decide.py 2026-11-01: CUT (effect -0.1)", started="2")]
+    st = PL.status(ptxt, srows, lrows)
+    assert st[0]["items"] == {"done": 1, "running": 1} and st[0]["ledger"] == {"ok": 3} and st[0]["verdict"] == "KEEP", st[0]
+    assert st[2]["ledger"] == {} and st[2]["verdict"] == "", "E26 does not take the rows of E265 / E2650 (exact id, then . or _)"
+    assert st[1]["ledger"] == {"ok": 1, "running": 1} and st[1]["verdict"] == "CUT", "t10.dual takes t10.dual_s0 and t10.dual_long_s0.eval: " + str(st[1])
+    assert PL.status("| N1 | E5 x |\n", [], [dict(id="E5.a", decision="")])[0]["ledger"] == {"planned": 1}, "a row without a status counts as planned"
     # evidence that cannot be compared is refused, not decided (review 2026-10-31: seeds paired by position, other splits / frame counts, infinity)
     def fc(name, q, **kw):
         return dict(full, name=name, metrics=dict(Q=q), **kw)
@@ -402,7 +467,8 @@ try:
         raise AssertionError("allow as a string must be refused")
     except ValueError as e:
         assert "allow must be a list" in str(e), str(e)
-    assert any("allow must be a list" in b for b in X.check(dict(base, arms=two, evaluate=dict(split="val", allow="denominator")), ef))
+    got = X.check(dict(base, arms=two, evaluate=dict(split="val", allow="denominator")), ef)
+    assert any("allow must be a list" in b for b in got), got
     # provenance blocks (autoresearch/reproducibility.md): cards of one comparison that differ in GT version / signature, evaluator code hash, frame hash or raw-data manifest are refused,
     # an evaluator that differs from its commit is not used, a value a card does not know is named as 'cannot tell' (never a refusal), allow ["provenance"] waives the
     # refusals, and with no block on any card nothing changes

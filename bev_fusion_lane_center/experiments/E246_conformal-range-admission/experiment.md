@@ -1,5 +1,77 @@
 # E246 Conformal risk control of range-binned admission thresholds (zero training)
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E246",
+ "card": "H19.F2-2",
+ "title": "conformal risk control of range-binned node admission thresholds on a scene-level false-length loss, leave-one-scene-out over the 22 VAL scenes",
+ "kind": "block",
+ "deterministic": true,
+ "metric": "R@1_far",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.02,
+  "vs": "c"
+ },
+ "variant": "a",
+ "arms": {
+  "a": {
+   "recipe": "analysis script temp/loop19/e246_crc.py: leave-one-scene-out CRC fit of tau_near / tau_mid / tau_far on fast_recall raw nodes (grid 0.3 ... 0.9), assemble with tau_bins and fork_prune 0.4, evaluate.py override; budget alpha_bin = false length per 100 m GT of the hand-set operating point in the bin",
+   "base": "e18_D7_j1rc",
+   "planned_names": [
+    "fast_recall_crc"
+   ]
+  },
+  "b": {
+   "recipe": "the same rule on champion (replication on a second checkpoint)",
+   "base": "e123_D7_r3_f1",
+   "planned_names": [
+    "champion_crc"
+   ]
+  },
+  "c": {
+   "recipe": "hand-set tau 0.7, fork_prune 0.4 (registry fast_recall)",
+   "names": [
+    "fast_recall"
+   ]
+  }
+ },
+ "control": "c",
+ "rule": [
+  {
+   "metric": "R@1_far",
+   "min_effect": 0.015
+  },
+  {
+   "metric": "false_len_frac",
+   "max_loss": 0.003
+  },
+  {
+   "metric": "Q",
+   "max_loss": 0.005
+  },
+  {
+   "metric": "topo_F1",
+   "max_loss": 0.005
+  },
+  {
+   "metric": "R@1_near",
+   "max_loss": 0.01
+  }
+ ],
+ "budget_gpu_h": 0.05,
+ "kill": "in-sample ceiling below +0.015 R@1_far; far-bin loss curves non-monotone by more than 0.1 B after repair; tau_far spread over the leave-one-scene-out fits above 0.15; realised risk above alpha_far by more than 2 standard errors",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}
+```
+
+
 One file per experiment; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). Machine-readable part: `experiment.json` next to this file.
 
 ## 0. What the tools run (the fields of `experiment.json`)

@@ -1,20 +1,28 @@
 # E<id> <short title>
 
-One file per experiment, in the experiment folder; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). The machine-readable part lives next to it in `experiment.json` (validated against `autoresearch/schemas/experiment.schema.json`); the table below shows the same fields so a reader sees what the tools will run.
+One file per experiment, in the experiment folder; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). The machine-readable card is the block in section 0 of this file (validated against `autoresearch/schemas/experiment.schema.json` by `experiment.py check`, read by `decide.py`); there is no separate `experiment.json`.
 
-## 0. What the tools run (the fields of `experiment.json`)
-| field | value |
-|---|---|
-| id / card / title | E<id> / H<..> / ... |
-| kind | variant (configuration only) / block (new code) |
-| deterministic | true when the arms share one checkpoint (e.g. an assembly setting): no training seed, the paired scene-bootstrap interval decides |
-| metric, direction, band | headline metric (e.g. Q), higher / lower, noise band of that metric (default 0.010; a per-metric band cites the project's measured seed spread, e.g. 3 paired seed SDs) |
-| prediction | value, against arm <letter> |
-| arms | <letter>: recipe or command, base, settings, seeds |
-| control | <arm letter> |
-| rule | clauses: metric, vs (optional), min_effect or max_loss, band (optional), subsets (optional), at_least (optional), note (optional) |
-| budget_gpu_h, kill | ..., ... |
-| evaluate | split, subset, compare |
+## 0. The card (what the tools run)
+Fields: id / card / title; kind (variant = configuration only, block = new code); deterministic (true when the arms share one checkpoint: no training seed, the paired scene-bootstrap interval decides); metric, direction, band (default 0.010; a per-metric band cites the project's measured seed spread); prediction {value, vs: arm letter}; arms {letter: recipe or command, base, settings, seeds}; control; rule (clauses: metric, vs, min_effect or max_loss, band, subsets, at_least, note); budget_gpu_h, kill; evaluate {split, subset, compare}.
+
+```json card
+{
+ "id": "E<id>",
+ "card": "H<..>",
+ "title": "...",
+ "kind": "variant",
+ "metric": "Q",
+ "direction": "higher",
+ "band": 0.010,
+ "prediction": {"value": 0.0, "vs": "c"},
+ "arms": {"a": {"recipe": "..."}, "c": {"recipe": "..."}},
+ "control": "c",
+ "rule": [{"metric": "Q", "min_effect": 0.01}],
+ "budget_gpu_h": 0.0,
+ "kill": "...",
+ "evaluate": {"split": "val"}
+}
+```
 
 ## 1. Card (written in P2, checked by ar-critic, mode cards)
 | | |

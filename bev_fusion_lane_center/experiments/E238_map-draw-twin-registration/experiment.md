@@ -1,5 +1,93 @@
 # E238 Map-error draw twin for registration + trust (E213): does "about half of the gap" survive another draw of the scene-constant map error?
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E238",
+ "card": "",
+ "title": "registered (K188 + K189) against unregistered 2 m map error with two new draws of the scene-constant map error, three failure types",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "F1@1.0",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.02,
+  "vs": "c"
+ },
+ "arms": {
+  "a": {
+   "recipe": "p18_regis_eval.py --regis regis_a --out regis_eval_a_d<k> --tags dark_gateB,blur_gateB,cam_front3_off_gateB --sigmas 2 --map_seed <k>; p17_eval.py --mapnet 1 --ckpt e17_map_b --variants gateB --map_mode exact --map_sigma 2 --reg <dir> --reg_trust hard --reg_thr 0.62 --map_seed <k>",
+   "base": "e17_map_b + regis_a",
+   "seeds": [
+    1,
+    2
+   ],
+   "note": "map-error draws k = 1, 2 (draw 3 = stored, reproduction check)"
+  },
+  "c": {
+   "recipe": "p17_eval.py ... --map_mode exact --map_sigma 2 --map_seed <k> (no --reg)",
+   "base": "e17_map_b",
+   "seeds": [
+    1,
+    2
+   ],
+   "note": "unregistered, same draws"
+  },
+  "n": {
+   "recipe": "stored: runs/e17/e140_gateB mnone cells (draw independent)",
+   "base": "e17_map_b",
+   "note": "no map"
+  },
+  "x": {
+   "recipe": "stored: runs/e17/e140_gateB m0 cells",
+   "base": "e17_map_b",
+   "note": "exact map, bound for the map only"
+  }
+ },
+ "control": "c",
+ "rule": [
+  {
+   "metric": "F1@1.0",
+   "vs": "c",
+   "min_effect": 0.015,
+   "subsets": [
+    "night",
+    "blur",
+    "cam_front3_off"
+   ],
+   "at_least": 2,
+   "note": "registration beats the unregistered map"
+  },
+  {
+   "metric": "F1@1.0",
+   "vs": "n",
+   "min_effect": 0.015,
+   "subsets": [
+    "night",
+    "blur",
+    "cam_front3_off"
+   ],
+   "at_least": 2,
+   "note": "registration beats no map"
+  }
+ ],
+ "seeds": [
+  1,
+  2
+ ],
+ "budget_gpu_h": 0.5,
+ "kill": "draw 3 (stored) does not reproduce night S 0.643 / 0.664 within 0.001; or after draw 1 R2 - U2 <= -0.01 in all three types",
+ "evaluate": {
+  "split": "val",
+  "subset": "failure_half",
+  "compare": "c"
+ }
+}
+```
+
+
 ## 0. What the tools run (the fields of `experiment.json`)
 | field | value |
 |---|---|

@@ -1,5 +1,56 @@
 # E252 Map offset of the lane ground truth: metric by city and lateral bias of correct predictions
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E252",
+ "card": "H20.G1",
+ "title": "the map offset of the lane ground truth (0.3 - 1 m per element and drive, worst in Boston) lowers the metric by city and shows up as a per-scene lateral bias of correct predictions",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "Q",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": -0.03,
+  "vs": "c"
+ },
+ "variant": "a",
+ "control": "c",
+ "arms": {
+  "a": {
+   "recipe": "analysis script temp/loop20/e252_gt_offset.py on the cached raw outputs of champion, e24_j1eq_s0, e24_j1rc_s0 (VAL 873): the frames of boston-seaport",
+   "base": "e123_D7_r3_f1",
+   "names": [
+    "champion"
+   ],
+   "note": "per-city pooling inside the script; the arms of this card name the two groups of frames, not two checkpoints"
+  },
+  "c": {
+   "recipe": "the same models, the frames of the three Singapore locations",
+   "base": "e123_D7_r3_f1",
+   "names": [
+    "champion"
+   ]
+  }
+ },
+ "rule": [
+  {
+   "metric": "Q",
+   "min_effect": 0.01,
+   "note": "city gap Boston - Singapore, read from the printout (the tool cannot split by city): CAP when Q(Boston) is lower by >= 0.03 for all three models with non-overlapping 95 % scene intervals AND the share of correct points with |lateral offset| > 0.5 m is >= 1.5 x that of Singapore; NO EVIDENCE when the Q gap is < 0.01"
+  }
+ ],
+ "budget_gpu_h": 0.0,
+ "kill": "none (CPU, 1 thread, about 10 min); void if the frame count per city does not add up to 873 or the identity check (offset of the GT against itself) is not exactly 0",
+ "evaluate": {
+  "split": "val"
+ }
+}
+```
+
+
 ## 0. What the tools run (the fields of `experiment.json`)
 | field | value |
 |---|---|

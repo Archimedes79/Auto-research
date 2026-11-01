@@ -1,5 +1,128 @@
 # E267 Stack of spurs kept (E265) and the seed ring (E266) on the recall chain: a 2 x 2 with recall_s1 as seed twin
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E267",
+ "card": "H22.E267",
+ "title": "spurs kept (E265) + seed ring (E266) on rc1: 2 x 2 with recall_s1 as seed twin",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "lanes_found",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.017,
+  "vs": "c"
+ },
+ "variant": "sr",
+ "control": "c",
+ "pairing": "position",
+ "arms": {
+  "c": {
+   "recipe": "registry settings of recall / recall_s1, re-scored after the S1 / S2 code with the ring metric (E266.c, tag l22r)",
+   "run_ids": [
+    "E266.c"
+   ],
+   "cards": [
+    "runs/eval/recall/val_l22r.json",
+    "runs/eval/recall_s1/val_l22r.json"
+   ]
+  },
+  "s": {
+   "recipe": "spur_len 0: evaluate.py <n> --asm spur_len=0 --tag sp0r --compare <n>",
+   "run_ids": [
+    "E267.s"
+   ],
+   "cards": [
+    "runs/eval/recall/val_sp0r.json",
+    "runs/eval/recall_s1/val_sp0r.json"
+   ]
+  },
+  "r": {
+   "recipe": "seed ring at +-47.5 m (E266 arm b)",
+   "run_ids": [
+    "E266.b0",
+    "E266.b1"
+   ],
+   "names": [
+    "recall_ring",
+    "recall_s1_ring"
+   ]
+  },
+  "sr": {
+   "recipe": "seed ring + spur_len 0: evaluate.py <n>_ring --asm spur_len=0 --tag sp0 --compare <n>",
+   "run_ids": [
+    "E267.sr"
+   ],
+   "cards": [
+    "runs/eval/recall_ring/val_sp0.json",
+    "runs/eval/recall_s1_ring/val_sp0.json"
+   ]
+  }
+ },
+ "rule": [
+  {
+   "metric": "lanes_found",
+   "min_effect": 0.015,
+   "note": "sr - c, both seeds positive, recall card's interval excluding 0"
+  },
+  {
+   "metric": "R@1_far",
+   "min_effect": 0.015
+  },
+  {
+   "metric": "R@1_far",
+   "vs": "s",
+   "min_effect": 0.005,
+   "note": "the ring adds on top of spurs kept (deterministic arms on the same raw outputs per seed; both seeds positive)"
+  },
+  {
+   "metric": "lanes_found",
+   "vs": "r",
+   "min_effect": 0.01,
+   "note": "spurs kept add on top of the ring; a clause on the headline metric is held to the band by decide.py, so the bar is the band"
+  },
+  {
+   "metric": "Q",
+   "max_loss": 0.005,
+   "note": "lead check: Q >= 0.735 on both seeds"
+  },
+  {
+   "metric": "topo_F1",
+   "max_loss": 0.005
+  },
+  {
+   "metric": "false_len_frac",
+   "max_loss": 0.005,
+   "note": "and <= 0.062 absolute (lead)"
+  },
+  {
+   "metric": "dup_frac",
+   "max_loss": 0.01
+  },
+  {
+   "metric": "P@1_far",
+   "max_loss": 0.01
+  },
+  {
+   "metric": "R@1_far_inner",
+   "vs": "s",
+   "max_loss": 0.005,
+   "note": "ring guard, two-sided +-0.005 by the lead; metric name as built by S2. Lead checks outside decide.py: per-piece DP <= 14.3 on both seeds (E266.v); if sr's DP exceeds c's by > 1.0, sr must lie above the E265.eb rc1 tau frontier at its DP"
+  }
+ ],
+ "budget_gpu_h": 0.0,
+ "kill": "E266 G1 fails or E265 is CUT (not run); the l22r control cards do not reproduce the stored numbers",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}
+```
+
+
 One file per experiment; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). The machine-readable part lives next to it in `experiment.json`. Written by ar-planner (loop 22, 2026-11-01 ~01:30) on the referee's stacking advice (E265 / E266 verdict paragraphs); the rule below was written before any number of the ring (E266) existed. Known at writing time: only the in-sample step-0 numbers of spurs kept on `recall` (`../E265_far-coverage-loss-budget/step0_cleanup.txt`: lanes found 0.7807, R@1 far 0.7796, DP 13.70).
 
 ## 0. What the tools run (the fields of `experiment.json`)

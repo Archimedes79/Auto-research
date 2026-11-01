@@ -1,6 +1,6 @@
 """Decision rule as code: KEEP / CUT / TIE / INCONCLUSIVE, from an experiment file and its metric cards, or from typed per-seed scores.
 
-    python decide.py --experiment E240 [--write]                     the rule clauses of experiments/E240_*/experiment.json applied to the cards
+    python decide.py --experiment E240 [--write]                     the rule clauses of the card of experiments/E240_*/experiment.md (an old experiment.json also works) applied to the cards
     python decide.py --variant 0.746,0.741 --control 0.725,0.722 [--band 0.010] [--lower-better] [--cost-variant 31 --cost-control 628] [--id E123.D7 --write]
 
 Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.schema.json):
@@ -395,7 +395,7 @@ def decide_experiment(exp, root):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--experiment", help="experiment id (E240), folder or experiment.json")
+    ap.add_argument("--experiment", help="experiment id (E240), folder, experiment.md or experiment.json")
     ap.add_argument("--variant", help="comma list, one score per seed")
     ap.add_argument("--control")
     ap.add_argument("--band", type=float, default=0.010)
@@ -423,7 +423,7 @@ def main():
         if d["prediction"]:
             print("  " + d["prediction"])
         if a.write:
-            out = os.path.join(os.path.dirname(path), os.path.basename(path).replace("experiment", "decision", 1))  # experiment_x.json -> decision_x.json
+            out = os.path.join(os.path.dirname(path), "decision.json" if path.endswith(".md") else os.path.basename(path).replace("experiment", "decision", 1))  # experiment.md -> decision.json; experiment_x.json -> decision_x.json
             json.dump(d, open(out, "w", encoding="utf-8"), indent=1)
             print("  written:", out)
             import ledger as L

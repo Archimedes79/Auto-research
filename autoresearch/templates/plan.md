@@ -1,12 +1,12 @@
 # Plan - loop <NN>
 
-Written in P2 by ar-planner, stable during the loop: only the status column changes. The schedule (what runs next) is the problem's schedule file, kept by the schedule tool.
+Written in P2 by ar-planner, stable during the loop. It holds the reasoning and the tree, no status: `python autoresearch/tools/plan.py status` reads the status of each node from the schedule and the ledger. The schedule (what runs next) is the problem's schedule file, kept by the schedule tool.
 
 Question of the loop: <one sentence>. Levels this loop owns: <e.g. 2 = module idea, 3 = variant>. Budget: <GPU hours, comparisons>.
 
 ## Tree
-| node | experiment | hypothesis (short) | decision rule | cost | priority | status (result) |
-|---|---|---|---|---|---|---|
+| node | experiment | hypothesis (short) | decision rule | cost | priority |
+|---|---|---|---|---|---|
 
 ## System improvements
 | item | lack in the software | change | done when | status |

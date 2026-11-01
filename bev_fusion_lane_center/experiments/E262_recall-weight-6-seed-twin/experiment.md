@@ -1,5 +1,87 @@
 # E262 Seed twin of the recall-weight-6 fine-tune (rc2s1): two-seed decision rc2 against the recall variant at the E261 operating point
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E262",
+ "card": "H22.E262",
+ "title": "seed twin of the recall-weight-6 fine-tune (rc2s1): two-seed decision rc2 at the E261 point against rc1 / rc1s1",
+ "kind": "variant",
+ "deterministic": false,
+ "metric": "lanes_found",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.021,
+  "vs": "c"
+ },
+ "variant": "a",
+ "control": "c",
+ "pairing": "position",
+ "arms": {
+  "a": {
+   "recipe": "rc2 seed 0 (existing e18_D7_rc2) and seed 1 (new e26_D7_rc2s1: the E219.rc2 command with --seed 1 --name e26_D7_rc2s1, stored distance map LCR_DIST_DIR=$HOME/exp_crn_b123/feats), both at the E261 operating point",
+   "seeds": [
+    0,
+    1
+   ],
+   "run_ids": [
+    "E262.a1",
+    "E262.ev"
+   ],
+   "names": [
+    "recall6",
+    "recall6_s1"
+   ]
+  },
+  "c": {
+   "recipe": "rc1 seed 0 / seed 1 at the registered point (recall / recall_s1), re-scored tonight (E265.c)",
+   "seeds": [
+    0,
+    1
+   ],
+   "cards": [
+    "runs/eval/recall/val_l22.json",
+    "runs/eval/recall_s1/val_l22.json"
+   ]
+  }
+ },
+ "rule": [
+  {
+   "metric": "lanes_found",
+   "min_effect": 0.015,
+   "note": "both seeds on the same side; the operating point was chosen on seed 0's VAL frames: seed 1 is the only out-of-sample element (say so in the result)"
+  },
+  {
+   "metric": "R@1_far",
+   "min_effect": 0.01
+  },
+  {
+   "metric": "Q",
+   "max_loss": 0.005,
+   "note": "lead check: Q >= 0.735 on both rc2 seeds; CUT if either rc2 seed < 0.730"
+  },
+  {
+   "metric": "topo_F1",
+   "max_loss": 0.01
+  },
+  {
+   "metric": "dup_frac",
+   "max_loss": 0.03,
+   "note": "referee fix: rise <= 0.030 on both seeds. Lead checks outside decide.py: per-piece DP <= 14.3 and false length <= 0.062 on both seeds; CUT if lanes found a - c < +0.010; INCONCLUSIVE = rc2s2 + rc1s2 in the next GPU window, not adoption"
+  }
+ ],
+ "budget_gpu_h": 1.0,
+ "kill": "do not start unless E261 PASS; stop if the val250 check at the end of training has Q < 0.725, the total loss exceeds 1.5 x rc2's logged value at the same iteration (rc2: tot 4.0 - 4.1 at 4600 - 4800), or (only if the slot is shared and time is short) the 25 % checkpoint (iteration 1200) is more than 0.01 lanes found below rc1s1 on val250",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}
+```
+
+
 One file per experiment; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). Machine-readable part: `experiment.json` next to this file (not written by the card author).
 
 ## 1. Card (written in P2, checked by ar-referee)

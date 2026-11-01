@@ -1,16 +1,23 @@
-"""The experiment file (experiments/E<id>_<slug>/experiment.json, schema in autoresearch/schemas/experiment.schema.json). Standard library only.
+"""The experiment card (the machine-readable part of experiments/E<id>_<slug>/experiment.md, schema in autoresearch/schemas/experiment.schema.json). Standard library only.
+
+The card is the first fenced block that starts with ```json card of the experiment.md; an older experiment.json next to it (or alone) is still read.
+Both present: they must be equal (check says so), so a migration cannot leave two truths.
 
     python autoresearch/tools/experiment.py check E240          # gate G2 as code: fields, enums, arms, control, rule clauses, card refs resolve
     python autoresearch/tools/experiment.py show E240           # the arms with their cards and the headline numbers
-    python autoresearch/tools/experiment.py check --all         # every experiment folder that has an experiment.json
+    python autoresearch/tools/experiment.py check --all         # every experiment folder that has a card (block or experiment.json)
+    python autoresearch/tools/experiment.py migrate E240        # card block into experiment.md, the json moves to <problem>/_to_delete/ (--all: every folder)
 
-An experiment is found by its id (prefix of a folder under experiments/) or by the path of its experiment.json. Card refs: a path relative to the
+An experiment is found by its id (prefix of a folder under experiments/), by its folder or by the path of its experiment.md / experiment.json. Card refs: a path relative to the
 problem folder, optionally '#a/b/c' into the JSON; a card has its metrics under 'metrics' (evaluate.py cards), a flat dict is the metrics itself.
 """
 import argparse
+import datetime
 import glob
 import json
 import os
+import re
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,21 +33,70 @@ def schema():
     return json.load(open(SCHEMA, encoding="utf-8"))
 
 
+FENCE = re.compile(r"^```json card[ \t]*\r?\n(\{.*?\})\r?\n```[ \t]*$", re.S | re.M)  # the body must be an object: an empty block or an unclosed one is not a card
+OUTER = re.compile(r"^(`{4,})[^\n]*\n.*?^\1[ \t]*$", re.S | re.M)  # a sample of the format inside a longer fence (documentation) is prose, not a card
+
+
+def bodies(text):
+    """the raw json texts of the card blocks of a markdown text (blocks inside a fence of 4+ backticks do not count)"""
+    return FENCE.findall(OUTER.sub("", text))
+
+
+def block_of(md):
+    """the card dict of an experiment.md, None when it has no ```json card block; ValueError for two blocks or a block that is not valid json"""
+    if not os.path.isfile(md):
+        return None
+    found = bodies(open(md, encoding="utf-8").read())
+    if not found:
+        return None
+    if len(found) > 1:
+        raise ValueError(f"{md} has {len(found)} ```json card blocks, expected 1")
+    try:
+        return json.loads(found[0])
+    except ValueError as e:
+        raise ValueError(f"the card block of {md} is not valid json ({e})") from None
+
+
+def source(folder):
+    """the file that holds the card of an experiment folder: experiment.md with a card block, else experiment.json, else None"""
+    md, js = os.path.join(folder, "experiment.md"), os.path.join(folder, "experiment.json")
+    if os.path.isfile(md) and bodies(open(md, encoding="utf-8").read()):
+        return md
+    return js if os.path.isfile(js) else None
+
+
 def find(exp):
-    """path of the experiment.json for an id, a folder or a file"""
+    """path of the file that holds the card (experiment.md or experiment.json) for an id, a folder or a file"""
     if os.path.isfile(exp):
         return exp
     if os.path.isdir(exp):
-        return os.path.join(exp, "experiment.json")
-    hits = sorted(glob.glob(os.path.join(P.root(), "experiments", exp + "_*", "experiment.json"))) + sorted(glob.glob(os.path.join(P.root(), "experiments", exp, "experiment.json")))
+        return source(exp) or os.path.join(exp, "experiment.json")
+    cand = sorted(glob.glob(os.path.join(P.root(), "experiments", exp + "_*")) + glob.glob(os.path.join(P.root(), "experiments", exp)))
+    hits = [h for h in (source(d) for d in cand if os.path.isdir(d)) if h]
     if not hits:
-        sys.exit(f"no experiments/{exp}_*/experiment.json under {P.root()}")
+        sys.exit(f"no card (experiment.md with a ```json card block, or experiment.json) for {exp} under {P.root()}/experiments")
     return hits[0]
+
+
+def read(path):
+    """the card dict of an experiment.md (block) or an experiment.json; ValueError when it is missing, unreadable or not valid json"""
+    if path.endswith(".md"):
+        card = block_of(path)
+        if card is None:
+            raise ValueError(f"{path} has no ```json card block")
+        return card
+    try:
+        return json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"cannot read {path}: {e}") from None
 
 
 def load(exp):
     p = find(exp)
-    return json.load(open(p, encoding="utf-8")), p
+    try:
+        return read(p), p
+    except ValueError as e:
+        sys.exit(str(e))
 
 
 def card_ref(ref, root=None):
@@ -84,7 +140,16 @@ def arm_cards(exp, letter, root=None):
 def check(exp, path):
     """list of problems (empty = ready)"""
     sc = schema()
-    bad = [f"missing field {k}" for k in sc["required"] if k not in exp]
+    bad = []
+    folder = os.path.dirname(os.path.abspath(path))
+    js, md = os.path.join(folder, "experiment.json"), os.path.join(folder, "experiment.md")
+    if os.path.abspath(path) in (js, md) and os.path.isfile(js) and os.path.isfile(md):
+        try:
+            if block_of(md) is not None and json.load(open(js, encoding="utf-8")) != block_of(md):
+                bad.append("experiment.json and the card block of experiment.md differ (two truths: keep one, `experiment.py migrate` moves the json away)")
+        except ValueError as e:
+            bad.append(f"cannot compare experiment.json with the card block: {e}")
+    bad += [f"missing field {k}" for k in sc["required"] if k not in exp]
     for k, t in sc["types"].items():
         if k in exp and not isinstance(exp[k], TYPES[t]):
             bad.append(f"{k} must be {t}")
@@ -183,18 +248,76 @@ def check(exp, path):
     return bad
 
 
+def migrate(folder, root):
+    """card block into experiment.md (right after the first heading outside a fence, line endings kept), the json moves to <problem>/_to_delete/experiment_json_<date>/<folder>/ (never deleted); -> message"""
+    js, md = os.path.join(folder, "experiment.json"), os.path.join(folder, "experiment.md")
+    name = os.path.basename(folder)
+    if not os.path.isfile(md):
+        return f"{name}: JSON-ONLY (no experiment.md to hold the block): left as it is"
+    try:
+        card = read(js)
+        have = block_of(md)
+    except ValueError as e:
+        return f"{name}: NOT migrated, {e}"
+    if have is not None:
+        if have != card:
+            return f"{name}: the block and the json differ: NOT migrated (decide which is right)"
+    else:
+        text = open(md, encoding="utf-8", newline="").read()
+        nl = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(nl)
+        i, fence = 0, False
+        for k, ln in enumerate(lines):  # after the first heading that is not inside a code fence, else at the top
+            if ln.lstrip().startswith("```"):
+                fence = not fence
+            elif not fence and ln.startswith("# "):
+                i = k + 1
+                break
+        block = ["```json card"] + json.dumps(card, indent=1, ensure_ascii=False).split("\n") + ["```"]
+        new = nl.join(lines[:i] + ["", "The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):", ""] + block + [""] + lines[i:])
+        tmp = md + ".new"
+        open(tmp, "w", encoding="utf-8", newline="").write(new)
+        try:
+            ok = block_of(tmp) == card
+        except ValueError:
+            ok = False
+        if not ok:  # never replace a file with one that does not read back
+            os.remove(tmp)
+            return f"{name}: ERROR the block does not read back equal: NOT migrated"
+        os.replace(tmp, md)
+    dest = os.path.join(root, "_to_delete", "experiment_json_" + datetime.date.today().isoformat(), name)
+    os.makedirs(dest, exist_ok=True)
+    target, n = os.path.join(dest, "experiment.json"), 1
+    while os.path.exists(target):  # never overwrite an earlier move
+        n += 1
+        target = os.path.join(dest, f"experiment.{n}.json")
+    shutil.move(js, target)
+    return f"{name}: migrated (json in {os.path.relpath(dest, root)})"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["check", "show"])
+    ap.add_argument("cmd", choices=["check", "show", "migrate"])
     ap.add_argument("exp", nargs="?")
     ap.add_argument("--all", action="store_true")
     a = ap.parse_args()
     if not a.all and not a.exp:
         ap.error("name an experiment (E240, a folder or a file) or pass --all")
-    files = sorted(glob.glob(os.path.join(P.root(), "experiments", "E*", "experiment.json"))) if a.all else [find(a.exp)]
+    if a.cmd == "migrate":
+        todo = [d for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d)] if a.all else [os.path.dirname(find(a.exp))]
+        for d in todo:
+            if os.path.isfile(os.path.join(d, "experiment.json")):
+                print(migrate(d, P.root()))
+        return 0
+    files = [source(d) for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d) and source(d)] if a.all else [find(a.exp)]
     rc = 0
     for f in files:
-        exp = json.load(open(f, encoding="utf-8"))
+        try:
+            exp = read(f)
+        except ValueError as e:  # a broken card is reported and the other experiments are still checked
+            print(f"?        NOT READY  {os.path.relpath(f, P.root())}\n    - {e}")
+            rc = 1
+            continue
         if a.cmd == "check":
             bad = check(exp, f)
             print(f"{exp.get('id', '?'):8} {'ready' if not bad else 'NOT READY'}  {os.path.relpath(f, P.root())}" + "".join(f"\n    - {b}" for b in bad))

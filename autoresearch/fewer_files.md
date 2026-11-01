@@ -1,6 +1,14 @@
-# Fewer files for experiment ideas (proposal, 2026-11-01)
+# Fewer files for experiment ideas (built 2026-11-01)
 
-Mirko, looking at `overview.svg`: for research results a summary plus detailed extractions are clear; but to carry an experiment idea, is more needed than one file for the planner, one file per experiment and one list of the experiments? Status: proposal, nothing changed yet.
+Mirko, looking at `overview.svg`: for research results a summary plus detailed extractions are clear; but to carry an experiment idea, is more needed than one file for the planner, one file per experiment and one list of the experiments? Mirko: "Yes, build". 
+
+## Built (2026-11-01)
+- **Card block:** the card is a fenced `json card` block in section 0 of `experiment.md` (`experiment.py` reads it; an old `experiment.json` is still read; both present and different is refused; `experiment.py migrate` moves a json into the md and the json to `<problem>/_to_delete/experiment_json_<date>/`). The 26 lane cards that had both files are migrated, 3 lane cards without an `experiment.md` (E215, E219, E232) keep their json. `decide.py` writes `decision.json` next to the md. Template, schema text and the docs that named `experiment.json` follow.
+- **Status from the ledger:** `plan.py status` prints each plan node with its schedule items, ledger rows and the last `decide.py` verdict. The status column is gone from `templates/plan.md`; the live lane `PLAN.md` of loop 22 keeps its column until the loop is filed.
+- **Not built, on purpose:** `INDEX.csv` is not generated (its theme / tag / result columns are written by hand and are not in the cards); `schedule.csv` and `LEDGER.csv` stay two files with one id (a queue is edited, a ledger is appended to) and a finished item stays in the schedule (its state is derived from the run records); `plans/` stays (loop-level detail plans, not per-experiment).
+- Reviewed by a fresh critic (mode code); its findings (broken or doubled blocks, a sample inside a longer fence, CRLF, same-day move, id matching, verdict only from the `decide.py` token) are fixed and tested.
+
+## The proposal as drafted
 
 ## Today (per problem)
 | file | job | read by code |

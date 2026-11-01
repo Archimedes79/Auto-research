@@ -1,5 +1,78 @@
 # E236 Q at a matched setting and a matched vertex budget: does the recall variant's Q edge survive?
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E236",
+ "card": "",
+ "title": "Q at matched fork pruning (0.4) and matched 14.3 +- 0.15 vertices per 100 m: the recall variant (rc1) against the pruned champion",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "Q",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.002,
+  "vs": "c"
+ },
+ "arms": {
+  "a": {
+   "recipe": "evaluate.py recall --asm fork_prune=0.4 --tau <t_a> --tag v143, t_a chosen by a sweep so that vert100 is 14.3 +- 0.15 (vtx_r as fallback, named)",
+   "base": "recall",
+   "note": "rc1, cached VAL raw outputs"
+  },
+  "c": {
+   "recipe": "evaluate.py champion --asm fork_prune=0.4 --tau <t_c> --tag v143, t_c chosen so that vert100 is 14.3 +- 0.15",
+   "base": "champion",
+   "note": "matched reference: same frames, same pruning, same budget"
+  },
+  "d": {
+   "names": [
+    "champion"
+   ],
+   "note": "as registered (pruning 0.3, vert100 14.83), reference of the headline table"
+  },
+  "n": {
+   "names": [
+    "champion_noprune"
+   ],
+   "note": "null: no pruning, 13.54 vertices per 100 m"
+  },
+  "e": {
+   "recipe": "evaluate.py fast_recall --asm fork_prune=0.4 --tau <t_e> --tag v143",
+   "base": "fast_recall",
+   "note": "report only"
+  },
+  "f": {
+   "recipe": "evaluate.py fast --asm fork_prune=0.4 --tau <t_f> --tag v143",
+   "base": "fast",
+   "note": "report only"
+  }
+ },
+ "control": "c",
+ "rule": [
+  {
+   "metric": "Q",
+   "min_effect": 0.005,
+   "note": "the recall variant's Q edge survives matched pruning and matched vertices"
+  },
+  {
+   "metric": "lanes_found",
+   "min_effect": 0.04,
+   "note": "sanity: the recall gain itself is still there at 14.3 vertices"
+  }
+ ],
+ "budget_gpu_h": 0,
+ "kill": "step 1 (registered settings) does not reproduce runs/eval/*/val.json within 0.0005",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}
+```
+
+
 ## 0. What the tools run (the fields of `experiment.json`)
 | field | value |
 |---|---|

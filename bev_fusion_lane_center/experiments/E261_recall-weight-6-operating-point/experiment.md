@@ -1,5 +1,99 @@
 # E261 Recall weight 6 (rc2) re-qualified on the reviewed vertex basis and at its own operating point
 
+The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):
+
+```json card
+{
+ "id": "E261",
+ "card": "H22.E261",
+ "title": "recall weight 6 (rc2, e18_D7_rc2) at its own operating point (tau, fork pruning) on the per-piece DP basis, against recall and against rc1's own threshold frontier",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "lanes_found",
+ "direction": "higher",
+ "band": 0.01,
+ "prediction": {
+  "value": 0.022,
+  "vs": "c"
+ },
+ "variant": "a",
+ "control": "c",
+ "arms": {
+  "a": {
+   "recipe": "rc2 at the point chosen on all 22 VAL scenes by temp/loop22/e261_cv.py (expected tau 0.8 / fork pruning 0.4); registry entry recall6 (run e18_D7_rc2, M 288 / K0 144, cache raw_val873_e18_D7_rc2_288.pkl through the loop-18 fallback); evaluate.py recall6 --compare recall",
+   "base": "e18_D7_rc2",
+   "run_ids": [
+    "E261.g",
+    "E261.cv",
+    "E261.ev"
+   ],
+   "names": [
+    "recall6"
+   ]
+  },
+  "c": {
+   "recipe": "recall (rc1, tau 0.7 / fork pruning 0.4), re-scored with tonight's code (E265.c, layer 1)",
+   "base": "e123_D7_r3_rc1",
+   "cards": [
+    "runs/eval/recall/val_l22.json"
+   ]
+  },
+  "t": {
+   "recipe": "threshold-only control: rc1 at its best admissible point of the grid tau {0.05, 0.1, 0.2, ..., 0.9} x fork pruning 0.4 / 0.5 / 0.6 (registry entry recall_thr); evaluate.py recall_thr --compare recall",
+   "base": "e123_D7_r3_rc1",
+   "run_ids": [
+    "E261.ev"
+   ],
+   "names": [
+    "recall_thr"
+   ]
+  },
+  "s": {
+   "recipe": "seed spread of the reference: recall_s1 (rc1s1) at the registered point",
+   "cards": [
+    "runs/eval/recall_s1/val_l22.json"
+   ]
+  },
+  "n": {
+   "recipe": "equal-budget null f1eq (weight 1) and range-weighted rc4: report lines of e261_cv.py at tau 0.7 / 0.4 (no registry entry)"
+  }
+ },
+ "rule": [
+  {
+   "metric": "lanes_found",
+   "min_effect": 0.015,
+   "note": "22-scene card (in-sample choice: label VAL, selection-CV, layer 3) AND the mean over the 20 held-out halves of e261_cv.py (lead check) must both reach +0.015 with the card's interval excluding 0"
+  },
+  {
+   "metric": "R@1_far",
+   "min_effect": 0.01,
+   "note": "card and held-out mean"
+  },
+  {
+   "metric": "Q",
+   "max_loss": 0.005,
+   "note": "and Q of a >= 0.735 absolute (card and held-out mean)"
+  },
+  {
+   "metric": "topo_F1",
+   "max_loss": 0.01
+  },
+  {
+   "metric": "dup_frac",
+   "max_loss": 0.03,
+   "note": "rise <= 0.030 (the step accepted when recall replaced champion). Lead checks outside decide.py: false length of a <= 0.062; per-piece DP of a <= 14.3 on all frames and > 14.3 in at most 5 of the 20 held-out halves (referee); lanes found a - t >= +0.010 on the held-out mean (threshold-only control; decide.py cannot interval-judge a clause against t, tools item S6); CUT if a - t < +0.010 or rc2 has no admissible point; TIE if a - c in (-0.010, +0.015) or a guard fails by less than its band"
+  }
+ ],
+ "budget_gpu_h": 0.0,
+ "kill": "rung E261.g: the best admissible rc1 point (tau down to 0.05, pruning 0.4 / 0.5 / 0.6; admissible = Q >= 0.735, DP <= 14.3, FL <= 0.062, dup <= 0.1063) reaches lanes found >= 0.7802 (rc2's best admissible in-sample 0.7902 minus 0.010): CUT without the CV, E262 cancelled; layer 1 fails (rc1 0.7 / 0.4 does not give Q 0.7404, lanes found 0.7673, DP 12.82)",
+ "evaluate": {
+  "split": "val",
+  "compare": "c"
+ }
+}
+```
+
+
 One file per experiment; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). Machine-readable part: `experiment.json` next to this file (not written by the card author).
 
 ## 1. Card (written in P2, checked by ar-referee)
