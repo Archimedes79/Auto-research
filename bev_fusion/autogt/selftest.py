@@ -208,6 +208,13 @@ def run(root=None, verbose=True):
         assert not [f for _, _, fs in os.walk(d) for f in fs if f.lower().endswith((".png", ".jpg"))], "no picture files"
         stored = os.listdir(os.path.join(d, "data", rep["signature"]))
         assert "index.json" in stored and rep["written"] == len([f for f in stored if f.endswith(".npz")]), rep
+        import json                                                                    # a smaller run must not shrink the folder's index
+        from .cli import write_index
+        from .suite import AutoGT as _Gen
+        sd_ = os.path.join(d, "data", rep["signature"])
+        write_index(sd_, _Gen(root, "v1.0-mini", ss=4, light=True), "v1.0-mini", ["scene-0061"], 20, 1, {})
+        held = json.load(open(os.path.join(sd_, "index.json")))
+        assert set(held["scenes"]) == {"scene-0061", "scene-1077"} and held["keyframes"] == len([f for f in stored if f.endswith(".npz")]), held
     # 7b the memory-light devkit gives the identical GT, and a parallel run of the report equals a serial one and resumes
     from .suite import AutoGT
     full = AutoGT(root, "v1.0-mini", ss=4)

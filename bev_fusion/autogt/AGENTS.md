@@ -27,14 +27,16 @@ g = gen.keyframe(gen.keyframes("scene-0061")[8])                # same dict, gen
 # trainval: `AutoGT(..., light=True, scenes=[...])` still reads the big json tables (minutes on a busy box): prefer `load`
 gen.signature() == autogt.current_signature()                   # the cache key (section 4)
 ```
-A cache folder without `index.json` belongs to a `report` / `build` that is still running (the index is written at the end): its
-files are valid, but the sequence list is incomplete. CLI details: `python -m autogt --help`; the commands you need most are `report`,
+A cache folder without `index.json`, or with `"complete": false` in it, belongs to a `report` / `build` that is still running or was
+interrupted (`build` writes a provisional index with the resolution and supersampling before the first keyframe and the final one at the
+end; a resume refuses another resolution): its files are valid, but the sequence list is incomplete. `clean --stale-caches` leaves a
+provisional folder alone for an hour after its last write. CLI details: `python -m autogt --help`; the commands you need most are `report`,
 `view`, `selftest`.
 
 ## 2. Run it (this box is shared)
 All commands run **from the `bev_fusion` folder inside WSL** with the conda env `gcar`; from Windows prefix `wsl`:
-`wsl bash temp/checks/run_py_nice.sh -m autogt selftest` (nice 15, one thread; runs any script the same way:
-`... run_py_nice.sh my_script.py`). Rules: one process, no worker pools while a training round runs (`uptime`, `free -m` first),
+`wsl bash autogt/run_nice.sh -m autogt selftest` (nice 15, one thread; runs any script the same way:
+`... run_nice.sh my_script.py`; a running `report` is stopped with `wsl bash -c "pkill -f '[a]utogt report'"`). Rules: one process, no worker pools while a training round runs (`uptime`, `free -m` first),
 the full trainval devkit needs 8+ GB (use `light=True, scenes=[...]`; `report` does it automatically), run long jobs in the
 background and wait with a bounded loop. Data: `~/data/nuscenes` (mini, 10 sequences, 404 keyframes), `~/data/nuscenes_full`
 (trainval, 850 sequences, 34,149 keyframes). Stored GT: `data/autogt/<signature>/<token>.npz` + `index.json`; reports (PDF):

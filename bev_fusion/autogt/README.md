@@ -33,6 +33,7 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`; commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
+| `run_nice.sh` | runs any module or script of bev_fusion at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
 | `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `encode.py`, `selftest.py` | the tools behind the commands (`encode.py`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
 
@@ -82,7 +83,7 @@ covariance, source, flag; plus the dense arrays when a grid is given)
   agree with the radar to about 0.2 m/s; the radar adds a small gain and the flags (57 overrides, 2 conflicts over all boxes of
   mini); the remaining RMSE is outlier detections (2.6 % beyond 2 m/s: ghosts, wheels)
 - the radar mask assumption: 99.9 % of all detections lie within +-60 deg of the sensor axis (measured)
-- the box shift v * dt (temp/checks/radar_box_shift.py, mini, 340 moving observed vehicles >= 5 m/s, 5..45 m ahead; raw radar
+- the box shift v * dt (a one-off script, commit 769aafc: `temp/checks/radar_box_shift.py`; the selftest keeps the sign check against the interpolated annotation; mini, 340 moving observed vehicles >= 5 m/s, 5..45 m ahead; raw radar
   POSITIONS, which the velocity did not use; points inside the footprint + 1 m per box and radar sweep within +-0.45 s): the
   moved box keeps its 0.37 - 0.41 points at every offset, the annotation pose falls from 0.38 to 0.19 and the opposite shift to
   0.07 (|dt| 0.3 .. 0.45 s); at the real 36 ms the three variants are within noise (0.40 / 0.39 / 0.36), the check is of the
