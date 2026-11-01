@@ -12,6 +12,7 @@ import statistics
 import time
 
 STALE_S = float(os.environ.get("TS_STALE_S", "900"))      # no new output for this long and not finished = stalled
+STOPPED_GRACE_S = 10.0                                    # output this much newer than the STOPPED marker: the run went on after the stop
 
 
 def _flat(obj, prefix=""):
@@ -48,7 +49,7 @@ def read_log(path):
             if not isinstance(rec, dict) or "step" not in rec:
                 continue
             row = _flat(rec)
-            if "step" not in row:
+            if "step" not in row or not math.isfinite(row["step"]):          # NaN / Infinity as a step (json.loads accepts them): no row, not a crash of every later int(step)
                 continue
             lst = evals if isinstance(rec.get("val"), dict) else train          # by the record, not by its keys: an empty val dict is an eval row
             if lst and row["step"] <= lst[-1]["step"]:
@@ -133,12 +134,13 @@ class Run:
 
     def stopped(self):
         """the STOPPED marker (dict) when the run ended because of a stop request and has not run since, else None. A trainer with
-        the stop check moves STOPPED aside at its start; for any other, STOPPED must not be older than the last output by more than 60 s"""
+        the stop check moves STOPPED aside at its start (10-40 s after a restart, while the imports run); until then, and for any other trainer, STOPPED must not
+        be older than the last output by more than STOPPED_GRACE_S: a restarted run that has printed for 10 s is not 'stopped' (watch dropped it as terminal)"""
         t = self.mtime("STOPPED")
         if not t:
             return None
         last = max([x for x in (self.mtime(self.log_name), self.mtime(self.text_name)) if x] or [0])
-        return (self.json("STOPPED") or {"reason": ""}) if t >= last - 60 else None
+        return (self.json("STOPPED") or {"reason": ""}) if t >= last - STOPPED_GRACE_S else None
 
     # ---- progress
     @property

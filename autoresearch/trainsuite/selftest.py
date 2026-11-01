@@ -211,6 +211,9 @@ def main():
         twin = Run(make(tmp, "twin", rows(100, seed=1)))
         assert "vs_ref" in codes(worse, "warn", ref) and "vs_ref" not in codes(Run(os.path.join(tmp, "good")), "warn", ref)
         assert "vs_ref" not in codes(twin, "warn", ref)
+        longref = Run(make(tmp, "longref", rows(100), total=6000))                   # a reference with another step total is on another schedule: named, not compared
+        vs_long = [f for f in health.check(worse, longref) if f.code == "vs_ref"]
+        assert len(vs_long) == 1 and vs_long[0].level == "info" and "6000 steps" in vs_long[0].text and "not compared" in vs_long[0].text, vs_long
         ok("a loss 25 % above the reference at the same step is a warning; the equal one and a seed twin are not")
 
         # 7 kill rules
@@ -221,14 +224,14 @@ def main():
         assert Rule("group.line@1000 > 0.1").evaluate(r)[0] == "unknown"
         assert Rule("total@500 < 3 window 5").evaluate(r)[0] == "ok"
         assert Rule("val.total@2000>=13").evaluate(Run(os.path.join(tmp, "val")))[0] == "hit"
-        assert Rule("total@2000 > 1").evaluate(Run(os.path.join(tmp, "nan")))[0] in ("hit", "ok")      # NaN rows: below
-        try:
-            Rule("lines is bad")
         mr = Rule("objhead.vel@+0.0@1000 > 1  # a key with @ and + (the bev_fusion velocity terms)")
         assert mr.key == "objhead.vel@+0.0" and mr.step == 1000 and Rule("val.motion@+0.0@2000 > 1").key == "val.motion@+0.0"
         assert cli.split_ref("run_a:run_b") == ("run_a", "run_b") and cli.split_ref("run_a") == ("run_a", None)
         win = "C:" + chr(92) + "runs" + chr(92) + "t10"
         assert cli.split_ref(win) == (win, None) and cli.split_ref(win + ":ref") == (win, "ref")
+        assert Rule("total@2000 > 1").evaluate(Run(os.path.join(tmp, "nan")))[0] in ("hit", "ok")      # NaN rows: below
+        try:
+            Rule("lines is bad")
             raise AssertionError("bad rule accepted")
         except ValueError:
             pass
@@ -276,6 +279,25 @@ def main():
         assert Run(d).state() == "stopped"
         os.utime(os.path.join(d, "log.jsonl"), (time.time() + 200, time.time() + 200))       # the run went on after the stop marker
         assert Run(d).state() != "stopped"
+        # a restart: the old STOPPED is still there while the new trainer imports (10-40 s); output a few seconds newer keeps 'stopped', output beyond the grace
+        # period is a running run again (watch dropped such a run as terminal)
+        control.mark_stopped(d, 2000, "again")
+        t_stop = os.path.getmtime(os.path.join(d, "STOPPED"))
+        for name in ("log.jsonl", "train.log"):
+            if os.path.exists(os.path.join(d, name)):
+                os.utime(os.path.join(d, name), (t_stop + 5, t_stop + 5))
+        assert Run(d).state() == "stopped"
+        for name in ("log.jsonl", "train.log"):
+            if os.path.exists(os.path.join(d, name)):
+                os.utime(os.path.join(d, name), (t_stop + 20, t_stop + 20))
+        assert Run(d).state() != "stopped", "output 20 s after the marker: the run went on"
+        nd = make(tmp, "nanstep", rows(20))                                    # NaN / Infinity as a step is no row (and no crash of int(step) in status)
+        with open(os.path.join(nd, "log.jsonl"), "a") as fh:
+            fh.write('{"step": NaN, "total": 1.0}\n{"step": Infinity, "total": 1.0}\n')
+        rn = Run(nd)
+        assert rn.step == 400 and len(rn.train) == 20, (rn.step, len(rn.train))
+        rc, out = run_cli("--root", tmp, "status")
+        assert rc is not None and "nanstep" in out, out
         assert control.honours_stop(os.path.join(tmp, "good")) is None
         assert control.honours_stop(make(tmp, "snap_old", rows(5), honours=False)) is False
         assert control.honours_stop(make(tmp, "snap_new", rows(5), honours=True)) is True
@@ -364,28 +386,6 @@ def main():
         assert buf.getvalue().count("flappy") == 1, buf.getvalue()
         ok("a finding that comes and goes is reported once")
 
-        # 11 layout override, status table, default listing, run:reference
-        d = os.path.join(tmp, "other")
-        os.makedirs(d)
-        with open(os.path.join(d, "trainsuite.json"), "w") as f:
-            json.dump({"log": "m.jsonl", "text_log": "out.txt", "loss": "loss", "steps": 100}, f)
-        with open(os.path.join(d, "m.jsonl"), "w") as f:
-            for s in range(10, 60, 10):
-                f.write(json.dumps({"step": s, "loss": 5.0 - s / 20}) + "\n")
-        open(os.path.join(d, "out.txt"), "w").write("ok\n")
-        r = Run(d)
-        assert r.step == 50 and r.total == 100 and r.loss_key == "loss" and r.state() == "running"
-        os.makedirs(os.path.join(tmp, "empty_log"))
-        open(os.path.join(tmp, "empty_log", "log.jsonl"), "w").close()
-        rc, out = run_cli("--root", tmp, "status", "--json")
-        names = {x["run"] for x in json.loads(out)}
-        assert "empty_log" not in names and "good" in names
-        rc, out = run_cli("--root", tmp, "status", "--all", "--json")
-        assert {x["run"] for x in json.loads(out)} >= {"good", "other", "ref", "empty_log"}
-        rc, out = run_cli("--root", tmp, "status", "worse:ref")
-        assert "vs_ref" in out, out
-        rc, out = run_cli("--root", tmp, "status", "good")
-        assert "running" in out and "2000/3000" in out, out
         # 10b a run that fails while watched and is restarted by the launcher (CUDA retry) is still watched
         d = make(tmp, "retry", rows(100, t0=now - 2000))
         tb = "step 99: total 1.0\nTraceback (most recent call last):\n  File x\nRuntimeError: CUDA error: unknown error\n"
@@ -410,6 +410,28 @@ def main():
         assert calls[0] >= 3 and "failed at step" in buf.getvalue() and "running at step" in buf.getvalue().split("failed at step")[1], buf.getvalue()
         ok("watch keeps a run that failed while watched for the launcher's retry")
 
+        # 11 layout override, status table, default listing, run:reference
+        d = os.path.join(tmp, "other")
+        os.makedirs(d)
+        with open(os.path.join(d, "trainsuite.json"), "w") as f:
+            json.dump({"log": "m.jsonl", "text_log": "out.txt", "loss": "loss", "steps": 100}, f)
+        with open(os.path.join(d, "m.jsonl"), "w") as f:
+            for s in range(10, 60, 10):
+                f.write(json.dumps({"step": s, "loss": 5.0 - s / 20}) + "\n")
+        open(os.path.join(d, "out.txt"), "w").write("ok\n")
+        r = Run(d)
+        assert r.step == 50 and r.total == 100 and r.loss_key == "loss" and r.state() == "running"
+        os.makedirs(os.path.join(tmp, "empty_log"))
+        open(os.path.join(tmp, "empty_log", "log.jsonl"), "w").close()
+        rc, out = run_cli("--root", tmp, "status", "--json")
+        names = {x["run"] for x in json.loads(out)}
+        assert "empty_log" not in names and "good" in names
+        rc, out = run_cli("--root", tmp, "status", "--all", "--json")
+        assert {x["run"] for x in json.loads(out)} >= {"good", "other", "ref", "empty_log"}
+        rc, out = run_cli("--root", tmp, "status", "worse:ref")
+        assert "vs_ref" in out, out
+        rc, out = run_cli("--root", tmp, "status", "good")
+        assert "running" in out and "2000/3000" in out, out
         ok("another layout through trainsuite.json; status as table / json, without empty logs by default, with a reference per run")
 
         # 12 curves
