@@ -350,6 +350,13 @@ def selftest():
             globals()["checkpoints"] = real
         assert [e["name"] for e in load()["entries"]] == ["e", "g", "d"], [e["name"] for e in load()["entries"]]
         assert not os.path.exists(state_path() + ".lock")
+        # the command line end to end: an apply returns a list (the checkpoints that left), the exit code must still be 0
+        card("e", 0.95)
+        old_argv, sys.argv = sys.argv, ["keep3.py", "consider", "e", "--apply", "--by-hand", "selftest"]
+        try:
+            assert main() == 0 and load()["entries"][0]["name"] == "e" and load()["entries"][0]["value"] == 0.95
+        finally:
+            sys.argv = old_argv
         card("e", 0.60)
         # show: ok, then a changed file is seen (size) and a changed byte only with --hash
         assert cmd_show(ns(), T) == 0
@@ -402,7 +409,8 @@ def main():
         return selftest()
     if not a.cmd:
         ap.error("a command (init, candidates, consider, show) or --selftest")
-    return {"init": cmd_init, "candidates": cmd_candidates, "consider": cmd_consider, "show": cmd_show}[a.cmd](a, P.root())
+    rc = {"init": cmd_init, "candidates": cmd_candidates, "consider": cmd_consider, "show": cmd_show}[a.cmd](a, P.root())
+    return rc if isinstance(rc, int) else 0  # consider returns the checkpoints that left (a list), which sys.exit would print and turn into exit code 1
 
 
 if __name__ == "__main__":

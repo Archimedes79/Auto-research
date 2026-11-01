@@ -1,0 +1,77 @@
+{
+ "about": "the best three networks of this problem (autoresearch/tools/keep3.py); one slot per checkpoint; a text record in git",
+ "metric": "Q",
+ "split": "val",
+ "frames": 873,
+ "slots": 3,
+ "band": 0.01,
+ "registry": "models/registry.json",
+ "ckpt": "runs/e123/{run}/model.pt",
+ "card": "runs/eval/{name}/{split}.json",
+ "entries": [
+  {
+   "name": "recall_sp0_dp",
+   "key": "e123_D7_r3_rc1",
+   "runs": [
+    "e123_D7_r3_rc1"
+   ],
+   "value": 0.7424430113264446,
+   "vert100": 10.936182176823829,
+   "asm_ms": 27.908849552324956,
+   "card": "runs/eval/recall_sp0_dp/val.json",
+   "commit": "32babc1+dirty",
+   "checkpoints": [
+    {
+     "path": "runs/e123/e123_D7_r3_rc1/model.pt",
+     "bytes": 4875215,
+     "sha256": "7ec06c8fa19d803ec87f07684978774dda330adb0dbfd230080b349bb23f3544"
+    }
+   ],
+   "since": "2026-11-01",
+   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the best quality we can deliver today, the prototype of loop 22 (E265 KEEP, spurs kept): Q on VAL 0.7424 (0.0003 below the highest of any name, all inside the band), lanes found 0.781 (the largest of the three; gap 1 of PROBLEM.md), 10.9 nodes delivered per 100 m (card vert100 with the DP stage; the budget count is on the per-piece basis, D25), the one TEST use E268.p (lanes found 0.740, Q 0.727 against the control 0.762 / 0.712). Assembly time on its card is 27.9 ms against 12-13 ms for the other two: look at the cost before relying on it for speed"
+  },
+  {
+   "name": "fast_recall",
+   "key": "e18_D7_j1rc",
+   "runs": [
+    "e18_D7_j1rc"
+   ],
+   "value": 0.7391642478631558,
+   "vert100": 14.977342067251438,
+   "asm_ms": 12.461698342025075,
+   "card": "runs/eval/fast_recall/val.json",
+   "commit": "0b356df+dirty",
+   "checkpoints": [
+    {
+     "path": "runs/e123/e18_D7_j1rc/model.pt",
+     "bytes": 4875215,
+     "sha256": "7f3e1f333b29edea8a6de0f00bf695b4b7c91064e346e5162ef9eea8a06d724e"
+    }
+   ],
+   "since": "2026-11-01",
+   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the fast leg of 'very good and very fast': the 192/96 recipe j1rc, Q 0.7392 inside the band of the top, lanes found 0.736, 20-22 ms per frame against 24 for the champion; its seed twins e24_j1rc_s1..s3 (Q 0.735-0.743) are replicates of this recipe and take no slot of their own"
+  },
+  {
+   "name": "champion",
+   "key": "e123_D7_r3_f1",
+   "runs": [
+    "e123_D7_r3_f1"
+   ],
+   "value": 0.7349707397502565,
+   "vert100": 14.83013946872132,
+   "asm_ms": 13.239684383484096,
+   "card": "runs/eval/champion/val.json",
+   "commit": "0b356df+dirty",
+   "checkpoints": [
+    {
+     "path": "runs/e123/e123_D7_r3_f1/model.pt",
+     "bytes": 4875215,
+     "sha256": "6249d8f0075fedfc2d76911b8ace08d39428c9906c33ab60c1964efa6730f7c0"
+    }
+   ],
+   "since": "2026-11-01",
+   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the promoted champion and the reference of every comparison; its checkpoint is named by the protected champion entry and by the golden numbers, so it stays whatever the ranking says (Q 0.7350, TEST S 0.748 in E230)"
+  }
+ ],
+ "left": []
+}
