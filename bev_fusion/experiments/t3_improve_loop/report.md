@@ -6,6 +6,75 @@ velocity `temp/calib/velocity_baseline.py`, controls `try1_controls.md`, latency
 nuScenes, 150 scenes exist), EMA weights, 3000 optimiser steps from the same 428 training scenes, seed 0 unless stated. This is a short-schedule
 screening study of blocks, not a final system.
 
+## Update 2026-11-01 (read this first; sections 1-11 are the state of 2026-10-30 and stay as written)
+
+Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps (`../t4_soa_front`, `../t6_soa_gap`, `../t7_lane_branch`, `../t8_bevfeat`,
+`../t10_dual_features`, `../t11_vel_cause`). Numbers: cold VAL, the same 1000 keyframes of the 82 validation scenes unless a row says otherwise; maps from
+`runs/*/eval/metrics.json` (`temp/pitch/ladder.py`), objects in the front sector (0-50 m, +-32.3 deg) from `../t4_soa_front/results_*.md` and
+`../t10_dual_features/results_x50.md` (`temp/t4/compare_front.py`). Seeds: most arms have one seed; where a seed twin exists the row says so.
+
+### What changes in the bottom line
+
+1. **The lever is the image features, not the blocks.** Eleven block exchanges tied; swapping the frozen detection-trained stride-16 image features for map-trained
+   stride-8 BEVFusion features nearly doubled the maps (lane divider 0.191 -> 0.351 / 0.345, walkway 0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165) and halved
+   the objects (front mAP2 0.367 -> 0.183 / 0.180). Both feature sets in one chain keep both: lane divider 0.335, walkway 0.340, drivable 0.806, front mAP2 0.361 (one
+   seed; the seed twin is training). The 3000-step dual chain beats the start recipe trained 4.7 x longer on five of six map layers (ladder below).
+2. **The velocity head is dead, not slow.** The output of the branch is its bias; 0.011 % of its hidden units are active at the supervised centres (13 - 50 % for the other
+   branches); 24 of the 29 classified runs are dead. Try 9 (loss weight x10) could not help a dead ReLU layer. The radar Doppler read-out at the GT boxes holds 0.79 of the
+   velocity of moving vehicles (upper bound, GT heading), our best learned heads 0.22 - 0.25.
+3. **The SOA gap is measured like for like where a published system can be run on our frames**: DualBEV (front camera only) 0.250 front mAP2 against our camera-only 0.242 and
+   camera + radar 0.359 - 0.400; GaussianCaR on the maps (section 8 of the update below). Still not comparable with published leaderboards.
+4. **Three errors found since** (they continue the list of section 9): the FPN-LSS inputs of our trunk were concatenated in the wrong order for the pre-trained weights
+   (`t4_fpn_order`: a tie); the GT cache is built from live code, so runs of different days had different object targets (same-code controls, decision D29);
+   the velocity branch was dead (above).
+
+### Tries 9 - 16
+
+| # | question | change | prediction (written before) | result | decision |
+|---|---|---|---|---|---|
+| 9 | does a larger velocity loss weight make the head learn? | `t3_vel10`: weight 10 | - | front mAP2 0.360 (reference 0.375 / 0.359); the velocity output stays zero (largest predicted speed 0.031 m/s) | no effect, not adopted; cause found in 16 |
+| 10 | does the wrong FPN-LSS input order of our trunk matter? | `t4_fpn_order`: original order (flag) | - | front mAP2 0.367 against 0.375 / 0.359 | TIE, flag stays default off |
+| 11 | how far is the system from a SOA camera detector in the front area? | DualBEV run with CAM_FRONT only, unchanged weights, same 1000 frames (`t4_soa_front`) | DualBEV 0.40 - 0.55 (miss) | DualBEV 0.250; ours camera-only 0.242; camera + radar 0.359 / 0.375 (3000 steps), 0.400 (7000 x 2) | camera path = SOA camera path; radar +0.11 - 0.15 (intervals exclude 0) |
+| 12 | why are the maps far from the SOA? | GaussianCaR scored by our metric, oracles, probes, a maps-only run (`t6_soa_gap`) | - | ours at 17 - 55 % of GaussianCaR except drivable (85 %); not range, threshold, over-fitting, BEV network or labels; task competition small (+0.015 - 0.051) | main candidate: frozen detection-trained stride-16 features (M6) plus the training budget |
+| 13 | do stride-4 image details help the thin map classes? | `t7_res4` / `t7_rgb`: a frozen ResNet stride-4 branch lifted into the BEV | lane divider +0.04 | res4: lane divider +0.065 / +0.042 (two seeds), road divider IoU@1 +0.119 / +0.096, walkway and crossing unchanged; rgb +0.015 | helps the thin lines, not the area classes; verdict waits for the equal-GT control |
+| 14 | are frozen detection-trained features the limit of the maps? | `t8_bevfeat`: cached BEVFusion map-trained stride-8 features, same chain, same-code control `t8_ctl` | maps up | maps x1.8 - 1.9 (two seeds agree), front mAP2 0.367 -> 0.183 / 0.180, pedestrians gone | supports M6; neither feature set alone gives both |
+| 15 | can both be had? | `t10_dual`: both caches, two lifts, merged by a 1x1 convolution | lane divider 0.34, drivable 0.80, walkway 0.33, front mAP2 0.33 (0.25 - 0.38), pedestrian AP@2 0.15 | lane divider 0.335, drivable 0.806, walkway 0.340, front mAP2 0.361, pedestrian AP@2 0.199 | rule E1 holds (one seed); seed twin training |
+| 16 | why is the box velocity zero in every run? | diagnosis from stored checkpoints, detections and a probe (`t11_vel_cause`) | active share < 1 % at the centres | 0.011 % (other branches 13 - 50 %); 24 of 29 runs dead | fresh branch, BatchNorm, moving / static gate queued as arms |
+
+### Maps: the ladder (same metric, VAL, `seg_fov`, dt 0)
+
+| run | what | step | frames | drivable | walkway | carpark | crossing | lane div. @0.5 m | road div. @0.5 m |
+|---|---|---|---|---|---|---|---|---|---|
+| t2_ref_s0 | start, 3000 steps | 3000 | 1000 | 0.666 | 0.191 | 0.106 | 0.002 | 0.181 | 0.220 |
+| t3_ref_long | start, 6000 steps | 6000 | 1000 | 0.689 | 0.225 | 0.155 | 0.057 | 0.234 | 0.297 |
+| t1_r4_soa | start, 7000 x 2 steps (4.7 x the training) | 7000 | 3109 | 0.698 | 0.244 | 0.162 | 0.093 | 0.274 | 0.322 |
+| t8_ctl_s0 | same-code control of t8 / t10 | 3000 | 1000 | 0.668 | 0.178 | 0.115 | 0.002 | 0.191 | 0.224 |
+| t8_bevfeat_s0 | map-trained features | 3000 | 1000 | 0.754 | 0.339 | 0.173 | 0.145 | 0.351 | 0.437 |
+| t8_bevfeat_s1 | map-trained features, seed 1 | 3000 | 1000 | 0.759 | 0.342 | 0.168 | 0.165 | 0.345 | 0.439 |
+| t10_dual_s0 | both feature sets | 3000 | 1000 | 0.756 | 0.340 | 0.144 | 0.154 | 0.335 | 0.442 |
+
+The 3000-step dual chain is above the 7000 x 2-step start on drivable, walkway, crossing, lane divider and road divider and below it on carpark (0.144 against 0.162); the
+frame sets differ (3109 against 1000; the same model scores 0.719 on 400 frames against 0.698 on 3109, so the subset effect is about 0.02).
+
+[[LIKE_FOR_LIKE_MAPS]]
+
+### Weak spots, ranked (replaces section 10)
+
+1. **Velocity**: the branch is dead; fresh branch, BatchNorm, gate and a Doppler read-out are queued (`t11_vel_hurdle`, `t11_motion_field`).
+2. **Thin map classes and the training budget**: lane divider 0.335 against 0.691 for GaussianCaR; 3000 steps are 0.55 epoch of 428 scenes. Dual features trained longer, the
+   stride-4 branch on top, all 700 scenes.
+3. **Objects at range**: precision of the confident detections falls from 0.89 (0 - 20 m) to 0.64 (40 - 60 m); far objects are mostly detected with low confidence (t6).
+4. **No SOA camera + radar detector was run on our frames** (CRN checkpoint on disk).
+5. **Per-block speed on an idle GPU** is still unmeasured.
+6. **Infrastructure**: C: at 4.1 GB free (a full disk crashed a run once); one GT version (D29) is open.
+
+### Errors made and corrected since (continues section 9)
+
+5. The FPN-LSS inputs of our trunk were concatenated in the wrong order for the pre-trained weights since the first run; found by the DualBEV port; a tie in effect.
+6. Runs of different days used different object targets because the GT is built from live code; found 2026-10-31; same-code controls added.
+7. "The head has not learned in 3000 steps" (weak spot 2 of section 1) was a diagnosis of the wrong kind: the branch was dead, and the loss-weight try could not work.
+8. My predictions missed twice more (DualBEV front-only 0.40 - 0.55, measured 0.250); recorded as misses.
+
 ## 1 Bottom line
 
 1. **No block swap shows an effect larger than the noise (about 0.05 mAP2 with one seed and 3000 steps).** Of eleven exchanges, none is BETTER than the reference. Seven are
@@ -79,7 +148,7 @@ height-sum collapse `t3_cam_zsum` 0.205, vehicle AP@0.5 0.037, walkway 0.089 (0.
 | 6 | tracking / time | ConvGRU, no block | GRU tie, none -0.01 | 0.327, 0.321 | TIE |
 | 7 | standard fusion 2 | CMX | -0.02 | 0.332 | TIE (better than predicted) |
 | 8 | standard radar encoder | pillars | tie | 0.349 | TIE (highest mAP2, below the seed spread): needs a second seed |
-| 9 (extra) | velocity head | `t3_vel10`: velocity loss weight 10 instead of 1 | - | running | pending |
+| 9 (extra) | velocity head | `t3_vel10`: velocity loss weight 10 instead of 1 | - | no effect: front mAP2 0.360, velocity output still zero (update above, try 9) | not adopted |
 
 ## 5 Why the ideas that did not work do not work
 
