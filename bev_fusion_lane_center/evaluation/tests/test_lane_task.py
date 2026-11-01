@@ -225,6 +225,54 @@ def t_causes_unit():
         assert abs(sum(b[k] for k in C.FN) - (D.min(1) > 1.0).sum() * 0.5) < 1e-9 and abs(sum(b[k] for k in C.FP) - (D.min(0) > 1.0).sum() * 0.5) < 1e-9   # adds up exactly
 
 
+def _best_shift_loop(P, G, tau, smax, step):
+    """the original best_shift: one pair of KD-tree queries per shift (the oracle of the batched version)"""
+    from scipy.spatial import cKDTree
+    if len(P) == 0 or len(G) == 0:
+        return 0.0, 0.0, 0, 0, 0, 0
+    tg, tp = cKDTree(G), cKDTree(P)
+    ks = np.arange(-smax, smax + 1e-9, step)
+    best = (-1.0, 0.0, 0.0)
+    for du in ks:
+        for dv in ks:
+            d = np.array([du, dv])
+            s = np.clip(1 - tg.query(P + d)[0] / tau, 0, 1).sum() + np.clip(1 - tp.query(G - d)[0] / tau, 0, 1).sum()
+            if s > best[0] + 1e-9 or (abs(s - best[0]) <= 1e-9 and np.hypot(du, dv) < np.hypot(best[1], best[2])):
+                best = (s, du, dv)
+    counts = lambda d: (int((tg.query(P + d)[0] <= tau).sum()), int((tp.query(G - d)[0] <= tau).sum()))
+    mp, mg = counts(np.array(best[1:]))
+    mp0, mg0 = counts(np.zeros(2))
+    return best[1], best[2], mp, mg, mp0, mg0
+
+
+@check("lanes.causes: best_shift (all shifts in batched KD-tree queries) = the shift-by-shift loop, bit for bit: ties on a lattice, noisy lanes, a point at exactly tau, tiny sets, a small chunk")
+def t_best_shift_equal():
+    from scipy.spatial import cKDTree
+    rng = np.random.default_rng(3)
+    cases = []
+    for _ in range(12):                                                        # integer lattice: many exact ties between shifts
+        n, m = int(rng.integers(1, 40)), int(rng.integers(1, 40))
+        cases.append((rng.integers(0, 12, (n, 2)).astype(float), rng.integers(0, 12, (m, 2)).astype(float), 1.0))
+    for _ in range(10):                                                        # lanes: G a polyline, P the same displaced and jittered
+        s = np.linspace(0, 60, int(rng.integers(30, 300)))
+        G = np.c_[2.0 * np.sin(s / 15.0), s]
+        shift = rng.uniform(-1.8, 1.8, 2)
+        cases.append((G + shift + rng.normal(0, 0.15, G.shape), G, float(rng.choice([0.5, 1.0, 1.5]))))
+    cases.append((np.array([[0.0, 0.0]]), np.array([[1.0, 0.0]]), 1.0))        # one point each, at exactly tau
+    cases.append((np.zeros((0, 2)), np.ones((3, 2)), 1.0))                    # empty
+    cases.append((np.c_[np.arange(0.0, 400.0, 0.25), np.zeros(1600)], np.c_[np.arange(0.0, 400.0, 0.25), np.full(1600, 0.4)], 1.0))   # 1600 points each
+    for P, G, tau in cases:
+        want, got = _best_shift_loop(P, G, tau, 2.0, 0.25), C.best_shift(P, G, tau, 2.0, 0.25)
+        assert want == got, (len(P), len(G), tau, want, got)
+    P, G, tau = cases[12][0], cases[12][1], 1.0                                # a chunk smaller than one shift's points and a chunk that splits the shifts
+    ks = np.arange(-2.0, 2.0 + 1e-9, 0.25)
+    shifts = np.array([(a, b) for a in ks for b in ks])
+    tg, tp = cKDTree(G), cKDTree(P)
+    ref = C._kernel_scores(tg, tp, P, G, shifts, tau)
+    for chunk in (1, 500, 5000):
+        assert np.array_equal(C._kernel_scores(tg, tp, P, G, shifts, tau, chunk=chunk), ref), chunk
+
+
 def _suite(tmp, emit="both", n_frames=6, **kw):
     src, subj, task = LS.build(emit=emit, n_frames=n_frames, **kw)
     return EvalSuite(src, subj, task, out=tmp, state="carry")

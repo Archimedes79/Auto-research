@@ -199,10 +199,13 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                 run.log("eval", step, res)
         if steps > 0 and not hist:                                       # every step skipped: no weight was ever updated, that is no finished run
             raise RuntimeError(f"no optimizer update in {steps} steps ({n_skip} skipped as non-finite)")
+        share = n_skip / max(steps, 1)                                   # isolated skips never trip max_bad: a run that skipped a lot says so
+        if share > 0.05:
+            run.log(f"WARNING: {n_skip} of {steps} steps ({share:.0%}) were skipped as non-finite; the run is finished but look at its curve")
         save_ckpt()
         torch.save(dict(state=model.state_dict(), args=args, steps=steps), run.path("model.pt"))
         run.status(state="done", step=step, seconds=round(time.time() - t0, 1), final_loss=float(np.mean(hist[-log_every:])) if hist else None, skipped=n_skip, rollbacks=n_roll,
-                   updates=len(hist))
+                   updates=len(hist), skipped_share=round(share, 4))
         run.mark_done()
         run.log("done", step)
     except BaseException as e:  # keep the checkpoint, tell the next start what happened

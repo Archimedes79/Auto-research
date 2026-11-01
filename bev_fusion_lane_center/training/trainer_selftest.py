@@ -154,6 +154,8 @@ def bursts(model, b):
 T.fit(make_model(), bursts, T.Run("j", tmp), **{**kw, "steps": 60, "ckpt_every": 20, "max_bad": 5})
 st = T.Run("j", tmp)._status
 assert st["state"] == "done" and st["skipped"] == 8 and st["updates"] == 52, st
+assert abs(st["skipped_share"] - 8 / 60) < 1e-3 and "WARNING" in open(os.path.join(tmp, "j", "log.txt")).read(), st      # 13 % skipped: finished, with a warning
+assert T.Run("e", tmp)._status["skipped_share"] == 0.025 and "WARNING" not in open(os.path.join(tmp, "e", "log.txt")).read()   # 1 of 40: no warning
 # a skipped step that lands on a checkpoint multiple still writes the checkpoint (and a crash right after resumes from it)
 n5 = {"i": 0}
 

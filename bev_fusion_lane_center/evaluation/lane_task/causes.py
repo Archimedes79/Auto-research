@@ -53,6 +53,21 @@ def target_of(fix: str) -> str:
     return "/".join(found) if found else "model"
 
 
+def _kernel_scores(tg, tp, P: np.ndarray, G: np.ndarray, shifts: np.ndarray, tau: float, chunk: int = 600_000) -> np.ndarray:
+    """for every shift d: sum of clip(1 - dist(P + d, G) / tau, 0, 1) + sum of clip(1 - dist(G - d, P) / tau, 0, 1). All shifts go through
+    one KD-tree query per chunk of points instead of one query per shift, and a point farther than tau from the other set is not searched
+    for (its kernel is 0 either way: the query answers inf, and clip(1 - inf) = 0). The same distances and the same row sums as the
+    loop over shifts, so the same scores bit for bit (checked against the loop in tests/test_lane_task.py)."""
+    out = np.zeros(len(shifts))
+    for sign, tree, A in ((1.0, tg, P), (-1.0, tp, G)):
+        per = max(chunk // max(len(A), 1), 1)                                # shifts per query
+        for i in range(0, len(shifts), per):
+            sh = shifts[i:i + per]
+            d = tree.query((A[None, :, :] + sign * sh[:, None, :]).reshape(-1, 2), distance_upper_bound=tau)[0].reshape(len(sh), len(A))
+            out[i:i + per] += np.clip(1 - d / tau, 0, 1).sum(axis=1)
+    return out
+
+
 def best_shift(P: np.ndarray, G: np.ndarray, tau: float, smax: float, step: float):
     """translation (du, dv) of the prediction that fits both sets best (triangular kernel of width tau: the peak is the true displacement,
     a count within tau would be flat over a whole range of shifts)
@@ -62,13 +77,12 @@ def best_shift(P: np.ndarray, G: np.ndarray, tau: float, smax: float, step: floa
         return 0.0, 0.0, 0, 0, 0, 0
     tg, tp = cKDTree(G), cKDTree(P)
     ks = np.arange(-smax, smax + 1e-9, step)
+    shifts = np.array([(du, dv) for du in ks for dv in ks])                 # the order of the double loop: the tie rule below depends on it
+    scores = _kernel_scores(tg, tp, P, G, shifts, tau)
     best = (-1.0, 0.0, 0.0)
-    for du in ks:
-        for dv in ks:
-            d = np.array([du, dv])
-            s = np.clip(1 - tg.query(P + d)[0] / tau, 0, 1).sum() + np.clip(1 - tp.query(G - d)[0] / tau, 0, 1).sum()
-            if s > best[0] + 1e-9 or (abs(s - best[0]) <= 1e-9 and np.hypot(du, dv) < np.hypot(best[1], best[2])):
-                best = (s, du, dv)
+    for (du, dv), s in zip(shifts, scores):
+        if s > best[0] + 1e-9 or (abs(s - best[0]) <= 1e-9 and np.hypot(du, dv) < np.hypot(best[1], best[2])):
+            best = (s, du, dv)
     counts = lambda d: (int((tg.query(P + d)[0] <= tau).sum()), int((tp.query(G - d)[0] <= tau).sum()))
     mp, mg = counts(np.array(best[1:]))
     mp0, mg0 = counts(np.zeros(2))
