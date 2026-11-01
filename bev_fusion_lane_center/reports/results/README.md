@@ -5,4 +5,4 @@ Each `weekN/` folder holds the short result record in git (`WeekN_Results.md`) a
 | folder | content |
 |---|---|
 | `week3/` | 27 October - 2 November 2026, **Spurmitte on the frozen GaussianCaR features only**: the prototype of record, the week's experiments, the limits of the design (`Week3_Results.md`; PDF, one example video) |
-| `week3_framework/` | assets for a separate report that is not written yet: the BEV system, the end-to-end set-up (gradient measurements, card E269), the tools and the disk work of the same week (figures and one dashboard video, not in git; the first combined version of the report builder is git commit `c0734ec`) |
+| `week3_framework/` | the same week, part 2, **not about the Spurmitte results**: the BEV system, the end-to-end set-up (gradient measurements, card E269), the tools and the disk work (`Week3_Framework_Results.md`; PDF, figures and one dashboard video, not in git; builder `build_w3_framework_report.py`; nothing was run for it) |
