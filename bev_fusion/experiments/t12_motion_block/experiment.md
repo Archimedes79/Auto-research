@@ -61,6 +61,12 @@ VAL 500 samples (pinned GT 0.5_4_15efbde2d1, cold keyframes, dt 0), the same fra
 - **Verdict by the rule: KEEP.** Band = max(0.1, 2 x 0.0015) = 0.10; both seeds are 3.35 m/s below the base; total_main 6 % better (the moved +-0.5 s objects fit better), not worse.
 - **Second decision (box velocity):** the field at the box centres beats the revived object head of t11_vel_hurdle_acc2 by 0.14 / 0.17 m/s (> band): read the box velocity from the field in the joint design.
 - **Prediction:** moving EPE <= 2.0 missed (3.32; on GT maps the pyramid reached 0.93: the frozen features blur the motion); centre and total_main predictions hit.
-- **Honest negatives:** static cells slightly worse (0.055 -> 0.08 m/s); the base's own velocity is dead (= v = 0), so the base is a weak reference; the strong one is the hurdle object head.
+- **Honest negatives:** static cells slightly worse (0.055 -> 0.08 m/s); the vehicle IoU of the moved maps fell on both seeds
+  (`sem.obj_iou.vehicle` @-0.5 0.760 -> 0.732 / 0.731, @+0.5 0.756 -> 0.723 / 0.727) while their BCE improved (@-0.5 0.106 -> 0.097,
+  @+0.5 0.105 -> 0.096 / 0.096): "the moved objects fit better" holds for the loss, not for the thresholded IoU (a blurred or
+  mis-shifted map can lower both); the rule looked only at total_main, so KEEP stands by the rule; the base's own velocity is dead
+  (= v = 0), so the base is a weak reference; the strong one is the hurdle object head. (IoU negative found by the BEV system chat's
+  re-check of the three metrics.json, 2026-11-01.)
 - **Cost:** 294 k parameters, 17 ms per frame at batch 1 (s1; s0 measured 58 ms while the GPU was shared: not an idle-GPU number), peak 2.2-2.6 GB.
-- **Next:** the joint-training card (block inside the model, trained with it under run.py, 2 seeds), with the box velocity read from the field and the block's runtime cut (17 ms is too slow for 0.3 M parameters).
+- **Next:** the joint-training card (block inside the model, trained with it under run.py, 2 seeds), with the box velocity read from the field and the block's runtime cut (17 ms is too slow for 0.3 M parameters); guard metrics
+  in its rule next to the loss: the vehicle IoU at +-0.5 s (must not fall by more than its band against the control) and the static EPE.
