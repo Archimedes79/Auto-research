@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:43:35",
+ "made": "2026-11-01T21:17:16",
  "run": "smoke.d32",
  "run_dir": "runs/smoke_d32",
  "status": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "b68416ecc438"
+  "hash": "dfd7abe5e588"
  },
  "metrics": {
   "eval/metrics.json": {}

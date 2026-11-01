@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:44:09",
+ "made": "2026-11-01T21:17:34",
  "run": "t12.mb_s0",
  "run_dir": "runs/t12_mb_s0",
  "status": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "771543e47dc5"
+  "hash": "fd8c4976d9b4"
  },
  "metrics": {},
  "metric_files": {},
@@ -56,5 +56,5 @@
   },
   "card": "unknown"
  },
- "experiment": "experiments/t13_complete_network/experiment.md"
+ "experiment": "experiments/t12_motion_block/experiment.md"
 }

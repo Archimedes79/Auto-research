@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:33:47",
+ "made": "2026-11-01T21:17:34",
  "gt": {
   "key": "unknown",
   "signature": "unknown",
@@ -22,11 +22,13 @@
  },
  "environment": {
   "python": "3.10.12",
+  "torch": "unknown",
+  "cuda": "unknown",
+  "numpy": "unknown",
   "gpu": "NVIDIA GeForce RTX 3060, 610.88",
   "host": "Desktop-I511600",
   "conda_env": "unknown",
-  "torch": "unknown",
-  "source": "run record"
+  "source": "run record (the trainer's interpreter was not found)"
  },
  "seed": "unknown",
  "code": {

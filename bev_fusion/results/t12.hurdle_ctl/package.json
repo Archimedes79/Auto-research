@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:44:06",
+ "made": "2026-11-01T21:17:33",
  "run": "t12.hurdle_ctl",
  "run_dir": "runs/t12_hurdle_ctl",
  "status": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "4818e6c57e56"
+  "hash": "ecbb82643516"
  },
  "metrics": {},
  "metric_files": {},
@@ -56,5 +56,5 @@
   },
   "card": "unknown"
  },
- "experiment": "unknown"
+ "experiment": "experiments/t12_motion_block/experiment.md"
 }

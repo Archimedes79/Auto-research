@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:43:45",
+ "made": "2026-11-01T21:17:23",
  "run": "t10.dual_s1",
  "run_dir": "runs/t10_dual_s1",
  "status": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "41563818aeba"
+  "hash": "7a4a1bee3e25"
  },
  "metrics": {
   "eval/metrics.json": {}

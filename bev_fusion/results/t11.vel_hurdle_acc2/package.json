@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:43:57",
+ "made": "2026-11-01T21:17:31",
  "run": "t11.vel_hurdle_acc2",
  "run_dir": "runs/t11_vel_hurdle_acc2",
  "status": {
@@ -31,7 +31,7 @@
  },
  "provenance": {
   "file": "provenance.json",
-  "hash": "4bb9b996326c"
+  "hash": "67c029ed558e"
  },
  "metrics": {
   "eval/metrics.json": {},

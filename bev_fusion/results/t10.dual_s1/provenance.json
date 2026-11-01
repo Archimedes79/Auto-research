@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "made": "2026-11-01T20:33:32",
+ "made": "2026-11-01T21:17:21",
  "gt": {
   "key": "0.5_4_15efbde2d1",
   "signature": "15efbde2d1",
@@ -38,12 +38,14 @@
   }
  },
  "environment": {
-  "python": "3.10.12",
+  "python": "3.12.15",
+  "torch": "2.8.0+cu129",
+  "cuda": "12.9",
+  "numpy": "1.26.4",
   "gpu": "NVIDIA GeForce RTX 3060, 610.88",
   "host": "Desktop-I511600",
   "conda_env": "unknown",
-  "torch": "unknown",
-  "source": "run record"
+  "source": "the interpreter of the run, read 2026-11-01 (the environment may have changed since the run): /home/ml/miniconda3/envs/gcar/bin/python"
  },
  "seed": 1,
  "code": {
@@ -112,6 +114,6 @@
   "dynamic_imports": [],
   "source": "t10_dual_s1/code",
   "config_hash": "1ac095207ea3",
-  "copied_to": "bundle"
+  "copy_skipped": "bundle/ exists and is not empty: left as it is"
  }
 }

@@ -7,8 +7,8 @@ code, which frames, which model and environment made a card, so that the experim
         collect() from its own interpreter (the environment block describes the interpreter that runs collect: torch and CUDA are filled
         when torch is already imported there); the command line describes the shell's python
     python3 provenance.py manifest <run id> [--run-dir d]       the provenance of a TRAINING run from its run record and run folder (GT it trained on,
-                                                                checkpoint, config, code tag, core code state) -> <problem>/results/<id>/provenance.json
-    python3 provenance.py repro <run id> [--card card.json]     what to check out and run to reproduce a run (prints, changes nothing; reads that manifest)
+                                                                checkpoint, config, code tag, model bundle) -> <problem>/results/<id>/provenance.json
+    python3 provenance.py repro <run id> [--card card.json] [--repeat [--dir d]]     what to check out and run to reproduce a run (prints, changes nothing; reads that manifest); --repeat checks the tag out in a worktree under temp/repro/ and prints the repeat command
     python3 provenance.py compare a.json b.json                 exit 0 comparable, 1 they differ, 2 not shown comparable (a value is unknown)
     python3 provenance.py --selftest
 
@@ -43,10 +43,10 @@ BUNDLE_ROOTS = ("model.py", "losses.py")   # the network and its losses; the bun
 BUNDLE_EXCLUDE = ("train.py", "nuscenes_dataset.py", "feature_cache.py")   # the training loop and the data loaders are not part of the network: not followed, but reported when the bundle imports them
 
 
-def git(repo, *args):
+def git(repo, *args, timeout=60):
     """stdout of a git call, None when git fails (missing, timeout, not a repository, a path outside it): a failure never reads as clean"""
     try:
-        r = subprocess.run(["git", "--no-optional-locks", "-C", repo, *args], capture_output=True, text=True, timeout=60)
+        r = subprocess.run(["git", "--no-optional-locks", "-C", repo, *args], capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout if r.returncode == 0 else None
@@ -419,6 +419,37 @@ def results_dir(run_id):
     return os.path.join(P.root(), P.cfg_of(P.root()).get("results", "results"), run_id)
 
 
+def repro_prepare(run_id, dest=None):
+    """Make a run repeatable without touching the current checkout: the run's code tag is checked out (detached) in a worktree under temp/repro/<id>
+    (or `dest`), data/ and <problem>/data/ are linked to the real ones, and the command that repeats the run is printed, not started: it goes through
+    run.py as `<id>.repro` with --no-card (a repetition feeds no verdict) and writes into the worktree's own runs/ folder, so the original run stays as
+    it is. Remove it later with `git worktree remove --force <dir>`. -> (worktree dir, command line)"""
+    rj = os.path.join(P.path("run_records"), run_id, "run.json")
+    if not os.path.isfile(rj):
+        sys.exit(f"no run record {rj}")
+    r = json.load(open(rj, encoding="utf-8"))
+    tag, repo = r.get("tag"), repo_root()
+    if not tag or git(repo, "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}") is None:
+        sys.exit(f"the code tag {tag} of {run_id} does not exist here (git fetch --tags): nothing to check out")
+    dest = os.path.abspath(dest or os.path.join(repo, "temp", "repro", run_id))
+    if not os.path.isdir(dest):
+        if git(repo, "worktree", "add", "--detach", dest, tag, timeout=3600) is None:   # a checkout on the Windows disk from WSL is slow
+            git(repo, "worktree", "unlock", dest)                      # a failed or timed-out checkout leaves a locked, half-made worktree: take it away again
+            git(repo, "worktree", "remove", "--force", dest)
+            sys.exit(f"git worktree add {dest} {tag} failed (the half-made worktree was removed; check the leftovers in that folder; never run `git worktree prune` from WSL: it drops the registration of worktrees with Windows paths)")
+    for rel in ("data", os.path.join(os.path.relpath(P.root(), repo), "data")):
+        src, dst = os.path.join(repo, rel), os.path.join(dest, rel)
+        if os.path.isdir(src) and not os.path.lexists(dst):
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            os.symlink(src, dst)
+    cwd = r.get("cwd") or P.root()
+    rel = os.path.relpath(cwd, repo) if os.path.commonpath([os.path.abspath(cwd), repo]) == repo else os.path.relpath(P.root(), repo)
+    work = os.path.normpath(os.path.join(dest, rel))
+    cmd = (f"cd {work} && AR_PROJECT=. python3 ../autoresearch/tools/run.py --id {run_id}.repro --hyp \"repetition of {run_id}\" "
+           f"--pred \"same code, same GT, same seed: the numbers agree within seed noise\" --rule \"by hand: a repetition, no verdict\" --no-card -- {r.get('command')}")
+    return dest, cmd
+
+
 def find_run_dir(run_id):
     """the folder a run writes into: <cards folder>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists"""
     root = P.root()
@@ -443,6 +474,47 @@ def final_ckpt(run_dir):
         if os.path.isfile(os.path.join(run_dir, f)):
             return os.path.join(run_dir, f), None
     return None, None
+
+
+PROBE = ("import json, platform\nfrom importlib import metadata\n"
+         "def v(n):\n    try:\n        return metadata.version(n)\n    except Exception:\n        return None\n"
+         "print(json.dumps({'python': platform.python_version(), 'torch': v('torch'), 'numpy': v('numpy')}))\n")
+
+
+def trainer_python(r):
+    """the interpreter a run was started with: project.json "trainer_python", else the .../bin/python that the script named in the run's command calls
+    (bev_fusion: temp/train/run_ar.sh -> ~/miniconda3/envs/gcar/bin/python); None when it is not found on this machine"""
+    cands = [P.cfg_of(P.root()).get("trainer_python")]
+    cwd = r.get("cwd") or P.root()
+    for tok in (r.get("command") or "").split():
+        f = os.path.join(cwd, tok)
+        if tok.endswith(".sh") and os.path.isfile(f):
+            try:
+                cands += re.findall(r"(~?/[\w./-]*/bin/python[\d.]*)", open(f, encoding="utf-8", errors="replace").read())
+            except OSError:
+                pass
+    for c in cands:
+        c = os.path.expanduser(c) if c else c
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def trainer_env(r):
+    """python, torch, CUDA and numpy versions of the interpreter that ran the training: asked through the package metadata (torch is not imported:
+    about 0.1 s); the CUDA version is the +cuNNN part of the torch version; {} when the interpreter is not found or does not answer"""
+    py = trainer_python(r)
+    if not py:
+        return {}
+    try:
+        out = subprocess.run([py, "-c", PROBE], capture_output=True, text=True, timeout=30)
+        d = json.loads(out.stdout.strip().splitlines()[-1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return {}
+    m = re.search(r"\+cu(\d+)", d.get("torch") or "")
+    d["cuda"] = f"{m.group(1)[:-1]}.{m.group(1)[-1]}" if m else None
+    d["source"] = f"the interpreter of the run, read {dt.date.today().isoformat()} (the environment may have changed since the run): {py}"
+    return d
 
 
 def manifest(run_id, run_dir=None, write=True, force=False):
@@ -489,8 +561,10 @@ def manifest(run_id, run_dir=None, write=True, force=False):
         block["bundle"] = bundle(snap, into=os.path.join(results_dir(run_id), "bundle") if write else None, config=cfg)
     else:
         block["bundle"] = {"code_hash": UNKNOWN, "files": [], "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag " + str(r.get("tag"))}
-    block["environment"] = {"python": r.get("python") or UNKNOWN, "gpu": r.get("gpu") or UNKNOWN, "host": r.get("host") or UNKNOWN,
-                            "conda_env": r.get("conda_env") or UNKNOWN, "torch": UNKNOWN, "source": "run record"}
+    env = trainer_env(r)
+    block["environment"] = {"python": env.get("python") or r.get("python") or UNKNOWN, "torch": env.get("torch") or UNKNOWN, "cuda": env.get("cuda") or UNKNOWN,
+                            "numpy": env.get("numpy") or UNKNOWN, "gpu": r.get("gpu") or UNKNOWN, "host": r.get("host") or UNKNOWN,
+                            "conda_env": r.get("conda_env") or UNKNOWN, "source": env.get("source") or "run record (the trainer's interpreter was not found)"}
     if not have_dir:
         block["run_dir"] = UNKNOWN
     if write:
@@ -615,6 +689,25 @@ def selftest():
             repro("r1")
         txt = buf.getvalue()
         assert "tag tg/r1" in txt and "WARNING: 1 file(s)" in txt and "autogt/v5" in txt and "frames: split val, 2 frames" in txt and "no card given" in txt, txt
+        # repro --run: the tag is checked out in a worktree, data is linked, the current checkout is untouched
+        run("tag", "tg/r1")
+        real_root = repo_root
+        globals()["repo_root"] = lambda start=None: tmp
+        try:
+            os.makedirs(os.path.join(tmp, "data", "autogt"), exist_ok=True)
+            wt, cmd = repro_prepare("r1")
+            assert os.path.isfile(os.path.join(wt, "ev", "m.py")) and wt == os.path.join(tmp, "temp", "repro", "r1"), wt
+            assert os.path.islink(os.path.join(wt, "data")) and os.path.realpath(os.path.join(wt, "data")) == os.path.realpath(os.path.join(tmp, "data")), "data is linked"
+            assert "--id r1.repro" in cmd and "--no-card" in cmd and "bash e.sh" in cmd and cmd.startswith("cd "), cmd
+            assert repro_prepare("r1")[0] == wt, "a second call reuses the worktree"
+            assert not os.path.exists(os.path.join(tmp, "temp", "repro", "r1", "ckpt.pt")) and os.path.isfile(os.path.join(tmp, "ev", "m.py")), "the checkout is separate"
+            try:
+                repro_prepare("r2")
+                raise AssertionError("a run without its tag cannot be prepared")
+            except SystemExit as e:
+                assert "does not exist" in str(e) or "no run record" in str(e), e
+        finally:
+            globals()["repo_root"] = real_root
         # the model bundle (network + losses = the import closure of model.py and losses.py) and the manifest of a training run
         tr = os.path.join(proj, "runs", "r2")
 
@@ -654,11 +747,22 @@ def selftest():
         os.makedirs(os.path.join(proj, "rr", "r2"))
         json.dump({"id": "r2", "status": "ok", "exit": 0, "tag": "tg/r2", "commit": "def", "code_hash": "h2", "command": "bash t.sh", "cwd": "/x", "split": "train",
                    "python": "3.10", "gpu": "RTX"}, open(os.path.join(proj, "rr", "r2", "run.json"), "w"))
+        fake = os.path.join(tmp, "envs", "bin")
+        os.makedirs(fake)
+        open(os.path.join(fake, "python"), "w").write("#!/bin/sh\necho '{\"python\": \"3.10.12\", \"torch\": \"2.8.0+cu128\", \"numpy\": \"1.26.4\"}'\n")
+        os.chmod(os.path.join(fake, "python"), 0o755)
+        open(os.path.join(tmp, "train.sh"), "w").write("#!/bin/bash\n" + os.path.join(fake, "python") + " -u train.py\n")
+        rj2 = os.path.join(proj, "rr", "r2", "run.json")
+        d2 = json.load(open(rj2))
+        d2.update(command="bash train.sh", cwd=tmp)
+        json.dump(d2, open(rj2, "w"))
         m = manifest("r2")
+        assert m["environment"]["torch"] == "2.8.0+cu128" and m["environment"]["cuda"] == "12.8" and m["environment"]["numpy"] == "1.26.4" and "envs/bin/python" in m["environment"]["source"], m["environment"]
+        assert trainer_env({"command": "bash nothing.sh", "cwd": tmp}) == {} and trainer_env({}) == {}, "an interpreter that is not found reads unknown, not a guess"
         assert m["subject"]["ckpt"] == "ckpt_00000200.pt" and m["subject"]["step"] == 200 and m["seed"] == 3 and m["code"]["tag"] == "tg/r2", m
         assert m["bundle"]["files"] == want and os.path.isfile(os.path.join(proj, "results", "r2", "bundle", "pkg", "head.py")) and os.path.isfile(os.path.join(proj, "results", "r2", "bundle", "config.json")), m["bundle"]
         assert not os.path.exists(os.path.join(proj, "results", "r2", "bundle", "data.py")), "the bundle holds the network and the losses only"
-        assert json.load(open(os.path.join(proj, "results", "r2", "provenance.json")))["code"]["commit"] == "def" and "evaluator" not in m and m["environment"]["torch"] == UNKNOWN
+        assert json.load(open(os.path.join(proj, "results", "r2", "provenance.json")))["code"]["commit"] == "def" and "evaluator" not in m and m["environment"]["torch"] == "2.8.0+cu128"
         assert m["run_status"] == {"status": "ok", "exit": 0, "final": True} and m["bundle"]["missing_roots"] == [] and m["bundle"]["copied_to"] == "bundle", m
         put(os.path.join(proj, "results", "r2"), "bundle/stale.py", "old\n")
         assert manifest("r2") == m, "an existing manifest is returned, not rebuilt"
@@ -726,6 +830,8 @@ def main():
     ap.add_argument("--run-dir")
     ap.add_argument("--card")
     ap.add_argument("--force", action="store_true", help="manifest: rebuild an existing provenance.json")
+    ap.add_argument("--repeat", action="store_true", help="repro: check the tag out in a worktree and print the repeat command")
+    ap.add_argument("--dir", help="repro --run: where to put the worktree (default temp/repro/<id>)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -734,6 +840,9 @@ def main():
         print(json.dumps(collect(a.gt_key, a.split, toks, a.evaluator, a.run, a.ckpt, a.config, a.step, a.run_dir, a.seed), indent=1))
     elif a.cmd == "repro" and a.args:
         repro(a.args[0], a.card)
+        if a.repeat:
+            wt, cmd = repro_prepare(a.args[0], a.dir)
+            print(f"\nworktree (the tag checked out, the current checkout untouched): {wt}\nstart the repetition (check the GT store above first):\n  {cmd}\nremove it afterwards: git worktree remove --force {wt}")
     elif a.cmd == "manifest" and a.args:
         b = manifest(a.args[0], a.run_dir, force=a.force)
         print(f"written: {os.path.join(results_dir(a.args[0]), 'provenance.json')} (GT {_get(b, ('gt', 'version'))}, checkpoint {_get(b, ('subject', 'ckpt'))}, code {_get(b, ('code', 'tag'))})")
