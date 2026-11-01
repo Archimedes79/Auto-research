@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 650" width="1448" height="650" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 750" width="1448" height="750" font-family="Segoe UI, Helvetica, Arial, sans-serif">
 <title>bev_fusion: camera + radar BEV system (base chain t8_ctl, variant t10_dual)</title>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
-<rect width="1448" height="650" fill="#ffffff"/>
+<rect width="1448" height="750" fill="#ffffff"/>
 <text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion: camera + radar BEV system (base chain t8_ctl, variant t10_dual)</text>
 <text x="24" y="50" font-size="12" fill="#475569">Front camera + radar detections + ego motion -&gt; timed map layers, object maps, boxes, lines. Learned between the cached camera features and the head outputs; red = a rule step on the path.</text>
 <text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 15 stages = 8 learned, 1 fixed-differentiable, 1 frozen, 5 rule steps</text>
 <rect x="232.0" y="73.0" width="784.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
 <rect x="232.0" y="273.0" width="584.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
 <rect x="432.0" y="373.0" width="384.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<rect x="32.0" y="373.0" width="384.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="373.0" width="384.0" height="298.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
 <path d="M204.0,228.0 C224.0,228.0 224.0,228.0 244.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M404.0,228.0 C424.0,228.0 424.0,228.0 444.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M604.0,228.0 C624.0,228.0 624.0,228.0 644.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
@@ -159,6 +159,11 @@
 <text x="124.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Data and caches</text>
 <text x="124.0" y="540.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Featur</text>
 </g>
+<g><title>scratch: training/scratch.py</title><rect x="44" y="597.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="124.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Scratch hygiene</text>
+<text x="124.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">tmpdir, cached, dump</text>
+<text x="124.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">scratch.py</text>
+</g>
 <g><title>trainer: training/train.py</title><rect x="244" y="497.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="324.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer</text>
 <text x="324.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">EMA, resume, stop</text>
@@ -173,13 +178,13 @@
 <text x="242.0" y="288.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">radar branch</text>
 <text x="442.0" y="388.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">consumer side: outside the model&#x27;s forward</text>
 <text x="42.0" y="388.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training only</text>
-<text x="24" y="600" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
-<rect x="24" y="612" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="622" font-size="11" fill="#334155">input</text>
-<rect x="95.0" y="612" width="18" height="12" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/><text x="119.0" y="622" font-size="11" fill="#334155">learned network (gradient flows)</text>
-<rect x="333.4" y="612" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="357.4" y="622" font-size="11" fill="#334155">fixed math, differentiable</text>
-<rect x="534.6" y="612" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="558.6" y="622" font-size="11" fill="#334155">frozen / cached (no gradient)</text>
-<rect x="754.4000000000001" y="612" width="18" height="12" rx="3" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4 2"/><text x="778.4000000000001" y="622" font-size="11" fill="#334155">rule step (no gradient)</text>
-<rect x="937.0000000000001" y="612" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="961.0000000000001" y="622" font-size="11" fill="#334155">delivered output</text>
-<rect x="1076.2" y="612" width="18" height="12" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/><text x="1100.2" y="622" font-size="11" fill="#334155">training only (data, GT, loss)</text>
-<rect x="24" y="630" width="18" height="12" rx="3" fill="#fff7ed" stroke="#ea580c" stroke-width="1.4"/><text x="48" y="640" font-size="11" fill="#334155">alternative block (ModelConfig switch, not in the base chain)</text>
+<text x="24" y="700" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
+<rect x="24" y="712" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="722" font-size="11" fill="#334155">input</text>
+<rect x="95.0" y="712" width="18" height="12" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/><text x="119.0" y="722" font-size="11" fill="#334155">learned network (gradient flows)</text>
+<rect x="333.4" y="712" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="357.4" y="722" font-size="11" fill="#334155">fixed math, differentiable</text>
+<rect x="534.6" y="712" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="558.6" y="722" font-size="11" fill="#334155">frozen / cached (no gradient)</text>
+<rect x="754.4000000000001" y="712" width="18" height="12" rx="3" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4 2"/><text x="778.4000000000001" y="722" font-size="11" fill="#334155">rule step (no gradient)</text>
+<rect x="937.0000000000001" y="712" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="961.0000000000001" y="722" font-size="11" fill="#334155">delivered output</text>
+<rect x="1076.2" y="712" width="18" height="12" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/><text x="1100.2" y="722" font-size="11" fill="#334155">training only (data, GT, loss)</text>
+<rect x="24" y="730" width="18" height="12" rx="3" fill="#fff7ed" stroke="#ea580c" stroke-width="1.4"/><text x="48" y="740" font-size="11" fill="#334155">alternative block (ModelConfig switch, not in the base chain)</text>
 </svg>

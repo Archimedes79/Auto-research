@@ -78,6 +78,8 @@
     {"id": "data", "label": "Data and caches", "kind": "train", "col": 0, "row": 4,
      "code": ["training/feature_cache.py::FeatureStore", "training/nuscenes_dataset.py", "training/augment.py", "training/gt_cache_build.py", "training/cache_bevfusion_features.py"],
      "note": "camera feature cache, radar cache, GT cache, mirror augmentation"},
+    {"id": "scratch", "label": "Scratch hygiene\ntmpdir, cached, dump", "kind": "train", "col": 0, "row": 5, "code": ["training/scratch.py"],
+     "note": "keeps bev_fusion/temp small: a fresh folder per smoke run removed on exit, list caches that are reused or deleted, dumps keyed by what they hold (written after C: was full with 18 GB of scratch)"},
     {"id": "trainer", "label": "Trainer\nEMA, resume, stop", "kind": "train", "col": 1, "row": 4, "code": ["training/train.py"], "note": "AdamW + cosine, gradient accumulation, EMA 0.999, checkpoint before evaluation, resume, CONTROL / STOPPED"},
     {"id": "alt", "label": "Alternatives\nin ModelConfig", "kind": "alt", "col": 5, "row": 0,
      "code": ["training/blocks_new.py::RadarPillars", "training/fallbacks.py::EgoWarpGRU", "training/lane_branch.py"],
@@ -98,7 +100,7 @@
     {"label": "camera branch", "nodes": ["frozen", "lift", "cam_reduce", "cam_temporal", "recentre"]},
     {"label": "radar branch", "nodes": ["radar_pre", "raster", "radar_convs"]},
     {"label": "consumer side: outside the model's forward", "nodes": ["lines_x", "lines_out", "decode", "boxes"]},
-    {"label": "training only", "nodes": ["gt", "loss", "data", "trainer"]}
+    {"label": "training only", "nodes": ["gt", "loss", "data", "trainer", "scratch"]}
   ],
   "main_path": {"from": ["in_cam", "in_rad", "in_ego"], "to": ["maps", "objmaps", "lines_out", "boxes"]},
   "covers": [{"dir": "training", "glob": "*.py"}],
