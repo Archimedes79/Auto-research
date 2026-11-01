@@ -99,3 +99,23 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
   the two frozen feature sets together keep the maps of BEVFusion AND the objects of DualBEV. Prediction hit on all five numbers (front mAP2 0.33 (0.25-0.38) -> 0.361; lane divider 0.34 -> 0.335; drivable 0.80 -> 0.806;
   walkway 0.33 -> 0.340; ped AP@2 0.15 -> 0.199, better than predicted). Caveats: one seed, the control also one seed (s1 crashed), no latency measured (two image encoders: not a product design, an
   information test); the maps of dual vs bevfeat are within the band, so "no loss" not "gain". Decision: seed twin `t10.dual_s1` next (E1), then the cost question (can the map side be had with one encoder).
+
+## 3 Lever 1: the dual chain at 6000 steps (card written 2026-11-01 before any run; proposed for the queue, not started)
+
+- **Question.** What is the slope of the dual features with training length, and does it carry the maps toward the SOA at a cost this machine can pay?
+- **Why now.** `../t6_soa_gap/report.md` section 5: for the OLD features the first doubling of the steps (3000 -> 6000) bought +0.053 on the lane divider, +0.034 walkway, +0.055
+  crossing and +0.023 drivable, and the remaining gap to GaussianCaR then needed 4 - 10 more doublings (16 - 1000 x the compute). With the new features the slope is unknown; it decides whether
+  "the SOA is reachable on this hardware" is a claim or a wish (the sceptical review of the case file, 2026-11-01, objection 7).
+- **Hypothesis.** The dual chain is still under-trained at 3000 steps (0.55 epoch). At 6000 steps the maps gain at least 0.75 x the old features' first-doubling rate (the new features
+  start closer to the SOA, so there is less to gain).
+- **Prediction** (cold VAL 1000, `seg_fov`, before the run): lane divider@0.5 0.375 (0.335 - 0.415), walkway 0.370 (0.340 - 0.410), crossing 0.19 (0.15 - 0.25), drivable@0 0.78
+  (0.76 - 0.80), front-sector mAP2 0.372 (0.35 - 0.40).
+- **Decision rule** (written now): gain of the lane divider over `t10_dual_s0` (3000 steps; the mean of the two dual seeds when `t10_dual_s1` exists) >= +0.04 -> KEEP the lever (continue with the
+  stride-4 branch and the longer budget); < +0.02 -> CUT: drop "the SOA is reachable on this hardware" and keep "SOA-level on camera detection, partial on maps"; in between -> INCONCLUSIVE
+  (add a seed, do not adopt). Guards: front mAP2 not below 0.361 - 0.054 (objects kept); walkway and crossing change with the same sign.
+- **Design.** One arm `t10_dual_long_s0` = `t10_dual_s0` with `steps` 6000 and `eval_every` 2000 (exactly the difference of `t3_ref_long` to `t2_ref_s0`, the matched reference of the old
+  features: lane divider 0.234, walkway 0.225, crossing 0.057, drivable 0.689 at 6000 steps, same frames). Controls: `t10_dual_s0` / `s1` (3000 steps) and `t3_ref_long`. One seed; the seed
+  twin of the 3000-step chain is the noise reference.
+- **Budget.** About 3 - 4 GPU hours (115 min per 3000 steps on the shared GPU) plus 10 min for the evaluation.
+- **Gate / kill.** The t7 loss rule at step 1000 (`group.lines` mean over steps 900 - 1000 above 1.48: stop); a NaN or a CUDA unknown error: resume from the last checkpoint once. It needs a free
+  GPU slot and less than 3 GB in use; the velocity arms and the lane GPU arms come first (D28). Config `training/configs/t10_dual_long_s0.json`, start line `temp/t10/start_long.sh`.
