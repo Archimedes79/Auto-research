@@ -4,9 +4,9 @@
 <rect width="1948" height="680" fill="#ffffff"/>
 <text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion target: precompute, input interface, modular network, output interface, removable post-processing</text>
 <text x="24" y="50" font-size="12" fill="#475569">Agreed by Mirko 2026-11-01, built after the 6000-step run. Left of the input interface nothing learns; between the two interfaces every slot is a swappable block with a stated contract and no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner. Each box names the code it is built from today.</text>
-<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 14 stages = 9 learned, 2 fixed-differentiable, 3 frozen, 0 rule steps</text>
+<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 15 stages = 9 learned, 2 fixed-differentiable, 4 frozen, 0 rule steps</text>
 <text x="119.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">Sensors</text>
-<text x="309.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">1 Precompute</text>
+<text x="309.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">1 Precompute (separate step)</text>
 <text x="499.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">2 Input interface</text>
 <text x="689.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3a Encoders</text>
 <text x="879.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3b Temporal</text>
@@ -48,6 +48,10 @@
 <path d="M1449.0,289.0 C1449.0,358.0 1449.0,358.0 1449.0,427.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1524.0,458.0 C1544.0,458.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1714.0,308.0 C1734.0,308.0 1734.0,458.0 1754.0,458.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M309.0,389.0 C309.0,408.0 309.0,408.0 309.0,427.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M384.0,458.0 C404.0,458.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M384.0,458.0 C879.0,458.0 879.0,558.0 1374.0,558.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M384.0,458.0 C1069.0,458.0 1069.0,358.0 1754.0,358.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <g><title>in_cam: training/nuscenes_dataset.py::FrontRadarDataset</title><rect x="44" y="127.0" width="150" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
 <text x="119.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Cameras</text>
 <text x="119.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">now + past frames</text>
@@ -152,11 +156,11 @@
 <text x="1829.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">threshold</text>
 <text x="1829.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">metrics.py::line_cells</text>
 </g>
-<g><title>decode: training/object_head.py::decode</title><rect x="1754" y="227.0" width="150" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
+<g><title>decode: training/extract.py::select_boxes</title><rect x="1754" y="227.0" width="150" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
 <text x="1829.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Select boxes</text>
 <text x="1829.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">local max, top-k,</text>
 <text x="1829.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">threshold</text>
-<text x="1829.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::decode</text>
+<text x="1829.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">extract.py::select_boxe</text>
 </g>
 <g><title>consumers: evaluation/bev_adapter.py::predictions; evaluation/board.py</title><rect x="1754" y="327.0" width="150" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
 <text x="1829.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Boxes, lines</text>
@@ -190,15 +194,23 @@
 <text x="879.0" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">temporal</text>
 <text x="879.0" y="385.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_branch.py::LaneBra</text>
 </g>
-<g><title>soft: training/object_head.py::decode; evaluation/metrics.py::line_cells</title><rect x="1374" y="427.0" width="150" height="62" rx="7" fill="#e0f2fe" stroke="#0284c7" stroke-width="2.2"/>
+<g><title>soft: training/extract.py::dense_boxes; training/extract.py::soft_line_map</title><rect x="1374" y="427.0" width="150" height="62" rx="7" fill="#e0f2fe" stroke="#0284c7" stroke-width="2.2"/>
 <text x="1449.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Soft extraction</text>
 <text x="1449.0" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">peaks, box params,</text>
 <text x="1449.0" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">line map</text>
-<text x="1449.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::decode </text>
+<text x="1449.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">extract.py::dense_boxes</text>
+</g>
+<g><title>vis: training/lift_pd.py::camera_visibility; ../autogt/nuscenes_gt.py::radar_coverage</title><rect x="234" y="427.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="309.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Visibility maps</text>
+<text x="309.0" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">camera, radar,</text>
+<text x="309.0" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">hidden</text>
+<text x="309.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lift_pd.py::camera_visi</text>
 </g>
 <text x="612.0" y="118.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">3 network: one slot per block, the kind chosen in the config, a contract test per kind</text>
 <text x="232.0" y="518.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training only</text>
 <text x="784.0" y="203.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">radar</text>
+<text x="879.0" y="503.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">loss masks</text>
+<text x="1069.0" y="403.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">scoring masks</text>
 <text x="24" y="630" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
 <rect x="24" y="642" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="652" font-size="11" fill="#334155">sensor</text>
 <rect x="101.2" y="642" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="125.2" y="652" font-size="11" fill="#334155">precompute: deterministic, cached with an identity, no weights learned before it</text>

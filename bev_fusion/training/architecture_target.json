@@ -68,7 +68,7 @@
   },
   {
    "col": 1,
-   "label": "1 Precompute"
+   "label": "1 Precompute (separate step)"
   },
   {
    "col": 2,
@@ -333,7 +333,7 @@
    "col": 9,
    "row": 1,
    "code": [
-    "training/object_head.py::decode"
+    "training/extract.py::select_boxes"
    ],
    "note": "the only box step left outside the network: picks cells of the dense box output for the metrics and the prototype; with the hard local maximum it gives exactly today's boxes"
   },
@@ -416,10 +416,22 @@
    "col": 7,
    "row": 3,
    "code": [
-    "training/object_head.py::decode",
-    "evaluation/metrics.py::line_cells"
+    "training/extract.py::dense_boxes",
+    "training/extract.py::soft_line_map"
    ],
    "note": "built from today's decode and line extraction: per cell a peak weight (heatmap x exp(-beta (maxpool - heatmap))), the box parameters (centre with offset, size, yaw with a soft direction sign, velocity x sigmoid(moving)) and a soft line map (near-zero distance x soft local minimum); fixed math, differentiable"
+  },
+  {
+   "id": "vis",
+   "label": "Visibility maps\ncamera, radar, hidden",
+   "kind": "pre",
+   "col": 1,
+   "row": 3,
+   "code": [
+    "training/lift_pd.py::camera_visibility",
+    "../autogt/nuscenes_gt.py::radar_coverage"
+   ],
+   "note": "made once per frame and read by the network (memory write masks, optional input channels), the training (loss weights per output, D36) and the evaluation (scoring masks, coverage classes); one definition, autogt.coverage_for of the GT Discussion chat's D36 plan; today two: the model's camera_visibility and the GT masks"
   }
  ],
  "edges": [
@@ -549,6 +561,25 @@
    "from": "out_iface",
    "to": "planner",
    "label": "dense, differentiable"
+  },
+  {
+   "from": "pre_ego",
+   "to": "vis",
+   "label": "calibration"
+  },
+  {
+   "from": "vis",
+   "to": "iface"
+  },
+  {
+   "from": "vis",
+   "to": "loss",
+   "label": "loss masks"
+  },
+  {
+   "from": "vis",
+   "to": "consumers",
+   "label": "scoring masks"
   }
  ],
  "groups": [
