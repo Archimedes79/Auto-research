@@ -73,6 +73,7 @@ class LossConfig:
     w_direction: float = 0.5
     dense_objects: bool = True         # decision (2): footprint coverage in the semantic head
     w_obj_vel: float = 0.2             # object_head.head_loss velocity weight
+    w_obj_mov: float = 1.0             # its moving / static BCE weight (only with model.object_moving, t11)
     w_refine: float = 1.0              # S5c refinement loss in the objects group (when the model refines)
     max_obj: int = 128
     motion_min_speed: float = 1.0
@@ -323,7 +324,7 @@ def refine_gt_boxes(g, grid, groups=NUSC_GROUPS):
     return out
 
 
-def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0.2, max_obj=128):
+def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0.2, max_obj=128, w_mov=1.0):
     """Stage 1 via object_head.head_loss. A box is supervised if it is observed (gt_bev meta 'observed': any lidar /
     radar point) and its centre cell has w_obj > 0; the others are ignored (neither positive nor negative: their peak
     region and every cell of w_obj = 0 get a constant logit, so no loss gradient). Returns (head_loss dict, targets)."""
@@ -348,7 +349,7 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
     if any(drop):
         ign = ign | ((build_targets(drop, grid, groups, max_obj)["hm"].to(dev) > 0) & (t["hm"].to(dev) == 0))
     hm = torch.where(ign, torch.full_like(out["hm"], -1e4), out["hm"])
-    return head_loss(dict(out, hm=hm), t, w_vel), t
+    return head_loss(dict(out, hm=hm), t, w_vel, w_mov=w_mov), t
 
 
 def motion_term(v_hat, T, cfg):
@@ -464,7 +465,7 @@ class BEVLoss(nn.Module):
         tt = None
         if "obj" in p:
             lo, tt = object_head_terms(p["obj"], T["boxes"], T["w_obj"], self.grid, self.groups, cfg.w_obj_vel,
-                                       cfg.max_obj)
+                                       cfg.max_obj, cfg.w_obj_mov)
             terms.update(("objhead." + k, v) for k, v in lo.items())
             add("objects", lo["total"])
         if "refine" in p:                                     # S5c, candidates built by the model (model.refine)

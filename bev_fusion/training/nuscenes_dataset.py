@@ -152,8 +152,13 @@ class FrontRadarDataset(torch.utils.data.Dataset):
     # ---- GT (optionally cached)
     def gt_signature(self):
         """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (autogt source + flags), the suffix of its GT
-        cache files; recorded by train.py (runs/<name>/gt.json) and by the evaluation (metrics.json, the suite's manifest)"""
-        return f"{self.grid.res}_{self.gt_ss}_{self.gt.signature()}"
+        cache files; recorded by train.py (runs/<name>/gt.json) and by the evaluation (metrics.json, the suite's manifest).
+        A grid with other extents than the default front grid (x 0..60 m, y -26..26 m) is another GT of the same resolution: its
+        extents follow the resolution ('0.5_x0_40_y-20_20_4_<signature>'). The default keeps the names of every existing cache file."""
+        g, d = self.grid, Grid()
+        ext = "" if (g.x_min, g.x_max, g.y_min, g.y_max) == (d.x_min, d.x_max, d.y_min, d.y_max) \
+            else "_x%g_%g_y%g_%g" % (g.x_min, g.x_max, g.y_min, g.y_max)
+        return f"{g.res}{ext}_{self.gt_ss}_{self.gt.signature()}"
 
     def _gt(self, token):
         # the generator signature is part of the key: GT cached by an older generator is never reused

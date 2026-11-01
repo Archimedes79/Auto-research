@@ -15,12 +15,25 @@ bev_fusion/_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is delet
 Never touches code, the current cache, or anything outside these categories.
 """
 import datetime
+import json
 import os
 import shutil
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)                                   # the bev_fusion folder
+RUNNING_S = 3600                                               # a folder with a provisional index that changed within this long may have a build running
+
+
+def _running(p):
+    """True for a cache folder whose index is provisional (`build` writes it before the first keyframe, "complete": false until the end)
+    and that was written to within the last hour: a build may still be running in it, so it is not offered as a stale cache"""
+    try:
+        with open(os.path.join(p, "index.json")) as f:
+            idx = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(idx, dict) and idx.get("complete") is False and time.time() - os.path.getmtime(p) < RUNNING_S
 
 
 def _size(p):
@@ -47,7 +60,8 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
         items.append((old, "old-outputs"))
     if all_caches and os.path.isdir(all_caches):
         items += [(os.path.join(all_caches, d), "cache") for d in sorted(os.listdir(all_caches))
-                  if os.path.exists(os.path.join(all_caches, d, "index.json"))]          # only what autogt marked as its cache
+                  if os.path.exists(os.path.join(all_caches, d, "index.json"))          # only what autogt marked as its cache,
+                  and not _running(os.path.join(all_caches, d))]                         # and not a build that may still be running
     if stale_caches and os.path.isdir(stale_caches):
         if current_signature is None:
             from .suite import current_signature as sig_of
@@ -56,7 +70,7 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
         keep = {current_signature} if isinstance(current_signature, str) else set(current_signature)
         for d in sorted(os.listdir(stale_caches)):
             p = os.path.join(stale_caches, d)
-            if os.path.isdir(p) and os.path.exists(os.path.join(p, "index.json")) and d not in keep:
+            if os.path.isdir(p) and os.path.exists(os.path.join(p, "index.json")) and d not in keep and not _running(p):
                 items.append((p, "stale-cache"))
     if older_than is not None:
         limit = time.time() - older_than * 86400
