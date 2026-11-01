@@ -61,7 +61,7 @@ def _flat_name(m: str, rest: str, prefix_seg: str):
     if m == "seg":
         mask, r = rest.split("/", 1)
         return f"{prefix_seg}_{mask}/seg/{r}"
-    if m in ("det", "detr", "curve"):
+    if m in ("det", "detr", "curve", "detf", "detfp", "cov"):
         return f"{m}/{rest}"
     if m == "loss":
         return "val_loss/" + rest.split("/", 1)[1]
@@ -236,6 +236,10 @@ def headline_table(flat: dict) -> str:
     for layer in ("drivable_area", "walkway", "carpark_area", "ped_crossing", "lane_divider", "road_divider", "vehicle", "pedestrian"):      # --curves only
         keys += [f"curve/dt+0.00/{layer}/{m}" for m in ("ap", "roc_auc", "ece")]
     keys += [f"curve/dt+0.00/velocity/{sub}/{m}" for sub in ("obj", "moving") for m in ("epe", "rmse", "r2", "bias")]
+    for dp in ("detf", "detfp"):                                    # --fusion only: the fusion-area rule (D37 / D38), a separate label from `det`
+        keys += [f"{dp}/dt+0.00/mean/all/mAP"] + [f"{dp}/dt+0.00/{cls}/all/{m}" for cls in ("vehicle", "pedestrian", "two_wheeler") for m in ("ap@2", "ap@4", "ate", "n_gt")]
+    keys += [f"cov/dt+0.00/{cls}/{c}/{m}" for cls in ("vehicle", "pedestrian") for c in ("all", "care", "partial", "dont_care", "camera", "cam_radar", "cam_only", "radar_only", "neither")
+             for m in ("n_gt", "recall2m")]
     keys += [k for k in flat if k.startswith(("val_loss/", "ms/", "info/"))]
     lines = []
     for k in keys:
@@ -293,6 +297,7 @@ def make_suite(a, prior: int = 0, state: str = None):
     source, subject, task = build(a.run, device=a.device, split=a.split, workers=a.workers, ckpt_dir=a.ckpt_dir, control=a.control, prior=prior)
     out = a.out or os.path.join(a.run, "eval", "suite")
     task.curves = bool(getattr(a, "curves", False))                          # --curves: PR / ROC / calibration / velocity regression next to the standard numbers
+    task.fusion = bool(getattr(a, "fusion", False))                          # --fusion: boxes scored on the fusion area (detf / detfp) and the coverage split (cov), D37 / D38
     return EvalSuite(source, subject, task, out=out, state=state or a.state)
 
 
@@ -313,7 +318,7 @@ def cmd_eval(a, rest) -> int:
     prov0 = provenance_start(suite)                                         # the evaluator's and the checkpoint's hash NOW, before any frame is scored
     from evalsuite.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
-    name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}_n{e.n or 'all'}"      # curve numbers need their own store: an eval made without them is not resumed
+    name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
     gt_now = suite.source.describe().get("gt_signature")                 # the GT scored against (autogt is read live, not pinned)
     quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
     refusal, gt_sig = gt_conflict(os.path.join(quant_dir, name), gt_now, e.force_resume)
@@ -477,8 +482,8 @@ def cmd_memory(a, rest) -> int:
     return 0
 
 
-def _task_only(run: str):
-    """the Task of a run without loading its checkpoint (metrics definitions only)"""
+def _task_only(run: str, curves: bool = False, fusion: bool = False):
+    """the Task of a run without loading its checkpoint (metrics definitions only; curves / fusion: the metric families of a store made with --curves / --fusion)"""
     from evaluation import bev_adapter as B
     from evaluation.bev_task import BEVTask
     os.chdir(ROOT)
@@ -488,7 +493,9 @@ def _task_only(run: str):
         cfg = ns.T.TrainConfig(**json.load(f))
     model, _, _ = ns.T.build(cfg)
     refine = bool(cfg.model.get("refine")) and hasattr(model, "boxes")
-    return BEVTask(model.grid, model.spec, [g for g, _ in ns.NUSC_GROUPS], refine=refine)
+    task = BEVTask(model.grid, model.spec, [g for g, _ in ns.NUSC_GROUPS], refine=refine)
+    task.curves, task.fusion = curves, fusion
+    return task
 
 
 def gt_check(run_a: str, run_b: str, ids: dict, force: bool = False) -> list:
@@ -572,9 +579,11 @@ def cmd_compare(argv) -> int:
     p.add_argument("--det-b", default="det")
     p.add_argument("--dt", type=float, default=0.0, help="legacy records only: target time of the detection numbers")
     p.add_argument("--force", action="store_true", help="compare even when the GT signatures or (legacy records) the frame sets differ")
+    p.add_argument("--curves", action="store_true", help="compare the stores made with `eval --curves` (PR / ROC / calibration / velocity numbers are bootstrapped too)")
+    p.add_argument("--fusion", action="store_true", help="compare the stores made with `eval --fusion` (detf / detfp / cov)")
     c = p.parse_args(argv)
     from evalsuite.quantitative import Quantitative
-    name = f"eval{c.tag}_n{c.n}"
+    name = f"eval{c.tag}{'_curves' if c.curves else ''}{'_fusion' if c.fusion else ''}_n{c.n}"
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
     train_ids = (train_gt(c.run_a), train_gt(c.run_b))
     if not all(os.path.exists(s) for s in stores):
@@ -595,7 +604,7 @@ def cmd_compare(argv) -> int:
     for w in gt_check(c.run_a, c.run_b, {"evaluation GT": tuple((m.get("source") or {}).get("gt_signature") for m in mans),
                                          "training GT": train_ids}, c.force):
         print(w)
-    task = _task_only(c.run_a)
+    task = _task_only(c.run_a, c.curves, c.fusion)
     q = Quantitative(SimpleNamespace(out=os.path.join(c.run_a, "eval", "suite"), task=task))
     res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed,
                     force=c.force, ignore={"source": ("feature_cache", "control")})   # the arms may differ in what the model is fed (t8: features)
@@ -607,8 +616,8 @@ def cmd_compare(argv) -> int:
 
 
 REPORT_NOTE = ("maps are scored on `seg_fov` = the grid cells the front camera sees (62 % of the grid; today's fusion area, D37), objects inside "
-               "+-32.3 deg and x < 60 m; boxes without a lidar / radar point are dropped from the GT, a detection on one still counts as a false "
-               "detection (D38 will make that two-sided). dt +-0.5 s = the neighbouring keyframe in its own ego frame.")
+               "+-32.3 deg and x < 60 m; `det`: boxes without a lidar / radar point are dropped from the GT, a detection on one still counts as a false "
+               "detection (`detf` / `detfp` of `eval --fusion` make that two-sided, D38). dt +-0.5 s = the neighbouring keyframe in its own ego frame.")
 
 
 def cmd_report(a, rest) -> int:
@@ -690,6 +699,7 @@ def main(argv=None) -> int:
     p.add_argument("--split", default="val", choices=["val", "train"])
     p.add_argument("--ckpt-dir", default=None)
     p.add_argument("--curves", action="store_true", help="also PR / ROC / calibration per layer and velocity regression (evaluation/bev_curves.py)")
+    p.add_argument("--fusion", action="store_true", help="also boxes scored on the fusion area (detf: care boxes, detfp: + partial) and the coverage split of the complete GT set (cov), D37 / D38 (evaluation/bev_fusion_area.py)")
     p.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"])
     p.add_argument("--out", default=None)
     p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])

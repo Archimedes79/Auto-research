@@ -42,6 +42,19 @@ def signatures():
     return out
 
 
+def resolve_sig(sig=None):
+    """the GT signature to check: the one named (it must have cached frames), else the current v5 `15efbde2d1` when it is cached, else the one with the most frames"""
+    have = signatures()
+    if sig:
+        assert sig in have, f"no cached frames with signature {sig} in {cache_dir()}; cached: {dict(sorted(have.items(), key=lambda x: -x[1]))}"
+        return sig
+    if "15efbde2d1" in have:
+        return "15efbde2d1"
+    best = max(have, key=have.get)
+    print(f"WARNING: no cached frames of the current GT 15efbde2d1; using {best} ({have[best]} frames)", flush=True)
+    return best
+
+
 def load(path):
     return np.load(path, allow_pickle=True)["gt"].item()
 
@@ -142,6 +155,7 @@ def build_task():
     from losses import NUSC_GROUPS, layer_spec
     task = BEVTask(Grid(), layer_spec(False, True), [g for g, _ in NUSC_GROUPS])
     task.curves = True
+    task.fusion = True
     return task
 
 
@@ -288,7 +302,7 @@ def compare_versions(a, b, n, seed):
         r = acc.setdefault("boxes (count)", [0, 0.0, 0.0, 0.0, 0.0])
         r[0] += 1
         r[1] += float(na != nb)
-    print(f"{'layer':22s}{'frames':>8s}{'cells differ':>14s}{'IoU(bin)':>10s}{'max |d|':>10s}")
+    print(f"{'layer':22s}{'frames':>8s}{'cells differ':>14s}{'IoU(>0.5)':>10s}{'max |d|':>10s}")
     for k, r in acc.items():
         if k == "boxes (count)":
             print(f"{k:22s}{r[0]:8d}{r[1] / r[0]:14.3f}  (share of frames with another number of boxes)")
@@ -299,12 +313,13 @@ def compare_versions(a, b, n, seed):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--n", type=int, default=24)
-    ap.add_argument("--sig", default="15efbde2d1")
+    ap.add_argument("--sig", default=None, help="GT signature (default: 15efbde2d1 = v5, else the most frequent one in the cache)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--versions", nargs=2, metavar=("SIG_A", "SIG_B"))
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
+    a.sig = resolve_sig(a.sig) if not (a.list or a.versions) else a.sig
     if a.list:
         for s, c in sorted(signatures().items(), key=lambda x: -x[1]):
             print(f"{s}  {c} frames")

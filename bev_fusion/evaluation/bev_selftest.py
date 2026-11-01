@@ -378,7 +378,7 @@ def _():
     with open(os.path.join(run, "ckpt_00000007.pt"), "wb") as f:
         f.write(b"checkpoint bytes")
     keys = ["scene-0001/1", "scene-0001/0"]
-    store = SimpleNamespace(frames=[{"key": k} for k in keys])
+    store = SimpleNamespace(frames=[{"key": k} for k in keys], scene_names=lambda: ["scene-0001"])
     a, e = SimpleNamespace(run=run, split="val", control="", ckpt_dir=None), SimpleNamespace(n=2, warm=False, prior=0)
     subj = {"checkpoint": "ckpt_00000007.pt", "step": 7}
     pv = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset")
@@ -387,6 +387,8 @@ def _():
     assert pv["subject"]["ckpt_hash"] not in (None, "unknown") and pv["subject"]["config_hash"] not in (None, "unknown"), pv["subject"]
     assert pv["subject"]["train_gt"]["signature"] == "15efbde2d1", pv["subject"]
     assert pv["data"]["n"] == 2 and pv["data"]["split"] == "val"
+    use = pv["data"]["use"]                                                    # which data was used, readable without code (2026-11-01)
+    assert use["scene_names"] == ["scene-0001"] and use["scenes_evaluated"] == 1 and use["frames_evaluated"] == 2 and "nuScenes official split 'val'" in use["split_rule"], use
     assert pv["data"]["frame_hash"] == hashlib.sha256("\n".join(sorted(keys)).encode()).hexdigest()[:12], "the frame hash is over the sorted keys"
     assert pv["gt"]["signature"] == "15efbde2d1" and pv["gt"]["key"] == "0.5_4_15efbde2d1"
     assert pv["evaluator"]["paths"] == ["bev_fusion/evaluation", "autoresearch/evalsuite"] and pv["evaluator"]["code_hash"] not in (None, "unknown"), pv["evaluator"]

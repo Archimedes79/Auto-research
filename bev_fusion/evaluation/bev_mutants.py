@@ -21,9 +21,10 @@ import numpy as np  # noqa: E402
 import evaluation.bev_response as R  # noqa: E402  (sets the import paths)
 import evaluation.bev_curves as C  # noqa: E402
 import evaluation.metrics as M  # noqa: E402
+import evaluation.bev_fusion_area as FA  # noqa: E402
 from evalsuite.comparison import boxes as B  # noqa: E402
 
-orig = {"cls": C.classification_numbers, "reg": C.regression_numbers, "tp": B.tp_errors, "front": M.in_front, "thr": M.TP_THRESHOLD, "vs": C.velocity_sums}
+orig = {"care": FA.CARE, "near": FA.NEAR, "prepare": FA.prepare, "share": FA.footprint_share, "farea": FA.fusion_area, "cls": C.classification_numbers, "reg": C.regression_numbers, "tp": B.tp_errors, "front": M.in_front, "thr": M.TP_THRESHOLD, "vs": C.velocity_sums}
 
 
 def m_auc_inverted():
@@ -91,15 +92,48 @@ def m_fov_mask_all():
     C.masks = bt.masks
 
 
+def m_care_threshold_03():                                           # the response rows count the classes with the same function: the module's own selftest catches this one
+    FA.CARE = 0.3
+
+
+def _near_neutral(d, gts_all, scored):
+    return any(b["group"] == d["group"] and FA._dist(d, b) <= FA.NEAR for b in gts_all if b not in scored)
+
+
+def m_neutral_rule_off():                                            # a detection on a neutral (partial / don't-care) box that lies inside the area counts again
+    real = FA.prepare
+
+    def prepare(dets, gts_all, shares, area, include_partial):
+        keep, scored = real(dets, gts_all, shares, area, include_partial)
+        return keep + [d for d in dets if d not in keep and orig["share"](d, area) >= 0.5], scored
+    FA.prepare = prepare
+
+
+def m_area_rule_off():                                               # detections outside the fusion area are kept (those on a neutral box stay out: only the area rule is removed)
+    real = FA.prepare
+
+    def prepare(dets, gts_all, shares, area, include_partial):
+        keep, scored = real(dets, gts_all, shares, area, include_partial)
+        return keep + [d for d in dets if d not in keep and not _near_neutral(d, gts_all, scored)], scored
+    FA.prepare = prepare
+
+
+def m_fusion_area_ignores_hidden():
+    FA.fusion_area = lambda g: (np.asarray(g["camera"], np.float32) > 0) & (np.asarray(g["radar"], np.float32) > 0)
+
+
 MUTANTS = [("ROC-AUC reported as 1 - AUC", m_auc_inverted), ("ECE without bin weights", m_ece_unweighted), ("Brier without the + P term", m_brier_without_P),
            ("RMSE without the square root", m_rmse_no_sqrt), ("ASE = 1 - sqrt(IoU)", m_ase_sqrt), ("AVE as L1 instead of L2", m_ave_L1), ("ATE x 1.1", m_ate_scaled),
            ("front window to 70 m", m_window_70m), ("TP threshold 1 m instead of 2 m", m_tp_threshold_1m), ("AOE without the 2 pi wrap", m_aoe_no_wrap),
-           ("moving-cell velocity sums = all cells", m_velocity_sums_skip_moving), ("camera mask = every cell (code side only)", m_fov_mask_all)]
+           ("moving-cell velocity sums = all cells", m_velocity_sums_skip_moving), ("camera mask = every cell (code side only)", m_fov_mask_all),
+           ("care threshold 0.3 instead of 0.5", m_care_threshold_03), ("neutral rule off (detections on neutral boxes count)", m_neutral_rule_off),
+           ("detections outside the fusion area are kept", m_area_rule_off), ("fusion area ignores hidden cells", m_fusion_area_ignores_hidden)]
 
 
 def restore():
     C.classification_numbers, C.regression_numbers, B.tp_errors, M.in_front, M.TP_THRESHOLD, C.velocity_sums = (
         orig["cls"], orig["reg"], orig["tp"], orig["front"], orig["thr"], orig["vs"])
+    FA.CARE, FA.NEAR, FA.footprint_share, FA.fusion_area, FA.prepare = orig["care"], orig["near"], orig["share"], orig["farea"], orig["prepare"]
 
 
 def off(rows):
@@ -109,7 +143,8 @@ def off(rows):
 def main(argv):
     n = int(argv[0]) if argv and argv[0].isdigit() else 24
     only = [a for a in argv if not a.isdigit()]
-    _, base = R.all_rows(n, "15efbde2d1", 0)
+    sig = R.G.resolve_sig(None)
+    _, base = R.all_rows(n, sig, 0)
     print(f"baseline: {len(base)} rows, {len(off(base))} OFF")
     escaped = []
     for name, apply in MUTANTS:
@@ -118,8 +153,13 @@ def main(argv):
         restore()
         apply()
         try:
-            _, rows = R.all_rows(n, "15efbde2d1", 0)
+            _, rows = R.all_rows(n, sig, 0)
             bad = off(rows)
+            if not bad:                                                     # the unit selftest of the fusion-area module is the second net
+                try:
+                    FA.selftest()
+                except AssertionError as e:
+                    bad = [("bev_fusion_area selftest", str(e)[:40], 0.0, 1.0, 0.0)]
             print(f"{'CAUGHT ' if bad else 'ESCAPED'}  {name:55s} {len(bad):3d} rows off" + (f"   e.g. {bad[0][0][:40]} / {bad[0][1]}" if bad else ""), flush=True)
             if not bad:
                 escaped.append(name)

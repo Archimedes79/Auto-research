@@ -15,6 +15,7 @@ det: `dt+0.00/<class>/<bin>/<metric>`; with the metric name in front they are th
 from __future__ import annotations
 
 import math
+import os
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
@@ -268,8 +269,27 @@ class BEVTask(Task):
         if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
             from evaluation.bev_curves import BevCurveMetric
             ms.append(BevCurveMetric(self.spec, self.groups))
+        if getattr(self, "fusion", False):                                    # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers
+            from evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
+            ms += [BevFusionDetMetric(self.groups, "detf"), BevFusionDetMetric(self.groups, "detfp", include_partial=True), BevCoverageMetric(self.groups, self._pts())]
         ms.append(BevLossMetric())
         return ms
+
+    _PTS = []
+
+    def _pts(self):
+        """token -> (lidar, radar points) of the annotation table (loaded once); None when it was not built or cannot be read: the radar classes of `cov` are then left out,
+        and that is said on the console"""
+        if not self._PTS:
+            from evaluation.bev_annotation_pts import OUT, load
+            try:
+                self._PTS.append(load() if os.path.exists(OUT) else None)
+            except Exception as ex:                                           # a damaged table must not stop an evaluation
+                print(f"WARNING: annotation table unreadable ({type(ex).__name__}: {ex})", flush=True)
+                self._PTS.append(None)
+            if self._PTS[0] is None:
+                print(f"WARNING: no annotation table ({OUT}): `cov` leaves out the radar classes (cam_radar, cam_only, radar_only, neither); build it with `python evaluation/bev_annotation_pts.py build`", flush=True)
+        return self._PTS[0]
 
     def views(self) -> Dict[str, View]:
         stages = StagesView(self)

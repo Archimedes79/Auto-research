@@ -42,10 +42,10 @@ from evaluation.metrics import in_front  # noqa: E402
 CLASS = "vehicle"
 
 
-def det_numbers(samples, dets, task):
+def det_numbers(samples, dets, task, name="det"):
     from evalsuite import Prediction, Sample
     from evalsuite.contracts import FrameRef
-    metric = next(m for m in task.metrics() if m.name == "det")
+    metric = next(m for m in task.metrics() if m.name == name)
     counts = []
     for i, ((name, s), d) in enumerate(zip(samples, dets)):
         sample = Sample(ref=FrameRef("gt", i, name), inputs=None, reference={0.0: s[0.0]})
@@ -210,6 +210,205 @@ def gap_rows(samples, task):
     n_gt = m[f"{CLASS}/all/n_gt"]
     return [(f"a perfect detection on each of {hidden} UNOBSERVED vehicle boxes (no lidar / radar point)", "n_det (D38: ignored, = n_gt)", m[f"{CLASS}/all/n_det"], n_gt, 0.0),
             (f"a perfect detection on each of {hidden} UNOBSERVED vehicle boxes (no lidar / radar point)", "ap_all@2 (D38: 1)", m[f"{CLASS}/all/ap_all@2"], 1.0, 1e-9)]
+
+
+def annotated(samples, task):
+    """per sample: every annotated box of the scored classes inside the window (observed or not), with its fusion-area class (footprint share from the corners)
+    and the sample's area"""
+    from evaluation.bev_fusion_area import fusion_area, gt_class, gt_with_shares
+    out = []
+    for _, s in samples:
+        g = s[0.0]
+        boxes, shares = gt_with_shares(g, task.groups)
+        out.append(([dict(b, cls=gt_class(f)) for b, f in zip(boxes, shares) if in_front(b)], fusion_area(g)))
+    return out
+
+
+def geometry_rows(samples, task):
+    """footprint geometry against an INDEPENDENT area: the cached `vehicle` layer is the area, so the footprint of a vehicle box must lie in it (mean share >= 0.95);
+    a y flip, swapped length / width or a negated yaw must fall below 0.9. Then the autogt reference implementation (autogt/coverage.py, the GT owner's): the same fusion
+    cells, the same corner shares, and the same classes for the dict-based footprint that detections use."""
+    from autogt import coverage as AC
+    from autogt.grid import GridSpec
+    from evaluation.bev_fusion_area import corner_share, footprint_share, fusion_area, gt_class, gt_with_shares
+    rows, grid = [], GridSpec(res=0.5)
+    shares = {"as is": [], "y flipped": [], "length / width swapped": [], "yaw negated": []}
+    differ, maxdiff, n_cls, n_box = 0, 0.0, 0, 0
+    for _, s in samples:
+        g = s[0.0]
+        layer = np.asarray(g["vehicle"], np.float32) > 0                       # the layer holds the coverage of each cell by a box: any coverage counts
+        boxes, f_corner = gt_with_shares(g, task.groups)
+        for b, fc, rb in zip(boxes, f_corner, [r for r in g["meta"]["boxes"] if r["group"] in task.groups]):
+            if b["group"] == CLASS and "length" in b and in_front(b) and rb.get("observed", True):             # (an unobserved box may have no pixels in the layer)
+                for k, fn in (("as is", lambda b: b), ("y flipped", lambda b: dict(b, cy=-b["cy"])), ("length / width swapped", lambda b: dict(b, length=b["width"], width=b["length"])),
+                              ("yaw negated", lambda b: dict(b, yaw=-b["yaw"]))):
+                    shares[k].append(footprint_share(fn(b), layer))
+            ref = AC.footprint_share(rb["corners"], AC.fusion_cells(g), grid)
+            maxdiff = max(maxdiff, abs(fc - ref))
+            if "length" in b:
+                n_box += 1
+                n_cls += gt_class(footprint_share(b, fusion_area(g))) != gt_class(fc)
+        differ += int((fusion_area(g) != AC.fusion_cells(g)).sum())
+    m = {k: float(np.mean(v)) for k, v in shares.items()}
+    lab = f"geometry: {len(shares['as is'])} observed vehicle footprints against the cached vehicle layer as the area"
+    rows += [(lab, "mean share as is >= 0.95 (1 = yes)", float(m["as is"] >= 0.95), 1.0, 0.0)]
+    rows += [(lab, f"mean share {k} < 0.9 (1 = yes)", float(m[k] < 0.9), 1.0, 0.0) for k in ("y flipped", "length / width swapped", "yaw negated")]
+    lab = "autogt reference (autogt/coverage.py)"
+    rows += [(lab, "cells where fusion_area differs from fusion_cells", float(differ), 0.0, 0.0), (lab, "max |corner share - autogt footprint_share|", maxdiff, 0.0, 0.02),
+             (lab, "share of box footprints (dict form, as for detections) with another class than the corner form", n_cls / max(n_box, 1), 0.0, 0.01)]
+    return rows
+
+
+def false_in_area(ann, rng, score, inside):
+    """one false vehicle per frame, 8 - 50 m ahead, at least 6 m from EVERY annotated box (neutral ones too): inside the fusion area (share 1) or well outside (share 0)"""
+    from evaluation.bev_fusion_area import footprint_share
+    out = []
+    for bs, area in ann:
+        for _ in range(400):
+            x = rng.uniform(8.0, 50.0)
+            y = rng.uniform(-0.5, 0.5) * x * math.tan(0.56)
+            b = dict(group=CLASS, cx=x, cy=y, vx=0.0, vy=0.0, length=4.5, width=1.9, yaw=float(rng.uniform(-3, 3)), score=score)
+            f = footprint_share(b, area)
+            if (f == 1.0 if inside else f == 0.0) and all(math.hypot(x - a["cx"], y - a["cy"]) > 6.0 for a in bs):
+                out.append([b])
+                break
+        else:
+            out.append([])
+    return out
+
+
+def fusion_rows(samples, task):
+    """the fusion-area numbers (D37 / D38, evaluation/bev_fusion_area.py): `detf` scores the care boxes (footprint share >= 0.5 in camera x radar x not hidden), `detfp`
+    care + partial; boxes outside are neutral on BOTH sides. Expected values come from counting the annotated boxes by their class, never from the metric."""
+    rng = np.random.RandomState(5)
+    ann = annotated(samples, task)
+    veh = [[b for b in bs if b["group"] == CLASS] for bs, _ in ann]
+    cnt = {c: sum(1 for v in veh for b in v if b["cls"] == c) for c in ("care", "partial", "dont_care")}
+    Nc, Np = cnt["care"], cnt["partial"]
+    rows = geometry_rows(samples, task)
+    assert Nc > 0, f"too few frames for the fusion rows (no care box): use --n 24 or more"
+    rows += [("sanity: the fusion rows rest on all three classes being present", f"{c} boxes > 0 (1 = yes)", float(cnt[c] > 0), 1.0, 0.0) for c in ("care", "partial", "dont_care")]
+
+    def strip(bs):
+        return [dict({k: v for k, v in b.items() if k != "cls"}, score=1.0) for b in bs]
+
+    def run(dets, metric):
+        r = det_numbers(samples, dets, task, metric)
+        return lambda k: r[f"{CLASS}/all/{k}"]
+    everything = [strip(bs) for bs, _ in ann]
+    m = run(everything, "detf")
+    lab = f"detf: a perfect detection of EVERY annotated box ({Nc} care, {Np} partial, {cnt['dont_care']} don't care)"
+    rows += [(lab, "n_gt = care boxes", m("n_gt"), Nc, 0.0), (lab, "n_det (neutral ones ignored)", m("n_det"), Nc, 0.0), (lab, "n_tp", m("n_tp"), Nc, 0.0), (lab, "ap_all@2", m("ap_all@2"), 1.0, 1e-9)]
+    mp = run(everything, "detfp")
+    lab = "detfp: the same detections"
+    rows += [(lab, "n_gt = care + partial", mp("n_gt"), Nc + Np, 0.0), (lab, "n_det", mp("n_det"), Nc + Np, 0.0), (lab, "ap_all@2", mp("ap_all@2"), 1.0, 1e-9)]
+    care_only = [strip([b for b in bs if b["cls"] == "care"]) for bs, _ in ann]
+    m = run(care_only, "detf")
+    lab = "detf: detections of the care boxes ONLY (the neutral boxes are not 'missed')"
+    rows += [(lab, "n_gt", m("n_gt"), Nc, 0.0), (lab, "n_tp", m("n_tp"), Nc, 0.0), (lab, "ap_all@2", m("ap_all@2"), 1.0, 1e-9)]
+    from evaluation.bev_fusion_area import footprint_share
+    shifted, n_sh = [], 0                                              # the detection of a neutral box nudged (<= 1.5 m) until at least half of it lies in the area: still on a neutral object
+    for bs, area in ann:
+        o = [dict(b, cls=None) for b in bs if b["cls"] == "care"]
+        for b in bs:
+            if b["cls"] == "care":
+                continue
+            cand = [dict(b, cx=b["cx"] + dx, cy=b["cy"] + dy) for dx in (-1.5, -1.0, -0.5, 0, 0.5, 1.0, 1.5) for dy in (-1.5, -1.0, -0.5, 0, 0.5, 1.0, 1.5) if math.hypot(dx, dy) <= 1.5]
+            hit = [c for c in cand if footprint_share(c, area) >= 0.5 and in_front(c)]
+            if hit:
+                o.append(hit[0])
+                n_sh += 1
+        shifted.append(strip(o))
+    assert n_sh > 0, "no neutral detection could be nudged into the area"
+    m = run(shifted, "detf")
+    lab = f"detf: the care boxes + {n_sh} detections of NEUTRAL boxes nudged up to 1.5 m into the area (still on a neutral object)"
+    rows += [(lab, "n_det (neutral ones ignored)", m("n_det"), Nc, 0.0), (lab, "ap_all@2", m("ap_all@2"), 1.0, 1e-9)]
+    i, kept, k = 0, [], 0
+    for bs, _ in ann:
+        o = []
+        for b in bs:
+            if b["group"] == CLASS and b["cls"] == "care":
+                i += 1
+                if i % 5 == 0:
+                    k += 1
+                    continue
+            o.append(b)
+        kept.append(strip(o))
+    m = run(kept, "detf")
+    lab = f"detf: {k} of {Nc} care boxes removed"
+    rows += [(lab, "n_tp", m("n_tp"), Nc - k, 0.0), (lab, "ap_all@2", m("ap_all@2"), (Nc - k) / Nc, 1e-9)]
+    fi = false_in_area(ann, rng, 2.0, inside=True)
+    mi = sum(len(f) for f in fi)
+    assert mi > 0, "no false box could be placed inside the area"
+    m = run([e + f for e, f in zip(everything, fi)], "detf")
+    lab = f"detf: {mi} false vehicles INSIDE the fusion area, high score"
+    rows += [(lab, "n_det", m("n_det"), Nc + mi, 0.0), (lab, "ap_all@2 = N / (N + m)", m("ap_all@2"), Nc / (Nc + mi), 1e-9)]
+    fo = false_in_area(ann, rng, 2.0, inside=False)
+    mo = sum(len(f) for f in fo)
+    assert mo > 0, "no false box could be placed outside the area"
+    m = run([e + f for e, f in zip(everything, fo)], "detf")
+    lab = f"detf: {mo} false vehicles well OUTSIDE the fusion area, high score (don't care on both sides)"
+    rows += [(lab, "n_det (ignored)", m("n_det"), Nc, 0.0), (lab, "ap_all@2", m("ap_all@2"), 1.0, 1e-9)]
+    m = det_numbers(samples, everything, task, "det")
+    n_all = sum(1 for bs, _ in ann for b in bs if b["group"] == CLASS)
+    lab = "det (old) on the same detections: nothing is ignored, the detections on unobserved boxes are false alarms (the known D38 gap)"
+    rows += [(lab, "n_det = every detection in the window", m[f"{CLASS}/all/n_det"], n_all, 0.0), (lab, "n_gt < every annotated box (lidar-based `observed`)", float(m[f"{CLASS}/all/n_gt"] <= n_all), 1.0, 0.0)]
+    # role swap: the annotated boxes are the detections, the GT holds m extra care boxes the detector missed
+    ref = [strip(bs) + [{k2: v for k2, v in f.items() if k2 != "score"} for f in ff] for (bs, _), ff in zip(ann, fi)]
+    r = det_numbers(with_boxes(samples, ref), everything, task, "detf")
+    lab = f"SWAPPED detf: {mi} care boxes added to the GT (missed by the detector)"
+    rows += [(lab, "n_gt", r[f"{CLASS}/all/n_gt"], Nc + mi, 0.0), (lab, "n_tp", r[f"{CLASS}/all/n_tp"], Nc, 0.0), (lab, "ap_all@2 = N / (N + m)", r[f"{CLASS}/all/ap_all@2"], Nc / (Nc + mi), 1e-9)]
+    rows += coverage_rows(samples, task, ann, everything, kept)
+    return rows
+
+
+def coverage_rows(samples, task, ann, everything, kept):
+    """the `cov` split of the complete GT set: classes are counted straight from the annotated boxes, the recall ceiling follows from the detections removed"""
+    from evalsuite import Prediction, Sample
+    from evalsuite.contracts import FrameRef
+    metric = next(m for m in task.metrics() if m.name == "cov")
+
+    def run(dets):
+        counts = [metric.frame(Sample(ref=FrameRef("gt", i, n), inputs=None, reference={0.0: s[0.0]}), Prediction(outputs={"dt": {0.0: {"dets": d}}})) for i, ((n, s), d) in enumerate(zip(samples, dets))]
+        return metric.reduce(counts)
+    rows = []
+    r = run(everything)
+    g = lambda res, cls, c, k: res[f"dt+0.00/{cls}/{c}/{k}"]   # noqa: E731
+    n_all = sum(1 for bs, _ in ann for b in bs if b["group"] == CLASS)
+    n_cls = {c: sum(1 for bs, _ in ann for b in bs if b["group"] == CLASS and b["cls"] == c) for c in ("care", "partial", "dont_care")}
+    lab = "cov: a perfect detection of every annotated box"
+    rows += [(lab, "n_gt all = every annotated vehicle", g(r, CLASS, "all", "n_gt"), n_all, 0.0), (lab, "recall2m all", g(r, CLASS, "all", "recall2m"), 1.0, 1e-9)]
+    for c in n_cls:
+        rows += [(lab, f"n_gt {c}", g(r, CLASS, c, "n_gt"), n_cls[c], 0.0)]
+    rows += [(lab, "care + partial + dont_care = all", sum(g(r, CLASS, c, "n_gt") for c in n_cls), n_all, 0.0)]
+    lab = "cov: nothing detected"
+    r0 = run([[] for _ in samples])
+    rows += [(lab, "recall2m all", g(r0, CLASS, "all", "recall2m"), 0.0, 0.0), (lab, "n_gt all", g(r0, CLASS, "all", "n_gt"), n_all, 0.0)]
+    i, k_by = 0, {c: 0 for c in n_cls}
+    removed = []
+    for bs, _ in ann:
+        o = []
+        for b in bs:
+            if b["group"] == CLASS:
+                i += 1
+                if i % 4 == 0:
+                    k_by[b["cls"]] += 1
+                    continue
+            o.append({kk: v for kk, v in b.items() if kk != "cls"})
+        removed.append(o)
+    r1 = run(removed)
+    lab = f"cov: every 4th vehicle not detected ({sum(k_by.values())} of {n_all})"
+    rows += [(lab, "recall2m all", g(r1, CLASS, "all", "recall2m"), (n_all - sum(k_by.values())) / n_all, 1e-9)]
+    for c in n_cls:
+        if n_cls[c]:
+            rows += [(lab, f"recall2m {c}", g(r1, CLASS, c, "recall2m"), (n_cls[c] - k_by[c]) / n_cls[c], 1e-9)]
+    if metric.pts is not None:                                                    # the radar split needs the annotation table
+        lab = "cov (radar returns of the annotations): camera = cam_radar + cam_only; the rest = radar_only + neither"
+        cam = g(r, CLASS, "camera", "n_gt")
+        rows += [(lab, "n_gt cam_radar + cam_only = camera", g(r, CLASS, "cam_radar", "n_gt") + g(r, CLASS, "cam_only", "n_gt"), cam, 0.0),
+                 (lab, "n_gt radar_only + neither = all - camera", g(r, CLASS, "radar_only", "n_gt") + g(r, CLASS, "neither", "n_gt"), n_all - cam, 0.0),
+                 (lab, "recall2m cam_radar (all detected)", g(r, CLASS, "cam_radar", "recall2m"), 1.0, 1e-9)]
+    return rows
 
 
 def maps_rows(samples, task):
@@ -488,7 +687,7 @@ def swap_velocity_rows(samples, task):
 def all_rows(n, sig, seed):
     task = G.build_task()
     samples = G.pick(n, sig, seed)
-    return samples, (boxes_rows(samples, task) + maps_rows(samples, task) + velocity_rows(samples, task)
+    return samples, (boxes_rows(samples, task) + maps_rows(samples, task) + velocity_rows(samples, task) + fusion_rows(samples, task)
                      + swap_boxes_rows(samples, task) + swap_maps_rows(samples, task) + swap_velocity_rows(samples, task))
 
 
@@ -505,15 +704,16 @@ def print_rows(rows):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--n", type=int, default=50)
-    ap.add_argument("--sig", default="15efbde2d1")
+    ap.add_argument("--sig", default=None, help="GT signature (default: 15efbde2d1 = v5, else the most frequent one in the cache)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
+    a.sig = G.resolve_sig(a.sig)
     samples, rows = all_rows(a.n, a.sig, a.seed)
     print(f"{len(samples)} real GT frames, signature {a.sig}")
     print_rows(rows)
     gaps = gap_rows(samples, G.build_task())
-    print("\nKNOWN GAP (not asserted; becomes ok when D38 is implemented, then move the rows up):")
+    print("\nKNOWN GAP OF THE OLD `det` (not asserted: old numbers keep their label, D37; `detf` above closes it, those rows are asserted):")
     print_rows(gaps)
     off = [r for r in rows if not (abs(r[2] - r[3]) <= r[4] or (math.isnan(r[2]) and math.isnan(r[3])))]
     if a.selftest:
