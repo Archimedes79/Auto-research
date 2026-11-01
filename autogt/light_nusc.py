@@ -5,7 +5,7 @@ the CAM_FRONT and the five RADAR channels, and a run works through the sequences
     nusc = light_nuscenes("~/data/nuscenes_full", "v1.0-trainval", scenes=["scene-0001", ...])   # ~0.7 GB for 85 sequences
     names = scene_names("~/data/nuscenes_full", "v1.0-trainval")                              # all 850 names, instantly
 
-The big tables (sample_data, ego_pose, sample_annotation) are scanned line by line and only the records of the requested
+The big tables (sample_data, ego_pose, sample_annotation) are scanned in blocks and only the records of the requested
 sequences are kept (for sample_data only the CAM_FRONT / RADAR channels); `scenes=None` keeps all sequences (about 6 GB for
 trainval). Everything else is the unchanged devkit, so `get`, the reverse indices, `sample["data"]` (CAM_FRONT and the radars only)
 and the map API work as usual; the `prev` / `next` chains of the kept channels stay intact because a chain never leaves its sensor.
@@ -13,33 +13,29 @@ and the map API work as usual; the `prev` / `next` chains of the kept channels s
 import json
 import os
 import os.path as osp
+import re
 
 _KEEP = ("/CAM_FRONT/", "/RADAR_")
+_RECORD = re.compile(r"\{[^{}]*\}")                     # a record of these tables is a flat dict: no braces inside
 
 
-def _records(path):
-    """records of a pretty-printed nuScenes table, one at a time as (list of stripped lines, joined text), no file in memory."""
-    buf = []
-    with open(path) as f:
-        for line in f:
-            s = line.strip()
-            if s == "{":
-                buf = [s]
-            elif s in ("}", "},"):
-                buf.append("}")
-                yield buf, "".join(buf)
-                buf = []
-            elif buf:
-                buf.append(s)
+def _records(path, block=1 << 26):
+    """the records of a pretty-printed nuScenes table, one at a time as text, read in blocks of 64 MB (no file in memory)."""
+    rest = ""
+    with open(path, encoding="utf-8") as f:
+        for chunk in iter(lambda: f.read(block), ""):
+            text, end = rest + chunk, 0
+            for m in _RECORD.finditer(text):
+                yield m.group()
+                end = m.end()
+            rest = text[end:]                                  # the start of a record that goes on in the next block
 
 
-def _value(buf, key):
-    """the string value of `"key": "..."` among the first lines of a record (nuScenes writes token first), or None."""
-    pre = f'"{key}"'
-    for ln in buf[1:6]:
-        if ln.startswith(pre):
-            return ln.split('"')[3]
-    return None
+def _value(text, key):
+    """the string value of `"key": "..."` in a record, or None (nuScenes writes `"key": "value"`; "token" does not match inside "sample_token")."""
+    start = f'"{key}": "'
+    i = text.find(start)
+    return None if i < 0 else text[i + len(start):text.index('"', i + len(start))]
 
 
 def scene_names(dataroot, version):
@@ -59,25 +55,24 @@ def light_nuscenes(dataroot, version, scenes=None, verbose=False):
             samples = {s["token"] for s in json.load(f) if s["scene_token"] in want}
     state = {}
 
+    def kept_sample_data():
+        """the CAM_FRONT / RADAR records of the wanted samples: read once, the devkit asks for ego_pose first and needs their pose tokens"""
+        if "sd" not in state:
+            state["sd"] = [json.loads(t) for t in _records(osp.join(root, "sample_data.json"))
+                           if any(k in t for k in _KEEP) and (want is None or _value(t, "sample_token") in samples)]
+            state["ego"] = {r["ego_pose_token"] for r in state["sd"]}
+        return state["sd"]
+
     class _Light(NuScenes):
         def __load_table__(self, table_name):
             path = osp.join(root, f"{table_name}.json")
             if table_name == "sample_data":
-                recs = []
-                for buf, t in _records(path):
-                    if any(k in t for k in _KEEP) and (want is None or _value(buf, "sample_token") in samples):
-                        recs.append(json.loads(t))
-                state["ego"] = {r["ego_pose_token"] for r in recs}
-                return recs
+                return kept_sample_data()
             if table_name == "ego_pose":
-                if "ego" not in state:                              # the devkit loads ego_pose before sample_data: read both
-                    state["ego"] = set()
-                    for buf, t in _records(osp.join(root, "sample_data.json")):
-                        if any(k in t for k in _KEEP) and (want is None or _value(buf, "sample_token") in samples):
-                            state["ego"].add(json.loads(t)["ego_pose_token"])
-                return [json.loads(t) for buf, t in _records(path) if _value(buf, "token") in state["ego"]]
+                kept_sample_data()
+                return [json.loads(t) for t in _records(path) if _value(t, "token") in state["ego"]]
             if table_name == "sample_annotation" and want is not None:
-                return [json.loads(t) for buf, t in _records(path) if _value(buf, "sample_token") in samples]
+                return [json.loads(t) for t in _records(path) if _value(t, "sample_token") in samples]
             with open(path) as f:
                 tab = json.load(f)
             if want is not None and table_name == "scene":

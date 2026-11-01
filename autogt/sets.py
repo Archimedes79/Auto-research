@@ -141,8 +141,8 @@ def check_raw(dataroot, version=None, set_name=None, scenes=None, examples=10):
             except OSError:
                 listed[d] = set()
         return name in listed[d]
-    for buf, text in _records(os.path.join(tab, "sample_data.json")):
-        if not any(k in text for k in _KEEP) or _value(buf, "sample_token") not in samples:
+    for text in _records(os.path.join(tab, "sample_data.json")):
+        if not any(k in text for k in _KEEP) or _value(text, "sample_token") not in samples:
             continue
         rel = json.loads(text)["filename"]
         n_cam, n_radar = n_cam + ("/CAM_FRONT/" in rel), n_radar + ("/RADAR_" in rel)
