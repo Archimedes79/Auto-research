@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Unpack a downloaded nuScenes archive part (.tgz) after refusing absolute or '..' paths.
 #   extract_blob.sh <archive.tgz> [--delete]
-# Environment (all optional):
-#   NUSC_DEST     target root (default ~/data/nuscenes_full, the WSL ext4 disk)
+# Environment:
+#   NUSC_DEST     target root, REQUIRED (the raw data lives on D:, e.g. /mnt/d/Auto-research/NuScenes/...; ~/data/nuscenes_full is a folder of symlinks, never a target)
 #   NUSC_MEMBERS  space-separated top-level members to unpack, e.g. "sweeps" (default: everything)
 #   NUSC_WINTAR=1 unpack with Windows' tar.exe (for a target on a Windows drive such as /mnt/d: native NTFS
 #                 writes of many small files are far faster than writing them through WSL)
 # --delete removes the archive after a successful unpack.
 set -euo pipefail
 f="$1"
-dest="${NUSC_DEST:-$HOME/data/nuscenes_full}"
+dest="${NUSC_DEST:?set NUSC_DEST to the target root on D: (see datasets/NuScenes/README.md)}"
 members="${NUSC_MEMBERS:-}"
 mkdir -p "$dest"
 echo "$(date +%T) path check $(basename "$f")"

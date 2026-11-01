@@ -4,10 +4,14 @@
 # The NUSC_* environment of get_blob_part.sh / extract_blob.sh is passed through.
 here="$(cd "$(dirname "$0")" && pwd)"
 kind="$1"; shift
-logs="${NUSC_DL:-$HOME/downloads}/nuscenes_$kind"
+logs="${NUSC_DL:?set NUSC_DL to a download folder on D:}/nuscenes_$kind"
 mkdir -p "$logs"
+pids=()
 for p in "$@"; do
   bash "$here/get_blob_part.sh" "$p" "$kind" > "$logs/part_$p.log" 2>&1 &
+  pids+=($!)
 done
-wait
-grep -h "done\|MISMATCH\|ABORT\|rror" "$logs"/part_*.log
+rc=0
+for pid in "${pids[@]}"; do wait "$pid" || rc=1; done      # one failed part makes the whole call fail
+grep -h "done\|MISMATCH\|ABORT\|rror" "$logs"/part_*.log || true
+exit $rc

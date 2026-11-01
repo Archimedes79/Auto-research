@@ -1,6 +1,6 @@
 """One-off: check a downloaded file against its S3 ETag (plain md5 or multipart md5-of-md5s "<hex>-<parts>").
 
-wsl python3 temp/loop19/verify_s3_etag.py <file> <etag>   -> exit 0 if it matches
+wsl python3 datasets/NuScenes/tools/verify_s3_etag.py <file> <etag>   -> exit 0 if it matches
 """
 import hashlib
 import os

@@ -42,9 +42,9 @@ Google Drive helpers (2026-10-26): `list_gdrive_folder.py <folder id>` lists a p
 | tool | what it does |
 |---|---|
 | `list_nuscenes_bucket.py [filter]` | lists the archives of the public bucket `motional-nuscenes` with size and ETag (no download) |
-| `get_blob_part.sh <part> <camera\|lidar\|radar>` | downloads one part (resumes a partial archive), checks the S3 ETag, unpacks it with `extract_blob.sh`, marks it `.unpacked`; environment `NUSC_DL` (download root) and those of `extract_blob.sh` |
+| `get_blob_part.sh <part> <camera\|lidar\|radar>` | downloads one part (resumes a partial archive), checks the S3 ETag, unpacks it with `extract_blob.sh`, marks it `.unpacked`; environment `NUSC_DL` (download root, required) and those of `extract_blob.sh` |
 | `get_parts_parallel.sh <kind> <part>...` | several parts in parallel (one connection gets 1-2 MB/s, six together about 6 MB/s) |
-| `extract_blob.sh <tgz> [--delete]` | path check (no absolute or `..` paths), then unpack; `NUSC_DEST` target, `NUSC_MEMBERS` (e.g. `sweeps`), `NUSC_WINTAR=1` unpacks with Windows `tar.exe` (fast on D:; WSL writes small files there at only about 50 per second) |
+| `extract_blob.sh <tgz> [--delete]` | path check (no absolute or `..` paths), then unpack; `NUSC_DEST` target (required, on D:), `NUSC_MEMBERS` (e.g. `sweeps`), `NUSC_WINTAR=1` unpacks with Windows `tar.exe` (fast on D:; WSL writes small files there at only about 50 per second) |
 | `verify_s3_etag.py <file> <etag>` | checks a file against a plain or multipart S3 ETag |
 | `link_views.sh` | builds the WSL views (above); moves the former WSL copies to `~/_to_delete/`. It refuses while a process has a file of a view open; the guard matches the link targets (`/mnt/d/Auto-research/NuScenes/nuscenes_full/*`, `.../nuscenes_mini/*`, the additions folder), because an open file reached through a view resolves to them in `/proc/*/fd` (fixed 2026-10-31: the former guard matched `~/data/*` only and never fired); `--selftest` holds a mini-view file open and checks that the guard sees it |
 | `stop_downloads.sh` | stops running downloads (partial archives are kept) |
