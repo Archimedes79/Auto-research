@@ -12,6 +12,6 @@ As step 1, for a foundation topic of `PROBLEM.md` (building blocks, training and
 Spawn `ar-planner` (mode branches) once per lens, in parallel, on the same inputs (the group digests, the best metric card, the experiment summaries, the ledger). Show me one line per card.
 
 **4. Referee and plan** - `Referee and plan loop <NN> (<GPU budget>).`
-`ar-critic` (mode cards) on all cards, then `ar-planner` (mode plan: loop plan + schedule). Show me the tree, the budget, the system improvements, and what needs my decision (TEST, long runs) before the loop starts.
+`ar-critic` (mode cards) on all cards; save its report as a file next to the plan (e.g. `experiment_execution/history/critic_cards_loop<NN>.md`); then `ar-planner` (mode plan) with that file named in the brief: verdicts into the cards' Referee lines, loop plan, schedule, planned ledger rows, `experiment.json` per card the tools decide. Show me the tree, the budget, the system improvements, and what needs my decision (TEST, long runs) before the loop starts.
 
 **Light cycle by default**: step 1 only for groups whose gap or literature changed, step 3 with three lenses; all groups and all six lenses every third cycle.

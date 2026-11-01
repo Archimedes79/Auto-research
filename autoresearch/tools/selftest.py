@@ -398,9 +398,9 @@ try:
     SC.save([dict(item="S.ta", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'echo a'"),
              dict(item="S.tm", kind="train", state="planned", resource="cpu", priority="2", run_ids="S.ta;S.tnone")], f"{T}/schedule.csv")
     ta = go("S.ta", ["bash", "-c", "echo a"])
-    assert shown()["S.tm"]["state"] != "done", "an item whose second run has no record yet is not done"
     assert ta.returncode == 0 and shown()["S.ta"]["state"] == "done" and raw()["S.ta"]["state"] == "planned", \
         "the state is derived from the record; the file is not written back"
+    assert shown()["S.tm"]["state"] == "planned", "an item whose second run has no record yet keeps its stored state"
     # the evaluator contract: a benchmark script (a code system, no ML) writes cards; run.py runs it from planned rows; card.py checks them; decide reads them
     import card as CARD
     CARD.selftest()
