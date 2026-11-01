@@ -1,12 +1,12 @@
 #!/bin/bash
 # D7 steps 5-6 (2026-10-25): ground truth, route and SD map of a frame set, CPU only, new files in ~/exp_gcar_<tag>/ only.
-#   bash temp/loop19/run_b456_gt.sh <tag>     (tag b456: the 255 new scenes; gtchk: the reproduction check set)
+#   bash training/data/prep/run_b456_gt.sh <tag>     (tag b456: the 255 new scenes; gtchk: the reproduction check set)
 # Order: graph + poses + exact distance (parallel) -> direction arrays + route -> route heat + SD map. Each stage waits for all its jobs and
 # stops when one failed (no job of a failed stage keeps writing while a re-run starts).
 set -e
 T="$1"
 case "$T" in ""|b123|mini) echo "usage: run_b456_gt.sh <tag>, not b123 / mini (their files are made by the original pipelines)"; exit 2 ;; esac
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/../../.."
 E="$HOME/exp_gcar_$T"
 [ -s "$E/feats/train_tokens.json" ] && [ -s "$E/feats/val_tokens.json" ] || { echo "no token lists in $E/feats"; exit 2; }
 export NUSC_ROOT="$HOME/data/nuscenes_full" NUSC_VERSION=v1.0-trainval GT_FRAME=ego

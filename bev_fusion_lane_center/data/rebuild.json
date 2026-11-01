@@ -201,6 +201,19 @@
       "note": "E234 (features), E235 (ground truth, route, SD map)"
     },
     {
+      "id": "gt_b456",
+      "where": "~/exp_gcar_b456 (graph, poses, exact distance, direction arrays, route heat, SD map of the 255 new scenes; tag gtchk = the reproduction check set)",
+      "status": "scripted",
+      "scripts": [
+        "training/data/prep/run_b456_gt.sh"
+      ],
+      "needs": [
+        "gcar_features_b456 (the token lists in feats/)",
+        "raw nuScenes"
+      ],
+      "note": "E235; moved here from temp/loop19 on 2026-11-01 when the loop scratch was filed"
+    },
+    {
       "id": "gcar_perturbed",
       "where": "~/exp_gcar_b123/pert (37 GB: dark, blur, cameras off ...)",
       "status": "scripted",
