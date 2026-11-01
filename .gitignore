@@ -85,6 +85,7 @@
 !/datasets/NuScenes/
 /datasets/NuScenes/*
 !/datasets/NuScenes/README.md
+!/datasets/NuScenes/manifest.json
 !/datasets/NuScenes/tools/
 /datasets/NuScenes/tools/history/
 # problem 2: camera + radar BEV: code and text records; runs (checkpoints, run snapshots, logs), caches and weights stay out
