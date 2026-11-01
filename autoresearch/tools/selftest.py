@@ -695,6 +695,8 @@ try:
     clean_temp.selftest()
     import machine_lock  # D19
     machine_lock.selftest()
+    import provenance  # result-package provenance (autoresearch/reproducibility.md)
+    provenance.selftest()
     import guard_hook  # P4: protected files, grants, json entries, Windows spellings
     guard_hook.selftest()
     import metrics  # P3: loop table from ledger, decision files and TEST log

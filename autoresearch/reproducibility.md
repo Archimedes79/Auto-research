@@ -1,6 +1,6 @@
 # Reproducibility: what a result package records (design, 2026-11-01)
 
-Mirko, in chat: more reproducibility; when a result package of an experiment is made it should say which autoGT was used in which mode and which evaluation code version, so that the experiment can be reproduced later. This page says what is recorded today, what is missing and where it goes. Status: design, not built.
+Mirko, in chat: more reproducibility; when a result package of an experiment is made it should say which autoGT was used in which mode and which evaluation code version, so that the experiment can be reproduced later. This page says what is recorded today, what is missing and where it goes. Status: the collector, `compare` and `repro` are built (`tools/provenance.py`, with a selftest, 2026-11-01); the `provenance` field in the card contract, the refusal in `decide.py`, the call in the card writers and the entry in `run.json` are still to do.
 
 ## Today (checked on `t10.dual_s1.eval` and the training run `t10_dual_s1`)
 | where | what it holds |
@@ -26,7 +26,7 @@ Mirko, in chat: more reproducibility; when a result package of an experiment is 
 
 ## Rules
 - `decide.py` and the comparison tools refuse cards of one comparison that differ in `gt.version`, `gt.signature`, `evaluator` hash or frame hash, unless a line in the card says why (today only the GT signature is compared).
-- A card whose evaluator is not clean is marked `+dirty` and is not used for a verdict.
+- A card whose evaluator is not clean (or was not checked) is a blocker in `compare`; `unknown` on either side of a key is "cannot tell" and `compare` exits 2, never 0.
 - Old cards keep what they have; missing fields read "unknown", never a guess.
 
 ## Reproduce a result: `repro.py <run id>` (one small tool, prints, changes nothing)
