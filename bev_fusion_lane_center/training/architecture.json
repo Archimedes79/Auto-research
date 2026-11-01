@@ -130,7 +130,7 @@
     {"id": "trainers", "label": "Training entry points\nand search", "kind": "train", "col": 1, "row": 8, "code": ["training/train/", "training/trainer.py", "training/search/p16_triage.py"],
      "note": "builder, dense head, route head and consumer are trained in separate pieces"},
     {"id": "data", "label": "Data, GT and prep", "kind": "train", "col": 2, "row": 8, "code": ["training/data/"], "note": "features, ground-truth fields, splits, SD-map library, route targets"},
-    {"id": "joint", "label": "Joint builder + route\nfine-tune (closed)", "kind": "alt", "col": 3, "row": 8, "code": ["training/train/p17_joint.py", "training/train/p18_joint.py", "training/pipeline/route_data.py"],
+    {"id": "joint", "label": "Joint builder + route\nfine-tune (closed)", "kind": "alt", "col": 3, "row": 8, "code": ["training/train/p18_joint.py", "training/pipeline/route_data.py"],
      "note": "the one end-to-end attempt: the assembly runs inside the loop and the route loss reaches the node tokens only, not positions, validity or edges; negative three times (E202, E214, E232), not adopted"}
   ],
   "edges": [
