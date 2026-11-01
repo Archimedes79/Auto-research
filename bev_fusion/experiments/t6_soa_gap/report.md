@@ -1,5 +1,9 @@
 # t6_soa_gap - why is the system not at the state of the art? (2026-10-30)
 
+Update 2026-11-01: the same 400 frames were scored again for the later chains (run `pitch.maps_lfl`, GPU variant `temp/soa_gap/map_ref_dev.py`, checked against the CPU run of this report: largest difference 0.0002).
+On those identical frames the dual-feature chain (two seeds) stands at 94 / 57 - 62 / 31 - 34 / 26 - 31 / 50 - 52 / 72 - 76 % of GaussianCaR's IoU (drivable, walkway, carpark, crossing, lane divider, road divider; both systems
+at the 0.5 threshold); the tables are in `../t3_improve_loop/report.md` ("Maps against the SOA, on identical frames"). The text below is the state of 2026-10-30 (one model, `runs/t1_r4_soa`) and stays as written.
+
 Question (Mirko): "Look exactly why performance is not SOA, find out." Method: measure the gap like for like wherever a published system
 can be scored with our own metric on our own frames, then decompose it with the evidence that exists (stored records, earlier arms) and
 name what is still unmeasured. CPU only (the GPU was shared with a training lane). Scripts: `temp/soa_gap/` (scratch, not a tool).
