@@ -1,0 +1,51 @@
+{
+ "id": "E265.a",
+ "hypothesis": "switching off the spur half of the clean-up (spur_len 0) raises lanes found at range without guard losses (E265, re-decision of E259 on the per-piece DP basis)",
+ "prediction": "lanes found +0.012 (+0.008 .. +0.016), R@1 far +0.007, Q +0.003 on the 4 replication checkpoints",
+ "rule": "E265 experiment.json: KEEP if mean lanes found >= +0.010 and R@1 far >= +0.004, guards on every checkpoint (Q -0.003, topo -0.005, FL / dup +0.005, P@1 far -0.010, DP <= 14.3), above the equal-budget tau frontier; TIE with guards = spurs kept (cheaper); CUT otherwise",
+ "split": "val",
+ "basis": "E259",
+ "seed": "",
+ "command": "bash temp/loop22/run_E265a.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 229549,
+ "created": "2026-11-01T01:53:32",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-01T01:53:57",
+ "code_hash": "648e3c9010ba",
+ "commit": "9952420840",
+ "tag": "lcr/E265.a",
+ "git_note": "",
+ "pid": 229602,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/evaluate.py",
+   "bev_fusion_lane_center/tools/prototype/lane_prototype.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2543,
+ "attempts": 1,
+ "ended": "2026-11-01T02:36:46",
+ "last_lines": [
+  "  S 0.769  Q 0.735  F1@1.0 0.870  J 0.409  topo_F1 0.741  lanes_found 0.695  R@1_far 0.709  false_len_frac 0.042  dup_frac 0.047  vert100 14.830",
+  "champion - champion (95 % over scenes): S +0.000 [-0.002, +0.003]  Q +0.004 [+0.002, +0.008]  F1@1.0 +0.002 [+0.001, +0.003]  J +0.015 [+0.004, +0.028]  lanes_found +0.013 [+0.011, +0.016]  topo_F1 -0.001 [-0.001, +0.000]  R@1_far +0.007 [+0.005, +0.009]  dup_frac +0.001 [+0.001, +0.002]",
+  "verdict on S (band 0.010): tie (interval contains 0)",
+  "card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/champion/val_sp0.json",
+  "_py14.sh: evaluation/evaluate.py",
+  "fast_recall_na on val (873 frames), commit 4261ac6+dirty, assembly 20.6 ms per frame (CPU), metrics 50 s",
+  "  S 0.771  Q 0.743  F1@1.0 0.868  J 0.460  topo_F1 0.741  lanes_found 0.746  R@1_far 0.733  false_len_frac 0.057  dup_frac 0.072  vert100 15.380",
+  "fast_recall_na:",
+  "  S 0.771  Q 0.739  F1@1.0 0.866  J 0.443  topo_F1 0.742  lanes_found 0.734  R@1_far 0.726  false_len_frac 0.056  dup_frac 0.071  vert100 15.020",
+  "fast_recall_na - fast_recall_na (95 % over scenes): S +0.000 [-0.002, +0.003]  Q +0.004 [+0.001, +0.008]  F1@1.0 +0.001 [+0.001, +0.002]  J +0.017 [+0.004, +0.031]  lanes_found +0.012 [+0.009, +0.015]  topo_F1 -0.000 [-0.001, +0.001]  R@1_far +0.006 [+0.005, +0.008]  dup_frac +0.001 [+0.000, +0.001]",
+  "verdict on S (band 0.010): tie (interval contains 0)",
+  "card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/fast_recall_na/val_sp0.json"
+ ]
+}

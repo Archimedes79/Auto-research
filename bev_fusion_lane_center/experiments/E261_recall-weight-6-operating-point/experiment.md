@@ -72,3 +72,19 @@ Grid (fixed now): tau {0.05, 0.1, 0.2, ..., 0.9} x fork pruning {0.4, 0.5, 0.6},
 | decide | PASS / TIE / CUT by the card's rule: `decide.py --experiment E261 --write` (22-scene card clauses) AND the held-out means of step 3 (same thresholds) AND the lead checks of `experiment.json` (FL, DP absolute and per half, a - t >= +0.010 held out); PASS starts E262 (GPU, 06:00) and makes `recall6` candidate W of PLAN.md | `decide.py` | verdict in the ledger rows E261.cv / E261.ev | ~04:30 |
 
 Prediction of the rung (written before it runs): rc1 at 0.2 / 0.4 lanes found about 0.778 with Q about 0.735 (admissible or just not); at 0.1 and 0.05 Q < 0.735 at pruning 0.4, and at 0.5 / 0.6 the dup guard fails or binds; best admissible rc1 about 0.777 - 0.779, so the rung passes by about +0.012 (probability of a kill about 0.35).
+
+## 3. Summary (lead, loop 22, 2026-11-01 04:40)
+- **Runs**: E261.g (rung), E261.cv (20 scene-half splits, `e261_cv.json`, run log), E261.ev (cards `runs/eval/recall6/val.json`, `runs/eval/recall_thr/val.json`); code tags `lcr/E261.*`. **Decision: CUT** (`decide.py --experiment E261 --write`, `decision.json`); the card's TIE window (a - c in (-0.010, +0.015)) would give the same consequence: `recall` (rc1) stays, rc2 is not adopted, E262 is cancelled, candidate W is out.
+- **Setup**: no training, no code in the product; rc2 (`e18_D7_rc2`, recall weight 6) and rc1 re-assembled on cached raw outputs over a grid of tau x fork pruning; the operating point chosen on one half of the 22 VAL scenes and read on the other half, 20 times; controls: `recall` (rc1 0.7 / 0.4, c), rc1's own best threshold (t), seed spread (`recall_s1`), equal-weight null f1eq and range-weighted rc4 (report lines).
+- **Numbers** (VAL 873, selection-CV; the 22-scene cards are in-sample choices):
+
+| | lanes found | R@1 far | Q | topo F1 | dup | DP / 100 m |
+|---|---|---|---|---|---|---|
+| `recall` (c, card `val_l22`) | 0.7673 | 0.7714 | 0.7404 | 0.7423 | 0.0763 | 12.82 |
+| `recall6` (a, rc2 0.9 / 0.5) - c | +0.0133 | +0.0054 | +0.0023 | -0.0037 | +0.0295 | 13.08 |
+| `recall_thr` (t, rc1 0.2 / 0.4) - c | +0.0105 | +0.0096 | -0.0049 | -0.0027 | +0.0068 | 13.48 |
+| held-out mean a - c (13 of 20 splits with an admissible rc2 point) | +0.029 | +0.021 | -0.0075 | -0.0085 | +0.016 | > 14.3 in 10 / 13 |
+| held-out mean a - t | +0.0157 | +0.0075 | +0.0019 | -0.0031 | -0.0045 | |
+
+- **What it says**: weight 6 does find more lanes at range, but the points that do so on held-out halves spend more than the vertex budget (10 of 13) and lose Q (-0.0075); the point that respects the budget on all 22 scenes is only +0.013 lanes found and +0.005 R@1 far, under the bar, and at the edge of the duplicate guard. rc1's own threshold buys most of the same coverage (+0.0105) at a Q cost. Prediction +0.022, measured +0.013 (in-sample). Negative kept: the recall weight is a coverage lever only at a vertex and Q price (as loop 19 found for weight 3).
+- **Weaknesses / next**: one seed of rc2; 7 of 20 halves had no admissible rc2 point at all (the guards are tight for rc2); `decide.py` has no clause for a TIE window (tools note). Next: nothing on this branch; gap 1 continues through the assembly (E265 KEEP) and the seed ring (E266 / E267).

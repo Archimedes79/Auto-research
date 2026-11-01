@@ -1,0 +1,52 @@
+{
+ "id": "E265.v",
+ "hypothesis": "the DP guard and the placebo of E265: spurs kept stay <= 14.3 per-piece DP; bubbles kept change nothing",
+ "prediction": "DP +0.6 .. +0.9 with spurs kept, all <= 14.3; placebo lanes found within +-0.003",
+ "rule": "a checkpoint above 14.3 with spurs kept -> E265 CUT",
+ "split": "val",
+ "basis": "E259",
+ "seed": "",
+ "command": "bash temp/loop22/run_E265v.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 232014,
+ "created": "2026-11-01T02:36:48",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-01T02:37:10",
+ "code_hash": "7f3802f5e9e5",
+ "commit": "af36a845b1",
+ "tag": "lcr/E265.v",
+ "git_note": "",
+ "pid": 232090,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/loop22/e261_cv.py",
+   "bev_fusion_lane_center/temp/loop22/run_E261cv.sh",
+   "bev_fusion_lane_center/tools/maintenance/wsl_second_wave_2026-11-01.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1498,
+ "attempts": 1,
+ "ended": "2026-11-01T03:02:43",
+ "last_lines": [
+  "e24_j1rc_s2  registry                   Q 0.7354 lanes_found 0.7360 R@1_far 0.7341 R@1_mid 0.8839 P@1_far 0.7644 topo_F1 0.7363 J 0.4295 F1@0.5 0.6864 FL 0.0539 dup 0.0724 vert100 15.15 vert100_dp 12.26 asm_ms 19.6  [72 s]",
+  "e24_j1rc_s2  spurs kept (spur_len 0)    Q 0.7387 lanes_found 0.7474 R@1_far 0.7404 R@1_mid 0.8883 P@1_far 0.7620 topo_F1 0.7353 J 0.4421 F1@0.5 0.6871 FL 0.0554 dup 0.0729 vert100 15.49 vert100_dp 12.90 asm_ms 18.1  [70 s]",
+  "e24_j1rc_s2  bubbles kept (bubble_r 0)  Q 0.7365 lanes_found 0.7384 R@1_far 0.7358 R@1_mid 0.8851 P@1_far 0.7640 topo_F1 0.7354 J 0.4325 F1@0.5 0.6871 FL 0.0539 dup 0.0773 vert100 15.17 vert100_dp 12.38 asm_ms 20.5  [79 s]",
+  "e24_j1rc_s3  registry                   Q 0.7391 lanes_found 0.7393 R@1_far 0.7363 R@1_mid 0.8861 P@1_far 0.7623 topo_F1 0.7384 J 0.4415 F1@0.5 0.6901 FL 0.0560 dup 0.0730 vert100 14.95 vert100_dp 12.15 asm_ms 26.1  [72 s]",
+  "e24_j1rc_s3  spurs kept (spur_len 0)    Q 0.7447 lanes_found 0.7506 R@1_far 0.7419 R@1_mid 0.8913 P@1_far 0.7604 topo_F1 0.7383 J 0.4627 F1@0.5 0.6912 FL 0.0573 dup 0.0736 vert100 15.28 vert100_dp 12.79 asm_ms 22.8  [72 s]",
+  "e24_j1rc_s3  bubbles kept (bubble_r 0)  Q 0.7390 lanes_found 0.7412 R@1_far 0.7379 R@1_mid 0.8874 P@1_far 0.7611 topo_F1 0.7370 J 0.4406 F1@0.5 0.6905 FL 0.0565 dup 0.0787 vert100 14.96 vert100_dp 12.30 asm_ms 17.4  [70 s]",
+  "champion     registry                   Q 0.7350 lanes_found 0.6948 R@1_far 0.7087 R@1_mid 0.8777 P@1_far 0.7850 topo_F1 0.7413 J 0.4092 F1@0.5 0.6912 FL 0.0415 dup 0.0465 vert100 14.83 vert100_dp 11.32 asm_ms 41.9  [103 s]",
+  "champion     spurs kept (spur_len 0)    Q 0.7395 lanes_found 0.7080 R@1_far 0.7159 R@1_mid 0.8847 P@1_far 0.7825 topo_F1 0.7407 J 0.4245 F1@0.5 0.6923 FL 0.0424 dup 0.0478 vert100 15.21 vert100_dp 12.08 asm_ms 20.4  [69 s]",
+  "champion     bubbles kept (bubble_r 0)  Q 0.7351 lanes_found 0.6964 R@1_far 0.7102 R@1_mid 0.8785 P@1_far 0.7828 topo_F1 0.7399 J 0.4098 F1@0.5 0.6916 FL 0.0423 dup 0.0504 vert100 14.82 vert100_dp 11.49 asm_ms 21.3  [71 s]",
+  "fast_recall_na registry                   Q 0.7388 lanes_found 0.7343 R@1_far 0.7264 R@1_mid 0.8859 P@1_far 0.7550 topo_F1 0.7415 J 0.4428 F1@0.5 0.6891 FL 0.0555 dup 0.0714 vert100 15.02 vert100_dp 11.85 asm_ms 20.2  [100 s]",
+  "fast_recall_na spurs kept (spur_len 0)    Q 0.7432 lanes_found 0.7462 R@1_far 0.7326 R@1_mid 0.8907 P@1_far 0.7528 topo_F1 0.7414 J 0.4598 F1@0.5 0.6899 FL 0.0568 dup 0.0723 vert100 15.38 vert100_dp 12.49 asm_ms 22.9  [97 s]",
+  "fast_recall_na bubbles kept (bubble_r 0)  Q 0.7392 lanes_found 0.7361 R@1_far 0.7287 R@1_mid 0.8873 P@1_far 0.7543 topo_F1 0.7401 J 0.4435 F1@0.5 0.6897 FL 0.0558 dup 0.0762 vert100 15.03 vert100_dp 12.01 asm_ms 26.5  [93 s]"
+ ]
+}
