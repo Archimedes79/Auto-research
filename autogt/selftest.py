@@ -169,6 +169,29 @@ def run(root=None, verbose=True):
     assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: add one, "
                                                       "commit, tag autogt/v<N> (decision D29)")
     assert current_version() == V.version_of(gt.signature()) and current_version(boxes_at="annotation").startswith(current_version() + "+")
+    import subprocess                                       # the older rows are final, so their git tag exists (the last row is tagged after its commit)
+    repo_ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if os.path.exists(os.path.join(repo_, ".git")):
+        try:
+            tags_ = set(subprocess.run(["git", "-C", repo_, "tag", "-l", "autogt/*"], capture_output=True, text=True, timeout=30).stdout.split())
+        except (OSError, subprocess.SubprocessError):
+            tags_ = set()
+        lost_ = [r["tag"] for r in rows_[:-1] if r["tag"] not in tags_]
+        assert not tags_ or not lost_, f"versions.csv names git tags that do not exist: {lost_} (git tag -a autogt/vN <commit>)"
+        if tags_ and rows_[-1]["tag"] not in tags_:
+            print(f"note: the newest version {rows_[-1]['version']} has no git tag {rows_[-1]['tag']} yet: commit, then tag it")
+    from . import suite as suite_mod2                       # the key of a process is computed once: a second call does not hash the files again
+    suite_mod2._SIGNATURES.clear()
+    first_, gt_sig_ = suite_mod2.current_signature(), gt.signature()
+    real_sig = suite_mod2.NuScenesGT.signature
+
+    def _no_hashing(self):
+        raise AssertionError("current_signature hashed the source files a second time")
+    suite_mod2.NuScenesGT.signature = _no_hashing
+    try:
+        assert first_ == gt_sig_ and suite_mod2.current_signature() == first_
+    finally:
+        suite_mod2.NuScenesGT.signature = real_sig
 
     # 5 the build command (cache keyed by the signature)
     from .cli import build, load_keyframe
@@ -214,7 +237,12 @@ def run(root=None, verbose=True):
         old_group, cli_mod.GROUP_SCENES = cli_mod.GROUP_SCENES, 1                      # two groups: the loop over devkit loads is exercised
         try:
             r = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
-            again = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+            from . import suite as suite_mod
+            real_gen, suite_mod.AutoGT = suite_mod.AutoGT, None                        # a rerun of finished groups must not load the devkit
+            try:
+                again = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+            finally:
+                suite_mod.AutoGT = real_gen
         finally:
             cli_mod.GROUP_SCENES = old_group
         assert r["signature"] == gt.signature() and r["out"] == os.path.join(d, gt.signature()), r
@@ -235,6 +263,125 @@ def run(root=None, verbose=True):
             raise AssertionError("a folder that is not a nuScenes folder must be refused")
         except ValueError as e:
             assert "not a nuScenes folder" in str(e)
+    # 5c scene sets and the manifest of a store: small is a part of full, a set is complete when every keyframe has a file, the index.json
+    #    says gt_version / commit / dirty / sets_complete and whether the folder is a release
+    import contextlib
+    import io
+    from . import sets
+    from .cli import write_index
+    from .suite import AutoGT as _Gen2
+    assert sets.names() == ["full", "small"], sets.names()
+    small, full_ = sets.scenes("small"), sets.scenes("full")
+    assert len(small) == 10 and len(full_) == 850 == len(set(full_)) and set(small) <= set(full_), (len(small), len(full_))
+    small_tokens = sets.tokens("small", "v1.0-mini", root)
+    assert len(small_tokens) > 300 and len(set(small_tokens)) == len(small_tokens), len(small_tokens)
+    for call, why in ((lambda: sets.tokens("full", "v1.0-mini", root), "full is not in mini"), (lambda: sets.scenes("nope"), "unknown set"),
+                      (lambda: cli_mod.generate(root, "x", set_name="small", scenes=["scene-0061"]), "set and scenes together")):
+        try:
+            call()
+            raise AssertionError(f"must refuse: {why}")
+        except ValueError:
+            pass
+    cs = V.code_state()
+    assert set(cs) == {"commit", "dirty"} and (cs["commit"] is None) == (cs["dirty"] is None), cs
+    with tempfile.TemporaryDirectory() as d:
+        sd5 = os.path.join(d, gt.signature())
+        os.makedirs(sd5)
+        for t in small_tokens[1:]:
+            open(os.path.join(sd5, t + ".npz"), "wb").write(b"x")
+        st = sets.status("small", data=d, version="v1.0-mini", dataroot=root)
+        assert st["have"] == len(small_tokens) - 1 and st["total"] == len(small_tokens) and not st["complete"], st
+        assert sets.complete_in(sd5, "v1.0-mini", root) == []
+        open(os.path.join(sd5, small_tokens[0] + ".npz"), "wb").write(b"x")
+        assert sets.status("small", data=d, version="v1.0-mini", dataroot=root)["complete"]
+        assert sets.complete_in(sd5, "v1.0-mini", root) == ["small"]                  # full needs trainval: skipped, not an error
+        gen5 = _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"])
+
+        def manifest(run, complete=True):
+            write_index(sd5, gen5, "v1.0-mini", ["scene-0061"], 1, 1, {}, complete=complete, run=run)
+            return json.load(open(os.path.join(sd5, "index.json")))
+        ok = {"set": "full", "commit": "abc1234", "dirty": False, "sets_complete": ["full"]}
+        m = manifest(ok)
+        assert m["release"] is True and m["gt_version"] == current_version() and m["commit"] == "abc1234" and m["sets_complete"] == ["full"], m
+        assert manifest({**ok, "dirty": True})["release"] is False, "a dirty tree is no release"
+        assert manifest({**ok, "dirty": None})["release"] is False, "an unknown tree state is no release"
+        assert manifest(ok, complete=False)["release"] is False, "an unfinished run is no release"
+        assert manifest({**ok, "sets_complete": ["small"]})["sets_complete"] == ["full", "small"], "sets that were complete stay listed"
+        m = manifest({**ok, "sets_complete": ["small"]})
+        assert m["release"] is True, m                                                # full came from the earlier run on this folder
+        m = manifest(None)                                                             # a report / build run keeps the manifest keys
+        assert m["release"] is True and m["commit"] == "abc1234" and m["sets_complete"] == ["full", "small"], m
+        assert manifest(None, complete=False)["release"] is False, "the provisional index of a running job is no release"
+        os.remove(os.path.join(sd5, "index.json"))
+        assert manifest({"set": None, "commit": "abc1234", "dirty": False, "sets_complete": ["small"]})["release"] is False, "no full set"
+    with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as sets_dir:
+        with open(os.path.join(sets_dir, "tiny.txt"), "w") as f:
+            f.write("# two sequences\nscene-0061\nscene-0103  # trailing comment\n\n")
+        old_dir, sets.DIR = sets.DIR, sets_dir                                         # a tiny set instead of the real ones
+        try:
+            assert sets.names() == ["tiny"] and sets.scenes("tiny") == ["scene-0061", "scene-0103"]
+            r = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+        finally:
+            sets.DIR = old_dir
+        held = json.load(open(os.path.join(r["out"], "index.json")))
+        assert held["set"] == "tiny" and held["scenes"] == ["scene-0061", "scene-0103"] and r["keyframes"] == 4, (held, r)
+        assert held["complete"] is True and held["release"] is False and r["release"] is False and "commit" in held and "dirty" in held, held
+        r_opt = cli_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
+        assert r_opt["signature"] == _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"], use_flow=False).signature() != r["signature"]
+    # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts
+    #    nor marks an interrupted run complete; strides that differ are said so
+    with tempfile.TemporaryDirectory() as d:
+        sd6 = os.path.join(d, gt.signature())
+        os.makedirs(sd6)
+        for i in range(5):
+            open(os.path.join(sd6, f"t{i}.npz"), "wb").write(b"x")
+        open(os.path.join(sd6, "t9.npz.1.tmp.npz"), "wb").write(b"x")                  # a leftover temporary file is no keyframe
+        open(os.path.join(sd6, "t8.npz"), "wb").close()                                # nor is an empty file
+        gen6 = _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"])
+        big = [f"scene-{i:04d}" for i in range(19)] + ["scene-0061"]                  # small is a part of big
+
+        def idx(names, stride=1, complete=True):
+            write_index(sd6, gen6, "v1.0-trainval" if len(names) > 5 else "v1.0-mini", names, stride, 99, {}, complete=complete)
+            return json.load(open(os.path.join(sd6, "index.json")))
+        m = idx(big, complete=False)                                                   # an interrupted big run ...
+        assert m["complete"] is False and m["keyframes"] == 99, m
+        m = idx(["scene-0061"])                                                        # ... then a finished small one
+        assert m["complete"] is False and m["scenes"] == sorted(big) and m["version"] == "v1.0-trainval", m
+        m = idx(big)                                                                   # the big run resumed and finished
+        assert m["complete"] is True and m["keyframes"] == 5 and m["stride"] == 1, m
+        m = idx(big, stride=2)                                                         # the same scenes again with another stride
+        assert m["keyframes"] == 5 and m["stride"] == "mixed" and m["complete"] is True, m
+        m = idx(["scene-0061"], stride=2)                                              # a subset after a full store
+        assert m["scenes"] == sorted(big) and m["complete"] is True and m["stride"] == "mixed", m
+    # 5e a rerun after damage writes exactly the damage; two worker processes (spawn) give the same GT as one; wrong arguments are refused
+    with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as d2:
+        kw = dict(scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+        r = cli_mod.generate(root, d, **kw)
+        stored = sorted(f for f in os.listdir(r["out"]) if f.endswith(".npz"))
+        os.remove(os.path.join(r["out"], stored[0]))                                   # a lost file,
+        open(os.path.join(r["out"], stored[1]), "wb").close()                          # an empty one (full disk),
+        open(os.path.join(r["out"], stored[2] + ".1.tmp.npz"), "wb").write(b"half")    # a leftover of a killed writer next to a good file
+        again = cli_mod.generate(root, d, **kw)
+        assert again["written"] == 2 and len(sets.held(r["out"])) == 4, again
+        assert load_keyframe(r["out"], stored[1][:-4])["drivable_area"].shape == (120, 104)
+        two = cli_mod.generate(root, d2, workers=2, **kw)                              # the spawn pool: each worker builds its own generator
+        assert two["written"] == 4 and two["signature"] == r["signature"], two
+        for t in (stored[0][:-4], stored[3][:-4]):
+            a_, b_ = load_keyframe(r["out"], t), load_keyframe(two["out"], t)
+            assert all(np.array_equal(a_[k], b_[k]) for k in ("drivable_area", "vehicle", "velocity", "flow", "instance")), "workers=2 == workers=1"
+        for bad, why in ((dict(scenes=[]), "no scene is not all scenes"), (dict(scenes=["scene-0061"], stride=0), "stride 0"),
+                         (dict(scenes=["scene-0061"], res=0.25), "another resolution in a used folder")):
+            try:
+                cli_mod.generate(root, d, **{**dict(stride=20, verbose=False), **bad})
+                raise AssertionError(f"generate must refuse: {why}")
+            except ValueError:
+                pass
+        dup = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0061"], stride=20, verbose=False)
+        assert dup["scenes"] == 1 and dup["keyframes"] == 2, dup                       # a name twice is one sequence
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        cli_mod._print_sets()
+    assert "small" in buf.getvalue() and "full" in buf.getvalue(), buf.getvalue()
     # the agent guide names every layer, meta entry and box field the generator produces (so it cannot drift from the code)
     guide = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "AGENTS.md"), encoding="utf-8").read()
     keys = [k for k in g2 if k != "meta"] + list(g2["meta"]) + list(g2["meta"]["boxes"][0]) + ["dt", "steps"]

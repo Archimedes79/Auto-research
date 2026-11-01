@@ -1,12 +1,15 @@
 """Command line of the autoGT suite (from the repository root):
 
   python -m autogt selftest
-  python -m autogt generate DATAROOT [--out DIR] [--version V] [--scenes scene-0061 ...] [--stride 1] [--res 0.5] [--workers 1]
-                          [--no-flow] [--no-radar] [--boxes-at camera|annotation]
+  python -m autogt generate DATAROOT [--out DIR] [--version V] [--set small|full | --scenes scene-0061 ...] [--stride 1] [--res 0.5]
+                          [--workers 1] [--no-flow] [--no-radar] [--boxes-at camera|annotation]
       THE entry point: reads nuScenes from DATAROOT (e.g. ~/data/nuscenes_full) and writes one compressed file per keyframe to
-      DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json; DIR default data/autogt (where
-      autogt.load reads); memory-light (groups of 60 sequences), resumable (existing files are skipped); the signature changes
-      with every edit of the generator, so GT of an older generator is never mixed in
+      DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json (the manifest: gt_version, commit and dirty flag
+      of the generator code, the sets held in full, release); DIR default data/autogt (where autogt.load reads); memory-light
+      (groups of 60 sequences), resumable (existing files are skipped); the signature changes with every edit of the generator, so GT
+      of an older generator is never mixed in
+  python -m autogt sets       the scene sets small (mini, small experiments) and full (trainval, releases) and how much of each is stored
+  python -m autogt versions   the GT versions (versions.csv), the current one marked
   python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] ...   the low-level writer behind it (full devkit)
   python -m autogt check  [--version v1.0-mini] [--scenes ...] [--stride 1] [--holdout]
       automatic consistency checks of the GT over keyframes (see autogt/checks.py); --holdout adds the leave-one-radar-out test
@@ -19,8 +22,10 @@
                           [--samples N] [--holdout] [--workers N] [--light]
       GT evaluation of all sequences in one pass: store the GT (as `build`), run every check, write ONE PDF report (summary, table
       per sequence, legend, sample pictures drawn straight into the PDF - no picture files exist, nothing to clean up but the report)
-  python -m autogt clean  [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--older-than DAYS] [--move | --delete]
-      dry run by default; --move puts the items into _to_delete/, --delete removes them (see autogt/clean.py)
+  python -m autogt clean  [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released]
+                          [--older-than DAYS] [--move | --delete]
+      dry run by default; --move puts the items into _to_delete/, --delete removes them; the caches of released GT versions are left
+      alone unless --include-released, and are then moved, never deleted (see autogt/clean.py)
 """
 import argparse
 import json
@@ -46,20 +51,29 @@ def _flat(g):
 
 def load_keyframe(sig_dir, token):
     """a keyframe written by `build` -> the GT dict (float32 layers + meta)."""
-    z = np.load(os.path.join(sig_dir, token + ".npz"), allow_pickle=True)
-    out = {k: (z[k].astype(np.float32) if z[k].dtype == np.float16 else z[k]) for k in z.files if k != "meta"}
-    out["meta"] = z["meta"].item()
+    out = {}
+    with np.load(os.path.join(sig_dir, token + ".npz"), allow_pickle=True) as z:
+        for k in z.files:
+            a = z[k]                                                    # each member is decompressed once
+            out[k] = a.item() if k == "meta" else a.astype(np.float32) if a.dtype == np.float16 else a
     return out
+
+
+def save_keyframe(path, flat):
+    """write one keyframe file atomically; the temporary name holds the process id, so two writers on one folder do not trip over each
+    other (".tmp" in the name keeps it out of every listing of stored keyframes)"""
+    tmp = f"{path}.{os.getpid()}.tmp.npz"
+    np.savez_compressed(tmp, **flat)
+    os.replace(tmp, path)
 
 
 def _work(args):
     token, sig_dir = args
     gt = _STATE["gt"]
     path = os.path.join(sig_dir, token + ".npz")
-    if os.path.exists(path):
+    if os.path.exists(path) and os.path.getsize(path) > 0:                  # an empty file (a full disk) is not a keyframe
         return 0
-    np.savez_compressed(path + ".tmp.npz", **_flat(gt.keyframe(token)))
-    os.replace(path + ".tmp.npz", path)
+    save_keyframe(path, _flat(gt.keyframe(token)))
     return 1
 
 
@@ -69,29 +83,55 @@ def _init(dataroot, version, res, ss, options, scenes=None):
     _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, light=scenes is not None, scenes=scenes, **options)
 
 
-def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True):
+def run_manifest(sig_dir, version, dataroot, set_name=None):
+    """what a finished run records about itself in index.json: the set asked for, the commit and dirty flag of autogt/, and the
+    sets that the folder now holds in full (see sets.py)"""
+    from . import sets, versions
+    return {"set": set_name, **versions.code_state(), "sets_complete": sets.complete_in(sig_dir, version, dataroot)}
+
+
+def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True, run=None):
     """index.json of a cache folder (marks it as an autogt cache for `clean`, records what it holds). `build` writes it with
-    complete=False before the first keyframe (so an interrupted build still says which resolution it holds) and again at the end."""
+    complete=False before the first keyframe (so an interrupted build still says which resolution it holds) and again at the end.
+    run = run_manifest(...) of a finished run adds the manifest keys set, commit, dirty, sets_complete and release (a complete folder
+    whose signature is a released GT version, made from a clean tree, holding the set `full`); without it the keys of an earlier run
+    on this folder stay."""
     names = list(names)
     try:
         with open(os.path.join(sig_dir, "index.json")) as f:
             old = json.load(f)
     except (OSError, ValueError):
         old = {}
-    if (old.get("signature") == gen.signature() and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
-            and not set(old.get("scenes", [])) <= set(names)):
+    same = old.get("signature") == gen.signature() and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
+    if same and not set(old.get("scenes", [])) <= set(names):
         # mini is a subset of trainval and both share the folder of their signature: a smaller run (the mini report after the trainval
-        # one) must not shrink the record of what the folder holds
+        # one) must not shrink the record of what the folder holds, nor mark an interrupted bigger run as complete
         if set(old["scenes"]) >= set(names):
             version = old["version"]
         names = sorted(set(old["scenes"]) | set(names))
-        n_keyframes = len([f for f in os.listdir(sig_dir) if f.endswith(".npz") and ".tmp" not in f])
+        complete = complete and old.get("complete", True)
+    if same and old.get("stride", stride) != stride:
+        stride = "mixed"                                           # runs with different strides wrote into this folder
+    if complete and os.path.isdir(sig_dir):
+        from .sets import held
+        n_keyframes = len(held(sig_dir))                           # what the folder holds, whatever this run wanted
     from .versions import version_of
     gt_version = version_of(gen.signature())                       # None: a signature without a row in versions.csv (unreleased): no key
     idx = {"signature": gen.signature(), **({"gt_version": gt_version} if gt_version else {}), "version": version, "res": gen.grid.res,
            "ss": gen.ss, "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
            "complete": complete}
-    tmp = os.path.join(sig_dir, "index.json.tmp")
+    kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
+    sets_complete = sorted(set(kept.get("sets_complete", [])) | set((run or {}).get("sets_complete", [])))
+    if run is None:
+        idx.update({k: kept[k] for k in ("set", "commit", "dirty", "release") if k in kept})
+        if "release" in idx and not complete:
+            idx["release"] = False                                 # a run in progress (its provisional index) is not a release
+    else:
+        idx.update(set=run.get("set"), commit=run.get("commit"), dirty=run.get("dirty"),
+                   release=bool(complete and gt_version and run.get("dirty") is False and "full" in sets_complete))
+    if sets_complete:
+        idx["sets_complete"] = sets_complete
+    tmp = os.path.join(sig_dir, f"index.json.{os.getpid()}.tmp")
     with open(tmp, "w") as f:
         json.dump(idx, f, indent=1)
     os.replace(tmp, os.path.join(sig_dir, "index.json"))
@@ -142,11 +182,13 @@ def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=
     """the low-level writer (one full devkit, `out` required; `generate` is the entry point): returns the number of keyframes written
     (existing ones are skipped)."""
     from .suite import AutoGT
+    if stride < 1:
+        raise ValueError(f"stride must be 1 or more, got {stride}")
     gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
     sig_dir = os.path.join(out, gt.signature())
     check_resume(sig_dir, gt.grid, ss)
     os.makedirs(sig_dir, exist_ok=True)
-    names = scenes or gt.scenes()
+    names = gt.scenes() if scenes is None else list(dict.fromkeys(scenes))
     tokens = [t for s in names for t in gt.keyframes(s)[::stride]]
     write_index(sig_dir, gt, version, names, stride, len(tokens), options, complete=False)       # before the first keyframe, also on a resume
     done = _write_tokens(gt, tokens, sig_dir, workers, (dataroot, version, res, ss, options), verbose)
@@ -169,7 +211,7 @@ def detect_version(dataroot):
     return found[0]
 
 
-def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, **options):
+def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, set_name=None, **options):
     """THE entry point of the suite: read nuScenes from `dataroot` and write the GT of every keyframe.
 
     dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
@@ -177,48 +219,63 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
                place `autogt.load(token)` reads from (not in git)
     version    v1.0-mini / v1.0-trainval; default: the one found in dataroot (an error if there are several)
     scenes     names such as ["scene-0061"]; default all sequences of the version
+    set_name   "small" (the 10 sequences of mini: small experiments) or "full" (all 850 of trainval: releases), the files of
+               autogt/sets/; instead of scenes (both given: an error)
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
     workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see AutoGT)
     -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
-        "written": new files}
+        "written": new files, "release": the folder is a release (see write_index)}
+    The index.json of the folder is the manifest: gt_version, commit and dirty flag of the generator code, the sets it holds in full.
 
     Memory-light and resumable: the sequences are read in groups of GROUP_SCENES with the light devkit (the GT is identical to the
     full devkit's), files that exist are skipped, so an interrupted run continues where it stopped. A folder of another resolution
     or supersampling is never continued. The signature changes with every edit of the generator, so GT of an older generator is
     never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
     import gc
-    from .suite import AutoGT, DATA, json_tables, scene_tokens
+    from . import sets
+    from .suite import AutoGT, DATA, current_signature, json_tables, scene_tokens
+    if set_name and scenes is not None:
+        raise ValueError(f"pass either scenes= or set_name= ({set_name!r}), not both")
+    if stride < 1:
+        raise ValueError(f"stride must be 1 or more, got {stride}")
     dataroot = os.path.expanduser(dataroot)
     version = version or detect_version(dataroot)
     out = os.path.expanduser(out) if out else DATA
     known = [s["name"] for s in json_tables(dataroot, version)[0]]
-    names = list(scenes) if scenes else known
+    names = sets.scenes(set_name) if set_name else known if scenes is None else list(dict.fromkeys(scenes))      # no duplicates
     if not names or [n for n in names if n not in known]:
         raise ValueError(f"unknown scene(s) {[n for n in names if n not in known] or 'none given'} in {version} of {dataroot}")
     tokens = {n: scene_tokens(n, version, dataroot)[::stride] for n in names}                       # json tables only, no devkit
     n_total = sum(len(t) for t in tokens.values())
-    sig_dir, ident, done = None, None, 0
+    sig = current_signature(**options)                                                              # the folder name, without the devkit
+    sig_dir = os.path.join(out, sig)
+    ident = types.SimpleNamespace(signature=lambda: sig, grid=GridSpec(res=res), ss=ss)             # what write_index needs, without the devkit
+    try:
+        check_resume(sig_dir, ident.grid, ss)
+    except SystemExit as e:                                                                          # a library call raises, it does not exit
+        raise ValueError(str(e)) from None
+    os.makedirs(sig_dir, exist_ok=True)
+    write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)           # before the first keyframe, also on a resume
+    done, stored = 0, sets.held(sig_dir)
     for g0 in range(0, len(names), GROUP_SCENES):
         grp = names[g0:g0 + GROUP_SCENES]
-        gen = AutoGT(dataroot, version, GridSpec(res=res), ss, light=True, scenes=grp, **options)
-        if sig_dir is None:
-            sig = gen.signature()
-            sig_dir = os.path.join(out, sig)
-            check_resume(sig_dir, gen.grid, ss)
-            os.makedirs(sig_dir, exist_ok=True)
-            write_index(sig_dir, gen, version, names, stride, n_total, options, complete=False)    # before the first keyframe, also on a resume
-            ident = types.SimpleNamespace(signature=lambda: sig, grid=gen.grid, ss=ss)               # what write_index needs, without the devkit
-        done += _write_tokens(gen, [t for n in grp for t in tokens[n]], sig_dir, workers, (dataroot, version, res, ss, options, grp), verbose)
+        todo = [t for n in grp for t in tokens[n] if t not in stored]
+        if not todo:
+            continue                                                                                # a finished group needs no devkit load
+        gen = AutoGT(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
+        done += _write_tokens(gen, todo, sig_dir, workers, (dataroot, version, res, ss, options, grp), verbose)
         del gen
         gc.collect()
-    write_index(sig_dir, ident, version, names, stride, n_total, options)
-    from .versions import version_of
-    gt_version = version_of(ident.signature()) or "unreleased"
+    write_index(sig_dir, ident, version, names, stride, n_total, options, run=run_manifest(sig_dir, version, dataroot, set_name))
+    with open(os.path.join(sig_dir, "index.json")) as f:
+        idx = json.load(f)
+    gt_version = idx.get("gt_version", "unreleased")
     if verbose:
-        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version})\n"
+        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx['commit']}"
+              f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx.get('sets_complete', [])})\n"
               f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
     return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
-            "keyframes": n_total, "written": done}
+            "keyframes": n_total, "written": done, "release": idx["release"]}
 
 
 def _print_versions():
@@ -233,6 +290,19 @@ def _print_versions():
         print(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased); add a row, commit, tag autogt/v<N>")
 
 
+def _print_sets():
+    """each scene set: its sequences, keyframes, and how much of it the store of the current generator holds"""
+    from . import sets
+    for name in sets.names():
+        try:
+            s = sets.status(name)
+        except ValueError as e:
+            print(f"{name:6s} {len(sets.scenes(name)):4d} scenes  not readable here: {e}")
+            continue
+        print(f"{name:6s} {len(sets.scenes(name)):4d} scenes  {s['total']:6d} keyframes ({s['version']})  stored for this generator: "
+              f"{s['have']}/{s['total']}{'  COMPLETE' if s['complete'] else ''}")
+
+
 def _boxes_option(a):
     """the generator option of --boxes-at (nothing for the default, so the default options stay empty in the records)."""
     return {} if a.boxes_at == "camera" else {"boxes_at": a.boxes_at}
@@ -243,10 +313,12 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("selftest")
     sub.add_parser("versions", help="the GT versions (autogt/versions.csv, D29): the current one marked, which GT is stored")
+    sub.add_parser("sets", help="the scene sets small / full (autogt/sets/): sequences, keyframes, how much of each is stored")
     ge = sub.add_parser("generate", help="read nuScenes from DATAROOT and write the GT of every keyframe (the entry point)")
     ge.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
     ge.add_argument("--out", default=None, help="folder of the stored GT (default data/autogt); the files go to OUT/<signature>/")
     ge.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the one found in DATAROOT)")
+    ge.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all of trainval)")
     ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
     ge.add_argument("--res", type=float, default=0.5)
     ge.add_argument("--stride", type=int, default=1, help="every n-th keyframe")
@@ -300,6 +372,7 @@ def main(argv=None):
     cl.add_argument("--old-outputs", action="store_true")
     cl.add_argument("--all-caches", metavar="DIR")
     cl.add_argument("--stale-caches", metavar="DIR")
+    cl.add_argument("--include-released", action="store_true", help="also list the caches of released GT versions (versions.csv): --move only")
     cl.add_argument("--older-than", type=float, metavar="DAYS")
     cl.add_argument("--move", action="store_true")
     cl.add_argument("--delete", action="store_true")
@@ -313,9 +386,14 @@ def main(argv=None):
         run()
     elif a.cmd == "versions":
         _print_versions()
+    elif a.cmd == "sets":
+        _print_sets()
     elif a.cmd == "generate":
-        generate(a.dataroot, a.out, a.version, a.scenes, a.stride, a.res, workers=a.workers,
-                 use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))
+        try:
+            generate(a.dataroot, a.out, a.version, a.scenes, a.stride, a.res, workers=a.workers, set_name=a.set_name,
+                     use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))
+        except ValueError as e:                                                                      # a wrong argument: the message, no traceback
+            raise SystemExit(f"error: {e}") from None
     elif a.cmd == "build":
         build(os.path.expanduser(a.dataroot), a.version, a.out, a.scenes, a.stride, a.workers, a.res,
               use_flow=not a.no_flow, use_radar=not a.no_radar, **_boxes_option(a))
@@ -339,8 +417,11 @@ def main(argv=None):
                a.light or "trainval" in a.version, **_boxes_option(a))
     elif a.cmd == "clean":
         from .clean import clean
-        clean(delete=a.delete, move=a.move, videos=a.videos, pictures=a.pictures, reports=a.reports, old_outputs=a.old_outputs,
-              stale_caches=a.stale_caches, all_caches=a.all_caches, older_than=a.older_than)
+        try:
+            clean(delete=a.delete, move=a.move, videos=a.videos, pictures=a.pictures, reports=a.reports, old_outputs=a.old_outputs,
+                  stale_caches=a.stale_caches, all_caches=a.all_caches, older_than=a.older_than, include_released=a.include_released)
+        except ValueError as e:
+            raise SystemExit(f"error: {e}") from None
     elif a.cmd == "video":
         from .video import run
         run(a.scene, a.mp4, a.seconds)

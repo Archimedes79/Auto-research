@@ -5,11 +5,13 @@ folder of the stored GT; the version is its human key. A version is: a row in ve
 on the commit that holds that generator, and the key `gt_version` in the index.json of the stored GT. The rule when you edit one of the
 five files: the signature changes, `python -m autogt selftest` fails until versions.csv has a row for the new signature, then commit
 and tag (`git tag -a autogt/v6 -m "..."`), rebuild the GT, tell the others. An old GT is rebuilt from its tag:
-`git worktree add temp/gt_v3 autogt/v3`, then generate with the package of that checkout (docs: README.md, section Versions).
+`git worktree add temp/gt_v5 autogt/v5`, then run `build` of the package in that checkout (the old tags have no `generate`; exact
+command and the check that it is the checkout's package that runs: README.md, section Versions).
 
     autogt.versions.table()          the rows (dicts)
     autogt.versions.version_of(sig)  "v5" or None; autogt.current_version() the version of THIS source with the default options
     python -m autogt versions        the table, the current version marked, which GT is stored
+    autogt.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
 """
 import csv
 import os
@@ -30,3 +32,18 @@ def version_of(signature):
 
 def row_of(version):
     return next((r for r in table() if r["version"] == version), None)
+
+
+def code_state():
+    """{"commit": short hash of HEAD, "dirty": True when anything in autogt/ differs from it (edited or new files)}; both None when
+    git is not available here. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one."""
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        head = subprocess.run(["git", "-C", here, "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=30)
+        status = subprocess.run(["git", "-C", here, "status", "--porcelain", "--", "."], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return {"commit": None, "dirty": None}
+    if head.returncode or status.returncode:
+        return {"commit": None, "dirty": None}
+    return {"commit": head.stdout.strip(), "dirty": bool(status.stdout.strip())}

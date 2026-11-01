@@ -9,17 +9,31 @@ imports `training/`; `training/gt_bev.py` is only a shim for the older code. Eve
 ```python
 import autogt                                   # run from the repository root (or put it on PYTHONPATH)
 r = autogt.generate("~/data/nuscenes_full")     # all of trainval (5-8 h in one process); out=None -> data/autogt/<signature>/
+r = autogt.generate("~/data/nuscenes", set_name="small")  # the small set (the 10 sequences of mini) for small experiments
 r = autogt.generate("~/data/nuscenes", out="/data/gt", scenes=["scene-0061"], stride=2)    # a mini sequence, every 2nd keyframe, elsewhere
-# -> {"out": folder written, "signature", "version", "scenes", "keyframes": wanted, "written": new files}; one <sample token>.npz per keyframe
-#    + index.json; the version is found in the folder (pass version= if it holds several); a rerun writes only what is missing
+# -> {"out": folder written, "signature", "gt_version", "version", "scenes", "keyframes": wanted, "written": new files, "release"}; one
+#    <sample token>.npz per keyframe + index.json; the version is found in the folder (pass version= if it holds several); a rerun writes
+#    only what is missing
 g = autogt.load(token)                          # read one back (data="/data/gt" for another folder), no nuScenes needed
 ```
-Same from the shell: `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--version V] [--scenes scene-0061 ...] [--stride N] [--workers N]`.
-Parameters of `generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, **options)`:
+Same from the shell: `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--version V] [--set small|full | --scenes scene-0061 ...] [--stride N] [--workers N]`.
+Parameters of `generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, set_name=None, **options)`:
 `dataroot` the nuScenes folder; `out` where the GT goes (default the place `load` reads); `version` v1.0-mini / v1.0-trainval;
-`scenes` names (default all); `stride` every n-th keyframe; `res` / `ss` cell size in m / supersampling; `workers` processes;
-`options` the generator options of `AutoGT` below (`use_flow`, `use_radar`, `boxes_at`, ...). A folder written with another
-resolution or supersampling is never continued; the folder name is the generator signature, so GT of an older generator is never mixed in.
+`scenes` names (default all); `set_name` a scene set instead of `scenes` (below); `stride` every n-th keyframe; `res` / `ss` cell size in
+m / supersampling; `workers` processes; `options` the generator options of `AutoGT` below (`use_flow`, `use_radar`, `boxes_at`, ...). A
+folder written with another resolution or supersampling is never continued; the folder name is the generator signature, so GT of an
+older generator is never mixed in.
+
+**Two sets, one manifest.** The scene sets are the files `sets/small.txt` (the 10 sequences of nuScenes mini, 404 keyframes, about 25
+minutes: small experiments) and `sets/full.txt` (all 850 sequences of trainval, 34,149 keyframes, 5 - 8 hours: releases); one scene name
+per line, `#` starts a comment. `python -m autogt sets` lists them and how much of each the store of the current generator holds
+(`autogt.sets.status(name)` in code). Small is a part of full and both share the signature folder, so running small first is not wasted.
+The `index.json` of a folder is its manifest: `gt_version` (key of `versions.csv`, only for a released signature), `commit` (short hash of
+HEAD when the last run was made) and `dirty` (anything in `autogt/` differed from it), `set` (the set the last run asked for),
+`sets_complete` (the sets whose every keyframe has a file) and `release`: true when the folder is complete, its signature is a released
+GT version, the tree was clean and `full` is complete. Use a folder with `release: true` for a number you report as a release; a
+folder with `dirty: true` or no `gt_version` is scratch. The network input that a model precomputes from the GT (it needs the
+backbone) is not made here; it is a product of the model code and carries its own version and the `gt_version` it stands on.
 
 One keyframe at a time in code:
 ```python
@@ -32,13 +46,14 @@ g = load(sample_token)                          # the STORED GT of a keyframe (d
 ```
 ```
 python -m autogt selftest                                   # all tests (synthetic world + real keyframes + build)
-python -m autogt generate DATAROOT [--out DIR] [--scenes ..] [--stride N] [--workers N]   # THE entry point (above): per-keyframe files DIR/<signature>/
+python -m autogt generate DATAROOT [--out DIR] [--set small|full | --scenes ..] [--stride N] [--workers N]   # THE entry point (above): per-keyframe files DIR/<signature>/
+python -m autogt sets                                       # the scene sets small / full and how much of each is stored; `versions` lists the GT versions
 python -m autogt build --version v1.0-mini --out DIR [--scenes ..] [--workers N] [--res 0.25]   # its low-level writer (one full devkit, --out required)
 python -m autogt check [--holdout]                          # automatic consistency checks (+ leave-one-radar-out radar test)
 python -m autogt view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
 python -m autogt report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (data/autogt/<signature>/), run every check, write ONE PDF
                                                             # (data/autogt/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
-python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--older-than DAYS] [--move|--delete]
+python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move|--delete]
                                                             # removes only what autogt generated; dry run by default, --move puts it into _to_delete/
 python -m autogt video SCENE OUT.mp4 [seconds]              # driving through the GT at 12 Hz (H.264, read back); the examples so far: scene-0061, scene-1077, scene-0655 in data/autogt/examples/
 ```
@@ -50,7 +65,8 @@ python -m autogt video SCENE OUT.mp4 [seconds]              # driving through th
 | `nuscenes_adapter.py` | devkit records -> `Track` / `Ego` / `RadarFrame` (`NuScenesScene`); the only place that knows nuScenes' radar and annotation format |
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
-| `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json` |
+| `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
+| `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
 | `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
@@ -102,7 +118,7 @@ covariance, source, flag; plus the dense arrays when a grid is given)
   agree with the radar to about 0.2 m/s; the radar adds a small gain and the flags (57 overrides, 2 conflicts over all boxes of
   mini); the remaining RMSE is outlier detections (2.6 % beyond 2 m/s: ghosts, wheels)
 - the radar mask assumption: 99.9 % of all detections lie within +-60 deg of the sensor axis (measured)
-- the box shift v * dt (a one-off script, commit 769aafc: `temp/checks/radar_box_shift.py`; the selftest keeps the sign check against the interpolated annotation; mini, 340 moving observed vehicles >= 5 m/s, 5..45 m ahead; raw radar
+- the box shift v * dt (a one-off script, commit 769aafc: `bev_fusion/temp/checks/radar_box_shift.py`; the selftest keeps the sign check against the interpolated annotation; mini, 340 moving observed vehicles >= 5 m/s, 5..45 m ahead; raw radar
   POSITIONS, which the velocity did not use; points inside the footprint + 1 m per box and radar sweep within +-0.45 s): the
   moved box keeps its 0.37 - 0.41 points at every offset, the annotation pose falls from 0.38 to 0.19 and the opposite shift to
   0.07 (|dt| 0.3 .. 0.45 s); at the real 36 ms the three variants are within noise (0.40 / 0.39 / 0.36), the check is of the
@@ -140,10 +156,13 @@ training which keyframes the store lacks.
 
 **When you edit one of the five files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py`) the signature changes and
 `python -m autogt selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild
-the GT, tell the others. **To rebuild an old version** (v3 and later): `git worktree add temp/gt_v3 autogt/v3`, then in that checkout
-`PYTHONPATH=temp/gt_v3/bev_fusion python -m autogt generate <nuScenes folder> --out <folder>` (the tag holds the package under
-`bev_fusion/autogt/`; since v5 + the move of 2026-11-01 under `autogt/`). v1 and v2 are `bev_fusion/training/gt_bev.py` at their tag
-(`NuScenesGT.keyframe_gt`, no `generate`). Tags are local until someone pushes them (`git push origin autogt/v1 ...`).
+the GT, tell the others. **To rebuild an old version** (v3, v4, v5): `git worktree add temp/gt_v5 autogt/v5`, then
+`cd temp/gt_v5 && PYTHONPATH=bev_fusion python -m autogt build --dataroot <nuScenes folder> --version v1.0-trainval --out <folder>`
+(`build`, not `generate`: the tags hold the package under `bev_fusion/autogt/` and have the full-devkit writer only, 8+ GB for
+trainval; the tags v3 - v5 predate `generate`). A `PYTHONPATH` that does not name the checkout silently imports the live package, so check
+first: `PYTHONPATH=bev_fusion python -c "import autogt; print(autogt.__file__)"` must print a path inside `temp/gt_v5`. Then `<folder>` holds
+`<signature>/` of that version (v5: 15efbde2d1). v1 and v2 are `bev_fusion/training/gt_bev.py` at their tag (`NuScenesGT.keyframe_gt`,
+no `generate`). Tags are pushed with the code (`git push origin autogt/v1 ...`).
 
 ## Adding a dataset
 Write an adapter that builds the four inputs of `estimate_flow` (`Track`, `Ego`, `RadarFrame`, `GridSpec`) and a generator for
@@ -161,6 +180,6 @@ predicting zero, and the gradient of a dense motion head at the BEV feature was 
 two groups (weight moving cells, `|velocity| > 1 m/s`, separately from static ones, or use a loss normalised per group), use
 `flow_weight` (0 = unknown) as the mask and `flow_sigma` as an uncertainty (e.g. a Huber / beta-NLL scale), and report speed errors
 split into moving and static cells with the zero predictor next to them. The signal is in the input: the median radar Doppler inside
-a moving box reproduces the GT radial speed (corr 0.989, review notes in `temp/review/observe_2026-10-30/NOTES.md`). A `moving`
+a moving box reproduces the GT radial speed (corr 0.989, review notes in `bev_fusion/temp/review/observe_2026-10-30/NOTES.md`). A `moving`
 mask is not stored in the GT on purpose (it would change the generator signature and invalidate the caches); derive it from
 `velocity`.

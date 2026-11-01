@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .cli import _flat, check_resume, write_index  # noqa: E402
+from .cli import _flat, check_resume, run_manifest, save_keyframe, write_index  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
 from .suite import AutoGT  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
@@ -83,17 +83,18 @@ def _scene_task(name):
             ck.feed(name, k, tok, gk, gen.nusc.get("sample", tok)["timestamp"])
             if sig_dir:
                 path = os.path.join(sig_dir, tok + ".npz")
-                if not os.path.exists(path):
-                    np.savez_compressed(path + ".tmp.npz", **_flat(gk))
-                    os.replace(path + ".tmp.npz", path)
+                if not (os.path.exists(path) and os.path.getsize(path) > 0):
+                    save_keyframe(path, _flat(gk))
                     written += 1
             if want_sample and sample is None and k >= mid:
                 sample = (k, gk)
         ck.written = written
         out = (name, ck, sample, None)
         if pk:
-            pickle.dump(out, open(pk + ".tmp", "wb"))
-            os.replace(pk + ".tmp", pk)
+            tmp = f"{pk}.{os.getpid()}.tmp"
+            with open(tmp, "wb") as f:
+                pickle.dump(out, f)
+            os.replace(tmp, pk)
         return out
     except Exception as e:                                          # noqa: BLE001
         return (name, None, None, f"{type(e).__name__}: {e}")
@@ -153,7 +154,8 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
                 held[n] = sample
     n_kf = len(ck.st["dt_ms"])
     if sig_dir:
-        write_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options)
+        write_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options,
+                    run=run_manifest(sig_dir, version, dataroot))
     fov = radar_fov(gen, [n for n in keep if n not in failed], stride)
     ho = leave_one_radar_out(gen, [n for n in names if n not in failed], stride) if (holdout and not light) else None
     os.makedirs(os.path.dirname(os.path.abspath(out_pdf)), exist_ok=True)

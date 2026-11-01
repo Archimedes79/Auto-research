@@ -9,19 +9,20 @@ sequences / 404 keyframes, trainval = 850 / 34,149).
 | I want | do this |
 |---|---|
 | the GT of keyframes that are already generated (training, analysis) | `autogt.load(token)` - 0.1 s, no nuScenes needed; the tokens of a sequence: `autogt.scene_tokens("scene-0561", "v1.0-trainval")` (json tables, 1 s) |
-| to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `autogt.generate("~/data/nuscenes_full")` (or `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing), returns `{"out", "signature", "version", "scenes", "keyframes", "written"}`; trainval 5-8 h; default `out` = `data/autogt` -> `<signature>/<token>.npz` + `index.json` |
+| to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `autogt.generate("~/data/nuscenes_full")` (or `python -m autogt generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing, a finished group loads no devkit), returns `{"out", "signature", "gt_version", "version", "scenes", "keyframes", "written", "release"}`; trainval 5-8 h; default `out` = `data/autogt` -> `<signature>/<token>.npz` + `index.json`; one generate / report per folder at a time |
+| a small or a full run | `autogt.generate(dataroot, set_name="small")` (the 10 sequences of mini, ~25 min, small experiments) or `"full"` (all 850 of trainval, 5-8 h, releases); shell `--set small|full`; `python -m autogt sets` shows how much of each is stored; the manifest in `index.json` (`gt_version`, `commit`, `dirty`, `sets_complete`, `release`) says what a folder is: `release: true` = complete, released GT version, clean tree, `full` held |
 | to generate single keyframes in code (other options, a quick look) | `AutoGT(dataroot, version).keyframe(token)` |
 | prev / cur / next keyframe + the ego motion between them | `AutoGT(...).training_sample(token)` (section 5) |
 | GT of ALL sequences stored + every check + one PDF | `python -m autogt report --version v1.0-mini` (trainval: `--version v1.0-trainval`, 5-8 h, resumable) |
 | to look at a keyframe / drive through a sequence | `python -m autogt view OUT_DIR <token>` (any STORED keyframe, mini or trainval) or `... view OUT_DIR scene-0061:8` (mini, generated now) / `python -m autogt video scene-0061 out.mp4 [seconds]` (mini) |
 | to be sure after editing the generator | `python -m autogt selftest` (about 5 min; also checks that this file lists every key) |
-| to remove what autogt generated | `python -m autogt clean --stale-caches data/autogt` (dry run; `--move` / `--delete` to act) |
+| to remove what autogt generated | `python -m autogt clean --stale-caches data/autogt` (dry run; `--move` / `--delete` to act; the caches of released GT versions are left alone, `--include-released` lists them and they can only be moved) |
 
 Python (all of it): `from autogt import generate, AutoGT, load, scene_tokens, current_signature, GridSpec`.
 ```python
 import autogt
 toks = autogt.scene_tokens("scene-0561", "v1.0-trainval")      # 40 sample tokens in time order (json tables only; mini: default version)
-g = autogt.load(toks[8])                                        # dict: 25 float32 layers + "meta" (tables below); raises FileNotFoundError
+g = autogt.load(toks[8])                                        # dict: 24 float32 layers + `instance` (int32) + "meta" (tables below); raises FileNotFoundError
                                                                 # (naming the folders that exist) if the token is not stored
 gen = autogt.AutoGT("~/data/nuscenes", "v1.0-mini")             # generate: mini loads in 4 s, the whole devkit is fine
 g = gen.keyframe(gen.keyframes("scene-0061")[8])                # same dict, generated now (2-3 s)
@@ -35,7 +36,7 @@ provisional folder alone for an hour after its last write. CLI details: `python 
 `view`, `selftest`.
 
 ## 2. Run it (this box is shared)
-All commands run **from the repository root (`C:Auto-research`) inside WSL** with the conda env `gcar`; from Windows prefix `wsl`:
+All commands run **from the repository root (`C:\Auto-research`) inside WSL** with the conda env `gcar`; from Windows prefix `wsl`:
 `wsl bash autogt/run_nice.sh -m autogt selftest` (nice 15, one thread; runs any script the same way:
 `... run_nice.sh my_script.py`; a running `report` is stopped with `wsl bash -c "pkill -f '[a]utogt report'"`). Rules: one process, no worker pools while a training round runs (`uptime`, `free -m` first),
 the full trainval devkit needs 8+ GB (use `light=True, scenes=[...]`; `report` does it automatically), run long jobs in the
@@ -90,13 +91,16 @@ one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), 
   nuscenes_adapter.py nuscenes_gt.py`) plus the options. ANY edit of those files makes every stored GT unreadable by the new code
   (a rebuild of trainval takes 5-8 h) and a running job that imports the live tree keeps its old key. So: never edit them while a job
   runs, tell the owner of the training code before you do, and put the signature next to every number you report. Edits of
-  `checks.py view.py video.py report.py cli.py suite.py clean.py encode.py selftest.py` do not change it. Never compare two models on
-  different signatures.
+  `checks.py view.py video.py report.py cli.py suite.py clean.py encode.py selftest.py sets.py` do not change it. `light_nusc.py` (the
+  memory-light devkit that `generate` uses) also does not change it, although it decides which records the GT sees: after an edit run
+  the selftest, which compares light and full GT. A process keeps the key it computed first (`current_signature()` is memoised): restart
+  a reader after an edit. Never compare two models on different signatures.
 - **A GT version has a key (decision D29).** Every signature is a version `vN` in `autogt/versions.csv` (`python -m autogt versions`
   lists them, `autogt.current_version()` is the one of this source, the `index.json` of a store carries `gt_version`), and a git tag
   `autogt/vN` sits on the commit that holds that generator. Edit one of the five files and the selftest fails until the table has a row
   for the new signature: add the row, commit, `git tag -a autogt/v<N> -m "<what changed>"`, rebuild the GT, tell the others. To
-  reproduce an old GT: `git worktree add temp/gt_v3 autogt/v3`, then run that checkout's package (README.md, section Versions). Before a
+  reproduce an old GT: `git worktree add temp/gt_v5 autogt/v5`, then run that checkout's `build` (exact command and the check that it is
+  the checkout's package that runs: README.md, section Versions; the old tags have no `generate`). Before a
   training starts, `autogt.missing(tokens)` says which keyframes the store lacks (none may be built inside a data-loader worker).
 - **Boxes are at the camera time** (decided by the user 2026-10-31, like Waymo's `camera_synced_box`): a moving box of known
   velocity is moved by `v * (t_camera - t_annotation)` (about -36 ms, median 6 cm, max 88 cm); stationary boxes and boxes of
@@ -152,7 +156,7 @@ cur["flow"] * dt                         # first-order displacement of every cel
   (numpy only) and a generator for the static layers (`layers.py` is reusable).
 
 ## 6. Files
-`suite.py` (`AutoGT`, `load`, `current_signature`), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
+`suite.py` (`AutoGT`, `load`, `current_signature`), `cli.py` (`generate`, the commands), `sets.py` + `sets/` (scene sets), `versions.py` + `versions.csv` (GT versions), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
 `nuscenes_adapter.py` (the only code that knows the nuScenes formats), `layers.py` + `grid.py` (exact rasteriser, occlusion, `GridSpec`),
 `checks.py` (consistency checks), `report.py`, `view.py`, `video.py`, `encode.py` (H.264 with a read-back check), `clean.py`,
 `light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan.md` section 9.5, `README.md` (validation numbers).
