@@ -6,6 +6,8 @@ frame; the "vehicle IoU at +-0.5 s -0.03" first reported there was a misreading 
 the block LOWERED, see the correction in that card). That KEEP means "write the joint-training card": this card. t13 (complete
 network) reuses the M runs as its B0+M row and does not run them again (agreed with the BEV system chat, 2026-11-01).
 
+> **GT version note (2026-11-02, Mirko: "schreibe auf v8 um" and "lösche v5 dateien").** New work uses autogt v8: released store `c643a7539d` (`gt_version` v8; the v9 code makes the same GT). The v5 store `data/autogt/15efbde2d1` is deleted (rebuild: tag `autogt/v5`, `autogt/README.md`, Versions); the pin `0.5_4_15efbde2d1` below (the tag copy of autogt v5 in the run folder, the trainer's own cache `bev_fusion/data/cache/gt`) never read that store and still works. This note does NOT switch the card: the arms are compared with `t10_dual_s0` / `s1` (v5), and v6 fixed the halved ego velocity at the ends of a sequence that section "Label of every velocity number" names. Moving the card to v8 means v8 controls and relabelled numbers: a design decision of the BEV system chat, to be recorded with Mirko's word; nothing starts while the training stop of 2026-11-01 stands.
+
 ## 1 Card
 
 - **Question.** Trained from the start with the chain (the `t10_dual` recipe), does the motion block give a better velocity than
