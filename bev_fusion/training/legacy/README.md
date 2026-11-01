@@ -7,7 +7,7 @@ the tests that use them add `training/legacy` to their path. Old run snapshots (
 
 | file | what it is | used by | self-test |
 |---|---|---|---|
-| `s1_camera.py` | S1 camera-only BEV segmentation (cached image heads -> lift PD / P / S -> trunk -> semantic head) with the published presets (`ours`, `dualbev`, `simplebev`, `lss`) | `../../tests/test_s1_pipeline.py` (card `../../experiments/s1a_lift_pd_vs_p/`), `../../temp/timing/time_s1_chain.py`, `../../requirements.md` R-METH-3 | `python training/legacy/s1_camera.py` |
+| `s1_camera.py` | S1 camera-only BEV segmentation (cached image heads -> lift PD / P / S -> trunk -> semantic head) with the published presets (`ours`, `dualbev`, `simplebev`, `lss`) | `../../tests/test_s1_pipeline.py` (card `../../experiments/s1a_lift_pd_vs_p/`), `../../temp/timing/time_s1_chain.py`, `../../plan/requirements.md` R-METH-3 | `python training/legacy/s1_camera.py` |
 | `train_s1.py` | the S1 driver for synthetic and real batches (loss, schedule, per-scene SegMeters, null baseline, bootstrap) | `../../tests/test_s1_pipeline.py` | `python training/legacy/train_s1.py` |
 | `camera_decoder.py` | camera-only decoder (lift PD, semantic + object head, depth) | `../../tests/test_camera_only.py`, `../../temp/checks/probe_cam_lanes.py` | `python training/legacy/camera_decoder.py` |
 | `radar_decoder.py` | radar-only decoder (stationary map + moving objects, detections moved once to the output time) | `../../tests/test_radar_only.py` | `python training/legacy/radar_decoder.py` |

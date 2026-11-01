@@ -1,6 +1,6 @@
 # Fusion blocks compared: CRN, GaussianCaR, RaCFormer, and ours (plan sections 4 + 7)
 
-Date 2026-10-25. Sources: `crn_fusion.md`, `gaussiancar_fusion.md`, `racformer_fusion.md` (same folder; each read from code, see their reliability notes - RaCFormer was read from raw GitHub files through a summarising fetch tool, so its row is the least certain). CRT-Fusion and FIERY are extracted by another scout (`crt_fusion.md`, `fiery_ego_warp.md`) and are not repeated; the plan names them as the basis of the temporal part (`../../plan.md` section 7). "Ours" is a design, not code.
+Date 2026-10-25. Sources: `crn_fusion.md`, `gaussiancar_fusion.md`, `racformer_fusion.md` (same folder; each read from code, see their reliability notes - RaCFormer was read from raw GitHub files through a summarising fetch tool, so its row is the least certain). CRT-Fusion and FIERY are extracted by another scout (`crt_fusion.md`, `fiery_ego_warp.md`) and are not repeated; the plan names them as the basis of the temporal part (`../../plan/plan.md` section 7). "Ours" is a design, not code.
 
 | | CRN (ICCV 2023) | GaussianCaR (ICRA 2026) | RaCFormer (CVPR 2025) | ours (plan sections 4 + 7, draft 3) |
 |---|---|---|---|---|

@@ -1,6 +1,6 @@
 # plan - the written plan of bev_fusion
 
-The documents that say what the camera + radar BEV system must be and why. They were in the root of `bev_fusion/` until 2026-11-01 (tidied on Mirko's word); the names did not change, so a reference such as "plan.md section 9.5" now means `plan/plan.md` section 9.5.
+The documents that say what the camera + radar BEV system must be and why. They were in the root of `bev_fusion/` until 2026-11-01 (tidied on Mirko's word); the names did not change, so a reference such as "plan.md section 9.5" now means `plan/plan.md` section 9.5, and the path `bev_fusion/plan.md` in a code docstring (`training/*.py`) or an older card means `bev_fusion/plan/plan.md` (the same for `requirements.md` and `radar_encoding.md`); the relative links of the living READMEs and cards were changed.
 
 | file | content |
 |---|---|
