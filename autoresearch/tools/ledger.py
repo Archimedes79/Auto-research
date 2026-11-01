@@ -104,7 +104,7 @@ def missing(inside=lambda rid: True):
     for rid, d in run_dirs():
         st, old = RUN.state_of(d), have.get(rid, {})
         row = old.get("status")
-        if inside(rid) and st in ("done", "ok", "failed", "timeout", "blocked", "gpu_busy", "stalled") \
+        if inside(rid) and st in ("done", "ok", "failed", "stopped", "timeout", "blocked", "gpu_busy", "stalled") \
                 and (row in (None, "", "planned", "running") or (row == "stalled" and st != "stalled")  # a stalled row stays until the run really ends
                      or RUN.later_attempt(RUN.record(d), old)):
             out.append((rid, d, st))

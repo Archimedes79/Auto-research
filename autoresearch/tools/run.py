@@ -12,6 +12,8 @@ What it does (paths from the problem's project.json, see project.py):
                 record. Runs in progress are not in the ledger: `ledger.py tail` and `schedule.py show` read them from the run records (state is
                 derived from the records, never synced between files)
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
+  * stop        exit code 75 (trainsuite: the trainer was asked to stop and saved a checkpoint) is status "stopped": no done flag, no retry (not even when the log tail
+                holds a CUDA error of an earlier attempt), not counted as a failure in metrics.py; the id can be started again to resume; --after dependents are blocked
   * card        a run needs its card: --hyp / --pred / --rule on the command line, else from the planned ledger row (ledger.py add); without
                 one it is refused (--no-card for smoke tests and data preparation, the ledger row then says "no card")
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
@@ -26,11 +28,11 @@ What it does (paths from the problem's project.json, see project.py):
                 into the ledger row; no difference leaves no key, a check that itself fails leaves code_drift_check = "failed: <reason>" and never
                 fails the run; --no-drift-check skips it. Not seen: an edit made between the first hash and the snapshot and undone before the end
   * id reuse    an id that is still running (fresh heartbeat) or finished with exit 0 is refused (a new id, or --again for a deliberate repeat);
-                a failed / blocked / stalled id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
+                a failed / blocked / stalled / stopped id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
                 and a note "code changed since attempt 1" (when the fingerprint differs) go into the record; result and decision of the earlier
                 attempt are cleared in the ledger row when the new attempt starts; two launchers of one id starting at once: the second is refused
                 (an atomic claim directory in the run directory)
-  * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed or stalled); waiting is not counted as run time
+  * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed, stalled or was stopped); waiting is not counted as run time
   * holdout     --split <holdout> (project.json holdout_split, default test) is refused unless the run id appears in the problem's holdout log
                 (project.json test_log)
   * chains      a launcher waits for its dependencies (--wait-after, default 720 min) and then for a GPU slot (--wait-gpu, default 720 min) before it
@@ -77,6 +79,10 @@ COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", 
 STALE_S = float(os.environ.get("AR_STALE_S", "300"))
 HEARTBEAT_S = float(os.environ.get("AR_HEARTBEAT_S", "15"))
 CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
+SCRATCH_MAX_BYTES = 1_000_000   # a scratch script over this size is not put into the run tag (it is data, not a script)
+SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (about 10 ms each at the snapshot, and again at the drift check)
+SCRATCH_SKIPPED = [0]           # how many scripts the last scratch_scripts() call left out
+EXIT_STOPPED = 75   # trainsuite/control.py EXIT_STOPPED: a trainer that was asked to stop (CONTROL file) saved a checkpoint and ended on purpose: status "stopped", never retried
 POSIX = os.name == "posix"
 
 
@@ -131,18 +137,36 @@ def snapshot_spec(root, cfg):
 
 
 def scratch_scripts(top, root, cfg):
-    """the .py / .sh files below the scratch folder (project.json scratch), relative to the repository top, when that folder lies inside a snapshotted code
-    folder, else []. The .gitignore keeps scratch out of ordinary commits (check_git.py), so the snapshot adds these by force: a run's tag and clean_temp.py
-    still hold the scripts of a loop"""
+    """the .py / .sh files below the scratch folder (project.json scratch, default "temp"), relative to the repository top; [] when the project sets it empty. The
+    .gitignore keeps scratch out of ordinary commits (check_git.py), so the snapshot adds these by force: a run's tag (and `clean_temp.py --move`, which tags
+    the same way) still holds the scripts of a loop. This holds also when the scratch folder lies OUTSIDE the code folders (bev_fusion: code_dirs training /
+    evaluation / autogt / tests, scratch temp): its scripts are in the tag but not in the drift check, which watches the code folders only, so another chat's new
+    scratch script is no 'code drift' of a run. A script over SCRATCH_MAX_BYTES and everything beyond the first SCRATCH_MAX_FILES (sorted by path) is left out;
+    the number is in SCRATCH_SKIPPED[0] and git_snapshot names it in the note of the run"""
     norm = lambda x: posixpath.normpath(x.replace("\\", "/")).strip("/")
     s = norm(cfg.get("scratch") or "")
-    if not s or s == "." or not any(norm(d) in (".", "") or s == norm(d) or s.startswith(norm(d) + "/") for d in cfg["code_dirs"]):
+    if not s or s == ".":
         return []
-    out = []
+    out, skipped = [], 0
     for dp, dn, fns in os.walk(os.path.join(root, s)):
         dn[:] = [d for d in dn if d != "__pycache__" and not d.startswith("literature_backup_")]  # never in git (the old .gitignore rule)
-        out += [os.path.relpath(os.path.join(dp, fn), top).replace("\\", "/") for fn in fns if fn.endswith((".py", ".sh"))]
-    return sorted(out)
+        for fn in fns:
+            if fn.endswith((".py", ".sh")):
+                p = os.path.join(dp, fn)
+                try:
+                    big = os.path.getsize(p) > SCRATCH_MAX_BYTES
+                except OSError:                       # gone while walking
+                    continue
+                if big:
+                    skipped += 1
+                else:
+                    out.append(os.path.relpath(p, top).replace("\\", "/"))
+    out.sort()
+    if len(out) > SCRATCH_MAX_FILES:                  # a cloned repository or a site-packages copy in the scratch folder must not slow every launch and fill every tag
+        skipped += len(out) - SCRATCH_MAX_FILES
+        out = out[:SCRATCH_MAX_FILES]
+    SCRATCH_SKIPPED[0] = skipped
+    return out
 
 
 def write_tree(top, spec, head, force=None):
@@ -191,6 +215,7 @@ def git_snapshot(root, cfg, prefix, run_id, msg):
             return "no-git", "", ""
         tag = f"{prefix}/{run_id}"
         top, spec, head = snapshot_spec(root, cfg)
+        SCRATCH_SKIPPED[0] = 0
         tree, err = write_tree(top, spec, head, lambda: scratch_scripts(top, root, cfg))
         if err:
             return "git-error", "", err
@@ -214,6 +239,8 @@ def git_snapshot(root, cfg, prefix, run_id, msg):
                 time.sleep(2)
             else:
                 return commit[:10], "", "tag failed: " + t.stderr.strip()[:120]
+        if SCRATCH_SKIPPED[0]:
+            note = "; ".join(x for x in (note, f"{SCRATCH_SKIPPED[0]} scratch script(s) not in the tag (over {SCRATCH_MAX_BYTES // 1000} kB, or beyond the first {SCRATCH_MAX_FILES})") if x)
         return commit[:10], tag, note
     except Exception as e:
         return "git-error", "", repr(e)[:120]
@@ -329,7 +356,7 @@ def save_rec(path, rec, indent=1):
 
 
 def state_of(d):
-    """done | ok | failed | blocked | gpu_busy | timeout | running | stalled | '' from a run directory"""
+    """done | ok | failed | stopped | blocked | gpu_busy | timeout | running | stalled | '' from a run directory"""
     if os.path.exists(os.path.join(d, "done")):
         return "done"
     rec = record(d)
@@ -429,7 +456,7 @@ def wait_after(records, ids, minutes, hb=None):
             st = state_of(os.path.join(records, i))
             if st in ("done", "ok"):  # ok = exit 0 whose done flag could not be written
                 continue
-            if st in ("failed", "gpu_busy", "blocked", "timeout", "stalled"):
+            if st in ("failed", "gpu_busy", "blocked", "timeout", "stalled", "stopped"):
                 return f"dependency {i} {st}"
             missing.append(i)
         if not missing:
@@ -727,7 +754,7 @@ def main():
                     lg.write(out + "\n")
             rec["pid"] = pid
             tail = out[-3000:]
-            if rc == 0 or timed_out or not CUDA_RETRY.search(out):
+            if rc == 0 or timed_out or rc == EXIT_STOPPED or not CUDA_RETRY.search(out):   # a stop is final even when the log tail holds an older CUDA error
                 break
             if attempt <= a.retries:
                 time.sleep(15)
@@ -749,7 +776,9 @@ def main():
                          "which a command that does not execute AR_COMMIT may not have run")
         if drift_err:
             rec["code_drift_check"] = drift_err
-    status = "ok" if rc == 0 else "timeout" if timed_out else "failed"  # a command's own exit 124 is a failure, not the launcher's timeout
+    status = "ok" if rc == 0 else "timeout" if timed_out else "stopped" if rc == EXIT_STOPPED else "failed"  # a command's own exit 124 is a failure, not the launcher's timeout
+    if status == "stopped":
+        notes.append("stopped on request (exit 75 = the trainsuite stop code, a checkpoint should have been saved): start the same id again to resume; its dependents are blocked meanwhile")
     rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
     try:
         save_rec(os.path.join(d, "run.json"), rec)

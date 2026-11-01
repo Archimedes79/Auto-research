@@ -86,8 +86,33 @@ try:
     assert oom.returncode == 1 and "1 attempt" in oom.stdout, oom.stdout
     to = go("S.timeout", ["bash", "-c", "sleep 30"], "--timeout", "0.03")
     assert to.returncode == 124 and rows()["S.timeout"]["status"] == "timeout", (to.returncode, rows().get("S.timeout"))
-    # a killed launcher leaves a stalled record: --after blocks on it, schedule.derived shows it failed, a new attempt is allowed
+    # exit 75 = a trainer stopped on request (trainsuite): status "stopped", ONE attempt even with an old CUDA error in the log tail (a retry would let the
+    # trainer erase the stop request), no done flag, not a failure for metrics, the schedule shows the item blocked, a dependent is blocked, the same id resumes
     import run as RUN
+    sys.path.insert(0, os.path.dirname(HERE))
+    from trainsuite import control as TS_CONTROL
+    assert RUN.EXIT_STOPPED == TS_CONTROL.EXIT_STOPPED == 75, "the launcher and the trainsuite must agree on the stop code"
+    stp = go("S.stop", ["bash", "-c", "echo 'CUDA error: unknown error'; exit 75"])
+    assert stp.returncode == 75 and "1 attempt" in stp.stdout and " stopped (exit 75" in stp.stdout and not os.path.exists(f"{T}/runs/S.stop/done"), stp.stdout
+    assert rows()["S.stop"]["status"] == "stopped" and "stopped on request" in rows()["S.stop"]["notes"], rows()["S.stop"]
+    assert RUN.state_of(f"{T}/runs/S.stop") == "stopped"
+    import metrics as MET
+    assert "stopped" not in MET.FAILED, "a stop on request is no failed run"
+    import schedule as SC0
+    assert SC0.derived([dict(item="S.stopi", state="planned", run_ids="S.stop", resource="gpu")], f"{T}/runs")[0]["state"] == "blocked"
+    aft = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.afterstop", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.stop", "--wait-after", "0", "--", "bash", "-c", "echo x"],
+                         capture_output=True, text=True, env=env)       # --wait-after is an integer (minutes): 0, so a missing fix fails the test instead of waiting for hours
+    assert aft.returncode == 3 and "dependency S.stop stopped" in aft.stdout, aft.stdout
+    res = go("S.stop", ["bash", "-c", "echo resumed"])
+    assert res.returncode == 0 and rows()["S.stop"]["status"] == "ok" and "attempt after stopped" in rows()["S.stop"]["notes"], (res.stdout, rows()["S.stop"])
+    # a stopped run whose launcher died before the ledger write: `ledger.py sync` adds its row from the record, with the status "stopped"
+    os.makedirs(f"{T}/runs/S.stopsync")
+    json.dump(dict(id="S.stopsync", status="stopped", exit=75, created="2026-10-25T10:00:00", started="2026-10-25T10:00:01", ended="2026-10-25T10:05:00", command="c", launcher_pid=1),
+              open(f"{T}/runs/S.stopsync/run.json", "w"))
+    assert RUN.state_of(f"{T}/runs/S.stopsync") == "stopped" and "S.stopsync" not in rows()
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env, check=True)
+    assert rows()["S.stopsync"]["status"] == "stopped", rows().get("S.stopsync")
+    # a killed launcher leaves a stalled record: --after blocks on it, schedule.derived shows it failed, a new attempt is allowed
     stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
         if RUN.record(f"{T}/runs/S.stall").get("status") == "running":
@@ -794,8 +819,9 @@ try:
     assert "temp/README.md" in lsf("HEAD") and not [x for x in lsf("HEAD") if x.startswith("temp/loop1")], lsf("HEAD")
     cfg4 = dict(code_dirs=["code", "temp"], fingerprint_extra=[], scratch="temp")
     assert RUN.scratch_scripts(T4, T4, cfg4) == ["temp/loop1/p1.py", "temp/loop1/run [x].sh"], RUN.scratch_scripts(T4, T4, cfg4)
-    assert RUN.scratch_scripts(T4, T4, dict(code_dirs=["code"], scratch="temp")) == [] and RUN.scratch_scripts(T4, T4, dict(code_dirs=["code"])) == [], \
-        "a scratch folder outside the code folders is not in the snapshot"
+    outside = dict(code_dirs=["code"], fingerprint_extra=[], scratch="temp")      # bev_fusion: scratch lies outside the code folders, its scripts must still be in the tag
+    assert RUN.scratch_scripts(T4, T4, outside) == ["temp/loop1/p1.py", "temp/loop1/run [x].sh"] and RUN.scratch_scripts(T4, T4, dict(code_dirs=["code"])) == [], \
+        "a scratch folder outside the code folders is in the snapshot; a project without a scratch folder has none"
     before4 = RUN.drift_hash(T4, cfg4)
     sc, stag, _ = RUN.git_snapshot(T4, cfg4, "t", "S.sc", "m")
     assert stag == "t/S.sc" and {"temp/loop1/p1.py", "temp/loop1/run [x].sh", "temp/README.md"} <= set(lsf(stag)) and "temp/loop1/result.json" not in lsf(stag), lsf(stag)
@@ -803,6 +829,30 @@ try:
     assert RUN.code_drift(T4, cfg4, sc, before4, spec4) == ({}, "")
     open(f"{T4}/temp/loop1/p1.py", "w").write("a = 2\n")
     assert RUN.code_drift(T4, cfg4, sc, before4, spec4) == ({"n": 1, "paths": ["temp/loop1/p1.py"]}, ""), RUN.code_drift(T4, cfg4, sc, before4, spec4)
+    # scratch OUTSIDE the code folders (bev_fusion: code_dirs training / evaluation / autogt / tests, scratch temp): the tag holds its scripts (no result file), an
+    # edit of one is no code drift of the run, an edit of real code still is
+    cfg4o = dict(code_dirs=["code"], fingerprint_extra=[], scratch="temp")
+    before4o = RUN.drift_hash(T4, cfg4o)
+    so, otag, _ = RUN.git_snapshot(T4, cfg4o, "t", "S.out", "m")
+    assert otag == "t/S.out" and {"temp/loop1/p1.py", "temp/loop1/run [x].sh"} <= set(lsf(otag)) and "temp/loop1/result.json" not in lsf(otag), lsf(otag)
+    spec4o = RUN.snapshot_spec(T4, cfg4o)[1]
+    open(f"{T4}/temp/loop1/p1.py", "w").write("a = 3\n")
+    assert RUN.code_drift(T4, cfg4o, so, before4o, spec4o) == ({}, ""), "an edited scratch script outside the code folders is no code drift"
+    open(f"{T4}/code/a.py", "w").write("2\n")
+    assert RUN.code_drift(T4, cfg4o, so, before4o, spec4o) == ({"n": 1, "paths": ["code/a.py"]}, ""), RUN.code_drift(T4, cfg4o, so, before4o, spec4o)
+    open(f"{T4}/code/a.py", "w").write("1\n")
+    open(f"{T4}/temp/loop1/p1.py", "w").write("a = 2\n")
+    # a script over the size limit and everything beyond the file cap stay out of the tag; the snapshot names the number in its note
+    open(f"{T4}/temp/loop1/big.py", "w").write("#" * (RUN.SCRATCH_MAX_BYTES + 10))
+    assert RUN.scratch_scripts(T4, T4, cfg4o) == ["temp/loop1/p1.py", "temp/loop1/run [x].sh"] and RUN.SCRATCH_SKIPPED[0] == 1, RUN.SCRATCH_SKIPPED
+    _, skip_tag, skip_note = RUN.git_snapshot(T4, cfg4o, "t", "S.skip", "m")
+    assert skip_tag == "t/S.skip" and "1 scratch script(s) not in the tag" in skip_note and "temp/loop1/big.py" not in lsf(skip_tag), (skip_note, lsf(skip_tag))
+    RUN.SCRATCH_MAX_FILES = 1
+    try:
+        assert RUN.scratch_scripts(T4, T4, cfg4o) == ["temp/loop1/p1.py"] and RUN.SCRATCH_SKIPPED[0] == 2, RUN.SCRATCH_SKIPPED
+    finally:
+        RUN.SCRATCH_MAX_FILES = 2000
+    os.remove(f"{T4}/temp/loop1/big.py")
     # review 2026-11-01: a script that is gone when the files are added (moved by another chat while the slow `add -A` ran) is skipped, the snapshot still gives a tree
     top4, spec4b, head4 = RUN.snapshot_spec(T4, cfg4)
     tree4, err4 = RUN.write_tree(top4, spec4b, head4, lambda: ["temp/loop1/gone.sh", "temp/loop1/p1.py"])
