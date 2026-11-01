@@ -30,7 +30,7 @@
     "root_files": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "project.json"],
     "root_dirs": ["data", "evaluation", "experiment_execution", "experiments", "literature", "models", "reports", "runs", "temp", "tools", "training", "_to_delete"],
     "folders_with_readme": ["data", "evaluation", "evaluation/sparse_lanes", "evaluation/lane_grid", "experiment_execution", "experiments", "literature", "models", "reports", "reports/build", "runs", "temp", "tools", "training", "_to_delete"],
-    "living": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "data", "evaluation", "experiment_execution", "models", "reports", "runs", "temp", "tools", "training", "experiments", "literature/README.md", "literature/OVERVIEW.md"],
+    "living": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "data", "evaluation", "experiment_execution", "models", "reports", "runs", "temp/README.md", "tools", "training", "experiments", "literature/README.md", "literature/OVERVIEW.md"],
     "skip_parts": ["CLEANUP_LIST.md", "/history/", "/logs/", "/runs/", "/plans/", "/_to_delete/", "/papers/", "/__pycache__/", "/literature_backup", "METRIC_RESPONSE.md", "LEDGER.md", "STRUCTURE.md", "/source/", "register.md", "CATALOGUE.md"],
     "index_dirs": ["training", "evaluation", "tools", "reports", "temp", "experiment_execution", "models", "literature", "experiments"],
     "extra_bases": ["runs", "runs/e17"]
