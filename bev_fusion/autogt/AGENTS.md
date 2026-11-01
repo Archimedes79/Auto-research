@@ -27,8 +27,10 @@ g = gen.keyframe(gen.keyframes("scene-0061")[8])                # same dict, gen
 # trainval: `AutoGT(..., light=True, scenes=[...])` still reads the big json tables (minutes on a busy box): prefer `load`
 gen.signature() == autogt.current_signature()                   # the cache key (section 4)
 ```
-A cache folder without `index.json` belongs to a `report` / `build` that is still running (the index is written at the end): its
-files are valid, but the sequence list is incomplete. CLI details: `python -m autogt --help`; the commands you need most are `report`,
+A cache folder without `index.json`, or with `"complete": false` in it, belongs to a `report` / `build` that is still running or was
+interrupted (`build` writes a provisional index with the resolution and supersampling before the first keyframe and the final one at the
+end; a resume refuses another resolution): its files are valid, but the sequence list is incomplete. `clean --stale-caches` leaves a
+provisional folder alone for an hour after its last write. CLI details: `python -m autogt --help`; the commands you need most are `report`,
 `view`, `selftest`.
 
 ## 2. Run it (this box is shared)

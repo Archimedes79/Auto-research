@@ -113,6 +113,10 @@ class TrainConfig:
                                                  # False = `keep` full resume checkpoints. Unfinished or stopped runs always keep full ones
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting
     seed: int = 0
+    init_from: str = ""                          # checkpoint of another run to start from (warm_start; only while this run has
+                                                 # no checkpoint of its own; optimiser, step and schedule start fresh), "" = off
+    init_reset: tuple = ()                       # key prefixes that keep their fresh initialisation in that warm start (t11: a dead
+                                                 # branch, e.g. "obj_head.head.vel.")
     device: str = "cuda"
     model: dict = field(default_factory=dict)    # ModelConfig fields
     loss: dict = field(default_factory=dict)     # LossConfig fields
@@ -271,9 +275,16 @@ class EMA:
         self.backup = None
 
 
+def camera_frozen(model):
+    """True if the camera heads are frozen (they come from the pre-trained file); a model without that switch counts as frozen"""
+    return bool(getattr(getattr(model, "cfg", None), "freeze_camera", True))
+
+
 def trainable_state(model, loss):
-    """Everything that is not the frozen camera heads (those come from the pre-trained file)."""
-    sd = {"model." + k: v for k, v in model.state_dict().items() if not k.startswith("camera.")}
+    """Everything that is not the frozen camera heads (those come from the pre-trained file). With freeze_camera false the camera
+    weights are trained, so they belong to the state: a resume must restore them, not start them from the pre-trained file again."""
+    frozen = camera_frozen(model)
+    sd = {"model." + k: v for k, v in model.state_dict().items() if not (frozen and k.startswith("camera."))}
     sd.update({"loss." + k: v for k, v in loss.state_dict().items()})
     return sd
 
@@ -282,6 +293,9 @@ def save_checkpoint(path, model, loss, opt, ema, step, cfg, extra=None, slim=Fal
     ck = {"state": trainable_state(model, loss), "opt": opt.state_dict(),
           "ema": {k: v.cpu() for k, v in ema.shadow.items()}, "step": step, "cfg": dataclasses.asdict(cfg),
           "rng": {"torch": torch.get_rng_state(), "numpy": np.random.get_state()}, "extra": extra or {}}
+    if slim:                                                    # weights only (finished run): no optimiser state, no RNG
+        del ck["opt"], ck["rng"]
+        ck["slim"] = True
     tmp = path + ".tmp"
     torch.save(ck, tmp)
     os.replace(tmp, path)
@@ -292,10 +306,10 @@ def load_checkpoint(path, model, loss, opt, ema, ck=None):
     sd = ck["state"]
     m = model.load_state_dict({k[6:]: v for k, v in sd.items() if k.startswith("model.")}, strict=False)
     assert all(k.startswith("camera.") for k in m.missing_keys) and not m.unexpected_keys, m
+    if m.missing_keys and not camera_frozen(model):
+        raise RuntimeError(f"{path} has no camera weights ({len(m.missing_keys)} missing) but this model trains them (freeze_camera false): "
+                           "a checkpoint of the code from before 2026-10-31 cannot be resumed, train again or freeze the camera")
     loss.load_state_dict({k[5:]: v for k, v in sd.items() if k.startswith("loss.")})
-    if slim:                                                    # weights only (finished run): no optimiser state, no RNG
-        del ck["opt"], ck["rng"]
-        ck["slim"] = True
     if "opt" in ck:                                             # a slim checkpoint (finished run) has no optimiser state and no RNG
         opt.load_state_dict(ck["opt"])
     ema.shadow = {k: v.to(next(model.parameters()).device) for k, v in ck["ema"].items()}
@@ -303,6 +317,29 @@ def load_checkpoint(path, model, loss, opt, ema, ck=None):
         torch.set_rng_state(ck["rng"]["torch"])
         np.random.set_state(ck["rng"]["numpy"])
     return ck["step"], ck.get("extra", {})
+
+
+def warm_start(path, model, loss, ck=None, reset=()):
+    """TrainConfig.init_from (t11): the model takes the checkpoint's EMA tensors (the evaluated weights; the integer buffers, which the
+    EMA does not average, from its state) for every key it shares with them; a shape mismatch or a checkpoint key the model does not
+    have raises; the model's keys the checkpoint lacks (a new branch) and the keys under a `reset` prefix (TrainConfig.init_reset; a
+    prefix that names no key raises) keep their initialisation. The loss takes the checkpoint's `loss.*` (Kendall s). Optimiser, step
+    and schedule are not touched. -> sorted list of the fresh keys"""
+    ck = ck if ck is not None else torch.load(path, map_location="cpu", weights_only=False)
+    src = {k[6:]: v for k, v in ck["state"].items() if k.startswith("model.")}
+    src.update(ck["ema"])
+    own = model.state_dict()
+    extra = sorted(k for k in src if k not in own)
+    bad = sorted(k for k in src if k in own and src[k].shape != own[k].shape)
+    if extra or bad:
+        raise ValueError(f"{path} does not fit the model: keys it lacks {extra[:5]} ({len(extra)}), other shapes {bad[:5]} ({len(bad)})")
+    unused = [p for p in reset if not any(k.startswith(p) for k in own)]
+    if unused:
+        raise ValueError(f"init_reset prefixes {unused} name no key of the model")
+    src = {k: v for k, v in src.items() if not k.startswith(tuple(reset))}
+    model.load_state_dict(src, strict=False)
+    loss.load_state_dict({k[5:]: v for k, v in ck["state"].items() if k.startswith("loss.")})
+    return sorted(k for k in own if k not in src)
 
 
 def prune_checkpoints(out_dir, keep):
@@ -485,6 +522,10 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     return out, res, gts
 
 
+LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0")     # single terms logged (train and val) next to the groups:
+                                                                             # the velocity terms (t11), hidden in group.objects / motion
+
+
 def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False, augment=False):
     """One clip = a list of batches (consecutive keyframes of the same scenes; a single batch = a clip of length 1). The
     model state (world memory) is carried from keyframe to keyframe with the ego step between them: detached at every
@@ -509,7 +550,7 @@ def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_t
         if backward:           # backward at once: the loss of a later keyframe changes the Kendall weights in place (clamp_)
             (out["total"] / (L * accum)).backward(retain_graph=bptt and t < L - 1)    # bptt: the graph is still needed for the state path
         for k, v in out.items():
-            if k == "total" or k == "consistency" or k.startswith(("group.", "s.")):
+            if k == "total" or k == "consistency" or k.startswith(("group.", "s.")) or k in LOGGED_TERMS:
                 acc[k] = acc.get(k, 0.0) + _f(v) / L
         if "diag" in out:
             dg = out["diag"]
@@ -536,7 +577,7 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
                 if not ok:
                     continue
                 for k, v in out.items():
-                    if k == "total" or k.startswith("group."):
+                    if k == "total" or k.startswith("group.") or k in LOGGED_TERMS:
                         tot[k] = tot.get(k, 0.0) + v
                 if len(clip) > 1:
                     cold, _, _ = forward_loss(model, loss, clip[-1], 1.0, device, amp, cfg, train_terms=False)
@@ -602,6 +643,18 @@ def record_gt(out_dir, datasets):
     return sig
 
 
+def check_grids(model, *datasets):
+    """The model and the GT of its datasets must share one cell grid (extents and resolution). `cfg.model["grid_kwargs"]` changes the
+    model's grid only; the datasets are built with the default front grid, so another model grid would train on labels cut for
+    another area, with the same shapes and no error."""
+    g = model.grid
+    for ds in datasets:
+        d = getattr(ds, "grid", None) or getattr(getattr(ds, "base", None), "grid", None)
+        if d is not None and (d.x_min, d.x_max, d.y_min, d.y_max, d.res) != (g.x_min, g.x_max, g.y_min, g.y_max, g.res):
+            raise ValueError(f"the model grid x {g.x_min}..{g.x_max} y {g.y_min}..{g.y_max} res {g.res} is not the grid of the GT "
+                             f"x {d.x_min}..{d.x_max} y {d.y_min}..{d.y_max} res {d.res} (make_datasets builds the default grid)")
+
+
 def train(cfg, eval_fn=None, datasets=None):
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -612,6 +665,7 @@ def train(cfg, eval_fn=None, datasets=None):
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
     train_ds, val_ds = datasets or make_datasets(cfg)
+    check_grids(model, train_ds, val_ds)
     record_gt(out_dir, (train_ds, val_ds))                      # the GT is not pinned by the code snapshot: record which one is used
     if cfg.seq_len > 1:                                         # clips of consecutive keyframes, the memory carried through
         train_ds, val_ds = ClipDataset(train_ds, cfg.seq_len), ClipDataset(val_ds, cfg.seq_len)
@@ -637,12 +691,21 @@ def train(cfg, eval_fn=None, datasets=None):
             continue
         check_resume(ck.get("cfg", {}), cfg, name)
         step, _ = load_checkpoint(os.path.join(out_dir, name), model, loss, opt, ema, ck=ck)
+        if ck.get("slim") and step < cfg.steps:
+            raise SystemExit(f"{name} is a slim checkpoint (no optimiser state): it evaluates and warm-starts (init_from), it cannot "
+                             f"continue training; start a new run name")
         print(f"resumed from {name} at step {step}", flush=True)
         break
     else:
         if damaged:
             raise SystemExit(f"no readable checkpoint in {out_dir} (damaged: {damaged}): a restart at step 0 would mix two runs in "
                              f"one folder")
+        if cfg.init_from:                                       # a new run warm-started from another run's checkpoint
+            fresh = warm_start(cfg.init_from, model, loss, reset=cfg.init_reset)
+            ema = EMA(model, cfg.ema)
+            torch.manual_seed(cfg.seed)                         # the same data order and flips whatever the new branches drew
+            np.random.seed(cfg.seed)
+            print(f"warm start from {cfg.init_from}; fresh keys: {fresh}", flush=True)
     supersede_log(out_dir, step)                                # also after a crash before the first save (rows of the lost steps)
     with open(os.path.join(out_dir, "config.json"), "w") as f:
         json.dump(dataclasses.asdict(cfg), f, indent=1)
@@ -691,9 +754,6 @@ def train(cfg, eval_fn=None, datasets=None):
             if dg:
                 acc["diag"] = dg
         gn = torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip) if finite else None
-        if ck.get("slim") and step < cfg.steps:
-            raise SystemExit(f"{name} is a slim checkpoint (no optimiser state): it evaluates and warm-starts (init_from), it cannot "
-                             f"continue training; start a new run name")
         skipped = gn is None or not torch.isfinite(gn)
         if skipped:
             bad += 1
@@ -859,6 +919,19 @@ def _selftest():
         assert ck["step"] == 4 and not any(k.startswith("model.camera.") for k in ck["state"])
         changed = any(not torch.equal(before[k], v) for k, v in model2.state_dict().items() if k in before)
         assert changed, "parameters changed"
+        # 2b slim_at_end (the default): a finished run keeps ONE checkpoint without optimiser state and RNG, and evaluation still loads it
+        scfg = dataclasses.replace(cfg, name="slimrun", slim_at_end=True)
+        _, _, sema, _ = train(scfg, datasets=(base, base))
+        sdir = os.path.join(tmp, "slimrun")
+        assert sorted(f for f in os.listdir(sdir) if f.startswith("ckpt_")) == ["ckpt_00000004.pt"], os.listdir(sdir)
+        sck = torch.load(os.path.join(sdir, "ckpt_00000004.pt"), weights_only=False)
+        assert sck["slim"] and "opt" not in sck and "rng" not in sck and sck["step"] == 4
+        assert os.path.getsize(os.path.join(sdir, "ckpt_00000004.pt")) < 0.75 * os.path.getsize(os.path.join(tmp, "selftest", ckpts[-1]))
+        m3, l3, _ = build(scfg)
+        o3 = torch.optim.AdamW(param_groups(m3, l3, scfg.lr, scfg.weight_decay), lr=scfg.lr)
+        e3 = EMA(m3, scfg.ema)
+        assert load_checkpoint(os.path.join(sdir, "ckpt_00000004.pt"), m3, l3, o3, e3)[0] == 4
+        assert all(torch.equal(e3.shadow[k].cpu(), sema.shadow[k].cpu()) for k in sema.shadow), "the EMA weights survive the slimming"
         # 3 resume: a resume with another configuration (here steps 4 -> 6, which would restart the cosine LR) is refused; with
         # BF_RESUME_ANY=1 the run continues from step 4 and ends at 6; the EMA differs from the weights. A damaged newest checkpoint
         # falls back to the one before, and the log rows above the resumed step move to log_superseded.jsonl
@@ -919,19 +992,6 @@ def _selftest():
         stop_cfg = dataclasses.replace(cfg, name="stoprun", steps=1, save_every=0, eval_every=0)
         sdir = os.path.join(tmp, "stoprun")
         os.makedirs(sdir)
-        # 2b slim_at_end (the default): a finished run keeps ONE checkpoint without optimiser state and RNG, and evaluation still loads it
-        scfg = dataclasses.replace(cfg, name="slimrun", slim_at_end=True)
-        _, _, sema, _ = train(scfg, datasets=(base, base))
-        sdir = os.path.join(tmp, "slimrun")
-        assert sorted(f for f in os.listdir(sdir) if f.startswith("ckpt_")) == ["ckpt_00000004.pt"], os.listdir(sdir)
-        sck = torch.load(os.path.join(sdir, "ckpt_00000004.pt"), weights_only=False)
-        assert sck["slim"] and "opt" not in sck and "rng" not in sck and sck["step"] == 4
-        assert os.path.getsize(os.path.join(sdir, "ckpt_00000004.pt")) < 0.75 * os.path.getsize(os.path.join(tmp, "selftest", ckpts[-1]))
-        m3, l3, _ = build(scfg)
-        o3 = torch.optim.AdamW(param_groups(m3, l3, scfg.lr, scfg.weight_decay), lr=scfg.lr)
-        e3 = EMA(m3, scfg.ema)
-        assert load_checkpoint(os.path.join(sdir, "ckpt_00000004.pt"), m3, l3, o3, e3)[0] == 4
-        assert all(torch.equal(e3.shadow[k].cpu(), sema.shadow[k].cpu()) for k in sema.shadow), "the EMA weights survive the slimming"
         for n in ("CONTROL", "STOPPED"):
             with open(os.path.join(sdir, n), "w") as fh:
                 json.dump({"cmd": "stop", "reason": "old"}, fh)
@@ -985,10 +1045,14 @@ def _selftest():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def read_config(path):
+    """TrainConfig of a config file; keys starting with "_" are comments for the reader (e.g. "_about"), every other unknown key is an error"""
+    with open(path) as fh:
+        return TrainConfig(**{k: v for k, v in json.load(fh).items() if not k.startswith("_")})
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        with open(sys.argv[1]) as fh:
-            raw = json.load(fh)
-        train(TrainConfig(**raw))
+        train(read_config(sys.argv[1]))
     else:
         _selftest()
