@@ -54,6 +54,13 @@ class Grid:
 
 
 def build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida=None):
+    """Lookup table of lift PD for one camera, always in float32 (under bf16 autocast the matmuls would project with about 4 px
+    error, and the table is cached and reused by later float32 calls). See _build_table."""
+    with torch.autocast(z_levels.device.type, enabled=False):
+        return _build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida)
+
+
+def _build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida=None):
     """Lookup table of lift PD for one camera.
 
     z_levels: tensor (Z,) of heights (may require grad: learned elevations); K, T_cam_car, ida: tensors (3x3, 4x4, 3x3);
@@ -196,6 +203,7 @@ def camera_visibility(grid, z_levels, depth_centres, K, T_cam_car, image_hw, ida
         off = ((torch.arange(oversample, dtype=z.dtype, device=z.device) + 0.5) / oversample - 0.5) * slice_height
         z = (z.view(-1, 1) + off.view(1, -1)).reshape(-1)
     key = (grid.x_min, grid.x_max, grid.y_min, grid.y_max, grid.res, tuple(z.tolist()), str(z.device),
+           len(depth_centres), float(depth_centres[0]), float(depth_centres[-1]),       # the depth range decides the mask too
            tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(int(v) for v in image_hw),
            None if ida is None else tuple(ida.flatten().tolist()))
     if key not in _VIS_CACHE:

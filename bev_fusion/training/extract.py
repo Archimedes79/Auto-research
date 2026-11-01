@@ -1,4 +1,4 @@
-"""Differentiable extraction (target architecture, training/architecture_target.md): the head maps -> dense outputs a planner can
+"""Differentiable extraction (layer 4 of training/architecture.md): the head maps -> dense outputs a planner can
 read and train through, and the one small post-processing step that picks discrete boxes and line cells for the metrics.
 
     dense = dense_boxes(obj, grid, groups)          every cell: peak weight w (B, G, X, Y) and the box it would decode to

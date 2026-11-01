@@ -141,6 +141,8 @@ def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False):
     strength by the normalisation (helped in every variant of temp/checks/check_splat_coordinates.py)."""
     B, C, N = feat.shape
     X, Y = grid.nx, grid.ny
+    if pos.dtype in (torch.float16, torch.bfloat16):           # geometry at least float32 under half-precision autocast (bf16
+        pos = pos.float()                                      # integers are exact only up to 256: cell indices overflowed the grid)
     fx = (pos[..., 0] - grid.x_min) / grid.res - 0.5           # continuous cell index
     fy = (pos[..., 1] - grid.y_min) / grid.res - 0.5
     x0, y0 = torch.floor(fx), torch.floor(fy)
@@ -154,10 +156,10 @@ def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False):
         ix, iy = x0 + dx, y0 + dy
         k = (ax if dx else 1 - ax) * (ay if dy else 1 - ay)
         ok = (ix >= 0) & (ix < X) & (iy >= 0) & (iy < Y)
-        k = k * ok
-        idx = (ix.clamp(0, X - 1) * Y + iy.clamp(0, Y - 1)).long()
+        k = (k * ok).to(feat.dtype)                             # weights in the feature dtype (geometry stays float32)
+        idx = ix.clamp(0, X - 1).long() * Y + iy.clamp(0, Y - 1).long()          # integer math: exact for any grid
         flat = (idx + boff).reshape(-1)
-        wk = (k * w_imp).reshape(-1)
+        wk = (k * w_imp).reshape(-1).to(feat.dtype)
         num_flat = num.permute(1, 0, 2).reshape(C, B * X * Y)
         num_flat = num_flat.index_add(1, flat, feat.permute(1, 0, 2).reshape(C, -1) * wk)
         num = num_flat.reshape(C, B, X * Y).permute(1, 0, 2)

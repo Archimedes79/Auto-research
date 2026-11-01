@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(ROOT, "training"))
 from bevfusion_camera import DEPTHS, bevfusion_ida  # noqa: E402
 from camera_encoder import nuscenes_front_ida  # noqa: E402
 from feature_cache import FEAT_HW, N_CTX, N_PROB, CachedBEVFusionModel  # noqa: E402
-from interface import check_inputs, check_outputs  # noqa: E402
+from interface import RADAR_FIELDS, check_inputs, check_outputs  # noqa: E402
 from lift_pd import _front_camera  # noqa: E402
 from model import ModelConfig, check_config  # noqa: E402
 from nuscenes_dataset import DST_HW  # noqa: E402
@@ -39,12 +39,17 @@ KINDS = [("camera_features", "dualbev"), ("camera_features", "bevfusion"), ("cam
          ("object_direction", True), ("object_moving", True)]
 # parts a kind builds but cannot train, with the reason (a finding, not hidden): the radar branch has no past frames, so the camera's
 # window block reads no window (relevance, temperature) and its velocity head reaches the output only through the memory write of a
-# later call - the radar memory needs its own static gate (the measured Doppler) or past radar BEVs (architecture_target.md)
+# later call - the radar memory needs its own static gate (the measured Doppler) or past radar BEVs (training/architecture.md)
 KNOWN_UNUSED = {("rad_temporal", "window_memory"): ("rad_temporal.log_tau", "rad_temporal.head.", "rad_temporal.relevance."),
-                ("radar_kind", "off"): ("radar.", "aux_rad.net.0.weight", "aux_rad.net.1.weight"),   # the study arm keeps the radar
+                ("radar_kind", "off"): ("radar.", "aux_rad.net.0.weight", "aux_rad.net.1.weight", "trunk.fuser.pr."),   # the study arm keeps the radar
                 # block's weights (same checkpoint layout), never runs it; the radar aux head sees a zero radar BEV
-                ("camera_off", True): ("cam_reduce.", "cam_temporal.head.net.0.weight", "cam_temporal.relevance.weight")}
+                ("camera_off", True): ("cam_reduce.", "cam_temporal.head.net.0.weight", "cam_temporal.relevance.weight"),
+                ("radar_kind", "delta_slots"): ("radar.decoder.",)}   # trained by the reconstruction side loss in train.py, not the outputs
                 # camera_off: the camera BEV is zero, its encoder never runs and the weights that see only that zero input get none
+COMBOS = [{"camera_features": "dual", "cam_temporal": "ego_gru"}, {"fusion": "cmx", "radar_kind": "off"},
+          {"rad_temporal": "window_memory", "radar_kind": "pillars"}, {"camera_off": True, "fusion": "gate"},
+          {"camera_features": "bevfusion", "cam_collapse": "zsum", "trunk_kind": "second"}]
+# pending (not yet run: the box was full): {"radar_kind": "delta_slots", "c_rad": 64} and the same with rad_temporal window_memory
 INVALID = [dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 
@@ -62,25 +67,17 @@ def batch_for(cfg, B=2, Fn=3, seed=0):
          "hw": DST_HW, "prob": prob / prob.sum(2, keepdim=True), "ctx": torch.randn(B, Fn, N_CTX, *hw_f, generator=g),
          "v": torch.full((B,), 8.0), "omega": torch.full((B,), 0.05),
          "steps": [[]] + [[(torch.full((B,), 1 / 12), torch.full((B,), 8.0), torch.full((B,), 0.05))] * k for k in range(1, Fn)],
-         "radar": {"x": torch.rand(40, generator=g) * 15, "y": torch.rand(40, generator=g) * 14 - 7, "z": torch.zeros(40),
-                   "vx": torch.randn(40, generator=g), "vy": torch.randn(40, generator=g), "rcs": torch.randn(40, generator=g),
-                   "b": torch.arange(40) % B}}
+         "radar": dict({f: torch.randn(40, generator=g) for f in RADAR_FIELDS},          # the contract's detection fields
+                       x=torch.rand(40, generator=g) * 15, y=torch.rand(40, generator=g) * 14 - 7, r=torch.rand(40, generator=g) * 15,
+                       dt=torch.rand(40, generator=g) * 0.5, b=torch.arange(40) % B)}
     if cfg.camera_features == "dual":
         p2 = torch.rand(B, Fn, len(DEPTHS), 32, 88, generator=g)
         b.update(prob2=p2 / p2.sum(2, keepdim=True), ctx2=torch.randn(B, Fn, N_CTX, 32, 88, generator=g), ida2=bevfusion_ida())
     return b
 
 
-def radar_fields():
-    """the detection fields radar_bev.properties reads, besides x, y, b"""
-    import inspect
-    import re
-    import radar_bev
-    return sorted(set(re.findall(r'det\["([a-z_]+)"\]', inspect.getsource(radar_bev.properties))))
-
-
-def one(name, value):
-    cfg = ModelConfig(**dict(BASE, **{name: value}))
+def one(name, value, extra=None):
+    cfg = ModelConfig(**dict(BASE, **{name: value}, **(extra or {})))
     torch.manual_seed(0)
     m = CachedBEVFusionModel(cfg).train()
     with torch.no_grad():                                        # zero-start branches (zero last layer) cut the gradient at init by
@@ -88,8 +85,6 @@ def one(name, value):
             if q.requires_grad and q.abs().max() == 0:
                 q.normal_(0, 1e-2)
     batch = batch_for(cfg)
-    for f in radar_fields():                                     # every field the radar raster / pillars read
-        batch["radar"].setdefault(f, torch.randn(len(batch["radar"]["x"])))
     errs = check_inputs(batch)
     assert not errs, (name, value, errs)
     dts = (0.0, 0.5)
@@ -111,10 +106,13 @@ def one(name, value):
     total.backward()
     dead = [n for n, q in m.named_parameters() if q.requires_grad
             and (q.grad is None or not torch.isfinite(q.grad).all() or q.grad.abs().max() == 0)]
-    known = KNOWN_UNUSED.get((name, value), ())
+    known = tuple(k for kv in [(name, value)] + list((extra or {}).items()) for k in KNOWN_UNUSED.get(kv, ()))
     unexpected = [n for n in dead if not n.startswith(known)]
-    assert not unexpected, (name, value, "no gradient:", unexpected[:6], len(unexpected))
-    assert all(any(n.startswith(k) for n in dead) for k in known), (name, value, "a known-unused part now trains: update KNOWN_UNUSED", dead)
+    assert not unexpected, (name, value, extra, "no gradient:", unexpected[:6], len(unexpected))
+    if not extra:                                                # a combination may legitimately train a part the single kind cannot
+        names = [n for n, _ in m.named_parameters()]
+        assert all(any(n.startswith(k) for n in dead) for k in known if any(p.startswith(k) for p in names)), \
+            (name, value, "a known-unused part now trains: update KNOWN_UNUSED", dead)
     with torch.no_grad():                                        # a second call carries the temporal state
         res2 = m(batch, dts=(0.0,), state=res["state"], step=(1 / 12, 8.0, 0.05))
     assert not check_outputs(res2, (0.0,)), (name, value)
@@ -132,8 +130,12 @@ def main():
     for name, value in KINDS:
         n = one(name, value)
         print(f"  ok  {name:16s} {str(value):14s} {n / 1e3:8.1f} k trainable parameters")
-    print(f"test_slots passed ({time.time() - t0:.0f} s): {len(KINDS)} slot kinds build, pass both interfaces, give finite dense "
-          f"outputs, reach every trainable parameter and carry state; {len(INVALID)} invalid combinations refused")
+    for combo in COMBOS:
+        (name, value), *rest = combo.items()
+        one(name, value, dict(rest))
+        print(f"  ok  combination {combo}")
+    print(f"test_slots passed ({time.time() - t0:.0f} s): {len(KINDS)} slot kinds and {len(COMBOS)} combinations build, pass both "
+          f"interfaces, give finite dense outputs, reach every trainable parameter and carry state; {len(INVALID)} invalid combinations refused")
 
 
 if __name__ == "__main__":

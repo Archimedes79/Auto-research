@@ -175,7 +175,7 @@
     "training/train.py::clip_step",
     "training/nuscenes_dataset.py::FrontRadarDataset"
    ],
-   "note": "the ego step from every past frame to now, the true gap to the target time, the memory step between calls, camera and radar calibration, the image crop; today partly built in train.py from the GT meta (also at evaluation)"
+   "note": "the ego step from every past frame to now (dataset, from the poses), calibration and crop; TODAY the true gap to the target time and the memory step between calls are built in train.py from the GT meta (batch_ego, clip_step): a layer-1 leak, the network cannot run without GT until the dataset makes them from the poses"
   },
   {
    "id": "iface",
@@ -270,7 +270,7 @@
     "training/timed_head.py::TimeMover",
     "training/splat.py::splat_bev"
    ],
-   "note": "moves S to a target time dt for every head (shared) and gives the velocity field v_hat at dt = 0"
+   "note": "the shared TimeMover: moves S to each target time dt (velocity head + ego splat) before both heads, gives v_hat at dt 0"
   },
   {
    "id": "maps_head",
@@ -337,7 +337,7 @@
    "code": [
     "training/extract.py::select_boxes"
    ],
-   "note": "the only box step left outside the network: picks cells of the dense box output for the metrics and the prototype; with the hard local maximum it gives exactly today's boxes"
+   "note": "select_boxes: the post-processing of model.boxes(); the evaluation adapter still scores with object_head.decode (equal box for box, extract.py self-test), so both stay until the adapter reads select_boxes"
   },
   {
    "id": "consumers",
@@ -480,15 +480,8 @@
   },
   {
    "from": "backbone",
-   "to": "maps_head"
-  },
-  {
-   "from": "backbone",
-   "to": "obj_head"
-  },
-  {
-   "from": "backbone",
-   "to": "motion"
+   "to": "motion",
+   "label": "S"
   },
   {
    "from": "maps_head",
@@ -496,10 +489,6 @@
   },
   {
    "from": "obj_head",
-   "to": "out_iface"
-  },
-  {
-   "from": "motion",
    "to": "out_iface"
   },
   {
@@ -535,11 +524,6 @@
    "to": "fusion"
   },
   {
-   "from": "cam_enc",
-   "to": "temporal",
-   "label": "visibility"
-  },
-  {
    "from": "iface",
    "to": "temporal"
   },
@@ -572,17 +556,34 @@
   },
   {
    "from": "vis",
-   "to": "iface"
+   "to": "iface",
+   "label": "memory write masks"
   },
   {
    "from": "vis",
    "to": "loss",
-   "label": "loss masks"
+   "label": "loss masks (D36, next)",
+   "dashed": true
   },
   {
    "from": "vis",
    "to": "consumers",
-   "label": "scoring masks"
+   "label": "scoring masks (D37, next)",
+   "dashed": true
+  },
+  {
+   "from": "motion",
+   "to": "maps_head",
+   "label": "S at dt"
+  },
+  {
+   "from": "motion",
+   "to": "obj_head"
+  },
+  {
+   "from": "motion",
+   "to": "out_iface",
+   "label": "v_hat"
   }
  ],
  "groups": [

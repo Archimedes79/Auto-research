@@ -13,6 +13,10 @@
             shared TimeMover (velocity head + splat to t + dt) -> TimedHead(semantic) / TimedHead(objects)
             auxiliary heads on each branch (training only)
 
+The five layers (training/architecture.md): precompute (precompute.py: the visibility maps, made at the entry of forward only where a
+memory reads them), input interface (interface.py), the network slots below (one builder table per slot, check_config), output
+interface (per dt the maps and object maps; with dense_outputs the dense boxes and the soft line map of extract.py), post-processing
+(boxes(): extract.select_boxes = object_head.decode).
 Every block is chosen in ModelConfig; each option is either the plan's design or its paper fallback:
   lift          "pd"  lift PD, pull with depth weight (DualBEV / FastBEV++ / FB-BEV) - default
                 "p"   pull without depth (Simple-BEV, Fast-BEV) - control
@@ -22,12 +26,10 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 "none"           current frame only
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
-                4-stage fuser, training/fallbacks.py CMXFuser)
+                4-stage fuser + decoder, training/fallbacks.py CMXTrunk: replaces fusion AND backbone)
   heads         semantic (channels = losses.layer_spec) and objects (CenterPoint, S5a), both decoded at any dt by
-                training/timed_head.py; the output is the prediction layout of losses.BEVLoss; S5b box propagation and
-                S5c refinement work on the decoded boxes (object_head.py)
-Open: the heads take one dt per call, so a batch is decoded at the nominal dt (0, +-0.5 s); the actual keyframe gap
-(0.45-0.55 s) and a missing k-1 / k+1 at scene ends need a per-sample dt and a GT mask before random batches.
+                training/timed_head.py (the shared TimeMover moves S to dt); the output is the prediction layout of losses.BEVLoss;
+                S5c refinement works on the decoded boxes (object_head.py). forward(ego=...) takes the true gap per sample.
 Conventions as the blocks: grid x 0..60 m forward, y -26..26 m left, 0.5 m; maps (B, C, X, Y).
 Run the self-test (nuScenes mini, 2 samples): python training/model.py
 """
@@ -334,8 +336,8 @@ class BEVFusionModel(nn.Module):
         away, not the nominal 0.5 s); without it a head decodes at the nominal dt with the batch's v, omega. The output
         key stays the nominal dt."""
         state = state or {}
-        need = (("vis_cam",) if isinstance(self.cam_temporal, TemporalFusion) else ()) + \
-               (("radar_hits",) if isinstance(self.rad_temporal, TemporalFusion) else ())
+        need = (("vis_cam",) if self.cam_temporal is not None else ()) + \
+               (("radar_hits",) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
         batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
         cam_frames = self.camera_bevs(batch)                                         # the batch's frame (kept when precomputed)
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
@@ -361,7 +363,8 @@ class BEVFusionModel(nn.Module):
             radar_side = {"features": rad, "state": rstate}
         else:
             rad = self.radar(batch["radar"], cam.shape[0])
-        rad_obs = batch["radar_hits"].to(rad) if "radar_hits" in need else None   # radar memory: write where it measured
+        rad_obs = batch["radar_hits"].to(rad) if "radar_hits" in batch else None   # radar memory: write where it measured (no
+                                                                                   # radar points: no mask = everywhere)
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:

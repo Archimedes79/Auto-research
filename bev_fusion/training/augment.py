@@ -74,6 +74,10 @@ def flip_batch(batch, flip):
     batch["radar"] = rad
     if "gt" in batch:
         batch["gt"] = [{key: flip_gt(g) for key, g in s.items()} if flip[i] else s for i, s in enumerate(batch["gt"])]
+    for key in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits"):    # precomputed maps (precompute.MAPS) already in the batch
+        if key in batch:
+            m = batch[key]
+            batch[key] = torch.where(flip.to(m.device).view(-1, 1, 1, 1), m.flip(-1), m)
     return batch
 
 

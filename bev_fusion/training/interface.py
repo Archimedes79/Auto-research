@@ -1,4 +1,4 @@
-"""The two interfaces of the network (target architecture, training/architecture_target.md): what the network reads (BEVInputs)
+"""The two interfaces of the network (layers 2 and 4 of training/architecture.md): what the network reads (BEVInputs)
 and what it returns (BEVOutputs), written down once with names, shapes, units and frames, and checked.
 
     check_inputs(batch, dts=..., state=..., step=..., ego=...)    -> list of problems (empty = fine); raise_on=True raises
@@ -20,7 +20,7 @@ INPUTS = {
     "v": (True, "(B,) ego speed at the keyframe, m/s"),
     "omega": (True, "(B,) ego yaw rate at the keyframe, rad/s"),
     "radar": (True, "dict of (N,) tensors: detections of 0.5 s of sweeps of all radars compensated to now, with 'b' = the sample index"),
-    "img": (False, "(B, F, 3, H, W) images; live camera heads only (the cached chain reads prob / ctx)"),
+    "img": (False, "(B, F, 3, H, W) images for the live camera heads; the cached chain carries a (B, F, 1) placeholder and reads prob / ctx"),
     "cam_vec": (False, "(B, F, 27) camera vector of the DualBEV depth net; live camera heads only"),
     "prob": (False, "(B, F, D, h, w) cached depth probabilities of the frozen image heads (camera_features dualbev / dual)"),
     "ctx": (False, "(B, F, 80, h, w) cached context features of the frozen image heads"),
@@ -38,6 +38,11 @@ INPUTS = {
     "tokens": (False, "list (B) of sample tokens (bookkeeping)"),
     "steps_raw": (False, "per sample the steps as python floats (bookkeeping)"),
 }
+# the fields of every radar detection in batch["radar"] (all (N,) tensors; nuscenes_dataset.FrontRadarDataset._radar)
+RADAR_FIELDS = {"x": "m, vehicle frame of now", "y": "m", "b": "sample index in the batch (long)", "r": "range from the sensor, m",
+                "psi": "ray direction in the vehicle frame, rad", "vr": "radial velocity (Doppler, ego-compensated), m/s",
+                "rcs": "radar cross section, dBsm", "dt": "age of the sweep, s"}
+# only frame 0 of K and T_cam_car is read today (the lift and the visibility of the current frame); the per-frame entries are kept
 CALL = {
     "dts": "target times (s, either sign) the heads decode; the output keys are these nominal dt",
     "state": "per-branch temporal states of the previous call ({'cam': ..., 'rad': ...}) or None",
@@ -84,6 +89,11 @@ def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=Fa
         rad = batch.get("radar", {})
         if "b" in rad and len(rad["b"]) and int(rad["b"].max()) >= B:
             errs.append(f"radar: sample index {int(rad['b'].max())} >= B = {B}")
+        if rad:
+            errs += [f"radar: missing field {f!r} ({m})" for f, m in RADAR_FIELDS.items() if f not in rad]
+            n = {len(v) for v in rad.values() if torch.is_tensor(v)}
+            if len(n) > 1:
+                errs.append(f"radar: fields of different lengths {sorted(n)}")
     for k, v in batch.items():
         if torch.is_tensor(v) and v.is_floating_point() and not torch.isfinite(v).all():
             errs.append(f"{k}: not finite")
@@ -103,6 +113,8 @@ def check_outputs(res, dts, raise_on=False):
     shape = None
     for dt, p in out.items():
         errs += [f"dt {dt}: missing {k!r}" for k in OUTPUTS_PER_DT if k not in p]
+        if abs(float(dt)) < 1e-6 and "v_hat" not in p:
+            errs.append(f"dt {dt}: missing 'v_hat' (the velocity field is made at dt = 0)")
         errs += [f"dt {dt}: unknown output {k!r} (add it to interface.OPTIONAL_PER_DT)" for k in p
                  if k not in OUTPUTS_PER_DT and k not in OPTIONAL_PER_DT]
         if "sem" in p:
@@ -110,7 +122,7 @@ def check_outputs(res, dts, raise_on=False):
             shape = shape or s
             if s != shape:
                 errs.append(f"dt {dt}: sem (B, X, Y) {s} != {shape}")
-        for k, v in list(p.items()) + list((p.get("obj") or {}).items()):
+        for k, v in list(p.items()) + list((p.get("obj") or {}).items()) + list((p.get("boxes") or {}).items()):
             if torch.is_tensor(v) and v.is_floating_point() and not torch.isfinite(v).all():
                 errs.append(f"dt {dt}: {k} not finite")
     if raise_on and errs:
@@ -121,10 +133,14 @@ def check_outputs(res, dts, raise_on=False):
 def _selftest():
     B, Fn = 2, 3
     z = torch.zeros
+    radar = dict({f: z(5) for f in RADAR_FIELDS}, b=torch.tensor([0, 0, 1, 1, 1]))
     batch = {"K": z(B, Fn, 3, 3), "T_cam_car": z(B, Fn, 4, 4), "ida": None, "v": z(B), "omega": z(B),
-             "steps": [[] for _ in range(Fn)], "radar": {"x": z(5), "b": torch.tensor([0, 0, 1, 1, 1])},
+             "steps": [[] for _ in range(Fn)], "radar": radar,
              "prob": z(B, Fn, 4, 2, 3), "ctx": z(B, Fn, 80, 2, 3), "hw": (16, 24), "tokens": ["a", "b"]}
     assert check_inputs(batch) == [], check_inputs(batch)
+    e = check_inputs(dict(batch, radar={k: v for k, v in radar.items() if k != "vr"}))
+    assert any("'vr'" in x for x in e), e
+    assert any("lengths" in x for x in check_inputs(dict(batch, radar=dict(radar, rcs=z(4)))))
     bad = dict(batch, v=z(B + 1), extra=1)
     del bad["omega"]
     e = check_inputs(bad)
@@ -132,7 +148,7 @@ def _selftest():
     bad = dict(batch, ctx=torch.full((B, Fn, 80, 2, 3), float("nan")))
     assert any("not finite" in x for x in check_inputs(bad))
     try:
-        check_inputs(dict(batch, radar={"b": torch.tensor([3])}), raise_on=True)
+        check_inputs(dict(batch, radar=dict({f: z(1) for f in RADAR_FIELDS}, b=torch.tensor([3]))), raise_on=True)
         raise AssertionError("no raise")
     except ValueError as ex:
         assert "sample index" in str(ex)
@@ -142,7 +158,9 @@ def _selftest():
     assert any("times" in x for x in check_outputs(res, (0.0,)))
     res2 = {"out": {0.0: {"sem": z(B, 12, 8, 6), "obj": {}, "foo": 1}}, "state": {}, "features": None}
     e = check_outputs(res2, (0.0,))
-    assert any("mass" in x for x in e) and any("foo" in x for x in e), e
+    assert any("mass" in x for x in e) and any("foo" in x for x in e) and any("v_hat" in x for x in e), e
+    bad_boxes = {"out": {0.5: dict(p, boxes={"w": torch.full((B, 3, 8, 6), float("inf"))})}, "state": {}, "features": None}
+    assert any("w not finite" in x for x in check_outputs(bad_boxes, (0.5,))), "the dense boxes are checked"
     print("interface selftest passed: input and output contracts checked (missing, unknown, shape, finite)")
 
 

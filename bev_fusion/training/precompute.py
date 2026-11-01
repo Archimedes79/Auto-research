@@ -2,9 +2,14 @@
 frame and read by the network, the training and the evaluation alike. Today it adds the visibility maps to a batch; calibration, ego
 steps, compensated radar points and the frozen image features come from the dataset and the feature caches.
 
-    pre = Precompute.from_model(model)      # grid, heights and depth range of the model's camera slot
+    pre = Precompute.from_model(model)      # grid, heights and depth range of the model's camera slot (or .from_config(ModelConfig))
     batch = pre(batch [, keys])             # adds the maps below (default all), (B, 1, X, Y) in [0, 1], each in the batch's frame
                                             # (mirrored for flipped samples); a key already present is kept
+
+On its own (no network), from the bev_fusion folder:
+    python training/precompute.py check  <config.json> [--split val] [--n 8 | --scene scene-0003]    build the network input, check it
+    python training/precompute.py frames <config.json> [...] [--out DIR]     also write one .pt per frame (the BEVInputs + maps, no GT)
+                                                                             and index.json (code commit, cover of every map per frame)
 
 The network asks only for what its memories read (no extra work on the training and timing paths); the training (D36 loss masks)
 and the evaluation (D36 / D37 scoring masks) call the step themselves.
@@ -55,6 +60,25 @@ class Precompute:
     @classmethod
     def from_model(cls, model):
         return cls(model.grid, model.cfg.z_levels, model.lift.depth_centres, model.cfg.oversample)
+
+    @classmethod
+    def from_config(cls, mcfg):
+        """the same step from a ModelConfig alone (no network built): the grid, heights and depth range of its camera slot"""
+        try:
+            from .camera_encoder import depth_centres
+            from .lift_pd import Grid
+        except ImportError:
+            from camera_encoder import depth_centres
+            from lift_pd import Grid
+        if mcfg.camera_features == "bevfusion":
+            try:
+                from .bevfusion_camera import DEPTHS
+            except ImportError:
+                from bevfusion_camera import DEPTHS
+            dc = DEPTHS
+        else:
+            dc = depth_centres()
+        return cls(Grid(z_levels=mcfg.z_levels, **mcfg.grid_kwargs), mcfg.z_levels, torch.as_tensor(dc, dtype=torch.float32), mcfg.oversample)
 
     def camera(self, batch):
         K, T = batch["K"], batch["T_cam_car"]
@@ -118,9 +142,95 @@ def _selftest():
     assert torch.equal(fl["vis_cam"][0], out["vis_cam"][0].flip(-1)) and torch.equal(fl["vis_cam"][1], out["vis_cam"][1])
     only = pre(dict(batch), keys=("vis_cam",))
     assert set(only) & set(MAPS) == {"vis_cam"}, "only the requested maps are made"
+    try:                                                          # the step without a network = the step of the network
+        from .feature_cache import CachedBEVFusionModel
+        from .model import ModelConfig
+    except ImportError:
+        from feature_cache import CachedBEVFusionModel
+        from model import ModelConfig
+    for cf in ("dualbev", "bevfusion"):
+        mcfg = ModelConfig(camera_features=cf, pretrained="", trunk_pretrained="")
+        a = Precompute.from_config(mcfg)(dict(batch), ("vis_cam",))["vis_cam"]
+        b = Precompute.from_model(CachedBEVFusionModel(mcfg))(dict(batch), ("vis_cam",))["vis_cam"]
+        assert torch.equal(a, b), f"from_config != from_model ({cf})"
     print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan (placeholder), fusion area = camera x radar, "
-          "radar hits from the detections, existing keys kept")
+          "radar hits from the detections, existing keys kept, maps mirrored, from_config = from_model")
+
+
+# ------------------------------------------------------------------------------------------- the step on its own
+def _frames(ds, args):
+    """the dataset indices to run: one scene, or n frames spread over the split"""
+    if args.scene:
+        names = {s["token"]: s["name"] for s in ds.nusc.scene}
+        idx = [i for i, t in enumerate(ds.samples) if names[ds.nusc.get("sample", t)["scene_token"]] == args.scene]
+        if not idx:
+            raise SystemExit(f"no frame of {args.scene} in the split")
+        return idx
+    n = min(args.n, len(ds))
+    return [int(i * (len(ds) - 1) / max(n - 1, 1)) for i in range(n)]
+
+
+def main(argv=None):
+    """precompute on its own: the network input of chosen frames, checked against interface.INPUTS, optionally written to disk"""
+    import argparse
+    import json
+    import os
+    import subprocess
+    import time
+    ap = argparse.ArgumentParser(description="the precompute step (layer 1) on its own: the network input of chosen frames")
+    ap.add_argument("cmd", choices=["check", "frames"], help="check: build and check, write nothing; frames: also write one .pt per frame")
+    ap.add_argument("config", help="a training config (training/configs/*.json or runs/<name>/config.json): data, caches, model grid")
+    ap.add_argument("--split", choices=["val", "train"], default="val")
+    ap.add_argument("--n", type=int, default=8, help="frames spread over the split (ignored with --scene)")
+    ap.add_argument("--scene", default="", help="all frames of one scene, e.g. scene-0003")
+    ap.add_argument("--out", default="", help="frames: output folder (default temp/precompute/<config name>_<split>)")
+    a = ap.parse_args(argv)
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, ".."))
+    os.chdir(root)
+    try:
+        from . import train as T
+        from .feature_cache import collate_cached
+        from .interface import check_inputs
+        from .model import ModelConfig
+        from .nuscenes_dataset import collate
+    except ImportError:
+        import train as T
+        from feature_cache import collate_cached
+        from interface import check_inputs
+        from model import ModelConfig
+        from nuscenes_dataset import collate
+    t0 = time.time()
+    cfg = T.read_config(a.config)
+    mcfg = ModelConfig(**cfg.model)
+    train_ds, val_ds = T.make_datasets(cfg)
+    ds = val_ds if a.split == "val" else train_ds
+    fn = collate_cached if cfg.feature_cache else collate
+    pre = Precompute.from_config(mcfg)
+    out = a.out or os.path.join("temp", "precompute", f"{os.path.basename(a.config).replace('.json', '')}_{a.split}")
+    if a.cmd == "frames":
+        os.makedirs(out, exist_ok=True)
+    rows = []
+    for i in _frames(ds, a):
+        batch = pre(fn([ds[i]]))
+        batch.pop("gt", None)                                     # the network input: no ground truth
+        check_inputs(batch, raise_on=True)
+        token = batch["tokens"][0]
+        cover = {k: round(float(batch[k].mean()), 4) for k in MAPS if k in batch}
+        rows.append({"index": i, "token": token, **{f"cover_{k}": v for k, v in cover.items()}})
+        if a.cmd == "frames":
+            torch.save(batch, os.path.join(out, f"{token}.pt"))
+    commit = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    dirty = bool(subprocess.run(["git", "-C", root, "status", "--porcelain", "--", "training"], capture_output=True, text=True).stdout.strip())
+    summary = {"config": a.config, "split": a.split, "frames": len(rows), "code": commit + ("+dirty" if dirty else ""),
+               "maps": list(MAPS), "radar_fan": "placeholder: every cell (autogt.coverage.radar_cells pending)", "rows": rows}
+    if a.cmd == "frames":
+        json.dump(summary, open(os.path.join(out, "index.json"), "w"), indent=1)
+    mean = {k: round(sum(r[f"cover_{k}"] for r in rows) / len(rows), 3) for k in MAPS if f"cover_{k}" in rows[0]}
+    print(f"precompute {a.cmd}: {len(rows)} frames of {a.split} pass interface.check_inputs ({time.time() - t0:.0f} s), mean cover {mean}"
+          + (f"; written to {out}" if a.cmd == "frames" else ""))
 
 
 if __name__ == "__main__":
-    _selftest()
+    import sys
+    main() if len(sys.argv) > 1 else _selftest()

@@ -46,6 +46,7 @@ import torch.nn as nn
 try:
     from .augment import flip_batch
     from .feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
+    from .interface import check_inputs, check_outputs
     from .loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from .losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
     from .model import BEVFusionModel, ModelConfig
@@ -55,6 +56,7 @@ except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from augment import flip_batch
     from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
+    from interface import check_inputs, check_outputs
     from loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
     from model import BEVFusionModel, ModelConfig
@@ -508,6 +510,9 @@ def clip_step(prev_batch, device):
     return tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
 
 
+_CONTRACT_CHECKED = []      # interface.check_inputs / check_outputs run on the first forward_loss call of the process
+
+
 def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=False, train_terms=True, state=None, step=None):
     """-> (loss dict, model result, GT targets). With cfg.gap_ego the model decodes dt = +-0.5 s with the TRUE gap of each
     sample and its gap-mean ego motion (the GT is the keyframe at the true gap), when the model takes `ego`. With
@@ -520,8 +525,14 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     batch = to_device(batch, device)
     ctx = torch.autocast("cuda", dtype=torch.bfloat16) if amp == "bf16" and device.startswith("cuda") else torch.autocast("cpu", enabled=False)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
+    first = not _CONTRACT_CHECKED
+    if first:                                                  # the interface contract on the first real batch of the process
+        check_inputs(batch, dts=dts, ego=ego, raise_on=True)   # (training, validation and the evaluation adapter all pass here)
     with ctx:
         res = model(batch, dts=dts, **kw)
+    if first:
+        check_outputs(res, dts, raise_on=True)
+        _CONTRACT_CHECKED.append(True)
     with torch.autocast("cpu", enabled=False), torch.autocast("cuda", enabled=False):
         preds = {dt: {k: ({a: b.float() for a, b in v.items()} if isinstance(v, dict) else v.float()) for k, v in p.items()}
                  for dt, p in res["out"].items()}                                    # already in the loss's layout

@@ -1,5 +1,7 @@
 """Equivalence check of a refactor of training/ (used for the five-layer build of 2026-11-01, training/architecture.md): runs a
-checkpoint on n val frames in eval mode and saves every forward output, or compares them with the saved reference.
+checkpoint in eval mode on n clips of 2 val keyframes (2 samples per batch, the first mirrored by augment.flip_batch, the second
+keyframe reading the memory state of the first through train.clip_step) and saves every forward output and the memory state, or
+compares them with the saved reference.
 
     EQUIV_CODE=<old training/ snapshot> EQUIV_DEVICE=cpu python tests/equivalence.py save [--n 4]     before: the old code
     EQUIV_DEVICE=cpu python tests/equivalence.py compare                                               after: the live tree;
@@ -23,6 +25,7 @@ DEV = os.environ.get("EQUIV_DEVICE", "cuda")                             # cpu: 
 sys.path.insert(0, CODE)
 os.chdir(ROOT)
 import train as T  # noqa: E402
+from augment import flip_batch  # noqa: E402
 from feature_cache import collate_cached  # noqa: E402
 
 REF = os.environ.get("EQUIV_REF", os.path.join(ROOT, "temp", "equivalence", "ref.pt"))
@@ -38,6 +41,10 @@ def flat(res):
                         out[f"{dt}/{k}/{a}"] = b
             elif torch.is_tensor(v):
                 out[f"{dt}/{k}"] = v
+    for branch, st in (res.get("state") or {}).items():          # the memory state the next call reads (fed by the visibility maps)
+        for k, v in (st or {}).items():
+            if torch.is_tensor(v):
+                out[f"state/{branch}/{k}"] = v
     return {k: v.detach().float().cpu() for k, v in out.items()}
 
 
@@ -50,12 +57,18 @@ def run(n):
     assert not m.unexpected_keys and all(k.startswith("camera.") for k in m.missing_keys), m
     model = model.to(DEV).eval()
     val = T.make_datasets(cfg)[1]
-    idx = [int(i * (len(val) - 1) / max(n - 1, 1)) for i in range(n)]
+    clips = T.ClipDataset(val, 2)                       # clips of 2 keyframes, 2 samples per batch, the first sample mirrored:
+    idx = [int(i * (len(clips) - 2) / max(n - 1, 1)) for i in range(n)]   # the second keyframe reads the memory of the first
     outs = []
     with torch.no_grad():
         for i in idx:
-            b = T.to_device(collate_cached([val[i]]), DEV)
-            outs.append(flat(model(b, dts=(-0.5, 0.0, 0.5))))
+            clip = T.collate_clips([clips[i], clips[i + 1]], collate_cached)
+            for b in clip:
+                flip_batch(b, torch.tensor([True, False]))
+            b0, b1 = (T.to_device(b, DEV) for b in clip)
+            r0 = model(b0, dts=(-0.5, 0.0, 0.5))
+            r1 = model(b1, dts=(-0.5, 0.0, 0.5), state=r0["state"], step=T.clip_step(b0, DEV))
+            outs.append(dict({f"k0/{k}": v for k, v in flat(r0).items()}, **{f"k1/{k}": v for k, v in flat(r1).items()}))
     return idx, outs, sorted(model.state_dict())
 
 

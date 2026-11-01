@@ -4,7 +4,7 @@
 <rect width="1948" height="680" fill="#ffffff"/>
 <text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion: camera + radar BEV system in five layers</text>
 <text x="24" y="50" font-size="12" fill="#475569">Built 2026-11-01 (Mirko&#x27;s layered design). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, tests/test_slots.py) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.</text>
-<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 15 stages = 9 learned, 2 fixed-differentiable, 4 frozen, 0 rule steps</text>
+<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 14 stages = 8 learned, 2 fixed-differentiable, 4 frozen, 0 rule steps</text>
 <text x="119.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">Sensors</text>
 <text x="309.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">1 Precompute (own step)</text>
 <text x="499.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">2 Input interface</text>
@@ -23,16 +23,13 @@
 <path d="M384.0,158.0 C404.0,158.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M384.0,258.0 C404.0,258.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M384.0,358.0 C404.0,358.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M574.0,258.0 C594.0,258.0 594.0,158.0 614.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M574.0,258.0 C594.0,258.0 594.0,158.0 614.0,158.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <path d="M574.0,258.0 C594.0,258.0 594.0,258.0 614.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M954.0,158.0 C974.0,158.0 974.0,208.0 994.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1144.0,208.0 C1164.0,208.0 1164.0,208.0 1184.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1334.0,208.0 C1354.0,208.0 1354.0,158.0 1374.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1334.0,208.0 C1354.0,208.0 1354.0,258.0 1374.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1334.0,208.0 C1354.0,208.0 1354.0,358.0 1374.0,358.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1524.0,158.0 C1544.0,158.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1524.0,258.0 C1544.0,258.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1524.0,358.0 C1544.0,358.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1714.0,308.0 C1734.0,308.0 1734.0,158.0 1754.0,158.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <path d="M1714.0,308.0 C1734.0,308.0 1734.0,258.0 1754.0,258.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <path d="M1829.0,189.0 C1829.0,258.0 1829.0,258.0 1829.0,327.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
@@ -41,7 +38,6 @@
 <path d="M1564.0,308.0 C1544.0,308.0 1544.0,558.0 1524.0,558.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <path d="M574.0,258.0 C689.0,258.0 689.0,358.0 804.0,358.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M954.0,358.0 C974.0,358.0 974.0,208.0 994.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M764.0,158.0 C784.0,158.0 784.0,158.0 804.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M574.0,258.0 C689.0,258.0 689.0,158.0 804.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M764.0,258.0 C784.0,258.0 784.0,158.0 804.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M1449.0,189.0 C1449.0,308.0 1449.0,308.0 1449.0,427.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
@@ -50,8 +46,11 @@
 <path d="M1714.0,308.0 C1734.0,308.0 1734.0,458.0 1754.0,458.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <path d="M309.0,389.0 C309.0,408.0 309.0,408.0 309.0,427.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <path d="M384.0,458.0 C404.0,458.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M384.0,458.0 C879.0,458.0 879.0,558.0 1374.0,558.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<path d="M384.0,458.0 C1069.0,458.0 1069.0,358.0 1754.0,358.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M384.0,458.0 C879.0,458.0 879.0,558.0 1374.0,558.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M384.0,458.0 C1069.0,458.0 1069.0,358.0 1754.0,358.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M1449.0,327.0 C1449.0,258.0 1449.0,258.0 1449.0,189.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1449.0,327.0 C1449.0,308.0 1449.0,308.0 1449.0,289.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1524.0,358.0 C1544.0,358.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
 <g><title>in_cam: training/nuscenes_dataset.py::FrontRadarDataset</title><rect x="44" y="127.0" width="150" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
 <text x="119.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Cameras</text>
 <text x="119.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">now + past frames</text>
@@ -95,7 +94,7 @@
 <text x="499.0" y="301.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">steps, gaps, flip</text>
 <text x="499.0" y="315.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">interface.py::check_inp</text>
 </g>
-<g><title>cam_enc: training/lift_pd.py::LiftPD; training/model.py::BEVFusionModel.camera_bevs; training/model.py::BEVFusionModel.camera_visibility; training/blocks_new.py::ZSumReduce</title><rect x="614" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>cam_enc: training/lift_pd.py::LiftPD; training/model.py::BEVFusionModel.camera_bevs; training/model.py::BEVFusionModel.camera_visibility; training/blocks_new.py::ZSumReduce</title><rect x="614" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
 <text x="689.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Camera BEV encoder</text>
 <text x="689.0" y="156.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lift + collapse;</text>
 <text x="689.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">mirror in BEV</text>
@@ -208,9 +207,12 @@
 </g>
 <text x="612.0" y="118.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">3 network: one slot per block, the kind chosen in ModelConfig, a contract test per kind</text>
 <text x="232.0" y="518.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training only</text>
+<text x="1354.0" y="278.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">S</text>
 <text x="784.0" y="203.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">radar</text>
-<text x="879.0" y="503.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">loss masks</text>
-<text x="1069.0" y="403.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">scoring masks</text>
+<text x="879.0" y="503.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">loss masks (D36, next)</text>
+<text x="1069.0" y="403.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">scoring masks (D37, next)</text>
+<text x="1455.0" y="261.0" font-size="10" text-anchor="start" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">S at dt</text>
+<text x="1544.0" y="328.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">v_hat</text>
 <text x="24" y="630" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
 <rect x="24" y="642" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="652" font-size="11" fill="#334155">sensor</text>
 <rect x="101.2" y="642" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="125.2" y="652" font-size="11" fill="#334155">precompute: deterministic, cached with an identity, no weights learned before it</text>

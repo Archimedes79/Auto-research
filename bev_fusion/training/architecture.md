@@ -7,7 +7,7 @@ Built 2026-11-01 in Mirko's layered design; the design record with its correctio
 ## Five layers
 | layer | code | what it holds | its rule |
 |---|---|---|---|
-| 1 Precompute | `precompute.py`, the dataset and feature caches | calibration, ego steps and gaps, radar detections compensated to now, frozen image features, the **visibility maps** (camera now, radar now) | everything before the first learned weight: deterministic, no gradient; the camera map is cached per calibration (the same function runs live in a car) |
+| 1 Precompute | `precompute.py` (also on its own: `python training/precompute.py check / frames <config>`), the dataset and feature caches | calibration, ego steps and gaps, radar detections compensated to now, frozen image features, the **visibility maps** (camera now, radar now) | everything before the first learned weight: deterministic, no gradient; the camera map is cached per calibration (the same function runs live in a car) |
 | 2 Input interface | `interface.py` (`INPUTS`, `CALL`, `check_inputs`) | the batch dict and the forward arguments, each named with shape, unit and frame | the only thing the network reads; the flip flag travels with it, the mirror is a BEV operation after the camera slot |
 | 3 Network | `model.py` (builder tables, `check_config`) and the block files | slots: camera encoder, radar encoder, temporal fusion per branch, lane add-on (option), fusion, backbone + neck, heads (maps, objects, time mover), soft extraction | one kind per slot chosen in `ModelConfig`; no rule step between the interfaces; `tests/test_slots.py` builds every kind |
 | 4 Output interface | `interface.py` (`OUTPUTS_PER_DT`, `check_outputs`), `extract.py` | per dt: maps, object maps, the dense box output (peak weight + box per cell), the soft line map; `v_hat`, features S, the temporal state | dense and differentiable: the loss, the post-processing and later the planner read only this |
@@ -44,6 +44,20 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 - **Fresh critic pass** (mode code) on the build: 10 findings, all fixed (the zero gradient of the soft direction sign, the unclamped line map, extra work on the training and timing paths, a weak gradient test, float32 selection, mixed frames of the maps for flipped samples, a radar-less batch, dead code).
 - **Finding:** with no past radar frames the radar memory block's window part and velocity head get no gradient (named in `tests/test_slots.py`): the radar memory needs its own static gate (the measured Doppler) or past radar BEVs before it is a fair arm.
 
+## Bug hunt before the first training (2026-11-01, two fresh critics + a real-data dry run)
+Fixed:
+- **bf16 crashed the GPU** (`splat.py`, a bug older than the build): the cell index was computed in the feature dtype, and bf16 is exact for integers only up to 256, so indices ran past the grid (device-side assert). Positions now float32, indices integer. Every stored config runs `amp: off`, so no number of a past run is affected.
+- **bf16 geometry was cached** (`lift_pd.build_table`): under autocast the projection tables and the camera visibility were built in bf16 (about 4 px error) and reused by float32 calls. Now always float32; the visibility cache key also holds the depth range.
+- **unequal temporal arms:** the ego-GRU control never got the visibility mask the window memory gets; every memory kind gets its write mask now (no stored config uses a changed path's numbers: old runs evaluate from their own code snapshot).
+- `flip_batch` mirrors precomputed maps; a radar-less batch no longer breaks the radar memory; `interface.py` names the radar fields (`RADAR_FIELDS`), requires `v_hat` at dt 0 and checks the dense boxes for finiteness; the contracts now run on the first real batch of every process (`train.forward_loss`: training, validation and the evaluation adapter); stale references and the model docstring updated; the drawing's wiring corrected (backbone -> time mover -> heads; the planned mask edges dashed).
+- **tests:** `tests/equivalence.py` now runs clips of 2 keyframes (memory carried, one sample mirrored, batch 2) and compares the memory state too: base model 64, hurdle model 70 outputs identical to the code before the build; `tests/test_slots.py` adds 5 combinations (33 builds).
+
+Design gaps left (named, not fixed; the next decisions):
+1. **Layer 1 leaks into the trainer:** the true gap to the target time and the memory step between calls come from the GT meta (`train.batch_ego`, `clip_step`), so the network cannot run without GT; the dataset should make them from the poses.
+2. **The camera slot is not one builder entry:** a new camera kind still touches the live `camera_bevs`, the cached subclass in `feature_cache.py`, the cached dataset and `collate_cached`.
+3. **The refiner puts GT matching inside the network** (`_refine_train`); it belongs in the loss (harmless while `refine` is off).
+4. **Two box extractors:** the evaluation adapter scores with `object_head.decode`, `model.boxes()` with `select_boxes` (equal box for box).
+
 ## What comes next inside this frame
 1. D36: loss weights and scoring masks read `vis_cam` / `vis_radar` (with `autogt.coverage_for` once it exists).
 2. The radar memory arm with a Doppler static gate.
@@ -59,7 +73,7 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 | Ego motion poses / CAN | sensor | `training/train.py::gap_ego_motion` | from the poses in nuScenes; a deployed system supplies its own odometry |
 | Image features frozen encoder, cached | precompute: deterministic, cached with an identity, no weights learned before it | `training/camera_encoder.py::FrontCameraEncoder`, `training/bevfusion_camera.py`, `training/feature_cache.py::FeatureStore`, `training/cache_bevfusion_features.py` | frozen DualBEV / BEVFusion image heads: depth probabilities + context per pixel; while frozen they are a cache (with a meta.json identity), once unfrozen the image encoder becomes the first network slot |
 | Radar points to now pose + Doppler, cached | precompute: deterministic, cached with an identity, no weights learned before it | `training/nuscenes_dataset.py::FrontRadarDataset._radar`, `training/feature_cache.py::build_radar_cache` | the sweeps of 0.5 s compensated to the current time and cached as points (not as a grid): the radar slot keeps the choice of raster or point encoder |
-| Ego steps, calibration (dt, v, omega), K, T | precompute: deterministic, cached with an identity, no weights learned before it | `training/train.py::gap_ego_motion`, `training/train.py::batch_ego`, `training/train.py::clip_step`, `training/nuscenes_dataset.py::FrontRadarDataset` | the ego step from every past frame to now, the true gap to the target time, the memory step between calls, camera and radar calibration, the image crop; today partly built in train.py from the GT meta (also at evaluation) |
+| Ego steps, calibration (dt, v, omega), K, T | precompute: deterministic, cached with an identity, no weights learned before it | `training/train.py::gap_ego_motion`, `training/train.py::batch_ego`, `training/train.py::clip_step`, `training/nuscenes_dataset.py::FrontRadarDataset` | the ego step from every past frame to now (dataset, from the poses), calibration and crop; TODAY the true gap to the target time and the memory step between calls are built in train.py from the GT meta (batch_ego, clip_step): a layer-1 leak, the network cannot run without GT until the dataset makes them from the poses |
 | Visibility maps camera, radar fan, fusion area | precompute: deterministic, cached with an identity, no weights learned before it | `training/precompute.py::Precompute`, `training/precompute.py::radar_hits`, `training/lift_pd.py::camera_visibility` | the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans (D36; placeholder until autogt.coverage.radar_cells), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask); read by the network, the training (D36 loss masks) and the evaluation (scoring masks) |
 | Ground truth autogt, cached | training only (data, GT, loss, trainer) | `../autogt/`, `training/gt_cache_build.py` |  |
 | INPUT INTERFACE BEVInputs (typed dict + check): image features, lane image, K, T, ida, radar points, ego steps, gaps, flip | interface: one typed contract (names, shapes, units, frames) | `training/interface.py::check_inputs`, `training/nuscenes_dataset.py::collate`, `training/feature_cache.py::collate_cached` | BEVInputs = the batch dict with its contract in interface.INPUTS (names, shapes, units, frames) and check_inputs(); the forward arguments dts, state, step, ego in interface.CALL; the per-sample flip flag travels with it (the mirror is a BEV operation after the camera slot) |
@@ -73,12 +87,12 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 | BEV backbone + neck ResNet + FPN \| SECOND \| CMX | network slot (learned, swapped by config) | `training/bev_trunk.py::BEVTrunk`, `training/blocks_new.py::SecondTrunk`, `training/fallbacks.py::CMXTrunk` | contract: (B, C_fuse, X, Y) -> features S (B, C, X, Y), the optional 1x1 head reduction included; CMX replaces fusion and backbone together (a kind of this slot that takes both branch BEVs) |
 | Map head layers per dt | network slot (learned, swapped by config) | `training/bev_trunk.py::SemanticHead`, `training/timed_head.py::TimedHead` | contract: (S moved to dt) -> map probabilities (B, L, X, Y); the aux heads read the branch BEVs, not S (training only) |
 | Object head CenterPoint maps per dt | network slot (learned, swapped by config) | `training/object_head.py::ObjectHead`, `training/object_head.py::BoxRefiner` | contract: (S moved to dt) -> heatmap, offset, size, yaw, velocity, moving maps; the refiner (option, off in the base chain) decodes top-k and matches the GT inside the training path: a rule step when it is on |
-| Time mover velocity + ego splat | network slot (learned, swapped by config) | `training/timed_head.py::TimeMover`, `training/splat.py::splat_bev` | moves S to a target time dt for every head (shared) and gives the velocity field v_hat at dt = 0 |
+| Time mover velocity + ego splat | network slot (learned, swapped by config) | `training/timed_head.py::TimeMover`, `training/splat.py::splat_bev` | the shared TimeMover: moves S to each target time dt (velocity head + ego splat) before both heads, gives v_hat at dt 0 |
 | Soft extraction peaks, box params, line map | fixed math, differentiable | `training/extract.py::dense_boxes`, `training/extract.py::soft_line_map` | built from today's decode and line extraction: per cell a peak weight (heatmap x exp(-beta (maxpool - heatmap))), the box parameters (centre with offset, size, yaw with a soft direction sign, velocity x sigmoid(moving)) and a soft line map (near-zero distance x soft local minimum); fixed math, differentiable |
 | Loss BEVLoss + Kendall | training only (data, GT, loss, trainer) | `training/losses.py::BEVLoss`, `training/loss_extras.py` | one module: the Kendall weights and the cross-head terms (motion and time consistency, refine) stay together; heads declare their output keys |
 | OUTPUT INTERFACE maps, object maps per dt, v_hat, features S, state | delivered output | `training/interface.py::check_outputs`, `training/model.py::BEVFusionModel.forward` | BEVOutputs = per dt the maps, the object maps, the dense boxes and the soft line map (interface.OUTPUTS_PER_DT / OPTIONAL_PER_DT, check_outputs), plus v_hat, the features S and the temporal state |
 | Line cells threshold | rule step (no gradient) | `evaluation/metrics.py::line_cells` | thresholds the soft line map for the line metric; the metric's reference line_cells stays the definition and a test checks the two agree |
-| Select boxes local max, top-k, threshold | rule step (no gradient) | `training/extract.py::select_boxes` | the only box step left outside the network: picks cells of the dense box output for the metrics and the prototype; with the hard local maximum it gives exactly today's boxes |
+| Select boxes local max, top-k, threshold | rule step (no gradient) | `training/extract.py::select_boxes` | select_boxes: the post-processing of model.boxes(); the evaluation adapter still scores with object_head.decode (equal box for box, extract.py self-test), so both stay until the adapter reads select_boxes |
 | Boxes, lines metrics, prototype | delivered output | `evaluation/bev_adapter.py::predictions`, `evaluation/board.py` |  |
 | Planner (later) after the system | later (no code yet) |  | a consumer of the output interface, not part of the system; the outputs are dense and differentiable, so a later joint training lets its loss flow back into the fusion |
 
@@ -86,16 +100,19 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 
 | from | to | carries |
 |---|---|---|
-| Camera BEV encoder lift + collapse; mirror in BEV | Temporal fusion per branch: camera, radar | visibility |
+| BEV backbone + neck ResNet + FPN \| SECOND \| CMX | Time mover velocity + ego splat | S |
 | Radar BEV encoder raster + convs \| pillars \| off | Temporal fusion per branch: camera, radar | radar |
 | OUTPUT INTERFACE maps, object maps per dt, v_hat, features S, state | Planner (later) after the system | dense, differentiable |
 | Ego steps, calibration (dt, v, omega), K, T | Visibility maps camera, radar fan, fusion area | calibration |
-| Visibility maps camera, radar fan, fusion area | Loss BEVLoss + Kendall | loss masks |
-| Visibility maps camera, radar fan, fusion area | Boxes, lines metrics, prototype | scoring masks |
+| Visibility maps camera, radar fan, fusion area | INPUT INTERFACE BEVInputs (typed dict + check): image features, lane image, K, T, ida, radar points, ego steps, gaps, flip | memory write masks |
+| Visibility maps camera, radar fan, fusion area | Loss BEVLoss + Kendall | loss masks (D36, next) (no data flow in training) |
+| Visibility maps camera, radar fan, fusion area | Boxes, lines metrics, prototype | scoring masks (D37, next) (no data flow in training) |
+| Time mover velocity + ego splat | Map head layers per dt | S at dt |
+| Time mover velocity + ego splat | OUTPUT INTERFACE maps, object maps per dt, v_hat, features S, state | v_hat |
 
 ## Main path from input to output
 
-main path (bold): 15 stages = 9 learned, 2 fixed-differentiable, 4 frozen, 0 rule steps.
+main path (bold): 14 stages = 8 learned, 2 fixed-differentiable, 4 frozen, 0 rule steps.
 
 | stage | class | code |
 |---|---|---|
@@ -104,15 +121,14 @@ main path (bold): 15 stages = 9 learned, 2 fixed-differentiable, 4 frozen, 0 rul
 | Ego steps, calibration (dt, v, omega), K, T | frozen | `training/train.py::gap_ego_motion`, `training/train.py::batch_ego`, `training/train.py::clip_step`, `training/nuscenes_dataset.py::FrontRadarDataset` |
 | Visibility maps camera, radar fan, fusion area | frozen | `training/precompute.py::Precompute`, `training/precompute.py::radar_hits`, `training/lift_pd.py::camera_visibility` |
 | INPUT INTERFACE BEVInputs (typed dict + check): image features, lane image, K, T, ida, radar points, ego steps, gaps, flip | fixed-differentiable | `training/interface.py::check_inputs`, `training/nuscenes_dataset.py::collate`, `training/feature_cache.py::collate_cached` |
-| Camera BEV encoder lift + collapse; mirror in BEV | learned | `training/lift_pd.py::LiftPD`, `training/model.py::BEVFusionModel.camera_bevs`, `training/model.py::BEVFusionModel.camera_visibility`, `training/blocks_new.py::ZSumReduce` |
 | Radar BEV encoder raster + convs \| pillars \| off | learned | `training/radar_bev.py::RadarBEV`, `training/radar_bev.py::rasterize`, `training/blocks_new.py::RadarPillars` |
 | Lane add-on (option) stride 4, after temporal | learned | `training/lane_branch.py::LaneBranch` |
 | Temporal fusion per branch: camera, radar | learned | `training/temporal_fusion.py::TemporalFusion`, `training/temporal_fusion.py::recentre`, `training/splat.py::splat_window`, `training/fallbacks.py::EgoWarpGRU` |
 | Fusion concat \| gate | learned | `training/fusion.py::ConcatFusion`, `training/fusion.py::GateFusion`, `training/fusion.py::drop_modality` |
 | BEV backbone + neck ResNet + FPN \| SECOND \| CMX | learned | `training/bev_trunk.py::BEVTrunk`, `training/blocks_new.py::SecondTrunk`, `training/fallbacks.py::CMXTrunk` |
+| Time mover velocity + ego splat | learned | `training/timed_head.py::TimeMover`, `training/splat.py::splat_bev` |
 | Map head layers per dt | learned | `training/bev_trunk.py::SemanticHead`, `training/timed_head.py::TimedHead` |
 | Object head CenterPoint maps per dt | learned | `training/object_head.py::ObjectHead`, `training/object_head.py::BoxRefiner` |
-| Time mover velocity + ego splat | learned | `training/timed_head.py::TimeMover`, `training/splat.py::splat_bev` |
 | Soft extraction peaks, box params, line map | fixed-differentiable | `training/extract.py::dense_boxes`, `training/extract.py::soft_line_map` |
 
 ## Where the path is not end to end, and what could stand in for it
