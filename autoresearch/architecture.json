@@ -93,6 +93,5 @@
     {"dir": "schemas", "glob": "*.json"},
     {"dir": "evalsuite", "glob": "*.py"},
     {"dir": "trainsuite", "glob": "*.py"}
-  ],
-  "not_drawn": {"agents/ar-scout.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended", "agents/ar-summarizer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended", "agents/ar-hypothesis.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended", "agents/ar-referee.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended", "agents/ar-reviewer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended"}
+  ]
 }

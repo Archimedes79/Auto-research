@@ -1,7 +1,6 @@
 """Statistics of the suite: robust outlier scores, leave-one-out influence, paired scene bootstrap. numpy only.
 
     robust_z(values)                      median / MAD z-scores (a few bad frames do not move their own yardstick)
-    iqr_fences(values, k)                 Tukey fences
     loo_influence(units, reduce, keys)    how much each unit (scene or frame) moves the dataset-level numbers: all - without it
     scene_picks / scene_draws             THE scene draws of every bootstrap in the repository (np.random.RandomState stream)
     paired_draws(stat_a, stat_b, draws)   THE paired interval, a - b = variant - control (the lane project and decide.py use it too)
@@ -31,16 +30,6 @@ def robust_z(values: Sequence[float]) -> np.ndarray:
         mad = np.mean(np.abs(v[ok] - med)) * 1.2533
     out[ok] = 0.0 if mad <= 0 else (v[ok] - med) / mad
     return out
-
-
-def iqr_fences(values: Sequence[float], k: float = 1.5):
-    """(low, high) Tukey fences of the finite values"""
-    v = np.asarray(values, float)
-    v = v[np.isfinite(v)]
-    if len(v) == 0:
-        return float("nan"), float("nan")
-    q1, q3 = np.percentile(v, [25, 75])
-    return float(q1 - k * (q3 - q1)), float(q3 + k * (q3 - q1))
 
 
 def loo_influence(units: Dict[str, list], reduce: Callable[[list], Dict[str, float]], keys: Optional[Sequence[str]] = None
@@ -108,10 +97,12 @@ def paired_draws(stat_a: Callable[[Any], Dict[str, float]], stat_b: Callable[[An
     frames); `draws` = scene_draws(...) (frame indices) or scene_picks(...) (scene positions) or anything stat_x understands.
     -> key -> {a, b, diff (a - b on all frames), lo, hi (interval of a - b over the draws), p_gt0 (share of the valid draws with
     a - b > 0), p_a_better (share of the valid draws in which a is strictly better: a - b > 0 for a 'high' key, < 0 for a 'low' key of
-    `better`, default 'high'), n_valid (finite draws), n_draws}. A key missing on all frames, or in every draw, is left out."""
+    `better`, default 'high'), n_valid (draws with a finite difference), n_draws (all draws, also those in which a statistic left the key out)}. A key missing on all frames, or in every draw, is left out."""
     base_a, base_b = stat_a(None), stat_b(None)
     d: Dict[str, List[float]] = {k: [] for k in keys}
+    n_total = 0
     for sel in draws:
+        n_total += 1
         ma, mb = stat_a(sel), stat_b(sel)
         for k in keys:
             if k in ma and k in mb:
@@ -127,7 +118,7 @@ def paired_draws(stat_a: Callable[[Any], Dict[str, float]], stat_b: Callable[[An
         out[k] = {"a": float(base_a[k]), "b": float(base_b[k]), "diff": float(base_a[k]) - float(base_b[k]), "lo": lo, "hi": hi,
                   "p_gt0": float((f > 0).mean()) if nv else float("nan"),
                   "p_a_better": float(((f > 0) if high else (f < 0)).mean()) if nv else float("nan"),
-                  "n_valid": nv, "n_draws": int(len(v))}
+                  "n_valid": nv, "n_draws": n_total}
     return out
 
 
@@ -137,7 +128,9 @@ def interval_draws(stat: Callable[[Any], Dict[str, float]], draws: Iterable[Any]
     stat and draws as in paired_draws"""
     base = stat(None)
     vals: Dict[str, List[float]] = {k: [] for k in keys}
+    n_total = 0
     for sel in draws:
+        n_total += 1
         m = stat(sel)
         for k in keys:
             if k in m:
@@ -149,7 +142,7 @@ def interval_draws(stat: Callable[[Any], Dict[str, float]], draws: Iterable[Any]
         v = np.asarray(vals[k], float)
         lo, hi, nv = percentile_interval(v, alpha)
         out[k] = {"value": base[k], "lo": lo, "hi": hi, "sd": float(np.std(v[np.isfinite(v)])) if nv else float("nan"),
-                  "n_valid": nv, "n_draws": int(len(v))}
+                  "n_valid": nv, "n_draws": n_total}
     return out
 
 

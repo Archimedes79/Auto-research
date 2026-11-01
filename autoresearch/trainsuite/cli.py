@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 
@@ -11,6 +12,7 @@ from .kill import load_rules
 from .runs import Run, fmt_dur
 
 TERMINAL = ("done", "failed", "stopped", "ended")
+RETRY_GRACE_S = 300       # watch: a run that fails while watched may be restarted by the launcher (a CUDA retry after 15 s): wait this long
 LATCH_POLLS = 5          # watch: a finding that went away must stay away this many looks before it can be reported again
 
 
@@ -27,8 +29,9 @@ def open_run(arg, root, loss):
 
 def split_ref(arg):
     """'run' or 'run:reference' -> (run, reference or None): a reference of its own for this run"""
-    name, _, ref = arg.partition(":")
-    return name, ref or None
+    skip = 2 if len(arg) > 2 and arg[1] == ":" and arg[0].isalpha() and arg[2] in "/" + chr(92) else 0     # a Windows drive letter is no separator
+    name, _, ref = arg[skip:].partition(":")
+    return arg[:skip] + name, ref or None
 
 
 def summary(run, ref=None, extra_rules=(), since_step=None):
@@ -167,10 +170,10 @@ def cmd_watch(a):
                     snap["initial"] = False
                 snap["since"] = now
                 _event(run, f"{s['state']} at step {s['step']}/{s['total'] or '?'}", "state")
-            here = {f.code: f for f in findings if f.level != "info"}
+            here = {(f.code, re.sub(r"[\d.]+", "#", f.text)[:60]): f for f in findings if f.level != "info"}     # one latch per finding (numbers in the text change every poll)
             for code, f in here.items():
                 if code not in snap["find"]:
-                    _event(run, f"{f.level} {code}: {f.text}", f.level)
+                    _event(run, f"{f.level} {f.code}: {f.text}", f.level)
                 snap["find"][code] = 0
             for code in [c for c in snap["find"] if c not in here]:
                 snap["find"][code] += 1
@@ -202,7 +205,8 @@ def cmd_watch(a):
                     f"{k[4:]} {v:.4g}" for k, v in e.items() if k.startswith("val.") and "last" not in k), "eval")
             snap.update(state=s["state"], kill={r.text: st for r, st, _ in kills}, evals=len(run.evals), step=run.step)
             waiting = s["state"] in ("new", "stalled") or (s["state"] in TERMINAL and s["state"] != "done" and snap["initial"])
-            if s["state"] == "done" or (s["state"] in TERMINAL and not waiting):
+            retrying = s["state"] == "failed" and not snap["initial"] and now - snap["since"] <= RETRY_GRACE_S
+            if s["state"] == "done" or (s["state"] in TERMINAL and not waiting and not retrying):
                 del runs[key]
             elif waiting and now - snap["since"] > 60 * a.give_up:
                 _event(run, f"still {s['state']} after {a.give_up:g} min, no longer watched", "state")

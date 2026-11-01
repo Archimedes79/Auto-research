@@ -28,7 +28,12 @@ def test_regex_characters_are_literal():
 
 
 def test_reads_the_project_log_by_default():
-    assert EV.test_allowed("E", None) is False  # the real log is read and a one-letter id never passes
+    import re
+    assert EV.test_allowed("E99999.zz", None) is False          # well formed, so the real log is opened; it does not name this id
+    with open(f"{EV.R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8") as f:
+        logged = re.search(r"(?<![\w.])(E\d+[A-Za-z0-9_.-]*[A-Za-z0-9_])(?![\w.])", f.read())
+    if logged:
+        assert EV.test_allowed(logged.group(1), None) is True, "an id of the real log passes: the default log is the project's"
 
 
 def test_digest_is_the_content_not_the_containers():

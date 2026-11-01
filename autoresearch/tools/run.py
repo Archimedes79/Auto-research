@@ -591,6 +591,13 @@ def run_once(cmd, cwd, log_path, hb_path, timeout_s, env=None):
     return rc, out, p.pid, timed_out
 
 
+def names_split(cmd, split):
+    """does the command line itself ask for this split (`--split test` or `--split=test`)? The gate looks at --split of the launcher, which a
+    command can contradict"""
+    toks = [str(t).lower() for t in cmd]
+    return any(t == f"--split={split}" or (t == "--split" and i + 1 < len(toks) and toks[i + 1] == split) for i, t in enumerate(toks))
+
+
 def main():
     root, cfg = P.root(), P.cfg()
     records, ledger, test_log = P.path("run_records"), P.path("ledger"), P.path("test_log")
@@ -637,7 +644,11 @@ def main():
     if cfg.get("splits") and a.split not in [s.lower() for s in cfg["splits"]]:
         print(f"[{a.id}] refused: split {a.split} is not one of the project's splits {cfg['splits']}")
         return 2
-    if a.split == str(cfg.get("holdout_split", "test")).lower():
+    holdout = str(cfg.get("holdout_split", "test")).lower()
+    if a.split != holdout and names_split(cmd, holdout):
+        print(f"[{a.id}] refused: the command asks for the holdout split ({holdout}) but --split is {a.split}; start it with --split {holdout} (the TEST log is checked then)")
+        return 2
+    if a.split == holdout:
         log = open(test_log, encoding="utf-8").read() if os.path.exists(test_log) else ""
         if not re.search(r"(?<![\w.])" + re.escape(a.id) + r"(?![\w.])", log):  # the whole id, not a prefix of a longer id
             print(f"[{a.id}] refused: split={a.split} is the holdout split but {a.id} is not named in {os.path.relpath(test_log, root)} (log it first, with the person's OK)")

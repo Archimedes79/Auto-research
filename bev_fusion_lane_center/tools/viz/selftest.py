@@ -25,4 +25,11 @@ for p in (png, cmp_, sheet, mp4, gif):
     print(f"{os.path.basename(p):12s} {os.path.getsize(p)/1e3:8.1f} kB")
 print("mp4 frames readable:", n, "(expected 12)")
 assert n == 12 and all(os.path.getsize(p) > 1000 for p in (png, cmp_, sheet, mp4, gif))
+sbs = MV.side_by_side([np.zeros((4, 6, 3), np.uint8)], [np.full((3, 2, 3), 7, np.uint8)])[0]       # a smaller right picture is padded with white
+assert sbs.shape == (4, 8, 3) and sbs[0, 6, 0] == 7 and sbs[0, 7, 0] == 7 and sbs[3, 6, 0] == 255
+try:
+    MV.frames_to_video([], f"{d}/none.mp4")
+    raise AssertionError("an empty frame list must be refused")
+except ValueError:
+    pass
 print("viz / video selftest passed in", d)

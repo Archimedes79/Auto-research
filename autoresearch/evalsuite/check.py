@@ -161,7 +161,7 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
                 s = src.load(r)
                 p = subj.predict(s, ())
                 c = m.frame(s, p)
-                assert isinstance(c, dict) and c and all(isinstance(v, np.ndarray) or np.isscalar(v) for v in c.values()), \
+                assert isinstance(c, dict) and all(isinstance(v, np.ndarray) or np.isscalar(v) for v in c.values()), \
                     "frame() must return a dict of numpy arrays"
                 sc = m.score(c)
                 assert all(isinstance(v, (int, float, np.integer, np.floating)) for v in sc.values()), "score() values must be numbers"

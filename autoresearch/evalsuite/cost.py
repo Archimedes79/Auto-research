@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
@@ -64,8 +63,6 @@ def _ms_source(costs: List[Dict[str, Any]]) -> str:
     return "mixed"
 
 
-def _slug(text: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]+", "_", text).strip("_")
 
 
 def pareto(quant, runs: Sequence[Any], y: Optional[str] = None, costs: Sequence[str] = ("ms", "gmacs"),
@@ -73,7 +70,7 @@ def pareto(quant, runs: Sequence[Any], y: Optional[str] = None, costs: Sequence[
     """quality `y` ('metric.key', default the first headline number) of every run on the common frames, against ms per frame and
     GMACs; -> {'rows', 'y', 'better', 'n_common_frames', 'ms_source', 'notes', 'png', 'json'} and the picture below `quant/`.
     The runs must come from the same source and task (quantitative.same_question; force=True skips the check)."""
-    from .quantitative import same_question
+    from .quantitative import _slug, same_question
     stores = [quant.open(r) for r in runs]
     same_question(*stores, force=force)
     common = set.intersection(*[set(s.labels()) for s in stores])

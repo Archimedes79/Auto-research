@@ -9,6 +9,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 p="$1"; kind="$2"
 dl="${NUSC_DL:?set NUSC_DL to a download folder on D:}/nuscenes_$kind/p$p"
+: "${NUSC_DEST:?set NUSC_DEST to the unpack target on D: before anything is downloaded}"
 mkdir -p "$dl"
 base="https://motional-nuscenes.s3.amazonaws.com/public/v1.0"
 name="v1.0-trainval${p}_blobs_${kind}.tgz"

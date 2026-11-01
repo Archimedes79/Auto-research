@@ -6,7 +6,7 @@
   frame_array(pred, gt, ...)                                             the same panel as an RGB uint8 array (used by the video tool)
   montage(paths, out, ncol)                                              stitch existing png files into one sheet
 Graph format: dict(pts=[(n,2) arrays], edges=[(i,j)]) (see evaluation/sparse_lanes/README.md).
-Usage: scripts/_py14.sh ../tools/viz/render.py --pred pred.pkl --gt gt.pkl --ids 0,10,20 --out sheet.png
+Usage: tools/env/_py14.sh viz/render.py --pred pred.pkl --gt gt.pkl --ids 0,10,20 --out sheet.png
 """
 import argparse
 import os

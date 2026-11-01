@@ -7,7 +7,7 @@ export BFLC_ROOT="$R"
 s="$1"; shift
 if [ ! -f "$s" ]; then
   n="${s##*../}"
-  case "$n" in */*) f=$(find $R/training $R/evaluation $R/tools $R/reports/build $R/temp -path "*/$n" -type f 2>/dev/null);; *) f=$(find $R/training $R/evaluation $R/tools $R/reports/build $R/temp -name "$n" -type f 2>/dev/null);; esac
+  case "$n" in */*) f=$(find $R/training $R/evaluation $R/tools $R/reports/build $R/temp -path "*/$n" -type f ! -path '*_session_scratch_*' 2>/dev/null);; *) f=$(find $R/training $R/evaluation $R/tools $R/reports/build $R/temp -name "$n" -type f ! -path '*_session_scratch_*' 2>/dev/null);; esac
   [ -n "$f" ] || { echo "_py14.sh: script not found: $s" >&2; exit 2; }
   [ "$(echo "$f" | wc -l)" -eq 1 ] || { echo "_py14.sh: $s is ambiguous, name its folder:" $(echo "$f" | sed "s#$R/##") >&2; exit 2; }
   s="$f"

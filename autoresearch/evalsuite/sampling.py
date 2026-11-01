@@ -55,7 +55,10 @@ class Sampler:
     def spread(self, n: int, scenes: Optional[Sequence[str]] = None, min_index: int = 0) -> List[FrameRef]:
         """n frames evenly spaced over the flat time-ordered list of the frames of `scenes` (default all scenes); min_index leaves
         out the first frames of every scene (e.g. frames that have no full history)."""
-        flat = [fr for s in (scenes if scenes is not None else self._scenes) for fr in self._frames.get(s, []) if fr.index >= min_index]
+        unknown = [s for s in (scenes or []) if s not in self._frames]
+        if unknown:
+            raise KeyError(f"unknown scene(s) {unknown[:3]}; scenes start with {list(self._frames)[:3]}")
+        flat = [fr for s in (scenes if scenes is not None else self._scenes) for fr in self._frames[s] if fr.index >= min_index]
         if n >= len(flat):
             return flat
         idx = sorted({int(i) for i in np.linspace(0, len(flat) - 1, n).round()})

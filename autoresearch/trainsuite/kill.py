@@ -11,7 +11,7 @@ import codecs
 import math
 import re
 
-_RULE = re.compile(r"^\s*([A-Za-z0-9_.\-]+)\s*@\s*(\d+)\s*(>=|<=|>|<)\s*([-+0-9.eE]+)\s*(?:window\s+(\d+))?\s*$")
+_RULE = re.compile(r"^\s*([A-Za-z0-9_.\-@+/]+?)\s*@\s*(\d+)\s*(>=|<=|>|<)\s*([-+0-9.eE]+)\s*(?:window\s+(\d+))?\s*$")
 DEFAULT_WINDOW = 10
 
 

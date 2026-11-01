@@ -157,7 +157,7 @@ class LcrMetric(Metric):
     the per-frame records are stored as arrays, any set of frames is pooled again by the project's own function"""
     name = "lcr"
     headline = ("Q", "S", "F1@1.0", "J", "lanes_found", "vert100")
-    better = {"vert100": "low"}
+    better = {k: "low" for k in ("false_len_frac", "vert100", "verts_per_frame", "dup_frac")}       # = sparse_metrics.LOWER_IS_BETTER
 
     def _sb(self):
         import bootstrap as SB

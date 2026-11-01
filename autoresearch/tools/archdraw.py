@@ -418,7 +418,7 @@ def problems(spec):
         errs += [f"group {g['label']}: unknown id {i}" for i in g["nodes"] if i not in spec["_by_id"]]
     for key in ("from", "to"):
         errs += [f"main_path.{key}: unknown id {i}" for i in (ends(spec["main_path"][key]) if spec.get("main_path") else []) if i not in spec["_by_id"]]
-    if spec.get("main_path") and not main_path(spec):
+    if spec.get("main_path") and not any("unknown id" in e for e in errs) and not main_path(spec):          # an unknown id would break the path walk
         errs.append("main_path: no path from the start to the end")
     refs = []
     for n in spec["nodes"]:

@@ -224,6 +224,11 @@ def main():
         assert Rule("total@2000 > 1").evaluate(Run(os.path.join(tmp, "nan")))[0] in ("hit", "ok")      # NaN rows: below
         try:
             Rule("lines is bad")
+        mr = Rule("objhead.vel@+0.0@1000 > 1  # a key with @ and + (the bev_fusion velocity terms)")
+        assert mr.key == "objhead.vel@+0.0" and mr.step == 1000 and Rule("val.motion@+0.0@2000 > 1").key == "val.motion@+0.0"
+        assert cli.split_ref("run_a:run_b") == ("run_a", "run_b") and cli.split_ref("run_a") == ("run_a", None)
+        win = "C:" + chr(92) + "runs" + chr(92) + "t10"
+        assert cli.split_ref(win) == (win, None) and cli.split_ref(win + ":ref") == (win, "ref")
             raise AssertionError("bad rule accepted")
         except ValueError:
             pass
@@ -342,7 +347,7 @@ def main():
         def flapping(run, ref=None, since_step=None):
             i = next(seq)
             f = orig(run, ref, since_step)
-            return f + ([health.Finding("warn", "flappy", "x")] if i % 2 == 0 else [])
+            return f + ([health.Finding("warn", "flappy", f"no output for {i} min")] if i % 2 == 0 else [])
         cli.health.check = flapping
         cli.time.sleep = stop_after
         calls[0] = 0
@@ -381,6 +386,30 @@ def main():
         assert "vs_ref" in out, out
         rc, out = run_cli("--root", tmp, "status", "good")
         assert "running" in out and "2000/3000" in out, out
+        # 10b a run that fails while watched and is restarted by the launcher (CUDA retry) is still watched
+        d = make(tmp, "retry", rows(100, t0=now - 2000))
+        tb = "step 99: total 1.0\nTraceback (most recent call last):\n  File x\nRuntimeError: CUDA error: unknown error\n"
+        calls[0] = 0
+
+        def crash_then_resume(_):
+            calls[0] += 1
+            with open(os.path.join(d, "train.log"), "w") as f:
+                f.write(tb if calls[0] == 1 else tb + "step 100: total 1.0\n")
+            if calls[0] >= 3:
+                raise _Stop()
+        cli.time.sleep = crash_then_resume
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                try:
+                    cli_main(["--root", tmp, "watch", "retry", "--every", "1"])
+                except _Stop:
+                    pass
+        finally:
+            cli.time.sleep = real_sleep
+        assert calls[0] >= 3 and "failed at step" in buf.getvalue() and "running at step" in buf.getvalue().split("failed at step")[1], buf.getvalue()
+        ok("watch keeps a run that failed while watched for the launcher's retry")
+
         ok("another layout through trainsuite.json; status as table / json, without empty logs by default, with a reference per run")
 
         # 12 curves

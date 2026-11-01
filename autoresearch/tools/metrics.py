@@ -8,7 +8,7 @@ and the TEST log. Standard library only.
 
 A loop is a range of experiment numbers (project.json "loops": {"18": [209, 233], "19": [234, null]}); run E219.rc1 belongs to the loop of 219.
 Columns
-  runs / failed   ledger rows that ran / of them failed, timed out, stalled or refused (gpu_busy); a run stopped on request ("stopped", exit 75) is a run, no failure
+  runs / failed   ledger rows that ran / of them failed, timed out, stalled, blocked or refused (gpu_busy); a run stopped on request ("stopped", exit 75) is a run, no failure
   GPU h           sum of the durations in hours (before the tick of ROADMAP P2 a chained run's duration includes its wait: an upper bound)
   exps            distinct experiment numbers with a run
   decisions       decide.py verdicts (one per decision*.json file) and the written decisions of the other rows: KEEP / CUT / TIE /
@@ -192,6 +192,8 @@ def main():
         return selftest()
     out = collect()
     if a.loop:
+        if a.loop not in out:
+            sys.exit(f"no loop {a.loop!r}; known: {', '.join(out)}")
         out = {a.loop: out[a.loop]}
     print(table(out, a.md))
     if a.v:

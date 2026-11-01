@@ -123,8 +123,8 @@ def check(exp, path):
         (f"clause {i} {k}", c[k]) for i, c in enumerate(exp["rule"]) if isinstance(c, dict) for k in ("min_effect", "max_loss", "band") if k in c]
     bad += [f"{name} must be a finite number" for name, v in thresholds if not CARD.is_number(v)]
     allow = exp["evaluate"].get("allow", [])
-    if not isinstance(allow, list) or any(x not in ("split", "subset", "denominator", "protocol") for x in allow):
-        bad.append("evaluate.allow must be a list of: split, subset, denominator, protocol")
+    if not isinstance(allow, list) or any(x not in ("split", "subset", "denominator", "protocol", "provenance") for x in allow):
+        bad.append("evaluate.allow must be a list of: split, subset, denominator, protocol, provenance")
     if not exp["rule"]:
         bad.append("rule has no clause")
     for i, c in enumerate(exp["rule"]):
@@ -189,6 +189,8 @@ def main():
     ap.add_argument("exp", nargs="?")
     ap.add_argument("--all", action="store_true")
     a = ap.parse_args()
+    if not a.all and not a.exp:
+        ap.error("name an experiment (E240, a folder or a file) or pass --all")
     files = sorted(glob.glob(os.path.join(P.root(), "experiments", "E*", "experiment.json"))) if a.all else [find(a.exp)]
     rc = 0
     for f in files:

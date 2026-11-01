@@ -2,7 +2,7 @@
 
     python autoresearch/tools/clean_temp.py loop19             # dry run: what would go, what live code still imports from it
     python autoresearch/tools/clean_temp.py loop19 --move      # commit + tag the scratch (<prefix>/loop19-scratch), then move it to <trash>/temp_loop19/
-    python autoresearch/tools/clean_temp.py loop19 --delete    # commit + tag, then delete (the tag keeps the scripts)
+    python autoresearch/tools/clean_temp.py loop19 --delete    # commit + tag, then delete (the tag keeps the scripts only: refused when the folder holds any other file; use --move then)
     python autoresearch/tools/clean_temp.py --selftest
 
 Convention: scratch of a loop lives in <scratch>/loopNN/ (also found: <scratch>/analysis/loopNN, <scratch>/launchers/loopNN).
@@ -34,7 +34,8 @@ def kept_by_snapshot(cfg):
 
 
 def missing_from_tag(root, tag, folders):
-    """the scripts (.py / .sh) of the scratch folders that the tag does NOT contain (an existing tag of an earlier snapshot, a .gitignore rule ...)"""
+    """the files of the scratch folders that the tag does NOT contain: an existing tag of an earlier snapshot, a .gitignore rule, or a
+    file that is not a script (the snapshot adds the .py / .sh files of the scratch only: a result.json or notes.md is held by no tag)"""
     from run import git
     top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
     have = set(x for x in git(top, "ls-tree", "-r", "--name-only", "-z", tag).stdout.split("\0") if x)     # -z: a name with a space or a quote is one name
@@ -42,10 +43,11 @@ def missing_from_tag(root, tag, folders):
     for f in folders:
         for dp, _, fns in os.walk(f):
             for fn in fns:
-                if fn.endswith((".py", ".sh")):
-                    rel = os.path.relpath(os.path.join(dp, fn), top).replace(chr(92), "/")
-                    if rel not in have:
-                        out.append(rel)
+                if "__pycache__" in dp:
+                    continue
+                rel = os.path.relpath(os.path.join(dp, fn), top).replace(chr(92), "/")
+                if rel not in have:
+                    out.append(rel)
     return out
 
 
@@ -108,7 +110,8 @@ def run(name, move=False, delete=False, force=False, root=None, cfg=None, git=Tr
         if delete:                                 # an old tag of an earlier snapshot ("tag existed") may not hold today's scripts
             lost = missing_from_tag(root, tag, folders)
             if lost:
-                print(f"  REFUSED: tag {tag} does not contain {len(lost)} script(s), e.g. {lost[:3]}; use --move (or a new scratch name)")
+                print(f"  REFUSED: tag {tag} does not contain {len(lost)} file(s), e.g. {lost[:3]} (only scripts are tagged); "
+                      "use --move (or a new scratch name)")
                 return 1
     for f in folders:
         if delete:
@@ -175,6 +178,15 @@ def selftest():
     # scratch in code_dirs (a "./temp" spelling too), fresh tag: the snapshot holds the script and --delete goes through
     assert run("loop97", delete=True, root=repo, cfg=cfgr2, git=True) == 0 and not os.path.exists(os.path.join(repo, "temp/loop97"))
     assert "temp/loop97/s.py" in g("ls-tree", "-r", "--name-only", "t/loop97-scratch").split(), "the tag must hold the deleted script"
+    # a result file next to the script is held by no tag: --delete refuses (hard rule 5), --move keeps it
+    open(os.path.join(repo, ".gitignore"), "w").write("temp/**\n")                       # the repository's rule: the snapshot then adds the scripts only
+    os.makedirs(os.path.join(repo, "temp", "loop95"))
+    for fn in ("s.py", "result.json"):
+        open(os.path.join(repo, "temp", "loop95", fn), "w").write("1\n")
+        os.utime(os.path.join(repo, "temp", "loop95", fn), (old, old))
+    assert run("loop95", delete=True, root=repo, cfg=cfgr2, git=True) == 1 and os.path.exists(os.path.join(repo, "temp/loop95/result.json")), \
+        "--delete must refuse a folder with a file that no tag holds"
+    assert run("loop95", move=True, root=repo, cfg=cfgr2, git=True) == 0 and os.path.exists(os.path.join(repo, "_to_delete/temp_loop95/loop95/result.json"))
     shutil.rmtree(repo)
     shutil.rmtree(root)
     print("clean_temp selftest passed")

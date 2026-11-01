@@ -61,10 +61,12 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
             cheaper = "variant" if cost_variant < cost_control else "control"
             return "TIE", effect, f"inside the noise band {band}: take the cheaper one ({cheaper}: {cost_variant} vs {cost_control})"
         return "TIE", effect, f"inside the noise band {band}: take the simpler / cheaper one"
-    same = all((d > 0) == (effect > 0) and abs(d) > 0 for d in diffs)
+    if effect < 0:                                                    # worse beyond the band: CUT, as decide_experiment does (no seed can rescue it)
+        return "CUT", effect, f"beyond the band {band} in the worse direction"
+    same = all(d > 0 for d in diffs)
     if len(diffs) < 2 or not same:
         return "INCONCLUSIVE", effect, "beyond the band but " + ("only one seed" if len(diffs) < 2 else "a seed disagrees") + ": add a seed, do not adopt yet"
-    return ("KEEP" if effect > 0 else "CUT"), effect, f"beyond the band {band} on all {len(diffs)} paired seeds"
+    return "KEEP", effect, f"beyond the band {band} on all {len(diffs)} paired seeds"
 
 
 # ------------------------------------------------------------------ experiment file + cards
@@ -134,15 +136,15 @@ def paired_effect(metric, v_cards, c_cards, lower=None):
         raise ValueError(f"{metric}: a card holds a value that is not a finite number (NaN, infinity or text)")
     effect = sgn * (sum(v) / len(v) - sum(c) / len(c))
     diffs = [sgn * (a - b) for a, b in zip(v, c)] if len(v) == len(c) else [effect]
-    interval = None
-    for m, card, _ in v_cards:  # the paired scene bootstrap of evaluate.py --compare, when the card compared against this control
+    spans = []
+    c_names = {(cc or {}).get("name") for _, cc, _ in c_cards}
+    for m, card, _ in v_cards:  # the paired scene bootstrap of evaluate.py --compare, of every card that compared against this control
         cmp = (card or {}).get("compare") or {}
         pr = cmp.get("paired", {}).get(metric)
-        c_names = {(cc or {}).get("name") for _, cc, _ in c_cards}
         if isinstance(pr, dict) and "lo" in pr and cmp.get("name") in c_names:
             lo, hi = sgn * pr["lo"], sgn * pr["hi"]
-            interval = (min(lo, hi), max(lo, hi))
-            break
+            spans.append((min(lo, hi), max(lo, hi)))
+    interval = (min(s[0] for s in spans), max(s[1] for s in spans)) if spans else None    # the hull: one seed whose interval holds 0 flags it
     return effect, diffs, interval
 
 
@@ -225,7 +227,6 @@ def incompatible(exp, cards):
 
 def judge_clause(clause, exp, cards, root=None):
     """one clause -> dict(ok, effect, diffs, interval, flags, text); subsets are judged one by one"""
-    import experiment as X  # noqa: F401  (same folder)
     metric = clause["metric"]
     vs = clause.get("vs", exp["control"])
     variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
@@ -268,7 +269,6 @@ def decide_experiment(exp, root):
         raise ValueError("the arms were not evaluated on the same thing: " + "; ".join(bad) + " (a known difference goes into evaluate.allow)")
     variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
     head_metric, band = exp["metric"], exp["band"]
-    sgn = 1.0  # paired_effect already turns lower-is-better around; exp["direction"] is for the reader
     def head(arm):  # the whole-split cards, else the subset cards in subset order (then the "seeds" of the headline are the subsets)
         return cards[arm].get("") or [c for s in sorted(cards[arm]) for c in cards[arm][s]]
     if cards[variant].get("") or cards[exp["control"]].get(""):  # whole-split cards: paired seed by seed
@@ -278,7 +278,6 @@ def decide_experiment(exp, root):
             raise ValueError(f"arm {variant} has the subsets {sorted(cards[variant])}, arm {exp['control']} {sorted(cards[exp['control']])}: nothing to pair")
         head_v, head_c, how = head(variant), head(exp["control"]), "subset"
     effect, diffs, interval = paired_effect(head_metric, head_v, head_c, is_lower(head_metric, exp, root))
-    effect *= sgn
     clauses = [judge_clause(c, exp, cards, root) for c in exp["rule"]]
     hows = {how} | {p["how"] for c in clauses for p in c["parts"]}  # the pairing recorded is the weakest used anywhere: a clause against another arm may pair by order
     how = next((h for h in ("unpaired", "position", "seed", "subset") if h in hows), "single")

@@ -233,6 +233,7 @@ try:
     assert decide([0.760, 0.715], [0.725, 0.722])[0] == "INCONCLUSIVE"
     assert decide([0.746], [0.725])[0] == "INCONCLUSIVE"
     assert decide([0.70, 0.69], [0.725, 0.722])[0] == "CUT"
+    assert decide([0.69], [0.725])[0] == "CUT" and decide([0.74, 0.58], [0.70, 0.70])[0] == "CUT", "worse beyond the band is a CUT whatever the seeds say, as in decide_experiment"
     # decide from an experiment file and cards: KEEP, TIE, CUT (guard / rule), INCONCLUSIVE (one seed), subsets with at_least, deterministic + interval
     import decide as DC
     os.makedirs(f"{T}/experiments/E1_x", exist_ok=True)
@@ -503,6 +504,10 @@ try:
     for _ in range(100):
         if RUN.record(f"{T}/runs/S.live2").get("status") == "running":
             break
+    for k, argv in enumerate((["--split", "final"], ["--split=FINAL"])):          # the command itself asks for the holdout under another launcher split
+        r = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", f"S.cmdfinal{k}", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "val", "--",
+                            "bash", "-c", "echo x", "evaluate.py", *argv], capture_output=True, text=True, env=env)
+        assert r.returncode == 2 and "asks for the holdout split" in r.stdout, r.stdout
         time.sleep(0.1)
     time.sleep(0.5)
     assert shown()["S.live"]["state"] == "running" and raw()["S.live"]["state"] == "planned", "the schedule shows a hand-started launcher; the file is untouched"

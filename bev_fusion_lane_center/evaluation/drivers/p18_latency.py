@@ -2,7 +2,7 @@
 frame features -> builder (CUDA graph) -> assembly (CPU) -> route input (vertex tokens, points every <= 4 m) -> route head along the edges (CUDA graphs per padded size) -> planner consumer (CUDA graph).
 Usage (gcar, GPU, idle machine): p18_latency.py --name e123_D7_r3_f1 [--n 60] [--rec 0|1] [--union 1|2] [--fork_prune 0.3] [--name2 <run>]   -> runs/e18/latency/*.json
 (--name2: E264 output ensemble, the second builder as its own CUDA graph after the first, the two trees joined before the assembly)
-(the timing driver of evaluation/PROTOCOL.md since 2026-10-31; p17_latency.py, now in evaluation/loops/loop17/, = --union 1 --fork_prune 0 with output in runs/e17/latency)"""
+(the timing driver of evaluation/PROTOCOL.md since 2026-10-31; p17_latency.py, since 2026-11-01 in _to_delete/ and in git history, = --union 1 --fork_prune 0 with output in runs/e17/latency)"""
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json

@@ -18,7 +18,7 @@ DEFAULTS = {
     "tag_prefix": "exp",
     "ledger": "LEDGER.csv",
     "ledger_md": "LEDGER.md",
-    "run_records": "runs_records",
+    "run_records": "run_records",
     "schedule": "schedule.csv",
     "test_log": "TEST_USAGE_LOG.md",
     "code_dirs": [],

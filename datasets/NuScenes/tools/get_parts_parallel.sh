@@ -5,6 +5,7 @@
 here="$(cd "$(dirname "$0")" && pwd)"
 kind="$1"; shift
 logs="${NUSC_DL:?set NUSC_DL to a download folder on D:}/nuscenes_$kind"
+: "${NUSC_DEST:?set NUSC_DEST to the unpack target on D:}"
 mkdir -p "$logs"
 pids=()
 for p in "$@"; do

@@ -119,8 +119,11 @@ def band_of(base_values, floor=FLOOR):
 
 
 def mark(deltas, band, better):
-    """^ better, v worse in every seed beyond the band; ? mean beyond the band, seeds disagree; ~ inside the band"""
+    """^ better, v worse in every seed beyond the band (two or more seeds); ? mean beyond the band but the seeds disagree or there is only one
+    seed; ~ inside the band"""
     good = [d if better == "high" else -d for d in deltas]
+    if len(good) < 2:
+        return "?" if abs(mean(good)) > band else "~"
     if all(g > band for g in good):
         return "^"
     if all(g < -band for g in good):
@@ -197,8 +200,7 @@ def build(names, floor=FLOOR, force=False):
 
 
 def champion():
-    c = read_json(CHAMPION) or {}
-    return c
+    return read_json(CHAMPION) or {}
 
 
 def render(board, champ):
@@ -208,16 +210,11 @@ def render(board, champ):
                 board["base"], ", ".join(board["base_runs"]), board["ident"][0], board["ident"][1], board["ident"][2],
                 "promoted %s" % prom.get("date") if isinstance(prom, dict) else "proposal, not promoted"),
             "", "Base row = mean value; arm rows = change against the base mean. Markers: ^ better and v worse than the band in every seed, "
-            "~ inside the band, ? mean beyond the band but the seeds disagree. Lower is better: " +
+            "~ inside the band, ? mean beyond the band but the seeds disagree or the arm has one seed. Lower is better: " +
             ", ".join(c[1] for c in COLUMNS if c[3] == "low") + ".",
             "Band per column (max of %.2f and 2 x base seed spread): " % FLOOR + ", ".join("%s %.3f" % (c[1], b) for c, b in zip(COLUMNS, board["bands"])) + ".",
             ("Base has ONE seed: the band is the floor, not a measured spread. " if len(board["base_runs"]) < 2 else "") +
             "This table is evidence. The decision is the card's rule (`decide.py`).", ""]
-    groups = []
-    for g, _, _, _ in COLUMNS:
-        if not groups or groups[-1][0] != g:
-            groups.append([g, 0])
-        groups[-1][1] += 1
     lines = ["| arm | state | " + " | ".join("%s: %s" % (c[0], c[1]) for c in COLUMNS) + " | reading |",
              "|" + "---|" * (len(COLUMNS) + 3)]
     for r in board["rows"]:
@@ -261,10 +258,12 @@ def selftest():
     fwd, rev = build(["t8_ctl_s0", "t8_bevfeat_s0"]), build(["t8_bevfeat_s0", "t8_ctl_s0"])
     pairs = [(a, b) for a, b in zip(fwd["rows"][1]["deltas"], rev["rows"][1]["deltas"]) if a is not None and b is not None]
     check("swapping base and arm negates all %d changes" % len(COLUMNS), len(pairs) == len(COLUMNS) and all(abs(a + b) < 1e-9 for a, b in pairs))
-    check("t8_bevfeat_s0: six maps better than the band, mAP worse", fwd["rows"][1]["marks"][:6] == ["^"] * 6 and fwd["rows"][1]["marks"][6] == "v")
+    row = fwd["rows"][1]
+    check("t8_bevfeat_s0 (one seed): six maps beyond the band upwards, mAP downwards, all marked ? because one seed proves nothing",
+          row["marks"][:7] == ["?"] * 7 and all(d > 0 for d in row["deltas"][:6]) and row["deltas"][6] < 0)
     check("marker rules: both seeds up, seeds disagree, inside the band, lower-is-better flip",
           mark([0.05, 0.04], 0.02, "high") == "^" and mark([0.10, 0.01], 0.02, "high") == "?" and mark([0.01, -0.01], 0.02, "high") == "~"
-          and mark([0.05], 0.02, "low") == "v" and mark([-0.05], 0.02, "low") == "^")
+          and mark([0.05], 0.02, "low") == "?" and mark([-0.05], 0.02, "low") == "?" and mark([0.05, 0.04], 0.02, "low") == "v")
     check("a name without a run is pending, not a number", build(["t8_ctl_s0", "zz_no_such_run"])["rows"][1]["cells"] == ["-"] * len(COLUMNS))
     runs = [Run(p) for p in sorted(glob.glob(os.path.join(RUNS, "*"))) if os.path.exists(os.path.join(p, "eval", "metrics.json"))]
     other = next((r for r in runs if not compat(ctl.identity, r.identity)[0]), None)

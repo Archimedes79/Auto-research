@@ -52,7 +52,10 @@ class Quantitative:
         return run if isinstance(run, RunStore) else RunStore.open(self.run_dir(run))
 
     def _metrics(self) -> Dict[str, Metric]:
-        ms = {m.name: m for m in self.s.task.metrics()}
+        listed = self.s.task.metrics()
+        ms = {m.name: m for m in listed}
+        if len(ms) != len(listed):
+            raise ValueError(f"the metric names of the task are not unique: {sorted(m.name for m in listed)}")
         return ms
 
     def run(self, scenes: Optional[Sequence[str]] = None, n_scenes: Optional[int] = None, seed: int = 0,
@@ -76,11 +79,13 @@ class Quantitative:
         else:
             chosen = list(scenes) if scenes else (Sampler(src, seed).scenes(n_scenes) if n_scenes else src.scenes())
             plan = {sc: src.frames(sc)[: max_frames or None] for sc in chosen}
+        if not any(plan.values()):
+            raise ValueError("no frames to run (an empty frame list, unknown scenes or max_frames that leaves nothing)")
         metrics = self._metrics()
         desc = subj.describe()
         run_name = name or _slug(f"{desc.get('name', type(subj).__name__)}_{state}_{time.strftime('%Y%m%d_%H%M%S')}")
         manifest = {"name": run_name, "state": state, "source": src.describe(), "subject": desc, "task": task.name,
-                    "metrics": {m.name: {"headline": list(m.headline), "better": dict(m.better)} for m in metrics.values()},
+                    "metrics": {m.name: {"headline": list(m.headline), "better": {k: m.direction(k) for k in m.headline}} for m in metrics.values()},
                     "selection": {"scenes": list(plan), "n_frames_planned": sum(len(v) for v in plan.values()),
                                   "max_frames": max_frames if frames is None else None, "seed": seed,     # frames= chooses the frames: no limit applied
                                   "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
@@ -206,6 +211,7 @@ class Quantitative:
             score_keys = sorted({key for fr in frames for key in fr["scores"] if key.startswith(name + ".")})
             hk = list(m.headline)
             counts = st.counts(name)
+            full = m.reduce(counts, keys=hk) if hk else {}                    # the run's own numbers, the same for every frame
             for sk in score_keys:
                 vals = np.array([fr["scores"].get(sk, np.nan) for fr in frames], float)
                 sup = np.array([fr["support"].get(sk, 1.0) for fr in frames], float)
@@ -221,7 +227,6 @@ class Quantitative:
                            "value": float(vals[i]), "z": float(zz[i]), "support": float(sup[i]),
                            "outlier": bool(-sign * zz[i] >= z), "view": f"qual frame {frames[i]['label']} --view overview debug"}
                     if hk:
-                        full = m.reduce(counts, keys=hk)
                         rest = m.reduce([c for j, c in enumerate(counts) if j != i], keys=hk)
                         row["drag"] = {key: float(-(1.0 if m.direction(key) == "high" else -1.0) * (full[key] - rest[key]))
                                        for key in hk if full[key] == full[key] and rest[key] == rest[key]}

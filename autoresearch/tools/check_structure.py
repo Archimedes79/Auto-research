@@ -72,7 +72,7 @@ def resolves(tok, md, names, root, R):
     for pre in R["strip"]:
         if t.startswith(pre):
             t = t[len(pre):]
-    if t.startswith(("wsl", "python", "bash", "powershell", "git")):
+    if re.match(r"(wsl|python3?|bash|powershell|git)(\s|$)", t):         # a command line, not a path
         return True
     for base in [root, os.path.dirname(md), os.path.dirname(root)] + [os.path.join(root, b) for b in R["bases"]]:
         if os.path.exists(os.path.join(base, t)):

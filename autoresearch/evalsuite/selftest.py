@@ -27,7 +27,7 @@ from evalsuite.check import check_adapter                                       
 from evalsuite.contracts import Flag, Source                                                        # noqa: E402
 from evalsuite.render import figure, report, taps as tapmod, video                                  # noqa: E402
 from evalsuite.sampling import Sampler                                                              # noqa: E402
-from evalsuite.stats import bootstrap_scenes, iqr_fences, loo_influence, robust_z                   # noqa: E402
+from evalsuite.stats import bootstrap_scenes, loo_influence, robust_z                   # noqa: E402
 from evalsuite.store import CHUNK, RunStore                                                         # noqa: E402
 
 CHECKS: List[Tuple[str, Callable]] = []
@@ -131,6 +131,36 @@ def _():
     flat = [f for s in src.scenes() for f in src.frames(s)]
     assert [f.label for f in sp] == [flat[i].label for i in sorted({int(i) for i in np.linspace(0, 95, 10).round()})]
     assert len(Sampler(src, 0).spread(1000)) == 96
+
+
+@check("review fixes: unknown scene / empty plan refused, duplicate metric names refused, draws a statistic skips are counted, a filter that matches nothing is exit 2")
+def _():
+    from evalsuite.stats import paired_draws
+    src = toy.ToySource()
+    try:
+        Sampler(src, 0).spread(5, ["no-such-scene"])
+        raise AssertionError("an unknown scene must raise")
+    except KeyError:
+        pass
+    with tempfile.TemporaryDirectory() as d:
+        suite = EvalSuite(toy.ToySource(n_scenes=2, n_frames=3), toy.ToySubject(), toy.ToyTask(), out=d)
+        try:
+            suite.quant.run(name="empty", frames=[], progress=0)
+            raise AssertionError("a run without frames must raise")
+        except ValueError:
+            pass
+        assert not os.path.exists(os.path.join(d, "quant", "empty")), "nothing is stored for a refused run"
+        m = suite.task.metrics()
+        suite.task.metrics = lambda: m + m                              # the same name twice
+        try:
+            suite.quant._metrics()
+            raise AssertionError("duplicate metric names must raise")
+        except ValueError:
+            pass
+    odd = lambda sel: {"x": 1.0} if sel is None or sel % 2 == 0 else {}      # noqa: E731
+    res = paired_draws(odd, lambda sel: {"x": 0.5}, range(10), ["x"])["x"]
+    assert res["n_draws"] == 10 and res["n_valid"] == 5, res
+    assert main(["no check has this name"]) == 2
 
 
 # ------------------------------------------------------------------------------------------------ store and stats
@@ -284,7 +314,7 @@ def _():
         assert suite.quant.outliers("a", k=2)["scenes"]
 
 
-@check("stats: robust_z, MAD = 0 fallback, IQR fences against numpy")
+@check("stats: robust_z, MAD = 0 fallback")
 def _():
     v = np.array([1.0, 2, 3, 4, 100, 3, 2, 3])
     z = robust_z(v)
@@ -294,9 +324,6 @@ def _():
     flat = robust_z([5, 5, 5, 5, 9])
     assert flat[4] > 3 and np.allclose(flat[:4], flat[0]), flat
     assert (robust_z([2, 2, 2]) == 0).all() and np.isnan(robust_z([np.nan, 1.0])[0])
-    lo, hi = iqr_fences(np.arange(1, 101))
-    q1, q3 = np.percentile(np.arange(1, 101), [25, 75])
-    assert abs(lo - (q1 - 1.5 * (q3 - q1))) < 1e-9 and abs(hi - (q3 + 1.5 * (q3 - q1))) < 1e-9
 
 
 @check("stats: leave-one-out influence by hand; bootstrap on a planted difference and on identical runs")
@@ -947,7 +974,9 @@ def _():
         with contextlib.redirect_stdout(buf):
             assert main(["--adapter", "evalsuite.adapters.toy:build", "--arg", "n_scenes=3", "--out", d, "probe", "budget", "a"]) == 0
         assert "fp.near (code)" in buf.getvalue() and "fn.far (fn.far)" in buf.getvalue()
-        empty = suite.quant.run(frames=[], name="e", progress=0)
+        from evalsuite.store import RunStore
+        empty = RunStore.create(os.path.join(d, "quant", "e"), dict(suite.quant.open("a").manifest, name="e"))     # quant.run refuses a plan without frames
+        empty.close(finished=True)
         assert len(empty.frames) == 0 and suite.probe.situations("e") == [] and suite.probe.budget("e") == []
 
 
@@ -1116,6 +1145,9 @@ def main(only=()) -> int:
     checks = CHECKS + COST_CHECKS + COMPARISON_CHECKS                     # the lane Task's tests live in the lane project (D24)
     if only:                                                               # name filter: python -m evalsuite selftest compare
         checks = [c for c in checks if any(o in c[0] for o in only)]
+        if not checks:
+            print(f"evalsuite selftest: no check matches {list(only)}")
+            return 2
     t0 = time.time()
     bad = 0
     for name, fn in checks:
