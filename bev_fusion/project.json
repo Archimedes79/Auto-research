@@ -24,9 +24,9 @@
   "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
   "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
   "structure": {
-    "root_files": ["README.md", "plan.md", "plan_draft2.md", "radar_encoding.md", "requirements.md", "project.json"],
-    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "records", "runs", "temp", "tests", "training"],
-    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "records", "runs", "temp", "training"],
+    "root_files": ["README.md", "project.json"],
+    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "runs", "temp", "tests", "training"],
+    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "runs", "temp", "training"],
     "living": [],
     "skip_parts": [],
     "index_dirs": ["training", "evaluation", "../autogt", "tests", "temp"],
