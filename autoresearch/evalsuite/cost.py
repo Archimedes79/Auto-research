@@ -29,7 +29,7 @@ def with_estimate(ops: Optional[Dict[str, Any]], name: str, gmacs: float, how: s
     ESTIMATE with its formula (`how`), so a reader can check it: the method becomes 'mixed' (or stays 'estimated')."""
     out = dict(ops) if ops else {"gmacs": 0.0, "method": "estimated", "note": "", "parts": {}}
     parts = dict(out.get("parts", {}))
-    parts[name] = float(gmacs)
+    parts[name] = float(parts.get(name, 0.0)) + float(gmacs)         # the same part added twice (a loop over levels): the parts keep adding up to the total
     method = out.get("method", "estimated")
     note = f"{out.get('note', '')}; {name}: estimated, {how}".lstrip("; ")
     out.update(gmacs=float(out.get("gmacs", 0.0)) + float(gmacs), parts=parts, method="mixed" if method == "measured" else method, note=note)

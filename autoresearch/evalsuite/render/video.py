@@ -81,20 +81,25 @@ def verify(path: str, n_frames: int) -> dict:
     return {"frames": n, "size": (frame.shape[1], frame.shape[0])}
 
 
-def _as_files(frames: Sequence[Union[str, np.ndarray]], tmp: str):
+def _as_files(frames: Sequence[Union[str, os.PathLike, np.ndarray]], tmp: str):
+    """one PNG file per frame: the numbered copy ffmpeg reads is named .png, so another image format (jpg) is converted"""
     from PIL import Image
     out = []
     for i, f in enumerate(frames):
-        if isinstance(f, str):
-            out.append(f)
+        if isinstance(f, (str, os.PathLike)) and os.fspath(f).lower().endswith(".png"):
+            out.append(os.fspath(f))
         else:
             p = os.path.join(tmp, f"in_{i:05d}.png")
-            Image.fromarray(np.asarray(f, np.uint8)).save(p)
+            if isinstance(f, (str, os.PathLike)):
+                with Image.open(f) as im:
+                    im.convert("RGB").save(p)
+            else:
+                Image.fromarray(np.asarray(f, np.uint8)).save(p)
             out.append(p)
     return out
 
 
-def encode(frames: Sequence[Union[str, np.ndarray]], out: str, fps: float = 2.0, crf: int = 20) -> dict:
+def encode(frames: Sequence[Union[str, os.PathLike, np.ndarray]], out: str, fps: float = 2.0, crf: int = 20) -> dict:
     frames = list(frames)
     if not frames:
         raise ValueError("no frames")

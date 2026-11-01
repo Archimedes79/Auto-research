@@ -665,6 +665,13 @@ try:
     open(f"{T}/src.json", "w").write('{"S": 0.74612}')
     out = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc.md", f"{T}/src.json"], capture_output=True, text=True).stdout
     assert "2 decimal numbers, 1 found" in out and "0.99" in out, out
+    # review 2026-11-01: a text with `<` and `->` far apart is no markup (it hid every number between them); a page is stripped, lines stay
+    open(f"{T}/doc2.md", "w").write("Q < 0.5 for failure\nthe wrong 0.911 here\nS 0.333 -> better\nand 0.746\n")
+    out = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc2.md", f"{T}/src.json"], capture_output=True, text=True).stdout
+    assert "4 decimal numbers, 1 found" in out and "line 2: 0.911" in out and "line 3: 0.333" in out, out
+    open(f"{T}/doc3.html", "w").write('<div\nclass="x">\n0.912 <b>here</b></div><style>x { width: 0.55em }</style>\n')
+    out = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc3.html", f"{T}/src.json"], capture_output=True, text=True).stdout
+    assert "1 decimal numbers, 0 found" in out and "line 3: 0.912" in out, out          # a tag over two lines keeps the line count
     # schedule: next respects dependencies, the state of an item with runs is derived from the run records
     import schedule as SC
     sch = [dict(item="a", state="planned", depends_on="", priority="1", run_ids="S.ok2", resource="gpu"),
@@ -707,6 +714,16 @@ try:
     r5 = subprocess.run([sys.executable, f"{HERE}/schedule.py", "add", "S.dup1", "--kind", "train"], capture_output=True, text=True, env=env)
     assert r5.returncode != 0 and "exists already" in r5.stdout + r5.stderr and open(f"{T}/schedule.csv", "rb").read() == sch_before \
         and not os.path.exists(f"{T}/schedule.csv.lock"), (r5.stdout, r5.stderr)
+    # review 2026-11-01: `set` of an item that does not exist is an error (it used to print nothing and save), a priority is a number, a hand-written one does not stop `next`
+    r5 = subprocess.run([sys.executable, f"{HERE}/schedule.py", "set", "S.typo", "done"], capture_output=True, text=True, env=env)
+    assert r5.returncode != 0 and "not in the schedule" in r5.stdout + r5.stderr and open(f"{T}/schedule.csv", "rb").read() == sch_before, (r5.stdout, r5.stderr)
+    r5 = subprocess.run([sys.executable, f"{HERE}/schedule.py", "add", "S.prio", "--kind", "train", "--priority", "high"], capture_output=True, text=True, env=env)
+    assert r5.returncode != 0 and "whole number" in r5.stdout + r5.stderr and open(f"{T}/schedule.csv", "rb").read() == sch_before, (r5.stdout, r5.stderr)
+    r5 = subprocess.run([sys.executable, f"{HERE}/schedule.py", "add", "S.prio", "--kind", "train", "--priority", "²"], capture_output=True, text=True, env=env)
+    assert r5.returncode != 0 and open(f"{T}/schedule.csv", "rb").read() == sch_before, "a superscript digit is no number (int() refuses it)"
+    odd = [dict(item="x", state="planned", depends_on="", priority="high", resource="cpu"), dict(item="z", state="planned", depends_on="", priority="²", resource="cpu"),
+           dict(item="y", state="planned", depends_on="", priority="3", resource="cpu"), dict(item="n", state="planned", depends_on="", priority="-1", resource="cpu")]
+    assert [r["item"] for r in SC.ready(odd)] == ["n", "y", "x", "z"], "an unreadable priority comes last, a negative one first"
     led_before = open(f"{T}/LEDGER.csv", "rb").read()
     r6 = subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "--result", "x"], capture_output=True, text=True, env=env)
     assert r6.returncode != 0 and open(f"{T}/LEDGER.csv", "rb").read() == led_before, (r6.stdout, r6.stderr)

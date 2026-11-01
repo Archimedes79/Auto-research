@@ -17,7 +17,7 @@ Columns
                   through its decision file only
   pred hit        written predictions met / judged ("prediction ... met"; any "missed" or "not met" after the word counts as missed): the
                   person or lead who wrote it knew the prediction's own tolerance, the decision files do not, so they give only the error
-  mean err        mean absolute prediction error of the decision files (in the headline metric)
+  mean err        mean absolute prediction error of the decision files, in the metric most of them are about (its name in brackets)
   TEST            rows of the TEST log that name the loop and used TEST
 Written decisions are read with simple patterns; `-v` lists every row with its class, so a person can check the count.
 """
@@ -82,7 +82,7 @@ def collect(root=None, cfg=None):
     test_log = os.path.join(root, cfg.get("test_log", ""))
     test_rows = open(test_log, encoding="utf-8").read().splitlines() if os.path.isfile(test_log) else []
     out = {name: dict(loop=name, runs=0, failed=0, gpu_s=0.0, exps=set(), KEEP=0, CUT=0, TIE=0, INCONCLUSIVE=0, other=0, keep2=0,
-                      pred_met=0, pred_n=0, errs=[], test=0, detail=[]) for name in loops}
+                      pred_met=0, pred_n=0, errs=[], errs_by={}, test=0, detail=[]) for name in loops}
     for d in decisions:
         L = out.get(loop_of(number(str(d.get("id"))), loops))
         if L is None:
@@ -94,6 +94,7 @@ def collect(root=None, cfg=None):
         m = re.search(r"error ([-+]?\d+\.\d+)", str(d.get("prediction") or ""))
         if m:
             L["errs"].append(abs(float(m.group(1))))
+            L["errs_by"].setdefault(str(d.get("metric") or ""), []).append(abs(float(m.group(1))))     # errors of different metrics are not one unit
         L["detail"].append(f"  {d.get('id')}.{d.get('variant')} vs {d.get('control')}: decision file {v} ({str(d.get('prediction') or '')[:70]})")
     for r in rows:
         n = number(r["id"])
@@ -131,7 +132,10 @@ def table(out, md=False):
         if not L["runs"] and not L["detail"]:
             continue
         hit = f"{L['pred_met']}/{L['pred_n']}" if L["pred_n"] else "-"
-        err = f"{sum(L['errs']) / len(L['errs']):.4f}" if L["errs"] else "-"
+        err = "-"
+        if L["errs_by"]:                                 # the metric most decisions of the loop are about; named when the loop has several
+            m = max(L["errs_by"], key=lambda k: len(L["errs_by"][k]))
+            err = f"{sum(L['errs_by'][m]) / len(L['errs_by'][m]):.4f}" + (f" ({m})" if m else "")
         lines.append([name, L["runs"], L["failed"], f"{L['gpu_s'] / 3600:.1f}", len(L["exps"]), L["KEEP"], L["CUT"], L["TIE"], L["INCONCLUSIVE"],
                       L["other"], L["keep2"], hit, err, L["test"]])
     if md:
@@ -154,8 +158,12 @@ def selftest():
                      dict(id="E2.c", status="failed", duration_s="", decision=""),
                      dict(id="E3.a", status="planned", duration_s="", decision=""),
                      dict(id="E9.a", status="ok", duration_s="7200", decision="confirmed; prediction met")])
-    json.dump(dict(id="E2", verdict="KEEP", variant="a", control="c", diffs=[0.02, 0.018], band=0.01, prediction="prediction +0.015, measured +0.0200 (error +0.0050)"),
+    json.dump(dict(id="E2", verdict="KEEP", variant="a", control="c", diffs=[0.02, 0.018], band=0.01, metric="Q", prediction="prediction +0.015, measured +0.0200 (error +0.0050)"),
               open(os.path.join(root, "experiments", "E2_x", "decision.json"), "w"))
+    for n, metric, err in ((3, "vert100", "+11.1503"), (4, "Q", "-0.0150")):       # another unit in the same loop must not enter the Q mean
+        os.makedirs(os.path.join(root, "experiments", f"E{n}_y"))
+        json.dump(dict(id=f"E{n}", verdict="TIE", variant="a", control="c", metric=metric, prediction=f"prediction x, measured y (error {err})"),
+                  open(os.path.join(root, "experiments", f"E{n}_y", "decision.json"), "w"))
     open(os.path.join(root, "TEST.md"), "w").write("| 2026-10-25 | 1 | champion | E2 | S 0.7 | once |\n| 2026-10-26 | 2 | not used | - | - | - |\n")
     cfg = dict(P.DEFAULTS, ledger="LEDGER.csv", test_log="TEST.md", loops={"1": [1, 5], "2": [6, None]})
     out = collect(root, cfg)
@@ -163,7 +171,8 @@ def selftest():
     assert (L["runs"], L["failed"], len(L["exps"])) == (4, 1, 2), L
     assert abs(L["gpu_s"] - 7200) < 1e-6
     assert (L["KEEP"], L["CUT"], L["other"], L["keep2"]) == (1, 1, 0, 1), L
-    assert (L["pred_met"], L["pred_n"]) == (0, 1) and L["errs"] == [0.005], L
+    assert (L["pred_met"], L["pred_n"]) == (0, 1) and sorted(L["errs_by"]["Q"]) == [0.005, 0.015] and L["errs_by"]["vert100"] == [11.1503], L
+    assert "0.0100 (Q)" in table(out), table(out)
     assert written("prediction lanes found >= 0.74 not met") == ("other", "missed")
     assert written("rule (Q >= 0.7) not met: prediction met") == ("CUT", "met")
     assert L["test"] == 1 and out["2"]["test"] == 0 and out["2"]["other"] == 1 and out["2"]["pred_met"] == 1

@@ -17,15 +17,20 @@ import numpy as np
 from ..contracts import Flag, Panel, TapSpec
 
 
+def _finite(t) -> np.ndarray:
+    """float64 copy with NaN / Inf set to 0: a broken tensor is flagged by `plausibility`, its picture must still be drawn"""
+    return np.nan_to_num(np.asarray(t, np.float64), nan=0.0, posinf=0.0, neginf=0.0)
+
+
 def energy(t) -> np.ndarray:
     """(C, H, W) -> (H, W): L2 norm over the channels"""
-    return np.sqrt((np.asarray(t, np.float64) ** 2).sum(0)).astype(np.float32)
+    return np.sqrt((_finite(t) ** 2).sum(0)).astype(np.float32)
 
 
 def pca_rgb(t) -> np.ndarray:
     """(C, H, W) -> (H, W, 3): first three principal components of the per-cell feature vectors, scaled to [0, 1]"""
     C, H, W = t.shape
-    f = np.asarray(t, np.float64).reshape(C, -1).T
+    f = _finite(t).reshape(C, -1).T
     f = f - f.mean(0)
     k = min(3, C, f.shape[0])
     _, _, vt = np.linalg.svd(f[:: max(1, len(f) // 4000)], full_matrices=False)
@@ -64,6 +69,11 @@ def plausibility(spec: TapSpec, arr) -> List[Flag]:
     return out
 
 
+def _note(spec: TapSpec) -> str:
+    """what the tap should look like and what a problem looks like: printed under its picture"""
+    return "; ".join(x for x in (spec.note, f"red flag: {spec.redflag}" if spec.redflag else "") if x)
+
+
 def _limits(spec: TapSpec):
     return ((spec.extent[1], spec.extent[0]) if (spec.flip_x and spec.extent) else None), None
 
@@ -81,7 +91,8 @@ def tap_panels(taps: Dict[str, np.ndarray], specs: Sequence[TapSpec], wanted: Op
         a = np.asarray(taps[name])
         stage = f"[{spec.stage}] " if spec.stage else ""
         xlim, ylim = _limits(spec)
-        kw = dict(extent=spec.extent, xlim=xlim, ylim=ylim, note=spec.note)
+        note = _note(spec)
+        kw = dict(extent=spec.extent, xlim=xlim, ylim=ylim, note=note)
         if spec.kind == "feature_map" and a.ndim == 3:
             panels.append(Panel("raster", f"{stage}{name}: energy {a.shape[0]}ch", energy(a), colorbar=True, **kw))
             if pca and a.shape[0] >= 3:
@@ -90,13 +101,14 @@ def tap_panels(taps: Dict[str, np.ndarray], specs: Sequence[TapSpec], wanted: Op
             panels.append(Panel("raster", f"{stage}{name}: max sigmoid over {a.shape[0]}ch", (1 / (1 + np.exp(-a))).max(0),
                                 colorbar=True, vmin=0, vmax=1, **kw))
         elif spec.kind == "image" or (a.ndim == 3 and a.shape[-1] in (1, 3) and spec.kind != "feature_map"):
-            panels.append(Panel("image", f"{stage}{name}", a[..., 0] if a.ndim == 3 and a.shape[-1] == 1 else a, note=spec.note))
+            panels.append(Panel("image", f"{stage}{name}", a[..., 0] if a.ndim == 3 and a.shape[-1] == 1 else a, note=note))
         elif a.ndim == 2:
             panels.append(Panel("raster", f"{stage}{name}", a, colorbar=True, **kw))
         elif a.ndim <= 1 and a.size > 1:
-            panels.append(Panel("bars", f"{stage}{name}", {str(i): float(v) for i, v in enumerate(a.ravel()[:16])}, note=spec.note))
+            cut = f"first 16 of {a.size} values" if a.size > 16 else ""
+            panels.append(Panel("bars", f"{stage}{name}", {str(i): float(v) for i, v in enumerate(a.ravel()[:16])}, note="; ".join(x for x in (note, cut) if x)))
         else:
-            panels.append(Panel("text", f"{stage}{name}", f"{a.ravel()[:8].tolist()}", note=spec.note))
+            panels.append(Panel("text", f"{stage}{name}", f"{a.ravel()[:8].tolist()}", note=note))
     return panels
 
 

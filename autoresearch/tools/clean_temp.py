@@ -37,7 +37,7 @@ def missing_from_tag(root, tag, folders):
     """the scripts (.py / .sh) of the scratch folders that the tag does NOT contain (an existing tag of an earlier snapshot, a .gitignore rule ...)"""
     from run import git
     top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
-    have = set(git(top, "ls-tree", "-r", "--name-only", tag).stdout.split())
+    have = set(x for x in git(top, "ls-tree", "-r", "--name-only", "-z", tag).stdout.split("\0") if x)     # -z: a name with a space or a quote is one name
     out = []
     for f in folders:
         for dp, _, fns in os.walk(f):
@@ -163,6 +163,8 @@ def selftest():
         os.makedirs(os.path.join(repo, "temp", n))
         open(os.path.join(repo, "temp", n, "s.py"), "w").write("y = 1\n")
         os.utime(os.path.join(repo, "temp", n, "s.py"), (old, old))
+    open(os.path.join(repo, "temp", "loop97", "my script.py"), "w").write("z = 1\n")        # a name with a space is one name for the tag check
+    os.utime(os.path.join(repo, "temp", "loop97", "my script.py"), (old, old))
     # the scratch is not in code_dirs: refused before the snapshot, so no tag is left behind
     assert run("loop97", delete=True, root=repo, cfg=cfgr, git=True) == 1 and os.path.exists(os.path.join(repo, "temp/loop97/s.py"))
     assert g("tag").strip() == "", "a refused --delete must not create a tag"

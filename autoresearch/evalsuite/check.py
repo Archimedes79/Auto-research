@@ -122,7 +122,6 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
         assert not missing, f"taps declared but not returned: {sorted(missing)} (mark a tap optional=True if the network may lack it)"
         for n, a in p.taps.items():
             assert isinstance(a, np.ndarray) and np.isfinite(a.astype(float)).all(), f"tap {n}: finite numpy array expected"
-        box["pred"] = p
         return f"{len(p.taps)} taps"
     _run(R, "subject: predict and taps", predict)
     if not R[-1]["ok"]:
@@ -165,11 +164,11 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
                 assert isinstance(c, dict) and c and all(isinstance(v, np.ndarray) or np.isscalar(v) for v in c.values()), \
                     "frame() must return a dict of numpy arrays"
                 sc = m.score(c)
-                assert all(isinstance(v, (int, float, np.floating)) for v in sc.values()), "score() values must be numbers"
+                assert all(isinstance(v, (int, float, np.integer, np.floating)) for v in sc.values()), "score() values must be numbers"
                 m.support(c)
                 counts.append({k: np.asarray(v) for k, v in c.items()})
             full = m.reduce(counts)
-            assert isinstance(full, dict) and all(isinstance(v, (int, float, np.floating)) for v in full.values()), \
+            assert isinstance(full, dict) and all(isinstance(v, (int, float, np.integer, np.floating)) for v in full.values()), \
                 "reduce() must return a flat dict of numbers"
             for h in m.headline:
                 assert h in full, f"headline key {h!r} is not produced by reduce()"

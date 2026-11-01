@@ -24,7 +24,7 @@ if __package__ in (None, ""):                                          # run as 
 from evalsuite import EvalSuite, FrameRef, Page, Panel, Prediction, Sample, TapSpec                 # noqa: E402
 from evalsuite.adapters import toy                                                                  # noqa: E402
 from evalsuite.check import check_adapter                                                           # noqa: E402
-from evalsuite.contracts import Flag, Metric, Source, Subject, Task                                 # noqa: E402
+from evalsuite.contracts import Flag, Source                                                        # noqa: E402
 from evalsuite.render import figure, report, taps as tapmod, video                                  # noqa: E402
 from evalsuite.sampling import Sampler                                                              # noqa: E402
 from evalsuite.stats import bootstrap_scenes, iqr_fences, loo_influence, robust_z                   # noqa: E402
@@ -573,8 +573,8 @@ def _():
 @check("compare: a worse network is detected (b - a < 0, interval below 0); a run against itself gives exactly 0")
 def _():
     with tempfile.TemporaryDirectory() as d:
-        a = make(d).quant.run(name="a", progress=0)
-        b = make(d, bias=0.35, name="worse").quant.run(name="b", progress=0)
+        make(d).quant.run(name="a", progress=0)
+        make(d, bias=0.35, name="worse").quant.run(name="b", progress=0)
         suite = make(d)
         cmp = suite.quant.compare("a", "b", boot=300)
         iou = cmp["metrics"]["seg.iou"]
@@ -592,10 +592,10 @@ def _():
         assert other.manifest["source"]["seed"] == 1
         same = suite.quant.compare("a", "a", boot=100)["metrics"]["seg.iou"]
         assert same["diff"] == 0 and same["lo"] == 0 and same["hi"] == 0
-        carry_vs_reset = make(d).quant.run(name="r", state="reset", progress=0)
+        make(d).quant.run(name="r", state="reset", progress=0)
         cm = suite.quant.compare("r", "a", boot=100)
         assert cm["n_common_frames"] == 96 and abs(cm["metrics"]["seg.iou"]["diff"]) > 0
-        part = make(d).quant.run(scenes=["toy-00", "toy-01"], name="p", progress=0)
+        make(d).quant.run(scenes=["toy-00", "toy-01"], name="p", progress=0)
         assert suite.quant.compare("p", "a", boot=50)["n_common_frames"] == 24, "compare uses the frames both runs have"
 
 
@@ -787,6 +787,58 @@ def _():
         assert "t &lt;&amp;&gt;" in txt and 'class="warn"' in txt and report.links_in(p) == ["../a.png"] * 3          # image: href + src, link: href
 
 
+@check("review 2026-11-01: NaN tensors, boolean masks, image notes, jpg frames, split estimates and option strings do not break pictures, videos, cost or the CLI")
+def _():
+    import pathlib
+    from PIL import Image
+    from evalsuite import cost
+    from evalsuite.cli import _auto
+    t = np.random.RandomState(0).randn(4, 6, 6).astype(np.float32)
+    t[0, 0, 0], t[1, 1, 1] = np.nan, np.inf
+    assert np.isfinite(tapmod.pca_rgb(t)).all() and np.isfinite(tapmod.energy(t)).all(), "NaN / Inf are flagged by plausibility, the picture is still drawn"
+    assert len(tapmod.tap_panels({"f": t}, [TapSpec("f", "feature_map")])) == 2
+    draw = lambda p: figure.render_page(Page("t", [p]))                                                     # noqa: E731
+    mask = np.zeros((8, 8), bool)
+    mask[2:5, 2:5] = True
+    assert draw(Panel("raster", "mask", mask)).ndim == 3, "a boolean map is drawn"
+    img = np.zeros((16, 16, 3), np.uint8)
+    assert not np.array_equal(draw(Panel("image", "i", img)), draw(Panel("image", "i", img, note="look at the corners"))), "the note of an image is drawn"
+    spec = TapSpec("v", "vector", note="n", redflag="all equal")
+    assert tapmod.tap_panels({"v": np.arange(40.0)}, [spec])[0].note == "n; red flag: all equal; first 16 of 40 values"
+    once = cost.with_estimate(None, "splat", 0.5, "a")
+    twice = cost.with_estimate(once, "splat", 0.5, "b")
+    assert twice["gmacs"] == 1.0 and sum(twice["parts"].values()) == twice["gmacs"], "the parts add up to the total when a part is added twice"
+    assert [_auto(v) for v in ("0061", "2020_01_03", "nan", "inf", "+", "1_0")] == ["0061", "2020_01_03", "nan", "inf", "+", "1_0"]
+    assert [_auto(v) for v in ("12", "-3", "0.35", "1e-3", ".5", "true", "'0061'")] == [12, -3, 0.35, 1e-3, 0.5, True, "0061"], "numbers, booleans, quotes keep a string"
+    assert not np.array_equal(draw(Panel("bars", "b", {"a": 1.0})), draw(Panel("bars", "b", {"a": 1.0}, note="what to look for"))), "the note of bars is drawn"
+    assert not np.array_equal(draw(Panel("text", "t", "hello")), draw(Panel("text", "t", "hello", note="what to look for"))), "the note of a text panel is drawn"
+    with tempfile.TemporaryDirectory() as d:
+        jpg = os.path.join(d, "f.jpg")
+        Image.fromarray(np.full((8, 8, 3), 90, np.uint8)).save(jpg)
+        files = video._as_files([jpg, pathlib.Path(jpg), np.zeros((8, 8, 3), np.uint8)], d)
+        for f in files:
+            with Image.open(f) as im:
+                assert f.endswith(".png") and im.format == "PNG", "the numbered copy ffmpeg reads is a real PNG: " + f
+        # options and runs: a bad --arg and --spread with a limit are clean refusals; frames= chooses the frames, so no max_frames is recorded;
+        # a video follows the suite's state
+        import json
+        from evalsuite.cli import main as cli_main
+        base = ["--adapter", "evalsuite.adapters.toy:build", "--arg", "n_scenes=3", "--out", d]
+        for extra, want in ((["--arg", "novalue", "list"], "K=V"), (["quant", "run", "--spread", "4", "--max-frames", "2"], "--spread")):
+            try:
+                cli_main(base + extra)
+                raise AssertionError(f"{extra} must be refused")
+            except SystemExit as e:
+                assert want in str(e), e
+        st = make(d).quant.run(frames=make(d).source.frames("toy-00")[:2], state="reset", max_frames=2, name="mf", progress=0)
+        assert st.manifest["selection"]["max_frames"] is None and st.manifest["selection"]["n_frames_planned"] == 2, st.manifest["selection"]
+
+        def rows_of(state):
+            o = make(d, state=state).qual.videos(1, scenes=["toy-01"], max_frames=4)[0]
+            return json.load(open(o["scores_strip"].replace(".png", ".json")))
+        assert rows_of("carry") != rows_of("reset"), "qual videos run in the suite's state, not always carried"
+
+
 @check("torch_taps: hooks by module path (out / in / first / list / pick), arming, optional missing module, batch index")
 def _():
     try:
@@ -827,6 +879,25 @@ def _():
     rec.close()
     m(x)
 
+    class K(nn.Module):                                                       # keyword-only call, an in-place layer after the tapped one
+        def __init__(self):
+            super().__init__()
+            self.c, self.r = nn.Conv1d(1, 1, 1), nn.ReLU(inplace=True)
+
+        def forward(self, feat):
+            return self.r(self.c(input=feat))                                 # the tapped module gets its input by keyword
+    k = K()
+    with torch.no_grad():
+        k.c.weight.fill_(-1.0)
+        k.c.bias.zero_()
+    rec = TapRecorder(k, {"in": Hook("c", when="in"), "conv": Hook("c")})
+    rec.arm(["in", "conv"])
+    with torch.no_grad():
+        k(torch.ones(1, 1, 5))                                                # no positional argument for the pre-hook: the tap is skipped, the forward pass runs
+    assert rec.errors.get("in") == 1 and "in" not in rec.read(), (rec.errors, rec.read().keys())
+    assert rec.read()["conv"].min() == -1.0, "the record is the output of the tapped layer, not what an in-place ReLU made of it"
+    rec.close()
+
 
 # ------------------------------------------------------------------------------------------------ probing
 @check("probing: the budget adds up to the error cells counted directly; the place to work comes from Task.causes() (the cause name when it gives none); situations find the planted frames; sample / scan / CLI; an empty run has no situations")
@@ -860,6 +931,18 @@ def _():
         assert len(smp) == 2 and {x["label"] for x in smp} <= planted
         res = suite.probe.scan(st, k=1, top=2, seed=0, render=False)
         assert os.path.exists(os.path.join(res["dir"], "budget.csv")) and os.path.exists(res["index"])
+        orig = suite.probe.budget
+        suite.probe.budget = lambda run: [dict(b, cause=b["cause"].replace("fn.", "miss.").replace("fp.", "extra.")) for b in orig(run)]
+        try:
+            other = suite.probe.scan(st, k=1, top=1, seed=1, render=False)      # causes outside the fn. / fp. convention: one picture of all of them
+        finally:
+            suite.probe.budget = orig
+        assert os.path.exists(os.path.join(other["dir"], "budget.png"))
+        from evalsuite.probing import budget_panels
+        some = budget_panels([{"cause": "miss.a", "amount": 2.0}, {"cause": "extra.b", "amount": 1.0}])
+        assert len(some) == 1 and some[0].data == {"extra.b": 1.0, "miss.a": 2.0}, "causes outside the fn. / fp. convention: one panel with all of them"
+        two = budget_panels([{"cause": "fn.a", "amount": 2.0}, {"cause": "fp.b", "amount": 1.0}])
+        assert len(two) == 2 and two[0].data == {"a": 2.0} and two[1].data == {"b": 1.0}
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             assert main(["--adapter", "evalsuite.adapters.toy:build", "--arg", "n_scenes=3", "--out", d, "probe", "budget", "a"]) == 0
@@ -916,6 +999,16 @@ def _():
         class T2(toy.ToyTask):
             def metrics(self): return [OrderDep()]
         assert "metric seg: counts, reduce, scores" in failed(EvalSuite(toy.ToySource(), toy.ToySubject(), T2(), out=d))
+
+        class IntKey(toy.SegMetric):
+            def reduce(self, counts, keys=None):
+                r = super().reduce(counts)
+                r["n_frames"] = np.sum(np.ones(len(counts), np.int64))                         # a numpy integer is a number
+                return r
+
+        class T3(toy.ToyTask):
+            def metrics(self): return [IntKey()]
+        assert not failed(EvalSuite(toy.ToySource(), toy.ToySubject(), T3(), out=d)), "reduce() may return numpy integers"
 
         class NoOverview(toy.ToyTask):
             def views(self): return {}
