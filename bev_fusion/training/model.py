@@ -161,7 +161,32 @@ def _cmx_trunk(cfg, p_drop):                                          # CMX: its
     return _fallbacks().CMXTrunk(cfg.c_cam, cfg.c_rad, embed=cfg.c_fuse, c_out=128, p_drop=p_drop), 128
 
 
-CAMERA_FEATURES = ("dualbev", "bevfusion", "dual")                    # camera slot: which cached / live image features feed the lift
+@dataclass(frozen=True)
+class CameraSource:
+    """One frozen image encoder whose (cached) outputs feed the camera slot: the feature family fixes the depth bins, the cell
+    convention and the cache's feature size; the suffix names its batch fields (prob<suffix>, ctx<suffix>, ida<suffix>) and, after the
+    first source, its modules (lift<suffix>, cam_reduce<suffix>: the checkpoint keys of the t10 chain)."""
+    features: str      # "dualbev" (stride 16, cell centres, depth bins 1.25 + 0.5 i) | "bevfusion" (stride 8, frustum cells, bins 1.0 + 0.5 i)
+    cache: str         # TrainConfig field holding the cache folder
+    suffix: str        # "" for the first source, "2" for the second
+
+
+# camera slot: kind -> its feature sources, one lift + height collapse each; two or more are merged (Conv 1x1 over the concatenated BEVs).
+# The first source is the geometry reference (visibility, precompute); the dataset, collate_cached, the cached model, train.build and
+# the tests read this table, not the kind's name.
+CAMERAS = {"dualbev": (CameraSource("dualbev", "feature_cache", ""),),
+           "bevfusion": (CameraSource("bevfusion", "feature_cache", ""),),
+           "dual": (CameraSource("dualbev", "feature_cache", ""), CameraSource("bevfusion", "feature_cache2", "2"))}
+CAMERA_FEATURES = tuple(CAMERAS)
+
+
+def source_lift(src, cfg, grid):
+    """the lift of one source: its depth bins and its cell convention (frustum cells for the BEVFusion family)"""
+    if src.features == "bevfusion":
+        return LIFTS[cfg.lift](grid, _bevfusion_depths(), cfg, frustum_cells=True)
+    return LIFTS[cfg.lift](grid, depth_centres(), cfg)
+
+
 LIFTS = {"pd": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=True, oversample=cfg.oversample, depth_centres=depths, **kw),
          "p": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=False, oversample=cfg.oversample, depth_centres=depths, **kw),
          "s": lambda grid, depths, cfg, **kw: _fallbacks().LiftS(grid, depth_centres())}
@@ -180,12 +205,12 @@ BACKBONES = dict(TRUNKS, cmx=_cmx_trunk)
 def check_config(cfg):
     """every unknown kind and every combination of slot kinds that does not fit, in one place (one ValueError naming all)"""
     errs = [f"{name}={val!r}: one of {sorted(table)}" for name, val, table in
-            (("camera_features", cfg.camera_features, CAMERA_FEATURES), ("lift", cfg.lift, LIFTS), ("cam_collapse", cfg.cam_collapse, COLLAPSES),
+            (("camera_features", cfg.camera_features, CAMERAS), ("lift", cfg.lift, LIFTS), ("cam_collapse", cfg.cam_collapse, COLLAPSES),
              ("cam_temporal", cfg.cam_temporal, TEMPORALS), ("rad_temporal", cfg.rad_temporal, TEMPORALS),
              ("radar_kind", cfg.radar_kind, RADARS), ("fusion", cfg.fusion, FUSIONS), ("trunk_kind", cfg.trunk_kind, TRUNKS))
             if val not in table]
-    if cfg.camera_features == "dual" and (cfg.lift == "s" or cfg.cam_adapter):
-        errs.append("camera_features='dual' is not supported with lift 's' or cam_adapter")
+    if len(CAMERAS.get(cfg.camera_features, ())) > 1 and (cfg.lift == "s" or cfg.cam_adapter):
+        errs.append(f"camera_features={cfg.camera_features!r} (several feature sources) is not supported with lift 's' or cam_adapter")
     if cfg.camera_features == "bevfusion" and cfg.lift == "s":
         errs.append("camera_features='bevfusion' is not supported with lift 's'")
     if cfg.lane_branch and (cfg.camera_features != "dualbev" or cfg.lift == "s"):
@@ -214,16 +239,15 @@ class BEVFusionModel(nn.Module):
             self.camera.freeze_camera_heads()
         del self.camera.lift, self.camera.out_conv                   # replaced by the model's own lift
         n_ctx, nz = 80, len(cfg.z_levels)
-        if cfg.camera_features == "bevfusion":                       # cached BEVFusion features: stride 8, frustum conventions
-            self.lift = LIFTS[cfg.lift](self.grid, _bevfusion_depths(), cfg, frustum_cells=True)
-        else:
-            self.lift = LIFTS[cfg.lift](self.grid, depth_centres(), cfg)
+        srcs = CAMERAS[cfg.camera_features]                          # one lift + collapse per feature source (the order = the checkpoint's)
+        self.lift = source_lift(srcs[0], cfg, self.grid)
         self.cam_adapter = CtxAdapter(n_ctx) if cfg.cam_adapter else None
         self.cam_reduce = COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam)
-        if cfg.camera_features == "dual":    # t10: second branch = cached BEVFusion features (stride 8, frustum cells), merged 2 c_cam -> c_cam
-            self.lift2 = LIFTS[cfg.lift](self.grid, _bevfusion_depths(), cfg, frustum_cells=True)
-            self.cam_reduce2 = COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam)
-            self.cam_merge = nn.Sequential(nn.Conv2d(2 * cfg.c_cam, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
+        for src in srcs[1:]:                                         # t10 "dual": lift2 + cam_reduce2 (BEVFusion features, stride 8)
+            setattr(self, "lift" + src.suffix, source_lift(src, cfg, self.grid))
+            setattr(self, "cam_reduce" + src.suffix, COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam))
+        if len(srcs) > 1:                                            # the sources' BEVs merged back to c_cam
+            self.cam_merge = nn.Sequential(nn.Conv2d(len(srcs) * cfg.c_cam, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
                                            nn.ReLU(True))
         # temporal slot, one block per branch (the same table)
         self.cam_temporal = TEMPORALS[cfg.cam_temporal](cfg.c_cam, self.grid)
