@@ -45,6 +45,10 @@ What it does (paths from the problem's project.json, see project.py):
                 (lock <slots dir>/.reclaim.lock); the owner file holds a token and a launcher releases only a slot that still carries its own); --gpu-max-mb
                 additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes (720), then status gpu_busy (exit 1). The
                 owner check needs launcher and slot owner in the same process namespace (all WSL or all Windows)
+  * queue / RAM the GPU jobs that wait stand in ONE line (tickets under <slots dir>/.queue, shared by the problems that share the GPU): first come, first
+                served, a ticket of a dead launcher does not count, the place is given up when the run starts. --ram-mb N (project.json ram_mb, 0 = off): the run
+                starts only when /proc/meminfo MemAvailable is at least N on AR_RAM_CHECKS (3) looks in a row, so two jobs run in parallel exactly when the RAM is
+                there for both and the box does not swap (a training with 6 loader workers wants about 10 GB of the 24); the heartbeat says what it waits for
   * machine lock (D19) every run, GPU or not, waits (max --wait-gpu minutes, then gpu_busy) while another owner holds a live exclusive lock of
                 machine_lock.py; the launcher's own owner name is AR_LOCK_OWNER from its environment (the lock owner's own runs pass)
   * environment the command gets AR_RUN_ID and, with a snapshot, AR_COMMIT / AR_TAG (the commit this attempt was launched from; the tag names attempt 1)
@@ -80,6 +84,7 @@ import project as P  # noqa: E402
 COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", "basis", "seed", "command", "result", "decision", "notes", "prediction", "rule", "code_hash", "split", "commit"]
 STALE_S = float(os.environ.get("AR_STALE_S", "300"))
 HEARTBEAT_S = float(os.environ.get("AR_HEARTBEAT_S", "15"))
+RAM_CHECKS = int(os.environ.get("AR_RAM_CHECKS", "3"))     # looks in a row (one per wait round) with enough free RAM before a run starts
 CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
 SCRATCH_MAX_BYTES = 1_000_000   # a scratch script over this size is not put into the run tag (it is data, not a script)
 SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (about 10 ms each at the snapshot, and again at the drift check)
@@ -287,6 +292,88 @@ def gpu_used_mb():
 def mem_ok(used_mb, max_mb):
     """the memory gate of --gpu-max-mb: no gate when max_mb is 0; a GPU that cannot be read (nvidia-smi failed: used_mb None) is NOT free"""
     return not max_mb or (used_mb is not None and used_mb < max_mb)
+
+
+def mem_available_mb():
+    """MemAvailable of /proc/meminfo (or of the file named by AR_MEMINFO) in MB; None when it cannot be read (Windows): no RAM gate then"""
+    try:
+        with open(os.environ.get("AR_MEMINFO", "/proc/meminfo"), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+class RamGate:
+    """--ram-mb: a run starts only when at least `need_mb` of RAM are available on RAM_CHECKS looks in a row. The box swaps when two trainings and a selftest share
+    24 GB (a training with 6 loader workers wants about 10 GB): a second job then makes both slower than one after the other. Two jobs run in parallel exactly when
+    the RAM is there for both"""
+
+    def __init__(self, need_mb):
+        self.need, self.n, self.last = need_mb, 0, None
+
+    def passed(self):
+        self.last = mem_available_mb()
+        if self.last is None:
+            return True
+        self.n = self.n + 1 if self.last >= self.need else 0
+        return self.n >= RAM_CHECKS
+
+    def reset(self):
+        self.n = 0
+
+
+class Ticket:
+    """a place in the line of the launchers that wait for a GPU slot (and RAM): first come, first served, so the run that has waited longest starts first. A ticket
+    whose launcher is dead does not count and is removed. The tickets lie next to the GPU slots, so the problems that share the GPU share the line"""
+
+    def __init__(self, base, run_id):
+        self.dir, self.id, self.name = os.path.join(base, ".queue"), run_id, None
+
+    def join(self):
+        os.makedirs(self.dir, exist_ok=True)
+        self.name = f"{time.time_ns():020d}_{uuid.uuid4().hex[:8]}"
+        save_rec(os.path.join(self.dir, self.name), dict(id=self.id, pid=os.getpid(), since=now()), indent=None)
+
+    def ahead(self):
+        """the ids of the live tickets older than mine"""
+        out = []
+        try:
+            names = sorted(os.listdir(self.dir))
+        except OSError:
+            return out
+        for n in names:
+            if n >= self.name:
+                break
+            f = os.path.join(self.dir, n)
+            try:
+                with open(f, encoding="utf-8") as fh:
+                    o = json.load(fh)
+                alive = pid_alive(o.get("pid"))
+            except (OSError, ValueError, AttributeError):
+                try:
+                    alive = time.time() - os.path.getmtime(f) < 10      # being written right now, or a leftover
+                except OSError:
+                    continue
+                o = {}
+            if alive:
+                out.append(o.get("id", "?"))
+            else:
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+        return out
+
+    def leave(self):
+        if self.name:
+            try:
+                os.remove(os.path.join(self.dir, self.name))
+            except OSError:
+                pass
+            self.name = None
 
 
 def gpu_info():
@@ -631,6 +718,7 @@ def main():
     ap.add_argument("--gpu", action="store_true", help="GPU job: start only when one of the GPU slots is free")
     ap.add_argument("--gpu-max-mb", type=int, default=0, help="GPU job: additionally wait until the GPU memory in use is below this (implies --gpu)")
     ap.add_argument("--gpu-slots", type=int, default=int(cfg.get("gpu_slots", 2)), help="number of GPU slots on this machine")
+    ap.add_argument("--ram-mb", type=int, default=int(cfg.get("ram_mb", 0)), help="GPU job: start only when this much RAM is available (project.json ram_mb; 0 = no gate): two jobs run in parallel only if the RAM is there for both")
     ap.add_argument("--wait-gpu", type=int, default=720, help="minutes to wait for a GPU slot")
     ap.add_argument("--timeout", type=float, default=0, help="minutes after which the command is killed (0 = none)")
     ap.add_argument("--retries", type=int, default=2)
@@ -727,9 +815,13 @@ def main():
             print(f"[{a.id}] blocked: {why}")
             return 3
     slot = GpuSlot(records, a.gpu_slots, a.id, d, base=slot_dir(root, cfg, records)) if (a.gpu or a.gpu_max_mb) else None
+    ticket = Ticket(slot.base, a.id) if slot else None           # first come, first served among the waiters for the GPU
+    ram = RamGate(a.ram_mb) if (slot and a.ram_mb) else None
     owner = os.environ.get("AR_LOCK_OWNER", "")
     try:
         t0 = time.time()
+        if ticket:
+            ticket.join()
         while True:
             try:
                 lk = machine_lock.blocks(owner)  # D19: every run (GPU or not) waits while another owner holds an exclusive machine lock
@@ -737,19 +829,29 @@ def main():
                 lk = None
             if not lk and not slot:
                 break
-            beat(hb, f"waiting for the machine lock of {lk['owner']}" if lk else "waiting for the GPU")
+            ahead = ticket.ahead() if ticket else []
+            beat(hb, f"waiting for the machine lock of {lk['owner']}" if lk else
+                 f"waiting in the queue behind {', '.join(ahead[:3])}" if ahead else
+                 f"waiting for RAM ({ram.last} of {a.ram_mb} MB available)" if (ram and ram.n < RAM_CHECKS and ram.last is not None) else "waiting for the GPU")
             u = gpu_used_mb() if (slot and a.gpu_max_mb) else None
-            if not lk and mem_ok(u, a.gpu_max_mb) and slot.try_take():
-                break
+            if not lk and not ahead and mem_ok(u, a.gpu_max_mb):
+                if (ram is None or ram.passed()) and slot.try_take():
+                    break
+            elif ram:
+                ram.reset()
             if time.time() - t0 > a.wait_gpu * 60:
                 why = (f"machine lock of {lk['owner']} until {lk['end']}" if lk else
-                       ("nvidia-smi unreadable" if (a.gpu_max_mb and u is None) else f"GPU memory {u} MB in use") + f" or all {a.gpu_slots} slots taken")
+                       ("nvidia-smi unreadable" if (a.gpu_max_mb and u is None) else f"GPU memory {u} MB in use") + f" or all {a.gpu_slots} slots taken"
+                       + (f", RAM {ram.last} of {a.ram_mb} MB available" if (ram and ram.last is not None and ram.n < RAM_CHECKS) else "")
+                       + (f", {len(ahead)} run(s) ahead in the queue ({', '.join(ahead[:3])})" if ahead else ""))
                 rec.update(status="gpu_busy", ended=now(), notes=why + f" for {a.wait_gpu} min")
                 save_rec(os.path.join(d, "run.json"), rec)
                 ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
                 print("machine lock not released:" if lk else "GPU did not become free:", rec["notes"])
                 return 1
             time.sleep(min(30, max(1, HEARTBEAT_S)))
+        if ticket:
+            ticket.leave()                                       # the place in the line is given up as soon as the run starts, not when it ends
         ch = code_hash(root, cfg)
         if prev.get("code_hash") and prev["code_hash"] != ch:
             notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")
@@ -789,6 +891,8 @@ def main():
                 time.sleep(15)
         dur = round(time.time() - t1)
     finally:
+        if ticket:
+            ticket.leave()
         if slot:
             slot.release()
     res = ""

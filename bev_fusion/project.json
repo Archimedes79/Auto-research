@@ -21,6 +21,8 @@
   "live_code": ["training", "evaluation", "../autogt"],
   "trash": "_to_delete",
   "gpu_slots": 2,
+  "_ram_mb": "run.py --gpu waits in one first-come-first-served line and starts only when this much RAM is available (3 looks in a row): two trainings run in parallel only if the 24 GB hold both (one with 6 loader workers wants about 10 GB); the box swapped with two trainings and a selftest",
+  "ram_mb": 10000,
   "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
   "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
   "structure": {

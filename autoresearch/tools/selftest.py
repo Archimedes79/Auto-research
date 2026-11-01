@@ -225,6 +225,75 @@ try:
     old_t = time.time() - 60
     os.utime(f"{T}/runs/.gpu_slots/0", (old_t, old_t))
     assert go("S.slot2", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1").returncode == 0, "an ownerless old slot is reclaimed"
+    # --ram-mb: a GPU job starts only when the RAM is there (two jobs run in parallel exactly when it is there for both); the line of waiters is first come, first served
+    mi = f"{T}/meminfo.txt"
+
+    def meminfo(mb):
+        open(mi, "w").write(f"MemTotal:       24000000 kB\nMemAvailable:   {mb * 1024} kB\nSwapFree:              0 kB\n")
+
+    def go_env(rid, extra_env, *extra, cmd=("bash", "-c", "echo ram")):
+        return subprocess.run([sys.executable, f"{HERE}/run.py", "--id", rid, "--hyp", "selftest", "--pred", "x >= 1", "--rule", "keep if x >= 1", "--retries", "1", *extra, "--", *cmd],
+                              capture_output=True, text=True, env=dict(env, **extra_env))
+    ram_env = {"AR_MEMINFO": mi, "AR_RAM_CHECKS": "1"}
+    meminfo(1000)
+    low = go_env("S.ramlow", ram_env, "--gpu", "--ram-mb", "5000", "--wait-gpu", "0")
+    assert low.returncode == 1 and rows()["S.ramlow"]["status"] == "gpu_busy" and "RAM 1000 of 5000 MB available" in rows()["S.ramlow"]["notes"], (low.stdout, rows()["S.ramlow"])
+    assert go_env("S.ramnogpu", ram_env, "--ram-mb", "5000", "--wait-gpu", "0").returncode == 0, "a job that asks for no GPU is not gated"
+    meminfo(8000)
+    assert go_env("S.ramok", ram_env, "--gpu", "--ram-mb", "5000", "--wait-gpu", "0").returncode == 0, "enough RAM: it starts"
+    meminfo(1000)
+    cfg0 = json.load(open(f"{T}/project.json"))
+    json.dump(dict(cfg0, ram_mb=5000), open(f"{T}/project.json", "w"))
+    try:
+        assert go_env("S.ramproj", ram_env, "--gpu", "--wait-gpu", "0").returncode == 1, "project.json ram_mb is the default of --ram-mb"
+    finally:
+        json.dump(cfg0, open(f"{T}/project.json", "w"))
+    assert not os.path.exists(f"{T}/runs/.gpu_slots/.queue") or not os.listdir(f"{T}/runs/.gpu_slots/.queue"), "a run that gave up leaves no ticket"
+    # the gate wants RAM_CHECKS looks in a row, and a dip starts the count again; a machine without /proc/meminfo has no gate
+    old_mi, old_checks = os.environ.get("AR_MEMINFO"), RUN.RAM_CHECKS
+    os.environ["AR_MEMINFO"], RUN.RAM_CHECKS = mi, 3
+    try:
+        g, seq = RUN.RamGate(5000), []
+        for mb in (8000, 8000, 1000, 8000, 8000, 8000):
+            meminfo(mb)
+            seq.append(g.passed())
+        assert seq == [False, False, False, False, False, True], seq
+        os.environ["AR_MEMINFO"] = f"{T}/no/such/meminfo"
+        assert RUN.RamGate(5000).passed() is True and RUN.mem_available_mb() is None, "unreadable: no gate"
+    finally:
+        RUN.RAM_CHECKS = old_checks
+        if old_mi is None:
+            os.environ.pop("AR_MEMINFO", None)
+        else:
+            os.environ["AR_MEMINFO"] = old_mi
+    qd = tempfile.mkdtemp()
+    ta, td, tb = RUN.Ticket(qd, "A"), RUN.Ticket(qd, "D"), RUN.Ticket(qd, "B")
+    ta.join()
+    td.join()
+    RUN.save_rec(os.path.join(td.dir, td.name), dict(id="D", pid=2 ** 30, since=""), indent=None)       # the launcher of D is dead
+    tb.join()
+    assert ta.ahead() == [] and tb.ahead() == ["A"] and not os.path.exists(os.path.join(td.dir, td.name)), "older live tickets count, a dead launcher's ticket is removed"
+    ta.leave()
+    assert tb.ahead() == []
+    tb.leave()
+    assert os.listdir(td.dir) == [], "leave() removes the ticket"
+    # three launchers wait for the one slot that a long run holds: they start in the order they came
+    qenv = dict(env, AR_HEARTBEAT_S="1")
+    base_cmd = [sys.executable, f"{HERE}/run.py", "--hyp", "selftest", "--pred", "x >= 1", "--rule", "keep if x >= 1", "--no-git", "--gpu", "--gpu-slots", "1", "--wait-gpu", "2"]
+    holder = subprocess.Popen(base_cmd + ["--id", "S.qhold", "--", "bash", "-c", "sleep 7"], env=qenv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        if os.path.exists(f"{T}/runs/.gpu_slots/0/run.json"):
+            break
+        time.sleep(0.2)
+    waiters = []
+    for w in ("S.q1", "S.q2", "S.q3"):
+        waiters.append(subprocess.Popen(base_cmd + ["--id", w, "--", "bash", "-c", f"date +%s%N > {T}/order_{w}.txt; sleep 0.4"], env=qenv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        time.sleep(1.2)
+    for pr in [holder] + waiters:
+        pr.wait(timeout=120)
+    started = [int(open(f"{T}/order_{w}.txt").read()) for w in ("S.q1", "S.q2", "S.q3")]
+    assert started == sorted(started) and rows()["S.q1"]["status"] == rows()["S.q3"]["status"] == "ok", (started, [rows()[w]["status"] for w in ("S.q1", "S.q2", "S.q3")])
+    assert not os.listdir(f"{T}/runs/.gpu_slots/.queue"), "no ticket is left after the runs"
     # --again clears the earlier attempt's result and decision
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "S.ok2", "--decision", "KEEP"], check=True, env=env, capture_output=True)
     assert go("S.ok2", ["bash", "-c", "echo again"], "--again").returncode == 0 and rows()["S.ok2"]["decision"] == "", rows()["S.ok2"]["decision"]
