@@ -1,0 +1,9 @@
+D33 and D19 in the research tools: gate-hook gaps closed, machine lock between chats
+
+guard_hook.py (D33, grant D33): a move is checked on source and destination (and write_pdf on outputPath); the spellings \wsl$\ and \wsl.localhost\ shares, \host\C$ admin shares, \?\UNC\, doubled leading slashes, drive-relative \x, Git Bash /c/x and C:x (another drive than cwd's is refused) and 8.3 short names resolve to the protected file; a relative path without an event cwd is read against both the workspace and the problem folder; registry edits through the MCP write_file / edit_block are judged by their resulting entries like Edit. Selftest cases for each, checked on the real project.
+
+machine_lock.py (D19 b + c): one lock file in autoresearch/state/ of the main checkout (not in git); run.py makes every run wait (max --wait-gpu, then gpu_busy) while another owner holds a live exclusive lock, the owner's runs pass with AR_LOCK_OWNER; a reservation blocks nobody; take --idle refuses a busy GPU; a missing, expired or malformed file never blocks or crashes a launch.
+
+A fresh ar-critic pass (code) found 9 items (Git Bash and C:x spellings, a malformed lock crashing run.py, the relative-path setup, write_pdf outputPath, untested branches, lock path per checkout, release without state folder, selftest env); all fixed and re-tested; selftest.py passes. The D28 row of DECISIONS.md goes in with it. architecture.svg / .md are not re-rendered: archdraw refuses while tools/check_git.py (another chat's new file) is in no box.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

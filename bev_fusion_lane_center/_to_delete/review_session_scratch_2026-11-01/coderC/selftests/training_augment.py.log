@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/bev_fusion/training/augment.py", line 208, in <module>
+    _selftest()
+  File "/mnt/c/Auto-research/bev_fusion/training/augment.py", line 174, in _selftest
+    assert torch.allclose(R1[0], want, atol=1e-5) and torch.equal(R1[1], R0[1])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

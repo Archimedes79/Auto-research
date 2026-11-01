@@ -1,0 +1,5 @@
+Handover: D29 versioning part 1 done by the GT Discussion chat
+
+Checked against git: tags autogt/v1..v5 exist (local, not pushed), commit fde6832 adds autogt/versions.csv and gt_version in the index. The evaluation default, run records and the training start check wait for the end of the t10 run.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

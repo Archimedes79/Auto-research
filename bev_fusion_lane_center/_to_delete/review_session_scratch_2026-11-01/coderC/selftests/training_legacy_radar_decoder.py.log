@@ -1,0 +1,1 @@
+radar_decoder selftest ok: static detection moved by ego motion only, moving one also by its radial motion, directions rotated with the ego, decoder shapes

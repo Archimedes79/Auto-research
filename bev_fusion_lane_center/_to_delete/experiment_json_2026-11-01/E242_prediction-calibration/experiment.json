@@ -1,0 +1,13 @@
+{"id": "E242", "card": "H19.S3", "title": "prediction calibration: a prediction that names value, tolerance and reference class is hit at least 70 % of the time (loop 18 prose predictions: 7 of 12)",
+ "kind": "variant", "metric": "pred_mean_abs_err", "direction": "lower", "band": 0.005,
+ "prediction": {"value": -0.006, "vs": "c"},
+ "arms": {"a": {"recipe": "predictions of cycle 19 and the first loop after it, written as {value, tol, class} where tol = max(2 x measured seed SD of E240, 0.005) and value is the median of the reference class (below) shrunk by half towards zero unless the card names a structural mechanism; scored by experiments/E242_prediction-calibration/rescore.py (CPU) from decision.json files; needs at least 8 numeric predictions",
+                "note": "scored forward; the retrospective part (arm c, 5 numeric effect predictions with decision.json + 7 prose hits of loop 18) is computed now"},
+          "c": {"recipe": "loop 18 as recorded: 5 numeric effect predictions in decision.json files (E215 +0.140, E219 +0.010 / +0.003 / +0.008, E232 +0.030), mean absolute error 0.0145 in metrics.py (it is the mean over exactly these five; the 7 of 12 hit count is a separate prose count)",
+                "note": "reference value 0.0145 from `metrics.py`; the signed errors are +0.0044, -0.0023, -0.0071, -0.0043, -0.0543 (decision.json files)"}},
+ "control": "c", "variant": "a",
+ "rule": [{"metric": "pred_mean_abs_err", "min_effect": 0.005, "note": "cycle-19+ mean absolute error at least 0.005 below 0.0145, i.e. <= 0.0095"},
+          {"metric": "pred_hit_rate", "min_effect": 0.10, "note": "hit rate inside the written tolerance at least 0.10 above the prose rate 7 / 12 = 0.58, i.e. >= 0.68; the metric is counted by rescore.py, not by the words 'met' / 'missed'"}],
+ "budget_gpu_h": 0,
+ "kill": "if fewer than 8 numeric predictions exist after two loops, report the retrospective table only and stop; if the written tolerances are all copied from the band (tol = band) the experiment is void",
+ "evaluate": {"split": "ledger", "compare": "c"}}

@@ -1,0 +1,12 @@
+# small: the 10 sequences of nuScenes mini (404 keyframes; day, night, rain, Boston and Singapore):
+# small experiments; about 25 minutes to generate. One scene name per line, # starts a comment.
+scene-0061
+scene-0103
+scene-0553
+scene-0655
+scene-0757
+scene-0796
+scene-0916
+scene-1077
+scene-1094
+scene-1100

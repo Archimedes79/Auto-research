@@ -1,0 +1,5 @@
+D38 (b): footprint share instead of the centre cell, with how others do it
+
+Mirko in chat, 2026-11-01: the centre-cell rule is a primitive first step, what do others do? KITTI, nuScenes and Waymo give each object a visible share or count with thresholds and ignore detections by their overlap with the ignore area (0.5); nobody uses the centre alone. Proposal in the coverage note and in the D38 row (not decided): footprint share f, two thresholds in evaluation, a soft weight in training, detections ignored at half overlap, thresholds from the data.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

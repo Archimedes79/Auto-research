@@ -1,0 +1,5 @@
+provenance.py: torch / CUDA / numpy / python of the trainer's interpreter in the manifest; repro --repeat checks the tag out in a worktree
+
+manifest reads the versions from the interpreter the run's script calls (project.json trainer_python or the .../bin/python in the script of the run's command) through the package metadata, labelled as read now. repro <id> --repeat: git worktree of the tag under temp/repro/<id> (data linked), prints the run.py command for <id>.repro with --no-card; a failed checkout is removed again, never git worktree prune from WSL. 7 manifests and packages refreshed. Selftest extended.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

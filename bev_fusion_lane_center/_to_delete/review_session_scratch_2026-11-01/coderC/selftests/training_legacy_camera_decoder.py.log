@@ -1,0 +1,1 @@
+camera_decoder selftest ok: shapes of the semantic map, the object maps and the depth logits; gradients reach the image encoder through the lift and the splat

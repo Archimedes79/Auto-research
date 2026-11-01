@@ -1,0 +1,9 @@
+          runs/ck/re.pt  0 MB  ok
+  0.7900  g                    since 2026-11-01  by hand: the other chat
+          runs/ck/rg.pt  0 MB  ok
+  0.7250  d                    since 2026-11-01  ledger E3 KEEP
+          runs/ck/rd.pt  0 MB  size differs
+left: c (2026-11-01), a (2026-11-01), b (2026-11-01), a_dp (2026-11-01), e (2026-11-01)
+keep3 selftest passed
+autoresearch tools selftest passed
+exit 

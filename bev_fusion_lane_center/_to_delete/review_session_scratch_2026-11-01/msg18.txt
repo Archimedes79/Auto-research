@@ -1,0 +1,5 @@
+D38 reading (a) confirmed: aux heads keep their own sensor area, as a debug tool, off in final E2E
+
+Mirko in chat, 2026-11-01: "On aux heads yes, I am not fan of an aux head once everything trains E2E. It can be a really important tool to test, to debug a blackbox to ensure no information loss..." The per-sensor aux heads keep their loss on their own sensor area (D36); they are switchable and off in the final end-to-end arms; probes on detached features are a proposal. D38 row, coverage note and handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,13 @@
+Lane documents back in step with the disk: dead paths fixed (check_structure 41 -> 0)
+
+- the temp/ scratch of loops 19-21 (143 files) was missing from disk, not in _to_delete; written
+  back from HEAD (identical, no commit needed)
+- reports/weekly binaries that git does not hold were missing too: the status report after loop 21,
+  the loop-18 report, the results video (stored recall card reproduced) and the two-week deck were
+  rebuilt from their builders; the loop-17 draft cannot be rebuilt: reports/README says so
+- E260: its hash baseline json was not in git and is lost, the record says so
+- PURGE sheet: one path spelled from the workspace root; models/REGISTRY_ALL.md regenerated
+  (make_structure.py, which also wrote temp/STRUCTURE.md)
+- grants.csv: the D24 grant row for project.json lower_is_better (945bacf)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

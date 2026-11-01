@@ -1,0 +1,7 @@
+CLAUDE.md
+autoresearch/METHOD.md
+autoresearch/prompts/experiment_flow.md
+autoresearch/tools/package.py
+autoresearch/tools/provenance.py
+bev_fusion/results
+bev_fusion_lane_center/experiment_execution/DECISIONS.md

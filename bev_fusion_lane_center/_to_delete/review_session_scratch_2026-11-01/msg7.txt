@@ -1,0 +1,5 @@
+D30 decided: one image region for every pipeline, intersection number only for exceptions
+
+Mirko in chat, 2026-11-01 ("ok, no ideally the front part always processes the same image region ..."; "Yes, record"): every pipeline processes the same image region (the full image by default); imported code is adapted to it; a pipeline that cannot be adapted is marked an exception and gets the intersection number next to the full-image headline. To do for the BEV system chat: t8_bevfeat check, intersection number in the comparison. The open D30 row is marked decided, handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

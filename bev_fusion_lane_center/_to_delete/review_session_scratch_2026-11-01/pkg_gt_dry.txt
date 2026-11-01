@@ -1,0 +1,4 @@
+latest GT version: v7 (b84e8ac9b2)
+  15efbde2d1     keep: needed by the unfinished run(s) t10.dual_long_s0, t8.ctl_s1
+  b84e8ac9b2     keep: the latest version (v7)
+dry run: nothing deleted (--apply)

@@ -1,0 +1,19 @@
+Lane loop 22 code (D28): raw-cache key fix, seed ring (E266), output union (E264), far-recall split, the lane prototype command
+
+- evaluation/evaluate.py: cache_paths / entry_cfg / builder_cfg / raw_of; the raw-output cache key now covers
+  every inference setting (old file names kept for plain entries, loop-18 names only when K0 == M // 2), a
+  subset is taken from the whole-split cache, cache writes only for whole-split cuda results and atomic;
+  registry kind "union" (members through their own entries, equal GT digest asserted)
+- training/models/p16_builder.py lattice_ring (default off, default candidates bit-identical);
+  training/pipeline/p16_infer.py union_raw; evaluation/drivers/p18_latency.py --name2
+- evaluation/sparse_lanes/topo_metrics.py: R@1_far_inner / ring and P@1_far_inner / ring (far bin split at 45 m;
+  existing numbers unchanged)
+- models/registry.json: 4 *_ring entries and 4 ens_* union entries (champion / control untouched)
+- tools/prototype/lane_prototype.py (+ test, README; make_results_video.py moved here from temp/loop21/):
+  one command from a registry name to the planner-ready graph JSON, numbers (whole VAL reproduces the stored
+  card) and video; timing shown as labelled estimates
+- tests: test_evaluate_guard 10/10, test_seed_ring_union, topo_metrics selftest, test_metric_response,
+  test_lane_prototype; evaluate.py --golden check --cached-only 6/6
+- two ar-reviewer passes (code): 3 schedule-vs-code blockers and the mediums fixed, the second pass clear
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

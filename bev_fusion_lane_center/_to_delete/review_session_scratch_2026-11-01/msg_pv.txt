@@ -1,0 +1,5 @@
+provenance.compare: an error-only block blocks like decide.provenance_check
+
+Found by the pitch chat's critic: a card whose collector failed gave exit 2 with no blocker. Now: a block with error is a difference (exit 1); a missing evaluator.dirty is cannot-tell. Selftest extended (fails without the fix).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,128 @@
+note: S.c5 had no ledger row; a new planned row was made (check the id)
+note: S.c0 had no ledger row; a new planned row was made (check the id)
+note: S.c2 had no ledger row; a new planned row was made (check the id)
+note: S.c4 had no ledger row; a new planned row was made (check the id)
+note: S.c1 had no ledger row; a new planned row was made (check the id)
+note: S.c6 had no ledger row; a new planned row was made (check the id)
+note: S.c7 had no ledger row; a new planned row was made (check the id)
+note: S.c3 had no ledger row; a new planned row was made (check the id)
+card selftest passed
+loop99: 1 files in temp/loop99
+  BLOCKED: module probe is imported by ['training/user.py'] - copy it to a code folder first
+loop99: 1 files in temp/loop99
+dry run: nothing changed (--move or --delete)
+loop99: 1 files in temp/loop99
+moved temp/loop99 -> _to_delete/temp_loop99/loop99 (add a line to _to_delete/README.md)
+loop98: 1 files in temp/loop98
+  code kept in git: no-git  
+  REFUSED: --delete needs the scratch in git, but the snapshot gave no tag (no-git ); use --move or fix git
+loop98: 1 files in temp/loop98
+  code kept in git: no-git  
+moved temp/loop98 -> _to_delete/temp_loop98/loop98 (add a line to _to_delete/README.md)
+loop97: 2 files in temp/loop97
+  REFUSED: --delete needs 'temp' in project.json code_dirs (the snapshot commits code_dirs only); use --move
+loop96: 1 files in temp/loop96
+  code kept in git: 46be93c98d t/loop96-scratch tag existed (resume): tag t/loop96-scratch is attempt 1 (d00f046dfb), this attempt ran 46be93c98d
+  REFUSED: tag t/loop96-scratch does not contain 1 script(s), e.g. ['temp/loop96/s.py']; use --move (or a new scratch name)
+loop97: 2 files in temp/loop97
+  code kept in git: f498bb4b65 t/loop97-scratch 
+deleted temp/loop97
+clean_temp selftest passed
+machine lock: free
+machine lock: timing until 2026-11-01T15:08:50 (exclusive)
+machine lock of timing until 2026-11-01T15:08:50 still held after 0 min
+machine lock: free
+machine lock: bev until 2026-11-01T15:08:50 (reservation)
+machine lock: x until 2026-11-01T15:08:50 (reservation)
+machine lock: free
+machine_lock selftest passed
+grant: tools/ -> /tmp/tmpka72tg05/tools until 2026-11-01T15:08 (D8; opens tools/)
+guard_hook selftest passed
+metrics selftest passed
+wrote records/keep3.json (empty, 3 slots, ranked by Q on val)
+ENTER: 0 of 3 slots are taken: a (0.7000) takes the next one
+applied (by hand: seed): ['a']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/a/val.json  (+ the registry entry, the ledger row, the run record)
+ENTER: 1 of 3 slots are taken: b (0.7200) takes the next one
+applied (by hand: seed): ['b', 'a']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/b/val.json  (+ the registry entry, the ledger row, the run record)
+ENTER: 2 of 3 slots are taken: c (0.6500) takes the next one
+applied (by hand: seed): ['b', 'a', 'c']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/c/val.json  (+ the registry entry, the ledger row, the run record)
+Q on val (100 frames), best name per network, 6 names are candidates, 5 networks (5 names are not: no checkpoint of their own / missing file / no full-split card); look at vert100 and the cost before you take one in:
+  0.7250  d                      rd                                             vert100 12.0
+  0.7200  b                      rb                                             vert100 12.0  <- kept
+  0.7050  a_dp                   ra                                             vert100 12.0  <- kept
+  0.6500  c                      rc                                             vert100 12.0  <- kept
+  0.6000  e                      re                                             vert100 12.0
+OUT: e (0.6000) does not beat the weakest, c (0.6500), by more than the band 0.01
+OUT: e (0.6000) does not beat the weakest, c (0.6500), by more than the band 0.01
+nothing to apply
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: e (0.6601) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+ENTER: d (0.7250) beats the weakest, c (0.6500), by more than the band 0.01: c leaves
+applied (ledger E3 KEEP): ['d', 'b', 'a']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/d/val.json  (+ the registry entry, the ledger row, the run record)
+left the three (slim or archive these checkpoints, never delete; this tool moves nothing): runs/ck/rc.pt
+REPLACE: same network as a: a_dp is better by more than the band (0.7200 vs 0.7000, band 0.01), it takes the place
+applied (ledger E10 KEEP): ['d', 'b', 'a_dp']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/a_dp/val.json  (+ the registry entry, the ledger row, the run record)
+ENTER: e (0.8000) beats the weakest, b (0.7200), by more than the band 0.01: b leaves
+ENTER: g (0.7900) beats the weakest, b (0.7200), by more than the band 0.01: b leaves
+applied (by hand: the other chat): ['g', 'd', 'a_dp']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/g/val.json  (+ the registry entry, the ledger row, the run record)
+left the three (slim or archive these checkpoints, never delete; this tool moves nothing): runs/ck/rb.pt
+applied (by hand: this chat): ['e', 'g', 'd']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/e/val.json  (+ the registry entry, the ledger row, the run record)
+left the three (slim or archive these checkpoints, never delete; this tool moves nothing): runs/ck/ra.pt
+REPLACE: same network as e: e is better by more than the band (0.9500 vs 0.8000, band 0.01), it takes the place
+applied (by hand: selftest): ['e', 'g', 'd']
+next: commit the text record (own paths, check_git.py --paths ...) and push it (git fetch, check_git.py):
+  records/keep3.json  cards/e/val.json  (+ the registry entry, the ledger row, the run record)
+best 3 by Q on val (band 0.01), 3 held:
+  0.9500  e                    since 2026-11-01  by hand: selftest
+          runs/ck/re.pt  0 MB  ok
+  0.7900  g                    since 2026-11-01  by hand: the other chat
+          runs/ck/rg.pt  0 MB  ok
+  0.7250  d                    since 2026-11-01  ledger E3 KEEP
+          runs/ck/rd.pt  0 MB  ok
+left: c (2026-11-01), a (2026-11-01), b (2026-11-01), a_dp (2026-11-01), e (2026-11-01)
+best 3 by Q on val (band 0.01), 3 held:
+  0.9500  e                    since 2026-11-01  by hand: selftest
+          runs/ck/re.pt  0 MB  ok
+  0.7900  g                    since 2026-11-01  by hand: the other chat
+          runs/ck/rg.pt  0 MB  ok
+  0.7250  d                    since 2026-11-01  ledger E3 KEEP
+          runs/ck/rd.pt  0 MB  ok
+left: c (2026-11-01), a (2026-11-01), b (2026-11-01), a_dp (2026-11-01), e (2026-11-01)
+best 3 by Q on val (band 0.01), 3 held:
+  0.9500  e                    since 2026-11-01  by hand: selftest
+          runs/ck/re.pt  0 MB  ok
+  0.7900  g                    since 2026-11-01  by hand: the other chat
+          runs/ck/rg.pt  0 MB  ok
+  0.7250  d                    since 2026-11-01  ledger E3 KEEP
+          runs/ck/rd.pt  0 MB  SHA256 DIFFERS
+left: c (2026-11-01), a (2026-11-01), b (2026-11-01), a_dp (2026-11-01), e (2026-11-01)
+best 3 by Q on val (band 0.01), 3 held:
+  0.9500  e                    since 2026-11-01  by hand: selftest
+          runs/ck/re.pt  0 MB  ok
+  0.7900  g                    since 2026-11-01  by hand: the other chat
+          runs/ck/rg.pt  0 MB  ok
+  0.7250  d                    since 2026-11-01  ledger E3 KEEP
+          runs/ck/rd.pt  0 MB  size differs
+left: c (2026-11-01), a (2026-11-01), b (2026-11-01), a_dp (2026-11-01), e (2026-11-01)
+keep3 selftest passed
+autoresearch tools selftest passed
+EXIT=0

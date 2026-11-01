@@ -1,0 +1,5 @@
+D38 (b) decided: an object counts by its observed footprint share
+
+Mirko in chat, 2026-11-01: "Yes, footprint share" (after calling the centre cell a primitive first step): share of the footprint inside the fusion area and not hidden; two thresholds in evaluation from the data, a soft weight in training, a detection with half or more of its footprint in a don't-care area is ignored. D38 row, coverage note and handover updated; the handover lists only what is still open.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

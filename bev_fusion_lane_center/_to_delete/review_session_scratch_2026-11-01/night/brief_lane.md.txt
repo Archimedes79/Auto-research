@@ -1,0 +1,18 @@
+# Brief for the loop-22 hypothesis authors (lane problem, overnight 2026-10-31 -> 11-01)
+
+Decision D28 (Mirko, 23:20): a ready-to-use prototype with good performance by 06:30; attack gap 1. Work from the workspace root `C:\Auto-research`; the problem folder is `bev_fusion_lane_center/`. Python only through WSL (`wsl bash tools/env/_py14.sh <script>` from the problem folder; plain `wsl python3` for the autoresearch tools), at most 2 threads, no GPU, nothing that writes outside your card folder.
+
+## Target
+Gap 1 of `PROBLEM.md`: coverage at range. Today `recall` (rc1 + pruning 0.4) has lanes found 0.767 and R@1 far 0.771, against the slow control E94 (628 ms) with 0.800 / 0.811; Q 0.740 vs 0.737; ms 20 - 25 for the fast chain. A card must keep Q >= 0.735 (band 0.010), the vertex budget <= 14.3 per 100 m (per-piece DP basis) and the speed class (<= ~30 ms), and raise lanes found and / or R@1 far.
+
+## Read first (in this order)
+`bev_fusion_lane_center/PROBLEM.md`, `HANDOVER.md`, `experiment_execution/closed_questions.md` (never re-open a closed question without a new mechanism), `experiment_execution/PLAN.md` (coverage candidates of loop 21), `wsl python3 ../autoresearch/tools/ledger.py tail --loop 19` (and 20), the summaries (section 3) of `experiments/E234_*` .. `E260_*`, `models/registry.json` (what checkpoints and configs exist), `evaluation/README.md` + `PROTOCOL.md`, `literature/OVERVIEW.md` sections A1 - A4 and `literature/register.md` (technique ids K<n>). Loss re-weighting for recall is spent (rc2 / rc4 in the ledger).
+
+## Tonight's budget and what a card may use
+- GPU: one slot for the lane problem from about 01:30 to 06:00 (~4.5 GPU-hours for ALL lane cards together, both seeds included); a card should need <= 90 GPU-min per arm. CPU arms on the cached raw outputs (`~/exp_gcar_b123/eval_cache/`, re-scored by `evaluate.py` in about a minute) are cheap and welcome.
+- Only what exists: fine-tunes or re-trainings with the existing training scripts (find them through the registry configs and the run records of E219 / E244 / E255 / j1rc), the cached features (`~/exp_crn_b123/feats`, GaussianCaR), assembly / inference options of `training/pipeline/` and `evaluate.py --asm ...`. Small code changes are allowed if the card names them (an `ar-coder` builds them with a spec test).
+- Statistics: 2 seeds per comparison (seed SD Q 0.0025, lanes found 0.004, R@1 far 0.003; E240), decide by `decide.py` with an `experiment.json`; a CPU arm on one checkpoint is `deterministic: true`. No TEST.
+- Fully differentiable training path (no argmax / matching / rule step on the training path); better short than false graphs.
+
+## Output
+Two cards, each in its own new folder `bev_fusion_lane_center/experiments/E<id>_<slug>/experiment.md`, section 1 only of `autoresearch/templates/experiment.md` (question, hypothesis, prediction as a number, decision rule with band, design: arms / controls / seeds / budget in GPU-min, gate, kill criterion). Your ids are given in the prompt. Do not write experiment.json, do not run anything on the GPU, do not edit code or state files. Report one line per card: id, slug, the bet, GPU-min, expected lanes found / R@1 far / Q.

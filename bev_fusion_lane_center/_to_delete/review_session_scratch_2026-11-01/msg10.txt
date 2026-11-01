@@ -1,0 +1,5 @@
+D36: one sensor coverage rule (camera loss only where the camera sees, radar loss only where the radar sees)
+
+Mirko in chat, 2026-11-01: unify the usage of coverage between training, evaluation and execution; separate camera and radar data in the GT and the training (lanes are camera information); no camera loss where the camera cannot see, no radar loss where the radar cannot see. Recorded as D36 with its consequences (BEV system and GT Discussion chats, after the t10 run); the coverage note gets the per-output first cut and two extra points (two implementations of "camera sees the cell", new regime needs a matched control). The handover is rewritten (2.6 KB): stale lines about the merge and the smoke test are gone.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

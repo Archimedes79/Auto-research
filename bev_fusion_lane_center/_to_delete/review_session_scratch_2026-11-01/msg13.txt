@@ -1,0 +1,5 @@
+Coverage note: radar measured on nuScenes mini, radar rule per object
+
+The GT Discussion chat measured the radar on 404 keyframes: no crisp radar-blind region beyond the fan (static density mask dropped), but 34 to 90 % of the objects have no radar point in the keyframe sweep (vehicles 34 % moving / 52 % standing, pedestrians 90 %, two-wheelers 81-84 %). So the radar rule is per object: fan minus the footprints of unmeasured boxes, per-box counts in the meta. Note and handover updated; Mirko confirms.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

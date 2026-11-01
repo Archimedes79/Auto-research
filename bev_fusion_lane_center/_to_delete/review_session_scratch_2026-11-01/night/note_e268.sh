@@ -1,0 +1,4 @@
+cd /mnt/c/Auto-research/bev_fusion_lane_center
+python3 ../autoresearch/tools/ledger.py note E268.p --result "TEST 833 (the one TEST use of loop 22, logged first): recall_sp0_dp Q 0.727, lanes found 0.740, R@1 far 0.749, topo F1 0.705, J 0.468, S 0.768, FL 0.079, dup 0.092, vert100 12.56; control E94 Q 0.712, lanes found 0.762, R@1 far 0.776; proto - control: Q +0.015 [+0.000, +0.029], lanes found -0.021 [-0.037, -0.005], R@1 far -0.028 [-0.042, -0.012], dup -0.041; prediction lanes found 0.735 - 0.74: hit" --decision "report only: the VAL gain transfers (lanes found +0.016 over E230.rc's 0.724 at equal Q 0.727); gap 1 on TEST shrinks from -0.038 to -0.021 lanes found; no promotion (D4 Mirko)"
+for i in P.proto E268.card E264.dec E266.dec E267.dec; do python3 ../autoresearch/tools/schedule.py set $i done; done
+for i in E264.t E264.code; do python3 ../autoresearch/tools/schedule.py set $i cancelled; done

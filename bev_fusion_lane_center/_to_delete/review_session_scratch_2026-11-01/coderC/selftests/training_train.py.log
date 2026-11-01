@@ -1,0 +1,17 @@
+step 1: total 15.4606 lr 2.00e-04 grad 96.86
+step 2: total 17.0915 lr 3.00e-04 grad 87.88
+step 3: total 23.8273 lr 3.00e-04 grad 119.31
+step 4: total 23.2994 lr 1.50e-04 grad 83.36
+resumed from ckpt_00000004.pt at step 4
+step 5: total 21.3207 lr 1.50e-04 grad 72.82
+step 6: total 21.5309 lr 4.42e-05 grad 61.69
+step 1: total 15.4606 lr 2.00e-04 grad 96.86
+step 1: total 15.4606 lr 2.00e-04 grad 96.86
+step 2: total 17.0915 lr 3.00e-04 grad 87.88
+step 2: stop requested (selftest), checkpoint saved, exit 75
+resumed from ckpt_00000002.pt at step 2
+step 3: total 23.8273 lr 3.00e-04 grad 119.31
+step 4: total 23.2994 lr 1.50e-04 grad 83.36
+step 1: total 15.4683 lr 3.00e-04 grad 164.77
+step 2: total 25.2197 lr 3.00e-04 grad 158.02
+train selftest ok: GT at three times (-0.5 / 0 / +0.5 s) -> loss, balancing arms (Kendall / fixed / UW-SO), cross-time consistency (hold = weight 0, gradient reaches the motion head), gradient-conflict cosines, sequence training (clips of consecutive keyframes, memory carried and detached or kept in the graph, paired warm / cold validation), 2 micro-batches per step, 4 steps with checkpoints (frozen heads not saved), resume 4 -> 6, validation under EMA restores the weights, schedule; 12.7 s per step on the CPU at batch 2 (cached features, width 1/4)

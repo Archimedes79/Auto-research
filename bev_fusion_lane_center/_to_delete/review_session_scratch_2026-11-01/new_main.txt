@@ -1,0 +1,85 @@
+def migrate(folder, root):
+    """card block into experiment.md (right after the first heading outside a fence, line endings kept), the json moves to <problem>/_to_delete/experiment_json_<date>/<folder>/ (never deleted); -> message"""
+    js, md = os.path.join(folder, "experiment.json"), os.path.join(folder, "experiment.md")
+    name = os.path.basename(folder)
+    if not os.path.isfile(md):
+        return f"{name}: JSON-ONLY (no experiment.md to hold the block): left as it is"
+    try:
+        card = read(js)
+        have = block_of(md)
+    except ValueError as e:
+        return f"{name}: NOT migrated, {e}"
+    if have is not None:
+        if have != card:
+            return f"{name}: the block and the json differ: NOT migrated (decide which is right)"
+    else:
+        text = open(md, encoding="utf-8", newline="").read()
+        nl = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(nl)
+        i, fence = 0, False
+        for k, ln in enumerate(lines):  # after the first heading that is not inside a code fence, else at the top
+            if ln.lstrip().startswith("```"):
+                fence = not fence
+            elif not fence and ln.startswith("# "):
+                i = k + 1
+                break
+        block = ["```json card"] + json.dumps(card, indent=1, ensure_ascii=False).split("\n") + ["```"]
+        new = nl.join(lines[:i] + ["", "The card (read by `experiment.py` and `decide.py`; schema `autoresearch/schemas/experiment.schema.json`):", ""] + block + [""] + lines[i:])
+        tmp = md + ".new"
+        open(tmp, "w", encoding="utf-8", newline="").write(new)
+        try:
+            ok = block_of(tmp) == card
+        except ValueError:
+            ok = False
+        if not ok:  # never replace a file with one that does not read back
+            os.remove(tmp)
+            return f"{name}: ERROR the block does not read back equal: NOT migrated"
+        os.replace(tmp, md)
+    dest = os.path.join(root, "_to_delete", "experiment_json_" + datetime.date.today().isoformat(), name)
+    os.makedirs(dest, exist_ok=True)
+    target, n = os.path.join(dest, "experiment.json"), 1
+    while os.path.exists(target):  # never overwrite an earlier move
+        n += 1
+        target = os.path.join(dest, f"experiment.{n}.json")
+    shutil.move(js, target)
+    return f"{name}: migrated (json in {os.path.relpath(dest, root)})"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", choices=["check", "show", "migrate"])
+    ap.add_argument("exp", nargs="?")
+    ap.add_argument("--all", action="store_true")
+    a = ap.parse_args()
+    if not a.all and not a.exp:
+        ap.error("name an experiment (E240, a folder or a file) or pass --all")
+    if a.cmd == "migrate":
+        todo = [d for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d)] if a.all else [os.path.dirname(find(a.exp))]
+        for d in todo:
+            if os.path.isfile(os.path.join(d, "experiment.json")):
+                print(migrate(d, P.root()))
+        return 0
+    files = [source(d) for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d) and source(d)] if a.all else [find(a.exp)]
+    rc = 0
+    for f in files:
+        try:
+            exp = read(f)
+        except ValueError as e:  # a broken card is reported and the other experiments are still checked
+            print(f"?        NOT READY  {os.path.relpath(f, P.root())}\n    - {e}")
+            rc = 1
+            continue
+        if a.cmd == "check":
+            bad = check(exp, f)
+            print(f"{exp.get('id', '?'):8} {'ready' if not bad else 'NOT READY'}  {os.path.relpath(f, P.root())}" + "".join(f"\n    - {b}" for b in bad))
+            rc |= bool(bad)
+        else:
+            print(f"{exp['id']} {exp['title']} [{exp['kind']}] headline {exp['metric']} ({exp['direction']}, band {exp['band']}), control {exp['control']}")
+            for letter in exp["arms"]:
+                for s, lst in arm_cards(exp, letter).items():
+                    for m, card, ref in lst:
+                        print(f"  {letter}{' ' + s if s else '':12} {exp['metric']} {m.get(exp['metric'], float('nan')):.4f}  {ref}")
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

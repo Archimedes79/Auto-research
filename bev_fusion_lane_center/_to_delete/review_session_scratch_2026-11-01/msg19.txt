@@ -1,0 +1,5 @@
+Handover back under 3 KB
+
+Two phrases shortened; the file was 9 bytes over the limit after the aux-head line.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

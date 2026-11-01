@@ -1,0 +1,10 @@
+{"id": "E256", "card": "H20.G2", "title": "the ranking of the deployment candidates of D4 (champion, recall, fast, fast_recall, control) is the same in Boston and in Singapore",
+ "kind": "variant", "deterministic": true, "metric": "Q", "direction": "higher", "band": 0.010,
+ "prediction": {"value": 0.0, "vs": "c"},
+ "variant": "a", "control": "c",
+ "arms": {"a": {"recipe": "analysis script temp/loop20/e252_gt_offset.py on the cached raw outputs of fast_recall, recall, fast, control, champion: per-city pooled metrics, frames of boston-seaport", "base": "e18_D7_j1rc", "names": ["fast_recall"]},
+          "c": {"recipe": "the same models, frames of singapore-onenorth", "base": "e123_D7_r3_f1", "names": ["champion"]}},
+ "rule": [{"metric": "Q", "min_effect": 0.01, "note": "read from the printout per city: the ranking by Q of the five candidates must agree between the cities up to the band 0.010; a pair whose order flips by more than the band is reported as city-dependent evidence for D4"}],
+ "budget_gpu_h": 0.0,
+ "kill": "none (CPU, 1 thread, about 10 min)",
+ "evaluate": {"split": "val"}}

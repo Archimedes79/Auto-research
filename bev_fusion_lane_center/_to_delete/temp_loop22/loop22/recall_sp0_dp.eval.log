@@ -1,0 +1,8 @@
+_py14.sh: evaluation/evaluate.py
+recall_sp0_dp on val (873 frames), commit 32babc1+dirty, assembly 27.9 ms per frame (CPU), metrics 50 s
+  S 0.781  Q 0.742  F1@1.0 0.878  J 0.439  topo_F1 0.741  lanes_found 0.781  R@1_far 0.779  false_len_frac 0.054  dup_frac 0.077  vert100 10.936
+recall_dp:
+  S 0.779  Q 0.740  F1@1.0 0.877  J 0.428  topo_F1 0.742  lanes_found 0.767  R@1_far 0.771  false_len_frac 0.051  dup_frac 0.076  vert100 10.369
+recall_sp0_dp - recall_dp (95 % over scenes): S +0.002 [-0.000, +0.005]  Q +0.003 [-0.000, +0.006]  F1@1.0 +0.001 [+0.000, +0.002]  J +0.011 [+0.001, +0.023]  lanes_found +0.014 [+0.010, +0.017]  topo_F1 -0.002 [-0.003, -0.001]  R@1_far +0.008 [+0.007, +0.010]  dup_frac +0.000 [-0.000, +0.001]
+verdict on S (band 0.010): tie (interval contains 0)
+card: /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/recall_sp0_dp/val.json

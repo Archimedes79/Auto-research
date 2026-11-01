@@ -1,0 +1,21 @@
+{"id": "E266", "card": "H22.E266", "title": "seed candidates on the ring at +-47.5 m (inference only, same checkpoints, same K0 / M)",
+ "kind": "block", "deterministic": true, "metric": "R@1_far", "direction": "higher", "band": 0.010,
+ "prediction": {"value": 0.012, "vs": "c"},
+ "variant": "b", "control": "c", "pairing": "position",
+ "arms": {
+  "b": {"recipe": "default lattice + ring at +-47.5 m (set lattice_ring=47.5; 361 -> 441 candidates, top-K0 unchanged); raw outputs once on the GPU under the S1 cache key: evaluate.py <n>_ring --compare <n>", "run_ids": ["E266.b0", "E266.b1", "E266.b2", "E266.b3"],
+        "names": ["recall_ring", "recall_s1_ring", "fast_recall_ring", "e24_j1rc_s1_ring"], "note": "order of the GPU runs: recall (G0 / G1 gates), recall_s1 (also needed by E267), fast_recall, e24_j1rc_s1; arm a (shifted grid) is not run tonight"},
+  "c": {"recipe": "registry entries re-scored after the code change with the ring metric (tag l22r, layer 1 --expect)", "run_ids": ["E266.c"],
+        "cards": ["runs/eval/recall/val_l22r.json", "runs/eval/recall_s1/val_l22r.json", "runs/eval/fast_recall/val_l22r.json", "runs/eval/e24_j1rc_s1/val_l22r.json"]}
+ },
+ "rule": [
+  {"metric": "R@1_far", "min_effect": 0.010, "note": "mean over the 4 checkpoints, bar raised from the card's +0.008 to the band; lead checks: recall alone >= +0.010 with its interval excluding 0, the same sign on >= 3 of 4"},
+  {"metric": "Q", "max_loss": 0.005, "note": "lead check: every checkpoint, and Q >= 0.735 absolute"},
+  {"metric": "topo_F1", "max_loss": 0.005},
+  {"metric": "false_len_frac", "max_loss": 0.005},
+  {"metric": "dup_frac", "max_loss": 0.010, "note": "added by the planner (stricter only): ring seeds at the box edge may add parallel stubs that Q cannot see"},
+  {"metric": "R@1_far_inner", "max_loss": 0.005, "note": "referee correction: a GUARD, not a built-in null (ring candidates can displace inner seeds in the top-K0); two-sided +-0.005 by the lead, the share of displaced inner seeds reported from G0. Lead checks outside decide.py: per-piece DP <= 14.3 on every checkpoint (E266.v); G0 (the ring cache is another file than the control's, kept level-0 seed share beyond 45 m >= 2 x 0.055 on recall); G1 (all-valid tree ring R@1 >= 0.82 on recall); metric name as built by S2"}
+ ],
+ "budget_gpu_h": 0.45,
+ "kill": "G0 fails after one debug round; G1 below +0.02 (tree ring R@1 < 0.82 on recall): the other checkpoints are not run; recall arm b R@1 far < +0.005",
+ "evaluate": {"split": "val", "compare": "c"}}

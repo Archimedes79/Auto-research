@@ -1,0 +1,5 @@
+bev_fusion_lane_center/PROBLEM.md
+bev_fusion_lane_center/evaluation/PROTOCOL.md
+autoresearch/templates/experiment.md
+bev_fusion_lane_center/experiments/E268_test-check-of-the-loop22-prototype/experiment.md
+bev_fusion_lane_center/reports/source/weekly/morning_2026-11-01_loop22.md

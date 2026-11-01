@@ -1,0 +1,16 @@
+autoresearch/METHOD.md
+autoresearch/agents/ar-planner.md
+autoresearch/architecture.json
+autoresearch/architecture.md
+autoresearch/architecture.svg
+autoresearch/fewer_files.md
+autoresearch/prompts/loop.md
+autoresearch/prompts/research_steps.md
+autoresearch/schemas/experiment.schema.json
+autoresearch/templates/experiment.md
+autoresearch/templates/plan.md
+autoresearch/tools/decide.py
+autoresearch/tools/experiment.py
+autoresearch/tools/plan.py
+autoresearch/tools/selftest.py
+bev_fusion_lane_center/experiments

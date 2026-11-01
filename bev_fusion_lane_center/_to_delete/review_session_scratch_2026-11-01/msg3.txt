@@ -1,0 +1,5 @@
+Method: research only on a trigger, roles inline by default, how a round is planned
+
+Mirko in chat, 2026-11-01 (no D entry): P1 research runs only when a trigger fires (open branches used up, two flat rounds, a card needs a technique without a K id, a gap changed, the person asks); G1 applies when it ran. New section "Planning a round" in METHOD.md and a step 0 "Start a round" in research_steps.md (ten lines, the person says OK). The lead does planner / coder / researcher work inline when it is small and spawns a role only for context, fresh eyes or parallel work (METHOD.md roles, loop prompt, ar-planner and ar-coder descriptions). The drawing spec follows (step label, check_git.py and keep3.py placed in their boxes) and is re-rendered. README: only the prompts row of this change; another chat's uncommitted tools row stays out.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

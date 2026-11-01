@@ -1,0 +1,56 @@
+FENCE = re.compile(r"^```json card[ \t]*\r?\n(\{.*?\})\r?\n```[ \t]*$", re.S | re.M)  # the body must be an object: an empty block or an unclosed one is not a card
+OUTER = re.compile(r"^(`{4,})[^\n]*\n.*?^\1[ \t]*$", re.S | re.M)  # a sample of the format inside a longer fence (documentation) is prose, not a card
+
+
+def bodies(text):
+    """the raw json texts of the card blocks of a markdown text (blocks inside a fence of 4+ backticks do not count)"""
+    return FENCE.findall(OUTER.sub("", text))
+
+
+def block_of(md):
+    """the card dict of an experiment.md, None when it has no ```json card block; ValueError for two blocks or a block that is not valid json"""
+    if not os.path.isfile(md):
+        return None
+    found = bodies(open(md, encoding="utf-8").read())
+    if not found:
+        return None
+    if len(found) > 1:
+        raise ValueError(f"{md} has {len(found)} ```json card blocks, expected 1")
+    try:
+        return json.loads(found[0])
+    except ValueError as e:
+        raise ValueError(f"the card block of {md} is not valid json ({e})") from None
+
+
+def source(folder):
+    """the file that holds the card of an experiment folder: experiment.md with a card block, else experiment.json, else None"""
+    md, js = os.path.join(folder, "experiment.md"), os.path.join(folder, "experiment.json")
+    if os.path.isfile(md) and bodies(open(md, encoding="utf-8").read()):
+        return md
+    return js if os.path.isfile(js) else None
+
+
+def find(exp):
+    """path of the file that holds the card (experiment.md or experiment.json) for an id, a folder or a file"""
+    if os.path.isfile(exp):
+        return exp
+    if os.path.isdir(exp):
+        return source(exp) or os.path.join(exp, "experiment.json")
+    cand = sorted(glob.glob(os.path.join(P.root(), "experiments", exp + "_*")) + glob.glob(os.path.join(P.root(), "experiments", exp)))
+    hits = [h for h in (source(d) for d in cand if os.path.isdir(d)) if h]
+    if not hits:
+        sys.exit(f"no card (experiment.md with a ```json card block, or experiment.json) for {exp} under {P.root()}/experiments")
+    return hits[0]
+
+
+def read(path):
+    """the card dict of an experiment.md (block) or an experiment.json; ValueError when it is missing, unreadable or not valid json"""
+    if path.endswith(".md"):
+        card = block_of(path)
+        if card is None:
+            raise ValueError(f"{path} has no ```json card block")
+        return card
+    try:
+        return json.load(open(path, encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"cannot read {path}: {e}") from None

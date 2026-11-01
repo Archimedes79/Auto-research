@@ -1,0 +1,11 @@
+import re,html
+t=open('reports/weekly/Week3_Loops18-20_Report_EN.html',encoding='utf8').read()
+t=re.sub(r'<img[^>]*>','[IMG]',t)
+t=re.sub(r'<style.*?</style>','',t,flags=re.S)
+t=re.sub(r'<(script).*?</\1>','',t,flags=re.S)
+t=re.sub(r'</(p|li|tr|h\d|div|table)>','\n',t)
+t=re.sub(r'</t[dh]>',' | ',t)
+t=re.sub(r'<[^>]+>','',t)
+t=html.unescape(t)
+t=re.sub(r'\n\s*\n+','\n',t)
+open('temp/loop20/review/week3.txt','w',encoding='utf8').write(t)

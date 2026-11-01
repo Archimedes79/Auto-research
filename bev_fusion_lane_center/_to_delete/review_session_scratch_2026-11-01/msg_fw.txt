@@ -1,0 +1,5 @@
+Proposal: fewer files for experiment ideas; reproducibility.md status after the card writer (8573172)
+
+fewer_files.md is a proposal only (Mirko: show the alternatives; yes, draft it). reproducibility.md: card-writer call is built, compare() on an error-only block is the open point.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,5 @@
+D29 decided (a) plus GT versioning, recorded with Mirko's words
+
+Mirko in chat, 2026-11-01: option (a) of D29 (one GT version for every evaluation and training), plus versioning: a git tag autogt/v<N> per change of the generator signature and a version record, so an old GT can be rebuilt from its tag. Implementation goes to the GT Discussion chat after t10.dual_long_s0 and its evaluation (frozen files until about 17:10); the open D29 row is marked decided, handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

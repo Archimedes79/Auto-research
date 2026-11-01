@@ -1,0 +1,6 @@
+    assert ct.returncode == 0 and "t/loop98-scratch" in tags(), ct.stdout + ct.stderr
+AssertionError:   File "/mnt/c/Auto-research/autoresearch/tools/clean_temp.py", line 254
+    open(os.path.join(imp, "training/u.py"), "w").write("import card
+                                                        ^
+SyntaxError: unterminated string literal (detected at line 254)
+

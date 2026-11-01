@@ -1,0 +1,7 @@
+bev_fusion/evaluation/bev_suite.py
+bev_fusion/evaluation/bev_task.py
+bev_fusion/evaluation/bev_selftest.py
+bev_fusion/evaluation/README.md
+bev_fusion/project.json
+bev_fusion_lane_center/project.json
+autoresearch/history/repo_review_2026-10-31.md

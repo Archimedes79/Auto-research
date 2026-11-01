@@ -1,0 +1,16 @@
+granted,until,path,decision,note
+2026-10-25T15:56,2026-10-26T03:56,../autoresearch/tools/,D8,"D8 tool work: loop-18 lead (P2, P8) and the data chat (P3, P4, P7, small items)"
+2026-10-25T16:16,2026-10-25T17:16,../.claude/settings.json,D8,"D8 P4 review fix: hook command fails open (|| true), refusal as JSON"
+2026-10-25T16:16,2026-10-25T17:16,project.json,D8,D8 P4 review fix: protect settings.local.json and the champion / control config cards
+2026-10-25T16:51,2026-10-25T18:51,project.json,D8,"P8 evaluator contract: holdout_split, cards, headline_metrics keys"
+2026-10-25T17:01,2026-10-25T18:01,../autoresearch/METHOD.md,D8,"D8 P2: the wake-up routine becomes tick.py --handover (lead chat's P2, committed e480bd8)"
+2026-10-25T21:51,2026-10-25T22:51,evaluation/TEST_USAGE_LOG.md,D13,D13: repoint the one loop-18 launcher path
+2026-10-26T08:38,2026-10-26T14:38,../autoresearch/tools/,D16,"D16: deploy the simplified run/tick/schedule/ledger/selftest (state derived from run records), tested in a scratch copy"
+2026-10-26T08:38,2026-10-26T14:38,../autoresearch/METHOD.md,D16,"D16: two lines of METHOD.md (wake-up routine, read the records first)"
+2026-10-30T18:53,2026-10-30T20:53,project.json,D21,"D21: protected list narrowed to the truth files and the gate itself (tools/ and METHOD.md leave it, guard_hook.py joins it)"
+2026-10-30T21:04,2026-10-31T01:04,PROBLEM.md,D20,"D20: one sentence on how the vertex budget is counted (after the output simplification, node-id count next to it)"
+2026-10-31T20:42,2026-10-31T22:42,project.json,D24,Mirko 2026-10-31: add lower_is_better (metric directions out of decide.py)
+2026-10-31T23:27,2026-11-01T11:27,project.json,D28,Mirko 2026-10-31 (D28): loop 22 range; loops 20 and 21 recorded (D17 option a for this loop)
+2026-11-01T05:46,2026-11-01T11:46,evaluation/TEST_USAGE_LOG.md,D28,"Mirko 2026-10-31 (D28): One TEST check - the row of E268.p (loop-22 lane prototype vs the control) before the run, and its numbers after"
+2026-11-01T08:57,2026-11-01T10:57,PROBLEM.md,D25,D25 (a): rewrite the vertex-count sentence
+2026-11-01T08:58,2026-11-01T11:58,../autoresearch/tools/guard_hook.py,D33,D33 (1): fix gaps (a)-(d) with selftest cases

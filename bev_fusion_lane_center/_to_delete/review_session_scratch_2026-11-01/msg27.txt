@@ -1,0 +1,5 @@
+Coverage note: the footprint-share threshold study and its three questions (completes 976b8d1)
+
+The previous commit 976b8d1 was empty by mistake (my script stopped on a size check before writing). This one carries the content: the BEV system chat's study (18700 objects, stored data only) summarised in the note with its proposal (care f >= 0.5, partial 0.1-0.5, don't care below 0.1) and three open questions; the handover points to the study.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

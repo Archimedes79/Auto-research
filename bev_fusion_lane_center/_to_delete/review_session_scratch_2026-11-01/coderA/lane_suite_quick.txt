@@ -1,0 +1,17 @@
+_py14.sh: evaluation/lane_suite.py
+      tolerant F1 at 1 m: adapter (transposed) 0.917, as stored 0.160, flipped 0.423
+ok    orientation of the dense maps  (9 s)
+ok    alignment of the ground truth  (33 s)
+      118 frames, 79 s
+      lcr.* / lcr_topo.* against evaluate.py's own functions on the same frames: largest relative difference 0.00e+00
+      geo.* (general suite code) against lcr.* (project code): largest difference 0.0011 (P@0.5)
+ok    the project's numbers reproduced + common metrics agree  (110 s)
+ok    adapter contract  (45 s)
+      img.F1_rel@1.0 0.906  img.AP_rel 0.945  geo.F1@1.0 0.881  geo.chamfer 0.552  geo.lanes_found 0.720  topo.topo_F1 0.826
+      where to work: {'model': 0.76, 'code': 0.21, 'evaluation': 0.02}
+ok    end to end on the dense head  (89 s)
+lane_suite selftest (quick): 5/5 checks passed in 285 s
+
+real	4m55.573s
+user	4m26.254s
+sys	0m8.110s

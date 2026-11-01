@@ -1,0 +1,5 @@
+D38 (b): evaluation states first, training masks after a matched control is planned
+
+Mirko in chat, 2026-11-01 ("no I would follow your suggestion actually"): the evaluation states first (care / partial / don't care, the two-sided ignore, headline on the fusion area); the training masks as a LossConfig option (default off) after the matched control (arm A today's loss, arm B hard don't-care, same budget, two seeds) is planned. All three questions of the BEV chat's study are answered. D38 row, coverage note and handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

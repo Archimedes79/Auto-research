@@ -1,0 +1,18 @@
+push check:
+  origin/main: 6 commit(s) ahead, 0 behind
+    to push: 80d4c1e Archimedes79 evaluation: fusion-area scoring (D37 / D38 first cut), coverage split of the complete GT set, annotation radar lookup
+    to push: fb87dad Archimedes79 provenance.py: the bundle carries the repository files the network imports (from the run's tag), lists what only tests 
+    to push: c155065 Archimedes79 t12 card: vehicle IoU at +-0.5 s fell (negative) + guard metrics for the joint card
+    to push: 4c17cb5 Archimedes79 autogt: python -m autogt have (the check before a training) and --scenes-file
+    to push: 39913fd Archimedes79 provenance.py: torch / CUDA / numpy / python of the trainer's interpreter in the manifest; repro --repeat checks the ta
+    to push: 070c84e Archimedes79 trainsuite start: a prepare step for the data a run needs (the GT store), built as a run of its own that the training w
+
+tags: all 94 local tags are on origin
+
+pending: 43 staged file(s), 45 untracked (0 of them scratch that `git add -A` would sweep in)
+
+scratch in git: 215 tracked file(s) in temp/ or _to_delete/ folders (legacy; new ones are refused above)
+scratch that is used: 24 file(s) run or imported by living files, 105 only cited in documents, 1 scratch folder(s) put on sys.path  (--used lists them)
+
+no errors
+done

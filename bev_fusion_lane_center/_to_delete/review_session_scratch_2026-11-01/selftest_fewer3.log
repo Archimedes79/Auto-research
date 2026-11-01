@@ -1,0 +1,6 @@
+note: S.c4 had no ledger row; a new planned row was made (check the id)
+note: S.c1 had no ledger row; a new planned row was made (check the id)
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/autoresearch/tools/selftest.py", line 384, in <module>
+    assert b"\r\n" in raw and raw.count(b"\n") == raw.count(b"\r\n"), "a CRLF file stays CRLF"
+AssertionError: a CRLF file stays CRLF

@@ -1,0 +1,17 @@
+  ok  healthy run: state, progress, ETA from the row times, no warnings
+  ok  NaN in a logged row is an alert
+  ok  a single value far above the recent median is a spike; watch finds one between two looks (since_step)
+  ok  a loss that climbs for many rows is a rising warning (only info before 50 % of the steps: loss ramps)
+  ok  a jump of the loss that stays is a level-shift warning, a flat noisy run is not
+  ok  grad-norm blow-up and GPU above 11 GB are warnings
+  ok  slowdown is a warning (not for finished runs); a resume gap does not spoil speed and ETA; rows without time give no slowdown alarm
+  ok  states: stalled, failed (a long traceback too; not when steps follow it), ended, done, new; the stall limit grows with the row interval
+  ok  skipped steps counted from the text log; after a resume the later attempt wins; eval rows kept apart (an empty one too); over-fitting warned
+  ok  a loss 25 % above the reference at the same step is a warning; the equal one and a seed twin are not
+  ok  kill rules: ok / hit / pending / unknown key / NaN = hit, inline comments, a bad line is reported and the rest still works
+  ok  stop protocol: CONTROL / STOPPED of an earlier stop are moved aside, the snapshot check, the copy in train.py agrees with control.py
+  ok  watch --enforce stops every run with a hit, refuses an old snapshot, rewrites an ignored stop once; waits for runs that have not started or were stopped
+  ok  a finding that comes and goes is reported once
+  ok  another layout through trainsuite.json; status as table / json, without empty logs by default, with a reference per run
+  ok  curves png of two runs
+trainsuite selftest: 16 groups of checks passed

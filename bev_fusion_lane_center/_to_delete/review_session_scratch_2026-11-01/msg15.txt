@@ -1,0 +1,5 @@
+D37: fusion numbers are reported on the fusion area only
+
+Mirko in chat, 2026-11-01: "Fusion performance shall be reported on the fusion area only. Only that allows for apple to apple comparisons..." The headline is scored on the cells camera and radar both observe (today the camera cells, 62 % of the grid); single-sensor areas may be reported next to it, labelled; camera-only baselines are scored on the same area; old numbers keep their label. D37 row, coverage note and handover.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

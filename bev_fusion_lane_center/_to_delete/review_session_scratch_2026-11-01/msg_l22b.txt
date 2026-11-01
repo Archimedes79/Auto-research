@@ -1,0 +1,3 @@
+Lane loop 22 decisions and TEST: E264 not adopted (FL guard, no timing), E266 KEEP (ring, G0 deviation noted), E267 CUT (precision guards); prototype recall_sp0_dp, TEST E268.p (lanes found 0.740, Q 0.727; vs control -0.021 / +0.015); morning summary page
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

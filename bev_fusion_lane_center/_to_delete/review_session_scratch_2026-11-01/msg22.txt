@@ -1,0 +1,5 @@
+Coverage note: a soft visibility weight (max over the sensors), what nuScenes carries, a three-arm test
+
+nuScenes carries the six-camera visibility bins and the lidar / radar point counts, not a front-camera or radar visibility; max(v_camera, v_radar) with the fan as v_radar is about 1 everywhere, so the radar value needs a prior per class and motion state (66 / 48 / 10 / 16-19 % of the objects have a radar point on mini); no standard recipe found, so the note proposes arms none / hard (D38) / soft. Proposal, not decided; handover points to the note.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

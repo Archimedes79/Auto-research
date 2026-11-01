@@ -1,0 +1,3 @@
+Loop 22 / overnight round P4: end-of-loop section, handover, morning pages corrected after the fresh numbers review (E266 two rule deviations disclosed, E265 equal-budget pass only via the Q branch, E230.rc labelled another code version, timing labels), dead paths of the loop-22 cards fixed
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

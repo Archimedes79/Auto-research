@@ -1,0 +1,48 @@
+﻿wsl : note: S.c5 had no ledger row; a new planned row was made (check the id)
+In Zeile:1 Zeichen:333
++ ... o-research; wsl python3 autoresearch/tools/selftest.py > C:\Users\mme ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (note: S.c5 had ... (check the id):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+note: S.c4 had no ledger row; a new planned row was made (check the id)
+note: S.c0 had no ledger row; a new planned row was made (check the id)
+note: S.c6 had no ledger row; a new planned row was made (check the id)
+note: S.c2 had no ledger row; a new planned row was made (check the id)
+note: S.c1 had no ledger row; a new planned row was made (check the id)
+note: S.c7 had no ledger row; a new planned row was made (check the id)
+note: S.c3 had no ledger row; a new planned row was made (check the id)
+card selftest passed
+loop99: 1 files in temp/loop99
+  BLOCKED: module probe is imported by ['training/user.py'] - copy it to a code folder first
+loop99: 1 files in temp/loop99
+dry run: nothing changed (--move or --delete)
+loop99: 1 files in temp/loop99
+moved temp/loop99 -> _to_delete/temp_loop99/loop99 (add a line to _to_delete/README.md)
+loop98: 1 files in temp/loop98
+  code kept in git: no-git  
+  REFUSED: --delete needs the scratch in git, but the snapshot gave no tag (no-git ); use --move or fix git
+loop98: 1 files in temp/loop98
+  code kept in git: no-git  
+moved temp/loop98 -> _to_delete/temp_loop98/loop98 (add a line to _to_delete/README.md)
+loop97: 2 files in temp/loop97
+  REFUSED: --delete needs 'temp' in project.json code_dirs (the snapshot commits code_dirs only); use --move
+loop96: 1 files in temp/loop96
+  code kept in git: c114009d01 t/loop96-scratch tag existed (resume): tag t/loop96-scratch is attempt 1 (82d78f0fa7), this attempt ran c114009d01
+  REFUSED: tag t/loop96-scratch does not contain 1 script(s), e.g. ['temp/loop96/s.py']; use --move (or a new scratch name)
+loop97: 2 files in temp/loop97
+  code kept in git: b5a75710d0 t/loop97-scratch 
+deleted temp/loop97
+clean_temp selftest passed
+machine lock: free
+machine lock: timing until 2026-11-01T10:17:39 (exclusive)
+machine lock of timing until 2026-11-01T10:17:39 still held after 0 min
+machine lock: free
+machine lock: bev until 2026-11-01T10:17:39 (reservation)
+machine lock: x until 2026-11-01T10:17:39 (reservation)
+machine lock: free
+machine_lock selftest passed
+grant: tools/ -> /tmp/tmp1ml3imrr/tools until 2026-11-01T10:17 (D8; opens tools/)
+guard_hook selftest passed
+metrics selftest passed
+autoresearch tools selftest passed

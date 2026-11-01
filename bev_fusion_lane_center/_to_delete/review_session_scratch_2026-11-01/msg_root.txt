@@ -1,0 +1,5 @@
+Root README.md: what the repository is, its five folders, where to start
+
+A short README for the repository root (Mirko: maybe you can generate a small readme for the project and push). .gitignore whitelists /README.md.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,5 @@
+D38 (b): the first thresholds of the footprint share are 0.1 and 0.5
+
+Mirko in chat, 2026-11-01: "Yes, 0.1 and 0.5": care from 0.5, partial 0.1 to 0.5 next to the headline, don't care below 0.1; the recall-by-f check comes later. D38 row, coverage note and handover updated; two of the BEV chat's three questions remain.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

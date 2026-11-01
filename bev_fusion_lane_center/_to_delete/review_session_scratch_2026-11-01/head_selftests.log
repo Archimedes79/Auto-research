@@ -1,0 +1,33 @@
+=== tools/selftest.py
+    sys.exit(main())
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/tools/run.py", line 764, in main
+    with open(os.path.join(d, "run.log"), "a", encoding="utf-8", errors="replace") as lg:
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/ar_selftest_uw8a9uxv/runs/S.live2/run.log'
+exit 1
+=== -m trainsuite selftest
+  ok  watch keeps a run that failed while watched for the launcher's retry
+  ok  another layout through trainsuite.json; status as table / json, without empty logs by default, with a reference per run
+  --  curves skipped (no matplotlib)
+trainsuite selftest: 17 groups of checks passed
+exit 0
+=== evalsuite/selftest.py
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/evalsuite/selftest.py", line 18, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+exit 1
+=== evalsuite/selftest_comparison.py
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/evalsuite/selftest_comparison.py", line 13, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+exit 1
+=== evalsuite/selftest_cost.py
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/evalsuite/selftest_cost.py", line 13, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+exit 1
+=== tools/archdraw.py --selftest
+archdraw selftest ok: render (svg + md deterministic), main-path count, symbol / path / coverage / overlap / stale checks, hand-written text around the file map kept, broken markers refused (never overwritten), step headers and spans, geometry per spec, has_symbol nesting
+exit 0

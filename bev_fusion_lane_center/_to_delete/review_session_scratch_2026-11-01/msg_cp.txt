@@ -1,0 +1,3 @@
+commit_paths.py: one tool to commit exactly the named paths in the shared checkout (replaces the commit_*.sh of every chat)
+
+Temporary index, compare-and-swap on HEAD, literal paths relative to the folder you run it in, scratch / forbidden / gitlink / ignored refused (measured on the committed content), --blob for a file other chats also edit (exec bit kept), the shared index brought in line only for entries that equal the old or the new content (others' staging is left and reported), identity checked, UTF-8 message. Critic pass (mode code): 15 findings fixed, selftest covers each. CLAUDE.md git rule and README row name it.

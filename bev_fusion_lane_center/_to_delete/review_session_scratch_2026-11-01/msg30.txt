@@ -1,0 +1,5 @@
+D38 (b): the occlusion rule is softened (boxes hide by their height)
+
+Mirko in chat, 2026-11-01: "Soften it": autogt's 2D occlusion takes every box as infinitely high, which overstates the hiding of low objects. D38 row, coverage note (with a suggestion for the GT chat's v6: shadow length d*H/(H-h), objects hidden by their vertical extent) and handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

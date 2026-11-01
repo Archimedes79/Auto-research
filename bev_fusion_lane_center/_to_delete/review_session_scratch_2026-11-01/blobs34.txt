@@ -1,0 +1,2 @@
+autoresearch/README.md	bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/readme_head_mine4.md
+.gitignore	bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/gitignore_head_mine.txt

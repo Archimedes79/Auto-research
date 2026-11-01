@@ -1,0 +1,20 @@
+run t10.dual_s0: status ok, exit 0, ended 2026-10-31T23:01:09
+code: tag bf/t10.dual_s0 (commit 40648bd153, code hash e388d297e288); check it out with: git worktree add ../repro_t10.dual_s0 bf/t10.dual_s0
+command: bash temp/train/run_ar.sh training/configs/t10_dual_s0.json   (cwd /mnt/c/Auto-research/bev_fusion)
+recorded: python 3.10.12, NVIDIA GeForce RTX 3060, 610.88; this machine: python 3.10.12, torch unknown
+manifest of the run: /mnt/c/Auto-research/bev_fusion/results/t10.dual_s0/provenance.json (made 2026-11-01T20:33:28)
+bundle: the network imports the loop or a loader: augment.py -> nuscenes_dataset.py, augment.py -> train.py, lane_branch.py -> train.py, model.py -> nuscenes_dataset.py
+bundle: repository code outside the bundle (its version is the run's GT version / tag): autogt
+GT: version v5 (signature 15efbde2d1, dataset v1.0-trainval, options {}), code: git show autogt/v5
+the GT store /mnt/c/Auto-research/data/autogt/15efbde2d1 is present
+training code: tag bf/t10.dual_s0, commit 40648bd153
+model bundle (network + losses): 17 files, hash bd2205365084, copied to bundle/
+frames: split train, 0 frames, hash unknown
+model: run t10.dual_s0, checkpoint ckpt_00003000.pt (20c2ef882355p), step 3000, config 40df839878b1; trained on GT v5
+seed 0; recorded torch unknown, CUDA None
+
+worktree (the tag checked out, the current checkout untouched): /mnt/c/Auto-research/temp/repro/t10.dual_s0
+start the repetition (check the GT store above first):
+  cd /mnt/c/Auto-research/temp/repro/t10.dual_s0/bev_fusion && AR_PROJECT=. python3 ../autoresearch/tools/run.py --id t10.dual_s0.repro --hyp "repetition of t10.dual_s0" --pred "same code, same GT, same seed: the numbers agree within seed noise" --rule "by hand: a repetition, no verdict" --no-card -- bash temp/train/run_ar.sh training/configs/t10_dual_s0.json
+remove it afterwards: git worktree remove --force /mnt/c/Auto-research/temp/repro/t10.dual_s0
+done

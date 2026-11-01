@@ -1,0 +1,7 @@
+Fewer files: the experiment card is a block in experiment.md; plan.py status; 26 lane cards migrated
+
+experiment.py reads the json card block (old experiment.json still read, both different refused), migrate moves the json to _to_delete; decide.py writes decision.json next to the md; plan.py status derives the node status from schedule and ledger (verdict only from the decide.py token); template, schema text, docs, drawing updated. Critic pass (mode code) findings fixed and tested; tools selftest passed. Mirko: Yes, build. INDEX.csv, schedule/ledger merge and plans/ left as they are (fewer_files.md says why).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+
+

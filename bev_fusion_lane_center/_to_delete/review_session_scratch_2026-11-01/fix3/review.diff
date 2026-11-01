@@ -1,0 +1,285 @@
+diff --git a/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/head/decide.py b/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/decide.py
+index d9f52d4..f699736 100644
+--- a/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/head/decide.py
++++ b/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/decide.py
+@@ -16,7 +16,8 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
+     interval that excludes 0 counts as agreeing seeds
+   * bands: the experiment's band for its headline metric, a clause's own band, else 0.010; lower-is-better: the experiment's direction for its
+     headline metric, else the cards' own "better" map (the evaluator declares every metric it writes; cards that disagree are refused), else
+-    for older cards the generic cost names (LOWER) plus the problem's project.json "lower_is_better" list
++    for older cards the generic cost names (LOWER) plus the problem's project.json "lower_is_better" list (a path-like card key such as
++    'det/dt+0.00/vehicle/all/ate' is matched by its last part)
+   * the headline is judged for its evidence (one seed, a disagreeing seed, an interval containing 0) also when its clause is a guard (max_loss)
+     or it has no min_effect clause: a better headline on one seed is INCONCLUSIVE, not KEEP
+   * --write writes decision.json next to the experiment file and appends "decide.py <date>: VERDICT (effect)" to the decision column of the
+@@ -59,11 +60,6 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None,
+ # ------------------------------------------------------------------ experiment file + cards
+ 
+ 
+-# TEMPORARY (D24, 2026-10-31): the lane problem's names (tag prefix lcr), used only while its project.json has no "lower_is_better" key
+-# (that file is protected and the grant is pending); remove this set once the key is there
+-LEGACY_LANE_LOWER = {"vert100", "verts_per_frame", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"}
+-
+-
+ def lower_names(root=None):
+     """the lower-is-better metric names of a problem: project.json "lower_is_better" plus the generic LOWER"""
+     import project as P
+@@ -71,9 +67,14 @@ def lower_names(root=None):
+         c = P.cfg_of(root or P.root())
+     except SystemExit:  # no problem folder (typed interface outside a project)
+         return set(LOWER)
+-    if "lower_is_better" in c:
+-        return LOWER | set(c["lower_is_better"])
+-    return LOWER | (LEGACY_LANE_LOWER if c.get("tag_prefix") == "lcr" else set())
++    return LOWER | set(c.get("lower_is_better", []))
++
++
++def named_lower(metric, root=None):
++    """the fallback for a metric no card declares: lower is better when lower_names lists the card key or its last path part
++    (a path-like key 'det/dt+0.00/vehicle/all/ate' is listed as 'ate')"""
++    names = lower_names(root)
++    return metric in names or metric.rsplit("/", 1)[-1] in names
+ 
+ 
+ def card_lower(metric, cards=(), root=None):
+@@ -96,7 +97,7 @@ def card_lower(metric, cards=(), root=None):
+     if not said:
+         return None
+     low = next(iter(said))
+-    if undeclared and low != (metric in lower_names(root)):
++    if undeclared and low != named_lower(metric, root):
+         raise ValueError(f"{metric}: {', '.join(said[low])} declare it {'lower' if low else 'higher'}-is-better, but the older cards "
+                          f"{', '.join(undeclared)} would be read the other way (fallback: project.json lower_is_better); fix the fallback")
+     return low
+@@ -104,11 +105,11 @@ def card_lower(metric, cards=(), root=None):
+ 
+ def is_lower(metric, exp=None, root=None, cards=()):
+     """lower is better: the experiment's direction for its headline metric, else what the cards declare (card_lower), else the
+-    problem's names (lower_names: project.json, the generic LOWER, the temporary lane list) for cards written before the field existed"""
++    problem's names (named_lower: project.json, the generic LOWER) for cards written before the field existed"""
+     if exp is not None and metric == exp.get("metric"):
+         return exp.get("direction") == "lower"
+     declared = card_lower(metric, cards, root)
+-    return declared if declared is not None else metric in lower_names(root)
++    return declared if declared is not None else named_lower(metric, root)
+ 
+ 
+ def paired_effect(metric, v_cards, c_cards, lower=None):
+diff --git a/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/head/experiment.py b/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/experiment.py
+index 60b179c..0fb2062 100644
+--- a/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/head/experiment.py
++++ b/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/experiment.py
+@@ -15,7 +15,7 @@ import sys
+ 
+ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ import project as P  # noqa: E402
+-from decide import card_lower, lower_names  # noqa: E402
++from decide import card_lower, named_lower  # noqa: E402
+ import card as CARD  # noqa: E402
+ 
+ SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
+@@ -147,7 +147,7 @@ def check(exp, path):
+             continue
+         if said is not None and said != (exp["direction"] == "lower"):
+             bad.append(f"direction {exp['direction']} contradicts the cards: their evaluator declares {metric} {'lower' if said else 'higher'}-is-better")
+-        elif said is None and metric in lower_names(root) and exp["direction"] != "lower":
++        elif said is None and named_lower(metric, root) and exp["direction"] != "lower":
+             bad.append(f"metric {metric} is lower-is-better (project.json lower_is_better) but direction is {exp['direction']}")
+     return bad
+ 
+diff --git a/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/head/selftest.py b/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/selftest.py
+index 25c6781..a10abf5 100644
+--- a/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/head/selftest.py
++++ b/C:/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/selftest.py
+@@ -242,15 +242,15 @@ try:
+     json.dump(dict(n=dict(a=dict(Q=0.80), c=dict(Q=0.70)), b=dict(a=dict(Q=0.80), c=dict(Q=0.70)), x=dict(a=dict(Q=0.69), c=dict(Q=0.70))), open(f"{T}/subq.json", "w"))
+     subq = dict(a=dict(cards={k: f"subq.json#{k}/a" for k in "nbx"}), c=dict(cards={k: f"subq.json#{k}/c" for k in "nbx"}))
+     assert verdict(arms=subq, rule=[dict(metric="Q", max_loss=0.05, subsets=["n", "b", "x"], at_least=2)]) == "KEEP", "subset-only guard: no seed flags"
+-    # lower-is-better names: project.json "lower_is_better" replaces the legacy lane list, which only a problem with tag prefix lcr gets
++    # lower-is-better names (the fallback for undeclared metrics): project.json "lower_is_better" plus the generic LOWER, no built-in problem list
+     assert "vert100" in DC.lower_names(T)
++    assert DC.named_lower("det/dt+0.00/vehicle/all/vert100", T) and not DC.named_lower("vert100/x", T) and not DC.named_lower("vert1000", T), \
++        "a path-like card key is matched by its last part only"
+     pj = json.load(open(f"{T}/project.json"))
+     json.dump(dict(pj, lower_is_better=[]), open(f"{T}/project.json", "w"))
+     assert "vert100" not in DC.lower_names(T) and "ms" in DC.lower_names(T), "an empty list: vert100 reads higher-is-better"
+-    json.dump({k: v for k, v in pj.items() if k != "lower_is_better"}, open(f"{T}/project.json", "w"))
+-    assert "vert100" not in DC.lower_names(T), "no key, tag prefix t: no lane names"
+     json.dump(dict({k: v for k, v in pj.items() if k != "lower_is_better"}, tag_prefix="lcr"), open(f"{T}/project.json", "w"))
+-    assert "vert100" in DC.lower_names(T), "no key, the lane problem: the legacy list until its key is written"
++    assert DC.lower_names(T) == DC.LOWER, "no key: only the generic names, whatever the tag prefix (the lane list moved to its project.json)"
+     json.dump(pj, open(f"{T}/project.json", "w"))
+     # the evaluator declares each metric's direction in its cards ("better"): decide.py reads it there, not from names (D24)
+     def fcard(q, err, bt):
+diff --git a/bev_fusion/evaluation/bev_selftest.py b/bev_fusion/evaluation/bev_selftest.py
+index c042058..78f84b2 100644
+--- a/bev_fusion/evaluation/bev_selftest.py
++++ b/bev_fusion/evaluation/bev_selftest.py
+@@ -331,6 +331,15 @@ def _():
+     assert not any(k.startswith(("seg.", "loss.")) for k in leg)
+     assert "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0" in bev_suite.headline_table(leg)
+     assert bev_suite.tag_of(True, True, "zero_radar") == "_warm_train_ctl_zero_radar" and bev_suite.tag_of(False, False, "") == ""
++    # the card's "better" map (read by autoresearch/tools/decide.py): every number but the counts, each by its metric's own direction
++    bt = bev_suite.better_of(tab, suite.task.metrics())
++    assert set(bt) <= set(leg) and all(v in ("lower", "higher") for v in bt.values())
++    assert set(leg) - set(bt) == {k for k in leg if k.rsplit("/", 1)[-1] == "n" or k.rsplit("/", 1)[-1].startswith("n_")}, "only counts undeclared"
++    assert bt["seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"] == "higher" and bt["det/dt+0.00/vehicle/all/ap@2"] == "higher"
++    assert bt["det/dt+0.00/vehicle/all/ate"] == bt["detr/dt+0.00/vehicle/all/ave_moving"] == bt["val_loss/total"] == "lower"
++    assert bt["seg_fov/seg/dt+0.00/lane_divider:zc/all/all/field_mae"] == "lower" and bt["det/dt+0.00/vehicle/all/ave_skill_moving"] == "higher"
++    assert bev_suite.better_of(tab, suite.task.metrics(), "prior")["prior_fov/seg/dt+0.00/drivable_area/all/all/iou@0"] == "higher"
++    assert bev_suite.ms_better({"ms/median_ms": 3.0, "ms/idle": True, "info/step": 5}) == {"ms/median_ms": "lower"}
+ 
+ 
+ @check("views: overview / outputs / dashboard / stages (with taps) render pages with the error colours; camera panel carries the projected GT")
+diff --git a/bev_fusion/evaluation/bev_suite.py b/bev_fusion/evaluation/bev_suite.py
+index 3d632e7..a905d7e 100644
+--- a/bev_fusion/evaluation/bev_suite.py
++++ b/bev_fusion/evaluation/bev_suite.py
+@@ -43,22 +43,46 @@ def tag_of(warm: bool, on_train: bool, control: str) -> str:
+     return ("_warm" if warm else "") + ("_train" if on_train else "") + (f"_ctl_{control}" if control else "")
+ 
+ 
++def _flat_name(m: str, rest: str, prefix_seg: str):
++    if m == "seg":
++        mask, r = rest.split("/", 1)
++        return f"{prefix_seg}_{mask}/seg/{r}"
++    if m in ("det", "detr"):
++        return f"{m}/{rest}"
++    if m == "loss":
++        return "val_loss/" + rest.split("/", 1)[1]
++    return None
++
++
+ def to_legacy(table: dict, prefix_seg: str = "seg") -> dict:
+     """suite table ('seg.fov/dt+0.00/drivable_area/all/all/iou@0', 'det.dt+0.00/vehicle/all/ap@2', ...) -> the flat names of the former
+     evaluate_run metrics.json ('seg_fov/seg/dt+0.00/...', 'det/dt+0.00/...', 'detr/...', 'val_loss/total')"""
+     flat = {}
+     for k, v in table.items():
+-        m, rest = k.split(".", 1)
+-        if m == "seg":
+-            mask, r = rest.split("/", 1)
+-            flat[f"{prefix_seg}_{mask}/seg/{r}"] = v
+-        elif m in ("det", "detr"):
+-            flat[f"{m}/{rest}"] = v
+-        elif m == "loss":
+-            flat["val_loss/" + rest.split("/", 1)[1]] = v
++        f = _flat_name(*k.split(".", 1), prefix_seg)
++        if f is not None:
++            flat[f] = v
+     return flat
+ 
+ 
++def better_of(table: dict, metrics, prefix_seg: str = "seg") -> dict:
++    """the card's "better" map of the flat names of to_legacy ({name: 'lower' | 'higher'}, card contract, read by
++    autoresearch/tools/decide.py), from each metric's own direction(); counts (n, n_gt, n_tp_*) have no direction and are left out"""
++    by = {m.name: m for m in metrics}
++    out = {}
++    for k in table:
++        m, rest = k.split(".", 1)
++        f, last = _flat_name(m, rest, prefix_seg), rest.rsplit("/", 1)[-1]
++        if f is not None and m in by and last != "n" and not last.startswith("n_"):
++            out[f] = "lower" if by[m].direction(rest) == "low" else "higher"
++    return out
++
++
++def ms_better(flat: dict) -> dict:
++    """the timing numbers (ms/...) are lower-is-better; the idle flag and info/... have no direction"""
++    return {k: "lower" for k, v in flat.items() if k.startswith("ms/") and isinstance(v, (int, float)) and not isinstance(v, bool)}
++
++
+ def headline_table(flat: dict) -> str:
+     keys = []
+     for pre in ("seg_fov", "prior_fov"):
+@@ -134,7 +158,8 @@ def cmd_eval(a, rest) -> int:
+             if o.get("detr") is not None:
+                 detr_rec.setdefault(sc, {}).setdefault(dt, []).append((list(o["detr"]), gb))
+     store = suite.quant.run(scenes=e.scenes if not e.n else None, frames=frames, state=state, name=name, progress=50, on_frame=keep_boxes)
+-    flat = to_legacy(suite.quant.table(store))
++    tab = suite.quant.table(store)
++    flat, better = to_legacy(tab), better_of(tab, suite.task.metrics())
+     subj = suite.subject.describe()
+     flat["info/step"], flat["info/n_samples"], flat["info/n_scenes"] = subj.get("step"), len(store.frames), len(store.scene_names())
+     lat = None
+@@ -145,8 +170,11 @@ def cmd_eval(a, rest) -> int:
+         psuite = make_suite(a, prior=e.prior, state="reset")
+         pstore = psuite.quant.run(frames=frames or [f for s in suite.source.scenes() for f in suite.source.frames(s)], state="reset",
+                                   name=f"prior{e.prior}_n{e.n or 'all'}", progress=50)
+-        flat.update(to_legacy(psuite.quant.table(pstore), prefix_seg="prior"))
++        ptab = psuite.quant.table(pstore)
++        flat.update(to_legacy(ptab, prefix_seg="prior"))
++        better.update(better_of(ptab, psuite.task.metrics(), prefix_seg="prior"))
+         psuite.close()
++    better.update(ms_better(flat))
+     if e.images:
+         for ref in Sampler(suite.source, 0).spread(e.images):
+             suite.qual.frame(ref, ("overview", "outputs"), out_dir=os.path.join(a.run, "eval", "images"),
+@@ -158,7 +186,8 @@ def cmd_eval(a, rest) -> int:
+         json.dump({"run": a.run, "checkpoint": subj.get("checkpoint"), "split": a.split, "weights": "EMA",
+                    "memory": "carried over the whole scene" if e.warm else "empty (cold)", "code": subj.get("code"),
+                    "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
+-                   "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "latency": lat}, f, indent=1, default=float)
++                   "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better, "latency": lat}, f, indent=1,
++                  default=float)
+     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
+     rec_path = os.path.join(out_dir, f"scene_records{tag}_n{e.n or 'all'}.pkl")
+     bev_legacy.write_scene_records(rec_path, suite.task.metrics()[0], store,
+diff --git a/bev_fusion/evaluation/bev_task.py b/bev_fusion/evaluation/bev_task.py
+index d1925bd..a1b3607 100644
+--- a/bev_fusion/evaluation/bev_task.py
++++ b/bev_fusion/evaluation/bev_task.py
+@@ -58,7 +58,7 @@ class BevSegMetric(Metric):
+             "lane_divider_iou": "fov/dt+0.00/lane_divider/all/all/iou@0.5", "lane_divider_f1": "fov/dt+0.00/lane_divider:zc/all/all/f1@0.5",
+             "vehicle_iou": "obj/dt+0.00/vehicle/all/all/iou@0"}
+     headline = tuple(HEAD.values())
+-    better = {}                                                            # all numbers: higher is better
++    better = {}                                                            # higher is better, but for the distance-field error (direction)
+ 
+     def __init__(self, grid, spec):
+         self.grid, self.spec = grid, spec
+@@ -133,7 +133,7 @@ class BevSegMetric(Metric):
+         return {n: float(acc[_flat_to_ikey(k + "/n_gt")][1]) if _flat_to_ikey(k + "/n_gt") in acc else 0.0 for n, k in keys.items()}
+ 
+     def direction(self, key):
+-        return "high"
++        return "low" if key.endswith("/field_mae") else "high"
+ 
+ 
+ # ------------------------------------------------------------------------------------------------ boxes
+@@ -219,6 +219,8 @@ class BevLossMetric(Metric):
+     headline = ("mean/total",)
+     better = {"mean/total": "low", "total": "low"}
+ 
++    def direction(self, key):
++        return "low"                                                       # every loss term
+     def frame(self, sample: Sample, pred: Prediction):
+         d = pred.info.get("loss") or {}
+         names = sorted(d)
+diff --git a/bev_fusion/project.json b/bev_fusion/project.json
+index 03cbf96..f1b9f3d 100644
+--- a/bev_fusion/project.json
++++ b/bev_fusion/project.json
+@@ -11,7 +11,10 @@
+   "splits": ["val", "train", "mini", "test"],
+   "cards": "runs",
+   "headline_metrics": [],
+-  "lower_is_better": ["ate", "ase", "aoe", "ave", "fp_hi", "median_ms", "p90_ms", "mean_ms"],
++  "_lower_is_better": "for cards written before their \"better\" map (2026-10-31; evaluation/bev_suite.py writes it since): a card key matches by its last part ('det/dt+0.00/vehicle/all/ate' by 'ate')",
++  "lower_is_better": ["ate", "ase", "aoe", "ave", "mATE", "mASE", "mAOE", "mAVE", "ave_moving", "ave_static", "ave0_moving", "ave0_static",
++                      "ave_slow_moving", "fp_hi", "field_mae", "total", "median_ms", "p90_ms", "mean_ms", "bev_dt0_median", "bev_3dt_median",
++                      "bev_dt0_refined_boxes_median", "camera_heads_median"],
+   "code_dirs": ["training", "evaluation", "autogt", "tests"],
+   "fingerprint_extra": ["temp/train/run_ar.sh", "temp/train/run_cfg.sh"],
+   "scratch": "temp",
+diff --git a/bev_fusion_lane_center/project.json b/bev_fusion_lane_center/project.json
+index 31b7cd5..bc4b9e1 100644
+--- a/bev_fusion_lane_center/project.json
++++ b/bev_fusion_lane_center/project.json
+@@ -11,6 +11,8 @@
+   "splits": ["val", "test", "confirm"],
+   "cards": "runs/eval",
+   "headline_metrics": ["Q", "topo_F1", "lanes_found", "R@1_far"],
++  "_lower_is_better": "the directions of cards written before their \"better\" map (2026-10-31); new cards declare it themselves (evaluation/sparse_lanes/sparse_metrics.py LOWER_IS_BETTER)",
++  "lower_is_better": ["vert100", "verts_per_frame", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"],
+   "code_dirs": ["training", "evaluation", "tools", "reports/build", "temp"],
+   "fingerprint_extra": ["data/splits.json", "models/registry.json"],
+   "scratch": "temp",

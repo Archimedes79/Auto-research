@@ -1,0 +1,5 @@
+D17 closed: the loop ranges in project.json stay a hand-entered line
+
+Mirko in chat, 2026-11-01: "Yes, close D17". The lead of a loop writes the E-id range of its loop into "loops" (a free key since D35); no tool derives the loop of a run. Handover updated (D17 closed, D35 no longer listed as open).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,10 @@
+Loop 22 (D28, Mirko): cards E261-E267 with referee verdicts and detail plans, loop plan, schedule, planned ledger rows, loop prompt, handover; project.json loops 19-22 (grant D28)
+
+- research step (light cycle): three hypothesis lenses (past critic E261/E262, state of the art E263/E264,
+  system review E265/E266) on gap 1 (coverage at range), ar-referee (E263 deferred, the rest revise),
+  ar-planner (PLAN.md loop 22, E267 = 2x2 stack of spurs kept and the seed ring, prototype choice rule
+  written before any number is read; fallback recall_dp)
+- project.json loops: 19 [234, 251], 20 [252, 256], 21 [257, 260], 22 [261, null] (grant under D28)
+- loop-21 plan archived to history/plans/PLAN_loop21.md; PROGRAM_loop22.md
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

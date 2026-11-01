@@ -1,0 +1,5 @@
+Coverage note: Mirko's rationale for separating camera and radar visibility
+
+With six cameras the two visibilities nearly coincide; with one front camera (62 % of the grid) and a wide radar fan (99.6 %, radar-only cells 37 %) they do not, so the rig needs its own rules (D36 to D38). Quoted in the note.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

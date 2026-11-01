@@ -1,0 +1,3 @@
+Lane loop 22: E265 KEEP (spurs kept: lanes found +0.0115 on 4 checkpoints, guards hold), E261 CUT (rc2 over the vertex budget held out), E262 cancelled; registry recall_sp0 / recall_sp0_dp (prototype candidate S), recall6 / recall_thr; cards, run records, plan, ledger
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

@@ -1,0 +1,16 @@
+bev_fusion_lane_center/experiments/E261_recall-weight-6-operating-point
+bev_fusion_lane_center/experiments/E262_recall-weight-6-seed-twin
+bev_fusion_lane_center/experiments/E263_seed-soup-of-the-fast-recall-fine-tunes
+bev_fusion_lane_center/experiments/E264_two-seed-output-ensemble-by-path-union
+bev_fusion_lane_center/experiments/E265_far-coverage-loss-budget
+bev_fusion_lane_center/experiments/E266_seed-lattice-to-the-box-edge
+bev_fusion_lane_center/experiments/E267_spurs-kept-and-seed-ring-stack
+bev_fusion_lane_center/experiment_execution/PLAN.md
+bev_fusion_lane_center/experiment_execution/history/plans/PLAN_loop21.md
+bev_fusion_lane_center/experiment_execution/history/prompts/PROGRAM_loop22.md
+bev_fusion_lane_center/experiment_execution/schedule.csv
+bev_fusion_lane_center/experiment_execution/LEDGER.csv
+bev_fusion_lane_center/experiment_execution/LEDGER.md
+bev_fusion_lane_center/experiment_execution/grants.csv
+bev_fusion_lane_center/project.json
+bev_fusion_lane_center/HANDOVER.md

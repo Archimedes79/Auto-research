@@ -1,0 +1,87 @@
+_py14.sh: /mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/boot_eval_smoke.py
+boot_eval smoke ok: {'F1@1m': -0.1662, 'P@1m': 0.4099, 'R@1m': -1.561}
+rc=0
+_py14.sh: evaluation/sparse_lanes/topo_metrics.py
+topo_metrics selftest passed
+rc=0
+vert100_dp on the ground-truth graphs (project oracle 14.3 on 100 TEST frames): 13.22 | unique end points: 9.08
+straight 20 m line, dp vertices per 100 m: 10.0 (2 end points -> 10.0)
+sparse_lanes selftest passed
+rc=0
+_py14.sh: evaluation/tests/test_lane_task.py
+ok    lanes.geometry: resample spacing, simplify keeps the corner, LaneGraph.of (dict / list), point graph merges a junction and links edges  (0.0 s)
+ok    lanes.raster: grid cells, rasterize, distance map in metres, thinning keeps one connected cell-wide line, a Y is traced back into three chains  (3.5 s)
+ok    lanes.measures (sparse): counts equal an independent brute force on random graphs; shift / half length / duplicate / reversal by hand  (0.0 s)
+ok    lanes.measures (topology): TOPO marbles and junctions on a fork: identical graph = 1, missed branch lowers recall, reversed graph ~ 0  (0.2 s)
+ok    lanes.measures (image): strict vs tolerant overlap, shift by 4 cells, soft Dice, tolerant AP = 1 for a clean picture and lower with false alarms  (0.0 s)
+ok    lanes.causes: the error budget adds up to the brute-force missed / false length; planted cases land in the planted cause (unit cases)  (1.8 s)
+ok    lane task: the picture-only head is scored as a picture and as the graph read from it; the graph-only head is drawn for the picture level; contract checker passes  (11.4 s)
+[quant r] 25/66 frames, 0.23 s per frame, eta 9 s
+[quant r] 50/66 frames, 0.24 s per frame, eta 4 s
+[quant c] 25/44 frames, 0.33 s per frame, eta 6 s
+run /tmp/tmp317h5ubp/cli/quant/c: 44 frames, 11 scenes
+geo.F1@1.0        0.7063
+geo.chamfer       0.9138
+geo.lanes_found   0.7125
+geo.vert100       11.6886
+img.AP_rel        0.6796
+img.F1_rel@1.0    0.7851
+img.F1_skel@1.0   0.7731
+img.dice          0.4389
+topo.junction_F1  0.8148
+topo.topo_F1      0.8726
+ms per frame in this run: median 1.80, p90 5.19 (n 44, load 13.9443359375; an idle benchmark: quant timing --run c)
+fn.gap (code)                         110.0000
+fn.missed_far (model)                 481.5000
+fn.missed_near (model)                560.0000
+fn.offset (model)                     73.5000
+fn.shift (model)                      921.5000
+fn.truncated (code/model)             234.0000
+fn.unobservable (evaluation)          0.0000
+fp.duplicate (code)                   835.5000
+fp.hallucinated (evaluation/model)    244.0000
+fp.offset (model)                     198.0000
+fp.overshoot (evaluation/code/model)  154.5000
+fp.shift (model)                      909.0000
+fp.spur (code)                        0.0000
+where to work: {'model': 0.727, 'code': 0.236, 'evaluation': 0.037}
++0.22  far_share low                          n=12   of all 27%  error share 49%  scenes 3  (tag: far_share <= 0.421 (bottom quarter))
++0.17  worst 10 % by img.F1_rel@1.0           n=5    of all 11%  error share 28%  scenes 2  (score: img.F1_rel@1.0 <= 0.411)
++0.17  dominated by fn.shift                  n=3    of all 7%  error share 24%  scenes 2  (cause: more than 50% of the frame's error is fn.shift)
++0.12  pred_empty                             n=4    of all 9%  error share 21%  scenes 1  (tag: pred_empty is true)
++0.12  dominated by fn.missed_near            n=4    of all 9%  error share 21%  scenes 1  (cause: more than 50% of the frame's error is fn.missed_near)
++0.12  flag: prediction length plausible      n=4    of all 9%  error share 21%  scenes 1  (flag: plausibility flag 'prediction length plausible' raised)
++0.12  flag: prediction not empty             n=4    of all 9%  error share 21%  scenes 1  (flag: plausibility flag 'prediction not empty' raised)
++0.12  flag: probabilities not saturated      n=4    of all 9%  error share 21%  scenes 1  (flag: plausibility flag 'probabilities not saturated' raised)
++0.08  dominated by fp.duplicate              n=5    of all 11%  error share 20%  scenes 2  (cause: more than 50% of the frame's error is fp.duplicate)
++0.02  len_ratio low                          n=11   of all 25%  error share 27%  scenes 3  (tag: len_ratio <= 0.803 (bottom quarter))
++0.02  pred_pieces low                        n=12   of all 27%  error share 29%  scenes 3  (tag: pred_pieces <= 2 (bottom quarter))
++0.01  len_ratio high                         n=11   of all 25%  error share 26%  scenes 4  (tag: len_ratio >= 1.25 (top quarter))
++0.00  gt_len high                            n=12   of all 27%  error share 28%  scenes 3  (tag: gt_len >= 242 (top quarter))
+-0.01  vert100 low                            n=11   of all 25%  error share 24%  scenes 3  (tag: vert100 <= 6.3 (bottom quarter))
+-0.04  dominated by fp.hallucinated           n=4    of all 9%  error share 5%  scenes 1  (cause: more than 50% of the frame's error is fp.hallucinated)
+-0.04  dominated by fn.truncated              n=4    of all 9%  error share 5%  scenes 1  (cause: more than 50% of the frame's error is fn.truncated)
+-0.06  dominated by fp.overshoot              n=4    of all 9%  error share 3%  scenes 1  (cause: more than 50% of the frame's error is fp.overshoot)
+-0.07  pred_pieces high                       n=20   of all 45%  error share 39%  scenes 5  (tag: pred_pieces >= 5 (top quarter))
+-0.07  dominated by fn.missed_far             n=4    of all 9%  error share 2%  scenes 1  (cause: more than 50% of the frame's error is fn.missed_far)
+-0.07  vert100 high                           n=11   of all 25%  error share 18%  scenes 3  (tag: vert100 >= 8.31 (top quarter))
+-0.08  dominated by fp.offset                 n=5    of all 11%  error share 3%  scenes 2  (cause: more than 50% of the frame's error is fp.offset)
+-0.09  dominated by fn.gap                    n=5    of all 11%  error share 2%  scenes 2  (cause: more than 50% of the frame's error is fn.gap)
+-0.09  curviness high                         n=12   of all 27%  error share 18%  scenes 3  (tag: curviness >= 25.1 (top quarter))
+-0.09  gt_lanes high                          n=12   of all 27%  error share 18%  scenes 3  (tag: gt_lanes >= 5 (top quarter))
+-0.11  far_share high                         n=12   of all 27%  error share 16%  scenes 3  (tag: far_share >= 0.49 (top quarter))
+-0.17  curviness low                          n=12   of all 27%  error share 10%  scenes 3  (tag: curviness <= 0 (bottom quarter))
+-0.17  gt_lanes low                           n=12   of all 27%  error share 10%  scenes 3  (tag: gt_lanes <= 2 (bottom quarter))
+-0.17  gt_len low                             n=12   of all 27%  error share 10%  scenes 3  (tag: gt_len <= 120 (bottom quarter))
+-0.18  is_fork                                n=16   of all 36%  error share 18%  scenes 4  (tag: is_fork is true)
+road-03/003: error 19.0, mostly fn.gap  /tmp/tmp317h5ubp/cli/quant/c/trace/road-03_003_overview.png
+/tmp/tmp317h5ubp/cli/probe/c_s0/index.html
+ok    lane suite: quant run = direct computation, planted causes are found in their scenes, budget / situations / sample / scan / CLI  (50.3 s)
+ok    lane views: the overview has the six panels; blue = ground truth without prediction, red = prediction without ground truth at the planted places  (1.7 s)
+ok    lane probe of a constant prediction (S1): a Subject that hands out ONE LaneGraph (or one Prediction) for every frame gets each frame's own tags and error budget  (9.8 s)
+lane task tests: 10/10 checks passed in 79 s
+
+real	1m32.686s
+user	1m5.180s
+sys	0m7.066s
+rc=0

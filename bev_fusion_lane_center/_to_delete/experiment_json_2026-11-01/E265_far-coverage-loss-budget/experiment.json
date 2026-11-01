@@ -1,0 +1,28 @@
+{"id": "E265", "card": "H22.E265", "title": "spurs kept (spur_len 0) in the assembly clean-up, re-decided on the per-piece DP vertex basis (re-decision of E259 under the changed vertex guard)",
+ "kind": "variant", "deterministic": true, "metric": "lanes_found", "direction": "higher", "band": 0.010,
+ "prediction": {"value": 0.012, "vs": "c"},
+ "variant": "a", "control": "c", "pairing": "position",
+ "arms": {
+  "a": {"recipe": "registry settings + spur_len 0, same cached raw outputs: evaluate.py <n> --asm spur_len=0 --tag sp0 --compare <n>", "run_ids": ["E265.a"],
+        "cards": ["runs/eval/recall_s1/val_sp0.json", "runs/eval/e24_j1rc_s1/val_sp0.json", "runs/eval/e24_j1rc_s2/val_sp0.json", "runs/eval/e24_j1rc_s3/val_sp0.json"],
+        "note": "replication checkpoints in this order: recall_s1 (rc1 seed 1, 288 / 144), j1rc s1, s2, s3 (192 / 96); recall / fast_recall (selection) and champion / fast_recall_na (scope) get sp0 cards too, reported, not in the rule"},
+  "c": {"recipe": "registry settings, re-scored with tonight's code (layer 1: --expect the stored Q, lanes found, R@1 far)", "run_ids": ["E265.c"],
+        "cards": ["runs/eval/recall_s1/val_l22.json", "runs/eval/e24_j1rc_s1/val_l22.json", "runs/eval/e24_j1rc_s2/val_l22.json", "runs/eval/e24_j1rc_s3/val_l22.json"]},
+  "b": {"recipe": "registry settings + spur_len 2.5: evaluate.py <n> --asm spur_len=2.5 --tag sp25 --compare <n>", "run_ids": ["E265.b"],
+        "cards": ["runs/eval/recall_s1/val_sp25.json", "runs/eval/e24_j1rc_s1/val_sp25.json", "runs/eval/e24_j1rc_s2/val_sp25.json", "runs/eval/e24_j1rc_s3/val_sp25.json"],
+        "note": "replaces a only if its lanes found is within 0.004 of a with >= 0.3 fewer per-piece DP vertices"},
+  "p": {"recipe": "placebo bubble_r 0 (the other half of the clean-up) and the DP / node-id vertex counts of c, a, p: experiments/E265_far-coverage-loss-budget/cleanup_split.py on the replication and scope checkpoints", "run_ids": ["E265.v"]},
+  "e": {"recipe": "equal-budget control: tau frontier of recall (rc1) and e24_j1rc_s1 at tau 0.10 - 0.65 (step 0.05) + 0.7, per-piece DP printed: experiments/E261_recall-weight-6-operating-point/frontier_scratch.py", "run_ids": ["E265.eb"]}
+ },
+ "rule": [
+  {"metric": "lanes_found", "min_effect": 0.010, "note": "mean over the 4 replication checkpoints; KEEP bar raised from the card's +0.008 to the band (referee fix 2); lead check: paired-bootstrap interval of each checkpoint's sp0 card excludes 0 on >= 3 of 4"},
+  {"metric": "R@1_far", "min_effect": 0.004},
+  {"metric": "Q", "max_loss": 0.003, "note": "lead check: also on EVERY checkpoint, and Q >= 0.735 absolute on every checkpoint"},
+  {"metric": "topo_F1", "max_loss": 0.005, "note": "lead check: on every checkpoint"},
+  {"metric": "false_len_frac", "max_loss": 0.005, "note": "rise <= 0.005, on every checkpoint"},
+  {"metric": "dup_frac", "max_loss": 0.005, "note": "rise <= 0.005, on every checkpoint"},
+  {"metric": "P@1_far", "max_loss": 0.010, "note": "lead check: also on every checkpoint; lead checks outside decide.py: per-piece DP (0.3 m, E265.v) <= 14.3 on every checkpoint, node-id count reported next to it (D20 / D25); equal-budget frontier (E265 section 2): arm a must lie above rc1's and j1rc s1's tau frontier at its own DP (lanes found +0.006, or Q +0.005 at lanes found not lower than -0.002), otherwise CUT as a budget-spend finding; TIE with every guard holding = the cheaper variant = spurs kept (one stage less, one rule step less)"}
+ ],
+ "budget_gpu_h": 0.0,
+ "kill": "the arm-c cards do not reproduce the stored numbers (E265.c --expect fails: stop, the harness is wrong); the equal-budget frontier reaches arm a within 0.006 lanes found at matched DP; any replication checkpoint above 14.3 per-piece DP vertices per 100 m with spurs kept",
+ "evaluate": {"split": "val", "compare": "c"}}

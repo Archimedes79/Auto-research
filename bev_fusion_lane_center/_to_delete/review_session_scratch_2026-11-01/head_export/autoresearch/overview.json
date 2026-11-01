@@ -1,0 +1,43 @@
+{
+  "title": "autoresearch: one lead agent, a notebook of files, code that measures and refuses",
+  "subtitle": "The overview. Dashed boxes are called only when needed. Red borders: points that can refuse. The detail with every box and tool is architecture.md. Generated from overview.json; archdraw.py check keeps it in step with the code.",
+  "root": ".",
+  "colw": 230,
+  "steps": [
+    {"col": 0, "label": "1 You and the notebook"},
+    {"col": 1, "label": "2 The lead plans a round"},
+    {"col": 2, "label": "3 Experiments run, several at a time"},
+    {"col": 3, "label": "4 Fresh eyes when it counts"}
+  ],
+  "kinds": {
+    "person": {"label": "the person", "fill": "#fce7f3", "stroke": "#db2777", "class": "other"},
+    "agent": {"label": "agent", "fill": "#fef3c7", "stroke": "#d97706", "class": "other"},
+    "ondemand": {"label": "agent, only when needed", "fill": "#fef3c7", "stroke": "#d97706", "class": "other", "dashed": true},
+    "file": {"label": "plain files", "fill": "#fef9c3", "stroke": "#ca8a04", "class": "other"},
+    "exec": {"label": "code: measures, runs", "fill": "#ccfbf1", "stroke": "#0d9488", "class": "other"},
+    "gate": {"label": "point that refuses", "fill": "#ffffff", "stroke": "#be123c", "class": "other"}
+  },
+  "nodes": [
+    {"id": "you", "label": "You\ngoal, decisions,\nTEST OK, promotion", "kind": "person", "col": 0, "row": 0, "code": ["prompts/loop.md"], "note": "gives the prompt, answers decisions in chat; nothing of yours is acted on unless it is recorded with your words"},
+    {"id": "promote", "label": "Promotion gate\nyour OK + one TEST", "kind": "gate", "col": 1, "row": 0, "code": ["tools/run.py"], "note": "a version becomes the champion only with your recorded OK and one TEST check; run.py refuses otherwise"},
+    {"id": "research", "label": "Research agent\nonly on a trigger", "kind": "ondemand", "col": 0, "row": 1, "code": ["agents/ar-researcher.md", "prompts/research_steps.md"], "note": "runs when the open branches are used up, two rounds were flat, a card needs an unknown technique, a gap changed, or you ask; writes notes only"},
+    {"id": "lead", "label": "Lead agent\nplans the round, tracks the best", "kind": "agent", "col": 1, "row": 1, "code": ["METHOD.md", "agents/ar-planner.md"], "note": "reads the notebook, says in ten lines what the round is, writes the cards, updates the best versions; does small planning and coding inline"},
+    {"id": "exp", "label": "Experiment agents\nplan, code, train, evaluate", "kind": "agent", "col": 2, "row": 1, "code": ["agents/ar-coder.md", "templates/experiment.md"], "note": "one per card, in parallel (GPU slots); a variant needs no agent at all"},
+    {"id": "critic", "label": "Fresh critic\ncards, shared code, headline numbers", "kind": "ondemand", "col": 3, "row": 1, "code": ["agents/ar-critic.md"], "note": "fresh context; accepts, revises or rejects; never judges what it wrote"},
+    {"id": "notebook", "label": "Notebook (plain files)\nproblem, findings, closed questions, queue,\nbest versions, ledger, decisions, handover", "kind": "file", "col": 0, "row": 2, "w": 2, "code": ["templates/plan.md", "templates/experiment.md", "templates/problem.md"], "note": "the only memory across sessions and chats; what a new chat reads first is the handover"},
+    {"id": "code", "label": "Measuring code and gates\nrun.py, decide.py, evaluation, provenance,\nmachine lock, hold marker, guard hook", "kind": "gate", "col": 2, "row": 2, "w": 2, "code": ["tools/run.py", "tools/decide.py", "tools/provenance.py", "tools/machine_lock.py", "tools/guard_hook.py"], "note": "a run starts only with a card, a free slot, no other chat's lock; the verdict comes from a rule written before the run; protected files only with your decision"}
+  ],
+  "edges": [
+    {"from": "you", "to": "promote", "label": "your OK", "both": true},
+    {"from": "lead", "to": "promote", "label": "proposal", "dashed": true},
+    {"from": "lead", "to": "exp", "bold": true, "label": "cards"},
+    {"from": "critic", "to": "exp", "dashed": true},
+    {"from": "lead", "to": "notebook", "both": true},
+    {"from": "research", "to": "notebook", "dashed": true},
+    {"from": "exp", "to": "code", "both": true, "bold": true}
+  ],
+  "groups": [],
+  "spans": [
+    {"from": 2, "to": 2, "label": "inner loop: once per experiment"}
+  ]
+}

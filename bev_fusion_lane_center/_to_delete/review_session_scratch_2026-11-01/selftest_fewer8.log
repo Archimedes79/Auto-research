@@ -1,0 +1,6 @@
+note: S.c4 had no ledger row; a new planned row was made (check the id)
+note: S.c3 had no ledger row; a new planned row was made (check the id)
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/autoresearch/tools/selftest.py", line 471, in <module>
+    assert any("allow must be a list" in b for b in got), got
+AssertionError: ['arms must be dict']

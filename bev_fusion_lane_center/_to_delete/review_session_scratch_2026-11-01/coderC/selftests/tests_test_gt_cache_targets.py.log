@@ -1,0 +1,3 @@
+F1 ok: GT cache written under a temporary name + os.replace; truncated and empty files rebuilt; a killed writer leaves nothing
+F2 ok: targets keyed by side, one per sample in batch order (0.75 s gap included); ego decode uses the true gap
+gt cache + targets: all checks pass

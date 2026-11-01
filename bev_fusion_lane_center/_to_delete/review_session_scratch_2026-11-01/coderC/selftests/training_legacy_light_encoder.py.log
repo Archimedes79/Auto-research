@@ -1,0 +1,1 @@
+light_encoder selftest ok: resnet18 11.9 M, efficientnet_b0 4.2 M, efficientnet_b2 7.8 M; shapes (B, 118 / 80, 32, 88), softmax sums to 1, camera vector changes the depth, stride-16 option, gradients to backbone and heads, ImageNet weights loaded, distillation loss zero for the pooled teacher, pooling alignment

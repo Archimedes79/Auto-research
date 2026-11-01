@@ -1,0 +1,11 @@
+step 1: total 16.4998 lr 2.00e-04 grad 192.80
+step 2: total 23.6886 lr 3.00e-04 grad 232.41
+step 3: total 28.4703 lr 3.00e-04 grad 157.70
+step 3: val total 28.5635
+saved /tmp/t11probe/old.pt 4 log rows
+step 1: total 16.4998 lr 2.00e-04 grad 192.80
+step 2: total 23.6886 lr 3.00e-04 grad 232.41
+step 3: total 28.4703 lr 3.00e-04 grad 157.70
+step 3: val total 28.5635
+saved /tmp/t11probe/new.pt 4 log rows
+EXIT 0

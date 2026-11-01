@@ -1,0 +1,1 @@
+nuscenes_dataset selftest ok: 384 mini samples; 3 camera frames 0 / 0.250 / 0.450 s old with 0 / 2 / 4 ego steps; 1367 radar detections from 5 radars, age <= 0.493 s; pose transform = steps chain within 0.022 m; GT cur / prev / next; collation

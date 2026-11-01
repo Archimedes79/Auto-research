@@ -1,0 +1,16 @@
+push check:
+  origin/main: 4 commit(s) ahead, 0 behind
+    to push: 113a362 Archimedes79 Fewer files: the experiment card is a block in experiment.md; plan.py status; 26 lane cards migrated
+    to push: ab6afdc Archimedes79 architecture.md: gap 2 (camera slot) closed by the CAMERAS table (c6abdbc)
+    to push: c6abdbc Archimedes79 Camera slot: one CAMERAS table (source = feature cache + lift settings), a merge for several sources
+    to push: c128902 Archimedes79 E269 restructured after critic pass 3 (REVISE): the registered experiment is the straight-through proxy (route gradient
+
+tags: 1 of 90 local tags are not on origin (bf 1): `git push origin --tags` (a tag holds what a run ran; `git push origin main` does not send it)
+
+pending: 42 staged file(s), 38 untracked (0 of them scratch that `git add -A` would sweep in)
+
+scratch in git: 215 tracked file(s) in temp/ or _to_delete/ folders (legacy; new ones are refused above)
+scratch that is used: 23 file(s) run or imported by living files, 105 only cited in documents, 1 scratch folder(s) put on sys.path  (--used lists them)
+
+no errors
+done

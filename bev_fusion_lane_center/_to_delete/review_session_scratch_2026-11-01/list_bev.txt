@@ -1,0 +1,5 @@
+bev_fusion/records/LEDGER.csv
+bev_fusion/records/LEDGER.md
+bev_fusion/records/morning_2026-11-01.md
+bev_fusion/experiments/t11_vel_hurdle
+bev_fusion/experiments/t11_motion_field

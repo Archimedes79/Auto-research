@@ -1,0 +1,8 @@
+smoke.d32                          skip: a derived file is younger than 2 days                            2.0 MB
+t10.dual_long_s0                   skip: the run is not final (status failed, exit 75)                    325.5 KB
+t10.dual_s0                        skip: in the best three                                                95.4 MB
+t10.dual_s1                        skip: in the best three                                                93.2 MB
+t11.vel_hurdle                     skip: a derived file is younger than 2 days                            88.7 MB
+t11.vel_hurdle_acc2                skip: in the best three                                                123.8 MB
+t8.ctl_s1                          skip: in the best three                                                90.6 MB
+would delete: 0 B in 0 run(s); 7 skipped

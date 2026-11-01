@@ -1,0 +1,6 @@
+p = "experiment_execution/DECISIONS.md"
+t = open(p, encoding="utf-8").read()
+new = ("| D20 | vertex budget: PROBLEM.md says Q at <= 14.3 vertices per 100 m without saying how vertices are counted. The system counts node ids (fast_recall 14.98, champion 14.83); the oracle 14.3 is a Douglas-Peucker count (0.3 m) of the ground truth, by which the same graphs have 12.2 / 11.3. E257: an output stage that removes interior vertices within eps of the polyline gives 9.9 / 9.5 (eps 0.2) or 9.0 / 8.5 (eps 0.3) per 100 m at Q -0.0003 / -0.0011. Count vertices before or after the output simplification, and adopt the stage? | (a) keep node-id counting, no stage / (b) adopt `simplify_dp` as an output stage (eps 0.2, default off until the consumers are checked) and quote the budget after it, keeping the old number next to it / (c) quote both counts always, no stage | (b), with (c) in every table; PROBLEM.md is protected, so the sentence is yours to change | `experiments/E257_dp-output-simplification/` (sweep eps 0.1 - 1.0, two models, layers 0 and 1 passed; the route head and map assignment read vertices and are not yet checked on simplified graphs) |\n")
+i = t.index("\n## Decided")
+t = t[:i].rstrip("\n") + "\n" + new + t[i:]
+open(p, "w", encoding="utf-8").write(t)

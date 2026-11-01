@@ -1,0 +1,10 @@
+_py14.sh: evaluation/evaluate.py
+ok    champion val (873 frames, tol 0.0005): S 0.7694 Q 0.735 F1@1.0 0.8696 J 0.4092 topo_F1 0.7413 lanes_found 0.6948 R@1_far 0.7087 vert100 14.8301
+ok    champion_noprune val (873 frames, tol 0.0005): S 0.7458 Q 0.7009 F1@1.0 0.8695 J 0.2647 topo_F1 0.7204 lanes_found 0.6948 R@1_far 0.7086 vert100 13.5439
+ok    control val (873 frames, tol 0.0005): S 0.7249 Q 0.7371 F1@1.0 0.8831 J 0.408 topo_F1 0.7632 lanes_found 0.7999 R@1_far 0.8111 vert100 21.7917
+ok    fast val (873 frames, tol 0.0005): S 0.762 Q 0.7281 F1@1.0 0.8607 J 0.3942 topo_F1 0.7345 lanes_found 0.6708 R@1_far 0.6766 vert100 14.989
+ok    fast_recall val (873 frames, tol 0.0005): S 0.7715 Q 0.7392 F1@1.0 0.8658 J 0.4469 topo_F1 0.7369 lanes_found 0.7364 R@1_far 0.7275 vert100 14.9773
+ok    recall val (873 frames, tol 0.0005): S 0.7675 Q 0.7404 F1@1.0 0.877 J 0.4277 topo_F1 0.7423 lanes_found 0.7673 R@1_far 0.7714 vert100 15.5305
+skip  champion val val250 fresh
+golden numbers reproduced: 6 entries
+rc=0

@@ -1,0 +1,22 @@
+_py14.sh: tools/prototype/lane_prototype.py
+# Lane prototype: recall_sp0_dp on VAL
+
+873 frames of 22 scene(s) (scene-0269, scene-0271, scene-0273, scene-0275, scene-0277, scene-0221 ...); graphs from the cached network outputs, assembled with the registry settings; 2026-11-01 04:51, commit d204ccb.
+
+| Q | topo_F1 | lanes_found | R@1_far | vert100 | ms per frame |
+|---|---|---|---|---|---|
+| 0.742 | 0.741 | 0.781 | 0.779 | 10.936 | 20.81 |
+
+ms per frame: 20.81 ms, stored timing (6 replicates, session e253_e: runs/e18/latency/latency_M288_rec0_u2_fp0.4_e253_e_r1.json ...), evaluation/drivers/p18_latency.py (median of the per-replicate medians of 'total'; the output stage dp_eps is not in the timed chain).
+The timing ran without the time recursion that this system uses; the recursion cost 6.11 ms in the same session (on e123_D7_r3_f1), so about 26.92 ms per frame with it.
+
+| estimate | ms per frame |
+|---|---|
+| lane graph = builder + assembly (no route head, no consumer) with the time recursion (estimate: measured without it + its cost) | 21.42 |
+| full chain (builder, assembly, route input, route head, consumer) with the time recursion (estimate: measured without it + its cost) | 26.92 |
+
+Layer 1: the stored card runs/eval/recall_sp0_dp/val.json is reproduced (tolerance 0.0005).
+
+Files: runs/prototype/recall_sp0_dp/scenes/<scene>.json (planner format: tools/prototype/README.md).
+
+written: runs/prototype/recall_sp0_dp/summary.json

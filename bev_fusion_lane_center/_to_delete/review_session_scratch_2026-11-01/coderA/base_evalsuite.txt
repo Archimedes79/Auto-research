@@ -1,0 +1,121 @@
+ok    FrameRef: label, slug, parse  (0.0 s)
+ok    Sample.get: lazy display values are computed once  (0.0 s)
+ok    Source.find: label, tuple, FrameRef, key; errors name the closest scenes  (0.0 s)
+ok    Sampler: video first, then frame - every video equally likely, every frame of a video equally likely  (0.0 s)
+ok    Sampler: seeded, no repeats, errors, scenes(m), spread(n)  (0.0 s)
+ok    RunStore: round trip over several chunks (fixed and ragged counts), resume, crash leaves a consistent prefix  (0.4 s)
+ok    stats: robust_z, MAD = 0 fallback, IQR fences against numpy  (0.0 s)
+ok    stats: leave-one-out influence by hand; bootstrap on a planted difference and on identical runs  (0.0 s)
+ok    Runner: carry keeps the memory along a scene, reset does not, run_to(cold) = reset, warm history is closer to carry  (0.1 s)
+ok    Runner: a failing loader thread raises in the consumer; breaking out of the loop does not hang  (0.0 s)
+ok    Metrics: toy counts against a hand calculation; reduce = summed cells; scenes add up to the total  (0.2 s)
+ok    quant.run + table: the suite's numbers = the numbers computed directly without the suite  (2.1 s)
+ok    quant.run: subsets (scenes, n_scenes, max_frames, frames), carry refuses a gap, resume completes an interrupted run  (1.5 s)
+ok    state 'warmup': any subset of frames, each from an empty start with the network's warm-up history only; trace replays it exactly  (2.5 s)
+ok    outliers: the planted frames are found first; scene drag = leave-one-out by hand; frame drag is positive for them  (0.6 s)
+ok    outliers: min_support keeps frames with nothing to find out of the ranking  (0.6 s)
+ok    compare: a worse network is detected (b - a < 0, interval below 0); a run against itself gives exactly 0  (2.3 s)
+ok    quant.report / trace / export_csv: files exist, every link resolves, the worst frame is drawn  (5.6 s)
+ok    qual.frame / debug: files, header carries the label and the frame's own scores, taps dump equals the taps  (8.6 s)
+ok    qual.random: n distinct frames, the video-first law's draws are reproducible, index.html links resolve  (9.0 s)
+ok    qual.videos: an H.264 (or gif) video with one picture per frame, read back; score strip and index exist  (16.4 s)
+ok    figure: error colours at the right cells (TP grey, FP red, FN blue, not evaluated cream); counts  (0.1 s)
+ok    figure: every panel kind and overlay draws; page size follows the grid; PNG and array agree  (0.9 s)
+ok    taps: energy, PCA, panels per kind, statistics, plausibility flags (dead, NaN, constant, no structure)  (0.0 s)
+ok    video: frames (arrays and files) -> mp4 read back with the right count and an even size; no frames raise  (0.3 s)
+ok    report: tables, images and links; links_in finds every target  (0.0 s)
+ok    torch_taps: hooks by module path (out / in / first / list / pick), arming, optional missing module, batch index  (3.1 s)
+ok    check_adapter: a good adapter passes; broken adapters are caught with the reason  (5.6 s)
+ok    CLI: list, qual frame / debug / random / videos, quant run / table / per-scene / outliers / compare / trace / report / timing  (18.8 s)
+ok    minimal adapter: the smallest adapter (frame + reduce + one view) runs the core commands, also as a copy anywhere; default score = the frame's own IoU; probing loads lazily  (5.9 s)
+ok    cost.front: not beaten on both axes; ties stay, a missing value is out, lower-is-better flips the quality direction  (0.0 s)
+ok    cost.with_estimate: adds a part as an estimate with its formula; measured becomes mixed  (0.0 s)
+ok    torch_taps.count_ops: a small network against the hand count (convolutions and linear layers; ReLU and flatten add nothing)  (0.0 s)
+[quant failing] operations not counted: RuntimeError: no counter here
+[quant bare] operations not counted: TypeError: ops() must return a dict with 'gmacs', not float
+ok    quant.run records ms per frame and Subject.ops; ops that touch the memory or fail change no number; the report and the benchmark (timing --run) show them  (3.8 s)
+ok    quant pareto: the front of planted costs (higher and lower is better), common frames, mixed ms sources, a run without ops, files, CLI  (6.3 s)
+ok    comparison.maps: confusion and scores by hand; valid cells; nothing to find is nan; float maps and shape mismatches are refused; counts add up  (0.0 s)
+ok    comparison.maps: dilate and the tolerant comparison against a brute-force distance search; tolerance 0 is the plain comparison; the former BEV dilate  (0.0 s)
+ok    comparison.boxes.match: score order, one-to-one, a distance of exactly thr counts, equal distances take the later box, equal scores keep list order, nan score is refused  (0.0 s)
+ok    comparison.boxes.match_frames: the former BEV matching on random frames with ties (same rows, same objects, same order); frames do not compete  (0.0 s)
+ok    comparison.boxes.tp_errors: hand cases, yaw wrap, circles, oriented IoU, missing velocity, zero size; the former BEV numbers on random pairs  (0.1 s)
+ok    comparison.boxes.ap_*: hand ranking, perfect and empty cases, an independent implementation of both definitions, the former BEV numbers  (0.0 s)
+ok    comparison.boxes.match_flags + detection_numbers: the rows of single frames give the numbers of one global matching (any order of frames, ties, thresholds without tp_threshold)  (0.1 s)
+ok    comparison.boxes against the real nuScenes devkit (accumulate + calc_ap): the same average precision on random frames; the two places where the rules differ are pinned  (1.6 s)
+ok    comparison.metrics.MapMetric: through quant.run the suite's numbers equal the core applied to the same frames; contract checker; the default score works  (0.4 s)
+ok    comparison.metrics.BoxMetric: through quant.run the suite's per-class and mean numbers equal one global matching (the former BEV code); contract checker; frames add up  (0.8 s)
+ok    lanes.geometry: resample spacing, simplify keeps the corner, LaneGraph.of (dict / list), point graph merges a junction and links edges  (0.0 s)
+ok    lanes.raster: grid cells, rasterize, distance map in metres, thinning keeps one connected cell-wide line, a Y is traced back into three chains  (0.0 s)
+ok    lanes.measures (sparse): counts equal an independent brute force on random graphs; shift / half length / duplicate / reversal by hand  (0.1 s)
+ok    lanes.measures (topology): TOPO marbles and junctions on a fork: identical graph = 1, missed branch lowers recall, reversed graph ~ 0  (0.0 s)
+ok    lanes.measures (image): strict vs tolerant overlap, shift by 4 cells, soft Dice, tolerant AP = 1 for a clean picture and lower with false alarms  (0.0 s)
+ok    lanes.causes: the error budget adds up to the brute-force missed / false length; planted cases land in the planted cause (unit cases)  (2.7 s)
+ok    lane task: the picture-only head is scored as a picture and as the graph read from it; the graph-only head is drawn for the picture level; contract checker passes  (3.5 s)
+[quant r] 25/66 frames, 0.19 s per frame, eta 8 s
+[quant r] 50/66 frames, 0.20 s per frame, eta 3 s
+[quant c] 25/44 frames, 0.23 s per frame, eta 4 s
+run /tmp/tmpyz61gef0/cli/quant/c: 44 frames, 11 scenes
+geo.F1@1.0        0.7063
+geo.chamfer       0.9138
+geo.lanes_found   0.7125
+geo.vert100       11.6886
+img.AP_rel        0.6796
+img.F1_rel@1.0    0.7851
+img.F1_skel@1.0   0.7731
+img.dice          0.4389
+topo.junction_F1  0.8148
+topo.topo_F1      0.8726
+ms per frame in this run: median 1.77, p90 7.82 (n 44, load 9.65966796875; an idle benchmark: quant timing --run c)
+fn.gap (code)                         110.0000
+fn.missed_far (model)                 481.5000
+fn.missed_near (model)                560.0000
+fn.offset (model)                     73.5000
+fn.shift (model)                      921.5000
+fn.truncated (code/model)             234.0000
+fn.unobservable (evaluation)          0.0000
+fp.duplicate (code)                   835.5000
+fp.hallucinated (evaluation/model)    244.0000
+fp.offset (model)                     198.0000
+fp.overshoot (evaluation/code/model)  154.5000
+fp.shift (model)                      909.0000
+fp.spur (code)                        0.0000
+where to work: {'model': 0.727, 'code': 0.236, 'evaluation': 0.037}
++0.22  far_share low                          n=12   of all 27%  error share 49%  scenes 3  (tag: far_share <= 0.421 (bottom quarter))
++0.17  worst 10 % by img.F1_rel@1.0           n=5    of all 11%  error share 28%  scenes 2  (score: img.F1_rel@1.0 <= 0.411)
++0.17  dominated by fn.shift                  n=3    of all 7%  error share 24%  scenes 2  (cause: more than 50% of the frame's error is fn.shift)
++0.12  pred_empty                             n=4    of all 9%  error share 21%  scenes 1  (tag: pred_empty is true)
++0.12  dominated by fn.missed_near            n=4    of all 9%  error share 21%  scenes 1  (cause: more than 50% of the frame's error is fn.missed_near)
++0.12  flag: prediction length plausible      n=4    of all 9%  error share 21%  scenes 1  (flag: plausibility flag 'prediction length plausible' raised)
++0.12  flag: prediction not empty             n=4    of all 9%  error share 21%  scenes 1  (flag: plausibility flag 'prediction not empty' raised)
++0.12  flag: probabilities not saturated      n=4    of all 9%  error share 21%  scenes 1  (flag: plausibility flag 'probabilities not saturated' raised)
++0.08  dominated by fp.duplicate              n=5    of all 11%  error share 20%  scenes 2  (cause: more than 50% of the frame's error is fp.duplicate)
++0.02  len_ratio low                          n=11   of all 25%  error share 27%  scenes 3  (tag: len_ratio <= 0.803 (bottom quarter))
++0.02  pred_pieces low                        n=12   of all 27%  error share 29%  scenes 3  (tag: pred_pieces <= 2 (bottom quarter))
++0.01  len_ratio high                         n=11   of all 25%  error share 26%  scenes 4  (tag: len_ratio >= 1.25 (top quarter))
++0.00  gt_len high                            n=12   of all 27%  error share 28%  scenes 3  (tag: gt_len >= 242 (top quarter))
+-0.01  vert100 low                            n=11   of all 25%  error share 24%  scenes 3  (tag: vert100 <= 6.3 (bottom quarter))
+-0.04  dominated by fp.hallucinated           n=4    of all 9%  error share 5%  scenes 1  (cause: more than 50% of the frame's error is fp.hallucinated)
+-0.04  dominated by fn.truncated              n=4    of all 9%  error share 5%  scenes 1  (cause: more than 50% of the frame's error is fn.truncated)
+-0.06  dominated by fp.overshoot              n=4    of all 9%  error share 3%  scenes 1  (cause: more than 50% of the frame's error is fp.overshoot)
+-0.07  pred_pieces high                       n=20   of all 45%  error share 39%  scenes 5  (tag: pred_pieces >= 5 (top quarter))
+-0.07  dominated by fn.missed_far             n=4    of all 9%  error share 2%  scenes 1  (cause: more than 50% of the frame's error is fn.missed_far)
+-0.07  vert100 high                           n=11   of all 25%  error share 18%  scenes 3  (tag: vert100 >= 8.31 (top quarter))
+-0.08  dominated by fp.offset                 n=5    of all 11%  error share 3%  scenes 2  (cause: more than 50% of the frame's error is fp.offset)
+-0.09  dominated by fn.gap                    n=5    of all 11%  error share 2%  scenes 2  (cause: more than 50% of the frame's error is fn.gap)
+-0.09  curviness high                         n=12   of all 27%  error share 18%  scenes 3  (tag: curviness >= 25.1 (top quarter))
+-0.09  gt_lanes high                          n=12   of all 27%  error share 18%  scenes 3  (tag: gt_lanes >= 5 (top quarter))
+-0.11  far_share high                         n=12   of all 27%  error share 16%  scenes 3  (tag: far_share >= 0.49 (top quarter))
+-0.17  curviness low                          n=12   of all 27%  error share 10%  scenes 3  (tag: curviness <= 0 (bottom quarter))
+-0.17  gt_lanes low                           n=12   of all 27%  error share 10%  scenes 3  (tag: gt_lanes <= 2 (bottom quarter))
+-0.17  gt_len low                             n=12   of all 27%  error share 10%  scenes 3  (tag: gt_len <= 120 (bottom quarter))
+-0.18  is_fork                                n=16   of all 36%  error share 18%  scenes 4  (tag: is_fork is true)
+road-03/003: error 19.0, mostly fn.gap  /tmp/tmpyz61gef0/cli/quant/c/trace/road-03_003_overview.png
+/tmp/tmpyz61gef0/cli/probe/c_s0/index.html
+ok    lane suite: quant run = direct computation, planted causes are found in their scenes, budget / situations / sample / scan / CLI  (40.5 s)
+ok    lane views: the overview has the six panels; blue = ground truth without prediction, red = prediction without ground truth at the planted places  (1.0 s)
+evalsuite selftest: 54/54 checks passed in 146 s
+
+real	2m28.095s
+user	2m2.394s
+sys	0m24.080s

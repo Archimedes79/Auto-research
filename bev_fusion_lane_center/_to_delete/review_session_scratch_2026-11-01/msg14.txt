@@ -1,0 +1,5 @@
+D36: no per-box radar gate, the radar rule stays an open topic
+
+Mirko in chat, 2026-11-01: assigning radar measurements to boxes is non-trivial, so the per-object rule is not adopted; the radar should see moving objects that are in its line of sight; down-weighting objects the radar is unlikely to see is an idea, an open topic. Note, D36 consequence and handover updated; obs_radar stays the fan.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

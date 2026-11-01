@@ -1,0 +1,5 @@
+D4 replaced: one question about the loop-22 prototype, decided after route success and timing
+
+Mirko in chat, 2026-11-01: "Yes, replace". The old loop-18 options (fast variants) are superseded; the open D4 row now asks about promoting recall_sp0_dp and waits for route success on spur-kept graphs and the idle ms per frame of the prototype. Handover updated (D17 no longer listed).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

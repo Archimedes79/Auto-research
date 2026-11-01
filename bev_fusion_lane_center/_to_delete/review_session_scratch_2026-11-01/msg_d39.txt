@@ -1,0 +1,5 @@
+D39: new BEV arms start from t10_dual, t8_ctl stays the control (relayed, labelled as second-hand)
+
+Recorded for the BEV system chat. Not a champion promotion; Mirko may confirm or correct it.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

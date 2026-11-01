@@ -1,0 +1,32 @@
+E215     ready  experiments/E215_fork-pruning/experiment.json
+E219     ready  experiments/E219_recall-weight-finetune-under-pruning/experiment.json
+E232     ready  experiments/E232_long-joint-fine-tune-full-builder-loss/experiment.json
+E236     ready  experiments/E236_matched-budget-rerank/experiment.json
+E237     ready  experiments/E237_exact-distance-target-finetune/experiment.json
+E238     ready  experiments/E238_map-draw-twin-registration/experiment.json
+E239     ready  experiments/E239_confirm-replication-j1-family/experiment.json
+E240     ready  experiments/E240_measurement-floor-seed-noise/experiment.json
+E241     ready  experiments/E241_early-kill-replay-checkpoints/experiment.json
+E242     ready  experiments/E242_prediction-calibration/experiment.json
+E243     ready  experiments/E243_timing-replicate-chain/experiment.json
+E244     ready  experiments/E244_phd-set-likelihood-recall/experiment.json
+E245     ready  experiments/E245_quality-focal-node-validity/experiment.json
+E246     ready  experiments/E246_conformal-range-admission/experiment.json
+E247     ready  experiments/E247_gated-evidence-recursion/experiment.json
+E252     ready  experiments/E252_gt-map-offset-by-city/experiment.json
+E253     ready  experiments/E253_timing-repeat-quiet-machine/experiment.json
+E255     ready  experiments/E255_poisson-set-loss-matched-vertex/experiment.json
+E256     ready  experiments/E256_candidates-by-city/experiment.json
+E257     ready  experiments/E257_dp-output-simplification/experiment.json
+E258     NOT READY  experiments/E258_assembly-profile-and-speedup/experiment.json
+    - arm a: card runs/eval/fast_recall/val.json has no metric asm_ms
+    - arm c: card runs/eval/fast_recall/val.json has no metric asm_ms
+E259     ready  experiments/E259_assembly-cleanup-ablation/experiment.json
+E260     ready  experiments/E260_assembly-dead-code-removal/experiment.json
+E261     ready  experiments/E261_recall-weight-6-operating-point/experiment.json
+E262     NOT READY  experiments/E262_recall-weight-6-seed-twin/experiment.json
+    - arm a: card runs/eval/recall6_s1/val.json not found
+E264     ready  experiments/E264_two-seed-output-ensemble-by-path-union/experiment.json
+E265     ready  experiments/E265_far-coverage-loss-budget/experiment.json
+E266     ready  experiments/E266_seed-lattice-to-the-box-edge/experiment.json
+E267     ready  experiments/E267_spurs-kept-and-seed-ring-stack/experiment.json

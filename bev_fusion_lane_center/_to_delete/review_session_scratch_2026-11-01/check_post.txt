@@ -1,0 +1,32 @@
+E215     ready  experiments/E215_fork-pruning/experiment.json
+E219     ready  experiments/E219_recall-weight-finetune-under-pruning/experiment.json
+E232     ready  experiments/E232_long-joint-fine-tune-full-builder-loss/experiment.json
+E236     ready  experiments/E236_matched-budget-rerank/experiment.md
+E237     ready  experiments/E237_exact-distance-target-finetune/experiment.md
+E238     ready  experiments/E238_map-draw-twin-registration/experiment.md
+E239     ready  experiments/E239_confirm-replication-j1-family/experiment.md
+E240     ready  experiments/E240_measurement-floor-seed-noise/experiment.md
+E241     ready  experiments/E241_early-kill-replay-checkpoints/experiment.md
+E242     ready  experiments/E242_prediction-calibration/experiment.md
+E243     ready  experiments/E243_timing-replicate-chain/experiment.md
+E244     ready  experiments/E244_phd-set-likelihood-recall/experiment.md
+E245     ready  experiments/E245_quality-focal-node-validity/experiment.md
+E246     ready  experiments/E246_conformal-range-admission/experiment.md
+E247     ready  experiments/E247_gated-evidence-recursion/experiment.md
+E252     ready  experiments/E252_gt-map-offset-by-city/experiment.md
+E253     ready  experiments/E253_timing-repeat-quiet-machine/experiment.md
+E255     ready  experiments/E255_poisson-set-loss-matched-vertex/experiment.md
+E256     ready  experiments/E256_candidates-by-city/experiment.md
+E257     ready  experiments/E257_dp-output-simplification/experiment.md
+E258     NOT READY  experiments/E258_assembly-profile-and-speedup/experiment.md
+    - arm a: card runs/eval/fast_recall/val.json has no metric asm_ms
+    - arm c: card runs/eval/fast_recall/val.json has no metric asm_ms
+E259     ready  experiments/E259_assembly-cleanup-ablation/experiment.md
+E260     ready  experiments/E260_assembly-dead-code-removal/experiment.md
+E261     ready  experiments/E261_recall-weight-6-operating-point/experiment.md
+E262     NOT READY  experiments/E262_recall-weight-6-seed-twin/experiment.md
+    - arm a: card runs/eval/recall6_s1/val.json not found
+E264     ready  experiments/E264_two-seed-output-ensemble-by-path-union/experiment.md
+E265     ready  experiments/E265_far-coverage-loss-budget/experiment.md
+E266     ready  experiments/E266_seed-lattice-to-the-box-edge/experiment.md
+E267     ready  experiments/E267_spurs-kept-and-seed-ring-stack/experiment.md

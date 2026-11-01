@@ -1,0 +1,5 @@
+provenance.py: the bundle carries the repository files the network imports (from the run's tag), lists what only tests import; critic fixes
+
+bundle: imports inside module-level _selftest / _cli / main functions and an if __name__ == __main__ body are listed as test_imports, not followed; repository modules the network and losses import (autogt/layers.py, found under the repository root or the problem folder) are taken from the run's tag, hashed and copied to _repo/, and what they import in turn is listed (repo_imports_unfollowed); tag listing by one git ls-tree; temp folder always removed. repro --repeat: a leftover folder must be a checkout of the tag, a partly tracked data/ is linked child by child, a cwd outside the repo is reported. trainer interpreter: -I, comments skipped, $HOME expanded, only a dict answer. 7 result folders refreshed.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

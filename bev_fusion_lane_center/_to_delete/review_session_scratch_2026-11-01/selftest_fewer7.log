@@ -1,0 +1,6 @@
+note: S.c3 had no ledger row; a new planned row was made (check the id)
+note: S.c0 had no ledger row; a new planned row was made (check the id)
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/autoresearch/tools/selftest.py", line 470, in <module>
+    assert any("allow must be a list" in b for b in X.check(dict(base, arms=two, evaluate=dict(split="val", allow="denominator")), ef))
+AssertionError

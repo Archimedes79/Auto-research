@@ -1,0 +1,3 @@
+bev_fusion overnight round (D28): t11 velocity hurdle decided V1 for B2 (vehicle skill 0.566, AVE 2.39 -> 1.19 m/s, maps and front mAP2 within bands, no speed cost), cards, ledger rows, morning summary; the t11 code itself stays in tag bf/t11.vel_hurdle_acc2 until its code review
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

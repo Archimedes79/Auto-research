@@ -1,0 +1,1 @@
+s1_camera selftest ok: presets run with shapes (B, 3, 120, 104) and gradients to trunk and head (ours 6.9 M, dualbev 27.2 M, simplebev 6.9 M, lss 6.9 M); presets differ in the named choices only; DualBEV preset: 13 heights summed to 80 channels without reduce; one-hot depth reaches only its own depth

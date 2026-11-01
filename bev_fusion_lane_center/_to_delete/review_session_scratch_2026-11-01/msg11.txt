@@ -1,0 +1,5 @@
+Coverage note: GT plan v6 and the open questions for Mirko
+
+The GT Discussion chat's plan for the autogt masks (obs_camera, obs_radar, one function for the camera visibility, GT v6 after the t10 freeze) and Mirko's two later points (higher expectations where both sensors are available; radar sees only stationary reflections and movers) are in the coverage note, with the four open questions to ask Mirko one at a time. The handover points to them.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

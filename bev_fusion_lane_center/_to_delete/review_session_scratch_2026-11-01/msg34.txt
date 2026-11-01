@@ -1,0 +1,5 @@
+Overview drawing (8 boxes) as the main picture, the 26-box drawing stays as the detail
+
+Mirko in chat, 2026-11-01: build the simple overview as the main architecture picture. overview.json (you, promotion gate, research on trigger, lead agent, experiment agents, fresh critic, notebook, measuring code and gates) is rendered by archdraw to overview.svg / overview.md and checked against the code (every box points at existing files); the README shows it first and links architecture.md for the detail. Own hunks of README only.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

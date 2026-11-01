@@ -1,0 +1,19 @@
+Metric directions: bev_fusion writes contract cards with "better", lane list moved to project.json (D24, Mirko: "Yes, fix both")
+
+- bev_fusion/evaluation/bev_suite.py eval: a "better" map in metrics<tag>.json from each metric's
+  direction() (counts left out; prior_* and ms/* included), and eval/card<tag>.json, the same finite
+  numbers as a card of the autoresearch contract (split, frames, snapshot commit, seed, GT signature
+  as protocol) that decide.py can read; bev_task.py: field_mae and every loss term are
+  lower-is-better (they were read as higher)
+- eval --prior: the prior-map baseline adds only its map numbers (prior_*); its det / detr / loss
+  numbers carried the model's names and overwrote the model's own (older bug)
+- decide.py: the built-in lane list LEGACY_LANE_LOWER is removed; the fallback for cards without
+  "better" is only project.json lower_is_better, matched by the key or its last '/' part
+  (named_lower), since bev_fusion's path-like keys never matched its list
+- bev_fusion_lane_center/project.json: lower_is_better (grant under D24);
+  bev_fusion/project.json: the full list of its lower-is-better names (incl. the loss groups)
+- tests: autoresearch selftest (last-part match, no built-in list); bev_selftest (better map,
+  loss terms, fallback agrees with the evaluator, prior numbers, contract card read by decide)
+- ar-reviewer pass (code): its findings are fixed in this commit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

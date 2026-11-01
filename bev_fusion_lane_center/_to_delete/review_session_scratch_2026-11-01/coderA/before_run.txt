@@ -1,0 +1,119 @@
+FAIL  RunStore: round trip over several chunks (fixed and ragged counts), resume, crash leaves a consistent prefix
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 171, in _
+    assert r.frame("s0/3") is r.frame("s0/003") is r.frame("s0:3"), "an unpadded label names the same frame"
+           ^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/store.py", line 201, in frame
+    raise KeyError(label)
+KeyError: 's0/3'
+
+FAIL  RunStore + quant: a metric that returns {} for a whole chunk (nothing to count there) still gives tables, compare and outliers (S5)
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 202, in _
+    assert all(os.path.exists(os.path.join(st.path, f"counts_sparse_{k:05d}.npz")) for k in range(3))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+ok    stats: robust_z, MAD = 0 fallback, IQR fences against numpy  (0.0 s)
+FAIL  stats: leave-one-out influence by hand; bootstrap on a planted difference and on identical runs
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 236, in _
+    assert abs(out["diff"] - 0.2) < 1e-9 and out["lo"] > 0 and out["p_b_better"] == 1.0 and out["n_valid"] == out["n_draws"] == 300, out
+                                                               ~~~^^^^^^^^^^^^^^
+KeyError: 'p_b_better'
+
+FAIL  stats: the ONE scene bootstrap - the draw stream is the lane project's (RandomState randint, = choice), paired a - b, non-finite draws counted (n_valid), direction-aware share
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 250, in _
+    from evalsuite.stats import paired_draws, interval_draws, percentile_interval, scene_draws, scene_picks
+ImportError: cannot import name 'paired_draws' from 'evalsuite.stats' (/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/stats.py)
+
+FAIL  compare: a worse network is detected (b - a < 0, interval below 0); a run against itself gives exactly 0
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 487, in _
+    assert iou["diff"] < -0.02 and iou["hi"] < 0 and iou["p_b_better"] == 0.0 and iou["n_valid"] == 300, iou
+                                                     ~~~^^^^^^^^^^^^^^
+KeyError: 'p_b_better'
+
+FAIL  video: frames (arrays and files) -> mp4 read back with the right count and an even size; no frames raise
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 675, in _
+    assert "/mnt/c" not in f.read()
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+FAIL  probing: the budget adds up to the error cells counted directly; the place to work comes from Task.causes() (the cause name when it gives none); situations find the planted frames; sample / scan / CLI; an empty run has no situations
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 756, in _
+    bud = {b["cause"]: b for b in suite.probe.budget(st)}
+                                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/probing.py", line 81, in budget
+    what, fix = info.get(c, ("", ""))
+    ^^^^^^^^^
+ValueError: too many values to unpack (expected 2)
+
+FAIL  check_adapter: a good adapter passes; broken adapters are caught with the reason
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 813, in _
+    assert "subject: reset() restores the start state" in failed(EvalSuite(minimal.MinSource(), LeakyNoTaps(), minimal.MinTask(), out=d))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+ok    CLI: list, qual frame / debug / random / videos, quant run / table / per-scene / outliers / compare / trace / report / timing  (21.9 s)
+FAIL  minimal adapter: the smallest adapter (frame + reduce + one view) runs the core commands, also as a copy anywhere; default score = the frame's own IoU; probing loads lazily
+Traceback (most recent call last):
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 937, in main
+    fn()
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 901, in _
+    call("quant", "trace", "a", "demo-1/3")                               # the unpadded label (stored as demo-1/003)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/selftest.py", line 891, in call
+    rc = main(base + list(args))
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/cli.py", line 244, in main
+    _qual_print(qt.trace(a.run, a.label))
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/quantitative.py", line 239, in trace
+    fr = st.frame(label)
+         ^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/evalsuite/store.py", line 201, in frame
+    raise KeyError(label)
+KeyError: 'demo-1/3'
+
+evalsuite selftest: 2/11 checks passed in 34 s
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/trainsuite/__main__.py", line 4, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/trainsuite/cli.py", line 250, in main
+    return selftest.main()
+           ^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/coderA/before/autoresearch/trainsuite/selftest.py", line 166, in main
+    assert r.crash_reason() == "" and r.state() != "failed", "trainsuite.json 'progress' names the trainer's progress lines"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: trainsuite.json 'progress' names the trainer's progress lines
+  ok  healthy run: state, progress, ETA from the row times, no warnings
+  ok  NaN in a logged row is an alert
+  ok  a single value far above the recent median is a spike; watch finds one between two looks (since_step)
+  ok  a loss that climbs for many rows is a rising warning (only info before 50 % of the steps: loss ramps)
+  ok  a jump of the loss that stays is a level-shift warning, a flat noisy run is not
+  ok  grad-norm blow-up and GPU above 11 GB are warnings
+  ok  slowdown is a warning (not for finished runs); a resume gap does not spoil speed and ETA; rows without time give no slowdown alarm

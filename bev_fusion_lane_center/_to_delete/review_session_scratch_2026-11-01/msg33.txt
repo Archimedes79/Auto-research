@@ -1,0 +1,5 @@
+Coordination design: hold marker for stopped runs and claims; handover drops D1
+
+Mirko in chat, 2026-11-01: improve the coordination between chats; the hold marker makes sense. The page lists what went wrong today (a stopped run restarted second-hand, a stale freeze, queued messages, two chats on one tool) and two small mechanisms: a HOLD file per run that run.py refuses and only the person's words clear, and claims (advice, built at the second use). Design only. The handover no longer lists "D1." (D1 is the closed download decision of 2026-10-25).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

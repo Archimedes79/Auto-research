@@ -1,0 +1,5 @@
+Records: the t10 long run is stopped at step 5030, the freeze has no end date
+
+The BEV system chat reported (Mirko decided) that t10.dual_long_s0 was stopped again at step 5030 (14:38, exit 75) and resumes only on Mirko's word. The "about 17:10" in the D29 and D36 rows, the coverage note and the handover is replaced by "when the freeze ends (no date)". New point in the note: a resume of the stopped run must read its recorded GT version (v5), not the newest one.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

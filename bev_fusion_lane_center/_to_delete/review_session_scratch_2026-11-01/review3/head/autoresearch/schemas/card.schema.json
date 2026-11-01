@@ -1,0 +1,25 @@
+{
+  "_about": "The evaluator contract: a metric card is the JSON a problem's evaluator writes for one named system on one split (runs/eval/<name>/<split>[_<subset>].json for lcr). Everything downstream (decide.py, experiment.py, metrics.py, reports) reads cards, never numbers typed by hand. Any problem plugs in by writing cards of this shape: an ML model evaluated on a validation split, or a code system benchmarked by a script (then 'n' is the number of benchmark runs or test cases and 'seeds' are repeats). Checked by autoresearch/tools/card.py check. Plain JSON, no JSON-Schema library: 'required' / 'types' / 'fields' as in experiment.schema.json.",
+  "schema": 1,
+  "required": ["schema", "name", "split", "metrics", "commit", "date"],
+  "one_of": [["frames", "n"]],
+  "types": {"schema": "int", "name": "str", "split": "str", "subset": "str", "fresh": "bool", "frames": "int", "n": "int", "metrics": "dict", "commit": "str", "date": "str", "registry": "dict", "overrides": "dict", "info": "dict", "compare": "dict", "settings": "dict"},
+  "fields": {
+    "schema": "the version of this contract (1)",
+    "name": "the registry name of the system evaluated (models/registry.json for lcr; any stable name for another problem)",
+    "split": "the data split or benchmark set the numbers come from (val | test | confirm | <benchmark name>); the holdout split (project.json holdout_split, default test) needs a logged id",
+    "subset": "a named subset of the split (val250) or empty",
+    "fresh": "true when the numbers were computed without the evaluator's cache",
+    "frames": "the denominator: number of frames (lcr) - or",
+    "n": "the denominator: number of samples / benchmark runs / test cases (generic name; a card has frames or n)",
+    "metrics": "{metric name: number}; the headline metrics of the problem must be present (PROBLEM.md); lower-is-better metrics are known by the experiment file's direction, else by name (project.json lower_is_better, plus the generic ms names of decide.py LOWER)",
+    "commit": "the code commit the numbers were made with ('+dirty' when tracked files differed, '+?' when unknown)",
+    "date": "YYYY-MM-DD HH:MM",
+    "registry": "the registry entry used (checkpoint, config, standard settings) - lcr",
+    "overrides": "settings changed for this card (recorded, so a card is never silently non-standard)",
+    "info": "evaluator details: cache file, assembly settings, ms per frame, seconds for the metrics",
+    "compare": "{name, metrics, paired: {metric: {diff, lo, hi}}}: the paired bootstrap against another name on the same samples (evaluate.py --compare); decide.py uses lo / hi as the interval",
+    "settings": "generic: the settings of the evaluation for a non-lcr problem (benchmark version, hardware)"
+  },
+  "bare_metrics": "a flat {metric: number} dict without 'metrics' is accepted by decide.py as a bare card (loop-18 result files) but fails `card.py check`: new evaluators write full cards"
+}

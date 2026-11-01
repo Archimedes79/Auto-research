@@ -1,0 +1,5 @@
+Mirko's answers to the open decisions (2026-11-01): D25, D18, D19, D33 decided, D4 and D17 kept open for a discussion; D25 applied (PROBLEM.md and PROTOCOL.md: the 14.3 budget is on the per-piece DP basis and met with and without the output stage, node-id counts are "nodes delivered"; loop-22 pages relabelled), D18 applied (a card may name a per-metric band citing the E240 seed table; decide.py already reads it, default 0.010)
+
+Only this session's rows of DECISIONS.md and grants.csv are in this commit (other chats' uncommitted rows stay in the working tree).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

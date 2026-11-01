@@ -1,0 +1,3 @@
+_py14.sh: /mnt/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/pc/frontier.py
+e123_D7_r3_rc1 tau 0.7 {'fork_prune': '0.5'} Q 0.7420 lanes_found 0.7673 R@1_far 0.7715 P@1_far 0.7676 topo_F1 0.7431 F1@1.0 0.8771 false_len_frac 0.0507 dup_frac 0.0989 vert100 15.8451 vdp 12.21
+e123_D7_r3_rc1 tau 0.8 {'fork_prune': '0.5'} Q 0.7426 lanes_found 0.7631 R@1_far 0.7672 P@1_far 0.7718 topo_F1 0.7437 F1@1.0 0.8776 false_len_frac 0.0488 dup_frac 0.0964 vert100 15.7698 vdp 12.07

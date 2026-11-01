@@ -1,0 +1,16 @@
+FAIL  grid metric reproduces stored numbers  | RuntimeError: No CUDA GPUs are available
+PASS  graph metric (identity, DP sparsity)  | sparse_lanes selftest passed
+PASS  connectivity / duplicate / range metrics  | topo_metrics selftest passed
+PASS  metric response to controlled errors  | written evaluation/METRIC_RESPONSE.md
+PASS  evaluate.py reproduces the golden numbers (cached, all registry names)  | golden numbers reproduced: 6 entries
+PASS  builder spec tests (18)  | 18 / 18 passed
+PASS  output stage simplify_dp (9)  | 9 / 9 passed
+PASS  trainer: crash + resume, NaN, rollback  | trainer selftest passed
+FAIL  autoresearch tools (launcher, git tag, ledger, schedule, decide)  | AssertionError: a running cpu item holds the slot (derived from its record)
+PASS  structure and documents (check_structure)  | check_structure selftest passed
+PASS  agent copies in .claude/agents in step  | 7 agents installed and in step
+PASS  images + video tools  | viz / video selftest passed in /tmp/tmpuk9_0112
+FAIL  champion fast path == reference graphs  | RuntimeError: No CUDA GPUs are available
+PASS  registration K188 (synthetic shifts, gradient)  | selftest ok
+FAIL  numba union == FastUnion graphs (120 frames)  | RuntimeError: No CUDA GPUs are available
+rc=0

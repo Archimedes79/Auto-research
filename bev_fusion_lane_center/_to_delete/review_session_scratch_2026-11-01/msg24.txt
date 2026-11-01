@@ -1,0 +1,5 @@
+Reproducibility design: what a result package records (GT version and mode, evaluator code, frames, model)
+
+Mirko in chat, 2026-11-01: a result package should say which autoGT was used in which mode and which evaluation code version, so an experiment can be reproduced later. The page lists what a run record, a card and the GT store hold today (checked on t10.dual_s1.eval), five gaps (readable GT version and mode, an evaluator code hash, a frame list hash, the model, software versions), a provenance block, a comparison rule and a repro.py. Design only; README row added (the working tree's other hunks stay out).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

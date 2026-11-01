@@ -1,0 +1,32 @@
+{
+  "_about": "Machine-readable part of an experiment (experiments/E<id>_<slug>/experiment.json, next to the human experiment.md from templates/experiment.md). Checked by autoresearch/tools/experiment.py check; decided by autoresearch/tools/decide.py --experiment. Plain JSON, no JSON-Schema library: 'required' lists the fields that must exist, 'types' their python types, 'enum' the allowed values, 'fields' the meaning.",
+  "required": ["id", "title", "kind", "metric", "direction", "band", "prediction", "arms", "control", "rule", "evaluate"],
+  "types": {"deterministic": "bool", "id": "str", "card": "str", "title": "str", "kind": "str", "metric": "str", "direction": "str", "band": "number", "prediction": "dict", "arms": "dict", "control": "str", "variant": "str", "rule": "list", "budget_gpu_h": "number", "kill": "str", "evaluate": "dict", "seeds": "list", "pairing": "str"},
+  "enum": {"kind": ["variant", "block"], "direction": ["higher", "lower"], "pairing": ["position"]},
+  "fields": {
+    "id": "E<number> (never reused)",
+    "card": "the hypothesis card it tests (H<cycle>.<n>) or empty",
+    "title": "short title",
+    "kind": "variant = a config change only (experiment file -> run -> decide -> one summary line); block = new code (detail plan -> code + review -> run)",
+    "metric": "the headline metric the verdict is about (e.g. Q); its band is 'band'",
+    "direction": "higher | lower: which way is better for the headline metric",
+    "band": "noise band of the headline metric (S / Q: 0.010); inside it the arms tie",
+    "prediction": "{value: number, vs: <arm letter>}: the predicted headline effect (variant minus vs), written before the run",
+    "arms": "{<letter>: {names: [registry names, one per seed] | cards: [card refs, one per seed] | {subset: card ref | [card refs]}, run_ids: [...], recipe | command, base, set, seeds, note}}; a card ref is a path relative to the problem folder, optionally '#a/b/c' into the JSON (a card has its metrics under 'metrics', a flat dict is taken as the metrics)",
+    "control": "the arm letter of the matched reference (equal budget, same frames)",
+    "variant": "the arm letter that is judged (default: the first arm that is not the control)",
+    "rule": "list of clauses, ALL must hold for KEEP: {metric, vs?: <arm letter, default control>, min_effect?: number (variant - vs >= this), max_loss?: number (variant - vs >= -this), band?: number, subsets?: [subset names], at_least?: int (how many subsets must pass), note?}",
+    "budget_gpu_h": "planned GPU hours",
+    "kill": "stop early when ... (text; written as a rule into the run's kill.txt, `trainsuite watch --enforce` stops a run that hits it)",
+    "evaluate": "{split: val | test | confirm, subset?: val250, compare: <control arm letter>, allow?: [split | subset | denominator | protocol]}: how the cards are made (evaluate.py <name> --compare <control name>). decide.py refuses arms whose cards differ in split (must be this split), subset, denominator (frames / n) or protocol; allow names a difference you know and accept",
+    "seeds": "the seeds every arm runs, one list: as long as the cards of the arms it declares that every arm lists its cards in this order, so the cards are paired by position. A card's own `seed` or an arm's own `seeds` list (as long as the arm's whole-split cards) is an identity instead: the arms are then paired by seed whatever the order of their lists",
+    "pairing": "'position' = the cards of two arms are paired by their order in the lists (card i against card i), also when the cards carry seeds (two models of one seed per arm); without a seed identity, a `seeds` list of the experiment or this declaration decide.py refuses to pair two or more seeds",
+    "deterministic": "true when the arms share the checkpoint and differ by a deterministic step (assembly, pruning, threshold): no training seed exists, the paired scene-bootstrap interval decides"
+  },
+  "verdicts": {
+    "KEEP": "headline effect beyond the band in the better direction, every paired seed on the same side, the paired-bootstrap interval (when a compare card exists) excludes 0, and every clause holds",
+    "CUT": "headline effect beyond the band in the worse direction, or a max_loss guard violated, or a min_effect clause missed with agreeing seeds",
+    "TIE": "headline effect inside the band and no guard violated: take the cheaper arm",
+    "INCONCLUSIVE": "beyond the band but one seed only, seeds disagree, or the interval contains 0: add a seed, do not adopt"
+  }
+}

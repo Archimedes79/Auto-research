@@ -1,0 +1,5 @@
+Handover: core work line (reproducibility, hold marker, hygiene)
+
+Added the line for the tools chat's work (reproducibility block, hold marker for stopped runs, hygiene list); trimmed three phrases to stay under 3 KB.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,5 @@
+Coverage: simple technique now, soft weights later, training and evaluation discussion to the BEV chat
+
+Mirko in chat, 2026-11-01: use a simple technique now, do the rest later, hand the discussion for training and evaluation over. Now = hard don't-care by footprint share (D38); soft weight, radar class prior and three-arm test later. Note and handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,7 @@
+provenance.py manifest <run id>: the provenance of a training run and its model bundle (network + losses)
+
+manifest: GT it trained on, final checkpoint, config, seed, run status, code tag, from the run record and run folder; bundle: import closure of model.py and losses.py inside the run's code snapshot, hash, copy in <run>/bundle/, with what it does not carry listed (missing roots, unparsed, imports of the loop, repository code such as autogt, dynamic imports). Critic pass (mode code) findings fixed: no live-tree fallback, parent packages, BOM, no overwrite, copy checked by hash. repro reads the manifest. Mirko: only the network and the losses form a bundle.
+
+Not wired into run.py yet (Training chat).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

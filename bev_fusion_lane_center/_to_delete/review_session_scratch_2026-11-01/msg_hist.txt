@@ -1,0 +1,5 @@
+History that is no longer needed leaves the tip of main (it stays in git: dad824d)
+
+Mirko: 'lösche Historie, die wir nicht mehr brauchen'. Lane experiment_execution/history: doc_backup_2026-10-24 (27 files), loop18_backup (162), templates_loops16-18 (3), HANDOVER_2026-10-25_loop18.md, STATE_before_loop11.md, STATE_loops02-11.md, MIGRATION_LOG.csv (no reference outside the folder). autoresearch/history: ROADMAP_2026-10-25.md (long plan of the short ROADMAP.md, which now names the commit) and repo_review_2026-10-31_pass3.md. Kept: the launchers, migration tools, PATH_MAP, indexes, prompts, loop17_recovery, the lane archive record and the deletion protocol of the lidar results. Restore a file with: git show dad824d:<path>.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

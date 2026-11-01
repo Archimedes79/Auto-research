@@ -1,0 +1,5 @@
+Freeze lifted: the resumed t10 run reads pinned copies of autogt v5 and training/
+
+BEV system chat, 2026-11-01: the resume of t10.dual_long_s0 reads runs/t10_dual_long_s0/autogt (signature 15efbde2d1) and the snapshot copy of training/, so the live autogt, training and evaluation code are free to change; the run stays stopped until Mirko's word. D29 and D36 consequences, the coverage note and the handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

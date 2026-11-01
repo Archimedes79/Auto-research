@@ -1,0 +1,7 @@
+D40: result package per run in results/<run id>/, clean-up of derived data and old GT stores (package.py), the experiment flow prompt
+
+package.py: package.json per run (code tag, GT version, bundle hash, evaluation version and frames, numbers, derived-file list, tier, experiment card), clean (dry run default; best three, final runs, tag + checkpoint, age, related evaluations, link and path guards; package and log written before deleting) and gt (latest version and unfinished runs' stores stay). provenance.py: results_dir. Hard rule 5 reworded to D40's scope (raw data, checkpoints, untagged scratch). 7 packages of the finished bev_fusion runs. prompts/experiment_flow.md: Mirko's six steps. Critic pass (mode code) findings fixed and tested; nothing deleted yet.
+
+Mirko: derived data may be deleted, only the latest GT version stays (D40).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

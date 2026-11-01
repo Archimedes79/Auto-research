@@ -1,0 +1,5 @@
+bev_fusion records: proposal for one sensor coverage rule (training, evaluation, execution)
+
+Mirko in chat, 2026-11-01: sensors can only be trained and evaluated where they see something, and the system should know its coverage. The note records what the code does today (real GT sample, table per stage), five findings (radar fan restricts nothing, maps trained on 99.6 % but scored on 62 %, front camera only, no coverage input, radar memory unmasked) and a proposal for the BEV and GT chats, to start after the t10 run. Only the note and its README row.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

@@ -1,0 +1,6 @@
+=== evaluate.py --golden check --cached-only
+ok    fast_recall val (873 frames, tol 0.0005): S 0.7715 Q 0.7392 F1@1.0 0.8658 J 0.4469 topo_F1 0.7369 lanes_found 0.7364 R@1_far 0.7275 vert100 14.9773
+ok    recall val (873 frames, tol 0.0005): S 0.7675 Q 0.7404 F1@1.0 0.877 J 0.4277 topo_F1 0.7423 lanes_found 0.7673 R@1_far 0.7714 vert100 15.5305
+skip  champion val val250 fresh
+golden numbers reproduced: 6 entries
+rc=0 (577 s)

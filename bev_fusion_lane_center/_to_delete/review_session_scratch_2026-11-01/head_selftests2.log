@@ -1,0 +1,23 @@
+=== evalsuite/selftest.py
+ok    comparison.metrics.MapMetric: through quant.run the suite's numbers equal the core applied to the same frames; contract checker; the default score works  (0.9 s)
+ok    comparison.metrics.BoxMetric: through quant.run the suite's per-class and mean numbers equal one global matching (the former BEV code); contract checker; frames add up  (1.2 s)
+evalsuite selftest: 52/52 checks passed in 225 s
+exit 0
+=== evalsuite/selftest_comparison.py
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/evalsuite/selftest_comparison.py", line 15, in <module>
+    from . import EvalSuite
+ImportError: attempted relative import with no known parent package
+exit 1
+=== evalsuite/selftest_cost.py
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/evalsuite/selftest_cost.py", line 15, in <module>
+    from . import EvalSuite
+ImportError: attempted relative import with no known parent package
+exit 1
+=== tools/selftest.py again
+Traceback (most recent call last):
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/tools/run.py", line 810, in <module>
+    sys.exit(main())
+  File "/mnt/c/Auto-research/bev_fusion_lane_center/temp/review_session_scratch_2026-11-01/head_export/autoresearch/tools/run.py", line 764, in main
+    with open(os.path.join(d, "run.log"), "a", encoding="utf-8", errors="replace") as lg:
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/ar_selftest_a5w3wc_u/runs/S.live2/run.log'
+exit 0

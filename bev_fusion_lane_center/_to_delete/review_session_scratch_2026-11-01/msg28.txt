@@ -1,0 +1,5 @@
+tools/provenance.py: the provenance block, compare and repro (D-free tool, critic-reviewed)
+
+New tool for reproducibility (design: autoresearch/reproducibility.md): collect() builds the provenance block of a result package (GT version / signature / options from the GT store index, evaluator commit + dirty files + code hash stable across Windows and WSL, frame list hash, model hashes, environment); compare() says when two cards are not comparable (exit 0 / 1 differ / 2 not shown comparable); repro <run id> prints how to reproduce a run. Unknown never reads as known or clean. A fresh ar-critic pass found 11 real points, all fixed with selftest cases; the full tools selftest passes. Only the selftest hook (2 lines) and a README row of the shared files are included; other chats' uncommitted hunks stay out. Integration (card contract, decide.py, writers, run.json) is still to do.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

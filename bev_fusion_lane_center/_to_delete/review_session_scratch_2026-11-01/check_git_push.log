@@ -1,0 +1,46 @@
+push check:
+  origin/main: 34 commit(s) ahead, 0 behind
+    to push: de1fd95 Archimedes79 D39: new BEV arms start from t10_dual, t8_ctl stays the control (relayed, labelled as second-hand)
+    to push: 94464cd Archimedes79 bev_fusion framework bug hunt before the first training: bf16 crash, cached bf16 geometry, unequal memory arms, contrac
+    to push: 920cdc7 Archimedes79 autogt: raw-data check (python -m autogt data), video of any trainval sequence on the light devkit, docs of the whole c
+    to push: 64a853e Archimedes79 t10 long run: not resumed for now (Mirko's no), card, brief and ledger say so; the deck-facing wording of the case brie
+    to push: 5200742 Archimedes79 Review pass 3: bug fixes with tests, the corrected review, and the trunk settings written down
+    to push: 7f86eae Archimedes79 E269 card revised after critic pass 1 (REVISE): streams and control specified as in E232, reference b and null row name
+    to push: 32ab9be Archimedes79 bev_fusion radar slot delta_slots: RadarEncoder as radar_kind in model.py, the reconstruction side loss (TrainConfig.ra
+    to push: 14b9bf7 Archimedes79 datasets/NuScenes: the one-offs of 2026-10-25 are kept by the tag nuscenes/tools-history-2026-11-01 (removed from the t
+    to push: 8208a77 Archimedes79 Spurmitte E2E set-up step 0: contract of the lane builder (p16_interface.py), gradient report (e2e_gradient_report.py, 
+    to push: 3d67763 Archimedes79 trainsuite: an integer beyond the float range is no value (it crashed Run() and with it `status` of the whole root); vs
+    to push: ecbaab9 Archimedes79 bev_fusion tidy, part 2: the four relative links to the moved plan documents, and the plan/README note on docstring pat
+    to push: 0f3b84c Archimedes79 trainsuite: no loss comparison across different step totals, a restart is no 'stopped' after 10 s, NaN / Infinity as a 
+    to push: 40c06e5 Archimedes79 keep3.py: a pinned network is never pushed out by a better newcomer
+    to push: 6e5d2eb Archimedes79 bev_fusion/_to_delete: the 172 tracked files that are gone from the disk leave the tip of main; its README now lists wh
+    to push: a358d86 Archimedes79 bev_fusion root tidy (Mirko: "Yes, tidy it"): the plan documents in plan/, the old draft out of the tree
+    to push: 51ea08c Archimedes79 Review of the suites and tools (2026-11-01): bugs fixed, dead files and the five forwarding agents removed
+    to push: 48d1054 Archimedes79 provenance: the raw-data identity from the NuScenes manifest (data.manifest_hash)
+    to push: 958bfac Archimedes79 datasets/NuScenes: the raw-data manifest (manifest.json), its generator with selftest, and the native folder scanner
+    to push: e7815f6 Archimedes79 Lane loops 19 - 22 filed: the scratch left the tip of main, its scripts are in the tags lcr/loop19-scratch ... lcr/loop
+    to push: 2a19cc1 Archimedes79 Overview drawing (8 boxes) as the main picture, the 26-box drawing stays as the detail
+    to push: c342745 Archimedes79 Coordination design: hold marker for stopped runs and claims; handover drops D1
+    to push: 1c2fdad Archimedes79 t10 card log: autogt v5 pinned in the run folder for the resume (the freeze on the live autogt is lifted)
+    to push: 985be7f Archimedes79 Freeze lifted: the resumed t10 run reads pinned copies of autogt v5 and training/
+    to push: fbc540f Archimedes79 D38 (b): evaluation states first, training masks after a matched control is planned
+    to push: 2f7acde Archimedes79 D38 (b): the occlusion rule is softened (boxes hide by their height)
+    to push: d625ee3 Archimedes79 D38 (b): the first thresholds of the footprint share are 0.1 and 0.5
+    to push: 37062df Archimedes79 tools/provenance.py: the provenance block, compare and repro (D-free tool, critic-reviewed)
+    to push: 360aef0 Archimedes79 datasets/NuScenes tools: download and unpack targets are required (no default on the WSL disk), failed parts fail the c
+    to push: 04ead89 Archimedes79 Coverage note: the footprint-share threshold study and its three questions (completes 976b8d1)
+    to push: 976b8d1 Archimedes79 Coverage note: the footprint-share threshold study and its three questions for Mirko
+    to push: 09fac68 Archimedes79 records: footprint-share threshold study for D38 (b), histogram, sensitivity tables and a proposal (no code)
+    to push: 8e1c49d Archimedes79 run_report.py (one page per training run, with TOPS and review fields), bev_suite.py report, and a first cleanup of dea
+    to push: 71a793a Archimedes79 Handover: core work line (reproducibility, hold marker, hygiene)
+    to push: e155fec Archimedes79 Reproducibility design: what a result package records (GT version and mode, evaluator code, frames, model)
+
+tags: 5 of 87 local tags are not on origin (lcr 4, nuscenes 1): `git push origin --tags` (a tag holds what a run ran; `git push origin main` does not send it)
+
+pending: 42 staged file(s), 30 untracked (0 of them scratch that `git add -A` would sweep in)
+
+scratch in git: 215 tracked file(s) in temp/ or _to_delete/ folders (legacy; new ones are refused above)
+scratch that is used: 16 file(s) run or imported by living files, 105 only cited in documents, 1 scratch folder(s) put on sys.path  (--used lists them)
+
+no errors
+done

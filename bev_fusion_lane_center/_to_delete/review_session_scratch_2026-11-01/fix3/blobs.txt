@@ -1,0 +1,3 @@
+autoresearch/tools/decide.py	/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/decide.py
+autoresearch/tools/experiment.py	/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/experiment.py
+autoresearch/tools/selftest.py	/c/Users/mmeut/AppData/Local/Temp/claude/C--Auto-research/6e9638e0-a42f-4660-b7d5-cac910d9084d/scratchpad/fix3/mine/selftest.py

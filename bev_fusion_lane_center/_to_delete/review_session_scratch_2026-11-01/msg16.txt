@@ -1,0 +1,5 @@
+D38: front-only rig, don't care on both sides outside the fusion area (settles D31)
+
+Mirko in chat, 2026-11-01: non-visible objects are "don't care", detected or not; for our front camera + radar rig the rule is set outside the fusion area, in training and evaluation, no 360-degree benchmark assumptions. Recorded with the consequences (evaluation drops detections in don't-care cells or on don't-care objects from the false-detection count; training gives no loss there), four readings to confirm, the search of how others do it in the coverage note; D31 marked settled by D38; handover updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

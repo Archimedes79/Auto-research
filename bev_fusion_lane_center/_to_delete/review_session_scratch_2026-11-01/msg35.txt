@@ -1,0 +1,5 @@
+provenance: the raw-data identity from the NuScenes manifest (data.manifest_hash)
+
+The NuScenes folder chat's manifest (datasets/NuScenes/manifest.json, 958bfac) gives the raw data an identity: collect() now records its hash, the dataset version key and the scene / sample counts in the data block, and compare() treats a different manifest hash as not comparable. Selftest cases: the block, a changed manifest, a missing manifest reads unknown. Design page updated.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>

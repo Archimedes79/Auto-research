@@ -1,0 +1,694 @@
+{
+ "about": "Identity of the raw nuScenes data on D: and of the files that are derived from it by pointer. Made by datasets/NuScenes/tools/make_manifest.py from the files on disk (no network); `make_manifest.py --check` compares the disk with it. Paths are relative to the data root; \"$REPO\" and \"$ROOT\" in view targets stand for the repository and the data root. A result names this file by its SHA-256.",
+ "archives": {
+  "v1.0-trainval01_blobs_camera.tgz": {
+   "bytes": 17590765342,
+   "etag": "c8193dc224f76fc0c50daf78104b234d-2097",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p01/v1.0-trainval01_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "sweeps"
+  },
+  "v1.0-trainval02_blobs_camera.tgz": {
+   "bytes": 16512734591,
+   "etag": "ba20cc37112616f2881bd697d7246b75-1969",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p02/v1.0-trainval02_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "sweeps"
+  },
+  "v1.0-trainval03_blobs_camera.tgz": {
+   "bytes": 16599534206,
+   "etag": "4c004489009635c4c07006939679fc60-1979",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p03/v1.0-trainval03_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "sweeps"
+  },
+  "v1.0-trainval04_blobs_camera.tgz": {
+   "bytes": 17820165067,
+   "etag": "b45028e337d44f2c8b0002a78b515070-2125",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p04/v1.0-trainval04_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "sweeps"
+  },
+  "v1.0-trainval04_blobs_radar.tgz": {
+   "bytes": 225881218,
+   "etag": null,
+   "etag_verified": false,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar_456/v1.0-trainval04_blobs_radar.tgz",
+   "unpacked_marker": false,
+   "unpacked_members": null
+  },
+  "v1.0-trainval05_blobs_camera.tgz": {
+   "bytes": 14852318156,
+   "etag": "10126539532bdebead7f108f0aeadce9-1771",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p05/v1.0-trainval05_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "sweeps"
+  },
+  "v1.0-trainval05_blobs_radar.tgz": {
+   "bytes": 225370723,
+   "etag": null,
+   "etag_verified": false,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar_456/v1.0-trainval05_blobs_radar.tgz",
+   "unpacked_marker": false,
+   "unpacked_members": null
+  },
+  "v1.0-trainval06_blobs_camera.tgz": {
+   "bytes": 14477516576,
+   "etag": "3fadf463d5fdce865a6276a3cd4e48b8-1726",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p06/v1.0-trainval06_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "sweeps"
+  },
+  "v1.0-trainval06_blobs_radar.tgz": {
+   "bytes": 212062945,
+   "etag": null,
+   "etag_verified": false,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar_456/v1.0-trainval06_blobs_radar.tgz",
+   "unpacked_marker": false,
+   "unpacked_members": null
+  },
+  "v1.0-trainval07_blobs_camera.tgz": {
+   "bytes": 16065659931,
+   "etag": "a1b89576566f04b5e806e3994e7c820b-1916",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p07/v1.0-trainval07_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
+  },
+  "v1.0-trainval07_blobs_radar.tgz": {
+   "bytes": 204662745,
+   "etag": "e64035be87d2de4060567c26f9affc0e-25",
+   "etag_verified": true,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar/p07/v1.0-trainval07_blobs_radar.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "all"
+  },
+  "v1.0-trainval08_blobs_camera.tgz": {
+   "bytes": 16743348010,
+   "etag": "5eacd64792ebb97d476792bb972f43bb-1996",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p08/v1.0-trainval08_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
+  },
+  "v1.0-trainval08_blobs_radar.tgz": {
+   "bytes": 209159380,
+   "etag": "99f5339f969c1b10ce138a5820727fc7-25",
+   "etag_verified": true,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar/p08/v1.0-trainval08_blobs_radar.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "all"
+  },
+  "v1.0-trainval09_blobs_camera.tgz": {
+   "bytes": 19302674331,
+   "etag": "89aa8738dba50467d2251ad72c5e6d27-2302",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p09/v1.0-trainval09_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
+  },
+  "v1.0-trainval09_blobs_radar.tgz": {
+   "bytes": 220520470,
+   "etag": "90262a443e6ee913b2578c9fadfb7c21-27",
+   "etag_verified": true,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar/p09/v1.0-trainval09_blobs_radar.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "all"
+  },
+  "v1.0-trainval10_blobs_camera.tgz": {
+   "bytes": 27323394106,
+   "etag": "953cb9269f8b1d98df0296556a2b1baf-3258",
+   "etag_verified": true,
+   "kind": "camera",
+   "path": "downloads/nuscenes_camera/p10/v1.0-trainval10_blobs_camera.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
+  },
+  "v1.0-trainval10_blobs_radar.tgz": {
+   "bytes": 194926413,
+   "etag": "ff9da4487e47ce2b072951971a62cbaf-24",
+   "etag_verified": true,
+   "kind": "radar",
+   "path": "downloads/nuscenes_radar/p10/v1.0-trainval10_blobs_radar.tgz",
+   "unpacked_marker": true,
+   "unpacked_members": "all"
+  }
+ },
+ "data_markers": {
+  "nuscenes_full/.v1.0-trainval01_blobs.txt": "v1.0-trainval01_blobs.tgz",
+  "nuscenes_full/.v1.0-trainval02_blobs.txt": "v1.0-trainval02_blobs.tgz",
+  "nuscenes_full/.v1.0-trainval03_blobs.txt": "v1.0-trainval03_blobs.tgz",
+  "nuscenes_full/.v1.0-trainval04_blobs_lidar.txt": "v1.0-trainval04_blobs_lidar.tgz",
+  "nuscenes_full/.v1.0-trainval04_blobs_radar.txt": "v1.0-trainval04_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval04_keyframes.txt": "v1.0-trainval04_keyframes.tgz",
+  "nuscenes_full/.v1.0-trainval05_blobs_lidar.txt": "v1.0-trainval05_blobs_lidar.tgz",
+  "nuscenes_full/.v1.0-trainval05_blobs_radar.txt": "v1.0-trainval05_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval05_keyframes.txt": "v1.0-trainval05_keyframes.tgz",
+  "nuscenes_full/.v1.0-trainval06_blobs_lidar.txt": "v1.0-trainval06_blobs_lidar.tgz",
+  "nuscenes_full/.v1.0-trainval06_blobs_radar.txt": "v1.0-trainval06_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval06_keyframes.txt": "v1.0-trainval06_keyframes.tgz",
+  "nuscenes_full/.v1.0-trainval07_blobs_radar.txt": "v1.0-trainval07_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval08_blobs_radar.txt": "v1.0-trainval08_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval09_blobs_radar.txt": "v1.0-trainval09_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval10_blobs_radar.txt": "v1.0-trainval10_blobs_radar.tgz",
+  "nuscenes_full/.v1.0-trainval_meta.txt": "v1.0-trainval_meta.tgz",
+  "nuscenes_mini/.v1.0-mini.txt": "v1.0-mini.tgz"
+ },
+ "datasets": {
+  "v1.0-mini": {
+   "dir": "nuscenes_mini/v1.0-mini",
+   "samples": 404,
+   "scenes": 10,
+   "tables": {
+    "attribute.json": {
+     "bytes": 1147,
+     "sha256": "dc01438363e29188f25785884bb2431a7aa27ba0debbc359cb21cf1f00652210"
+    },
+    "calibrated_sensor.json": {
+     "bytes": 38486,
+     "sha256": "13d35eeb08bfbc4d0c9eaede7824ff65efe16f8bf345aa7ba9fd75f9866a8d0f"
+    },
+    "category.json": {
+     "bytes": 4747,
+     "sha256": "30f64fb175e5bd7db99892d90f9034481bca491f26600c5c0d1a56106b198dfe"
+    },
+    "ego_pose.json": {
+     "bytes": 7654286,
+     "sha256": "62817fd8b1633ed7925db46a29ec4c70f77116b866f248f0dc1bac4774459d70"
+    },
+    "instance.json": {
+     "bytes": 226647,
+     "sha256": "38bbfcf53fb78469ec2c5b07fdafc9a44e9fbf9ab858d35a007dd8347428a14a"
+    },
+    "log.json": {
+     "bytes": 1412,
+     "sha256": "d543b6fd127a6496ab9fa8de5c96a0887e0996e56f7a6c606de6d8b34827df58"
+    },
+    "map.json": {
+     "bytes": 3606,
+     "sha256": "6b1d504987d0630e7e32affb7ae0d99fe9b427c757a315ec2f56fb09ebd1bfce"
+    },
+    "sample.json": {
+     "bytes": 87838,
+     "sha256": "3c47794e2e6c09af4be7907b83f50750351180008d059899f42a9d405ed68586"
+    },
+    "sample_annotation.json": {
+     "bytes": 9307571,
+     "sha256": "49703705e98ddea281ca321aae3b7352a8b6495840fe654cf0717c5b7b721080"
+    },
+    "sample_data.json": {
+     "bytes": 15960620,
+     "sha256": "db18a189bd73648013d3e77ce6f5236d7c5997c0bdbf71166ddd8a6cb5c2c288"
+    },
+    "scene.json": {
+     "bytes": 3513,
+     "sha256": "cc4dfeac83ac4f5d3e7fc899f90156891a21fa08bc0f8a1ac0e0a27cc1a0bfa6"
+    },
+    "sensor.json": {
+     "bytes": 1185,
+     "sha256": "4d5c96570e2d8b09b88ce4c605e40ee43c4909f97bea5741185f18f92eb491ae"
+    },
+    "visibility.json": {
+     "bytes": 418,
+     "sha256": "87088bf2c78d070e1e215ff108f9c5c0958d124a14cce8f72bfb5d9651295749"
+    }
+   }
+  },
+  "v1.0-trainval": {
+   "dir": "nuscenes_full/v1.0-trainval",
+   "samples": 34149,
+   "scenes": 850,
+   "tables": {
+    "attribute.json": {
+     "bytes": 1147,
+     "sha256": "dc01438363e29188f25785884bb2431a7aa27ba0debbc359cb21cf1f00652210"
+    },
+    "calibrated_sensor.json": {
+     "bytes": 3268133,
+     "sha256": "67781a5dd7b2504b046ef89d6dcb267b12d1cc91af21f1ec5758624588e99865"
+    },
+    "category.json": {
+     "bytes": 4747,
+     "sha256": "30f64fb175e5bd7db99892d90f9034481bca491f26600c5c0d1a56106b198dfe"
+    },
+    "ego_pose.json": {
+     "bytes": 645746265,
+     "sha256": "be12bd501f694b344628ba0680a37d6e1ec83e62b37f310c205c1dbe41cd09ff"
+    },
+    "instance.json": {
+     "bytes": 16012833,
+     "sha256": "8f8b19496ce45353874714ce23a9df7f47f48cb6203df2dd456ea0247d146461"
+    },
+    "log.json": {
+     "bytes": 11968,
+     "sha256": "774c8256554a5569f64660e5f450394ce7e3a82168edfab530edab81f9ae7edc"
+    },
+    "map.json": {
+     "bytes": 3606,
+     "sha256": "6b1d504987d0630e7e32affb7ae0d99fe9b427c757a315ec2f56fb09ebd1bfce"
+    },
+    "sample.json": {
+     "bytes": 7424233,
+     "sha256": "6035ac58b6e971622be2bb1be15b917e7cb4e05ae984d6b339c27c1699c4ad9d"
+    },
+    "sample_annotation.json": {
+     "bytes": 583417244,
+     "sha256": "1f4f3835cb86f4efe49ccad3ae6f5f6a2d068422696de564c5892b5b06bea2a9"
+    },
+    "sample_data.json": {
+     "bytes": 1345678379,
+     "sha256": "6dcad49f0b9bd7b1cef04e2a0ff2ac2879b46b938e8d48153f00693cebb4de21"
+    },
+    "scene.json": {
+     "bytes": 285132,
+     "sha256": "bdc3211bfbfda652d5e9dab73c45c7132925ca84f869bf45e8e14edeafb1d20b"
+    },
+    "sensor.json": {
+     "bytes": 1185,
+     "sha256": "4d5c96570e2d8b09b88ce4c605e40ee43c4909f97bea5741185f18f92eb491ae"
+    },
+    "visibility.json": {
+     "bytes": 418,
+     "sha256": "87088bf2c78d070e1e215ff108f9c5c0958d124a14cce8f72bfb5d9651295749"
+    }
+   }
+  }
+ },
+ "file_lists": {
+  "manifests/nuscenes_full.tsv": {
+   "bytes": 76189272,
+   "lines": 787847,
+   "sha256": "59128a5662fae1261c1b7a03ec3eca9a371c6a6e7ddb2cc58e58c4bf51ad4113"
+  },
+  "manifests/nuscenes_mini.tsv": {
+   "bytes": 2599781,
+   "lines": 27300,
+   "sha256": "379e22b04016102ed13f7a69a8f4e99fad3fc4ac668ecc11df076f7547c7ada6"
+  },
+  "manifests/radar_456_archives.tsv": {
+   "bytes": 132,
+   "lines": 3,
+   "sha256": "77df9494d16d4bc182381fd8fa1a8cb0f8b7b0aa547e340227e5bdbcbe2eab3d"
+  }
+ },
+ "files": {
+  "nuscenes_full/LICENSE": {
+   "bytes": 25319,
+   "sha256": "1a218286e733f6d6135fc5698d614cda2be94ea096f6eee280278458e570636a"
+  },
+  "nuscenes_full/maps/expansion/boston-seaport.json": {
+   "bytes": 16244922,
+   "sha256": "fc33712481efd763be39ce7edca0ec924d2d1fe20e1c89d52e21bf43d86e6b59"
+  },
+  "nuscenes_full/maps/expansion/singapore-hollandvillage.json": {
+   "bytes": 8203967,
+   "sha256": "0c9209c277686e367b06ab5bbe2547ba357f7f790365cb4927f44ae0f78266b2"
+  },
+  "nuscenes_full/maps/expansion/singapore-onenorth.json": {
+   "bytes": 13809722,
+   "sha256": "17939122b940d7faff50fa7ff623ded7f739549a781c32dff1ecd1ac7bebca02"
+  },
+  "nuscenes_full/maps/expansion/singapore-queenstown.json": {
+   "bytes": 11011530,
+   "sha256": "c7e75f5a5643c4831aae1c99a0fdcc61e9ba3c01f98d922f0fafa34ea1062927"
+  },
+  "nuscenes_mini/LICENSE": {
+   "bytes": 25319,
+   "sha256": "1a218286e733f6d6135fc5698d614cda2be94ea096f6eee280278458e570636a"
+  },
+  "nuscenes_mini/maps/expansion/boston-seaport.json": {
+   "bytes": 16244922,
+   "sha256": "fc33712481efd763be39ce7edca0ec924d2d1fe20e1c89d52e21bf43d86e6b59"
+  },
+  "nuscenes_mini/maps/expansion/singapore-hollandvillage.json": {
+   "bytes": 8203967,
+   "sha256": "0c9209c277686e367b06ab5bbe2547ba357f7f790365cb4927f44ae0f78266b2"
+  },
+  "nuscenes_mini/maps/expansion/singapore-onenorth.json": {
+   "bytes": 13809722,
+   "sha256": "17939122b940d7faff50fa7ff623ded7f739549a781c32dff1ecd1ac7bebca02"
+  },
+  "nuscenes_mini/maps/expansion/singapore-queenstown.json": {
+   "bytes": 11011530,
+   "sha256": "c7e75f5a5643c4831aae1c99a0fdcc61e9ba3c01f98d922f0fafa34ea1062927"
+  }
+ },
+ "folders": {
+  "nuscenes_full/maps": {
+   "bytes": 478677657,
+   "files": 13,
+   "list_sha256": "4096382f2f3c0b50be6aade2f4e3d4e4e82b485659c78c5bef759be02f6f3ab9"
+  },
+  "nuscenes_full/samples/CAM_BACK": {
+   "bytes": 2541948491,
+   "files": 20418,
+   "list_sha256": "e7af863278bfc810aa8feb41627823349f34d78a316376b4e72922718b8beb2f"
+  },
+  "nuscenes_full/samples/CAM_BACK_LEFT": {
+   "bytes": 2858854280,
+   "files": 20418,
+   "list_sha256": "acb845877f1d41de46e1fe35a3258a5eab4428b456b9c7c206686e93bea93960"
+  },
+  "nuscenes_full/samples/CAM_BACK_RIGHT": {
+   "bytes": 2994230866,
+   "files": 20418,
+   "list_sha256": "9d5c88c378cf9a789bbb5362d718285f8283466164c6f28a552651d6cea1cc45"
+  },
+  "nuscenes_full/samples/CAM_FRONT": {
+   "bytes": 5089796906,
+   "files": 34149,
+   "list_sha256": "3a9000ecbdfdf6326aa214808aa4c95a9b158b5a22e7012f4206c8330529b124"
+  },
+  "nuscenes_full/samples/CAM_FRONT_LEFT": {
+   "bytes": 2964979135,
+   "files": 20418,
+   "list_sha256": "360fbe9650b70218e29e0568a2cff08bcbec52103e39662e87568828b0ee4993"
+  },
+  "nuscenes_full/samples/CAM_FRONT_RIGHT": {
+   "bytes": 2915592723,
+   "files": 20418,
+   "list_sha256": "1c9570add12b8818b7d046007c4d2a05bbe9e28db8aaae289f96389f5630ad9a"
+  },
+  "nuscenes_full/samples/RADAR_BACK_LEFT": {
+   "bytes": 303671140,
+   "files": 34148,
+   "list_sha256": "ad358edf4c18f4c1e017233193cbb81294e9b24d9124d955ea15c7164570b599"
+  },
+  "nuscenes_full/samples/RADAR_BACK_RIGHT": {
+   "bytes": 302818912,
+   "files": 34147,
+   "list_sha256": "6361f11b3316dc74149c6e46a51dd29c1e339608e1f38b59d56d11d1fffbc6f4"
+  },
+  "nuscenes_full/samples/RADAR_FRONT": {
+   "bytes": 313201638,
+   "files": 34146,
+   "list_sha256": "33c7bee579297af97a976a32593ec946229263f042fedf5e2beb0a8c5742e034"
+  },
+  "nuscenes_full/samples/RADAR_FRONT_LEFT": {
+   "bytes": 207735463,
+   "files": 34147,
+   "list_sha256": "5feb8b2470501239a1706b2a43d31a505b342d41b98c0b2bb467ee6ec2807848"
+  },
+  "nuscenes_full/samples/RADAR_FRONT_RIGHT": {
+   "bytes": 208393363,
+   "files": 34147,
+   "list_sha256": "00b3e3d9fe380e995f0c4f451a8d43ab195d6efdd5b10de6f4c33fc3fa60d3f6"
+  },
+  "nuscenes_full/sweeps/CAM_BACK": {
+   "bytes": 11974382138,
+   "files": 96248,
+   "list_sha256": "12a9830147401f899f54a03d18ac9ee1bc3bb8c77d07ad2f280a2a99906dfd0d"
+  },
+  "nuscenes_full/sweeps/CAM_BACK_LEFT": {
+   "bytes": 13361811199,
+   "files": 95598,
+   "list_sha256": "ce89a130833130a5608afcd87f8c399a2c25389d15093568122b159bf593ef45"
+  },
+  "nuscenes_full/sweeps/CAM_BACK_RIGHT": {
+   "bytes": 14387143879,
+   "files": 98098,
+   "list_sha256": "ae1e4a5a97caea18effafea10100bd03bfff37f9e2b60e72e6e95982c677df66"
+  },
+  "nuscenes_full/sweeps/CAM_FRONT": {
+   "bytes": 24465948198,
+   "files": 164166,
+   "list_sha256": "ffd522b27cf1101b6faf1127641fdc2cd406aef07f25b6f4b2bfdacb38840aa5"
+  },
+  "nuscenes_full/sweeps/CAM_FRONT_LEFT": {
+   "bytes": 14258793436,
+   "files": 98205,
+   "list_sha256": "1948aa97c6e28e35bd287ea76830a1824a41bfb09393c21892a59c426e596b0b"
+  },
+  "nuscenes_full/sweeps/CAM_FRONT_RIGHT": {
+   "bytes": 13980358709,
+   "files": 97896,
+   "list_sha256": "c0612c46785fc216e40c73834506eb4749bf9b6ee6eba1e267036ab1c89d584f"
+  },
+  "nuscenes_full/sweeps/RADAR_BACK_LEFT": {
+   "bytes": 1648634923,
+   "files": 185467,
+   "list_sha256": "e12abefd4eef9f8df9c2969c6b7610c42007fcab4b06ea9f9ec8ff3dae3b016c"
+  },
+  "nuscenes_full/sweeps/RADAR_BACK_RIGHT": {
+   "bytes": 1674993640,
+   "files": 189065,
+   "list_sha256": "1b5901000f5c7c7e7a69e5ccdc4082acf8aa4d606c193bc390b2dd9f53a65fb8"
+  },
+  "nuscenes_full/sweeps/RADAR_FRONT": {
+   "bytes": 1729285540,
+   "files": 188562,
+   "list_sha256": "d00f1a4215c58c61ff932e593ea1d6c9ad66925a053516889c9fe42db0f7c26d"
+  },
+  "nuscenes_full/sweeps/RADAR_FRONT_LEFT": {
+   "bytes": 1161100813,
+   "files": 191133,
+   "list_sha256": "fb2d5e810683f8cc72bcde178b8bd776640efd48ff587373e9b3176e14229f01"
+  },
+  "nuscenes_full/sweeps/RADAR_FRONT_RIGHT": {
+   "bytes": 1161292139,
+   "files": 190435,
+   "list_sha256": "b7aa9608200294915c3ae5b357806a611e514b7a71f7d278b2f79ae9f1566fca"
+  },
+  "nuscenes_full/v1.0-trainval": {
+   "bytes": 2601855290,
+   "files": 13,
+   "list_sha256": "794399b3a0c62acf515e11f8afc324a8d27df1e63da1847abe2cfcb1ddf30ef2"
+  },
+  "nuscenes_mini/maps": {
+   "bytes": 478702976,
+   "files": 14,
+   "list_sha256": "84ffd200a586946596521f83cac7619350fbc8fbd17e5fde3cbfb79b99129a81"
+  },
+  "nuscenes_mini/samples/CAM_BACK": {
+   "bytes": 65123489,
+   "files": 404,
+   "list_sha256": "5d2537e5d1fe16d92fd9c382048804a4d4ab05d4d4a8a79874b5153a9798f814"
+  },
+  "nuscenes_mini/samples/CAM_BACK_LEFT": {
+   "bytes": 70406461,
+   "files": 404,
+   "list_sha256": "36200672fcef3aa15596b7317853ae39fe8005c1b8ab45b64aba87e17c035443"
+  },
+  "nuscenes_mini/samples/CAM_BACK_RIGHT": {
+   "bytes": 74447794,
+   "files": 404,
+   "list_sha256": "a7637ac477ca651d1d359473f44c18ff0c086e5600915197d5f70e5181cace76"
+  },
+  "nuscenes_mini/samples/CAM_FRONT": {
+   "bytes": 72891996,
+   "files": 404,
+   "list_sha256": "28bee7451402c5a7826bcbf2fe5c83ae2c3aa9c782fc9fb89114171884e4ace7"
+  },
+  "nuscenes_mini/samples/CAM_FRONT_LEFT": {
+   "bytes": 73579279,
+   "files": 404,
+   "list_sha256": "fa54dd2cbb310c4a2c93146c20bd6e361d57c275fe0ee1ea2f2dfec75cd013d9"
+  },
+  "nuscenes_mini/samples/CAM_FRONT_RIGHT": {
+   "bytes": 75616763,
+   "files": 404,
+   "list_sha256": "e0432071e73cd80e9118634de194f338de5ad34f2367f5e50469e7a256f1180f"
+  },
+  "nuscenes_mini/samples/RADAR_BACK_LEFT": {
+   "bytes": 3502107,
+   "files": 404,
+   "list_sha256": "06b44f9f1b5637b8c27bfe1a5a5e57a336fe94b9c9ab772eb3c25bae446a1ad2"
+  },
+  "nuscenes_mini/samples/RADAR_BACK_RIGHT": {
+   "bytes": 3545236,
+   "files": 404,
+   "list_sha256": "321228b055efc30bec72a214e998ff7443e9c6245a086e7b9cbd88760a4d776d"
+  },
+  "nuscenes_mini/samples/RADAR_FRONT": {
+   "bytes": 3747121,
+   "files": 404,
+   "list_sha256": "7ff498194b62d271b81494b1e6e0e02119151e721281265106ee45d3089f180d"
+  },
+  "nuscenes_mini/samples/RADAR_FRONT_LEFT": {
+   "bytes": 2216794,
+   "files": 404,
+   "list_sha256": "581a07aa569ca9beaaef8dd318d74c5d5ebf74acb65cea4ad2393250d5752b6d"
+  },
+  "nuscenes_mini/samples/RADAR_FRONT_RIGHT": {
+   "bytes": 2583928,
+   "files": 404,
+   "list_sha256": "4799b7fcfc243f61ef4b1a95e61da6b6c5ec6fe9cdad86eec20a1b39fb902ca8"
+  },
+  "nuscenes_mini/sweeps/CAM_BACK": {
+   "bytes": 308956847,
+   "files": 1911,
+   "list_sha256": "c426d75d66daa987a29da01c671d61790e478524392502257b67ef4e54cdd617"
+  },
+  "nuscenes_mini/sweeps/CAM_BACK_LEFT": {
+   "bytes": 336693953,
+   "files": 1923,
+   "list_sha256": "722a76f74a229e8ba418f95737eafa129cbad6e786a91e5d46200e82aeba35b0"
+  },
+  "nuscenes_mini/sweeps/CAM_BACK_RIGHT": {
+   "bytes": 357222110,
+   "files": 1938,
+   "list_sha256": "d3522b33391a97dbc7a1449fb9320d38c1306216a0d5a29e9cf187ee6cc959c6"
+  },
+  "nuscenes_mini/sweeps/CAM_FRONT": {
+   "bytes": 350345345,
+   "files": 1938,
+   "list_sha256": "b1e3ff9142f596b0da2e19b7a07eb5ed0b70418ee4af6ff1ee00f6a8d33f74c6"
+  },
+  "nuscenes_mini/sweeps/CAM_FRONT_LEFT": {
+   "bytes": 352862259,
+   "files": 1940,
+   "list_sha256": "58282372810fd8d736796762bbbcb3e38c2427a8476bdd53a80c58196fdfba31"
+  },
+  "nuscenes_mini/sweeps/CAM_FRONT_RIGHT": {
+   "bytes": 362937935,
+   "files": 1934,
+   "list_sha256": "a72c5f89bdb786e9571f15076a439b637a8edc51bb5cee9c3d1964980defdae3"
+  },
+  "nuscenes_mini/sweeps/RADAR_BACK_LEFT": {
+   "bytes": 19287541,
+   "files": 2230,
+   "list_sha256": "6943294f1b8a1d666f01d0dc472ec2845c4f660ff257443e4f7e918b1af74048"
+  },
+  "nuscenes_mini/sweeps/RADAR_BACK_RIGHT": {
+   "bytes": 19540435,
+   "files": 2231,
+   "list_sha256": "12d91fa5474b66981443165023b2f0e0b387b40ce4262c710528d5c6ae522ef7"
+  },
+  "nuscenes_mini/sweeps/RADAR_FRONT": {
+   "bytes": 20688277,
+   "files": 2231,
+   "list_sha256": "2704863696f4ffb6f0167eb7ccc081865fb1f90eda8c5aa3a4b587cc37c656ec"
+  },
+  "nuscenes_mini/sweeps/RADAR_FRONT_LEFT": {
+   "bytes": 12529072,
+   "files": 2282,
+   "list_sha256": "f610806ca6dcd8393d18fc52528910a545f139691c86aedc157cc30654e6690f"
+  },
+  "nuscenes_mini/sweeps/RADAR_FRONT_RIGHT": {
+   "bytes": 14544855,
+   "files": 2269,
+   "list_sha256": "72799cbb317542f60306050d56d03fc4f7a276d13404441cb380af6b5cef2f4f"
+  },
+  "nuscenes_mini/v1.0-mini": {
+   "bytes": 33291476,
+   "files": 13,
+   "list_sha256": "1d80f84d11b2bd98044961ab576927b3132a4e8a9405a06d5092691be058d04c"
+  },
+  "occ3d/gts": {
+   "bytes": 2768813344,
+   "files": 34149,
+   "list_sha256": "3b132863dfe06e41be6eb346edcf1002d3610c26dee3665b9b3216ecd5fa283f"
+  }
+ },
+ "generated": "2026-11-01",
+ "generator": {
+  "folder_scanner": "powershell",
+  "tool": "datasets/NuScenes/tools/make_manifest.py",
+  "tool_sha256": "0629885a5c790fb2a4e2a388f1f7051d1c055706ee693bc681f13d9d928f8c20"
+ },
+ "licence": "nuScenes is for non-commercial use (the LICENSE of the data is under files); downloads only with Mirko's OK",
+ "links": {
+  "gt": {
+   "check": "python -m autogt data <dataroot>",
+   "registry": "autogt/versions.csv",
+   "store": "data/autogt/<signature>/index.json",
+   "tags": "autogt/v<N>"
+  },
+  "lane_additions": "bev_fusion_lane_center/data/rebuild.json",
+  "recipes": "datasets/NuScenes/README.md and datasets/NuScenes/tools/ (link_views.sh builds the views)"
+ },
+ "occ3d": {
+  "drive_ids": {
+   "annotations.json": "1Wj2saxyvfsBuIbG0rshcm3tFPB6-tuKa",
+   "gts.tar.gz": "1kiXVNSEi3UrNERPMz_CfiJXKkgts_5dY"
+  },
+  "files": {
+   "downloads/occ3d/annotations.json": {
+    "bytes": 150463571,
+    "sha256": "87cc81f04ef1cd82bd72647c32110b84de8e5620652ecb2b5beae83ee65a1ba2"
+   },
+   "downloads/occ3d/gts.tar.gz": {
+    "bytes": 2737816708,
+    "sha256": "0635d1383d8b99cce26a0344ec3ca3c4346f53907a06e82ea525acf7b1abba53"
+   },
+   "occ3d/annotations.json": {
+    "bytes": 150463571,
+    "sha256": "87cc81f04ef1cd82bd72647c32110b84de8e5620652ecb2b5beae83ee65a1ba2"
+   }
+  },
+  "scenes": 850
+ },
+ "root": {
+  "windows": "D:\\Auto-research\\NuScenes",
+  "wsl": "/mnt/d/Auto-research/NuScenes"
+ },
+ "schema": 1,
+ "source": {
+  "bucket": "motional-nuscenes",
+  "etag_check": "datasets/NuScenes/tools/verify_s3_etag.py",
+  "listing": "datasets/NuScenes/tools/list_nuscenes_bucket.py"
+ },
+ "views": {
+  "~/data/nuscenes": {
+   ".v1.0-mini.txt": "$ROOT/nuscenes_mini/.v1.0-mini.txt",
+   "LICENSE": "$ROOT/nuscenes_mini/LICENSE",
+   "maps": "$ROOT/nuscenes_mini/maps",
+   "nuscenes_infos_train.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn_mini/nuscenes_infos_train.pkl",
+   "nuscenes_infos_train_crn.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn_mini/nuscenes_infos_train_crn.pkl",
+   "nuscenes_infos_val.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn_mini/nuscenes_infos_val.pkl",
+   "nuscenes_infos_val_crn.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn_mini/nuscenes_infos_val_crn.pkl",
+   "radar_bev_filter": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn_mini/radar_bev_filter",
+   "radar_pv_filter": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn_mini/radar_pv_filter",
+   "samples": "$ROOT/nuscenes_mini/samples",
+   "sweeps": "$ROOT/nuscenes_mini/sweeps",
+   "v1.0-mini": "$ROOT/nuscenes_mini/v1.0-mini"
+  },
+  "~/data/nuscenes_full": {
+   ".v1.0-trainval01_blobs.txt": "$ROOT/nuscenes_full/.v1.0-trainval01_blobs.txt",
+   ".v1.0-trainval02_blobs.txt": "$ROOT/nuscenes_full/.v1.0-trainval02_blobs.txt",
+   ".v1.0-trainval03_blobs.txt": "$ROOT/nuscenes_full/.v1.0-trainval03_blobs.txt",
+   ".v1.0-trainval04_blobs_lidar.txt": "$ROOT/nuscenes_full/.v1.0-trainval04_blobs_lidar.txt",
+   ".v1.0-trainval04_blobs_radar.txt": "$ROOT/nuscenes_full/.v1.0-trainval04_blobs_radar.txt",
+   ".v1.0-trainval04_keyframes.txt": "$ROOT/nuscenes_full/.v1.0-trainval04_keyframes.txt",
+   ".v1.0-trainval05_blobs_lidar.txt": "$ROOT/nuscenes_full/.v1.0-trainval05_blobs_lidar.txt",
+   ".v1.0-trainval05_blobs_radar.txt": "$ROOT/nuscenes_full/.v1.0-trainval05_blobs_radar.txt",
+   ".v1.0-trainval05_keyframes.txt": "$ROOT/nuscenes_full/.v1.0-trainval05_keyframes.txt",
+   ".v1.0-trainval06_blobs_lidar.txt": "$ROOT/nuscenes_full/.v1.0-trainval06_blobs_lidar.txt",
+   ".v1.0-trainval06_blobs_radar.txt": "$ROOT/nuscenes_full/.v1.0-trainval06_blobs_radar.txt",
+   ".v1.0-trainval06_keyframes.txt": "$ROOT/nuscenes_full/.v1.0-trainval06_keyframes.txt",
+   ".v1.0-trainval_meta.txt": "$ROOT/nuscenes_full/.v1.0-trainval_meta.txt",
+   "LICENSE": "$ROOT/nuscenes_full/LICENSE",
+   "maps": "$ROOT/nuscenes_full/maps",
+   "nuscenes_infos_train.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn/nuscenes_infos_train.pkl",
+   "nuscenes_infos_train_crn.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn/nuscenes_infos_train_crn.pkl",
+   "nuscenes_infos_val.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn/nuscenes_infos_val.pkl",
+   "nuscenes_infos_val_crn.pkl": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn/nuscenes_infos_val_crn.pkl",
+   "radar_bev_filter": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn/radar_bev_filter",
+   "radar_pv_filter": "$REPO/bev_fusion_lane_center/data/nuscenes_additions/lcr_crn/radar_pv_filter",
+   "samples": "$ROOT/nuscenes_full/samples",
+   "sweeps": "$ROOT/nuscenes_full/sweeps",
+   "v1.0-trainval": "$ROOT/nuscenes_full/v1.0-trainval"
+  }
+ }
+}
