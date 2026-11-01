@@ -12,6 +12,7 @@ much of a set the store of the current generator holds. The store folder is shar
     sets.scenes(name)             the scene names of a set
     sets.tokens(name, ...)        the sample tokens of those scenes (json tables only, no devkit)
     sets.status(name, ...)        {"set", "version", "have", "total", "complete"} for the current generator signature
+    sets.stored_for(scenes, ...)  the same for any list of sequence names, with the missing sample tokens: `python -m autogt have`
     sets.check_raw(dataroot, ...) are the raw files the generator reads on disk (tables, map expansion, CAM_FRONT, the five radars)?
                                   `python -m autogt data`; sets.report_raw(result) prints it. The tools that fetch, verify and link the raw
                                   data are `datasets/NuScenes/tools/` (its README describes the layout on D:)
@@ -35,17 +36,20 @@ def scenes(name):
     return [x for x in lines if x]
 
 
-def _tables(name, version=None, dataroot=None):
-    """(version, dataroot) whose json tables hold every scene of the set: the asked version, else trainval before mini (the first
+def _find(want, version=None, dataroot=None):
+    """(version, dataroot) whose json tables hold every scene name of `want`: the asked version, else trainval before mini (the first
     that is on this machine and holds all of them; `dataroot` default ~/data/nuscenes_full / ~/data/nuscenes)"""
     from .suite import default_root, json_tables
-    want = scenes(name)
     for v in ([version] if version else ["v1.0-trainval", "v1.0-mini"]):
         root = os.path.expanduser(dataroot) if dataroot else default_root(v)
         if os.path.exists(os.path.join(root, v, "scene.json")) and set(want) <= {s["name"] for s in json_tables(root, v)[0]}:
             return v, root
-    raise ValueError(f"set {name!r}: no nuScenes version {version or 'v1.0-trainval / v1.0-mini'} under {dataroot or 'the default folders'} "
-                     f"holds all its {len(want)} scenes")
+    raise ValueError(f"no nuScenes version {version or 'v1.0-trainval / v1.0-mini'} under {dataroot or 'the default folders'} "
+                     f"holds all {len(want)} scenes asked for")
+
+
+def _tables(name, version=None, dataroot=None):
+    return _find(scenes(name), version, dataroot)
 
 
 def tokens(name, version=None, dataroot=None):
@@ -71,6 +75,17 @@ def status(name, data=None, version=None, dataroot=None, **options):
     stored = held(os.path.join(data or DATA, current_signature(**options)))
     have = sum(1 for t in toks if t in stored)
     return {"set": name, "version": version, "have": have, "total": len(toks), "complete": bool(toks) and have == len(toks)}
+
+
+def stored_for(want, data=None, version=None, dataroot=None, stride=1, **options):
+    """the keyframes (every `stride`-th) of the sequences `want` (names) that the store of the current generator holds: the check before a
+    training or an evaluation -> {"version", "scenes", "total", "have", "missing": [sample tokens]}; `python -m autogt have`"""
+    from .suite import DATA, current_signature, scene_tokens
+    version, root = _find(list(want), version, dataroot)
+    toks = [t for s in want for t in scene_tokens(s, version, root)[::stride]]
+    stored = held(os.path.join(data or DATA, current_signature(**options)))
+    missing = [t for t in toks if t not in stored]
+    return {"version": version, "scenes": len(list(want)), "total": len(toks), "have": len(toks) - len(missing), "missing": missing}
 
 
 def complete_in(sig_dir, version, dataroot):

@@ -10,6 +10,9 @@
       of an older generator is never mixed in
   python -m autogt data DATAROOT [--set small|full | --scenes ...]
       are the raw files the generator reads on disk (json tables, map expansion, CAM_FRONT, the five radars)? exit 1 if not
+  python -m autogt have [--set small|full | --scenes ... | --scenes-file F] [--version V] [--stride N]
+      is the stored GT of the current generator there for these sequences? exit 0 (all) or 1 (prints how many are missing): the check before
+      a training; `generate ... --scenes-file F` fills what is missing (resumable)
   python -m autogt sets       the scene sets small (mini, small experiments) and full (trainval, releases) and how much of each is stored
   python -m autogt versions   the GT versions (versions.csv), the current one marked
   python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] ...   the low-level writer behind it (full devkit)
@@ -305,6 +308,16 @@ def _print_sets():
               f"{s['have']}/{s['total']}{'  COMPLETE' if s['complete'] else ''}")
 
 
+def _scene_names(a):
+    """the sequence names asked for on the command line: --scenes, --scenes-file (one name per line, # comments) or None (--set / all)"""
+    if getattr(a, "scenes_file", None):
+        if a.scenes:
+            raise ValueError("pass either --scenes or --scenes-file, not both")
+        with open(a.scenes_file, encoding="utf-8") as f:
+            return [x for x in (ln.split("#")[0].strip() for ln in f) if x]
+    return a.scenes
+
+
 def _options(a):
     """the generator options of the command line (flow and radar on unless switched off; boxes_at only when it is not the default)"""
     return {"use_flow": not a.no_flow, "use_radar": not a.no_radar, **({} if a.boxes_at == "camera" else {"boxes_at": a.boxes_at})}
@@ -341,6 +354,15 @@ def _parser():
     ge.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the one found in DATAROOT)")
     ge.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all of trainval)")
     ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
+    ge.add_argument("--scenes-file", help="a file of sequence names, one per line (instead of --scenes)")
+    hv = sub.add_parser("have", help="is the stored GT of the current generator there for these sequences? exit 0 or 1 (the check before a training)")
+    hv.add_argument("--set", dest="set_name", default=None, help="small | full")
+    hv.add_argument("--scenes", nargs="*")
+    hv.add_argument("--scenes-file", help="a file of sequence names, one per line")
+    hv.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the first that holds all the sequences)")
+    hv.add_argument("--dataroot", default=None)
+    hv.add_argument("--stride", type=int, default=1)
+    hv.add_argument("--data", default=None, help="the store folder (default data/autogt)")
     b = sub.add_parser("build", parents=[gen], help="the low-level writer of generate (one full devkit, --out required)")
     b.add_argument("--dataroot", default="~/data/nuscenes")
     b.add_argument("--version", default="v1.0-mini")
@@ -397,7 +419,19 @@ def _cmd_data(a):
 
 
 def _cmd_generate(a):
-    generate(a.dataroot, a.out, a.version, a.scenes, a.stride, a.res, workers=a.workers, set_name=a.set_name, **_options(a))
+    generate(a.dataroot, a.out, a.version, _scene_names(a), a.stride, a.res, workers=a.workers, set_name=a.set_name, **_options(a))
+
+
+def _cmd_have(a):
+    from . import current_version, sets
+    want = sets.scenes(a.set_name) if a.set_name else _scene_names(a)
+    if not want:
+        raise ValueError("give --set, --scenes or --scenes-file")
+    r = sets.stored_for(want, a.data, a.version, a.dataroot, a.stride)
+    print(f"{r['have']}/{r['total']} keyframes of {r['scenes']} sequences ({r['version']}) are stored for GT version "
+          f"{current_version()}; missing {len(r['missing'])}")
+    if r["missing"]:
+        raise SystemExit(1)
 
 
 def _cmd_build(a):
@@ -441,10 +475,10 @@ def _cmd_video(a):
     run(a.scene, a.mp4, a.seconds, dataroot=a.dataroot or default_root(a.version), version=a.version)
 
 
-COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data,
+COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "have": _cmd_have,
             "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets,
             "report": _cmd_report, "clean": _cmd_clean, "video": _cmd_video}
-CHECKS_ARGUMENTS = ("data", "generate", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
+CHECKS_ARGUMENTS = ("data", "generate", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
 
 
 def main(argv=None):

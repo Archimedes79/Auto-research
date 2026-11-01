@@ -414,6 +414,16 @@ def run(root=None, verbose=True):
         open(os.path.join(sd5, small_tokens[0] + ".npz"), "wb").write(b"x")
         assert sets.status("small", data=d, version="v1.0-mini", dataroot=root)["complete"]
         assert sets.complete_in(sd5, "v1.0-mini", root) == ["small"]                  # full needs trainval: skipped, not an error
+        from .suite import scene_tokens as tokens_of                                   # `have`: the check before a training
+        want_ = sets.scenes("small")[:2]
+        every = sets.stored_for(want_, data=d, version="v1.0-mini", dataroot=root)
+        assert every["missing"] == [] and every["have"] == every["total"] > 0 and every["scenes"] == 2, every
+        gone = tokens_of(want_[0], "v1.0-mini", root)[0]
+        os.remove(os.path.join(sd5, gone + ".npz"))
+        gap = sets.stored_for(want_, data=d, version="v1.0-mini", dataroot=root)
+        assert gap["missing"] == [gone] and gap["have"] == gap["total"] - 1, gap
+        open(os.path.join(sd5, gone + ".npz"), "wb").write(b"x")
+        assert sets.stored_for(want_, data=d, version="v1.0-mini", dataroot=root, stride=1000)["total"] == 2, "stride"
         gen5 = _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"])
 
         def manifest(run, complete=True):
