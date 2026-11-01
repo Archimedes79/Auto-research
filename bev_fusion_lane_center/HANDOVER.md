@@ -14,14 +14,14 @@ New chat: start in the repository folder, say "Read HANDOVER.md and continue". R
 D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex sentence; D29 one GT version + autogt tags (v1-v5 done; evaluation default, run records and training start check after the freeze); D30 one image region for all pipelines; D33 hook gaps; D35 key-level protection; D36 coverage rule; D37 fusion numbers on the fusion area only; D38 front-only rig: outside the fusion area don't care on both sides (settles D31); object visibility = footprint share; aux heads: own area, debug tool, off in final E2E.
 
 ## Open for Mirko
-- D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). "D1." (unclear, asked back).
+- D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop).
 - D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start now (freeze lifted).
 - D36/D38 open: radar rule (Mirko: no per-box gate; radar should see moving objects in line of sight; soft weights later, BEV chat); footprint: 0.1/0.5, soft occlusion, evaluation states first: decided. GT chat plans v6 after the freeze.
 
 ## Next
 1. Next lane loop: precision at range, idle timing of ring / union / prototype, route success on spur-kept graphs.
 2. bev (BEV system chat): t11 code review + commit, seed twin of B2, the long run with hurdle + accumulation 2, then D29 part 2 and D36.
-3. Core (tools chat): reproducibility block (`autoresearch/reproducibility.md`), hold marker for stopped runs, hygiene list.
+3. Core (tools chat): reproducibility block (`autoresearch/reproducibility.md`), hold marker for stopped runs (`autoresearch/coordination.md`), hygiene list.
 
 ## Pointers
 PROBLEM.md; PLAN.md; METHOD.md; closed_questions.md; DECISIONS.md; git: tag `lcr/<id>` per run (bev `bf/<id>`), pushes only on request.
