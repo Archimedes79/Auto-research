@@ -203,7 +203,7 @@ Every lever below has a measured effect size from this repository; the sums are 
 | 6 | a confirm evaluation on the 68 official val scenes never used for a decision (if their caches exist) | - | 1 GPU hour | removes the selection effect of reusing the same 82 scenes |
 
 **Compute reality.** GaussianCaR was trained for 40 epochs with an effective batch of 16 on 4 x A100 80 GB. For the old features the remaining gap needed 4 - 10 more doublings of the steps
-(16 - 1000 x the compute; `t6_soa_gap` section 5). With the new features the slope is unknown; lever 1 measures it: the dual chain at 6000 optimiser steps with accumulation 2 (4x the samples), started at 09:01 on 1 November (snapshot d14597e2e8, about 5.5 h on the whole GPU at the 3.4 s per step measured in the first steps, 8.4 h at arm B2's ledger rate;
+(16 - 1000 x the compute; `t6_soa_gap` section 5). With the new features the slope is unknown; lever 1 measures it: the dual chain at 6000 optimiser steps with accumulation 2 (4x the samples), started at 09:01 on 1 November and paused at step 5030 (84 %) at 14:38, to be resumed (snapshot d14597e2e8, about 5.5 h on the whole GPU at the 3.4 s per step measured in the first steps, 8.4 h at arm B2's ledger rate;
 card 3b / 3c of t10, prediction and rule written before the start: lane divider 0.39 with the range 0.355 - 0.44, a gain of +0.05) against its own 3000-step run (0.335, 0.350); the nearest old-feature
 reference is the 7000 x 2 start recipe (0.273 on the same 1000 frames, 4.7x the samples). **Rule, written in the card before the run (revision 2, after two critic passes):** a gain of at least +0.04 on the lane
 divider over the 3000-step dual chain = continue with levers 1 and 2, provisionally (one seed: the tool never says KEEP on one seed); a gain inside the noise band of 0.029 drops nothing on one run, a second long
@@ -276,8 +276,10 @@ graph: equal Q at 26 x (2.3), with its gaps. 6. What the checks caught, and wher
 - DONE since version 3: the like-for-like maps (section 4; GPU scoring, a few minutes per model, checked against the stored CPU run), the velocity arms (section 2.2), the lane prototype with its one
   TEST use (section 2.3). PENDING: the 6000-step run (below).
 - Lever 1 (the 6000-step dual run in the lead's version, with the velocity fix and accumulation 2): STARTED at 09:01 on 1 November, after the restructured autoresearch was merged (08:19) and its smoke
-  test passed, by Mirko's decision; about 5.5 h on the whole GPU at the measured 3.4 s per step (expected end about 15:00; up to 17:25 at the B2 ledger rate), then its cold VAL 1000 evaluation (chained, about 15 minutes); card 3b / 3c revision 2; the machine
-  stays on (the shutdown is cancelled). If it is not finished at the meeting, the deck says "running"; intermediate checkpoints are not scored (the learning rate is still at 27 % at step 4000).
+  test passed, by Mirko's decision; **PAUSED at 14:38 at step 5030 of 6000 (84 %) on Mirko's request** (trainsuite stop: a full checkpoint was saved at the next step, exit 75; no steps lost; it had been stopped once before at step 4773 and was restarted by another session at 14:20, which Mirko did not want). It resumes from that checkpoint on Mirko's word;
+  its cold VAL 1000 evaluation (chained, about 15 minutes) and the like-for-like map scoring follow the resumed run, about 1 h of training is left. A CUDA error at step 3200 (12:09) had already been resumed once by the launcher
+  (same snapshot), so the finished run will be a run resumed three times (fresh data order each time), named so in every table. Until it finishes the deck says "paused at 84 %, result pending"; intermediate checkpoints are not scored
+  (the learning rate was 2.2e-05, about 7 % of the peak, at the stop); card 3b / 3c revision 2 and the log 3d of `t10_dual_features`.
 - Decisions that wait for Mirko: D4, D17, D29, D30, D31 (D18, D19, D25 and D33 were answered this morning); permission for the two downloads (section 8, item 6).
 
 ## 11 Sources
