@@ -2,6 +2,10 @@
 
 General and problem-independent: the method (`METHOD.md`), four agent roles (`agents/`), five templates (`templates/`), two prompts (`prompts/`) and the tools that make the method hold (`tools/`). A problem plugs in through its own folder. It is kept small on purpose: a new template, agent or tool only when the same thing has been done twice by hand (`METHOD.md`, "Code, git, size"), and only a few rules are hard (`METHOD.md`, "Hard rules and defaults").
 
+![autoresearch overview: you, one lead agent, a notebook of plain files, experiment agents, code that measures and refuses](overview.svg)
+
+The overview above is generated from `overview.json`; the detail with every box and every tool is [architecture.md](architecture.md) (the picture below, 26 boxes).
+
 ![autoresearch: two loops through four layers. The person decides, agents write plain files, code runs them and writes the records back](architecture.svg)
 
 The architecture in one picture: four layers - the **person**, the **agents** (four roles), **plain files in the problem folder** and **code** (the tools and the two suites) - and two loops: the outer one (problem, research, branches, tracking of the n best versions, promotion, cleanup) runs one round after another, the inner one (build, train, evaluate, decide) once per experiment, several at a time. Nothing but files passes between agents and code, so every step can be read, diffed in git and resumed. The points that can refuse are drawn red: the write gate (the gate hook and the card check), the start gate (`run.py`: a card, a logged TEST row, a GPU slot, a tagged snapshot), the decision rule (`decide.py`), the promotion (the person, with one TEST check) and the cleanup (`clean_temp.py` tags the scratch and moves it away). [Each box with the code it stands for](architecture.md). The drawings are generated from `architecture.json` (and the two problems' `training/architecture.json`) by `tools/archdraw.py`, which also fails when a box names a file or symbol that does not exist, or a code file is in no box (section "Examples").
@@ -19,6 +23,7 @@ The architecture in one picture: four layers - the **person**, the **agents** (f
 | `history/` | design history, not read by the tools: the long roadmap and reviews of 2026-10-25, the D22 tool-fix spec (applied), the evalsuite architecture, the repository reviews of 2026-10-31, the target design of D32 and its migration record (`TARGET_2026-11-01.md`, finished in its lean form by D34) |
 | `reproducibility.md` | what a result package records (GT version and mode, evaluator code, frame list, model, environment), the gaps today and the plan: a `provenance` block and `repro.py` (design, not built) |
 | `coordination.md` | design of two small mechanisms between chats: the hold marker for stopped runs and claims / freezes with a reason and a release (design, not built) |
+| `overview.json` | the overview drawing (8 boxes: you, the lead agent, the notebook, experiment agents, measuring code and gates, research and critic on demand), rendered to `overview.svg` / `overview.md` by `tools/archdraw.py`; the 26-box detail is `architecture.json` |
 | `ROADMAP.md` | the open items of the system (backups, CONFIRM split, evaluation cache key, ...), what is done, and what the last reviews taught |
 | `architecture.json` / `.svg` / `.md` | the drawing of this system and why it looks like this: the spec (boxes, arrows, the code each box stands for), the generated picture and the generated file map; `python tools/archdraw.py check architecture.json` keeps picture and code together |
 | `config.json` | the default problem folder |
