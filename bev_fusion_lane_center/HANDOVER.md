@@ -16,7 +16,7 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
 2. Next lane loop: precision at range (range-dependent threshold for edge seeds; union with a wider vertex merge), idle timing of ring and union, route success on spur-kept graphs, idle ms of the prototype (both decide D4).
 3. bev: code review + commit of the t11 code; seed twin of B2; the 6000-step run with the hurdle + accumulation 2.
 
-Decided 2026-11-01 and applied: D25 (PROBLEM.md vertex sentence), D18 (per-card bands), D19 (`autoresearch/tools/machine_lock.py`, run.py waits on another owner's exclusive lock), D33 (gate-hook gaps), D17 (loop ranges by hand, closed). Open for Mirko: D4 (prototype, after route success and timing), D30 - D31 (bev); D29 decided: one GT version + autogt tags (GT Discussion chat); Mirko's "D1." is asked back (DECISIONS.md).
+Decided 2026-11-01 and applied: D25 (PROBLEM.md vertex sentence), D18 (per-card bands), D19 (`autoresearch/tools/machine_lock.py`, run.py waits on another owner's exclusive lock), D33 (gate-hook gaps), D17 (loop ranges by hand, closed). Open for Mirko: D4 (prototype, after route success and timing), D31 (bev); D29 decided: one GT version + autogt tags (GT Discussion chat); D30: same image region for all pipelines; Mirko's "D1." is asked back (DECISIONS.md).
 
 Method change 2026-11-01 (Mirko in chat, no D entry): research (P1) only on a trigger; planner / coder / researcher work inline unless context or fresh eyes need a spawn. A round starts with `autoresearch/prompts/research_steps.md` step 0 (ten lines, Mirko says OK); rules in `autoresearch/METHOD.md`, "Planning a round".
 
