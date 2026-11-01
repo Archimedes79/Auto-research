@@ -439,20 +439,20 @@ def consistency_weight(cfg, step_frac):
     return cfg.consistency * min(1.0, max(0.0, (step_frac - hold) / max(ramp, 1e-6)))
 
 
-def consistency_term(model, loss, res, gts, gt_samples, device):
+def consistency_term(model, loss, res, gts, gap_steps, device):
     """Train-only cross-time consistency of the predictions at dt = 0 and dt = +-0.5 s (loss_extras): the layers whose
-    kind is area / line / object, the visibility of the cells = camera and not occluded, the ego steps and the motion
-    field of the batch. -> the result dict of cross_time_consistency."""
+    kind is area / line / object, the visibility of the cells = camera and not occluded, the ego steps (batch["gap_steps"]) and the
+    motion field of the batch. -> the result dict of cross_time_consistency."""
     sel = [i for i, (_, kind, _) in enumerate(loss.spec) if kind in ("area", "line", "object")]
     out = res["out"]
     probs = {dt: torch.sigmoid(o["sem"][:, sel].float()) for dt, o in out.items()}
     weights = {dt: build_layer_targets(gts[dt], loss.cfg, out[dt].get("mass"), dt, device)["w_cam"] for dt in out}
-    steps = {dt: [s["prev" if dt < 0 else "next"]["meta"]["steps"] for s in gt_samples] for dt in out if dt != 0.0}
+    steps = {dt: [g["prev" if dt < 0 else "next"] for g in gap_steps] for dt in out if dt != 0.0}
     return cross_time_consistency(probs, steps, out[0.0]["v_hat"].float(), model.grid, weights)
 
 
 def gap_ego_motion(steps):
-    """The ego steps [(dt_i, v_i, omega_i)] of the GT meta (time 0 -> the target keyframe, negative dt backwards) as ONE
+    """The ego steps [(dt_i, v_i, omega_i)] (batch["gap_steps"]: time 0 -> the target keyframe, negative dt backwards) as ONE
     splat step (dt, v, omega) that lands a static point where the chain does: the chain is composed with the splat's own
     motion model p' = R(-omega dt)(p - d), d = (v dt, v omega dt^2 / 2); omega = heading change / dt, v = forward chord /
     dt (what splat.ego_speed_yawrate gives from the two poses). dt is the TRUE gap (0.40-0.60 s on nuScenes), not the
@@ -470,14 +470,15 @@ def gap_ego_motion(steps):
     return T, chord_x / T, th / T
 
 
-def batch_ego(gt_samples, dts, device):
-    """{nominal dt != 0: (dt, v, omega)} as (B,) tensors: the true gap and the gap-mean ego motion of every sample."""
+def batch_ego(gap_steps, dts, device):
+    """{nominal dt != 0: (dt, v, omega)} as (B,) tensors: the true gap and the gap-mean ego motion of every sample, from batch["gap_steps"]
+    (the dataset makes them from the poses: the network input needs no ground truth)."""
     ego = {}
     for dt in dts:
         if abs(dt) < 1e-6:
             continue
         key = "prev" if dt < 0 else "next"
-        vals = [gap_ego_motion(s[key]["meta"]["steps"]) for s in gt_samples]
+        vals = [gap_ego_motion(g[key]) for g in gap_steps]
         ego[dt] = tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
     return ego
 
@@ -505,9 +506,10 @@ def detach_tree(x):
 
 
 def clip_step(prev_batch, device):
-    """(dt, v, omega) as (B,) tensors from the previous keyframe of each clip to the current one: the GT ego steps of the
-    previous batch toward its next keyframe, composed into one splat step; the model's memory pose advances by it."""
-    vals = [gap_ego_motion(s["next"]["meta"]["steps"]) for s in prev_batch["gt"]]
+    """(dt, v, omega) as (B,) tensors from the previous keyframe of each clip to the current one: the ego steps of the
+    previous batch toward its next keyframe (batch["gap_steps"], from the poses), composed into one splat step; the model's memory pose
+    advances by it."""
+    vals = [gap_ego_motion(g["next"]) for g in prev_batch["gap_steps"]]
     return tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
 
 
@@ -522,7 +524,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     previous keyframe of the clip and the ego step since then (sequence training)."""
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))
-    ego = batch_ego(batch["gt"], dts, device) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
+    ego = batch_ego(batch["gap_steps"], dts, device) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
     batch = to_device(batch, device)
     ctx = torch.autocast("cuda", dtype=torch.bfloat16) if amp == "bf16" and device.startswith("cuda") else torch.autocast("cpu", enabled=False)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
@@ -541,7 +543,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
         out["total_main"] = out["total"].detach()                                 # without the train-only terms
         wc = consistency_weight(cfg, step_frac) if cfg is not None and train_terms and len(dts) > 1 else 0.0
         if wc > 0:                                                                 # nothing is computed during the hold
-            ct = consistency_term(model, loss, res, gts, batch["gt"], device)
+            ct = consistency_term(model, loss, res, gts, batch["gap_steps"], device)
             out["consistency"] = ct["total"]
             out["total"] = out["total"] + wc * ct["total"]
         side = res.get("radar_side")                                               # radar_kind "delta_slots" only
@@ -862,7 +864,9 @@ def _selftest():
         gts = sample_targets(batch["gt"])
         assert sorted(gts) == [-0.5, 0.0, 0.5], sorted(gts)
         # 0 the true gap and the gap-mean ego motion of the ego steps (nominal 0.5 s, true 0.40-0.60 s)
-        ego = batch_ego(batch["gt"], sorted(gts), "cpu")
+        assert all(g[k] == s[k]["meta"]["steps"] for g, s in zip(batch["gap_steps"], batch["gt"]) for k in ("prev", "next")), \
+            "the dataset's gap steps (from the poses) equal the ones the GT carries"
+        ego = batch_ego(batch["gap_steps"], sorted(gts), "cpu")
         assert sorted(ego) == [-0.5, 0.5] and all(t.shape == (2,) for e in ego.values() for t in e), ego
         assert all(0.35 < abs(float(d)) < 0.65 for e in ego.values() for d in e[0]) and bool((ego[-0.5][0] < 0).all()) \
             and bool((ego[0.5][0] > 0).all())

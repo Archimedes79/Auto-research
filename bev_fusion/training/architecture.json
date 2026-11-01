@@ -175,7 +175,7 @@
     "training/train.py::clip_step",
     "training/nuscenes_dataset.py::FrontRadarDataset"
    ],
-   "note": "the ego step from every past frame to now (dataset, from the poses), calibration and crop; TODAY the true gap to the target time and the memory step between calls are built in train.py from the GT meta (batch_ego, clip_step): a layer-1 leak, the network cannot run without GT until the dataset makes them from the poses"
+   "note": "the ego step from every past frame to now (dataset, from the poses), calibration and crop, the radar poses, and the ego steps to the neighbouring keyframes (batch['gap_steps']: the true gap to the target time and the memory step between calls, from the poses; train.batch_ego / clip_step read them, so the network runs without GT)"
   },
   {
    "id": "iface",
@@ -434,7 +434,7 @@
     "training/precompute.py::radar_hits",
     "training/lift_pd.py::camera_visibility"
    ],
-   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans (D36; placeholder until autogt.coverage.radar_cells), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
+   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans of the calibrated poses (D36; autogt.coverage.radar_cells, cached per rig), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
   }
  ],
  "edges": [

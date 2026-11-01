@@ -92,6 +92,58 @@ def curves(run, out_png):
         return False
 
 
+def data_block(rundir):
+    """Which data, GT, code and weights made the numbers (the card's provenance block), for each stored evaluation (val, and train when evaluated):
+    enough to find the same frames again; a value the evaluation did not record says so instead of staying silent."""
+    rows = []
+    for label, name in (("val", "card.json"), ("train", "card_train.json")):
+        try:
+            c = json.load(open(os.path.join(rundir, "eval", name), encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        pv = c.get("provenance") or {}
+        d, gt, sub, ev = pv.get("data") or {}, pv.get("gt") or {}, pv.get("subject") or {}, pv.get("evaluator") or {}
+        use = d.get("use") or {}
+        tg = sub.get("train_gt") or {}
+        nr = "not recorded"
+        rows.append((label, [("split rule", use.get("split_rule") or d.get("split") or nr),
+                             ("scenes", f"{use.get('scenes_evaluated', nr)} evaluated of {use.get('scenes_available', nr)} available of {use.get('scenes_official', nr)} in the official split"),
+                             ("frames", f"{use.get('frames_evaluated', c.get('frames', nr))}, list hash {d.get('frame_hash', nr)}, raw data {d.get('dataset', nr)} (manifest {d.get('manifest_hash', nr)})"),
+                             ("GT scored against", f"version {gt.get('version', nr)}, signature {gt.get('signature', nr)}"),
+                             ("GT the model was trained on", f"version {tg.get('version', nr)}, signature {tg.get('signature', nr)}"),
+                             ("evaluator", f"code hash {ev.get('code_hash', nr)}, commit {ev.get('commit', nr)}, dirty: {ev.get('dirty', nr)}"),
+                             ("weights", f"{sub.get('ckpt', nr)} (hash {sub.get('ckpt_hash', nr)}), step {sub.get('step', nr)}, seed {pv.get('seed', nr)}"),
+                             ("scene names", ", ".join(use.get("scene_names", [])) or nr)]))
+    if not rows:
+        return ""
+    out = ["<h2>Data used (traceable)</h2>"]
+    for label, items in rows:
+        out.append(f"<h3 style='font-size:14px'>{label}</h3><table>" + "".join(f"<tr><th class='l'>{html.escape(k)}</th><td class='l' style='max-width:1000px'>{html.escape(str(v))}</td></tr>" for k, v in items) + "</table>")
+    return "".join(out)
+
+
+def gap_block(rundir, card):
+    """Training against validation: the same numbers on frames the network was trained on and on frames it never saw (eval/table_train.txt next to
+    eval/table.txt). The training number is what this architecture, data and schedule can FIT (EMA weights, no augmentation, cold memory), the gap to
+    the validation number is what is lost in generalisation. Only for runs evaluated on both splits (`bev_suite.py RUN generalisation`)."""
+    tr, va = read_table(os.path.join(rundir, "eval", "table_train.txt")), dict(read_table(os.path.join(rundir, "eval", "table.txt")))
+    if not tr or not va:
+        return ""
+    rows = []
+    for key, t in tr:
+        if key not in va:
+            continue
+        v = va[key]
+        gap = t - v
+        worse = (gap < 0) if lower_is_better(key, card) else (gap > 0)                  # training better than validation = the usual overfit direction
+        rows.append(f"<tr><td class='l'>{html.escape(key)}</td><td>{fmt(t)}</td><td>{fmt(v)}</td><td>{gap:+.4f}</td>"
+                    f"<td>{(100 * gap / t if t else float('nan')):+.1f} %</td><td>{'train better' if worse and abs(gap) > 1e-9 else ''}</td></tr>")
+    return ("<h2>Training against validation (generalisation)</h2><table><tr><th class='l'>metric</th><th>train</th><th>val</th><th>train - val</th><th>relative</th><th></th></tr>"
+            + "".join(rows) + "</table><p class='note'>train = frames the network was trained on (what it can fit: the practical ceiling of this architecture, data and schedule); "
+            "val = scenes it never saw; the gap is the generalisation loss. Both with the EMA weights, no augmentation and an empty memory, same number of frames "
+            "spread over the scenes of each split. The TEST split is not used here (it needs a logged row under a recorded decision).</p>")
+
+
 OPS = {"fps": 10.0, "util": 0.3, "extra": []}      # set from the command line: frame rate, share of the peak a real accelerator reaches, fixed parts [(name, GOPs)]
 
 
@@ -204,6 +256,8 @@ def build(rundir, vs, run_id, note, max_pic, out_dir):
                  "is a tie (decide.py gives the verdict, not this page). Full list: eval/table.txt.</p>")
     else:
         h.append("<p class='note'>no eval/table.txt yet: run the evaluation first.</p>")
+    h.append(gap_block(rundir, card))
+    h.append(data_block(rundir))
     try:
         lat = json.load(open(os.path.join(rundir, "eval", "latency.json"), encoding="utf-8")).get("latency", {})
         h.append("<h2>Cost</h2><table>" + "".join(f"<tr><th class='l'>{k}</th><td>{fmt(v)}</td></tr>" for k, v in lat.items() if isinstance(v, (int, float)) and "median" in k or k == "p90_ms") + "</table>"

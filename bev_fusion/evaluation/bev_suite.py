@@ -16,6 +16,9 @@
                                                 the --vs runs (first = control), cost, random frames + a video (made first when the run has none) and a
                                                 review field per picture; -> RUN/report/index.html (autoresearch/tools/run_report.py; --ingest there
                                                 takes the review.json the page exports)
+    generalisation [--n N]                      the same evaluation on val and on the TRAIN split (N frames each; default = the largest n already
+                                                evaluated on val, else 600; stored val numbers are reused) -> eval/table_train.txt + the page with the
+                                                train-vs-val gap table; train = what the architecture can fit, the gap = what is lost on unseen scenes
     time                                        ms per frame of the chain (idle GPU only) -> eval/latency.json
     memory [--clips 600]                        does the carried memory help? warm vs cold on the same frames -> eval/memory.json + txt
     compare RUN_A RUN_B [--tag _warm] [--n N] [--force]   paired scene bootstrap between two evaluated runs (b - a; runs evaluated
@@ -58,7 +61,7 @@ def _flat_name(m: str, rest: str, prefix_seg: str):
     if m == "seg":
         mask, r = rest.split("/", 1)
         return f"{prefix_seg}_{mask}/seg/{r}"
-    if m in ("det", "detr"):
+    if m in ("det", "detr", "curve"):
         return f"{m}/{rest}"
     if m == "loss":
         return "val_loss/" + rest.split("/", 1)[1]
@@ -153,7 +156,24 @@ def provenance_start(suite) -> dict:
         return {"error": f"{type(ex).__name__}: {ex}"}
 
 
-def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, start: dict = None) -> dict:
+def data_use(split: str, store, avail=None) -> dict:
+    """which data an evaluation used, readable without the code: the split is the nuScenes norm (nuscenes.utils.splits.create_splits_scenes: train 700 /
+    val 150 scenes); only the scenes whose features are cached can be run, so `available` is smaller than `official`; `scenes` are the ones the frames of
+    this evaluation came from (their names, so another person can look them up); the test split of nuScenes has no public ground truth and is not used"""
+    try:
+        from nuscenes.utils.splits import create_splits_scenes
+        official = set(create_splits_scenes().get(split, []))
+    except Exception:                                    # no devkit: the counts stay unknown, the names stay
+        official = set()
+    used = sorted(store.scene_names())
+    return {"split_rule": f"nuScenes official split '{split}' (nuscenes.utils.splits.create_splits_scenes), restricted to the scenes with cached features; "
+                          "the nuScenes test split has no public ground truth and is not used",
+            "scenes_official": len(official) or None, "scenes_available": len(avail) if avail is not None else None, "scenes_evaluated": len(used),
+            "frames_evaluated": len(store.frames), "scenes_not_in_official_split": [s for s in used if official and s not in official],
+            "scene_names": used}
+
+
+def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, start: dict = None, avail=None) -> dict:
     """the `provenance` block of the card (design autoresearch/reproducibility.md, collector autoresearch/tools/provenance.py): GT version and
     signature, the hash of the evaluator's code (evaluation/ and autoresearch/evalsuite/) with the files that differ from its commit, the frame
     list, the raw-data manifest, the model (run, checkpoint hash and step, config hash, its training GT), the settings and the environment of THIS
@@ -176,6 +196,7 @@ def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, star
                          settings={"tag": tag, "n": e.n, "warm": bool(e.warm), "prior": e.prior, "control": a.control or None, "state": state,
                                    "weights": "EMA", "device": subj.get("device") or getattr(a, "device", None), "code": subj.get("code"),
                                    "store": {k: man.get(k) for k in ("created", "resumed", "commit")}})
+        pv.setdefault("data", {})["use"] = data_use(a.split, store, avail)
         ev, sub = pv.get("evaluator", {}), pv.get("subject", {})
         if start.get("tree") and ev.get("code_hash") != start["tree"]:       # the evaluator's code changed while the evaluation ran
             ev.update(dirty="unknown", changed_during_run=True, code_hash_at_start=start["tree"])
@@ -263,6 +284,7 @@ def make_suite(a, prior: int = 0, state: str = None):
     from evaluation.bev_adapter import build
     source, subject, task = build(a.run, device=a.device, split=a.split, workers=a.workers, ckpt_dir=a.ckpt_dir, control=a.control, prior=prior)
     out = a.out or os.path.join(a.run, "eval", "suite")
+    task.curves = bool(getattr(a, "curves", False))                          # --curves: PR / ROC / calibration / velocity regression next to the standard numbers
     return EvalSuite(source, subject, task, out=out, state=state or a.state)
 
 
@@ -344,7 +366,7 @@ def cmd_eval(a, rest) -> int:
                                               "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better,
                                               "latency": lat}, indent=1, default=float))
     card = contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig)                                     # for decide.py
-    card["provenance"] = provenance_block(a, e, store, subj, gt_sig, tag, state, start=prov0)  # which GT, evaluator, frames, data and model made it
+    card["provenance"] = provenance_block(a, e, store, subj, gt_sig, tag, state, start=prov0, avail=list(suite.source.scenes()))  # which GT, evaluator, frames, data and model made it
     write_both("card", "json", json.dumps(card, indent=1))
     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
     rec_path, plain = os.path.join(out_dir, f"scene_records{tag}{n_tag}.pkl"), os.path.join(out_dir, f"scene_records{tag}.pkl")
@@ -603,6 +625,34 @@ def cmd_report(a, rest) -> int:
     return subprocess.call([sys.executable, tool, a.run, "--note", REPORT_NOTE] + extra + (["--vs"] + r.vs if r.vs else []), env=env)
 
 
+def cmd_generalisation(a, rest) -> int:
+    """the same evaluation on the validation and on the TRAIN split, then the report page with the train-vs-val table.
+    n defaults to the largest n already evaluated on val (the stored val numbers are then reused, not replaced), else 600"""
+    import re
+    p = argparse.ArgumentParser(prog="generalisation", allow_abbrev=False)
+    p.add_argument("--n", type=int, default=0)
+    r = p.parse_args(rest)
+    by_n = os.path.join(a.run, "eval", "by_n")
+    have = sorted(int(m.group(1)) for f in (os.listdir(by_n) if os.path.isdir(by_n) else []) for m in [re.fullmatch(r"table_n(\d+)\.txt", f)] if m)
+    n = r.n or (have[-1] if have else 600)
+    for split, tag in (("val", ""), ("train", "_train")):
+        if os.path.exists(os.path.join(by_n, f"table{tag}_n{n}.txt")):
+            print(f"generalisation: {split} n={n} already evaluated, reused", flush=True)
+            continue
+        b = argparse.Namespace(**vars(a))
+        b.split = split
+        code = cmd_eval(b, ["--n", str(n)])
+        if code:
+            return code
+    for tag in ("", "_train"):                                         # the plain tables are the ones the page reads: make them this n
+        src = os.path.join(by_n, f"table{tag}_n{n}.txt")
+        if os.path.exists(src):
+            import shutil
+            shutil.copyfile(src, os.path.join(a.run, "eval", f"table{tag}.txt"))
+    print(f"generalisation: val and train, {n} frames each (the TEST split is not touched: it needs a logged row under a recorded decision)")
+    return cmd_report(a, ["--no-pictures"])
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "compare":
@@ -616,6 +666,7 @@ def main(argv=None) -> int:
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--split", default="val", choices=["val", "train"])
     p.add_argument("--ckpt-dir", default=None)
+    p.add_argument("--curves", action="store_true", help="also PR / ROC / calibration per layer and velocity regression (evaluation/bev_curves.py)")
     p.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"])
     p.add_argument("--out", default=None)
     p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])
@@ -632,6 +683,8 @@ def main(argv=None) -> int:
         return cmd_memory(a, a.command[1:])
     if a.command[0] == "report":
         return cmd_report(a, a.command[1:])
+    if a.command[0] == "generalisation":
+        return cmd_generalisation(a, a.command[1:])
     from evalsuite.cli import main as suite_main
     out = a.out or os.path.join(a.run, "eval", "suite")
     pre = ["--adapter", "evaluation.bev_adapter:build", "--arg", f"run={a.run}", "--arg", f"device={a.device}", "--arg", f"workers={a.workers}",

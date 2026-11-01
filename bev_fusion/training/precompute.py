@@ -18,15 +18,20 @@ vis_cam    the cells the current camera frame observes (lift_pd.camera_visibilit
            within the depth range), cached per calibration, so a fixed rig costs one computation per process - the same function runs
            live in a car. The write mask of the camera memory (the network mirrors it with the camera BEV for flipped samples); D36: the
            loss and scoring mask of the camera outputs.
-vis_radar  the cells the radar rig can see (D36, Mirko: "obs_radar stays the fan"): the fans of the five radars. PLACEHOLDER = every
-           cell (the fans cover 99.6 % of this grid, bev_fusion/records/sensor_coverage_2026-11-01.md) until the GT Discussion chat's
-           autogt.coverage.radar_cells(grid, sensor_poses, half, rmax) exists; then it is computed once per rig here, nowhere else.
+vis_radar  the cells the radar rig can see (D36, Mirko: "obs_radar stays the fan"): the +-60 deg / 70 m fans of the five radars, from their
+           calibrated poses (batch["radar_poses"]) through autogt.coverage.radar_cells - the one definition the ground truth uses -, made
+           once per rig. The fans cover 99.6 % of this grid (bev_fusion/records/sensor_coverage_2026-11-01.md), so the map restricts little
+           today; what matters is that it comes from the geometry and not from a constant.
 vis_fusion the fusion area (D37: fusion results are reported on cells observed by camera and radar) = vis_cam x vis_radar; the evaluation
            removes the cells hidden behind a GT box (autogt.coverage.hidden_by_boxes) on top.
 radar_hits the cells with at least one radar detection of this frame's compensated sweeps, widened by `dilate` cells (radar points are
            mirrored by the augmentation already): where the radar measured now, the write mask of the radar memory.
 Run the self-test: python training/precompute.py
 """
+import os
+import sys
+
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -34,6 +39,20 @@ try:
     from .lift_pd import camera_visibility
 except ImportError:
     from lift_pd import camera_visibility
+
+_FANS = {}                                                    # (grid, the five radar poses) -> the fan (nx, ny), made once per process
+
+
+def _radar_cells():
+    """autogt.coverage.radar_cells (the fan the ground truth uses), imported when first needed: the folder autogt/ is found by walking
+    up from this file (the repository, or a run's snapshot that carries its own copy next to code/)"""
+    root = os.path.dirname(os.path.abspath(__file__))
+    while not os.path.isdir(os.path.join(root, "autogt")) and os.path.dirname(root) != root:
+        root = os.path.dirname(root)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from autogt import coverage
+    return coverage.radar_cells
 
 
 MAPS = ("vis_cam", "vis_radar", "vis_fusion", "radar_hits")
@@ -88,8 +107,19 @@ class Precompute:
         return torch.stack(vis)[:, None].to(device=K.device, dtype=torch.float32)
 
     def radar_fan(self, batch):
-        """placeholder until autogt.coverage.radar_cells: every cell (the five fans cover 99.6 % of the front grid)"""
-        return batch["K"].new_ones(batch["K"].shape[0], 1, self.grid.nx, self.grid.ny, dtype=torch.float32)
+        """(B, 1, X, Y): the cells inside the fan of one of the five radars, from batch["radar_poses"] (autogt.coverage.radar_cells on the
+        cell centres: the definition of the ground truth); one computation per distinct rig"""
+        if "radar_poses" not in batch:
+            raise KeyError("vis_radar needs batch['radar_poses'] (B, 5, 4, 4), the radar calibration (nuscenes_dataset.collate makes it)")
+        assert batch["radar_poses"].shape[0] == batch["K"].shape[0], (tuple(batch["radar_poses"].shape), tuple(batch["K"].shape))
+        g, fans = self.grid, []
+        for poses in batch["radar_poses"].detach().double().cpu().numpy():
+            key = (g.x_min, g.y_min, g.res, g.nx, g.ny, poses.tobytes())
+            if key not in _FANS:
+                gx, gy = np.meshgrid(g.x_min + (np.arange(g.nx) + 0.5) * g.res, g.y_min + (np.arange(g.ny) + 0.5) * g.res, indexing="ij")
+                _FANS[key] = torch.from_numpy(_radar_cells()(gx, gy, poses)).float()
+            fans.append(_FANS[key])
+        return torch.stack(fans)[:, None].to(batch["K"].device)
 
     def __call__(self, batch, keys=MAPS):
         """adds the requested maps (default all) to `batch` and returns it; a key already present is kept. Every map is in the
@@ -120,18 +150,47 @@ def _selftest():
     grid = Grid()
     K, T, hw = _front_camera(torch.float32)
     B = 2
+
+    def pose(x, y, yaw):                                          # a radar's sensor -> vehicle matrix (yaw about z)
+        c, s = float(np.cos(yaw)), float(np.sin(yaw))
+        return torch.tensor([[c, -s, 0, x], [s, c, 0, y], [0, 0, 1, 0.5], [0, 0, 0, 1]])
+    rig = torch.stack([pose(3.41, 0.0, 0.0), pose(2.42, 0.8, 1.04), pose(2.42, -0.8, -1.04), pose(-1.0, 0.9, 2.1), pose(-1.0, -0.9, -2.1)])
     batch = {"K": K.expand(B, 3, 3, 3).clone(), "T_cam_car": T.expand(B, 3, 4, 4).clone(), "hw": hw, "ida": None,
+             "radar_poses": rig.expand(B, 5, 4, 4).clone(),
              "radar": {"x": torch.tensor([10.2, 30.0, 500.0]), "y": torch.tensor([0.3, -5.0, 0.0]), "b": torch.tensor([0, 1, 1])}}
     pre = Precompute(grid, grid.z_levels, depth_centres(), oversample=1)
     out = pre(dict(batch))
     ref = camera_visibility(grid, grid.z_levels, depth_centres(), K, T, hw, None, 1)
     assert out["vis_cam"].shape == (B, 1, grid.nx, grid.ny) and torch.equal(out["vis_cam"][0, 0], ref.float()), "camera map != lift_pd"
     assert 0.2 < ref.float().mean() < 0.9, ref.float().mean()
-    assert out["vis_radar"].min() == 1 and torch.equal(out["vis_fusion"], out["vis_cam"] * out["vis_radar"]), "fusion area = camera x radar"
+    gx, gy = np.meshgrid(grid.x_min + (np.arange(grid.nx) + 0.5) * grid.res, grid.y_min + (np.arange(grid.ny) + 0.5) * grid.res, indexing="ij")
+    assert torch.equal(out["vis_radar"][0, 0], torch.from_numpy(_radar_cells()(gx, gy, rig.numpy())).float()), "radar fan != autogt.coverage"
+    assert 0.9 < out["vis_radar"].mean() <= 1.0, out["vis_radar"].mean()              # the five fans cover nearly the whole front grid
+    assert torch.equal(out["vis_fusion"], out["vis_cam"] * out["vis_radar"]), "fusion area = camera x radar"
+    one = pre(dict(batch, radar_poses=rig[:1].expand(B, 1, 4, 4).clone().repeat(1, 5, 1, 1)), ("vis_radar",))["vis_radar"][0, 0]
+    ix = lambda x: int((x - grid.x_min) / grid.res)                                    # noqa: E731
+    iy = lambda y: int((y - grid.y_min) / grid.res)                                    # noqa: E731
+    assert one[ix(20.25), iy(0.25)] == 1 and one[ix(10.25), iy(25.25)] == 0 and one[ix(2.25), iy(0.25)] == 0 and one.mean() < 0.9, \
+        "the fan is a geometry: 20 m ahead in, 25 m to the side at 10 m (68 deg) out, behind the sensor (x = 3.41 m) out"
+    n_fans = len(_FANS)
+    pre(dict(batch), ("vis_radar",))
+    assert len(_FANS) == n_fans, "one computation per distinct rig, kept for later calls"
+    asym = pre(dict(batch, radar_poses=rig[:1].expand(B, 1, 4, 4).clone().repeat(1, 5, 1, 1), flip=torch.tensor([True, False])), ("vis_radar",))["vis_radar"]
+    assert torch.equal(asym[0, 0], one.flip(-1)) and torch.equal(asym[1, 0], one), \
+        "an asymmetric rig: the fan of a flipped sample is mirrored, once (the symmetric real rig cannot show this)"
+    try:
+        pre(dict(batch, radar_poses=rig.expand(1, 5, 4, 4).clone()), ("vis_radar",))
+        raise AssertionError("poses for one sample with a batch of two must be refused")
+    except AssertionError as e:
+        assert "must be refused" not in str(e), e
+    try:
+        pre({k: v for k, v in batch.items() if k != "radar_poses"}, ("vis_radar",))
+        raise AssertionError("vis_radar without radar poses must not fall back to a constant")
+    except KeyError:
+        pass
     hits = out["radar_hits"]
     assert hits.shape == (B, 1, grid.nx, grid.ny) and hits[0].sum() == 9 and hits[1].sum() == 9, (hits[0].sum(), hits[1].sum())   # 3 x 3 each
-    ix, iy = int((10.2 - grid.x_min) / grid.res), int((0.3 - grid.y_min) / grid.res)
-    assert hits[0, 0, ix, iy] == 1 and hits[1, 0, ix, iy] == 0
+    assert hits[0, 0, ix(10.2), iy(0.3)] == 1 and hits[1, 0, ix(10.2), iy(0.3)] == 0
     kept = pre(dict(batch, vis_cam=torch.zeros(B, 1, grid.nx, grid.ny)))
     assert kept["vis_cam"].sum() == 0 and kept["vis_fusion"].sum() == 0, "an existing map must be kept and used"
     empty = pre(dict(batch, radar={"x": torch.zeros(0), "y": torch.zeros(0), "b": torch.zeros(0, dtype=torch.long)}))
@@ -153,7 +212,7 @@ def _selftest():
         a = Precompute.from_config(mcfg)(dict(batch), ("vis_cam",))["vis_cam"]
         b = Precompute.from_model(CachedBEVFusionModel(mcfg))(dict(batch), ("vis_cam",))["vis_cam"]
         assert torch.equal(a, b), f"from_config != from_model ({cf})"
-    print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan (placeholder), fusion area = camera x radar, "
+    print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan = autogt.coverage.radar_cells of the calibrated poses, fusion area = camera x radar, "
           "radar hits from the detections, existing keys kept, maps mirrored, from_config = from_model")
 
 
@@ -211,8 +270,12 @@ def main(argv=None):
     if a.cmd == "frames":
         os.makedirs(out, exist_ok=True)
     rows = []
+    fan_gt = []
     for i in _frames(ds, a):
         batch = pre(fn([ds[i]]))
+        if "gt" in batch:                                         # the one definition: the fan equals the ground truth's own radar layer
+            g = torch.as_tensor(np.asarray(batch["gt"][0]["cur"]["radar"])) > 0
+            fan_gt.append(float(((batch["vis_radar"][0, 0] > 0) == g).float().mean()) if g.shape == batch["vis_radar"].shape[-2:] else float("nan"))
         batch.pop("gt", None)                                     # the network input: no ground truth
         check_inputs(batch, raise_on=True)
         token = batch["tokens"][0]
@@ -223,11 +286,15 @@ def main(argv=None):
     commit = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "-C", root, "status", "--porcelain", "--", "training"], capture_output=True, text=True).stdout.strip())
     summary = {"config": a.config, "split": a.split, "frames": len(rows), "code": commit + ("+dirty" if dirty else ""),
-               "maps": list(MAPS), "radar_fan": "placeholder: every cell (autogt.coverage.radar_cells pending)", "rows": rows}
+               "maps": list(MAPS), "radar_fan": "autogt.coverage.radar_cells of the calibrated radar poses", "rows": rows}
     if a.cmd == "frames":
         json.dump(summary, open(os.path.join(out, "index.json"), "w"), indent=1)
+    if fan_gt:
+        assert min(fan_gt) >= 0.999, f"vis_radar differs from the ground truth's radar layer (share of equal cells per frame: {fan_gt})"
+        summary["fan_equals_gt_share"] = [round(x, 5) for x in fan_gt]
     mean = {k: round(sum(r[f"cover_{k}"] for r in rows) / len(rows), 3) for k in MAPS if f"cover_{k}" in rows[0]}
     print(f"precompute {a.cmd}: {len(rows)} frames of {a.split} pass interface.check_inputs ({time.time() - t0:.0f} s), mean cover {mean}"
+          + (f", fan equals the GT's radar layer on {min(fan_gt):.4f} or more of the cells" if fan_gt else "")
           + (f"; written to {out}" if a.cmd == "frames" else ""))
 
 

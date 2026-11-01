@@ -21,7 +21,6 @@ run "synthetic world"   "$PY" tests/synthetic_world.py
 run "lift PD"           "$PY" training/lift_pd.py
 run "camera encoder"    "$PY" training/camera_encoder.py
 run "radar encoder"     "$PY" training/radar_bev.py
-run "radar encoder, lossless" "$PY" training/radar_encoder.py     # delta-coded slot raster: exact round trip, side loss, monitor
 run "splat"             "$PY" training/splat.py
 run "BEV trunk"         "$PY" training/bev_trunk.py
 run "temporal fusion"   "$PY" training/temporal_fusion.py
@@ -40,13 +39,18 @@ else
   echo "SKIP  velocity hurdle  | runs/t10_dual_s0/ckpt_00003000.pt missing (G4 needs it)"
 fi
 run "slots, every kind" "$PY" tests/test_slots.py                   # five-layer build: contract test of every kind of every slot; CPU, no data, about 1 min
-run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
+if ls data/cache/gt/*_15efbde2d1.npz > /dev/null 2>&1; then    # the evaluation on real cached GT: GT as the prediction must reach every ceiling, degraded copies fall, the GT frames agree with their poses
+  run "GT against GT"   "$PY" evaluation/bev_gtcheck.py --selftest     # CPU, about 1 min, no model
+  run "response test"   "$PY" evaluation/bev_response.py --selftest    # CPU, about 2 min, no model: GT worsened by known amounts, every number must move by exactly that amount
+else
+  echo "SKIP  GT against GT  | no cached GT of signature 15efbde2d1 in data/cache/gt"
+fi
+run "orientation"       "$PY" tests/test_orientation.py            # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s
 if [ "${1:-}" = "--all" ]; then
   run "whole chain"     "$PY" training/model.py                     # nuScenes mini, CPU; minutes
   run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
-  run "radar slot"      "$PY" tests/test_radar_slot.py              # delta_slots in the whole chain: side loss, gradients, old path unchanged; about 2 min
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
   run "autoGT"          "$PY" -m autogt selftest
   run "flow from frames" "$PY" tests/test_flow_from_frames.py

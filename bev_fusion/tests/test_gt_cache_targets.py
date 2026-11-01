@@ -107,7 +107,7 @@ def check_f2():
         assert all(g is s[side] for g, s in zip(gts[dt], batch)), dt
     # the model's output at -0.5 is decoded with each sample's TRUE gap (train.batch_ego keys by side, too)
     import train as T
-    ego = T.batch_ego(batch, tuple(sorted(gts)), "cpu")
+    ego = T.batch_ego([{k: s[k]["meta"]["steps"] for k in ("prev", "next")} for s in batch], tuple(sorted(gts)), "cpu")
     assert np.allclose(ego[-0.5][0].numpy(), [-0.5, -0.75, -0.5], atol=1e-6), ego[-0.5][0]
     # a batch where only some samples carry a side cannot be aligned with the predictions: refused
     try:

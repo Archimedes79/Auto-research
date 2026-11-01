@@ -67,6 +67,8 @@ def flip_batch(batch, flip):
     sign = torch.where(flip, -1.0, 1.0)
     batch["omega"] = batch["omega"] * sign.to(batch["omega"].dtype)
     batch["steps"] = [[(dt, v, w * sign.to(w.dtype)) for dt, v, w in fr] for fr in batch["steps"]]
+    if "gap_steps" in batch:
+        batch["gap_steps"] = [{k: [(dt, v, -w) for dt, v, w in s] for k, s in g.items()} if flip[i] else g for i, g in enumerate(batch["gap_steps"])]
     rad = dict(batch["radar"])
     f = flip[rad["b"].cpu()].to(rad["y"].device)
     rad["y"] = torch.where(f, -rad["y"], rad["y"])
@@ -181,6 +183,8 @@ def _selftest():
     st = orig["gt"][0]["next"]["meta"]["steps"]
     a, b = gap_ego_motion(st), gap_ego_motion(one["gt"][0]["next"]["meta"]["steps"])
     assert abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-6 and abs(a[2] + b[2]) < 1e-9, (a, b)
+    assert orig["gap_steps"][0]["next"] == st and one["gap_steps"][0]["next"] == one["gt"][0]["next"]["meta"]["steps"] and \
+        one["gap_steps"][1] == orig["gap_steps"][1], "the batch's gap steps mirror with the GT meta steps (and only for the flipped sample)"
     p0 = p1 = torch.zeros(1, 3)
     for (dt, v, w), (_, _, wm) in zip(st, one["gt"][0]["next"]["meta"]["steps"]):
         p0, p1 = advance_pose(p0, dt, v, w), advance_pose(p1, dt, v, wm)
