@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import statistics
 import sys
 import time
 
@@ -345,6 +346,41 @@ def cmd_watch(a):
     return 0
 
 
+def speed_row(run, skip=10):
+    """{s_step, data_share, gpu_busy, gpu_gb, loss, step} of one run for the speed table: the median interval between the logged rows (the first `skip` rows are the warm-up), the
+    probe's data wait over step time when the run logged it, the GPU busy share from profile.txt when there is one, the peak GPU allocation, the loss at the end"""
+    rows = [r for r in run.train if "t" in r][skip:]
+    gaps = [(b["t"] - a_["t"]) / (b["step"] - a_["step"]) for a_, b in zip(rows, rows[1:]) if b["step"] > a_["step"] and b["t"] > a_["t"]]
+    pr = [r for r in rows if r.get("t_step") and "t_data" in r]
+    busy = None
+    try:
+        with open(run.p("profile.txt"), encoding="utf-8") as f:
+            m = re.search(r"GPU kernels busy: .*? = (\d+) %", f.read())
+        busy = int(m.group(1)) if m else None
+    except OSError:
+        pass
+    return dict(s_step=statistics.median(gaps) if gaps else None, step=run.step, loss=run.last(run.loss_key, 5),
+                data_share=statistics.median(r["t_data"] / r["t_step"] for r in pr) if pr else None,
+                gpu_busy=busy, gpu_gb=max([r["gpu_gb"] for r in run.train if "gpu_gb" in r], default=None))
+
+
+def cmd_speed(a):
+    """the runs side by side (the first is the baseline): seconds per step and the speed-up, the share of a step that waits for the data, the GPU busy share, the peak GPU memory
+    and the loss at the last step the runs share (an optimisation that changes the loss curve is not a free speed-up)"""
+    runs = [open_run(x, a.root, a.loss) for x in a.runs]
+    rows = [speed_row(r, a.skip) for r in runs]
+    common = min(r.step for r in runs)
+    base = rows[0]["s_step"]
+    print(f"{'run':<24}{'steps':>6}  {'s/step':>7}  {'speed-up':>8}  {'data wait':>9}  {'GPU busy':>8}  {'peak GB':>7}  {'loss@' + str(common):>12}  {'vs base':>8}")
+    b_loss = runs[0].window_mean(runs[0].loss_key, common)
+    for r, x in zip(runs, rows):
+        l = r.window_mean(r.loss_key, common)
+        print(f"{r.name:<24}{x['step']:>6}  {_num(x['s_step'], '%.2f'):>7}  " + (f"x{base / x['s_step']:.2f}" if base and x["s_step"] else "-").rjust(8)
+              + f"  {('%.0f %%' % (100 * x['data_share'])) if x['data_share'] is not None else '-':>9}  {('%d %%' % x['gpu_busy']) if x['gpu_busy'] is not None else '-':>8}"
+              + f"  {_num(x['gpu_gb'], '%.1f'):>7}  {_num(l, '%.4g'):>12}  " + (f"{100 * (l - b_loss) / abs(b_loss):+.1f} %" if (l is not None and b_loss) else "-").rjust(8))
+    return 0
+
+
 def cmd_queue(a):
     """who holds the GPU slots, who waits in the line (first goes first), what the RAM gate says, and which runs lie on hold: the view of run.py's queue"""
     tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
@@ -516,6 +552,8 @@ def main(argv=None):
     p.add_argument("--keys", nargs="+")
     p.add_argument("--smooth", type=int, default=10)
     p.add_argument("--out")
+    p = add("speed", cmd_speed, "+", help="runs side by side, the first is the baseline: s/step and speed-up, data wait, GPU busy, peak memory, loss at the last shared step")
+    p.add_argument("--skip", type=int, default=10, help="logged rows to leave out as warm-up (default 10)")
     p = sub.add_parser("queue", help="the GPU slots, the line of waiting runs, the RAM gate and the runs on hold of the project (AR_PROJECT or --project)")
     p.add_argument("--project", help="project folder (default: AR_PROJECT)")
     p.set_defaults(fn=cmd_queue)

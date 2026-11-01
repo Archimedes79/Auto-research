@@ -1139,6 +1139,28 @@ def main():
         assert "slot 0: free  (a stale owner" not in so and "slot 0: free" in so, "an empty slot is free"
         ok("queue: the slots with their holders, the line in order without a dead launcher's ticket, the RAM gate against /proc/meminfo, the runs on hold")
 
+        # 17 the speed table: runs side by side against the first one
+        sb = make(tmp, "sp_base", rows(40, sec=2.0, t0=now - 5000), total=800)                      # 2.0 s per step
+        fr = rows(40, sec=1.0, t0=now - 5000)
+        for r_ in fr:
+            r_.update({"t_data": 0.2, "t_step": 1.0, "gpu_gb": 6.5})
+        sf = make(tmp, "sp_fast", fr, total=800)
+        open(os.path.join(sf, "profile.txt"), "w").write("window: 30 optimiser steps, 30.00 s wall = 1.000 s per step\nGPU kernels busy: 21.00 s of 30.00 s = 70 % (the rest is the GPU waiting)\n")
+        rc, so = run_cli("--root", tmp, "speed", "sp_base", "sp_fast", "--skip", "5")
+        lines_ = {ln.split()[0]: ln for ln in so.splitlines() if ln.startswith("sp_")}
+        assert rc == 0 and "x1.00" in lines_["sp_base"] and "x2.00" in lines_["sp_fast"] and "2.00" in lines_["sp_base"] and "1.00" in lines_["sp_fast"], so
+        assert "20 %" in lines_["sp_fast"] and "70 %" in lines_["sp_fast"] and "6.5" in lines_["sp_fast"] and "7.1" in lines_["sp_base"], so
+        assert " - " in lines_["sp_base"] or "-" in lines_["sp_base"].split()[4:6], "no probe, no profile: dashes"
+        short = make(tmp, "sp_short", rows(10, sec=1.0, t0=now - 5000), total=800)                   # shorter than the others: compared at the last step they share
+        rc, so = run_cli("--root", tmp, "speed", "sp_base", "sp_short", "--skip", "2")
+        assert "loss@200" in so and rc == 0, so
+        try:
+            run_cli_err("--root", tmp, "speed", "no_such_run")
+            raise AssertionError("an unknown run must be refused")
+        except SystemExit as e:
+            assert "no run directory" in str(e), e
+        ok("speed: s/step and the speed-up against the first run, data wait (probe), GPU busy (profile.txt), peak memory, the loss at the last shared step")
+
         # 12 curves
         try:
             import matplotlib  # noqa: F401
