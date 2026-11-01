@@ -8,7 +8,7 @@ One file per experiment, in the experiment folder; it grows from card (P2) to de
 | id / card / title | E<id> / H<..> / ... |
 | kind | variant (configuration only) / block (new code) |
 | deterministic | true when the arms share one checkpoint (e.g. an assembly setting): no training seed, the paired scene-bootstrap interval decides |
-| metric, direction, band | headline metric (e.g. Q), higher / lower, noise band of that metric |
+| metric, direction, band | headline metric (e.g. Q), higher / lower, noise band of that metric (default 0.010; a per-metric band cites the project's measured seed spread, e.g. 3 paired seed SDs) |
 | prediction | value, against arm <letter> |
 | arms | <letter>: recipe or command, base, settings, seeds |
 | control | <arm letter> |

@@ -1,157 +1,192 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1588 850" width="1588" height="850" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-<title>autoresearch: design, files, execution</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1488 780" width="1488" height="780" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<title>autoresearch: two loops through four layers</title>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
-<rect width="1588" height="850" fill="#ffffff"/>
-<text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">autoresearch: design, files, execution</text>
-<text x="24" y="50" font-size="12" fill="#475569">People and agents design what to do and write it down as plain files; code reads the files, runs them and writes its records back. Between the layers sit gates that can refuse; at the end the temporary data is cleaned up.</text>
-<rect x="32.0" y="73.0" width="1512.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<text x="1228.0" y="105.0" font-size="11" fill="#475569">The edit layer. METHOD.md cuts one cycle into P0</text>
-<text x="1228.0" y="120.0" font-size="11" fill="#475569">frame, P1 research, P2 hypotheses + plan, P3 loop and</text>
-<text x="1228.0" y="135.0" font-size="11" fill="#475569">P4 close, each ended by a gate. What is the person&#x27;s</text>
-<text x="1228.0" y="150.0" font-size="11" fill="#475569">goes through DECISIONS.md.</text>
-<rect x="32.0" y="273.0" width="1512.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<text x="1228.0" y="305.0" font-size="11" fill="#475569">The design layer writes them, the execution layer</text>
-<text x="1228.0" y="320.0" font-size="11" fill="#475569">reads them and writes its records back; nothing else</text>
-<text x="1228.0" y="335.0" font-size="11" fill="#475569">passes between the layers. Both layers read the</text>
-<text x="1228.0" y="350.0" font-size="11" fill="#475569">records.</text>
-<rect x="32.0" y="473.0" width="1512.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<text x="1228.0" y="505.0" font-size="11" fill="#475569">Standard-library python with selftests. The launcher</text>
-<text x="1228.0" y="520.0" font-size="11" fill="#475569">runs what the schedule says, the suites judge it, the</text>
-<text x="1228.0" y="535.0" font-size="11" fill="#475569">written rule decides, the validators keep the files</text>
-<text x="1228.0" y="550.0" font-size="11" fill="#475569">honest.</text>
-<path d="M124.0,159.0 C124.0,228.0 124.0,228.0 124.0,297.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M324.0,159.0 C324.0,228.0 324.0,228.0 324.0,297.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M524.0,159.0 C524.0,228.0 524.0,228.0 524.0,297.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M724.0,159.0 C724.0,228.0 724.0,228.0 724.0,297.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M924.0,159.0 C924.0,228.0 924.0,228.0 924.0,297.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M124.0,359.0 C124.0,428.0 124.0,428.0 124.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M524.0,359.0 C524.0,428.0 524.0,428.0 524.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M724.0,359.0 C724.0,428.0 724.0,428.0 724.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M924.0,359.0 C924.0,428.0 924.0,428.0 924.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M1124.0,359.0 C1124.0,428.0 1124.0,428.0 1124.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
-<path d="M804.0,528.0 C824.0,528.0 824.0,328.0 844.0,328.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<path d="M724.0,559.0 C724.0,578.0 724.0,578.0 724.0,597.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<path d="M924.0,559.0 C924.0,578.0 924.0,578.0 924.0,597.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<path d="M824.0,659.0 C824.0,682.0 824.0,682.0 824.0,705.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<path d="M1124.0,559.0 C1124.0,632.0 1124.0,632.0 1124.0,705.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<g><title>d_person: METHOD.md</title><rect x="44" y="97.0" width="160" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="124.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Person (Mirko)</text>
-<text x="124.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">decides, grants,</text>
-<text x="124.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">owns PROBLEM.md</text>
-<text x="124.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">METHOD.md</text>
+<rect width="1488" height="780" fill="#ffffff"/>
+<text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">autoresearch: two loops through four layers</text>
+<text x="24" y="50" font-size="12" fill="#475569">The outer loop runs left to right, one round after another; the shaded inner loop runs once per experiment, several at a time. Red borders: points that can refuse. Generated from architecture.json; archdraw.py check keeps it in step with the code.</text>
+<rect x="570" y="80" width="528" height="632" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-dasharray="6 4"/>
+<text x="834.0" y="706" font-size="11" font-weight="600" text-anchor="middle" fill="#c2410c">inner loop: once per experiment, several in parallel (GPU slots)</text>
+<text x="114.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">1 Problem</text>
+<text x="294.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">2 Research</text>
+<text x="474.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3 Branches</text>
+<text x="654.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">4 Build</text>
+<text x="834.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">5 Train</text>
+<text x="1014.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">6 Evaluate</text>
+<text x="1194.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">7 Track, promote</text>
+<text x="1374.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">8 Close</text>
+<rect x="32.0" y="103.0" width="1244.0" height="98.0" rx="10" fill="none" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="203.0" width="1424.0" height="98.0" rx="10" fill="none" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="403.0" width="1424.0" height="98.0" rx="10" fill="none" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="603.0" width="1424.0" height="98.0" rx="10" fill="none" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<path d="M114.0,189.0 C114.0,208.0 114.0,208.0 114.0,227.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M114.0,289.0 C114.0,358.0 114.0,358.0 114.0,427.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M294.0,289.0 C294.0,358.0 294.0,358.0 294.0,427.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M474.0,289.0 C474.0,358.0 474.0,358.0 474.0,427.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M654.0,289.0 C654.0,358.0 654.0,358.0 654.0,427.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M1194.0,289.0 C1194.0,358.0 1194.0,358.0 1194.0,427.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M1374.0,289.0 C1374.0,358.0 1374.0,358.0 1374.0,427.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M1194.0,227.0 C1194.0,208.0 1194.0,208.0 1194.0,189.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M184.0,458.0 C204.0,458.0 204.0,458.0 224.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M364.0,458.0 C384.0,458.0 384.0,458.0 404.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M544.0,458.0 C564.0,458.0 564.0,458.0 584.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M724.0,458.0 C744.0,458.0 744.0,458.0 764.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M904.0,458.0 C924.0,458.0 924.0,458.0 944.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1084.0,458.0 C1104.0,458.0 1104.0,458.0 1124.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1264.0,458.0 C1284.0,458.0 1284.0,458.0 1304.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1194.0,489.0 L1194.0,498.5 Q1194.0,508.0 1184.5,508.0 L663.5,508.0 Q654.0,508.0 654.0,498.5 L654.0,489.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1194.0,227.0 L1194.0,217.5 Q1194.0,208.0 1184.5,208.0 L483.5,208.0 Q474.0,208.0 474.0,217.5 L474.0,227.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M114.0,489.0 C114.0,558.0 114.0,558.0 114.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M294.0,489.0 C294.0,558.0 294.0,558.0 294.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M474.0,489.0 C474.0,558.0 474.0,558.0 474.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M654.0,489.0 C654.0,558.0 654.0,558.0 654.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M834.0,489.0 C834.0,558.0 834.0,558.0 834.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M1014.0,489.0 C1014.0,558.0 1014.0,558.0 1014.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M1194.0,489.0 C1194.0,558.0 1194.0,558.0 1194.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<path d="M1374.0,489.0 C1374.0,558.0 1374.0,558.0 1374.0,627.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<g><title>p_prompt: prompts/loop.md</title><rect x="44" y="127.0" width="140" height="62" rx="7" fill="#fce7f3" stroke="#db2777" stroke-width="1.4"/>
+<text x="114.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Prompt; approves</text>
+<text x="114.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the problem</text>
+<text x="114.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">loop.md</text>
 </g>
-<g><title>d_lead: prompts/loop.md; prompts/research_steps.md</title><rect x="244" y="97.0" width="160" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="324.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lead chat</text>
-<text x="324.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">runs the loop</text>
-<text x="324.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">loop.md +1</text>
+<g><title>p_promote: tools/run.py</title><rect x="1124" y="127.0" width="140" height="62" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
+<text x="1194.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Promotion: OK</text>
+<text x="1194.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">and TEST once</text>
+<text x="1194.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">run.py</text>
 </g>
-<g><title>d_res: agents/ar-researcher.md</title><rect x="444" y="97.0" width="160" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="524.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Researcher</text>
-<text x="524.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scan, deep, summary</text>
-<text x="524.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-researcher.md</text>
+<g><title>a_problem: agents/ar-planner.md</title><rect x="44" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<text x="114.0" y="248.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner</text>
+<text x="114.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">problem draft</text>
+<text x="114.0" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-planner.md</text>
 </g>
-<g><title>d_work: agents/ar-planner.md; agents/ar-coder.md</title><rect x="644" y="97.0" width="160" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="724.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner, coder</text>
-<text x="724.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">all planning modes</text>
-<text x="724.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-planner.md +1</text>
+<g><title>a_research: agents/ar-researcher.md; prompts/research_steps.md</title><rect x="224" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<text x="294.0" y="248.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Researcher</text>
+<text x="294.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scouts, summaries</text>
+<text x="294.0" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-researcher.md +1</text>
 </g>
-<g><title>d_rev: agents/ar-critic.md</title><rect x="844" y="97.0" width="160" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="924.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Critic</text>
-<text x="924.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">fresh eyes: cards,</text>
-<text x="924.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">code, numbers</text>
-<text x="924.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-critic.md</text>
+<g><title>a_branch: agents/ar-planner.md; agents/ar-critic.md</title><rect x="404" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<text x="474.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner: branches</text>
+<text x="474.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(one per lens);</text>
+<text x="474.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">critic</text>
+<text x="474.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-planner.md +1</text>
 </g>
-<g><title>d_method: METHOD.md</title><rect x="1044" y="97.0" width="160" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="1124.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">The method</text>
-<text x="1124.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">P0-P4, gates G1-G4</text>
-<text x="1124.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">METHOD.md</text>
+<g><title>a_build: agents/ar-coder.md; agents/ar-critic.md</title><rect x="584" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<text x="654.0" y="248.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner, coder</text>
+<text x="654.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ critic</text>
+<text x="654.0" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-coder.md +1</text>
 </g>
-<g><title>gate_write: tools/guard_hook.py; tools/experiment.py</title><rect x="44" y="205.0" width="1160" height="46" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
-<text x="624.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">WRITE GATE: only complete, permitted entries reach the files</text>
-<text x="624.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">guard_hook.py refuses the protected files without a grant under a decided D&lt;n&gt;; experiment.py: a card names arms, seeds, metric, band and rule (G2)</text>
-<text x="624.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">guard_hook.py +1</text>
+<g><title>a_track: agents/ar-planner.md</title><rect x="1124" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<text x="1194.0" y="248.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner: tracking</text>
+<text x="1194.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">n best, next round</text>
+<text x="1194.0" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-planner.md</text>
 </g>
-<g><title>f_prob: templates/problem.md</title><rect x="44" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="124.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">PROBLEM.md</text>
-<text x="124.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">project.json</text>
-<text x="124.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">problem.md</text>
+<g><title>a_close: agents/ar-critic.md</title><rect x="1304" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<text x="1374.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Critic</text>
+<text x="1374.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">numbers of the</text>
+<text x="1374.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">report</text>
+<text x="1374.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-critic.md</text>
 </g>
-<g><title>f_dec: templates/plan.md</title><rect x="244" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="324.0" y="311.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">DECISIONS.md</text>
-<text x="324.0" y="326.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">HANDOVER.md</text>
-<text x="324.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ledger notes</text>
-<text x="324.0" y="355.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">plan.md</text>
+<g><title>g_write: tools/guard_hook.py; tools/experiment.py</title><rect x="44" y="341.0" width="1400" height="34" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
+<text x="744.0" y="356.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">WRITE GATE: protected truth files only with a grant under a decided D&lt;n&gt;; a card only when complete (G2)</text>
+<text x="744.0" y="370.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">guard_hook.py +1</text>
 </g>
-<g><title>f_lit: templates/paper_note.md; templates/group_summary.md</title><rect x="444" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="524.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">paper notes</text>
-<text x="524.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">-&gt; summaries + digest</text>
-<text x="524.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">paper_note.md +1</text>
+<g><title>f_problem: templates/problem.md</title><rect x="44" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="114.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">PROBLEM.md</text>
+<text x="114.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">project.json</text>
+<text x="114.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">problem.md</text>
 </g>
-<g><title>f_cards: templates/experiment.md; schemas/experiment.schema.json</title><rect x="644" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="724.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">experiment cards</text>
-<text x="724.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">plan, schedule.csv</text>
-<text x="724.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">experiment.md +1</text>
+<g><title>f_research: templates/paper_note.md; templates/group_summary.md</title><rect x="224" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="294.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">notes, summaries</text>
+<text x="294.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">K register</text>
+<text x="294.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">paper_note.md +1</text>
 </g>
-<g><title>f_rec: schemas/card.schema.json</title><rect x="844" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="924.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run records, ledger</text>
-<text x="924.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">metric cards, verdicts</text>
-<text x="924.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">card.schema.json</text>
+<g><title>f_branch: templates/experiment.md; templates/plan.md; schemas/experiment.schema.json</title><rect x="404" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="474.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">experiments/E&lt;id&gt;/</text>
+<text x="474.0" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">experiment.md (+</text>
+<text x="474.0" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">.json)</text>
+<text x="474.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">experiment.md +2</text>
 </g>
-<g><title>f_fmt: templates/; schemas/</title><rect x="1044" y="297.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="1124.0" y="318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">formats</text>
-<text x="1124.0" y="333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">templates, schemas</text>
-<text x="1124.0" y="347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">templates/ +1</text>
+<g><title>f_build: templates/experiment.md</title><rect x="584" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="654.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">detail plan, code</text>
+<text x="654.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">tagged commit</text>
+<text x="654.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">experiment.md</text>
 </g>
-<g><title>gate_start: tools/run.py</title><rect x="44" y="405.0" width="1160" height="46" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
-<text x="624.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">START GATE: only a recorded, runnable experiment starts</text>
-<text x="624.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run.py needs a card (hypothesis, prediction, rule), a logged row for the TEST split and a free GPU slot; it tags the code snapshot it ran</text>
-<text x="624.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">run.py</text>
+<g><title>f_train: trainsuite/runs.py</title><rect x="764" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="834.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run records</text>
+<text x="834.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run.json, log.jsonl</text>
+<text x="834.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">runs.py</text>
 </g>
-<g><title>e_proj: tools/project.py; tools/install_agents.py; config.json</title><rect x="44" y="497.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
-<text x="124.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">project.py</text>
-<text x="124.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">finds the problem</text>
-<text x="124.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">project.py +2</text>
+<g><title>f_eval: schemas/card.schema.json</title><rect x="944" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="1014.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">card.json, verdict</text>
+<text x="1014.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(ledger derived)</text>
+<text x="1014.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">card.schema.json</text>
 </g>
-<g><title>e_lit: ../bev_fusion_lane_center/tools/literature/catalogue.py</title><rect x="444" y="497.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
-<text x="524.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">problem&#x27;s catalogue</text>
-<text x="524.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">tool</text>
-<text x="524.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(no code here)</text>
-<text x="524.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">catalogue.py</text>
+<g><title>f_versions: ../bev_fusion_lane_center/models/registry.json; ../bev_fusion/records/champion.json</title><rect x="1124" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="1194.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the n best versions</text>
+<text x="1194.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">registry, champion</text>
+<text x="1194.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">registry.json +1</text>
 </g>
-<g><title>e_launch: tools/schedule.py; tools/run.py; tools/ledger.py</title><rect x="644" y="497.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
-<text x="724.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Launcher</text>
-<text x="724.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">schedule,</text>
-<text x="724.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run.py, ledger</text>
-<text x="724.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">schedule.py +2</text>
+<g><title>f_close: templates/plan.md</title><rect x="1304" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="1374.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">DECISIONS.md</text>
+<text x="1374.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">HANDOVER.md</text>
+<text x="1374.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">plan.md</text>
 </g>
-<g><title>e_judge: evalsuite/; trainsuite/; tools/decide.py</title><rect x="844" y="497.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
-<text x="924.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">evalsuite, trainsuite</text>
-<text x="924.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">decide</text>
-<text x="924.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">evalsuite/ +2</text>
+<g><title>g_start: tools/run.py</title><rect x="764" y="538.0" width="140" height="40" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
+<text x="834.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">START GATE</text>
+<text x="834.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">card, slot, tag</text>
+<text x="834.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">run.py</text>
 </g>
-<g><title>e_check: tools/card.py; tools/check_numbers.py; tools/check_structure.py; tools/clean_temp.py; tools/metrics.py; tools/selftest.py; tools/archdraw.py; architecture.json</title><rect x="1044" y="497.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
-<text x="1124.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">validators and hygiene</text>
-<text x="1124.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">checks, cleanup,</text>
-<text x="1124.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">these drawings</text>
-<text x="1124.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">card.py +7</text>
+<g><title>k_problem: tools/project.py; tools/install_agents.py; config.json</title><rect x="44" y="627.0" width="140" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
+<text x="114.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">project.py</text>
+<text x="114.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">install_agents.py</text>
+<text x="114.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">project.py +2</text>
 </g>
-<g><title>prod: evalsuite/contracts.py</title><rect x="644" y="597.0" width="360" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
-<text x="824.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">The product: the problem&#x27;s own code</text>
-<text x="824.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(one tagged commit per run)</text>
-<text x="824.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">contracts.py</text>
+<g><title>k_research: ../bev_fusion_lane_center/tools/literature/catalogue.py</title><rect x="224" y="627.0" width="140" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="294.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the problem&#x27;s</text>
+<text x="294.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">literature tools</text>
+<text x="294.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">catalogue.py</text>
 </g>
-<g><title>gate_clean: tools/clean_temp.py; tools/check_structure.py</title><rect x="44" y="705.0" width="1160" height="46" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
-<text x="624.0" y="718.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">CLEANUP at the end of the loop: nothing temporary stays</text>
-<text x="624.0" y="733.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clean_temp.py commits and tags the scratch, then moves temp/loopNN away; check_structure.py finds dead paths; HANDOVER.md is rewritten</text>
-<text x="624.0" y="747.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">clean_temp.py +1</text>
+<g><title>k_branch: tools/experiment.py; tools/card.py; schemas/</title><rect x="404" y="627.0" width="140" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
+<text x="474.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">experiment.py</text>
+<text x="474.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">card.py, schemas</text>
+<text x="474.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">experiment.py +2</text>
 </g>
-<text x="42.0" y="88.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">DESIGN: people and agents decide what to do and write it down</text>
-<text x="42.0" y="288.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">FILES: plain files in the problem folder, the only contract</text>
-<text x="42.0" y="488.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">EXECUTION: code that reads the files and runs them</text>
-<text x="24" y="800" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
-<rect x="24" y="812" width="18" height="12" rx="3" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/><text x="48" y="822" font-size="11" fill="#334155">design layer: people and agents</text>
-<rect x="256.20000000000005" y="812" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="280.20000000000005" y="822" font-size="11" fill="#334155">plain file in the problem folder</text>
-<rect x="494.6" y="812" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="518.6" y="822" font-size="11" fill="#334155">execution layer: code</text>
-<rect x="664.8000000000001" y="812" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="688.8000000000001" y="822" font-size="11" fill="#334155">the problem&#x27;s own code</text>
-<rect x="841.2" y="812" width="18" height="12" rx="3" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/><text x="865.2" y="822" font-size="11" fill="#334155">transition point: a check that can refuse</text>
+<g><title>k_build: tools/selftest.py</title><rect x="584" y="627.0" width="140" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
+<text x="654.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">spec tests</text>
+<text x="654.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">selftest.py</text>
+<text x="654.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">selftest.py</text>
+</g>
+<g><title>k_train: tools/run.py; tools/schedule.py; tools/ledger.py; trainsuite/</title><rect x="764" y="627.0" width="140" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
+<text x="834.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">launcher + train</text>
+<text x="834.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">suite, kill rules</text>
+<text x="834.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">run.py +3</text>
+</g>
+<g><title>k_eval: evalsuite/; tools/decide.py</title><rect x="944" y="627.0" width="140" height="62" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
+<text x="1014.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">eval suite (VAL)</text>
+<text x="1014.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">decide.py: the rule</text>
+<text x="1014.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">evalsuite/ +1</text>
+</g>
+<g><title>k_track: ../bev_fusion/evaluation/board.py; ../bev_fusion_lane_center/tools/prototype/lane_prototype.py</title><rect x="1124" y="627.0" width="140" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="1194.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">board, prototype</text>
+<text x="1194.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(per problem)</text>
+<text x="1194.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">board.py +1</text>
+</g>
+<g><title>k_close: tools/clean_temp.py; tools/check_structure.py; tools/check_numbers.py; tools/metrics.py; tools/archdraw.py; architecture.json</title><rect x="1304" y="627.0" width="140" height="62" rx="7" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/>
+<text x="1374.0" y="641.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">cleanup, checks</text>
+<text x="1374.0" y="656.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clean_temp,</text>
+<text x="1374.0" y="671.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">archdraw</text>
+<text x="1374.0" y="685.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">clean_temp.py +5</text>
+</g>
+<text x="42.0" y="118.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">PERSON</text>
+<text x="42.0" y="218.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">AGENTS: four roles, run by the lead chat</text>
+<text x="42.0" y="418.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">FILES in the problem folder: the only contract between the layers</text>
+<text x="42.0" y="618.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">CODE: core and suites</text>
+<text x="930.0" y="511.0" font-size="10" text-anchor="start" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">start from a version</text>
+<text x="840.0" y="211.0" font-size="10" text-anchor="start" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">next round</text>
+<text x="24" y="730" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
+<rect x="24" y="742" width="18" height="12" rx="3" fill="#fce7f3" stroke="#db2777" stroke-width="1.4"/><text x="48" y="752" font-size="11" fill="#334155">the person</text>
+<rect x="126.0" y="742" width="18" height="12" rx="3" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/><text x="150.0" y="752" font-size="11" fill="#334155">agent role (mode)</text>
+<rect x="271.4" y="742" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="295.4" y="752" font-size="11" fill="#334155">plain file in the problem folder</text>
+<rect x="509.79999999999995" y="742" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="533.8" y="752" font-size="11" fill="#334155">code: core and suites</text>
+<rect x="680.0" y="742" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="704.0" y="752" font-size="11" fill="#334155">the problem&#x27;s own code</text>
+<rect x="856.4" y="742" width="18" height="12" rx="3" fill="#ffffff" stroke="#be123c" stroke-width="1.4"/><text x="880.4" y="752" font-size="11" fill="#334155">transition point: refuses</text>
 </svg>
