@@ -33,21 +33,66 @@ GCOLS = ["granted", "until", "path", "decision", "note"]
 
 
 def norm(p, cwd=None):
-    """one spelling for a path from Windows (C:\\x\\y, \\\\?\\C:\\x, x.md., x.md::$DATA, relative to cwd) or WSL (/mnt/c/x/y): /mnt/c/x/y,
-    lower case under /mnt/ (the Windows file system ignores case)"""
+    """one spelling for a path from Windows (C:\\x\\y, \\\\?\\C:\\x, x.md., x.md::$DATA, relative to cwd, \\x on the drive of cwd), a share
+    (\\\\wsl$\\<distro>\\x and \\\\wsl.localhost\\<distro>\\x -> /x, \\\\host\\C$\\x -> C:\\x) or WSL (/mnt/c/x/y, //mnt/c/x/y): /mnt/c/x/y, 8.3 short
+    names of existing folders (AUTO-R~1) expanded, lower case under /mnt/ (the Windows file system ignores case)"""
     p = p.replace("\\", "/")
     if p.startswith(("//?/", "//./")):
         p = p[4:]
+        if p.lower().startswith("unc/"):  # \\?\UNC\host\share\x
+            p = "//" + p[4:]
+    m = re.match(r"^//(?:wsl\$|wsl\.localhost)/[^/]+(/.*)?$", p, re.I)
+    if m:
+        p = m.group(1) or "/"
+    m = re.match(r"^//[^/]+/([A-Za-z])\$(/.*)?$", p)
+    if m:
+        p = f"{m.group(1)}:{m.group(2) or '/'}"
+    d = re.match(r"^([A-Za-z]):[\\/]", cwd or "")  # a Windows cwd: the event comes from Windows
+    m = re.match(r"^([A-Za-z]):(?!/)(.*)$", p)
+    if m and d and m.group(1).lower() == d.group(1).lower():  # C:x is relative to the cwd of that drive
+        p = cwd.replace("\\", "/").rstrip("/") + "/" + m.group(2)
+    elif m:  # C:x on another drive: its cwd is unknown, read it at the drive's root (verdict refuses this form anyway)
+        p = f"{m.group(1)}:/{m.group(2)}"
     m = re.match(r"^([A-Za-z]):/(.*)$", p)
     if m:
         p = f"/mnt/{m.group(1).lower()}/{m.group(2)}"
-    elif not p.startswith("/") and cwd:
+    elif p.startswith("/"):
+        p = "/" + p.lstrip("/")
+        g = re.match(r"^/([A-Za-z])(/.*)?$", p)
+        if d and g:  # from a Windows cwd, /c/x is the Git Bash spelling of C:\x
+            p = f"/mnt/{g.group(1).lower()}{g.group(2) or '/'}"
+        elif not p.startswith("/mnt/") and d:  # from a Windows cwd, \x is drive-relative: the drive of cwd (from a Linux cwd /x is a Linux path)
+            p = f"/mnt/{d.group(1).lower()}{p}"
+    elif cwd:
         p = norm(cwd).rstrip("/") + "/" + p
     if p.startswith("/mnt/"):
         p = p.split(":", 1)[0]  # an NTFS stream (x.md::$DATA) is the file itself
         p = "/".join(s.rstrip(". ") or s for s in p.split("/"))  # Windows drops trailing dots and spaces of a name
     p = os.path.normpath(p).replace("\\", "/")
+    if p.startswith("/mnt/") and re.search(r"~\d", p):
+        p = long_name(p)
     return p.lower() if p.startswith("/mnt/") else p
+
+
+def long_name(p):
+    """expand the 8.3 short names (AUTO-R~1) of the existing folders and files of a /mnt/ path: the entry of the parent that is the same file"""
+    cur = ""
+    for s in p.strip("/").split("/"):
+        nxt = cur + "/" + s
+        if re.search(r"~\d", s) and os.path.exists(nxt):
+            try:
+                s = next((e for e in os.listdir(cur or "/") if e != s and _same(os.path.join(cur or "/", e), nxt)), s)
+            except OSError:
+                pass
+        cur += "/" + s
+    return cur
+
+
+def _same(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:  # e.g. pagefile.sys cannot be stat-ed
+        return False
 
 
 def grant_file(root, cfg):
@@ -94,21 +139,29 @@ def granted(path, root, cfg, now=None):
 
 
 def new_text(tool, inp, path):
-    """the file text after the edit, where the hook can reproduce it (Write, Edit, MultiEdit); None when it cannot"""
-    if tool == "Write":
+    """the file text after the edit, where the hook can reproduce it (Write, Edit, MultiEdit and the MCP write_file / edit_block); None when it
+    cannot (e.g. move_file)"""
+    mcp = tool.startswith("mcp__")
+    if tool == "Write" or (mcp and tool.endswith("write_file") and inp.get("mode", "rewrite") == "rewrite"):
         return inp.get("content")
-    edits = inp.get("edits") if tool == "MultiEdit" else [inp] if tool == "Edit" else None
+    if mcp and tool.endswith("write_file") and inp.get("mode") != "append":
+        return None
+    edits = (inp.get("edits") if tool == "MultiEdit" else [inp] if tool == "Edit" or (mcp and tool.endswith("edit_block"))
+             else [] if mcp and tool.endswith("write_file") else None)
     if edits is None:
         return None
     try:
         text = open(path, encoding="utf-8").read()
     except OSError:
         return None
+    if not edits:  # write_file in append mode
+        return text + (inp.get("content") or "")
     for e in edits:
         o, n = e.get("old_string", ""), e.get("new_string", "")
         if not o or o not in text:
             return None  # e.g. a line-ending difference Claude Code normalises: the result is unknown
-        text = text.replace(o, n) if e.get("replace_all") else text.replace(o, n, 1)
+        k = -1 if e.get("replace_all") else int(e.get("expected_replacements", 1) or 1)
+        text = text.replace(o, n, k)
     return text
 
 
@@ -127,22 +180,34 @@ def entries_changed(path, after, entries):
     return [k for k in entries if before.get(k) != new.get(k)]
 
 
-def target(tool, inp):
-    """the path a tool call writes, or None for a tool that writes no file"""
+def targets(tool, inp):
+    """the paths a tool call writes (a move writes its source and its destination); empty for a tool that writes no file"""
     if tool in TOOLS:
-        return inp.get("file_path") or inp.get("notebook_path")
-    if tool.startswith("mcp__") and tool.endswith(MCP_WRITERS):
-        return inp.get("path") or inp.get("file_path") or inp.get("destination")
-    return None
+        keys = ("file_path", "notebook_path")
+    elif tool.startswith("mcp__") and tool.endswith(MCP_WRITERS):
+        keys = ("path", "file_path", "source", "destination", "outputPath")
+    else:
+        return []
+    return [inp[k] for k in keys if isinstance(inp.get(k), str) and inp[k]]
 
 
 def verdict(tool, inp, root=None, cfg=None, now=None, cwd=None):
-    """None = allowed, else the reason for the refusal"""
+    """None = allowed, else the reason for the refusal. A relative path is read against the event's cwd; without one against both the hook's own
+    folder (the workspace) and the problem folder (an MCP server resolves against its own folder, which the hook cannot know)"""
     root, cfg = root or P.root(), cfg or P.cfg()
-    raw = target(tool, inp)
-    if not raw:
-        return None
-    path = norm(raw, cwd)
+    for raw in targets(tool, inp):
+        m = re.match(r"^([A-Za-z]):(?![\\/])", raw)
+        d = re.match(r"^([A-Za-z]):[\\/]", cwd or "")
+        if m and not (d and m.group(1).lower() == d.group(1).lower()):
+            return f"guard_hook: {raw} is relative to the current folder of drive {m.group(1)}:, which the hook cannot know: write the full path"
+        for c in [cwd] if cwd else [os.getcwd(), root]:
+            why = verdict_path(tool, inp, norm(raw, c), root, cfg, now)
+            if why:
+                return why
+    return None
+
+
+def verdict_path(tool, inp, path, root, cfg, now):
     if path == norm(grant_file(root, cfg)):
         return "guard_hook: the grant file is written only by `guard_hook.py grant` (a decided D<n> behind each row)"
     for rel, prot, folder, entries in rules(root, cfg):
@@ -199,6 +264,33 @@ def selftest():
     assert norm("C:\\ML-Experiment\\x\\PROBLEM.md.") == norm("C:\\ML-Experiment\\x\\PROBLEM.md::$DATA") == norm("/mnt/c/ML-Experiment/x/PROBLEM.md")
     assert norm("x\\PROBLEM.md", cwd="C:\\ML-Experiment") == norm("/mnt/c/ML-Experiment/x/PROBLEM.md")
     assert norm("/mnt/c/a/b/../c.md") == "/mnt/c/a/c.md"
+    want = "/mnt/c/ml-experiment/x/problem.md"  # D33 (b): share, doubled-slash and drive-relative spellings
+    for s in ("\\\\wsl$\\Ubuntu\\mnt\\c\\ML-Experiment\\x\\PROBLEM.md", "\\\\wsl.localhost\\Ubuntu-22.04\\mnt\\c\\ML-Experiment\\x\\PROBLEM.md",
+              "\\\\localhost\\C$\\ML-Experiment\\x\\PROBLEM.md", "\\\\?\\UNC\\localhost\\c$\\ML-Experiment\\x\\PROBLEM.md",
+              "//mnt/c/ML-Experiment/x/PROBLEM.md", "///mnt/c/ML-Experiment/x/PROBLEM.md"):
+        assert norm(s) == want, (s, norm(s))
+    assert norm("\\ML-Experiment\\x\\PROBLEM.md", cwd="C:\\other") == want, "a drive-relative path is on the drive of cwd"
+    assert norm("\\ML-Experiment\\x\\PROBLEM.md", cwd="D:\\y") == "/mnt/d/ml-experiment/x/problem.md"
+    assert norm("/tmp/x.md", cwd="/mnt/c/y") == "/tmp/x.md", "from a Linux cwd a rooted path is a Linux path"
+    assert norm("/home/u/x.md", cwd="/home/u") == "/home/u/x.md", "a Linux path stays one"
+    assert norm("/c/ML-Experiment/x/PROBLEM.md", cwd="C:\\other") == want, "the Git Bash spelling from a Windows cwd"
+    assert norm("/c/x.md", cwd="/home/u") == "/c/x.md", "from a Linux cwd /c/x is a Linux path"
+    assert norm("C:x\\PROBLEM.md", cwd="C:\\ML-Experiment") == want, "C:x is relative to the cwd of drive C:"
+    calls = []
+    real_long = globals()["long_name"]
+    globals()["long_name"] = lambda q: calls.append(q) or q
+    try:
+        norm("C:\\AUTO-R~1\\x.md")
+        norm("C:\\Auto-research\\x.md")
+    finally:
+        globals()["long_name"] = real_long
+    assert calls == ["/mnt/c/AUTO-R~1/x.md"], "norm expands a short name of a /mnt/ path, and only then"
+    root = tempfile.mkdtemp()
+    os.makedirs(os.path.join(root, "LONGNAME"))
+    os.symlink(os.path.join(root, "LONGNAME"), os.path.join(root, "LONGNA~1"))  # stands in for an 8.3 alias: another name of the same folder
+    assert long_name(os.path.join(root, "LONGNA~1", "f.md")) == os.path.join(root, "LONGNAME", "f.md"), "a short name is expanded"
+    assert long_name(os.path.join(root, "NOSUCH~1", "f.md")) == os.path.join(root, "NOSUCH~1", "f.md"), "an unknown short name stays"
+    shutil.rmtree(root)
     root = tempfile.mkdtemp()
     os.makedirs(os.path.join(root, "experiment_execution"))
     os.makedirs(os.path.join(root, "tools"))
@@ -223,6 +315,32 @@ def selftest():
     assert v("Edit", file_path=reg, old_string='"run": "b"', new_string='"run": "c"') is None, "an Edit of another entry passes"
     assert v("Edit", file_path=reg, old_string='"run":\r\n "b"', new_string='"run": "c"'), "an Edit the hook cannot reproduce must be refused"
     assert v("Write", file_path=os.path.join(root, "experiment_execution/grants.csv"), content="x"), "the grant file is never edited"
+    dc = "mcp__desktop-commander__"  # D33 (a), (c), (d)
+    assert v(dc + "move_file", source=os.path.join(root, "TEST_LOG.md"), destination=os.path.join(root, "x.md")), "moving a protected file away"
+    assert v(dc + "move_file", source=os.path.join(root, "x.md"), destination=os.path.join(root, "TEST_LOG.md")), "moving onto a protected file"
+    assert v(dc + "move_file", source=os.path.join(root, "x.md"), destination=os.path.join(root, "y.md")) is None, "other moves pass"
+    assert v(dc + "move_file", source=reg, destination=os.path.join(root, "r2.json")), "moving the registry away changes its champion"
+    here = os.getcwd()
+    os.chdir(os.path.dirname(root))  # as in production: the hook runs in the workspace, the parent of the problem folder
+    try:
+        assert verdict("Edit", dict(file_path=os.path.join(os.path.basename(root), "TEST_LOG.md")), root, cfg), "relative to the hook's own folder"
+        assert verdict("Edit", dict(file_path="TEST_LOG.md"), root, cfg), "relative to the problem folder (an MCP server's own cwd is unknown)"
+        assert verdict("Edit", dict(file_path="other.md"), root, cfg) is None
+    finally:
+        os.chdir(here)
+    assert verdict("Edit", dict(file_path="D:x.md"), root, cfg, cwd="C:\\w"), "C:x on another drive than cwd's is refused (its folder is unknown)"
+    assert v(dc + "write_pdf", path=os.path.join(root, "in.md"), outputPath=os.path.join(root, "TEST_LOG.md")), "write_pdf writes its outputPath"
+    assert v(dc + "write_file", path=reg, content=" ", mode="append") is None, "an append that keeps the json and its champion passes"
+    assert v(dc + "write_file", path=reg, content="{}", mode="weird"), "an unknown write mode is refused"
+    open(reg, "w").write(json.dumps({"fast": {"run": "b"}, "champion": {"run": "b"}}))
+    assert v(dc + "edit_block", path=reg, old_string='"run": "b"', new_string='"run": "c"', expected_replacements=2), "the 2nd match is the champion"
+    assert v(dc + "edit_block", path=reg, old_string='"run": "b"', new_string='"run": "c"') is None, "one replacement touches only the first entry"
+    open(reg, "w").write(json.dumps({"champion": {"run": "a"}, "fast": {"run": "b"}}))
+    assert v(dc + "edit_block", path=reg, old_string='"run": "b"', new_string='"run": "c"') is None, "an MCP edit of another entry passes"
+    assert v(dc + "edit_block", path=reg, old_string='"run": "a"', new_string='"run": "z"'), "an MCP edit of the champion is refused"
+    assert v(dc + "write_file", path=reg, content=json.dumps({"champion": {"run": "a"}, "fast": {"run": "c"}})) is None, "an MCP rewrite of another entry"
+    assert v(dc + "write_file", path=reg, content=json.dumps({"champion": {"run": "z"}})), "an MCP rewrite of the champion is refused"
+    assert v(dc + "write_file", path=reg, content="{}", mode="append"), "an MCP append that breaks the json is refused"
     for bad in (("TEST_LOG.md", "D9"), ("TEST_LOG.md", "D3"), ("TEST_LOG.md", "D4")):
         try:
             add_grant(bad[0], bad[1], 1, "not decided", root, cfg)

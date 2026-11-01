@@ -42,6 +42,8 @@ What it does (paths from the problem's project.json, see project.py):
                 (lock <slots dir>/.reclaim.lock); the owner file holds a token and a launcher releases only a slot that still carries its own); --gpu-max-mb
                 additionally waits until the GPU memory in use is below the limit; max --wait-gpu minutes (720), then status gpu_busy (exit 1). The
                 owner check needs launcher and slot owner in the same process namespace (all WSL or all Windows)
+  * machine lock (D19) every run, GPU or not, waits (max --wait-gpu minutes, then gpu_busy) while another owner holds a live exclusive lock of
+                machine_lock.py; the launcher's own owner name is AR_LOCK_OWNER from its environment (the lock owner's own runs pass)
   * environment the command gets AR_RUN_ID and, with a snapshot, AR_COMMIT / AR_TAG (the commit this attempt was launched from; the tag names attempt 1)
   * timeout     --timeout <minutes>: the command and its process group are killed after the limit (status timeout, exit 124)
   * retry       a run whose LAST attempt printed a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
@@ -67,6 +69,7 @@ import time
 import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import machine_lock  # noqa: E402
 import project as P  # noqa: E402
 
 COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", "basis", "seed", "command", "result", "decision", "notes", "prediction", "rule", "code_hash", "split", "commit"]
@@ -635,21 +638,29 @@ def main():
             print(f"[{a.id}] blocked: {why}")
             return 3
     slot = GpuSlot(records, a.gpu_slots, a.id, d, base=slot_dir(root, cfg, records)) if (a.gpu or a.gpu_max_mb) else None
+    owner = os.environ.get("AR_LOCK_OWNER", "")
     try:
-        if slot:
-            t0 = time.time()
-            while True:
-                beat(hb, "waiting for the GPU")
-                u = gpu_used_mb() if a.gpu_max_mb else None
-                if mem_ok(u, a.gpu_max_mb) and slot.try_take():
-                    break
-                if time.time() - t0 > a.wait_gpu * 60:
-                    rec.update(status="gpu_busy", ended=now(), notes=("nvidia-smi unreadable" if (a.gpu_max_mb and u is None) else f"GPU memory {u} MB in use") + f" or all {a.gpu_slots} slots taken for {a.wait_gpu} min")
-                    save_rec(os.path.join(d, "run.json"), rec)
-                    ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
-                    print("GPU did not become free:", rec["notes"])
-                    return 1
-                time.sleep(min(30, max(1, HEARTBEAT_S)))
+        t0 = time.time()
+        while True:
+            try:
+                lk = machine_lock.blocks(owner)  # D19: every run (GPU or not) waits while another owner holds an exclusive machine lock
+            except Exception:  # noqa: BLE001  the lock must never be what breaks a launch
+                lk = None
+            if not lk and not slot:
+                break
+            beat(hb, f"waiting for the machine lock of {lk['owner']}" if lk else "waiting for the GPU")
+            u = gpu_used_mb() if (slot and a.gpu_max_mb) else None
+            if not lk and mem_ok(u, a.gpu_max_mb) and slot.try_take():
+                break
+            if time.time() - t0 > a.wait_gpu * 60:
+                why = (f"machine lock of {lk['owner']} until {lk['end']}" if lk else
+                       ("nvidia-smi unreadable" if (a.gpu_max_mb and u is None) else f"GPU memory {u} MB in use") + f" or all {a.gpu_slots} slots taken")
+                rec.update(status="gpu_busy", ended=now(), notes=why + f" for {a.wait_gpu} min")
+                save_rec(os.path.join(d, "run.json"), rec)
+                ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
+                print("machine lock not released:" if lk else "GPU did not become free:", rec["notes"])
+                return 1
+            time.sleep(min(30, max(1, HEARTBEAT_S)))
         ch = code_hash(root, cfg)
         if prev.get("code_hash") and prev["code_hash"] != ch:
             notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")

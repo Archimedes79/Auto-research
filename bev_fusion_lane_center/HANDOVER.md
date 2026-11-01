@@ -16,7 +16,7 @@ New chat: start in the repository folder (parent of autoresearch/ and this folde
 2. Next lane loop: precision at range (range-dependent threshold for edge seeds; union with a wider vertex merge), idle timing of ring and union, route success on spur-kept graphs.
 3. bev: code review + commit of the t11 code; seed twin of B2; the 6000-step run with the hurdle + accumulation 2.
 
-Open decisions for Mirko: D25, D4, D18, D19 (DECISIONS.md).
+Decided 2026-11-01 and applied: D25 (PROBLEM.md vertex sentence), D18 (per-card bands), D19 (`autoresearch/tools/machine_lock.py`, run.py waits on another owner's exclusive lock), D33 (gate-hook gaps). Open for Mirko: D4 and D17 (to discuss), D29 - D31 (bev), D35; Mirko's "D1." is asked back (DECISIONS.md).
 
 ## Pointers
 PROBLEM.md; PLAN.md; METHOD.md; closed_questions.md; git: tag `lcr/<id>` per run (bev: `bf/<id>`), remote origin (pushes only on request).

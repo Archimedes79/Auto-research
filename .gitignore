@@ -13,6 +13,8 @@
 !/autoresearch/
 # what `python -m evalsuite` writes below autoresearch/ with the default --out (runs, pictures, stored counts: results, not code)
 /autoresearch/eval_out/
+# the machine lock between chats (D19, tools/machine_lock.py): runtime state, not a record
+/autoresearch/state/
 
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/

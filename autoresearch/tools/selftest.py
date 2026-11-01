@@ -25,7 +25,8 @@ open(f"{T}/code/a.py", "w").write("x = 1\n")
 json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", ledger_md="LEDGER.md", run_records="runs", schedule="schedule.csv", test_log="TEST.md",
                code_dirs=["code"], scratch="temp", live_code=["code"], lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))
 open(f"{T}/TEST.md", "w").write("| S.test.ok | logged |\n")
-env = dict(os.environ, AR_PROJECT=T)
+env = dict(os.environ, AR_PROJECT=T, AR_MACHINE_LOCK=f"{T}/state/machine_lock.json")  # never the real machine lock
+env.pop("AR_LOCK_OWNER", None)  # the operator's own lock name must not let the selftest's runs pass a lock
 G = ["git", "-c", "safe.directory=*", "-C", T]
 subprocess.run(G[:3] + ["init", "-q", T], check=True)
 for k, v in (("user.name", "selftest"), ("user.email", "selftest@example.invalid"), ("core.autocrlf", "false")):
@@ -120,6 +121,19 @@ try:
     busy = go("S.busy", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1", "--wait-gpu", "0")
     assert busy.returncode == 1 and rows()["S.busy"]["status"] == "gpu_busy", busy.stdout
     shutil.rmtree(f"{T}/runs/.gpu_slots")
+    # D19: an exclusive machine lock of another owner holds every run (GPU or not); its owner's own runs pass; a reservation holds nobody
+    os.makedirs(f"{T}/state")
+    json.dump(dict(owner="timing", start="2026-01-01T00:00:00", end="2999-01-01T00:00:00", exclusive=True, note="selftest"), open(f"{T}/state/machine_lock.json", "w"))
+    held = go("S.mlock", ["bash", "-c", "echo x"], "--wait-gpu", "0")
+    assert held.returncode == 1 and rows()["S.mlock"]["status"] == "gpu_busy" and "machine lock of timing" in rows()["S.mlock"]["notes"], held.stdout
+    own = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.mlock.own", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--wait-gpu", "0", "--", "bash", "-c", "echo x"],
+                         capture_output=True, text=True, env=dict(env, AR_LOCK_OWNER="timing"))
+    assert own.returncode == 0, own.stdout
+    json.dump(dict(owner="timing", end="2999-01-01T00:00:00", exclusive=False), open(f"{T}/state/machine_lock.json", "w"))
+    assert go("S.mlock.res", ["bash", "-c", "echo x"], "--wait-gpu", "0").returncode == 0, "a reservation holds nobody"
+    open(f"{T}/state/machine_lock.json", "w").write('{"end": "2999-01-01", "exclusive": true}')  # malformed (no owner): never blocks, never crashes
+    assert go("S.mlock.bad", ["bash", "-c", "echo x"], "--wait-gpu", "0").returncode == 0, "a malformed lock must not break a launch"
+    os.remove(f"{T}/state/machine_lock.json")
     # project.json gpu_slots_dir: one slot folder shared by the problems of a machine (D23); a live slot there blocks this problem too
     shared = tempfile.mkdtemp(prefix="ar_slots_")
     assert RUN.slot_dir(T, dict(gpu_slots_dir=shared), f"{T}/runs") == os.path.normpath(shared) and RUN.slot_dir(T, {}, f"{T}/runs") == f"{T}/runs/.gpu_slots"
@@ -654,6 +668,8 @@ try:
     assert r6.returncode != 0 and open(f"{T}/LEDGER.csv", "rb").read() == led_before, (r6.stdout, r6.stderr)
     import clean_temp
     clean_temp.selftest()
+    import machine_lock  # D19
+    machine_lock.selftest()
     import guard_hook  # P4: protected files, grants, json entries, Windows spellings
     guard_hook.selftest()
     import metrics  # P3: loop table from ledger, decision files and TEST log
