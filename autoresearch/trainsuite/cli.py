@@ -395,25 +395,47 @@ def cmd_start(a):
         if r.returncode:
             print("start: the check found problems; nothing started")
             return 1
-    line = " ".join(shlex.quote(x) for x in plan["argv"])
-    print(f"cd {root} && AR_PROJECT={root} {line}")
+    missing = []
+    for pr in ([] if a.skip_prepare else plan["prepare"]):         # the data the run needs (the GT store of its version): present, or built first
+        chk = pr["check"] if a.go else pr["check_preview"]
+        r = subprocess.run(chk, cwd=root, capture_output=True, text=True)
+        print(f"prepare {pr['name']}: {' '.join(chk)} -> exit {r.returncode} ({'present' if r.returncode == 0 else 'MISSING'})")
+        print("\n".join("  " + x for x in (r.stdout + r.stderr).strip().splitlines()[-8:]))
+        if r.returncode:
+            missing.append(pr)
+    cmd = lambda argv: f"cd {root} && AR_PROJECT={root} " + " ".join(shlex.quote(x) for x in argv)           # noqa: E731
+    if missing and not a.prepare:
+        print(f"start: {', '.join(m['name'] for m in missing)} missing. A build takes hours and belongs in the schedule: start with --prepare (the build becomes a run of its own and "
+              "the training waits for it), or build it first:")
+        for m in missing:
+            print("  " + cmd(m["argv"]))
+        return 1
+    train_argv = plan["argv"]
+    if missing:                                                  # the training waits for the builds (--after); a failed build blocks it instead of letting it start without its data
+        i = train_argv.index("--")
+        train_argv = train_argv[:i] + ["--after", ",".join(m["id"] for m in missing), "--wait-after", str(max(m["wait_min"] for m in missing))] + train_argv[i:]
+    jobs = [(m["argv"], os.path.join(os.path.dirname(plan["log"]), m["id"].replace(".", "_") + ".launcher.log"), m["id"]) for m in missing] + [(train_argv, plan["log"], a.id)]
+    for argv_, _, _ in jobs:
+        print(cmd(argv_))
     if not a.go:
         print("(nothing started: add --go)")
         return 0
-    os.makedirs(os.path.dirname(plan["log"]), exist_ok=True)
-    with open(plan["log"], "ab") as lf:
-        proc = subprocess.Popen(plan["argv"], cwd=root, env=dict(os.environ, AR_PROJECT=root), stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
-    try:
-        rc = proc.wait(timeout=a.wait)                          # run.py refuses a held, running, finished or card-less id within a second: say so instead of "started"
-    except subprocess.TimeoutExpired:
-        rc = None
-    if rc is not None:
-        with open(plan["log"], encoding="utf-8", errors="replace") as lf:
-            tail = lf.read().strip().splitlines()[-6:]
-        print(f"the launcher ended after {a.wait:g} s with exit {rc}: nothing runs\n" + "\n".join("  " + x for x in tail))
-        return 1
     runs = os.path.join(root, block.get("runs", "runs"))
-    print(f"started, pid {proc.pid}, launcher log {plan['log']}\n  watch it: python -m trainsuite --root {runs} watch {a.id.replace('.', '_')}")
+    os.makedirs(os.path.dirname(plan["log"]), exist_ok=True)
+    for argv_, log_, rid in jobs:
+        with open(log_, "ab") as lf:
+            proc = subprocess.Popen(argv_, cwd=root, env=dict(os.environ, AR_PROJECT=root), stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            rc = proc.wait(timeout=a.wait)                      # run.py refuses a held, running, finished or card-less id within a second: say so instead of "started"
+        except subprocess.TimeoutExpired:
+            rc = None
+        if rc is not None:
+            with open(log_, encoding="utf-8", errors="replace") as lf:
+                tail = lf.read().strip().splitlines()[-6:]
+            print(f"the launcher of {rid} ended after {a.wait:g} s with exit {rc}: nothing runs" + (" and the later runs are not started" if rid != a.id else "") + "\n" + "\n".join("  " + x for x in tail))
+            return 1
+        print(f"started {rid}, pid {proc.pid}, launcher log {log_}")
+    print(f"  watch it: python -m trainsuite --root {runs} watch {a.id.replace('.', '_')}")
     return 0
 
 
@@ -480,6 +502,8 @@ def main(argv=None):
     p.add_argument("--no-card", action="store_true", help="a diagnostic run: no hypothesis / prediction / rule (it never feeds a verdict)")
     p.add_argument("--no-check", action="store_true", help="skip the project's static check of the composed config")
     p.add_argument("--go", action="store_true", help="start it (detached); without it the command is only printed and the composed config goes to <id>.preview.json")
+    p.add_argument("--prepare", action="store_true", help="a missing prepare item (the GT store) is built first, as a run of its own that the training waits for (--after)")
+    p.add_argument("--skip-prepare", action="store_true", help="do not check the prepare items")
     p.add_argument("--wait", type=float, default=3.0, help="seconds to see whether the launcher stays alive (it refuses a held / running / finished id at once)")
     p.add_argument("--run-arg", action="append", default=[], help="an argument for run.py itself (repeatable), e.g. --run-arg=--seed --run-arg=1")
     p.add_argument("--project", help="project folder (default: AR_PROJECT)")

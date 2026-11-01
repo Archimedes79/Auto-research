@@ -1022,7 +1022,7 @@ def main():
 
             def fake_popen_of(cls):
                 def fake(argv, **kw):                                  # only the launcher is faked, the check runs for real
-                    if "--gpu" in argv:
+                    if len(argv) > 1 and str(argv[1]).endswith("run.py"):
                         calls.append((argv, kw))
                         return cls()
                     return real_popen(argv, **kw)
@@ -1032,7 +1032,7 @@ def main():
                 rc, so = run_cli(*args, "--go")
             finally:
                 sp.Popen = real_popen
-            assert rc == 0 and "started, pid 4242" in so and "watch t15_h" in so and len(calls) == 1, so
+            assert rc == 0 and "started t15.h, pid 4242" in so and "watch t15_h" in so and len(calls) == 1, so
             (argv_, kw_), = calls
             assert argv_[2:4] == ["--id", "t15.h"] and kw_["cwd"] == proj and kw_["env"]["AR_PROJECT"] == proj and kw_["start_new_session"] is True and os.path.exists(os.path.join(proj, "runs", "t15_h.launcher.log"))
             assert json.load(open(os.path.join(proj, "composed", "t15_h.json")))["name"] == "t15_h" and "composed/t15_h.json" in argv_, "--go writes the real config"
@@ -1054,6 +1054,45 @@ def main():
             os.environ.pop("AR_PROJECT")
             rc, so = run_cli("start", "base.json", "--id", "t15.l", "--no-card", "--no-check", "--project", proj)
             assert rc == 0 and "--id t15.l" in so, "--project replaces AR_PROJECT"
+            # the prepare step: data a run needs (the GT store) is checked, built as a run of its own when missing, and the training waits for it
+            os.environ["AR_PROJECT"] = proj
+            open(os.path.join(proj, "chkgt.py"), "w").write("import json, os, sys\njson.load(open(sys.argv[1]))\nok = os.path.exists('gt_present')\nprint('GT store present' if ok else 'GT store of the run missing')\nsys.exit(0 if ok else 1)\n")
+            pblock = dict(block, prepare=[{"name": "gt", "check": "python3 chkgt.py {config}", "build": "bash build.sh {config}", "wait_min": 600}])
+            json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "trainsuite": pblock}, open(os.path.join(proj, "project.json"), "w"))
+            pargs = ["start", "base.json", "--id", "t15.p", "--no-card", "--no-check"]
+            rc, so = run_cli(*pargs)
+            assert rc == 1 and "prepare gt:" in so and "MISSING" in so and "GT store of the run missing" in so and "--prepare" in so \
+                and "--id t15.p.prep_gt --no-card -- bash build.sh composed/t15_p.json" in so and "--after" not in so and "nothing started" not in so, so
+            rc, so = run_cli(*pargs, "--prepare")
+            assert rc == 0 and "(nothing started: add --go)" in so, so
+            lines = [ln for ln in so.splitlines() if ln.startswith("cd ")]
+            assert len(lines) == 2 and "--id t15.p.prep_gt" in lines[0] and "--gpu" not in lines[0] and "--id t15.p --gpu" in lines[1] \
+                and "--after t15.p.prep_gt --wait-after 600 -- bash train.sh" in lines[1], lines
+            open(os.path.join(proj, "gt_present"), "w").close()
+            rc, so = run_cli(*pargs)
+            assert rc == 0 and "(present)" in so and "--after" not in so and "prep_gt --no-card" not in so, so
+            os.remove(os.path.join(proj, "gt_present"))
+            rc, so = run_cli(*pargs, "--skip-prepare")
+            assert rc == 0 and "prepare gt" not in so, "--skip-prepare does not look"
+            calls.clear()
+            sp.Popen = fake_popen_of(FakeProc)
+            try:
+                rc, so = run_cli(*pargs, "--prepare", "--go")
+            finally:
+                sp.Popen = real_popen
+            assert rc == 0 and [c[0][3] for c in calls] == ["t15.p.prep_gt", "t15.p"] and "started t15.p.prep_gt, pid 4242" in so and "started t15.p, pid 4242" in so, (so, [c[0][:4] for c in calls])
+            assert "--after" in calls[1][0] and "--gpu" not in calls[0][0] and os.path.exists(os.path.join(proj, "runs", "t15_p_prep_gt.launcher.log")), calls
+            calls.clear()
+            sp.Popen = fake_popen_of(DeadProc)
+            try:
+                rc, so = run_cli(*pargs, "--prepare", "--go", "--wait", "0.1")
+            finally:
+                sp.Popen = real_popen
+            assert rc == 1 and len(calls) == 1 and "launcher of t15.p.prep_gt ended" in so and "later runs are not started" in so, (so, len(calls))
+            json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "trainsuite": dict(block, prepare=[{"name": "bad name", "check": "x", "build": "y"}])},
+                      open(os.path.join(proj, "project.json"), "w"))
+            rc, so, se = run_cli_err(*pargs)
+            assert rc == 2 and "need a name" in se, se
             os.environ["AR_PROJECT"] = proj
             json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs"}, open(os.path.join(proj, "project.json"), "w"))
             rc, so, se = run_cli_err(*args)

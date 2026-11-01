@@ -8,7 +8,10 @@ The modes of a training are values in the config, not code paths: a preset is a 
 given), `--set a.b=c` overrides one value (c is read as json when it parses: `steps=500`, `flip_aug=0.5`, `train_only=["fusion."]`, else it is a string), the base
 file stays as it is, the composed file is written to a scratch path. Every change is printed with its old value and its source, a key that the base file did not
 have is marked NEW (a typo shows there; the project's check command refuses an unknown key before a GPU is touched). `start` needs a `trainsuite` block in the
-project's project.json: {"presets": dir, "out": dir for the composed files, "check": command with {config}, "train": command with {config}, "runs": run folder}.
+project's project.json: {"presets": dir, "out": dir for the composed files, "check": command with {config}, "train": command with {config}, "runs": run folder,
+"prepare": [{"name": "gt", "check": command with {config} (exit 0 = present), "build": command with {config} (resumable), "wait_min": minutes the training may wait for it}]}.
+`start` runs the prepare checks; a missing item stops it unless `--prepare`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)
+and the training is started with `--after` it, so a failed build blocks the training instead of letting it start without its data.
 """
 import copy
 import difflib
@@ -176,5 +179,13 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
         if val:
             argv += [flag, val]
     argv += list(extra) + ["--"] + sub(train, composed)
-    return dict(config=cfg, composed=composed, preview=preview, changes=changes, base_keys=keys_of(base), check=check, check_preview=check_preview, argv=argv, notes=notes,
+    prepare = []                                                 # data a run needs before it starts (the GT store of its version): checked, and built as a run of its own when missing
+    for item in block.get("prepare") or []:
+        name = str(item.get("name") or "")
+        if not name or not all(c.isalnum() or c in "_-" for c in name) or not item.get("check") or not item.get("build"):
+            raise ComposeError(f'"prepare" entries of the trainsuite block need a name (letters, digits, _ -), a check and a build command: {item!r}')
+        pid = f"{run_id}.prep_{name}"
+        prepare.append(dict(name=name, id=pid, check=sub(item["check"], composed), check_preview=sub(item["check"], preview), wait_min=int(item.get("wait_min", 1440)),
+                            argv=["python3", run_py, "--id", pid, "--no-card", "--"] + sub(item["build"], composed)))
+    return dict(config=cfg, composed=composed, preview=preview, changes=changes, base_keys=keys_of(base), check=check, check_preview=check_preview, argv=argv, notes=notes, prepare=prepare,
                 log=os.path.join(project_root, block.get("runs", "runs"), folder + ".launcher.log"))
