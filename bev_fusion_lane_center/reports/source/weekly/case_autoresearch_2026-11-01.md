@@ -14,11 +14,11 @@ them E27 and E94, were not logged at the time). "Like for like" = a published sy
 Autoresearch is a research loop: an agent proposes and runs experiments on ONE RTX 3060, every result goes into a ledger and into git, a rule written before the run decides (for most runs,
 section 3), and a person keeps the decisions. After three weeks it has
 
-1. **produced**: 22 loops (21 filed, one running), 221 lane experiment folders and 14 BEV experiments, 540 papers triaged (404 notes, 36 deep extractions), 398 commits, 82 lane launcher runs
-   since loop 18, 32 decisions asked of the person (23 answered) (counts of 04:25);
+1. **produced**: 22 loops (all filed), 222 lane experiment folders and 14 BEV experiments, 540 papers triaged (404 notes, 36 deep extractions), 418 commits, 100 lane launcher runs
+   since loop 18, 32 decisions asked of the person (23 answered) (counts of 09:00);
 2. **found causes, not only knobs**: three stories (section 2). The better parts are borrowed from published models (BEVFusion's map-trained features, GaussianCaR's features, DualBEV's heads). What
    the loop added is the diagnosis by elimination, the controlled swap, the like-for-like harness and the integration (box in 2.1);
-3. **kept a record that shows its checks and its lapses** (section 3): a reviewed judge, a prediction and a rule in the ledger for 68 of 82 executed lane runs, measured noise bands, and reviews that
+3. **kept a record that shows its checks and its lapses** (section 3): a reviewed judge, a prediction and a rule in the ledger for 86 of 100 executed lane runs, measured noise bands, and reviews that
    found real bugs and process lapses;
 4. **measured itself against the state of the art like for like** where a published system could be run on our frames, with named limits (section 4);
 5. **and is NOT state of the art on any public leaderboard.** Say this first. What it shows today is the measured distance, a ranked path, and a test that decides whether the path is realistic
@@ -26,28 +26,29 @@ section 3), and a person keeps the decisions. After three weeks it has
 
 The value is not that an AI writes code. It is a loop that records everything, tests one block at a time against a control, and makes its own checks visible, including where they failed.
 
-## 1 It produces (counts from the repository, 2026-11-01 04:25)
+## 1 It produces (counts from the repository, 2026-11-01 09:00)
 
 | what | number | source |
 |---|---|---|
 | days since the first loop (11 Oct) | 22 | `reports/README.md` (week 1 = 11 - 17 Oct) |
-| loops | 21 filed + loop 22 running | `HANDOVER.md` |
-| experiment folders, lane project (catalogue ids E15 - E267) | 221 | `experiments/` |
+| loops | 22 filed (loop 22 closed this morning) | `HANDOVER.md` |
+| experiment folders, lane project (catalogue ids E15 - E268) | 222 | `experiments/` |
 | experiment folders, BEV project (t1 - t11, since 25 Oct) | 14 | `bev_fusion/experiments/` |
-| launcher runs since loop 18 (lane ledger, executed rows) | 82: 72 ok, 6 failed, 2 stalled, 1 stopped, 1 blocked; 30.1 job-hours | `LEDGER.csv` |
-| ... of these with a prediction and a rule in the ledger | 68 of 82 | `LEDGER.csv` |
-| launcher runs of the BEV project (ledger since 31 Oct) | 7, all ok; 6.0 job-hours (BEV trainings before D23 were not under the launcher: unmetered) | `bev_fusion/records/LEDGER.csv` |
+| launcher runs since loop 18 (lane ledger, executed rows) | 100: 90 ok, 6 failed, 2 stalled, 1 stopped, 1 blocked; 32.2 job-hours | `LEDGER.csv` |
+| ... of these with a prediction and a rule in the ledger | 86 of 100 | `LEDGER.csv` |
+| launcher runs of the BEV project (ledger since 31 Oct) | 12, all ok; 7.8 job-hours (BEV trainings before D23 were not under the launcher: unmetered) | `bev_fusion/records/LEDGER.csv` |
 | idea to verdict, the two latest cards | t10: card committed 19:30, result committed 23:24 on 31 Oct (3 h 54 min, two commits, 115 min of training inside); t11 velocity cause: about 1 h by the card's own header (00:10 to 01:17 on 1 Nov; one commit holds card and results) | `git log`, card headers |
 | papers triaged / notes / deep extractions | 540 / 404 / 36 | `literature/papers.csv`, `papers/`, `deep/` |
-| commits (git started on 25 Oct) / tagged runs | 398 / 56 | `git log`, `git tag` |
+| commits (git started on 25 Oct) / tagged runs | 418 / 76 | `git log`, `git tag` |
 | decisions asked of the person (D1 - D33, no D12) | 32; 23 answered, 9 open | `DECISIONS.md` |
-| tools / agent roles / suites | 16 / 7 / 2 (evalsuite, trainsuite) | `autoresearch/` |
+| tools / agent roles / suites | 15 / 4 / 2 (evalsuite, trainsuite; the four roles merged at 08:19 today) | `autoresearch/` |
 | hardware | one RTX 3060, 12 GB | `PROBLEM.md` |
 
-Reading: output is high, and the verdicts are not all wins. Since loop 18 the ledger holds 29 experiments (loops 18 - 21); `metrics.py` counts 18 verdict events on 12 of them: 5 KEEP, 8 CUT,
-5 TIE. Read this with care: nine events come from `decide.py` files (five of those files were re-encoded from the record afterwards: E215, E219 x3, E232) and nine from "rule met / not met"
-text in ledger rows; six of the CUT / TIE belong to one family (the recall-weight arms of E219) and two KEEPs are data checks (E235.chk3, E251.chk). Of the 15 events where the tool could read
-a hit or a miss of the written prediction, 8 are hits (two further written hits are not counted by it).
+Reading: output is high, and the verdicts are not all wins. Since loop 18 the ledger holds 35 experiments (loops 18 - 22); `metrics.py` counts 23 verdict events on them: 8 KEEP, 10 CUT,
+5 TIE. Read this with care: fourteen events come from `decide.py` files (five of the first nine files were re-encoded from the record afterwards: E215, E219 x3, E232) and nine from "rule met / not met"
+text in ledger rows; six of the CUT / TIE belong to one family (the recall-weight arms of E219), two KEEPs are data checks (E235.chk3, E251.chk) and one is a tool KEEP that the lead did not adopt
+(E264, a guard missed). Of the 16 events where the tool could read a hit or a miss of the written prediction, 8 are hits (the loop-22 page itself counts four hits and two misses by its own tolerances;
+the tool read one written miss there).
 
 ## 2 It finds causes (three stories)
 
@@ -146,7 +147,7 @@ jobs at once (no, they stall), a matching-free Poisson set loss (Q -0.073).
 - A judge that is reviewed and re-checked, not one that cannot change: golden numbers, and a stored number is reproduced before a new harness is believed (the re-evaluation of the reference
   reproduced lane divider 0.181 / 0.179 and drivable 0.714 / 0.711 exactly). The hook protects the truth files (golden numbers, TEST log, champion entries, `project.json`), not the evaluator
   code itself (D21); two findings of review pass 1 (L1, L2) were bugs in that code.
-- A rule written before the run, for most runs: 68 of 82 executed lane runs carry a prediction and a rule in the ledger. Exceptions the reviews found: the pivotal t8 feature swap (a qualitative
+- A rule written before the run, for most runs: 86 of 100 executed lane runs carry a prediction and a rule in the ledger. Exceptions the reviews found: the pivotal t8 feature swap (a qualitative
   rule, no numeric card), E257's rule relaxed after the sweep, E259.b0's prediction written after E259.a0 finished, three experiment files (E215, E219, E232) re-encoded from the loop-18
   record. Where a card exists a tool decides (`decide.py`: KEEP / CUT / TIE / INCONCLUSIVE) inside a measured band (Q seed SD 0.0025; the front-sector mAP2 of the same-code controls differs by
   0.001, the older t2 pair by 0.015; decision band 0.054, set by the walkway).
@@ -200,14 +201,16 @@ Every lever below has a measured effect size from this repository; the sums are 
 | 6 | a confirm evaluation on the 68 official val scenes never used for a decision (if their caches exist) | - | 1 GPU hour | removes the selection effect of reusing the same 82 scenes |
 
 **Compute reality.** GaussianCaR was trained for 40 epochs with an effective batch of 16 on 4 x A100 80 GB. For the old features the remaining gap needed 4 - 10 more doublings of the steps
-(16 - 1000 x the compute; `t6_soa_gap` section 5). With the new features the slope is unknown; lever 1 measures it: the dual chain at 6000 optimiser steps with accumulation 2 (4x the samples; card 3b of t10, written before the run, prediction lane divider 0.41 with the range
-0.36 - 0.46) against its own 3000-step run (0.335, 0.350) and the 7000 x 2 start recipe (0.273 on the same 1000 frames). **Rule, written in the card before the run (corrected after the critic's pass, card 3c):** a gain of at least +0.04 on the lane divider over the 3000-step dual chain = continue
-with levers 1 and 2, provisionally (one seed: the tool never says KEEP on one seed); a gain inside the noise band of 0.029 drops nothing on one run, a second long run decides: only a mean gain below +0.02 drops the claim
-that the SOA is reachable on this hardware and keeps "SOA-level on camera detection, partial on maps". The 7000 x 2 reference is 0.273 on the same 1000 frames.
+(16 - 1000 x the compute; `t6_soa_gap` section 5). With the new features the slope is unknown; lever 1 measures it: the dual chain at 6000 optimiser steps with accumulation 2 (4x the samples), started at 09:01 on 1 November (snapshot d14597e2e8, about 7.5 - 8.4 h on the whole GPU;
+card 3b / 3c of t10, prediction and rule written before the start: lane divider 0.39 with the range 0.355 - 0.44, a gain of +0.05) against its own 3000-step run (0.335, 0.350); the nearest old-feature
+reference is the 7000 x 2 start recipe (0.273 on the same 1000 frames, 4.7x the samples). **Rule, written in the card before the run (revision 2, after two critic passes):** a gain of at least +0.04 on the lane
+divider over the 3000-step dual chain = continue with levers 1 and 2, provisionally (one seed: the tool never says KEEP on one seed); a gain inside the noise band of 0.029 drops nothing on one run, a second long
+run decides: two seeds of this bundle below +0.02 drop only "this bundle is the lever"; the claim that the SOA is reachable on this hardware ("SOA-level on camera detection, partial on maps" stays) is dropped only
+if the equal-budget arm without the velocity hurdle also gains less than +0.02.
 
 ## 6 Making the hobby meaningful: three outputs that outlive it
 
-1. **A method package others can run**: the loop, the judge, the tools and the rules (`autoresearch/`: launcher with a git tag per run, ledger, decision tool, evalsuite, trainsuite, seven agent
+1. **A method package others can run**: the loop, the judge, the tools and the rules (`autoresearch/`: launcher with a git tag per run, ledger, decision tool, evalsuite, trainsuite, four agent
    roles), with a short write-up "a verification-first research loop for perception" (not yet written). It is problem-independent: the second problem (BEV fusion) was plugged in on 31 October in one day.
 2. **One public number per problem** (levers 4 and 5): a result a stranger can check, with the harness as the artefact.
 3. **A lessons-learned list that saves a team months**: frozen detection-trained image features cap lane-divider, walkway and road-divider quality (here by a factor of two); a velocity branch
@@ -234,11 +237,11 @@ LLM service reads the code), before any of this is used there.
    no intervals; the like-for-like maps and the 7000 x 2 reference are single runs.
 6. **"Is it state of the art?"** Not on a public benchmark. Like for like: camera detection about equal to the SOA port (a port we wrote), +0.11 - 0.15 with radar; maps at 26 - 94 % of
    GaussianCaR by layer on identical frames (four of six layers at or above 50 %, carpark and crossing at about 30 %); lane graph: no comparable number yet.
-7. **"What does it cost?"** Known: one RTX 3060, 36.1 job-hours under the launcher since loop 18 (lane 30.1 + BEV 6.0, as of 04:25; BEV trainings before D23 unmetered), 32 decision entries, 1 - 4
+7. **"What does it cost?"** Known: one RTX 3060, 40.0 job-hours under the launcher since loop 18 (lane 32.2 + BEV 7.8, as of 09:00; BEV trainings before D23 unmetered), 32 decision entries, 1 - 4
    hours from card to verdict for the two latest cards. Unknown: agent tokens or money, human hours, and what a team does today for the same questions. The pilot is designed to measure the last one.
 8. **"Does it transfer, and is it product-relevant?"** The tools are problem-independent (a metric-card writer and a launch command are the plug). Not tested on another organisation's data; the
    data and weights are non-commercial; the lane project is partly simulated; see the boundaries in section 6.
-9. **"Where did it fail?"** Five closed questions; 8 CUT and 5 TIE of 18 verdict events (six from one family); a velocity head dead in 28 of 30 batch-3 runs (fixed overnight, one seed); a feature swap that halved the objects;
+9. **"Where did it fail?"** Five closed questions; 10 CUT and 5 TIE of 23 verdict events (six from one family); a velocity head dead in 28 of 30 batch-3 runs (fixed overnight, one seed); a feature swap that halved the objects;
    predictions missed by factors of 1.6 to 15; rule and prediction lapses found by review.
 10. **"What can go wrong?"** A full C: disk crashed a run once; the dual seed twin was OOM-killed tonight; code changed under running jobs; one lead chat and nine open decisions; the loop wrote and
     found its own bugs. Mitigations: GPU gate and slots, one lead per loop, noise bands, a clean-up rule that moves and never deletes, reviews.
@@ -269,9 +272,9 @@ graph: equal Q at 26 x (2.3), with its gaps. 6. What the checks caught, and wher
 
 - DONE since version 3: the like-for-like maps (section 4; GPU scoring, a few minutes per model, checked against the stored CPU run), the velocity arms (section 2.2), the lane prototype with its one
   TEST use (section 2.3). PENDING: the 6000-step run (below).
-- Lever 1 (the 6000-step dual run in the lead's version, with the velocity fix and accumulation 2, about 8.4 h): card 3b, config and start line are ready; by Mirko's decision it starts after the
-  restructured autoresearch is merged and a smoke test passed, and the machine stays on (the shutdown is cancelled). If it is not finished at the meeting, the deck says "running"; the
-  in-training validation at steps 2000 and 4000 is a proxy, not the cold VAL 1000.
+- Lever 1 (the 6000-step dual run in the lead's version, with the velocity fix and accumulation 2): STARTED at 09:01 on 1 November, after the restructured autoresearch was merged (08:19) and its smoke
+  test passed, by Mirko's decision; about 7.5 - 8.4 h on the whole GPU, expected end 16:30 - 17:10, then its cold VAL 1000 evaluation (chained, about 15 minutes); card 3b / 3c revision 2; the machine
+  stays on (the shutdown is cancelled). If it is not finished at the meeting, the deck says "running"; intermediate checkpoints are not scored (the learning rate is still at 27 % at step 4000).
 - Decisions that wait for Mirko: D4, D17, D18, D19, D25, D29, D30, D31, D33; permission for the two downloads (section 8, item 6).
 
 ## 11 Sources
