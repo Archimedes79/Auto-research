@@ -1,0 +1,7 @@
+GT signature 15efbde2d1, 40 real frames (every 97th file of data/cache/gt)
+fusion area (camera x radar): 0.626 of the grid; camera and not occluded 0.466, radar 0.996
+w_map: mean weight off 0.8784 -> on 0.5458
+w_lines: mean weight off 0.8784 -> on 0.5458
+w_obj: mean weight off 0.9945 -> on 0.6241
+supervised object centres: off 369 -> on 197 (46.6 % dropped)
+fusion_area_real passed

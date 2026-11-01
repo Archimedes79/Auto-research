@@ -48,6 +48,9 @@ if ls data/cache/gt/*_15efbde2d1.npz > /dev/null 2>&1; then    # the evaluation 
 else
   echo "SKIP  GT against GT  | no cached GT of signature 15efbde2d1 in data/cache/gt"
 fi
+run "fusion-area loss" "$PY" training/losses.py --fusion-area              # D38 (b) option: weights, ignored objects, the gradient through BEVLoss; CPU, seconds, no optimiser step
+run "fusion area, real" "$PY" tests/test_fusion_area_real.py               # the same option on real cached GT frames (skips without data/cache/gt); seconds
+run "startable"        "$PY" training/startable.py                         # static config check, GT identity, smoke twin; CPU, seconds
 run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s

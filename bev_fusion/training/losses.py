@@ -56,6 +56,9 @@ class LossConfig:
     mass_threshold: float = 0.5
     w_interpolated: float = 0.5        # interpolated boxes (12 Hz sweeps); the map stays exact
     use_w_reg: bool = True             # decision (4): per-frame registration weight meta["w_reg"] on lines, if present
+    fusion_area_only: bool = False     # D37 / D38 (b), first step; off = every stored run is reproduced. On: the fused heads (areas, lines,
+                                       # dense objects, object head, motion) get no loss outside the fusion area = camera x radar cells
+                                       # (a cell or an object centre there is neither positive nor negative); the aux heads keep their own area
     # per output
     w_area_iou: float = 0.5
     area_overlap: str = "iou"          # arm "semimetric": Dice semimetric (2303.16296, 0 at p = t for soft targets)
@@ -136,7 +139,8 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     every layer by its GT key (B, 1 or K, X, Y), 'obj_cells' (instance >= 0), 'boxes' (meta boxes per sample) and the
     per-cell weights (B, 1, X, Y): w_map (areas: undefined 0, occluded w_occluded_map), w_lines (w_map x w_reg),
     w_obj (objects, velocity: (camera and not occluded) or radar; x w_interpolated on interpolated labels),
-    w_cam (camera and not occluded), w_radar (radar); all x w_unknown where mass < threshold at dt != 0."""
+    w_cam (camera and not occluded), w_radar (radar), w_fusion (camera x radar, D37); all x w_unknown where mass <
+    threshold at dt != 0. cfg.fusion_area_only (D38 (b), default off): w_map, w_lines and w_obj are also x w_fusion."""
     cfg = cfg or LossConfig()
     gts = [gts] if isinstance(gts, dict) else list(gts)
     T = {}
@@ -163,10 +167,13 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     # every object-type target (dense layers, velocity / motion, aux heads), never background (plan 8.4 masks)
     keep = (1 - _stack(gts, "ignore", device).clamp(0, 1)) if all("ignore" in g for g in gts) else torch.ones_like(cam)
     w_obj = w_obj * keep
+    fusion = cam * radar                              # D37: the cells that camera and radar both observe
+    if cfg.fusion_area_only:                          # D38 (b): don't care outside it, for the fused heads
+        w_map, w_obj = w_map * fusion, w_obj * fusion
     w_reg = torch.tensor([float(g.get("meta", {}).get("w_reg", 1.0)) if cfg.use_w_reg else 1.0 for g in gts],
                          device=device).view(-1, 1, 1, 1)
     W = {"w_map": w_map, "w_lines": w_map * w_reg, "w_obj": w_obj, "w_cam": w_cam, "w_radar": radar,
-         "w_keep": keep}
+         "w_keep": keep, "w_fusion": fusion}
     if mass is not None and abs(float(dt)) > 1e-6:
         m = mass.detach().to(device)
         u = torch.where(m < cfg.mass_threshold, torch.full_like(m, cfg.w_unknown), torch.ones_like(m))
@@ -308,7 +315,8 @@ def head_box(bx, groups=NUSC_GROUPS):
 def refine_gt_boxes(g, grid, groups=NUSC_GROUPS):
     """GT boxes of one gt_bev GT dict for the S5c candidates (object_head.refine_candidates): head_box dicts whose
     'observed' is True only where stage 1 supervises the box too (a lidar / radar point AND its centre cell covered:
-    camera and not occluded, or radar), so every other box is ignored, not background."""
+    camera and not occluded, or radar), so every other box is ignored, not background. It does NOT follow
+    LossConfig.fusion_area_only (startable.py refuses model.refine together with it)."""
     X, Y = np.asarray(g["camera"]).shape[-2:]
     w = np.maximum(np.asarray(g["camera"]) * (1 - np.asarray(g["occluded"])), np.asarray(g["radar"]))
     out = []
@@ -571,6 +579,105 @@ def synthetic_gt(scene, grid):
     return g
 
 
+def _demo_scene(sw):
+    """the synthetic sample of the self-tests: one moving car, a parked car, a parked truck, a walking pedestrian"""
+    B_ = sw.Box
+    return sw.Scene([B_(20.0, -1.75, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0),
+                     B_(28.0, -5.5, 4.5, 1.8, 1.5, 0.0, 0.0, 0.0, "car", 10.0),
+                     B_(38.0, 3.5, 8.0, 2.5, 3.0, 0.05, 0.0, 0.0, "truck", 20.0),
+                     B_(15.0, 8.5, 0.6, 0.6, 1.8, math.pi / 2, 0.0, 1.2, "pedestrian", -5.0)],
+                    lanes=[-5.25, -1.75, 1.75, 5.25], v=10.0, omega=0.1)
+
+
+def _selftest_fusion_area():
+    """LossConfig.fusion_area_only (D38 (b)), CPU, no optimiser step (a backward pass on leaf tensors only; seconds):
+    off by default and then every weight is positive outside camera x radar; on, the fused weights are x (camera x radar) and the aux
+    weights stay; an object whose centre lies outside is ignored; through the whole BEVLoss at dt 0 and dt 0.5 (splat mass) the gradient
+    of every fused output is exactly 0 outside the fusion area, the aux heads' gradients are identical to those with the option off."""
+    import os
+    import sys
+    from dataclasses import replace
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
+    import synthetic_world as sw
+    from object_head import ObjectHead
+    torch.set_num_threads(2)
+    grid, cfg = Grid(), LossConfig()
+    X, Y = grid.nx, grid.ny
+    assert cfg.fusion_area_only is False, "the option is off by default: every stored run is reproduced"
+    scene = _demo_scene(sw)
+    gts = {dt: [synthetic_gt(scene.step(dt) if dt else scene, grid)] for dt in (0.0, 0.5)}
+    T = build_layer_targets(gts[0.0], cfg)
+    fa = torch.as_tensor(gts[0.0][0]["camera"] * gts[0.0][0]["radar"])[None, None]
+    assert float(fa.min()) == 0.0 and float(fa.max()) == 1.0 and torch.equal(T["w_fusion"], fa)
+    for k in ("w_map", "w_lines", "w_obj"):
+        assert float(T[k][fa == 0].max()) > 0, f"{k}: off by default, so cells outside the fusion area are supervised"
+    Tf = build_layer_targets(gts[0.0], replace(cfg, fusion_area_only=True))
+    for k in ("w_map", "w_lines", "w_obj"):
+        assert torch.equal(Tf[k], T[k] * fa), k
+        assert float(Tf[k][fa == 0].abs().max()) == 0.0 and float(Tf[k][fa > 0].sum()) > 0, k
+    for k in ("w_cam", "w_radar", "w_keep", "w_fusion"):
+        assert torch.equal(Tf[k], T[k]), k
+    cam_, occ_, rad_ = (torch.as_tensor(gts[0.0][0][k])[None, None] for k in ("camera", "occluded", "radar"))
+    assert torch.equal(T["w_cam"], cam_ * (1 - occ_)) and torch.equal(T["w_radar"], rad_), "the aux weights are the sensors' own areas"
+    assert float(((cam_ > 0) & (rad_ == 0)).sum()) > 0, "the demo scene has camera cells the radar does not see (the aux weights differ there)"
+    # an object whose centre cell lies outside the fusion area is ignored (the moving car: blank the camera under its centre cell)
+    cx0 = gts[0.0][0]["meta"]["boxes"][0]["center"]
+    ix, iy = int((cx0[0] - grid.x_min) / grid.res), int((cx0[1] - grid.y_min) / grid.res)
+    gcam = dict(gts[0.0][0], camera=gts[0.0][0]["camera"].copy())
+    gcam["camera"][ix - 4:ix + 5, iy - 4:iy + 5] = 0.0
+    oh = ObjectHead(8, groups=NUSC_GROUPS)(torch.zeros(1, 8, X, Y))
+    npos = {}
+    for tag, g_, on in (("off", gts[0.0], False), ("off_blank", [gcam], False), ("on", gts[0.0], True), ("on_blank", [gcam], True)):
+        Tg = build_layer_targets(g_, replace(cfg, fusion_area_only=on))
+        npos[tag] = int(object_head_terms(oh, Tg["boxes"], Tg["w_obj"], grid, NUSC_GROUPS)[1]["mask"].sum())
+    assert npos["off_blank"] == npos["off"] and npos["on_blank"] == npos["on"] - 1 > 0, npos
+
+    # the gradient through the whole BEVLoss: leaf tensors as the model's outputs, dt 0 and dt 0.5 (unknown cells: mass 0 in a strip)
+    def grads(on):
+        torch.manual_seed(0)
+        g = torch.Generator().manual_seed(0)
+        lm = BEVLoss(replace(cfg, fusion_area_only=on))
+        head = ObjectHead(8, groups=NUSC_GROUPS)
+        preds, leaves = {}, {}
+        for dt in (0.0, 0.5):
+            maps = head(torch.randn(1, 8, X, Y, generator=g))
+            p = {"sem": torch.randn(1, len(lm.spec), X, Y, generator=g), "obj": {k: v.detach().clone() for k, v in maps.items()},
+                 "cam_aux": torch.randn(1, len(lm.cam_spec), X, Y, generator=g), "radar_aux": torch.randn(1, len(lm.radar_spec), X, Y, generator=g),
+                 "mass": torch.ones(1, 1, X, Y)}
+            if dt == 0.0:
+                p["v_hat"] = torch.randn(1, 2, X, Y, generator=g)
+            else:
+                p["mass"][..., :20, :] = 0.0
+            for k in ("sem", "cam_aux", "radar_aux", "v_hat"):
+                if k in p:
+                    p[k].requires_grad_()
+            for v in p["obj"].values():
+                v.requires_grad_()
+            preds[dt] = p
+            leaves[dt] = p
+        out = lm(preds, gts, 1.0)
+        out["total"].backward()
+        return {dt: {**{k: p[k].grad for k in ("sem", "cam_aux", "radar_aux", "v_hat") if k in p},
+                     **{"obj." + k: v.grad for k, v in p["obj"].items()}} for dt, p in leaves.items()}
+    g_off, g_on = grads(False), grads(True)
+    outside = (fa == 0)
+    for dt in (0.0, 0.5):
+        for k, gr in g_on[dt].items():
+            if k in ("cam_aux", "radar_aux"):
+                assert torch.equal(gr, g_off[dt][k]), f"dt {dt} {k}: the aux heads keep their own area (identical gradient with the option off)"
+                continue
+            m = outside.expand_as(gr)
+            assert float(gr[m].abs().max()) == 0.0, f"dt {dt} {k}: gradient outside the fusion area must be exactly 0"
+            assert float(gr[~m].abs().max()) > 0.0, f"dt {dt} {k}: no gradient inside the fusion area"
+        for k in ("sem", "obj.hm"):
+            gr = g_off[dt][k]
+            assert float(gr[outside.expand_as(gr)].abs().max()) > 0.0, f"dt {dt} {k}: with the option off the outside is supervised"
+        gr = g_on[dt]["radar_aux"]
+        assert float(gr[outside.expand_as(gr)].abs().max()) > 0.0, "the radar aux head keeps supervising outside the fusion area"
+    print("fusion_area_only selftest passed: off by default; on, the fused weights are x camera x radar, an object centre outside is ignored, "
+          "the gradient of every fused output is exactly 0 outside the fusion area at dt 0 and 0.5, the aux gradients equal those without the option")
+
+
 def _selftest():
     import os
     import sys
@@ -612,12 +719,7 @@ def _selftest():
     assert float(dist_huber(torch.where(D >= DIST_MAX, D + 5, D), D, ones)[0]) == 0.0
 
     # the synthetic sample: one moving car, a parked car, a parked truck, a walking pedestrian; GT at dt = 0, +-0.5 s
-    B_ = sw.Box
-    scene = sw.Scene([B_(20.0, -1.75, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0),
-                      B_(28.0, -5.5, 4.5, 1.8, 1.5, 0.0, 0.0, 0.0, "car", 10.0),
-                      B_(38.0, 3.5, 8.0, 2.5, 3.0, 0.05, 0.0, 0.0, "truck", 20.0),
-                      B_(15.0, 8.5, 0.6, 0.6, 1.8, math.pi / 2, 0.0, 1.2, "pedestrian", -5.0)],
-                     lanes=[-5.25, -1.75, 1.75, 5.25], v=10.0, omega=0.1)
+    scene = _demo_scene(sw)
     dts = (0.0, 0.5, -0.5)
     gts = {dt: [synthetic_gt(scene.step(dt) if dt else scene, grid)] for dt in dts}
     T = build_layer_targets(gts[0.0], cfg)
@@ -633,6 +735,8 @@ def _selftest():
     Tk = build_layer_targets(gts[0.5], cfg, None, 0.5)
     sel = Tk["w_map"][..., :20, :] > 0
     assert torch.allclose(Tu["w_map"][..., :20, :][sel], cfg.w_unknown * Tk["w_map"][..., :20, :][sel])
+
+    _selftest_fusion_area()                           # D38 (b): `python training/losses.py --fusion-area` runs it alone
 
     # predictions as leaf tensors: weight-0 cells get exactly zero gradient; doubling the map leaves every term
     cam_n, rad_n = len(layer_spec(False, True)), len(radar_aux_spec(True))
@@ -804,4 +908,8 @@ def _selftest():
 
 
 if __name__ == "__main__":
-    _selftest()
+    import sys
+    if "--fusion-area" in sys.argv:
+        _selftest_fusion_area()
+    else:
+        _selftest()
