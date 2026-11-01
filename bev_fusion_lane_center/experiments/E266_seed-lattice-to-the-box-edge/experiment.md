@@ -49,3 +49,20 @@ Note (coder, after the reviewer pass): the ring applies in every eval-mode forwa
 | replication | E266.b1 / b2 / b3 (GPU, `--after E266.g01`): `evaluate.py recall_s1_ring --compare recall_s1`, `fast_recall_ring --compare fast_recall`, `e24_j1rc_s1_ring --compare e24_j1rc_s1` | evaluate.py | 3 cards | GPU 15 - 20 min |
 | DP | E266.v: `cleanup_split.py recall_ring recall_s1_ring fast_recall_ring e24_j1rc_s1_ring` (rows registry = arm b, spurs kept = E267's sr) | `../E265_*/cleanup_split.py` | DP printed | CPU 15 min |
 | decide | `decide.py --experiment E266 --write` + lead checks (recall alone >= +0.010 with interval > 0, 3 of 4 signs, every guard per checkpoint, Q >= 0.735, DP <= 14.3, inner-far two-sided, G0 displaced share reported); KEEP: candidate R of PLAN.md and E267 runs; timing of 441 vs 361 candidates only on the idle protocol (not tonight; recorded as provisional) | decide.py | verdict in the ledger rows E266.b0 - b3 | ~06:45 |
+
+## 3. Summary (lead, loop 22, 2026-11-01 06:10)
+- **Runs**: E266.c (layer 1 controls with the ring metric, `val_l22r`), E266.b0 - b3 (ring raw outputs computed fresh on the GPU into their own cache files, cards `runs/eval/<n>_ring/val.json`), E266.g01 (gates), E266.v (DP); code tags `lcr/E266.*`. **Decision: KEEP** (`decide.py --experiment E266 --write`, every clause and lead check holds) **with one gate deviation**: G0's numeric bar (kept seed share beyond 45 m >= 2 x 0.055 = 0.110) was missed (0.1036, 1.88 x); the gate's purpose (the flag acts, no cache collision) was checked in one debug round (own cache file, seed share 0.055 -> 0.104, ring-zone R@1 0.702 -> 0.750) and the lead continued.
+- **Setup**: inference only; the seed lattice of the D7 builder gets a ring of 80 candidates at +-47.5 m (361 -> 441 candidates, top-K0 unchanged; `lattice_ring 47.5`); same checkpoints, same assembly.
+- **Numbers** (VAL 873, R@1 far ring - registry, paired scene bootstrap):
+
+| checkpoint | R@1 far | lanes found | Q (ring) | DP / 100 m (ring) |
+|---|---|---|---|---|
+| recall | +0.017 [+0.012, +0.022] (0.771 -> 0.788) | +0.007 | 0.738 | 13.03 |
+| recall_s1 | +0.019 [+0.014, +0.026] | +0.009 | 0.737 | 13.12 |
+| fast_recall | +0.013 [+0.009, +0.017] | +0.003 | 0.737 | 12.33 |
+| e24_j1rc_s1 | +0.011 [+0.008, +0.015] | +0.006 | 0.741 | 12.51 |
+| mean | +0.0152 (prediction +0.012) | | Q -0.0016 | |
+
+  Gates on `recall`: all-valid tree ring R@1 0.7995 -> 0.8504 (G1 bar 0.82); output ring (45 - 48 m) 0.702 -> 0.750, inner (< 45 m) 0.8014 -> 0.8050 (guard holds); displaced inner seeds 5.1 %.
+- **What it says**: the ring loss of step 0 (70 % of the R@1-far gap in the 45 - 48 m band) was the seed lattice, not the features: seeds at the box edge grow true lanes there (tree ring R@1 +0.05). It adds R@1 far on every checkpoint at a small Q cost (-0.002) and almost no lanes found (the ring lanes are short). ms per frame of 441 candidates: not measured tonight (provisional).
+- **Weaknesses / next**: G0 deviation (above); timing missing; arm a (shifted grid) not run. With spurs kept (E267) the stack gives R@1 far 0.798 but misses two precision guards.

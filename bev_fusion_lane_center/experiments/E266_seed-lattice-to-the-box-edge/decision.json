@@ -1,0 +1,56 @@
+{
+ "id": "E266",
+ "verdict": "KEEP",
+ "metric": "R@1_far",
+ "variant": "b",
+ "control": "c",
+ "effect": 0.01519,
+ "diffs": [
+  0.01697,
+  0.01936,
+  0.01298,
+  0.01147
+ ],
+ "pairing": "position",
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": [
+  0.0125,
+  0.02204
+ ],
+ "why": "headline R@1_far b-c +0.0152 beyond the band 0.01, interval [+0.012, +0.022], 4 paired seed(s); every clause holds",
+ "prediction": "prediction +0.012, measured +0.0152 (error +0.0032)",
+ "clauses": [
+  {
+   "text": "R@1_far b-c +0.0152 (want >= +0.010, band 0.01)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "Q b-c -0.0016 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "topo_F1 b-c +0.0007 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "false_len_frac b-c -0.0028 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "dup_frac b-c -0.0017 (want >= -0.010)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "R@1_far_inner b-c +0.0029 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-11-01 06:09"
+}

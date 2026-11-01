@@ -50,3 +50,16 @@ What would make it fail: the two gains are the same lanes (ring seeds grow exact
 - **Images**:
 - **What it says**:
 - **Weaknesses** / **next steps**:
+
+## 3. Summary (lead, loop 22, 2026-11-01 06:10)
+- **Runs**: E267.s (spurs kept, ring metric), E267.sr (ring + spurs kept), with E266.b0 / b1 (ring) and E266.c (control) as the other cells of the 2 x 2; E266.v for DP; code tags `lcr/E267.*`. **Decision: CUT** (`decide.py --experiment E267 --write`: false length +0.0060 against the 0.005 guard, P@1 far -0.0147 against 0.010); every coverage clause holds.
+- **Numbers** (VAL 873, sr - c, paired scene bootstrap):
+
+| seed | lanes found | R@1 far | Q | false length | P@1 far | DP / 100 m |
+|---|---|---|---|---|---|---|
+| recall | +0.022 [+0.018, +0.026] (0.767 -> 0.789) | +0.026 (0.771 -> 0.798) | +0.000 | 0.051 -> 0.057 | 0.768 -> 0.753 | 13.95 |
+| recall_s1 | +0.022 [+0.018, +0.027] | +0.028 | +0.002 | 0.052 -> 0.058 | | 14.04 |
+
+  Additivity: the ring adds R@1 far +0.019 over spurs kept, the spurs add lanes found +0.015 over the ring: the two act on different losses and add.
+- **What it says**: the stack is the strongest system of the loop at range (R@1 far 0.798, lanes found 0.789 on `recall`), but each kept stub and ring seed also adds some false geometry at range (P@1 far -0.015, false length +0.006): two precision guards missed. Against the prototype `recall_sp0_dp` it would add only +0.009 lanes found (under the +0.010 replacement bar), so S stays by both rules.
+- **Next**: a precision step at range (e.g. a range-dependent tau for ring seeds, or the union with a wider vertex merge) before the stack can be adopted.

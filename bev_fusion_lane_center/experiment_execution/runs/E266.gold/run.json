@@ -1,0 +1,50 @@
+{
+ "id": "E266.gold",
+ "hypothesis": "the cache-key, ring and union code leaves every default graph and golden number unchanged",
+ "prediction": "golden 6 of 6, all tests pass",
+ "rule": "any miss -> no ring / union run until fixed",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c bash tools/env/_py14.sh evaluate.py --golden check --cached-only && bash tools/maintenance/run_all_tests.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 257847,
+ "created": "2026-11-01T04:10:17",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-01T04:10:32",
+ "code_hash": "12cbc4852733",
+ "commit": "d2ff484af1",
+ "tag": "lcr/E266.gold",
+ "git_note": "",
+ "pid": 257877,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/models/registry.json"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2069,
+ "attempts": 1,
+ "ended": "2026-11-01T04:45:17",
+ "last_lines": [
+  "PASS  builder spec tests (18)  | 18 / 18 passed",
+  "PASS  output stage simplify_dp (9)  | 9 / 9 passed",
+  "PASS  seed ring (E266) + output union (E264)  | test_seed_ring_union: 7 tests passed",
+  "PASS  trainer: crash + resume, NaN, rollback  | trainer selftest passed",
+  "PASS  autoresearch tools (launcher, git tag, ledger, schedule, decide)  | autoresearch tools selftest passed",
+  "PASS  structure and documents (check_structure)  | check_structure selftest passed",
+  "PASS  agent copies in .claude/agents in step  | 7 agents installed and in step",
+  "PASS  images + video tools  | viz / video selftest passed in /tmp/tmpvdpwf310",
+  "PASS  lane prototype: JSON graph == evaluate's graph, card reproduced  | lane_prototype selftest passed",
+  "PASS  champion fast path == reference graphs  | metrics fast    : {'S': 0.7247, 'F1@1.0': 0.8068, 'J': 0.3773, 'vert100': 13.4546}",
+  "PASS  registration K188 (synthetic shifts, gradient)  | selftest ok",
+  "PASS  numba union == FastUnion graphs (120 frames)  | median ms per frame: a 19.88  b 12.30  (min over reps: a 19.88 b 12.30)"
+ ]
+}

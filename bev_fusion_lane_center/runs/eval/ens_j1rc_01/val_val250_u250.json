@@ -1,0 +1,186 @@
+{
+ "schema": 1,
+ "name": "ens_j1rc_01",
+ "split": "val",
+ "subset": "val250",
+ "fresh": false,
+ "frames": 250,
+ "registry": {
+  "kind": "union",
+  "members": [
+   "e24_j1rc_s0",
+   "e24_j1rc_s1"
+  ],
+  "tau": 0.7,
+  "asm": {
+   "cov_r": 0.5,
+   "vtx_r": 1.5,
+   "junc_thr": 0.5,
+   "reloc_thr": 0.4,
+   "reloc_shift": 12,
+   "reloc_tol": 1.6,
+   "fork_prune": 0.4,
+   "fast": 2
+  },
+  "what": "E264 arm u01: j1rc seeds 0 + 1 joined (the exploration pair of step 0)"
+ },
+ "overrides": {
+  "asm": {},
+  "tau": null
+ },
+ "info": {
+  "cache": [
+   "/home/ml/exp_gcar_b123/p18/raw_val873_e18_D7_j1rc_192.pkl [250 frames]",
+   "/home/ml/exp_gcar_b123/p18/raw_val873_e18_D7_j1rcs1_192.pkl [250 frames]"
+  ],
+  "members": {
+   "e24_j1rc_s0": {
+    "kind": "builder",
+    "design": "D7",
+    "run": "e18_D7_j1rc",
+    "set": {
+     "M": 192,
+     "K0": 96
+    },
+    "tau": 0.7,
+    "asm": {
+     "cov_r": 0.5,
+     "vtx_r": 1.5,
+     "junc_thr": 0.5,
+     "reloc_thr": 0.4,
+     "reloc_shift": 12,
+     "reloc_tol": 1.6,
+     "fork_prune": 0.4,
+     "fast": 2
+    },
+    "what": "E240 arm a (recall weight 3), seed 0"
+   },
+   "e24_j1rc_s1": {
+    "kind": "builder",
+    "design": "D7",
+    "run": "e18_D7_j1rcs1",
+    "set": {
+     "M": 192,
+     "K0": 96
+    },
+    "tau": 0.7,
+    "asm": {
+     "cov_r": 0.5,
+     "vtx_r": 1.5,
+     "junc_thr": 0.5,
+     "reloc_thr": 0.4,
+     "reloc_shift": 12,
+     "reloc_tol": 1.6,
+     "fork_prune": 0.4,
+     "fast": 2
+    },
+    "what": "E240 arm a (recall weight 3), seed 1"
+   }
+  },
+  "asm": {
+   "cov_r": 0.5,
+   "vtx_r": 1.5,
+   "junc_thr": 0.5,
+   "reloc_thr": 0.4,
+   "reloc_shift": 12,
+   "reloc_tol": 1.6,
+   "fork_prune": 0.4,
+   "fast": 2
+  },
+  "tau": 0.7,
+  "asm_ms": 23.251558303833008,
+  "metric_s": 12.261685371398926
+ },
+ "commit": "d204ccb+dirty",
+ "date": "2026-11-01 04:55",
+ "metrics": {
+  "P@0.5": 0.663872809577136,
+  "R@0.5": 0.7263713865535378,
+  "F1@0.5": 0.6937172829490621,
+  "P@1.0": 0.8660652040188641,
+  "R@1.0": 0.8884351284310004,
+  "F1@1.0": 0.8771075576688239,
+  "P@1.5": 0.9409820034384315,
+  "R@1.5": 0.9420558543084924,
+  "F1@1.5": 0.9415186226778943,
+  "F1o2o@1.0": 0.749778181187725,
+  "lanes_found": 0.7888209310227658,
+  "false_len_frac": 0.05901799656156843,
+  "split6_P": 0.32581227436823107,
+  "split6_R": 0.5562403697996918,
+  "split6_F1": 0.4109277177006261,
+  "merge6_P": 0.36806148590947907,
+  "merge6_R": 0.6002785515320335,
+  "merge6_F1": 0.4563260984647962,
+  "split_F1": 0.2822993739328401,
+  "merge_F1": 0.33033350979354154,
+  "dir_acc": 0.9454501568911416,
+  "n_samples": 250.0,
+  "vert100": 16.644588548341698,
+  "verts_per_frame": 110.76,
+  "S": 0.758619119394273,
+  "J": 0.43362690808271115,
+  "Sp": 0.8591380891433757,
+  "Q": 0.7408804776738429,
+  "topo_P": 0.8014357155903786,
+  "topo_R": 0.6893437149981106,
+  "topo_F1": 0.7411756054336676,
+  "dup_frac": 0.08926988533303891,
+  "R@1_near": 0.954415387295031,
+  "P@1_near": 0.945606175166172,
+  "R@1_mid": 0.9142585192680375,
+  "P@1_mid": 0.8926325214641085,
+  "R@1_far": 0.7765517983772219,
+  "P@1_far": 0.7467437851065013,
+  "R@1_far_inner": 0.8088317495807714,
+  "P@1_far_inner": 0.746437072524029,
+  "R@1_far_ring": 0.7019076484221787,
+  "P@1_far_ring": 0.7476091299358184
+ },
+ "better": {
+  "P@0.5": "higher",
+  "R@0.5": "higher",
+  "F1@0.5": "higher",
+  "P@1.0": "higher",
+  "R@1.0": "higher",
+  "F1@1.0": "higher",
+  "P@1.5": "higher",
+  "R@1.5": "higher",
+  "F1@1.5": "higher",
+  "F1o2o@1.0": "higher",
+  "lanes_found": "higher",
+  "false_len_frac": "lower",
+  "split6_P": "higher",
+  "split6_R": "higher",
+  "split6_F1": "higher",
+  "merge6_P": "higher",
+  "merge6_R": "higher",
+  "merge6_F1": "higher",
+  "split_F1": "higher",
+  "merge_F1": "higher",
+  "dir_acc": "higher",
+  "vert100": "lower",
+  "verts_per_frame": "lower",
+  "S": "higher",
+  "J": "higher",
+  "Sp": "higher",
+  "Q": "higher",
+  "topo_P": "higher",
+  "topo_R": "higher",
+  "topo_F1": "higher",
+  "dup_frac": "lower",
+  "R@1_near": "higher",
+  "P@1_near": "higher",
+  "R@1_mid": "higher",
+  "P@1_mid": "higher",
+  "R@1_far": "higher",
+  "P@1_far": "higher",
+  "R@1_far_inner": "higher",
+  "P@1_far_inner": "higher",
+  "R@1_far_ring": "higher",
+  "P@1_far_ring": "higher"
+ },
+ "protocol": {
+  "gt_sha": "20ed2b30b03b"
+ }
+}

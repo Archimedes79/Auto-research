@@ -39,3 +39,22 @@ Code (ar-coder, S3, ready ~05:30, reviewer pass): `p16_infer.union_raw(raws)`: c
 | decide | `decide.py --experiment E264 --write` (u23 vs s3) + lead checks: u01 - s1 > 0 on lanes found and R@1 far, FL <= 0.062, DP <= 14.3, u - m >= +0.010 on 623 and on 873, ms <= 30 (CUT > 32); KEEP: candidate U of PLAN.md (`fast_recall_ens2` = ens_j1rc_23, or ens_j1rc_01 if both pairs pass with it better) | decide.py | verdict in the ledger row E264.u23 | ~06:45 |
 
 Order tonight: E264.u23 (the u23 card only) 05:30 - 05:40, before the CPU must be quiet; the idle timing E264.t 05:45 - 06:00; E264.u (u01, u4, urc), E264.v, E264.mfl / mfl2 and E264.mv 06:00 - 06:45.
+
+## 3. Summary (lead, loop 22, 2026-11-01 05:20)
+- **Runs**: E264.u23 (held-out pair), E264.u (exploration pair u01, ceiling u4, no-diversity control urc), E264.v (per-piece DP), E264.mfl / E264.mfl2 (matched false length), E264.mv (matched vertices, val250, report only); code tags `lcr/E264.*`. E264.t (idle timing) **not run** (no idle GPU before the TEST window). **Decision: not adopted tonight**: `decide.py` gives KEEP on its clauses (`decision.json`), but the card's absolute false-length guard (<= 0.062) fails by 0.0015 and the speed check is missing, so there is no candidate U.
+- **Setup**: the raw hypothesis trees of two j1rc seeds joined before the one existing path union (registry kind `union`, `evaluate.raw_of`); nothing trained. Controls: better parent (s3 / s1), matched false length (parent at tau 0.10), matched vertices (union with a wider vertex merge), no-diversity union (two rc1 seeds), ceiling (four seeds).
+- **Numbers** (VAL 873 unless named; cards `runs/eval/ens_*/val.json`, `runs/eval/e24_j1rc_s*/val_mfl.json`):
+
+| | lanes found | R@1 far | Q | false length | dup | DP / 100 m |
+|---|---|---|---|---|---|---|
+| s3 (parent) | 0.739 | 0.736 | 0.739 | 0.056 | 0.073 | 12.15 |
+| u23 = s2 + s3 | 0.786 (+0.047 [+0.034, +0.060]) | 0.776 (+0.040) | 0.736 | **0.0635** | 0.090 | 14.13 |
+| s3 at matched false length (tau 0.10) | 0.748 | 0.744 | 0.734 | 0.061 | 0.079 | |
+| u01 = s0 + s1 vs s1 | +0.047 [+0.034, +0.061] | +0.039 | -0.000 | 0.062 | +0.017 | 14.30 |
+| urc = recall + recall_s1 vs recall | +0.007 | +0.004 | -0.002 | | +0.004 | |
+| ceiling u4 vs s1 | +0.080 | +0.068 | -0.012 | | +0.027 | |
+| u23 with spurs kept | 0.798 | 0.783 | 0.737 | 0.066 | 0.090 | 14.83 (over) |
+
+  val250 (report only): u23 with vtx_r 1.9 keeps lanes found 0.783 at false length 0.060; with vtx_r 2.5 it matches s3's node-id vertices (14.86 vs 14.93) at +0.026 lanes found.
+- **What it says**: the union of two differently trained seeds is the largest coverage lever of the loop (+0.047 lanes found, +0.040 R@1 far, replicated on both pairs, prediction +0.045), and it is not a lower threshold (+0.038 over the parent at equal false length). It needs seed diversity: two rc1 seeds give only +0.007. It costs a second network forward and the false-length guard sits at its edge (0.0635 vs 0.062). Against tonight's prototype `recall_sp0_dp` (lanes found 0.781) it would add only +0.005, under the +0.010 needed to replace a simpler candidate.
+- **Weaknesses / next**: one held-out pair; timing not measured (two forwards; the two-member latency option `--name2` exists, untested on the GPU); the val250 choices are on frames that overlap the 873. Next loop: the union with vtx_r 1.9 - 2.1 (and spurs kept) on 873 frames with its idle timing; a union of the two rc1-family seeds that already carry spurs-kept assembly is the natural prototype step if it fits 14.3 DP and 0.062 false length.

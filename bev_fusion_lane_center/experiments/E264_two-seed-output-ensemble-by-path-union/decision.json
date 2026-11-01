@@ -1,0 +1,53 @@
+{
+ "id": "E264",
+ "verdict": "KEEP",
+ "metric": "lanes_found",
+ "variant": "u",
+ "control": "p",
+ "effect": 0.04657,
+ "diffs": [
+  0.04657
+ ],
+ "pairing": "single",
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": [
+  0.03362,
+  0.05987
+ ],
+ "why": "headline lanes_found u-p +0.0466 beyond the band 0.01, interval [+0.034, +0.060], 1 paired seed(s); every clause holds",
+ "prediction": "prediction +0.045, measured +0.0466 (error +0.0016)",
+ "clauses": [
+  {
+   "text": "lanes_found u-p +0.0466 (want >= +0.030, band 0.01)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "R@1_far u-p +0.0402 (want >= +0.025)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "Q u-p -0.0027 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "topo_F1 u-p +0.0021 (want >= -0.005)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "false_len_frac u-p -0.0075 (want >= -0.010)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "dup_frac u-p -0.0168 (want >= -0.020)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-11-01 05:19"
+}
