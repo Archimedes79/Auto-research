@@ -1,0 +1,273 @@
+{
+ "schema": 1,
+ "made": "2026-11-01T20:43:51",
+ "run": "t11.vel_hurdle",
+ "run_dir": "runs/t11_vel_hurdle",
+ "status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "tier": "normal",
+ "code": {
+  "tag": "bf/t11.vel_hurdle",
+  "commit": "e909ccf089",
+  "code_hash": "4fc5a3867143"
+ },
+ "gt": {
+  "version": "v5",
+  "signature": "15efbde2d1"
+ },
+ "bundle": {
+  "code_hash": "f050545bf0a4",
+  "files": 17
+ },
+ "model": {
+  "ckpt": "ckpt_00001000.pt",
+  "ckpt_hash": "e99ddbd0c22ep",
+  "step": 1000,
+  "config_hash": "4ac192bb939a",
+  "seed": 0
+ },
+ "provenance": {
+  "file": "provenance.json",
+  "hash": "b3c6ffdb5bae"
+ },
+ "metrics": {
+  "eval/metrics.json": {}
+ },
+ "metric_files": {
+  "eval/metrics.json": "9ea76dbc3a08"
+ },
+ "deep": {
+  "files": [
+   {
+    "path": "eval/scene_records.pkl",
+    "bytes": 39313174
+   },
+   {
+    "path": "eval/scene_records_n1000.pkl",
+    "bytes": 39313174
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00000.npz",
+    "bytes": 185342
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00001.npz",
+    "bytes": 214652
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00002.npz",
+    "bytes": 204726
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00003.npz",
+    "bytes": 237862
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00004.npz",
+    "bytes": 263033
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00005.npz",
+    "bytes": 213981
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00006.npz",
+    "bytes": 190466
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00007.npz",
+    "bytes": 225666
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00008.npz",
+    "bytes": 203082
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00009.npz",
+    "bytes": 224968
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00010.npz",
+    "bytes": 230558
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00011.npz",
+    "bytes": 213263
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00012.npz",
+    "bytes": 232064
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00013.npz",
+    "bytes": 211203
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00014.npz",
+    "bytes": 197176
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00015.npz",
+    "bytes": 125242
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00000.npz",
+    "bytes": 30184
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00001.npz",
+    "bytes": 30175
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00002.npz",
+    "bytes": 30183
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00003.npz",
+    "bytes": 30180
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00004.npz",
+    "bytes": 30177
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00005.npz",
+    "bytes": 30175
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00006.npz",
+    "bytes": 30167
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00007.npz",
+    "bytes": 30191
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00008.npz",
+    "bytes": 30208
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00009.npz",
+    "bytes": 30183
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00010.npz",
+    "bytes": 30177
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00011.npz",
+    "bytes": 30182
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00012.npz",
+    "bytes": 30168
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00013.npz",
+    "bytes": 30179
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00014.npz",
+    "bytes": 30216
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00015.npz",
+    "bytes": 18875
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00000.npz",
+    "bytes": 548870
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00001.npz",
+    "bytes": 567565
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00002.npz",
+    "bytes": 585305
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00003.npz",
+    "bytes": 632263
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00004.npz",
+    "bytes": 670141
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00005.npz",
+    "bytes": 637737
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00006.npz",
+    "bytes": 573345
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00007.npz",
+    "bytes": 589235
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00008.npz",
+    "bytes": 609336
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00009.npz",
+    "bytes": 638760
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00010.npz",
+    "bytes": 636252
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00011.npz",
+    "bytes": 618675
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00012.npz",
+    "bytes": 598753
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00013.npz",
+    "bytes": 651799
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00014.npz",
+    "bytes": 589505
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00015.npz",
+    "bytes": 394368
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/frames.jsonl",
+    "bytes": 1021732
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/manifest.json",
+    "bytes": 6517
+   }
+  ],
+  "bytes": 93041410
+ },
+ "deleted": [],
+ "evaluation": {
+  "evaluator": {
+   "commit": "unknown",
+   "code_hash": "unknown",
+   "dirty": "unknown"
+  },
+  "split": "unknown",
+  "frames": null,
+  "frame_hash": "unknown",
+  "manifest_hash": "unknown",
+  "gt": {
+   "version": "unknown",
+   "signature": "unknown"
+  },
+  "card": "t11_vel_hurdle/eval/card.json"
+ },
+ "experiment": "experiments/t10_dual_features/experiment.md"
+}

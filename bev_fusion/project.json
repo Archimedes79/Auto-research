@@ -25,8 +25,8 @@
   "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
   "structure": {
     "root_files": ["README.md", "project.json"],
-    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "runs", "temp", "tests", "training"],
-    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "runs", "temp", "training"],
+    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runs", "temp", "tests", "training"],
+    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runs", "temp", "training"],
     "living": [],
     "skip_parts": [],
     "index_dirs": ["training", "evaluation", "../autogt", "tests", "temp"],

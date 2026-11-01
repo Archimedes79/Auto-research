@@ -19,6 +19,7 @@ The architecture, drawn from the code ([file map and end-to-end table](training/
 | `temp/scout_tables/` | the raw tables of the scouts |
 | `temp/` | scripts of the studies and of the setup; some of them are used as launchers and recipes (`temp/train/run_cfg.sh`, the cache builders of `temp/setup/`) - see `temp/README.md` |
 | `runs/` | one folder per training run (not in git) - see `runs/README.md` |
+| `results/` | the result package of each run (`results/<run id>/`: `package.json`, `provenance.json`; D40) - see `results/README.md` |
 | `project.json`, `records/` | since D23 (2026-10-31) a problem of `../autoresearch/`: trainings start through `run.py` (card, ledger row, code tag `bf/<id>`, GPU slot shared with the lane problem); the ledger and the launcher's run records are in `records/`, the start line in `records/README.md` |
 | `_to_delete/` | what was taken out of the live tree, listed in `_to_delete/README.md` |
 | `experiments/` | one folder per experiment (card, detail plan, summary); first: `s1a_lift_pd_vs_p/` (camera-only real-data run, its synthetic unit test, idle-GPU timing) - see `experiments/README.md` |

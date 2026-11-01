@@ -7,7 +7,7 @@ code, which frames, which model and environment made a card, so that the experim
         collect() from its own interpreter (the environment block describes the interpreter that runs collect: torch and CUDA are filled
         when torch is already imported there); the command line describes the shell's python
     python3 provenance.py manifest <run id> [--run-dir d]       the provenance of a TRAINING run from its run record and run folder (GT it trained on,
-                                                                checkpoint, config, code tag, core code state) -> <run_records>/<id>/provenance.json
+                                                                checkpoint, config, code tag, core code state) -> <problem>/results/<id>/provenance.json
     python3 provenance.py repro <run id> [--card card.json]     what to check out and run to reproduce a run (prints, changes nothing; reads that manifest)
     python3 provenance.py compare a.json b.json                 exit 0 comparable, 1 they differ, 2 not shown comparable (a value is unknown)
     python3 provenance.py --selftest
@@ -270,7 +270,7 @@ def repro(run_id, card_path=None):
     L += [f"command: {r.get('command')}   (cwd {r.get('cwd')})",
           f"recorded: python {r.get('python')}, {r.get('gpu')}; this machine: python {platform.python_version()}, torch {torch_here}"]
     prov = json.load(open(card_path, encoding="utf-8")).get("provenance") if card_path else None
-    pj = os.path.join(os.path.dirname(rj), "provenance.json")
+    pj = os.path.join(results_dir(run_id), "provenance.json")
     if not card_path and os.path.isfile(pj):  # the run's own manifest (`manifest <run id>`): GT, model and settings of the training
         prov = json.load(open(pj, encoding="utf-8"))
         L.append(f"manifest of the run: {pj} (made {prov.get('made')})")
@@ -374,7 +374,7 @@ def _hash_files(root, files):
 
 def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_EXCLUDE):
     """The model bundle of a run: the network and loss modules (import_closure of `roots` under code_dir) with a hash over their text (line endings
-    normalised), and the run's config. into = a folder to copy them to (runs/<id>/bundle/), so the model can be rebuilt from that folder and the
+    normalised), and the run's config. into = a folder to copy them to (results/<id>/bundle/), so the model can be rebuilt from that folder and the
     checkpoint alone; it is made next to the target, checked against the hash and moved into place, and an existing non-empty folder is left alone.
     What the files do NOT carry is listed, never hidden: missing_roots, unparsed (their imports are unknown), imports_excluded (the network imports
     the loop or a loader), external_local (repository folders such as autogt that the code imports: they are not in the bundle, their version is the
@@ -413,6 +413,12 @@ def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_
     return out
 
 
+def results_dir(run_id):
+    """the result folder of a run: <problem>/<project.json "results", default results>/<run id>. Text records go to git (package.json, provenance.json);
+    the heavy files stay in the run folder and are only listed in the package"""
+    return os.path.join(P.root(), P.cfg_of(P.root()).get("results", "results"), run_id)
+
+
 def find_run_dir(run_id):
     """the folder a run writes into: <cards folder>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists"""
     root = P.root()
@@ -442,14 +448,14 @@ def final_ckpt(run_dir):
 def manifest(run_id, run_dir=None, write=True, force=False):
     """The provenance block of a TRAINING run, made from its run record and its run folder: GT it trained on (gt.json), checkpoint, config, split,
     seed, the run's status, the code tag and commit, and the model bundle (network + losses) from the run's own code snapshot (<run folder>/code;
-    the live tree is never used: it is not what ran). Written to <run_records>/<id>/provenance.json (`repro` reads it); an existing manifest or
+    the live tree is never used: it is not what ran). Written to the result folder <problem>/results/<id>/provenance.json (`repro` reads it); an existing manifest or
     bundle/ is not rebuilt without force, so a later call cannot replace a good record by one made after the folder was slimmed. A missing piece
     reads "unknown"; nothing here changes the run. The environment comes from the run record: this tool runs in the launcher's interpreter, not
     the trainer's, so torch stays unknown"""
     rj = os.path.join(P.path("run_records"), run_id, "run.json")
     if not os.path.isfile(rj):
         sys.exit(f"no run record {rj}")
-    out = os.path.join(os.path.dirname(rj), "provenance.json")
+    out = os.path.join(results_dir(run_id), "provenance.json")
     if write and os.path.isfile(out) and not force:
         return json.load(open(out, encoding="utf-8"))
     r = json.load(open(rj, encoding="utf-8"))
@@ -480,7 +486,7 @@ def manifest(run_id, run_dir=None, write=True, force=False):
     block["run_status"] = {"status": r.get("status") or UNKNOWN, "exit": r.get("exit"), "final": r.get("status") in ("ok", "done") and r.get("exit") == 0}
     snap = os.path.join(run_dir, "code") if have_dir else None
     if snap and os.path.isdir(snap):
-        block["bundle"] = bundle(snap, into=os.path.join(run_dir, "bundle") if write else None, config=cfg)
+        block["bundle"] = bundle(snap, into=os.path.join(results_dir(run_id), "bundle") if write else None, config=cfg)
     else:
         block["bundle"] = {"code_hash": UNKNOWN, "files": [], "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag " + str(r.get("tag"))}
     block["environment"] = {"python": r.get("python") or UNKNOWN, "gpu": r.get("gpu") or UNKNOWN, "host": r.get("host") or UNKNOWN,
@@ -488,6 +494,7 @@ def manifest(run_id, run_dir=None, write=True, force=False):
     if not have_dir:
         block["run_dir"] = UNKNOWN
     if write:
+        os.makedirs(os.path.dirname(out), exist_ok=True)
         P.atomic_write(out, json.dumps(block, indent=1) + "\n")
     return block
 
@@ -649,14 +656,14 @@ def selftest():
                    "python": "3.10", "gpu": "RTX"}, open(os.path.join(proj, "rr", "r2", "run.json"), "w"))
         m = manifest("r2")
         assert m["subject"]["ckpt"] == "ckpt_00000200.pt" and m["subject"]["step"] == 200 and m["seed"] == 3 and m["code"]["tag"] == "tg/r2", m
-        assert m["bundle"]["files"] == want and os.path.isfile(os.path.join(tr, "bundle", "pkg", "head.py")) and os.path.isfile(os.path.join(tr, "bundle", "config.json")), m["bundle"]
-        assert not os.path.exists(os.path.join(tr, "bundle", "data.py")), "the bundle holds the network and the losses only"
-        assert json.load(open(os.path.join(proj, "rr", "r2", "provenance.json")))["code"]["commit"] == "def" and "evaluator" not in m and m["environment"]["torch"] == UNKNOWN
+        assert m["bundle"]["files"] == want and os.path.isfile(os.path.join(proj, "results", "r2", "bundle", "pkg", "head.py")) and os.path.isfile(os.path.join(proj, "results", "r2", "bundle", "config.json")), m["bundle"]
+        assert not os.path.exists(os.path.join(proj, "results", "r2", "bundle", "data.py")), "the bundle holds the network and the losses only"
+        assert json.load(open(os.path.join(proj, "results", "r2", "provenance.json")))["code"]["commit"] == "def" and "evaluator" not in m and m["environment"]["torch"] == UNKNOWN
         assert m["run_status"] == {"status": "ok", "exit": 0, "final": True} and m["bundle"]["missing_roots"] == [] and m["bundle"]["copied_to"] == "bundle", m
-        put(tr, "bundle/stale.py", "old\n")
+        put(os.path.join(proj, "results", "r2"), "bundle/stale.py", "old\n")
         assert manifest("r2") == m, "an existing manifest is returned, not rebuilt"
         m2f = manifest("r2", force=True)
-        assert "copy_skipped" in m2f["bundle"] and os.path.isfile(os.path.join(tr, "bundle", "stale.py")), "a bundle/ that exists is left alone"
+        assert "copy_skipped" in m2f["bundle"] and os.path.isfile(os.path.join(proj, "results", "r2", "bundle", "stale.py")), "a bundle/ that exists is left alone"
         # hard cases of the closure: BOM, parent packages with code, level-2 relative imports, missing root, broken file, dynamic import, external local code
         s2 = os.path.join(tmp, "snap2")
         open(os.path.join(s2 if os.path.isdir(s2) else (os.makedirs(s2) or s2), "model.py"), "w", encoding="utf-8-sig").write("import pkg.head\nimport autogt\nimport torch\nimport broken\nimport importlib\nimportlib.import_module('x')\n")
@@ -729,7 +736,7 @@ def main():
         repro(a.args[0], a.card)
     elif a.cmd == "manifest" and a.args:
         b = manifest(a.args[0], a.run_dir, force=a.force)
-        print(f"written: {os.path.join(P.path('run_records'), a.args[0], 'provenance.json')} (GT {_get(b, ('gt', 'version'))}, checkpoint {_get(b, ('subject', 'ckpt'))}, code {_get(b, ('code', 'tag'))})")
+        print(f"written: {os.path.join(results_dir(a.args[0]), 'provenance.json')} (GT {_get(b, ('gt', 'version'))}, checkpoint {_get(b, ('subject', 'ckpt'))}, code {_get(b, ('code', 'tag'))})")
     elif a.cmd == "compare" and len(a.args) == 2:
         text, code = verdict(*compare(*(json.load(open(x, encoding="utf-8")) for x in a.args)))
         print(text)

@@ -1,0 +1,317 @@
+{
+ "schema": 1,
+ "made": "2026-11-01T20:43:45",
+ "run": "t10.dual_s1",
+ "run_dir": "runs/t10_dual_s1",
+ "status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "tier": "top3",
+ "code": {
+  "tag": "bf/t10.dual_s1",
+  "commit": "77aed2787c",
+  "code_hash": "3aa3d9e32e2e"
+ },
+ "gt": {
+  "version": "v5",
+  "signature": "15efbde2d1"
+ },
+ "bundle": {
+  "code_hash": "f050545bf0a4",
+  "files": 17
+ },
+ "model": {
+  "ckpt": "ckpt_00003000.pt",
+  "ckpt_hash": "64777361b700p",
+  "step": 3000,
+  "config_hash": "1ac095207ea3",
+  "seed": 1
+ },
+ "provenance": {
+  "file": "provenance.json",
+  "hash": "41563818aeba"
+ },
+ "metrics": {
+  "eval/metrics.json": {}
+ },
+ "metric_files": {
+  "eval/metrics.json": "c6e48b776fe5"
+ },
+ "deep": {
+  "files": [
+   {
+    "path": "eval/scene_records.pkl",
+    "bytes": 39646348
+   },
+   {
+    "path": "eval/scene_records_n1000.pkl",
+    "bytes": 39646348
+   },
+   {
+    "path": "eval/suite/qualitative/random_s1_n4/draws.json",
+    "bytes": 148
+   },
+   {
+    "path": "eval/suite/qualitative/random_s1_n4/index.html",
+    "bytes": 4007
+   },
+   {
+    "path": "eval/suite/qualitative/random_s1_n4/scene-0013_005_overview.png",
+    "bytes": 320517
+   },
+   {
+    "path": "eval/suite/qualitative/random_s1_n4/scene-0274_019_overview.png",
+    "bytes": 310403
+   },
+   {
+    "path": "eval/suite/qualitative/random_s1_n4/scene-0557_036_overview.png",
+    "bytes": 304714
+   },
+   {
+    "path": "eval/suite/qualitative/random_s1_n4/scene-0563_036_overview.png",
+    "bytes": 326885
+   },
+   {
+    "path": "eval/suite/qualitative/videos/index.html",
+    "bytes": 867
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0625_dashboard.mp4",
+    "bytes": 2352026
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0625_dashboard_scores.json",
+    "bytes": 12236
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0625_dashboard_scores.png",
+    "bytes": 62379
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00000.npz",
+    "bytes": 177401
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00001.npz",
+    "bytes": 212122
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00002.npz",
+    "bytes": 206325
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00003.npz",
+    "bytes": 239789
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00004.npz",
+    "bytes": 263471
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00005.npz",
+    "bytes": 214858
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00006.npz",
+    "bytes": 188011
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00007.npz",
+    "bytes": 222634
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00008.npz",
+    "bytes": 200476
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00009.npz",
+    "bytes": 224128
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00010.npz",
+    "bytes": 232883
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00011.npz",
+    "bytes": 209151
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00012.npz",
+    "bytes": 233708
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00013.npz",
+    "bytes": 213933
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00014.npz",
+    "bytes": 198260
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_det_00015.npz",
+    "bytes": 124349
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00000.npz",
+    "bytes": 30157
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00001.npz",
+    "bytes": 30173
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00002.npz",
+    "bytes": 30186
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00003.npz",
+    "bytes": 30169
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00004.npz",
+    "bytes": 30172
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00005.npz",
+    "bytes": 30190
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00006.npz",
+    "bytes": 30187
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00007.npz",
+    "bytes": 30174
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00008.npz",
+    "bytes": 30209
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00009.npz",
+    "bytes": 30165
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00010.npz",
+    "bytes": 30158
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00011.npz",
+    "bytes": 30182
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00012.npz",
+    "bytes": 30173
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00013.npz",
+    "bytes": 30179
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00014.npz",
+    "bytes": 30199
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_loss_00015.npz",
+    "bytes": 18853
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00000.npz",
+    "bytes": 545460
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00001.npz",
+    "bytes": 571495
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00002.npz",
+    "bytes": 588835
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00003.npz",
+    "bytes": 635533
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00004.npz",
+    "bytes": 669216
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00005.npz",
+    "bytes": 633032
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00006.npz",
+    "bytes": 575614
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00007.npz",
+    "bytes": 594401
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00008.npz",
+    "bytes": 608483
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00009.npz",
+    "bytes": 642402
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00010.npz",
+    "bytes": 633211
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00011.npz",
+    "bytes": 625175
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00012.npz",
+    "bytes": 594059
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00013.npz",
+    "bytes": 651207
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00014.npz",
+    "bytes": 584317
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/counts_seg_00015.npz",
+    "bytes": 392267
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/frames.jsonl",
+    "bytes": 1013072
+   },
+   {
+    "path": "eval/suite/quant/eval_n1000/manifest.json",
+    "bytes": 6509
+   },
+   {
+    "path": "report/curves.png",
+    "bytes": 334270
+   }
+  ],
+  "bytes": 97718461
+ },
+ "deleted": [],
+ "evaluation": {
+  "evaluator": {
+   "commit": "unknown",
+   "code_hash": "unknown",
+   "dirty": "unknown"
+  },
+  "split": "unknown",
+  "frames": null,
+  "frame_hash": "unknown",
+  "manifest_hash": "unknown",
+  "gt": {
+   "version": "unknown",
+   "signature": "unknown"
+  },
+  "card": "t10_dual_s1/eval/card.json"
+ },
+ "experiment": "experiments/t10_dual_features/experiment.md"
+}

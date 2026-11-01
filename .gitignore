@@ -94,6 +94,8 @@
 !/bev_fusion/
 /bev_fusion/runs/*
 !/bev_fusion/runs/README.md
+# the result folder of a run (results/<run id>/: package.json, provenance.json are text records; bundle/ is a copy of code that the run's tag holds)
+/bev_fusion/results/*/bundle/
 # scratch of problem 2: not in git (as for the lane problem); only the two launch scripts that the snapshot lists in project.json fingerprint_extra stay in
 /bev_fusion/temp/**
 !/bev_fusion/temp/README.md

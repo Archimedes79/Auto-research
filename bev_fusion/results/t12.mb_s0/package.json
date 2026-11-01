@@ -1,0 +1,60 @@
+{
+ "schema": 1,
+ "made": "2026-11-01T20:44:09",
+ "run": "t12.mb_s0",
+ "run_dir": "runs/t12_mb_s0",
+ "status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "tier": "normal",
+ "code": {
+  "tag": "bf/t12.mb_s0",
+  "commit": "5a6ce25269",
+  "code_hash": "63f943afa4ea"
+ },
+ "gt": {
+  "version": "unknown",
+  "signature": "unknown"
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": 0
+ },
+ "model": {
+  "ckpt": "block.pt",
+  "ckpt_hash": "b48d2874c481",
+  "step": null,
+  "config_hash": "unknown",
+  "seed": "unknown"
+ },
+ "provenance": {
+  "file": "provenance.json",
+  "hash": "771543e47dc5"
+ },
+ "metrics": {},
+ "metric_files": {},
+ "deep": {
+  "files": [],
+  "bytes": 0
+ },
+ "deleted": [],
+ "evaluation": {
+  "evaluator": {
+   "commit": "unknown",
+   "code_hash": "unknown",
+   "dirty": "unknown"
+  },
+  "split": "unknown",
+  "frames": null,
+  "frame_hash": "unknown",
+  "manifest_hash": "unknown",
+  "gt": {
+   "version": "unknown",
+   "signature": "unknown"
+  },
+  "card": "unknown"
+ },
+ "experiment": "experiments/t13_complete_network/experiment.md"
+}

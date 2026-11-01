@@ -1,0 +1,108 @@
+{
+ "schema": 1,
+ "made": "2026-11-01T20:33:41",
+ "gt": {
+  "key": "0.5_4_15efbde2d1",
+  "signature": "15efbde2d1",
+  "version": "v5",
+  "dataset": "v1.0-trainval",
+  "res": 0.5,
+  "ss": 4,
+  "options": {},
+  "index_hash": "69cf4a6fc02a"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "v1.0-trainval",
+  "manifest_hash": "48496f48f7e6",
+  "scenes": 850,
+  "samples": 34149
+ },
+ "subject": {
+  "run": "t11.vel_hurdle_acc2",
+  "ckpt": "ckpt_00001000.pt",
+  "ckpt_hash": "2f803fca9a0ep",
+  "config_hash": "f55ffa96fd43",
+  "step": 1000,
+  "train_gt": {
+   "key": "0.5_4_15efbde2d1",
+   "signature": "15efbde2d1",
+   "version": "v5",
+   "dataset": "v1.0-trainval",
+   "res": 0.5,
+   "ss": 4,
+   "options": {},
+   "index_hash": "69cf4a6fc02a"
+  }
+ },
+ "environment": {
+  "python": "3.10.12",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "torch": "unknown",
+  "source": "run record"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "bf/t11.vel_hurdle_acc2",
+  "commit": "677e758b62",
+  "code_hash": "4fc5a3867143",
+  "drift_files": [],
+  "command": "bash temp/train/run_ar.sh training/configs/t11_vel_hurdle_acc2.json",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "f050545bf0a4",
+  "files": [
+   "augment.py",
+   "bev_trunk.py",
+   "bevfusion_camera.py",
+   "blocks_new.py",
+   "camera_encoder.py",
+   "fallbacks.py",
+   "fusion.py",
+   "lane_branch.py",
+   "lift_pd.py",
+   "loss_extras.py",
+   "losses.py",
+   "model.py",
+   "object_head.py",
+   "radar_bev.py",
+   "splat.py",
+   "temporal_fusion.py",
+   "timed_head.py"
+  ],
+  "roots": [
+   "model.py",
+   "losses.py"
+  ],
+  "missing_roots": [],
+  "excluded": [
+   "train.py",
+   "nuscenes_dataset.py",
+   "feature_cache.py"
+  ],
+  "imports_excluded": [
+   "augment.py -> nuscenes_dataset.py",
+   "augment.py -> train.py",
+   "lane_branch.py -> train.py",
+   "model.py -> nuscenes_dataset.py"
+  ],
+  "unparsed": [],
+  "external_local": [
+   "autogt"
+  ],
+  "dynamic_imports": [],
+  "source": "t11_vel_hurdle_acc2/code",
+  "config_hash": "f55ffa96fd43",
+  "copied_to": "bundle"
+ }
+}

@@ -1,0 +1,117 @@
+{
+ "schema": 1,
+ "made": "2026-11-01T20:33:32",
+ "gt": {
+  "key": "0.5_4_15efbde2d1",
+  "signature": "15efbde2d1",
+  "version": "v5",
+  "dataset": "v1.0-trainval",
+  "res": 0.5,
+  "ss": 4,
+  "options": {},
+  "index_hash": "69cf4a6fc02a"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "v1.0-trainval",
+  "manifest_hash": "48496f48f7e6",
+  "scenes": 850,
+  "samples": 34149
+ },
+ "subject": {
+  "run": "t10.dual_s1",
+  "ckpt": "ckpt_00003000.pt",
+  "ckpt_hash": "64777361b700p",
+  "config_hash": "1ac095207ea3",
+  "step": 3000,
+  "train_gt": {
+   "key": "0.5_4_15efbde2d1",
+   "signature": "15efbde2d1",
+   "version": "v5",
+   "dataset": "v1.0-trainval",
+   "res": 0.5,
+   "ss": 4,
+   "options": {},
+   "index_hash": "69cf4a6fc02a"
+  }
+ },
+ "environment": {
+  "python": "3.10.12",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "torch": "unknown",
+  "source": "run record"
+ },
+ "seed": 1,
+ "code": {
+  "tag": "bf/t10.dual_s1",
+  "commit": "77aed2787c",
+  "code_hash": "3aa3d9e32e2e",
+  "drift_files": [
+   "autoresearch/tools/archdraw.py",
+   "bev_fusion/evaluation/bev_selftest.py",
+   "bev_fusion/tests/test_flow_explains.py",
+   "bev_fusion/tests/test_flow_fused.py",
+   "bev_fusion/tests/test_flow_timed.py",
+   "bev_fusion/tests/test_velocity_hurdle.py",
+   "bev_fusion/training/scratch.py",
+   "bev_fusion/training/train.py"
+  ],
+  "command": "bash temp/train/run_ar.sh training/configs/t10_dual_s1.json",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "f050545bf0a4",
+  "files": [
+   "augment.py",
+   "bev_trunk.py",
+   "bevfusion_camera.py",
+   "blocks_new.py",
+   "camera_encoder.py",
+   "fallbacks.py",
+   "fusion.py",
+   "lane_branch.py",
+   "lift_pd.py",
+   "loss_extras.py",
+   "losses.py",
+   "model.py",
+   "object_head.py",
+   "radar_bev.py",
+   "splat.py",
+   "temporal_fusion.py",
+   "timed_head.py"
+  ],
+  "roots": [
+   "model.py",
+   "losses.py"
+  ],
+  "missing_roots": [],
+  "excluded": [
+   "train.py",
+   "nuscenes_dataset.py",
+   "feature_cache.py"
+  ],
+  "imports_excluded": [
+   "augment.py -> nuscenes_dataset.py",
+   "augment.py -> train.py",
+   "lane_branch.py -> train.py",
+   "model.py -> nuscenes_dataset.py"
+  ],
+  "unparsed": [],
+  "external_local": [
+   "autogt"
+  ],
+  "dynamic_imports": [],
+  "source": "t10_dual_s1/code",
+  "config_hash": "1ac095207ea3",
+  "copied_to": "bundle"
+ }
+}
