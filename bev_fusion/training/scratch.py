@@ -11,7 +11,7 @@
 
     python training/scratch.py report     temp/ by folder, extension and age, the budget and the free space
     python training/scratch.py --selftest
-The finished checkpoints of a training run are slimmed by train.py itself (TrainConfig.slim_at_end), see training/README.md.
+A finished training run keeps complete checkpoints (resume later); train.py slims them only on request (TrainConfig.slim_at_end), see training/README.md.
 """
 import contextlib
 import glob

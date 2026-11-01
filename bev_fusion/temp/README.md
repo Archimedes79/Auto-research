@@ -26,5 +26,5 @@ Budget 10 GB for `temp/` (`python training/scratch.py report` shows it); the hel
 
 - No double dumps: a feature dump is keyed by what it holds (`scratch.dump`); a finished one is reused, a new one passes `scratch.guard` first. Probe only the layers, frames and range the question needs (every 4th frame is usually enough).
 - Outdated caches are deleted, not kept: list caches go through `scratch.cached` (a bigger cache serves a smaller n, one older than its inputs or built by another builder is deleted).
-- Smoke runs and test outputs go into `scratch.tmpdir(...)`, which is removed on exit; a run that finishes keeps one slim checkpoint (`slim_at_end`), never a pile of resume checkpoints.
+- Smoke runs and test outputs go into `scratch.tmpdir(...)`, which is removed on exit; a run that finishes keeps its `keep` complete checkpoints so that it can be resumed later (`slim_at_end` is an opt-in that keeps one slim checkpoint).
 - Cleanup in the end: the last step of every card is the line `scratch left behind: <size>, keep / move / delete` (`../experiments/README.md`); what stays goes to the D: archive (`bev_fusion_temp_archive`), not into `temp/`.

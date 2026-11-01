@@ -108,9 +108,9 @@ class TrainConfig:
     eval_batches: int = 50
     save_every: int = 500
     keep: int = 3
-    slim_at_end: bool = True                     # a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half the
-                                                 # size) and no older ones: it evaluates and warm-starts, it cannot resume training.
-                                                 # False = `keep` full resume checkpoints. Unfinished or stopped runs always keep full ones
+    slim_at_end: bool = False                    # True: a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half
+                                                 # the size, no older ones): it evaluates and warm-starts but cannot resume training.
+                                                 # False (default; Mirko 2026-11-01: keep the full data to resume later): `keep` complete ones
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting
     seed: int = 0
     device: str = "cuda"
@@ -750,7 +750,7 @@ def _selftest():
         cfg = TrainConfig(name="selftest", out_root=tmp, data_root="~/data/nuscenes", version="v1.0-mini",
                           train_split="train", val_split="val", feature_cache=cache, gt_cache=os.path.join(tmp, "gt"),
                           batch_size=2, accum=2, workers=0, steps=4, warmup=2, log_every=1, eval_every=0, save_every=2, keep=2,
-                          slim_at_end=False, device="cpu", model={"trunk_width": 0.25})       # (slimming has its own test, 2b)
+                          device="cpu", model={"trunk_width": 0.25})
         # the dataset restricted to the samples whose frames are cached
         from nuscenes.nuscenes import NuScenes
         nusc = NuScenes(cfg.version, dataroot=os.path.expanduser(cfg.data_root), verbose=False)
@@ -864,6 +864,7 @@ def _selftest():
         assert len(ckpts) == 2, ckpts                                              # keep = 2
         ck = torch.load(os.path.join(tmp, "selftest", ckpts[-1]), weights_only=False)
         assert ck["step"] == 4 and not any(k.startswith("model.camera.") for k in ck["state"])
+        assert "opt" in ck and "rng" in ck and not ck.get("slim"), "the default keeps complete checkpoints (Adam moments and RNG)"
         changed = any(not torch.equal(before[k], v) for k, v in model2.state_dict().items() if k in before)
         assert changed, "parameters changed"
         # 2b slim_at_end (the default): a finished run keeps ONE checkpoint without optimiser state and RNG, and evaluation still loads it
