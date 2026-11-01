@@ -56,15 +56,19 @@ class TapRecorder:
             self._handles.append(mod.register_forward_pre_hook(self._pre(name, h)) if h.when == "in"
                                  else mod.register_forward_hook(self._post(name, h)))
 
-    def _store(self, name: str, h: Hook, value: Any) -> None:
-        """record one value; a tap that cannot be read from this network's output is skipped (counted in `errors`), it never
-        breaks the forward pass"""
+    def _store(self, name: str, h: Hook, value: Any, first_arg: bool = False) -> None:
+        """record one value (first_arg: the first positional argument of a pre-hook); a tap that cannot be read from this network's
+        output is skipped (counted in `errors`), it never breaks the forward pass"""
         if name not in self.armed:
             return
         try:
+            if first_arg:
+                value = value[0]                                                    # a module called with keywords only has no args
             if h.pick is not None:
                 value = h.pick(value)
             v = value.detach().float().cpu()
+            if v.data_ptr() == value.data_ptr():                                    # float32 on the CPU is no copy: an in-place layer after
+                v = v.clone()                                                       # this one (ReLU(inplace=True)) would change the record
         except Exception:                                                           # noqa: BLE001
             self.errors[name] = self.errors.get(name, 0) + 1
             return
@@ -81,7 +85,7 @@ class TapRecorder:
         return lambda mod, args, out: self._store(name, h, out)
 
     def _pre(self, name, h):
-        return lambda mod, args: self._store(name, h, args[0])
+        return lambda mod, args: self._store(name, h, args, first_arg=True)
 
     def arm(self, names: Sequence[str]) -> None:
         unknown = [n for n in names if n not in self.hooks]

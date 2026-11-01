@@ -32,7 +32,7 @@
 `quant run --spread N` takes N frames evenly over all scenes and always runs them in state `reset`. `qual frame` feeds `Subject.warmup` history frames first (`--history warmup | full | none`; `full` = every frame from the start of the scene up to the frame). `quant trace` replays the stored run's state; the replay is exact for a carry run that started at the first frame of the scene. `carry` refuses a frame subset with gaps.
 
 ## 3. Looking inside the network
-`Subject.taps()` lists `TapSpec(name, kind, stage, note, redflag, ...)`; `predict(sample, taps=[names])` returns those as numpy arrays (one sample, no batch axis). `kind` is `feature_map`, `map`, `image`, `logits`, `vector` or `scalar`; `note` says what the tap should look like (printed under the picture), `redflag` what a problem looks like, `optional` marks parts a configuration may lack, `alive_check=False` allows an all-zero tap.
+`Subject.taps()` lists `TapSpec(name, kind, stage, note, redflag, ...)`; `predict(sample, taps=[names])` returns those as numpy arrays (one sample, no batch axis). `kind` is `feature_map`, `map`, `image`, `logits`, `vector` or `scalar`; `note` says what the tap should look like and `redflag` what a problem looks like (both printed under the picture), `optional` marks parts a configuration may lack, `alive_check=False` allows an all-zero tap.
 
 `qual debug SPEC [--taps a b]` writes `_debug.png` (one picture per tap by kind: feature maps as energy and PCA colours, maps, images, logits as maximum probability, bars), a statistics table, plausibility flags (non-finite, dead or constant, no spatial structure, extreme magnitude) and `_taps.npz` with the raw arrays. The flags are heuristics: they point, a human judges.
 

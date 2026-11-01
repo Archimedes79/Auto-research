@@ -17,11 +17,12 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 
 1. **The lever is the image features, not the blocks.** Eleven block exchanges tied; swapping the frozen detection-trained stride-16 image features for map-trained
    stride-8 BEVFusion features nearly doubled the maps (lane divider 0.191 -> 0.351 / 0.345, walkway 0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165) and halved
-   the objects (front mAP2 0.367 -> 0.183 / 0.180). Both feature sets in one chain keep both: lane divider 0.335, walkway 0.340, drivable 0.806, front mAP2 0.361 (one
-   seed; the seed twin is training). The 3000-step dual chain beats the start recipe trained with 4.7 x the optimiser steps (7000 x accumulation 2; a different config and frame set)
+   the objects (front mAP2 0.367 / 0.368 -> 0.183 / 0.180). Both feature sets in one chain keep both, on two seeds: lane divider 0.335 / 0.350, walkway 0.340 / 0.354, drivable
+   0.806 / 0.807, front mAP2 0.361 / 0.364 against the control's 0.367 / 0.368 (the seed twin ran on a later code snapshot and was resumed once). The 3000-step dual chain beats the start recipe trained with 4.7 x the optimiser steps (7000 x accumulation 2; a different config and frame set)
    on five of six map layers (ladder below). The better features are a published, map-trained model's: the saving is partly borrowed compute. The swap is a bundle (backbone,
-   stride, objective and depth head differ), planned in plan 2.8 with a qualitative rule, not a numeric card. Not kept in the dual chain: the rare two-wheeler class
-   (AP@2 0.121 -> 0.016, 174 GT boxes), so the 3-class mAP falls 0.251 -> 0.221 while vehicle + pedestrian mAP2 stays inside the band.
+   stride, objective and depth head differ), planned in plan 2.8 with a qualitative rule, not a numeric card. Not claimed: the rare two-wheeler class and the 3-class mAP
+   (two-wheeler AP@2 control 0.121 / 0.051, dual 0.016 / 0.061; 3-class mAP control 0.251 / 0.235, dual 0.221 / 0.234: inside the control's own seed spread); an earlier one-seed gain of
+   the pedestrian segmentation (0.000 -> 0.091) was noise, the control's second seed scores 0.090.
 2. **The velocity head is dead, not slow.** The output of the branch is its bias; 0.011 % of its hidden units are active at the supervised centres (13 - 50 % for the other
    branches); 24 of the 29 classified runs are dead. Try 9 (loss weight x10) could not help a dead ReLU layer. The radar Doppler read-out at the GT boxes holds 0.79 of the
    velocity of moving vehicles (upper bound, GT heading), our best learned heads 0.22 - 0.25.
@@ -41,7 +42,7 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 | 12 | why are the maps far from the SOA? | GaussianCaR scored by our metric, oracles, probes, a maps-only run (`t6_soa_gap`) | - | ours at 17 - 55 % of GaussianCaR except drivable (85 %); not range, threshold, over-fitting, BEV network or labels; task competition small (+0.015 - 0.051) | main candidate: frozen detection-trained stride-16 features (M6) plus the training budget |
 | 13 | do stride-4 image details help the thin map classes? | `t7_res4` / `t7_rgb`: a frozen ResNet stride-4 branch lifted into the BEV | lane divider +0.04 | res4: lane divider +0.065 / +0.042 (two seeds), road divider IoU@1 +0.119 / +0.096, walkway and crossing unchanged; rgb +0.015 | helps the thin lines, not the area classes; verdict waits for the equal-GT control |
 | 14 | are frozen detection-trained features the limit of the maps? | `t8_bevfeat`: cached BEVFusion map-trained stride-8 features, same chain, same-code control `t8_ctl` | maps up | maps x1.8 - 1.9 (two seeds agree), front mAP2 0.367 -> 0.183 / 0.180, pedestrians gone | supports M6; neither feature set alone gives both |
-| 15 | can both be had? | `t10_dual`: both caches, two lifts, merged by a 1x1 convolution | lane divider 0.34, drivable 0.80, walkway 0.33, front mAP2 0.33 (0.25 - 0.38), pedestrian AP@2 0.15 | lane divider 0.335, drivable 0.806, walkway 0.340, front mAP2 0.361, pedestrian AP@2 0.199 | rule E1 holds (one seed); seed twin training |
+| 15 | can both be had? | `t10_dual`: both caches, two lifts, merged by a 1x1 convolution | lane divider 0.34, drivable 0.80, walkway 0.33, front mAP2 0.33 (0.25 - 0.38), pedestrian AP@2 0.15 | seed 0 / seed 1: lane divider 0.335 / 0.350, drivable 0.806 / 0.807, walkway 0.340 / 0.354, front mAP2 0.361 / 0.364, pedestrian AP@2 0.199 / 0.202 | rule E1 holds on both seeds; the dual chain is the proposed new base (promotion is Mirko's) |
 | 16 | why is the box velocity zero in every 3000-step run? | diagnosis from stored checkpoints, detections and a probe (`t11_vel_cause`) | active share < 1 % at the centres; linear read-out skill >= 0.15 | 0.011 % (other branches 13 - 50 %); 24 of 29 classified runs dead (the live ones have an effective batch of 6 or more); the linear read-out gives 0.019 (that prediction failed) | a diagnosis, not yet a fix: fresh branch + moving / static gate (B') and with accumulation 2 (B2) queued, not run; BatchNorm is a ranked candidate without a card |
 
 ### Maps: the ladder (same metric, VAL, `seg_fov`, dt 0)
@@ -55,6 +56,8 @@ Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps
 | t8_bevfeat_s0 | map-trained features | 3000 | 1000 | 0.754 | 0.339 | 0.173 | 0.145 | 0.351 | 0.437 |
 | t8_bevfeat_s1 | map-trained features, seed 1 | 3000 | 1000 | 0.759 | 0.342 | 0.168 | 0.165 | 0.345 | 0.439 |
 | t10_dual_s0 | both feature sets | 3000 | 1000 | 0.756 | 0.340 | 0.144 | 0.154 | 0.335 | 0.442 |
+| t10_dual_s1 | both feature sets, seed 1 | 3000 | 1000 | 0.757 | 0.354 | 0.139 | 0.173 | 0.350 | 0.442 |
+| t8_ctl_s1 | same-code control, seed 1 | 3000 | 1000 | 0.668 | 0.176 | 0.106 | 0.000 | 0.180 | 0.227 |
 
 The 3000-step dual chain is above the 7000 x 2-step start on drivable, walkway, crossing, lane divider and road divider and below it on carpark (0.144 against 0.162); the
 frame sets differ (3109 against 1000; the same model scores 0.719 on 400 frames against 0.698 on 3109, so the subset effect is about 0.02).

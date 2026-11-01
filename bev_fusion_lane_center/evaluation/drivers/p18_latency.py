@@ -7,7 +7,6 @@ import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
 import json
 import os
-import pickle
 import sys
 import time
 

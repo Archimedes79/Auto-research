@@ -9,7 +9,7 @@
 | tag | D - dropped: tried, no gain or worse |
 | sparsification stage | SP0 not part of the sparsification chain (foundation, map, time, planner, analysis) |
 | building blocks | BB10 memory bank / query propagation |
-| loop | loop11 - log: [../../experiment_execution/indexes/LOOP11_INDEX.md](../../experiment_execution/indexes/LOOP11_INDEX.md) |
+| loop | loop11 - log: [../../experiment_execution/history/indexes/LOOP11_INDEX.md](../../experiment_execution/history/indexes/LOOP11_INDEX.md) |
 
 ## Result
 

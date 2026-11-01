@@ -9,7 +9,7 @@
 | tag | E - E2E-usable: learned or parameter-free, differentiable (the trace network has discrete bookkeeping inside) |
 | sparsification stage | SP6 vertex positions of the sparse graph (refinement, keep gate) |
 | building blocks | BB29 matching-free point-to-polyline loss |
-| loop | loop15 - log: [../../experiment_execution/indexes/LOOP15_INDEX.md](../../experiment_execution/indexes/LOOP15_INDEX.md) |
+| loop | loop15 - log: [../../experiment_execution/history/indexes/LOOP15_INDEX.md](../../experiment_execution/history/indexes/LOOP15_INDEX.md) |
 
 ## Result
 

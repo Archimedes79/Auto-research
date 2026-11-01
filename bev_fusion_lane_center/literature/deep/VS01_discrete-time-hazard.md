@@ -216,7 +216,7 @@ Tags: [paper] = in Nnet-survival or K-B; [theory] = standard survival analysis, 
 
 ## 7. Our experiments that touch it
 - Code, checked: `training/losses/p16_loss.py: level_losses(hazard=True, cens=False)` is the masked BCE with the event ring counted (K41, plan item M4 "default loss from rung 0"); the censoring branch exists and `DEFAULT_W cens = 0.0`. Which runs switched it on: not traced here. The plan test T26 (ray leaving the BEV is not a lane end) is listed as planned.
-- E132 (E123.B3.r0.00, from `experiment_execution/indexes/TRIAGE_STATE.md` line 33): the one-pooled-score-per-ray baseline B3 scored S 0.654 against 0.697 for the survival read-out D3 (VAL subset of 250 frames, 1 u). It compares read-outs, not hazard-loss conventions. The descriptive text of the same run in `Experiment_Table_EN.md` says "as good as the survival product", which does not match these numbers.
+- E132 (E123.B3.r0.00, from `experiment_execution/history/indexes/TRIAGE_STATE_loop16.md` line 33): the one-pooled-score-per-ray baseline B3 scored S 0.654 against 0.697 for the survival read-out D3 (VAL subset of 250 frames, 1 u). It compares read-outs, not hazard-loss conventions. The descriptive text of the same run in `Experiment_Table_EN.md` says "as good as the survival product", which does not match these numbers.
 - E94 predicts an end event (VS44), not a survival product. A node-level validity ECE (5 equal-width bins) exists in `evaluation/loops/loop16/p16_diag.py`; there is no per-ring ECE, no product or D-calibration check.
 - Not tried: floor versus other censoring conventions on the full data, per-metre hazard head, gap likelihood, expected endpoint loss, calibration tests of section 5.1c.
 

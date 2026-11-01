@@ -38,6 +38,17 @@ def place_of(cause: str, info: tuple) -> str:
     return str(info[2]) if len(info) > 2 and info[2] else cause
 
 
+def budget_panels(bud: List[Dict[str, Any]]) -> List[Panel]:
+    """the bars of the error budget: missing (fn.<cause>) next to false (fp.<cause>) when the causes follow that convention (the toy and
+    the lane task do), else one panel of all causes"""
+    fn = {b["cause"][3:]: b["amount"] for b in bud if b["cause"].startswith("fn.") and b["amount"] > 0}
+    fp = {b["cause"][3:]: b["amount"] for b in bud if b["cause"].startswith("fp.") and b["amount"] > 0}
+    low_to_high = lambda d: dict(sorted(d.items(), key=lambda kv: kv[1])) or {"-": 0}                      # noqa: E731
+    if fn or fp:
+        return [Panel("bars", "missing (fn): amount per cause", low_to_high(fn)), Panel("bars", "false (fp): amount per cause", low_to_high(fp))]
+    return [Panel("bars", "error: amount per cause", low_to_high({b["cause"]: b["amount"] for b in bud if b["amount"] > 0}))]
+
+
 class Prober:
     def __init__(self, suite):
         self.s = suite
@@ -206,12 +217,9 @@ class Prober:
         if tgt:
             body += "<p>where to work (share of the error): " + ", ".join(f"<b>{k_}</b> {v:.0%}" for k_, v in tgt.items()) + "</p>"
         if bud:
-            fn = {b["cause"][3:]: b["amount"] for b in bud if b["cause"].startswith("fn.") and b["amount"] > 0}
-            fp = {b["cause"][3:]: b["amount"] for b in bud if b["cause"].startswith("fp.") and b["amount"] > 0}
-            panels = [Panel("bars", "missing (fn): amount per cause", dict(sorted(fn.items(), key=lambda kv: kv[1])) or {"-": 0}),
-                      Panel("bars", "false (fp): amount per cause", dict(sorted(fp.items(), key=lambda kv: kv[1])) or {"-": 0})]
+            panels = budget_panels(bud)
             p = os.path.join(out_dir, "budget.png")
-            render_page(Page(f"error budget of {name}", panels, ncols=2, panel_size=(6.5, 3.6)), p)
+            render_page(Page(f"error budget of {name}", panels, ncols=len(panels), panel_size=(6.5, 3.6)), p)
             body += html.image(p, out_dir, 900)
         sections.append(("error budget: which cause the error is assigned to", body))
         # situations

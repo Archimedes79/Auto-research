@@ -9,7 +9,7 @@
 | tag | C - classical / reference: classical method, simulator, analysis, protocol or literature review |
 | sparsification stage | SP0 not part of the sparsification chain (foundation, map, time, planner, analysis) |
 | building blocks | BB04 correlation / cost volume + soft-argmax |
-| loop | loop08 - log: [../../experiment_execution/indexes/LOOP8_INDEX.md](../../experiment_execution/indexes/LOOP8_INDEX.md) |
+| loop | loop08 - log: [../../experiment_execution/history/indexes/LOOP8_INDEX.md](../../experiment_execution/history/indexes/LOOP8_INDEX.md) |
 
 ## Result
 

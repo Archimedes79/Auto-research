@@ -144,14 +144,14 @@ class Qualitative:
 
     def videos(self, m: int = 1, seed: int = 0, view: Optional[str] = None, fps: float = 4.0, max_frames: Optional[int] = None,
                scenes: Optional[Sequence[str]] = None, render_every: int = 1) -> List[Dict[str, Any]]:
-        """m random scenes (or the named ones) as videos: the state carried along the scene, one picture per frame."""
+        """m random scenes (or the named ones) as videos, one picture per frame, in the suite's state (carried along the scene by default)."""
         view = view or self.s.task.default_video_view
         names = list(scenes) if scenes else Sampler(self.s.source, seed).scenes(m)
         need = self._need_taps([view], None)
         out = []
         for scene in names:
             frames = self.s.source.frames(scene)[: max_frames or None]
-            runner = Runner(self.s.source, self.s.subject, "carry")
+            runner = Runner(self.s.source, self.s.subject, self.s.state)
             imgs, rows = [], []
             for k, (sample, pred) in enumerate(runner.iter_scene(scene, frames, need)):
                 ctx = self.context(sample, pred)

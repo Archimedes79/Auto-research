@@ -610,7 +610,6 @@ class _MapSource(Source):
         return [FrameRef(scene, t) for t in range(4)]
 
     def load(self, ref):
-        rng = np.random.default_rng(10 * int(ref.scene[-1]) + ref.index)
         truth = np.zeros((16, 16), bool)
         truth[4 + ref.index:9 + ref.index, 3:9] = True
         return Sample(ref, inputs=truth, reference={"gt": truth, "valid": np.arange(16)[:, None] < 14 + 0 * truth})

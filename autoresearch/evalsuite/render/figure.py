@@ -83,6 +83,8 @@ def _panel(fig, ax, p: Panel) -> None:
         ax.axis("off")
     elif p.kind in ("raster", "rgb"):
         a = np.asarray(p.data)
+        if a.dtype == bool:                                      # a mask: percentile and colour limits need numbers
+            a = a.astype(np.float32)
         kw = dict(origin=p.origin, interpolation="nearest", aspect="equal" if p.equal else "auto")
         if p.extent is not None:
             kw["extent"] = p.extent
@@ -117,8 +119,11 @@ def _panel(fig, ax, p: Panel) -> None:
         ax.set_xlim(*(p.xlim if p.xlim is not None else view[0]))
         ax.set_ylim(*(p.ylim if p.ylim is not None else view[1]))
     ax.set_title(title, fontsize=8)
-    if p.note and p.kind in ("raster", "rgb", "image"):          # what to look for, under the picture
-        ax.set_xlabel(textwrap.fill(p.note, 60), fontsize=6, color="0.35")
+    if p.note:                                                   # what to look for, under the picture
+        if p.kind in ("image", "text", "table"):                 # their axes are off: an x label would not be drawn
+            ax.text(0.5, -0.02, textwrap.fill(p.note, 60), transform=ax.transAxes, ha="center", va="top", fontsize=6, color="0.35")
+        else:
+            ax.set_xlabel(textwrap.fill(p.note, 60), fontsize=6, color="0.35")
 
 
 def render_page(page: Page, path: Optional[str] = None, dpi: int = 90) -> np.ndarray:

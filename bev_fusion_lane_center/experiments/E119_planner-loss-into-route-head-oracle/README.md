@@ -8,7 +8,7 @@
 | theme | T7 - Planner interface, trust and the planner loss (loops 5 - 14) |
 | tag | D - dropped: tried, no gain or worse |
 | sparsification stage | SP7 sparse graph as planner interface (tokens, consumer) |
-| loop | loop14 - log: [../../experiment_execution/indexes/LOOP14_INDEX.md](../../experiment_execution/indexes/LOOP14_INDEX.md) |
+| loop | loop14 - log: [../../experiment_execution/history/indexes/LOOP14_INDEX.md](../../experiment_execution/history/indexes/LOOP14_INDEX.md) |
 
 ## Result
 

@@ -9,7 +9,7 @@
 | tag | D - dropped: tried, no gain or worse |
 | sparsification stage | SP7 sparse graph as planner interface (tokens, consumer) |
 | building blocks | BB12 cross-attention |
-| loop | loop15 - log: [../../experiment_execution/indexes/LOOP15_INDEX.md](../../experiment_execution/indexes/LOOP15_INDEX.md) |
+| loop | loop15 - log: [../../experiment_execution/history/indexes/LOOP15_INDEX.md](../../experiment_execution/history/indexes/LOOP15_INDEX.md) |
 
 ## Result
 

@@ -15,7 +15,8 @@
     quant pareto RUN [RUN ...] [--y metric.key] [--cost ms gmacs] [--force]   quality against runtime / operations, the runs not beaten on both
     selftest                                             the core against known answers on the toy adapter (no --adapter)
     selftest-adapter                                     the contract checker on --adapter
-`build(**kv)` of an adapter returns (Source, Subject, Task). RUN is a run name below <out>/quant or a run directory.
+`build(**kv)` of an adapter returns (Source, Subject, Task); a value is an int / float / true / false only when written as one, else a string ('0061' keeps one).
+RUN is a run name below <out>/quant or a run directory.
 """
 from __future__ import annotations
 
@@ -23,16 +24,23 @@ import argparse
 import importlib
 import json
 import os
+import re
 import sys
 from typing import Any, Dict
 
+_INT = re.compile(r"[+-]?(0|[1-9][0-9]*)")
+_FLOAT = re.compile(r"[+-]?([0-9]+\.[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?|[+-]?[0-9]+[eE][+-]?[0-9]+")
+
 
 def _auto(v: str) -> Any:
-    for cast in (int, float):
-        try:
-            return cast(v)
-        except ValueError:
-            pass
+    """the value of --arg K=V: an int or a float only when it is written as one (an id like 0061 or 2020_01_03, nan and inf stay
+    strings); true / false; quotes ('0061') keep a string whatever it looks like"""
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+        return v[1:-1]
+    if _INT.fullmatch(v):
+        return int(v)
+    if _FLOAT.fullmatch(v):
+        return float(v)
     return {"true": True, "false": False}.get(v.lower(), v)
 
 
@@ -176,6 +184,9 @@ def main(argv=None) -> int:
     if not a.adapter:
         raise SystemExit("--adapter module:function is required")
     from .suite import EvalSuite
+    bad = [x for x in a.arg if "=" not in x]
+    if bad:
+        raise SystemExit(f"--arg expects K=V, got {bad}")
     kv = {k: _auto(v) for k, v in (x.split("=", 1) for x in a.arg)}
     source, subject, task = load_adapter(a.adapter, kv)
     suite = EvalSuite(source, subject, task, out=a.out, state=a.state)
@@ -223,6 +234,8 @@ def main(argv=None) -> int:
                 frames = None
                 state = None
                 if a.spread:
+                    if a.n_scenes or a.max_frames:
+                        raise SystemExit("--spread chooses the frames itself: it cannot be combined with --n-scenes or --max-frames")
                     from .sampling import Sampler
                     frames = Sampler(source, a.seed).spread(a.spread, a.scenes)
                     state = "reset"

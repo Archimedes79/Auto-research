@@ -31,7 +31,6 @@ import torch  # noqa: E402
 
 from evalsuite import EvalSuite, FrameRef, Prediction, Sample, Source, Subject  # noqa: E402
 from evalsuite.render import figure  # noqa: E402
-from evalsuite.sampling import Sampler  # noqa: E402
 from evaluation import bev_legacy, bev_suite  # noqa: E402
 from evaluation.bev_task import BEVTask, BevDetMetric, BevSegMetric, MASKS, add_sample  # noqa: E402
 from evaluation.bev_views import gt_boxes  # noqa: E402
@@ -313,8 +312,7 @@ def _():
     assert same(sel[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"], got[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"]) and m.direction("dt+0.00/vehicle/all/ave_moving") == "low" \
         and m.direction("dt+0.00/vehicle/all/ave_skill_moving") == "high" and m.direction("dt+0.00/vehicle/all/ap@2") == "high"
     old = [{kk: v for kk, v in c.items() if not kk.endswith("|vel")} for c in counts]                  # a stored run from before the split
-    nan = float("nan")
-    pre = m.reduce(old)                                                       # no counts: the keys are left out of the full table, nan when asked for
+    pre = m.reduce(old)                                                      # no counts: the keys are left out of the full table, nan when asked for
     assert f"{dt_key(0.0)}/vehicle/all/ave_skill_moving" not in pre and same(pre[f"{dt_key(0.0)}/vehicle/all/ap@2"], got[f"{dt_key(0.0)}/vehicle/all/ap@2"])
     assert math.isnan(m.reduce(old, keys=[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"])[f"{dt_key(0.0)}/vehicle/all/ave_skill_moving"])
     assert f"{dt_key(0.0)}/vehicle/all/ave_moving" not in m.reduce(old[:10] + counts[10:]), "frames with and without the counts must not be mixed"

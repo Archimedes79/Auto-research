@@ -11,7 +11,7 @@ Note: a file `reports/source/weekly/week2_digest.md` (written earlier today by s
 | ST | `experiment_execution/STATE.md` (journal; loops 10-16b are lines 94-126; cited as ST l.NN) |
 | L17 | `experiment_execution/loop17_recovery/out__loop2__e17__LOOP17_STATE.md` (loop-17 ledger, internal ids E130-E144; cited as L17 l.NN; this file was RESTORED BY REPLAY after a rollback, see CLAUDE.md "rollback hazard") |
 | P17 | `experiment_execution/loop17_recovery/reports__Loop17_Plan_EN.md` (plan, written 2026-10-24 16:50) |
-| TRI | `experiment_execution/indexes/TRIAGE_STATE.md` (loop 16 / 16b decision log, cited by timestamp) |
+| TRI | `experiment_execution/history/indexes/TRIAGE_STATE_loop16.md` (loop 16 / 16b decision log, cited by timestamp) |
 | I11 .. I15 | `experiment_execution/history/indexes/LOOP11_INDEX.md` .. `LOOP15_INDEX.md` (there is NO LOOP10_INDEX; loop 10 is in ST l.94-96 and T10a/b) |
 | PROG | `experiment_execution/PROGRAM.md` (= `experiment_execution/history/prompts/Loop_Prompt_Next_EN.md`, identical text; next-loop prompt, states the E209 crash) |
 | T10a, T10b | `reports/source/text/04e_loop10.md` (sec. 7.16-7.20), `04e_loop10_b.md` (7.21-7.24) |

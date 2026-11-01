@@ -15,6 +15,7 @@ stored `state` column only counts for an item without a run record. Nothing writ
 import argparse
 import csv
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -64,12 +65,18 @@ def derived(rows, records=None):
     return out
 
 
+def _priority(r):
+    """the priority of a row as a number (1 = first); an empty or hand-written value ('high') comes last instead of stopping `next` and the tick"""
+    p = (r.get("priority") or "").strip()
+    return int(p) if re.fullmatch(r"[+-]?[0-9]+", p) else 9
+
+
 def ready(rows, resource=None):
     """ready items of derived rows, by priority"""
     done = {r["item"] for r in rows if r["state"] == "done"}
     out = [r for r in rows if r["state"] in ("planned", "ready") and all(d in done for d in (r.get("depends_on") or "").split(";") if d)
            and (resource is None or r.get("resource") == resource)]
-    return sorted(out, key=lambda r: (int(r.get("priority") or 9), rows.index(r)))
+    return sorted(out, key=lambda r: (_priority(r), rows.index(r)))
 
 
 def change(a):
@@ -78,6 +85,8 @@ def change(a):
     if a.cmd == "set":
         if a.state not in STATES:
             sys.exit(f"state must be one of {STATES}")
+        if not any(r["item"] == a.item for r in rows):
+            sys.exit(f"item {a.item} is not in the schedule (`add` creates it)")
         for r in rows:
             if r["item"] == a.item:
                 r["state"] = a.state
@@ -87,6 +96,8 @@ def change(a):
     else:
         if any(r["item"] == a.item for r in rows):
             sys.exit(f"item {a.item} exists already in the schedule (change its state with `set`)")
+        if a.priority and not re.fullmatch(r"[+-]?[0-9]+", a.priority):
+            sys.exit(f"--priority must be a whole number (1 = first), got {a.priority!r}")
         res = a.resource or {"train": "gpu", "evaluate": "cpu"}.get(a.kind, "agent")  # an empty resource follows the kind
         rows.append(dict(item=a.item, node=a.node, kind=a.kind, state="planned", depends_on=a.depends, resource=res, budget=a.budget,
                          priority=a.priority or "5", owner=a.owner, run_ids=a.runs or (a.item if a.kind == "train" else ""), note=a.note, command=a.command))

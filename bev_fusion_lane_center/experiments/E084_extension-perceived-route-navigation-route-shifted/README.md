@@ -8,7 +8,7 @@
 | theme | T4 - Perception-first graph with a learned assignment (reference system A) (loops 8 - 9) |
 | tag | C - classical / reference: classical method, simulator, analysis, protocol or literature review |
 | sparsification stage | SP0 not part of the sparsification chain (foundation, map, time, planner, analysis) |
-| loop | loop08 - log: [../../experiment_execution/indexes/LOOP8_INDEX.md](../../experiment_execution/indexes/LOOP8_INDEX.md) |
+| loop | loop08 - log: [../../experiment_execution/history/indexes/LOOP8_INDEX.md](../../experiment_execution/history/indexes/LOOP8_INDEX.md) |
 
 ## Result
 

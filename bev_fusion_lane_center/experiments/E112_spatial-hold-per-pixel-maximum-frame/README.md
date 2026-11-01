@@ -9,7 +9,7 @@
 | tag | E - E2E-usable: learned or parameter-free, differentiable (the trace network has discrete bookkeeping inside) |
 | sparsification stage | SP0 not part of the sparsification chain (foundation, map, time, planner, analysis) |
 | building blocks | BB10 memory bank / query propagation |
-| loop | loop12 - log: [../../experiment_execution/indexes/LOOP12_INDEX.md](../../experiment_execution/indexes/LOOP12_INDEX.md) |
+| loop | loop12 - log: [../../experiment_execution/history/indexes/LOOP12_INDEX.md](../../experiment_execution/history/indexes/LOOP12_INDEX.md) |
 
 ## Result
 

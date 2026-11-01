@@ -31,8 +31,10 @@ def main():
     for p in a.sources:
         pool.update(numbers(open(p, encoding="utf-8", errors="replace").read()))
     raw = open(a.doc, encoding="utf-8", errors="replace").read()
-    raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw, flags=re.S)
-    raw = html.unescape(re.sub(r"<[^>]+>", " ", raw))
+    if a.doc.lower().endswith((".html", ".htm")):     # markup is removed from a page only (a text "Q < 0.5 ... -> better" is no tag), line breaks stay: lines match the file
+        blank = lambda m: " " + "\n" * m.group(0).count("\n")  # noqa: E731
+        raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", blank, raw, flags=re.S)
+        raw = html.unescape(re.sub(r"<[^>]+>", blank, raw))
     # round-aware lookup by decimals: build rounded sets once
     by_dec = {}
     for tok in pool:

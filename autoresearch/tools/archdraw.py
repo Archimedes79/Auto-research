@@ -19,6 +19,7 @@ The spec (one per system, next to its code; a minimal example is in `--selftest`
 or a stated reason); the svg / md are generated, so a drawing cannot drift from its spec.
 """
 import argparse
+import ast
 import fnmatch
 import json
 import os
@@ -348,10 +349,38 @@ def file_map(spec):
 
 
 # ------------------------------------------------------------------------------------------------ check
+def _flat(body):
+    """the statements of a body, with those inside if / try / with / for / while / match blocks (a def under `if TYPE_CHECKING:` is still a def of
+    the module); the body of a def or a class is another scope and is not entered"""
+    for s in body:
+        yield s
+        if not isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            for field in ("body", "orelse", "finalbody"):
+                yield from _flat(getattr(s, field, None) or [])
+            for part in [h.body for h in getattr(s, "handlers", [])] + [c.body for c in getattr(s, "cases", [])]:
+                yield from _flat(part)
+
+
 def has_symbol(text, name):
-    for part in name.split("."):
-        if not re.search(rf"(?m)^\s*(?:async\s+)?(?:def|class)\s+{re.escape(part)}\b|^\s*{re.escape(part)}\s*(?::[^=\n]+)?=", text):
+    """does the code define `Class.method` / `name`: each part inside the body of the one before (A.forward is not B.forward). A file that the
+    running Python cannot parse (a syntax of a newer Python, a shell script) falls back to a text search that does not check the nesting."""
+    parts = name.split(".")
+    try:
+        body = ast.parse(text).body
+    except SyntaxError:                               # not Python: the names must appear, in this order
+        return all(re.search(rf"(?m)^\s*(?:async\s+)?(?:def|class)\s+{re.escape(p)}\b|^\s*{re.escape(p)}\s*(?::[^=\n]+)?=", text) for p in parts)
+    for part in parts:
+        found = None
+        for s in _flat(body):
+            if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and s.name == part:
+                found = s
+            elif isinstance(s, (ast.Assign, ast.AnnAssign)) and part in [t.id for t in (s.targets if isinstance(s, ast.Assign) else [s.target]) if isinstance(t, ast.Name)]:
+                found = found or s
+            if found is not None and isinstance(found, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                break
+        if found is None:
             return False
+        body = getattr(found, "body", [])
     return True
 
 
@@ -518,8 +547,12 @@ def selftest():
         errs = " | ".join(check(p)[1])
         for want in ("has no Missing", "nope.py does not exist", "c.py: in no box", "overlaps o"):
             assert want in errs, (want, errs)
+        src = "class A:\n    def x(self): pass\nclass B:\n    def forward(self): pass\n    n: int = 3\nif True:\n    def late(): pass\nfor i in range(2):\n    def looped(): pass\nDEFAULT = 1\n"
+        assert has_symbol(src, "B.forward") and has_symbol(src, "late") and has_symbol(src, "DEFAULT") and has_symbol(src, "B.n") and has_symbol(src, "looped")
+        assert not has_symbol(src, "A.forward") and not has_symbol(src, "B.x") and not has_symbol(src, "forward"), "a method belongs to its own class"
+        assert has_symbol("def f(:\n  pass", "f") and not has_symbol("def f(:\n  pass", "g")  # not Python (a syntax error, a shell script): the text search
     print("archdraw selftest ok: render (svg + md deterministic), main-path count, symbol / path / coverage / overlap / stale checks, "
-          "hand-written text around the file map kept, broken markers refused (never overwritten), step headers and spans, geometry per spec")
+          "hand-written text around the file map kept, broken markers refused (never overwritten), step headers and spans, geometry per spec, has_symbol nesting")
 
 
 def main():

@@ -7,7 +7,7 @@ Formerly `out/loop2`. What the live code reads and writes: checkpoints (`model.p
 | `e<id>_<tag>/` | one run of experiment E<id> (loops 2-15); `e94_a` control trace network, `e37_final` dense head, `e120_*` refinement, `e117`-`e121` loop 14-15 |
 | `e123/e123_<design>_r<rung>_<step>/` | ladder runs of loop 16 (model, `log.txt`, `status.json`); `e17_map_*` map-conditioned builders of loop 17 |
 | `prototype/<name>/` | output of `../tools/prototype/lane_prototype.py`: `scenes/<scene>.json` (planner format), `summary.json` / `.md`, optional video (rewritten by each call) |
-| `e123_ladder/` | loop 16 workspace: `cards/` (one json per finished run), `diag/`, `gate/`, `state.json`, `queue.json`, rung summaries (the human-readable `TRIAGE_STATE.md` moved to `../experiment_execution/indexes/`) |
+| `e123_ladder/` | loop 16 workspace: `cards/` (one json per finished run), `diag/`, `gate/`, `state.json`, `queue.json`, rung summaries (the human-readable `TRIAGE_STATE.md` moved to `../experiment_execution/history/indexes/`) |
 | `e18/` | loop 18 workspace (`p18_*` outputs, fork pruning, smoke runs) |
 | `e17/` | loop 17 workspace: `e130_champion` ... `e144_*` (internal names; catalogue ids E193-E212, see `../experiments/`), `results_master.json`, `results_extra.json`, `logs/`, `latency/`, `consumer/`, `tables/` |
 | `p16_*`, `p16chain_*`, `timing`, `diag_*` | loop 16b: route heads (`p16_<cfg>_route_s<seed>`), chain data and consumers, timing |

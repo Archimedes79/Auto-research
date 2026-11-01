@@ -64,11 +64,12 @@ prediction written before the run was right in 8 of 15 cases that carried one.
   qualitative rule ("if the maps move towards the SOA, the encoder is the cause"), not with a numeric card. Maps nearly doubled (lane divider 0.191 -> 0.351 / 0.345,
   walkway 0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165, drivable 0.716 -> 0.803 / 0.809) and the objects HALVED (front-sector mAP2 0.367 -> 0.183 / 0.180,
   pedestrians gone). The loop wrote that down as a result, not as a failure.
-- **The next hypothesis, built and run the same night** (both feature sets in one chain, `t10_dual`): maps kept (lane divider 0.335, walkway 0.340, drivable 0.806) and
-  vehicle + pedestrian detection kept (front mAP2 0.361 against 0.367, inside the 0.054 band and the 0.015 seed spread; pedestrian AP@2 0.199 against 0.210). Not kept: the
-  rare two-wheeler class (AP@2 0.121 -> 0.016; 174 GT boxes, a class whose AP@2 swung 0.196 / 0.047 between the two reference seeds), so the 3-class mAP falls 0.251 -> 0.221.
-  The prediction (written first) hit on four of five numbers; the fifth (pedestrian AP@2) came out better than predicted (0.199 against 0.15). Rule E1 held. ONE seed so far:
-  the seed twin `t10.dual_s1` is training, resumed once after an out-of-memory kill on a later code snapshot, so read it as a robustness check, not as a pure seed twin.
+- **The next hypothesis, built and run the same night** (both feature sets in one chain, `t10_dual`, two seeds): maps kept (lane divider 0.335 / 0.350, walkway 0.340 / 0.354,
+  crossing 0.154 / 0.173, drivable@0.5 0.806 / 0.807; the control: 0.191 / 0.180, 0.178 / 0.176, 0.002 / 0.000, 0.716 / 0.716) and vehicle + pedestrian detection kept (front mAP2
+  0.361 / 0.364 against the control's 0.367 / 0.368: -0.004 to -0.006, bootstrap intervals touching zero, inside the 0.015 seed spread; pedestrian AP@2 0.199 / 0.202 against
+  0.210 / 0.213). The rare two-wheeler class and the 3-class mAP are noisy and nothing is claimed about them (two-wheeler AP@2: control 0.121 / 0.051, dual 0.016 / 0.061;
+  3-class mAP 0.251 / 0.235 against 0.221 / 0.234). The prediction (written first) hit on four of five numbers; the fifth (pedestrian AP@2) came out better than predicted (0.199
+  against 0.15). Rule E1 held on both seeds. The seed twin was killed once by the out-of-memory killer and resumed on a later code snapshot; it agrees with the first seed.
 - **What it means**: a feature swap beat the start recipe trained with 4.7 x the optimiser steps (7000 x accumulation 2; a different config and a larger frame set) on all six
   map layers (map-trained features alone) and on five of six (dual chain). The saving is partly borrowed compute: the better features come from a map-trained network that
   somebody else trained.
@@ -78,6 +79,8 @@ prediction written before the run was right in 8 of 15 cases that carried one.
 | start (`t2_ref_s0`, 3000 steps) | 0.666 | 0.191 | 0.106 | 0.002 | 0.181 | 0.220 |
 | start, 4.7 x the training (`t1_r4_soa`, 7000 x 2 steps, 3109 frames) | 0.698 | 0.244 | 0.162 | 0.093 | 0.274 | 0.322 |
 | both feature sets (`t10_dual_s0`, 3000 steps) | 0.756 | 0.340 | 0.144 | 0.154 | 0.335 | 0.442 |
+| both feature sets, seed twin (`t10_dual_s1`, 3000 steps) | 0.757 | 0.354 | 0.139 | 0.173 | 0.350 | 0.442 |
+| same-code control, two seeds (`t8_ctl_s0` / `s1`, 3000 steps) | 0.668 / 0.668 | 0.178 / 0.176 | 0.115 / 0.106 | 0.002 / 0.000 | 0.191 / 0.180 | 0.224 / 0.227 |
 
 **What is borrowed and what is ours** (said openly, because the first objection is "the wins are other people's models"):
 - Borrowed from published work: the foundation features of the lane project (GaussianCaR camera + radar BEV features: +0.24 lane F1, the largest single effect of that
@@ -194,7 +197,8 @@ on maps".
    first steps; the cache that builds your GT can silently change between runs; a seed twin is worth a ledger row. Each lesson has its number and its file.
 
 **Boundaries, stated up front.** The data (nuScenes) and the weights used (GaussianCaR, DualBEV, BEVFusion) are non-commercial; the lane project uses a simulated SD map and exact
-poses; the BEV system sees one front camera; the key claims rest on single seeds so far; everything ran on one machine under one lead chat. It is a private research project on
+poses; the BEV system sees one front camera; the BEV claims now have two seeds (control and dual chain), while the like-for-like maps, the lane results and the 7000 x 2 reference rest on one; everything ran on one machine under
+one lead chat. It is a private research project on
 public data. A company pilot needs its own clearance of IP, company time, data governance and the external agent tool (an LLM service reads the code), before any of this is used there.
 
 ## 7 The hardest questions
@@ -208,8 +212,9 @@ public data. A company pilot needs its own clearance of IP, company time, data g
    downloads), reads the ledger. The agent does the coding, the running and the first reading.
 4. **"Why not an existing tool (MLflow, W&B, Optuna)?"** Those track runs and tune knobs. This also writes the hypothesis and the decision rule before the run, runs the controls,
    and diagnoses causes. It could sit on top of them; it was not benchmarked against them.
-5. **"Could this be luck?"** A same-code control exists for the t8 and t10 claims; the seed twin of the dual chain is still training; every BEV selection used the same 82 val
-   scenes (a confirm run on the other 68 is lever 6); the lane TEST has 21 scenes and no intervals.
+5. **"Could this be luck?"** The t8 and t10 claims have a same-code control with two seeds and the dual chain has two seeds; the maps replicate within 0.02 across the seeds. The
+   dual seed twin ran on a later code snapshot and was resumed once. Every BEV selection used the same 82 val scenes (a confirm run on the other 68 is lever 6); the lane TEST
+   has 21 scenes and no intervals; the like-for-like maps and the 7000 x 2 reference are single runs.
 6. **"Is it state of the art?"** Not on a public benchmark. Like for like: equal to the SOA camera detector (a port we wrote), +0.11 - 0.15 with radar; maps at 22 - 89 % of the
    SOA by layer (indicative); lane graph: no comparable number yet.
 7. **"What does it cost?"** Known: one RTX 3060, 29.6 job-hours under the launcher since loop 18 (BEV trainings before D23 unmetered), 30 decision entries, 1 - 4 hours from card to
@@ -245,8 +250,9 @@ boundaries and the path with its stop rule (5, 6). 9. The ask (8).
 
 ## 10 Open points before the meeting
 
-- PENDING: like-for-like maps (CPU re-score of three models, queued behind the trainings: the box ran out of memory while two trainings ran), seed twin `t10.dual_s1` (training,
-  resumed once), second control seed `t8_ctl_s1` (evaluation queued), the lane prototype of the overnight round, lever 1 (the 6000-step dual run, not queued).
+- PENDING: like-for-like maps (a 400-frame re-score needs about 8 GB of host memory and cannot run next to a training on this box; a GPU variant, a few minutes per model, is
+  prepared for the quiet window after tonight's round), the lane prototype of the overnight round, lever 1 (the 6000-step dual run: card, config and start line are ready; the queue owner judged that it does not fit before tonight's
+  planned shutdown, so it is the next GPU item and needs Mirko's go).
 - Decisions that wait for Mirko: D4, D17, D18, D19, D25, D29, D30, D31; permission for the two downloads (section 8, item 6).
 
 ## 11 Sources
@@ -268,3 +274,6 @@ change" (a reviewed judge; the hook protects truth files, not the evaluator); "n
 weeks" (dead in 24 of 29 classified runs; three live runs; BatchNorm not queued; the linear read-out prediction failed); "same quality / 24 ms" (equal Q, lanes found lower; cached
 foundation features); "TEST once" (loops 16 and 18; the control's numbers are from loop 16); "no number typed" (reviews still found errors); "4.1 GB free" (now 36 GB); "six-page write-up"
 (not written). Added: what is borrowed, cost known and unknown, boundaries, the end-to-end gaps of the lane graph, speed, the compute reality with a stop rule, a confirm run, the pilot design.
+After the two-seed evaluation of 03:15 two statements of this file's own were corrected in the other direction: a gain of "pedestrian segmentation 0.000 -> 0.091" was seed noise (the control's
+second seed scores 0.090 too) and was dropped; the "two-wheeler / 3-class mAP loss" of the dual chain lies inside the control's own seed spread (two-wheeler AP@2 0.121 / 0.051 for the control,
+0.016 / 0.061 for the dual chain; 3-class mAP 0.251 / 0.235 against 0.221 / 0.234).

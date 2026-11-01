@@ -35,5 +35,8 @@ Remove-Item -Recurse -Force D:\Auto-research\lane_archive_2026-11-01
 ```
 That frees 19.4 GB on D:. Nothing on C: depends on it.
 
+## Status
+Kept set accepted by Mirko in chat on 2026-11-01 ("Accept, I delete"); the deletion of the D: archive is Mirko's step and had not been run when this was written. The second wave of the WSL purge (13.25 GB, explicit list) is prepared in `tools/maintenance/wsl_second_wave_2026-11-01.sh`.
+
 ## Condensed record
 `reports/source/Condensed_Record_2026-11-01.md`: the key experiments (K1 - K26) with their numbers, what was dropped, sources.

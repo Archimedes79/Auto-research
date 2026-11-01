@@ -23,7 +23,7 @@ import numpy as np
 from ..comparison.maps import confusion, scores
 from ..contracts import (Flag, FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, TapSpec, Task, View,
                          ViewContext)
-from ..render.figure import ERROR_LEGEND, TP_COLOR, error_counts, error_rgb
+from ..render.figure import ERROR_LEGEND, error_counts, error_rgb
 
 SIZE = 48
 PLANTED = {("toy-03", 5): "noise burst", ("toy-03", 6): "noise burst", ("toy-07", 2): "hole"}

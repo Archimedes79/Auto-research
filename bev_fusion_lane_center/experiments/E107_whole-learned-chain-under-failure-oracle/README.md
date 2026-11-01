@@ -8,7 +8,7 @@
 | theme | T6 - Time and sensor failure (loops 5 - 13) |
 | tag | P - with a classical step: learned, but needs a rule or geometric stage next to it |
 | sparsification stage | SP0 not part of the sparsification chain (foundation, map, time, planner, analysis) |
-| loop | loop11 - log: [../../experiment_execution/indexes/LOOP11_INDEX.md](../../experiment_execution/indexes/LOOP11_INDEX.md) |
+| loop | loop11 - log: [../../experiment_execution/history/indexes/LOOP11_INDEX.md](../../experiment_execution/history/indexes/LOOP11_INDEX.md) |
 
 ## Result
 
