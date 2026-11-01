@@ -114,6 +114,15 @@ def stored_timing(e, temporal):
     return dict(ms=None, note=f"not measured for this configuration ({', '.join(other)}); nearest: the plain configuration (M / K0 only), {ms}", nearest=out)
 
 
+def session_tag(stem, name, name2):
+    """the session label of a latency file name (the --tag without its replicate suffix _r<k>): the settings prefix is cut, and since 2026-11-01 the builder names
+    (`__<name>[__<name2>]` behind the settings, the form p18_latency.result_file writes) are cut too; files written before have no names and parse as before"""
+    for n in (name, name2):
+        if n:
+            stem = stem.replace(f"__{n}", "", 1)
+    return re.sub(r"_r\d+$", "", re.sub(r"^latency_M\d+_rec\d_u\d_fp[\d.]+(_ens2)?_?", "", stem))
+
+
 def _timing(runs, M, asm, temporal):
     """the stored timing of the builder runs (one, or two joined by --name2) at M and the assembly settings asm (see stored_timing)"""
     if len(runs) > 2:
@@ -121,7 +130,7 @@ def _timing(runs, M, asm, temporal):
     rows = []
     for f in glob.glob(f"{EV.R}/runs/e18/latency/latency_*.json"):
         d = json.load(open(f))
-        tag = re.sub(r"_r\d+$", "", re.sub(r"^latency_M\d+_rec\d_u\d_fp[\d.]+(_ens2)?_?", "", os.path.basename(f)[:-5]))
+        tag = session_tag(os.path.basename(f)[:-5], d.get("name"), d.get("name2"))
         rows.append(dict(file=os.path.relpath(f, EV.R), mtime=os.path.getmtime(f), tag=tag, name=d.get("name"), name2=d.get("name2") or "", M=d.get("M"), rec=int(d.get("rec", 0)),
                          union=d.get("union"), fp=float(d.get("fork_prune", 0.0)), ms=d["total"]["median_ms"], lane_ms=d["builder"]["median_ms"] + d["assembly"]["median_ms"]))
     want2 = runs[1] if len(runs) == 2 else ""

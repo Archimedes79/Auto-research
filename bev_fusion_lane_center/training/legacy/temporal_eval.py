@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import assoc_lib as AL  # noqa: E402
 import dense_head as DH  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
+from p13_temporal_val import make_grid, warp  # noqa: E402  (the copies of these two functions were identical)
 import route_head3 as RH3  # noqa: E402
 import sd_lib as SL  # noqa: E402
 
@@ -73,29 +74,6 @@ def infer_rows(net, mean, std, feat, rows, P, SDm, sigma, maps_mode, workers=3, 
         for k, i in enumerate(b["idx"].tolist()):
             out[i] = (L0[k], L[k], R[k], float(ag[k]))
     return out
-
-
-_XS = None
-
-
-def make_grid(Rp, tp, Rc, tc):
-    """sampling grid: target pixel of the current frame -> source position in the previous frame (p_prev = Rp^T (Rc p_cur + tc - tp))."""
-    global _XS
-    if _XS is None:
-        xs = (torch.arange(200, device=DEV, dtype=torch.float64) + 0.5) * 0.5 - 50.0
-        _XS = torch.stack(torch.meshgrid(xs, xs, indexing="ij"), -1).reshape(-1, 2)
-    f = lambda a: torch.as_tensor(np.asarray(a, np.float64), device=DEV)
-    pw = _XS @ f(Rc).T + f(tc)
-    pp = ((pw - f(tp)) @ f(Rp)).reshape(200, 200, 2).float()
-    return torch.stack([pp[..., 1] / 50.0, pp[..., 0] / 50.0], -1)[None]
-
-
-def warp(M, grid):
-    """M [C,200,200] -> (warped [C,200,200], valid [200,200] bool)"""
-    m = M[None].float()
-    w = F.grid_sample(m, grid, mode="bilinear", padding_mode="zeros", align_corners=False)
-    v = F.grid_sample(torch.ones_like(m[:, :1]), grid, mode="bilinear", padding_mode="zeros", align_corners=False)[0, 0] > 0.99
-    return w[0], v
 
 
 def logit(p):

@@ -86,6 +86,13 @@ def route_input(r, g_aux, g, h_static, step, keep):
     return TR.resample_item(it, step)
 
 
+def result_file(a):
+    """result json of one timing run. Since 2026-11-01 --name (and --name2) are part of the file name, so two builders timed with the same M / rec / union / fork_prune / tag no longer overwrite each other;
+    the files written before have no name in it (tools/prototype/lane_prototype.py session_tag reads both forms)"""
+    names = f"__{a.name}" + (f"__{a.name2}" if a.name2 else "")
+    return f"{BP.ROOT}/runs/e18/latency/latency_M{a.M}_rec{a.rec}_u{a.union}_fp{a.fork_prune}{'_ens2' if a.name2 else ''}{names}{a.tag}.json"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default="e123_D7_r3_f1")
@@ -199,7 +206,7 @@ def main():
     print(json.dumps(res, indent=1))
     res["union"], res["fork_prune"] = a.union, a.fork_prune
     os.makedirs(BP.ROOT + "/runs/e18/latency", exist_ok=True)
-    json.dump(res, open(f"{BP.ROOT}/runs/e18/latency/latency_M{a.M}_rec{a.rec}_u{a.union}_fp{a.fork_prune}{'_ens2' if a.name2 else ''}{a.tag}.json", "w"), indent=1)
+    json.dump(res, open(result_file(a), "w"), indent=1)
 
 
 if __name__ == "__main__":

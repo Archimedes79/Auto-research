@@ -5,10 +5,15 @@
 2. two VAL scenes (23 Boston, 7 Singapore One-North): the graph written to JSON equals the graph that evaluate.graphs_of scores at the registry settings
    (points within 1e-5 m, edges, vertex ids), and summary.json's numbers equal card_any on evaluate's graphs of those frames and on the graphs read back from the JSON
 3. the whole VAL split: summary.json reproduces the stored card runs/eval/<name>/val.json (layer 1)
+4. latency file names (F1): two builders timed with the same settings and tag get different files (p18_latency.result_file); the session label read by
+   lane_prototype.session_tag is the same for the old form (no builder name) and the new one, and for every stored file equals the label of the old regex
 """
 import lane_prototype as LP  # first: it sets the thread limits before numpy loads
+import argparse  # noqa: E402
 import glob  # noqa: E402
 import json  # noqa: E402
+import os  # noqa: E402
+import re  # noqa: E402
 import shutil  # noqa: E402
 import tempfile  # noqa: E402
 
@@ -16,6 +21,7 @@ import numpy as np  # noqa: E402
 
 import evaluate as EV  # noqa: E402
 import make_results_video as RV  # noqa: E402
+import p18_latency as LT  # noqa: E402
 import sparse_metrics as SM  # noqa: E402
 
 NAME, SCENES = "recall_dp", ["23", "7"]
@@ -34,7 +40,25 @@ def backward_left_share(gts, ix):
     return float(np.mean(side)), len(side)
 
 
+def check_latency_names():
+    """spec of the latency file names (F1): the builder name is in the new file name and the session label does not change"""
+    mk = lambda name, name2="": argparse.Namespace(name=name, name2=name2, M=192, rec=0, union=2, fork_prune=0.3, tag="_e999_x_r1")
+    fa, fb = (os.path.basename(LT.result_file(mk(n))) for n in ("run_a", "run_b"))
+    assert fa != fb and fa == "latency_M192_rec0_u2_fp0.3__run_a_e999_x_r1.json", (fa, fb)
+    fe = os.path.basename(LT.result_file(mk("run_a", "run_b")))
+    assert fe == "latency_M192_rec0_u2_fp0.3_ens2__run_a__run_b_e999_x_r1.json", fe
+    for stem, n, n2 in ((fa[:-5], "run_a", ""), (fe[:-5], "run_a", "run_b"), ("latency_M192_rec0_u2_fp0.3_e999_x_r1", "run_a", "")):  # new form, new ensemble form, old form
+        assert LP.session_tag(stem, n, n2) == "e999_x", stem
+    old = lambda stem: re.sub(r"_r\d+$", "", re.sub(r"^latency_M\d+_rec\d_u\d_fp[\d.]+(_ens2)?_?", "", stem))
+    files = glob.glob(f"{EV.R}/runs/e18/latency/latency_*.json")
+    for f in files:
+        d, stem = json.load(open(f)), os.path.basename(f)[:-5]
+        assert LP.session_tag(stem, d.get("name"), d.get("name2")) == old(stem), f"session label of the stored file {stem} changed"
+    print(f"ok  latency file names: builder name in the new files, session label unchanged for {len(files)} stored files")
+
+
 def main():
+    check_latency_names()
     reg = EV.registry()
     ref, gts, _ = EV.graphs_of(NAME, reg[NAME], "val", require_cache=True)
     ft = RV.frame_table("val")

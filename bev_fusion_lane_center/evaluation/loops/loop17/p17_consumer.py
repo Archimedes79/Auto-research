@@ -20,8 +20,8 @@ import p16_data as PD  # noqa: E402
 import p16_infer as PI  # noqa: E402
 import p16_time as PTM  # noqa: E402
 import p17_eval as EV  # noqa: E402
-import p17_joint as PJ  # noqa: E402
 import p8_lib as L  # noqa: E402
+import route_data as RD  # noqa: E402
 
 DEV = "cuda"
 E17 = EV.E17
@@ -64,7 +64,7 @@ def items_of(net, cfg, ds, idx, asm, tau):
         if not len(ax["V"]):
             items.append(dict(row=row, k=len(items), xy=np.zeros((1, 2), np.float32), tok=np.zeros((1, 128), np.float16), has=np.zeros(1, bool), cp=np.zeros((1, 7, 2), np.float32), pieces=[], edges=[], keep=np.zeros(1, np.float32)))
             continue
-        it0, it1, M, src, has = PJ.route_item(r, ax, g)
+        it0, it1, M, src, has = RD.route_item(r, ax, g)
         h = res["h"][0].float().cpu().numpy()
         tok_old = np.zeros((len(it0["xy"]), 128), np.float32)
         if has.any():

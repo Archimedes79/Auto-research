@@ -18,59 +18,13 @@ import p13_jhead as JH  # noqa: E402
 import p13_phead as PH  # noqa: E402
 import p8_lib as L  # noqa: E402
 import sd_lib as SL  # noqa: E402
+from p16_chain_data import edge_tokens, ego_of, targets  # noqa: E402,F401  (module-level functions that were identical copies and use only NT / SG, equal in both files)
 
 HOME = os.path.expanduser("~")
 NT = 320
 SG = np.arange(5, 41, 5)
 NMAXV = 320
 CELLS_TEST = {"exact": ("n", 0.0), "s2": ("n", 2.0), "wrong": ("w", 2.0), "none": ("0", 0.0)}
-
-
-def edge_tokens(it):
-    """edges of the pieces (start / end vertex ids), the piece id and the geometry; truncated to the NT edges nearest to the ego"""
-    ia, ib, pid = [], [], []
-    for k, path in enumerate(it["pieces"]):
-        for a, b in zip(path[:-1], path[1:]):
-            ia.append(int(a))
-            ib.append(int(b))
-            pid.append(k)
-    ia, ib, pid = np.array(ia, int), np.array(ib, int), np.array(pid, int)
-    xy = it["xy"].astype(np.float32)
-    if len(ia) > NT:
-        pm = 0.5 * (xy[ia] + xy[ib])
-        keep = np.sort(np.argsort(np.linalg.norm(pm, axis=1))[:NT])
-        ia, ib, pid = ia[keep], ib[keep], pid[keep]
-    return ia, ib, pid
-
-
-def ego_of(P, r):
-    prev = int(P["prev"][r])
-    if prev < 0:
-        return np.zeros(4, np.float32)
-    dt = max(float(P["dt"][r]), 0.2)
-    v = P["R"][r].T @ (P["t"][r] - P["t"][prev]) / dt
-    Rrel = P["R"][prev].T @ P["R"][r]
-    yaw = float(np.arctan2(Rrel[1, 0], Rrel[0, 0])) / dt
-    return np.array([v[0] / 10, v[1] / 10, yaw * 5, 1.0], np.float32)
-
-
-def targets(rt):
-    y = np.zeros((len(SG), 2), np.float32)
-    v = np.zeros(len(SG), bool)
-    curved = False
-    if rt is None:
-        return y, v, curved
-    p = np.asarray(rt["path"], np.float64)
-    seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
-    cs = np.concatenate([[0.0], np.cumsum(seg)])
-    for j, sg in enumerate(SG):
-        if cs[-1] >= sg:
-            y[j] = [np.interp(sg, cs, p[:, 0]), np.interp(sg, cs, p[:, 1])]
-            v[j] = True
-    if v[5]:
-        ang = np.degrees(np.arctan2(y[5][0] - y[0][0], y[5][1] - y[0][1]))
-        curved = abs(ang) > 12.0
-    return y, v, bool(curved)
 
 
 def verifier_probs(items, dev):

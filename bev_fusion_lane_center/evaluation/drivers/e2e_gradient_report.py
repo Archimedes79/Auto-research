@@ -117,8 +117,8 @@ def run_route(run_name, n, route_name="p16_f2hr_route_s0", seed=0):
     import p16_infer as PI
     import p16_loss as PL
     import p17_eval as EV
-    import p18_joint as PJ
     import p8_lib as L
+    import route_data as RD
     import torch.nn.functional as F
 
     torch.manual_seed(seed)
@@ -152,7 +152,7 @@ def run_route(run_name, n, route_name="p16_f2hr_route_s0", seed=0):
         g, ax = PI.assemble(r, None, 0.7, cfg, aux=True, **asm)
         if not len(ax["V"]):
             continue
-        it0, it1, M, src, has = PJ.route_item(r, ax, g)
+        it0, it1, M, src, has = RD.route_item(r, ax, g)
         h = res["h"][i].float()
         tok_old = torch.zeros(len(it0["xy"]), 128)
         if has.any():

@@ -19,7 +19,8 @@ run "evaluate.py parts: route success, failure series, timing (stored inputs, CP
 run "lane task of the evaluation suite (moved from autoresearch, D24)" test_lane_task.py
 run "evaluate.py reproduces the golden numbers (cached, all registry names)" evaluate.py --golden check --cached-only
 run "builder spec tests (18)"               test_p16_spec.py
-run "output stage simplify_dp (9)"          test_dp_simplify.py
+run "output stage simplify_dp (10)"         test_dp_simplify.py
+run "route data: one copy of resample_matrix / route_item" test_route_data.py
 run "seed ring (E266) + output union (E264)" test_seed_ring_union.py
 run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
 run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py

@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import p16_common as C  # noqa: E402
 import p16_data as PD  # noqa: E402
 import p16_loss as PL  # noqa: E402
+from sparse_metrics import _dp_keep as _dp_keep_np  # noqa: E402  (evaluation/sparse_lanes, already imported by p16_common)
 
 TAUS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
@@ -484,26 +485,9 @@ def anchor_junctions_fast(V, E, jmap, thr=0.3, r_edge=3.0, r_free=8.0, ang_hi=10
 
 
 def _dp_keep(q, eps):
-    """indices kept by Douglas-Peucker (iterative) on the polyline q [n,2] with tolerance eps (m); the ends are always kept.
-    Same rule as evaluation/sparse_lanes/sparse_metrics._dp_keep (the oracle count vert100_dp); keep the two equal."""
-    n = len(q)
-    if n <= 2:
-        return list(range(n))
-    keep = np.zeros(n, bool)
-    keep[0] = keep[-1] = True
-    stack = [(0, n - 1)]
-    while stack:
-        a, b = stack.pop()
-        if b <= a + 1:
-            continue
-        ab = q[b] - q[a]
-        s = np.clip(((q[a + 1:b] - q[a]) @ ab) / max(float(ab @ ab), 1e-12), 0.0, 1.0)
-        d = np.linalg.norm(q[a + 1:b] - (q[a] + s[:, None] * ab), axis=1)
-        k = int(np.argmax(d))
-        if d[k] > eps:
-            keep[a + 1 + k] = True
-            stack += [(a, a + 1 + k), (a + 1 + k, b)]
-    return [int(i) for i in np.nonzero(keep)[0]]
+    """indices (python ints) kept by Douglas-Peucker on the polyline q [n,2] with tolerance eps (m); the ends are always kept.
+    The rule is evaluation/sparse_lanes/sparse_metrics._dp_keep (the oracle count vert100_dp), one copy."""
+    return [int(i) for i in _dp_keep_np(q, eps)]
 
 
 def simplify_dp(g, eps):

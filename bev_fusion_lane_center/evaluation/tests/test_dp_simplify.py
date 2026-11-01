@@ -86,14 +86,26 @@ def test_D7_a_forked_graph_from_graph_from_vertices_keeps_edges_ends_and_shared_
 
     V = np.array([[0, 0], [10, 0], [20, 0], [30, 0], [40, 0], [30, 6], [40, 12.0]])
     E = [(0, 1), (1, 2), (2, 3), (3, 4), (2, 5), (5, 6)]  # a fork at vertex 2
-    g = C.graph_from_vertices(V, E)
-    s = PI.simplify_dp(g, 0.2)
-    assert s["edges"] == list(g["edges"]) and len(s["pts"]) == len(g["pts"])
-    shared = {i for i in {i for nd in g["nodes"] for i in nd} if sum(i in nd for nd in g["nodes"]) > 1}
-    kept = {i for nd in s["nodes"] for i in nd}
-    assert shared <= kept
-    for old, new in zip(g["nodes"], s["nodes"]):
-        assert new[0] == old[0] and new[-1] == old[-1]
+    for legacy_cut in (True, False):  # True = the cut of the product path (p16_infer.assemble), False = the fixed cut of graph_from_vertices
+        g = C.graph_from_vertices(V, E, legacy_cut=legacy_cut)
+        s = PI.simplify_dp(g, 0.2)
+        assert s["edges"] == list(g["edges"]) and len(s["pts"]) == len(g["pts"]), f"legacy_cut={legacy_cut}"
+        shared = {i for i in {i for nd in g["nodes"] for i in nd} if sum(i in nd for nd in g["nodes"]) > 1}
+        kept = {i for nd in s["nodes"] for i in nd}
+        assert shared <= kept, f"legacy_cut={legacy_cut}"
+        for old, new in zip(g["nodes"], s["nodes"]):
+            assert new[0] == old[0] and new[-1] == old[-1], f"legacy_cut={legacy_cut}"
+
+
+def test_D7b_the_output_stage_uses_the_one_douglas_peucker_of_the_metric():
+    """p16_infer._dp_keep is a wrapper of sparse_metrics._dp_keep that returns python ints (the node ids of simplify_dp must not become numpy ints)"""
+    import sparse_metrics as SM
+    rng = np.random.RandomState(0)
+    for n in (0, 1, 2, 3, 8, 40):
+        for eps in (0.0, 0.2, 1.0):
+            q = np.cumsum(rng.normal(size=(n, 2)), 0)
+            got, ref = PI._dp_keep(q, eps), SM._dp_keep(q, eps)
+            assert got == [int(i) for i in ref] and all(type(i) is int for i in got), (n, eps, got, ref)
 
 
 def test_D8_assemble_refuses_dp_with_aux_and_negative_eps_before_any_work():
