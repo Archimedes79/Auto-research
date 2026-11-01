@@ -1,4 +1,4 @@
-"""Command line of the training suite: python -m trainsuite <status|health|curves|stop|resume|watch|selftest> ... (run from autoresearch/)."""
+"""Command line of the training suite: python -m trainsuite <status|health|curves|stop|resume|watch|early|selftest> ... (run from autoresearch/)."""
 import argparse
 import json
 import os
@@ -89,6 +89,23 @@ def cmd_status(a):
     return 0
 
 
+def events_of(run, n=5):
+    """the last n events that `watch` wrote for this run (trainsuite_events.jsonl; a damaged line is skipped)"""
+    out = []
+    try:
+        with open(run.p("trainsuite_events.jsonl"), encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(e, dict):
+                    out.append(e)
+    except OSError:
+        return []
+    return out[-n:]
+
+
 def cmd_detail(run, row):
     s, findings, kills = row
     print()
@@ -101,6 +118,12 @@ def cmd_detail(run, row):
             f"{k[4:]} {v:.4g}" for k, v in run.evals[-1].items() if k.startswith("val.") and "last" not in k)))
     if run.restarts:
         print(f"  the stream was resumed {run.restarts} time(s); the later attempt of each step is used")
+    ev = events_of(run, 5)
+    if ev:
+        print("  last events of `watch` (trainsuite_events.jsonl):")
+        for e in ev:
+            t_ = e.get("t") if isinstance(e.get("t"), (int, float)) else 0
+            print(f"    [{time.strftime('%m-%d %H:%M:%S', time.localtime(t_))}] {e.get('kind', 'info')}: {e.get('text', '')}")
     if not run.timed() and run.train:
         print("  rows have no time `t` (trainer older than 2026-10-31): speed is the trainer's average, no slowdown check")
     return 0
@@ -145,6 +168,54 @@ def cmd_resume(a):
     moved = control.clear_stale(run.dir)
     print(f"{run.name}: " + (f"moved {', '.join(moved)} aside (*.old)" if moved else "no CONTROL / STOPPED to clear")
           + "; start the trainer again with the same command: it resumes from the last checkpoint")
+    return 0
+
+
+def cmd_early(a):
+    """advice only (exit 0; 2 for a usage error, also a missing direction or band, or a calibration that cannot be used): `early <run> --vs <control>`
+    or `early --calibrate [root]`, see early.py"""
+    try:
+        return _early(a)
+    except (ValueError, OSError) as e:
+        print(f"early: {e}", file=sys.stderr)
+        return 2
+
+
+def _early(a):
+    from . import early
+    if a.calibrate is not None:
+        explicit = []
+        for x in a.pair:
+            v, c = split_ref(x)
+            if not c:
+                print("usage: --pair variant:control", file=sys.stderr)
+                return 2
+            explicit.append((v, c))
+        if a.band is None:
+            raise ValueError("--band is required: the seed noise in the units of the key (a loss is not on the 0..1 scale of the lane S)")
+        pairs = early.find_pairs(a.calibrate or a.root, a.loss, explicit, a.group)
+        cal = early.calibrate(pairs, a.key, a.lower, a.better, band=a.band)
+        print(early.describe(cal))
+        if a.out:
+            with open(a.out, "w", encoding="utf-8") as f:
+                json.dump(cal, f, indent=1)
+            print(f"written: {a.out}")
+        return 0
+    if len(a.runs) != 1 or not a.vs:
+        print("usage: early <run> --vs <control run> [--key K] [--at F]   |   early --calibrate [runs root]", file=sys.stderr)
+        return 2
+    cal = None
+    if a.calib:
+        with open(a.calib, encoding="utf-8") as f:
+            cal = json.load(f)
+    var, ctl = open_run(a.runs[0], a.root, a.loss), open_run(a.vs, a.root, a.loss)
+    key = (a.key or ["val.total"])[0]
+    better = early.direction(key, a.better, a.lower)
+    text, info = early.advise(var, ctl, key, a.at, better, a.band, cal, a.min_rows, a.min_agree)
+    print(f"{var.name} vs {ctl.name}: {text}")
+    if a.as_rule:
+        line = early.as_rule(ctl, info)
+        print(line if line else f"# no rule: only the verdict 'consider stopping' gives one (this one: {info['verdict']})")
     return 0
 
 
@@ -257,6 +328,23 @@ def main(argv=None):
     p.add_argument("--once", action="store_true")
     p.add_argument("--give-up", type=float, default=180.0, help="minutes to wait for a run that has not started / restarted (default 180)")
     p.add_argument("--honour-wait", type=float, default=300.0, help="seconds to wait for a requested stop before writing it once more (default 300)")
+    p = sub.add_parser("early", help="advice from learning curves: gap to a control run vs how well that gap predicted the final one (never stops anything)")
+    p.add_argument("runs", nargs="*", help="the run to judge")
+    p.add_argument("--vs", help="the control run")
+    p.add_argument("--calibrate", nargs="?", const="", metavar="ROOT", help="calibrate on the finished pairs of a runs root (default: --root)")
+    p.add_argument("--calib", help="calibration file written by --calibrate --out")
+    p.add_argument("--out", help="write the calibration here (json)")
+    p.add_argument("--key", action="append", help="metric, e.g. val.total (repeatable for --calibrate; default: every val.* key / val.total)")
+    p.add_argument("--better", choices=("higher", "lower"), help="direction of the metric: REQUIRED unless the key is named by --lower (no default: the bev_fusion val.* are losses, a score is higher)")
+    p.add_argument("--lower", action="append", default=[], help="a key that is lower-is-better (repeatable; overrides --better for that key)")
+    p.add_argument("--band", type=float, help="seed-noise band in the key's units: REQUIRED for --calibrate and without --calib (with --calib it is the calibration's band; a different value is refused)")
+    p.add_argument("--at", type=float, help="fraction of the steps to compare at (default: as far as the run has got)")
+    p.add_argument("--min-rows", type=int, default=3, help="rows of the key needed before a gap is judged (default 3)")
+    p.add_argument("--min-agree", type=float, default=0.8, help="95 %% lower bound of the sign agreement needed for 'consider stopping' (default 0.8; also 15 pairs from 8 runs)")
+    p.add_argument("--as-rule", action="store_true", help="also print a kill.txt line for review (never written)")
+    p.add_argument("--pair", action="append", default=[], help="--calibrate: variant:control pair (repeatable; default: every two finished runs with the same name prefix)")
+    p.add_argument("--group", choices=("prefix", "all"), default="prefix", help="--calibrate automatic pairing: same name prefix before the first _ (default) or all")
+    p.set_defaults(fn=cmd_early)
     sub.add_parser("selftest", help="check the suite on synthetic runs").set_defaults(fn=None)
     a = ap.parse_args(argv)
     if a.cmd == "selftest":

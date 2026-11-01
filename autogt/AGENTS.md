@@ -68,7 +68,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `flow_weight` | (nx, ny) | 1 = velocity known, 0 = unknown (ignored boxes, unknown velocity): the supervision mask |
 | `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s |
 | `camera` | (nx, ny) | ground cells that project into the CAM_FRONT image |
-| `occluded` | (nx, ny) | cells behind a box as seen from the camera (2D test) |
+| `occluded` | (nx, ny) | ground cells a box hides from the camera, by the box's real height (v7: no longer an infinitely high box; section 3a) |
 | `radar` | (nx, ny) | cells inside the +-60 deg fan of one of the five radars |
 | `undefined` | (nx, ny) | cells neither camera nor radar can see |
 
@@ -85,11 +85,31 @@ frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, ego 
 annotator bin "1".."4" = 0-40 / 40-60 / 60-80 / 80-100 %), `token` (annotation), `instance` (instance token), `stationary` (bool:
 one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), `world` (3, global position at the camera time),
 `world_ann` (global position at the annotation time), `shift` (2, ego axes, m: what moved the box from annotation to camera time),
-`shift_s` (s).
+`shift_s` (s), `num_lidar_pts` / `num_radar_pts` (int: the nuScenes counts of points in the box in the keyframe sweep, information only),
+`share_camera` / `share_radar` / `share_fusion` (0..1: the share of the box footprint the camera sees / the radar fan covers / both;
+section 3a).
+
+## 3a. Coverage: what the rig observes, and the fusion share f (v7; decisions D36 - D38)
+The rig is one front camera and five radars. The **fusion area** = `camera` cells not `occluded`, inside the `radar` fan; everything
+outside it is **don't care on both sides** (training and evaluation). `autogt.coverage` (numpy only, calibration + grid, so a car can
+run it live) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, `coverage_for(g, kind)` (kind `map` / `objects` /
+`velocity`: the fusion area; `camera_aux`: camera cells not hidden; `radar_aux`: the radar fan), `camera_cells(...)`, `radar_cells(...)`,
+`hidden_cells(...)`, `footprint_share(corners, mask, grid)`, `object_shares(...)`.
+- **Hiding is by height**: a box hides the ground behind it with its real volume (its top, not an infinite wall), so low boxes cast short
+  shadows (a 0.5 m high box and a camera at 1.6 m: the shadow ends at about 34 m for a box ending at 24 m); `hidden_cells(..., soft=False)`
+  is the old 2D rule of v5 / v6 (the study of `bev_fusion/records/footprint_share_study_2026-11-01.md` used it). Only boxes with a lidar or
+  radar point hide.
+- **f = `share_fusion`**: the share of the footprint (0.125 m samples; samples outside the 60 x 52 m grid count as not observed) where
+  the camera sees the object (inside the image at the bottom, middle or top of the box height and not hidden by another box: a pedestrian
+  above a low car stays visible) AND the radar fan covers. The states (Mirko, 2026-11-01): care f >= 0.5, partial 0.1 <= f < 0.5, don't
+  care f < 0.1; a detection is judged by the same number from `footprint_share(det_corners, fusion_cells(g), grid)` (the ground-plane
+  version: a detection has no height). With the OLD masks the helper reproduces the study's per-object table to 0.001.
+- The camera mask is the ground plane z = 0 (what the maps need); the model's `camera_visibility` uses height slices: call
+  `camera_cells(gx, gy, K, T_c2e, size, z=<slice height>)` to share the function.
 
 ## 4. Rules you must follow when you use or change it
-- **Signature = identity of a GT version.** `signature()` is a hash of the five generator files (`grid.py layers.py flow.py
-  nuscenes_adapter.py nuscenes_gt.py`) plus the options. ANY edit of those files makes every stored GT unreadable by the new code
+- **Signature = identity of a GT version.** `signature()` is a hash of the six generator files (`grid.py layers.py flow.py
+  nuscenes_adapter.py nuscenes_gt.py coverage.py`) plus the options. ANY edit of those files makes every stored GT unreadable by the new code
   (a rebuild of trainval takes 5-8 h) and a running job that imports the live tree keeps its old key. So: never edit them while a job
   runs, tell the owner of the training code before you do, and put the signature next to every number you report. Edits of
   `checks.py view.py video.py report.py cli.py suite.py clean.py encode.py selftest.py sets.py` do not change it. `light_nusc.py` (the
@@ -98,7 +118,7 @@ one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), 
   a reader after an edit. Never compare two models on different signatures.
 - **A GT version has a key (decision D29).** Every signature is a version `vN` in `autogt/versions.csv` (`python -m autogt versions`
   lists them, `autogt.current_version()` is the one of this source, the `index.json` of a store carries `gt_version`), and a git tag
-  `autogt/vN` sits on the commit that holds that generator. Edit one of the five files and the selftest fails until the table has a row
+  `autogt/vN` sits on the commit that holds that generator. Edit one of the six files and the selftest fails until the table has a row
   for the new signature: add the row, commit, `git tag -a autogt/v<N> -m "<what changed>"`, rebuild the GT, tell the others. To
   reproduce an old GT: `git worktree add temp/gt_v5 autogt/v5`, then run that checkout's `build` (exact command and the check that it is
   the checkout's package that runs: README.md, section Versions; the old tags have no `generate`). Before a
@@ -109,6 +129,7 @@ one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), 
   (nuScenes-style evaluation; another signature). A time `dt` is a decoder input only to predict to ANOTHER time (the +-0.5 s keyframes).
 - **Stationary means stationary**: a parked car has ONE world pose and velocity 0 in all keyframes; map corrections are allowed per
   map element in world coordinates (`map_offsets`), never per frame.
+- **Where a loss or a score counts** (D36 - D38): the coverage of section 3a (`coverage_for`), not the old per-layer habits.
 - **Supervision masks**: objects only where `observed`; leave `ignore` out; velocity only where `flow_weight > 0`; `camera` /
   `occluded` / `radar` / `undefined` say what the sensors can see. **"Moving" has one definition**: known velocity and speed above
   1 m/s - cells: `(np.hypot(*g["velocity"]) > 1) & (g["flow_weight"] > 0)`, boxes: `b["vel_known"] and np.hypot(*b["vel"]) > 1`.
@@ -160,4 +181,4 @@ cur["flow"] * dt                         # first-order displacement of every cel
 `suite.py` (`AutoGT`, `load`, `current_signature`), `cli.py` (`generate`, the commands), `sets.py` + `sets/` (scene sets), `rawdata.py` (raw-data check), `versions.py` + `versions.csv` (GT versions), `nuscenes_gt.py` (the generator), `flow.py` (the velocity / flow box, dataset independent),
 `nuscenes_adapter.py` (the only code that knows the nuScenes formats), `layers.py` + `grid.py` (exact rasteriser, occlusion, `GridSpec`),
 `checks.py` (consistency checks), `report.py`, `view.py`, `video.py`, `encode.py` (H.264 with a read-back check), `clean.py`,
-`light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan/plan.md` section 9.5, `README.md` (validation numbers).
+`coverage.py` (what the sensors observe, the footprint share), `light_nusc.py` (memory-light devkit), `selftest.py`. Decisions and history: `../bev_fusion/plan/plan.md` section 9.5, `README.md` (validation numbers).

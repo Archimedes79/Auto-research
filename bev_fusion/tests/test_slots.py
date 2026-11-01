@@ -8,6 +8,7 @@ second call of a clip (the first fills the memory: the radar branch has no past 
 and (5) carry a temporal state into the next call. A new kind is a builder entry in model.py plus its line in KINDS below.
 Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_slots.py   (CPU, about 1-2 min, no data, no GPU)"""
 import dataclasses
+import math
 import os
 import sys
 import time
@@ -23,6 +24,7 @@ from interface import RADAR_FIELDS, check_inputs, check_outputs  # noqa: E402
 from lift_pd import _front_camera  # noqa: E402
 from model import ModelConfig, check_config  # noqa: E402
 from nuscenes_dataset import DST_HW  # noqa: E402
+from precompute import MAPS, Precompute  # noqa: E402
 
 GRID = {"x_max": 16.0, "y_min": -8.0, "y_max": 8.0}             # 32 x 32 cells
 BASE = dict(pretrained="", trunk_pretrained="", grid_kwargs=GRID, oversample=1, c_cam=16, c_rad=8, c_fuse=24, trunk_width=0.25,
@@ -49,7 +51,7 @@ KNOWN_UNUSED = {("rad_temporal", "window_memory"): ("rad_temporal.log_tau", "rad
 COMBOS = [{"camera_features": "dual", "cam_temporal": "ego_gru"}, {"fusion": "cmx", "radar_kind": "off"},
           {"rad_temporal": "window_memory", "radar_kind": "pillars"}, {"camera_off": True, "fusion": "gate"},
           {"camera_features": "bevfusion", "cam_collapse": "zsum", "trunk_kind": "second"}]
-# pending (not yet run: the box was full): {"radar_kind": "delta_slots", "c_rad": 64} and the same with rad_temporal window_memory
+COMBOS += [{"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "delta_slots", "c_rad": 64, "rad_temporal": "window_memory"}]
 INVALID = [dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 
@@ -62,7 +64,11 @@ def batch_for(cfg, B=2, Fn=3, seed=0):
     bevf = cfg.camera_features == "bevfusion"                    # the cached BEVFusion features: own depth bins, stride 8, own crop
     n_d, hw_f = (len(DEPTHS), (32, 88)) if bevf else (N_PROB, FEAT_HW)
     prob = torch.rand(B, Fn, n_d, *hw_f, generator=g)
-    b = {"K": K.expand(B, Fn, 3, 3).clone(), "T_cam_car": T.expand(B, Fn, 4, 4).clone(),
+    rig = torch.eye(4).repeat(5, 1, 1)                           # five radars as on the car: front, two front corners, two rear
+    for i, (x, y, yaw) in enumerate([(3.4, 0.0, 0.0), (2.4, 0.8, 1.04), (2.4, -0.8, -1.04), (-1.0, 0.9, 2.1), (-1.0, -0.9, -2.1)]):
+        rig[i, :2, :2] = torch.tensor([[math.cos(yaw), -math.sin(yaw)], [math.sin(yaw), math.cos(yaw)]])
+        rig[i, :2, 3] = torch.tensor([x, y])
+    b = {"K": K.expand(B, Fn, 3, 3).clone(), "T_cam_car": T.expand(B, Fn, 4, 4).clone(), "radar_poses": rig.expand(B, 5, 4, 4).clone(),
          "ida": bevfusion_ida() if bevf else nuscenes_front_ida(dst_hw=DST_HW),
          "hw": DST_HW, "prob": prob / prob.sum(2, keepdim=True), "ctx": torch.randn(B, Fn, N_CTX, *hw_f, generator=g),
          "v": torch.full((B,), 8.0), "omega": torch.full((B,), 0.05),
@@ -87,6 +93,9 @@ def one(name, value, extra=None):
     batch = batch_for(cfg)
     errs = check_inputs(batch)
     assert not errs, (name, value, errs)
+    maps = Precompute.from_model(m)(dict(batch))                 # the precompute step on the model's own grid: every map, in the contract
+    assert not check_inputs(maps), (name, value, check_inputs(maps))
+    assert all(maps[k].shape == (2, 1, m.grid.nx, m.grid.ny) and 0 <= maps[k].min() and maps[k].max() <= 1 for k in MAPS), (name, value)
     dts = (0.0, 0.5)
     with torch.no_grad():                                        # the first call of a clip fills the memory (radar has no past frames:
         state = m(batch, dts=(0.0,))["state"]                    # its memory blocks read nothing before it)
@@ -113,6 +122,19 @@ def one(name, value, extra=None):
         names = [n for n, _ in m.named_parameters()]
         assert all(any(n.startswith(k) for n in dead) for k in known if any(p.startswith(k) for p in names)), \
             (name, value, "a known-unused part now trains: update KNOWN_UNUSED", dead)
+    # the dense outputs are the planner's door into the network: a loss on them must reach every parameter that a loss on the maps they
+    # are built from reaches (heat map -> peak weight, box parameters; distance channels -> soft line map)
+    p3 = m(batch, dts=dts, state=state, step=(1 / 12, 8.0, 0.05))["out"][0.0]
+    params = [q for q in m.parameters() if q.requires_grad]
+
+    def reached(*tensors):
+        s = sum((t.float() * torch.randn_like(t.float())).mean() for t in tensors)
+        gr = torch.autograd.grad(s, params, allow_unused=True, retain_graph=True)
+        return {n for (n, q), g in zip(m.named_parameters(), gr) if q.requires_grad and g is not None and torch.isfinite(g).all() and g.abs().max() > 0}
+    from_maps = reached(*[v for k, v in p3["obj"].items() if k in ("hm", "off", "size", "rot", "vel")], p3["sem"][:, m._dist_idx])
+    from_dense = reached(*[v for v in p3["boxes"].values() if torch.is_tensor(v) and v.is_floating_point()], p3["lines"])
+    lost = sorted(from_maps - from_dense)
+    assert from_dense and not lost, (name, value, extra, "the dense outputs lose the gradient of", lost[:6], len(lost), "of", len(from_maps))
     with torch.no_grad():                                        # a second call carries the temporal state
         res2 = m(batch, dts=(0.0,), state=res["state"], step=(1 / 12, 8.0, 0.05))
     assert not check_outputs(res2, (0.0,)), (name, value)

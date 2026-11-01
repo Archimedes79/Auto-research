@@ -69,7 +69,8 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `flow.py` | **the velocity / flow box** (dataset independent, numpy only): `estimate_flow(tracks, ego, t, grid, radar, config)` - see below |
 | `nuscenes_adapter.py` | devkit records -> `Track` / `Ego` / `RadarFrame` (`NuScenesScene`); the only place that knows nuScenes' radar and annotation format |
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
-| `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), occlusion mask, `GridSpec` |
+| `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
+| `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
 | `rawdata.py` | `check(dataroot, ...)`: are the raw files the generator reads on disk; `python -m autogt data` |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets` |
@@ -97,6 +98,26 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
   keyframes: `meta["dt"]`, `meta["steps"]`); the GT of every frame is at its own camera time
 - rules: stationary GT does not move (stationary objects have ONE world pose and velocity 0; map corrections only per element in
   world coordinates, `map_offsets`, never per frame)
+
+## Coverage (`coverage.py`, v7; decisions D36 - D38 of the BEV project, `bev_fusion/records/sensor_coverage_2026-11-01.md`)
+The rig is one front camera and five radars, so the GT says per cell and per object what the rig can observe. **Fusion area** = `camera`
+cells that are not `occluded`, inside the `radar` fan (D37: fusion numbers are reported there); outside it the cell is **don't care** on
+both sides, in training and in evaluation (D38). `coverage_for(g, kind)` gives the area of an output type: map layers, objects and
+velocity on the fusion area, the camera aux head on the camera cells not hidden, the radar aux head on the fan.
+- **Boxes hide with their height** (v7): a box hides the ground behind it with its real volume: the line from the camera to the cell must
+  pass through the box's footprint at a height between its bottom and its top (`blocked`, `hidden_cells`). A 0.5 m high box and a camera
+  at 1.6 m cast a shadow of about 10 m behind a box that ends at 24 m; v5 / v6 took every box as an infinitely high wall (16 % of the
+  objects of the stored val frames lost at least half of their share to it). Only boxes with a lidar or radar point hide. `camera` (the ground
+  plane z = 0 projected into the image), `radar` (the fan, 99.9 % of all detections inside) and `undefined` are unchanged.
+- **The footprint share f** (D38 b), per box in the meta as `share_fusion` (and `share_camera`, `share_radar`): the share of the footprint
+  (0.125 m samples, samples outside the 60 x 52 m grid count as not observed) where the camera sees the object and the radar fan covers.
+  The camera sees a sample when it sees the object above it at the bottom, middle or top of its height (inside the image, not hidden by
+  another box), so a pedestrian above a low car stays visible. Mirko's first states: care f >= 0.5, partial 0.1 <= f < 0.5, don't care
+  f < 0.1; the same f of a detection: `footprint_share(corners, fusion_cells(g), grid)`. With the OLD masks (`hidden_cells(soft=False)`) the
+  helper reproduces the per-object table of the BEV chat's study (`bev_fusion/records/footprint_share_study_2026-11-01.md`, 48,724 objects of
+  the val frames) to 0.001.
+- `num_lidar_pts` / `num_radar_pts` per box are the nuScenes counts, stored as information (Mirko: no per-box radar gate).
+- To share "the camera sees the cell" with a model: `camera_cells(gx, gy, K, T_c2e, size, z=<height of the slice>)`.
 
 ## The flow box (`flow.py`): one function, five steps
 `estimate_flow(tracks, ego, t, grid=None, radar=(), config=Config())` -> `FlowGT` (`objects` = the product: pose at `t`, velocity,
@@ -147,7 +168,7 @@ covariance, source, flag; plus the dense arrays when a grid is given)
 
 ## Versions (decision D29, 2026-11-01)
 The GT may change, but every state of the generator is a **version** with a key, so that an old GT and the training on it can be
-reconstructed. The signature (a hash of the five generator files + options) names the folder of the stored GT; the version key `vN`
+reconstructed. The signature (a hash of the six generator files + options) names the folder of the stored GT; the version key `vN`
 is its human name. A version is three things: a row in `versions.csv` (key, signature, tag, date, generator, what changed), a git
 tag `autogt/vN` on the commit that holds that generator, and `gt_version` in the `index.json` of the stored GT.
 `python -m autogt versions` lists them; `autogt.current_version()` is the key of this source; `autogt.missing(tokens)` tells before a
@@ -158,9 +179,11 @@ training which keyframes the store lacks.
 | v1, v2 | 85f096748f, 962e788566 | the generator before the suite, `training/gt_bev.py` of the commits 7f5cb10 / 7c8f12e; its GT is in the trainer's cache `bev_fusion/data/cache/gt` |
 | v3 | 7fe1149566 | the standalone suite, moving boxes at the annotation time |
 | v4 | fefd519974 | boxes at the camera time, first state (superseded after 18 minutes) |
-| v5 | 15efbde2d1 | review fixes; the generator of the t10 runs; **current** |
+| v5 | 15efbde2d1 | review fixes; the generator of the t10 runs (GT stored for all of trainval) |
+| v6 | 02a1217742 | generator fixes: ego velocity at the first / last pose of a sequence, instance / velocity / flow_sigma on the same sub-pixels, `ego_half_window` |
+| v7 | see `versions.csv` | coverage (D36 - D38): boxes hide by their height (softer `occluded`), `coverage.py`, per box `share_camera` / `share_radar` / `share_fusion` and the nuScenes point counts; `camera`, `radar`, `undefined` unchanged; **current** |
 
-**When you edit one of the five files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py`) the signature changes and
+**When you edit one of the six files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py coverage.py`) the signature changes and
 `python -m autogt selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild
 the GT, tell the others. **To rebuild an old version** (v3, v4, v5): `git worktree add temp/gt_v5 autogt/v5`, then
 `cd temp/gt_v5 && PYTHONPATH=bev_fusion python -m autogt build --dataroot <nuScenes folder> --version v1.0-trainval --out <folder>`

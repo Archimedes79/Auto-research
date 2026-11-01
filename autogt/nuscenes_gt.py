@@ -36,12 +36,13 @@ import cv2
 import numpy as np
 from pyquaternion import Quaternion
 
+from . import coverage as cvg
 from . import flow as flowmod
-from .layers import AREAS, DIST_MAX, LINES, OBJECTS, SHIFT, Raster, cell_centres, occlusion
+from .coverage import RADAR_FOV                      # half angle, range (m): measured, see coverage.py (kept here: older code imports it)
+from .layers import AREAS, DIST_MAX, LINES, OBJECTS, SHIFT, Raster, cell_centres
 from .nuscenes_adapter import NuScenesScene, category_group, pose_matrix
 
-RADAR_FOV = (math.radians(60.0), 70.0)               # half angle, range (m): measured, see the module docstring
-SIGNATURE_FILES = ("grid.py", "layers.py", "flow.py", "nuscenes_adapter.py", "nuscenes_gt.py")
+SIGNATURE_FILES = ("grid.py", "layers.py", "flow.py", "nuscenes_adapter.py", "nuscenes_gt.py", "coverage.py")
 
 
 class NuScenesGT:
@@ -277,7 +278,8 @@ class NuScenesGT:
                           "vel_sigma": vsig, "vel_known": known, "visibility": a["visibility_token"], "token": atok,
                           "instance": a["instance_token"], "stationary": stationary, "observed": observed,
                           "world": np.asarray(trans), "world_ann": trans_ann, "shift": Rg2e[:2, :2] @ shift,
-                          "shift_s": float(t_cam) if shifted else 0.0})
+                          "shift_s": float(t_cam) if shifted else 0.0,
+                          "num_lidar_pts": int(a["num_lidar_pts"]), "num_radar_pts": int(a["num_radar_pts"])})
         for k in OBJECTS:
             out[k] = R.coverage(objs[k])
         out["ignore"] = R.coverage(ignore)
@@ -302,20 +304,24 @@ class NuScenesGT:
         out["flow_weight"] = ((R.at_centres(ignore) == 0) & (R.at_centres(unknown) == 0)).astype(np.float32)
         out["flow_sigma"] = np.where(out["instance"] >= 0, R.at_centres(sig) / np.maximum(pc, 1e-6), 0.1).astype(np.float32)    # mean over the covered sub-pixels, like velocity
 
-        # masks: camera coverage (ground points in the image), occlusion behind boxes, radar fans
+        # masks (autogt/coverage.py): camera cells (ground points in the image), what boxes hide from the camera (by their height), radar fans
         cs = nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
         K = np.array(cs["camera_intrinsic"])
         T_c2e = pose_matrix(cs)
+        img_size = (sd["width"], sd["height"])
         gx, gy = cell_centres(grid)
-        P = np.stack([gx.ravel(), gy.ravel(), np.zeros(gx.size), np.ones(gx.size)], 1) @ np.linalg.inv(T_c2e).T
-        z = P[:, 2]
-        u = K[0, 0] * P[:, 0] / np.maximum(z, 1e-6) + K[0, 2]
-        vv = K[1, 1] * P[:, 1] / np.maximum(z, 1e-6) + K[1, 2]
-        cam = (z > 0.5) & (u >= 0) & (u < sd["width"]) & (vv >= 0) & (vv < sd["height"])
-        out["camera"] = cam.reshape(gx.shape).astype(np.float32)
-        out["occluded"] = occlusion(gx, gy, T_c2e[:2, 3], [b["corners"] for b in boxes if b["observed"]]).astype(np.float32)
-        out["radar"] = radar_coverage(self, sample, gx, gy).astype(np.float32)
+        cam_xyz = T_c2e[:3, 3]
+        poses = radar_poses(self, sample)
+        hiding = [b for b in boxes if b["observed"]]             # only boxes with a lidar / radar point hide (as before)
+        prisms = [cvg.prism_of(b) for b in hiding]
+        out["camera"] = cvg.camera_cells(gx, gy, K, T_c2e, img_size).astype(np.float32)
+        out["occluded"] = cvg.hidden_cells(gx, gy, cam_xyz, prisms).astype(np.float32)
+        out["radar"] = cvg.radar_cells(gx, gy, poses).astype(np.float32)
         out["undefined"] = ((out["camera"] == 0) & (out["radar"] == 0)).astype(np.float32)
+        place = {id(b): n for n, b in enumerate(hiding)}
+        for b in boxes:                                          # per object: the share of its footprint the sensors observe (D38 b)
+            sh = cvg.object_shares(b, place.get(id(b)), prisms, cam_xyz, K, T_c2e, img_size, poses, grid)
+            b["share_camera"], b["share_radar"], b["share_fusion"] = sh["camera"], sh["radar"], sh["fusion"]
         out["meta"] = {"sample": sample_token, "scene": sample["scene_token"], "timestamp": sd["timestamp"],
                        "annotation_timestamp": sample["timestamp"], "boxes_at": self.boxes_at,
                        "T_e2g": T_e2g, "boxes": boxes, "res": grid.res, "cam_file": sd["filename"], "K": K,
@@ -363,17 +369,12 @@ class NuScenesGT:
         return out
 
 
+def radar_poses(gt, sample):
+    """the sensor -> ego matrices of the radars of a sample"""
+    return [pose_matrix(gt.nusc.get("calibrated_sensor", gt.nusc.get("sample_data", tok)["calibrated_sensor_token"]))
+            for ch, tok in sample["data"].items() if ch.startswith("RADAR")]
+
+
 def radar_coverage(gt, sample, gx, gy):
-    half, rmax = RADAR_FOV
-    cov = np.zeros(gx.shape, bool)
-    for ch, tok in sample["data"].items():
-        if not ch.startswith("RADAR"):
-            continue
-        cs = gt.nusc.get("calibrated_sensor", gt.nusc.get("sample_data", tok)["calibrated_sensor_token"])
-        T = pose_matrix(cs)
-        yaw = math.atan2(T[1, 0], T[0, 0])
-        dx, dy = gx - T[0, 3], gy - T[1, 3]
-        ang = np.arctan2(dy, dx) - yaw
-        ang = (ang + np.pi) % (2 * np.pi) - np.pi
-        cov |= (np.abs(ang) <= half) & (np.hypot(dx, dy) <= rmax)
-    return cov
+    """cells inside the fan of one of the radars of the sample (see coverage.radar_cells)"""
+    return cvg.radar_cells(gx, gy, radar_poses(gt, sample))

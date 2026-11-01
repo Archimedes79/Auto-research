@@ -58,7 +58,7 @@ def _flat_name(m: str, rest: str, prefix_seg: str):
     if m == "seg":
         mask, r = rest.split("/", 1)
         return f"{prefix_seg}_{mask}/seg/{r}"
-    if m in ("det", "detr"):
+    if m in ("det", "detr", "curve"):
         return f"{m}/{rest}"
     if m == "loss":
         return "val_loss/" + rest.split("/", 1)[1]
@@ -263,6 +263,7 @@ def make_suite(a, prior: int = 0, state: str = None):
     from evaluation.bev_adapter import build
     source, subject, task = build(a.run, device=a.device, split=a.split, workers=a.workers, ckpt_dir=a.ckpt_dir, control=a.control, prior=prior)
     out = a.out or os.path.join(a.run, "eval", "suite")
+    task.curves = bool(getattr(a, "curves", False))                          # --curves: PR / ROC / calibration / velocity regression next to the standard numbers
     return EvalSuite(source, subject, task, out=out, state=state or a.state)
 
 
@@ -616,6 +617,7 @@ def main(argv=None) -> int:
     p.add_argument("--workers", type=int, default=2)
     p.add_argument("--split", default="val", choices=["val", "train"])
     p.add_argument("--ckpt-dir", default=None)
+    p.add_argument("--curves", action="store_true", help="also PR / ROC / calibration per layer and velocity regression (evaluation/bev_curves.py)")
     p.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"])
     p.add_argument("--out", default=None)
     p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])

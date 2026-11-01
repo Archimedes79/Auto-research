@@ -76,6 +76,217 @@ class _Stop(Exception):
     pass
 
 
+def run_cli_err(*args):
+    """(rc, stdout, stderr) of a trainsuite call"""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = cli_main(list(args))
+    return rc, out.getvalue(), err.getvalue()
+
+
+def early_pairs(tmp, name, early, final, total=1000, steps=(100, 250, 500, 750, 1000), skip=()):
+    """a root with one pair p<i>_v / p<i>_c per (early, final) gap: the control sits at 10 - step/200, the variant `val.score` above it by `early` at
+    every evaluation before the last and by `final` at the last; `val.loss` = the same series negated plus offset, so lower is better. `skip` = indices
+    of pairs whose variant is not finished"""
+    root = os.path.join(tmp, name)
+    for i, (e, fin) in enumerate(zip(early, final)):
+        for tag, g in (("c", 0.0), ("v", None)):
+            ev = []
+            for s in steps:
+                gap = g if g is not None else (fin if s == steps[-1] else e)
+                ev.append((s, {"score": 10 - s / 200 + gap, "loss": 20 - (10 - s / 200 + gap)}))
+            make(root, f"p{i:02d}_{tag}", rows(5), total=total, done=not (tag == "v" and i in skip), evals=ev)
+    return root
+
+
+def early_set(tmp, name, off_early, off_final, steps=(100, 250, 500, 750, 1000)):
+    """runs g_0 .. g_n-1 of one prefix, each `val.score` = control curve + its offset (early offset before the last evaluation, final offset at it): N runs make
+    N(N-1)/2 pairs that share runs"""
+    root = os.path.join(tmp, name)
+    for i, (e, fin) in enumerate(zip(off_early, off_final)):
+        ev = [(s, {"score": 10 - s / 200 + (fin if s == steps[-1] else e)}) for s in steps]
+        make(root, f"g_{i}", rows(5), total=1000, done=True, evals=ev)
+    return root
+
+
+def early_checks(tmp, ok):
+    """trainsuite early: calibration over finished pairs and the advice for one run, on synthetic pairs with known answers"""
+    from . import early as E
+    # statistics with known answers: average ranks for ties, Spearman 1 / 0.8 / constant side None, Wilson bound of 8 of 8
+    assert E.ranks([5, 5, 7]) == [1.5, 1.5, 3.0] and E.spearman([1, 2, 3], [10, 20, 30]) == 1.0 and abs(E.spearman([1, 2, 3, 4], [1, 3, 2, 4]) - 0.8) < 1e-9
+    assert E.spearman([1, 2, 3], [4, 4, 4]) is None and abs(E.wilson_low(8, 8) - 0.6756) < 1e-3 and E.wilson_low(0, 0) == 0.0
+    H, L = dict(better="higher"), dict(better="lower")
+
+    fin = [0.1 * k * (-1) ** k for k in range(1, 9)]                         # 8 final gaps of both signs and different sizes
+    # the early gap predicts the final one: sign agreement 8 of 8, rank correlation 1; a finished pair with another step total, an unfinished one
+    # and two runs of another name prefix are no pairs
+    root = early_pairs(tmp, "early_good", [0.5 * x for x in fin] + [0.3], fin + [0.3], skip=(8,))
+    make(root, "q_v", rows(5), total=500, done=True, evals=[(100, {"score": 1.0})])
+    make(root, "q_c", rows(5), total=1000, done=True, evals=[(100, {"score": 1.0})])
+    pairs = E.find_pairs(root)
+    assert len(pairs) == 8 and all(a.name.split("_")[0] == b.name.split("_")[0] for a, b in pairs), [(a.name, b.name) for a, b in pairs]
+    assert len(E.find_pairs(root, group="all")) == 153 and len(E.find_pairs(root, explicit=[("p00_v", "p00_c"), ("p08_v", "p08_c")])) == 1
+    cal = E.calibrate(pairs, ["val.score"], band=0.02, **H)
+    kd = cal["keys"]["val.score"]["fractions"]
+    assert cal["n_pairs"] == 8 and cal["n_runs"] == 16
+    e50 = kd["0.5"]
+    assert e50["calibrated"] and e50["agree"] == 8 and e50["n_sign"] == 8 and abs(e50["spearman"] - 1.0) < 1e-9 and e50["agree_band"] == 8 and e50["n_band"] == 8, e50
+    assert e50["n_runs_band"] == 16 and abs(e50["frac_lo"] - 0.5) < 1e-9 and abs(kd["0.1"]["frac_lo"] - 0.1) < 1e-9
+    assert kd["0.75"]["agree"] == 8
+    # a band of 0.22 leaves only the 4 largest early gaps: fewer than 6 pairs beyond it
+    cal_wide = E.calibrate(pairs, ["val.score"], band=0.22, **H)
+    assert cal_wide["keys"]["val.score"]["fractions"]["0.5"]["n_band"] == 4 and cal_wide["keys"]["val.score"]["fractions"]["0.5"]["agree_band"] is None
+    ok("early: Spearman / Wilson known answers; calibration over 8 pairs whose early gap predicts the final one: agreement 8 of 8, Spearman 1; unfinished, other-total and other-prefix runs are no pairs")
+
+    # the early gap points the wrong way: agreement 0 of 8 (< 0.5), Spearman -1; 5 pairs or equal curves: no number
+    root_bad = early_pairs(tmp, "early_bad", [-0.5 * x for x in fin], fin)
+    cal_bad = E.calibrate(E.find_pairs(root_bad), ["val.score"], band=0.02, **H)
+    b50 = cal_bad["keys"]["val.score"]["fractions"]["0.5"]
+    assert b50["agree"] == 0 and b50["n_sign"] == 8 and abs(b50["spearman"] + 1.0) < 1e-9 and b50["agree_band"] == 0, b50
+    assert "0 of 8" in E.describe(cal_bad)
+    root_few = early_pairs(tmp, "early_few", [0.5 * x for x in fin[:5]], fin[:5])
+    cal_few = E.calibrate(E.find_pairs(root_few), ["val.score"], band=0.02, **H)
+    f50 = cal_few["keys"]["val.score"]["fractions"]["0.5"]
+    assert not f50["calibrated"] and f50["agree"] is None and f50["spearman"] is None and f50["agree_band"] is None and f50["n_sign"] == 5, f50
+    assert "not enough pairs to calibrate" in E.describe(cal_few) and "no threshold" in E.describe(cal_few)
+    root_eq = early_pairs(tmp, "early_eq", [0.0] * 8, [0.0] * 8)
+    q50 = E.calibrate(E.find_pairs(root_eq), ["val.score"], band=0.02, **H)["keys"]["val.score"]["fractions"]["0.5"]
+    assert q50["n"] == 8 and q50["n_tied"] == 8 and q50["n_sign"] == 0 and not q50["calibrated"] and q50["spearman"] is None, q50
+    ok("early: a misleading early gap gives agreement 0 of 8 and Spearman -1; 5 pairs or equal curves give 'not enough pairs to calibrate' and no number")
+
+    # the rank correlation must not depend on which run of a pair is called the variant: three of the pairs swapped, same Spearman (unoriented, it differs)
+    mag = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.5]
+    fin_o = [0.1 * k * (-1) ** k for k in range(1, 9)]
+    early_o = [0.5 * m * (1 if f > 0 else -1) for m, f in zip(mag, fin_o)]          # signs agree with the final gaps, magnitudes shuffled
+    root_o = early_pairs(tmp, "early_orient", early_o, fin_o)
+    want = E.spearman([abs(x) for x in early_o], [abs(x) for x in fin_o])
+    flip = [-1 if i in (1, 2, 5) else 1 for i in range(8)]
+    assert abs(want - 1.0) > 0.05 and abs(E.spearman([x * s for x, s in zip(early_o, flip)], [x * s for x, s in zip(fin_o, flip)]) - want) > 0.05, "test data must be sensitive to the orientation"
+    sp = lambda prs: E.calibrate(prs, ["val.score"], band=0.02, **H)["keys"]["val.score"]["fractions"]["0.5"]["spearman"]
+    swapped = E.find_pairs(root_o, explicit=[(f"p{i:02d}_c", f"p{i:02d}_v") if i in (1, 2, 5) else (f"p{i:02d}_v", f"p{i:02d}_c") for i in range(8)])
+    assert abs(sp(E.find_pairs(root_o)) - want) < 1e-9 and abs(sp(swapped) - want) < 1e-9, (sp(E.find_pairs(root_o)), sp(swapped), want)
+    ok("early: Spearman is taken on pairs oriented by their final gap: swapping variant and control of three pairs gives the same value")
+
+    # direction and band are never guessed: refused without, and a calibration without them is not used
+    v0, c0 = Run(os.path.join(root, "p00_v")), Run(os.path.join(root, "p00_c"))
+    for bad in (lambda: E.calibrate(pairs, ["val.score"], band=0.02), lambda: E.calibrate(pairs, ["val.loss"], band=0.02, better="up"),
+                lambda: E.advise(v0, c0, "val.score", 0.5, None, 0.02)):
+        try:
+            bad()
+            raise AssertionError("a missing direction was accepted")
+        except ValueError as e:
+            assert "direction" in str(e), e
+    assert E.calibrate(pairs, ["val.loss"], lower=["val.loss"], band=0.02)["keys"]["val.loss"]["better"] == "lower"
+    lo = E.calibrate(E.find_pairs(root), ["val.loss"], band=0.02, **L)["keys"]["val.loss"]
+    assert lo["better"] == "lower" and lo["fractions"]["0.5"]["agree"] == 8 and abs(lo["fractions"]["0.5"]["spearman"] - 1.0) < 1e-9
+    mixed = E.calibrate(E.find_pairs(root), ["val.loss", "val.score"], lower=["val.loss"], band=0.02, **H)["keys"]
+    assert mixed["val.loss"]["better"] == "lower" and mixed["val.score"]["better"] == "higher"
+    rc, out, err = run_cli_err("--root", root, "early", "--calibrate", "--key", "val.score", "--band", "0.02")
+    assert rc == 2 and "direction" in err and not out, (rc, out, err)
+    rc, out, err = run_cli_err("--root", root, "early", "--calibrate", "--key", "val.score", "--better", "higher")
+    assert rc == 2 and "--band is required" in err, (rc, err)
+    nodir = json.loads(json.dumps(cal))
+    del nodir["keys"]["val.score"]["better"]
+    try:
+        E.advise(v0, c0, "val.score", 0.5, "higher", 0.02, nodir)
+        raise AssertionError("a calibration without a direction was used")
+    except ValueError as e:
+        assert "does not state the direction" in str(e), e
+    ok("early: no default direction and no default band (ValueError / CLI exit 2); --lower names a loss key; a calibration without its direction is refused")
+
+    # the band of the calibration is the band of the advice: a different --band is refused, none given takes the calibration's, none at all is refused
+    cal_json = json.loads(json.dumps(cal))
+    assert E.resolve_band(None, cal_json) == 0.02 and E.resolve_band(0.02, cal_json) == 0.02 and E.resolve_band(0.5, None) == 0.5
+    for b_, c_ in ((0.5, cal_json), (None, None)):
+        try:
+            E.resolve_band(b_, c_)
+            raise AssertionError("band accepted")
+        except ValueError as e:
+            assert "band" in str(e)
+    cp = os.path.join(tmp, "calib.json")
+    json.dump(cal, open(cp, "w"))
+    root_one = early_pairs(tmp, "early_one", [-0.5, 0.01, 0.5], [-1.0, 0.01, 1.0])         # pair 0: variant 0.5 below the control, pair 1 inside the band, pair 2: 0.5 above
+    common = ("--root", root_one, "early", "p00_v", "--vs", "p00_c", "--key", "val.score", "--better", "higher", "--at", "0.5", "--calib", cp)
+    rc, out, err = run_cli_err(*common, "--band", "0.5")
+    assert rc == 2 and "differs from the band" in err and not out, (rc, out, err)
+    rc, out, err = run_cli_err(*common)
+    assert rc == 0 and "band 0.02" in out, (rc, out)
+    rc, out, err = run_cli_err("--root", root_one, "early", "p00_v", "--vs", "p00_c", "--key", "val.score", "--better", "higher")
+    assert rc == 2 and "no band" in err, (rc, err)
+    ok("early: advice uses the band of the calibration; a different --band or none without a calibration is refused")
+
+    # advice for one run
+    bad_run, mid_run, good_run = (Run(os.path.join(root_one, f"p0{i}_v")) for i in range(3))
+    ctl = lambda i: Run(os.path.join(root_one, f"p0{i}_c"))
+    big = [0.1 * k * (-1) ** k for k in range(1, 21)]
+    root_big = early_pairs(tmp, "early_big", [0.5 * x for x in big], big)                   # 20 pairs from 40 runs, the early gap predicts the final one every time
+    cal_big = json.loads(json.dumps(E.calibrate(E.find_pairs(root_big), ["val.score"], band=0.02, **H)))
+    text, info = E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", None, cal_big)
+    assert info["verdict"] == "consider_stop" and "behind control by 0.5" in text and "20 of 20 pairs from 40 runs" in text, text
+    assert text.endswith("not the decision metric of the card]") and "consider stopping" in text, text
+    # the boundary: the printed 95 % lower bound decides, not the point estimate. 19 of 20 agree (0.95) but the bound is 0.76 < 0.8
+    early_19 = [0.5 * x for x in big[:19]] + [-0.5 * big[19]]
+    cal_19 = json.loads(json.dumps(E.calibrate(E.find_pairs(early_pairs(tmp, "early_19", early_19, big)), ["val.score"], band=0.02, **H)))
+    text, info = E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", None, cal_19)
+    assert info["verdict"] == "weak" and "19 of 20" in text and "no reliable signal" in text and "consider stopping" not in text, text
+    assert E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", None, cal_19, min_agree=0.7)[1]["verdict"] == "consider_stop", "the bound 0.76 clears 0.7"
+    # 5 of 6 (0.83 >= 0.8 as a point estimate, bound 0.44): too few pairs for any 'consider stopping'
+    early_56 = [0.5 * x for x in fin[:5]] + [-0.5 * fin[5]]
+    cal_56 = json.loads(json.dumps(E.calibrate(E.find_pairs(early_pairs(tmp, "early_56", early_56, fin[:6])), ["val.score"], band=0.02, **H)))
+    e56 = cal_56["keys"]["val.score"]["fractions"]["0.5"]
+    assert e56["agree_band"] == 5 and e56["n_band"] == 6, e56
+    text, info = E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", None, cal_56, min_agree=0.4)
+    assert info["verdict"] == "dependent" and "not enough independent evidence" in text and "consider stopping" not in text, text
+    # 15 pairs that all agree, but from 6 runs only (6 runs make 15 pairs that share runs): not independent either, however good the bound
+    root_set = early_set(tmp, "early_set", [0.05 * i for i in range(6)], [0.1 * i for i in range(6)])
+    cal_set = json.loads(json.dumps(E.calibrate(E.find_pairs(root_set), ["val.score"], band=0.02, **H)))
+    e_set = cal_set["keys"]["val.score"]["fractions"]["0.5"]
+    assert e_set["agree_band"] == 15 and e_set["n_band"] == 15 and e_set["n_runs_band"] == 6, e_set
+    g0, g5 = Run(os.path.join(root_set, "g_0")), Run(os.path.join(root_set, "g_5"))
+    text, info = E.advise(g0, g5, "val.score", 0.5, "higher", None, cal_set, min_agree=0.7)
+    assert info["verdict"] == "dependent" and "from 6 runs" in text, text
+    ok("early: 'consider stopping' needs the 95 % lower bound >= 0.8 (19 of 20 is not enough, 20 of 20 is) from >= 15 pairs and >= 8 runs (5 of 6 and 15 pairs of 6 runs are not)")
+
+    text, info = E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", 0.02, cal_json)       # the 8-pair calibration: 8 of 8 but only 8 pairs
+    assert info["verdict"] == "dependent", text
+    text, info = E.advise(bad_run, ctl(0), "val.loss", 0.5, "lower", 0.02, cal_json)          # the variant's val.loss is HIGHER (worse); this key is not in the calibration
+    assert info["verdict"] == "uncalibrated" and text.startswith("not calibrated: gap only"), text
+    assert E.advise(bad_run, ctl(0), "val.score", 0.5, "lower", 0.02, cal_json)[1]["verdict"] == "ahead", "the direction decides who is behind"
+    assert E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", 0.02, None)[1]["verdict"] == "uncalibrated"
+    text, info = E.advise(mid_run, ctl(1), "val.score", 0.5, "higher", 0.02, cal_json)
+    assert info["verdict"] == "inside" and text.startswith("inside the band: no signal"), text
+    assert E.advise(good_run, ctl(2), "val.score", 0.5, "higher", 0.02, cal_json)[1]["verdict"] == "ahead"
+    assert E.advise(good_run, ctl(2), "val.score", 0.5, "lower", 0.02, cal_json)[1]["verdict"] == "uncalibrated", "a calibration made for another direction is not used"
+    assert E.advise(bad_run, ctl(0), "val.score", 0.1, "higher", 0.02, cal_json, min_rows=3)[1]["verdict"] == "none"          # one evaluation up to 10 %: too early
+    assert E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", 0.02, json.loads(json.dumps(cal_few)))[1]["verdict"] == "uncalibrated"
+    ok("early: advice for one run: inside the band, ahead, direction, no calibration, calibration too small, too few rows")
+
+    # the kill-rule line: only for 'consider stopping'; a rule the suite reads: it hits the lagging variant and not its control (both directions)
+    info_stop = E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", None, cal_big)[1]
+    line = E.as_rule(ctl(0), info_stop)
+    assert line is not None and Rule(line).evaluate(bad_run)[0] == "hit" and Rule(line).evaluate(ctl(0))[0] == "ok", line
+    cal_big_lo = json.loads(json.dumps(E.calibrate(E.find_pairs(root_big), ["val.loss"], band=0.02, **L)))
+    info_lo = E.advise(bad_run, ctl(0), "val.loss", 0.5, "lower", None, cal_big_lo)[1]
+    line_lo = E.as_rule(ctl(0), info_lo)
+    assert info_lo["verdict"] == "consider_stop" and ">" in line_lo and Rule(line_lo).evaluate(bad_run)[0] == "hit" and Rule(line_lo).evaluate(ctl(0))[0] == "ok", line_lo
+    for cal_x in (cal_19, cal_56, cal_set, None):                                   # weak / dependent / uncalibrated: no rule although the run lags
+        info_x = E.advise(bad_run, ctl(0), "val.score", 0.5, "higher", None if cal_x else 0.02, cal_x)[1]
+        assert info_x["advantage"] < -0.02 and E.as_rule(ctl(0), info_x) is None, info_x
+    cb = os.path.join(tmp, "calib_big.json")
+    c19 = os.path.join(tmp, "calib_19.json")
+    for path_, root_, c_ in ((cb, root_big, None), (c19, os.path.join(tmp, "early_19"), None)):
+        rc, out, err = run_cli_err("--root", root_, "early", "--calibrate", "--key", "val.score", "--better", "higher", "--band", "0.02", "--out", path_)
+        assert rc == 0 and json.load(open(path_))["n_pairs"] == 20, (out, err)
+    args = ("--root", root_one, "early", "p00_v", "--vs", "p00_c", "--key", "val.score", "--better", "higher", "--at", "0.5", "--as-rule")
+    rc, out, err = run_cli_err(*args, "--calib", cb)
+    assert rc == 0 and "consider stopping" in out and "val.score@500 <" in out, out
+    rc, out, err = run_cli_err(*args, "--calib", c19)
+    assert rc == 0 and "no reliable signal" in out and "# no rule" in out and "val.score@500" not in out, out
+    assert not os.path.exists(os.path.join(root_one, "p00_v", "kill.txt")), "the rule is printed, never written"
+    assert run_cli_err("--root", root_one, "early", "p00_v")[0] == 2 and run_cli_err("--root", root_one, "early", "--calibrate", "--pair", "x")[0] == 2
+    ok("early: --as-rule prints a kill.txt line only for 'consider stopping' (it hits the laggard, not the control, both directions); the CLI exits 0, usage errors 2, nothing is written")
+
+
 def main():
     n = [0]
 
@@ -409,6 +620,9 @@ def main():
             cli.time.sleep = real_sleep
         assert calls[0] >= 3 and "failed at step" in buf.getvalue() and "running at step" in buf.getvalue().split("failed at step")[1], buf.getvalue()
         ok("watch keeps a run that failed while watched for the launcher's retry")
+        rc, out = run_cli("--root", tmp, "status", "retry")                       # the events `watch` wrote are shown by the detail of one run
+        assert "last events of `watch`" in out and "failed at step" in out, out
+        ok("status of one run shows the last events written by watch")
 
         # 10c a restart from an earlier checkpoint: the watch looked at step 5000 last, the resumed run is at step 4560 and its first rows (a spike at 4520) are new
         d = make(tmp, "stepback", rows(250, every=20, mean=10.0, t0=now - 9000))
@@ -524,6 +738,9 @@ def main():
             ok("curves png of two runs")
         except ImportError:
             print("  --  curves skipped (no matplotlib)")
+
+        # 13 early: advice from learning curves (calibration over finished pairs)
+        early_checks(tmp, ok)
     print(f"trainsuite selftest: {n[0]} groups of checks passed")
     return 0
 

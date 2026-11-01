@@ -149,6 +149,14 @@ class FrontRadarDataset(torch.utils.data.Dataset):
         out["sensor"] = out["sensor"].long()
         return out
 
+    def _radar_poses(self, sample):
+        """(5, 4, 4) sensor -> vehicle matrices of the radars (RADARS order): the rig calibration the radar fan is made from"""
+        poses = []
+        for ch in RADARS:
+            cs = self.nusc.get("calibrated_sensor", self.nusc.get("sample_data", sample["data"][ch])["calibrated_sensor_token"])
+            poses.append(torch.tensor(pose_matrix(cs), dtype=torch.float32))
+        return torch.stack(poses)
+
     # ---- GT (optionally cached)
     def gt_signature(self):
         """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (autogt source + flags), the suffix of its GT
@@ -193,7 +201,7 @@ class FrontRadarDataset(torch.utils.data.Dataset):
         radar = self._radar(sample, cur)
         last = self.gt.ego_steps(track[max(0, [t["token"] for t in track].index(cur["token"]) - 1)]["timestamp"],
                                  cur["timestamp"], track) or [(1 / 12, 0.0, 0.0)]
-        item = {"token": token, "frames": frames, "radar": radar, "ida": self.ida,
+        item = {"token": token, "frames": frames, "radar": radar, "radar_poses": self._radar_poses(sample), "ida": self.ida,
                 "ego": {"v": last[-1][1], "omega": last[-1][2]}, "timestamp": cur["timestamp"]}
         if self.with_gt:
             item["gt"] = self._gt(token)
@@ -209,6 +217,7 @@ def collate(items):
            "K": torch.stack([torch.stack([f["K"] for f in it["frames"]]) for it in items]),
            "T_cam_car": torch.stack([torch.stack([f["T_cam_car"] for f in it["frames"]]) for it in items]),
            "cam_vec": torch.stack([torch.stack([f["cam_vec"] for f in it["frames"]]) for it in items]),
+           "radar_poses": torch.stack([it["radar_poses"] for it in items]),
            "ida": items[0]["ida"], "tokens": [it["token"] for it in items],
            "v": torch.tensor([it["ego"]["v"] for it in items]), "omega": torch.tensor([it["ego"]["omega"] for it in items])}
     steps = []

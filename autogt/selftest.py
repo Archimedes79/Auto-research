@@ -154,6 +154,47 @@ def run(root=None, verbose=True):
     c = np.array([gx[ix, iy], gy[ix, iy]])
     err = np.abs((c + k["flow_ego"][:, ix, iy] * dt) - (np.r_[c, 0, 1] @ Tn.T)[:2]).max()
     assert err < 0.05, err
+    # 4a coverage (v7, autogt/coverage.py): the camera layer is the old ground-plane projection, boxes hide with their height, every box
+    #    carries the observed shares of its footprint, and the helpers have known answers
+    from . import coverage as C
+    from .nuscenes_adapter import pose_matrix
+    cs_ = gt.nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
+    K_, Tc_ = np.array(cs_["camera_intrinsic"]), pose_matrix(cs_)
+    P_ = np.stack([gx.ravel(), gy.ravel(), np.zeros(gx.size), np.ones(gx.size)], 1) @ np.linalg.inv(Tc_).T
+    old_cam = (P_[:, 2] > 0.5) & (K_[0, 0] * P_[:, 0] / np.maximum(P_[:, 2], 1e-6) + K_[0, 2] >= 0) & (K_[0, 0] * P_[:, 0] / np.maximum(P_[:, 2], 1e-6) + K_[0, 2] < sd["width"]) \
+        & (K_[1, 1] * P_[:, 1] / np.maximum(P_[:, 2], 1e-6) + K_[1, 2] >= 0) & (K_[1, 1] * P_[:, 1] / np.maximum(P_[:, 2], 1e-6) + K_[1, 2] < sd["height"])
+    assert np.array_equal(k["camera"] > 0, old_cam.reshape(gx.shape)), "the camera layer is the ground-plane projection of CAM_FRONT"
+    old_occ = occlusion(gx, gy, Tc_[:2, 3], [b_["corners"] for b_ in bx if b_["observed"]])
+    assert ((k["occluded"] > 0) <= old_occ).all() and (k["occluded"] > 0).sum() <= old_occ.sum(), "soft hiding hides a subset of the old rule"
+    for b_ in bx:
+        s_ = (b_["share_camera"], b_["share_radar"], b_["share_fusion"])
+        assert all(0.0 <= x_ <= 1.0 for x_ in s_) and s_[2] <= min(s_[0], s_[1]) + 1e-9, s_
+        assert isinstance(b_["num_lidar_pts"], int) and isinstance(b_["num_radar_pts"], int)
+        assert (b_["num_lidar_pts"] + b_["num_radar_pts"] > 0) == b_["observed"]
+    assert any(0 < b_["share_fusion"] < 1 for b_ in bx) and any(b_["share_fusion"] == 0 for b_ in bx), "shares are not all 0 or 1"
+    fus_ = C.fusion_cells(k)
+    assert np.array_equal(fus_, (k["camera"] > 0) & (k["occluded"] == 0) & (k["radar"] > 0))
+    assert np.array_equal(C.coverage_for(k, "map"), fus_) and np.array_equal(C.coverage_for(k, "radar_aux"), k["radar"] > 0)
+    assert np.array_equal(C.coverage_for(k, "camera_aux"), (k["camera"] > 0) & (k["occluded"] == 0))
+    cam_ = np.array([1.5, 0.0, 1.6])                                                   # known answers on the synthetic scene
+    low = (np.array([[20.0, -1], [24, -1], [24, 1], [20, 1]]), 0.0, 0.5)               # a 0.5 m high box, x 20..24: its shadow ends at
+    hid = C.hidden_cells(gx, gy, cam_, [low])                                          # 1.5 + (24 - 1.5) * 1.6 / (1.6 - 0.5) = 34.2 m
+    row = gx[:, 52][hid[:, 52]]
+    assert 24 < row.min() < 24.6 and 33.5 < row.max() < 34.5, (row.min(), row.max())
+    tall = (low[0], -50.0, 50.0)
+    assert np.array_equal(C.hidden_cells(gx, gy, cam_, [tall]), C.hidden_cells(gx, gy, cam_, [tall], soft=False)), "infinite height = the old rule"
+    assert not C.hidden_cells(gx, gy, cam_, [low])[(gx > 20.3) & (gx < 23.7) & (np.abs(gy) < 0.7)].any(), "a box does not hide its own cells"
+    Kt_, Tt_ = np.array([[1260.0, 0, 800], [0, 1260.0, 450], [0, 0, 1]]), np.eye(4)
+    Tt_[:3, :3], Tt_[:3, 3] = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], float), cam_
+    car_ = (np.array([[10.0, -1], [14, -1], [14, 1], [10, 1]]), 0.0, 1.5)
+    ped_ = {"corners": np.array([[17.0, -0.3], [17.6, -0.3], [17.6, 0.3], [17.0, 0.3]]), "center": np.array([17.3, 0.0, 0.85]), "size": [0.6, 0.6, 1.7]}
+    kid_ = dict(ped_, center=np.array([17.3, 0.0, 0.5]), size=[0.6, 0.6, 1.0])
+    assert C.object_shares(ped_, None, [car_], cam_, Kt_, Tt_, (1600, 900), [], g)["camera"] == 1.0, "a 1.7 m pedestrian behind a 1.5 m car is seen"
+    assert C.object_shares(kid_, None, [car_], cam_, Kt_, Tt_, (1600, 900), [], g)["camera"] == 0.0, "a 1.0 m high object behind it is hidden"
+    half_ = np.array([[10.0, -1], [12, -1], [12, 1], [10, 1]])
+    assert C.footprint_share(half_, gy > 0, g) == 0.5 and C.footprint_share(np.array([[58.0, -1], [62, -1], [62, 1], [58, 1]]), np.ones((g.nx, g.ny), bool), g) == 0.5
+    fan_ = C.radar_cells(np.array([10.0, 10.0, 80.0, -5.0]), np.array([0.0, 20.0, 0.0, 0.0]), [np.eye(4)])
+    assert fan_.tolist() == [True, False, False, False], fan_                          # in the fan, 63 deg off axis, beyond 70 m, behind
     sw = gt.keyframe_gt(tok, g, sd=nx_)                           # a 12 Hz sweep frame
     assert abs(sw["meta"]["timestamp"] - nx_["timestamp"]) == 0 and sw["drivable_area"].mean() > 0.05
     # boxes at a sweep 0.2 s after the annotation (sd=): the constant-velocity shift must agree with the straight line between the

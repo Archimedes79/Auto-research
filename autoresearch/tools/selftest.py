@@ -253,6 +253,35 @@ try:
     assert decide([0.69], [0.725])[0] == "CUT" and decide([0.74, 0.58], [0.70, 0.70])[0] == "CUT", "worse beyond the band is a CUT whatever the seeds say, as in decide_experiment"
     # decide from an experiment file and cards: KEEP, TIE, CUT (guard / rule), INCONCLUSIVE (one seed), subsets with at_least, deterministic + interval
     import decide as DC
+    # the kill criterion of a card is a list of trainsuite kill rules (prose is refused), written once into kill.txt; the budget is shown against the ledger rows E<n> / E<n>.*
+    import experiment as X
+    rules_, bad_ = X.kill_rules({"kill": "group.lines@1000 > 1.48; total@500 < 3 window 5\nobjhead.vel@+0.0@800 > 1  # why\nthe loss must not blow up"})
+    assert rules_ == ["group.lines@1000 > 1.48", "total@500 < 3 window 5", "objhead.vel@+0.0@800 > 1"] and len(bad_) == 1 and "not understood" in bad_[0], (rules_, bad_)
+    assert X.kill_rules({}) == ([], [])
+    import tempfile as _tf
+    kr = _tf.mkdtemp()
+    json.dump(dict(ledger="L.csv"), open(f"{kr}/project.json", "w"))
+    open(f"{kr}/L.csv", "w").write("id,duration_s\nE7.a,3600\nE7.b,1800\nE70.a,9999\nE7,0\n")
+    assert X.spent_gpu_h("E7", kr) == (1.5, 3), X.spent_gpu_h("E7", kr)      # E70.a is another experiment
+    os.makedirs(f"{kr}/r")
+    open(f"{kr}/r/kill.txt", "w").write("total@500 < 3 window 5")              # no newline at the end: kept, and the same rule is not written twice
+    assert X.write_kill_rules(rules_, f"{kr}/r") == (2, 1) and X.write_kill_rules(rules_, f"{kr}/r") == (0, 3)
+    assert open(f"{kr}/r/kill.txt").read().splitlines() == ["total@500 < 3 window 5", "group.lines@1000 > 1.48", "objhead.vel@+0.0@800 > 1"]
+    try:
+        X.write_kill_rules(rules_, f"{kr}/no_such_run")
+        raise AssertionError("a run folder that does not exist must be refused (no stray folder)")
+    except ValueError:
+        assert not os.path.exists(f"{kr}/no_such_run")
+    open(f"{kr}/r/kill.txt", "wb").write("total@500 < 3 window 5".encode("utf-16"))
+    try:
+        X.write_kill_rules(rules_, f"{kr}/r")
+        raise AssertionError("a UTF-16 kill.txt must be refused, not corrupted")
+    except ValueError as e:
+        assert "UTF-16" in str(e)
+    assert X.kill_rules({"kill": "total@500 < 3  # a; b >"})[0] == ["total@500 < 3"], "a ';' inside a comment is no separator"
+    open(f"{kr}/r/kill.txt", "w").write("total@500 <  3 window 5  # same rule, other spacing")
+    assert X.write_kill_rules(["total@500 < 3 window 5"], f"{kr}/r") == (0, 1), "the same rule is not written twice"
+    shutil.rmtree(kr)
     os.makedirs(f"{T}/experiments/E1_x", exist_ok=True)
     os.makedirs(f"{T}/runs/eval/v", exist_ok=True)
     os.makedirs(f"{T}/runs/eval/c", exist_ok=True)
