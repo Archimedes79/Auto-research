@@ -1,22 +1,22 @@
-# HANDOVER - 2026-10-31 23:45
+# HANDOVER - 2026-11-01 06:35
 
 New chat: start in the repository folder (parent of autoresearch/ and this folder), say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB).
 
 ## Who does what
-- **Lead of loop 22 and of the overnight bev_fusion round, owner of the code of both: the repository-review chat (session 6e9638e0)**, prompt `experiment_execution/history/prompts/PROGRAM_loop22.md` (D28: prototype by 06:30, +2-3 h allowed, then shutdown; one TEST check; no mail). The tools chat owns `autoresearch/tools` (it has uncommitted work there: commit by path). BEV chats: idle tonight.
+- Lead of loop 22 and of the overnight bev_fusion round (D28): the repository-review chat (session 6e9638e0); the round is finished (P4). Next: the Architecture chat (local_79b594f7) merges `ar/layered-design` in the quiet window it has been told about; after that the 6000-step bev run `t10.dual_long_s0` (smoke test first). The tools chat owns `autoresearch/tools` (commit by path).
 
 ## Where we are
-- Loop 21 filed in its state (E257-E260 summaries, status report `reports/weekly/Status_after_Loop21_EN.pdf`, review); its scratch `temp/loop21/` stays because the loop-21 records point to it (it was lost from disk once on 2026-10-31 and written back from git; tag it with `clean_temp.py` only together with the record links). `project.json` loops now 19-22 (grant D28).
-- Loop 22 (E261 ff.): light research cycle on gap 1 (coverage at range), three hypothesis lenses (E261-E266), then referee + planner; GPU arms run after the bev_fusion trainings (one training fills the GPU).
-- Lane prototype: `tools/prototype/lane_prototype.py` (being built: `recall_dp`, planner-ready graph JSON, numbers, video).
-- bev_fusion: `t10.dual_s1` (seed twin, its rule E1) trains 23:24 - ~01:20; next a t11 card on the weakest head (motion term flat at 1.094 in every run) and / or t10 at 6000 steps.
+- Loop 22 filed in its state: PLAN.md "End of loop" section, experiment files E261 - E268 (section 3 each), ledger rows; morning page `reports/source/weekly/morning_2026-11-01_loop22.md`.
+- Lane prototype of record: `recall_sp0_dp` (rc1 + fork pruning 0.4 + spurs kept + output DP 0.2). VAL lanes found 0.781, Q 0.742; TEST (E268.p, the one TEST use) lanes found 0.740, Q 0.727, R@1 far 0.749 vs control 0.762 / 0.712 / 0.776. Run: `wsl bash tools/env/_py14.sh lane_prototype.py recall_sp0_dp [--scenes 23 7 --video]`. `champion` / `control` registry entries unchanged.
+- KEEP but not in the prototype: E266 seed ring (R@1 far +0.015). Coverage-positive but blocked by precision guards: E267 ring + spurs, E264 two-seed union.
+- bev_fusion: B2 (`runs/t11_vel_hurdle_acc2`) is the bev prototype (velocity revived, see `../bev_fusion/records/morning_2026-11-01.md`); its t11 code lives in tag `bf/t11.vel_hurdle_acc2` and is not on main yet (needs an ar-reviewer code pass and the backbone chat's train.py hunks kept apart).
 
 ## Next
-1. Cards E261-E266 -> `ar-referee` -> `ar-planner` (PLAN.md loop 22, schedule).
-2. bev: decide t10 by its rule after s1 (`evaluation/board.py`), start t11.
-3. Lane GPU arms after bev; CPU arms now. 06:30: summaries, one TEST check of the lane prototype, check_numbers, reviewer, shutdown.
+1. Mirko: read both morning pages; decide whether spurs kept becomes the recall-family default (D-entry), D25, D4.
+2. Next lane loop: precision at range (range-dependent threshold for edge seeds; union with a wider vertex merge), idle timing of ring and union, route success on spur-kept graphs.
+3. bev: code review + commit of the t11 code; seed twin of B2; the 6000-step run with the hurdle + accumulation 2.
 
 Open decisions for Mirko: D25, D4, D18, D19 (DECISIONS.md).
 
 ## Pointers
-PROBLEM.md; METHOD.md; closed_questions.md; literature/OVERVIEW.md; git: tag `lcr/<id>` per run (bev: `bf/<id>`), remote origin (pushes only on request).
+PROBLEM.md; PLAN.md; METHOD.md; closed_questions.md; git: tag `lcr/<id>` per run (bev: `bf/<id>`), remote origin (pushes only on request).

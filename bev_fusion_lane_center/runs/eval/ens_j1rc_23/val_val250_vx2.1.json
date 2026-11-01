@@ -1,0 +1,188 @@
+{
+ "schema": 1,
+ "name": "ens_j1rc_23",
+ "split": "val",
+ "subset": "val250",
+ "fresh": false,
+ "frames": 250,
+ "registry": {
+  "kind": "union",
+  "members": [
+   "e24_j1rc_s2",
+   "e24_j1rc_s3"
+  ],
+  "tau": 0.7,
+  "asm": {
+   "cov_r": 0.5,
+   "vtx_r": 1.5,
+   "junc_thr": 0.5,
+   "reloc_thr": 0.4,
+   "reloc_shift": 12,
+   "reloc_tol": 1.6,
+   "fork_prune": 0.4,
+   "fast": 2
+  },
+  "what": "E264 arm u23: the trees of j1rc seeds 2 + 3 joined and assembled once at the fast_recall settings (the held-out pair)"
+ },
+ "overrides": {
+  "asm": {
+   "vtx_r": 2.1
+  },
+  "tau": null
+ },
+ "info": {
+  "cache": [
+   "/home/ml/exp_gcar_b123/eval_cache/raw_val_e24_D7_j1rcs2_192_96.pkl [250 frames]",
+   "/home/ml/exp_gcar_b123/eval_cache/raw_val_e24_D7_j1rcs3_192_96.pkl [250 frames]"
+  ],
+  "members": {
+   "e24_j1rc_s2": {
+    "kind": "builder",
+    "design": "D7",
+    "run": "e24_D7_j1rcs2",
+    "set": {
+     "M": 192,
+     "K0": 96
+    },
+    "tau": 0.7,
+    "asm": {
+     "cov_r": 0.5,
+     "vtx_r": 1.5,
+     "junc_thr": 0.5,
+     "reloc_thr": 0.4,
+     "reloc_shift": 12,
+     "reloc_tol": 1.6,
+     "fork_prune": 0.4,
+     "fast": 2
+    },
+    "what": "E240 arm a (recall weight 3), seed 2"
+   },
+   "e24_j1rc_s3": {
+    "kind": "builder",
+    "design": "D7",
+    "run": "e24_D7_j1rcs3",
+    "set": {
+     "M": 192,
+     "K0": 96
+    },
+    "tau": 0.7,
+    "asm": {
+     "cov_r": 0.5,
+     "vtx_r": 1.5,
+     "junc_thr": 0.5,
+     "reloc_thr": 0.4,
+     "reloc_shift": 12,
+     "reloc_tol": 1.6,
+     "fork_prune": 0.4,
+     "fast": 2
+    },
+    "what": "E240 arm a (recall weight 3), seed 3"
+   }
+  },
+  "asm": {
+   "cov_r": 0.5,
+   "vtx_r": 2.1,
+   "junc_thr": 0.5,
+   "reloc_thr": 0.4,
+   "reloc_shift": 12,
+   "reloc_tol": 1.6,
+   "fork_prune": 0.4,
+   "fast": 2
+  },
+  "tau": 0.7,
+  "asm_ms": 23.551852226257324,
+  "metric_s": 12.218055009841919
+ },
+ "commit": "d204ccb+dirty",
+ "date": "2026-11-01 05:17",
+ "metrics": {
+  "P@0.5": 0.6660129165180871,
+  "R@0.5": 0.717986237297881,
+  "F1@0.5": 0.6910236998399123,
+  "P@1.0": 0.8636996975580121,
+  "R@1.0": 0.8821029585755198,
+  "F1@1.0": 0.8728043296990271,
+  "P@1.5": 0.9410271141223239,
+  "R@1.5": 0.9397964712343309,
+  "F1@1.5": 0.9404113900669583,
+  "F1o2o@1.0": 0.7572211550016458,
+  "lanes_found": 0.7760788311247027,
+  "false_len_frac": 0.05897288587767608,
+  "split6_P": 0.35038084874863984,
+  "split6_R": 0.49614791987673346,
+  "split6_F1": 0.41071428571428575,
+  "merge6_P": 0.3848454636091725,
+  "merge6_R": 0.5376044568245125,
+  "merge6_F1": 0.44857640906449736,
+  "split_F1": 0.2678571428571429,
+  "merge_F1": 0.3242300987797792,
+  "dir_acc": 0.9463416688011171,
+  "n_samples": 250.0,
+  "vert100": 15.446231516781182,
+  "verts_per_frame": 98.612,
+  "S": 0.7659979990876007,
+  "J": 0.42964534738939153,
+  "Sp": 0.9257921574245546,
+  "Q": 0.7377990299693148,
+  "topo_P": 0.8039766549687553,
+  "topo_R": 0.6860228102276282,
+  "topo_F1": 0.7403309022347593,
+  "dup_frac": 0.08677377603444404,
+  "R@1_near": 0.9517280847993232,
+  "P@1_near": 0.9399844382909582,
+  "R@1_mid": 0.9044658629028108,
+  "P@1_mid": 0.8829316917645089,
+  "R@1_far": 0.7717076846481963,
+  "P@1_far": 0.7543156266730117,
+  "R@1_far_inner": 0.7980763670707967,
+  "P@1_far_inner": 0.7532640467684313,
+  "R@1_far_ring": 0.7107327509359957,
+  "P@1_far_ring": 0.7571968854282536
+ },
+ "better": {
+  "P@0.5": "higher",
+  "R@0.5": "higher",
+  "F1@0.5": "higher",
+  "P@1.0": "higher",
+  "R@1.0": "higher",
+  "F1@1.0": "higher",
+  "P@1.5": "higher",
+  "R@1.5": "higher",
+  "F1@1.5": "higher",
+  "F1o2o@1.0": "higher",
+  "lanes_found": "higher",
+  "false_len_frac": "lower",
+  "split6_P": "higher",
+  "split6_R": "higher",
+  "split6_F1": "higher",
+  "merge6_P": "higher",
+  "merge6_R": "higher",
+  "merge6_F1": "higher",
+  "split_F1": "higher",
+  "merge_F1": "higher",
+  "dir_acc": "higher",
+  "vert100": "lower",
+  "verts_per_frame": "lower",
+  "S": "higher",
+  "J": "higher",
+  "Sp": "higher",
+  "Q": "higher",
+  "topo_P": "higher",
+  "topo_R": "higher",
+  "topo_F1": "higher",
+  "dup_frac": "lower",
+  "R@1_near": "higher",
+  "P@1_near": "higher",
+  "R@1_mid": "higher",
+  "P@1_mid": "higher",
+  "R@1_far": "higher",
+  "P@1_far": "higher",
+  "R@1_far_inner": "higher",
+  "P@1_far_inner": "higher",
+  "R@1_far_ring": "higher",
+  "P@1_far_ring": "higher"
+ },
+ "protocol": {
+  "gt_sha": "20ed2b30b03b"
+ }
+}
