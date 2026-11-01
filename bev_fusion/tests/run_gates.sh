@@ -27,6 +27,7 @@ run "fusion"            "$PY" training/fusion.py
 run "timed heads"       "$PY" training/timed_head.py
 run "object head"       "$PY" training/object_head.py
 run "metrics"           "$PY" evaluation/metrics.py
+run "front compare"     "$PY" evaluation/front_compare.py
 run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py

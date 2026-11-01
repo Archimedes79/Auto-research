@@ -1,7 +1,7 @@
 # t4_soa_front - state-of-the-art comparison with only the front area visible
 
 Started 2026-10-30 (request of Mirko: "Do a state of the art comparison considering only the front area as visible").
-Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-10-31), `temp/t4/dualbev_front_eval.py`, `temp/t4/compare_front.py`.
+Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-10-31), `temp/t4/dualbev_front_eval.py` (the DualBEV front-only records), and for the comparison `evaluation/front_compare.py` (`bev_suite.py front`, promoted from `temp/t4/compare_front.py` on 2026-11-01).
 
 ## 1 Card
 
@@ -35,7 +35,7 @@ Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-1
   against GT 7.6 m / 0.1 m). **This also affects our own system**: every run since t1 loaded the pre-trained trunk with the scrambled order
   (fine-tuning repairs part of it). New flag `trunk_fpn_original` (default off, earlier runs unchanged) and arm `t4_fpn_order` (try 10).
 
-## 3 Result (2026-10-30; numbers from `results_x50.md`, made by `temp/t4/compare_front.py` from the `scene_records.pkl` of each run)
+## 3 Result (2026-10-30; numbers from `results_x50.md`, made by `temp/t4/compare_front.py`, now `bev_suite.py front`, from the `scene_records.pkl` of each run)
 
 Front sector (0-50 m, +-32.3 deg), the same 1000 cold-VAL frames of 82 official val scenes (3061 vehicle and 1435 pedestrian GT boxes),
 centre-distance AP at 0.5 / 1 / 2 / 4 m, `mAP2` = vehicle + pedestrian. Difference to DualBEV with the paired scene bootstrap (100 draws).
@@ -89,4 +89,4 @@ for the corrected order would only be worth it together with longer training.
 
 Note on sources: `temp/t7/finish.sh` re-evaluates `t2_ref_s0` / `t2_ref_s1` with `bev_suite` after the t7 runs; the evaluation behind the
 tables above is then kept in `runs/t2_ref_s{0,1}/eval_legacy_2026-10-28/` (`scene_records.pkl`, `metrics.json`). To regenerate a table
-after that, point `compare_front.py` at those folders, not at `eval/`.
+after that, point `bev_suite.py front` at those records (`LABEL=runs/t2_ref_s0/eval_legacy_2026-10-28/scene_records.pkl`), not at `runs/t2_ref_s0`.

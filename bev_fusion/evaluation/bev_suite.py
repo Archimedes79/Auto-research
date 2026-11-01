@@ -17,6 +17,9 @@
                                                 before the suite: their scene_records pickles through evaluation/bev_legacy.py, only on
                                                 the same frames); refused when the recorded GT signatures (evaluation: metrics / manifest,
                                                 training: RUN/gt.json) differ, a warning when one is not recorded; --force overrides
+    front REF SYSTEM [SYSTEM ...] [--x-max 50] [--n 1000] [--boot 1000] [--out FILE.md]   front-sector detection table of several evaluated
+                                                runs (or LABEL=FILE.pkl records): AP at 0.5 / 1 / 2 / 4 m, mAP2, per range bin, difference to REF with the
+                                                paired scene bootstrap; same GT / frame checks as compare (evaluation/front_compare.py)
 Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train  --ckpt-dir DIR (moved checkpoints)
                 --control shuffle_radar|zero_radar|shuffle_cam|zero_cam  --out DIR (default RUN/eval/suite)  --state carry|reset
 Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/EXTENSIONS.md chapter 5 for what each command writes.
@@ -500,6 +503,9 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "compare":
         return cmd_compare(argv[1:])
+    if argv and argv[0] == "front":
+        from evaluation.front_compare import main as front_main
+        return front_main(argv[1:])
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     p.add_argument("run")
     p.add_argument("--device", default="cuda")

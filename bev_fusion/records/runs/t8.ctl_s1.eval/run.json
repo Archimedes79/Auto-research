@@ -1,0 +1,53 @@
+{
+ "id": "t8.ctl_s1.eval",
+ "hypothesis": "evaluation (cold VAL 1000, bev_suite) of t8_ctl_s1, the resumed second seed of the base chain t8_ctl; the training finished at 00:37 on 2026-11-01 under run t8.ctl_s1, whose launcher record is stuck on running",
+ "prediction": "drivable 0.716 +- 0.03, lane divider IoU@0.5 0.191 +- 0.03, mAP 0.251 +- 0.03 (the t8_ctl_s0 numbers)",
+ "rule": "measurement, no decision of its own: gives the base band its second seed; waits for the GPU to be free of the t10 training (11 GB rule)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/t8/eval_ctl_s1.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 220506,
+ "created": "2026-11-01T00:43:29",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-01T02:50:35",
+ "code_hash": "ff9c0692c9be",
+ "commit": "583941f520",
+ "tag": "bf/t8.ctl_s1.eval",
+ "git_note": "",
+ "pid": 233734,
+ "code_drift": {
+  "n": 4,
+  "paths": [
+   "autoresearch/evalsuite/adapters/toy.py",
+   "autoresearch/evalsuite/selftest.py",
+   "autoresearch/evalsuite/selftest_comparison.py",
+   "bev_fusion/evaluation/bev_selftest.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1530,
+ "attempts": 1,
+ "ended": "2026-11-01T03:16:22",
+ "last_lines": [
+  "det/dt-0.50/two_wheeler/all/ave0_static                          0.0082",
+  "det/dt-0.50/two_wheeler/all/ave_skill_static                    -0.0000",
+  "det/dt-0.50/two_wheeler/all/n_tp_static                         62.0000",
+  "val_loss/group.areas                                             1.1129",
+  "val_loss/group.lines                                             1.2474",
+  "val_loss/group.motion                                            1.1837",
+  "val_loss/group.objects                                          12.0269",
+  "val_loss/total                                                  11.3814",
+  "info/step                                                          3000",
+  "info/n_samples                                                     1000",
+  "info/n_scenes                                                        82",
+  "done: 1000 val frames, 82 scenes, 1107 s -> runs/t8_ctl_s1/eval (suite run /mnt/c/Auto-research/bev_fusion/runs/t8_ctl_s1/eval/suite/quant/eval_n1000)"
+ ]
+}
