@@ -26,6 +26,7 @@ Validation: a fixed subset of `eval_batches * batch_size` samples spread over al
 Usage:  python training/train.py <config.json>   (fields of TrainConfig; unknown keys are an error)
 Self-test (nuScenes mini, CPU, needs data/cache/cam_feats_mini): python training/train.py
 """
+import contextlib
 import copy
 import dataclasses
 import functools
@@ -46,6 +47,8 @@ import torch.nn as nn
 try:
     from .augment import flip_batch
     from .feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
+    from . import freeze as freeze_mod
+    from .probe import ModuleProbe, StepTimer, batch_tokens, dump_incident
     from .interface import check_inputs, check_outputs
     from .loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from .losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -56,6 +59,8 @@ except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from augment import flip_batch
     from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
+    import freeze as freeze_mod
+    from probe import ModuleProbe, StepTimer, batch_tokens, dump_incident
     from interface import check_inputs, check_outputs
     from loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -121,6 +126,10 @@ class TrainConfig:
                                                  # the size, no older ones): it evaluates and warm-starts but cannot resume training.
                                                  # False (default; Mirko 2026-11-01: keep the full data to resume later): `keep` complete ones
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting
+    train_only: tuple = ()                       # module prefixes that train, everything else is frozen (freeze.py; () = everything trains)
+    freeze: tuple = ()                           # module prefixes that are frozen (freeze.py); with train_only it takes from it. Not in RESUME_FREE: a resume needs the same plan
+    probe: bool = False                          # log grad.<module> / upd.<module> (gradient norm, update-to-weight ratio) and t_data / t_step in the rows of log_every,
+                                                 # dump incident_<step>.json on a skipped step (probe.py; costs one copy of the trainable weights per logged step)
     seed: int = 0
     init_from: str = ""                          # checkpoint of another run to start from (warm_start; only while this run has
                                                  # no checkpoint of its own; optimiser, step and schedule start fresh), "" = off
@@ -262,8 +271,9 @@ def lr_factor(step, warmup, total, min_frac):
 class EMA:
     """Exponential moving average of the trainable weights and the buffers (BatchNorm statistics)."""
 
-    def __init__(self, model, decay):
+    def __init__(self, model, decay, skip=()):
         self.decay = decay
+        self.skip = frozenset(skip)                              # state keys that a freeze plan fixed: their average stays the value itself (freeze.frozen_keys)
         self.shadow = {k: v.detach().clone() for k, v in self._tensors(model).items()}
         self.backup = None
 
@@ -274,7 +284,8 @@ class EMA:
     def update(self, model, step):
         d = min(self.decay, (1 + step) / (10 + step))
         for k, v in self._tensors(model).items():
-            self.shadow[k].mul_(d).add_(v.detach(), alpha=1 - d)
+            if k not in self.skip:
+                self.shadow[k].mul_(d).add_(v.detach(), alpha=1 - d)
 
     def apply(self, model):
         self.backup = {k: v.detach().clone() for k, v in self._tensors(model).items()}
@@ -364,7 +375,7 @@ def prune_checkpoints(out_dir, keep):
 
 
 RESUME_FREE = ("name", "out_root", "data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers",
-               "device", "log_every", "eval_every", "eval_batches", "save_every", "keep", "slim_at_end", "max_bad_steps", "grad_diag_every")
+               "device", "log_every", "eval_every", "eval_batches", "save_every", "keep", "slim_at_end", "max_bad_steps", "grad_diag_every", "probe")
 
 
 def check_resume(old, cfg, name):
@@ -375,6 +386,7 @@ def check_resume(old, cfg, name):
     norm = lambda d: json.loads(json.dumps(d, default=str))                 # noqa: E731 - tuples and lists compare equal
     a, b = norm(old), norm(dataclasses.asdict(cfg))
     diff = sorted(k for k in a if k not in RESUME_FREE and a[k] != b.get(k))
+    diff += [k for k in ("train_only", "freeze") if k not in a and b.get(k)]               # a checkpoint from before freeze.py has no plan: a new one cannot resume it (its optimiser state has a slot per parameter)
     if diff and os.environ.get("BF_RESUME_ANY") != "1":
         raise SystemExit(f"{name}: the configuration differs from the checkpoint's in {diff}; start a new run name "
                          f"(or set BF_RESUME_ANY=1)")
@@ -560,7 +572,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
             groups = {k[len("group."):]: v for k, v in out.items() if k.startswith("group.") and torch.is_tensor(v) and v.requires_grad}
             if wc > 0 and out["consistency"].requires_grad:      # its gradient norm at the BEV feature calibrates its weight
                 groups["consistency"] = out["consistency"]
-            if len(groups) > 1:
+            if len(groups) > 1 and res["features"].requires_grad:      # a frozen trunk gives the groups no common feature to differentiate by
                 names, C, nrm = group_gradient_cosines(groups, res["features"])
                 out["diag"] = {"groups": names, "cos": C.tolist(), "norm": nrm.tolist()}
     return out, res, gts
@@ -714,6 +726,10 @@ def train(cfg, eval_fn=None, datasets=None):
     _clear_control(out_dir)
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
+    if cfg.train_only or cfg.freeze:                            # one module trains, the rest is frozen (freeze.py): before the optimiser is built
+        freeze_mod.apply(model, cfg.train_only, cfg.freeze)
+        print("freeze:", freeze_mod.signature(cfg.train_only, cfg.freeze), flush=True)
+        print(freeze_mod.report(model), flush=True)
     train_ds, val_ds = datasets or make_datasets(cfg)
     check_grids(model, train_ds, val_ds)
     record_gt(out_dir, (train_ds, val_ds))                      # the GT is not pinned by the code snapshot: record which one is used
@@ -726,7 +742,8 @@ def train(cfg, eval_fn=None, datasets=None):
         print("WARNING: gap_ego is on but model.forward has no `ego` argument: dt = +-0.5 s is decoded with the nominal "
               "gap and the last step's ego motion (0.2-0.35 m of label error)", flush=True)
     opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr, betas=(0.9, 0.999))
-    ema = EMA(model, cfg.ema)
+    frozen = freeze_mod.frozen_keys(model) if (cfg.train_only or cfg.freeze) else ()
+    ema = EMA(model, cfg.ema, skip=frozen)
     step, damaged, was_slim = 0, [], False
     ckpts = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
     for name in reversed(ckpts):                                # the newest READABLE checkpoint: a damaged one falls back to the one before
@@ -751,7 +768,10 @@ def train(cfg, eval_fn=None, datasets=None):
                              f"one folder")
         if cfg.init_from:                                       # a new run warm-started from another run's checkpoint
             fresh = warm_start(cfg.init_from, model, loss, reset=cfg.init_reset)
-            ema = EMA(model, cfg.ema)
+            lost = sorted(set(fresh) & set(frozen))
+            if lost:                                            # a frozen weight that the checkpoint does not have stays what it was initialised to
+                print(f"WARNING: {len(lost)} frozen state key(s) are not in the warm-start checkpoint (or under init_reset) and stay at their random initialisation, e.g. {lost[:3]}", flush=True)
+            ema = EMA(model, cfg.ema, skip=frozen)
             torch.manual_seed(cfg.seed)                         # the same data order and flips whatever the new branches drew
             np.random.seed(cfg.seed)
             print(f"warm start from {cfg.init_from}; fresh keys: {fresh}", flush=True)
@@ -776,6 +796,7 @@ def train(cfg, eval_fn=None, datasets=None):
             return next(it)
     params = [p for g in opt.param_groups for p in g["params"]]
     bad, t0, step0, last = 0, time.time(), step, {}
+    probe, timer = (ModuleProbe(model, every=cfg.log_every), StepTimer()) if cfg.probe else (None, None)
     while step < cfg.steps:
         reason = _stop_requested(out_dir)               # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
         if reason is not None:
@@ -790,9 +811,13 @@ def train(cfg, eval_fn=None, datasets=None):
             g["lr"] = cfg.lr * f
         diag = bool(cfg.grad_diag_every) and (step + 1) % cfg.grad_diag_every == 0
         opt.zero_grad(set_to_none=True)
-        acc, finite = {}, True
+        acc, finite, prow, step_ids = {}, True, {}, []
+        pstep = probe.begin(step + 1) if probe is not None else None    # a StepProbe only on a step that is logged
         for m in range(cfg.accum):                              # effective batch = batch_size * seq_len * accum samples
-            item = next_batch()
+            with (timer.data() if timer is not None else contextlib.nullcontext()):        # the wait for the data loader
+                item = next_batch()
+            if probe is not None:
+                step_ids.append(batch_tokens(item))                 # the samples of every micro-batch of the step, for an incident dump
             out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], step / max(1, cfg.steps),
                                       device, cfg.amp, cfg, diag=diag and m == 0, backward=True, augment=True)
             if not ok:
@@ -802,22 +827,31 @@ def train(cfg, eval_fn=None, datasets=None):
                 acc[k] = acc.get(k, 0.0) + v / cfg.accum
             if dg:
                 acc["diag"] = dg
+        if pstep is not None and finite:
+            pstep.grads()                                       # gradient norm per module BEFORE clipping (a blow-up must not hide behind the clip) and the weights before the step
         gn = torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip) if finite else None
         skipped = gn is None or not torch.isfinite(gn)
         if skipped:
             bad += 1
             opt.zero_grad(set_to_none=True)
             print(f"step {step}: non-finite {'loss' if gn is None else 'gradient'}, skipped ({bad} in a row)", flush=True)
+            if probe is not None:                               # what a replay needs: the step and the samples of the micro-batches so far (the last one is the one that failed)
+                dump_incident(out_dir, step, "nonfinite", batch_ids=[t for ids in step_ids for t in ids], losses=acc,
+                              extra={"what": "loss" if gn is None else "gradient", "micro": len(step_ids), "micro_batches": step_ids,
+                                     "step_frac": step / max(1, cfg.steps), "grad_norm": None if gn is None else float(gn)})
             if bad >= cfg.max_bad_steps:
                 raise RuntimeError("too many non-finite steps in a row")
         else:
             bad = 0
             opt.step()
             ema.update(model, step)
+            if pstep is not None:
+                prow = pstep.finish()
         step += 1
+        trow = timer.row() if timer is not None else {}
         if not skipped and (step % cfg.log_every == 0 or step == 1 or "diag" in acc):
             rec = {"step": step, "t": time.time(), "lr": cfg.lr * f, "grad_norm": float(gn),
-                   "s_per_step": (time.time() - t0) / max(1, step - step0), **acc}
+                   "s_per_step": (time.time() - t0) / max(1, step - step0), **acc, **prow, **trow}
             if device.startswith("cuda"):
                 rec["gpu_gb"] = torch.cuda.max_memory_allocated() / 1e9
             last = rec
@@ -1070,6 +1104,58 @@ def _selftest():
         assert not os.path.exists(os.path.join(sdir, "STOPPED")) and not os.path.exists(os.path.join(sdir, "CONTROL")), "old files not moved"
         assert os.path.exists(os.path.join(sdir, "CONTROL.old")) and os.path.exists(os.path.join(sdir, "STOPPED.old"))
         assert all("t" in json.loads(ln) for ln in open(os.path.join(sdir, "log.jsonl")) if '"val"' not in ln), "log rows carry t"
+        # 3d one module trains, the rest is frozen (freeze.py) and the probe logs the module keys (probe.py); with the defaults neither exists
+        assert not any(k.startswith(("grad.", "upd.", "t_data")) for ln in open(os.path.join(sdir, "log.jsonl")) if '"val"' not in ln for k in json.loads(ln)), "the probe is off by default"
+        # the average of a frozen weight is the weight: after 200 updates a plain EMA of a constant has drifted by rounding, the one with `skip` has not
+        e_net = nn.Linear(64, 64)
+        e_plain, e_skip = EMA(e_net, 0.99), EMA(e_net, 0.99, skip={"weight"})
+        for i in range(200):
+            e_plain.update(e_net, i)
+            e_skip.update(e_net, i)
+        assert not torch.equal(e_plain.shadow["weight"], e_net.weight.detach()) and torch.equal(e_skip.shadow["weight"], e_net.weight.detach()), "EMA skip"
+        fz_cfg = dataclasses.replace(cfg, name="freezerun", steps=4, save_every=4, eval_every=0, log_every=2, grad_diag_every=1, grad_clip=1e-3, train_only=("aux_rad.",), probe=True)
+        torch.manual_seed(fz_cfg.seed)
+        init_model, _, _ = build(fz_cfg)
+        init = {k: v.clone() for k, v in init_model.state_dict().items()}
+        train(fz_cfg, datasets=(base, base))                    # grad_diag_every=1 with a frozen trunk: the diagnostics are skipped, not a crash
+        fdir = os.path.join(tmp, "freezerun")
+        ck_f = torch.load(os.path.join(fdir, "ckpt_00000004.pt"), map_location="cpu", weights_only=False)
+        moved = [k for k in init if "model." + k in ck_f["state"] and not torch.equal(ck_f["state"]["model." + k], init[k])]
+        assert moved and all(k.startswith("aux_rad.") for k in moved), moved[:5]
+        assert all(torch.equal(ck_f["ema"][k], init[k]) for k in init if not k.startswith("aux_rad.") and k in ck_f["ema"]), "the average of a frozen weight is the weight itself"
+        f_rows = [json.loads(ln) for ln in open(os.path.join(fdir, "log.jsonl")) if '"val"' not in ln]
+        even = [r for r in f_rows if r["step"] % 2 == 0]
+        assert even and all("grad.aux_rad" in r and "upd.aux_rad" in r for r in even), [sorted(r) for r in f_rows][:3]       # log_every 2: the numbering of begin(step + 1) is right
+        assert not any(k.startswith(("grad.", "upd.")) and "aux_rad" not in k for r in f_rows for k in r) and all("diag" not in r for r in f_rows), "frozen modules have no keys, no diag"
+        assert all(r["grad.aux_rad"] > fz_cfg.grad_clip for r in even), "the gradient norm is measured BEFORE clipping (clipped to 1e-3 it could not exceed 1e-3)"
+        assert any(r.get("t_data", 0) > 0 and r.get("t_step", 0) >= r["t_data"] for r in f_rows), "the wait for the data is measured"
+        try:
+            train(dataclasses.replace(fz_cfg, train_only=("aux_cam.",)), datasets=(base, base))
+            raise AssertionError("a resume with another freeze plan must be refused")
+        except SystemExit as e:
+            assert "train_only" in str(e), e
+        train(dataclasses.replace(fz_cfg, probe=False), datasets=(base, base))        # probe is a logging switch: not part of the plan a resume checks
+        # probe on or off: the weights are bit-equal (the probe only looks)
+        ck_pair = []
+        for nm, pr in (("probe_on", True), ("probe_off", False)):
+            train(dataclasses.replace(cfg, name=nm, steps=2, save_every=2, eval_every=0, log_every=1, probe=pr), datasets=(base, base))
+            ck_pair.append(torch.load(os.path.join(tmp, nm, "ckpt_00000002.pt"), map_location="cpu", weights_only=False)["state"])
+        assert all(torch.equal(ck_pair[0][k], ck_pair[1][k]) for k in ck_pair[1]), "the probe changes no weight"
+        # a non-finite step with the probe on: the dump names the step and the samples
+        real_clip, calls_ = globals()["run_clip"], [0]
+
+        def clip_fails_once(*a, **k):
+            calls_[0] += 1
+            if calls_[0] == 1:
+                return {}, False, None, None
+            return real_clip(*a, **k)
+        globals()["run_clip"] = clip_fails_once
+        try:
+            train(dataclasses.replace(cfg, name="incrun", steps=1, save_every=0, eval_every=0, log_every=1, probe=True), datasets=(base, base))
+        finally:
+            globals()["run_clip"] = real_clip
+        inc = json.load(open(os.path.join(tmp, "incrun", "incident_0.json")))
+        assert inc["kind"] == "nonfinite" and inc["what"] == "loss" and inc["micro"] == 1 and inc["batch"] and all(isinstance(t, str) for t in inc["batch"]) and inc["micro_batches"] == [inc["batch"]], inc
         real_stop, calls = globals()["_stop_requested"], [0]
 
         def stop_third(run_dir):                              # the stop request arrives while the run trains: seen at the third step

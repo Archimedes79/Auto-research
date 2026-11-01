@@ -25,6 +25,16 @@
   "ram_mb": 10000,
   "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
   "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
+  "_trainsuite": "python -m trainsuite compose | start (autoresearch/trainsuite/compose.py): presets are json files of overrides, the composed config goes to out, check is the static check of training/startable.py, train is the command run.py wraps",
+  "trainsuite": {
+    "presets": "training/configs/presets",
+    "out": "temp/compose",
+    "runs": "runs",
+    "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/startable.py {config}\"",
+    "train": "bash temp/train/run_ar.sh {config}",
+    "prepare": [{"name": "gt", "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} check\"",
+                 "build": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} build\"", "wait_min": 600}]
+  },
   "structure": {
     "root_files": ["README.md", "project.json"],
     "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runs", "temp", "tests", "training"],

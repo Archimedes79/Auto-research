@@ -1,0 +1,9 @@
+{
+ "steps": 400,
+ "warmup": 40,
+ "eval_every": 100,
+ "eval_batches": 10,
+ "save_every": 200,
+ "keep": 2,
+ "log_every": 10
+}

@@ -4,6 +4,8 @@ A config is the JSON of `train.TrainConfig` (unknown keys are an error); `model`
 `losses.LossConfig` fields (the head layout flags are taken from `loss`). One run = one config; an arm is the base config with
 the listed fields changed (copy the file, change the name and the fields, never edit the base).
 
+**Presets** (`presets/*.json`, overrides, not configs): `smoke` (20 steps, the end-to-end smoke of a new version), `small` (400 steps, evaluation every 100: a quick look), `onfly` (all caches off: preprocessing on the fly). `python -m trainsuite start training/configs/<base>.json --id <id> --preset small --set seed=3 ...` composes the run's config (written to `temp/compose/`, scratch), runs `startable.py` and prints the `run.py` command; `compose` only shows and writes the config. The full run is the base config as it is; data computed elsewhere is `--set feature_cache=<path>` (and `gt_cache`, `radar_cache`); one module with the rest frozen is `--set 'train_only=["fusion."]'` once `train.py` knows the key (see `freeze.py`).
+
 | file | what | status |
 |---|---|---|
 | `t1_base.json` | the first full training: cached camera-head features (`data/cache/cam_feats`, built by `temp/setup/build_full_cache.sh`), GT at -0.5 / 0 / +0.5 s with the true keyframe gap (`gap_ego`), Kendall task weights, AdamW 3e-4 with 500 warm-up steps from lr / 3 and cosine, effective batch 16 (micro-batch 4 x 4 accumulation: 2.5 s per optimiser step, 4.4 GB; 2 x 8 takes 5.3 s, 8 x 2 takes 2.1 s with 8.6 GB; idle GPU, 4 workers, 2026-10-26), EMA 0.999, gradient-conflict log every 500 steps, 20000 optimiser steps | not run at full length (the caches are built, the trainer self-test passes on mini and a 12-step smoke ran on the real caches) |
