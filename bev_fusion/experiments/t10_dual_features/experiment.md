@@ -93,11 +93,11 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
   | front mAP2 | 0.367 | 0.361 | 0.183 / 0.180 |
   | ped AP@2 (front) | 0.210 | 0.199 | 0.001 / 0.002 |
   | vehicle seg IoU | 0.415 | 0.413 | 0.309 / 0.305 |
-  | pedestrian seg IoU | 0.000 | 0.091 | 0.000 / 0.000 |
+  | pedestrian seg IoU (one seed; the control's second seed later scored 0.090: noise, see the 03:15 entry) | 0.000 | 0.091 | 0.000 / 0.000 |
 
   mAP2 difference to the control -0.006 [-0.016, -0.000] (paired scene bootstrap, 100 draws): inside the 0.054 band. Rule: **E1** (lane divider within 0.02 of bevfeat, drivable and walkway equal, mAP2 >= ctl - 0.054):
-  the two frozen feature sets together keep the maps of BEVFusion AND the objects of DualBEV. Prediction hit on all five numbers (front mAP2 0.33 (0.25-0.38) -> 0.361; lane divider 0.34 -> 0.335; drivable 0.80 -> 0.806;
-  walkway 0.33 -> 0.340; ped AP@2 0.15 -> 0.199, better than predicted). Caveats: one seed, the control also one seed (s1 crashed), no latency measured (two image encoders: not a product design, an
+  the two frozen feature sets together keep the maps of BEVFusion AND the objects of DualBEV. Prediction hit on four of five numbers (front mAP2 0.33 (0.25-0.38) -> 0.361; lane divider 0.34 -> 0.335; drivable 0.80 -> 0.806;
+  walkway 0.33 -> 0.340); the fifth, ped AP@2 0.15 -> 0.199, is better than predicted (outside the tolerance). Caveats: one seed, the control also one seed (s1 crashed), no latency measured (two image encoders: not a product design, an
   information test); the maps of dual vs bevfeat are within the band, so "no loss" not "gain". Decision: seed twin `t10.dual_s1` next (E1), then the cost question (can the map side be had with one encoder).
 - 2026-11-01 03:15: the seed twin `t10_dual_s1` (3000 steps; config identical but the seed; killed once by the out-of-memory killer at step 760 and resumed from a checkpoint on a later code
   snapshot, commit 77aed27 against 40648bd for s0) was evaluated cold on VAL 1000 (`temp/t10/eval_s1.sh`, run `t10.dual_s1.eval`); front-sector comparison `results_x50_2seeds.md`; board
