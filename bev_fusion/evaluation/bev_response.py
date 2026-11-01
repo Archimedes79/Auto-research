@@ -20,6 +20,8 @@ Maps and curves (lane dividers and the drivable area):
     negatives raised to p = 1      IoU@0 = P / (P + q N), AP = P / (P + q N), ROC-AUC = 1 - q / 2, ECE = Brier = q N / (P + N)
     constant p = 0.5               AUC = 0.5, AP = prevalence, Brier = 0.25, ECE = |prevalence - 0.5|
 Velocity field: GT + (0.3, 0.4) and 0.8 x GT: EPE, RMSE, bias and R2 against numpy computed straight from the arrays.
+Velocity split (`vel`, bev_velocity.py): EPE and n per cell set (static, per class, moving part) and at the GT box centres (field / object head / zero, box
+velocities painted into the centre cells), numpy from the arrays and the box list; swapped: the damaged velocities are the reference.
 ROLES SWAPPED (--swap rows are part of the same table): the damaged set is the ground truth and the original GT is the prediction. Symmetric numbers (ate, ase, aoe,
 ave, IoU) must not change; precision and recall trade places, so the AP of 'k boxes removed' (recall limited) must equal the AP of 'k boxes ranked first and false'
 (precision limited), the AP of 'm false boxes added' equals the AP of 'm boxes missing'; for the maps the PR / ROC / calibration formulas swap their roles.
@@ -37,7 +39,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path[:0] = [ROOT, os.path.join(ROOT, "training"), os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
 from evaluation import bev_gtcheck as G  # noqa: E402
 from evaluation.bev_views import gt_boxes, masks  # noqa: E402
-from evaluation.metrics import in_front  # noqa: E402
+from evaluation.metrics import gt_boxes_from_meta, in_front  # noqa: E402
 
 CLASS = "vehicle"
 
@@ -684,11 +686,107 @@ def swap_velocity_rows(samples, task):
     return rows
 
 
+def _vel_numbers(task, samples, outs):
+    from evalsuite import Prediction, Sample
+    from evalsuite.contracts import FrameRef
+    vm = next(m for m in task.metrics() if m.name == "vel")
+    cs = [vm.frame(Sample(ref=FrameRef("gt", i, name), inputs=None, reference={0.0: s[0.0]}), Prediction(outputs={"dt": {0.0: o}}))
+          for i, ((name, s), o) in enumerate(zip(samples, outs))]
+    return vm.reduce(cs)
+
+
+def _centres(g, task):
+    """the scored GT box centres, computed here from the rule (not by bev_velocity): observed, velocity known, in the front window, centre cell
+    floor((c - min) / res) inside the grid and inside obj_fov -> (ix, iy, vx, vy) arrays. Shared with the code under test (not independent): masks(),
+    gt_boxes_from_meta, in_front - a bug inside them hits both sides (as for masks() in bev_mutants.py); independent: the floor rule, the indexing, the
+    moving split and the known-velocity filter"""
+    fov = masks(g)["obj_fov"]
+    rows = []
+    raw = [b for b in g["meta"]["boxes"] if b.get("observed", True)]
+    for b, rb in zip(gt_boxes_from_meta(raw), raw):
+        if b["group"] not in task.groups or not rb.get("vel_known", True):
+            continue
+        i, j = int(math.floor((b["cx"] - task.grid.x_min) / task.grid.res)), int(math.floor((b["cy"] - task.grid.y_min) / task.grid.res))
+        if in_front(b) and 0 <= i < fov.shape[0] and 0 <= j < fov.shape[1] and fov[i, j]:
+            rows.append((i, j, b["vx"], b["vy"]))
+    a = np.array(rows, np.float64).reshape(-1, 4)
+    return a[:, 0].astype(int), a[:, 1].astype(int), a[:, 2:].T
+
+
+def _cell_sets(g, gv, task):
+    """the cell sets of bev_velocity, from the masks and the GT arrays: object cells; static = speed <= 0.5 (of gv, the reference); per class"""
+    obj = masks(g)["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in task.groups if c in g], axis=0)
+    if "flow_weight" in g:
+        obj = obj & (np.asarray(g["flow_weight"], np.float32) > 0)                 # unknown velocity: left out
+    mov = np.hypot(gv[0], gv[1]) > 0.5
+    out = {"static": obj & ~mov}
+    for c in task.groups:
+        if c in g:
+            out[c] = obj & (np.asarray(g[c], np.float32) > 0.5)
+            out[c + "_moving"] = out[c] & mov
+    return out
+
+
+def velocity_split_rows(samples, task, swap=False):
+    """`vel` (bev_velocity.py), every expectation computed here with numpy from the arrays and the box list (cell sets and centre cells by their stated rule).
+    Cells: the field = GT + (0.3, 0.4) and 0.8 x GT -> EPE and n per cell set (static, per class, the class's moving part).
+    Centres: field = the GT box velocity + (0.3, 0.4) painted into the centre cells, object head = 0.8 x the box velocity painted, zero -> EPE and n, all and
+    moving, read back from the painted arrays (two boxes in one cell: the later one wins, the expectation reads the same cell; without collisions the field
+    EPE is exactly 0.5 and the object head's 0.2 x the mean speed).
+    SWAPPED: the reference is damaged (velocity layer and box velocities + (0.36, 0.48)), the prediction is the original (layer; box velocities painted);
+    the static / moving sets follow the damaged reference."""
+    off = np.array([0.36, 0.48] if swap else [0.3, 0.4], np.float64)
+    fields = ((f"SWAPPED: GT velocity + (0.36, 0.48) as the GT", None),) if swap else \
+        (("velocity field + (0.3, 0.4) m/s", lambda v: v + off[:, None, None]), ("velocity field x 0.8", lambda v: 0.8 * v))
+    rows = []
+    for li, (label, fn) in enumerate(fields):
+        samp, cell_outs, cent_outs, acc = [], [], [], {}
+        for name, s in samples:
+            g = s[0.0]
+            gv0 = np.asarray(g["velocity"], np.float64)
+            if swap:
+                meta = dict(g["meta"], boxes=[dict(b, vel=[b["vel"][0] + off[0], b["vel"][1] + off[1]]) for b in g["meta"]["boxes"]])
+                g = dict(g, velocity=(gv0 + off[:, None, None]).astype(np.float32), meta=meta)
+                ref, v = gv0 + off[:, None, None], gv0
+            else:
+                ref, v = gv0, fn(gv0)
+            samp.append((name, {0.0: g}))
+            cell_outs.append({"vhat": v.astype(np.float32), "objvel": None})
+            for k, sel in _cell_sets(g, ref, task).items():
+                acc.setdefault(("cells", k), []).append(np.hypot(*(v[:, sel] - ref[:, sel])))
+            if li:                                                             # the centre rows once per table
+                continue
+            ix, iy, bv = _centres(g, task)                                     # bv: the reference box velocity (damaged when swapped)
+            pf, po = np.zeros_like(gv0), np.zeros_like(gv0)
+            pf[:, ix, iy] = (bv - off[:, None]) if swap else (bv + off[:, None])
+            po[:, ix, iy] = (bv - off[:, None]) if swap else 0.8 * bv
+            cent_outs.append({"vhat": pf.astype(np.float32), "objvel": po.astype(np.float32)})
+            mov = np.hypot(bv[0], bv[1]) > 0.5
+            for src, arr in (("field", pf.astype(np.float32)), ("objhead", po.astype(np.float32)), ("zero", np.zeros_like(gv0))):
+                e = np.hypot(*(np.asarray(arr, np.float64)[:, ix, iy] - bv))
+                acc.setdefault(("centre", src, "all"), []).append(e)
+                acc.setdefault(("centre", src, "moving"), []).append(e[mov])
+        res = {"cells": _vel_numbers(task, samp, cell_outs)}
+        if cent_outs:
+            res["centre"] = _vel_numbers(task, samp, cent_outs)
+        for key, es in acc.items():
+            if key == ("cells", "static_moving"):
+                continue
+            e = np.concatenate(es)
+            k = f"dt+0.00/cells/{key[1]}" if key[0] == "cells" else f"dt+0.00/centre/{key[1]}/{key[2]}"
+            lab = f"{label} ({key[0]} {'/'.join(key[1:])})"
+            rows += [(lab, "EPE", res[key[0]].get(k + "/epe", float("nan")), float(e.mean()) if len(e) else float("nan"), 1e-5),
+                     (lab, "n", res[key[0]].get(k + "/n", 0.0), float(len(e)), 0)]
+    return rows
+
+
 def all_rows(n, sig, seed):
     task = G.build_task()
     samples = G.pick(n, sig, seed)
     return samples, (boxes_rows(samples, task) + maps_rows(samples, task) + velocity_rows(samples, task) + fusion_rows(samples, task)
-                     + swap_boxes_rows(samples, task) + swap_maps_rows(samples, task) + swap_velocity_rows(samples, task))
+                     + velocity_split_rows(samples, task)
+                     + swap_boxes_rows(samples, task) + swap_maps_rows(samples, task) + swap_velocity_rows(samples, task)
+                     + velocity_split_rows(samples, task, swap=True))
 
 
 def print_rows(rows):

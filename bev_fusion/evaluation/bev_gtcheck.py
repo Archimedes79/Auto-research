@@ -156,6 +156,7 @@ def build_task():
     task = BEVTask(Grid(), layer_spec(False, True), [g for g, _ in NUSC_GROUPS])
     task.curves = True
     task.fusion = True
+    task.velocity = True
     return task
 
 
@@ -189,6 +190,9 @@ def selftest(n=24):
     assert g("oracle", "det/dt+0.00/vehicle/all/ap@2") > 0.999 and g("oracle", "curve/dt+0.00/lane_divider/ap") > 0.999
     assert g("oracle", "curve/dt+0.00/lane_divider/roc_auc") > 0.999 and g("oracle", "curve/dt+0.00/velocity/moving/epe") < 1e-3
     assert g("oracle", "curve/dt+0.00/velocity/moving/r2") > 0.999
+    assert g("oracle", "vel/dt+0.00/cells/vehicle_moving/epe") < 1e-3 and g("oracle", "vel/dt+0.00/cells/static/epe") < 1e-3     # the field = the GT layer
+    assert g("oracle", "vel/dt+0.00/centre/zero/moving/epe") > 1.0 > g("oracle", "vel/dt+0.00/centre/field/moving/epe")         # GT layer at the centre vs v = 0
+    assert g("null", "vel/dt+0.00/cells/vehicle_moving/epe") > 1.0
     assert g("oracle", L0) > g("shift 1", L0) > g("shift 3", L0) and g("shift 1", L1) > 0.99 > g("shift 3", L0)       # tolerance recovers a 1-cell shift
     assert g("oracle", "curve/dt+0.00/lane_divider/roc_auc") > g("noise 0.2", "curve/dt+0.00/lane_divider/roc_auc") > g("noise 0.5", "curve/dt+0.00/lane_divider/roc_auc") > 0.5
     assert g("shuffled", L0) < 0.5 * g("oracle", L0)

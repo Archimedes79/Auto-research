@@ -335,7 +335,8 @@ def _make_subject_classes():
                                "mass": p["mass"][0, 0].float().cpu().numpy() if p.get("mass") is not None else None,
                                "dets": ns.decode({k: v[:1].float().cpu() for k, v in p["obj"].items()}, grid, ns.NUSC_GROUPS, k=100, threshold=0.05)[0],
                                "detr": list(refined[dt][0]) if self.refine else None,
-                               "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None}
+                               "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None,
+                               "objvel": p["obj"]["vel"][0].float().cpu().numpy() if "vel" in p["obj"] else None}     # the object head's raw velocity map (bev_velocity centres)
                 arrays = self.rec.read(0) if names else {}
                 if "memory_conf" in arrays:
                     arrays["memory_conf"] = arrays["memory_conf"][0]

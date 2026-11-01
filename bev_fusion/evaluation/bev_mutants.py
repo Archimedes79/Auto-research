@@ -5,7 +5,7 @@ version of the response test (AVE as L1, TP threshold, AOE wrap), which now have
     python evaluation/bev_mutants.py [n_frames] [name-part ...]        (from bev_fusion, CPU, about 8 min for all 12 at 24 frames; a name part selects mutants)
 
 Mutants: ROC-AUC reported as 1 - AUC; ECE without bin weights; Brier without the + P term; RMSE without the square root; ASE = 1 - sqrt(IoU); AVE as L1 instead
-of L2; ATE x 1.1; front window to 70 m; TP threshold 1 m instead of 2 m; AOE without the 2 pi wrap; moving-cell velocity sums = all cells; camera mask = every cell
+of L2; ATE x 1.1; front window to 70 m; TP threshold 1 m instead of 2 m; AOE without the 2 pi wrap; moving-cell velocity sums = all cells; camera mask = every cell; fusion-area rules; velocity: box-centre cell rounded, static set with the moving cells
 (patched on the code side only: the test derives its cell sets from the same `masks()` function, so a bug INSIDE masks() would hit both sides and escape - the masks
 are checked by `bev_gtcheck.py` against the poses and by eye, not by this test)."""
 from __future__ import annotations
@@ -22,9 +22,10 @@ import evaluation.bev_response as R  # noqa: E402  (sets the import paths)
 import evaluation.bev_curves as C  # noqa: E402
 import evaluation.metrics as M  # noqa: E402
 import evaluation.bev_fusion_area as FA  # noqa: E402
+import evaluation.bev_velocity as V  # noqa: E402
 from evalsuite.comparison import boxes as B  # noqa: E402
 
-orig = {"care": FA.CARE, "near": FA.NEAR, "prepare": FA.prepare, "share": FA.footprint_share, "farea": FA.fusion_area, "cls": C.classification_numbers, "reg": C.regression_numbers, "tp": B.tp_errors, "front": M.in_front, "thr": M.TP_THRESHOLD, "vs": C.velocity_sums}
+orig = {"care": FA.CARE, "near": FA.NEAR, "prepare": FA.prepare, "share": FA.footprint_share, "farea": FA.fusion_area, "cls": C.classification_numbers, "reg": C.regression_numbers, "tp": B.tp_errors, "front": M.in_front, "thr": M.TP_THRESHOLD, "vs": C.velocity_sums, "vci": V.centre_index, "vcs": V.cell_sets}
 
 
 def m_auc_inverted():
@@ -118,6 +119,21 @@ def m_area_rule_off():                                               # detection
     FA.prepare = prepare
 
 
+def m_velocity_centre_rounded():                                    # the box-centre cell rounded instead of floored (half a cell off)
+    def f(boxes, grid, valid):
+        g2 = type("G", (), {"x_min": grid.x_min - 0.5 * grid.res, "y_min": grid.y_min - 0.5 * grid.res, "res": grid.res})
+        return orig["vci"](boxes, g2, valid)
+    V.centre_index = f
+
+
+def m_velocity_static_all_cells():                                  # the static set keeps the moving cells
+    def f(g, groups):
+        out = orig["vcs"](g, groups)
+        out["static"] = V.object_cells(g, groups)
+        return out
+    V.cell_sets = f
+
+
 def m_fusion_area_ignores_hidden():
     FA.fusion_area = lambda g: (np.asarray(g["camera"], np.float32) > 0) & (np.asarray(g["radar"], np.float32) > 0)
 
@@ -127,13 +143,15 @@ MUTANTS = [("ROC-AUC reported as 1 - AUC", m_auc_inverted), ("ECE without bin we
            ("front window to 70 m", m_window_70m), ("TP threshold 1 m instead of 2 m", m_tp_threshold_1m), ("AOE without the 2 pi wrap", m_aoe_no_wrap),
            ("moving-cell velocity sums = all cells", m_velocity_sums_skip_moving), ("camera mask = every cell (code side only)", m_fov_mask_all),
            ("care threshold 0.3 instead of 0.5", m_care_threshold_03), ("neutral rule off (detections on neutral boxes count)", m_neutral_rule_off),
-           ("detections outside the fusion area are kept", m_area_rule_off), ("fusion area ignores hidden cells", m_fusion_area_ignores_hidden)]
+           ("detections outside the fusion area are kept", m_area_rule_off), ("fusion area ignores hidden cells", m_fusion_area_ignores_hidden),
+           ("velocity: box-centre cell rounded, not floored", m_velocity_centre_rounded), ("velocity: static set keeps the moving cells", m_velocity_static_all_cells)]
 
 
 def restore():
     C.classification_numbers, C.regression_numbers, B.tp_errors, M.in_front, M.TP_THRESHOLD, C.velocity_sums = (
         orig["cls"], orig["reg"], orig["tp"], orig["front"], orig["thr"], orig["vs"])
     FA.CARE, FA.NEAR, FA.footprint_share, FA.fusion_area, FA.prepare = orig["care"], orig["near"], orig["share"], orig["farea"], orig["prepare"]
+    V.centre_index, V.cell_sets = orig["vci"], orig["vcs"]
 
 
 def off(rows):
