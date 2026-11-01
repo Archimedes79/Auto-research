@@ -20,6 +20,7 @@ All three weekly reports end with the list of corrected claims and an experiment
 ## Other folders
 
 - `build/` - builders, in two subfolders (`reports/`, `decks/`); see `build/README.md`. Temporary files (html, image cache, slide exports) are not kept.
+- `results/weekN/` - the result record of a week: `WeekN_Results.md` in git, the extensive PDF report, its figures and the example videos next to it (not in git); see `results/README.md`.
 - `source/figures/` - result images used by the builders; `source/weekly/` - digests, number reviews, deck charts.
 
 ## Removed

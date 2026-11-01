@@ -38,6 +38,7 @@
 !/bev_fusion_lane_center/reports/README.md
 !/bev_fusion_lane_center/reports/build/
 !/bev_fusion_lane_center/reports/source/
+!/bev_fusion_lane_center/reports/results/
 # text records: plan, schedule, ledger, decisions, closed questions, run records, history; experiment cards and summaries; model registry
 !/bev_fusion_lane_center/experiment_execution/
 !/bev_fusion_lane_center/experiments/
