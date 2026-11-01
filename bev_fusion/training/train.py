@@ -50,6 +50,7 @@ try:
     from .losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
     from .model import BEVFusionModel, ModelConfig
     from .nuscenes_dataset import FrontRadarDataset, available_scenes, collate
+    from .radar_encoder import aux_weight
 except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from augment import flip_batch
@@ -58,6 +59,7 @@ except ImportError:                                   # run as a script
     from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
     from model import BEVFusionModel, ModelConfig
     from nuscenes_dataset import FrontRadarDataset, available_scenes, collate
+    from radar_encoder import aux_weight
 
 
 @dataclass
@@ -89,6 +91,11 @@ class TrainConfig:
     uwso_T: float = 5.0                          # UW-SO temperature, search {1, 2, 5, 10, 20} on quarter-length runs
     consistency: float = 0.0                     # weight of the train-only cross-time consistency (loss_extras), 0 = off
     consistency_warmup: tuple = (0.2, 0.2)       # (hold, ramp) fractions: off for the first 20 %, then linear in
+    radar_aux: float = 0.0                       # radar_kind "delta_slots": weight of the radar encoder's reconstruction SIDE loss at the start of
+                                                 # the training (radar_encoder.aux_weight: floor + (start - floor) * 0.5 ** (progress / half)); it
+                                                 # helps the first phase, the task losses are the goal; 0 = off (kept-fraction not computed either)
+    radar_aux_floor: float = 0.05                # weight it decays to
+    radar_aux_half: float = 0.2                  # half-life in fractions of the training
     grad_diag_every: int = 0                     # log the cosines of the task-group gradients at the BEV feature every N steps
     seq_len: int = 1                             # keyframes per clip: > 1 trains on clips of consecutive keyframes of one scene with
                                                  # the world memory carried from keyframe to keyframe (batch_size = clips per
@@ -525,6 +532,16 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
             ct = consistency_term(model, loss, res, gts, batch["gt"], device)
             out["consistency"] = ct["total"]
             out["total"] = out["total"] + wc * ct["total"]
+        side = res.get("radar_side")                                               # radar_kind "delta_slots" only
+        if side is not None and cfg is not None and cfg.radar_aux > 0:
+            enc = model.radar
+            f_side, s_side = side["features"].float(), side["state"].float()
+            if train_terms:                                                        # the SIDE loss: helps early, decays to a floor
+                la = enc.aux_loss(f_side, s_side)
+                out["radar_aux"] = la
+                out["total"] = out["total"] + aux_weight(step_frac, cfg.radar_aux, cfg.radar_aux_floor, cfg.radar_aux_half) * la
+            else:                                                                  # validation: how much of the detections the features hold
+                out["radar_kept"] = enc.kept_fraction(batch["radar"], f_side.shape[0], features=f_side)[0]
         if diag:
             groups = {k[len("group."):]: v for k, v in out.items() if k.startswith("group.") and torch.is_tensor(v) and v.requires_grad}
             if wc > 0 and out["consistency"].requires_grad:      # its gradient norm at the BEV feature calibrates its weight
@@ -535,7 +552,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     return out, res, gts
 
 
-LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0")     # single terms logged (train and val) next to the groups:
+LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0", "radar_aux", "radar_kept")     # single terms logged (train and val) next to the groups:
                                                                              # the velocity terms (t11), hidden in group.objects / motion
 
 

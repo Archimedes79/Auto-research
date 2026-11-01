@@ -49,6 +49,7 @@ try:
     from .object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
     from .precompute import Precompute
     from .radar_bev import RadarBEV
+    from .radar_encoder import RadarEncoder, n_channels
     from .temporal_fusion import TemporalFusion
     from .timed_head import TimedHead, TimeMover
 except ImportError:                                   # run as a script
@@ -64,6 +65,7 @@ except ImportError:                                   # run as a script
     from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
     from precompute import Precompute
     from radar_bev import RadarBEV
+    from radar_encoder import RadarEncoder, n_channels
     from temporal_fusion import TemporalFusion
     from timed_head import TimedHead, TimeMover
 
@@ -95,6 +97,8 @@ class ModelConfig:
     trunk_kind: str = "dualbev"        # "dualbev" (ResNet pyramid + FPN-LSS) | "second" (SECOND + SECONDFPN, blocks_new.py)
     trunk_fpn_original: bool = False   # t4: FPN-LSS concatenation order of BEVDet / DualBEV (stage 0 first), what the pre-trained weights expect
     radar_kind: str = "raster"         # "raster" (means + 2 convs) | "pillars" (point MLP + scatter-max, blocks_new.py) | "off" (zeros)
+                                       # | "delta_slots" (radar_encoder.RadarEncoder: lossless delta-coded slot raster + 2 convs; needs c_rad >= 61;
+                                       # its reconstruction side loss is switched on by TrainConfig.radar_aux)
     cam_collapse: str = "zconv"        # try 7: "zconv" (1x1 conv over Z x 80 channels) | "zsum" (sum over heights, then 1x1; blocks_new.ZSumReduce)
     cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
     camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
@@ -164,7 +168,8 @@ TEMPORALS = {"window_memory": lambda c, grid: TemporalFusion(c, c, grid),     # 
              "ego_gru": lambda c, grid: _fallbacks().EgoWarpGRU(c, c, grid),
              "none": lambda c, grid: None}
 RADARS = {"raster": lambda grid, c: RadarBEV(grid, c), "off": lambda grid, c: RadarBEV(grid, c),
-          "pillars": lambda grid, c: RadarPillars(grid, c)}
+          "pillars": lambda grid, c: RadarPillars(grid, c),
+          "delta_slots": lambda grid, c: RadarEncoder(grid, C=c)}      # radar_encoder.py: delta-coded slot raster, pass-through start, side loss
 FUSIONS = {"concat": ConcatFusion, "gate": GateFusion, "cmx": None}  # cmx: the backbone takes both branch BEVs
 TRUNKS = {"dualbev": _dualbev_trunk, "second": _second_trunk}
 BACKBONES = dict(TRUNKS, cmx=_cmx_trunk)
@@ -183,6 +188,8 @@ def check_config(cfg):
         errs.append("camera_features='bevfusion' is not supported with lift 's'")
     if cfg.lane_branch and (cfg.camera_features != "dualbev" or cfg.lift == "s"):
         errs.append("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
+    if cfg.radar_kind == "delta_slots" and cfg.c_rad < n_channels():
+        errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
     if errs:
@@ -346,8 +353,14 @@ class BEVFusionModel(nn.Module):
             if flip is not None and bool(flip.any()):
                 lane = flip_cam(lane[:, None], None, flip)[0][:, 0]
             cam = cam + lane
-        rad = (torch.zeros(cam.shape[0], self.cfg.c_rad, self.grid.nx, self.grid.ny, device=cam.device)
-               if self.cfg.radar_kind == "off" else self.radar(batch["radar"], cam.shape[0]))
+        radar_side = None
+        if self.cfg.radar_kind == "off":
+            rad = torch.zeros(cam.shape[0], self.cfg.c_rad, self.grid.nx, self.grid.ny, device=cam.device)
+        elif self.cfg.radar_kind == "delta_slots":               # features + the lossless raster: the side loss (train.py) reads both
+            rad, rstate = self.radar(batch["radar"], cam.shape[0], with_state=True)
+            radar_side = {"features": rad, "state": rstate}
+        else:
+            rad = self.radar(batch["radar"], cam.shape[0])
         rad_obs = batch["radar_hits"].to(rad) if "radar_hits" in need else None   # radar memory: write where it measured
         rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
@@ -375,7 +388,10 @@ class BEVFusionModel(nn.Module):
                 if self.cfg.aux_heads and self.training:
                     p["cam_aux"], p["radar_aux"] = self.aux_cam(cam), self.aux_rad(rad)
             out[float(dt)] = p
-        return {"out": out, "state": {"cam": cam_state, "rad": rad_state}, "features": S}
+        res = {"out": out, "state": {"cam": cam_state, "rad": rad_state}, "features": S}
+        if radar_side is not None:
+            res["radar_side"] = radar_side
+        return res
 
 
 def trainable_parameters(model):
@@ -471,7 +487,7 @@ def _selftest():
     # every swappable block (shapes only: no checkpoint, no gradient)
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
              {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"},
-             {"radar_kind": "pillars"}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
+             {"radar_kind": "pillars"}, {"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
              {"camera_off": True}, {"cam_adapter": True}, {"cam_collapse": "zsum"}]
     tried = []
     for kw in swaps:

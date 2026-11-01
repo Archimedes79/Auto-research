@@ -21,6 +21,7 @@ run "synthetic world"   "$PY" tests/synthetic_world.py
 run "lift PD"           "$PY" training/lift_pd.py
 run "camera encoder"    "$PY" training/camera_encoder.py
 run "radar encoder"     "$PY" training/radar_bev.py
+run "radar encoder, lossless" "$PY" training/radar_encoder.py     # delta-coded slot raster: exact round trip, side loss, monitor
 run "splat"             "$PY" training/splat.py
 run "BEV trunk"         "$PY" training/bev_trunk.py
 run "temporal fusion"   "$PY" training/temporal_fusion.py
@@ -45,6 +46,7 @@ run "mirror augment"    "$PY" training/augment.py                   # nuScenes m
 if [ "${1:-}" = "--all" ]; then
   run "whole chain"     "$PY" training/model.py                     # nuScenes mini, CPU; minutes
   run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
+  run "radar slot"      "$PY" tests/test_radar_slot.py              # delta_slots in the whole chain: side loss, gradients, old path unchanged; about 2 min
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
   run "autoGT"          "$PY" -m autogt selftest
   run "flow from frames" "$PY" tests/test_flow_from_frames.py
