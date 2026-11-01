@@ -55,9 +55,15 @@ def cmd_status(a):
     else:
         names = sorted(d for d in os.listdir(a.root) if os.path.isdir(os.path.join(a.root, d))) if os.path.isdir(a.root) else []
         runs = [(Run(os.path.join(a.root, d), a.loss), None) for d in names]
-        runs = [x for x in runs if (x[0].train if not a.all else x[0].mtime(x[0].log_name))]
+        recent = lambda r: (r.heartbeat_age() or 1e9) < 24 * 3600
+
+        def shown(r):       # a run that crashed in its imports or is still starting has a text log and no row yet: it is the news, not clutter (an old text-only folder is clutter)
+            if a.all:
+                return r.train or r.mtime(r.log_name) or r.mtime(r.text_name)
+            return r.train or (r.mtime(r.text_name) and recent(r))
+        runs = [x for x in runs if shown(x[0])]
         if not a.all:
-            runs = [x for x in runs if (x[0].heartbeat_age() or 1e9) < 24 * 3600 or x[0].state() in ("running", "stalled")]
+            runs = [x for x in runs if recent(x[0]) or x[0].state() in ("running", "stalled")]
     rows = []
     for run, ref_name in runs:
         ref = open_run(ref_name or a.vs, a.root, a.loss) if (ref_name or a.vs) else None
@@ -66,7 +72,7 @@ def cmd_status(a):
         print(json.dumps([r[0] for r in rows], indent=1))
         return 0
     if not rows:
-        print(f"no runs with metrics under {a.root} (use --all for the old ones)")
+        print(f"no runs with metrics or a text log under {a.root} (use --all for the old ones)")
         return 0
     print(f"{'run':<24}{'state':<9}{'step/total':<13}{'%':>4}  {'s/step':>6}  {'ETA':>7}  {'loss':>8}  flags")
     for s, f, k in rows:
@@ -157,13 +163,17 @@ def cmd_watch(a):
     specs = [split_ref(x) for x in a.runs]
     runs = {n: Run(resolve(n, a.root), a.loss) for n, _ in specs}
     refs = {n: (open_run(r or a.vs, a.root, a.loss) if (r or a.vs) else None) for n, r in specs}
-    snaps = {n: dict(state=None, find={}, kill={}, evals=0, step=None, since=time.time(), initial=True, req=None, rewrote=False) for n in runs}
+    snaps = {n: dict(state=None, find={}, kill={}, evals=0, step=None, restarts=None, since=time.time(), initial=True, req=None, rewrote=False) for n in runs}
     stopped_by = set()
     while runs:
         for key in list(runs):
             run = runs[key] = Run(runs[key].dir, a.loss)
             snap = snaps[key]
-            s, findings, kills = summary(run, refs[key], a.kill, snap["step"])
+            cursor = snap["step"]
+            if snap["restarts"] is not None and (run.restarts > snap["restarts"] or run.step < snap["step"]):
+                # resumed from an earlier checkpoint since the last look (the run may be past the old step again by now): the rows from the resume step on are new
+                cursor = run.resumes[-1] - 1 if run.resumes else None
+            s, findings, kills = summary(run, refs[key], a.kill, cursor)
             now = time.time()
             if s["state"] != snap["state"]:
                 if snap["state"] is not None:
@@ -203,7 +213,7 @@ def cmd_watch(a):
                 e = run.evals[-1]
                 _event(run, f"eval at step {int(e['step'])}: " + ", ".join(
                     f"{k[4:]} {v:.4g}" for k, v in e.items() if k.startswith("val.") and "last" not in k), "eval")
-            snap.update(state=s["state"], kill={r.text: st for r, st, _ in kills}, evals=len(run.evals), step=run.step)
+            snap.update(state=s["state"], kill={r.text: st for r, st, _ in kills}, evals=len(run.evals), step=run.step, restarts=run.restarts)
             waiting = s["state"] in ("new", "stalled") or (s["state"] in TERMINAL and s["state"] != "done" and snap["initial"])
             retrying = s["state"] == "failed" and not snap["initial"] and now - snap["since"] <= RETRY_GRACE_S
             if s["state"] == "done" or (s["state"] in TERMINAL and not waiting and not retrying):

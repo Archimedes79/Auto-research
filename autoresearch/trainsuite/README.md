@@ -5,7 +5,7 @@ A training is a process that writes files. This suite reads them and tells you w
 ## Try it
 ```
 python -m trainsuite selftest                                  # synthetic runs with known answers, a few seconds
-python -m trainsuite --root ../bev_fusion/runs status          # runs active in the last 24 h (--all: every run with a metrics file)
+python -m trainsuite --root ../bev_fusion/runs status          # runs active in the last 24 h, also one that died before its first row (--all: every run with a metrics file or a text log)
 python -m trainsuite --root ../bev_fusion/runs health t8_bevfeat_s0:t8_ctl_s0 --kill "group.lines@1000 > 1.48"
 python -m trainsuite --root ../bev_fusion/runs curves t8_bevfeat_s0 t8_ctl_s0      # png: total, every group.*, grad_norm
 python -m trainsuite --root ../bev_fusion/runs watch t8_bevfeat_s0:t8_ctl_s0 t8_bevfeat_s1:t8_ctl_s1 --kill "group.lines@1000 > 1.48" --enforce
@@ -34,7 +34,7 @@ The loss key is `total` (`--loss KEY`). A project with other names puts a `train
 |---|---|---|
 | `failed`, `stalled` | alert | crashed (last line of the traceback) / no output |
 | `nonfinite`, `skipped` | alert / warn | NaN or inf in a logged row / steps the trainer skipped (3 in a row = alert) |
-| `spike` | warn | a value 8 robust sigmas above the recent median (`watch` tests every row since its last look) |
+| `spike` | warn | a value 8 robust sigmas above the recent median (`watch` tests every row since its last look; after a restart from an earlier checkpoint the rows from the resume step on count as new, also when the run has passed the old step again) |
 | `shift` | warn after 50 % of the steps, else info | the last 10 rows of `total` jumped by more than 30 % and 5 standard errors over the 30 before, and stay there |
 | `rising` | same | window mean of `total` or a `group.*` rose by more than 3 standard errors |
 | `grad_norm`, `gpu`, `slow` | warn | grad norm > 10 x its median / the trainer's peak GPU allocation > 11 GB / s per step 1.5 x the typical one of the current attempt (rows with a time `t` only, running runs only) |

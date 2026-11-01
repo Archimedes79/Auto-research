@@ -410,6 +410,73 @@ def main():
         assert calls[0] >= 3 and "failed at step" in buf.getvalue() and "running at step" in buf.getvalue().split("failed at step")[1], buf.getvalue()
         ok("watch keeps a run that failed while watched for the launcher's retry")
 
+        # 10c a restart from an earlier checkpoint: the watch looked at step 5000 last, the resumed run is at step 4560 and its first rows (a spike at 4520) are new
+        d = make(tmp, "stepback", rows(250, every=20, mean=10.0, t0=now - 9000))
+        calls[0] = 0
+
+        def resume_with_spike(_):
+            calls[0] += 1
+            if calls[0] == 1:
+                back = rows(226, every=20, mean=10.0, t0=now - 9000)                      # steps 20 .. 4520, then the spike row replaces the last one
+                back[-1]["total"] = 80.0
+                back += [dict(back[-2], step=4540 + 20 * i, t=back[-2]["t"] + 20 * (i + 2)) for i in range(2)]
+                with open(os.path.join(d, "log.jsonl"), "w") as f:
+                    f.write("".join(json.dumps(x) + "\n" for x in back))
+            if calls[0] >= 3:
+                raise _Stop()
+        cli.time.sleep = resume_with_spike
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                try:
+                    cli_main(["--root", tmp, "watch", "stepback", "--every", "1"])
+                except _Stop:
+                    pass
+        finally:
+            cli.time.sleep = real_sleep
+        assert Run(d).step == 4560 and "warn spike" in buf.getvalue(), (Run(d).step, buf.getvalue())
+        ok("watch looks at the first rows after a restart from an earlier checkpoint (the cursor of the last look is reset)")
+
+        # 10d/10e the cursor in the other cases: a restart that is past the old step again at the next look (spike in the resumed segment, not the last row),
+        # and normal progress (a spike in the middle of 30 new rows is seen, the 5-row default window would miss it)
+        def watch_between(name, first_sleep):
+            calls[0] = 0
+
+            def sleeper(_):
+                calls[0] += 1
+                if calls[0] == 1:
+                    first_sleep()
+                if calls[0] >= 2:
+                    raise _Stop()
+            cli.time.sleep = sleeper
+            out_ = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out_):
+                    try:
+                        cli_main(["--root", tmp, "watch", name, "--every", "1"])
+                    except _Stop:
+                        pass
+            finally:
+                cli.time.sleep = real_sleep
+            return out_.getvalue()
+
+        def dump(path, rs):
+            with open(path, "w") as f:
+                f.write("".join(json.dumps(x) + "\n" for x in rs))
+        old_rows = rows(250, every=20, mean=10.0, t0=now - 9000)                     # steps 20 .. 5000
+        d = make(tmp, "fastback", old_rows)
+        new_rows = rows(252, every=20, mean=10.0, t0=now - 9000)[224:]               # the resume: steps 4500 .. 5040, past the old 5000 at the next look
+        new_rows[11]["total"] = 80.0                                                  # step 4720, 16 rows from the end
+        text = watch_between("fastback", lambda: dump(os.path.join(d, "log.jsonl"), old_rows + new_rows))
+        r = Run(d)
+        assert r.restarts == 1 and r.resumes == [4500] and r.step == 5040 and "warn spike" in text, (r.restarts, r.resumes, r.step, text)
+        d = make(tmp, "midway", old_rows)
+        more = rows(280, every=20, mean=10.0, t0=now - 9000)[250:]                    # steps 5020 .. 5600
+        more[5]["total"] = 80.0                                                       # step 5120, 24 rows from the end
+        text = watch_between("midway", lambda: dump(os.path.join(d, "log.jsonl"), old_rows + more))
+        assert Run(d).restarts == 0 and "warn spike" in text, text
+        ok("watch tests every row since its last look, also after a restart that has caught up with the old step again")
+
         # 11 layout override, status table, default listing, run:reference
         d = os.path.join(tmp, "other")
         os.makedirs(d)
@@ -433,6 +500,21 @@ def main():
         rc, out = run_cli("--root", tmp, "status", "good")
         assert "running" in out and "2000/3000" in out, out
         ok("another layout through trainsuite.json; status as table / json, without empty logs by default, with a reference per run")
+
+        # 11b a run that died before its first row (import error: a traceback in the text log, no metrics stream) is listed as failed; an old text-only folder is not
+        c0 = make(tmp, "crash_start", [], text="Traceback (most recent call last):\n  File x\nImportError: no module named torchvision\n")
+        os.remove(os.path.join(c0, "log.jsonl"))
+        o0 = make(tmp, "old_text_only", [], text="loading\n", age=3 * 86400)
+        os.remove(os.path.join(o0, "log.jsonl"))
+        rc, out = run_cli("--root", tmp, "status", "--json")
+        got = {x["run"]: x for x in json.loads(out)}
+        assert got["crash_start"]["state"] == "failed" and "torchvision" in str(got["crash_start"]["findings"]), got.get("crash_start")
+        assert "old_text_only" not in got and "empty_log" not in got and "good" in got
+        rc, out = run_cli("--root", tmp, "status")
+        assert "crash_start" in out and "failed" in out, out
+        rc, out = run_cli("--root", tmp, "status", "--all", "--json")
+        assert {"crash_start", "old_text_only", "empty_log"} <= {x["run"] for x in json.loads(out)}
+        ok("status lists a run that crashed before its first row, not an old folder with a text log only")
 
         # 12 curves
         try:

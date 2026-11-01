@@ -29,12 +29,12 @@ def _flat(obj, prefix=""):
     return out
 
 
-def read_log(path):
+def read_log(path, resumes=None):
     """(train rows, eval rows, restarts) of a metrics stream. A row is a flat dict with `step`; an eval row has keys `val.*`.
     After a resume the file holds steps twice: a row whose step is not above the last one replaces everything from that step on
     (the later attempt wins, its evaluations from that step on included); `restarts` counts those replacements. Contract: ONE train row per step
     (a second train-type row at the same step, e.g. a closing summary row, counts as a rollback and drops the evaluations from that step on).
-    A half-written last line is skipped."""
+    A half-written last line is skipped. A list given as `resumes` receives the step of the row that replaced the old ones, once per restart."""
     train, evals, restarts = [], [], 0
     try:
         f = open(path, encoding="utf-8", errors="replace")
@@ -60,6 +60,8 @@ def read_log(path):
                     lst.pop()
                 if lst is train:
                     restarts += 1
+                    if resumes is not None:
+                        resumes.append(int(row["step"]))
                     while evals and evals[-1]["step"] >= row["step"]:        # the evaluations of the superseded training suffix go with it
                         evals.pop()
             lst.append(row)
@@ -77,7 +79,8 @@ class Run:
         self.loss_key = opt.get("loss", loss)
         self.progress = str(opt.get("progress", "step "))      # how a progress line of the text log starts (crash detection)
         self.total = int(opt.get("steps") or self.cfg.get("steps") or 0)
-        self.train, self.evals, self.restarts = read_log(self.p(self.log_name))
+        self.resumes = []                                       # the first step of each later attempt (watch looks at the rows from there on)
+        self.train, self.evals, self.restarts = read_log(self.p(self.log_name), self.resumes)
 
     # ---- files
     def p(self, *a):
