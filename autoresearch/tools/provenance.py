@@ -34,7 +34,7 @@ import project as P  # noqa: E402
 
 SCHEMA = 1
 CODE_SUFFIX = (".py", ".sh", ".ps1", ".json", ".yaml", ".yml")
-COMPARE_KEYS = (("gt", "version"), ("gt", "signature"), ("evaluator", "code_hash"), ("data", "frame_hash"))
+COMPARE_KEYS = (("gt", "version"), ("gt", "signature"), ("evaluator", "code_hash"), ("data", "frame_hash"), ("data", "manifest_hash"))
 UNKNOWN = "unknown"
 
 
@@ -144,6 +144,20 @@ def frames_block(split, tokens):
             "frame_hash": hashlib.sha256("\n".join(toks).encode()).hexdigest()[:12] if toks else UNKNOWN}
 
 
+def dataset_block(version, repo):
+    """the identity of the raw data: the hash of datasets/NuScenes/manifest.json (archives, tables, sensor-folder fingerprints), the version key and the counts"""
+    out = {"dataset": version or UNKNOWN, "manifest_hash": UNKNOWN}
+    p = os.path.join(repo, "datasets", "NuScenes", "manifest.json")
+    if os.path.isfile(p):
+        out["manifest_hash"] = file_hash(p)
+        try:
+            d = json.load(open(p, encoding="utf-8")).get("datasets", {}).get(version or "", {})
+            out.update(scenes=d.get("scenes"), samples=d.get("samples"))
+        except (OSError, ValueError, AttributeError):
+            out["manifest_error"] = "unreadable manifest"
+    return out
+
+
 def subject_block(run=None, ckpt=None, config=None, step=None, run_dir=None, repo=None):
     out = {"run": run or UNKNOWN}
     if ckpt and os.path.isfile(ckpt):
@@ -177,11 +191,14 @@ def env_block():
 
 
 def collect(gt_key=None, split=None, tokens=(), evaluator=(), run=None, ckpt=None, config=None, step=None, run_dir=None, seed=None,
-            settings=None, repo=None, data_root=None):
+            settings=None, repo=None, data_root=None, dataset=None):
+    """dataset = the nuScenes version key (v1.0-trainval, v1.0-mini); default: the one the GT store names"""
     repo = repo or repo_root()
-    return {"schema": SCHEMA, "made": dt.datetime.now().isoformat(timespec="seconds"), "gt": gt_block(gt_key, repo, data_root),
+    gt = gt_block(gt_key, repo, data_root)
+    data = dict(frames_block(split, tokens), **dataset_block(dataset or gt.get("dataset"), repo))
+    return {"schema": SCHEMA, "made": dt.datetime.now().isoformat(timespec="seconds"), "gt": gt,
             "evaluator": evaluator_block(evaluator, repo, settings) if evaluator else {"commit": UNKNOWN, "dirty": UNKNOWN, "code_hash": UNKNOWN},
-            "data": frames_block(split, tokens), "subject": subject_block(run, ckpt, config, step, run_dir, repo), "environment": env_block(),
+            "data": data, "subject": subject_block(run, ckpt, config, step, run_dir, repo), "environment": env_block(),
             "seed": seed if seed is not None else UNKNOWN}
 
 
@@ -278,6 +295,9 @@ def selftest():
         open(os.path.join(tmp, "ev", "m.py"), "w").write("x = 1\n")
         json.dump({"signature": "abc123", "gt_version": "v5", "version": "v1.0-trainval", "res": 0.5, "ss": 4, "options": {"boxes_at": "camera"}},
                   open(os.path.join(tmp, "data", "autogt", "abc123", "index.json"), "w"))
+        os.makedirs(os.path.join(tmp, "datasets", "NuScenes"))
+        mf = os.path.join(tmp, "datasets", "NuScenes", "manifest.json")
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}}, open(mf, "w"))
         run("init", "-q")
         run("add", "ev")
         run("commit", "-q", "-m", "x")
@@ -289,6 +309,12 @@ def selftest():
         assert a["evaluator"]["dirty"] == [] and a["data"]["n"] == 2 and a["subject"]["ckpt_hash"] and a["seed"] == 1
         assert a["data"]["frame_hash"] == frames_block("val", ["t1", "t2", "t1"])["frame_hash"], "the frame hash ignores order and duplicates"
         assert frames_block("val", [])["frame_hash"] == UNKNOWN and frames_block("val", [])["n"] == 0, "no frames is unknown, not the hash of nothing"
+        assert a["data"]["dataset"] == "v1.0-trainval" and a["data"]["scenes"] == 850 and a["data"]["manifest_hash"] != UNKNOWN, a["data"]
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 851, "samples": 34149}}}, open(mf, "w"))
+        m2 = collect("0.5_4_abc123", "val", ["t2", "t1"], [os.path.join(tmp, "ev")], repo=tmp)
+        assert any("data.manifest_hash" in x for x in compare(a, m2)[0]), "another manifest = other raw data = not comparable"
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}}, open(mf, "w"))
+        assert dataset_block("v1.0-trainval", os.path.join(tmp, "nowhere"))["manifest_hash"] == UNKNOWN, "no manifest reads unknown"
         assert gt_block("0.5_4_zzz", tmp)["version"] == UNKNOWN, "an unknown store reads unknown"
         open(os.path.join(tmp, "data", "autogt", "abc123", "index.json"), "w").write("{torn")
         assert gt_block("0.5_4_abc123", tmp)["version"] == UNKNOWN and "error" in gt_block("0.5_4_abc123", tmp), "a torn index does not crash"
