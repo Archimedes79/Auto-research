@@ -37,6 +37,7 @@ import collections
 import cv2
 import numpy as np
 from pyquaternion import Quaternion
+from shapely.geometry import MultiPolygon
 
 from . import coverage as cvg
 from . import flow as flowmod
@@ -117,6 +118,7 @@ class NuScenesGT:
         self._scenes = collections.OrderedDict()
         self._stationary = {}
         self._bounds = {}
+        self._geoms = {}                               # the shapely polygon / node array of a map record, made once
         self.signature()                               # frozen now (see signature())
 
     # ---- scene data (tracks, ego, radar) of the flow box, a few scenes kept
@@ -130,9 +132,11 @@ class NuScenesGT:
     def records_in_patch(self, nmap, box, layers):
         """same result as nmap.get_records_in_patch(box, layers, 'intersect'), but the devkit extracts every polygon of the
         whole map per call (0.5 s per keyframe): the bounding box of every record is computed once per map, and the
-        devkit's exact test runs only on the records whose box meets the patch."""
+        devkit's exact test runs only on the records whose box meets the patch (with the geometry of a record made once)."""
+        from shapely.geometry import box as sh_box
         out = {}
         x0, y0, x1, y1 = box
+        patch = sh_box(x0, y0, x1, y1)
         for layer in layers:
             key = (nmap.map_name, layer)
             if key not in self._bounds:
@@ -147,9 +151,28 @@ class NuScenesGT:
                 continue
             toks, bb = b
             hit = (bb[:, 0] <= x1) & (bb[:, 2] >= x0) & (bb[:, 1] <= y1) & (bb[:, 3] >= y0)
-            out[layer] = [toks[i] for i in np.nonzero(hit)[0]
-                          if nmap.explorer.is_record_in_patch(layer, toks[i], box, "intersect")]
+            out[layer] = [toks[i] for i in np.nonzero(hit)[0] if self._record_in_patch(nmap, layer, toks[i], box, patch)]
         return out
+
+    def _record_in_patch(self, nmap, layer, token, box, patch):
+        """the devkit's exact `is_record_in_patch(layer, token, box, "intersect")`: a polygon record (drivable_area: the multi-polygon of its
+        parts) intersects the patch, a line record has a node strictly inside it; the geometry of a record is made once, not on every call"""
+        key = (nmap.map_name, layer, token)
+        if key not in self._geoms:
+            rec = nmap.get(layer, token)
+            if layer == "drivable_area":
+                self._geoms[key] = MultiPolygon([nmap.extract_polygon(t) for t in rec["polygon_tokens"]])
+            elif layer in nmap.lookup_polygon_layers:
+                self._geoms[key] = nmap.extract_polygon(rec["polygon_token"])
+            elif layer in nmap.non_geometric_line_layers:
+                self._geoms[key] = np.array([[n["x"], n["y"]] for n in (nmap.get("node", t) for t in rec["node_tokens"])])
+            else:
+                return nmap.explorer.is_record_in_patch(layer, token, box, "intersect")
+        geom = self._geoms[key]
+        if isinstance(geom, np.ndarray):                           # a line: some node inside the patch (a line without nodes: none)
+            x0, y0, x1, y1 = box
+            return bool(len(geom) and np.any((geom[:, 0] < x1) & (geom[:, 0] > x0) & (geom[:, 1] < y1) & (geom[:, 1] > y0)))
+        return geom.intersects(patch)
 
     def signature(self):
         """10 hex chars identifying this generator: the source of every file that shapes the GT (SIGNATURE_FILES) plus the

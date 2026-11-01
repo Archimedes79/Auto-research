@@ -114,11 +114,8 @@ def cell_centres(grid):
 
 def inside_quad(P, poly):
     """points P (N, 2) inside the convex quadrilateral poly (4, 2), either orientation."""
-    signs = []
-    for k in range(4):
-        a, b = poly[k], poly[(k + 1) % 4]
-        signs.append((b[0] - a[0]) * (P[:, 1] - a[1]) - (b[1] - a[1]) * (P[:, 0] - a[0]))
-    S = np.stack(signs, 1)
+    e = np.roll(poly, -1, axis=0) - poly                                 # the four edges a -> b
+    S = e[:, 0] * (P[:, 1:2] - poly[:, 1]) - e[:, 1] * (P[:, 0:1] - poly[:, 0])      # (N, 4): the side of every point of every edge
     return (S >= 0).all(1) | (S <= 0).all(1)
 
 

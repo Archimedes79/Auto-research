@@ -183,7 +183,8 @@ training which keyframes the store lacks.
 | v5 | 15efbde2d1 | review fixes; the generator of the t10 runs (GT stored for all of trainval) |
 | v6 | 02a1217742 | generator fixes: ego velocity at the first / last pose of a sequence, instance / velocity / flow_sigma on the same sub-pixels, `ego_half_window` |
 | v7 | b84e8ac9b2 | coverage (D36 - D38): boxes hide by their height (softer `occluded`), `coverage.py`, per box `share_camera` / `share_radar` / `share_fusion` and the nuScenes point counts; `camera`, `radar`, `undefined` unchanged. Never built for trainval (superseded by v8 before it finished) |
-| v8 | c643a7539d | v7 made fast, the same GT (bit-identical on 34 keyframes of four maps): radar files read in parallel, map polygons and centre-line points made once, the box shares in one pass, `keyframe_gt` split into methods; **current** |
+| v8 | c643a7539d | v7 made fast, the same GT (bit-identical on 34 keyframes of four maps): radar files read in parallel, map polygons and centre-line points made once, the box shares in one pass, `keyframe_gt` split into methods (the first trainval store of the coverage GT) |
+| v9 | 6a7aa7864a | v8 made twice as fast, the same GT (211 frames of all ten mini sequences byte for byte equal to v7 / v8): the map's record-in-patch test with the geometry made once, `inside_quad` for four edges at once; its store is the v8 store (same bytes); **current** |
 
 **When you edit one of the six files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py coverage.py`) the signature changes and
 `python -m autogt selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild
