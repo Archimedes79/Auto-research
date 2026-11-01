@@ -11,11 +11,14 @@
     tools/env/_py14.sh evaluate.py --list
 
 What it does
-  * builder: the raw network outputs of (run, split, M, K0) are computed once on the GPU and cached in ~/exp_gcar_b123/eval_cache/ (the
-    loop-18 caches ~/exp_gcar_b123/p18/raw_val873_<run>_<M>.pkl are reused); assembly settings and thresholds are re-scored on the CPU in seconds.
+  * builder: the raw network outputs of (run, split, M, K0, every other `set` field) are computed once on the GPU and cached in
+    ~/exp_gcar_b123/eval_cache/ (cache_paths; the loop-18 caches ~/exp_gcar_b123/p18/raw_val873_<run>_<M>.pkl are reused for entries without
+    other settings); assembly settings and thresholds are re-scored on the CPU in seconds.
     --fresh ignores and does not write the cache (the network path is exercised); --subset val250 takes the fixed 250-frame VAL subset of the
-    triage rungs (p16_common.val_subset)
+    triage rungs (p16_common.val_subset), from the cache of the whole split when there is one (the network runs only without a cache or with --fresh)
   * graphs: stored graphs of a system that is not re-run (the control E94)
+  * union: `members` = registry names of builders; their raw trees (each read from its own cache) are joined per frame (p16_infer.union_raw) and
+    assembled once with the union entry's tau / asm (E264, output ensemble)
   * metrics: sparse_metrics.card_any(extra=True) - S, Q, F1, J, FL, vertices per 100 m, lanes found, topo P / R / F1, dup_frac, recall by range
   * card: runs/eval/<name>/<split>[_<subset>][_fresh][_<tag>].json (the contract ../autoresearch/schemas/card.schema.json, schema 1) with the registry entry, overrides, frames, cache file, code commit, metrics, assembly ms per frame
   * golden: evaluation/golden.json holds one entry per (name, split, subset, fresh) with the metrics of GOLD_KEYS rounded to 4 decimals, the
@@ -85,41 +88,70 @@ def subset_ks(split, subset):
     sys.exit(f"unknown subset {subset} for split {split} (known: val250 on val)")
 
 
-def builder_raw(e, split, ks=None, fresh=False, require_cache=False):
-    """(raw node outputs, ground truths, source) of the frames ks of the split (None = all); cached unless ks is given or fresh is set"""
+def cache_paths(e, split):
+    """raw-output cache files of a builder entry on the split: [the file written and read first, older names also read]. The name holds run, M, K0
+    and, when the entry has any other setting that changes the network output (another `set` field, a design other than D7), a digest of those
+    settings; the older names (the loop-18 files without K0, all made with K0 = M / 2) belong to entries without such settings and with K0 = M / 2
+    only, so a new setting never re-scores an old cache"""
     run, M, K0 = e["run"], e["set"]["M"], e["set"]["K0"]
-    os.makedirs(CACHE, exist_ok=True)
-    path = f"{CACHE}/raw_{split}_{run}_{M}_{K0}.pkl"
-    cached = ks is None and not fresh
-    if cached:
-        old = [f"{HOME}/exp_gcar_b123/p18/raw_val873_{run}_{M}.pkl"] + ([f"{HOME}/exp_gcar_b123/p18/raw_val873.pkl"] if run == "e123_D7_r3_f1" and M == 288 else [])
-        for p in [path] + (old if split == "val" else []):
+    other = {k: v for k, v in e["set"].items() if k not in ("M", "K0")}
+    if e["design"] != "D7":
+        other["design"] = e["design"]
+    if other:
+        return [f"{CACHE}/raw_{split}_{run}_{M}_{K0}_{digest(other)}.pkl"]
+    old = [f"{HOME}/exp_gcar_b123/p18/raw_val873_{run}_{M}.pkl"] + ([f"{HOME}/exp_gcar_b123/p18/raw_val873.pkl"] if run == "e123_D7_r3_f1" and M == 288 else [])
+    return [f"{CACHE}/raw_{split}_{run}_{M}_{K0}.pkl"] + (old if split == "val" and K0 == M // 2 else [])
+
+
+def entry_cfg(e):
+    """the builder config overrides of a builder entry: its run card's cfg, then the entry's `set`"""
+    import p16_train as PT
+    extra = dict(json.load(open(f"{R}/runs/e123_ladder/cards/{e['run']}.json", encoding="utf-8-sig"))["cfg"])
+    extra.update(PT.parse_set([f"{k}={v}" for k, v in e["set"].items()]))
+    return extra
+
+
+def builder_raw(e, split, ks=None, fresh=False, require_cache=False, dev="cuda"):
+    """(raw node outputs, ground truths, source) of the frames ks of the split (None = all). Unless fresh is set they come from the cache of the
+    whole split (cache_paths; frames ks taken from it); without a cache the network runs on dev, and only a whole split computed on the GPU
+    (the device of every cache so far) is written"""
+    paths = cache_paths(e, split)
+    if not fresh:
+        for p in paths:
             if os.path.exists(p):
                 raw, gts = pickle.load(open(p, "rb"))
-                return raw, gts, p
+                if ks is None:
+                    return raw, gts, p
+                return [raw[int(k)] for k in ks], [gts[int(k)] for k in ks], f"{p} [{len(ks)} frames]"
     if require_cache:
-        raise RuntimeError(f"no cached network outputs for {run} {M} / {K0} on {split} (would need the GPU)")
+        raise RuntimeError(f"no cached network outputs for {e['run']} {e['set']} on {split} (would need the GPU)")
     import torch
     import p16_data as PD
     import p16_infer as PI
     import p16_train as PT
-    c = json.load(open(f"{R}/runs/e123_ladder/cards/{run}.json", encoding="utf-8-sig"))
-    extra = dict(c["cfg"])
-    extra.update(PT.parse_set([f"{k}={v}" for k, v in e["set"].items()]))
-    net, cfg = PT.build(e["design"], extra)
-    net = net.cuda()
-    net.load_state_dict(torch.load(f"{R}/runs/e123/{run}/model.pt", map_location="cuda"), strict=False)
+    net, cfg = PT.build(e["design"], entry_cfg(e))
+    net = net.to(dev)
+    net.load_state_dict(torch.load(f"{R}/runs/e123/{e['run']}/model.pt", map_location=dev), strict=False)
     ds = PD.BuilderData(SPLITS[split][0], ks=ks, train=False, with_prev=cfg.temporal)
     raw = []
-    _, gts, _ = PI.predict(net, ds, list(range(len(ds))), taus=(e["tau"],), bs=8, workers=2, raw=raw)
-    if cached:
-        pickle.dump((raw, gts), open(path, "wb"))
-        return raw, gts, path
+    _, gts, _ = PI.predict(net, ds, list(range(len(ds))), taus=(e["tau"],), bs=8, workers=2, raw=raw, dev=dev)
+    if ks is None and not fresh and dev == "cuda":
+        os.makedirs(CACHE, exist_ok=True)
+        tmp = f"{paths[0]}.tmp{os.getpid()}"  # written whole, then renamed: a crash never leaves a truncated cache under the real name
+        try:
+            with open(tmp, "wb") as f:
+                pickle.dump((raw, gts), f)
+            os.replace(tmp, paths[0])
+        except BaseException:  # a failed or interrupted write leaves no temp file behind
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise
+        return raw, gts, paths[0]
     return raw, gts, "fresh (no cache)"
 
 
 def graphs_of(name, e, split, asm_over=None, tau=None, ks=None, fresh=False, require_cache=False):
-    """graphs, ground truths, info for a registry entry"""
+    """graphs, ground truths, info for a registry entry (kind graphs: stored; builder / union: raw_of, assembled with the entry's tau / asm)"""
     if e["kind"] == "graphs":
         z = pickle.load(open(f"{R}/{e['files'][split]}", "rb"))
         import p16_data as PD
@@ -129,21 +161,38 @@ def graphs_of(name, e, split, asm_over=None, tau=None, ks=None, fresh=False, req
         gts = [ds.gt[ds.rows[int(z["ks"][i])]] for i in keep]
         return [z["preds"][i] for i in keep], gts, dict(source=e["files"][split], asm_ms=float("nan"))
     import p16_infer as PI
-    import p16_train as PT
-    raw, gts, cache = builder_raw(e, split, ks, fresh, require_cache)
-    c = json.load(open(f"{R}/runs/e123_ladder/cards/{e['run']}.json", encoding="utf-8-sig"))
-    extra = dict(c["cfg"])
-    extra.update(PT.parse_set([f"{k}={v}" for k, v in e["set"].items()]))
-    import p16_builder as PB
-    kw = dict(PT.DESIGNS[e["design"]])
-    kw.update(extra)
-    cfg = PB.DefaultCfg(**{k: v for k, v in kw.items() if k not in ("w",)})  # the config of PT.build without building the network
+    raw, gts, info, base = raw_of(e, split, ks, fresh, require_cache)
     asm = dict(e["asm"])
     asm.update(asm_over or {})
-    t = e["tau"] if tau is None else tau
+    t, cfg = (e["tau"] if tau is None else tau), builder_cfg(base)
     t0 = time.time()
     g = [PI.assemble(r, None, t, cfg, **asm) for r in raw]
-    return g, gts, dict(cache=cache, asm=asm, tau=t, asm_ms=(time.time() - t0) / max(len(raw), 1) * 1e3)
+    return g, gts, dict(info, asm=asm, tau=t, asm_ms=(time.time() - t0) / max(len(gts), 1) * 1e3)
+
+
+def raw_of(e, split, ks=None, fresh=False, require_cache=False):
+    """(raw trees, ground truths, info, the builder entry whose config assembles them) of a builder or union entry. Union (E264): the trees of
+    the member entries (each from its own cache) joined per frame, one joined frame at a time (memory); the members must share the ground truth"""
+    if e["kind"] != "union":
+        raw, gts, cache = builder_raw(e, split, ks, fresh, require_cache)
+        return raw, gts, dict(cache=cache), e
+    import p16_infer as PI
+    reg = registry()
+    members = [reg[m] for m in e["members"]]
+    got = [builder_raw(m, split, ks, fresh, require_cache) for m in members]
+    if len({digest(x[1]) for x in got}) != 1:
+        raise ValueError(f"the members {e['members']} were computed on different frames or ground truths")
+    raw = (PI.union_raw(rs) for rs in zip(*(x[0] for x in got)))
+    return raw, got[0][1], dict(cache=[x[2] for x in got], members={m: reg[m] for m in e["members"]}), members[0]
+
+
+def builder_cfg(e):
+    """the builder config of a builder entry without building the network (the config of p16_train.build)"""
+    import p16_builder as PB
+    import p16_train as PT
+    kw = dict(PT.DESIGNS[e["design"]])
+    kw.update(entry_cfg(e))
+    return PB.DefaultCfg(**{k: v for k, v in kw.items() if k not in ("w",)})
 
 
 def scenes(split, ks=None):
@@ -333,7 +382,7 @@ def main():
     reg = registry()
     if a.list or (not a.name and not a.golden):
         for k, v in reg.items():
-            print(f"{k:18} {v['kind']:8} {v.get('run', '')} {v.get('set', '')} {v.get('what', '')}")
+            print(f"{k:18} {v['kind']:8} {v.get('run', ' + '.join(v.get('members', [])))} {v.get('set', '')} {v.get('what', '')}")
         return
     if a.split == "test" and a.golden != "check" and not test_allowed(a.test_id):
         sys.exit("TEST refused: pass --test-id <run id> that is logged in evaluation/TEST_USAGE_LOG.md (select and tune on VAL only)")

@@ -533,6 +533,26 @@ def simplify_dp(g, eps):
     return dict(pts=pts, edges=list(g["edges"]), nodes=nodes)
 
 
+def union_raw(trees):
+    """E264: the raw trees of one frame from several networks as one tree for the path union of `assemble`: node arrays concatenated (parents and
+    link ends shifted by the nodes before them), junction heat maps by their element-wise maximum"""
+    keys = set(trees[0])
+    if any(set(t) != keys for t in trees):
+        raise ValueError(f"trees with different fields: {[sorted(t) for t in trees]}")
+    off = np.cumsum([0] + [len(t["pi"]) for t in trees[:-1]])
+    out = {}
+    for k in trees[0]:
+        if k == "parent":
+            out[k] = np.concatenate([np.where(t[k] >= 0, t[k] + o, t[k]) for t, o in zip(trees, off)])
+        elif k == "link_p":
+            out[k] = [(i + int(o), j + int(o), p) for t, o in zip(trees, off) for (i, j, p) in t[k]]
+        elif k == "junc":
+            out[k] = np.maximum.reduce([t[k] for t in trees])
+        else:
+            out[k] = np.concatenate([t[k] for t in trees])
+    return out
+
+
 def assemble(r, b, tau, cfg, cov_r=1.0, vtx_r=1.5, pair=None, clean=True, bubble_r=2.5, spur_len=5.0, aux=False, junc_thr=0.0, junc_edge=3.0, junc_free=8.0, junc_ang=100.0, reloc_thr=0.0, reloc_shift=8.0, reloc_tol=0.8, fast=True, tau_low=0.0, fork_prune=0.0, fork_prune_m=-1.0, tau_decay=0.0, dp_eps=0.0):
     """tree -> DAG by path union (nodes in descending path validity): a node within cov_r of an existing edge is snapped onto it (edge split: fork / merge), a node near a vertex reuses it,
     edges that duplicate an existing path are skipped. `pair` = optional learned duplicate suppression (alias of a node to the better node).

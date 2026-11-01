@@ -1,6 +1,6 @@
 """Spec test of the TEST guard of evaluation/evaluate.py (review bug L2, decision D24): `test_allowed` accepts a run id only when the TEST usage log
 names it as a whole id, the rule of ../autoresearch/tools/run.py (a prefix or a substring of a logged id must not pass); the card's protocol digest
-and seed. No GPU, no data.
+and seed; the key of the network-output cache (every inference setting, the existing caches still found); a subset read from the cache. No GPU; the cache test reads file names only.
 Run (from the problem folder): wsl bash tools/env/_py14.sh test_evaluate_guard.py"""
 import evaluate as EV
 
@@ -47,6 +47,61 @@ def test_digest_is_the_content_not_the_containers():
         raise AssertionError("an object without a stable content must be refused")
     except TypeError:
         pass
+
+
+def test_cache_key_holds_every_inference_setting():
+    e = EV.registry()["recall"]
+    base = EV.cache_paths(e, "val")
+    assert base[0].endswith("/eval_cache/raw_val_e123_D7_r3_rc1_288_144.pkl") and base[1].endswith("/p18/raw_val873_e123_D7_r3_rc1_288.pkl")  # the names of today
+    variants = [dict(e, set=dict(e["set"], lattice_ring=47.5)), dict(e, set=dict(e["set"], lattice_ring=50.0)), dict(e, design="D8")]
+    paths = [EV.cache_paths(v, "val") for v in variants]
+    assert all(len(p) == 1 for p in paths), "an entry with another setting reads no old name (the loop-18 fallback has no K0 either)"
+    assert len({p[0] for p in paths} | set(base)) == len(base) + len(variants), "every setting has its own file"
+    assert EV.cache_paths(dict(e, set={"lattice_ring": 47.5, "K0": 144, "M": 288}), "val") == paths[0], "the order of the set does not matter"
+    assert EV.cache_paths(e, "test") == [base[0].replace("raw_val_", "raw_test_")]
+    assert EV.cache_paths(dict(e, set={"M": 288, "K0": 100}), "val") == [f"{EV.CACHE}/raw_val_e123_D7_r3_rc1_288_100.pkl"], "the loop-18 files (K0 = M / 2) only for K0 = M / 2"
+
+
+def test_a_subset_is_taken_from_the_cache_without_the_network():
+    """frames ks of a cached split come from the cache (no network built, nothing written); --fresh is the only way to the network"""
+    import os
+    e = {"kind": "builder", "design": "D7", "run": "e123_D7_r3_c1", "set": {"M": 288, "K0": 144}, "tau": 0.7}  # a small loop-18 cache (32 MB)
+    path = next((p for p in EV.cache_paths(e, "val") if os.path.exists(p)), None)
+    if path is None:
+        print("SKIP test_a_subset_is_taken_from_the_cache_without_the_network: no network-output cache on this machine")
+        return
+    import p16_train as PT
+    real = PT.build
+    PT.build = lambda *a, **k: (_ for _ in ()).throw(AssertionError("the network was built for a cached subset"))
+    try:
+        raw, gts, src = EV.builder_raw(e, "val", ks=[7, 0, 5])
+    finally:
+        PT.build = real
+    full, fgts, _ = EV.builder_raw(e, "val")
+    assert src == f"{path} [3 frames]" and len(raw) == 3
+    assert all(EV.digest(raw[i]) == EV.digest(full[k]) and EV.digest(gts[i]) == EV.digest(fgts[k]) for i, k in enumerate([7, 0, 5]))
+
+
+def test_registry_entries_find_their_caches():
+    """every builder entry of the registry without other settings reads the same cache file as under the key of loop 21 (run, M, K0; the
+    loop-18 names without K0); an entry with other settings (E266 `*_ring`) never reads those names"""
+    import os
+
+    def hit(paths):
+        return next((p for p in paths if os.path.exists(p)), None)
+
+    def old_paths(e):
+        run, M, K0, p18 = e["run"], e["set"]["M"], e["set"]["K0"], f"{EV.HOME}/exp_gcar_b123/p18"
+        return [f"{EV.CACHE}/raw_val_{run}_{M}_{K0}.pkl", f"{p18}/raw_val873_{run}_{M}.pkl"] + ([f"{p18}/raw_val873.pkl"] if run == "e123_D7_r3_f1" and M == 288 else [])
+
+    reg = {n: e for n, e in EV.registry().items() if e["kind"] == "builder"}
+    plain = {n for n, e in reg.items() if set(e["set"]) == {"M", "K0"} and e["design"] == "D7"}
+    diff = [n for n in plain if hit(EV.cache_paths(reg[n], "val")) != hit(old_paths(reg[n]))]
+    assert not diff, f"registry entries whose cache file changed: {diff}"
+    shared = [n for n in set(reg) - plain if set(EV.cache_paths(reg[n], "val")) & set(old_paths(reg[n]))]
+    assert not shared, f"entries with other settings that would read an old cache: {shared}"
+    if os.path.isdir(EV.CACHE):  # on the machine with the caches: the golden entries are cached
+        assert hit(EV.cache_paths(reg["recall"], "val")) is not None
 
 
 def test_seed_of_reads_the_run_card():
