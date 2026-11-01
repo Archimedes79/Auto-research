@@ -345,6 +345,62 @@ def cmd_watch(a):
     return 0
 
 
+def cmd_queue(a):
+    """who holds the GPU slots, who waits in the line (first goes first), what the RAM gate says, and which runs lie on hold: the view of run.py's queue"""
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+    sys.path.insert(0, tools)
+    if a.project:
+        os.environ["AR_PROJECT"] = a.project
+    import project as P
+    import run as R
+    cfg, root = P.cfg(), P.root()
+    records = P.path("run_records")
+    base = R.slot_dir(root, cfg, records)
+    n = int(cfg.get("gpu_slots", 2))
+    print(f"GPU slots ({n}, {os.path.relpath(base, root)}):")
+    for i in range(n):
+        s = os.path.join(base, str(i))
+        o = R.record(s) if os.path.isdir(s) else {}
+        if o and R.pid_alive(o.get("pid")):
+            print(f"  slot {i}: {o.get('id', '?')}  (pid {o.get('pid')}, since {o.get('taken', '?')})")
+        else:
+            print(f"  slot {i}: free" + ("  (a stale owner is reclaimed by the next launcher)" if o else ""))
+    qd = os.path.join(base, ".queue")
+    line = []
+    for name in sorted(os.listdir(qd)) if os.path.isdir(qd) else []:
+        try:
+            with open(os.path.join(qd, name), encoding="utf-8") as f:
+                o = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(o, dict) and R.pid_alive(o.get("pid")):
+            line.append(o)
+    print("queue (the first goes first):" + ("" if line else " empty"))
+    for i, o in enumerate(line, 1):
+        print(f"  {i}. {o.get('id', '?')}  (waiting since {o.get('since', '?')}, pid {o.get('pid')})")
+    need, avail = int(cfg.get("ram_mb", 0)), R.mem_available_mb()
+    if avail is None:
+        print("RAM: /proc/meminfo is not readable here: no gate")
+    elif need:
+        print(f"RAM: {avail} MB available, the gate asks for {need} MB on {R.RAM_CHECKS} looks in a row: " + ("a run could start" if avail >= need else "a run waits"))
+    else:
+        print(f"RAM: {avail} MB available, no gate (project.json ram_mb is 0)")
+    held = []
+    for rid in sorted(os.listdir(records)) if os.path.isdir(records) else []:
+        h = os.path.join(records, rid, "HOLD")
+        if os.path.isfile(h):
+            try:
+                with open(h, encoding="utf-8") as f:
+                    held.append((rid, json.load(f).get("when", "?")))
+            except (OSError, ValueError):
+                held.append((rid, "?"))
+    if held:
+        print("on hold (only the person's words clear a hold: hold.py clear ID --words ...):")
+        for rid, when in held:
+            print(f"  {rid}  (since {when})")
+    return 0
+
+
 def cmd_compose(a):
     from . import compose as C
     try:
@@ -460,6 +516,9 @@ def main(argv=None):
     p.add_argument("--keys", nargs="+")
     p.add_argument("--smooth", type=int, default=10)
     p.add_argument("--out")
+    p = sub.add_parser("queue", help="the GPU slots, the line of waiting runs, the RAM gate and the runs on hold of the project (AR_PROJECT or --project)")
+    p.add_argument("--project", help="project folder (default: AR_PROJECT)")
+    p.set_defaults(fn=cmd_queue)
     p = add("stop", cmd_stop, 1, help="ask the trainer to checkpoint and stop (refused when its code snapshot has no stop check)")
     p.add_argument("--reason", default="stopped by hand")
     add("resume", cmd_resume, 1, help="move CONTROL / STOPPED of an earlier stop aside (the trainer does it itself at its start)")

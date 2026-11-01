@@ -6,6 +6,7 @@ A training is a process that writes files. This suite reads them and tells you w
 ```
 python -m trainsuite selftest                                  # synthetic runs with known answers, a few seconds
 python -m trainsuite --root ../bev_fusion/runs status          # runs active in the last 24 h, also one that died before its first row (--all: every run with a metrics file or a text log)
+AR_PROJECT=../bev_fusion python -m trainsuite queue            # who holds the GPU slots, who waits in the line (first come, first served), what the RAM gate says (run.py --ram-mb), which runs lie on hold
 python -m trainsuite --root ../bev_fusion/runs health t8_bevfeat_s0:t8_ctl_s0 --kill "group.lines@1000 > 1.48"
 python -m trainsuite --root ../bev_fusion/runs curves t8_bevfeat_s0 t8_ctl_s0      # png: total, every group.*, grad_norm
 python -m trainsuite --root ../bev_fusion/runs watch t8_bevfeat_s0:t8_ctl_s0 t8_bevfeat_s1:t8_ctl_s1 --kill "group.lines@1000 > 1.48" --enforce

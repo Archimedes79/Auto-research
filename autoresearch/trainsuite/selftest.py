@@ -1104,6 +1104,41 @@ def main():
                 os.environ["AR_PROJECT"] = old_env
         ok("compose: presets in order, --set as json or string, the base untouched, every change listed (NEW keys and typos marked), errors refused; start: the check, the exact run.py command, resume / hold notes, nothing started without --go")
 
+        # 16 the view of run.py's queue
+        qp = os.path.join(tmp, "qproj")
+        for d_ in ("records/runs/.gpu_slots/0", "records/runs/.gpu_slots/.queue", "records/runs/Rheld"):
+            os.makedirs(os.path.join(qp, d_))
+        json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "gpu_slots": 2, "ram_mb": 5000}, open(os.path.join(qp, "project.json"), "w"))
+        json.dump({"id": "Rrun", "pid": os.getpid(), "taken": "2026-11-01T22:00:00"}, open(os.path.join(qp, "records/runs/.gpu_slots/0/run.json"), "w"))
+        for nm, rid, pid in (("00000000000000000001_a", "Rwait1", os.getpid()), ("00000000000000000002_b", "Rdead", 2 ** 30), ("00000000000000000003_c", "Rwait2", os.getpid())):
+            json.dump({"id": rid, "pid": pid, "since": "2026-11-01T22:05:00"}, open(os.path.join(qp, "records/runs/.gpu_slots/.queue", nm), "w"))
+        json.dump({"id": "Rheld", "who": "run.py", "when": "2026-11-01T21:00:00"}, open(os.path.join(qp, "records/runs/Rheld/HOLD"), "w"))
+        os.makedirs(os.path.join(qp, "records/runs/.gpu_slots/1"))
+        json.dump({"id": "Rghost", "pid": 2 ** 30, "taken": "2026-11-01T21:30:00"}, open(os.path.join(qp, "records/runs/.gpu_slots/1/run.json"), "w"))       # its launcher is dead
+        mi_ = os.path.join(tmp, "q_meminfo")
+        old_mi_ = os.environ.get("AR_MEMINFO")
+        os.environ["AR_MEMINFO"] = mi_
+        try:
+            open(mi_, "w").write("MemAvailable:   2097152 kB\n")                                       # 2048 MB
+            rc, so = run_cli("queue", "--project", qp)
+            assert rc == 0 and "slot 0: Rrun  (pid" in so and "slot 1: free  (a stale owner is reclaimed by the next launcher)" in so and "Rghost" not in so and "1. Rwait1" in so and "2. Rwait2" in so and "Rdead" not in so, so
+            assert "RAM: 2048 MB available, the gate asks for 5000 MB" in so and "a run waits" in so and "Rheld  (since 2026-11-01T21:00:00)" in so, so
+            open(mi_, "w").write("MemAvailable:   10485760 kB\n")
+            rc, so = run_cli("queue", "--project", qp)
+            assert "a run could start" in so, so
+            os.environ["AR_MEMINFO"] = os.path.join(tmp, "no_such_meminfo")
+            rc, so = run_cli("queue", "--project", qp)
+            assert "not readable here: no gate" in so, so
+        finally:
+            if old_mi_ is None:
+                os.environ.pop("AR_MEMINFO", None)
+            else:
+                os.environ["AR_MEMINFO"] = old_mi_
+        os.remove(os.path.join(qp, "records/runs/.gpu_slots/0/run.json"))
+        rc, so = run_cli("queue", "--project", qp)
+        assert "slot 0: free  (a stale owner" not in so and "slot 0: free" in so, "an empty slot is free"
+        ok("queue: the slots with their holders, the line in order without a dead launcher's ticket, the RAM gate against /proc/meminfo, the runs on hold")
+
         # 12 curves
         try:
             import matplotlib  # noqa: F401
