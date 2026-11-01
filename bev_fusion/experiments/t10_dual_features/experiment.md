@@ -99,6 +99,13 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
   the two frozen feature sets together keep the maps of BEVFusion AND the objects of DualBEV. Prediction hit on all five numbers (front mAP2 0.33 (0.25-0.38) -> 0.361; lane divider 0.34 -> 0.335; drivable 0.80 -> 0.806;
   walkway 0.33 -> 0.340; ped AP@2 0.15 -> 0.199, better than predicted). Caveats: one seed, the control also one seed (s1 crashed), no latency measured (two image encoders: not a product design, an
   information test); the maps of dual vs bevfeat are within the band, so "no loss" not "gain". Decision: seed twin `t10.dual_s1` next (E1), then the cost question (can the map side be had with one encoder).
+- 2026-11-01 03:15: the seed twin `t10_dual_s1` (3000 steps; config identical but the seed; killed once by the out-of-memory killer at step 760 and resumed from a checkpoint on a later code
+  snapshot, commit 77aed27 against 40648bd for s0) was evaluated cold on VAL 1000 (`temp/t10/eval_s1.sh`, run `t10.dual_s1.eval`); front-sector comparison `results_x50_2seeds.md`; board
+  `../../records/BOARD.md` (base `t8_ctl`, two seeds). Seed 1: lane divider 0.350, drivable@0.5 0.807, walkway 0.354, crossing 0.173, carpark 0.139, road divider 0.442; front mAP2 0.364 (control
+  0.367 / 0.368, dual s0 0.361; difference to `t8_ctl_s0` -0.004 [-0.010, +0.001]), pedestrian AP@2 (front) 0.202. **Rule E1 holds on both seeds**: maps within 0.02 of s0 and of the BEVFusion-only
+  runs, vehicle + pedestrian mAP2 within 0.006 of the control. Not claimed: the rare two-wheeler class and the 3-class mAP (two-wheeler AP@2 control 0.121 / 0.051, dual 0.016 / 0.061; 3-class mAP
+  control 0.251 / 0.235, dual 0.221 / 0.234: inside the control's own seed spread) and the earlier one-seed gain of the pedestrian segmentation (0.000 -> 0.091), which the control's second seed
+  (0.090) shows to be noise. The board reads "7 better, 0 worse" for `t10_dual`. The dual chain is the proposed new base; `records/champion.json` "promoted" stays null: Mirko's decision.
 
 ## 3 Lever 1: the dual chain at 6000 steps (card written 2026-11-01 before any run; proposed for the queue, not started)
 
@@ -119,3 +126,8 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
 - **Budget.** About 3 - 4 GPU hours (115 min per 3000 steps on the shared GPU) plus 10 min for the evaluation.
 - **Gate / kill.** The t7 loss rule at step 1000 (`group.lines` mean over steps 900 - 1000 above 1.48: stop); a NaN or a CUDA unknown error: resume from the last checkpoint once. It needs a free
   GPU slot and less than 3 GB in use; the velocity arms and the lane GPU arms come first (D28). Config `training/configs/t10_dual_long_s0.json`, start line `temp/t10/start_long.sh`.
+- **Decision of Mirko (chat, 2026-11-01 02:4x, quoted):** "while you work on trainings and evaluations, let the architecture chat restructure the auto research in a branch. Once it is ready,
+  merge its branch to main and then use the 6000 step run after a first smoke test as a test for the new system." So this run starts only after the restructured autoresearch is merged and a
+  smoke test through it has passed, and it is the first real run of the new system (the start line above is written for today's `run.py` / `run_ar.sh` and is adapted to the new interface then).
+- **Decision of Mirko (chat, 2026-11-01 about 02:50, button "Yes, keep it on"):** "cancel the 09:30 shutdown; the machine stays on until the 6000-step run and its evaluation are done." The
+  planned shutdown of D28 is therefore not to be executed; the lead of the overnight round owns it and was told.
