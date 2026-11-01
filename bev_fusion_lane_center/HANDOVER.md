@@ -16,7 +16,7 @@ D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex senten
 ## Open for Mirko
 - D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). "D1." (unclear, asked back).
 - D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start when the freeze ends (no date).
-- D36/D38 open: radar rule (Mirko: no per-box gate; radar should see moving objects in line of sight; soft weights later, BEV chat); thresholds of the footprint share come from the data. GT chat plans v6 after the freeze.
+- D36/D38 open: radar rule (Mirko: no per-box gate; radar should see moving objects in line of sight; soft weights later, BEV chat); footprint thresholds: study in bev records, 3 questions open. GT chat plans v6 after the freeze.
 
 ## Next
 1. Next lane loop: precision at range, idle timing of ring / union / prototype, route success on spur-kept graphs.
