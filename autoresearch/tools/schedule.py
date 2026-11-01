@@ -4,10 +4,10 @@
     python autoresearch/tools/schedule.py next [--resource gpu]    # ready items: planned / ready, every dependency done
     python autoresearch/tools/schedule.py set E240.sum done        # set the stored state of an item that has no run (a review, a summary); `cancelled` also drops an item with runs
     python autoresearch/tools/schedule.py add E240.b --node R1 --kind train --depends E240.code --resource gpu --budget 40m --note "seed 1" [--command "bash tools/env/_py14.sh ..."]
-    python autoresearch/tools/tick.py [--dry-run]                  # start the ready items that have a command
 
 Columns: item, node, kind, state, depends_on (';'-separated), resource (gpu / cpu / agent), budget, priority (1 = first), owner, run_ids (';'), note,
-command (what tick.py starts through run.py; empty = the arm's command in the experiment file).
+command (the launcher command of the item, for the lead; empty = the arm's command in the experiment file). Items start through run.py (a chain
+through --after); tick.py, which started ready items, was removed under D32 (it started 0 of 61 runs).
 
 State is derived, never synced: an item with run ids takes its state from the run records (done flag, record status, heartbeat: derived() below), the
 stored `state` column only counts for an item without a run record. Nothing writes a derived state back into the file, so the file cannot go stale.
@@ -56,7 +56,7 @@ def derived(rows, records=None):
     out = []
     for r in rows:
         r = dict(r)
-        ids = [x for x in (r.get("run_ids") or r["item"]).split(";") if x]  # the run id of an item without run_ids is its name (as in tick.py)
+        ids = [x for x in (r.get("run_ids") or r["item"]).split(";") if x]  # the run id of an item without run_ids is its name
         st = [OF_RUN.get(RUN.state_of(os.path.join(records, i)), "") for i in ids]
         if any(st) and r["state"] != "cancelled":  # a cancelled item stays cancelled whatever its run records say
             r["state"] = "done" if all(s == "done" for s in st) else "failed" if "failed" in st else "blocked" if "blocked" in st else "running" if "running" in st else r["state"]

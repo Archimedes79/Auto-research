@@ -87,7 +87,6 @@
     {"dir": "schemas", "glob": "*.json"}, {"dir": "evalsuite", "glob": "*.py"}, {"dir": "trainsuite", "glob": "*.py"}
   ],
   "not_drawn": {
-      "tools/tick.py": "to be removed: it started 0 of 61 runs (D16); a run starts through run.py, a chain through --after",
       "agents/ar-scout.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
       "agents/ar-summarizer.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",
       "agents/ar-hypothesis.md": "forwarding file under the old role name (D32), removed once the loop running at the switch has ended",

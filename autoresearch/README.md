@@ -42,7 +42,6 @@ python tools/decide.py --variant 0.746,0.741 --control 0.725,0.722 --id E240.a -
 python tools/experiment.py check E240 | show E240 | check --all   # gate G2 as code for experiment.json (schema: schemas/experiment.schema.json)
 python tools/card.py check --all | check <card.json> | show <card.json>   # the evaluator contract (schemas/card.schema.json): every metric card decide.py reads
 python tools/schedule.py show|next|set|add [--command "..."]    # item states are read from the run records
-python tools/tick.py [--dry-run]                       # start the ready items that have a command (gpu items when a slot is free); prints what runs
 python tools/check_numbers.py <report> <sources ...> [--strict]   # --strict: exit 1 when a number is missing from the sources
 python tools/check_structure.py
 python tools/install_agents.py [--check]

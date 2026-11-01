@@ -5,7 +5,7 @@
 Tests: run.py (done flag only on success, retry only on a CUDA unknown error, timeout, card check, TEST guard, --after waits / blocks / sees a
 stalled run, snapshot commit + tag per run through a temporary index, a finished id is refused without --again, a failed or stalled id is resumed
 and keeps its first tag, a planned ledger row keeps its prediction, GPU slots reclaim dead owners one launcher at a time and block on live ones, code edited during a run is recorded as drift, no git identity refused), project.locked (renewed by a live holder, a dead holder's lock taken over),
-tick.py (dry run, derived states that are never written back, gpu slots from the slot directories, dependencies, commands from the schedule or the experiment arm, blocked items), ledger.py (concurrent notes under the lock, sync, tail with the runs in progress), decide.py (typed scores and experiment files with cards: seeds, interval, guards, subsets, deterministic), experiment.py (check), card.py (the evaluator contract, a benchmark script as a non-ML problem through the same loop, the holdout split from project.json), check_numbers.py, schedule.py (next, derived states), clean_temp.py.
+ledger.py (concurrent notes under the lock, sync, tail with the runs in progress), decide.py (typed scores and experiment files with cards: seeds, interval, guards, subsets, deterministic), experiment.py (check), card.py (the evaluator contract, a benchmark script as a non-ML problem through the same loop, the holdout split from project.json), check_numbers.py, schedule.py (next, derived states), clean_temp.py.
 """
 import csv
 import json
@@ -128,8 +128,6 @@ try:
     json.dump(dict(id="other", pid=os.getpid(), run_dir=f"{T}/runs/S.live"), open(f"{shared}/0/run.json", "w"))
     busy2 = go("S.busy2", ["bash", "-c", "echo gpu"], "--gpu", "--gpu-slots", "1", "--wait-gpu", "0")
     assert busy2.returncode == 1 and rows()["S.busy2"]["status"] == "gpu_busy", busy2.stdout
-    import tick as TK
-    assert TK.free_gpu_slots(f"{T}/runs", 2, shared) == 1 and TK.free_gpu_slots(f"{T}/runs", 2) == 2
     shutil.rmtree(shared)
     json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k != "gpu_slots_dir"}, open(f"{T}/project.json", "w"))
     # a command's own exit 124 is a failure, not the launcher's timeout (review 2026-10-31)
@@ -393,24 +391,10 @@ try:
             assert "finite" in str(e), str(e)
     assert any("finite" in b for b in X.check(dict(base, band=float("inf"), arms=two), ef)) and any("finite" in b for b in X.check(dict(base, arms=two, rule=[dict(metric="Q", min_effect=float("inf"))]), ef))
     json.dump(dict(base, arms=two), open(f"{T}/experiments/E1_x/experiment.json", "w"))  # the file the next steps read
-    # tick: item states are derived from the run records and never written back; start what fits (gpu slots = the launchers' own slot directories), commands from the schedule or the experiment arm
+    # schedule: item states are derived from the run records and never written back (tick.py, which started items, is gone: D32)
     import schedule as SC
-    for rid in ("S.ta", "S.tb"):
-        subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", rid, "--hyp", "tick", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
-    exp = json.load(open(f"{T}/experiments/E1_x/experiment.json"))
-    exp["arms"]["a"]["command"] = "bash -c 'echo arm a'"
-    json.dump(exp, open(f"{T}/experiments/E1_x/experiment.json", "w"))
-    SC.save([dict(item="S.ta", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'sleep 1; echo a'"),
-             dict(item="S.tb", kind="train", state="planned", depends_on="S.ta", resource="gpu", priority="1", budget="5m", command="bash -c 'echo b'"),
-             dict(item="E1.a", kind="train", state="planned", resource="cpu", priority="2", run_ids="E1.a"),
-             dict(item="S.sum", kind="summary", state="planned", resource="agent", priority="3"),
-             dict(item="S.nocmd", kind="train", state="planned", resource="cpu", priority="4"),
-             dict(item="S.nocard", kind="train", state="planned", resource="cpu", priority="5", command="bash -c 'echo x'")], f"{T}/schedule.csv")
     raw = lambda: {r["item"]: r for r in SC.load(f"{T}/schedule.csv")}  # noqa: E731  (what the file says)
     shown = lambda: {r["item"]: r for r in SC.derived(SC.load(f"{T}/schedule.csv"), f"{T}/runs")}  # noqa: E731  (what schedule.py shows)
-
-    def tick(*extra):
-        return subprocess.run([sys.executable, f"{HERE}/tick.py", *extra], capture_output=True, text=True, env=env)
 
     def wait_done(*ids):
         for _ in range(300):
@@ -418,39 +402,10 @@ try:
                 return True
             time.sleep(0.2)
         return False
-    dry = tick("--dry-run")
-    assert "would start  S.ta" in dry.stdout and "would start  E1.a" in dry.stdout and raw()["S.ta"]["state"] == "planned" and not os.path.exists(f"{T}/runs/S.ta"), dry.stdout
-    t1 = tick()
-    assert "started  S.ta" in t1.stdout and "started  E1.a" in t1.stdout and "S.tb" not in t1.stdout, t1.stdout + t1.stderr  # S.tb waits for S.ta: not ready, not listed
-    assert "command  S.nocmd: no command" in t1.stdout and "lead     S.sum" in t1.stdout, t1.stdout
-    assert raw()["S.nocard"]["state"] == "blocked" and "launcher exit 2" in raw()["S.nocard"]["note"] and t1.returncode == 1, (raw()["S.nocard"], t1.stdout)
-    assert wait_done("S.ta", "E1.a"), open(f"{T}/runs/S.ta/launcher.log").read()
-    assert RUN.record(f"{T}/runs/E1.a")["hypothesis"] == exp["title"], "the arm's card reaches the run record"
-    assert shown()["S.ta"]["state"] == "done" and raw()["S.ta"]["state"] == "planned", "the state is derived from the record; the file is not written back"
-    t2 = tick()
-    assert "started  S.tb" in t2.stdout, t2.stdout + t2.stderr
-    assert wait_done("S.tb") and "t/S.tb" in tags(), "the gpu item ran with a slot and left its tag"
-    assert shown()["S.tb"]["state"] == "done" and raw()["S.tb"]["state"] == "planned"
-    t3 = tick()
-    assert "started" not in t3.stdout and "done     3" in t3.stdout, t3.stdout  # nothing is started twice
-    # GPU slots: the launchers' own slot directories are the count; a stale one does not count; a gpu item waits when none is free and runs when one is
-    for i in (0, 1):
-        os.makedirs(f"{T}/runs/S.hold{i}", exist_ok=True)
-        json.dump(dict(id=f"S.hold{i}", status="running", launcher_pid=1), open(f"{T}/runs/S.hold{i}/run.json", "w"))
-        open(f"{T}/runs/S.hold{i}/heartbeat", "w").write("x")
-        os.makedirs(f"{T}/runs/.gpu_slots/{i}", exist_ok=True)
-        json.dump(dict(id=f"S.hold{i}", pid=os.getpid(), run_dir=f"{T}/runs/S.hold{i}"), open(f"{T}/runs/.gpu_slots/{i}/run.json", "w"))
-    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.tg", "--hyp", "tick", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
-    SC.save([dict(item="S.tg", kind="train", state="planned", resource="gpu", priority="1", command="bash -c 'echo g'")], f"{T}/schedule.csv")
-    full_slots = tick()
-    assert "waiting  S.tg: no free GPU slot" in full_slots.stdout and "gpu free 0" in full_slots.stdout, full_slots.stdout
-    shutil.rmtree(f"{T}/runs/.gpu_slots/1")
-    free_slot = tick()
-    assert "started  S.tg" in free_slot.stdout, free_slot.stdout
-    assert wait_done("S.tg")
-    shutil.rmtree(f"{T}/runs/.gpu_slots")
-    import tick as TK
-    assert TK.budget_minutes("40m") == 40 and TK.budget_minutes("1.5 h") == 90 and TK.budget_minutes("90") == 90 and TK.budget_minutes("2 d") == 2880 and TK.budget_minutes("soon") is None
+    SC.save([dict(item="S.ta", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'echo a'")], f"{T}/schedule.csv")
+    ta = go("S.ta", ["bash", "-c", "echo a"])
+    assert ta.returncode == 0 and shown()["S.ta"]["state"] == "done" and raw()["S.ta"]["state"] == "planned", \
+        "the state is derived from the record; the file is not written back"
     # the evaluator contract: a benchmark script (a code system, no ML) writes cards; run.py runs it from planned rows; card.py checks them; decide reads them
     import card as CARD
     CARD.selftest()
@@ -620,32 +575,7 @@ try:
     assert st_["status"] == "stalled" and st_["started"] == "2026-10-25T10:00:00" and st_["ended"] == "" and st_["exit"] == "" and st_["duration_s"] == "" and st_["hypothesis"] == "h", st_
     assert "S.l1" not in dry_sync() and RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.l1", status="failed", started="2026-10-25T10:00:00"), fill=True) is False, \
         "the row of the same attempt is never replaced"
-    # tick: an item `A;B` whose A is done starts B (not A again); a dry run writes nothing, also when an item cannot be started; a real run marks it blocked
-    for rid in ("S.m2", "S.c1", "S.c2", "S.race"):
-        subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", rid, "--hyp", "t", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
-    os.makedirs(f"{T}/runs/S.m1", exist_ok=True)
-    json.dump(dict(id="S.m1", status="ok", exit=0, launcher_pid=1), open(f"{T}/runs/S.m1/run.json", "w"))
-    open(f"{T}/runs/S.m1/done", "w").write("x")
-    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.bq", "--hyp", "t", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
-    SC.save([dict(item="S.multi", kind="train", state="planned", resource="cpu", priority="1", run_ids="S.m1;S.m2", command="bash -c 'echo m'"),
-             dict(item="S.bq", kind="train", state="planned", resource="gpu", priority="2", command="bash -c 'echo")], f"{T}/schedule.csv")  # unbalanced quote: cannot be started
-    dry = tick("--dry-run")
-    assert "would start  S.multi -> S.m2" in dry.stdout and "blocked  S.bq" in dry.stdout and raw()["S.bq"]["state"] == "planned" and dry.returncode == 1, dry.stdout
-    real = tick()
-    assert "started  S.multi -> S.m2" in real.stdout and raw()["S.bq"]["state"] == "blocked" and wait_done("S.m2"), real.stdout
-    # cpu items run one at a time (cpu_slots, default 1); two ticks at once start an item once; two launchers of one id: the second is refused
-    json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k != "cpu_slots"}, open(f"{T}/project.json", "w"))
-    SC.save([dict(item="S.c1", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'sleep 12; echo 1'"),  # long enough for two ticks on a loaded box
-             dict(item="S.c2", kind="train", state="planned", resource="cpu", priority="2", command="bash -c 'echo 2'")], f"{T}/schedule.csv")
-    c1 = tick()
-    assert "started  S.c1" in c1.stdout and "waiting  S.c2: cpu slot busy" in c1.stdout, c1.stdout
-    assert "waiting  S.c2: cpu slot busy" in tick().stdout, "a running cpu item holds the slot (derived from its record)"
-    assert wait_done("S.c1") and "started  S.c2" in tick().stdout and wait_done("S.c2")
-    SC.save([dict(item="S.race", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'sleep 3; echo r'")], f"{T}/schedule.csv")
-    ticks = [subprocess.Popen([sys.executable, f"{HERE}/tick.py"], stdout=subprocess.PIPE, text=True, env=env) for _ in range(2)]
-    outs = [p.communicate()[0] for p in ticks]
-    assert sum("started  S.race" in o for o in outs) == 1, outs
-    assert wait_done("S.race") and open(f"{T}/runs/S.race/run.log").read().count("=== attempt") == 1, "one command ran, not two"
+    # two launchers of one id: the second is refused
     dup = [subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.dup", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 3; echo x"], env=env, stdout=subprocess.DEVNULL) for _ in range(2)]
     assert sorted(p.wait() for p in dup) == [0, 2], "exactly one launcher of an id runs"
     # a re-run drops the old judgement when it starts, not only when it ends (a re-run that dies must not keep the old KEEP)
