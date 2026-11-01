@@ -1,24 +1,25 @@
-# HANDOVER - 2026-11-01 06:35
+# HANDOVER - 2026-11-01 14:35
 
-New chat: start in the repository folder (parent of autoresearch/ and this folder), say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB).
+New chat: start in the repository folder (parent of autoresearch/ and this folder), say "Read HANDOVER.md and continue". Rewrite this file at every milestone (<= 3 KB). Mirko is often interrupted and reads little: one small step per turn, say where we are.
 
 ## Who does what
-- Lead of loop 22 and of the overnight bev_fusion round (D28): the repository-review chat (session 6e9638e0); the round is finished (P4). Next: the Architecture chat (local_79b594f7) merges `ar/layered-design` in the quiet window it has been told about; after that the 6000-step bev run `t10.dual_long_s0` (smoke test first). The tools chat owns `autoresearch/tools` (commit by path).
+- Lead of loop 22 (filed): the repository-review chat (session 6e9638e0). The layered design is merged (8292f4a). The BEV system chat runs `t10.dual_long_s0` (6000 steps) and its evaluation until about 17:10: GPU full, no new GPU job, no edits to bev_fusion/training/*.py. The GT Discussion chat owns autogt (D29), the tools chat `autoresearch/tools`.
 
 ## Where we are
-- Loop 22 filed in its state: PLAN.md "End of loop" section, experiment files E261 - E268 (section 3 each), ledger rows; morning page `reports/source/weekly/morning_2026-11-01_loop22.md`.
-- Lane prototype of record: `recall_sp0_dp` (rc1 + fork pruning 0.4 + spurs kept + output DP 0.2). VAL lanes found 0.781, Q 0.742; TEST (E268.p, the one TEST use) lanes found 0.740, Q 0.727, R@1 far 0.749 vs control 0.762 / 0.712 / 0.776. Run: `wsl bash tools/env/_py14.sh lane_prototype.py recall_sp0_dp [--scenes 23 7 --video]`. `champion` / `control` registry entries unchanged.
-- KEEP but not in the prototype: E266 seed ring (R@1 far +0.015). Coverage-positive but blocked by precision guards: E267 ring + spurs, E264 two-seed union.
-- bev_fusion: B2 (`runs/t11_vel_hurdle_acc2`) is the bev prototype (velocity revived, see `../bev_fusion/records/morning_2026-11-01.md`); its t11 code lives in tag `bf/t11.vel_hurdle_acc2` and is not on main yet (needs an ar-reviewer code pass and the backbone chat's train.py hunks kept apart).
+- Lane prototype of record: `recall_sp0_dp` (VAL lanes found 0.781, Q 0.742; TEST E268.p, the one TEST use: lanes found 0.740, Q 0.727, R@1 far 0.749 vs control 0.762 / 0.712 / 0.776). Run: `wsl bash tools/env/_py14.sh lane_prototype.py recall_sp0_dp`. `champion` / `control` unchanged. KEEP but not in it: E266 seed ring; blocked by precision: E267, E264.
+- bev: B2 (`runs/t11_vel_hurdle_acc2`) is the bev prototype (`../bev_fusion/records/morning_2026-11-01.md`); its t11 code is in tag `bf/t11.vel_hurdle_acc2`, not on main (needs a critic pass).
+- Method change today (Mirko, no D entry): research only on a trigger, roles inline; `autoresearch/METHOD.md` "Planning a round", step 0 of `research_steps.md`.
+
+## Decided today
+D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex sentence; D29 one GT version + autogt tags (v1-v5 done; evaluation default, run records and training start check after t10); D30 one image region for all pipelines; D33 hook gaps; D35 key-level protection; D36 coverage rule.
+
+## Open for Mirko
+- D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). D31: wedge vs grid, folds into D36 if he agrees. "D1." (unclear, asked back).
+- D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start after t10; fused objects: where either sensor sees (to confirm).
 
 ## Next
-1. Mirko: read both morning pages; decide whether spurs kept becomes the recall-family default (D-entry).
-2. Next lane loop: precision at range (range-dependent threshold for edge seeds; union with a wider vertex merge), idle timing of ring and union, route success on spur-kept graphs, idle ms of the prototype (both decide D4).
-3. bev: code review + commit of the t11 code; seed twin of B2; the 6000-step run with the hurdle + accumulation 2.
-
-Decided 2026-11-01 and applied: D25 (PROBLEM.md vertex sentence), D18 (per-card bands), D19 (`autoresearch/tools/machine_lock.py`, run.py waits on another owner's exclusive lock), D33 (gate-hook gaps), D17 (loop ranges by hand, closed). Open for Mirko: D4 (prototype, after route success and timing), D31 (bev); D29: autogt tags v1-v5 + versions.csv done, rest after t10 (GT chat); D30: same image region for all pipelines; Mirko's "D1." is asked back (DECISIONS.md).
-
-Method change 2026-11-01 (Mirko in chat, no D entry): research (P1) only on a trigger; planner / coder / researcher work inline unless context or fresh eyes need a spawn. A round starts with `autoresearch/prompts/research_steps.md` step 0 (ten lines, Mirko says OK); rules in `autoresearch/METHOD.md`, "Planning a round".
+1. Next lane loop: precision at range, idle timing of ring / union / prototype, route success on spur-kept graphs.
+2. bev (BEV system chat): t11 code review + commit, seed twin of B2, the long run with hurdle + accumulation 2, then D29 part 2 and D36.
 
 ## Pointers
-PROBLEM.md; PLAN.md; METHOD.md; closed_questions.md; git: tag `lcr/<id>` per run (bev: `bf/<id>`), remote origin (pushes only on request).
+PROBLEM.md; PLAN.md; METHOD.md; closed_questions.md; DECISIONS.md; git: tag `lcr/<id>` per run (bev `bf/<id>`), pushes only on request.

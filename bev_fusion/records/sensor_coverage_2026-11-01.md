@@ -1,6 +1,6 @@
-# Sensor coverage: one rule for training, evaluation and execution (proposal, 2026-11-01)
+# Sensor coverage: one rule for training, evaluation and execution (D36, 2026-11-01)
 
-Asked by Mirko in chat (answering D31): "If you evaluate you can only evaluate where the sensor can see something. If you train, you can only train where the sensor can see something. Maybe the system needs to know the coverage area of its sensors (radar camera) besides the grid location in the VCS and only there a fair comparison can be made." Put on the BEV list for after `t10.dual_long_s0` and its evaluation (Mirko: "Yes, put it"). Not decided: this page is the starting point.
+Asked by Mirko in chat (answering D31): "If you evaluate you can only evaluate where the sensor can see something. If you train, you can only train where the sensor can see something. Maybe the system needs to know the coverage area of its sensors (radar camera) besides the grid location in the VCS and only there a fair comparison can be made." Put on the BEV list for after `t10.dual_long_s0` and its evaluation (Mirko: "Yes, put it"). The rule itself is decided as D36 (section at the end); the details are for the BEV and GT chats to settle.
 
 ## What the code does today
 One real sample of the stored GT (grid 0.5 m, x 0 to 60 m, y +-26 m, 120 x 104 cells). The rig is fixed, so camera and radar masks hold for every frame. Picture: `bev_fusion/temp/sensor_coverage/coverage.png` (ignored scratch; redraw with `plot_cov.py` in the same folder, argument = one GT file of `data/cache/gt`).
@@ -29,3 +29,19 @@ Sources: `autogt/nuscenes_gt.py` (`camera` = ground cells that project into the 
 - A change of a mask is a change of the GT: it needs a new autogt version tag (D29).
 
 Owners: BEV system chat (training, evaluation) and GT Discussion chat (the autogt masks). The training code and the five signature files stay frozen until the t10 run and its evaluation end (about 17:10).
+
+## Decision D36 (Mirko, in chat, 2026-11-01, after this note)
+"Unify the usage between training, evaluation and execution. And on the training & gt, separate what is radar data, what is camera data (lanes are camera only information for example...). Do not put a camera loss on regions, where camera cannot see. Do not put a radar loss, where radar cannot see."
+
+First cut of what that means per output (to be refined by the BEV system and GT Discussion chats; the entries marked "to settle" need a look at the data):
+
+| output | the information comes from | loss only where |
+|---|---|---|
+| lane dividers, road dividers, stop lines, crossings | camera | the camera observes the cell now |
+| drivable area, walkway, carpark | camera (radar cannot see them) | the camera observes the cell now; cells seen earlier through the memory: to settle |
+| camera aux head | camera | the camera observes (today `w_cam`: already so) |
+| radar aux heads | radar | the radar observes, meaning cells with measurements (today `w_radar` = the fan: already separate, but too wide) |
+| velocity / motion | radar Doppler, camera over time | the radar observes; the camera part: to settle |
+| fused objects (vehicle, pedestrian, two-wheeler) | camera and radar | my reading, to confirm: where either sensor observes |
+
+Today only the two aux heads follow the rule; the maps (`w_map`) and the fused objects (`w_obj`) are supervised on 99.6 % of the grid. Two more points: (a) "the camera sees the cell" exists twice, as the GT mask on the ground plane (`autogt/nuscenes_gt.py`) and as `camera_visibility` of the model (lift heights, image augmentation): they should be one function, and the difference measured first; (b) a changed loss and GT is a new regime: every arm after the change is compared with a control trained the same way, not with the stored numbers.
