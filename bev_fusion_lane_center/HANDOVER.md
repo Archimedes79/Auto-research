@@ -3,7 +3,7 @@
 New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko is often interrupted and reads little: one small step per turn, say where we are.
 
 ## Who does what
-- Lead of loop 22 (filed): the repository-review chat (session 6e9638e0). The long run `t10.dual_long_s0` was stopped at step 5030 (14:38, exit 75) on Mirko's decision: do not restart or resume it; it resumes only on his word. Until then the freeze of bev_fusion/training/*.py and the autogt signature files has no end date; the GPU is idle. The GT Discussion chat owns autogt (D29), the tools chat `autoresearch/tools`.
+- Lead of loop 22 (filed): the repository-review chat (session 6e9638e0). The long run `t10.dual_long_s0` was stopped at step 5030 (14:38, exit 75) on Mirko's decision: do not restart or resume it; it resumes only on his word. The freeze of training/ and autogt is lifted (the resume reads a pinned copy of autogt v5); the GPU is idle. The GT Discussion chat owns autogt (D29), the tools chat `autoresearch/tools`.
 
 ## Where we are
 - Lane prototype of record: `recall_sp0_dp` (VAL lanes found 0.781, Q 0.742; TEST E268.p, the one TEST use: lanes found 0.740, Q 0.727, R@1 far 0.749 vs control 0.762 / 0.712 / 0.776). Run: `wsl bash tools/env/_py14.sh lane_prototype.py recall_sp0_dp`. `champion` / `control` unchanged. KEEP but not in it: E266 seed ring; blocked by precision: E267, E264.
@@ -15,7 +15,7 @@ D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex senten
 
 ## Open for Mirko
 - D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). "D1." (unclear, asked back).
-- D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start when the freeze ends (no date).
+- D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start now (freeze lifted).
 - D36/D38 open: radar rule (Mirko: no per-box gate; radar should see moving objects in line of sight; soft weights later, BEV chat); footprint: 0.1/0.5, soft occlusion, evaluation states first: decided. GT chat plans v6 after the freeze.
 
 ## Next
