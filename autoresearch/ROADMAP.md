@@ -16,10 +16,10 @@ The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1
 |---|---|---|
 | M2 | backups: `main` and the 25 `lcr/*` tags were pushed on 2026-10-26 (Mirko's OK); still open: copy the run records to a second place, one copy of registered checkpoints and splits, test a restore; push again after each loop | Mirko |
 | P9 | CONFIRM split and the "adopted" state: a KEEP on VAL counts as adopted only when CONFIRM agrees | first use on D4 |
-| P10 | early kill from learning curves (E241 replay: lanes found separates at 25 %, Q does not) | after cycle 19 |
+| P10 | early kill from learning curves: BUILT as `trainsuite early` (advisory, calibrated on finished pairs, stops nothing). The signal is weak so far: 111 bev_fusion pairs come from 30 runs, mostly crippled variants, and the key is a loss, not the decision metric; the E241 replay on lanes is impossible (lane `runs/` have no `log.jsonl`). It needs about 15 control / variant pairs from 8 or more independent runs of the same code and ground truth, evaluated about every 250 steps, logging a real metric (lanes found, Q) | more finished pairs |
 | W8 | evaluation cache key has no checkpoint hash or inference-code fingerprint | small change in `evaluate.py` |
 | W13 | scouts have WebFetch and Write: fetched text is data, scouts write only under `literature/` | hook rule or agent definition |
-| W11 | evaluation covers graphs only: route success, failure series, timing are still per-loop drivers | after loop 19 |
+| W11 | route success, the failure series and timing are parts of the lane `evaluate.py` (`--route`, `--failure`, `--timing`, `evaluation/eval_parts.py`); the stored-input paths are verified on the CPU, the paths that run the builder and the timing are NOT (commands in `bev_fusion_lane_center/evaluation/README.md`) | an idle GPU |
 | M3-M5 | package rename `ar` / facade `lcr` / `lcr.train` recipes | **deferred, probably not needed**: the loop runs without them; revisit only if a second problem is plugged in |
 
 ## What the last days taught (design rules for the tools)

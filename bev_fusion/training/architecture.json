@@ -629,6 +629,9 @@
   }
  ],
  "not_drawn": {
+  "training/motion_block.py": "t12 experiment: the velocity field from two camera BEVs, ego motion and the radar Doppler; trained alone on a frozen base (train_motion_block.py), not part of the main chain until it wins its card",
+  "training/train_motion_block.py": "t12 experiment trainer of the motion block on a frozen, trained base model; not the main training",
+  "training/startable.py": "tool: static checks, smoke config and start lines of a training config; no GPU, not part of the network",
   "training/temporal.py": "older multi-hypothesis temporal propagation, superseded by temporal_fusion.py; imported only by tests and scratch",
   "training/radar_encoder.py": "delta-coded slot raster of plan 3.4, not imported by model.py or train.py",
   "training/gt_bev.py": "compatibility shim that re-exports autogt",
