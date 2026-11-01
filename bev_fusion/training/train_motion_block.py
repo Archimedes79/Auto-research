@@ -31,8 +31,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from losses import _gather, build_layer_targets, motion_term, object_head_terms, sample_targets  # noqa: E402
-from motion_block import MotionBlock, backward_warp, radar_raster  # noqa: E402
-from splat import splat_window  # noqa: E402
+from motion_block import MotionBlock, backward_warp, block_inputs  # noqa: E402
 from train import build, forward_loss, make_datasets, make_loader, read_config, val_subset, warm_start  # noqa: E402
 
 
@@ -55,14 +54,10 @@ def attach(model, block, old):
     def camera_bevs(batch):
         with torch.no_grad():
             frames = orig_cb(batch)
-        B = frames.shape[0]
-        steps = [tuple(torch.as_tensor(t, dtype=frames.dtype, device=frames.device) for t in s)
-                 for s in batch["steps"][old]]
+        steps = [[tuple(torch.as_tensor(t, dtype=frames.dtype, device=frames.device) for t in s) for s in f]
+                 for f in batch["steps"]]
         with torch.no_grad():
-            w, m = splat_window([(frames[:, old], steps)], model.grid, head=None, mass_gate=True)
-            rad = radar_raster(batch["radar"], B, model.grid)
-        dt = sum(s[0] for s in steps).abs().reshape(B)
-        inputs = (frames[:, 0], w[:, 0], m[:, 0].clamp(max=1.0), rad, dt)
+            inputs = block_inputs(frames, steps, batch["radar"], model.grid, old)
         ctx["inputs"] = tuple(t[:1].detach() for t in inputs)              # one sample, for the timing at the end
         ctx["raw"] = inputs                                                # for the warp check of the base evaluation
         if ctx["on"]:

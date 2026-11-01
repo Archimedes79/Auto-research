@@ -118,6 +118,12 @@ class ModelConfig:
     aux_heads: bool = True
     object_direction: bool = False     # object head: sign-free axis + front / back class (object_head.ObjectHead)
     object_moving: bool = False        # object head: moving / static logit, velocity on moving centres only (t11 hurdle)
+    motion_block: bool = False         # t15: the time mover's velocity field from training/motion_block.py (the current and the oldest
+                                       # camera frame + the radar Doppler, a 3-level pyramid) instead of the 1x1 head on the trunk; needs
+                                       # >= 2 camera frames (n_cam) and a radar
+    motion_strides: tuple = (4, 2, 1)  # its pyramid levels in cells, coarse to fine; (4, 2) = the runtime arm without the 0.5 m level
+    box_vel_from_field: bool = False   # t15: the object head's `vel` = the motion block's field (at dt != 0 moved with the state, the
+                                       # vector turned with the ego yaw); the object head's own vel branch stays (unused for the output)
     refine: bool = False               # S5c: deformable box refinement (object_head.BoxRefiner, n = 1, dt-aware) on the
                                        # object head's features at the target time; trained on decoded + jittered GT
     refine_k: int = 50                 # candidates: top-k decoded boxes per sample + refine_jitter copies of each GT box
@@ -219,6 +225,12 @@ def check_config(cfg):
         errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
+    if cfg.motion_block and (cfg.camera_off or cfg.radar_kind == "off"):
+        errs.append("motion_block reads two camera frames and the radar Doppler: it needs the camera and a radar")
+    if cfg.box_vel_from_field and not cfg.motion_block:
+        errs.append("box_vel_from_field reads the motion block's field: it needs motion_block")
+    if cfg.motion_block and (not cfg.motion_strides or list(cfg.motion_strides) != sorted(cfg.motion_strides, reverse=True)):
+        errs.append(f"motion_strides must be a non-empty decreasing tuple of cell strides, is {cfg.motion_strides}")
     if errs:
         raise ValueError("; ".join(errs))
 
@@ -272,9 +284,16 @@ class BEVFusionModel(nn.Module):
         if cfg.n_sem is not None and cfg.n_sem != len(self.spec):
             raise ValueError(f"n_sem {cfg.n_sem} != len(layer_spec) {len(self.spec)}")
         self.mover = TimeMover(c, self.grid)
+        self.motion_block = None
+        if cfg.motion_block:                                     # t15: the field comes from the block; the 1x1 head is not built (it would
+            from motion_block import MotionBlock                 # get no gradient); TimeMover then needs v_field on every call
+            self.motion_block = MotionBlock(cfg.c_cam, self.grid, strides=tuple(cfg.motion_strides))
+            self.mover.motion = None
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
         self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction, moving=cfg.object_moving),
                                   c, self.mover)
+        if cfg.box_vel_from_field:                               # its own vel branch is not read: frozen, so no parameter goes without a
+            self.obj_head.head.vel.requires_grad_(False)          # gradient (and the optimiser does not decay it)
         if cfg.refine:
             import random
             self.refiner = BoxRefiner(c, groups=NUSC_GROUPS, use_dt=True)
@@ -370,6 +389,10 @@ class BEVFusionModel(nn.Module):
         flip = batch.get("flip")                                 # mirror augmentation (training/augment.py): the other inputs
         if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
             cam_frames = flip_cam(cam_frames, None, flip)[0]     # (the visibility map is mirrored by the precompute step)
+        v_levels = None
+        if self.motion_block is not None:                        # t15: the velocity field from two camera frames + radar (motion_block.py)
+            from motion_block import block_inputs
+            v_levels = self.motion_block(*block_inputs(cam_frames, steps, batch["radar"], self.grid))
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
         if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
@@ -399,8 +422,12 @@ class BEVFusionModel(nn.Module):
         for dt in dts:
             e = (ego or {}).get(float(dt))
             dt_i, v_i, w_i = (dt, v, w) if e is None else (torch.as_tensor(x).to(S) for x in e)
-            sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True)
-            obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True)
+            vf = v_levels[-1] if v_levels is not None else None
+            sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf)
+            carry = vf if (vf is not None and self.cfg.box_vel_from_field and abs(float(dt)) > 1e-6) else None
+            obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf, carry=carry)
+            if vf is not None and self.cfg.box_vel_from_field:   # the box velocity is the field (t12's second decision)
+                obj = dict(obj, vel=vf if carry is None else _turn(ao["carry"], w_i, dt_i))
             p = {"sem": sem, "obj": obj, "mass": a["mass"]}
             if self.cfg.refine:
                 p["obj_feat"] = ao["state"]                          # what the refiner samples (also at run time)
@@ -411,7 +438,9 @@ class BEVFusionModel(nn.Module):
                 p["boxes"] = dense_boxes({k: v.float() for k, v in obj.items()}, self.grid, NUSC_GROUPS)
                 p["lines"] = soft_line_map(sem[:, self._dist_idx].float().clamp(min=0), self.grid.res)   # clamped as the evaluation does
             if abs(float(dt)) < 1e-6:
-                p["v_hat"] = self.mover.motion(S)
+                p["v_hat"] = self.mover.motion(S) if v_levels is None else v_levels[-1]
+                if v_levels is not None and len(v_levels) > 1:
+                    p["v_levels"] = v_levels[:-1]                  # the coarser levels: the same motion term (deep supervision, losses.py)
                 if self.cfg.aux_heads and self.training:
                     p["cam_aux"], p["radar_aux"] = self.aux_cam(cam), self.aux_rad(rad)
             out[float(dt)] = p
@@ -419,6 +448,14 @@ class BEVFusionModel(nn.Module):
         if radar_side is not None:
             res["radar_side"] = radar_side
         return res
+
+
+def _turn(vec, omega, dt):
+    """velocity vectors (B, 2, X, Y) carried to t + dt: turned into the ego axes of the target time, R(-omega dt) (the rotation of
+    splat.splat_positions); omega, dt scalars or (B,)"""
+    a = -(torch.as_tensor(omega).to(vec) * torch.as_tensor(dt).to(vec)).reshape(-1, 1, 1)
+    c, s = torch.cos(a), torch.sin(a)
+    return torch.stack([c * vec[:, 0] - s * vec[:, 1], s * vec[:, 0] + c * vec[:, 1]], 1)
 
 
 def trainable_parameters(model):

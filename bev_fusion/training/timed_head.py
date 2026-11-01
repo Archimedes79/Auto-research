@@ -62,9 +62,18 @@ class TimeMover(nn.Module):
         self.grid, self.corr = grid or Grid(), corr
         self.motion = MotionHead(c, hidden, v_max)
 
-    def forward(self, state, dt, v, omega):
-        out, mass, v_hat = splat_bev(state, self.grid, dt, v, omega, head=self.motion, corr=self.corr)
-        return out, mass, v_hat
+    def forward(self, state, dt, v, omega, v_field=None, carry=None):
+        """v_field (B, 2, X, Y): a velocity computed elsewhere (the motion block, ModelConfig.motion_block) used instead of
+        self.motion; carry (B, K, X, Y): extra channels moved with the state (the field itself, for the box velocity at dt),
+        returned as a 4th output."""
+        head = self.motion if v_field is None else (lambda _s: v_field)
+        if carry is None:
+            return splat_bev(state, self.grid, dt, v, omega, head=head, corr=self.corr)
+        if self.corr is not None:
+            raise ValueError("carry with a position correction: the correction would read the carried channels")
+        C = state.shape[1]
+        out, mass, v_hat = splat_bev(torch.cat([state, carry.to(state.dtype)], 1), self.grid, dt, v, omega, head=head)
+        return out[:, :C], mass, v_hat, out[:, C:]
 
 
 class TimedHead(nn.Module):
@@ -80,14 +89,18 @@ class TimedHead(nn.Module):
             nn.init.zeros_(m.weight)
             nn.init.zeros_(m.bias)
 
-    def forward(self, state, dt=0.0, v=0.0, omega=0.0, return_aux=False):
+    def forward(self, state, dt=0.0, v=0.0, omega=0.0, return_aux=False, v_field=None, carry=None):
         B = state.shape[0]
-        moved, mass, v_hat = self.mover(state, dt, v, omega)
+        if carry is None:
+            moved, mass, v_hat = self.mover(state, dt, v, omega, v_field=v_field)
+            carried = None
+        else:
+            moved, mass, v_hat, carried = self.mover(state, dt, v, omega, v_field=v_field, carry=carry)
         gamma, beta = self.film(dt_embedding(dt, B, state)).unsqueeze(-1).unsqueeze(-1).chunk(2, 1)
         h = self.refine(torch.cat([moved, mass], 1)) * (1 + gamma) + beta
         x = moved + self.out(F.relu(h))
         y = self.head(x)
-        return (y, {"mass": mass, "v_hat": v_hat, "state": x}) if return_aux else y
+        return (y, {"mass": mass, "v_hat": v_hat, "state": x, "carry": carried}) if return_aux else y
 
 
 # ------------------------------------------------------------------------------------------------ self-test
@@ -133,6 +146,17 @@ def _selftest():
     assert abs(centroid_x(y) - 32.0) < 0.1, centroid_x(y)
     with torch.no_grad():
         mover.motion.f.net[2].bias.zero_()
+    # 3b a field from elsewhere (the motion block, t15): v_field replaces the head and lands the blob the same way; carry moves the
+    #    field with the state (the box velocity at dt); without them the output is bit-equal to the plain call
+    vf = torch.zeros(1, 2, X, Y)
+    vf[:, 0] = 4.0
+    y, aux = th(S, 0.5, 0.0, 0.0, return_aux=True, v_field=vf)
+    assert abs(centroid_x(y) - 32.0) < 0.1 and aux["v_hat"] is vf and aux["carry"] is None, centroid_x(y)
+    y2, aux2 = th(S, 0.5, 0.0, 0.0, return_aux=True, v_field=vf, carry=vf)
+    assert torch.equal(y2, y) and aux2["carry"].shape == vf.shape
+    landed = aux2["mass"][0, 0] > 0.99
+    assert torch.allclose(aux2["carry"][0, 0][landed], torch.full_like(aux2["carry"][0, 0][landed], 4.0), atol=1e-4)
+    assert torch.equal(th(S, 0.5, 3.0, 0.1), th(S, 0.5, 3.0, 0.1, v_field=None, carry=None))
     # 4 the motion loss: zero for the right velocity, background pulled to rest, parked objects (< 1 m/s) count as 0
     v_gt = torch.zeros(1, 2, X, Y)
     v_gt[0, 0, 40:50, 50:55] = 6.0

@@ -14,8 +14,10 @@ Returns the velocity of every level at the grid resolution (coarse to fine); the
 same loss (deep supervision). v in m/s, k's axes (x forward, y left), the convention of training/splat.py VelocityHead.
 Fully differentiable: bilinear sampling and convolutions, no argmax, no matching.
 
-Where it plugs in (t12, frozen base): `training/train_motion_block.py` replaces the velocity head of the time mover
-(TimeMover.motion) of a trained model by this block's output; the base stays frozen.
+Where it plugs in: t12 (frozen base): `training/train_motion_block.py` replaces the velocity head of the time mover
+(TimeMover.motion) of a trained model by this block's output; the base stays frozen. t15 (joint): `ModelConfig.motion_block`
+builds it inside the chain (`block_inputs` from the model's own camera frames, steps and radar; the field goes to the time
+mover as `v_field`, with `box_vel_from_field` also into the object head's `vel`).
 Run the self-test: python training/motion_block.py
 """
 import math
@@ -26,8 +28,10 @@ import torch.nn.functional as F
 
 try:
     from .lift_pd import Grid
+    from .splat import splat_window
 except ImportError:                                   # run as a script
     from lift_pd import Grid
+    from splat import splat_window
 
 NR = 6                                                # radar raster channels
 
@@ -90,6 +94,22 @@ def backward_warp(f, v, dt, res):
     qy = iy - v[:, 1] * d / res
     grid = torch.stack([(qy + 0.5) / Y * 2 - 1, (qx + 0.5) / X * 2 - 1], -1)
     return F.grid_sample(f, grid, align_corners=False, padding_mode="zeros")
+
+
+def block_inputs(frames, steps, radar, grid, old=-1):
+    """the block's inputs from the model's own tensors: frames (B, F, C, X, Y) camera BEVs per window frame (0 = current, F >= 2),
+    steps[k] the ego steps of frame k to the current time (a list of (dt, v, omega) tensors, as model.forward builds them),
+    radar the batch's detections; old: the window frame used as the older frame (-1 = the oldest).
+    -> (cur, the older frame ego-aligned to k (one splat, differentiable), its mass clamped to 1, radar raster, dt (B,) > 0)"""
+    B, Fn = frames.shape[:2]
+    k = old % Fn
+    if k == 0:
+        raise ValueError(f"the motion block needs an older camera frame (n_cam >= 2), got {Fn} frame(s)")
+    w, m = splat_window([(frames[:, k], steps[k])], grid, head=None, mass_gate=True)
+    with torch.no_grad():
+        rad = radar_raster(radar, B, grid)
+    dt = sum(s[0] for s in steps[k]).abs().reshape(B)
+    return frames[:, 0], w[:, 0], m[:, 0].clamp(max=1.0), rad, dt
 
 
 def _block(cin, cout, dil=1):
@@ -216,6 +236,22 @@ def _selftest():
     err = float((outs[-1].permute(0, 2, 3, 1)[m] - vt).norm(dim=-1).mean())
     assert err < 2.0, err
     print(f"learning ok: blob velocity error after 150 steps {err:.2f} m/s (|v| {float(vt.norm()):.1f})")
+    # 5. block_inputs (the joint form, t15): the older frame is the window frame ego-aligned to k, dt its age, radar rastered;
+    #    a pure forward drive of 10 m/s for 0.33 s moves a feature 3.3 m back; the oldest frame by default; one frame refused
+    fr = torch.zeros(1, 3, 2, X, Y)
+    fr[0, 2, 0, 60, 52] = 1.0                                             # a point at x = 30.25 m in the oldest frame
+    steps = [[], [tuple(torch.tensor([t]) for t in (0.17, 10.0, 0.0))], [tuple(torch.tensor([t]) for t in (0.33, 10.0, 0.0))]]
+    det = {"b": torch.zeros(1), "x": torch.tensor([20.1]), "y": torch.tensor([0.1]), "psi": torch.zeros(1), "vr": torch.tensor([-2.0]), "dt": torch.tensor([0.1])}
+    cur, old_al, mass, rad, dt = block_inputs(fr, steps, det, g)
+    assert cur.shape == (1, 2, X, Y) and abs(float(dt[0]) - 0.33) < 1e-6 and float(rad[0, 2, 40, 52]) == -2.0
+    xc = float((old_al[0, 0] * gx).sum() / old_al[0, 0].sum())
+    assert abs(xc - (30.25 - 3.3)) < 0.3, xc                               # the ego drove 3.3 m towards it
+    try:
+        block_inputs(fr[:, :1], steps[:1], det, g)
+        raise AssertionError("one frame must be refused")
+    except ValueError:
+        pass
+    print(f"block_inputs ok: older frame ego-aligned (x {xc:.2f} m, expected {30.25 - 3.3:.2f}), dt, radar raster, one frame refused")
     print("motion_block self-test passed")
 
 
