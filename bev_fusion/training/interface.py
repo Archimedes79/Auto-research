@@ -30,6 +30,9 @@ INPUTS = {
     "ida2": (False, "crop / resize of the BEVFusion features (camera_features dual)"),
     "lane_img": (False, "(B, 3, H, W) uint8 image of the current frame for the lane add-on"),
     "flip": (False, "(B,) bool: samples mirrored by the augmentation (y -> -y); the camera BEV is mirrored after the camera slot"),
+    "gap_steps": (False, "list (B) of {'prev': steps, 'next': steps}: the ego steps (dt, v, omega) from now to the neighbouring keyframes "
+                         "(python floats, from the poses; dt < 0 backwards): the true gap and ego motion for decoding dt = +-0.5 s and the memory step between calls"),
+    "radar_poses": (False, "(B, 5, 4, 4) sensor -> vehicle matrices of the five radars (the rig calibration; precompute.py makes vis_radar from it)"),
     "vis_cam": (False, "(B, 1, X, Y) cells the current camera frame observes (precompute.py; made from K, T, crop and grid when absent)"),
     "vis_radar": (False, "(B, 1, X, Y) cells the radar rig can see, the fans (precompute.py; D36)"),
     "vis_fusion": (False, "(B, 1, X, Y) the fusion area = vis_cam x vis_radar (precompute.py; D37: fusion results are scored here)"),
@@ -81,9 +84,14 @@ def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=Fa
         for k in ("K", "T_cam_car", "img", "cam_vec", "prob", "ctx", "prob2", "ctx2"):
             if k in batch and tuple(batch[k].shape[:2]) != (B, Fn):
                 errs.append(f"{k}: leading shape {tuple(batch[k].shape[:2])} != (B, F) = {(B, Fn)}")
-        for k in ("v", "omega", "flip"):
+        for k in ("v", "omega", "flip", "radar_poses"):
             if k in batch and batch[k].shape[0] != B:
                 errs.append(f"{k}: {batch[k].shape[0]} samples != B = {B}")
+        if "radar_poses" in batch and tuple(batch["radar_poses"].shape[1:]) != (5, 4, 4):
+            errs.append(f"radar_poses: shape {tuple(batch['radar_poses'].shape)} != (B, 5, 4, 4)")
+        for k in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits"):
+            if k in batch and tuple(batch[k].shape[:2]) != (B, 1):
+                errs.append(f"{k}: leading shape {tuple(batch[k].shape[:2])} != (B, 1) = {(B, 1)}")
         if "steps" in batch and len(batch["steps"]) != Fn:
             errs.append(f"steps: {len(batch['steps'])} frames != F = {Fn}")
         rad = batch.get("radar", {})

@@ -149,6 +149,14 @@ class FrontRadarDataset(torch.utils.data.Dataset):
         out["sensor"] = out["sensor"].long()
         return out
 
+    def _radar_poses(self, sample):
+        """(5, 4, 4) sensor -> vehicle matrices of the radars (RADARS order): the rig calibration the radar fan is made from"""
+        poses = []
+        for ch in RADARS:
+            cs = self.nusc.get("calibrated_sensor", self.nusc.get("sample_data", sample["data"][ch])["calibrated_sensor_token"])
+            poses.append(torch.tensor(pose_matrix(cs), dtype=torch.float32))
+        return torch.stack(poses)
+
     # ---- GT (optionally cached)
     def gt_signature(self):
         """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (autogt source + flags), the suffix of its GT
@@ -193,8 +201,10 @@ class FrontRadarDataset(torch.utils.data.Dataset):
         radar = self._radar(sample, cur)
         last = self.gt.ego_steps(track[max(0, [t["token"] for t in track].index(cur["token"]) - 1)]["timestamp"],
                                  cur["timestamp"], track) or [(1 / 12, 0.0, 0.0)]
-        item = {"token": token, "frames": frames, "radar": radar, "ida": self.ida,
-                "ego": {"v": last[-1][1], "omega": last[-1][2]}, "timestamp": cur["timestamp"]}
+        gap = {key: ([tuple(float(x) for x in s) for s in self.gt.ego_steps(cur["timestamp"], self.gt.cam(sample[key])["timestamp"], track)]
+                      if sample[key] else []) for key in ("prev", "next")}   # the ego steps from now to the neighbouring keyframes, from the poses
+        item = {"token": token, "frames": frames, "radar": radar, "radar_poses": self._radar_poses(sample), "ida": self.ida,
+                "gap_steps": gap, "ego": {"v": last[-1][1], "omega": last[-1][2]}, "timestamp": cur["timestamp"]}
         if self.with_gt:
             item["gt"] = self._gt(token)
         return item
@@ -209,6 +219,7 @@ def collate(items):
            "K": torch.stack([torch.stack([f["K"] for f in it["frames"]]) for it in items]),
            "T_cam_car": torch.stack([torch.stack([f["T_cam_car"] for f in it["frames"]]) for it in items]),
            "cam_vec": torch.stack([torch.stack([f["cam_vec"] for f in it["frames"]]) for it in items]),
+           "radar_poses": torch.stack([it["radar_poses"] for it in items]),
            "ida": items[0]["ida"], "tokens": [it["token"] for it in items],
            "v": torch.tensor([it["ego"]["v"] for it in items]), "omega": torch.tensor([it["ego"]["omega"] for it in items])}
     steps = []
@@ -221,6 +232,7 @@ def collate(items):
         steps.append(per)
     out["steps"] = steps
     out["steps_raw"] = [[f["steps"] for f in it["frames"]] for it in items]      # per sample, python floats
+    out["gap_steps"] = [it["gap_steps"] for it in items]                         # per sample {"prev": steps, "next": steps}, python floats
     rad = {k: torch.cat([it["radar"][k] for it in items]) for k in items[0]["radar"]}
     rad["b"] = torch.cat([torch.full((len(it["radar"]["x"]),), b, dtype=torch.long) for b, it in enumerate(items)])
     out["radar"] = rad
@@ -259,6 +271,9 @@ def _selftest():
     # GT present with the three keyframes and their steps
     g = it["gt"]
     assert set(g) == {"cur", "prev", "next"} and abs(g["next"]["meta"]["dt"] - 0.5) < 0.1
+    assert all(it["gap_steps"][k] == g[k]["meta"]["steps"] and len(it["gap_steps"][k]) >= 5 for k in ("prev", "next")), \
+        "the ego steps to the neighbouring keyframes are made from the poses here, equal to the ones the GT carries"
+    assert it["radar_poses"].shape == (5, 4, 4) and bool((it["radar_poses"][:, 3, 3] == 1).all())
     assert g["cur"]["drivable_area"].shape == (120, 104)
     # collation of two samples
     b = collate([ds[10], ds[11]])
