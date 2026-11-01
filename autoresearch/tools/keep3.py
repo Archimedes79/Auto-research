@@ -5,13 +5,16 @@
     python autoresearch/tools/keep3.py candidates [--top 12]       # every registry name with a card and a checkpoint: value, network, best name per network
     python autoresearch/tools/keep3.py consider NAME [--ledger ID | --by-hand "reason"] [--apply]
     python autoresearch/tools/keep3.py show [--hash]                # the three, their checkpoints (exist, size, sha256 with --hash)
+    python autoresearch/tools/keep3.py pin NAME --reason "..."      # a pinned network (the champion: a protected registry entry) is never pushed out by a better newcomer
+    python autoresearch/tools/keep3.py unpin NAME --reason "..."
     python autoresearch/tools/keep3.py --selftest
 
 The rule (standing instruction of the person, 2026-11-01): a problem keeps its best three NETWORKS (one slot per checkpoint, not per registry name: the same
 checkpoint with another assembly is one network). Their checkpoints stay complete; every other checkpoint may be slimmed or archived, never deleted
 (hard rule 5). The list is a text record in git (<folder of the ledger>/keep3.json: value, card, commit, checkpoint path, size and sha256).
 A candidate comes in when its value on the ranking card beats the weakest of the three by more than the band (the noise band, default 0.010), or
-when fewer than three are held; on the same network it replaces the old name only by the band. A name without a checkpoint of its own (stored graphs,
+when fewer than three are held; on the same network it replaces the old name only by the band. The one that leaves is the weakest UNPINNED entry: a pinned
+entry (`pin`, with a reason; keep the protected champion pinned, a better newcomer must not evict it) stays whatever the ranking says, and when all are pinned nobody comes in. A name without a checkpoint of its own (stored graphs,
 a union of other networks) or whose file is missing is no candidate. Ranking is by the one metric only: the vertex budget (the card's vert100 is shown,
 it is not the budget count of D25) and the cost (ms) are not gates here, so look at them in `candidates` before you take one in; a metric where lower is
 better (project.json lower_is_better) is refused.
@@ -23,9 +26,11 @@ Ranking cards: <card pattern> with {name} and {split}; the card is a json with "
 (evaluation/evaluate.py of the lane problem). A problem whose results have another shape needs its own ranking rule first (bev_fusion: open).
 """
 import argparse
+import contextlib
 import csv
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import re
@@ -99,6 +104,12 @@ def checkpoints(st, root, runs):
     return out
 
 
+def weakest(ents):
+    """the entry a newcomer would push out: the weakest one that is not pinned (None when every entry is pinned)"""
+    free = [e for e in ents if not e.get("pinned")]
+    return min(free, key=lambda e: e["value"]) if free else None
+
+
 def decide(st, cand):
     """(action, text): action is one of enter / replace / out / same; text says why. Pure: the state is not changed"""
     ents, band = st["entries"], st["band"]
@@ -110,7 +121,9 @@ def decide(st, cand):
         return "same", f"{e['name']} holds this network already ({cand['value']:.4f} vs {e['value']:.4f}, inside the band {band} or lower)"
     if len(ents) < st["slots"]:
         return "enter", f"{len(ents)} of {st['slots']} slots are taken: {cand['name']} ({cand['value']:.4f}) takes the next one"
-    weak = min(ents, key=lambda e: e["value"])
+    weak = weakest(ents)
+    if weak is None:
+        return "out", f"every one of the {len(ents)} slots is pinned ({', '.join(e['name'] for e in ents)}): nobody can leave, {cand['name']} stays out (`unpin` first, with a reason)"
     if cand["value"] > weak["value"] + band:
         return "enter", f"{cand['name']} ({cand['value']:.4f}) beats the weakest, {weak['name']} ({weak['value']:.4f}), by more than the band {band}: {weak['name']} leaves"
     return "out", f"{cand['name']} ({cand['value']:.4f}) does not beat the weakest, {weak['name']} ({weak['value']:.4f}), by more than the band {band}"
@@ -141,8 +154,14 @@ def apply(st, cand, ck, action, ev, today=None):
                  checkpoints=ck, since=today or dt.date.today().isoformat(), evidence=ev)
     if action == "replace":
         left = [e for e in ents if e["key"] == cand["key"]]
+        pins = [e["pinned"] for e in left if e.get("pinned")]
+        if pins:                                       # the same network under a better assembly: the pin stays with the network
+            entry["pinned"] = pins[0]
     elif action == "enter" and len(ents) >= st["slots"]:
-        left = [min(ents, key=lambda e: e["value"])]
+        w = weakest(ents)
+        if w is None:
+            sys.exit("every slot is pinned: nothing can leave")
+        left = [w]
     for e in left:
         ents.remove(e)
         st.setdefault("left", []).append(dict(name=e["name"], key=e["key"], value=e["value"], left=entry["since"], replaced_by=cand["name"], checkpoints=[c["path"] for c in e["checkpoints"]]))
@@ -221,12 +240,33 @@ def cmd_consider(a, root):
     return gone
 
 
+def cmd_pin(a, root):
+    """pin / unpin a held network: a pinned one (e.g. the champion, a protected registry entry) never leaves because a newcomer is better"""
+    if not a.reason.strip():
+        sys.exit("--reason is needed (why this network must stay, e.g. 'protected registry entry: the champion')")
+    sp = state_path()
+    with P.locked(sp):
+        st = load()
+        hits = [e for e in st["entries"] if e["name"] == a.name]
+        if not hits:
+            sys.exit(f"{a.name} is not held; held: {[e['name'] for e in st['entries']]}")
+        if a.cmd == "pin":
+            hits[0]["pinned"] = a.reason.strip()
+        elif not hits[0].get("pinned"):
+            sys.exit(f"{a.name} is not pinned")
+        else:
+            del hits[0]["pinned"]
+        st.setdefault("pin_log", []).append(dict(name=a.name, action=a.cmd, reason=a.reason.strip(), date=dt.date.today().isoformat()))
+        write(st, sp)
+    print(f"{a.name}: {a.cmd}ned ({a.reason.strip()}); commit {os.path.relpath(sp, root)} (own path, check_git.py --paths), push after git fetch and check_git.py")
+
+
 def cmd_show(a, root):
     st = load()
     print(f"best {st['slots']} by {st['metric']} on {st['split']} (band {st['band']}), {len(st['entries'])} held:")
     bad = 0
     for e in st["entries"]:
-        print(f"  {e['value']:.4f}  {e['name']:20} since {e['since']}  {e['evidence']}")
+        print(f"  {e['value']:.4f}  {e['name']:20} since {e['since']}  {e['evidence']}" + (f"  PINNED: {e['pinned']}" if e.get("pinned") else ""))
         for c in e["checkpoints"]:
             f = os.path.join(root, c["path"])
             st_ = ("MISSING" if not os.path.exists(f) else "size differs" if os.path.getsize(f) != c["bytes"]
@@ -358,6 +398,37 @@ def selftest():
         finally:
             sys.argv = old_argv
         card("e", 0.60)
+        # pins: a better newcomer pushes out the weakest UNPINNED entry, never the pinned champion; all pinned = nobody comes in; a replace keeps the pin
+        pst = dict(entries=[dict(name="champ", key="k1", value=0.70, pinned="protected", checkpoints=[]), dict(name="x", key="k2", value=0.74, checkpoints=[]),
+                            dict(name="y", key="k3", value=0.75, checkpoints=[])], slots=3, band=0.01)
+        newcomer = dict(name="n", key="k9", runs=["rn"], value=0.80, vert100=1, asm_ms=1, card="c", commit="c")
+        act, txt = decide(pst, newcomer)
+        assert act == "enter" and "beats the weakest, x " in txt, (act, txt)
+        left = apply(pst, newcomer, [], "enter", "test")
+        assert [e["name"] for e in left] == ["x"] and {e["name"] for e in pst["entries"]} == {"champ", "y", "n"}, (left, pst["entries"])
+        allpin = dict(entries=[dict(name=f"p{i}", key=f"kp{i}", value=0.6 + i / 100, pinned="r", checkpoints=[]) for i in range(3)], slots=3, band=0.01)
+        act, txt = decide(allpin, newcomer)
+        assert act == "out" and "pinned" in txt, (act, txt)
+        assert _raises(lambda: apply(allpin, newcomer, [], "enter", "test")), "an apply with every slot pinned must refuse"
+        samekey = dict(entries=[dict(name="champ", key="ka", value=0.70, pinned="protected", checkpoints=[])], slots=3, band=0.01)
+        better = dict(newcomer, name="champ2", key="ka", value=0.80)
+        assert decide(samekey, better)[0] == "replace"
+        apply(samekey, better, [], "replace", "test")
+        assert samekey["entries"][0]["name"] == "champ2" and samekey["entries"][0].get("pinned") == "protected", samekey
+        # the command: a reason is needed, an unknown name and an unpin of an unpinned one are refused, the log keeps who/why, show names the pin
+        assert _raises(lambda: cmd_pin(ns(cmd="pin", name="d", reason="  "), T)) and _raises(lambda: cmd_pin(ns(cmd="pin", name="zz", reason="r"), T))
+        assert _raises(lambda: cmd_pin(ns(cmd="unpin", name="d", reason="r"), T)), "d is not pinned yet"
+        cmd_pin(ns(cmd="pin", name="d", reason="protected registry entry"), T)
+        held = {e["name"]: e for e in load()["entries"]}
+        assert held["d"]["pinned"] == "protected registry entry" and not held["e"].get("pinned") and load()["pin_log"][-1]["action"] == "pin"
+        buf_ = io.StringIO()
+        with contextlib.redirect_stdout(buf_):
+            cmd_show(ns(), T)
+        assert "PINNED: protected registry entry" in buf_.getvalue(), buf_.getvalue()
+        weak_name = min(load()["entries"], key=lambda e: e["value"])["name"]
+        assert weak_name == "d" and weakest(load()["entries"])["name"] != "d", "the weakest is d, but d is pinned: another one is the one to leave"
+        cmd_pin(ns(cmd="unpin", name="d", reason="no longer the champion"), T)
+        assert not {e["name"]: e for e in load()["entries"]}["d"].get("pinned") and len(load()["pin_log"]) == 2
         # show: ok, then a changed file is seen (size) and a changed byte only with --hash
         assert cmd_show(ns(), T) == 0
         open(f"{T}/runs/ck/rd.pt", "wb").write(b"r" * 199 + b"X")  # 200 bytes like the original "rd" * 100
@@ -404,12 +475,16 @@ def main():
     k.add_argument("--apply", action="store_true")
     s = sub.add_parser("show")
     s.add_argument("--hash", action="store_true")
+    for verb in ("pin", "unpin"):
+        pn = sub.add_parser(verb, help="a pinned network (the champion: a protected registry entry) never leaves because a newcomer is better" if verb == "pin" else "remove the pin")
+        pn.add_argument("name")
+        pn.add_argument("--reason", required=True)
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     if not a.cmd:
-        ap.error("a command (init, candidates, consider, show) or --selftest")
-    rc = {"init": cmd_init, "candidates": cmd_candidates, "consider": cmd_consider, "show": cmd_show}[a.cmd](a, P.root())
+        ap.error("a command (init, candidates, consider, show, pin, unpin) or --selftest")
+    rc = {"init": cmd_init, "candidates": cmd_candidates, "consider": cmd_consider, "show": cmd_show, "pin": cmd_pin, "unpin": cmd_pin}[a.cmd](a, P.root())
     return rc if isinstance(rc, int) else 0  # consider returns the checkpoints that left (a list), which sys.exit would print and turn into exit code 1
 
 
