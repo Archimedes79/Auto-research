@@ -265,7 +265,7 @@ def main(argv=None):
     r.add_argument("--version", default="v1.0-mini")
     r.add_argument("--workers", type=int, default=1, help="processes (fork, one sequence per task); a finished sequence is saved, reruns resume")
     r.add_argument("--light", action="store_true", help="memory-light devkit (automatic for trainval)")
-    r.add_argument("--out", default=None, help="report PDF (default autogt/reports/autogt_report_<version>_<date>.pdf)")
+    r.add_argument("--out", default=None, help="report PDF (default data/autogt/reports/autogt_report_<version>_<date>.pdf)")
     r.add_argument("--data", default=None, help="cache directory (default bev_fusion/data/autogt); --no-data: do not store")
     r.add_argument("--no-data", action="store_true")
     r.add_argument("--scenes", nargs="*")
@@ -310,7 +310,7 @@ def main(argv=None):
     elif a.cmd == "report":
         import datetime
         from .report import report
-        out = a.out or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "autogt", "reports",
+        out = a.out or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt", "reports",
                                     f"autogt_report_{a.version}_{datetime.date.today().isoformat()}.pdf")
         data = None if a.no_data else (a.data or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt"))
         root = a.dataroot or ("~/data/nuscenes_full" if "trainval" in a.version else "~/data/nuscenes")

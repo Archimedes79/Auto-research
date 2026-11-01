@@ -4,9 +4,10 @@
 
 Without --move / --delete it only lists what it would remove and the size (dry run). --move puts the items into
 bev_fusion/_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace), --delete removes them.
-- videos / pictures: *.mp4 / *.gif and *.png in autogt/examples (they are reproducible: `python -m autogt video / view / sheets`)
-- reports: *.pdf in autogt/reports (what `python -m autogt report` writes by default; the report is self-contained, its sample pictures are
-  drawn straight into the PDF and never exist as files)
+- videos / pictures: *.mp4 / *.gif and *.png in data/autogt/examples (they are reproducible: `python -m autogt video / view / sheets`)
+- reports: *.pdf in data/autogt/reports (what `python -m autogt report` writes by default; the report is self-contained, its sample pictures
+  are drawn straight into the PDF and never exist as files)
+(everything autogt generates lives under bev_fusion/data/autogt/, outside the code package autogt/ and outside git)
 - old-outputs: bev_fusion/_to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
 - stale-caches DIR: the cache folders `DIR/<signature>` of `python -m autogt build` / `report` whose signature is not a current
   one (the default options or `--boxes-at annotation`; every edit of the generator changes the signature, GT of older versions
@@ -46,13 +47,13 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
             base=BASE, current_signature=None):
     """list of (path, bytes, category) the cleanup would remove."""
     items = []
-    ex = os.path.join(base, "autogt", "examples")
+    ex = os.path.join(base, "data", "autogt", "examples")
     if os.path.isdir(ex):
         for f in sorted(os.listdir(ex)):
             low = f.lower()
             if (videos and low.endswith((".mp4", ".gif"))) or (pictures and low.endswith(".png")):
                 items.append((os.path.join(ex, f), "videos" if videos and low.endswith((".mp4", ".gif")) else "pictures"))
-    rep = os.path.join(base, "autogt", "reports")
+    rep = os.path.join(base, "data", "autogt", "reports")
     if reports and os.path.isdir(rep):
         items += [(os.path.join(rep, f), "reports") for f in sorted(os.listdir(rep)) if f.lower().endswith(".pdf")]
     old = os.path.join(base, "_to_delete", "autogt_old_outputs")
@@ -101,14 +102,14 @@ def clean(delete=False, move=False, base=BASE, **kw):
 def selftest():
     import tempfile
     with tempfile.TemporaryDirectory() as b:
-        ex = os.path.join(b, "autogt", "examples")
+        ex = os.path.join(b, "data", "autogt", "examples")
         os.makedirs(ex)
         os.makedirs(os.path.join(b, "_to_delete", "autogt_old_outputs"))
         for f in ("a.mp4", "b.png", "make_videos.sh"):
             open(os.path.join(ex, f), "wb").write(b"x" * 100)
-        os.makedirs(os.path.join(b, "autogt", "reports"))
-        open(os.path.join(b, "autogt", "reports", "r.pdf"), "wb").write(b"x" * 100)
-        open(os.path.join(b, "autogt", "reports", "notes.txt"), "wb").write(b"x")
+        os.makedirs(os.path.join(b, "data", "autogt", "reports"))
+        open(os.path.join(b, "data", "autogt", "reports", "r.pdf"), "wb").write(b"x" * 100)
+        open(os.path.join(b, "data", "autogt", "reports", "notes.txt"), "wb").write(b"x")
         cache = os.path.join(b, "cache")
         for sig in ("old1", "cur"):
             os.makedirs(os.path.join(cache, sig))
@@ -125,6 +126,6 @@ def selftest():
         moved = os.path.join(b, "_to_delete", f"autogt_cleanup_{datetime.date.today().isoformat()}")
         assert sorted(os.listdir(moved)) == ["a.mp4", "b.png", "old1"], os.listdir(moved)
         clean(delete=True, base=b, reports=True)
-        assert not os.path.exists(os.path.join(b, "autogt", "reports", "r.pdf")) and os.path.exists(os.path.join(b, "autogt", "reports", "notes.txt"))
+        assert not os.path.exists(os.path.join(b, "data", "autogt", "reports", "r.pdf")) and os.path.exists(os.path.join(b, "data", "autogt", "reports", "notes.txt"))
         clean(delete=True, base=b, old_outputs=True)
         assert not os.path.exists(os.path.join(b, "_to_delete", "autogt_old_outputs"))

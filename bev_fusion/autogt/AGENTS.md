@@ -40,8 +40,10 @@ All commands run **from the `bev_fusion` folder inside WSL** with the conda env 
 `... run_nice.sh my_script.py`; a running `report` is stopped with `wsl bash -c "pkill -f '[a]utogt report'"`). Rules: one process, no worker pools while a training round runs (`uptime`, `free -m` first),
 the full trainval devkit needs 8+ GB (use `light=True, scenes=[...]`; `report` does it automatically), run long jobs in the
 background and wait with a bounded loop. Data: `~/data/nuscenes` (mini, 10 sequences, 404 keyframes), `~/data/nuscenes_full`
-(trainval, 850 sequences, 34,149 keyframes). Stored GT: `data/autogt/<signature>/<token>.npz` + `index.json`; reports (PDF):
-`autogt/reports/`. Nothing here is in git except code and text; stored GT is derived data and can always be rebuilt.
+(trainval, 850 sequences, 34,149 keyframes). Code and output are apart: the code is the package `bev_fusion/autogt/` (in git); everything
+autogt generates is under `bev_fusion/data/autogt/` (not in git): stored GT `<signature>/<token>.npz` + `index.json`, reports (PDF)
+`reports/`, example videos / pictures `examples/`. Stored GT is derived data and can always be rebuilt (5-8 h for trainval); the raw
+nuScenes data is on D: (`~/data/nuscenes*` are links to it) and is never written to.
 
 ## 3. What a keyframe contains
 Grid: ego frame at the **front-camera time**, x forward 0..60 m, y left -26..26 m, 0.5 m cells (`GridSpec(res=0.25)` for 0.25 m)
@@ -136,7 +138,7 @@ cur["flow"] * dt                         # first-order displacement of every cel
 - Look: `python -m autogt view OUT_DIR scene-0061:8 [--total]` writes a 4-panel picture (camera with 3D boxes + map lines, semantic
   BEV, objects + velocity arrows, motion relative to the static world); `python -m autogt sheets OUT_DIR` stacks the ten defaults.
   Pictures and videos are reproducible: delete them with `python -m autogt clean --pictures --videos [--move]`.
-- Evaluate a GT version: `python -m autogt report --version v1.0-mini --holdout` -> PDF in `autogt/reports/` with every check
+- Evaluate a GT version: `python -m autogt report --version v1.0-mini --holdout` -> PDF in `data/autogt/reports/` with every check
   (O1-O8 objects, M1-M3 map, V1-V3 velocity; `checks.py` documents each) and the leave-one-radar-out test of the radar correction.
 - Change the generator: edit, `python -m autogt selftest`, `report` on mini, tell the trainer the new signature, then
   `python -m autogt clean --stale-caches data/autogt` (dry run first). A new layer must also be added to the table above (selftest fails otherwise).

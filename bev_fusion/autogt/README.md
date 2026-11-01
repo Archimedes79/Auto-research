@@ -37,10 +37,10 @@ python -m autogt build --version v1.0-mini --out DIR [--scenes ..] [--workers N]
 python -m autogt check [--holdout]                          # automatic consistency checks (+ leave-one-radar-out radar test)
 python -m autogt view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
 python -m autogt report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (data/autogt/<signature>/), run every check, write ONE PDF
-                                                            # (autogt/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
+                                                            # (data/autogt/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
 python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--older-than DAYS] [--move|--delete]
                                                             # removes only what autogt generated; dry run by default, --move puts it into _to_delete/
-python -m autogt video SCENE OUT.mp4 [seconds]              # driving through the GT at 12 Hz (H.264, read back)
+python -m autogt video SCENE OUT.mp4 [seconds]              # driving through the GT at 12 Hz (H.264, read back); the examples so far: scene-0061, scene-1077, scene-0655 in data/autogt/examples/
 ```
 
 ## Layout
