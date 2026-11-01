@@ -1,6 +1,6 @@
 {
  "title": "bev_fusion target: precompute, input interface, modular network, output interface, removable post-processing",
- "subtitle": "Proposal for discussion (2026-11-01, not built). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block with a stated contract (the base chain has no rule step there); right of the output interface only rule steps for metrics and the prototype. Each box names the code it is built from today.",
+ "subtitle": "Agreed by Mirko 2026-11-01, built after the 6000-step run. Left of the input interface nothing learns; between the two interfaces every slot is a swappable block with a stated contract and no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner. Each box names the code it is built from today.",
  "root": "..",
  "colw": 190,
  "kinds": {
@@ -27,6 +27,12 @@
    "fill": "#dbeafe",
    "stroke": "#2563eb",
    "class": "learned"
+  },
+  "fixed": {
+   "label": "fixed math, differentiable",
+   "fill": "#e0f2fe",
+   "stroke": "#0284c7",
+   "class": "fixed"
   },
   "rule": {
    "label": "rule step (no gradient)",
@@ -213,7 +219,7 @@
   },
   {
    "id": "temporal",
-   "label": "Temporal fusion\nwindow + memory | GRU | none",
+   "label": "Temporal fusion\nper branch: camera, radar",
    "kind": "learned",
    "col": 4,
    "row": 0,
@@ -223,7 +229,7 @@
     "training/splat.py::splat_window",
     "training/fallbacks.py::EgoWarpGRU"
    ],
-   "note": "contract: (BEV now, past BEVs with their ego steps, state, step since the last call, visibility) -> (BEV, state); the memory re-centre is a whole-cell roll: the gradient passes, the shift comes from the ego pose"
+   "note": "the same block for both branches (TemporalFusion takes channels and grid); camera: window + world memory; radar: none today, world memory as the first arm (its 0.5 s history is in the points); contract: (BEV now, past BEVs with their ego steps, state, step since the last call, coverage) -> (BEV, state); the re-centre is a whole-cell roll, the gradient passes"
   },
   {
    "id": "fusion",
@@ -291,11 +297,11 @@
   },
   {
    "id": "planner",
-   "label": "Planner head\n(later)",
+   "label": "Planner (later)\nafter the system",
    "kind": "later",
-   "col": 7,
+   "col": 9,
    "row": 3,
-   "note": "reads the features S and the dense outputs; trained jointly, its loss flows back through backbone, fusion and encoders: the deep connection to the fusion"
+   "note": "a consumer of the output interface, not part of the system; the outputs are dense and differentiable, so a later joint training lets its loss flow back into the fusion"
   },
   {
    "id": "out_iface",
@@ -311,25 +317,25 @@
   },
   {
    "id": "lines",
-   "label": "Line extraction\nzero crossing",
+   "label": "Line cells\nthreshold",
    "kind": "rule",
    "col": 9,
    "row": 0,
    "code": [
     "evaluation/metrics.py::line_cells"
    ],
-   "note": "for the line metric and the prototype only"
+   "note": "thresholds the soft line map for the line metric; the metric's reference line_cells stays the definition and a test checks the two agree"
   },
   {
    "id": "decode",
-   "label": "Box decode\npeak, top-k, threshold",
+   "label": "Select boxes\nlocal max, top-k, threshold",
    "kind": "rule",
    "col": 9,
    "row": 1,
    "code": [
     "training/object_head.py::decode"
    ],
-   "note": "for the detection metrics and the prototype; the refiner option also calls it on the training path"
+   "note": "the only box step left outside the network: picks cells of the dense box output for the metrics and the prototype; with the hard local maximum it gives exactly today's boxes"
   },
   {
    "id": "consumers",
@@ -402,6 +408,18 @@
     "training/lane_branch.py::LaneBranch"
    ],
    "note": "reads the lane image, K, T, ida and the DualBEV depth of the current frame; its BEV is added to the camera BEV after the temporal block; mirrored on its own"
+  },
+  {
+   "id": "soft",
+   "label": "Soft extraction\npeaks, box params, line map",
+   "kind": "fixed",
+   "col": 7,
+   "row": 3,
+   "code": [
+    "training/object_head.py::decode",
+    "evaluation/metrics.py::line_cells"
+   ],
+   "note": "built from today's decode and line extraction: per cell a peak weight (heatmap x exp(-beta (maxpool - heatmap))), the box parameters (centre with offset, size, yaw with a soft direction sign, velocity x sigmoid(moving)) and a soft line map (near-zero distance x soft local minimum); fixed math, differentiable"
   }
  ],
  "edges": [
@@ -442,10 +460,6 @@
    "to": "fusion"
   },
   {
-   "from": "rad_enc",
-   "to": "fusion"
-  },
-  {
    "from": "fusion",
    "to": "backbone"
   },
@@ -462,11 +476,6 @@
    "to": "motion"
   },
   {
-   "from": "backbone",
-   "to": "planner",
-   "label": "S"
-  },
-  {
    "from": "maps_head",
    "to": "out_iface"
   },
@@ -476,10 +485,6 @@
   },
   {
    "from": "motion",
-   "to": "out_iface"
-  },
-  {
-   "from": "planner",
    "to": "out_iface"
   },
   {
@@ -522,6 +527,28 @@
   {
    "from": "iface",
    "to": "temporal"
+  },
+  {
+   "from": "rad_enc",
+   "to": "temporal",
+   "label": "radar"
+  },
+  {
+   "from": "maps_head",
+   "to": "soft"
+  },
+  {
+   "from": "obj_head",
+   "to": "soft"
+  },
+  {
+   "from": "soft",
+   "to": "out_iface"
+  },
+  {
+   "from": "out_iface",
+   "to": "planner",
+   "label": "dense, differentiable"
   }
  ],
  "groups": [
@@ -536,8 +563,8 @@
     "motion",
     "maps_head",
     "obj_head",
-    "planner",
-    "lane"
+    "lane",
+    "soft"
    ]
   },
   {
