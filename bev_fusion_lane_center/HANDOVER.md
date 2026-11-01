@@ -16,6 +16,7 @@ D17 loop ranges by hand; D18 bands per card; D19 machine lock; D25 vertex senten
 ## Open for Mirko
 - D4: promote `recall_sp0_dp`? after route success + idle ms (next lane loop). D31: wedge vs grid, folds into D36 if he agrees. "D1." (unclear, asked back).
 - D36: camera loss only where the camera sees, radar loss only where the radar sees, lanes camera-only, one rule for training, evaluation and execution; note `../bev_fusion/records/sensor_coverage_2026-11-01.md`; BEV + GT chats start after t10; fused objects: where either sensor sees (to confirm).
+- D36 details, ask Mirko one at a time (list in the note): report by coverage class, radar mask definition, cells hidden behind a box, per-object radar flag. GT chat plans v6 after t10.
 
 ## Next
 1. Next lane loop: precision at range, idle timing of ring / union / prototype, route success on spur-kept graphs.
