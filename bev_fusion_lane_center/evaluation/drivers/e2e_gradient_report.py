@@ -105,6 +105,113 @@ def show(rep):
         print(f"{r['group']:48s} {r['channels']:9d} {r['mean_abs']:13.3e} {r['max_abs']:12.3e}")
 
 
+def run_route(run_name, n, route_name="p16_f2hr_route_s0", seed=0):
+    """G1(1) of card E269: the gradient of the ROUTE loss alone through the old joint path (p18_joint: builder -> assembly -> vertex tokens M @ h[src] -> RouteXNet -> route BCE),
+    per module group of the builder, next to the gradient of the builder loss on the same frames; plus the gradient on the node positions, validity, tokens and link logits.
+    CPU float32, builder in eval mode as in p18_joint, TRAIN rows with the route labels of the joint training (clean frames, no failure stream)."""
+    import p10_net as PN
+    import p10_route_train as RTR
+    import p16_builder as PB
+    import p16_common as C
+    import p16_data as PD
+    import p16_infer as PI
+    import p16_loss as PL
+    import p17_eval as EV
+    import p18_joint as PJ
+    import p8_lib as L
+    import torch.nn.functional as F
+
+    torch.manual_seed(seed)
+    rng = np.random.RandomState(seed)
+    card = json.load(open(f"{C.LADDER}/cards/{run_name}.json", encoding="utf-8-sig"))
+    kw = dict(card["cfg"], temporal=False)
+    cfg = PB.DefaultCfg(**kw)
+    net = PB.Builder(cfg, stem_from=None)
+    net.load_state_dict(torch.load(f"{C.OUT}/e123/{run_name}/model.pt", map_location="cpu"), strict=False)
+    net.float().eval()
+    rnet = PN.RouteXNet()
+    rnet.load_state_dict(torch.load(f"{L.OUT}/{route_name}/model.pt", map_location="cpu"))
+    rnet.float().eval()
+    ks = list(range(0, 8000, 8000 // n))[:n]
+    ds = PD.BuilderData("train", ks=ks, train=True, with_prev=False)
+    b = PD.collate([ds[i] for i in range(n)])
+    sdl = L.cache("sd", "train")
+    rh = np.load(f"{L.D}/route_heat_train.npy", mmap_mode="r")
+    asm = dict(EV.CHAMP_ASM)
+    x = b["x"].float()
+    res = net(x, gt=None, share=0.0, prior=None)
+    watch = {"node positions (pos)": res["pos"], "node validity (pi)": res["pi"], "node tokens (h)": res["h"], "seed positions": res["seeds"]["pos"], "seed validity (val)": res["seeds"]["val"]}
+    if "link_logit" in res:
+        watch["link logits"] = res["link_logit"]
+    for t in watch.values():
+        t.retain_grad()
+    lr_ = []
+    for i in range(x.shape[0]):
+        row = int(b["row"][i])
+        r = PI.to_numpy(res, i)
+        g, ax = PI.assemble(r, None, 0.7, cfg, aux=True, **asm)
+        if not len(ax["V"]):
+            continue
+        it0, it1, M, src, has = PJ.route_item(r, ax, g)
+        h = res["h"][i].float()
+        tok_old = torch.zeros(len(it0["xy"]), 128)
+        if has.any():
+            hh = h[torch.as_tensor(src[has])]
+            tok_old[torch.as_tensor(np.where(has)[0]), : hh.shape[1]] = hh
+        tok = torch.from_numpy(M) @ tok_old
+        raster, kind, _, _ = RTR.draw_cell(sdl[row], sdl, row, rng, 0.08, 0.08, 0.3)
+        nn_ = len(it1["xy"])
+        y = np.zeros(nn_, np.float32)
+        if kind == "n":
+            r_ = np.clip(np.round((it1["xy"][:, 0] + 50) / 0.5 - 0.5).astype(int), 0, 199)
+            c_ = np.clip(np.round((it1["xy"][:, 1] + 50) / 0.5 - 0.5).astype(int), 0, 199)
+            y = (np.asarray(rh[row])[r_, c_] >= 128).astype(np.float32)
+        lg = rnet(tok[None], torch.from_numpy(it1["xy"])[None], torch.from_numpy(it1["cp"])[None], torch.from_numpy(raster)[None], torch.ones(1, nn_, dtype=torch.bool))
+        lr_.append(F.binary_cross_entropy_with_logits(lg.float()[0], torch.from_numpy(y), pos_weight=torch.tensor(2.0)))
+    lroute = torch.stack(lr_).mean()
+    lb, _ = PL.total_loss(net, res, b, {})
+
+    def collect(loss):
+        net.zero_grad()
+        for t in watch.values():
+            t.grad = None
+        loss.backward(retain_graph=True)
+        rows, silent = param_table(net.named_parameters())
+        vec = {}
+        for n_, p_ in net.named_parameters():
+            vec.setdefault(group_of(n_), []).append((p_.grad if p_.grad is not None else torch.zeros_like(p_)).detach().flatten().clone())  # a tensor without gradient counts as zeros, so both losses give vectors of equal length
+        vec = {g: torch.cat(v) for g, v in vec.items()}
+        return {r["group"]: r for r in rows}, {k: (float(t.grad.float().norm()) if t.grad is not None else 0.0) for k, t in watch.items()}, silent, vec
+
+    rt, rw, rsilent, rv = collect(lroute)
+    bt, bw, _, bv = collect(lb)
+
+    def cosine(g):
+        if g not in rv or g not in bv or float(rv[g].norm()) == 0.0 or float(bv[g].norm()) == 0.0:
+            return None
+        return float(F.cosine_similarity(rv[g][None], bv[g][None]))
+    allr = torch.cat([rv[g] for g in rv])
+    return dict(run=run_name, route_head=route_name, frames=len(lr_), route_loss=float(lroute), builder_loss=float(lb),
+                groups=[dict(group=g, route_norm=rt[g]["norm"], builder_norm=bt[g]["norm"], route_live=rt[g]["live"], tensors=rt[g]["tensors"], cosine=cosine(g)) for g in rt],
+                cosine_all=float(F.cosine_similarity(allr[None], torch.cat([bv[g] for g in rv])[None])),
+                watched=[dict(name=k, route_norm=rw[k], builder_norm=bw[k]) for k in watch], silent_under_route_loss=rsilent)
+
+
+def show_route(rep):
+    print(f"G1(1): route loss alone through the old joint path, {rep['run']} + head {rep['route_head']}, {rep['frames']} TRAIN frames (CPU, float32, eval mode); route loss {rep['route_loss']:.3f}, builder loss {rep['builder_loss']:.3f}")
+    print(f"{'module group':48s} {'route grad':>11s} {'builder grad':>13s} {'ratio':>8s} {'cosine':>7s} {'tensors live (route)':>21s}")
+    for r in rep["groups"]:
+        ratio = r["route_norm"] / r["builder_norm"] if r["builder_norm"] > 0 else float("nan")
+        cs = "-" if r.get("cosine") is None else f"{r['cosine']:.3f}"
+        print(f"{r['group']:48s} {r['route_norm']:11.4f} {r['builder_norm']:13.4f} {ratio:8.3f} {cs:>7s} {r['route_live']:>10d}/{r['tensors']:<10d}")
+    print(f"cosine between the route-loss and the builder-loss gradient over all groups the route loss reaches: {rep['cosine_all']:.3f}")
+    print(f"{'tensor on the path':48s} {'route grad':>11s} {'builder grad':>13s} {'ratio':>8s}")
+    for w in rep["watched"]:
+        ratio = w["route_norm"] / w["builder_norm"] if w["builder_norm"] > 0 else float("nan")
+        print(f"{w['name']:48s} {w['route_norm']:11.4f} {w['builder_norm']:13.4f} {ratio:8.3f}")
+    print("tensors without any route-loss gradient:", len(rep["silent_under_route_loss"]), ("(" + ", ".join(rep["silent_under_route_loss"][:12]) + (" ..." if len(rep["silent_under_route_loss"]) > 12 else "") + ")") if rep["silent_under_route_loss"] else "")
+
+
 def selftest():
     import torch.nn as nn
 
@@ -138,10 +245,17 @@ def main():
     ap.add_argument("--n", type=int, default=2, help="VAL frames")
     ap.add_argument("--json", default="", help="also write the report here")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--route", action="store_true", help="G1(1) of E269: gradient of the route loss alone through the old p18_joint path (use --run e123_D7_r3_j1)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
     torch.set_num_threads(2)
+    if a.route:
+        rep = run_route(a.run, a.n)
+        show_route(rep)
+        if a.json:
+            json.dump(rep, open(a.json, "w"), indent=1)
+        return
     rep = run(a.run, a.n)
     show(rep)
     if a.json:
