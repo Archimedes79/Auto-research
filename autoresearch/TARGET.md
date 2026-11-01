@@ -58,6 +58,14 @@ Each step ends with the selftests green, `architecture.json` redrawn to the new 
 
 Not part of it: new suites, a service or daemon, templates beyond the card and the version entry.
 
+## Status (branch `ar/layered-design`, night of 2026-11-01; nothing merged into main yet)
+| step | state |
+|---|---|
+| 1 roles to four, METHOD.md on one page | done on the branch: `ar-planner` (5 modes), `ar-researcher`, `ar-coder`, `ar-critic`; the old names are 3-line forwarding files; METHOD.md 1,821 -> 925 words; tools selftest passes |
+| 2 `eval package` | not started: its check needs a real run of both prototypes (GPU booked, RAM short that night) |
+| 3 experiment folder as the unit | `tick.py` removed (0 of 61 runs). Measured before deleting `schedule.csv` (lane, 105 items): 54 derivable from the cards (8 arms, 24 evaluate, 10 summary, 6 code, 6 decide steps), 16 more once seed repeats are named by a rule (`E240.a2` = arm a, seed 2), 35 not: card steps outside the arms (diagnosis, analysis, timing: 13), round steps (agent work, prototypes, reviews, tests: 19), items without a folder (3). bev_fusion has no `schedule.csv` at all. So `schedule.csv` goes when `experiment.json` lists its extra steps and seeds, and the round's plan lists the round steps; until then it stays, with its state derived |
+| 4, 5 | wait for their decisions |
+
 ## Migrating while trainings run
 - **Where the work happens.** The branch `ar/layered-design` lives in its own worktree (`_wt/layered`, inside the workspace, ignored by main). Running chains keep calling `autoresearch/tools/run.py` in the main checkout and never see the branch. The old rule "worktrees need M7" is about running experiments: a worktree has no runs, data or ledger. So nothing is trained or evaluated in the worktree; selftests run there (they use a throw-away project), and the one real run each step requires happens in the main checkout after the merge.
 - **Old paths keep working.** A tool that moves leaves a forwarding file at its old path for one full loop (`tools/run.py` imports and calls `core/run.py`); agent roles are installed under their new names beside the old ones, and the old names go after the loop that used them.
