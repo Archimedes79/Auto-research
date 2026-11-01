@@ -8,7 +8,7 @@
 | theme | T5 - Learned graph extractor and registration-free navigation head (system B) (loops 10 - 13) |
 | tag | C - classical / reference: classical method, simulator, analysis, protocol or literature review |
 | sparsification stage | SP5 learned sparse extractor (step choice, vertices, events) |
-| loop | loop12 - log: [../../experiment_execution/indexes/LOOP12_INDEX.md](../../experiment_execution/indexes/LOOP12_INDEX.md) |
+| loop | loop12 - log: [../../experiment_execution/history/indexes/LOOP12_INDEX.md](../../experiment_execution/history/indexes/LOOP12_INDEX.md) |
 
 ## Result
 

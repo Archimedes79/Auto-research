@@ -9,7 +9,7 @@
 | tag | E - E2E-usable: learned or parameter-free, differentiable (the trace network has discrete bookkeeping inside) |
 | sparsification stage | SP7 sparse graph as planner interface (tokens, consumer) |
 | building blocks | BB12 cross-attention; BB11 self-attention |
-| loop | loop14 - log: [../../experiment_execution/indexes/LOOP14_INDEX.md](../../experiment_execution/indexes/LOOP14_INDEX.md) |
+| loop | loop14 - log: [../../experiment_execution/history/indexes/LOOP14_INDEX.md](../../experiment_execution/history/indexes/LOOP14_INDEX.md) |
 
 ## Result
 

@@ -9,7 +9,7 @@
 | tag | P - with a classical step: learned, but needs a rule or geometric stage next to it |
 | sparsification stage | SP4 keep and verify (precision gates, verifiers, probabilities) |
 | building blocks | BB13 relation bias, graph transformer, message passing; BB11 self-attention |
-| loop | loop08 - log: [../../experiment_execution/indexes/LOOP8_INDEX.md](../../experiment_execution/indexes/LOOP8_INDEX.md) |
+| loop | loop08 - log: [../../experiment_execution/history/indexes/LOOP8_INDEX.md](../../experiment_execution/history/indexes/LOOP8_INDEX.md) |
 
 ## Result
 

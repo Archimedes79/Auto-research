@@ -8,7 +8,7 @@
 | theme | T7 - Planner interface, trust and the planner loss (loops 5 - 14) |
 | tag | E - E2E-usable: learned or parameter-free, differentiable (the trace network has discrete bookkeeping inside) |
 | sparsification stage | SP4 keep and verify (precision gates, verifiers, probabilities) |
-| loop | loop12 - log: [../../experiment_execution/indexes/LOOP12_INDEX.md](../../experiment_execution/indexes/LOOP12_INDEX.md) |
+| loop | loop12 - log: [../../experiment_execution/history/indexes/LOOP12_INDEX.md](../../experiment_execution/history/indexes/LOOP12_INDEX.md) |
 
 ## Result
 

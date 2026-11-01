@@ -9,7 +9,7 @@
 | tag | P - with a classical step: learned, but needs a rule or geometric stage next to it |
 | sparsification stage | SP0 not part of the sparsification chain (foundation, map, time, planner, analysis) |
 | building blocks | BB10 memory bank / query propagation; BB03 grid sampling, spatial transformer, warping |
-| loop | loop11 - log: [../../experiment_execution/indexes/LOOP11_INDEX.md](../../experiment_execution/indexes/LOOP11_INDEX.md) |
+| loop | loop11 - log: [../../experiment_execution/history/indexes/LOOP11_INDEX.md](../../experiment_execution/history/indexes/LOOP11_INDEX.md) |
 
 ## Result
 

@@ -9,7 +9,7 @@
 | tag | C - classical / reference: classical method, simulator, analysis, protocol or literature review |
 | sparsification stage | SP5 learned sparse extractor (step choice, vertices, events) |
 | building blocks | BB01 convolution, U-Net / FPN pyramids; BB11 self-attention; BB19 output heads: class + residual, splines; BB21 discrete choices inside the network; BB14 pointer attention |
-| loop | loop16 - log: [../../experiment_execution/indexes/TRIAGE_STATE.md](../../experiment_execution/indexes/TRIAGE_STATE.md) |
+| loop | loop16 - log: [../../experiment_execution/history/indexes/TRIAGE_STATE_loop16.md](../../experiment_execution/history/indexes/TRIAGE_STATE_loop16.md) |
 
 ## Result
 

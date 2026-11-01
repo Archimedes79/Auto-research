@@ -7,7 +7,7 @@
 | experiment id | E214 |
 | theme | T11 - Fork pruning, map localisation and failure-trained navigation (loop 18) |
 | tag | D - dropped: tried, no gain or worse |
-| loop | loop18 - state: [../../experiment_execution/indexes/LOOP18_STATE.md](../../experiment_execution/indexes/LOOP18_STATE.md) |
+| loop | loop18 - state: [../../experiment_execution/history/indexes/LOOP18_STATE.md](../../experiment_execution/history/indexes/LOOP18_STATE.md) |
 
 ## Result
 
