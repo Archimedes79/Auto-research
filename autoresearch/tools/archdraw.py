@@ -41,11 +41,16 @@ DEFAULT_KINDS = {
 CLASS_WORD = {"learned": "learned", "fixed": "fixed-differentiable", "frozen": "frozen", "rule": "rule step"}
 
 
-def load(path):
+def geometry(spec):
+    """the grid of this spec (set again before every drawing, so two specs in one process do not share a grid)"""
     global COLW, ROWH, TITLE_H
-    spec = json.load(open(path, encoding="utf-8"))
     COLW, ROWH = spec.get("colw", 200), spec.get("rowh", 100)
-    TITLE_H = 78 + (30 if spec.get("steps") else 0)                # room for the step headers
+    TITLE_H = 78 + (30 if spec.get("steps") or spec.get("spans") else 0)   # room for the step headers and the top of a span
+
+
+def load(path):
+    spec = json.load(open(path, encoding="utf-8"))
+    geometry(spec)
     spec.setdefault("kinds", DEFAULT_KINDS)
     spec.setdefault("edges", [])
     spec.setdefault("groups", [])
@@ -192,6 +197,7 @@ def edge_path(a, b, via=None):
 
 
 def render_svg(spec):
+    geometry(spec)
     cols = max(n["col"] + span(n)[0] for n in spec["nodes"])
     rows = max(n["row"] + span(n)[1] for n in spec["nodes"])
     extra = spec.get("extra_w", 0)
@@ -282,13 +288,28 @@ def cell(s):
 END = "<!-- archdraw:end -->"
 
 
+def marked_span(current):
+    """(start, end) of the generated part of a hand-written file; None when the file has no markers. A marker counts only at the start
+    of a line. ValueError unless there is exactly one begin followed by exactly one end, so a broken document is refused, never
+    overwritten or doubled."""
+    begins = [m.start() for m in re.finditer(r"(?m)^<!-- archdraw:begin", current)]
+    ends = [m.start() for m in re.finditer(r"(?m)^" + re.escape(END), current)]
+    if not begins and not ends:
+        return None
+    if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
+        raise ValueError(f"needs exactly one `<!-- archdraw:begin` line followed by one `{END}` line (found {len(begins)} begin, "
+                         f"{len(ends)} end{', end before begin' if begins and ends and ends[0] < begins[0] else ''}); fix the markers by hand")
+    return begins[0], ends[0] + len(END)
+
+
 def render_md(spec, current=None):
     """the markdown file: `current` (a hand-written document) with its marked part replaced by the file map, or a whole generated file."""
     stem = spec["_stem"]
     begin = f"<!-- archdraw:begin: generated from {stem}.json by autoresearch/tools/archdraw.py; edit the spec, then `archdraw.py render` -->"
     block = begin + "\n" + file_map(spec) + END
-    if current and "<!-- archdraw:begin" in current and END in current:
-        return current[:current.index("<!-- archdraw:begin")] + block + current[current.index(END) + len(END):]
+    span = marked_span(current) if current else None
+    if span:
+        return current[:span[0]] + block + current[span[1]:]
     return "\n".join([f"# {spec['title']}", "", f"![{spec['title']}]({stem}.svg)", "", spec.get("subtitle", ""), "", block]) + "\n"
 
 
@@ -395,7 +416,11 @@ def check(path):
     spec["_stem"] = os.path.splitext(os.path.basename(path))[0]
     errs = problems(spec)
     if not errs:
-        for ext, text in outputs(spec).items():
+        try:
+            out = outputs(spec)
+        except ValueError as e:
+            return spec, [f"{spec['_stem']}.md: {e}"]
+        for ext, text in out.items():
             f = os.path.join(spec["_dir"], f"{spec['_stem']}.{ext}")
             if not os.path.exists(f) or open(f, encoding="utf-8", newline="").read() != text:
                 errs.append(f"{spec['_stem']}.{ext} is missing or stale: run `archdraw.py render {path}`")
@@ -408,7 +433,11 @@ def render(path):
     errs = problems(spec)
     if errs:
         return spec, errs
-    for ext, text in outputs(spec).items():
+    try:
+        out = outputs(spec)
+    except ValueError as e:                                        # broken markers: nothing is written
+        return spec, [f"{spec['_stem']}.md: {e}"]
+    for ext, text in out.items():
         with open(os.path.join(spec["_dir"], f"{spec['_stem']}.{ext}"), "w", encoding="utf-8", newline="\n") as fh:
             fh.write(text)
     return spec, []
@@ -449,13 +478,31 @@ def selftest():
         assert md.startswith("# Design\n\nhand-written text") and md.endswith("more text\n") and "soft peak" in md and "old map" not in md, md
         open(f"{t}/architecture.md", "a").write("a line the author adds\n")              # text outside the markers is free
         assert check(p)[1] == [], check(p)[1]
-        open(f"{t}/architecture.md", "w").write(open(f"{t}/architecture.md").read().replace("soft peak", "hard peak"))
-        assert any("stale" in e for e in check(p)[1])                                     # the generated part is not
+        md = open(f"{t}/architecture.md").read()
+        open(f"{t}/architecture.md", "w").write(md.replace("soft peak", "hard peak"))
+        assert "hard peak" in open(f"{t}/architecture.md").read() and any("stale" in e for e in check(p)[1])  # the generated part is not
         render(p)
+        good = open(f"{t}/architecture.md").read()
+        for broken in (good.replace(END, ""),                                             # no end marker
+                       good.replace(END, "") + "\n" + END + "\n" + "<!-- archdraw:begin -->\n",   # end before a second begin
+                       good + "\n<!-- archdraw:begin -->\nstale copy\n" + END + "\n"):     # two blocks
+            open(f"{t}/architecture.md", "w").write(broken)
+            errs_r = render(p)[1]
+            assert errs_r and "exactly one" in errs_r[0] and open(f"{t}/architecture.md").read() == broken, errs_r  # refused, not overwritten
+            assert any("exactly one" in e for e in check(p)[1])
+        open(f"{t}/architecture.md", "w").write("quoted `" + END + "` inline is prose\n" + good)       # a marker inside a line is not a marker
+        assert render(p)[1] == [] and open(f"{t}/architecture.md").read().startswith("quoted `")
         spec2 = dict(spec, steps=[{"col": 0, "label": "1 in"}], spans=[{"from": 1, "to": 2, "label": "inner loop"}])
         json.dump(spec2, open(p, "w"))
         svg = render_svg(load(p))
         assert ">1 in<" in svg and ">inner loop<" in svg and TITLE_H == 108, TITLE_H
+        json.dump(dict(spec, spans=[{"from": 1, "to": 2, "label": "x"}]), open(p, "w"))
+        sa = load(p)
+        first = render_svg(sa)
+        assert TITLE_H == 108, "a span alone reserves the top as well (it must not cover the subtitle)"
+        json.dump(dict(spec, rowh=60, colw=150), open(f"{t}/other.json", "w"))
+        load(f"{t}/other.json")
+        assert render_svg(sa) == first, "a drawing does not depend on the spec loaded last"
         bad = json.loads(json.dumps(spec))
         bad["nodes"][1]["code"] = ["code/a.py::Missing"]                                  # a box whose symbol is gone
         bad["nodes"][3]["code"] = ["code/nope.py"]
@@ -466,7 +513,7 @@ def selftest():
         for want in ("has no Missing", "nope.py does not exist", "c.py: in no box", "overlaps o"):
             assert want in errs, (want, errs)
     print("archdraw selftest ok: render (svg + md deterministic), main-path count, symbol / path / coverage / overlap / stale checks, "
-          "hand-written text around the file map kept, step headers and spans")
+          "hand-written text around the file map kept, broken markers refused (never overwritten), step headers and spans, geometry per spec")
 
 
 def main():

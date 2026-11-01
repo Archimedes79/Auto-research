@@ -23,7 +23,7 @@ T = tempfile.mkdtemp(prefix="ar_selftest_")
 os.makedirs(f"{T}/code")
 open(f"{T}/code/a.py", "w").write("x = 1\n")
 json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", ledger_md="LEDGER.md", run_records="runs", schedule="schedule.csv", test_log="TEST.md",
-               code_dirs=["code"], scratch="temp", live_code=["code"], cpu_slots=5, lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))  # 5 here; the cpu-cap test below uses the default 1
+               code_dirs=["code"], scratch="temp", live_code=["code"], lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))
 open(f"{T}/TEST.md", "w").write("| S.test.ok | logged |\n")
 env = dict(os.environ, AR_PROJECT=T)
 G = ["git", "-c", "safe.directory=*", "-C", T]
@@ -395,15 +395,10 @@ try:
     import schedule as SC
     raw = lambda: {r["item"]: r for r in SC.load(f"{T}/schedule.csv")}  # noqa: E731  (what the file says)
     shown = lambda: {r["item"]: r for r in SC.derived(SC.load(f"{T}/schedule.csv"), f"{T}/runs")}  # noqa: E731  (what schedule.py shows)
-
-    def wait_done(*ids):
-        for _ in range(300):
-            if all(RUN.state_of(f"{T}/runs/{i}") == "done" for i in ids):
-                return True
-            time.sleep(0.2)
-        return False
-    SC.save([dict(item="S.ta", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'echo a'")], f"{T}/schedule.csv")
+    SC.save([dict(item="S.ta", kind="train", state="planned", resource="cpu", priority="1", command="bash -c 'echo a'"),
+             dict(item="S.tm", kind="train", state="planned", resource="cpu", priority="2", run_ids="S.ta;S.tnone")], f"{T}/schedule.csv")
     ta = go("S.ta", ["bash", "-c", "echo a"])
+    assert shown()["S.tm"]["state"] != "done", "an item whose second run has no record yet is not done"
     assert ta.returncode == 0 and shown()["S.ta"]["state"] == "done" and raw()["S.ta"]["state"] == "planned", \
         "the state is derived from the record; the file is not written back"
     # the evaluator contract: a benchmark script (a code system, no ML) writes cards; run.py runs it from planned rows; card.py checks them; decide reads them
@@ -753,6 +748,8 @@ try:
     assert nochk.returncode == 0 and not {"code_drift", "code_drift_check"} & set(RUN.record(f"{T}/runs/S.nochk")), "--no-drift-check skips the check"
     strict = subprocess.run([sys.executable, f"{HERE}/check_numbers.py", f"{T}/doc.md", f"{T}/src.json", "--strict"], capture_output=True, text=True)
     assert strict.returncode == 1, "check_numbers --strict must fail on a number missing from the sources"
+    ad = subprocess.run([sys.executable, f"{HERE}/archdraw.py", "--selftest"], capture_output=True, text=True)
+    assert ad.returncode == 0, "archdraw selftest: " + ad.stdout[-400:] + ad.stderr[-800:]
     print("autoresearch tools selftest passed")
 finally:
     shutil.rmtree(T, ignore_errors=True)

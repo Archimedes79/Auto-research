@@ -17,7 +17,7 @@
     "variant": "the arm letter that is judged (default: the first arm that is not the control)",
     "rule": "list of clauses, ALL must hold for KEEP: {metric, vs?: <arm letter, default control>, min_effect?: number (variant - vs >= this), max_loss?: number (variant - vs >= -this), band?: number, subsets?: [subset names], at_least?: int (how many subsets must pass), note?}",
     "budget_gpu_h": "planned GPU hours",
-    "kill": "stop early when ... (text; a tick can act on it once learning curves are recorded)",
+    "kill": "stop early when ... (text; written as a rule into the run's kill.txt, `trainsuite watch --enforce` stops a run that hits it)",
     "evaluate": "{split: val | test | confirm, subset?: val250, compare: <control arm letter>, allow?: [split | subset | denominator | protocol]}: how the cards are made (evaluate.py <name> --compare <control name>). decide.py refuses arms whose cards differ in split (must be this split), subset, denominator (frames / n) or protocol; allow names a difference you know and accept",
     "seeds": "the seeds every arm runs, one list: as long as the cards of the arms it declares that every arm lists its cards in this order, so the cards are paired by position. A card's own `seed` or an arm's own `seeds` list (as long as the arm's whole-split cards) is an identity instead: the arms are then paired by seed whatever the order of their lists",
     "pairing": "'position' = the cards of two arms are paired by their order in the lists (card i against card i), also when the cards carry seeds (two models of one seed per arm); without a seed identity, a `seeds` list of the experiment or this declaration decide.py refuses to pair two or more seeds",

@@ -6,7 +6,7 @@
     python autoresearch/tools/schedule.py add E240.b --node R1 --kind train --depends E240.code --resource gpu --budget 40m --note "seed 1" [--command "bash tools/env/_py14.sh ..."]
 
 Columns: item, node, kind, state, depends_on (';'-separated), resource (gpu / cpu / agent), budget, priority (1 = first), owner, run_ids (';'), note,
-command (the launcher command of the item, for the lead; empty = the arm's command in the experiment file). Items start through run.py (a chain
+command (the launcher command of the item, for the lead to start through run.py). Items start through run.py (a chain
 through --after); tick.py, which started ready items, was removed under D32 (it started 0 of 61 runs).
 
 State is derived, never synced: an item with run ids takes its state from the run records (done flag, record status, heartbeat: derived() below), the

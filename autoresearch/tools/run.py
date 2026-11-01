@@ -282,7 +282,7 @@ def record(d):
 
 def save_rec(path, rec, indent=1):
     """write a run record / slot owner file through a temporary file and an atomic replace: other tools poll these files (state_of, schedule,
-    tick, GpuSlot.stale); a torn read gave record() == {}, and a live slot with an unreadable owner file looked stale and was taken twice"""
+    GpuSlot.stale); a torn read gave record() == {}, and a live slot with an unreadable owner file looked stale and was taken twice"""
     text = json.dumps(rec, indent=indent)
     for i in range(3):
         try:

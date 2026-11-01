@@ -1,5 +1,5 @@
 """Copy the agent definitions (autoresearch/agents/*.md) into the workspace's .claude/agents/ so Claude Code sessions started in the workspace
-can spawn them by name (ar-scout, ar-referee, ...). Run again after editing an agent. Standard library only.
+can spawn them by name (ar-planner, ar-critic, ...). Run again after editing an agent. Standard library only.
 
     python autoresearch/tools/install_agents.py [--workspace <folder>]   (default: the folder that contains autoresearch/)
     python autoresearch/tools/install_agents.py --check                  exit 1 when an installed copy differs, is missing or is not ours
