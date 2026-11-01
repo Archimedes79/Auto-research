@@ -1,6 +1,6 @@
 # Roadmap of the research system (short form, 2026-10-26)
 
-The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1-R10, proposals P1-P10, steps M0-M7) is kept unchanged in `history/ROADMAP_2026-10-25.md`. This file is only what is still open and what was learned.
+The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1-R10, proposals P1-P10, steps M0-M7) was removed from the tip on 2026-11-01 (Mirko: delete the history that is no longer needed) and stays in git: `git show dad824d:autoresearch/history/ROADMAP_2026-10-25.md`. This file is only what is still open and what was learned.
 
 ## Done (one line each; details in git and `DECISIONS.md` D8, D15, D16)
 - Records: locked atomic ledger and schedule writes, run record with heartbeat, done flag only on exit 0, a code snapshot and tag per run (temporary git index, no branch moves), refusal of id reuse, card required before a run (W1, W3, W4, W9).

@@ -1,9 +1,0 @@
-#!/bin/bash
-# deployed-path rows for the equal-budget control j1eq, then the paired bootstrap with all systems
-R=/mnt/c/ML-Experiment/bev_fusion_lane_center
-P=$R/tools/env/_py14.sh
-for s in 0 1; do
-  bash $P p16_pipeline_eval.py --name e18_D7_j1eq --M 192 --K0 96 --route p16_f2hr_route_s$s --fork_prune 0.4 --tag _final_s${s}_fp0.4 | tail -1 | cut -c1-200
-done
-bash $P p18_final_boot.py > $R/runs/e18/final_boot.log 2> $R/runs/e18/final_boot.err
-tail -5 $R/runs/e18/final_boot.log
