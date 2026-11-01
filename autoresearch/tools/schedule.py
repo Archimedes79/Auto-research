@@ -23,7 +23,7 @@ import project as P  # noqa: E402
 
 COLS = ["item", "node", "kind", "state", "depends_on", "resource", "budget", "priority", "owner", "run_ids", "note", "command"]
 STATES = ("planned", "ready", "running", "done", "failed", "blocked", "cancelled")
-OF_RUN = {"done": "done", "ok": "done", "running": "running", "failed": "failed", "gpu_busy": "failed", "timeout": "failed", "stalled": "failed", "blocked": "blocked", "stopped": "blocked"}   # stopped = ended on request with a checkpoint: not failed, but waits for a resume
+OF_RUN = {"done": "done", "ok": "done", "running": "running", "failed": "failed", "gpu_busy": "failed", "timeout": "failed", "stalled": "failed", "blocked": "blocked", "stopped": "blocked", "held": "blocked"}   # stopped = ended on request with a checkpoint: not failed, but waits for a resume
 
 
 def load(path=None):

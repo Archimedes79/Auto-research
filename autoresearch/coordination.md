@@ -1,6 +1,6 @@
 # Coordination between chats (design, 2026-11-01)
 
-Mirko, in chat: improve the coordination between chats; the hold marker "makes sense". Status: design, not built.
+Mirko, in chat: improve the coordination between chats; the hold marker "makes sense". Status: the hold marker is built (`tools/hold.py`, 2026-11-01: `run.py` refuses a held id and sets a hold at exit 75, `ledger.py` / `schedule.py` know the state `held`); claims are design, not built.
 
 ## What went wrong on 2026-11-01
 1. A stopped run (`t10.dual_long_s0`, exit 75) was started again by another chat on an instruction that was passed on second-hand, after a later word of the person had said stop. Nothing in the files said "this run is on hold".
