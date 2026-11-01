@@ -25,6 +25,7 @@ Timing of the network (ms per frame on an idle GPU) is not measured here: evalua
 """
 import bflc_paths as BP  # project paths from the location of this checkout
 import argparse
+import hashlib
 import json
 import os
 import pickle
@@ -153,12 +154,55 @@ def scenes(split, ks=None):
     return np.load(f"{HOME}/exp_gcar_b123/poses_val.npz")["scene"][rows]
 
 
+def digest(obj, h=None):
+    """12-hex sha1 of nested dicts / lists / numpy arrays / scalars: the same content gives the same digest whatever the container types (the card's
+    protocol: the ground truth the frames were scored against, so decide.py refuses a comparison across ground truths; also in the names of the
+    network-output caches, cache_paths). FROZEN: a change of the formula splits every comparison across the cards written before it and renames
+    those caches, so a different formula is a new function"""
+    top = h is None
+    h = h or hashlib.sha1()
+    if isinstance(obj, dict):
+        h.update(b"{")
+        for k in sorted(obj, key=str):
+            h.update(str(k).encode() + b"\0")
+            digest(obj[k], h)
+        h.update(b"}")
+    elif isinstance(obj, (list, tuple)):
+        h.update(b"[")
+        for x in obj:
+            digest(x, h)
+        h.update(b"]")
+    elif isinstance(obj, np.ndarray) and obj.dtype != object:
+        h.update(f"{obj.dtype.str}{obj.shape}".encode() + np.ascontiguousarray(obj).tobytes() + b"\0")
+    elif isinstance(obj, np.generic):
+        h.update(repr(obj.item()).encode() + b"\0")
+    elif obj is None or isinstance(obj, (bool, int, float, str)):
+        h.update(repr(obj).encode() + b"\0")
+    else:  # an object whose repr may carry a memory address would make the digest differ from run to run: refuse instead
+        raise TypeError(f"cannot digest a {type(obj).__name__}")
+    return h.hexdigest()[:12] if top else None
+
+
+def seed_of(entry):
+    """the training seed of a registry entry: its own `seed` (written where the run card is a copy with another seed: e24_j1phd_s0_at50), else the seed of
+    its run card (runs/e123_ladder/cards/<run>.json); None when none is recorded (stored graphs)"""
+    own = entry.get("seed")
+    if isinstance(own, (int, str)) and not isinstance(own, bool):
+        return own
+    try:
+        s = json.load(open(f"{R}/runs/e123_ladder/cards/{entry['run']}.json", encoding="utf-8-sig")).get("seed")
+    except (OSError, ValueError, KeyError):
+        return None
+    return s if isinstance(s, (int, str)) and not isinstance(s, bool) else None
+
+
 def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=False, compare=None, tag="", require_cache=False):
     """one card: the registry name on the split (or its subset), written to runs/eval/<name>/; returns the card"""
     import sparse_metrics as SM
     over = over or {}
     ks = subset_ks(split, subset)
     g, gts, info = graphs_of(name, reg[name], split, over, tau, ks, fresh, require_cache)
+    protocol = dict(gt_sha=digest(gts))  # the ground truth scored against (before the minute of scoring: a ground truth that cannot be digested fails early)
     t0 = time.time()
     m = SM.card_any(g, gts, extra=True)
     info["metric_s"] = time.time() - t0
@@ -167,12 +211,17 @@ def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=Fal
         info["nan_metrics"] = nan
         m = {k: v for k, v in m.items() if k not in nan}
     card = dict(schema=1, name=name, split=split, subset=subset or "", fresh=bool(fresh), frames=len(gts), registry=reg[name], overrides=dict(asm=over, tau=tau),
-                info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m, better=SM.better(m))  # each metric's direction (card contract)
+                info=info, commit=commit(), date=time.strftime("%Y-%m-%d %H:%M"), metrics=m, better=SM.better(m),  # each metric's direction (card contract)
+                protocol=protocol)  # decide.py refuses cards of one comparison that differ in it
+    seed = seed_of(reg[name])
+    if seed is not None:
+        card["seed"] = seed  # decide.py pairs the cards of two arms by it
     if compare:
         import bootstrap as SB
         import topo_metrics as TM
         g2, gts2, _ = graphs_of(compare, reg[compare], split, None, None, ks, False)
         assert len(g2) == len(g) and all(len(x["pts"]) == len(y["pts"]) for x, y in zip(gts, gts2)), "frame sets differ"
+        assert digest(gts2) == protocol["gt_sha"], "the control was scored against another ground truth"
         sc = scenes(split, ks)
         pr = SB.paired(SB.frame_records(g, gts), SB.frame_records(g2, gts), sc, B=1000)
         pr.update(TM.paired([TM.frame_record(p, q) for p, q in zip(g, gts)], [TM.frame_record(p, q) for p, q in zip(g2, gts)], sc, B=1000))

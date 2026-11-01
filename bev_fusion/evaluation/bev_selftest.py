@@ -517,6 +517,29 @@ def _():
         pass
 
 
+@check("BEVSubject.ops: the GMACs of the cached chain, counted by torch, on a one-convolution model with a known answer; the note names what is not counted")
+def _():
+    import torch
+    from types import SimpleNamespace
+    Sub, _prior = A._make_subject_classes()
+
+    class OneConv(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.conv = torch.nn.Conv2d(3, 4, 3, padding=1)
+
+        def forward(self, batch, dts=()):
+            return [self.conv(batch) for _ in dts]               # one pass per prediction time, like the chain
+    sub = object.__new__(Sub)                                    # no checkpoint: only what ops() reads
+    sub.device, sub.model = "cpu", OneConv().eval()
+    seen = []
+    sub.ns = SimpleNamespace(T=SimpleNamespace(to_device=lambda x, device: seen.append(device) or x))
+    r = sub.ops(SimpleNamespace(inputs=torch.zeros(1, 3, 8, 8)))
+    assert abs(r["gmacs"] - 3 * 4 * 3 * 3 * 3 * 8 * 8 / 1e9) < 1e-12 and r["method"] == "measured", r   # 6912 MACs of the 3 -> 4 channel 3x3 convolution on 8 x 8, once per dt
+    assert seen == ["cpu"], "the sample goes to the subject's device first"
+    assert "pre-trained camera heads" in r["note"] and "dts -0.5 / 0 / +0.5" in r["note"], r["note"]
+
+
 @check("eval: a stored run of another or an unrecorded GT is refused (a resume would label old counts with the new GT); "
        "--force-resume only for an unrecorded one; a legacy pickle that fits the store is kept (review 2026-10-31 pass 2)")
 def _():
