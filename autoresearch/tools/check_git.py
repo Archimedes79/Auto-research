@@ -5,9 +5,13 @@
     python autoresearch/tools/check_git.py --used           # the full list of scratch files that living code or records point at
     python autoresearch/tools/check_git.py --selftest
 
+The only network access is one `git ls-remote --tags` (15 s limit, never asks for a password) to compare the tags; `--no-remote` or CHECK_GIT_OFFLINE=1 skips it.
+
 What it checks
   1. push check: no commit that is not yet on the upstream branch (without one: on any remote branch) may ADD a scratch or forbidden file, in any
      of its commits (a file added and deleted again is still published by a push), or add / change a file over 1 MB
+     and the run tags: those that exist here but not on the remote are listed with the push command (`git push origin --tags`; `git push origin main` does
+     not send tags, and a tag is where a run's code and scratch scripts are kept); a forbidden-type or over-1-MB file that a tag's own commits add is an error
   2. pending changes: the staged files (and, with --paths, the named ones) must be fit for git; deletions are never an error. Scratch = a file inside a
      `temp/` or `_to_delete/` folder (any case; except its README.md): it is not committed by hand, a run's tag keeps what ran. Forbidden = data,
      checkpoints, caches, binaries, logs and anything over 1 MB. Untracked scratch is only counted: `git add -A` would sweep it in.
@@ -21,9 +25,11 @@ Exit codes: 0 fine, 1 an error found, 2 wrong use or nothing to check.
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 MAX_BYTES = 1_000_000
 SCRATCH_DIRS = ("temp", "_to_delete")
@@ -96,14 +102,19 @@ def push_check(top):
     if rng is None:
         return [], [base]
     info = [base]
-    commits = git(top, "rev-list", "--no-merges", *rng).split()
     merges = len(git(top, "rev-list", "--merges", *rng).split())
     for c in git(top, "log", "--no-merges", "--format=%h %an %s", *rng).splitlines():
         info.append("  to push: " + c[:140])
     if merges:
         info.append(f"  {merges} merge commit(s) are not inspected")
+    return commit_errors(top, rng, "a push would publish"), info
+
+
+def commit_errors(top, rng, lead, allow_scratch=False):
+    """errors for the files the commits of a rev-list range ADD (scratch / forbidden type, also when a later commit deletes them) and the files they add or change
+    over 1 MB; allow_scratch: scratch files are no error (the commit of a run tag holds the scratch scripts on purpose)"""
     entries = []                                              # (status, blob, path, commit)
-    for c in commits:
+    for c in git(top, "rev-list", "--no-merges", *rng).split():
         tok = git(top, "diff-tree", "--root", "--no-commit-id", "-r", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-filter=AM", c).split("\0")
         entries += [(tok[i].split()[-1], tok[i].split()[3], tok[i + 1], c[:8]) for i in range(0, len(tok) - 1, 2)]
     sizes = {}
@@ -115,9 +126,70 @@ def push_check(top):
     errors = []
     for status, blob, path, c in entries:
         kind = verdict(top, path, sizes.get(blob)) if status == "A" else ("forbidden" if sizes.get(blob, 0) > MAX_BYTES else "ok")      # a change of an old scratch file is legacy
+        if kind == "scratch" and allow_scratch:                   # the scripts of a scratch folder: .py / .sh up to 1 MB, as run.py adds them; anything else is not
+            kind = "ok" if path.endswith((".py", ".sh")) and sizes.get(blob, 0) <= MAX_BYTES else "forbidden"
         if kind != "ok":
             why = f" ({sizes[blob] // 1000} kB)" if sizes.get(blob, 0) > MAX_BYTES else ""
-            errors.append(f"a push would publish {kind} file {path}{why} (commit {c})")
+            errors.append(f"{lead} {kind} file {path}{why} (commit {c})")
+    return errors
+
+
+def windows_git(top):
+    """the Windows git (git.exe, reachable from WSL, with the Windows credential helper that the WSL git lacks) as a command prefix with the repository path in
+    Windows form, or None where there is none"""
+    exe = shutil.which("git.exe")
+    if not exe:
+        return None
+    try:
+        w = subprocess.run(["wslpath", "-w", top], capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return [exe, "-C", w] if w else None
+
+
+def remote_tags(top, timeout=15, fallbacks=None):
+    """(remote name, set of tag names on it) or (name or None, None) when there is no remote or it cannot be reached (also: it hangs longer than `timeout` seconds,
+    or git would ask for a password: GIT_TERMINAL_PROMPT=0). The only network access of this tool, one read of the tag list; if `git` cannot do it, each command
+    prefix of `fallbacks` (default: the Windows git when this runs in WSL) is tried"""
+    up = git(top, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}", check=False).strip()
+    remotes = git(top, "remote").split()
+    name = up.split("/")[0] if "/" in up and up.split("/")[0] in remotes else (remotes[0] if remotes else None)
+    if not name:
+        return None, None
+    if fallbacks is None:
+        fallbacks = [p for p in (windows_git(top),) if p]
+    for prefix in (["git", "-C", top], *fallbacks):
+        try:
+            r = subprocess.run([*prefix, "ls-remote", "--tags", name], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+                               env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
+        except (subprocess.TimeoutExpired, OSError):
+            continue
+        if not r.returncode:
+            return name, {ln.split("\t")[1][len("refs/tags/"):].removesuffix("^{}") for ln in r.stdout.splitlines() if "\t" in ln and ln.split("\t")[1].startswith("refs/tags/")}
+    return name, None
+
+
+def tag_check(top, remote_on=True, timeout=15):
+    """(errors, info) for the tags that exist here but not on the remote. A run tag holds what ran (the code snapshot and, since 2026-11-01, the scripts of the
+    scratch folder), `git push origin main` does not send it: they are listed with the push command. Errors: a forbidden-type or over-1-MB file that a tag's own
+    commits add (scratch scripts - .py / .sh under 1 MB - are the point of a tag and no error). remote_on=False: no network access, the tags are not compared"""
+    if not remote_on:
+        return [], ["tags: not compared with the remote (--no-remote)"]
+    name, remote = remote_tags(top, timeout)
+    if name is None:
+        return [], ["tags: no remote"]
+    if remote is None:
+        return [], [f"tags: remote {name} not reachable, not compared"]
+    local = git(top, "tag").split()
+    missing = sorted(set(local) - remote)
+    if not missing:
+        return [], [f"tags: all {len(local)} local tags are on {name}"]
+    by_prefix = {}
+    for t in missing:
+        by_prefix[t.split("/")[0]] = by_prefix.get(t.split("/")[0], 0) + 1
+    info = [f"tags: {len(missing)} of {len(local)} local tags are not on {name} ({', '.join(f'{k} {v}' for k, v in sorted(by_prefix.items()))}): `git push {name} --tags` "
+            "(a tag holds what a run ran; `git push origin main` does not send it)"]
+    errors = commit_errors(top, [*missing, "--not", "--remotes", "HEAD", "--"], "pushing the tags would publish", allow_scratch=True)      # `--`: a tag named like a folder
     return errors, info
 
 
@@ -178,11 +250,14 @@ def used_scratch(top):
     return out, imports
 
 
-def report(top, show_all=False):
+def report(top, show_all=False, remote_on=True):
     errors, lines = [], []
     e, info = push_check(top)
     errors += e
     lines += ["push check:"] + ["  " + i for i in info] + ["  " + x for x in e]
+    te, tinfo = tag_check(top, remote_on)
+    errors += te
+    lines += [""] + tinfo + ["  " + x for x in te]
     staged, untracked = pending(top)
     se = path_errors(top, staged)
     errors += se
@@ -308,8 +383,67 @@ def _selftest():
         subprocess.run(["git", "-C", lone, "remote", "add", "origin", lone], check=True)               # a remote, but no branch pushed: all commits are unpushed
         errors, info = push_check(lone)
         assert errors and "no upstream branch" in info[0], (errors, info)
+    with tempfile.TemporaryDirectory() as base:                  # run tags: listed when they are not on the remote; the commits of a tag may hold scratch, not a forbidden file
+        bare, work = os.path.join(base, "remote.git"), os.path.join(base, "work")
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", bare], check=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", work], check=True)
+
+        def g(*a, inp=None):
+            return subprocess.run(["git", "-C", work, "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True, text=True, input=inp).stdout.strip()
+
+        def snapshot_tag(name, rel, data):                        # a commit on top of HEAD that is on no branch, tagged (the way run.py does it), index back to HEAD
+            os.makedirs(os.path.dirname(os.path.join(work, rel)), exist_ok=True)
+            open(os.path.join(work, rel), "wb").write(data)
+            g("add", "-f", rel)
+            commit = g("commit-tree", g("write-tree"), "-p", "HEAD", "-m", name)
+            g("tag", "-a", name, "-m", name, commit)
+            g("reset", "-q")
+            return commit
+        open(os.path.join(work, ".gitignore"), "w").write("*.npz\n")
+        open(os.path.join(work, "a.py"), "w").write("x = 1\n")
+        g("add", "-A")
+        g("commit", "-qm", "base")
+        g("remote", "add", "origin", bare)
+        g("push", "-q", "-u", "origin", "main")
+        assert tag_check(work) == ([], ["tags: all 0 local tags are on origin"]), tag_check(work)
+        snapshot_tag("run/ok", "temp/s.py", b"print(1)\n")        # scratch script in a tag: fine
+        snapshot_tag("run/bad", "weights.npz", b"0" * 10)         # a forbidden type in a tag: an error
+        snapshot_tag("run/data", "temp/data.npz", b"0" * 10)      # scratch that is no script (a data file): an error too
+        g("tag", "run/light")                                     # a tag at HEAD that was never pushed: listed
+        os.makedirs(os.path.join(work, "docs", "v1"))             # a tag named like a folder: rev-list without `--` dies on it
+        open(os.path.join(work, "docs", "v1", "x.txt"), "w").write("x")
+        g("tag", "docs/v1")
+        errors, info = tag_check(work)
+        assert info[0].startswith("tags: 5 of 5 local tags are not on origin (docs 1, run 4): `git push origin --tags`"), info
+        assert len(errors) == 2 and any("forbidden file weights.npz" in e for e in errors) and any("forbidden file temp/data.npz" in e for e in errors) \
+            and not any("temp/s.py" in e for e in errors), errors
+        errors, text = report(work)
+        assert any("pushing the tags would publish forbidden file weights.npz" in e for e in errors) and "tags: 5 of 5" in text
+        assert report(work, remote_on=False)[1].count("not compared with the remote (--no-remote)") == 1
+        g("push", "-q", "origin", "--tags")
+        assert tag_check(work) == ([], ["tags: all 5 local tags are on origin"]), tag_check(work)
+        g("remote", "set-url", "origin", os.path.join(base, "gone.git"))
+        assert tag_check(work) == ([], ["tags: remote origin not reachable, not compared"]), tag_check(work)
+        # the first git cannot reach the remote, a fallback prefix can (the Windows git in WSL): the tags are compared through it
+        good = os.path.join(base, "good_work")
+        subprocess.run(["git", "clone", "-q", bare, good], check=True, capture_output=True)
+        g("remote", "set-url", "origin", os.path.join(base, "gone.git"))
+        subprocess.run(["git", "-C", good, "remote", "set-url", "origin", bare], check=True)
+        assert remote_tags(work, fallbacks=[["git", "-C", good]])[1] == remote_tags(good)[1] and "run/ok" in remote_tags(good)[1], remote_tags(good)
+        assert remote_tags(work, fallbacks=[])[1] is None
+        g("remote", "set-url", "origin", "ssh://nohost.invalid/x.git")      # a remote that hangs: no traceback, no wait beyond the limit
+        old_ssh = os.environ.get("GIT_SSH_COMMAND")
+        os.environ["GIT_SSH_COMMAND"] = "sleep 6 #"
+        try:
+            t0 = time.time()
+            assert tag_check(work, timeout=1) == ([], ["tags: remote origin not reachable, not compared"]) and time.time() - t0 < 5
+        finally:
+            if old_ssh is None:
+                os.environ.pop("GIT_SSH_COMMAND")
+            else:
+                os.environ["GIT_SSH_COMMAND"] = old_ssh
     print("check_git selftest ok: classes (separators, case, substrings, extensions, size), the reference regex, references resolved ($VAR, project folder, missing target, "
-          "history/), sys.path folders, staged scratch refused and a staged deletion not, pushes that add scratch / big / deleted-again files refused, no remote / no upstream, exit codes")
+          "history/), sys.path folders, staged scratch refused and a staged deletion not, pushes that add scratch / big / deleted-again files refused, no remote / no upstream, exit codes, run tags not on the remote listed (scratch in a tag fine, a forbidden file not)")
     return 0
 
 
@@ -317,6 +451,7 @@ def main(argv):
     ap = argparse.ArgumentParser(prog="check_git", description=__doc__.split("\n")[0], allow_abbrev=False)     # no abbreviations: `--path A` must not pass for `--paths A`
     ap.add_argument("--paths", nargs="+", metavar="PATH", help="check these paths (a folder: its files) as the content of the next commit")
     ap.add_argument("--used", action="store_true", help="list the scratch that living files point at")
+    ap.add_argument("--no-remote", action="store_true", help="no network access (also CHECK_GIT_OFFLINE=1): the tags are not compared with the remote")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -336,7 +471,7 @@ def main(argv):
         errors = path_errors(top, paths)
         print("\n".join(errors) if errors else f"ok: {len(paths)} path(s) fit for git")
         return 1 if errors else 0
-    errors, text = report(top, show_all=a.used)
+    errors, text = report(top, show_all=a.used, remote_on=not (a.no_remote or os.environ.get("CHECK_GIT_OFFLINE")))
     print(text)
     print("\n" + (f"{len(errors)} ERROR(S)" if errors else "no errors"))
     return 1 if errors else 0
