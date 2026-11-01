@@ -4,4 +4,4 @@ Each `weekN/` folder holds the short result record in git (`WeekN_Results.md`) a
 
 | folder | content |
 |---|---|
-| `week3/` | 27 October - 2 November 2026: the lane prototype of record, the BEV velocity head, the E2E set-up, tools and disk (`Week3_Results.md`; PDF with 9 pages, two example videos) |
+| `week3/` | 27 October - 2 November 2026: the lane prototype of record, the BEV velocity head, the E2E set-up, tools and disk (`Week3_Results.md`; PDF with 10 pages, two example videos) |
