@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1948 680" width="1948" height="680" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<title>bev_fusion target: precompute, input interface, modular network, output interface, removable post-processing</title>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
+<rect width="1948" height="680" fill="#ffffff"/>
+<text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion target: precompute, input interface, modular network, output interface, removable post-processing</text>
+<text x="24" y="50" font-size="12" fill="#475569">Proposal for discussion (2026-11-01, not built). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block with a stated contract (the base chain has no rule step there); right of the output interface only rule steps for metrics and the prototype. Each box names the code it is built from today.</text>
+<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 13 stages = 9 learned, 1 fixed-differentiable, 3 frozen, 0 rule steps</text>
+<text x="119.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">Sensors</text>
+<text x="309.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">1 Precompute</text>
+<text x="499.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">2 Input interface</text>
+<text x="689.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3a Encoders</text>
+<text x="879.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3b Temporal</text>
+<text x="1069.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3c Fusion</text>
+<text x="1259.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3d Backbone</text>
+<text x="1449.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">3e Heads</text>
+<text x="1639.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">4 Output interface</text>
+<text x="1829.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">5 Post (goes later)</text>
+<rect x="602.0" y="103.0" width="934.0" height="398.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="222.0" y="503.0" width="1314.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<path d="M194.0,158.0 C214.0,158.0 214.0,158.0 234.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M194.0,258.0 C214.0,258.0 214.0,258.0 234.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M194.0,358.0 C214.0,358.0 214.0,358.0 234.0,358.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M384.0,158.0 C404.0,158.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M384.0,258.0 C404.0,258.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M384.0,358.0 C404.0,358.0 404.0,258.0 424.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M574.0,258.0 C594.0,258.0 594.0,158.0 614.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M574.0,258.0 C594.0,258.0 594.0,258.0 614.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M954.0,158.0 C974.0,158.0 974.0,208.0 994.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M764.0,258.0 C879.0,258.0 879.0,208.0 994.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1144.0,208.0 C1164.0,208.0 1164.0,208.0 1184.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1334.0,208.0 C1354.0,208.0 1354.0,158.0 1374.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1334.0,208.0 C1354.0,208.0 1354.0,258.0 1374.0,258.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1334.0,208.0 C1354.0,208.0 1354.0,358.0 1374.0,358.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1334.0,208.0 C1354.0,208.0 1354.0,458.0 1374.0,458.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1524.0,158.0 C1544.0,158.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1524.0,258.0 C1544.0,258.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1524.0,358.0 C1544.0,358.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1524.0,458.0 C1544.0,458.0 1544.0,308.0 1564.0,308.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1714.0,308.0 C1734.0,308.0 1734.0,158.0 1754.0,158.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1714.0,308.0 C1734.0,308.0 1734.0,258.0 1754.0,258.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1829.0,189.0 C1829.0,258.0 1829.0,258.0 1829.0,327.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1829.0,289.0 C1829.0,308.0 1829.0,308.0 1829.0,327.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M384.0,558.0 C404.0,558.0 404.0,558.0 424.0,558.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1564.0,308.0 C1544.0,308.0 1544.0,558.0 1524.0,558.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M574.0,258.0 C689.0,258.0 689.0,358.0 804.0,358.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M954.0,358.0 C974.0,358.0 974.0,208.0 994.0,208.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M764.0,158.0 C784.0,158.0 784.0,158.0 804.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M574.0,258.0 C689.0,258.0 689.0,158.0 804.0,158.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<g><title>in_cam: training/nuscenes_dataset.py::FrontRadarDataset</title><rect x="44" y="127.0" width="150" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="119.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Cameras</text>
+<text x="119.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">now + past frames</text>
+<text x="119.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fr</text>
+</g>
+<g><title>in_rad: training/nuscenes_dataset.py::FrontRadarDataset._radar</title><rect x="44" y="227.0" width="150" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="119.0" y="248.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Radars</text>
+<text x="119.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">detections, 0.5 s</text>
+<text x="119.0" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fr</text>
+</g>
+<g><title>in_ego: training/train.py::gap_ego_motion</title><rect x="44" y="327.0" width="150" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="119.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ego motion</text>
+<text x="119.0" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">poses / CAN</text>
+<text x="119.0" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py::gap_ego_motio</text>
+</g>
+<g><title>pre_img: training/camera_encoder.py::FrontCameraEncoder; training/bevfusion_camera.py; training/feature_cache.py::FeatureStore; training/cache_bevfusion_features.py</title><rect x="234" y="127.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="309.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Image features</text>
+<text x="309.0" y="156.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">frozen encoder,</text>
+<text x="309.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">cached</text>
+<text x="309.0" y="185.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">camera_encoder.py::Fron</text>
+</g>
+<g><title>pre_radar: training/nuscenes_dataset.py::FrontRadarDataset._radar; training/feature_cache.py::build_radar_cache</title><rect x="234" y="227.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="309.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Radar points to now</text>
+<text x="309.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pose + Doppler,</text>
+<text x="309.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">cached</text>
+<text x="309.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fr</text>
+</g>
+<g><title>pre_ego: training/train.py::gap_ego_motion; training/train.py::batch_ego; training/train.py::clip_step; training/nuscenes_dataset.py::FrontRadarDataset</title><rect x="234" y="327.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="309.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ego steps,</text>
+<text x="309.0" y="356.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">calibration</text>
+<text x="309.0" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(dt, v, omega), K, T</text>
+<text x="309.0" y="385.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py::gap_ego_motio</text>
+</g>
+<g><title>iface: training/nuscenes_dataset.py::collate; training/feature_cache.py::collate_cached</title><rect x="424" y="127.0" width="150" height="262" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="2.2"/>
+<text x="499.0" y="211.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">INPUT INTERFACE</text>
+<text x="499.0" y="226.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEVInputs (typed</text>
+<text x="499.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">dict + check): image</text>
+<text x="499.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">features, lane</text>
+<text x="499.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">image, K, T, ida,</text>
+<text x="499.0" y="286.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">radar points, ego</text>
+<text x="499.0" y="301.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">steps, gaps, flip</text>
+<text x="499.0" y="315.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::co</text>
+</g>
+<g><title>cam_enc: training/lift_pd.py::LiftPD; training/model.py::BEVFusionModel.camera_bevs; training/model.py::BEVFusionModel.camera_visibility; training/blocks_new.py::ZSumReduce</title><rect x="614" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="689.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Camera BEV encoder</text>
+<text x="689.0" y="156.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lift + collapse;</text>
+<text x="689.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">mirror in BEV</text>
+<text x="689.0" y="185.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lift_pd.py::LiftPD +3</text>
+</g>
+<g><title>rad_enc: training/radar_bev.py::RadarBEV; training/radar_bev.py::rasterize; training/blocks_new.py::RadarPillars</title><rect x="614" y="227.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="689.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Radar BEV encoder</text>
+<text x="689.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">raster + convs |</text>
+<text x="689.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pillars | off</text>
+<text x="689.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">radar_bev.py::RadarBEV </text>
+</g>
+<g><title>temporal: training/temporal_fusion.py::TemporalFusion; training/temporal_fusion.py::recentre; training/splat.py::splat_window; training/fallbacks.py::EgoWarpGRU</title><rect x="804" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="879.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Temporal fusion</text>
+<text x="879.0" y="156.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">window + memory |</text>
+<text x="879.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">GRU | none</text>
+<text x="879.0" y="185.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">temporal_fusion.py::Tem</text>
+</g>
+<g><title>fusion: training/fusion.py::ConcatFusion; training/fusion.py::GateFusion; training/fusion.py::drop_modality</title><rect x="994" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1069.0" y="198.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Fusion</text>
+<text x="1069.0" y="213.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">concat | gate</text>
+<text x="1069.0" y="227.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">fusion.py::ConcatFusion</text>
+</g>
+<g><title>backbone: training/bev_trunk.py::BEVTrunk; training/blocks_new.py::SecondTrunk; training/fallbacks.py::CMXTrunk</title><rect x="1184" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1259.0" y="191.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEV backbone + neck</text>
+<text x="1259.0" y="206.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResNet + FPN |</text>
+<text x="1259.0" y="221.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SECOND | CMX</text>
+<text x="1259.0" y="235.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::BEVTrunk </text>
+</g>
+<g><title>motion: training/timed_head.py::TimeMover; training/splat.py::splat_bev</title><rect x="1374" y="327.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1449.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Time mover</text>
+<text x="1449.0" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">velocity + ego splat</text>
+<text x="1449.0" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">timed_head.py::TimeMove</text>
+</g>
+<g><title>maps_head: training/bev_trunk.py::SemanticHead; training/timed_head.py::TimedHead</title><rect x="1374" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1449.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Map head</text>
+<text x="1449.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">layers per dt</text>
+<text x="1449.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::SemanticH</text>
+</g>
+<g><title>obj_head: training/object_head.py::ObjectHead; training/object_head.py::BoxRefiner</title><rect x="1374" y="227.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1449.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Object head</text>
+<text x="1449.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">CenterPoint maps per</text>
+<text x="1449.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">dt</text>
+<text x="1449.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::ObjectH</text>
+</g>
+<g><title>planner: </title><rect x="1374" y="427.0" width="150" height="62" rx="7" fill="#fdf4ff" stroke="#a21caf" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="1449.0" y="455.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner head</text>
+<text x="1449.0" y="470.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(later)</text>
+</g>
+<g><title>out_iface: training/model.py::BEVFusionModel.forward</title><rect x="1564" y="127.0" width="150" height="362" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
+<text x="1639.0" y="283.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">OUTPUT INTERFACE</text>
+<text x="1639.0" y="298.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">maps, object maps</text>
+<text x="1639.0" y="313.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">per dt, v_hat,</text>
+<text x="1639.0" y="328.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">features S, state</text>
+<text x="1639.0" y="342.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">model.py::BEVFusionMode</text>
+</g>
+<g><title>lines: evaluation/metrics.py::line_cells</title><rect x="1754" y="127.0" width="150" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
+<text x="1829.0" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Line extraction</text>
+<text x="1829.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">zero crossing</text>
+<text x="1829.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">metrics.py::line_cells</text>
+</g>
+<g><title>decode: training/object_head.py::decode</title><rect x="1754" y="227.0" width="150" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
+<text x="1829.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Box decode</text>
+<text x="1829.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">peak, top-k,</text>
+<text x="1829.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">threshold</text>
+<text x="1829.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_head.py::decode</text>
+</g>
+<g><title>consumers: evaluation/bev_adapter.py::predictions; evaluation/board.py</title><rect x="1754" y="327.0" width="150" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="1829.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Boxes, lines</text>
+<text x="1829.0" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">metrics, prototype</text>
+<text x="1829.0" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_adapter.py::predict</text>
+</g>
+<g><title>gt: ../autogt/; training/gt_cache_build.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="309.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ground truth</text>
+<text x="309.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">autogt, cached</text>
+<text x="309.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">autogt/ +1</text>
+</g>
+<g><title>data: training/feature_cache.py::CachedFrontRadarDataset; training/train.py::ClipDataset; training/augment.py::flip_batch; training/scratch.py</title><rect x="424" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="499.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Datasets, caches</text>
+<text x="499.0" y="556.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clips, mirror,</text>
+<text x="499.0" y="571.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scratch</text>
+<text x="499.0" y="585.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Cache</text>
+</g>
+<g><title>trainer: training/train.py::train; training/model.py::ModelConfig; training/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="974.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer + config</text>
+<text x="974.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">builder table per slot</text>
+<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train.py::train +2</text>
+</g>
+<g><title>loss: training/losses.py::BEVLoss; training/loss_extras.py</title><rect x="1374" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="1449.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Loss</text>
+<text x="1449.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEVLoss + Kendall</text>
+<text x="1449.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">losses.py::BEVLoss +1</text>
+</g>
+<g><title>lane: training/lane_branch.py::LaneBranch</title><rect x="804" y="327.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="879.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lane add-on (option)</text>
+<text x="879.0" y="356.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">stride 4, after</text>
+<text x="879.0" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">temporal</text>
+<text x="879.0" y="385.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_branch.py::LaneBra</text>
+</g>
+<text x="612.0" y="118.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">3 network: one slot per block, the kind chosen in the config, a contract test per kind</text>
+<text x="232.0" y="518.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training only</text>
+<text x="1354.0" y="328.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">S</text>
+<text x="24" y="630" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
+<rect x="24" y="642" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="652" font-size="11" fill="#334155">sensor</text>
+<rect x="101.2" y="642" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="125.2" y="652" font-size="11" fill="#334155">precompute: deterministic, cached with an identity, no weights learned before it</text>
+<rect x="637.2" y="642" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="661.2" y="652" font-size="11" fill="#334155">interface: one typed contract (names, shapes, units, frames)</text>
+<rect x="1049.2" y="642" width="18" height="12" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/><text x="1073.2" y="652" font-size="11" fill="#334155">network slot (learned, swapped by config)</text>
+<rect x="1343.4" y="642" width="18" height="12" rx="3" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4 2"/><text x="1367.4" y="652" font-size="11" fill="#334155">rule step (no gradient)</text>
+<rect x="1526.0" y="642" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="1550.0" y="652" font-size="11" fill="#334155">delivered output</text>
+<rect x="24" y="660" width="18" height="12" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/><text x="48" y="670" font-size="11" fill="#334155">training only (data, GT, loss, trainer)</text>
+<rect x="305.8" y="660" width="18" height="12" rx="3" fill="#fdf4ff" stroke="#a21caf" stroke-width="1.4" stroke-dasharray="4 2"/><text x="329.8" y="670" font-size="11" fill="#334155">later (no code yet)</text>
+</svg>
