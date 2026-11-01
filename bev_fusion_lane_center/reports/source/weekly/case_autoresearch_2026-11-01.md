@@ -116,7 +116,7 @@ road divider).
   scenes). Arm B' (batch 3): vehicle velocity skill 0.470 (on the matched true positives: about 1100 moving vehicles in the 1000 frames); arm B2 (accumulation 2, effective batch 6): 0.566 (the dual chain without the fix: 0.000). Vehicle AVE 2.39 -> 1.19 m/s (on the moving
   cars 6.58 -> 2.86 m/s). The written prediction was skill 0.25 (range 0.12 - 0.40): both arms beat it (a miss on the good side). Verdict by the card's rule: V1, the velocity learns, for B2; B' misses the
   card's clause on the error at static cars (0.336 against <= 0.30 m/s). The price: front mAP2 -0.014 (interval [-0.020, -0.006], inside the 0.054 band; vehicle AP@0.5 0.254 -> 0.207), the error at
-  static cars rises from 0.03 to 0.28 m/s, drivable, walkway and lane divider within 0.01 of the dual chain (the carpark is +0.03: more samples or the hurdle, not separable), speed within 1 - 2 ms (indicative). One seed per arm; the from-scratch test is the 6000-step run (lever 1, section 5);
+  static cars rises from 0.03 to 0.28 m/s, drivable, walkway and lane divider within 0.01 of the dual chain (the carpark is +0.03: more samples or the hurdle, not separable), speed within 1 - 2 ms (indicative). One seed per arm; the from-scratch test was the 6000-step run (lever 1, section 5), stopped at 84 % and not resumed for now (section 10);
   pedestrian velocity stays near 0 (skill 0.014). Next candidates for the moving error: the radar Doppler at the boxes (bound 0.79) and the fused flow pyramid.
 - **For a team**: a dead branch looks like "the model does not learn velocity" for as long as nobody opens the checkpoint. The loop did, from files, in hours, and had a fix with a verdict, by a rule
   written first, the next morning. The dead branch sat in 28 of the 30 batch-3 runs of the BEV project (the exceptions: `t2_fusion_cmx` with a tiny output and the maps-only run `t6_maps_only`).
@@ -195,15 +195,15 @@ Every lever below has a measured effect size from this repository; the sums are 
 
 | # | lever | measured so far | cost | what it would show |
 |---|---|---|---|---|
-| 1 | dual features, longer: 6000 optimiser steps at accumulation 2 (4x the samples) with the velocity fix from scratch (card 3b of t10), then all 700 scenes | the old features gained +0.053 on the lane divider from 3000 to 6000 steps and +0.09 to 7000 x 2 | about 5.5 - 8.4 GPU hours (3.4 s per step measured at the start; 5.06 s per step by arm B2's ledger row) | the slope of the NEW features and whether the fix also holds from scratch (three things change at once; the card names what it can and cannot show) |
+| 1 | dual features, longer: 6000 optimiser steps at accumulation 2 (4x the samples) with the velocity fix from scratch (card 3b of t10), then all 700 scenes. STATUS: stopped at 84 %, not resumed for now (section 10) | the old features gained +0.053 on the lane divider from 3000 to 6000 steps and +0.09 to 7000 x 2 | about 5.5 - 8.4 GPU hours (3.4 s per step measured at the start; 5.06 s per step by arm B2's ledger row) | the slope of the NEW features and whether the fix also holds from scratch (three things change at once; the card names what it can and cannot show) |
 | 2 | stride-4 detail branch on top | on the old features: lane divider +0.065 / +0.042, road divider IoU@1 +0.119 / +0.096 (two seeds) | 2 GPU hours per seed | whether the thin classes add up |
-| 3 | velocity: first step DONE (moving / static gate: skill 0.470 at batch 3, 0.566 with accumulation 2); next the seed twin of B2, the from-scratch run (lever 1), then a Doppler read-out for the moving error | closed-form bound 0.79 against 0.566 now | 1 - 3 GPU hours | whether the fix is robust, and where the rest of the moving error sits |
+| 3 | velocity: first step DONE (moving / static gate: skill 0.470 at batch 3, 0.566 with accumulation 2); next the seed twin of B2, a from-scratch run (the 6000-step run of lever 1 stopped at 84 % and is not resumed for now), then a Doppler read-out for the moving error | closed-form bound 0.79 against 0.566 now | 1 - 3 GPU hours | whether the fix is robust, and where the rest of the moving error sits |
 | 4 | a SOA camera + radar detector (CRN) on our frames | the checkpoint is on disk | half a day of porting | turns "no number" into a number |
 | 5 | bridge the lane graph to OpenLane-V2 subset B (DET_l, TOP_ll) | nothing yet; needs the annotation files and the official evaluator (a download: needs Mirko's OK) | 1 day for a feasibility check | the first number a stranger can compare |
 | 6 | a confirm evaluation on the 68 official val scenes never used for a decision (if their caches exist) | - | 1 GPU hour | removes the selection effect of reusing the same 82 scenes |
 
 **Compute reality.** GaussianCaR was trained for 40 epochs with an effective batch of 16 on 4 x A100 80 GB. For the old features the remaining gap needed 4 - 10 more doublings of the steps
-(16 - 1000 x the compute; `t6_soa_gap` section 5). With the new features the slope is unknown; lever 1 measures it: the dual chain at 6000 optimiser steps with accumulation 2 (4x the samples), started at 09:01 on 1 November and paused at step 5030 (84 %) at 14:38, to be resumed (snapshot d14597e2e8, about 5.5 h on the whole GPU at the 3.4 s per step measured in the first steps, 8.4 h at arm B2's ledger rate;
+(16 - 1000 x the compute; `t6_soa_gap` section 5). With the new features the slope is unknown; lever 1 was to measure it: the dual chain at 6000 optimiser steps with accumulation 2 (4x the samples), started at 09:01 on 1 November, stopped at step 5030 (84 %) at 14:38 and not resumed for now (snapshot d14597e2e8, about 5.5 h on the whole GPU at the 3.4 s per step measured in the first steps, 8.4 h at arm B2's ledger rate;
 card 3b / 3c of t10, prediction and rule written before the start: lane divider 0.39 with the range 0.355 - 0.44, a gain of +0.05) against its own 3000-step run (0.335, 0.350); the nearest old-feature
 reference is the 7000 x 2 start recipe (0.273 on the same 1000 frames, 4.7x the samples). **Rule, written in the card before the run (revision 2, after two critic passes):** a gain of at least +0.04 on the lane
 divider over the 3000-step dual chain = continue with levers 1 and 2, provisionally (one seed: the tool never says KEEP on one seed); a gain inside the noise band of 0.029 drops nothing on one run, a second long
@@ -262,7 +262,7 @@ LLM service reads the code), before any of this is used there.
 
 **Success criteria, written now, checked at the next review**: (a) every map layer at 50 % or more of the SOA like for like and the drivable area at 90 % (today 26 - 94 % on identical frames, both systems at
 the 0.5 threshold: drivable 94, road divider 72 - 76, walkway 57 - 62, lane divider 50 - 52, carpark 31 - 34, crossing 26 - 31); (b) box velocity with skill 0.5 or more on moving vehicles (today 0.566
-in one arm, B2: one seed, 1000 warm-start steps; 0 in the 3000-step chain without the fix, 0.25 at 7000 x 2; the seed twin and the from-scratch run are the next checks); (c) one public-benchmark number per
+in one arm, B2: one seed, 1000 warm-start steps; 0 in the 3000-step chain without the fix, 0.25 at 7000 x 2; the seed twin and a from-scratch run are the next checks; the 6000-step run stopped at 84 % and is not resumed for now); (c) one public-benchmark number per
 problem; plus the rule of section 5. Missing them is a result too.
 
 ## 9 Ten minutes, in order
@@ -274,18 +274,19 @@ graph: equal Q at 26 x (2.3), with its gaps. 6. What the checks caught, and wher
 ## 10 Open points before the meeting
 
 - DONE since version 3: the like-for-like maps (section 4; GPU scoring, a few minutes per model, checked against the stored CPU run), the velocity arms (section 2.2), the lane prototype with its one
-  TEST use (section 2.3). PENDING: the 6000-step run (below).
+  TEST use (section 2.3). OPEN: the 6000-step run (below): stopped at 84 %, not resumed for now.
 - Lever 1 (the 6000-step dual run in the lead's version, with the velocity fix and accumulation 2): STARTED at 09:01 on 1 November, after the restructured autoresearch was merged (08:19) and its smoke
-  test passed, by Mirko's decision; **PAUSED at 14:38 at step 5030 of 6000 (84 %) on Mirko's request** (trainsuite stop: a full checkpoint was saved at the next step, exit 75; no steps lost; it had been stopped once before at step 4773 and was restarted by another session at 14:20, which Mirko did not want). It resumes from that checkpoint on Mirko's word;
-  its cold VAL 1000 evaluation (chained, about 15 minutes) and the like-for-like map scoring follow the resumed run, about 1 h of training is left. A CUDA error at step 3200 (12:09) had already been resumed once by the launcher
-  (same snapshot), so the finished run will be a run resumed three times (fresh data order each time), named so in every table. Until it finishes the deck says "paused at 84 %, result pending"; intermediate checkpoints are not scored
-  (the learning rate was 2.2e-05, about 7 % of the peak, at the stop); card 3b / 3c revision 2 and the log 3d of `t10_dual_features`.
+  test passed, by Mirko's decision; **STOPPED at 14:38 at step 5030 of 6000 (84 %) on Mirko's request and NOT resumed for now** (trainsuite stop: a full checkpoint was saved at the next step, exit 75; no steps lost; it had been stopped once before at step 4773 and was restarted at 14:20 by the GT chat on Mirko's order, then stopped again on Mirko's later word).
+  Asked later whether to finish it before the new long run, Mirko answered no: the next step is a complete network (card t13 in preparation, the framework first). Consequences: no cold-VAL number and no verdict by the rule of card 3c, the slope of the dual features with training budget is NOT measured,
+  and the claim that the SOA is reachable on this hardware is neither confirmed nor dropped by it (the rule drops it only with an equal-budget arm without the hurdle). What exists: the checkpoint at step 5030 (unannealed: the learning rate was 2.2e-05, about 7 % of the peak; unscored, as Mirko decided),
+  the in-training validation (at step 4000 the moving / static logit had learned from scratch: cross entropy 0.34 against 0.75 at the start; a proxy of 50 batches, no verdict), the pinned code and its own copy of autogt v5, so it can be resumed in about 1.3 h on Mirko's word; it is also the natural matched-budget control for a long run of the complete network.
+  A CUDA error at step 3200 (12:09) had been resumed once by the launcher, so a finished run would be a run resumed three times (fresh data order each time), named so in every table; card 3b / 3c revision 2 and the log 3d of `t10_dual_features`.
 - Decisions that wait for Mirko: D4, D17, D29, D30, D31 (D18, D19, D25 and D33 were answered this morning); permission for the two downloads (section 8, item 6).
 
 ## 11 Sources
 
 `bev_fusion_lane_center/PROBLEM.md`, `experiment_execution/{LEDGER.csv, DECISIONS.md, closed_questions.md}`, `evaluation/TEST_USAGE_LOG.md`, `experiments/INDEX.csv`,
-`reports/source/weekly/{review_week2.md, s21_review.json}`, `bev_fusion/records/LEDGER.csv`, `bev_fusion/plan.md` (2.8),
+`reports/source/weekly/{review_week2.md, s21_review.json}`, `bev_fusion/records/LEDGER.csv`, `bev_fusion/plan/plan.md` (2.8; in the root of bev_fusion until 2026-11-01),
 `bev_fusion/experiments/{t3_improve_loop, t4_soa_front, t6_soa_gap, t7_lane_branch, t8_bevfeat, t10_dual_features, t11_vel_cause, t11_vel_hurdle}/`, `bev_fusion/runs/*/eval/metrics.json`,
 `bev_fusion/temp/box_vel/out/alive_table.txt`, `bev_fusion/records/morning_2026-11-01.md`, `bev_fusion/temp/soa_gap/map_ref_<run>_400.json` (runs `pitch.maps_lfl`, `pitch.maps_lfl_check`),
 `bev_fusion/runs/t1_r4_soa/eval/latency.json`, `autoresearch/history/repo_review_2026-10-31*.md`, `bev_fusion/temp/pitch/{facts.json, ladder.md, indicative.txt, subset_effect.py, maps_shares.py, maps_lfl.md}` (counts and
