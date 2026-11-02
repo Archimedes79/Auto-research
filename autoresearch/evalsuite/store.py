@@ -34,8 +34,9 @@ def _git_commit(path: str) -> str:
         return ""
 
 
-_IDENTITY_KEYS = ("state", "source", "subject", "task", "selection")
+_IDENTITY_KEYS = ("state", "source", "subject", "task", "selection", "metrics")
 _VOLATILE = {"subject": ("device",)}
+_OPTIONAL = ("metrics",)         # the metric contract (headline keys, direction): a manifest without it (stored before it, or a caller that does not describe it) is no difference
 
 
 def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDENTITY_KEYS, gained: Optional[List[str]] = None,
@@ -49,6 +50,8 @@ def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDE
     out = []
     for k in keys:
         a, b = stored.get(k), new.get(k)
+        if k in _OPTIONAL and not (isinstance(a, dict) and isinstance(b, dict)):
+            continue
         if isinstance(a, dict) and isinstance(b, dict):
             drop = tuple(_VOLATILE.get(k, ())) + tuple((ignore or {}).get(k, ()))
             a, b = {x: v for x, v in a.items() if x not in drop}, {x: v for x, v in b.items() if x not in drop}
@@ -110,10 +113,12 @@ class RunStore:
 
     # ------------------------------------------------------------------------------------------ create / open
     @classmethod
-    def create(cls, path: str, manifest: Dict[str, Any], resume: bool = True, force: bool = False) -> "RunStore":
+    def create(cls, path: str, manifest: Dict[str, Any], resume: bool = True, force: bool = False,
+               ignore: Optional[Dict[str, Any]] = None) -> "RunStore":
         """a new run directory, or (resume) the existing one: frames already stored are kept. A resume must be the SAME run (state,
         source, subject, task, selection as in the stored manifest, the device aside): otherwise the stored counts would be mixed
-        into the numbers of another checkpoint / seed / frame set. force=True skips that check. A description key that is new in
+        into the numbers of another checkpoint / seed / frame set. force=True skips that check; ignore ({entry: keys}, e.g.
+        {"source": ("evaluator_hash",)}) skips it for those description keys only. A description key that is new in
         `manifest` and absent from the stored run (an adapter that added e.g. a ground-truth signature) is tolerated with a warning; the
         stored descriptions are then kept and the keys listed under `predates_keys`."""
         if os.path.exists(os.path.join(path, "manifest.json")):
@@ -121,7 +126,7 @@ class RunStore:
                 raise FileExistsError(f"{path} already holds a run (resume it or choose another name)")
             st = cls.open(path, mode="a", repair=False)                   # nothing is touched before it is clear that this is the same run
             gained: List[str] = []
-            diff = [] if force else _identity_differences(st.manifest, manifest, gained=gained)
+            diff = [] if force else _identity_differences(st.manifest, manifest, gained=gained, ignore=ignore)
             if diff:
                 raise ValueError(f"{path} holds a different run ({'; '.join(diff)}): choose another name, or force=True to resume it anyway")
             if os.path.exists(os.path.join(path, "frames.jsonl")):

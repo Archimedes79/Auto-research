@@ -60,11 +60,14 @@ class Quantitative:
 
     def run(self, scenes: Optional[Sequence[str]] = None, n_scenes: Optional[int] = None, seed: int = 0,
             max_frames: Optional[int] = None, frames: Optional[Sequence[FrameRef]] = None, state: Optional[str] = None,
-            name: Optional[str] = None, resume: bool = True, progress: int = 25, on_frame=None) -> RunStore:
+            name: Optional[str] = None, resume: bool = True, progress: int = 25, on_frame=None,
+            ignore: Optional[Dict[str, Sequence[str]]] = None) -> RunStore:
         """Run the chosen scenes (default: all; n_scenes: that many random scenes; max_frames: the first frames of each scene)
         or the given frames (grouped by scene, in time order) through the Subject and store the counts of every Metric.
         state 'carry' (default of the suite) | 'reset' (every frame independent) | 'warmup'. on_frame(sample, prediction): optional callback
-        for EVERY frame run (also frames a resumed run already has stored: the Subject runs them anyway). -> the closed RunStore."""
+        for EVERY frame run (also frames a resumed run already has stored: the Subject runs them anyway). ignore: description keys of a
+        resumed store that may differ ({"source": ("evaluator_hash",)}: the person accepts a store finished with other evaluator code).
+        -> the closed RunStore."""
         src, subj, task = self.s.source, self.s.subject, self.s.task
         state = state or self.s.state
         if frames is not None:
@@ -88,8 +91,10 @@ class Quantitative:
                     "metrics": {m.name: {"headline": list(m.headline), "better": {k: m.direction(k) for k in m.headline}} for m in metrics.values()},
                     "selection": {"scenes": list(plan), "n_frames_planned": sum(len(v) for v in plan.values()),
                                   "max_frames": max_frames if frames is None else None, "seed": seed,     # frames= chooses the frames: no limit applied
-                                  "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
-        store = RunStore.create(os.path.join(self.dir, run_name), manifest, resume=resume)
+                                  "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12],
+                                  # the labels are scene / index: another frame list behind the same labels (a re-cut dataset, other tokens) is only seen in the keys
+                                  "keys_sha": hashlib.sha1("\n".join(f.key for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
+        store = RunStore.create(os.path.join(self.dir, run_name), manifest, resume=resume, ignore=ignore)
         done = store.done()
         n_before = len(store.frames)
         cost = store.manifest.setdefault("cost", {})
@@ -258,12 +263,19 @@ class Quantitative:
         Both runs must come from the same Source and Task (their manifests' `source` and `task` entries: dataset, split, ground-truth
         version, caches); otherwise the counts are of different questions and the comparison is refused (force=True compares anyway).
         ignore: description keys that are the arms' difference, not the question ({"source": ("feature_cache",)}: a run fed with
-        other features answers the same question on the same frames and ground truth)."""
+        other features answers the same question on the same frames and ground truth).
+        The labels are scene / index only: a label both runs have must name the same frame key (dataset id), otherwise the pairs are
+        two different frames and the comparison is refused (force=True compares anyway)."""
         a, b = self.open(run_a), self.open(run_b)
         same_question(a, b, force=force, ignore=ignore)
         common = set(a.labels()) & set(b.labels())
         if not common:
             raise ValueError("the runs have no frame in common")
+        ka, kb = ({fr["label"]: fr.get("key") or None for fr in st.frames} for st in (a, b))      # no key (a store from before it was stored, a FrameRef without one) is None: not a clash
+        clash = sorted(lb for lb in common if ka[lb] is not None and kb[lb] is not None and ka[lb] != kb[lb])
+        if clash and not force:
+            raise ValueError(f"{len(clash)} of the {len(common)} common frame labels name another frame key in the two runs (e.g. {clash[0]}: "
+                             f"{ka[clash[0]]} vs {kb[clash[0]]}): the pairs would be different frames; force=True compares anyway")
         out: Dict[str, Any] = {"n_common_frames": len(common), "only_a": len(set(a.labels()) - common),
                                "only_b": len(set(b.labels()) - common), "metrics": {}}
         for name, m in self._metrics().items():

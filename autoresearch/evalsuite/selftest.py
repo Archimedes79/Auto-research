@@ -506,6 +506,21 @@ def _():
         with contextlib.redirect_stderr(io.StringIO()) as err:
             suite.quant.run(frames=one, state="reset", name="pick", progress=0)
         assert "frames_sha" in err.getvalue() and "not verified" in err.getvalue(), err.getvalue()
+        # the labels are scene / index only: the same labels over other dataset ids (keys) are another frame list (keys_sha); a store without keys_sha resumes with a warning
+        ka, kb = [FrameRef("toy-01", 0, "tokA")], [FrameRef("toy-01", 0, "tokB")]
+        suite.quant.run(frames=ka, state="reset", name="keyed", progress=0)
+        try:
+            suite.quant.run(frames=kb, state="reset", name="keyed", progress=0)
+            raise AssertionError("the same labels with other frame keys under the same run name must be refused")
+        except ValueError as e:
+            assert "keys_sha" in str(e), e
+        mf = os.path.join(suite.quant.dir, "keyed", "manifest.json")
+        old = json.load(open(mf))
+        old["selection"].pop("keys_sha")
+        json.dump(old, open(mf, "w"))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            assert len(suite.quant.run(frames=kb, state="reset", name="keyed", progress=0).frames) == 1
+        assert "keys_sha" in err.getvalue(), err.getvalue()
         # interrupted run: a failing source in the middle; the resumed run gives the same numbers as an undisturbed one
         full = suite.quant.table(suite.quant.run(name="full", progress=0))
 
@@ -597,6 +612,36 @@ def _():
         assert len([r for r in every if r["metric"] == "seg.iou"]) > 0 and strict == []
 
 
+@check("run identity: a changed metric contract (direction of a headline number) is another run; a manifest without the entry, or a new metric, is not")
+def _():
+    from evalsuite.store import _identity_differences
+    old = {"metrics": {"iou": {"headline": ["iou"], "better": {"iou": "high"}}}}
+    flipped = {"metrics": {"iou": {"headline": ["iou"], "better": {"iou": "low"}}}}
+    more = {"metrics": {"iou": old["metrics"]["iou"], "ap": {"headline": ["ap"], "better": {"ap": "high"}}}}
+    diff = _identity_differences(old, flipped)
+    assert len(diff) == 1 and "metrics" in diff[0] and "iou" in diff[0], diff
+    assert _identity_differences(old, {}) == [] and _identity_differences({}, old) == [] and _identity_differences(old, old) == []
+    gained = []
+    assert _identity_differences(old, more, gained=gained) == [] and any("ap" in g for g in gained), gained
+    # resume with one description key accepted as different (the person's word: a store finished with other evaluator code), nothing else
+    from evalsuite.store import RunStore
+    with tempfile.TemporaryDirectory() as d:
+        m1 = {"name": "x", "state": "reset", "source": {"dataset": "s", "evaluator_hash": "aaa"}, "subject": {}, "task": "t", "selection": {}}
+        RunStore.create(os.path.join(d, "x"), m1).close()
+        m2 = dict(m1, source={"dataset": "s", "evaluator_hash": "bbb"})
+        try:
+            RunStore.create(os.path.join(d, "x"), m2)
+            raise AssertionError("another evaluator hash must be refused")
+        except ValueError as e:
+            assert "evaluator_hash" in str(e), e
+        RunStore.create(os.path.join(d, "x"), m2, ignore={"source": ("evaluator_hash",)}).close()
+        try:
+            RunStore.create(os.path.join(d, "x"), dict(m2, source={"dataset": "other", "evaluator_hash": "bbb"}), ignore={"source": ("evaluator_hash",)})
+            raise AssertionError("ignore must lift only the named key")
+        except ValueError as e:
+            assert "dataset" in str(e), e
+
+
 @check("compare: a worse network is detected (b - a < 0, interval below 0); a run against itself gives exactly 0")
 def _():
     with tempfile.TemporaryDirectory() as d:
@@ -624,6 +669,16 @@ def _():
         assert cm["n_common_frames"] == 96 and abs(cm["metrics"]["seg.iou"]["diff"]) > 0
         make(d).quant.run(scenes=["toy-00", "toy-01"], name="p", progress=0)
         assert suite.quant.compare("p", "a", boot=50)["n_common_frames"] == 24, "compare uses the frames both runs have"
+        # the same label over another frame key is another frame: refused (the labels are scene / index only), force compares anyway
+        make(d).quant.run(frames=[FrameRef("toy-00", 0, "tokA")], name="ka", progress=0)
+        make(d).quant.run(frames=[FrameRef("toy-00", 0, "tokB")], name="kb", progress=0)
+        try:
+            suite.quant.compare("ka", "kb", boot=20)
+            raise AssertionError("the same label with another frame key must not be paired")
+        except ValueError as e:
+            assert "frame key" in str(e) and "tokA" in str(e) and "tokB" in str(e), e
+        assert suite.quant.compare("ka", "kb", boot=20, force=True)["n_common_frames"] == 1
+        assert suite.quant.compare("ka", "ka", boot=20)["n_common_frames"] == 1
 
 
 @check("quant.report / trace / export_csv: files exist, every link resolves, the worst frame is drawn")
