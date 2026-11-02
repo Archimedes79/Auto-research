@@ -548,6 +548,14 @@ def run(root=None, verbose=True):
     # 5f the raw-data check: complete on mini, and a data root without files is reported (every listed file, the map expansion)
     ok_ = sets.check_raw(root, "v1.0-mini", scenes=["scene-0061"])
     assert ok_["missing"] == 0 and not ok_["maps"] and ok_["camera"] > 100 and ok_["radar"] > 500, ok_
+    with tempfile.TemporaryDirectory() as sd:                                           # a named set: the parameter `scenes` hid the function (a TypeError before 2026-11-02)
+        with open(os.path.join(sd, "one.txt"), "w") as f:
+            f.write("scene-0061\n")
+        old_dir, sets.DIR = sets.DIR, sd
+        try:
+            assert sets.check_raw(root, "v1.0-mini", set_name="one") == ok_
+        finally:
+            sets.DIR = old_dir
     with tempfile.TemporaryDirectory() as d:
         os.makedirs(os.path.join(d, "v1.0-mini"))
         for t in ("scene", "sample", "log", "sample_data"):

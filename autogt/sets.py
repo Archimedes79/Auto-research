@@ -36,6 +36,9 @@ def scenes(name):
     return [x for x in lines if x]
 
 
+_set_scenes = scenes                 # check_raw has a parameter `scenes` that hides the function
+
+
 def _find(want, version=None, dataroot=None):
     """(version, dataroot) whose json tables hold every scene name of `want`: the asked version, else trainval before mini (the first
     that is on this machine and holds all of them; `dataroot` default ~/data/nuscenes_full / ~/data/nuscenes)"""
@@ -130,7 +133,7 @@ def check_raw(dataroot, version=None, set_name=None, scenes=None, examples=10):
     tab = os.path.join(root, version)
     with open(os.path.join(tab, "scene.json")) as f:
         by_name = {s["name"]: s for s in json.load(f)}
-    names = scenes(set_name) if set_name else list(by_name) if scenes is None else list(scenes)
+    names = _set_scenes(set_name) if set_name else list(by_name) if scenes is None else list(scenes)
     lost = [n for n in names if n not in by_name]
     if lost or not names:
         raise ValueError(f"unknown scene(s) {lost or 'none given'} in {version} of {root}")

@@ -12,5 +12,5 @@ echo "$(date +%T) download $(basename "$dest") ($want bytes)"
 curl -sfL --retry 10 --retry-delay 20 -C - -A 'Mozilla/5.0' -o "$dest" "$url"
 have="$(stat -c %s "$dest")"
 [ "$have" = "$want" ] || { echo "MISMATCH: $have bytes, expected $want"; exit 1; }
-case "$dest" in *.gz) gzip -t "$dest" && echo "$(date +%T) gzip test ok";; esac
+case "$dest" in *.gz) gzip -t "$dest" || { echo "GZIP TEST FAILED: $dest"; exit 1; }; echo "$(date +%T) gzip test ok";; esac   # in an && list set -e would not stop on the failed test
 echo "$(date +%T) done $(basename "$dest"): $have bytes"
