@@ -99,7 +99,7 @@ def collect(root=None, cfg=None):
     for r in rows:
         n = number(r["id"])
         L = out.get(loop_of(n, loops))
-        if L is None or r.get("status") in ("planned", ""):
+        if L is None or r.get("status") in ("planned", "held", ""):             # held: refused by a hold while it waited, it never ran
             continue
         L["runs"] += 1
         L["failed"] += r.get("status") in FAILED
@@ -157,6 +157,7 @@ def selftest():
                      dict(id="E2.a", status="ok", duration_s="1800", decision="rule met | decide.py 2026-10-25: KEEP (effect +0.0200)"),
                      dict(id="E2.c", status="failed", duration_s="", decision=""),
                      dict(id="E3.a", status="planned", duration_s="", decision=""),
+                     dict(id="E1.h", status="held", duration_s="0", decision=""),               # refused by a hold while it waited: not a run
                      dict(id="E9.a", status="ok", duration_s="7200", decision="confirmed; prediction met")])
     json.dump(dict(id="E2", verdict="KEEP", variant="a", control="c", diffs=[0.02, 0.018], band=0.01, metric="Q", prediction="prediction +0.015, measured +0.0200 (error +0.0050)"),
               open(os.path.join(root, "experiments", "E2_x", "decision.json"), "w"))
