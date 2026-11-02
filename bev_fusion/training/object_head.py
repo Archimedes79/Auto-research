@@ -83,6 +83,8 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
          "off": torch.zeros(B, max_obj, 2), "size": torch.zeros(B, max_obj, 2), "rot": torch.zeros(B, max_obj, 2),
          "rad": torch.zeros(B, max_obj, 1), "vel": torch.zeros(B, max_obj, 2), "is_box": torch.zeros(B, max_obj),
          "dir": torch.zeros(B, max_obj, 1)}
+    if any("vel_known" in bx for boxes in boxes_batch for bx in boxes):    # LossConfig.hygiene_2026_11_02: 1 where the velocity of the object is known (a box dict may carry `loss_w`, its loss weight, as well)
+        t["known"] = torch.ones(B, max_obj)
     for b, boxes in enumerate(boxes_batch):
         n = 0
         for bx in boxes:
@@ -106,7 +108,9 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
             peak = torch.exp(-((gx - ix) ** 2 + (gy - iy) ** 2) / (2 * sigma * sigma))
             w = t["hm"][b, g, x0:x1, y0:y1]
             w.copy_(torch.maximum(w, peak))
-            t["ind"][b, n], t["mask"][b, n], t["group"][b, n] = ix * Y + iy, 1.0, g
+            t["ind"][b, n], t["mask"][b, n], t["group"][b, n] = ix * Y + iy, bx.get("loss_w", 1.0), g
+            if "known" in t:
+                t["known"][b, n] = 1.0 if bx.get("vel_known", True) else 0.0
             t["off"][b, n] = torch.tensor([fx - ix, fy - iy])
             t["vel"][b, n] = torch.tensor([bx["vx"], bx["vy"]])
             if kind == "box":
@@ -121,13 +125,17 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
 
 
 # ------------------------------------------------------------------------------------------------ losses
-def focal_loss(logits, target):
-    """CenterNet focal loss (alpha 2, beta 4), normalised by the number of peaks."""
+def focal_loss(logits, target, weight=None):
+    """CenterNet focal loss (alpha 2, beta 4), normalised by the number of peaks. weight (B, 1, X, Y) or None: a per-cell weight (LossConfig.hygiene_2026_11_02); the sums are then weighted and
+    the normaliser is the weighted number of peaks. None = the plain loss, bit for bit."""
     p = torch.sigmoid(logits).clamp(1e-4, 1 - 1e-4)
     pos = target.eq(1).float()
     neg = 1 - pos
     pos_l = -torch.log(p) * (1 - p) ** 2 * pos
     neg_l = -torch.log(1 - p) * p ** 2 * (1 - target) ** 4 * neg
+    if weight is not None:
+        w = weight.to(p.dtype).expand_as(p)
+        return ((pos_l * w).sum() + (neg_l * w).sum()) / (pos * w).sum().clamp(min=1)
     return (pos_l.sum() + neg_l.sum()) / pos.sum().clamp(min=1)
 
 
@@ -137,17 +145,22 @@ def _gather(m, ind):
     return m.reshape(B, C, -1).gather(2, ind.unsqueeze(1).expand(B, C, ind.shape[1])).permute(0, 2, 1)
 
 
-def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0):
+def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0, cell_w=None):
     """dict of loss terms and their sum 'total'. With out['dir'] (ObjectHead(direction=True)): rot is the sign-free axis
     loss min(L1(r, t), L1(r, -t)) and 'dir' the BCE of the direction class (weight w_dir, SECOND's 0.2). With out['mov']
     (ObjectHead(moving=True)): 'mov' the BCE of moving (|vel| > MOVING_SPEED) at every centre (weight w_mov), and 'vel'
-    the L1 on the moving centres only (a hurdle model: the static ones no longer pull the regression to 0)."""
+    the L1 on the moving centres only (a hurdle model: the static ones no longer pull the regression to 0).
+    LossConfig.hygiene_2026_11_02 (all three absent = the plain loss, bit for bit): cell_w (B, 1, X, Y) weights the focal loss per cell; t["mask"] may hold a weight per object (build_targets: the
+    `loss_w` of a box dict), which then weights every regression term; t["known"] (1 where the velocity of the object is known) takes the objects of unknown velocity out of the moving / static
+    BCE and of the velocity L1 (their velocity target is 0, which would read as "static")."""
     dev = out["hm"].device
     t = {k: v.to(dev) for k, v in t.items()}
     m = t["mask"].unsqueeze(-1)
     mb = (t["mask"] * t["is_box"]).unsqueeze(-1)
     mc = (t["mask"] * (1 - t["is_box"])).unsqueeze(-1)
-    mv = m * (t["vel"].norm(dim=-1, keepdim=True) > MOVING_SPEED).float() if "mov" in out else m
+    mk = m * t["known"].unsqueeze(-1) if "known" in t else m
+    mv = mk * (t["vel"].norm(dim=-1, keepdim=True) > MOVING_SPEED).float() if "mov" in out else mk
+    cell_w = None if cell_w is None else cell_w.to(dev)
 
     def l1(name, mask):
         return (F.l1_loss(_gather(out[name], t["ind"]), t[name], reduction="none") * mask).sum() / mask.sum().clamp(min=1)
@@ -156,7 +169,7 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0):
     e_rot = F.l1_loss(rot, t["rot"], reduction="none").sum(-1, keepdim=True)
     if "dir" in out:
         e_rot = torch.minimum(e_rot, F.l1_loss(rot, -t["rot"], reduction="none").sum(-1, keepdim=True))
-    losses = {"hm": focal_loss(out["hm"], t["hm"]), "off": l1("off", m), "size": l1("size", mb),
+    losses = {"hm": focal_loss(out["hm"], t["hm"], cell_w), "off": l1("off", m), "size": l1("size", mb),
               "rot": (e_rot * mb).sum() / mb.sum().clamp(min=1),
               "rad": l1("rad", mc), "vel": w_vel * l1("vel", mv)}
     if "dir" in out:
@@ -164,7 +177,7 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0):
         losses["dir"] = w_dir * (bce * mb).sum() / mb.sum().clamp(min=1)
     if "mov" in out:
         bce = F.binary_cross_entropy_with_logits(_gather(out["mov"], t["ind"]), (mv > 0).float(), reduction="none")
-        losses["mov"] = w_mov * (bce * m).sum() / m.sum().clamp(min=1)
+        losses["mov"] = w_mov * (bce * mk).sum() / mk.sum().clamp(min=1)
     losses["total"] = sum(losses.values())
     return losses
 

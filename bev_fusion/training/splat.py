@@ -39,9 +39,20 @@ def grid_points(grid, device=None, dtype=torch.float32):
     return torch.stack([gx.reshape(-1), gy.reshape(-1)], -1)
 
 
+def _geo(x):
+    """positions and velocities are geometry: float32 at least (bf16 resolves only 0.25 m at 32 - 64 m, fp16 0.03 m); float32 / float64 pass unchanged, bit for bit"""
+    return x.float() if x is not None and x.dtype in (torch.float16, torch.bfloat16) else x
+
+
+def _geo_dtype(dtype):
+    return torch.float32 if dtype in (torch.float16, torch.bfloat16) else dtype
+
+
 def splat_positions(p, dt, v, omega, v_obj=None, delta=None):
     """p (B, N, 2) source positions; dt, v, omega: (B,) or (B, N); v_obj (B, N, 2) or None; delta (B, N, 2) a learned
-    correction in the target frame (CorrectionHead) or None -> p' (B, N, 2)."""
+    correction in the target frame (CorrectionHead) or None -> p' (B, N, 2). Half-precision inputs are computed in float32."""
+    p, v_obj, delta = _geo(p), _geo(v_obj), _geo(delta)
+
     def col(t):
         t = torch.as_tensor(t, dtype=p.dtype, device=p.device)
         return t.view(-1, 1) if t.dim() <= 1 else t
@@ -63,6 +74,7 @@ def chain_positions(p, steps, v_obj=None, delta=None):
     frame to the target, oldest first (each value a scalar or (B,)); v_obj (B, N, 2) object velocity in the source
     axes, constant in the world, so its vector is rotated along by R(-omega_i dt_i) at every step; delta (B, N, 2) an
     optional correction added once at the end. The positions are then splatted once (splat_window)."""
+    p, v_obj, delta = _geo(p), _geo(v_obj), _geo(delta)
     pos, vel = p, v_obj
     for dt, v, omega in steps:
         pos = splat_positions(pos, dt, v, omega, vel)
@@ -176,10 +188,10 @@ def splat_bev(bev, grid, dt, v, omega, head=None, importance=None, corr=None):
     splat_positions with v_hat = head(bev) (or 0) and the correction corr(...) (or none), then splat.
     Returns (out, mass, v_hat or None)."""
     B, C, X, Y = bev.shape
-    p = grid_points(grid, bev.device, bev.dtype).unsqueeze(0).expand(B, -1, -1)
+    p = grid_points(grid, bev.device, _geo_dtype(bev.dtype)).unsqueeze(0).expand(B, -1, -1)     # cell centres in float32 even when the BEV is bf16 / fp16
     v_hat = head(bev) if head is not None else None
     v_obj = v_hat.permute(0, 2, 3, 1).reshape(B, X * Y, 2) if v_hat is not None else None
-    delta = corr(bev.reshape(B, C, X * Y), p, dt, v, omega) if corr is not None else None
+    delta = corr(bev.reshape(B, C, X * Y), p.to(bev.dtype), dt, v, omega) if corr is not None else None      # the correction head reads them in the BEV's dtype, as before
     pos = splat_positions(p, dt, v, omega, v_obj, delta)
     imp = importance.reshape(B, X * Y) if importance is not None else None
     out, mass = splat(bev.reshape(B, C, X * Y), pos, grid, imp)
@@ -197,14 +209,14 @@ def splat_window(frames, grid, head=None, corr=None, importance=None, mass_gate=
     outs, masses = [], []
     for bev, steps in frames:
         B, C, X, Y = bev.shape
-        p = grid_points(grid, bev.device, bev.dtype).unsqueeze(0).expand(B, -1, -1)
+        p = grid_points(grid, bev.device, _geo_dtype(bev.dtype)).unsqueeze(0).expand(B, -1, -1)       # float32 cell centres even when the BEV is bf16 / fp16
         v_obj = head(bev).permute(0, 2, 3, 1).reshape(B, X * Y, 2) if head is not None else None
         delta = None
         if corr is not None and steps:
             T = sum(float(s[0]) for s in steps)
             v_m = sum(float(s[0]) * float(s[1]) for s in steps) / T
             w_m = sum(float(s[0]) * float(s[2]) for s in steps) / T
-            delta = corr(bev.reshape(B, C, X * Y), p, T, v_m, w_m)
+            delta = corr(bev.reshape(B, C, X * Y), p.to(bev.dtype), T, v_m, w_m)
         pos = chain_positions(p, steps, v_obj, delta)
         imp = importance(bev).reshape(B, X * Y) if importance is not None else None
         o, m = splat(bev.reshape(B, C, X * Y), pos, grid, imp, mass_gate=mass_gate)

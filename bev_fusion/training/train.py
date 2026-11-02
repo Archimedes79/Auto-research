@@ -118,8 +118,11 @@ class TrainConfig:
     grad_clip_split: tuple = ()                  # module prefixes (as freeze / train_only) whose gradients are clipped to grad_clip ON THEIR OWN, the rest as one group: a block whose
                                                  # gradient is far above the others' (the motion block in t16: 36 - 131 against 0.1 - 17) no longer sets the clip factor of the whole
                                                  # network; () = one global clip as before (bit-identical)
+    lr_groups: dict = field(default_factory=dict)  # module prefix -> {"lr": float, "warmup": int} (either key optional; the chain's lr / warmup otherwise): that module's parameters get their own
+                                                 # learning rate and warm-up (lr_group_params / param_groups); {} = today's two groups and one schedule, bit for bit. Not free on a resume
+                                                 # (the optimiser state has a slot per group)
     ema: float = 0.999
-    amp: str = "off"                             # "off" | "bf16" | "fp16" (CUDA only). fp16 trains with a GradScaler (dynamic loss scaling). bf16 as it is: ledger row speed.c2 (an 8-step diagnostic, with cudnn.benchmark): no speed-up, gradient norm 25x fp32
+    amp: str = "off"                           # "off" | "bf16" | "fp16" (CUDA only). fp16 trains with a GradScaler (dynamic loss scaling). bf16 as it is: ledger row speed.c2 (an 8-step diagnostic, with cudnn.benchmark): no speed-up, gradient norm 25x fp32
     fp16_scale: float = 1024.0                   # amp "fp16": the start scale of the GradScaler (halved on an overflow; a power of two scales exactly)
     fp16_growth_interval: int = 2000             # amp "fp16": the scale doubles after that many clean steps in a row (an overflow restarts the count); the torch default
     log_every: int = 20
@@ -268,12 +271,75 @@ def to_device(batch, device, non_blocking=False):
 
 
 # ------------------------------------------------------------------------------------------------ optimisation
-def param_groups(model, loss, lr, wd):
+def lr_group_params(model, lr_groups):
+    """{prefix: [trainable parameters]} of `TrainConfig.lr_groups`, in sorted prefix order: module prefix -> {"lr": float, "warmup": int} (either key optional). A prefix matches the module itself and
+    its children, never `motion_blockx` (the rule of `grad_clip_split`); a prefix that names no trainable parameter, two prefixes that overlap, an unknown key or a bad value are errors"""
+    if not isinstance(lr_groups, dict):
+        raise ValueError(f"lr_groups must be a dict prefix -> {{'lr': ..., 'warmup': ...}}, got {lr_groups!r}")
+    out, seen = {}, {}
+    for pre in sorted(lr_groups):                                # sorted: the group order, and with it the pairing of Adam moments and groups on a resume, does not depend on the order of the keys
+        spec = lr_groups[pre]
+        if not isinstance(spec, dict) or not spec or set(spec) - {"lr", "warmup"}:
+            raise ValueError(f"lr_groups[{pre!r}] must be a dict with the keys lr and / or warmup, got {spec!r}")
+        if "lr" in spec and not (isinstance(spec["lr"], (int, float)) and not isinstance(spec["lr"], bool) and spec["lr"] > 0):
+            raise ValueError(f"lr_groups[{pre!r}]['lr'] must be a positive number, got {spec['lr']!r}")
+        if "warmup" in spec and not (isinstance(spec["warmup"], int) and not isinstance(spec["warmup"], bool) and spec["warmup"] >= 0):
+            raise ValueError(f"lr_groups[{pre!r}]['warmup'] must be a non-negative integer (steps), got {spec['warmup']!r}")
+        ps = [p for n, p in model.named_parameters() if p.requires_grad and (n == pre or n.startswith(pre.rstrip(".") + "."))]
+        if not ps:
+            raise ValueError(f"lr_groups: the prefix {pre!r} names no trainable parameter")
+        for p in ps:
+            if id(p) in seen:
+                raise ValueError(f"lr_groups: the prefixes {seen[id(p)]!r} and {pre!r} overlap (a parameter would have two learning rates)")
+            seen[id(p)] = pre
+        out[pre] = ps
+    return out
+
+
+def param_groups(model, loss, lr, wd, lr_groups=None):
+    """the optimiser's groups: decay (weights of dim >= 2) and no decay. Without lr_groups exactly these two, in this order (the optimiser state layout of every stored run). With lr_groups
+    (module prefix -> {"lr", "warmup"}): the same two for everything the prefixes do not claim, then a decay / no-decay pair per prefix, tagged base_lr (the group's own peak lr),
+    warmup (if given) and lr_group (the prefix); the schedule of train() reads the tags"""
+    taken = lr_group_params(model, lr_groups) if lr_groups else {}
+    claimed = {id(p) for ps in taken.values() for p in ps}
     decay, no_decay = [], []
     for name, p in list(model.named_parameters()) + [("loss." + n, p) for n, p in loss.named_parameters()]:
-        if p.requires_grad:
+        if p.requires_grad and id(p) not in claimed:
             (decay if p.ndim >= 2 else no_decay).append(p)
-    return [{"params": decay, "weight_decay": wd}, {"params": no_decay, "weight_decay": 0.0}]
+    groups = [{"params": decay, "weight_decay": wd}, {"params": no_decay, "weight_decay": 0.0}]
+    if not taken:
+        return groups
+    for pre, ps in taken.items():
+        tag = {"base_lr": float(lr_groups[pre].get("lr", lr)), "lr_group": pre}
+        if "warmup" in lr_groups[pre]:
+            tag["warmup"] = int(lr_groups[pre]["warmup"])
+        groups += [{"params": [p for p in ps if p.ndim >= 2], "weight_decay": wd, **tag}, {"params": [p for p in ps if p.ndim < 2], "weight_decay": 0.0, **tag}]
+    return [g for g in groups if g["params"]]
+
+
+def retag_lr_groups(opt, cfg):
+    """after opt.load_state_dict: the groups of lr_groups carry the tags of the CONFIG, not the ones the checkpoint saved (they can differ only when BF_RESUME_ANY=1 let a changed lr_groups pass
+    check_resume; without this the new value would be recorded in config.json and the old one used)"""
+    for g in opt.param_groups:
+        pre = g.get("lr_group")
+        if pre is None:
+            continue
+        spec = cfg.lr_groups.get(pre)
+        if spec is None:
+            raise ValueError(f"the checkpoint's optimiser has a learning-rate group for {pre!r} that lr_groups no longer names")
+        g["base_lr"] = float(spec.get("lr", cfg.lr))
+        if "warmup" in spec:
+            g["warmup"] = int(spec["warmup"])
+        else:
+            g.pop("warmup", None)
+
+
+def scheduled_lr(group, step, cfg, f):
+    """the learning rate of one optimiser group at `step`; f = lr_factor with the chain's warm-up. A group without the tags of lr_groups gets cfg.lr * f (the single schedule, bit for bit);
+    a tagged one its own peak lr (base_lr) and, if it has one, its own warm-up"""
+    if "base_lr" not in group:
+        return cfg.lr * f
+    return group["base_lr"] * (f if "warmup" not in group else lr_factor(step, group["warmup"], cfg.steps, cfg.lr_min_frac))
 
 
 def lr_factor(step, warmup, total, min_frac):
@@ -408,7 +474,7 @@ def check_resume(old, cfg, name):
     a, b = norm(old), norm(dataclasses.asdict(cfg))
     diff = sorted(k for k in a if k not in RESUME_FREE and a[k] != b.get(k))
     diff += [k for k in ("train_only", "freeze") if k not in a and b.get(k)]               # a checkpoint from before freeze.py has no plan: a new one cannot resume it (its optimiser state has a slot per parameter)
-    diff += [k for k in ("cudnn_benchmark", "tf32", "grad_clip_split") if k not in a and b.get(k)]   # a checkpoint from before these switches ran without them: turning one on changes the numbers in the middle of a run
+    diff += [k for k in ("cudnn_benchmark", "tf32", "grad_clip_split", "lr_groups") if k not in a and b.get(k)]   # a checkpoint from before these switches ran without them: turning one on changes the numbers in the middle of a run
     if diff and os.environ.get("BF_RESUME_ANY") != "1":
         raise SystemExit(f"{name}: the configuration differs from the checkpoint's in {diff}; start a new run name "
                          f"(or set BF_RESUME_ANY=1)")
@@ -537,13 +603,16 @@ def gap_ego_motion(steps):
     return T, chord_x / T, th / T
 
 
-def batch_ego(gap_steps, dts, device):
+def batch_ego(gap_steps, dts, device, strict=False):
     """{nominal dt != 0: (dt, v, omega)} as (B,) tensors: the true gap and the gap-mean ego motion of every sample, from batch["gap_steps"]
-    (the dataset makes them from the poses: the network input needs no ground truth)."""
+    (the dataset makes them from the poses: the network input needs no ground truth). gap_steps holds the previous and the next keyframe only, i.e. dt = -0.5 and +0.5 s: any other dt
+    would silently get the 0.5 s gap; strict (LossConfig.hygiene_2026_11_02) raises instead."""
     ego = {}
     for dt in dts:
         if abs(dt) < 1e-6:
             continue
+        if strict and abs(abs(dt) - 0.5) > 1e-6:
+            raise ValueError(f"batch_ego: dt {dt:+.2f} s has no ego gap (gap_steps holds the keyframe before and after, dt = -0.5 and +0.5 s); the sample builder must provide the gap of that dt")
         key = "prev" if dt < 0 else "next"
         vals = [gap_ego_motion(g[key]) for g in gap_steps]
         ego[dt] = tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
@@ -687,7 +756,8 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     previous keyframe of the clip and the ego step since then (sequence training)."""
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))
-    ego = batch_ego(batch["gap_steps"], dts, device) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
+    strict = bool(getattr(getattr(loss, "cfg", None), "hygiene_2026_11_02", False))       # LossConfig.hygiene_2026_11_02: a dt without an ego gap is an error
+    ego = batch_ego(batch["gap_steps"], dts, device, strict=strict) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
     batch = to_device(batch, device, non_blocking=bool(cfg is not None and cfg.pin_memory))
     ctx = amp_context(amp, device)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
@@ -900,6 +970,8 @@ def train(cfg, eval_fn=None, datasets=None):
         print("freeze:", freeze_mod.signature(cfg.train_only, cfg.freeze), flush=True)
         print(freeze_mod.report(model), flush=True)
     clip_split = clip_groups(model, cfg.grad_clip_split)        # a typo in a prefix fails here, in seconds, not after the data are built
+    if cfg.lr_groups:
+        lr_group_params(model, cfg.lr_groups)                   # the same for lr_groups (prefix, overlap, values)
     train_ds, val_ds = datasets or make_datasets(cfg)
     check_grids(model, train_ds, val_ds)
     record_gt(out_dir, (train_ds, val_ds))                      # the GT is not pinned by the code snapshot: record which one is used
@@ -911,7 +983,7 @@ def train(cfg, eval_fn=None, datasets=None):
     if cfg.gap_ego and not supports_ego(model):
         print("WARNING: gap_ego is on but model.forward has no `ego` argument: dt = +-0.5 s is decoded with the nominal "
               "gap and the last step's ego motion (0.2-0.35 m of label error)", flush=True)
-    opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr, betas=(0.9, 0.999))
+    opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay, cfg.lr_groups), lr=cfg.lr, betas=(0.9, 0.999))
     scaler = make_scaler(cfg, device)                           # amp "fp16" only
     if scaler is not None and cfg.grad_diag_every:
         print("WARNING: amp fp16: grad_diag_every is ignored (the group gradients would be taken unscaled and underflow)", flush=True)
@@ -931,6 +1003,7 @@ def train(cfg, eval_fn=None, datasets=None):
             continue
         check_resume(ck.get("cfg", {}), cfg, name)
         step, ck_extra = load_checkpoint(os.path.join(out_dir, name), model, loss, opt, ema, ck=ck)
+        retag_lr_groups(opt, cfg)
         if scaler is not None and ck_extra.get("scaler"):        # the scale it had reached, not the start scale again
             scaler.load_state_dict(ck_extra["scaler"])
         refuse_slim_resume(ck, step, cfg, name)
@@ -984,7 +1057,7 @@ def train(cfg, eval_fn=None, datasets=None):
             raise SystemExit(EXIT_STOPPED)
         f = lr_factor(step, cfg.warmup, cfg.steps, cfg.lr_min_frac)
         for g in opt.param_groups:
-            g["lr"] = cfg.lr * f
+            g["lr"] = scheduled_lr(g, step, cfg, f)
         diag = bool(cfg.grad_diag_every) and scaler is None and (step + 1) % cfg.grad_diag_every == 0         # not under fp16: the group gradients would be taken unscaled and underflow
         opt.zero_grad(set_to_none=True)
         acc, finite, prow, step_ids = {}, True, {}, []
@@ -1041,6 +1114,7 @@ def train(cfg, eval_fn=None, datasets=None):
         if not skipped and (step % cfg.log_every == 0 or step == 1 or "diag" in acc):
             rec = {"step": step, "t": time.time(), "lr": cfg.lr * f, "grad_norm": float(gn),
                    "s_per_step": (time.time() - t0) / max(1, step - step0), **acc, **prow, **trow}
+            rec.update({f"lr.{g['lr_group']}": g["lr"] for g in opt.param_groups if "lr_group" in g})          # the own learning rate of every lr_groups prefix
             if device.startswith("cuda"):
                 rec["gpu_gb"] = torch.cuda.max_memory_allocated() / 1e9
             if scaler is not None:

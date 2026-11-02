@@ -88,7 +88,8 @@ def load_run(run: str, device: str, ckpt_dir: Optional[str] = None, ns=None):
     ckpts = sorted(glob.glob(os.path.join(ckpt_dir or run, "ckpt_*.pt")))
     if not ckpts:
         raise FileNotFoundError(f"no checkpoint in {ckpt_dir or run}")
-    opt = torch.optim.AdamW(T.param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr)      # as train(), to load
+    extra = [cfg.lr_groups] if getattr(cfg, "lr_groups", None) else []                          # a run with its own learning rates per module: its snapshot's param_groups takes them (an older snapshot has no such argument)
+    opt = torch.optim.AdamW(T.param_groups(model, loss, cfg.lr, cfg.weight_decay, *extra), lr=cfg.lr)      # as train(), to load
     ema = T.EMA(model, cfg.ema)
     step, _ = T.load_checkpoint(ckpts[-1], model, loss, opt, ema)
     ema.apply(model)                                                         # the EMA weights are evaluated

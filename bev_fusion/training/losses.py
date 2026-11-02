@@ -86,8 +86,16 @@ class LossConfig:
     w_correction: float = 0.01         # 0.01 |delta|^2 on the splat correction
     w_cam_aux: float = 0.3
     w_radar_aux: float = 0.3
-    radar_stationary: bool = True      # decision (3): the proxy target, used when the GT dict carries it
-    w_radar_slot: float = 0.1
+    radar_stationary: bool = True      # decision (3): the proxy target, used when the GT dict carries it. NO GT layer carries it (autogt writes none), so its branch never runs and the
+                                       # radar aux head has one untrained channel; false removes the channel and changes the head layout and the init (open_findings #4: at the next baseline)
+    w_radar_slot: float = 0.1          # UNUSED: no model output `radar_slot` exists (the branch was removed 2026-11-02); the field stays so that stored configs load
+    hygiene_2026_11_02: bool = False   # lead 2026-11-02, off = every stored run is reproduced bit for bit. On: (#3) the object head and the motion loss apply w_obj as a WEIGHT (w_interpolated,
+                                       # w_unknown, ... reach the focal loss per cell, the regression terms per object and the motion L1 per cell; they only decided keep / ignore before),
+                                       # (#2) an object of unknown velocity (meta vel_known False) trains neither the moving / static logit nor the velocity, (#1) train.batch_ego raises on a
+                                       # dt other than +-0.5 s (it silently used the 0.5 s gap), the motion loss leaves the cells of a box of unknown velocity (flow_weight 0) out. The weights are
+                                       # RELATIVE: every normaliser clamps at 1, so a batch whose objects are all down-weighted equally is not down-weighted; at dt 0 w_obj is 0 or 1 (fractional only at the
+                                       # ignore edges), the weights act at dt +-0.5 s (w_unknown) and on interpolated labels (w_interpolated); `objhead.*`, `group.objects` and the val total are not
+                                       # comparable between a flag-on and a flag-off arm. See records/open_findings_2026-11-02.md
     # time, decision (5)
     dt_weights: tuple = ((0.0, 1.0), (0.5, 0.5), (1.0, 0.25))       # (|dt| nominal, w), nearest |dt| is used
     warmup_hold: float = 0.2           # dt = 0 only for this fraction of the steps
@@ -151,6 +159,8 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
         T[k] = _stack(gts, k, device)
     if cfg.radar_stationary and all("radar_stationary" in g for g in gts):       # hook: another session builds it
         T["radar_stationary"] = _stack(gts, "radar_stationary", device)
+    if cfg.hygiene_2026_11_02 and all("flow_weight" in g for g in gts):          # autogt: 1 where the velocity is known, 0 on the cells of a box of unknown velocity (velocity 0 there)
+        T["flow_weight"] = _stack(gts, "flow_weight", device)
     T["obj_cells"] = (_stack(gts, "instance", device) >= 0).float()
     cam, occ = _stack(gts, "camera", device), _stack(gts, "occluded", device)
     radar, undef = _stack(gts, "radar", device), _stack(gts, "undefined", device)
@@ -332,10 +342,12 @@ def refine_gt_boxes(g, grid, groups=NUSC_GROUPS):
     return out
 
 
-def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0.2, max_obj=128, w_mov=1.0):
+def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0.2, max_obj=128, w_mov=1.0, hygiene=False):
     """Stage 1 via object_head.head_loss. A box is supervised if it is observed (gt_bev meta 'observed': any lidar /
     radar point) and its centre cell has w_obj > 0; the others are ignored (neither positive nor negative: their peak
-    region and every cell of w_obj = 0 get a constant logit, so no loss gradient). Returns (head_loss dict, targets)."""
+    region and every cell of w_obj = 0 get a constant logit, so no loss gradient). Returns (head_loss dict, targets).
+    hygiene (LossConfig.hygiene_2026_11_02): w_obj is also the WEIGHT of the supervised ones (the focal loss per cell, every regression term per object by its centre cell) and an object of
+    unknown velocity (vel_known False) trains neither the moving / static logit nor the velocity."""
     X, Y = w_obj.shape[-2:]
     w_host = w_obj[:, 0].detach().cpu()                                    # ONE device-to-host read per call (float(w_obj[...]) per box was one GPU sync per box: ~270 per step)
     keep, drop = [], []
@@ -349,7 +361,10 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
             iy = int(math.floor((hb["cy"] - grid.y_min) / grid.res))
             if not (0 <= ix < X and 0 <= iy < Y):
                 continue
-            (k if bx.get("observed", True) and float(w_host[b, ix, iy]) > 0 else d).append(hb)
+            wv = float(w_host[b, ix, iy])
+            if hygiene:                                                       # the weight of this object and whether its velocity is known travel with the target box
+                hb = dict(hb, loss_w=wv, vel_known=bool(bx.get("vel_known", True)))
+            (k if bx.get("observed", True) and wv > 0 else d).append(hb)
         keep.append(k)
         drop.append(d)
     dev = out["hm"].device
@@ -358,17 +373,20 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
     if any(drop):
         ign = ign | ((build_targets(drop, grid, groups, max_obj)["hm"].to(dev) > 0) & (t["hm"].to(dev) == 0))
     hm = torch.where(ign, torch.full_like(out["hm"], -1e4), out["hm"])
-    return head_loss(dict(out, hm=hm), t, w_vel, w_mov=w_mov), t
+    return head_loss(dict(out, hm=hm), t, w_vel, w_mov=w_mov, cell_w=w_obj if hygiene else None), t
 
 
 def motion_term(v_hat, T, cfg):
-    """MotionHead.loss on the cells where objects / velocity are supervised (w_obj > 0), normalised by their counts."""
+    """MotionHead.loss on the cells where objects / velocity are supervised (w_obj > 0), normalised by their counts. LossConfig.hygiene_2026_11_02: the cells of a box of unknown velocity
+    (flow_weight 0, GT velocity 0) are out of it, as the evaluation leaves them out, and w_obj weights the rest (it is 0 or 1 at dt 0 but at the ignore edges: the weight acts at dt +-0.5 s)."""
     valid = T["w_obj"][:, 0] > 0
+    if cfg.hygiene_2026_11_02 and "flow_weight" in T:
+        valid = valid & (T["flow_weight"][:, 0] > 0)
 
     def sel(x):
         return x.permute(0, 2, 3, 1)[valid].t().reshape(1, x.shape[1], -1, 1)
     return MotionHead.loss(sel(v_hat), sel(T["velocity"]), sel(T["obj_cells"]), cfg.motion_min_speed,
-                           cfg.motion_w_background)
+                           cfg.motion_w_background, weight=sel(T["w_obj"]) if cfg.hygiene_2026_11_02 else None)
 
 
 def consistency_term(obj_vel, v_hat, t):
@@ -442,8 +460,7 @@ class BEVLoss(nn.Module):
     """The 8.4 total. forward(preds, gts, step_frac):
     preds: {dt: {'sem': (B, len(spec), X, Y) logits, 'obj': object head maps, 'v_hat': (B, 2, X, Y) motion field
             (supervised at dt = 0 against the GT of t_c), 'mass': (B, 1, X, Y) splat mass at dt, 'delta': (..., 2)
-            splat correction, 'cam_aux': (B, len(cam_spec), X, Y), 'radar_aux': (B, len(radar_spec), X, Y),
-            'radar_slot': a precomputed radar slot-decoder loss}; every entry optional}
+            splat correction, 'cam_aux': (B, len(cam_spec), X, Y), 'radar_aux': (B, len(radar_spec), X, Y)}; every entry optional
     gts: {dt: [gt_bev GT dict per sample]} (sample_targets builds it from training samples)
     Returns a dict: every term as '<name>@<dt>', 'group.<g>' (dt-weighted), 's.<g>', 'aux', 'total'."""
 
@@ -474,7 +491,7 @@ class BEVLoss(nn.Module):
         tt = None
         if "obj" in p:
             lo, tt = object_head_terms(p["obj"], T["boxes"], T["w_obj"], self.grid, self.groups, cfg.w_obj_vel,
-                                       cfg.max_obj, cfg.w_obj_mov)
+                                       cfg.max_obj, cfg.w_obj_mov, hygiene=cfg.hygiene_2026_11_02)
             terms.update(("objhead." + k, v) for k, v in lo.items())
             add("objects", lo["total"])
         if "refine" in p:                                     # S5c, candidates built by the model (model.refine)
@@ -507,9 +524,6 @@ class BEVLoss(nn.Module):
                              step_frac)
             terms.update(("radar_aux." + k, v) for k, v in t.items())
             fixed["radar_aux"] = cfg.w_radar_aux * sum(g.values())
-        if "radar_slot" in p:
-            terms["radar_slot"] = p["radar_slot"]
-            fixed["radar_slot"] = cfg.w_radar_slot * p["radar_slot"]
         return terms, groups, fixed
 
     def forward(self, preds, gts, step_frac=1.0):
