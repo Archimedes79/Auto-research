@@ -14,7 +14,9 @@ What it does (paths from the problem's project.json, see project.py):
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
   * stop        exit code 75 (trainsuite: the trainer was asked to stop and saved a checkpoint) is status "stopped": no done flag, no retry (not even when the log tail
                 holds a CUDA error of an earlier attempt), not counted as a failure in metrics.py; the id is put ON HOLD (a HOLD file in its run record, hold.py): it is
-                refused ("held") and starts again only after the person's words (hold.py clear ID --words ...); --after dependents are blocked
+                refused ("held") and starts again only after the person's words (hold.py clear ID --words ...); --after dependents are blocked. The hold is read
+                again every round while the launcher waits (--after, machine lock, GPU queue): a hold set meanwhile ends the wait (status held, exit 2); an id whose run
+                folder is the same after . -> _ (`t1.a`, `t1_a`) is refused too
   * card        a run needs its card: --hyp / --pred / --rule on the command line, else from the planned ledger row (ledger.py add); without
                 one it is refused (--no-card for smoke tests and data preparation, the ledger row then says "no card")
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
@@ -546,12 +548,27 @@ def write_manifest(run_id):
         print(f"[{run_id}] warning: provenance manifest not written ({type(e).__name__}: {str(e)[:160]})", flush=True)
 
 
-def wait_after(records, ids, minutes, hb=None):
-    """wait for the done flags of ids; returns '' when all are done, else the reason; touches the heartbeat while waiting"""
+def hold_refusal(records, run_id):
+    """'' when the run id may start, else why not: it has a HOLD marker, or another id has one and names the same run folder (trainsuite/compose.py: the
+    folder is the id with . as _, so `t1.a` and `t1_a` share one folder and one checkpoint, but have two run records)"""
+    folder = run_id.replace(".", "_")
+    for name, h in HOLD.holds(records):
+        if name.replace(".", "_") == folder:
+            return (f"this run id is on HOLD ({HOLD.line(name, h)})" if name == run_id else
+                    f"{name} is on HOLD and names the same run folder ({folder}) ({HOLD.line(name, h)})") + f". It starts again after the person's words: hold.py clear {name} --words \"<their words>\""
+    return ""
+
+
+def wait_after(records, ids, minutes, hb=None, stop=None):
+    """wait for the done flags of ids; returns '' when all are done, else the reason; touches the heartbeat while waiting. `stop` = a function that returns
+    a reason to give up (a hold set meanwhile) or ''"""
     t0 = time.time()
     while True:
         if hb:
             beat(hb, "waiting for " + ",".join(ids))
+        why = stop() if stop else ""
+        if why:
+            return why
         missing = []
         for i in ids:
             st = state_of(os.path.join(records, i))
@@ -692,11 +709,16 @@ def run_once(cmd, cwd, log_path, hb_path, timeout_s, env=None):
     return rc, out, p.pid, timed_out
 
 
+SPLIT_ARG = re.compile(r"--split(?:\s+|\s*=\s*)[\"']?([\w,.-]+)", re.I)
+SNAPSHOT_TRIES, SNAPSHOT_RETRY_S = 3, 2         # a snapshot that fails (a locked file on the Windows side, a busy index) is tried again before the run is refused
+
+
 def names_split(cmd, split):
-    """does the command line itself ask for this split (`--split test` or `--split=test`)? The gate looks at --split of the launcher, which a
-    command can contradict"""
-    toks = [str(t).lower() for t in cmd]
-    return any(t == f"--split={split}" or (t == "--split" and i + 1 < len(toks) and toks[i + 1] == split) for i, t in enumerate(toks))
+    """does the command line itself ask for this split (`--split test`, `--split=test`, `--split=val,test`, also inside `bash -c '... --split test'`)? The gate
+    looks at --split of the launcher, which a command can contradict. Looked for in the joined command line, so a script string is read too. Best effort: the
+    launcher's --split is the gate; an argparse prefix (`--spl test`), a split passed by environment variable or config file is not seen, and a quoted
+    `--split test` inside an echo counts as a hit"""
+    return any(split.lower() in m.group(1).lower().split(",") for m in SPLIT_ARG.finditer(" ".join(str(t) for t in cmd)))
 
 
 def main():
@@ -761,9 +783,9 @@ def main():
             print(f"[{a.id}] refused: git cannot commit the snapshot here ({err}); set user.name / user.email in the repository, or --no-git")
             return 2
     d = os.path.join(records, a.id)
-    held = HOLD.read(d)
-    if held is not None:       # the person's decisions are acted on only when recorded (hard rule 6): a stopped run waits for their words, not for a chat's judgement
-        print(f"[{a.id}] refused: this run id is on HOLD ({HOLD.line(a.id, held)}). It starts again after the person's words: hold.py clear {a.id} --words \"<their words>\"")
+    held = hold_refusal(records, a.id)
+    if held:       # the person's decisions are acted on only when recorded (hard rule 6): a stopped run waits for their words, not for a chat's judgement
+        print(f"[{a.id}] refused: {held}")
         return 2
     os.makedirs(d, exist_ok=True)
     claim = take_claim(d)  # two launchers of one id (two ticks, two chats) must not both start: the first to make the directory goes on
@@ -806,8 +828,21 @@ def main():
             pass
     if again and ledger_row(ledger, a.id):
         ledger_safe(ledger, dict(id=a.id), clear)  # the old judgement goes now, not only at the end: a re-run that dies must not keep the old KEEP beside it
+
+    def refuse_held():
+        """a hold set while this launcher waits (--after, machine lock, GPU queue) is read again every round: the run does not start; status held, a ledger row, exit 2 like the first check"""
+        why = hold_refusal(records, a.id)
+        if why:
+            rec.update(status="held", ended=now(), notes=why[:300])
+            save_rec(os.path.join(d, "run.json"), rec)
+            ledger_safe(ledger, dict(rec, exit=2, duration_s=0), clear)
+            print(f"[{a.id}] refused: {why}")
+        return why
+
     if a.after:
-        why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after, hb)
+        why = wait_after(records, [x for x in a.after.split(",") if x], a.wait_after, hb, stop=lambda: hold_refusal(records, a.id))
+        if refuse_held():
+            return 2
         if why:
             rec.update(status="blocked", ended=now(), notes=why)
             save_rec(os.path.join(d, "run.json"), rec)
@@ -823,6 +858,8 @@ def main():
         if ticket:
             ticket.join()
         while True:
+            if refuse_held():               # the round that ends in the start (break) looks first, so the hold is read right before the snapshot too
+                return 2
             try:
                 lk = machine_lock.blocks(owner)  # D19: every run (GPU or not) waits while another owner holds an exclusive machine lock
             except Exception:  # noqa: BLE001  the lock must never be what breaks a launch
@@ -859,7 +896,17 @@ def main():
             before = drift_hash(root, cfg)  # before the snapshot: a change while the snapshot is made counts, the precise check at the end tells
         except OSError:  # a scratch file that vanished during the walk must not stop the launch: no hash, no drift check
             before = None
-        commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
+        for tries in range(1, SNAPSHOT_TRIES + 1):
+            commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
+            if commit != "git-error" or tries == SNAPSHOT_TRIES:
+                break
+            time.sleep(SNAPSHOT_RETRY_S)
+        if commit == "git-error":        # a run must name the code it ran: no snapshot, no start (--no-git is the explicit way to run without one)
+            rec.update(status="failed", ended=now(), notes=f"the code snapshot failed {tries} times, the command was not started: {gnote}"[:300])
+            save_rec(os.path.join(d, "run.json"), rec)
+            ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
+            print(f"[{a.id}] refused: the code snapshot failed ({gnote}); fix git here, or --no-git to run without a snapshot")
+            return 1
         if gnote:
             notes.append(gnote)
         rec.update(status="running", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)

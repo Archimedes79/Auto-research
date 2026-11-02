@@ -712,21 +712,41 @@ def trainer_env(r):
     return d
 
 
+def manifest_stale(old, r, run_dir):
+    """is the stored manifest `old` of an earlier state of the run? Its run status differs from the run record now (a stopped run that was resumed and ended), or the
+    run folder holds a NEWER checkpoint than the one it names (a higher step). A folder without a checkpoint (slimmed, moved), or whose newest checkpoint is older than
+    the recorded one (the final one slimmed or archived, an older one stays), never makes it stale: the record of the final checkpoint stays"""
+    rs = old.get("run_status") or {}
+    if (rs.get("status"), rs.get("exit")) != (r.get("status") or UNKNOWN, r.get("exit")):
+        return True
+    ck, step = final_ckpt(run_dir) if run_dir and os.path.isdir(run_dir) else (None, None)
+    sub = old.get("subject") or {}
+    if not ck:
+        return False
+    recorded = sub.get("step")
+    if not isinstance(recorded, (int, float)) or not isinstance(step, (int, float)):
+        return (os.path.basename(ck), step) != (sub.get("ckpt"), recorded)       # a step that cannot be ordered: any difference counts
+    return step > recorded
+
+
 def manifest(run_id, run_dir=None, write=True, force=False):
     """The provenance block of a TRAINING run, made from its run record and its run folder: GT it trained on (gt.json), checkpoint, config, split,
     seed, the run's status, the code tag and commit, and the model bundle (network + losses) from the run's own code snapshot (<run folder>/code;
     the live tree is never used: it is not what ran). Written to the result folder <problem>/results/<id>/provenance.json (`repro` reads it); an existing manifest or
-    bundle/ is not rebuilt without force, so a later call cannot replace a good record by one made after the folder was slimmed. A missing piece
+    bundle/ is not rebuilt without force, so a later call cannot replace a good record by one made after the folder was slimmed. The exception is a manifest of an
+    earlier state of the run (manifest_stale: a stopped run that was resumed): it is rebuilt, and the old file stays as provenance.<n>.json. A missing piece
     reads "unknown"; nothing here changes the run. The environment comes from the run record: this tool runs in the launcher's interpreter, not
     the trainer's, so torch stays unknown"""
     rj = os.path.join(P.path("run_records"), run_id, "run.json")
     if not os.path.isfile(rj):
         sys.exit(f"no run record {rj}")
     out = os.path.join(results_dir(run_id), "provenance.json")
-    if write and os.path.isfile(out) and not force:
-        return json.load(open(out, encoding="utf-8"))
     r = json.load(open(rj, encoding="utf-8"))
     run_dir = run_dir or find_run_dir(run_id)
+    if write and os.path.isfile(out) and not force:
+        old = json.load(open(out, encoding="utf-8"))
+        if not manifest_stale(old, r, run_dir):
+            return old
     have_dir = bool(run_dir and os.path.isdir(run_dir))
     sig = cfg = ck = step = seed = None
     if have_dir:
@@ -766,6 +786,16 @@ def manifest(run_id, run_dir=None, write=True, force=False):
         block["run_dir"] = UNKNOWN
     if write:
         os.makedirs(os.path.dirname(out), exist_ok=True)
+        if os.path.isfile(out):          # the earlier manifest (an earlier attempt, or before a forced rebuild) is kept next to the new one
+            n = 1
+            while True:                  # the name is reserved with an exclusive create: two callers cannot overwrite one archive
+                arch = os.path.join(os.path.dirname(out), f"provenance.{n}.json")
+                try:
+                    open(arch, "x").close()
+                    break
+                except FileExistsError:
+                    n += 1
+            os.replace(out, arch)
         P.atomic_write(out, json.dumps(block, indent=1) + "\n")
     return block
 
@@ -1048,6 +1078,22 @@ def selftest():
         assert manifest("r2") == m, "an existing manifest is returned, not rebuilt"
         m2f = manifest("r2", force=True)
         assert "copy_skipped" in m2f["bundle"] and os.path.isfile(os.path.join(proj, "results", "r2", "bundle", "stale.py")), "a bundle/ that exists is left alone"
+        # review 2026-11-02: a stopped run that was resumed: the manifest of the earlier attempt is rebuilt (status, then a newer checkpoint), the old file stays as
+        # provenance.<n>.json; a run folder without checkpoint (slimmed, moved) is no newer state
+        rdir = os.path.join(proj, "results", "r2")
+        assert os.path.isfile(os.path.join(rdir, "provenance.1.json")), "a forced rebuild keeps the file it replaces"
+        json.dump(dict(d2, status="stopped", exit=75), open(rj2, "w"))
+        ms = manifest("r2")
+        assert ms["run_status"] == {"status": "stopped", "exit": 75, "final": False} and json.load(open(os.path.join(rdir, "provenance.2.json")))["run_status"]["status"] == "ok", ms["run_status"]
+        json.dump(d2, open(rj2, "w"))
+        assert manifest("r2")["run_status"]["final"] is True and json.load(open(os.path.join(rdir, "provenance.3.json")))["run_status"]["status"] == "stopped", "the resumed run ended ok"
+        assert manifest("r2", run_dir=os.path.join(tmp, "nowhere")) == manifest("r2") and not os.path.exists(os.path.join(rdir, "provenance.4.json")), "no checkpoint to look at: not stale"
+        open(os.path.join(tr, "ckpt_00000300.pt"), "wb").write(b"w" * 300)
+        assert manifest("r2")["subject"]["step"] == 300 and json.load(open(os.path.join(rdir, "provenance.4.json")))["subject"]["step"] == 200, "a newer checkpoint makes it stale"
+        assert manifest("r2")["subject"]["step"] == 300 and not os.path.exists(os.path.join(rdir, "provenance.5.json")), "up to date: returned, not rebuilt"
+        os.rename(os.path.join(tr, "ckpt_00000300.pt"), os.path.join(tr, "ckpt_00000300.pt.moved"))      # the final checkpoint slimmed / archived, an older one stays: the record of step 300 stays
+        assert manifest("r2")["subject"]["step"] == 300 and not os.path.exists(os.path.join(rdir, "provenance.5.json")), "a lower step on disk is not stale"
+        os.rename(os.path.join(tr, "ckpt_00000300.pt.moved"), os.path.join(tr, "ckpt_00000300.pt"))
         # hard cases of the closure: BOM, parent packages with code, level-2 relative imports, missing root, broken file, dynamic import, external local code
         s2 = os.path.join(tmp, "snap2")
         open(os.path.join(s2 if os.path.isdir(s2) else (os.makedirs(s2) or s2), "model.py"), "w", encoding="utf-8-sig").write("import pkg.head\nimport autogt\nimport torch\nimport broken\nimport importlib\nimportlib.import_module('x')\n")

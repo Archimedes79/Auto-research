@@ -2,7 +2,8 @@
 
     python ledger.py render                                   rewrite the markdown from the csv
     python ledger.py add E240.a --hyp "..." --pred "..." --rule "..." [--status planned]     a row before the run (planned)
-    python ledger.py note E240.a --result "Q 0.741" --decision "KEEP" [--notes "..."]        the judgement columns after the run
+    python ledger.py note E240.a --result "Q 0.741" --decision "KEEP" [--notes "..." [--replace-notes]]   the judgement columns after the run; --notes is APPENDED
+                                                              to the notes of the row (hold words, attempts, code change), --replace-notes overwrites them
     python ledger.py tail [--loop 19] [-n 15]                 the last rows (of one loop) in short form, then the runs in progress, for a wake-up
     python ledger.py sync [--dry-run]                         add the row of every ended run that has none, also a run whose launcher died (stalled); facts from its run record.
                                                               Also replaces the finished row of an EARLIER attempt of an id by the record of a later one (a re-run whose own
@@ -119,7 +120,8 @@ def sync(dry=False):
     for rid, d, st in missing():
         rec = RUN.record(d)
         row = {c: rec.get(c, "") for c in COLS}
-        row.update(id=rid, status="ok" if st == "done" else st, notes="row added by ledger.py sync from the run record"
+        # `held` is derived (a HOLD marker lies on the run): the row says what the run itself wrote, as run.py's own row does
+        row.update(id=rid, status="ok" if st == "done" else (rec.get("status") or st) if st == "held" else st, notes="row added by ledger.py sync from the run record"
                    + (f" (launcher gone, heartbeat {RUN.heartbeat_age(d) / 3600:.1f} h old)" if st == "stalled" else ""))
         if dry or RUN.ledger_write(P.path("ledger"), row, fill=True):  # the check is made again under the lock: a launcher that finished meanwhile wins
             print(f"{'would add' if dry else 'added'} {rid} ({row['status']})")
@@ -138,6 +140,7 @@ def main():
     ap.add_argument("-n", type=int, default=15)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true", help="change the hypothesis / prediction / rule of a row that has started (the old text goes into the notes)")
+    ap.add_argument("--replace-notes", action="store_true", help="--notes replaces the notes cell (default: the text is appended after ' | ')")
     a = ap.parse_args()
     if a.cmd in ("note", "add") and not a.id:
         ap.error(f"{a.cmd} needs a run id (a row without an id would be written)")
@@ -157,6 +160,8 @@ def main():
                 print(f"note: {a.id} had no ledger row; a new planned row was made (check the id)", file=sys.stderr)
         new = {col: getattr(a, k) for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"),
                                                  ("notes", "notes"), ("status", "status"), ("pred", "prediction"), ("rule", "rule")) if getattr(a, k) is not None}
+        if "notes" in new and row.get("notes") and not a.replace_notes:   # the cell holds the hold words, the attempt counts, the code-change note: a new note is added to them
+            new["notes"] = row["notes"] + " | " + new["notes"]
         started = row.get("status") not in (None, "", "planned")
         frozen = [c for c in ("hypothesis", "prediction", "rule") if started and row.get(c) and c in new and row[c] != new[c]]
         if frozen and not a.force:    # hard rule 4: the rule is written before the run; a started row keeps it (nothing is saved)

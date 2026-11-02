@@ -44,6 +44,7 @@ from card import is_number  # noqa: E402  (a finite number: NaN, infinity and te
 
 LOWER = {"ms", "ms_per_frame"}  # generic cost names; problem metrics are listed in project.json "lower_is_better"
 DEFAULT_BAND = 0.010
+DECIMALS = 9   # an effect is rounded to this many decimals before it meets a band or a threshold: 0.746 - 0.736 is 0.010000000000000009 in floats, and the rule says |effect| <= band is a tie
 
 
 def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, cost_control=None):
@@ -53,7 +54,7 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
         raise ValueError("scores and band must be finite numbers, at least one score per arm")
     sgn = -1.0 if lower_better else 1.0
     mv, mc = sum(variant) / len(variant), sum(control) / len(control)
-    effect = sgn * (mv - mc)
+    effect = round(sgn * (mv - mc), DECIMALS)
     if len(variant) == len(control):
         diffs = [sgn * (v - c) for v, c in zip(variant, control)]
     else:
@@ -136,7 +137,7 @@ def paired_effect(metric, v_cards, c_cards, lower=None):
         raise KeyError(f"no card for {metric}")
     if not all(is_number(x) for x in [*v, *c]):
         raise ValueError(f"{metric}: a card holds a value that is not a finite number (NaN, infinity or text)")
-    effect = sgn * (sum(v) / len(v) - sum(c) / len(c))
+    effect = round(sgn * (sum(v) / len(v) - sum(c) / len(c)), DECIMALS)
     diffs = [sgn * (a - b) for a, b in zip(v, c)] if len(v) == len(c) else [effect]
     spans = []
     c_names = {(cc or {}).get("name") for _, cc, _ in c_cards}
@@ -197,7 +198,8 @@ def incompatible(exp, cards):
     """the reasons why the cards of the arms are not measurements of the same thing, from the cards' own fields: split (must be the experiment's
     evaluate.split), subset (of whole-split cards, when the card has the field: evaluate.subset), the denominator (frames / n) and the optional
     protocol (what the evaluator says about ground truth, cache, frame list) must be the same on every card of one subset key; a card that lacks
-    a field that another card has counts as different. Only the arms the rule uses are compared (the variant, the control, the clauses' `vs`).
+    a field that another card has counts as different (a protocol that is a dict is compared key by key: a key that only some cards carry is
+    unknown on the others, not a difference). Only the arms the rule uses are compared (the variant, the control, the clauses' `vs`).
     A bare metrics dict holds no fields and passes. exp["evaluate"]["allow"] lists fields that are knowingly different (split | subset |
     denominator | protocol)."""
     ev = exp.get("evaluate", {})
@@ -220,7 +222,17 @@ def incompatible(exp, cards):
                     if field not in allow:
                         seen.setdefault((s, field), {}).setdefault(json.dumps(value, sort_keys=True), []).append(str(ref))
     for (s, field), values in sorted(seen.items()):
-        if len(values) > 1:
+        parsed = {v: json.loads(v) for v in values}
+        if field == "protocol" and len(values) > 1 and all(isinstance(p, dict) for p in parsed.values()):
+            for key in sorted({k for p in parsed.values() for k in p}):          # a protocol that grew: a key only some cards carry is unknown on the others, not a difference
+                by_value = {}
+                for v, p in parsed.items():
+                    if key in p:
+                        by_value.setdefault(json.dumps(p[key], sort_keys=True), []).extend(values[v])
+                if len(by_value) > 1:
+                    out.append(f"{'subset ' + s + ': ' if s else ''}the cards differ in protocol.{key}: " + "; ".join(
+                        f"{json.loads(v)!r} ({', '.join(refs[:2])})" for v, refs in by_value.items()))
+        elif len(values) > 1:
             out.append(f"{'subset ' + s + ': ' if s else ''}the cards differ in {field}: " + "; ".join(
                 f"{'missing' if v == 'null' else json.loads(v)!r} ({', '.join(refs[:2])})" for v, refs in values.items()))
     if "provenance" not in allow:
@@ -298,7 +310,7 @@ def judge_clause(clause, exp, cards, root=None):
             flags.append(f"seed counts differ ({len(vc)} vs {len(cc)}): unpaired, counts as one seed")
         if "min_effect" in clause:
             thr = max(clause["min_effect"], band) if metric == exp["metric"] else clause["min_effect"]  # inside the band it is a tie, whatever the clause says
-            ok = effect >= thr
+            ok = effect >= thr and (metric != exp["metric"] or effect > band)   # |effect| <= band is a tie, also when the clause asks for no more than the band
             if ok and len(diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
                 flags.append("one seed")  # a deterministic change (no training seed) is judged by the paired scene-bootstrap interval instead
             if ok and len(diffs) >= 2 and not all(d > 0 for d in diffs):
