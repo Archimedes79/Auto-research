@@ -470,6 +470,13 @@ def maps_rows(samples, task):
     return rows
 
 
+def _object_cells(g, task):
+    """the cells whose GT velocity is scored (the curve numbers' obj / moving cells and bev_velocity's sets), from the masks and the GT arrays: camera cells without ignored
+    boxes x any object layer > 0.5 x known velocity (`flow_weight` > 0 where the GT has it: autogt writes 0 m/s with flow_weight 0 for a box of unknown velocity)"""
+    obj = masks(g)["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in task.groups if c in g], axis=0)
+    return obj & (np.asarray(g["flow_weight"], np.float32) > 0) if "flow_weight" in g else obj
+
+
 def velocity_rows(samples, task):
     from evalsuite import Prediction, Sample
     from evalsuite.contracts import FrameRef
@@ -479,7 +486,7 @@ def velocity_rows(samples, task):
         cs, E, GV, DX = [], [], [], []
         for i, (name, s) in enumerate(samples):
             g = s[0.0]
-            m = masks(g)["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in task.groups if c in g], axis=0)
+            m = _object_cells(g, task)
             gv = np.asarray(g["velocity"], np.float32)
             v = fn(gv)
             o = G.oracle_output(g, task.spec, task.groups)
@@ -665,7 +672,7 @@ def swap_velocity_rows(samples, task):
         cs, GV, DX = [], [], []                          # (0.36, 0.48) has length 0.6: a clear margin to the moving threshold 0.5 (an offset of exactly 0.5 would sit on it)
         for i, (name, s) in enumerate(samples):
             g = s[0.0]
-            m = masks(g)["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in task.groups if c in g], axis=0)
+            m = _object_cells(g, task)
             gv0 = np.asarray(g["velocity"], np.float32)
             gv = fn(gv0).astype(np.float32)                                         # the damaged field is the reference
             o = G.oracle_output(g, task.spec, task.groups)                          # the prediction is the original
@@ -715,9 +722,7 @@ def _centres(g, task):
 
 def _cell_sets(g, gv, task):
     """the cell sets of bev_velocity, from the masks and the GT arrays: object cells; static = speed <= 0.5 (of gv, the reference); per class"""
-    obj = masks(g)["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in task.groups if c in g], axis=0)
-    if "flow_weight" in g:
-        obj = obj & (np.asarray(g["flow_weight"], np.float32) > 0)                 # unknown velocity: left out
+    obj = _object_cells(g, task)
     mov = np.hypot(gv[0], gv[1]) > 0.5
     out = {"static": obj & ~mov}
     for c in task.groups:

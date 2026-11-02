@@ -4,7 +4,8 @@
 
     BEVSource      the val (or train) keyframes of the run's config, grouped into scenes (videos) in time order; one frame =
                    the cached-feature batch of the training code (batch of 1) + the GT of -0.5 / 0 / +0.5 s; worker processes read ahead;
-                   describe() carries `gt_signature` (the GT identity: the snapshot pins the code, not autogt, which is read live)
+                   describe() carries `gt_signature` (the GT identity: the snapshot pins the code, not autogt, which is read live) and
+                   `evaluator_hash` (the evaluator's source files at build: the store's identity rule refuses a resume with other evaluator code)
     BEVSubject     the run's last checkpoint under its EMA weights (the run's own code snapshot `runs/<name>/code` when it exists, so
                    a run is evaluated with the code it was trained with), the chain's state carried frame to frame along a scene,
                    forward hooks for the taps
@@ -81,6 +82,9 @@ def load_run(run: str, device: str, ckpt_dir: Optional[str] = None, ns=None):
         cfg = T.TrainConfig(**json.load(f))
     model, loss, _ = T.build(cfg)
     model, loss = model.to(device), loss.to(device)
+    if getattr(cfg, "train_only", ()) or getattr(cfg, "freeze", ()):     # train() applies the plan before it builds the optimiser: its state has a slot per TRAINABLE parameter
+        import freeze as freeze_mod                                     # the run's own snapshot first on sys.path (setup_paths)
+        freeze_mod.apply(model, cfg.train_only, cfg.freeze)
     ckpts = sorted(glob.glob(os.path.join(ckpt_dir or run, "ckpt_*.pt")))
     if not ckpts:
         raise FileNotFoundError(f"no checkpoint in {ckpt_dir or run}")
@@ -122,6 +126,45 @@ def gt_signature(ds) -> Optional[str]:
         return None
 
 
+PROVENANCE_DIR = os.path.join(ROOT, "..", "autoresearch", "tools")
+EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "evalsuite"))        # everything the evaluator is made of (the card's provenance block)
+# the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the evalsuite's frame loop,
+# counts, sampling and comparison core. Not the selftests, mutants, views, board, report or README: an edit there changes no number and must not orphan a
+# store that took 30 minutes while other chats work in the same folders
+NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py")) + \
+    tuple(os.path.join(ROOT, "..", "autoresearch", "evalsuite", f) for f in ("comparison", "quantitative.py", "store.py", "runner.py", "contracts.py", "sampling.py"))
+
+
+def _provenance_module():
+    """autoresearch/tools/provenance.py loaded by path (tools/ is not a package); the folder it puts first on sys.path is taken away again, so the run's pinned
+    code snapshot keeps its place"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("provenance", os.path.join(PROVENANCE_DIR, "provenance.py"))
+    mod = importlib.util.module_from_spec(spec)
+    keep = list(sys.path)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path[:] = keep
+    return mod
+
+
+def evaluator_tree_hash(mod=None, paths=None) -> str:
+    """12 hex over the source files of the evaluator (default: all of evaluation/ and autoresearch/evalsuite/), provenance.tree_hash"""
+    mod = mod or _provenance_module()
+    return mod.tree_hash([os.path.abspath(p) for p in (EVALUATOR_PATHS if paths is None else paths)], mod.repo_root())
+
+
+def evaluator_hash() -> Optional[str]:
+    """the hash of the files that shape the numbers (NUMBER_PATHS) for the Source's description (None, with a warning, when the collector cannot be loaded: a
+    store started then differs from every other, so a resume is refused rather than mixed)"""
+    try:
+        return evaluator_tree_hash(paths=NUMBER_PATHS)
+    except Exception as ex:                                                   # noqa: BLE001
+        print(f"WARNING: evaluator hash not available ({type(ex).__name__}: {ex}); the store is not protected against a resume with other evaluator code", flush=True)
+        return None
+
+
 def layer_index(spec):
     return {name: (i, kind, key) for i, (name, kind, key) in enumerate(spec)}
 
@@ -148,8 +191,9 @@ def _make_source_class():
     from evalsuite import FrameRef, Sample, Source
 
     class _BEVSource(Source):
-        def __init__(self, cfg, ds, ns, workers: int = 2, control: str = "", split: str = "val"):
+        def __init__(self, cfg, ds, ns, workers: int = 2, control: str = "", split: str = "val", evaluator: Optional[str] = None):
             self.cfg, self.ds, self.ns, self.workers, self.control, self.split = cfg, ds, ns, workers, control, split
+            self.evaluator = evaluator                                    # evaluator_hash(), taken once at build: a resumed store must come from the same evaluator code
             self.nusc = ds.nusc
             self.fn = ns.T.collate_cached if cfg.feature_cache else ns.T.collate
             by: Dict[str, list] = {}
@@ -174,7 +218,7 @@ def _make_source_class():
             sig = gt_signature(self.ds)
             return {"class": "BEVSource", "dataset": "nuScenes " + self.cfg.version, "split": self.split, "scenes": len(self._frames),
                     "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None,
-                    "gt_signature": sig, "gt_version": gt_version(sig)}
+                    "gt_signature": sig, "gt_version": gt_version(sig), "evaluator_hash": self.evaluator}
 
         # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
         def prefetch(self, refs: Sequence[FrameRef]) -> None:
@@ -412,9 +456,10 @@ def prior_maps(train_ds, n: int, spec):
 
 # ------------------------------------------------------------------------------------------------ entry
 def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, ckpt_dir: Optional[str] = None, control: str = "",
-          prior: int = 0):
+          prior: int = 0, evaluator: Optional[str] = None):
     """(Source, Subject, Task) of a training run. split: 'val' | 'train' (overfitting check). prior > 0: the Subject is the prior-map
-    baseline built from that many train keyframes (no network is loaded)."""
+    baseline built from that many train keyframes (no network is loaded). evaluator: the evaluator hash of the Source (default: taken now; the prior
+    suite of an `eval` gets the main suite's, so both stores are checked against the same value)."""
     os.chdir(ROOT)
     code = setup_paths(run)
     ns = _chain()
@@ -431,7 +476,8 @@ def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, 
         cfg.radar_cache = "data/cache/radar"                       # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = ns.T.make_datasets(cfg)
     ds = train_ds if split == "train" else val_ds
-    source = _make_source_class()(cfg, ds, ns, workers=workers, control=control, split=split)
+    source = _make_source_class()(cfg, ds, ns, workers=workers, control=control, split=split,
+                                      evaluator=evaluator or evaluator_hash())
     if prior:
         model, loss, _ = ns.T.build(cfg)
         spec, grid = model.spec, model.grid

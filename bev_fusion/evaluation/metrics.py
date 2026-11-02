@@ -34,6 +34,9 @@ field of view, circles for pedestrians, dt keys, the known / unknown split, the 
 `match_frames`). DetMeter reduces with ties="list": equal scores keep frame order, then detection order, as it always did.
 Two differences from the code before the core: a detection whose score is nan (a diverged model) raises a ValueError at its frame (it used to
 rank last and give garbage numbers); and importing this file imports the evalsuite package (numpy only), so a broken evalsuite breaks this file.
+The mean errors (mATE / mASE / mAOE / mAVE) count a class with ground truth and no true positive as WORST_ERROR (1.0, the devkit's rule and the
+core's BoxMetric); until 2026-11-02 such a class was left out of the mean (a missed class improved it). AOE of the circle classes stays undefined
+(left out, as the devkit leaves out the orientation of a traffic cone); cards made before this change have mean errors that are not comparable.
 Run the self-test: wsl ~/miniconda3/envs/gcar/bin/python evaluation/metrics.py
 """
 import math
@@ -48,6 +51,7 @@ _AUTORESEARCH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__
 if _AUTORESEARCH not in sys.path:
     sys.path.append(_AUTORESEARCH)                       # the comparison core is in the autoresearch folder next to this problem
 from evalsuite.comparison import boxes as _boxes, maps as _maps  # noqa: E402
+from evalsuite.comparison.metrics import WORST_ERROR  # noqa: E402
 
 RANGE_BINS = ((0.0, 20.0), (20.0, 40.0), (40.0, 60.0))
 TOLERANCES = (0.0, 0.5, 1.0)
@@ -300,7 +304,16 @@ class DetMeter:
             mean = {}
             for name, keys in (("mAP", ["ap@%g" % t for t in self.thr]), ("mAP_all", ["ap_all@%g" % t for t in self.thr]),
                                ("mATE", ["ate"]), ("mASE", ["ase"]), ("mAOE", ["aoe"]), ("mAVE", ["ave"])):
-                v = [out[c]["all"][k] for c in out for k in keys if out[c]["all"]["n_gt"] and out[c]["all"][k] == out[c]["all"][k]]
+                v = []
+                for c in out:
+                    row = out[c]["all"]
+                    for k in keys:
+                        if not row["n_gt"]:
+                            continue                                                    # a class without ground truth is not in the mean
+                        if row[k] == row[k]:
+                            v.append(row[k])
+                        elif k in TP_ERR_KEYS and row["n_tp"] == 0 and not (k == "aoe" and c in CIRCLE_GROUPS):
+                            v.append(WORST_ERROR)                                       # ground truth that was not found at all: the devkit's 1.0 (not "skipped")
                 mean[name] = float(np.mean(v)) if v else float("nan")
             out["mean"] = {"all": mean}
         return out
@@ -454,6 +467,27 @@ def _selftest():
     r = m.result()[0.0]["vehicle"]["all"]
     assert eq(r["0-20"]["iou@0"], 90 / 110) and eq(r["0-20"]["iou@0.5"], 1.0) and eq(r["0-20"]["iou@1"], 1.0)
     iou_shift = r["0-20"]["iou@0"]
+    # tolerance radius, metres -> cells (0.5 m cells: 0.5 m = 1 cell, 1 m = 2 cells; a DISC, so a diagonal step of 1 cell is outside 0.5 m but inside 0.75 m and 1 m;
+    # a 2-cell step is inside 1 m only). A 10 x 10 block moved by (1, 1) and by (2, 0) cells; the expectation is a brute-force count straight from the
+    # definition (a predicted cell is a hit if a GT cell centre lies within t metres of its centre, and the other way round) and numbers worked out by hand
+    # (diagonal: 99 of 100 cells hit at 0.5 m, the corner pair misses; 2-cell step: 90 of 100 at 0.5 m)
+    def tol_iou(P, G, t):
+        pc, gc = np.argwhere(P) * g.res, np.argwhere(G) * g.res
+        d = np.sqrt(((pc[:, None] - gc[None]) ** 2).sum(-1))
+        miss_p, miss_g = np.sum(d.min(1) > t + 1e-9), np.sum(d.min(0) > t + 1e-9)
+        tp = (len(pc) - miss_p + len(gc) - miss_g) / 2
+        return tp / (tp + miss_p + miss_g)
+    blk = np.zeros((X, Y))
+    blk[10:20, 30:40] = 1.0
+    tols = (0.0, 0.25, 0.5, 0.75, 1.0)
+    for shift, hand in (((1, 1), {0.0: 81 / 119, 0.25: 81 / 119, 0.5: 99 / 101, 0.75: 1.0, 1.0: 1.0}),
+                        ((2, 0), {0.0: 80 / 120, 0.25: 80 / 120, 0.5: 90 / 110, 0.75: 90 / 110, 1.0: 1.0})):
+        moved = np.roll(blk, shift, axis=(0, 1))
+        m = SegMeter(g, tolerances=tols)
+        m.add({"vehicle": moved}, {"vehicle": blk})
+        r = m.result()[0.0]["vehicle"]["all"]["all"]
+        for t in tols:
+            assert eq(r["iou@%g" % t], tol_iou(moved > 0, blk > 0, t)) and eq(r["iou@%g" % t], hand[t]), (shift, t, r["iou@%g" % t], hand[t])
     # mask: false positives on undefined cells do not count
     fp = gt.copy()
     fp[100:110, 0:10] = 1.0
@@ -524,6 +558,23 @@ def _selftest():
     assert eq(row["ap_all@1"], 0.25) and eq(row["ap@1"], 8.2 / 81) and eq(row["ate"], 0.3) and row["n_tp"] == 1, row
     assert eq(row["ap_all@4"], 1.0) and eq(row["ap@4"], 1.0)  # at 4 m the 4 m-off detection matches too
     ap_rank = row["ap@1"]
+    # mean errors: a class with GT and no true positive counts WORST_ERROR (1.0), it is not left out of the mean (a missed class must not improve mATE).
+    #   car: found 0.3 m off, sizes / yaw / velocity equal (ATE 0.3, others 0); truck: GT, never detected; pedestrian (circle): found 1.5 m off (ATE 1.5)
+    #   -> mATE (0.3 + 1 + 1.5) / 3, mASE and mAVE (0 + 1 + 0) / 3; AOE: car 0, truck 1, the pedestrian's AOE is undefined (circle) -> 0.5
+    car = {"group": "car", "cx": 10.0, "cy": 1.0, "length": 4.5, "width": 1.8, "yaw": 0.3, "vx": 5.0, "vy": 0.0}
+    truck = {"group": "truck", "cx": 30.0, "cy": -2.0, "length": 8.0, "width": 2.5, "yaw": 0.0, "vx": 0.0, "vy": 0.0}
+    ped = {"group": "pedestrian", "cx": 15.0, "cy": 3.0, "radius": 0.4, "vx": 0.0, "vy": 1.2}
+    dm = DetMeter(classes=["car", "truck", "pedestrian"])
+    dm.add([dict(car, cx=10.3, score=0.9), dict(ped, cx=16.5, score=0.9)], [car, truck, ped])
+    mean = dm.result()[0.0]["mean"]["all"]
+    assert eq(mean["mATE"], (0.3 + 1.0 + 1.5) / 3) and eq(mean["mASE"], 1 / 3) and eq(mean["mAVE"], 1 / 3) and eq(mean["mAOE"], 0.5), mean
+    dm = DetMeter(classes=["car", "pedestrian"])                    # the pedestrian is not found either: it counts 1.0 in ATE / ASE / AVE, its AOE stays undefined
+    dm.add([dict(car, cx=10.3, score=0.9)], [car, ped])
+    mean = dm.result()[0.0]["mean"]["all"]
+    assert eq(mean["mATE"], 0.65) and eq(mean["mASE"], 0.5) and eq(mean["mAVE"], 0.5) and eq(mean["mAOE"], 0.0), mean
+    dm = DetMeter(classes=["car", "truck"])                         # a class without any GT is not in the mean (the truck has no GT here)
+    dm.add([dict(car, cx=10.3, score=0.9)], [car])
+    assert eq(dm.result()[0.0]["mean"]["all"]["mATE"], 0.3)
 
     # 5 dt-keyed results: three dt, flatten -> unflatten round trip, report and table
     dm, sm = DetMeter(), SegMeter(g)
@@ -626,7 +677,8 @@ def _selftest():
                                   "median", "n_gt"])
     print(table)
     print(f"metrics selftest ok: range bins of cells and boxes, IoU perfect 1 / 1-cell shift {iou_shift:.3f} at 0 m "
-          f"and 1 at 0.5 / 1 m, mask, known / unknown split, line zero-crossing F1 (perfect 1, shift 0 / 1, field "
+          f"and 1 at 0.5 / 1 m, tolerance disc against a brute-force count (diagonal and 2-cell shifts), mean errors of a missed class = 1.0, "
+          f"mask, known / unknown split, line zero-crossing F1 (perfect 1, shift 0 / 1, field "
           f"error 0.425 m), detection perfect AP 1 and errors 0, empty AP 0, 90 deg AOE pi/2 ASE 0 BIoU 0.25, ASE "
           f"by hand (box 0.191, circle 0.36), two-detection AP nuScenes {ap_rank:.4f} = 8.2/81 / all-point 0.25, "
           f"front field of view, dt-keyed round trip ({len(fa)} keys), per-frame rows = the original greedy matching on random "
