@@ -97,8 +97,7 @@ class Network:
             if "gap_steps" not in batch:
                 raise SystemExit("this run decodes dt = +-0.5 s with the true gap (gap_ego) but the frames carry no gap_steps: make them again with `precompute`")
             kw["ego"] = T.batch_ego(batch["gap_steps"], self.dts, self.device)             # the true gap to dt = +-0.5 s, from the poses
-        amp = self.cfg.amp == "bf16" and self.device.startswith("cuda")                    # as the evaluation runs it (train.forward_loss)
-        with torch.autocast("cuda", dtype=torch.bfloat16) if amp else torch.autocast("cpu", enabled=False):
+        with T.amp_context(self.cfg.amp, self.device):                                      # as the evaluation runs it (train.forward_loss): bf16 and fp16 on CUDA
             res = self.model(T.to_device(batch, self.device), dts=self.dts, **kw)
         self.check_outputs(res, self.dts, raise_on=True)
         self.state, self.prev, self.next_token = T.detach_tree(res["state"]), batch, row["next"]

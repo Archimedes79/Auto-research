@@ -116,7 +116,9 @@ class TrainConfig:
     weight_decay: float = 1e-2
     grad_clip: float = 5.0
     ema: float = 0.999
-    amp: str = "off"                             # "off" | "bf16" (CUDA only)
+    amp: str = "off"                             # "off" | "bf16" | "fp16" (CUDA only). fp16 trains with a GradScaler (dynamic loss scaling). bf16 as it is: ledger row speed.c2 (an 8-step diagnostic, with cudnn.benchmark): no speed-up, gradient norm 25x fp32
+    fp16_scale: float = 1024.0                   # amp "fp16": the start scale of the GradScaler (halved on an overflow; a power of two scales exactly)
+    fp16_growth_interval: int = 2000             # amp "fp16": the scale doubles after that many clean steps in a row (an overflow restarts the count); the torch default
     log_every: int = 20
     eval_every: int = 1000
     eval_batches: int = 50
@@ -575,6 +577,72 @@ def clip_step(prev_batch, device):
     return tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
 
 
+AMP_DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16}
+
+
+def amp_context(amp, device):
+    """the autocast context of the forward pass: bf16 / fp16 on CUDA, nothing otherwise. An unknown name is an error (it used to mean `off`)"""
+    if amp != "off" and amp not in AMP_DTYPES:
+        raise ValueError(f"amp must be one of off, {', '.join(AMP_DTYPES)}; got {amp!r}")
+    if amp in AMP_DTYPES and device.startswith("cuda"):
+        return torch.autocast("cuda", dtype=AMP_DTYPES[amp])
+    return torch.autocast("cpu", enabled=False)
+
+
+def make_scaler(cfg, device):
+    """amp 'fp16': a GradScaler (the fp16 range is small: gradients below ~6e-8 vanish, values above 65504 overflow, so the loss is scaled and the gradients are
+    unscaled before the clip); None otherwise (bf16 has the range of fp32). An unknown amp name is an error here, before the model and the data are built.
+    NOT covered: an overflow in the FORWARD pass (activations above 65504) is no scaler event, it gives a non-finite loss and leaves non-finite batch-norm statistics (see poisoned_buffers)"""
+    amp_context(cfg.amp, device)
+    if cfg.amp != "fp16":
+        return None
+    return torch.amp.GradScaler("cuda" if device.startswith("cuda") else "cpu", init_scale=cfg.fp16_scale, growth_interval=cfg.fp16_growth_interval)
+
+
+def poisoned_buffers(model):
+    """names of the float buffers (batch-norm statistics ...) that are not finite: a forward pass that overflowed in fp16 writes inf / nan into them, and the EMA would carry it on"""
+    return [k for k, v in model.named_buffers() if v.is_floating_point() and not torch.isfinite(v).all()]
+
+
+def scaler_extra(scaler):
+    """the part of a checkpoint's `extra` that holds the scaler (its scale and growth counter), {} without one"""
+    return {"scaler": scaler.state_dict()} if scaler is not None else {}
+
+
+def optimizer_step(opt, params, grad_clip, scaler=None, before_clip=None):
+    """gradient clip and optimiser step of one training step. -> (grad norm before the clip, status). Without a scaler this is what the loop did inline: clip, and step unless the
+    norm is not finite ("nonfinite": no step, gradients dropped). With a scaler the gradients are unscaled first (before_clip, the probe, sees them unscaled), and a non-finite
+    gradient is an "overflow": no step, the scale is halved (an expected event of fp16, not a diverged run). "ok": the step was made (and the scale updated)"""
+    if scaler is not None:
+        scaler.unscale_(opt)
+    if before_clip is not None:
+        before_clip()
+    gn = torch.nn.utils.clip_grad_norm_(params, grad_clip)
+    if not torch.isfinite(gn):
+        opt.zero_grad(set_to_none=True)
+        if scaler is not None:
+            scaler.update(scaler.get_scale() * scaler.get_backoff_factor())
+            scaler.load_state_dict({**scaler.state_dict(), "_growth_tracker": 0})            # update(new_scale) leaves the count of clean steps; an overflow restarts it, as in the stock path
+            return gn, "overflow"
+        return gn, "nonfinite"
+    if scaler is not None:
+        scaler.step(opt)
+        scaler.update()
+    else:
+        opt.step()
+    return gn, "ok"
+
+
+def bad_steps_after(status, bad, scaler=None):
+    """the number of bad steps in a row after a step with this status: "ok" resets it; a non-finite loss or gradient counts; an fp16 "overflow" counts only once the scale is
+    below 1 (then it is a diverged run, not the scaler finding its scale: it starts at 1024 and halves)"""
+    if status == "ok":
+        return 0
+    if status == "overflow" and scaler is not None and scaler.get_scale() >= 1.0:
+        return bad
+    return bad + 1
+
+
 _CONTRACT_CHECKED = []      # interface.check_inputs / check_outputs run on the first forward_loss call of the process
 
 
@@ -588,7 +656,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     dts = tuple(sorted(gts))
     ego = batch_ego(batch["gap_steps"], dts, device) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
     batch = to_device(batch, device, non_blocking=bool(cfg is not None and cfg.pin_memory))
-    ctx = torch.autocast("cuda", dtype=torch.bfloat16) if amp == "bf16" and device.startswith("cuda") else torch.autocast("cpu", enabled=False)
+    ctx = amp_context(amp, device)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
     first = not _CONTRACT_CHECKED
     if first:                                                  # the interface contract on the first real batch of the process
@@ -632,12 +700,13 @@ LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0", "radar_au
                                                                              # the velocity terms (t11), hidden in group.objects / motion
 
 
-def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False, augment=False):
+def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False, augment=False, scaler=None):
     """One clip = a list of batches (consecutive keyframes of the same scenes; a single batch = a clip of length 1). The
     model state (world memory) is carried from keyframe to keyframe with the ego step between them: detached at every
     keyframe, or with cfg.seq_bptt kept in the graph through the clip. backward: backpropagate the mean loss of the clip
     divided by cfg.accum, right after each keyframe (with seq_bptt the earlier graphs are retained for the state path of
-    the later keyframes, so the gradient is that of the clip's mean loss).
+    the later keyframes, so the gradient is that of the clip's mean loss). scaler: the GradScaler of amp "fp16": the loss is scaled before the backward (the gradients stay
+    scaled until optimizer_step unscales them); the logged terms are the unscaled ones.
     -> (dict of the scalar terms averaged over the keyframes, finite flag, diag of the last keyframe or None, list of the
     per-keyframe totals)."""
     L, state, prev, kf, dg = len(clip), None, None, [], None
@@ -656,7 +725,8 @@ def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_t
             return acc, False, dg, totals
         kf.append(_pack(out, selected))                           # before the backward, which changes the Kendall weights in place (clamp_)
         if backward:           # backward at once: the loss of a later keyframe changes the Kendall weights in place (clamp_)
-            (out["total"] / (L * accum)).backward(retain_graph=bptt and t < L - 1)    # bptt: the graph is still needed for the state path
+            mean_loss = out["total"] / (L * accum)
+            (mean_loss if scaler is None else scaler.scale(mean_loss)).backward(retain_graph=bptt and t < L - 1)    # bptt: the graph is still needed for the state path
         if "diag" in out:
             dg = out["diag"]
         state = res["state"] if bptt else detach_tree(res["state"])
@@ -808,6 +878,9 @@ def train(cfg, eval_fn=None, datasets=None):
         print("WARNING: gap_ego is on but model.forward has no `ego` argument: dt = +-0.5 s is decoded with the nominal "
               "gap and the last step's ego motion (0.2-0.35 m of label error)", flush=True)
     opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay), lr=cfg.lr, betas=(0.9, 0.999))
+    scaler = make_scaler(cfg, device)                           # amp "fp16" only
+    if scaler is not None and cfg.grad_diag_every:
+        print("WARNING: amp fp16: grad_diag_every is ignored (the group gradients would be taken unscaled and underflow)", flush=True)
     frozen = freeze_mod.frozen_keys(model) if (cfg.train_only or cfg.freeze) else ()
     ema = EMA(model, cfg.ema, skip=frozen)
     step, damaged, was_slim = 0, [], False
@@ -823,7 +896,9 @@ def train(cfg, eval_fn=None, datasets=None):
             print(f"WARNING: {name} is damaged ({type(e).__name__}: {e}), kept as {name}.damaged; trying the one before", flush=True)
             continue
         check_resume(ck.get("cfg", {}), cfg, name)
-        step, _ = load_checkpoint(os.path.join(out_dir, name), model, loss, opt, ema, ck=ck)
+        step, ck_extra = load_checkpoint(os.path.join(out_dir, name), model, loss, opt, ema, ck=ck)
+        if scaler is not None and ck_extra.get("scaler"):        # the scale it had reached, not the start scale again
+            scaler.load_state_dict(ck_extra["scaler"])
         refuse_slim_resume(ck, step, cfg, name)
         was_slim = bool(ck.get("slim"))
         print(f"resumed from {name} at step {step}", flush=True)
@@ -861,13 +936,13 @@ def train(cfg, eval_fn=None, datasets=None):
             it = iter(train_loader)
             return next(it)
     params = [p for g in opt.param_groups for p in g["params"]]
-    bad, t0, step0, last = 0, time.time(), step, {}
+    bad, n_overflow, t0, step0, last = 0, 0, time.time(), step, {}
     probe, timer = (ModuleProbe(model, every=cfg.log_every), StepTimer()) if cfg.probe else (None, None)
     prof = StepProfiler(out_dir, cfg.profile_steps, device=device) if cfg.profile_steps > 0 else None
     while step < cfg.steps:
         reason = _stop_requested(out_dir)               # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
         if reason is not None:
-            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg)
+            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, extra=scaler_extra(scaler))
             prune_checkpoints(out_dir, cfg.keep)
             with open(os.path.join(out_dir, "STOPPED"), "w", encoding="utf-8") as fh:
                 json.dump({"step": step, "reason": reason, "t": time.time()}, fh)
@@ -876,7 +951,7 @@ def train(cfg, eval_fn=None, datasets=None):
         f = lr_factor(step, cfg.warmup, cfg.steps, cfg.lr_min_frac)
         for g in opt.param_groups:
             g["lr"] = cfg.lr * f
-        diag = bool(cfg.grad_diag_every) and (step + 1) % cfg.grad_diag_every == 0
+        diag = bool(cfg.grad_diag_every) and scaler is None and (step + 1) % cfg.grad_diag_every == 0         # not under fp16: the group gradients would be taken unscaled and underflow
         opt.zero_grad(set_to_none=True)
         acc, finite, prow, step_ids = {}, True, {}, []
         pstep = probe.begin(step + 1) if probe is not None else None    # a StepProbe only on a step that is logged
@@ -886,7 +961,7 @@ def train(cfg, eval_fn=None, datasets=None):
             if probe is not None:
                 step_ids.append(batch_tokens(item))                 # the samples of every micro-batch of the step, for an incident dump
             out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], step / max(1, cfg.steps),
-                                      device, cfg.amp, cfg, diag=diag and m == 0, backward=True, augment=True)
+                                      device, cfg.amp, cfg, diag=diag and m == 0, backward=True, augment=True, scaler=scaler)
             if not ok:
                 finite = False
                 break
@@ -894,23 +969,34 @@ def train(cfg, eval_fn=None, datasets=None):
                 acc[k] = acc.get(k, 0.0) + v / cfg.accum
             if dg:
                 acc["diag"] = dg
-        if pstep is not None and finite:
-            pstep.grads()                                       # gradient norm per module BEFORE clipping (a blow-up must not hide behind the clip) and the weights before the step
-        gn = torch.nn.utils.clip_grad_norm_(params, cfg.grad_clip) if finite else None
-        skipped = gn is None or not torch.isfinite(gn)
-        if skipped:
-            bad += 1
+        if finite:                                              # the probe's gradient norm per module comes BEFORE clipping (a blow-up must not hide behind the clip), with the weights before the step
+            gn, status = optimizer_step(opt, params, cfg.grad_clip, scaler, before_clip=pstep.grads if pstep is not None else None)
+        else:
+            gn, status = None, "nonfinite"
             opt.zero_grad(set_to_none=True)
+        skipped = status != "ok"
+        if status == "nonfinite" and gn is None and scaler is not None:      # a non-finite LOSS under fp16: the forward may have overflowed and written inf / nan into the batch-norm statistics
+            poisoned = poisoned_buffers(model)
+            if poisoned:
+                raise RuntimeError(f"step {step}: the forward pass left non-finite batch-norm statistics ({len(poisoned)} buffers, e.g. {poisoned[:3]}): an fp16 overflow of the activations "
+                                   "(above 65504), which no loss scale cures; resume from the last checkpoint with amp bf16 or off")
+        was_bad, bad = bad, bad_steps_after(status, bad, scaler)
+        if status == "overflow" and bad == was_bad:             # fp16: expected now and then, the scaler halved its scale
+            n_overflow += 1
+            print(f"step {step}: fp16 gradient overflow, skipped, loss scale -> {scaler.get_scale():g} ({n_overflow} since this start)", flush=True)
+        elif status == "overflow":                              # the scale is below 1: a diverged run, in the words the health check counts
+            n_overflow += 1
+            print(f"step {step}: non-finite gradient (fp16 overflow, loss scale {scaler.get_scale():g}), skipped ({bad} in a row)", flush=True)
+        elif skipped:
             print(f"step {step}: non-finite {'loss' if gn is None else 'gradient'}, skipped ({bad} in a row)", flush=True)
             if probe is not None:                               # what a replay needs: the step and the samples of the micro-batches so far (the last one is the one that failed)
                 dump_incident(out_dir, step, "nonfinite", batch_ids=[t for ids in step_ids for t in ids], losses=acc,
                               extra={"what": "loss" if gn is None else "gradient", "micro": len(step_ids), "micro_batches": step_ids,
                                      "step_frac": step / max(1, cfg.steps), "grad_norm": None if gn is None else float(gn)})
+        if skipped:
             if bad >= cfg.max_bad_steps:
                 raise RuntimeError("too many non-finite steps in a row")
         else:
-            bad = 0
-            opt.step()
             ema.update(model, step)
             if pstep is not None:
                 prow = pstep.finish()
@@ -923,12 +1009,14 @@ def train(cfg, eval_fn=None, datasets=None):
                    "s_per_step": (time.time() - t0) / max(1, step - step0), **acc, **prow, **trow}
             if device.startswith("cuda"):
                 rec["gpu_gb"] = torch.cuda.max_memory_allocated() / 1e9
+            if scaler is not None:
+                rec["loss_scale"], rec["fp16_overflows"] = scaler.get_scale(), n_overflow
             last = rec
             log.write(json.dumps(rec) + "\n")
             log.flush()
             print(f"step {step}: total {rec['total']:.4f} lr {rec['lr']:.2e} grad {rec['grad_norm']:.2f}", flush=True)
         if cfg.save_every and step % cfg.save_every == 0:       # before the evaluation (and also after a skipped step): an evaluation
-            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg)   # that dies no longer
+            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, extra=scaler_extra(scaler))   # that dies no longer
             prune_checkpoints(out_dir, cfg.keep)                                                                 # costs the steps since the last save
         if cfg.eval_every and step % cfg.eval_every == 0:
             ev = evaluate(model, loss, ema, val_loader, 10 ** 9, device, cfg.amp, eval_fn, cfg)
@@ -937,7 +1025,7 @@ def train(cfg, eval_fn=None, datasets=None):
             print(f"step {step}: val total {ev.get('total', float('nan')):.4f}", flush=True)
     if prof is not None:
         prof.close()                                            # a run shorter than warm-up + window writes what it has (before the final save: its wall time must not hold the checkpoint write)
-    save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, slim=cfg.slim_at_end or was_slim)
+    save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, extra=scaler_extra(scaler), slim=cfg.slim_at_end or was_slim)
     prune_checkpoints(out_dir, 1 if (cfg.slim_at_end or was_slim) else cfg.keep)         # a finished run: the final weights only
     return model, loss, ema, last
 
