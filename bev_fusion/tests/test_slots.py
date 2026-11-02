@@ -58,6 +58,8 @@ INVALID = [dict(rad_static_gate=True), dict(rad_static_gate=True, rad_temporal="
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 
 COMBOS += [{"motion_block": True, "motion_strides": (4, 2)}, {"motion_block": True, "box_vel_from_field": True}, {"motion_block": True, "box_vel_from_field": True, "object_moving": True}]   # t15
+COMBOS += [{"camera_features": "dual", "radar_kind": "delta_slots", "c_rad": 64, "rad_temporal": "window_memory", "rad_static_gate": True,
+            "object_direction": True, "object_moving": True, "motion_block": True, "box_vel_from_field": True}]   # t16: the full network (configs/t16_full.json)
 INVALID += [dict(box_vel_from_field=True), dict(motion_block=True, radar_kind="off"), dict(motion_block=True, camera_off=True),
             dict(motion_block=True, motion_strides=(1, 2)), dict(motion_block=True, motion_strides=(4, 3))]
 

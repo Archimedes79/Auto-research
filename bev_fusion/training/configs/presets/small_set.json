@@ -1,0 +1,20 @@
+{
+ "_about": "the ten scenes of autogt's small set (sets/small.txt; nuScenes mini's split: 8 train, 2 val) for a bring-up on the small data: their feature shards are linked in data/cache/small/ (cam_feats: DualBEV, cam_feats_bevfusion: BEVFusion; temp/t16/prepare_small.sh builds the missing ones), GT and radar caches are the shared folders (keyed by signature)",
+ "feature_cache": "data/cache/small/cam_feats",
+ "feature_cache2": "data/cache/small/cam_feats_bevfusion",
+ "train_scenes": [
+  "scene-0061",
+  "scene-0553",
+  "scene-0655",
+  "scene-0757",
+  "scene-0796",
+  "scene-1077",
+  "scene-1094",
+  "scene-1100"
+ ],
+ "val_scenes": [
+  "scene-0103",
+  "scene-0916"
+ ],
+ "eval_batches": 20
+}
