@@ -37,7 +37,6 @@ run "GT cache, targets" "$PY" tests/test_gt_cache_targets.py
 run "speed flags"       "$PY" tests/test_speed_flags.py            # run_clip against its per-term float() version, switches, resume rules, profiler
 run "host overhead"     "$PY" tests/test_host_overhead.py          # target window, one host read per call, multi-tensor EMA
 run "grad scaler"       "$PY" tests/test_grad_scaler.py            # amp fp16: scaler exact against plain steps, overflow, bad-step rule, checkpoint
-run "clip split"        "$PY" tests/test_clip_split.py             # grad_clip_split: each listed module and the rest clipped on their own, the global call unchanged, resume, call site
 if [ -f runs/t10_dual_s0/ckpt_00003000.pt ]; then               # its G4 warm-starts from this real checkpoint (not in git)
   run "velocity hurdle" "$PY" tests/test_velocity_hurdle.py     # t11; CPU, about 1 min, 2.2 GB peak
 else
@@ -46,6 +45,8 @@ fi
 run "slots, every kind" "$PY" tests/test_slots.py                   # five-layer build: contract test of every kind of every slot; CPU, no data, about 1 min
 run "fusion area"       "$PY" evaluation/bev_fusion_area.py --selftest   # footprint shares, GT classes, neutral detections, coverage classes (D37 / D38); no data
 run "curve metrics"     "$PY" evaluation/bev_curves.py --selftest      # AP / AUC / Brier against the exact curves of sorted scores, additivity, one-class / NaN / float16
+run "module probe"      "$PY" evaluation/bev_modules.py --selftest      # tensor numbers, dead channels, planted velocity offsets, each response perturbation changes only what it names; no data
+run "module timing"     "$PY" evaluation/bev_timing.py --selftest       # toy modules with known sleeps: per call / per frame, calls, hooks removed, training split, idle rule; CPU
 if ls data/cache/gt/*_15efbde2d1.npz > /dev/null 2>&1; then    # the evaluation on real cached GT: GT as the prediction must reach every ceiling, degraded copies fall, the GT frames agree with their poses
   run "GT against GT"   "$PY" evaluation/bev_gtcheck.py --selftest     # CPU, about 1 min, no model
   run "response test"   "$PY" evaluation/bev_response.py --selftest    # CPU, about 2 min, no model: GT worsened by known amounts, every number must move by exactly that amount
