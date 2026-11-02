@@ -11,6 +11,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `CKPT_SLIM_2026-11-01.md` | what the cleanup of 2026-11-01 did: 34 finished runs slimmed to one checkpoint each (per-run sizes), the outdated caches deleted, what was kept on purpose and what is open |
 | `morning_2026-11-01.md` | summary of the overnight round of 2026-11-01 (D28): t10_dual seed twin, the velocity fix t11 (arms B' / B2), the prototype command, incidents and open items |
 | `sensor_coverage_2026-11-01.md` | proposal: one coverage rule per output type for training, evaluation and execution (what the code does today, findings, open points; Mirko's question of 2026-11-01) |
+| `cleanup_inventory_2026-11-02.md` | the repository-wide clean-up of D44 (5): a size and a rule per class, what is protected, what each class needs (owner, tag, archive); read-only list, nothing deleted by it |
 | `BOARD.md` | the board made by `python evaluation/board.py --write`: every open arm against the base, all heads, from the stored `metrics.json` files; regenerate it, do not edit it |
 
 ## Start a training
