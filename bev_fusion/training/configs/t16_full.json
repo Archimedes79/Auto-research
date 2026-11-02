@@ -1,5 +1,5 @@
 {
- "_about": "t16 full network, the bring-up of the complete chain on the five-layer framework and GT v8 (Mirko, 2026-11-02: generate a full network with fusion, train it on a small set, time it, probe every module, fix, retrain, then the large set as the baseline): the recipe of t10_dual_long_s0 (dual camera features, 6000 steps, accumulation 2, velocity hurdle from step 0, no init_from) plus every block that is built and has a passing gate: the radar delta-slot encoder R (c_rad 64, side loss radar_aux), the radar memory with the Doppler static gate, the motion block M in its joint form with the object head's velocity read from its field; probe on (grad.<module>, upd.<module>, t_data / t_step in every logged row). The small-set run is this file with --preset small --preset small_set (the ten scenes of autogt's small set).",
+ "_about": "t16 full network, the bring-up of the complete chain on the five-layer framework and GT v8 (Mirko, 2026-11-02: generate a full network with fusion, train it on a small set, time it, probe every module, fix, retrain, then the large set as the baseline): the recipe of t10_dual_long_s0 (dual camera features, 6000 steps, accumulation 2, velocity hurdle from step 0, no init_from) plus the blocks that are built, have a passing gate and survived the small-set bring-up: the radar delta-slot encoder R (c_rad 64, side loss radar_aux), the motion block M in its joint form with the object head's velocity read from its field; probe on (grad.<module>, upd.<module>, t_data / t_step in every logged row). The small-set run is this file with --preset small --preset small_set (the ten scenes of autogt's small set). The radar memory with the Doppler static gate (rad_temporal window_memory + rad_static_gate) is OFF here: in the small-set probe its learned static map was exactly 1.0 everywhere and its velocity head got no gradient (card section 6); it returns as its own arm. grad_clip_split clips the motion block's gradient (30 x the others') on its own.",
  "name": "t16_full",
  "out_root": "runs",
  "data_root": "~/data/nuscenes_full",
@@ -48,8 +48,6 @@
   "object_moving": true,
   "radar_kind": "delta_slots",
   "c_rad": 64,
-  "rad_temporal": "window_memory",
-  "rad_static_gate": true,
   "motion_block": true,
   "motion_strides": [
    4,
@@ -578,5 +576,8 @@
  "radar_aux": 1.0,
  "radar_aux_floor": 0.05,
  "radar_aux_half": 0.2,
- "probe": true
+ "probe": true,
+ "grad_clip_split": [
+  "motion_block"
+ ]
 }

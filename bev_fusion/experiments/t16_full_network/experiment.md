@@ -3,7 +3,7 @@
 ## 0 Statement, referee, status
 - **Order (D44, Mirko 2026-11-02, word for word in `experiment_execution/DECISIONS.md`):** generate a full network with fusion; train it first on a small set; time the training code; probe the outputs of all modules ("does it make sense?"); find errors and fix them; train again until fixed, with timing; then train on the large set and establish a performance baseline; make a report with result videos and images; afterwards module improvements and the repeat of old experiments on the new system and GT v8.
 - **What this card is.** A bring-up with gates, not a hypothesis test. The small runs are diagnostics (`--no-card`, they feed no verdict). The one run that counts is the large run: it becomes the baseline row of the new system. Everything it is compared with is labelled by hand ("by hand: single seed, bring-up baseline, no verdict"), because one seed never gives KEEP or CUT (project rule).
-- **Status.** Draft; config `training/configs/t16_full.json` and preset `training/configs/presets/small_set.json` written; static check passes; CPU gate `tests/test_slots.py` (with the full combination) passes. No GPU run yet: the run snapshot carries the working tree, so nothing starts before the other chats have committed (D44 (2)).
+- **Status (2026-11-02, updated after the small-set bring-up).** Sections 1 - 5 are the plan as written before any run; section 6 is the log of the small-set stages S0 - S4 (runs, timing, probe, findings, what the large run changes); the large run and its control are queued behind the final small run. Main was pushed (b430af0) after every other chat had committed (D44 (2)).
 - **TEST is untouched** (VAL only; hard rule 1).
 
 ## 1 The network (one config, every block that is built and has a passing gate)
@@ -12,7 +12,7 @@
 | camera encoder | `camera_features` "dual": cached DualBEV heads (stride 16) + BEVFusion map-trained features (stride 8), two lifts PD merged by a 1x1 conv, 3 frames | t10 chain; `test_dual_camera_geometry.py` |
 | camera temporal | `window_memory` (window of the last frames + world-aligned static memory) | t2 / t10 |
 | radar encoder | `delta_slots` R, `c_rad` 64, side loss `radar_aux` 1.0 -> 0.05 | Radar Encoder chat, `test_radar_encoder.py`, `test_radar_slot.py` |
-| radar temporal | `window_memory` with the Doppler static gate (`rad_static_gate`) | built, **never run**: the least tested block of the chain; its window part and velocity head get no gradient without past radar frames (named in `test_slots.py` KNOWN_UNUSED) |
+| radar temporal | `window_memory` with the Doppler static gate (`rad_static_gate`): **in the small-set runs, OFF in the large run** (section 6, finding 3) | built, never run before t16; its window part and velocity head get no gradient without past radar frames (named in `test_slots.py` KNOWN_UNUSED); after 400 steps its static map is 1.0 everywhere |
 | fusion | `concat` + modality dropout `p_drop` 0.2 | t2 (all fusion kinds TIE) |
 | backbone + neck | DualBEV trunk width 1.0, detail path 32, pre-trained, `head_channels` 96, `c_fuse` 80 | t1 r4 / t2 |
 | heads | maps (5 areas, 2 lines, 2 distance fields, 3 dense objects), radar aux head, object head with `object_direction` and the velocity hurdle `object_moving` | t1 r1a, t11 |
@@ -52,5 +52,40 @@ Health rules of S6 / S7 (`trainsuite watch --kill`, advice first, enforced only 
 - Small run: about 15 - 20 min each (time per step is measured in S1, a guess of 2 s). Large run and control: 6000 steps each, 3 - 4 h each at 2 s per step, one GPU line, 10 GB RAM gate.
 - Risks: (1) the trainer's GT cache for v8 is cold (cost seconds per sample; the small set is prefilled, the large set takes hours of CPU: `gt_cache_build.py`, started before S6); (2) the radar memory and R + M together are untested; (3) the shared machine (other chats' tests) disturbs timing: timing only on an idle GPU, and the load is written next to every timing number; (4) a speed change of the trainer changes no number only if `equivalence.py` says so.
 
-## 6 Summary (written after the runs)
+## 6 Bring-up log (2026-11-02, small set; numbers from the stored files of the runs, single seeds, VAL = the 2 val scenes of autogt's small set, 77 frames, GT v8 `c643a7539d`)
+
+**Runs** (all through `run.py`, `--no-card`, diagnostics, no verdict): `t16.smoke_s0` (20 steps), `t16.small_s0` (400 steps, the full config of section 1 with the radar memory), `t16.small_ctl_s0` (the matched control, `t16_ctl.json`), `t16.small_bg1_s0` (`loss.motion_w_background` 1.0), `t16.small_clip_s0` (`grad_clip_split` ["motion_block"]). Evaluations by `bev_suite.py RUN --curves --fusion --velocity eval --n 80 --prior 300`; the module probe and the timing by the scratch scripts `temp/t16/probe_modules.py` / `time_modules.py` (promoted into `evaluation/` at their second use, the large run).
+
+**Gates.** S0: `test_slots.py` (66 s, 13 combinations incl. the full one) passes; `run_gates.sh`: everything passes except `velocity hurdle`, a stale assertion (LOGGED_TERMS grew by the two radar side-loss terms that `train.forward_loss` makes, the toy BEVLoss forward has none): fixed in b430af0, the gate passes. S1: 20 steps, loss 33.6 -> 31.4 (val 26.2 -> 23.5), finite, a gradient on all 14 modules, peak GPU 10.1 GB, 3.7 s per step. S2: 400 steps, no alert of the trainsuite, val total 20.2 (step 100) -> 18.2 (step 400), 4.1 s per step of which 7 % waiting for the data, update ratios 1e-4 - 5e-3.
+
+**Timing (S3, idle GPU, batch 1, dt -0.5 / 0 / +0.5, the cached chain without the frozen image heads; `eval/timing_modules.json` of both runs).** Full network 102.8 ms per frame, control 86.2 ms: +16.6 ms (+19 %). Per module, full / control: lift 14.1 / 14.0, camera temporal 13.1 / 13.8, trunk 11.0 / 10.8, motion block 4.5 / -, radar memory 4.2 / -, radar encoder 4.0 / 1.9 (delta slots against the plain raster); the rest (time mover, heads, decoding: not hooked) 39 / 33 ms. One training sample, forward + loss / backward: 161 / 95 ms against 140 / 92 ms; peak 1.6 GB per sample.
+
+**Matched control on the small set (400 steps, 8 train scenes; one seed each: a diagnostic, not a verdict; the seed spread is not measured here).**
+
+| metric (VAL, 77 frames) | full | control |
+|---|---|---|
+| drivable IoU@0 / lane divider IoU@0.5 | 0.597 / 0.100 | 0.660 / 0.101 |
+| walkway / carpark / crossing ROC-AUC | 0.819 / 0.677 / 0.691 | 0.849 / 0.809 / 0.521 |
+| mAP (fusion area) / vehicle AP@2 / pedestrian AP@2 | 0.228 / 0.630 / 0.222 | 0.207 / 0.584 / 0.322 |
+| velocity EPE at moving box centres (zero predictor 2.60) | 1.40 | 1.92 |
+| velocity EPE, vehicle_moving cells / static cells | 1.76 / 1.26 | 2.93 / 0.51 |
+| val group.motion | 0.598 | 0.368 |
+
+The full network is better on moving objects and worse on the static background; the maps are inside what two scenes and one seed can tell (drivable -0.06, the rest mixed).
+
+**Probe of the modules (S4; `runs/t16_small_s0/eval/modules/`: `frame_<k>.png`, `response.json`, `static_check.json`).** Every module's output is finite, not constant, without a dead channel; the camera BEV fills the camera cone and sits on the vehicles, the radar points are where the detections are, the fusion and trunk features carry both, the maps recover the road corridor (the prior baseline's drivable IoU is 0.42) but not yet the cross road, lane dividers 0.10 against the prior's 0. Response when an input is removed (relative change of the stage output, 3 cold frames): without the camera the camera BEV 0.97, fusion 0.70, maps 0.43, the velocity field 1.07; without all radar detections the radar raster 1.0, fusion 0.59, maps 0.17, objects 0.09, velocity 0.24; without the Doppler alone the velocity 0.16 and the motion block 0.2 (the Doppler is used). The box velocity of the object head equals the motion block's field (`box_vel_from_field` works). Warm frames (the memories read what the first call wrote): the camera memory reads (mem_read std 0.72), the radar memory writes only where detections are (86 % zeros).
+
+**Findings** (what the bring-up found; none stopped training):
+1. **The motion block's gradient dominates the clip.** `grad.motion_block` 29 - 133 (median 80) against 0.1 - 41 for the other modules; the global clip (5) scales every update by 0.04 - 0.14. The Temporal Fusion chat: expected (t12 saw 117 -> 22), AdamW is insensitive to a constant factor, not to a fluctuating one. Built: `TrainConfig.grad_clip_split` (opt-in, off = bit-identical; code critic REVISE -> all findings fixed, e1e28f2). The critic's measurement on the probe rows: the rest of the network stays clipped every step (factors 0.08 - 0.29), the split raises its level about 3 x and leaves the step-to-step spread almost unchanged (max/min 3.6 against 3.9): the gain is small, and the control chain runs in the same regime (norms 12 - 35). The split is used in the large run for that reason; its small arm (`t16.small_clip_s0`) checks that it does no harm, it does not prove a gain.
+2. **Static cells of the motion block: 1.26 m/s against the control's 0.51.** The mean field on static cells is about 0 (|mean| <= 0.37 m/s at ego speeds of 2 - 5 m/s, std 0.6 - 1.6 m/s): zero-mean noise, not an ego-motion offset or a frame error (`static_check.json`). The block starts at exactly zero and its output is scaled 10 x per level, so it moves ten times faster per step than a 1x1 head; in the t12 log it settled only after about 2000 steps. The weight of the background term (0.1) is not the lever: with 1.0 (`t16.small_bg1_s0`) the static EPE is 1.04 against 1.26 and everything else is the same within the noise. Not changed; watched in the large run (`vel` rows at every evaluation).
+3. **The radar memory (rad_temporal + rad_static_gate) is an unlearned block.** After 400 steps its learned static map is exactly 1.0 everywhere (std 0), its velocity head and window part get no gradient (the known KNOWN_UNUSED of `test_slots.py`); the camera memory's static map is 0.9997 +- 0.009. The Radar Encoder chat advises leaving it out (it writes moving content into the memory; the 0.5 s sweep history is already in the raster). **Off in the large run**; back as its own arm when the gate has a signal; 4.2 ms per frame saved.
+4. **`radar_kept` falls 0.94 -> 0.04 in 400 steps** while the side loss decays (half-life 0.2 of the run = 80 steps). The Radar chat: expected in a short schedule (its 1500-step run: 0.34, 0.69, 0.71 at steps 500, 1000, 1500; the monitor is strict); not a defect, checked again in the large run.
+5. The hurdle's moving probability is high almost everywhere after 400 steps (it is supervised at box centres only).
+6. The evaluation's debug taps (`bev_adapter.bev_taps`) do not cover the new modules (delta slots, radar memory, the motion block's levels, the hurdle); the probe script does; to be integrated into `evaluation/` after the large run.
+7. Walkway / carpark / crossing IoU is 0.0 at 400 steps (the prior's too) while the curves say the heads carry information (walkway AUC 0.82): rare classes are not over the 0.5 threshold yet, a training-length effect.
+8. The trainer's GT cache for v8 costs 0.57 s per sample per worker when cold (the small set: 37 s for 230 samples with 4 workers): no prefill is needed for the large run (6 loader workers give about 10 samples per second against 2.3 needed).
+
+**Changes for the large run (S5):** the radar memory off (finding 3), `grad_clip_split` ["motion_block"] on (finding 1), everything else as section 1; the small run of this final config (`t16.small_final_s0`) repeats S2 / S3 before the large run starts.
+
+## 7 Summary (written after the large run)
 (open)
