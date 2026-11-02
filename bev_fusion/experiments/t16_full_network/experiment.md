@@ -87,5 +87,29 @@ The full network is better on moving objects and worse on the static background;
 
 **Changes for the large run (S5):** the radar memory off (finding 3), `grad_clip_split` ["motion_block"] on (finding 1), everything else as section 1; the small run of this final config (`t16.small_final_s0`) repeats S2 / S3 before the large run starts.
 
-## 7 Summary (written after the large run)
-(open)
+## 7 Results (written 2026-11-02, updated as runs finish; every number from `runs/<run>/eval/by_n/table_n1000.txt`, never typed by hand)
+
+**Large baseline `t16.full_s0`** (config `t16_full.json`, 6000 steps, 428 train / 82 val scenes, GT v8, started 04:47, finished 11:53, 3.61 s per step, no trainsuite alert; code commit `40e7ff5b3c`, tag `bf/t16.full_s0`).
+Validation total 11.25 / 8.27 / 7.89 at steps 2000 / 4000 / 6000; the radar-kept monitor is back at 0.90 (it fell to 0.04 in the 400-step run); the train-minus-val gap of the six map IoUs is 0.091
+(drivable 0.040, walkway 0.036, carpark 0.171, crossing 0.072, lane divider 0.125, road divider 0.100; `bev_suite.py generalisation --n 1000`).
+
+| metric (VAL, 1000 frames, GT v8, one seed) | t16.full_s0 (baseline) |
+|---|---|
+| drivable IoU@0 | 0.779 |
+| walkway IoU@0 | 0.413 |
+| carpark IoU@0 | 0.274 |
+| ped crossing IoU@0 | 0.256 |
+| lane divider IoU@0.5 | 0.429 |
+| road divider IoU@1 | 0.572 |
+| mAP, fusion area (detf) | 0.416 |
+| vehicle AP@2 | 0.799 |
+| pedestrian AP@2 | 0.376 |
+| velocity EPE at moving box centres (m/s) | 1.112 |
+| zero predictor at the same centres | 4.268 |
+| EPE vehicle_moving cells | 1.441 |
+| EPE static cells | 0.189 |
+
+The motion block's error on static cells settled from 1.26 m/s (400-step run) to the value above: the 400-step number was early-training noise (finding 2). The prediction of section 3 (baseline against control within +-0.02 on the maps,
+moving EPE below 4.0 m/s, static EPE at most 0.03 above the control) is judged by hand when the control has finished ("by hand: one seed per arm", no KEEP / CUT).
+
+*Queued behind it (all through the launcher, pinned code):* the extraction of the BEVFusion features for 272 more train scenes, `t17.data` (700 train scenes), `t18.fix` (t17 recipe + the Training chat's hygiene flags + the motion block's own learning rate), the matched control `t16.ctl_s0`, each with an evaluation job.
