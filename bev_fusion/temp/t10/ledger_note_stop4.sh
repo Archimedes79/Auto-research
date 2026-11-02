@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# the decision of the training row after Mirko's no to finishing the run before the new long run (single-quoted strings: no re-parse)
+cd "$(dirname "$0")/../.." || exit 1
+export AR_PROJECT=../bev_fusion
+python3 ../autoresearch/tools/ledger.py note t10.dual_long_s0 \
+  --result 'stopped twice on request of the user, no verdict: at step 4773 (14:14, trainsuite stop, exit 75) and again at step 5030 of 6000 (14:38, exit 75) after the GT Discussion chat had restarted it at 14:20 on the order of the user (run.py --no-git with the pinned snapshot commit d14597e2e8, so the code was the original one); the status failed is the launcher reading of exit 75, not a crash; full checkpoints ckpt_00005030.pt and ckpt_00005000.pt in runs/t10_dual_long_s0; no cold-VAL number; in-training validation at step 4000 only: the moving / static cross entropy 0.34 against 0.75 at the start (a proxy, no verdict); attempts: 1 (09:01 - 12:09 CUDA unknown error at step 3200), 2 (12:11 - 14:14, resumed at 3000), 3 (14:20 - 14:38, resumed at 4773)' \
+  --decision 'NOT resumed for now: the user answered no to finishing it before the new long run and chose a complete network next (framework, card, smoke test, long run); lever 1 (the slope of the dual features) stays unmeasured, the claim that the SOA is reachable on this hardware is neither confirmed nor dropped; resume only on the word of the user, on the pinned snapshot (run.py --no-git, commit as the second argument of temp/train/run_ar.sh) with the pinned copy of autogt v5 in runs/t10_dual_long_s0/autogt; it is the natural matched-budget control for a long run of the complete network'
+python3 ../autoresearch/tools/ledger.py tail 2>&1 | grep -E 't10.dual_long_s0 ' | cut -c1-200
