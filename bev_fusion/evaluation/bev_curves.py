@@ -123,8 +123,8 @@ class BevCurveMetric(Metric):
                 valid = m["obj_fov"] if kind == "object" else m["fov"]
                 out[f"{dk}|{name}"] = histogram(np.asarray(o["prob"][name], np.float32)[valid], np.asarray(g[key], np.float32)[valid] > 0.5)
             if o.get("vhat") is not None and "velocity" in g:
-                cells = m["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in self.groups if c in g], axis=0)
-                out[f"{dk}|velocity"] = velocity_sums(o["vhat"], g["velocity"], cells)
+                from evaluation.bev_velocity import object_cells      # THE object-cell rule (obj_fov x object layer x known velocity); imported here because bev_velocity imports this module
+                out[f"{dk}|velocity"] = velocity_sums(o["vhat"], g["velocity"], object_cells(g, self.groups))
         return out
 
     def reduce(self, counts, keys: Optional[Sequence[str]] = None):
@@ -191,7 +191,21 @@ def selftest():
     s = velocity_sums(v + np.array([[0.3], [0.4]]), v, np.array([True, True]))      # an error vector (0.3, 0.4): length 0.5 in L2, 0.7 in L1
     r = regression_numbers(s[0])
     assert abs(r["epe"] - 0.5) < 1e-12 and abs(r["bias"] - 0.5) < 1e-12 and abs(r["rmse"] - 0.5) < 1e-12
-    print("bev_curves selftest ok: AP / AUC within 0.004 of the exact curves (prevalence 30 %, 1 %, 0.3 %), Brier exact, additive, one-class / NaN / float16 handled")
+    # the cells of the velocity numbers (frame()): a car of unknown velocity (GT 0 m/s, flow_weight 0) is no static ground truth. 8 x 8 world: a moving car (4 cells, 3 m/s),
+    # a parked one (1 cell), a car of unknown velocity (1 cell), the field = GT + (0.3, 0.4) m/s -> obj = 5 cells (not 6), moving = 4, EPE 0.5 on both
+    from evalsuite.contracts import FrameRef
+    z = np.zeros((8, 8), np.float32)
+    veh, gv, fw = z.copy(), np.zeros((2, 8, 8), np.float32), np.ones((8, 8), np.float32)
+    veh[2:4, 2:4], veh[6, 6], veh[1, 7] = 1, 1, 1
+    gv[0, 2:4, 2:4], fw[1, 7] = 3.0, 0
+    g = {"camera": np.ones_like(z), "undefined": z, "vehicle": veh, "velocity": gv, "flow_weight": fw}
+    m = BevCurveMetric([], ["vehicle"])
+    c = m.frame(Sample(ref=FrameRef("gt", 0, "s"), inputs=None, reference={0.0: g}),
+                Prediction(outputs={"dt": {0.0: {"prob": {}, "vhat": gv + np.array([0.3, 0.4], np.float32)[:, None, None]}}}))
+    r = m.reduce([c])
+    assert r["dt+0.00/velocity/obj/n"] == 5 and r["dt+0.00/velocity/moving/n"] == 4 and abs(r["dt+0.00/velocity/obj/epe"] - 0.5) < 1e-6, r
+    print("bev_curves selftest ok: AP / AUC within 0.004 of the exact curves (prevalence 30 %, 1 %, 0.3 %), Brier exact, additive, one-class / NaN / float16 handled, "
+          "cars of unknown velocity left out of the velocity cells")
 
 
 if __name__ == "__main__":

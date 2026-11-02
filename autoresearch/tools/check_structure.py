@@ -22,6 +22,7 @@ GENERIC = {"log.txt", "status.json", "metrics.json", "model.pt", "run.json", "ru
 TOKEN = re.compile(r"`([^`\n]+)`|\]\(([^)\s]+)\)")
 PATHLIKE = re.compile(r"^[A-Za-z0-9_.\-/\\{}\[\]<>*~$:]+$")
 EXT = r"\.(py|sh|ps1|md|csv|json|txt|yml|pdf|pptx|png)$"
+PLACEHOLDER = re.compile(r"loopNN|(?<![A-Za-z])NN(?![A-Za-z])|\d/\d+(?:/|$)")   # `temp/loopNN/`, `E<NN>`-style NN, `e37_fold0/1/2/model.pt`: a spelling of many paths, not one (NN inside a word is a typo)
 
 
 def rules():
@@ -84,7 +85,7 @@ def resolves(tok, md, names, root, R):
     t = tok.strip().rstrip(".,;:)").replace("\\", "/")
     t = t.split("#")[0].split(":")[0] if not t.startswith(("http", "C:")) else t
     relative = t.startswith(("./", "../"))                  # resolved against the document and the problem folder below; other dot words (.gitignore, ...) are no path
-    if not t or t.startswith(("http", "mailto", "/loop", "C:")) or (t.startswith(".") and not relative) or any(c in t for c in "*<>{}[]$~") or "NN" in t or re.search(r"[0-9]/[0-9]", t):
+    if not t or t.startswith(("http", "mailto", "/loop", "C:")) or (t.startswith(".") and not relative) or any(c in t for c in "*<>{}[]$~") or PLACEHOLDER.search(t):
         return True
     if re.fullmatch(r"[\w-]+/[\w.-]+", t) and t.split("/")[0] not in R["root_dirs"] and not re.search(r"\.(py|sh|md|csv|json|pdf|pptx)$", t):
         return True  # owner/repo of a GitHub repository
@@ -148,6 +149,9 @@ def selftest():
     assert resolves("autoresearch/tools/run.py", md, set(), root, R)
     assert resolves("../autoresearch/tools/run.py", md, set(), root, R) and resolves(".gitignore", md, set(), root, R)
     assert not resolves("../autoresearch/tools/does_not_exist.py", md, set(), root, R) and not resolves("./does_not_exist.py", md, set(), root, R), "a relative path is looked up"
+    # review 2026-11-02: only the placeholder spellings of the repository skip the lookup, not any token that contains NN or a digit-slash-digit
+    assert resolves("temp/loopNN/x.py", md, set(), root, R) and resolves("history/prompts/PROGRAM_loopNN.md", md, set(), root, R) and resolves("e37_fold0/1/2/model.pt", md, set(), root, R)
+    assert not resolves("tools/NNnot_there.py", md, set(), root, R) and not resolves("tools/foo2/3bar.py", md, set(), root, R), "NN inside a word and digit/digit inside names are no placeholders"
     import tempfile
     tmp = tempfile.mkdtemp()
     os.makedirs(os.path.join(tmp, "runs", "proj", "docs", "history"))                   # a checkout below a folder called runs

@@ -10,7 +10,9 @@ The checks repeat what `train.build` / `check_resume` refuse and what a start ne
 `ModelConfig` / `LossConfig` / `model.check_config` accept it, the head layout flags of model and loss agree, the camera kind and its feature
 caches fit (`model.CAMERAS`), `loss.fusion_area_only` is not combined with `model.refine` (the refiner builds its own box mask), every named path
 exists (data root, caches, all pre-trained weights, `init_from`), an existing run folder is not finished and its stored config equals this one
-(`train.check_resume`), the disk has room, and the GT: the autogt that would be imported (a pinned copy `<out_root>/<name>/autogt`, else the live
+(`train.check_resume`), the configs that stop at the first step or after the model is built are refused (`motion_block` needs `n_cam` >= 2, `loss.dt_weights`
+needs a weight near |dt| 0 and 0.5, `train_only` / `freeze` must name parameters: `freeze.plan` on a model built on the meta device, no weights),
+`radar_aux` without `delta_slots` and `loss.w_obj_mov` without `model.object_moving` are noted as doing nothing, the disk has room, and the GT: the autogt that would be imported (a pinned copy `<out_root>/<name>/autogt`, else the live
 `autogt/`) must have the signature files of the version `init_from`'s run was trained on (`gt.json` + `autogt/versions.csv`), or of
 `--expect-gt`; the live GT signature is otherwise hashed from the source at start, so a changed autogt silently means another GT. The uncommitted
 files of `training/` are listed (the launcher's snapshot is a copy of the working tree, so the arms of a matched control can differ in code);
@@ -20,6 +22,7 @@ environment.
 import argparse
 import ast
 import csv
+import dataclasses
 import json
 import os
 import re
@@ -27,10 +30,13 @@ import shutil
 import subprocess
 import sys
 
+import torch
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                                   # bev_fusion/
 sys.path.insert(0, HERE)
 
+import freeze as freeze_mod                                     # noqa: E402
 import losses                                                   # noqa: E402
 import model as M                                               # noqa: E402
 import train as T                                               # noqa: E402
@@ -110,6 +116,23 @@ def gt_identity(folder, base_signature, repo):
     return True, f"GT: {where} has the signature files of {row['version']} ({sig})"
 
 
+def freeze_findings(mc, train_only, freeze):
+    """(problems, notes) of the freeze plan: `freeze.plan` on the model built on the meta device (names and requires_grad only, no weights, no memory);
+    a prefix that matches no parameter, or a plan that freezes everything, would stop the run after the model is built"""
+    if not (train_only or freeze):
+        return [], []
+    try:
+        with torch.device("meta"):
+            model = M.BEVFusionModel(dataclasses.replace(mc, pretrained="", trunk_pretrained="", lane_pretrained=""))
+    except Exception as e:                                      # noqa: BLE001 - a model that cannot be built on meta: say so, do not refuse
+        return [], [f"train_only / freeze not checked against the model ({type(e).__name__}: {e})"]
+    try:
+        plan = freeze_mod.plan(model, train_only, freeze)
+    except (ValueError, TypeError) as e:
+        return [f"train_only / freeze: {e}"], []
+    return ([] if any(plan.values()) else ["train_only / freeze froze every parameter: nothing is left to train"]), []
+
+
 def check(path, root=ROOT, require_clean=False, expect_gt=""):
     """(problems, notes) of the config file `path`; nothing is read from the data, no model is built, nothing is trained"""
     problems, notes = [], []
@@ -144,6 +167,21 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
             problems.append("loss.fusion_area_only with model.refine: the refiner builds its own box mask (losses.refine_gt_boxes) and ignores the option")
         if not cached and cfg.device == "cuda":
             notes.append("no feature_cache: the camera heads run live (slow, much more memory)")
+        if mc.motion_block and cfg.n_cam < 2:
+            problems.append(f"model.motion_block needs an older camera frame (motion_block.block_inputs): n_cam >= 2, is {cfg.n_cam}")
+        for dt in (0.0, 0.5):                                   # the target times of the GT (train.py: 0 and +-0.5 s); the loss refuses a time without a weight within 0.1 s
+            try:
+                losses.dt_weight(dt, 1.0, lc)
+            except (ValueError, TypeError) as e:
+                problems.append(f"loss.dt_weights: {e}")
+                break
+        if cfg.radar_aux > 0 and mc.radar_kind != "delta_slots":
+            notes.append(f"radar_aux {cfg.radar_aux} does nothing: only radar_kind 'delta_slots' returns the radar side loss's inputs (is {mc.radar_kind!r})")
+        if "w_obj_mov" in cfg.loss and not mc.object_moving:
+            notes.append("loss.w_obj_mov does nothing without model.object_moving (the head has no moving / static logit)")
+        p_, n_ = freeze_findings(mc, cfg.train_only, cfg.freeze)
+        problems += p_
+        notes += n_
     named = [("data_root", cfg.data_root), ("feature_cache", cfg.feature_cache), ("feature_cache2", cfg.feature_cache2),
              ("gt_cache", cfg.gt_cache), ("radar_cache", cfg.radar_cache), ("lane_images", cfg.lane_images), ("init_from", cfg.init_from)]
     if mc is not None:
@@ -188,7 +226,7 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
     elif d:
         (problems if require_clean else notes).append(
             f"the snapshot carries {len(d)} uncommitted file(s) of training/: {', '.join(d[:8])}{' ...' if len(d) > 8 else ''}")
-    if cfg.steps % cfg.save_every and cfg.steps > cfg.save_every:
+    if cfg.save_every and cfg.steps % cfg.save_every and cfg.steps > cfg.save_every:        # save_every 0 = no periodic checkpoint (train.py accepts it)
         notes.append(f"steps {cfg.steps} is not a multiple of save_every {cfg.save_every}: the last checkpoint is written at the end only")
     return problems, notes
 
@@ -248,10 +286,25 @@ def _selftest():
                (dict(feature_cache2=os.path.join(tmp, "cache2")), "do not match"),
                (dict(model={"lane_branch": "rgb", "pretrained": ""}), "needs lane_images"),
                (dict(model={"refine": True, "pretrained": ""}, loss={"fusion_area_only": True}), "refiner builds its own box mask"),
-               (dict(name="done_run"), "finished run")]
+               (dict(name="done_run"), "finished run"),
+               # configs that stop at the first step or after the model is built (motion_block.block_inputs, losses.dt_weight, freeze.plan)
+               (dict(model={"motion_block": True, "pretrained": ""}, n_cam=1), "needs an older camera frame"),
+               (dict(loss={"dt_weights": [[0.0, 1.0]]}), "loss.dt_weights"),
+               (dict(train_only=["fusoin."]), "freeze prefix 'fusoin.'"), (dict(freeze=["fusion.", "nosuchmodule"]), "freeze prefix 'nosuchmodule'"),
+               (dict(train_only=["fusion."], freeze=["fusion."]), "froze every parameter")]
         for kw, text in bad:
             pr, _ = check(write(**kw), tmp)
             assert has(pr, text), (kw, text, pr)
+        # the same switches done right are no problem; a flag that does nothing is a note, not a refusal
+        for kw in (dict(model={"motion_block": True, "pretrained": ""}), dict(train_only=["fusion."]), dict(save_every=0)):    # save_every 0 once raised ZeroDivisionError
+            pr, _ = check(write(**kw), tmp)
+            assert pr == [], (kw, pr)
+        for kw, text, quiet in ((dict(radar_aux=0.5), "radar_aux 0.5 does nothing", dict(radar_aux=0.5, model={"radar_kind": "delta_slots", "c_rad": 64, "pretrained": ""})),
+                                (dict(loss={"w_obj_mov": 2.0}), "w_obj_mov does nothing", dict(loss={"w_obj_mov": 2.0}, model={"object_moving": True, "pretrained": ""}))):
+            pr, nt = check(write(**kw), tmp)
+            assert pr == [] and has(nt, text), (kw, pr, nt)
+            pr, nt = check(write(**quiet), tmp)
+            assert pr == [] and not has(nt, "does nothing"), (quiet, pr, nt)
         # an existing run with a checkpoint: a changed config is refused by check_resume, an unchanged one is a note
         cfg_ok = T.read_config(write(name="base"))
         import dataclasses
@@ -321,7 +374,7 @@ def _selftest():
         assert "<hypothesis of the card>" in start_lines(s, "t14_dc_ctl_s0") and "--id t14.dc_ctl_s0 " in start_lines(s, "t14_dc_ctl_s0")
         pr, _ = check(write(), tmp, require_clean=True)                                              # tmp lies in the outer repo's ignored temp/
         assert isinstance(pr, list)
-    print("startable selftest passed: 15 kinds of bad config and a changed resume config are found, relative paths and the disk check work, "
+    print("startable selftest passed: 20 kinds of bad config and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
           "uncommitted files (rename, space, untracked folder) are listed, the GT identity is told against a tagged version (CRLF-safe), "
           "the smoke twin is a valid config, the start lines make up no card")
 

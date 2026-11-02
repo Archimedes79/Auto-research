@@ -26,6 +26,16 @@ from .layers import Raster, cell_centres, occlusion
 from .nuscenes_gt import NuScenesGT
 
 
+def _same_gt(a, b):
+    """two keyframes (dict of layers + meta) agree in every array byte and every meta entry (checks._feed, the digest of `autogt digest`)"""
+    import hashlib
+    from .checks import _feed
+    ha, hb = hashlib.sha1(), hashlib.sha1()
+    _feed(ha, a)
+    _feed(hb, b)
+    return ha.hexdigest() == hb.hexdigest()
+
+
 def run(root=None, verbose=True):
     import torch
     import torch.nn.functional as F
@@ -373,7 +383,7 @@ def run(root=None, verbose=True):
         assert held["scenes"] == ["scene-0061", "scene-0103"] and held["keyframes"] == 4 and held["complete"] is True, held
         assert held["gt_version"] == r["gt_version"] == current_version(), (held, r)                      # the version key is stamped
         mine = load_keyframe(r["out"], tok2)                                           # the keyframe `build` wrote above, from the full devkit
-        assert all(np.array_equal(mine[k], g2[k]) for k in ("drivable_area", "vehicle", "velocity", "flow", "instance")), "light == full"
+        assert _same_gt(mine, g2), "light == full: every layer and every meta entry"
         for bad, why in ((dict(scenes=["scene-9999"]), "unknown scene"), (dict(version="v1.0-trainval"), "version")):
             try:
                 cli_mod.generate(root, d, verbose=False, **bad)
@@ -525,7 +535,7 @@ def run(root=None, verbose=True):
         assert two["written"] == 4 and two["signature"] == r["signature"], two
         for t in (stored[0][:-4], stored[3][:-4]):
             a_, b_ = load_keyframe(r["out"], t), load_keyframe(two["out"], t)
-            assert all(np.array_equal(a_[k], b_[k]) for k in ("drivable_area", "vehicle", "velocity", "flow", "instance")), "workers=2 == workers=1"
+            assert _same_gt(a_, b_), "workers=2 == workers=1: every layer and every meta entry"
         for bad, why in ((dict(scenes=[]), "no scene is not all scenes"), (dict(scenes=["scene-0061"], stride=0), "stride 0"),
                          (dict(scenes=["scene-0061"], res=0.25), "another resolution in a used folder")):
             try:
@@ -593,7 +603,7 @@ def run(root=None, verbose=True):
     from . import scene_tokens
     assert scene_tokens("scene-0061", "v1.0-mini", root) == full.keyframes("scene-0061")        # the devkit-free list is the same
     a, b2 = full.keyframe(tk), light.keyframe(tk)
-    assert all(np.array_equal(a[k_], b2[k_]) for k_ in a if k_ != "meta"), "light devkit must give identical GT"
+    assert _same_gt(a, b2), "light devkit must give identical GT (every layer and every meta entry)"
     assert len(light.nusc.sample_data) < 0.7 * len(full.nusc.sample_data)
     with tempfile.TemporaryDirectory() as d:
         kw = dict(scenes=["scene-0061", "scene-0103", "scene-1077"], stride=20, samples=3, verbose=False)

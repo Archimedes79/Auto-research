@@ -506,6 +506,21 @@ def _():
         with contextlib.redirect_stderr(io.StringIO()) as err:
             suite.quant.run(frames=one, state="reset", name="pick", progress=0)
         assert "frames_sha" in err.getvalue() and "not verified" in err.getvalue(), err.getvalue()
+        # the labels are scene / index only: the same labels over other dataset ids (keys) are another frame list (keys_sha); a store without keys_sha resumes with a warning
+        ka, kb = [FrameRef("toy-01", 0, "tokA")], [FrameRef("toy-01", 0, "tokB")]
+        suite.quant.run(frames=ka, state="reset", name="keyed", progress=0)
+        try:
+            suite.quant.run(frames=kb, state="reset", name="keyed", progress=0)
+            raise AssertionError("the same labels with other frame keys under the same run name must be refused")
+        except ValueError as e:
+            assert "keys_sha" in str(e), e
+        mf = os.path.join(suite.quant.dir, "keyed", "manifest.json")
+        old = json.load(open(mf))
+        old["selection"].pop("keys_sha")
+        json.dump(old, open(mf, "w"))
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            assert len(suite.quant.run(frames=kb, state="reset", name="keyed", progress=0).frames) == 1
+        assert "keys_sha" in err.getvalue(), err.getvalue()
         # interrupted run: a failing source in the middle; the resumed run gives the same numbers as an undisturbed one
         full = suite.quant.table(suite.quant.run(name="full", progress=0))
 

@@ -163,7 +163,7 @@ covariance, source, flag; plus the dense arrays when a grid is given)
   allowed (`map_offsets`), and no estimator is built yet
 - 25 % of the boxes stand more than 0.5 m above or below the ego ground plane (hills, overpasses): a ground-plane assumption of
   the camera lift, not a GT error
-- the occlusion mask is 2D: it also hides about 12 % of boxes that annotators rate as 80-100 % visible (pedestrians behind cars)
+- the occlusion mask is 2D: it also hides about 11 % of boxes that annotators rate as 80-100 % visible (pedestrians behind cars)
 - radar gives only the radial velocity; the tangential part comes from the annotations. Not validated against lidar scene flow
   (no lidar on disk)
 
