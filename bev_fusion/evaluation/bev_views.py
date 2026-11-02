@@ -7,6 +7,9 @@ Views (names as in `BEVTask.views()`):
     stages      the stages of the chain: camera heads, lift, camera BEV, temporal fusion, radar, trunk (needs the taps)
     dashboard   one compact picture of every stage of one frame (the video frame)
 Bird's-eye maps are drawn with x forward (up) and +y (left of the car) on the left; arrays are (x, y) = (rows, columns).
+Colour scheme (Mirko, 2026-11-03): black plot background, dark-grey road with a black boundary, white lane lines, light-grey crossings, a calmer green for walkways, dark-red
+objects (vehicles, pedestrians, two-wheelers) and the same red translucent where they lie outside the observed area (camera x radar x not hidden); boxes: GT outline red
+(translucent outside), the dashed GT outline on a prediction white, predicted boxes amber. The error maps (right grey, false red, missed blue, cream) are unchanged.
 """
 from __future__ import annotations
 
@@ -21,14 +24,22 @@ from evalsuite.render.figure import ERROR_LEGEND, FN_COLOR, FP_COLOR, SKIP_COLOR
 from evalsuite.render.taps import energy, pca_rgb
 from evaluation.metrics import FRONT_HALF_FOV, dilate, gt_boxes_from_meta, line_cells
 
-COLORS = {"drivable_area": (0.80, 0.80, 0.80), "carpark_area": (0.70, 0.78, 0.90), "walkway": (0.62, 0.85, 0.62),
-          "ped_crossing": (1.00, 0.70, 0.35), "stop_line": (0.80, 0.68, 0.92),
-          "vehicle": (0.15, 0.35, 0.90), "pedestrian": (0.85, 0.15, 0.75), "two_wheeler": (0.10, 0.75, 0.80)}
-LINE_COLORS = {"lane_divider": (0.15, 0.15, 0.15), "road_divider": (0.85, 0.10, 0.10)}
+# The colour scheme of the bird's-eye pictures (Mirko's proposal of 2026-11-03): black plot background, dark-grey road with a black boundary, white lane markings, light-grey
+# crossings, dark-red objects (vehicles, pedestrians, two-wheelers) and the same red, translucent, where they lie outside the observed area, a calmer green for walkways.
+BG = (0.0, 0.0, 0.0)
+ROAD_EDGE = (0.0, 0.0, 0.0)
+DARK_RED, OUT_RED, OUT_ALPHA = (0.62, 0.04, 0.07), (0.95, 0.16, 0.16), 0.45
+OBJECT_LAYERS = ("vehicle", "pedestrian", "two_wheeler")
+GT_BOX_COLOR, GT_BOX_OUT = (0.80, 0.12, 0.14), (0.95, 0.30, 0.30, 0.55)     # outline of a ground-truth box inside / outside the observed area (RGBA: translucent)
+GT_OVERLAY, DET_COLOR = (0.93, 0.93, 0.93), (1.0, 0.72, 0.15)                 # dashed GT outline on a prediction panel; predicted boxes
+COLORS = {"drivable_area": (0.23, 0.23, 0.25), "carpark_area": (0.31, 0.33, 0.40), "walkway": (0.31, 0.60, 0.43),
+          "ped_crossing": (0.74, 0.74, 0.74), "stop_line": (0.60, 0.60, 0.64),
+          "vehicle": DARK_RED, "pedestrian": DARK_RED, "two_wheeler": DARK_RED}
+LINE_COLORS = {"lane_divider": (0.97, 0.97, 0.97), "road_divider": (0.98, 0.82, 0.30)}
 GROUP_COLOR = {"vehicle": (0.95, 0.15, 0.15), "pedestrian": (0.9, 0.2, 0.9), "two_wheeler": (1.0, 0.6, 0.1)}
 LINE_RGB = {"lane_divider": (1.0, 0.9, 0.1), "road_divider": (1.0, 0.5, 0.0), "centreline": (0.1, 0.9, 0.9)}
 EDGES = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
-MAP_LEGEND = [(n, c) for n, c in list(COLORS.items()) + list(LINE_COLORS.items())]
+MAP_LEGEND = [(n, c) for n, c in list(COLORS.items()) + list(LINE_COLORS.items())] + [("object outside the observed area", OUT_RED)]
 
 
 # ------------------------------------------------------------------------------------------------ geometry helpers
@@ -51,25 +62,43 @@ def extent(grid) -> Tuple[float, float, float, float]:
     return (grid.y_min, grid.y_max, grid.x_min, grid.x_max)
 
 
-def box_shapes(boxes, color, ls="-", lw=1.2, score_min=None) -> List[Shape]:
-    """box dicts (cx, cy, length, width, yaw | radius) -> overlay shapes in bird's-eye plot coordinates (horizontal = y)"""
+def observed_area(g) -> np.ndarray:
+    """cells the rig observes in this GT frame (the fusion area of D37: camera cells not hidden behind a box, inside the radar fan); all True for a GT without these layers"""
+    cam = np.asarray(g["camera"], np.float32) > 0 if "camera" in g else None
+    if cam is None:
+        return np.ones_like(np.asarray(g["undefined"]), bool) if "undefined" in g else np.ones((120, 104), bool)
+    area = cam
+    if "occluded" in g:
+        area = area & ~(np.asarray(g["occluded"], np.float32) > 0)
+    if "radar" in g:
+        area = area & (np.asarray(g["radar"], np.float32) > 0)
+    return area
+
+
+def box_shapes(boxes, color, ls="-", lw=1.2, score_min=None, observed=None) -> List[Shape]:
+    """box dicts (cx, cy, length, width, yaw | radius) -> overlay shapes in bird's-eye plot coordinates (horizontal = y). observed: a bool grid (observed_area) -> `color` for a
+    box with at least half of its footprint inside, translucent GT_BOX_OUT for the others (the colour argument is then the one of the observed boxes)"""
     out = []
-    for b in boxes:
+    if observed is not None:
+        from evaluation.bev_fusion_area import footprint_share
+    for b0 in boxes:
+        b = b0
         if score_min is not None and b.get("score", 1.0) < score_min:
             continue
+        color_b = color if observed is None or footprint_share(b, observed) >= 0.5 else GT_BOX_OUT
         if "radius" in b:
-            out.append(Shape("circle", (b["cy"], b["cx"], max(b["radius"], 0.3)), color, ls, lw))
+            out.append(Shape("circle", (b["cy"], b["cx"], max(b["radius"], 0.3)), color_b, ls, lw))
         else:
             c, s = math.cos(b["yaw"]), math.sin(b["yaw"])
             hl, hw = b["length"] / 2, b["width"] / 2
             pts = [(b["cx"] + c * a - s * w, b["cy"] + s * a + c * w) for a, w in ((hl, hw), (hl, -hw), (-hl, -hw), (-hl, hw))]
-            out.append(Shape("polygon", [(y, x) for x, y in pts], color, ls, lw))
-            out.append(Shape("line", [(b["cy"], b["cx"]), (b["cy"] + s * hl, b["cx"] + c * hl)], color, ls, lw))
+            out.append(Shape("polygon", [(y, x) for x, y in pts], color_b, ls, lw))
+            out.append(Shape("line", [(b["cy"], b["cx"]), (b["cy"] + s * hl, b["cx"] + c * hl)], color_b, ls, lw))
     return out
 
 
 def fov_shapes() -> List[Shape]:
-    return [Shape("line", [(0, 0), (sg * 60 * math.tan(FRONT_HALF_FOV), 60)], "0.4", ":", 0.6) for sg in (-1, 1)]
+    return [Shape("line", [(0, 0), (sg * 60 * math.tan(FRONT_HALF_FOV), 60)], "0.62", ":", 0.7) for sg in (-1, 1)]
 
 
 def bev(grid, kind: str, title: str, data, shapes: Sequence[Shape] = (), fov: bool = True, **kw) -> Panel:
@@ -78,18 +107,39 @@ def bev(grid, kind: str, title: str, data, shapes: Sequence[Shape] = (), fov: bo
                  shapes=(fov_shapes() if fov else []) + list(shapes), **kw)
 
 
-def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_width: float = 0.35) -> np.ndarray:
-    """RGB (X, Y, 3) of the probabilities (alpha = probability) in the order of COLORS, lines from the distance field"""
+def _edge(mask: np.ndarray) -> np.ndarray:
+    """the cells of a boolean map that touch a cell outside it (4-neighbourhood, the map border counts as inside)"""
+    pad = np.pad(mask, 1, mode="edge")
+    inner = pad[1:-1, 1:-1] & pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:]
+    return mask & ~inner
+
+
+def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_width: float = 0.35, observed: Optional[np.ndarray] = None) -> np.ndarray:
+    """RGB (X, Y, 3) on the black background: the areas (alpha = probability, in the order of COLORS), a black boundary along the drivable area, then crossings, the object
+    layers (dark red; outside `observed`, a bool grid, the same red translucent) and the lines (from the distance field)"""
     shape = next(iter(prob.values())).shape
-    img = np.ones(shape + (3,), np.float32)
-    for name, c in COLORS.items():
+    img = np.zeros(shape + (3,), np.float32) + np.asarray(BG, np.float32)
+
+    def paint(c, a):
+        nonlocal img
+        img = img * (1 - a[..., None]) + np.asarray(c, np.float32) * a[..., None]
+    for name in ("drivable_area", "carpark_area", "walkway"):
         if name in prob:
-            a = np.clip(prob[name], 0, 1)[..., None]
-            img = img * (1 - a) + np.asarray(c, np.float32) * a
+            paint(COLORS[name], np.clip(prob[name], 0, 1))
+    if "drivable_area" in prob:                                                 # the road boundary, black, over the neighbouring walkway / car park
+        paint(ROAD_EDGE, _edge(prob["drivable_area"] > 0.5).astype(np.float32))
+    for name, c in COLORS.items():
+        if name in ("drivable_area", "carpark_area", "walkway") or name not in prob:
+            continue
+        a = np.clip(prob[name], 0, 1)
+        if name in OBJECT_LAYERS and observed is not None:
+            paint(OUT_RED, a * np.where(observed, 0.0, OUT_ALPHA))
+            paint(c, a * np.where(observed, 1.0, 0.0))
+        else:
+            paint(c, a)
     for name, c in LINE_COLORS.items():
         if name in dist:
-            a = np.clip(1 - dist[name] / line_width, 0, 1)[..., None]
-            img = img * (1 - a) + np.asarray(c, np.float32) * a
+            paint(c, np.clip(1 - dist[name] / line_width, 0, 1))
     return img
 
 
@@ -214,9 +264,9 @@ class OverviewView(BevView):
                            note="paint and lines must meet; boxes on the vehicles") if cam is not None
                      else Panel("text", "front camera", "not available"))
         panels = [cam_panel,
-                  bev(grid, "rgb", "ground truth (areas, lines, vehicles)", composite(gt_prob, gt_dist), box_shapes(gtb, "tab:blue")),
-                  bev(grid, "rgb", "prediction (red boxes: score >= 0.3, dashed: GT)", composite(o["prob"], o["dist"]),
-                      box_shapes(gtb, "k", "--", 0.7) + box_shapes(dets, "tab:red")),
+                  bev(grid, "rgb", "ground truth (areas, lines, vehicles)", composite(gt_prob, gt_dist, observed=observed_area(g0)), box_shapes(gtb, GT_BOX_COLOR, observed=observed_area(g0))),
+                  bev(grid, "rgb", "prediction (amber boxes: score >= 0.3, dashed: GT)", composite(o["prob"], o["dist"], observed=observed_area(g0)),
+                      box_shapes(gtb, GT_OVERLAY, "--", 0.7) + box_shapes(dets, DET_COLOR)),
                   bev(grid, "rgb", _caption(error_counts(P, G, m["fov"]), "drivable area (cells)"), e_drv),
                   bev(grid, "rgb", _caption(error_counts(Pv, Gv, m["obj_fov"]), "vehicle footprint (cells)"), e_veh),
                   bev(grid, "rgb", _caption(c_lane, "lane dividers (+-0.5 m)"), e_lane)]
@@ -250,9 +300,9 @@ class OutputsView(BevView):
         pv, gv = o0["prob"]["vehicle"], np.asarray(g0["vehicle"], np.float32)
         rgb = np.ones(pv.shape + (3,), np.float32)
         rgb[..., 0], rgb[..., 1], rgb[..., 2] = 1 - pv * 0.8, 1 - np.maximum(pv, gv) * 0.6, 1 - gv * 0.8
-        panels = [bev(grid, "rgb", "13 ground truth, dt 0 (areas, lines, vehicles)", composite(gt_prob, gt_dist), box_shapes(gtb, "tab:blue")),
-                  bev(grid, "rgb", "14 prediction, dt 0 (red boxes: score >= 0.3, dashed black: GT)", composite(o0["prob"], o0["dist"]),
-                      box_shapes(gtb, "k", "--", 0.7) + box_shapes([d for d in o0["dets"] if d["score"] >= 0.3], "tab:red")),
+        panels = [bev(grid, "rgb", "13 ground truth, dt 0 (areas, lines, vehicles)", composite(gt_prob, gt_dist, observed=observed_area(g0)), box_shapes(gtb, GT_BOX_COLOR, observed=observed_area(g0))),
+                  bev(grid, "rgb", "14 prediction, dt 0 (amber boxes: score >= 0.3, dashed white: GT)", composite(o0["prob"], o0["dist"], observed=observed_area(g0)),
+                      box_shapes(gtb, GT_OVERLAY, "--", 0.7) + box_shapes([d for d in o0["dets"] if d["score"] >= 0.3], DET_COLOR)),
                   bev(grid, "rgb", "15 drivable area: right grey, false red, missed blue, cream = not seen by the camera", _err(P, G, m["fov"])),
                   bev(grid, "rgb", "16 vehicle footprint: prediction red, GT blue, both = dark", rgb)]
         for dt in (0.5, -0.5):
@@ -260,12 +310,12 @@ class OutputsView(BevView):
                 panels.append(Panel("text", f"dt {dt:+.1f}", "not decoded"))
                 continue
             od = pred.outputs["dt"][dt]
-            img = composite(od["prob"], od["dist"])
+            img = composite(od["prob"], od["dist"], observed=observed_area(sample.reference[dt]))
             shade = od["mass"] < 0.5 if od["mass"] is not None else np.zeros(img.shape[:2], bool)
             img = np.where(shade[..., None], img * 0.45 + np.array([0.35, 0.25, 0.0]) * 0.55, img)
             panels.append(bev(grid, "rgb", f"prediction at dt {dt:+.1f} s; brown = unknown cells (splat mass < 0.5); dashed = GT then", img,
-                              box_shapes(gt_boxes(sample.reference[dt], t.groups), "k", "--", 0.7) +
-                              box_shapes([d for d in od["dets"] if d["score"] >= 0.3], "tab:red")))
+                              box_shapes(gt_boxes(sample.reference[dt], t.groups), GT_OVERLAY, "--", 0.7) +
+                              box_shapes([d for d in od["dets"] if d["score"] >= 0.3], DET_COLOR)))
         if 0.5 in pred.outputs["dt"] and pred.outputs["dt"][0.5]["mass"] is not None:
             panels.append(bev(grid, "raster", "19 splat mass at dt +0.5 s (1 = a source cell lands here, 0 = nothing does)",
                               pred.outputs["dt"][0.5]["mass"], fov=False, cmap="viridis", vmin=0, vmax=1.5, colorbar=True))
@@ -301,7 +351,7 @@ class StagesView(BevView):
     def render(self, sample: Sample, pred: Prediction, ctx: ViewContext) -> Page:
         t, grid = self.t, self.t.grid
         g0 = self._gt0(sample)
-        boxes = box_shapes(gt_boxes(g0, t.groups), "k", "--", 0.7)
+        boxes = box_shapes(gt_boxes(g0, t.groups), GT_OVERLAY, "--", 0.7)
         batch, tp = sample.inputs, pred.taps
         cam = np.asarray(g0["camera"], np.float32) > 0
         panels: List[Panel] = []
@@ -326,7 +376,7 @@ class StagesView(BevView):
         rad = batch["radar"]
         pts = [Shape("points", np.c_[rad["y"].numpy(), rad["x"].numpy()], _doppler_colors(rad["vr"].numpy()), "-", 0.6)]
         panels.append(bev(grid, "rgb", f"4 radar detections of the window ({len(rad['x'])}): colour = Doppler vr (blue -15 .. red +15 m/s)",
-                          np.ones((2, 2, 3)), pts + boxes, note="moving cars carry a Doppler colour that differs from their surroundings"))
+                          np.zeros((2, 2, 3)), pts + boxes, note="moving cars carry a Doppler colour that differs from their surroundings"))
 
         def emap(name, title, note=""):
             if name in tp:
@@ -369,7 +419,7 @@ class DashboardView(BevView):
         t, grid = self.t, self.t.grid
         g0 = self._gt0(sample)
         gtb = gt_boxes(g0, t.groups)
-        boxes = box_shapes(gtb, "k", "--", 0.7)
+        boxes = box_shapes(gtb, GT_OVERLAY, "--", 0.7)
         batch, tp = sample.inputs, pred.taps
         o0 = self._preds(pred)
         k = layer_index(t.spec)
@@ -380,7 +430,7 @@ class DashboardView(BevView):
             h, w = img.shape[:2]
             panels.append(Panel("image", "input + camera head depth (blue near, red far)", _overlay(img, np.kron(ed, np.ones((16, 16)))[:h, :w])))
         rad = batch["radar"]
-        panels.append(bev(grid, "rgb", f"radar detections ({len(rad['x'])}), colour = Doppler", np.ones((2, 2, 3)),
+        panels.append(bev(grid, "rgb", f"radar detections ({len(rad['x'])}), colour = Doppler", np.zeros((2, 2, 3)),
                           [Shape("points", np.c_[rad["y"].numpy(), rad["x"].numpy()], _doppler_colors(rad["vr"].numpy()), "-", 0.6)] + boxes))
         for name, title in (("cam_temporal", "camera BEV after lift + temporal fusion (energy)"), ("radar_feat", "radar branch (energy)")):
             if name in tp:
@@ -390,15 +440,15 @@ class DashboardView(BevView):
             panels.append(bev(grid, "rgb", "trunk output (feature PCA as RGB)", pca_rgb(np.asarray(tp["trunk"])), boxes))
         gt_prob = {n: np.asarray(g0[k[n][2]], np.float32) for n in o0["prob"]}
         gt_dist = {n: np.asarray(g0[n + "_dist"], np.float32) for n in o0["dist"]}
-        panels.append(bev(grid, "rgb", "ground truth now", composite(gt_prob, gt_dist), box_shapes(gtb, "tab:blue")))
-        panels.append(bev(grid, "rgb", "prediction now (red boxes >= 0.3, dashed = GT)", composite(o0["prob"], o0["dist"]),
-                          boxes + box_shapes([d for d in o0["dets"] if d["score"] >= 0.3], "tab:red")))
+        panels.append(bev(grid, "rgb", "ground truth now", composite(gt_prob, gt_dist, observed=observed_area(g0)), box_shapes(gtb, GT_BOX_COLOR, observed=observed_area(g0))))
+        panels.append(bev(grid, "rgb", "prediction now (amber boxes >= 0.3, dashed = GT)", composite(o0["prob"], o0["dist"], observed=observed_area(g0)),
+                          boxes + box_shapes([d for d in o0["dets"] if d["score"] >= 0.3], DET_COLOR)))
         for dt in (0.5, -0.5):
             if dt in pred.outputs["dt"]:
                 od = pred.outputs["dt"][dt]
-                panels.append(bev(grid, "rgb", f"prediction at dt {dt:+.1f} s (dashed = GT then)", composite(od["prob"], od["dist"]),
-                                  box_shapes(gt_boxes(sample.reference[dt], t.groups), "k", "--", 0.7) +
-                                  box_shapes([d for d in od["dets"] if d["score"] >= 0.3], "tab:red")))
+                panels.append(bev(grid, "rgb", f"prediction at dt {dt:+.1f} s (dashed = GT then)", composite(od["prob"], od["dist"], observed=observed_area(sample.reference[dt])),
+                                  box_shapes(gt_boxes(sample.reference[dt], t.groups), GT_OVERLAY, "--", 0.7) +
+                                  box_shapes([d for d in od["dets"] if d["score"] >= 0.3], DET_COLOR)))
         if o0.get("vhat") is not None:
             sp = np.hypot(o0["vhat"][0], o0["vhat"][1])
             panels.append(bev(grid, "raster", "predicted speed field (m/s)", sp, boxes, cmap="viridis", colorbar=True, vmax=max(2.0, float(sp.max()))))
