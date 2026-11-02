@@ -321,7 +321,8 @@
     "unsafe": 0
    },
    "path": "../NuScenes_zips/nuscenes_camera/p07/v1.0-trainval07_blobs_camera.tgz",
-   "present": true,
+   "present": false,
+   "removed": "2026-11-02",
    "sha256": "9ba043bd1041795840aac85097b91deb169c84d340b3a32bf51d81143b44cbb7",
    "unpacked_marker": true,
    "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
@@ -384,7 +385,8 @@
     "unsafe": 0
    },
    "path": "../NuScenes_zips/nuscenes_camera/p08/v1.0-trainval08_blobs_camera.tgz",
-   "present": true,
+   "present": false,
+   "removed": "2026-11-02",
    "sha256": "9cd40fc6c07a610a4ab297f8c489037ca11aa63a886da35b831cac9d0aba908d",
    "unpacked_marker": true,
    "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
@@ -447,7 +449,8 @@
     "unsafe": 0
    },
    "path": "../NuScenes_zips/nuscenes_camera/p09/v1.0-trainval09_blobs_camera.tgz",
-   "present": true,
+   "present": false,
+   "removed": "2026-11-02",
    "sha256": "c2b87e49b37ac57dd7b1a83dd5f6b609c2b8227eadc9185c3e2a6e90dc98fc1a",
    "unpacked_marker": true,
    "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
@@ -510,7 +513,8 @@
     "unsafe": 0
    },
    "path": "../NuScenes_zips/nuscenes_camera/p10/v1.0-trainval10_blobs_camera.tgz",
-   "present": true,
+   "present": false,
+   "removed": "2026-11-02",
    "sha256": "1038a6204633067310b894da3793bca0a39f758fee039d22cf91a34757cbc89a",
    "unpacked_marker": true,
    "unpacked_members": "samples/CAM_FRONT sweeps/CAM_FRONT"
