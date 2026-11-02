@@ -10,7 +10,8 @@ and where along the range the misses are. These metrics close them; graph format
   dup_frac  share of the predicted length that runs parallel (|cos| > 0.9) within 0.75 m of another predicted piece that is neither its
             neighbour nor its sibling in the graph, not counting the first and last 4 m of a piece (fork zones); parallel duplicates are
             invisible to point F1, FL and S.
-  range     recall / precision at 1 m by distance from the ego: near < 20 m, mid 20 - 40 m, far >= 40 m (R@1_far is the open gap of loop 18);
+  range     recall / precision at 1 m by distance from the ego: near < 20 m, mid 20 - 40 m, far >= 40 m (R@1_far is the open gap of loop 18; a frame without
+            ground truth adds its predicted points, all false, to the precision bins);
             the far bin is also split at max(|x|,|y|) = 45 m, the edge of the inference seed lattice (E266): far_inner (< 45) and far_ring (45 - 48).
 
     extra(preds, gts) -> dict(topo_P, topo_R, topo_F1, dup_frac, R@1_near / mid / far / far_inner / far_ring, P@1_ the same)
@@ -161,11 +162,9 @@ def range_counts(pred, gt, tau=1.0):
     P, _, _ = GE.dense_points(pred)
     G, _, _ = GE.dense_points(gt)
     out = np.zeros((len(NAMES), 4))
-    if not len(G):
-        return out
-    dg = cKDTree(P).query(G)[0] if len(P) else np.full(len(G), np.inf)
-    dp = cKDTree(G).query(P)[0] if len(P) else np.zeros(0)
-    P = P.reshape(-1, 2)
+    dg = cKDTree(P).query(G)[0] if len(P) and len(G) else np.full(len(G), np.inf)  # without ground truth the predicted points are all false (they count in the precision bins)
+    dp = cKDTree(G).query(P)[0] if len(P) and len(G) else np.full(len(P), np.inf)
+    P, G = P.reshape(-1, 2), G.reshape(-1, 2)
     rg, rp = np.linalg.norm(G, axis=1), np.linalg.norm(P, axis=1)
     cg, cp = np.abs(G).max(1), np.abs(P).max(1)
     far_g, far_p = rg >= BINS[-1][1], rp >= BINS[-1][1]
@@ -229,6 +228,12 @@ def _selftest():
     assert r[3, 1] == 10 and r[4, 1] == 6 and r[3, 1] + r[4, 1] == r[2, 1], r  # inner + ring = far
     e = extra([cut], [lane])
     assert e["R@1_far_inner"] == 1.0 and e["R@1_far_ring"] == 0.0 and e["P@1_far_inner"] == 1.0 and e["P@1_far_ring"] == 0.0 and abs(e["R@1_far"] - 10 / 16) < 1e-12, e
+    nothing = dict(pts=[], edges=[])  # a frame without ground truth: its predicted points are false in their range bin (they once entered no P@1_<bin>)
+    junk = dict(pts=[np.stack([np.linspace(2, 10, 17), np.zeros(17)], 1)], edges=[])  # 17 points, all near
+    nn = range_counts(gt, gt)[0, 3]
+    assert list(range_counts(junk, nothing)[0]) == [0, 0, 0, 17] and range_counts(nothing, nothing).sum() == 0
+    e = extra([gt, junk], [gt, nothing])
+    assert abs(e["P@1_near"] - nn / (nn + 17)) < 1e-12 and e["P@1_far"] == 1.0 and e["R@1_near"] == 1.0, e
     print("topo_metrics selftest passed")
 
 

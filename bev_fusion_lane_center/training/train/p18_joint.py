@@ -26,6 +26,26 @@ import p8_lib as L  # noqa: E402
 from route_data import route_item  # noqa: E402
 
 DEV = "cuda"
+MAX_BAD = 20  # steps without an optimizer update in a row that fail the run
+
+
+def count_bad(bad, ok, what, step, max_bad=MAX_BAD):
+    """the steps without an optimizer update in a row: an update resets the count, a bad step adds one; max_bad in a row raise (a failed run, no done flag: a run that never
+    updates must not write a model that equals its start)"""
+    bad = 0 if ok else bad + 1
+    if bad >= max_bad:
+        raise RuntimeError(f"{bad} steps without an update in a row ({what}) at step {step}: the run is failed (no done flag)")
+    return bad
+
+
+def guarded_step(scaler, opt, bad, step):
+    """scaler.step + update; (bad, updated). A finite loss can still have inf / nan gradients under the fp16 scaler: it skips the update and lowers its scale (the rule of
+    trainer.fit), which counts as a bad step like a non-finite loss"""
+    scale0 = scaler.get_scale()
+    scaler.step(opt)
+    scaler.update()
+    updated = scaler.get_scale() >= scale0
+    return count_bad(bad, updated, "non-finite gradient", step), updated
 
 
 def main():
@@ -93,7 +113,7 @@ def main():
         dl = torch.utils.data.DataLoader(ds, batch_size=a.bs, shuffle=False, sampler=sampler, num_workers=a.workers, collate_fn=PD.collate, drop_last=True, persistent_workers=True, prefetch_factor=3)
     else:
         ds, dl = PD.loader("train", bs=a.bs, workers=a.workers, with_prev=False)
-    bad_steps = 0                                  # consecutive steps with a non-finite loss: a run that never gets a finite one must fail, not loop for ever
+    bad_steps = 0                                  # consecutive steps without an update (non-finite loss or gradient): a run that never updates must fail, not loop for ever
     while it < a.iters:
         for b in dl:
             b = {k: (v.to(DEV, non_blocking=True) if torch.is_tensor(v) else v) for k, v in b.items()}
@@ -137,18 +157,17 @@ def main():
             loss = lroute + a.lam * lb
             if not torch.isfinite(loss):
                 opt.zero_grad(set_to_none=True)
-                bad_steps += 1
-                if bad_steps >= 20:
-                    raise RuntimeError(f"{bad_steps} non-finite losses in a row at step {it}: the run is failed (no done flag)")
+                bad_steps = count_bad(bad_steps, False, "non-finite loss", it)
                 continue
-            bad_steps = 0
             opt.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
             scaler.unscale_(opt)
             gb = torch.nn.utils.clip_grad_norm_(net.parameters(), 5.0)
             torch.nn.utils.clip_grad_norm_(rnet.parameters(), 2.0)
-            scaler.step(opt)
-            scaler.update()
+            bad_steps, updated = guarded_step(scaler, opt, bad_steps, it)
+            if not updated:  # no update, no step of the schedule, the step is not counted
+                opt.zero_grad(set_to_none=True)
+                continue
             sched.step()
             for k, v in dict(loss=float(loss), route=float(lroute), builder=float(lb), grad_builder=float(gb) if torch.isfinite(gb) else run.get("grad_builder", 0.0), pos_rate=float(np.mean(pos)) if pos else 0.0, scale=float(scaler.get_scale())).items():
                 run[k] = 0.95 * run.get(k, v) + 0.05 * v

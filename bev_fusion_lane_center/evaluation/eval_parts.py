@@ -9,7 +9,8 @@ per-loop driver. The numerics are those of the drivers (imported, not re-written
     evaluate.py champion --timing                                  # ms per frame of the whole chain (idle GPU only)
 
 Keys in the card (`metrics`; the direction of each is in `better`):
-  route_success / route_cov / route_prec / route_frames    keys of drivers/p16_pipeline_eval.py (mean over the frames with a route; route_frames = their number)
+  route_success / route_cov / route_prec / route_frames    keys of drivers/p16_pipeline_eval.py (mean over the frames with route points and an SD map; route_frames = their number, the
+                                                           fixed denominator); a frame whose assembled graph is EMPTY counts as a failure (0 / 0 / 0), it is not skipped: route_empty = their number
   series.<pert>_<variant>.<cl|fail>.<S|Q|F1@1.0|J|topo_F1|lanes_found|vert100>   per phase of a failure series (graph metrics as evaluate.py); with --route also
   series.<tag>.<phase>.route_success                       (p17_route.py: the route head along the assembled edges, exact map)
   ms_per_frame (= ms.total.median) and ms.<stage>.<median|p90>   stages of drivers/p18_latency.py: builder, assembly, route_input, route_head, consumer_prep, consumer, total, memory
@@ -22,6 +23,7 @@ import os
 import pickle
 import re
 import sys
+import time
 
 import numpy as np
 
@@ -32,7 +34,7 @@ ROUTE_HEAD = "p16_f2hr_route_s0"  # the route head of the drivers (seed 0; seed 
 SERIES_KEYS = ("S", "Q", "F1@1.0", "J", "topo_F1", "lanes_found", "vert100")
 PHASES = (("cl", 0), ("fail", 1))  # phase of a series frame: first half clean, second half perturbed (p17_series.py)
 STAGES = ("builder", "assembly", "route_input", "route_head", "consumer_prep", "consumer", "total", "memory")
-COUNTS = ("route_frames",)  # numbers without a direction
+COUNTS = ("route_frames", "route_empty")  # numbers without a direction
 SPLIT_DS = {"val": "val_clean", "test": "test_clean"}  # the BuilderData name of a split (evaluate.SPLITS[split][0])
 
 
@@ -49,16 +51,19 @@ def route_frame(p, it, rp):
 
 
 def route_metrics(results):
-    """the route keys of the card from the per-frame results of route_frame (route_frames = the frames with a route)"""
-    out = dict(route_frames=len(results), route_success=float(np.mean([r["succ"] for r in results])) if results else float("nan"))
+    """the route keys of the card from the per-frame results of route_frame and route_over (route_frames = the frames with route points, the fixed denominator;
+    route_empty = those of them whose graph was empty, counted with success 0)"""
+    out = dict(route_frames=len(results), route_empty=sum(bool(r.get("empty")) for r in results),
+               route_success=float(np.mean([r["succ"] for r in results])) if results else float("nan"))
     if results:
         out.update(route_cov=float(np.mean([r["cov"] for r in results])), route_prec=float(np.mean([r["prec"] for r in results])))
     return out
 
 
 def route_over(items, probs, part):
-    """per-frame route results and the number of frames: items yields (row, token item or None); probs(it, sd raster) -> vertex probabilities. A frame without
-    vertices, route points or SD map is not counted (as the drivers)"""
+    """per-frame route results and the number of frames: items yields (row, token item or None); probs(it, sd raster) -> vertex probabilities; part = the data part of
+    the rows (BuilderData.part). A frame without route points or SD map is not counted (as the drivers); a frame WITH them but without vertices (no item, an empty
+    assembled graph) is a failure with success 0 (route_empty), so the mean is not taken over the frames the builder managed to answer"""
     import torch
     import p8_lib as L
     import sd_lib as SL
@@ -67,7 +72,10 @@ def route_over(items, probs, part):
     for row, it in items:
         n += 1
         rp, sd = rptl[row], sdl[row]
-        if it is None or len(it["xy"]) == 0 or rp is None or len(rp) == 0 or sd is None:
+        if rp is None or len(rp) == 0 or sd is None:
+            continue
+        if it is None or len(it["xy"]) == 0:
+            res.append(dict(L.route_success(np.zeros((0, 2)), rp), empty=True))
             continue
         sdm, _, _ = L.draw_sd(sd, row, 0.0, 0.0, 1)
         res.append(route_frame(probs(it, torch.from_numpy(SL.raster_sd(sdm))[None]), it, rp))
@@ -104,27 +112,34 @@ def route_from_tokens(tok, head=ROUTE_HEAD):
     return route_metrics(res), dict(source=f"tokens {tok}", head=head, frames=n)
 
 
-def builder_items(net, cfg, e, split, step=4.0):
-    """(row, route token item) of every frame of the split from the builder as deployed (GPU): CUDA-graph builder -> assembly (aux) -> route input at points every <= step m
-    (the loop of drivers/p16_pipeline_eval.py; p16_pipeline.route_input)"""
+def route_asm(e):
+    """the assembly settings of a registry entry for a route input: without dp_eps. The route input is made from the UNSIMPLIFIED graph (assemble(aux=True) refuses
+    dp_eps > 0: the token map refers to its vertices); the DP stage is an output stage of the export"""
+    return {k: v for k, v in e["asm"].items() if k != "dp_eps"}
+
+
+def builder_items(net, cfg, e, ds, step=4.0):
+    """(row, route token item; None for an empty graph) of every frame of the dataset ds (p16_data.BuilderData) from the builder as deployed (GPU): CUDA-graph builder ->
+    assembly (aux) -> route input at points every <= step m (the loop of drivers/p16_pipeline_eval.py; p16_pipeline.route_input)"""
     import p16_data as PD
     import p16_infer as PI
     import p16_pipeline as PP
     import p16_runtime as RT
     import p16_timing as TM
-    ds = PD.BuilderData(split, ks=None, train=False, with_prev=cfg.temporal)
     fb = RT.FastBuilder(net, cfg, TM.to_gpu(PD.collate([ds[0]])))
+    asm = route_asm(e)
     for i in range(len(ds)):
         b = TM.to_gpu(PD.collate([ds[i]]))
         row = int(ds.rows[int(b["k"][0])])
         r = fb.raw(b)
-        g, ax = PI.assemble(r, None, e["tau"], cfg, aux=True, **e["asm"])
+        g, ax = PI.assemble(r, None, e["tau"], cfg, aux=True, **asm)
         yield row, (PP.route_input(r, ax, g, fb.h_static, step, r["pi"]) if len(ax["V"]) else None)
 
 
 def route_from_builder(net, cfg, e, split, head=ROUTE_HEAD, step=4.0):
     """route metrics of a builder entry on the split (GPU, CUDA graphs as the deployed path); (metrics, info)"""
     import torch
+    import p16_data as PD
     import p16_pipeline as PP
     fr = PP.FastRoute(load_head(head, "cuda"))
 
@@ -132,7 +147,8 @@ def route_from_builder(net, cfg, e, split, head=ROUTE_HEAD, step=4.0):
         t = lambda a: torch.from_numpy(a)[None].cuda()
         return fr(t(it["tok"].astype(np.float32)), t(it["xy"]), t(it["cp"]), ras.cuda(), len(it["xy"])).cpu().numpy()
 
-    res, n = route_over(builder_items(net, cfg, e, SPLIT_DS[split], step), probs, split)
+    ds = PD.BuilderData(SPLIT_DS[split], ks=None, train=False, with_prev=cfg.temporal)
+    res, n = route_over(builder_items(net, cfg, e, ds, step), probs, ds.part)  # the part of the data files: 'val' for val AND test (the TEST rows live in the VAL pool)
     return route_metrics(res), dict(source="builder", head=head, step=step, frames=n)
 
 
@@ -161,15 +177,25 @@ def series_from_builder(net, cfg, e, tag, bs=4, workers=2):
     return [PI.assemble(r, None, e["tau"], cfg, **e["asm"]) for r in raw], gts, ds.meta["phase"], f"series input {tag}"
 
 
+def phase_route(vals, meta, rptl, sdl):
+    """{phase: (route success, frames, of them with an empty graph)} from the per-frame results of p17_route.run_series (None = skipped there). The frames are those with
+    route points and an SD map (the fixed denominator); a None on such a frame is an EMPTY assembled graph and counts as 0, as in route_over"""
+    out = {}
+    for nm, k in PHASES:
+        v = [(x, rptl[row], sdl[row]) for x, (row, ph) in zip(vals, meta) if ph == k]
+        v = [x for x, rp, sd in v if rp is not None and len(rp) and sd is not None]
+        out[nm] = (float(np.mean([0.0 if x is None else x for x in v])) if v else float("nan"), len(v), sum(x is None for x in v))
+    return out
+
+
 def series_route(net, cfg, e, tag, head=ROUTE_HEAD):
-    """route success per phase of a series, exact map (GPU): loops/loop17/p17_route.run_series (aux assembly, route head along the edges)"""
+    """route success per phase of a series, exact map (GPU): loops/loop17/p17_route.run_series (aux assembly, route head along the edges); phase_route"""
     import p17_eval as EV17
     import p17_route as RT17
+    import p8_lib as L
     ds = EV17.SeriesData(tag, with_prev=bool(cfg.temporal))
-    out, meta, _ = RT17.run_series(net, cfg, ds, [load_head(head, "cuda")], [0.0], e["tau"], e["asm"])
-    v = np.asarray([np.nan if x is None else x for x in out[(0, 0)]], float)
-    ph = np.asarray([m[1] for m in meta])
-    return {nm: (float(np.nanmean(v[ph == k])), int(np.isfinite(v[ph == k]).sum())) for nm, k in PHASES}
+    out, meta, _ = RT17.run_series(net, cfg, ds, [load_head(head, "cuda")], [0.0], e["tau"], route_asm(e))
+    return phase_route(out[(0, 0)], meta, L.cache("rpts", "val"), L.cache("sd", "val"))
 
 
 def failure_metrics(tag, cards):
@@ -181,7 +207,8 @@ def failure_metrics(tag, cards):
 
 def timing_argv(e, reg, n=60, tag=""):
     """the command line of drivers/p18_latency.py for a registry entry (time recursion off, the setting of every stored latency); ValueError when the driver cannot
-    time the entry as it is (another design, another network setting, other assembly settings than its fixed ones): the card must not claim a timing of another system"""
+    time the entry as it is (another design, another network setting, other assembly settings than its fixed ones, a union whose members differ in M or K0: the driver
+    times the second member at the first one's): the card must not claim a timing of another system"""
     import p16_timing as TM
     ent = [e] if e["kind"] == "builder" else [reg[m] for m in e.get("members", [])]
     if e["kind"] not in ("builder", "union") or not 1 <= len(ent) <= 2:
@@ -189,6 +216,8 @@ def timing_argv(e, reg, n=60, tag=""):
     for x in ent:
         if x["design"] != "D7" or set(x["set"]) != {"M", "K0"}:
             raise ValueError("timing: p18_latency times design D7 with M / K0 only")
+    if len({(x["set"]["M"], x["set"]["K0"]) for x in ent}) != 1:
+        raise ValueError("timing: the members of a union differ in M / K0; p18_latency times both at the first one's")
     base = {k: v for k, v in e["asm"].items() if k not in ("fork_prune", "fast")}
     if e["tau"] != 0.7 or {k: float(v) for k, v in base.items()} != {k: float(v) for k, v in TM.ASM.items()}:
         raise ValueError(f"timing: p18_latency times tau 0.7 and the assembly {TM.ASM} (+ fork_prune / fast); the entry differs")
@@ -207,15 +236,21 @@ def timing_metrics(res):
 
 
 def timing_run(e, reg, n, tag):
-    """runs p18_latency on an idle GPU for the entry; (latency json, its file)"""
+    """runs p18_latency on an idle GPU for the entry; (latency json, its file). The file must have been written by this call: a stale one with the same tag is an error.
+    Written = new, or changed in mtime / size against the listing taken before the call (the clock of WSL is not the clock that stamps files on the shared drive)"""
     import p18_latency as LT
+    pattern = f"{R}/runs/e18/latency/latency_*{tag}.json"
+    before = {f: (os.path.getmtime(f), os.path.getsize(f)) for f in glob.glob(pattern)}
     argv, old = timing_argv(e, reg, n, tag), sys.argv
     sys.argv = argv
     try:
         LT.main()
     finally:
         sys.argv = old
-    f = sorted(glob.glob(f"{R}/runs/e18/latency/latency_*{tag}.json"), key=os.path.getmtime)[-1]
+    new = [f for f in glob.glob(pattern) if before.get(f) != (os.path.getmtime(f), os.path.getsize(f))]
+    if not new:
+        raise RuntimeError(f"timing: p18_latency wrote no latency_*{tag}.json in this call (an older file with that tag is not used)")
+    f = max(new, key=os.path.getmtime)
     return json.load(open(f)), f
 
 
@@ -266,9 +301,10 @@ def run(e, reg, split, parts, build_net):
             m.update(failure_metrics(tag, cards))
             info["series"][tag] = dict(source=src, n={nm: int((np.asarray(phase) == v).sum()) for nm, v in PHASES}, cards=cards)
             if r and not f.get("series_dir"):  # route per phase of the series (not from stored graphs: they carry no route): the builder runs again, with the aux assembly of the route chain
-                for nm, (v, cnt) in series_route(*net(), e, tag, r["head"]).items():
+                for nm, (v, cnt, empty) in series_route(*net(), e, tag, r["head"]).items():
                     m[f"series.{tag}.{nm}.route_success"] = v
                     info["series"][tag].setdefault("route_n", {})[nm] = cnt
+                    info["series"][tag].setdefault("route_empty", {})[nm] = empty
     t = parts.get("timing")
     if t:
         res, path = timing_run(e, reg, t["n"], t["tag"])

@@ -5,9 +5,9 @@
     tools/env/_py14.sh evaluate.py champion --asm fork_prune=0.4  # try a setting (recorded in the card as an override)
     tools/env/_py14.sh evaluate.py champion --split test --test-id E230.f1p   # TEST only when the id is logged in evaluation/TEST_USAGE_LOG.md
     tools/env/_py14.sh evaluate.py champion --subset val250 --fresh           # the network path: 250 VAL frames re-inferred on the GPU, no cache
-    tools/env/_py14.sh evaluate.py --golden check [--cached-only]            # layer 1 of the protocol: every golden number reproduced (exit 1 otherwise)
-    tools/env/_py14.sh evaluate.py --golden write [names ...]                # (re)write golden entries: all registry names on VAL from the cache
-    tools/env/_py14.sh evaluate.py --golden write champion --subset val250 --fresh --tol 0.002   # the uncached entry (idle GPU)
+    tools/env/_py14.sh evaluate.py --golden check [--cached-only]            # layer 1 of the protocol: every golden number reproduced (exit 1 otherwise); golden.json holds 7 entries, not every registry name (PROTOCOL.md)
+    tools/env/_py14.sh evaluate.py --golden write [names ...]                # (re)write golden entries of the names given (default: all registry names; protected file: a grant under a decided D<n> first)
+    tools/env/_py14.sh evaluate.py --golden write champion --subset val250 --fresh --tol 0.0005   # the uncached entry (idle GPU; the stored tolerance)
     tools/env/_py14.sh evaluate.py --list
     tools/env/_py14.sh evaluate.py champion --route --failure dark,blur,cam_front3_off --timing   # parts (eval_parts.py): route success, failure series, ms per frame (GPU); card tag `parts`
     tools/env/_py14.sh evaluate.py champion --route --route-tokens tok_p18_f1pr_val_clean         # route success from stored tokens (CPU)
@@ -84,6 +84,13 @@ def test_allowed(test_id, log=None):
     if log is None:
         log = open(f"{R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8").read()
     return re.search(r"(?<![\w.])" + re.escape(test_id) + r"(?![\w.])", log) is not None
+
+
+def s_comparable(a, b):
+    """False when exactly one of the two names is a per-piece-DP entry (`*_dp`): sparse_metrics.Sp divides the oracle 14.3 by the node-id count (vert100), which
+    simplify_dp lowers, so a `*_dp` entry gains S without a better graph (D25: recall 0.7675 -> recall_dp 0.7789 in S = +0.0115 above the band, Q 0.7404 -> 0.7399);
+    across that basis Q is the number to read"""
+    return a.endswith("_dp") == b.endswith("_dp")
 
 
 def subset_ks(split, subset):
@@ -304,7 +311,7 @@ def evaluate(name, reg, split="val", over=None, tau=None, subset=None, fresh=Fal
         pr = SB.paired(SB.frame_records(g, gts), SB.frame_records(g2, gts), sc, B=1000)
         pr.update(TM.paired([TM.frame_record(p, q) for p, q in zip(g, gts)], [TM.frame_record(p, q) for p, q in zip(g2, gts)], sc, B=1000))
         m2 = SM.card_any(g2, gts, extra=True)
-        card["compare"] = dict(name=compare, metrics=m2, better=SM.better(m2), paired=pr)
+        card["compare"] = dict(name=compare, metrics=m2, better=SM.better(m2), paired=pr, s_not_comparable=not s_comparable(name, compare))
     os.makedirs(f"{R}/runs/eval/{name}", exist_ok=True)
     out = f"{R}/runs/eval/{name}/{split}{'_' + subset if subset else ''}{'_fresh' if fresh else ''}{'_' + tag if tag else ''}.json"
     json.dump(card, open(out, "w", encoding="utf-8"), indent=1, default=float)
@@ -327,6 +334,9 @@ def show(card):
         p = card["compare"]["paired"]
         keys = [k for k in ("S", "Q", "F1@1.0", "J", "lanes_found", "topo_F1", "R@1_far", "dup_frac") if k in p]
         print(f"{card['name']} - {cmp} (95 % over scenes): " + "  ".join(f"{k} {p[k]['diff']:+.3f} [{p[k]['lo']:+.3f}, {p[k]['hi']:+.3f}]" for k in keys if isinstance(p.get(k), dict) and "diff" in p[k]))
+        if card["compare"].get("s_not_comparable"):
+            print(f"WARNING: S is NOT comparable between {card['name']} and {cmp}: exactly one of them is a `_dp` entry, and S counts the node-id vertices that simplify_dp lowers (D25). "
+                  "Read Q; the S verdict below says nothing.")
         if "verdict" in p.get("S", {}):
             print("verdict on S (band 0.010):", p["S"]["verdict"])
     print("card:", card["path"])
