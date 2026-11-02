@@ -83,8 +83,6 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
          "off": torch.zeros(B, max_obj, 2), "size": torch.zeros(B, max_obj, 2), "rot": torch.zeros(B, max_obj, 2),
          "rad": torch.zeros(B, max_obj, 1), "vel": torch.zeros(B, max_obj, 2), "is_box": torch.zeros(B, max_obj),
          "dir": torch.zeros(B, max_obj, 1)}
-    gx = torch.arange(X, dtype=torch.float32).view(X, 1)
-    gy = torch.arange(Y, dtype=torch.float32).view(1, Y)
     for b, boxes in enumerate(boxes_batch):
         n = 0
         for bx in boxes:
@@ -102,9 +100,12 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
                 r = gaussian_radius(d, d)
             r = max(min_radius, int(r))
             sigma = (2 * r + 1) / 6
+            x0, x1, y0, y1 = max(0, ix - r), min(X, ix + r + 1), max(0, iy - r), min(Y, iy + r + 1)     # the peak is 0 outside |dx|, |dy| <= r: only that window is computed (same values, 2x less CPU)
+            gx = torch.arange(x0, x1, dtype=torch.float32).view(-1, 1)
+            gy = torch.arange(y0, y1, dtype=torch.float32).view(1, -1)
             peak = torch.exp(-((gx - ix) ** 2 + (gy - iy) ** 2) / (2 * sigma * sigma))
-            peak = peak * (((gx - ix).abs() <= r) & ((gy - iy).abs() <= r))
-            t["hm"][b, g] = torch.maximum(t["hm"][b, g], peak)
+            w = t["hm"][b, g, x0:x1, y0:y1]
+            w.copy_(torch.maximum(w, peak))
             t["ind"][b, n], t["mask"][b, n], t["group"][b, n] = ix * Y + iy, 1.0, g
             t["off"][b, n] = torch.tensor([fx - ix, fy - iy])
             t["vel"][b, n] = torch.tensor([bx["vx"], bx["vy"]])

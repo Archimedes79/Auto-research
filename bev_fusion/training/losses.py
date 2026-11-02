@@ -337,6 +337,7 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
     radar point) and its centre cell has w_obj > 0; the others are ignored (neither positive nor negative: their peak
     region and every cell of w_obj = 0 get a constant logit, so no loss gradient). Returns (head_loss dict, targets)."""
     X, Y = w_obj.shape[-2:]
+    w_host = w_obj[:, 0].detach().cpu()                                    # ONE device-to-host read per call (float(w_obj[...]) per box was one GPU sync per box: ~270 per step)
     keep, drop = [], []
     for b, boxes in enumerate(boxes_batch):
         k, d = [], []
@@ -348,7 +349,7 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
             iy = int(math.floor((hb["cy"] - grid.y_min) / grid.res))
             if not (0 <= ix < X and 0 <= iy < Y):
                 continue
-            (k if bx.get("observed", True) and float(w_obj[b, 0, ix, iy]) > 0 else d).append(hb)
+            (k if bx.get("observed", True) and float(w_host[b, ix, iy]) > 0 else d).append(hb)
         keep.append(k)
         drop.append(d)
     dev = out["hm"].device

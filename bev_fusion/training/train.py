@@ -48,7 +48,7 @@ try:
     from .augment import flip_batch
     from .feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
     from . import freeze as freeze_mod
-    from .probe import ModuleProbe, StepTimer, batch_tokens, dump_incident
+    from .probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident
     from .interface import check_inputs, check_outputs
     from .loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from .losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -60,7 +60,7 @@ except ImportError:                                   # run as a script
     from augment import flip_batch
     from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
     import freeze as freeze_mod
-    from probe import ModuleProbe, StepTimer, batch_tokens, dump_incident
+    from probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident
     from interface import check_inputs, check_outputs
     from loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
     from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -128,6 +128,11 @@ class TrainConfig:
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting
     train_only: tuple = ()                       # module prefixes that train, everything else is frozen (freeze.py; () = everything trains)
     freeze: tuple = ()                           # module prefixes that are frozen (freeze.py); with train_only it takes from it. Not in RESUME_FREE: a resume needs the same plan
+    pin_memory: bool = False                     # DataLoader with pinned host memory and non-blocking copies to the GPU (cuda only; same numbers; NOT measured: the pinning thread shares the GIL with the host-bound main thread)
+    prefetch_factor: int = 0                     # batches each loader worker prepares ahead (0 = the torch default, 2); only with workers > 0
+    cudnn_benchmark: bool = False                # torch.backends.cudnn.benchmark: the fastest convolution algorithm per input shape (shapes are static here); the last bits may differ
+    tf32: bool = False                           # torch.set_float32_matmul_precision("high"): TF32 for fp32 matrix products (torch already runs convolutions in TF32 by default); changes the numbers slightly
+    profile_steps: int = 0                       # > 0: torch.profiler over that many optimiser steps (at most 8: 30 steps held 22 GB of host RAM) after 10 warm-up steps; writes profile.txt into the run folder (probe.StepProfiler)
     probe: bool = False                          # log grad.<module> / upd.<module> (gradient norm, update-to-weight ratio) and t_data / t_step in the rows of log_every,
                                                  # dump incident_<step>.json on a skipped step (probe.py; costs one copy of the trainable weights per logged step)
     seed: int = 0
@@ -234,19 +239,24 @@ def make_loader(ds, cfg, train, workers=None, generator=None):
     if cfg.seq_len > 1:
         fn = functools.partial(collate_clips, fn=fn)
     n = cfg.workers if workers is None else workers
+    extra = {}
+    if cfg.pin_memory and torch.cuda.is_available():
+        extra["pin_memory"] = True
+    if cfg.prefetch_factor > 0 and n > 0:
+        extra["prefetch_factor"] = cfg.prefetch_factor
     return torch.utils.data.DataLoader(ds, batch_size=cfg.batch_size, shuffle=train, num_workers=n, collate_fn=fn, drop_last=train,
-                                       persistent_workers=train and n > 0, generator=generator)
+                                       persistent_workers=train and n > 0, generator=generator, **extra)
 
 
-def to_device(batch, device):
+def to_device(batch, device, non_blocking=False):
     out = {}
     for k, v in batch.items():
         if torch.is_tensor(v):
-            out[k] = v.to(device)
+            out[k] = v.to(device, non_blocking=non_blocking)
         elif k == "radar":
-            out[k] = {a: b.to(device) for a, b in v.items()}
+            out[k] = {a: b.to(device, non_blocking=non_blocking) for a, b in v.items()}
         elif k == "steps":
-            out[k] = [[tuple(t.to(device) for t in s) for s in fr] for fr in v]
+            out[k] = [[tuple(t.to(device, non_blocking=non_blocking) for t in s) for s in fr] for fr in v]
         else:
             out[k] = v
     return out
@@ -283,8 +293,14 @@ class EMA:
 
     def update(self, model, step):
         d = min(self.decay, (1 + step) / (10 + step))
-        for k, v in self._tensors(model).items():
-            if k not in self.skip:
+        live = [(k, v) for k, v in self._tensors(model).items() if k not in self.skip]
+        full = [(k, v) for k, v in live if v.dtype in (torch.float32, torch.float64)]
+        if full:                                                 # two multi-tensor calls instead of two kernels per state tensor (218 float tensors of the t10 model: 436 launches of the ~20000 per step)
+            shadow = [self.shadow[k] for k, _ in full]
+            torch._foreach_mul_(shadow, d)
+            torch._foreach_add_(shadow, [v.detach() for _, v in full], alpha=1 - d)
+        for k, v in live:                                        # a multi-tensor call rounds the scalar to the tensor's dtype (bf16 / fp16 state would be averaged with 0.98828125 for 0.99): those take the loop
+            if v.dtype not in (torch.float32, torch.float64):
                 self.shadow[k].mul_(d).add_(v.detach(), alpha=1 - d)
 
     def apply(self, model):
@@ -375,7 +391,7 @@ def prune_checkpoints(out_dir, keep):
 
 
 RESUME_FREE = ("name", "out_root", "data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers",
-               "device", "log_every", "eval_every", "eval_batches", "save_every", "keep", "slim_at_end", "max_bad_steps", "grad_diag_every", "probe")
+               "device", "log_every", "eval_every", "eval_batches", "save_every", "keep", "slim_at_end", "max_bad_steps", "grad_diag_every", "probe", "pin_memory", "prefetch_factor", "profile_steps")
 
 
 def check_resume(old, cfg, name):
@@ -387,6 +403,7 @@ def check_resume(old, cfg, name):
     a, b = norm(old), norm(dataclasses.asdict(cfg))
     diff = sorted(k for k in a if k not in RESUME_FREE and a[k] != b.get(k))
     diff += [k for k in ("train_only", "freeze") if k not in a and b.get(k)]               # a checkpoint from before freeze.py has no plan: a new one cannot resume it (its optimiser state has a slot per parameter)
+    diff += [k for k in ("cudnn_benchmark", "tf32") if k not in a and b.get(k)]            # a checkpoint from before these switches ran without them: turning one on changes the numbers in the middle of a run
     if diff and os.environ.get("BF_RESUME_ANY") != "1":
         raise SystemExit(f"{name}: the configuration differs from the checkpoint's in {diff}; start a new run name "
                          f"(or set BF_RESUME_ANY=1)")
@@ -443,6 +460,39 @@ def val_logged(out_dir, step):
 # ------------------------------------------------------------------------------------------------ loop
 def _f(v):
     return float(v.detach()) if torch.is_tensor(v) else float(v)
+
+
+def _pack(out, selected):
+    """snapshot of the logged scalar terms of ONE keyframe: (order, packed). The tensors are stacked NOW into one device tensor (a term that is a view of a parameter, which a
+    later keyframe changes in place, must be read as it is at this point; the stack is a copy), numbers are kept. Nothing is read back here: the old code called float() per
+    term, and every call waited for the GPU, which was still busy with the backward of this keyframe, so the host could not queue the next keyframe meanwhile. The terms are
+    widened to float64 (exact for float16 / bfloat16 / float32 / float64, as float(v) was)"""
+    order, tens = [], []
+    for k, v in out.items():
+        if selected(k):
+            if torch.is_tensor(v):
+                order.append((k, True, len(tens)))
+                tens.append(v.detach().double().reshape(()))
+            else:
+                order.append((k, False, float(v)))
+    return order, (torch.stack(tens) if tens else None)
+
+
+def _unpack(kf, L):
+    """-> (acc, totals) of the packed keyframes with ONE device-to-host transfer. Bit-identical to the per-term floats: the same float32 values widened to Python floats, summed in
+    the same order (keyframe by keyframe, term by term)"""
+    packs = [p for _, p in kf if p is not None]
+    flat = torch.cat(packs).cpu().tolist() if packs else []
+    acc, totals, pos = {}, [], 0
+    for order, p in kf:
+        base = pos
+        pos += 0 if p is None else p.numel()
+        for k, is_t, x in order:
+            val = flat[base + x] if is_t else x
+            acc[k] = acc.get(k, 0.0) + val / L
+            if k == "total":
+                totals.append(val)
+    return acc, totals
 
 
 def consistency_weight(cfg, step_frac):
@@ -537,7 +587,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))
     ego = batch_ego(batch["gap_steps"], dts, device) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
-    batch = to_device(batch, device)
+    batch = to_device(batch, device, non_blocking=bool(cfg is not None and cfg.pin_memory))
     ctx = torch.autocast("cuda", dtype=torch.bfloat16) if amp == "bf16" and device.startswith("cuda") else torch.autocast("cpu", enabled=False)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
     first = not _CONTRACT_CHECKED
@@ -590,7 +640,8 @@ def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_t
     the later keyframes, so the gradient is that of the clip's mean loss).
     -> (dict of the scalar terms averaged over the keyframes, finite flag, diag of the last keyframe or None, list of the
     per-keyframe totals)."""
-    L, state, prev, acc, totals, dg = len(clip), None, None, {}, [], None
+    L, state, prev, kf, dg = len(clip), None, None, [], None
+    selected = lambda k: k == "total" or k == "consistency" or k.startswith(("group.", "s.")) or k in LOGGED_TERMS          # noqa: E731
     bptt, accum = bool(cfg is not None and cfg.seq_bptt), (cfg.accum if cfg is not None else 1)
     if augment and cfg is not None and cfg.flip_aug > 0:         # mirror a sample in ALL its keyframes (same memory frame)
         flip = torch.rand(len(clip[0]["tokens"])) < cfg.flip_aug
@@ -601,17 +652,16 @@ def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_t
         out, res, _ = forward_loss(model, loss, batch, step_frac, device, amp, cfg, diag=diag and t == L - 1,
                                    train_terms=train_terms, state=state, step=step)
         if not torch.isfinite(out["total"]):
+            acc, totals = _unpack(kf, L)
             return acc, False, dg, totals
-        totals.append(_f(out["total"]))
+        kf.append(_pack(out, selected))                           # before the backward, which changes the Kendall weights in place (clamp_)
         if backward:           # backward at once: the loss of a later keyframe changes the Kendall weights in place (clamp_)
             (out["total"] / (L * accum)).backward(retain_graph=bptt and t < L - 1)    # bptt: the graph is still needed for the state path
-        for k, v in out.items():
-            if k == "total" or k == "consistency" or k.startswith(("group.", "s.")) or k in LOGGED_TERMS:
-                acc[k] = acc.get(k, 0.0) + _f(v) / L
         if "diag" in out:
             dg = out["diag"]
         state = res["state"] if bptt else detach_tree(res["state"])
         prev = batch
+    acc, totals = _unpack(kf, L)                                  # the only synchronisation of the clip besides the finite check of each keyframe
     return acc, True, dg, totals
 
 
@@ -717,10 +767,26 @@ def check_grids(model, *datasets):
                              f"x {d.x_min}..{d.x_max} y {d.y_min}..{d.y_max} res {d.res} (make_datasets builds the default grid)")
 
 
+def apply_speed_flags(cfg):
+    """the opt-in speed switches of the config; all off by default and then nothing is touched. They are process-wide and set once at the start of train() (an eval_fn in the
+    same process runs with them). -> {name: value} of what was set"""
+    done = {}
+    if cfg.cudnn_benchmark:
+        torch.backends.cudnn.benchmark = True
+        done["cudnn.benchmark"] = True
+    if cfg.tf32:
+        torch.set_float32_matmul_precision("high")
+        done["tf32"] = "high"
+    return done
+
+
 def train(cfg, eval_fn=None, datasets=None):
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
     device = cfg.device if (cfg.device != "cuda" or torch.cuda.is_available()) else "cpu"
+    speed = apply_speed_flags(cfg)
+    if speed:
+        print("speed flags:", speed, flush=True)
     out_dir = os.path.join(cfg.out_root, cfg.name)
     os.makedirs(out_dir, exist_ok=True)
     _clear_control(out_dir)
@@ -797,6 +863,7 @@ def train(cfg, eval_fn=None, datasets=None):
     params = [p for g in opt.param_groups for p in g["params"]]
     bad, t0, step0, last = 0, time.time(), step, {}
     probe, timer = (ModuleProbe(model, every=cfg.log_every), StepTimer()) if cfg.probe else (None, None)
+    prof = StepProfiler(out_dir, cfg.profile_steps, device=device) if cfg.profile_steps > 0 else None
     while step < cfg.steps:
         reason = _stop_requested(out_dir)               # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
         if reason is not None:
@@ -849,6 +916,8 @@ def train(cfg, eval_fn=None, datasets=None):
                 prow = pstep.finish()
         step += 1
         trow = timer.row() if timer is not None else {}
+        if prof is not None:
+            prof.tick()
         if not skipped and (step % cfg.log_every == 0 or step == 1 or "diag" in acc):
             rec = {"step": step, "t": time.time(), "lr": cfg.lr * f, "grad_norm": float(gn),
                    "s_per_step": (time.time() - t0) / max(1, step - step0), **acc, **prow, **trow}
@@ -866,6 +935,8 @@ def train(cfg, eval_fn=None, datasets=None):
             log.write(json.dumps({"step": step, "val": ev}) + "\n")
             log.flush()
             print(f"step {step}: val total {ev.get('total', float('nan')):.4f}", flush=True)
+    if prof is not None:
+        prof.close()                                            # a run shorter than warm-up + window writes what it has (before the final save: its wall time must not hold the checkpoint write)
     save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, slim=cfg.slim_at_end or was_slim)
     prune_checkpoints(out_dir, 1 if (cfg.slim_at_end or was_slim) else cfg.keep)         # a finished run: the final weights only
     return model, loss, ema, last

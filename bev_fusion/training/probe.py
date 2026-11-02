@@ -144,3 +144,71 @@ def dump_incident(run_dir, step, kind, batch_ids=None, losses=None, extra=None):
 def read_incident(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+class StepProfiler:
+    """torch.profiler over `steps` optimiser steps after `warmup` steps (TrainConfig.profile_steps; off by default). Writes <run folder>/profile.txt: the wall time of the window,
+    how much of it the GPU was busy (the sum of the kernel times over the wall time: a low share means the GPU waits for the host), how often the host synchronised with
+    the GPU (aten::item / cudaStreamSynchronize / cudaMemcpy calls per step) and the top operators by GPU time and by CPU time. Call tick() once at the end of every optimiser
+    step and close() when the loop ends (a run shorter than warm-up + window writes what it has). The window is at most MAX_STEPS: the profiler keeps every event in host memory
+    (30 steps of the bev_fusion trainer held 22 GB and took 3 minutes to close, 2026-11-02, run speed.b; 8 steps still take about 100 s to close). close() never raises"""
+    MAX_STEPS = 8
+
+    def __init__(self, out_dir, steps, warmup=10, device="cuda"):
+        self.out_dir, self.steps, self.warmup, self.cuda = out_dir, min(int(steps), self.MAX_STEPS), warmup, str(device).startswith("cuda")
+        if int(steps) > self.MAX_STEPS:
+            print(f"profile: window of {int(steps)} steps shortened to {self.MAX_STEPS} (the profiler keeps every event in host memory)", flush=True)
+        self.n, self.prof, self.t0, self.done, self.exited = 0, None, None, False, False
+
+    def tick(self):
+        if self.done or self.steps <= 0:
+            return
+        self.n += 1
+        if self.prof is None and self.n == self.warmup:
+            acts = [torch.profiler.ProfilerActivity.CPU] + ([torch.profiler.ProfilerActivity.CUDA] if self.cuda else [])
+            self.prof = torch.profiler.profile(activities=acts)
+            self.prof.__enter__()
+            self.t0, self.n0 = time.perf_counter(), self.n
+        elif self.prof is not None and self.n - self.n0 >= self.steps:
+            self.close()
+
+    def close(self):
+        """writes profile.txt; a failure is printed, never raised (a diagnostic must not end a training run)"""
+        if self.prof is None or self.done:
+            return
+        self.done = True
+        try:
+            self._write()
+        except Exception as e:                                  # noqa: BLE001
+            print(f"profile: profile.txt not written ({type(e).__name__}: {e})", flush=True)
+        finally:
+            if not self.exited:                                 # a failure before the profiler was left: leave it, or torch aborts at the end of the process
+                try:
+                    self.prof.__exit__(None, None, None)
+                except Exception:                               # noqa: BLE001
+                    pass
+            self.prof = None                                    # the events of the window are millions of objects: free them now
+
+    def _write(self):
+        if self.cuda:
+            torch.cuda.synchronize()
+        wall = time.perf_counter() - self.t0
+        self.prof.__exit__(None, None, None)
+        self.exited = True
+        steps = max(1, self.n - self.n0)
+        ka = self.prof.key_averages()
+        dev = lambda e: getattr(e, "self_device_time_total", getattr(e, "self_cuda_time_total", 0.0))       # noqa: E731 - the attribute was renamed in torch 2.x
+        gpu_s = sum(dev(e) for e in ka if e.device_type == torch.autograd.DeviceType.CPU) / 1e6        # the operator rows only, as torch's own "Self CUDA time total": the kernel rows repeat the same time
+        syncs = {e.key: e.count for e in ka if e.key in ("aten::item", "cudaStreamSynchronize", "cudaDeviceSynchronize", "cudaMemcpyAsync", "cudaMemcpy")}       # aten::item = _local_scalar_dense
+        lines = [f"window: {steps} optimiser steps, {wall:.2f} s wall = {wall / steps:.3f} s per step",
+                 (f"GPU kernels busy: {gpu_s:.2f} s of {wall:.2f} s = {100 * gpu_s / wall:.0f} % (the rest is the GPU waiting for the host or the data)" if self.cuda
+                  else "no CUDA in this run: CPU operators only"),
+                 "host-device synchronisations per step: " + (", ".join(f"{k} {v / steps:.1f}" for k, v in sorted(syncs.items())) or "none seen"), ""]
+        key = None if not len(ka) else ("self_device_time_total" if hasattr(ka[0], "self_device_time_total") else "self_cuda_time_total")
+        if self.cuda and key:
+            lines += ["top operators by GPU time:", ka.table(sort_by=key, row_limit=25, max_name_column_width=60), ""]
+        lines += ["top operators by CPU time:", ka.table(sort_by="self_cpu_time_total", row_limit=20, max_name_column_width=60)]
+        path = os.path.join(self.out_dir, "profile.txt")
+        with open(path + ".tmp", "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        os.replace(path + ".tmp", path)

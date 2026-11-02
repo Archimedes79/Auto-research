@@ -34,6 +34,8 @@ run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py
 run "GT cache, targets" "$PY" tests/test_gt_cache_targets.py
+run "speed flags"       "$PY" tests/test_speed_flags.py            # run_clip against its per-term float() version, switches, resume rules, profiler
+run "host overhead"     "$PY" tests/test_host_overhead.py          # target window, one host read per call, multi-tensor EMA
 if [ -f runs/t10_dual_s0/ckpt_00003000.pt ]; then               # its G4 warm-starts from this real checkpoint (not in git)
   run "velocity hurdle" "$PY" tests/test_velocity_hurdle.py     # t11; CPU, about 1 min, 2.2 GB peak
 else
