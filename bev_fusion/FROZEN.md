@@ -14,3 +14,4 @@ What is frozen is everything that makes a number comparable between two runs or 
 
 ## Changelog
 - 2026-11-02: frame frozen at the state after the hygiene flag and `lr_groups` (`df9d437`) and the split clip (`e1e28f2`); `frozen.json` holds the hashes of that state.
+- 2026-11-02: `evaluation/bev_timing.py` idle guard (bug fix): a `run.py` launcher merely queued for a GPU slot, whose arguments name train.py / run_ar.sh / bev_suite, was counted as a GPU user and refused the timing on an idle GPU (0 % utilisation, 0.9 GB). Only a python process running a trainer / evaluation / probe script on the GPU counts now (`holds_gpu`); the self-test fails with the old logic (queued launchers), `ar-critic` pass done (interpreter options with a value, `-m` forms, the `modules` command, more GPU scripts added). No number of any run changes.

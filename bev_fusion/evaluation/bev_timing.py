@@ -10,11 +10,13 @@ attributed EXCLUSIVELY (its time is taken off the caller), a module called sever
 (the sum of its calls). The sum of the modules is printed next to the unsynchronised total and the difference is `unattributed_ms`: host-side work outside every
 module (precompute, rasterising the radar, decoding) plus the synchronisation overhead (every sync stalls the queue: the sum of a small-kernel chain is a
 little ABOVE its fused time on the GPU, while the host work makes the total larger): read the split as shares, not as an exact budget.
+A job that is merely QUEUED (a run.py launcher waiting for its GPU slot) is not seen, and when a slot frees it starts under a running timing: time through a GPU
+slot (as `temp/t16/eval_chain.sh` does) or look at the schedule first.
 This is the fp32 path of `BEVSubject.benchmark()` with a cold memory (no state carried in) and without the ego correction; a run trained with cfg.amp != off or
 a warm-memory deployment is not what is timed here (a warning says so). Training: the loss of a micro-batch (forward) and its backward, median of 8 with min / max.
 
-IDLE GPU ONLY. The GPU utilisation (max of 3 samples), the memory in use, the other GPU processes (`nvidia-smi` shows none under WSL2, so `ps` is read too: any
-trainer / evaluation process counts), the load average are stored with the numbers (`idle`) and a busy GPU is refused - before the model is loaded AND again before
+IDLE GPU ONLY. The GPU utilisation (max of 3 samples), the memory in use, the other GPU processes (`nvidia-smi` shows none under WSL2, so `ps` is read too: a python
+process running a trainer / evaluation / probe script on the GPU counts, a run.py launcher waiting for a slot does not), the load average are stored with the numbers (`idle`) and a busy GPU is refused - before the model is loaded AND again before
 the timed loop - unless --force (the result is then marked not idle and must not be quoted). Result: RUN/eval/timing_modules.json (default).
 `bev_suite.py RUN time` gives the headline latency of the whole chain (eval/latency.json); this is its split by module."""
 from __future__ import annotations
@@ -22,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -35,7 +38,9 @@ sys.path[:0] = [ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autore
 from evaluation.bev_modules import chain_modules, wrap_method  # noqa: E402
 
 GPU_BASELINE_MB = 2000                       # desktop apps hold ~1.3 GB with no job
-BUSY_PATTERNS = ("train.py", "bev_suite.py", "evaluate_run", "run_ar.sh")     # a process whose command line has one of these may be using the GPU
+GPU_SCRIPTS = {"train.py": "cuda", "train_motion_block.py": "cuda", "bev_suite.py": "cuda", "bev_runner.py": "cuda", "bev_timing.py": "cuda",
+               "bev_prototype.py": "cuda", "cache_bevfusion_features.py": "cuda", "bev_modules.py": "cpu"}        # script -> the device it uses when --device is not given
+SUITE_OPTIONS_WITH_VALUE = ("--device", "--workers", "--split", "--ckpt-dir", "--out", "--control", "--state")    # bev_suite.py's global options that take a value
 
 
 def sync(device):
@@ -127,12 +132,50 @@ def train_split(loss_fn, zero_grad, device="cpu", n=8, warmup=5):
     return {"forward_loss": statistics.median(fw), "backward": statistics.median(bw), "forward_loss_min_max": [min(fw), max(fw)], "backward_min_max": [min(bw), max(bw)]}
 
 
+def holds_gpu(args):
+    """does this command line (`ps -eo args`) belong to a process that holds the GPU? Only a python interpreter RUNNING one of GPU_SCRIPTS does (the script is the first
+    token ending in .py, or the module of `-m`; `-W ignore` / `-X dev` values are not mistaken for it), on the device it was given (--device, else the script's default;
+    bev_suite's `modules` command defaults to the CPU). A waiting run.py launcher (queued for a GPU slot, its own arguments name train.py and run_ar.sh), a bash wrapper,
+    `python -c` and a shell are not users of the GPU."""
+    tok = args.split()
+    while tok and (os.path.basename(tok[0]) == "env" or "=" in tok[0]):         # `env VAR=1 python ...`
+        tok = tok[1:]
+    if not tok or not os.path.basename(tok[0]).startswith("python"):
+        return False
+    opts = tok[1:]
+    if "-c" in opts[:4]:
+        return False
+    if "-m" in opts[:4]:
+        i = opts.index("-m")
+        script, after = opts[i + 1].split(".")[-1] + ".py" if i + 1 < len(opts) else "", opts[i + 2:]
+    else:
+        i = next((k for k, t in enumerate(opts) if t.endswith(".py")), None)
+        script, after = (os.path.basename(opts[i]), opts[i + 1:]) if i is not None else ("", [])
+    if script not in GPU_SCRIPTS:
+        return False
+    device = GPU_SCRIPTS[script]
+    m = re.search(r"--device(?:=|\s+)(\S+)", args)
+    if m:
+        device = m.group(1)
+    elif script == "bev_suite.py":
+        positional, k = [], 0
+        while k < len(after) and len(positional) < 2:
+            if after[k].startswith("--"):
+                k += 2 if after[k] in SUITE_OPTIONS_WITH_VALUE else 1
+            else:
+                positional.append(after[k])
+                k += 1
+        if len(positional) == 2 and positional[1] == "modules":
+            device = "cpu"
+    return device.startswith("cuda")
+
+
 def busy_processes(ps_text, own):
-    """the processes of a `ps -eo pid,args` listing whose command line looks like a trainer / evaluation (BUSY_PATTERNS), except the pids in `own`"""
+    """the processes of a `ps -eo pid,args` listing that hold the GPU (holds_gpu), except the pids in `own`"""
     out = []
     for ln in ps_text.splitlines()[1:]:
         parts = ln.strip().split(None, 1)
-        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) not in own and any(p in parts[1] for p in BUSY_PATTERNS):
+        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) not in own and holds_gpu(parts[1]):
             out.append(f"{parts[0]} {parts[1][:100]}")
     return out
 
@@ -323,6 +366,28 @@ def selftest():
     assert is_idle({**ok, "mem_used_mb": 11800.0}, "cuda", check_memory=False), "after our own model is loaded the memory says nothing"
     ps = "  PID COMMAND\n  101 /usr/bin/python -u runs/t16/code/train.py cfg\n  102 python evaluation/bev_suite.py runs/x timing\n  103 bash -c sleep 5\n  104 python other.py\n"
     assert [x.split()[0] for x in busy_processes(ps, {102})] == ["101"] and busy_processes(ps, {101, 102}) == [], "ps: trainers / evaluations, not ourselves"
+    # queued jobs are not GPU users (the bug: a run.py launcher waiting for a slot, whose arguments name train.py / run_ar.sh / bev_suite, refused the timing on an idle GPU)
+    waiting = ("  PID COMMAND\n"
+               "  201 python3 /mnt/c/Auto-research/autoresearch/tools/run.py --id t17.data --gpu --split train --hyp more scenes -- bash temp/train/run_ar.sh temp/compose/t17_data.json\n"
+               "  202 python3 ../autoresearch/tools/run.py --id t17.data.eval --gpu --split val --no-card --after t17.data -- bash temp/t16/eval_chain.sh runs/t17_data\n"
+               "  203 bash temp/train/run_ar.sh temp/compose/t17_data.json\n"
+               "  204 python3 ../autoresearch/tools/run.py --id x --gpu -- python evaluation/bev_suite.py runs/x eval --n 10\n")
+    assert busy_processes(waiting, set()) == [], busy_processes(waiting, set())
+    running = ("  PID COMMAND\n  301 /home/ml/miniconda3/envs/gcar/bin/python -u runs/t17_data/code/train.py temp/compose/t17_data.json\n"
+               "  302 python -u evaluation/bev_suite.py runs/t17_data eval --n 1000\n  303 python -u evaluation/bev_suite.py runs/t17_data --device cpu eval --n 6\n"
+               "  304 python evaluation/bev_suite.py runs/t17_data modules --frames 3\n  305 python evaluation/bev_suite.py runs/t17_data --device cuda modules\n  306 python -c import train.py\n")
+    assert [x.split()[0] for x in busy_processes(running, set())] == ["301", "302", "305"], busy_processes(running, set())
+    for line, want in (("python3.12 -u runs/x/code/train.py cfg.json", True), ("python -W ignore runs/x/code/train.py cfg.json", True), ("python -X dev -u train.py cfg", True),
+                       ("env CUDA_VISIBLE_DEVICES=0 python train.py cfg", True), ("python -m evaluation.bev_suite runs/x eval --n 5", True),
+                       ("python -m evaluation.bev_suite runs/x --device=cpu eval --n 5", False), ("python evaluation/bev_suite.py runs/x eval --n 5 --out modules", True),
+                       ("python evaluation/bev_suite.py runs/x --workers 0 modules", False), ("python evaluation/bev_suite.py runs/modules eval", True),
+                       ("python evaluation/bev_suite.py runs/x --curves --fusion eval", True), ("python evaluation/bev_suite.py runs/x --device=cuda modules", True),
+                       ("python evaluation/bev_suite.py runs/x --device cuda modules", True), ("python runner/bev_runner.py full runs/x", True),
+                       ("python runner/bev_runner.py full runs/x --device cpu", False), ("python evaluation/bev_timing.py runs/x", True), ("python evaluation/bev_modules.py runs/x", False),
+                       ("python evaluation/bev_modules.py runs/x --device cuda", True), ("python evaluation/bev_prototype.py runs/x", True),
+                       ("python -c train.py", False), ("python -m json.tool train.py", False), ("python3 tools/run.py --id x --gpu -- python train.py", False),
+                       ("bash temp/train/run_ar.sh cfg train.py", False), ("python other.py train.py", False)):
+        assert holds_gpu(line) == want, (line, want)
     print("bev_timing selftest ok: per call / per frame / exclusive milliseconds of toy modules with known sleeps, hooks removed and output unchanged, training split, idle rule")
 
 
