@@ -1,7 +1,7 @@
 # Data
 
 ## In this folder
-- Raw nuScenes is on D: and is described once for all problems in `../../datasets/NuScenes/README.md`; this file lists only this problem's own data.
+- Raw nuScenes is on D: and is described once for all problems in `../../data/NuScenes/README.md`; this file lists only this problem's own data.
 - `nuscenes_additions/` (not in git, since 2026-10-25): this problem's derived nuScenes files, `nuscenes_additions/lcr_crn/` (CRN info files `nuscenes_infos_{train,val}{,_crn}.pkl`, `nuscenes_additions/lcr_crn/radar_bev_filter/`, `nuscenes_additions/lcr_crn/radar_pv_filter/`; 70,844 files) and `nuscenes_additions/lcr_crn_mini/` (the same for v1.0-mini), `nuscenes_additions/manifests/` (file lists of the copy). The WSL paths the code uses (`~/data/nuscenes_full/<file>`, `~/data/nuscenes/<file>`) are links to here.
 - No nuscenes folder any more (removed 2026-10-25): the Windows copy of nuScenes mini duplicated `~/data/nuscenes` in the WSL home, which the code reads.
 - `splits.json` - TRAIN / VAL / TEST scene lists of the full runs (scene-disjoint).

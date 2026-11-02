@@ -109,12 +109,12 @@
     {
       "what": "raw nuScenes (camera, radar, maps, metadata; no lidar)",
       "where": "D:\\Auto-research\\NuScenes (WSL /mnt/d/Auto-research/NuScenes), public bucket motional-nuscenes",
-      "recipe": "../datasets/NuScenes/README.md and tools/ (download only with the user's OK; non-commercial licence)"
+      "recipe": "../data/NuScenes/README.md and tools/ (download only with the user's OK; non-commercial licence)"
     },
     {
       "what": "WSL home views of the raw data",
       "where": "~/data/nuscenes_full, ~/data/nuscenes (symlinks)",
-      "recipe": "../datasets/NuScenes/tools/link_views.sh"
+      "recipe": "../data/NuScenes/tools/link_views.sh"
     },
     {
       "what": "conda environment gcar (python 3.12, torch 2.8)",
@@ -133,7 +133,7 @@
       "where": "~/data/nuscenes_full, ~/data/nuscenes",
       "status": "scripted",
       "scripts": [
-        "../datasets/NuScenes/tools/link_views.sh"
+        "../data/NuScenes/tools/link_views.sh"
       ],
       "needs": [
         "raw nuScenes on D:",

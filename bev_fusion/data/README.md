@@ -1,7 +1,7 @@
 # data - derived data of bev_fusion (not in git)
 
 Everything here is derived from the raw nuScenes data (`D:\Auto-research\NuScenes`, WSL views `~/data/nuscenes_full`,
-`~/data/nuscenes`; `../../datasets/NuScenes/README.md`) and the pre-trained checkpoint (`../models/README.md`) by tracked
+`~/data/nuscenes`; `../../data/NuScenes/README.md`) and the pre-trained checkpoint (`../models/README.md`) by tracked
 scripts, so it can be deleted and rebuilt (rule D11 of the lane project: a new derived artifact gets its row here in the same
 step). `.npy` / `.npz` / `.pt` files are ignored by git globally. Folders: `cache/` (this file's table), `../runs/` (training runs).
 
@@ -22,4 +22,4 @@ of the study `t2_block_swaps`) are frozen in the t2 configs as `train_scenes` / 
 whose first CAM_FRONT keyframe exists, so a config without these lists would silently train on 700 scenes. The older configs
 (`t1_*`) have no list and now mean 700 / 150 scenes; patch them before re-evaluating an old run.
 
-Note 2026-10-30: the feature-cache shards of the scenes of parts 7-10 (680 files, 10.9 GB) were moved from `cache/cam_feats/` to `D:\Auto-research\bev_fusion_cache_parts7_10\cam_feats\` because C: was full (`temp/study/move_new_feats.py`; `... back` restores them). Runs with the frozen 428 / 82 scene lists do not need them; a 700-scene run does.
+Note 2026-10-30: the feature-cache shards of the scenes of parts 7-10 (680 files, 10.9 GB) were moved from `cache/cam_feats/` to D: because C: was full (`temp/study/move_new_feats.py`; `... back` restores them). Since 2026-11-02 they lie in `D:\Auto-research\NuScenes_cache\bev_fusion\cam_feats_parts7_10\` and are reached through the link `cache/cam_feats_parts7_10`; the BEVFusion cache `cache/cam_feats_bevfusion` and the superseded checkpoints `checkpoints/` (= `D:\Auto-research\NuScenes_checkpoints\bev_fusion`) are links too: `data/NuScenes/tools/link_storage.sh --check` lists them, `--apply` repairs them (the structure is in `data/NuScenes/README.md`). Runs with the frozen 428 / 82 scene lists do not need them; a 700-scene run does.

@@ -81,15 +81,15 @@
 /bev_fusion_lane_center/temp/**
 !/bev_fusion_lane_center/temp/README.md
 
-# not in git: wsl/ (the WSL disk image) and the raw data itself (nuScenes is on D:). In git: the description and the download / check tools of the raw data (recipes)
-!/datasets/
-/datasets/*
-!/datasets/NuScenes/
-/datasets/NuScenes/*
-!/datasets/NuScenes/README.md
-!/datasets/NuScenes/manifest.json
-!/datasets/NuScenes/tools/
-/datasets/NuScenes/tools/history/
+# not in git: wsl/ (the WSL disk image) and the raw data itself (nuScenes is on D:). In git: data/NuScenes = description, manifest and download / check / link tools of the nuScenes data family
+!/data/
+/data/*
+!/data/NuScenes/
+/data/NuScenes/*
+!/data/NuScenes/README.md
+!/data/NuScenes/manifest.json
+!/data/NuScenes/tools/
+/data/NuScenes/tools/history/
 # problem 2: camera + radar BEV: code and text records; runs (checkpoints, run snapshots, logs), caches and weights stay out
 !/bev_fusion/
 /bev_fusion/runs/*

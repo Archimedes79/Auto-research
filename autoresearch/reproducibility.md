@@ -20,7 +20,7 @@ Mirko, in chat: more reproducibility; when a result package of an experiment is 
 ## The record: one block `provenance`, written into `card.json` and `run.json`
 - `gt`: version, signature, res, ss, options (with `boxes_at`), and the hash of the store's `index.json`.
 - `evaluator`: commit, the list of files that differ from it (empty = clean), a hash over the evaluator's source files (`evaluation/` and `autoresearch/evalsuite/` of the problem), the metric settings.
-- `data`: nuScenes version, split name, number of frames and the hash of the sorted frame tokens; the hash of `datasets/NuScenes/manifest.json` (archives, tables, sensor-folder fingerprints; made by `datasets/NuScenes/tools/make_manifest.py`) with the scene and sample counts, compared as `data.manifest_hash`.
+- `data`: nuScenes version, split name, number of frames and the hash of the sorted frame tokens; the hash of `data/NuScenes/manifest.json` (archives, tables, sensor-folder fingerprints; made by `data/NuScenes/tools/make_manifest.py`) with the scene and sample counts, compared as `data.manifest_hash`.
 - `subject`: run id, checkpoint file hash and step, config hash, training GT version and signature.
 - `environment`: python, torch, CUDA, gpu, host; the seed.
 

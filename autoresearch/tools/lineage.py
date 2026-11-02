@@ -22,7 +22,7 @@ What is checked, in the order of the chain:
   4 data: the GT signature of the run (gt.json, or its provenance) is a row of autogt/versions.csv, its git tag autogt/vN exists, a version named by a
     provenance block is the version of that signature, the GT store (when present here) names the same version.
   5 evaluations: the cards that name the network (<cards>/<name>/*.json and <cards>/<name>/eval/*.json for the network's names): commit in git, a
-    provenance block, its GT signature as in 4, its raw-data manifest hash equal to the current datasets/NuScenes/manifest.json; then provenance.compare of
+    provenance block, its GT signature as in 4, its raw-data manifest hash equal to the current data/NuScenes/manifest.json; then provenance.compare of
     every two cards with a provenance block (INFO: comparable / differ / not shown comparable).
 
 Recording for FUTURE networks (nothing in run.py or train.py is changed here): `record` writes <run records>/<id>/lineage.json, a file of its own
@@ -130,7 +130,7 @@ class Ctx:
                 self.versions = {r["signature"]: r for r in csv.DictReader(f)}
         except OSError:
             pass
-        self.manifest = os.path.join(self.repo, "datasets", "NuScenes", "manifest.json")
+        self.manifest = os.path.join(self.repo, "data", "NuScenes", "manifest.json")
 
     def rel(self, f):
         return os.path.relpath(f, self.root).replace("\\", "/")
@@ -356,11 +356,11 @@ def check_manifest(c, prov, label):
     if rec in (None, UNKNOWN):
         return (MISSING, f"{label}: no raw-data manifest hash recorded")
     if not os.path.isfile(c.manifest):
-        return (MISSING, f"{label}: datasets/NuScenes/manifest.json not present here")
-    cur = PV.file_hash(c.manifest)
+        return (MISSING, f"{label}: data/NuScenes/manifest.json not present here")
+    cur = PV.dataset_block((prov.get("data") or {}).get("dataset"), c.repo)["manifest_hash"]       # the same identity the card was made with (data_identity of the manifest)
     if cur == rec:
         return (OK, f"{label}: manifest hash {rec} = current")
-    # the file changed since the card (it is rewritten whenever anything under datasets/NuScenes is regenerated): only the entry the card names decides
+    # the file changed since the card (it is rewritten whenever anything under data/NuScenes is regenerated): only the entry the card names decides
     data = (prov or {}).get("data") or {}
     now = ((jload(c.manifest) or {}).get("datasets") or {}).get(data.get("dataset") or "") or {}
     named = {k: data[k] for k in ("scenes", "samples") if data.get(k) is not None}
@@ -600,7 +600,7 @@ def selftest():
         return hits[0].split()[0]
     try:
         git("init", "-q")
-        write("datasets/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 850}}}')
+        write("data/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 850}}}')
         write("autogt/versions.csv", "version,signature,tag,date,generator,what_changed\nv5,abc123,autogt/v5,2026-10-31,x,y\n")
         write("code/a.py", "x = 1\n")
         git("add", "-A")
@@ -632,7 +632,7 @@ def selftest():
         write("proj/runs/skipnet/model.pt", "skip-weights")
         wj("proj/records/runs/skipnet/run.json", {"id": "skipnet", "tag": "t/netrun", "commit": "skipped"})
         wj("proj/records/runs/lostnet/run.json", {"id": "lostnet", "tag": "t/lostnet", "commit": lost[:10]})
-        man = PV.file_hash(os.path.join(T, "datasets/NuScenes/manifest.json"))
+        man = PV.dataset_block("v1.0-trainval", T)["manifest_hash"]
 
         def prov(**k):
             p = {"schema": 1, "gt": {"signature": "abc123", "version": "v5"}, "evaluator": {"dirty": [], "code_hash": "e1"}, "data": {"frame_hash": "f1", "manifest_hash": man, "dataset": "v1.0-trainval", "scenes": 850},
@@ -777,13 +777,13 @@ def selftest():
         assert rc == 0 and "MISSING signature zzz999 is no row" in txt, txt
         card("proj/runs/netrun/eval/card2.json", provenance=prov(evaluator__code_hash="e2"))
         # mutation 4: the data manifest changes: the entry the card names (850 scenes) changed = MISMATCH; the file changed elsewhere = MISSING (exit 0), not a failure
-        write("datasets/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 851}}}')
+        write("data/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 851}}}')
         rc, txt = run()
         assert rc == 1 and "MISMATCH manifest hash" in txt and "scenes 850 -> 851" in txt, txt
-        write("datasets/NuScenes/manifest.json", '{"about": "regenerated", "datasets": {"v1.0-trainval": {"scenes": 850}}}')
+        write("data/NuScenes/manifest.json", '{"about": "regenerated", "datasets": {"v1.0-trainval": {"scenes": 850}}}')
         rc, txt = run()
         assert rc == 0 and "MISSING manifest file changed since the card" in txt and "is unchanged" in txt, txt
-        write("datasets/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 850}}}')
+        write("data/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 850}}}')
         assert run()[0] == 0
         # an old card (no provenance) is MISSING, never a guess
         card("proj/runs/netrun/eval/card2.json")

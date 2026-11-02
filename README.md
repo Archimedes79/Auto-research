@@ -13,9 +13,9 @@ One lead agent plans a round and writes the experiment cards. Experiment agents 
 | [`autogt/`](autogt/README.md) | the nuScenes ground-truth suite: BEV ground truth (map layers, objects, velocity) per keyframe, versioned (`autogt/vN` tags) |
 | [`bev_fusion_lane_center/`](bev_fusion_lane_center/README.md) | problem 1: a lane-centre-line graph from camera + radar, attached to an SD map |
 | [`bev_fusion/`](bev_fusion/README.md) | problem 2: a camera + radar BEV perception system (training, evaluation, experiments, literature) |
-| [`datasets/NuScenes/`](datasets/NuScenes/README.md) | description, manifest and download / check tools of the raw nuScenes data (the data itself is not in the repository) |
+| [`data/NuScenes/`](data/NuScenes/README.md) | the nuScenes dataset family: description, manifest, download / check / link tools and the map of where raw data, caches and checkpoints live (the data itself is not in the repository) |
 
-Not in git: `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).
+Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).
 
 ## Where to start
 - The method and its rules: [`autoresearch/METHOD.md`](autoresearch/METHOD.md) (six hard rules, everything else is a default).
@@ -24,4 +24,4 @@ Not in git: `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).
 - Rules for agents working in this checkout: [`CLAUDE.md`](CLAUDE.md).
 
 ## Reproducing a result
-A result card names the ground-truth version and mode, the evaluation code version, the frames, the raw-data manifest, the model and the environment (`autoresearch/reproducibility.md`, `autoresearch/tools/provenance.py`). Recipes for the raw data stay in git (`datasets/NuScenes/`).
+A result card names the ground-truth version and mode, the evaluation code version, the frames, the raw-data manifest, the model and the environment (`autoresearch/reproducibility.md`, `autoresearch/tools/provenance.py`). Recipes for the raw data stay in git (`data/NuScenes/`).

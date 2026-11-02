@@ -2,9 +2,11 @@
 # Download one nuScenes trainval archive part of one sensor kind from the public bucket, check it against its
 # S3 ETag, unpack it with extract_blob.sh (path check), and mark it as unpacked. Parts run in parallel
 # (one call per part, each in its own download folder); a partial archive is resumed (curl -C -).
-# The archive is kept until the extraction is checked.
-# Usage (from the repository root): wsl bash datasets/NuScenes/tools/get_blob_part.sh <part 01..10> <camera|lidar|radar>
-# Environment: NUSC_DL download root, REQUIRED (not the full C: disk: a folder on D:); NUSC_DEST (required), NUSC_MEMBERS, NUSC_WINTAR as in extract_blob.sh
+# The archive is kept until the extraction is checked: verify_archive.ps1 -Archive <archive> -Dest $NUSC_DEST must show 0 differences, then the archive is deleted
+# (README, "Archives"; `extract_blob.sh <archive> --delete` does both; make_manifest.py keeps the identity). Unpack everything (no NUSC_MEMBERS) unless a part is
+# really not wanted.
+# Usage (from the repository root): wsl bash data/NuScenes/tools/get_blob_part.sh <part 01..10> <camera|lidar|radar>
+# Environment: NUSC_DL download root, REQUIRED (a folder on D:, by convention /mnt/d/Auto-research/NuScenes_zips); NUSC_DEST (required), NUSC_MEMBERS, NUSC_WINTAR as in extract_blob.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 p="$1"; kind="$2"
@@ -21,6 +23,6 @@ curl -sfL --retry 10 --retry-delay 20 -C - -o "$f" "$base/$name" || curl -sfL --
 echo "$(date +%T) verify $name"
 python3 "$here/verify_s3_etag.py" "$f" "$etag"
 echo "$(date +%T) unpack $name"
-bash "$here/extract_blob.sh" "$f"
+bash "$here/extract_blob.sh" "$f" --delete                 # unpack, compare with the archive, delete it only if 0 differences (a failure stops here, the archive stays)
 touch "$f.unpacked"
 echo "$(date +%T) done $name"

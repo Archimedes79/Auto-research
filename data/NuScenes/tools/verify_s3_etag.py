@@ -1,7 +1,7 @@
 """Check a downloaded file against its S3 ETag: a plain md5, or the multipart form "<md5 of the part md5s>-<number of parts>".
 
-    python3 datasets/NuScenes/tools/verify_s3_etag.py <file> <etag> [--part-size MiB]   -> exit 0 if it matches
-    python3 datasets/NuScenes/tools/verify_s3_etag.py --selftest
+    python3 data/NuScenes/tools/verify_s3_etag.py <file> <etag> [--part-size MiB]   -> exit 0 if it matches
+    python3 data/NuScenes/tools/verify_s3_etag.py --selftest
 
 A multipart ETag does not say how big the parts were, and the file size and the part count do not give it (20 MiB in 3 parts can be
 7, 8, 9 ... MiB parts). Without --part-size the usual sizes are tried (8 MiB: aws cli and boto3, 5 MiB: the minimum, 15 MiB: s3cmd, 16, 32,

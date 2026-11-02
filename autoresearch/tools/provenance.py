@@ -150,13 +150,18 @@ def frames_block(split, tokens):
 
 
 def dataset_block(version, repo):
-    """the identity of the raw data: the hash of datasets/NuScenes/manifest.json (archives, tables, sensor-folder fingerprints), the version key and the counts"""
+    """the identity of the raw data: the manifest's `data_identity` (data/NuScenes/manifest.json; the hash of its data part - tables, licence and map files, file
+    lists, sensor-folder fingerprints - so deleting an archive or making the file again leaves it unchanged), else the hash of the whole file (a manifest of schema 1);
+    the version key and the counts"""
     out = {"dataset": version or UNKNOWN, "manifest_hash": UNKNOWN}
-    p = os.path.join(repo, "datasets", "NuScenes", "manifest.json")
+    p = os.path.join(repo, "data", "NuScenes", "manifest.json")
     if os.path.isfile(p):
         out["manifest_hash"] = file_hash(p)
         try:
-            d = json.load(open(p, encoding="utf-8")).get("datasets", {}).get(version or "", {})
+            m = json.load(open(p, encoding="utf-8"))
+            if isinstance(m.get("data_identity"), str) and m["data_identity"]:
+                out["manifest_hash"] = m["data_identity"][:12]
+            d = m.get("datasets", {}).get(version or "", {})
             out.update(scenes=d.get("scenes"), samples=d.get("samples"))
         except (OSError, ValueError, AttributeError):
             out["manifest_error"] = "unreadable manifest"
@@ -780,8 +785,8 @@ def selftest():
         open(os.path.join(tmp, "ev", "m.py"), "w").write("x = 1\n")
         json.dump({"signature": "abc123", "gt_version": "v5", "version": "v1.0-trainval", "res": 0.5, "ss": 4, "options": {"boxes_at": "camera"}},
                   open(os.path.join(tmp, "data", "autogt", "abc123", "index.json"), "w"))
-        os.makedirs(os.path.join(tmp, "datasets", "NuScenes"))
-        mf = os.path.join(tmp, "datasets", "NuScenes", "manifest.json")
+        os.makedirs(os.path.join(tmp, "data", "NuScenes"))
+        mf = os.path.join(tmp, "data", "NuScenes", "manifest.json")
         json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}}, open(mf, "w"))
         run("init", "-q")
         run("add", "ev")
@@ -800,6 +805,15 @@ def selftest():
         assert any("data.manifest_hash" in x for x in compare(a, m2)[0]), "another manifest = other raw data = not comparable"
         json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}}, open(mf, "w"))
         assert dataset_block("v1.0-trainval", os.path.join(tmp, "nowhere"))["manifest_hash"] == UNKNOWN, "no manifest reads unknown"
+        # a manifest with a data_identity (schema 2): the identity is that of the data part; archives, dates and the rest of the file do not change it
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}, "data_identity": "ab12cd34ef56" + "0" * 52, "archives": {"x.tgz": {"present": True}}}, open(mf, "w"))
+        h1 = dataset_block("v1.0-trainval", tmp)["manifest_hash"]
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}, "data_identity": "ab12cd34ef56" + "0" * 52, "archives": {"x.tgz": {"present": False, "removed": "d"}},
+                   "generated": "later"}, open(mf, "w"))
+        assert h1 == "ab12cd34ef56" == dataset_block("v1.0-trainval", tmp)["manifest_hash"], "archive bookkeeping and dates are not the identity of the data"
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}, "data_identity": "ff" * 32}, open(mf, "w"))
+        assert dataset_block("v1.0-trainval", tmp)["manifest_hash"] != h1, "another data_identity = other raw data"
+        json.dump({"datasets": {"v1.0-trainval": {"scenes": 850, "samples": 34149}}}, open(mf, "w"))
         assert gt_block("0.5_4_zzz", tmp)["version"] == UNKNOWN, "an unknown store reads unknown"
         open(os.path.join(tmp, "data", "autogt", "abc123", "index.json"), "w").write("{torn")
         assert gt_block("0.5_4_abc123", tmp)["version"] == UNKNOWN and "error" in gt_block("0.5_4_abc123", tmp), "a torn index does not crash"

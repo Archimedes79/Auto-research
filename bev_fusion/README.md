@@ -25,4 +25,4 @@ The architecture, drawn from the code ([file map and end-to-end table](training/
 | `_to_delete/` | what was taken out of the live tree, listed in `_to_delete/README.md` |
 | `experiments/` | one folder per experiment (card, detail plan, summary); first: `s1a_lift_pd_vs_p/` (camera-only real-data run, its synthetic unit test, idle-GPU timing) - see `experiments/README.md` |
 
-Shared data (nuScenes) is described in `../datasets/NuScenes/README.md`.
+Shared data (nuScenes) is described in `../data/NuScenes/README.md`.

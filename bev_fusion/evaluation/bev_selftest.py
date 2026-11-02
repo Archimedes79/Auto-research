@@ -728,7 +728,7 @@ def golden():
     if not os.path.exists(os.path.join(scratch, "code")):
         import shutil
         shutil.copytree(os.path.join(run, "code"), os.path.join(scratch, "code"))
-    ckpt_dir = run if any(f.startswith("ckpt_") for f in os.listdir(run)) else os.path.join("/mnt/d/Auto-research/bev_fusion_ckpts", os.path.basename(run))
+    ckpt_dir = run if any(f.startswith("ckpt_") for f in os.listdir(run)) else os.path.join("data", "checkpoints", os.path.basename(run))     # data/checkpoints: link to D: (data/NuScenes/tools/link_storage.sh)
     old_store = os.path.join(scratch, "eval", "suite")
     if os.path.isdir(old_store):
         import shutil

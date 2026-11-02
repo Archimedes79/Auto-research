@@ -5,7 +5,7 @@
 # WSL are moved to ~/_to_delete/ (purge only with Mirko's OK). Re-run after the repository folder or the D: root
 # moves (the links are absolute). Refuses while a process has a file open under ~/data (checked on the link TARGETS: an
 # open file reached through a view shows as /mnt/d/... or as the additions path in /proc/*/fd, never as ~/data/...).
-# Usage (from the repository root): wsl bash datasets/NuScenes/tools/link_views.sh [--selftest]
+# Usage (from the repository root): wsl bash data/NuScenes/tools/link_views.sh [--selftest]
 #   --selftest: holds a file of the mini view open and checks that the guard sees it; changes nothing
 set -euo pipefail
 raw_d=/mnt/d/Auto-research/NuScenes
