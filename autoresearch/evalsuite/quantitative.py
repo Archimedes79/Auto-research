@@ -88,7 +88,9 @@ class Quantitative:
                     "metrics": {m.name: {"headline": list(m.headline), "better": {k: m.direction(k) for k in m.headline}} for m in metrics.values()},
                     "selection": {"scenes": list(plan), "n_frames_planned": sum(len(v) for v in plan.values()),
                                   "max_frames": max_frames if frames is None else None, "seed": seed,     # frames= chooses the frames: no limit applied
-                                  "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
+                                  "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12],
+                                  # the labels are scene / index: another frame list behind the same labels (a re-cut dataset, other tokens) is only seen in the keys
+                                  "keys_sha": hashlib.sha1("\n".join(f.key for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
         store = RunStore.create(os.path.join(self.dir, run_name), manifest, resume=resume)
         done = store.done()
         n_before = len(store.frames)

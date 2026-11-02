@@ -16,6 +16,7 @@ and the training is started with `--after` it, so a failed build blocks the trai
 import copy
 import difflib
 import json
+import math
 import os
 import shlex
 
@@ -26,29 +27,56 @@ class ComposeError(ValueError):
     pass
 
 
-def load(path):
+class _NonFinite(ValueError):
+    pass
+
+
+def _no_const(name):
+    """json parse_constant: NaN / Infinity / -Infinity are no json (the writer would emit invalid json for them)"""
+    raise _NonFinite(f"{name} is not a json number")
+
+
+def _clean(v, what, ints):
+    """v with integral floats as ints when `ints` (steps=1e3 is 1000, not 1000.0); ComposeError for a non-finite float (json reads 1e400 as inf)"""
+    if isinstance(v, float):
+        if not math.isfinite(v):
+            raise ComposeError(f"{what}: {v} is not a finite number")
+        return int(v) if ints and v.is_integer() else v
+    if isinstance(v, dict):
+        return {k: _clean(x, what, ints) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_clean(x, what, ints) for x in v]
+    return v
+
+
+def load(path, ints=False):
+    """a json object from a file; `ints`: integral floats become ints (the presets, as --set does it; the base file stays as it is)"""
     try:
         with open(path, encoding="utf-8") as f:
-            d = json.load(f)
+            d = json.load(f, parse_constant=_no_const)
     except OSError as e:
         raise ComposeError(f"cannot read {path}: {e}")
     except ValueError as e:
         raise ComposeError(f"{path} is not json: {e}")
     if not isinstance(d, dict):
         raise ComposeError(f"{path}: the config must be a json object")
-    return d
+    return _clean(d, path, ints)
 
 
 def parse_set(text):
-    """'a.b=c' -> (['a', 'b'], value); the value is json when it parses (500, 0.5, true, null, [..], {..}), else the string"""
+    """'a.b=c' -> (['a', 'b'], value); the value is json when it parses (500, 0.5, true, null, [..], {..}), else the string; an integral float
+    is an int (1e3 -> 1000), NaN / Infinity / 1e400 are refused"""
     key, sep, raw = text.partition("=")
     key = key.strip()
     if not sep or not key or any(not p for p in key.split(".")):
         raise ComposeError(f"--set wants key=value or a.b=value, got {text!r}")
     try:
-        return key.split("."), json.loads(raw)
+        value = json.loads(raw, parse_constant=_no_const)
+    except _NonFinite as e:
+        raise ComposeError(f"--set {text!r}: {e}")
     except ValueError:
         return key.split("."), raw
+    return key.split("."), _clean(value, f"--set {text!r}", True)
 
 
 def _flat(prefix, d):
@@ -93,7 +121,7 @@ def compose(base, presets=(), sets=(), presets_dir=None):
             have = sorted(f[:-5] for f in os.listdir(presets_dir) if f.endswith(".json")) if os.path.isdir(presets_dir) else []
             near = difflib.get_close_matches(name, have, 1)
             raise ComposeError(f"no preset {name!r} in {presets_dir}" + (f" (did you mean {near[0]!r}?)" if near else f" (there are: {', '.join(have) or 'none'})"))
-        for path_, v in _flat([], load(path)):
+        for path_, v in _flat([], load(path, ints=True)):
             changes.append((".".join(path_), _put(cfg, path_, v), v, f"preset {name}"))
     for text in sets:
         path_, v = parse_set(text)
@@ -119,18 +147,27 @@ def keys_of(d):
 
 
 def write(cfg, out):
-    """write the composed config atomically (a half file must never be read by a trainer)"""
+    """write the composed config atomically (a half file must never be read by a trainer); a NaN / Infinity is refused, never written as invalid json"""
+    try:
+        text = json.dumps(cfg, indent=1, ensure_ascii=False, allow_nan=False) + "\n"
+    except ValueError as e:
+        raise ComposeError(f"{out}: the config has a value that is not json ({e})")
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     tmp = out + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=1, ensure_ascii=False)
-        f.write("\n")
+        f.write(text)
     os.replace(tmp, out)
 
 
+def same_folder_ids(records, run_id):
+    """the OTHER run ids of the run records whose run folder is the same: the folder is the id with '.' as '_', so t1.a and t1_a share runs/t1_a"""
+    folder = run_id.replace(".", "_")
+    return sorted(r for r in os.listdir(records) if r != run_id and r.replace(".", "_") == folder) if records and os.path.isdir(records) else []
+
+
 def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=None, pred=None, rule=None, no_card=False, extra=(), ar_tools=None, records=None):
-    """everything `start` will do, without doing it: {config, composed, changes, check (argv list or None), argv (the run.py command), notes, log}.
-    Raises ComposeError for what must be fixed first (unknown preset, a missing card field, no train command)"""
+    """everything `start` will do, without doing it: {config, held (the id is ON HOLD), composed, changes, check (argv list or None), argv (the run.py command), notes, log}.
+    Raises ComposeError for what must be fixed first (unknown preset, a missing card field, no train command, another run id with the same run folder)"""
     if not run_id or not run_id[0].isalnum() or not all(c.isalnum() or c in "._-" for c in run_id):
         raise ComposeError(f"--id {run_id!r}: starts with a letter or digit; letters, digits, . _ - only")
     train = block.get("train")
@@ -142,7 +179,11 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
     presets_dir = os.path.join(project_root, block["presets"]) if block.get("presets") else None
     base = load(base_path if os.path.isabs(base_path) else os.path.join(project_root, base_path))
     sets, folder = list(sets), run_id.replace(".", "_")
-    key = block.get("name_key", "name")                       # the config key that names the run folder (runs/<name>); "" = the project has none
+    twins = same_folder_ids(records, run_id)
+    if twins:
+        raise ComposeError(f"--id {run_id}: its run folder runs/{folder} ('.' becomes '_') is also the folder of the run id {twins[0]}, which has a run record"
+                           + (" and is ON HOLD" if os.path.exists(os.path.join(records, twins[0], "HOLD")) else "") + ": two ids must not share one folder; use another id")
+    key =block.get("name_key", "name")                       # the config key that names the run folder (runs/<name>); "" = the project has none
     if key and any(s.partition("=")[0].strip() == key for s in sets):
         raise ComposeError(f"--set {key}=...: the run folder is runs/{folder}, named by --id, and the launcher script names it after the config file: change --id instead")
     cfg, changes = compose(base, presets, sets, presets_dir)
@@ -165,7 +206,8 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
         if not same:
             raise ComposeError(f"{os.path.relpath(composed, project_root)} is the config of the run in {os.path.relpath(run_dir, project_root)} and differs from this one: a resume must have the "
                                "same config (the launcher script re-reads this file on every retry). Use the same presets / --set, or a new --id")
-    if records and os.path.exists(os.path.join(records, run_id, "HOLD")):
+    held = bool(records) and os.path.exists(os.path.join(records, run_id, "HOLD"))
+    if held:
         notes.append(f"run id {run_id} is ON HOLD: run.py will refuse it until the person's words clear it (hold.py show)")
     rel = lambda p: os.path.relpath(p, project_root).replace(os.sep, "/")                    # noqa: E731
     sub = lambda cmd, p: shlex.split(cmd.replace("{config}", shlex.quote(rel(p))))           # noqa: E731 - not .format: a ${HOME} in the command is no field; quoted: a space in the folder
@@ -187,5 +229,5 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
         pid = f"{run_id}.prep_{name}"
         prepare.append(dict(name=name, id=pid, check=sub(item["check"], composed), check_preview=sub(item["check"], preview), wait_min=int(item.get("wait_min", 1440)),
                             argv=["python3", run_py, "--id", pid, "--no-card", "--"] + sub(item["build"], composed)))
-    return dict(config=cfg, composed=composed, preview=preview, changes=changes, base_keys=keys_of(base), check=check, check_preview=check_preview, argv=argv, notes=notes, prepare=prepare,
+    return dict(config=cfg, held=held, composed=composed, preview=preview, changes=changes, base_keys=keys_of(base), check=check, check_preview=check_preview, argv=argv, notes=notes, prepare=prepare,
                 log=os.path.join(project_root, block.get("runs", "runs"), folder + ".launcher.log"))

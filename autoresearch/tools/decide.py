@@ -44,6 +44,7 @@ from card import is_number  # noqa: E402  (a finite number: NaN, infinity and te
 
 LOWER = {"ms", "ms_per_frame"}  # generic cost names; problem metrics are listed in project.json "lower_is_better"
 DEFAULT_BAND = 0.010
+DECIMALS = 9   # an effect is rounded to this many decimals before it meets a band or a threshold: 0.746 - 0.736 is 0.010000000000000009 in floats, and the rule says |effect| <= band is a tie
 
 
 def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, cost_control=None):
@@ -53,7 +54,7 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
         raise ValueError("scores and band must be finite numbers, at least one score per arm")
     sgn = -1.0 if lower_better else 1.0
     mv, mc = sum(variant) / len(variant), sum(control) / len(control)
-    effect = sgn * (mv - mc)
+    effect = round(sgn * (mv - mc), DECIMALS)
     if len(variant) == len(control):
         diffs = [sgn * (v - c) for v, c in zip(variant, control)]
     else:
@@ -136,7 +137,7 @@ def paired_effect(metric, v_cards, c_cards, lower=None):
         raise KeyError(f"no card for {metric}")
     if not all(is_number(x) for x in [*v, *c]):
         raise ValueError(f"{metric}: a card holds a value that is not a finite number (NaN, infinity or text)")
-    effect = sgn * (sum(v) / len(v) - sum(c) / len(c))
+    effect = round(sgn * (sum(v) / len(v) - sum(c) / len(c)), DECIMALS)
     diffs = [sgn * (a - b) for a, b in zip(v, c)] if len(v) == len(c) else [effect]
     spans = []
     c_names = {(cc or {}).get("name") for _, cc, _ in c_cards}
@@ -298,7 +299,7 @@ def judge_clause(clause, exp, cards, root=None):
             flags.append(f"seed counts differ ({len(vc)} vs {len(cc)}): unpaired, counts as one seed")
         if "min_effect" in clause:
             thr = max(clause["min_effect"], band) if metric == exp["metric"] else clause["min_effect"]  # inside the band it is a tie, whatever the clause says
-            ok = effect >= thr
+            ok = effect >= thr and (metric != exp["metric"] or effect > band)   # |effect| <= band is a tie, also when the clause asks for no more than the band
             if ok and len(diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
                 flags.append("one seed")  # a deterministic change (no training seed) is judged by the paired scene-bootstrap interval instead
             if ok and len(diffs) >= 2 and not all(d > 0 for d in diffs):

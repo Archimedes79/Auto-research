@@ -157,6 +157,15 @@ try:
     assert RUN.state_of(f"{T}/runs/S.stopsync") == "stopped" and "S.stopsync" not in rows()
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env, check=True)
     assert rows()["S.stopsync"]["status"] == "stopped", rows().get("S.stopsync")
+    # review 2026-11-02: the same with a HOLD on it (state `held` is derived): the row says what the record says, as run.py's own row does
+    os.makedirs(f"{T}/runs/S.stopsync2")
+    json.dump(dict(id="S.stopsync2", status="stopped", exit=75, created="2026-10-25T10:00:00", started="2026-10-25T10:00:01", ended="2026-10-25T10:05:00", command="c", launcher_pid=1),
+              open(f"{T}/runs/S.stopsync2/run.json", "w"))
+    hold_cmd("set", "S.stopsync2", "--by", "selftest", "--reason", "sync test")
+    assert RUN.state_of(f"{T}/runs/S.stopsync2") == "held"
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env, check=True)
+    assert rows()["S.stopsync2"]["status"] == "stopped", rows().get("S.stopsync2")
+    hold_cmd("clear", "S.stopsync2", "--words", "Mirko: ok")
     # a killed launcher leaves a stalled record: --after blocks on it, schedule.derived shows it failed, a new attempt is allowed
     stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
@@ -204,6 +213,35 @@ try:
     open(f"{T}/state/machine_lock.json", "w").write('{"end": "2999-01-01", "exclusive": true}')  # malformed (no owner): never blocks, never crashes
     assert go("S.mlock.bad", ["bash", "-c", "echo x"], "--wait-gpu", "0").returncode == 0, "a malformed lock must not break a launch"
     os.remove(f"{T}/state/machine_lock.json")
+    # review 2026-11-02: a hold set while a launcher WAITS (--after, machine lock) is read again every round: the run does not start (status held, row, exit 2) and the
+    # command never runs; and a hold also refuses the id that names the same run folder (`.` -> `_`: S.al.a and S.al_a are one folder, two run records)
+    hq = dict(env, AR_HEARTBEAT_S="1")
+
+    def hold_while_waiting(rid, wait_args, release):
+        p = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", rid, "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", *wait_args, "--", "bash", "-c", f"echo ran > {T}/ran_{rid}"],
+                             env=hq, stdout=subprocess.PIPE, text=True)
+        for _ in range(100):
+            if RUN.record(f"{T}/runs/{rid}").get("status") == "waiting":
+                break
+            time.sleep(0.2)
+        hold_cmd("set", rid, "--by", "selftest", "--reason", "set while the launcher waits")
+        release()
+        out = p.communicate(timeout=60)[0]
+        assert p.returncode == 2 and "on HOLD" in out and not os.path.exists(f"{T}/ran_{rid}"), (rid, p.returncode, out)
+        assert RUN.record(f"{T}/runs/{rid}")["status"] == "held" and rows()[rid]["status"] == "held" and RUN.state_of(f"{T}/runs/{rid}") == "held", (rows()[rid], RUN.record(f"{T}/runs/{rid}"))
+        assert hold_cmd("clear", rid, "--words", "Mirko: ok").returncode == 0
+
+    def dep_done():
+        os.makedirs(f"{T}/runs/S.holddep", exist_ok=True)
+        open(f"{T}/runs/S.holddep/done", "w").write("x")
+    hold_while_waiting("S.holdwait", ["--after", "S.holddep", "--wait-after", "1"], dep_done)
+    json.dump(dict(owner="timing", start="2026-01-01T00:00:00", end="2999-01-01T00:00:00", exclusive=True, note="selftest"), open(f"{T}/state/machine_lock.json", "w"))
+    hold_while_waiting("S.holdlock", [], lambda: os.remove(f"{T}/state/machine_lock.json"))
+    hold_cmd("set", "S.al.a", "--by", "selftest", "--reason", "alias test")
+    al = go("S.al_a", ["bash", "-c", "echo x"])
+    assert al.returncode == 2 and "S.al.a is on HOLD and names the same run folder" in al.stdout and "hold.py clear S.al.a" in al.stdout and not os.path.exists(f"{T}/runs/S.al_a/run.json"), al.stdout
+    assert go("S.al.a", ["bash", "-c", "echo x"]).returncode == 2 and "S.al.a" not in rows()
+    assert hold_cmd("clear", "S.al.a", "--words", "Mirko: ok").returncode == 0 and go("S.al_a", ["bash", "-c", "echo x"]).returncode == 0, "no hold, no refusal"
     # project.json gpu_slots_dir: one slot folder shared by the problems of a machine (D23); a live slot there blocks this problem too
     shared = tempfile.mkdtemp(prefix="ar_slots_")
     assert RUN.slot_dir(T, dict(gpu_slots_dir=shared), f"{T}/runs") == os.path.normpath(shared) and RUN.slot_dir(T, {}, f"{T}/runs") == f"{T}/runs/.gpu_slots"
@@ -351,10 +389,18 @@ try:
     assert rows_()["S.ok"]["prediction"] == "x >= 0.5" and "prediction before the change: x >= 1" in rows_()["S.ok"]["notes"]
     assert led("add", "S.fresh", "--pred", "a").returncode == 0 and led("add", "S.fresh", "--pred", "b").returncode == 0, "a planned row may still be rewritten"
     led("note", "S.ok", "--pred", "x >= 1", "--force")
+    # review 2026-11-02: --notes is appended to the notes cell (hold words, attempt counts), --replace-notes overwrites it
+    led("note", "S.fresh", "--notes", "first")
+    assert rows_()["S.fresh"]["notes"] == "first"
+    led("note", "S.fresh", "--notes", "second")
+    assert rows_()["S.fresh"]["notes"] == "first | second", rows_()["S.fresh"]["notes"]
+    led("note", "S.fresh", "--notes", "only", "--replace-notes")
+    assert rows_()["S.fresh"]["notes"] == "only", rows_()["S.fresh"]["notes"]
     # decide
     from decide import decide
     assert decide([0.746, 0.741], [0.725, 0.722])[0] == "KEEP"
     assert decide([0.730, 0.729], [0.725, 0.722])[0] == "TIE"
+    assert 0.746 - 0.736 > 0.010 and decide([0.746, 0.746], [0.736, 0.736])[0] == "TIE", "review 2026-11-02: an effect on the band edge is a tie, not a float-noise KEEP"
     assert decide([0.760, 0.715], [0.725, 0.722])[0] == "INCONCLUSIVE"
     assert decide([0.746], [0.725])[0] == "INCONCLUSIVE"
     assert decide([0.70, 0.69], [0.725, 0.722])[0] == "CUT"
@@ -414,6 +460,9 @@ try:
     assert verdict(arms=two) == "CUT", "guard violated"
     json.dump(dict(a=dict(Q=0.735, F=0.9), b=dict(Q=0.725, F=0.9), ca=dict(Q=0.73, F=0.9), cb=dict(Q=0.72, F=0.9)), open(f"{T}/cards.json", "w"))
     assert verdict(arms=two, rule=[dict(metric="Q", min_effect=0.0)]) == "TIE"
+    json.dump(dict(a=dict(Q=0.746, F=0.9), b=dict(Q=0.746, F=0.9), ca=dict(Q=0.736, F=0.9), cb=dict(Q=0.736, F=0.9)), open(f"{T}/cards.json", "w"))
+    assert verdict(arms=two) == "TIE", "review 2026-11-02: an effect on the band edge (0.746 - 0.736 = 0.010000000000000009) is a tie also for an experiment file"
+    json.dump(dict(a=dict(Q=0.735, F=0.9), b=dict(Q=0.725, F=0.9), ca=dict(Q=0.73, F=0.9), cb=dict(Q=0.72, F=0.9)), open(f"{T}/cards.json", "w"))
     json.dump(dict(n=dict(a=dict(R=0.8), a1=dict(R=0.79), c=dict(R=0.7), c1=dict(R=0.71)), b=dict(a=dict(R=0.8), a1=dict(R=0.79), c=dict(R=0.7), c1=dict(R=0.71)),
                    x=dict(a=dict(R=0.5), a1=dict(R=0.5), c=dict(R=0.7), c1=dict(R=0.7))), open(f"{T}/sub.json", "w"))
     subs = dict(a=dict(cards={s: [f"sub.json#{s}/a", f"sub.json#{s}/a1"] for s in "nbx"}), c=dict(cards={s: [f"sub.json#{s}/c", f"sub.json#{s}/c1"] for s in "nbx"}))
@@ -758,6 +807,14 @@ try:
         r = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", f"S.cmdfinal{k}", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "val", "--",
                             "bash", "-c", "echo x", "evaluate.py", *argv], capture_output=True, text=True, env=env)
         assert r.returncode == 2 and "asks for the holdout split" in r.stdout, r.stdout
+    # review 2026-11-02: also a script string (`bash -c '... --split final'`), a split list, a quoted value; not another word that starts the same
+    for cmdl in (["bash", "-c", "python eval.py --split final"], ["x", "--split=val,final"], ["x", "--split", "val,FINAL"], ["x", "--split='final'"], ["x", "--split", '"final"']):
+        assert RUN.names_split(cmdl, "final"), cmdl
+    for cmdl in (["x", "--split", "finally"], ["x", "--split=val"], ["x", "--splits", "final"], ["bash", "-c", "echo final --split val"], ["x", "--split=final.json"]):
+        assert not RUN.names_split(cmdl, "final"), cmdl
+    r = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.cmdfinal2", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "val", "--", "bash", "-c", "echo x --split=val,final"],
+                       capture_output=True, text=True, env=env)
+    assert r.returncode == 2 and "asks for the holdout split" in r.stdout, r.stdout
     json.dump(dict(json.load(open(f"{T}/project.json")), splits=["val", "final"]), open(f"{T}/project.json", "w"))
     assert "not one of the project's splits" in hold("S.other", "other").stdout
     json.dump({k: v for k, v in json.load(open(f"{T}/project.json")).items() if k not in ("holdout_split", "splits")}, open(f"{T}/project.json", "w"))

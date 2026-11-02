@@ -15,7 +15,8 @@ the files you committed, and only for those whose staged content is the old or t
 content stays staged (the tool says so; their next commit would revert your part of it, so tell them). Working files are never touched.
 Refused (exit 1, nothing committed): `.` or the top folder, a path outside the repository, a path that does not exist and is not in HEAD, an ignored path,
 an embedded repository (a gitlink: temp/gt_v8 is a worktree), scratch or forbidden files (`check_git.py` classes: temp/, _to_delete/, data, binaries,
-over 1 MB, measured on the committed content; --allow-scratch forces them in, for a record that must have them), an empty result (the tree would not
+over 1 MB, measured on the committed content; --allow-scratch lifts the temp/ rule only, for a record that must have it: a checkpoint or a file over 1 MB
+in temp/ is still refused), an empty result (the tree would not
 change), a missing git identity. The author is the repository's git identity; the message ends with the --trailer lines you give (the session's attribution).
 Hooks are not run (plumbing commit): run the checks yourself (`check_git.py --paths`, the folder's tests).
 """
@@ -38,7 +39,8 @@ def run(top, *args, env=None, inp=None, check=True, literal=True):
     env.pop("GIT_LITERAL_PATHSPECS", None)
     if literal:
         env["GIT_LITERAL_PATHSPECS"] = "1"                                  # names are literal: no globs, no `:(top)` magic (check-ignore does not support it)
-    r = subprocess.run(["git", "-C", top, *args], capture_output=True, text=True, encoding="utf-8", errors="replace", env=env, input=inp)
+    r = subprocess.run(["git", "-C", top, *args], capture_output=True, env=env, input=inp.encode("utf-8") if inp is not None else None)   # bytes in and out: a text-mode pipe turns LF into CRLF on Windows
+    r.stdout, r.stderr = (x.decode("utf-8", errors="replace") for x in (r.stdout, r.stderr))
     if check and r.returncode != 0:
         raise RuntimeError(f"git {' '.join(args[:2])} failed: {(r.stderr or r.stdout).strip()}")
     return r
@@ -138,22 +140,23 @@ def commit_paths(top, paths, message, blobs=None, allow_scratch=False, dry_run=F
         if tree == old_tree:
             return None, [], []
         rows = diff_raw(top, old_tree, tree)
-        changed = [r[5] for r in rows if r[4] != "D"]
+        changed = [r[5] for r in rows]                                   # deletions too
         links = [r[5] for r in rows if r[1] == "160000"]
         if links:
             raise RuntimeError(f"refused, nothing committed: {links[0]} is an embedded repository (a gitlink): commit the files inside it from there")
-        if not allow_scratch:
-            errors = []
-            for om, nm, osha, nsha, st, path in rows:
-                if st == "D":
-                    continue
-                size = int(run(top, "cat-file", "-s", nsha).stdout.strip())      # the committed content, not the working file
-                kind = CG.verdict(top, path, size)
-                if kind != "ok":
-                    errors.append(f"{kind}: {path} - " + ("inside a temp/ or _to_delete/ folder (promote it to a code folder or put the command in the card)" if kind == "scratch"
-                                                           else f"a data / binary / log type or over 1 MB ({size // 1000} kB)"))
-            if errors:
-                raise RuntimeError("refused, nothing committed:\n  " + "\n  ".join(errors[:12]))
+        errors = []
+        for om, nm, osha, nsha, st, path in rows:
+            if st == "D":
+                continue
+            size = int(run(top, "cat-file", "-s", nsha).stdout.strip())      # the committed content, not the working file
+            kind = CG.verdict(top, path, size)
+            if kind == "scratch" and allow_scratch:                          # lifts the folder rule only: the type and size rules still hold for the file itself
+                kind = "forbidden" if "__pycache__" in path.split("/") else CG.classify(os.path.basename(path), size)   # by name: no .gitignore whitelist applies inside temp/
+            if kind != "ok":
+                errors.append(f"{kind}: {path} - " + ("inside a temp/ or _to_delete/ folder (promote it to a code folder or put the command in the card)" if kind == "scratch"
+                                                       else f"a data / binary / log type or over 1 MB ({size // 1000} kB)"))
+        if errors:
+            raise RuntimeError("refused, nothing committed:\n  " + "\n  ".join(errors[:12]))
         if dry_run:
             return "dry-run", changed, []
         new = run(top, "commit-tree", tree, "-p", old, inp=message).stdout.strip()
@@ -205,7 +208,7 @@ def selftest():
         w("run.sh", "#!/bin/sh\necho x\n", 0o755)
         open(os.path.join(tmp, "run_mine.sh"), "w").write("#!/bin/sh\necho x\n")
         new, changed, left = commit_paths(top, ["mine", "a.py", "old.txt"], "msg\n\nTrailer: x\n", blobs={"shared.md": os.path.join(tmp, "shared_mine.md"), "run.sh": os.path.join(tmp, "run_mine.sh")})
-        assert new and sorted(changed) == ["a.py", "mine/new.py", "run.sh", "shared.md"] and left == [], (changed, left)
+        assert new and sorted(changed) == ["a.py", "mine/new.py", "old.txt", "run.sh", "shared.md"] and left == [], (changed, left)      # old.txt = my deletion, listed too
         assert g("show", "-s", "--format=%B", "HEAD").strip().endswith("Trailer: x")
         assert g("show", "HEAD:shared.md") == "line1\nline2 mine\n" and g("show", "HEAD:a.py") == "a = 2\n", "my blob, my file"
         assert "100755" in g("ls-tree", "HEAD", "run.sh"), "the exec bit of a blob path is kept"
@@ -250,6 +253,26 @@ def selftest():
             except RuntimeError as e:
                 assert word and word in str(e), (bad, str(e))
         assert commit_paths(top, ["temp/x.py"], "m\n", allow_scratch=True)[0], "scratch only when asked (-f for ignored paths)"
+        # review 2026-11-02: --allow-scratch lifts the temp/ rule only (a checkpoint or a file over 1 MB there is still refused); a deletion-only commit lists the file;
+        # the message goes to git as bytes (a text-mode pipe gives CRLF on Windows)
+        w("temp/ck.pt", "weights")
+        w("temp/big.txt", "x" * 1_300_000)
+        for bad in ("temp/ck.pt", "temp/big.txt"):
+            try:
+                commit_paths(top, [bad], "m\n", allow_scratch=True)
+                raise AssertionError(f"{bad}: --allow-scratch must not lift the type and size rules")
+            except RuntimeError as e:
+                assert "forbidden: " + bad in str(e), (bad, str(e))
+        os.remove(os.path.join(top, "temp", "x.py"))
+        dele, chd, _ = commit_paths(top, ["temp/x.py"], "m\n", allow_scratch=True)
+        assert dele and chd == ["temp/x.py"], "a deletion-only commit names the file"
+        seen, real_sub = [], subprocess.run
+        subprocess.run = lambda cmd, *a, **kw: (seen.append(kw.get("input")) if "commit-tree" in cmd else None) or real_sub(cmd, *a, **kw)
+        try:
+            assert commit_paths(top, ["other_dir"], "ä msg\n")[0]
+        finally:
+            subprocess.run = real_sub
+        assert len(seen) == 1 and isinstance(seen[0], bytes) and g("log", "-1", "--format=%s").strip() == "ä msg", seen
         try:
             commit_paths(top, ["c.py"], "m\n", blobs={"c.py": os.path.join(tmp, "b_mine.py")})
             raise AssertionError("a path named twice must be refused")
