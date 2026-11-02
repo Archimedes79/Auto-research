@@ -168,6 +168,15 @@ check(old_style["exc"] and old_style["exc"].startswith("SystemExit") and "lr_gro
 old_plain = TT.run_train(T, root, "base")
 check(old_plain["exc"] is None and "resumed from" in old_plain["out"], "a checkpoint from before the field resumes with no lr_groups, as before")
 
+# lr_groups together with amp "fp16" (GradScaler): the scale is taken off before the optimiser sees the gradients, so a power-of-two scale changes nothing: the same weights, EMA and optimiser
+# state as amp off, bit for bit, also through an overflow (here an overflow is not injected: see test_grad_scaler.py; the group tags and the per-group lr are what is new)
+off_g = TT.run_train(T, root, "g_off", lr_groups=spec5)
+fp_g = TT.run_train(T, root, "g_fp16", lr_groups=spec5, amp="fp16")
+check(off_g["exc"] is None and fp_g["exc"] is None and TT.same_tree(off_g["ck"]["state"], fp_g["ck"]["state"]) and TT.same_tree(off_g["ck"]["ema"], fp_g["ck"]["ema"])
+      and TT.same_tree(off_g["ck"]["opt"]["state"], fp_g["ck"]["opt"]["state"]) and [g["lr"] for g in off_g["ck"]["opt"]["param_groups"]] == [g["lr"] for g in fp_g["ck"]["opt"]["param_groups"]],
+      "lr_groups with amp fp16 (scale 1024) = lr_groups with amp off: the same weights, EMA, optimiser state and group learning rates, bit for bit")
+check(all(r["loss_scale"] == 1024.0 for r in fp_g["rows"]) and all(f"lr.net.3" in r for r in fp_g["rows"]), "and the rows carry both the loss scale and lr.net.3")
+
 # evaluation/bev_adapter.load_run builds the optimiser "as train()" to load a checkpoint: with lr_groups it must pass them (the optimiser state has a slot per group), without them an older
 # snapshot's param_groups (four arguments) must still work
 sys.path.insert(0, "evaluation")
