@@ -289,6 +289,168 @@ def early_checks(tmp, ok):
     ok("early: --as-rule prints a kill.txt line only for 'consider stopping' (it hits the laggard, not the control, both directions); the CLI exits 0, usage errors 2, nothing is written")
 
 
+def _start_project(tmp, name, prepare=True):
+    """a throw-away project for `start`: records/runs, a base config, and (prepare) a prepare check that always says MISSING; -> project folder"""
+    proj = os.path.join(tmp, name)
+    os.makedirs(os.path.join(proj, "records", "runs"))
+    json.dump({"steps": 3000, "name": "x"}, open(os.path.join(proj, "base.json"), "w"))
+    open(os.path.join(proj, "chkgt.py"), "w").write("import sys\nsys.exit(1)\n")
+    block = {"out": "composed", "train": "bash train.sh {config}", "runs": "runs"}
+    if prepare:
+        block["prepare"] = [{"name": "gt", "check": "python3 chkgt.py {config}", "build": "bash build.sh {config}"}]
+    json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "trainsuite": block}, open(os.path.join(proj, "project.json"), "w"))
+    return proj
+
+
+def _start_go(proj, finished, *args):
+    """`start base.json <args> --go --wait 0.1` with only run.py's launcher faked: a job whose id is in `finished` ends at once with exit 0, the others keep
+    running; -> (exit code, output, the ids of the launched jobs in order)"""
+    import subprocess as sp
+    launched, real = [], sp.Popen
+
+    class Fake:
+        pid = 4242
+
+        def __init__(self, rid):
+            self.rid = rid
+
+        def wait(self, timeout=None):
+            if self.rid in finished:
+                return 0
+            raise sp.TimeoutExpired("run.py", timeout)
+
+    def fake(argv, **kw):                                           # the prepare check and the check command run for real
+        if len(argv) > 1 and str(argv[1]).endswith("run.py"):
+            launched.append(argv[argv.index("--id") + 1])
+            return Fake(launched[-1])
+        return real(argv, **kw)
+    old = os.environ.get("AR_PROJECT")
+    os.environ["AR_PROJECT"], sp.Popen = proj, fake
+    try:
+        rc, out = run_cli("start", "base.json", *args, "--go", "--wait", "0.1")
+    finally:
+        sp.Popen = real
+        if old is None:
+            os.environ.pop("AR_PROJECT", None)
+        else:
+            os.environ["AR_PROJECT"] = old
+    return rc, out, launched
+
+
+def check_bad_steps(tmp):
+    """a step total that is no number (config.json or trainsuite.json) is a finding of that run, not a crash of the status table of all"""
+    from . import cli as cli_mod
+    root = os.path.join(tmp, "bad_steps")
+    make(root, "a_good", rows(5), total=3000)
+    for name, bad in (("b_str", "abc"), ("c_list", [5]), ("d_nan", float("nan")), ("e_inf", float("inf"))):
+        r = Run(make(root, name, rows(5), total=bad))
+        assert r.total == 0 and len(r.config_problems) == 1, (name, r.total, r.config_problems)
+    d = make(root, "f_opt", rows(5), total=3000)
+    json.dump({"steps": "abc"}, open(os.path.join(d, "trainsuite.json"), "w"))
+    assert Run(d).total == 0 and Run(d).config_problems
+    rc, out = run_cli("--root", root, "status", "--all")
+    assert rc == 0 and all(x in out for x in ("a_good", "b_str", "c_list", "d_nan", "e_inf", "f_opt")) and "bad_config" in out, out
+    s, f, _ = cli_mod.summary(Run(os.path.join(root, "b_str")))
+    assert [x.code for x in f if x.level == "warn"] == ["bad_config"] and s["total"] == 0, f
+    assert Run(os.path.join(root, "a_good")).config_problems == []
+
+
+def check_compose_values(tmp):
+    """--set and presets: 1e3 is the int 1000; NaN / Infinity / 1e400 are refused everywhere (they would be written as invalid json); the base file keeps its floats"""
+    from . import compose as C
+    for text in ("steps=1e3", "steps=1000.0"):
+        v = C.parse_set(text)[1]
+        assert v == 1000 and type(v) is int, (text, v)
+    assert C.parse_set("lr=2.5")[1] == 2.5 and C.parse_set("w=[1e2, 0.5]")[1] == [100, 0.5] and C.parse_set("w=abc")[1] == "abc"
+    for bad in ("lr=NaN", "lr=Infinity", "lr=-Infinity", "lr=1e400", "lr=[1, NaN]", 'lr={"a": 1e999}'):
+        try:
+            C.parse_set(bad)
+            raise AssertionError(f"--set {bad!r} must be refused")
+        except C.ComposeError:
+            pass
+    d = os.path.join(tmp, "cvals")
+    os.makedirs(os.path.join(d, "presets"))
+    open(os.path.join(d, "presets", "sci.json"), "w").write('{"steps": 1e3}')
+    open(os.path.join(d, "presets", "nan.json"), "w").write('{"lr": NaN}')
+    open(os.path.join(d, "presets", "big.json"), "w").write('{"lr": 1e400}')
+    open(os.path.join(d, "base.json"), "w").write('{"steps": 3000, "w": 2.0}')
+    open(os.path.join(d, "base_nan.json"), "w").write('{"steps": NaN}')
+    cfg, _ = C.compose(C.load(os.path.join(d, "base.json")), ["sci"], [], os.path.join(d, "presets"))
+    assert type(cfg["steps"]) is int and cfg["steps"] == 1000 and type(cfg["w"]) is float, cfg
+    for name in ("nan", "big"):
+        try:
+            C.compose({"steps": 1}, [name], [], os.path.join(d, "presets"))
+            raise AssertionError(f"preset {name} must be refused")
+        except C.ComposeError:
+            pass
+    try:
+        C.load(os.path.join(d, "base_nan.json"))
+        raise AssertionError("a base file with NaN must be refused")
+    except C.ComposeError:
+        pass
+    out = os.path.join(d, "out.json")
+    try:
+        C.write({"a": float("nan")}, out)
+        raise AssertionError("the writer must refuse a NaN")
+    except C.ComposeError:
+        pass
+    assert not os.path.exists(out) and not os.path.exists(out + ".tmp"), "a refused config leaves no file behind"
+    rc, so, se = run_cli_err("compose", os.path.join(d, "base.json"), "--set", "lr=NaN")
+    assert rc == 2 and "not a json number" in se, (rc, se)
+
+
+def check_folder_twins(tmp):
+    """t1.a and t1_a are one run folder (runs/t1_a): the second id is refused when the first has a run record, and the first one is not"""
+    from . import compose as C
+    proj = _start_project(tmp, "twins", prepare=False)
+    block = json.load(open(os.path.join(proj, "project.json")))["trainsuite"]
+    recs = os.path.join(proj, "records", "runs")
+    os.makedirs(os.path.join(recs, "t17.a"))
+    card = dict(hyp="h", pred="p", rule="r", records=recs)
+    try:
+        C.plan_start(proj, block, "base.json", "t17_a", [], [], **card)
+        raise AssertionError("t17_a shares runs/t17_a with t17.a: refused")
+    except C.ComposeError as e:
+        assert "also the folder of the run id t17.a" in str(e) and "runs/t17_a" in str(e), e
+    assert C.plan_start(proj, block, "base.json", "t17.a", [], [], **card)["held"] is False
+    assert C.plan_start(proj, block, "base.json", "t17.b", [], [], **card)["held"] is False, "another folder is no twin"
+    open(os.path.join(recs, "t17.a", "HOLD"), "w").write("{}")
+    try:
+        C.plan_start(proj, block, "base.json", "t17_a", [], [], **card)
+        raise AssertionError("the twin of a held id is refused")
+    except C.ComposeError as e:
+        assert "ON HOLD" in str(e), e
+    assert C.plan_start(proj, block, "base.json", "t17.a", [], [], **card)["held"] is True
+    assert C.same_folder_ids(None, "t17.a") == []
+
+
+def check_start_hold(tmp):
+    """a held training id (or the id that shares its run folder) stops `start --go` before any job: no prepare build (hours) that the held training then waits for"""
+    proj = _start_project(tmp, "hold_start")
+    recs = os.path.join(proj, "records", "runs")
+    os.makedirs(os.path.join(recs, "t16.h"))
+    open(os.path.join(recs, "t16.h", "HOLD"), "w").write("{}")
+    rc, out, launched = _start_go(proj, (), "--id", "t16.h", "--no-card", "--no-check", "--prepare")
+    assert rc == 1 and launched == [] and "ON HOLD" in out and "no prepare job" in out, (rc, out, launched)
+    assert not os.path.exists(os.path.join(proj, "composed", "t16_h.json")) and not os.path.exists(os.path.join(proj, "runs")), "nothing is written for a held id"
+    rc, out, launched = _start_go(proj, (), "--id", "t16_h", "--no-card", "--no-check", "--prepare")
+    assert rc == 2 and launched == [], (rc, out, launched)                  # the twin id: the same run folder
+    rc, out, launched = _start_go(proj, (), "--id", "t16.free", "--no-card", "--no-check", "--prepare")
+    assert rc == 0 and launched == ["t16.free.prep_gt", "t16.free"], (rc, out, launched)
+
+
+def check_start_prepare_done(tmp):
+    """a prepare job that ends with exit 0 inside the wait is a success (the training goes on); an exit 0 of the training itself is still 'nothing runs'"""
+    proj = _start_project(tmp, "prep_done")
+    rc, out, launched = _start_go(proj, {"t16.p.prep_gt"}, "--id", "t16.p", "--no-card", "--no-check", "--prepare")
+    assert rc == 0 and launched == ["t16.p.prep_gt", "t16.p"] and "started t16.p, pid 4242" in out, (rc, out, launched)
+    rc, out, launched = _start_go(proj, {"t16.q"}, "--id", "t16.q", "--no-card", "--no-check", "--prepare")
+    assert rc == 1 and "launcher of t16.q ended" in out, (rc, out)
+
+
+REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_start_hold, check_start_prepare_done)       # review of 2026-11-02, one rule each
+
+
 def main():
     n = [0]
 
@@ -1104,8 +1266,14 @@ def main():
                 os.environ["AR_PROJECT"] = old_env
         ok("compose: presets in order, --set as json or string, the base untouched, every change listed (NEW keys and typos marked), errors refused; start: the check, the exact run.py command, resume / hold notes, nothing started without --go")
 
+        # 15b the review of 2026-11-02: a bad step total, NaN / 1e3 in --set, ids that share a folder, a held id, a prepare job that is done at once
+        for check in REVIEW_CHECKS:
+            check(tmp)
+        ok("review fixes: a non-numeric steps is a finding (status goes on), --set / presets refuse NaN and read 1e3 as 1000, t1.a and t1_a do not share a run folder, "
+           "start --go refuses a held id before any job, a prepare job that finishes inside --wait does not stop the training")
+
         # 16 the view of run.py's queue
-        qp = os.path.join(tmp, "qproj")
+        qp =os.path.join(tmp, "qproj")
         for d_ in ("records/runs/.gpu_slots/0", "records/runs/.gpu_slots/.queue", "records/runs/Rheld"):
             os.makedirs(os.path.join(qp, d_))
         json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "gpu_slots": 2, "ram_mb": 5000}, open(os.path.join(qp, "project.json"), "w"))

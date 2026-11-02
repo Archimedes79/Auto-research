@@ -11,7 +11,9 @@
     eval [--n 1000] [--warm] [--prior 500] [--images 8] [--time]   the evaluation of a run (replaces evaluate_run.py): runs the
                                                 suite over the val frames, writes eval/metrics<tag>.json + eval/table<tag>.txt
                                                 + eval/card<tag>.json (the metric card of decide.py / experiment.py, with its `provenance` block:
-                                                GT version, evaluator code hash, frame hash, raw-data manifest hash, model)
+                                                GT version, evaluator code hash, frame hash, raw-data manifest hash, model; its `protocol` = GT signature,
+                                                memory mode, control, prior, weights: decide.py refuses cards that differ in it). A store started with other
+                                                evaluator code (the Source's `evaluator_hash`) is not resumed: move it aside or use a new name
     report [--vs RUN ...] [--frames 6]          ONE PAGE for a person without code: state, resumes, the card's prediction / rule, curves, the numbers next to
                                                 the --vs runs (first = control), cost, random frames + a video (made first when the run has none) and a
                                                 review field per picture; -> RUN/report/index.html (autoresearch/tools/run_report.py; --ingest there
@@ -47,6 +49,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path.insert(0, os.path.join(ROOT, ".."))                       # so that `autoresearch` can be located from any cwd
 sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 sys.path.insert(0, ROOT)
+from evaluation import bev_adapter as A  # noqa: E402  (numpy only at import: the chain's code is imported later, after setup_paths)
 
 HEADLINE_LAYERS = (("drivable_area", "iou@0"), ("drivable_area", "iou@0.5"), ("ped_crossing", "iou@0"), ("walkway", "iou@0"),
                    ("carpark_area", "iou@0"), ("lane_divider", "iou@0.5"), ("lane_divider", "iou@1"), ("road_divider", "iou@1"),
@@ -106,11 +109,14 @@ def prior_numbers(ptab: dict, metrics) -> tuple:
     return ({k: v for k, v in flat.items() if k.startswith("prior_")}, {k: v for k, v in better.items() if k.startswith("prior_")})
 
 
-def contract_card(run: str, split: str, tag: str, flat: dict, better: dict, n_frames: int, gt_sig) -> dict:
+def contract_card(run: str, split: str, tag: str, flat: dict, better: dict, n_frames: int, gt_sig, state: str, control: str, prior: int,
+                  weights: str = "EMA") -> dict:
     """the metric card of this evaluation in the evaluator contract (autoresearch/schemas/card.schema.json): the file decide.py and
     experiment.py read (eval/card<tag>.json). The finite numbers of metrics.json (no info/*, no NaN, no flags) with their directions;
     commit = the run's code snapshot (code/SNAPSHOT.txt of run_ar.sh / run_cfg.sh, '+?' when unknown); seed from the run's config.json;
-    protocol = the GT signature scored against (decide.py refuses a comparison across protocols)"""
+    protocol = what the numbers were measured under: the GT signature scored against, the memory mode (state: reset = cold, carry = warm), the
+    sanity control, the prior-map baseline (frames) and the weights (decide.py refuses a comparison across protocols: a warm card is not
+    comparable to a cold one with the same frames)"""
     metrics = {k: float(v) for k, v in flat.items()
                if not k.startswith("info/") and isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)}
     try:
@@ -120,38 +126,20 @@ def contract_card(run: str, split: str, tag: str, flat: dict, better: dict, n_fr
         commit = "+?"
     card = {"schema": 1, "name": os.path.basename(os.path.normpath(run)) + tag, "split": split, "frames": int(n_frames), "metrics": metrics,
             "better": {k: v for k, v in better.items() if k in metrics}, "commit": commit, "date": time.strftime("%Y-%m-%d %H:%M"),
-            "protocol": {"gt_signature": gt_sig}}
+            "protocol": {"gt_signature": gt_sig, "state": state, "control": control or None, "prior": int(prior), "weights": weights}}
     seed = (_read_json(os.path.join(run, "config.json")) or {}).get("seed")
     if isinstance(seed, (int, str)) and not isinstance(seed, bool):
         card["seed"] = seed
     return card
 
 
-PROVENANCE_DIR = os.path.join(ROOT, "..", "autoresearch", "tools")
-EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "evalsuite"))
-
-
-def _provenance_module():
-    """autoresearch/tools/provenance.py loaded by path (tools/ is not a package); the folder it puts first on sys.path is taken away again, so the run's pinned
-    code snapshot keeps its place"""
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("provenance", os.path.join(PROVENANCE_DIR, "provenance.py"))
-    mod = importlib.util.module_from_spec(spec)
-    keep = list(sys.path)
-    try:
-        spec.loader.exec_module(mod)
-    finally:
-        sys.path[:] = keep
-    return mod
-
-
 def provenance_start(suite) -> dict:
     """what is fixed when the evaluation STARTS: the hash of the evaluator's source files and of the checkpoint. The block is written 15 - 30 minutes later, in a
     working tree that other chats edit; a change in between is then marked in the block, not hidden. A collector that cannot be loaded is said here, at minute 0."""
     try:
-        mod = _provenance_module()
+        mod = A._provenance_module()
         ckpt = getattr(suite.subject, "ckpt", None)
-        return {"tree": mod.tree_hash([os.path.abspath(p) for p in EVALUATOR_PATHS], mod.repo_root()),
+        return {"tree": A.evaluator_tree_hash(mod),
                 "ckpt_path": ckpt, "ckpt": mod.file_hash(ckpt) if ckpt and os.path.isfile(ckpt) else None}
     except Exception as ex:
         print(f"WARNING: provenance collector not usable ({type(ex).__name__}: {ex}); the card will carry a gap", flush=True)
@@ -183,7 +171,7 @@ def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, star
     the block says so (evaluator.dirty = 'unknown', changed_during_run) and decide.py refuses the card as unchecked. A failure to collect never stops an
     evaluation: the block then holds the error, a WARNING is printed, and decide.py refuses the card as unchecked."""
     try:
-        mod = _provenance_module()
+        mod = A._provenance_module()
         start = start or {}
         cfg, ckpt = os.path.join(a.run, "config.json"), start.get("ckpt_path") or subj.get("checkpoint")
         if not (ckpt and os.path.isfile(ckpt)) and subj.get("checkpoint"):    # a checkpoint that was moved (--ckpt-dir) is found there
@@ -192,7 +180,7 @@ def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, star
                     ckpt = os.path.join(d, subj["checkpoint"])
                     break
         man = getattr(store, "manifest", None) or {}
-        pv = mod.collect(gt_key=gt_sig, split=a.split, tokens=[fr["key"] for fr in store.frames], evaluator=list(EVALUATOR_PATHS),
+        pv = mod.collect(gt_key=gt_sig, split=a.split, tokens=[fr["key"] for fr in store.frames], evaluator=list(A.EVALUATOR_PATHS),
                          run=os.path.basename(os.path.normpath(a.run)), ckpt=ckpt, config=cfg, step=subj.get("step"), run_dir=a.run,
                          seed=(_read_json(cfg) or {}).get("seed"),
                          settings={"tag": tag, "n": e.n, "warm": bool(e.warm), "prior": e.prior, "control": a.control or None, "state": state,
@@ -293,6 +281,25 @@ def train_gt(run: str):
     return (_read_json(os.path.join(run, "gt.json")) or {}).get("gt_signature")
 
 
+def evaluator_conflict(stored: str, hash_now):
+    """refusal text or None: a resume computes only the missing frames, so a store started with other evaluator code would be finished with this code and
+    carry one hash on a mixture of both. A store made before the Source carried `evaluator_hash` has no value to compare: the evalsuite store tolerates the new
+    key with its warning (resume of ... description gained keys)"""
+    old = (_read_json(os.path.join(stored, "manifest.json")) or {}).get("source") or {}
+    if "evaluator_hash" not in old or old["evaluator_hash"] == hash_now:
+        return None
+    return (f"refused: evaluator code changed since this store was started ({stored}: {old['evaluator_hash']} -> {hash_now}): use a new --name "
+            "(`eval` / `memory` name their stores themselves: move that directory aside; RunStore.create(force=True) overrides the check)")
+
+
+def quant_run(suite, **kw):
+    """suite.quant.run with the evaluator check of evaluator_conflict (SystemExit with the text, before any frame is run)"""
+    refusal = evaluator_conflict(os.path.join(suite.quant.dir, kw["name"]), suite.source.describe().get("evaluator_hash"))
+    if refusal:
+        raise SystemExit(refusal)
+    return suite.quant.run(**kw)
+
+
 def make_suite(a, prior: int = 0, state: str = None):
     from evalsuite import EvalSuite
     from evaluation.bev_adapter import build
@@ -322,11 +329,15 @@ def cmd_eval(a, rest) -> int:
     from evalsuite.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
     name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', False) else ''}{'_vel' if getattr(a, 'velocity', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
-    gt_now = suite.source.describe().get("gt_signature")                 # the GT scored against (autogt is read live, not pinned)
+    desc = suite.source.describe()
+    gt_now = desc.get("gt_signature")                                    # the GT scored against (autogt is read live, not pinned)
     quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
-    refusal, gt_sig = gt_conflict(os.path.join(quant_dir, name), gt_now, e.force_resume)
-    if refusal is None and e.prior:                                        # the prior baseline's stored run as well
-        refusal = gt_conflict(os.path.join(quant_dir, f"prior{e.prior}_n{e.n or 'all'}"), gt_now, e.force_resume)[0]
+    stores = [os.path.join(quant_dir, name)] + ([os.path.join(quant_dir, f"prior{e.prior}_n{e.n or 'all'}")] if e.prior else [])    # the prior baseline's stored run as well
+    refusal, gt_sig = gt_conflict(stores[0], gt_now, e.force_resume)
+    for st_dir in stores[1:]:
+        refusal = refusal or gt_conflict(st_dir, gt_now, e.force_resume)[0]
+    for st_dir in stores:                                                  # before any frame is run, not after the first store has finished
+        refusal = refusal or evaluator_conflict(st_dir, desc.get("evaluator_hash"))
     if refusal:
         print(refusal, flush=True)
         suite.close()
@@ -344,7 +355,7 @@ def cmd_eval(a, rest) -> int:
             det_rec.setdefault(sc, {}).setdefault(dt, []).append((list(o["dets"]), gb))
             if o.get("detr") is not None:
                 detr_rec.setdefault(sc, {}).setdefault(dt, []).append((list(o["detr"]), gb))
-    store = suite.quant.run(scenes=e.scenes if not e.n else None, frames=frames, state=state, name=name, progress=50, on_frame=keep_boxes)
+    store = quant_run(suite, scenes=e.scenes if not e.n else None, frames=frames, state=state, name=name, progress=50, on_frame=keep_boxes)
     tab = suite.quant.table(store)
     flat, better = to_legacy(tab), better_of(tab, suite.task.metrics())
     subj = suite.subject.describe()
@@ -355,7 +366,7 @@ def cmd_eval(a, rest) -> int:
         flat.update({f"ms/{k}": v for k, v in lat.items() if isinstance(v, (int, float)) and k != "n"})
     if e.prior:
         psuite = make_suite(a, prior=e.prior, state="reset")
-        pstore = psuite.quant.run(frames=frames or [f for s in suite.source.scenes() for f in suite.source.frames(s)], state="reset",
+        pstore = quant_run(psuite, frames=frames or [f for s in suite.source.scenes() for f in suite.source.frames(s)], state="reset",
                                   name=f"prior{e.prior}_n{e.n or 'all'}", progress=50)
         pflat, pbetter = prior_numbers(psuite.quant.table(pstore), psuite.task.metrics())
         flat.update(pflat)
@@ -381,7 +392,7 @@ def cmd_eval(a, rest) -> int:
                                               "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
                                               "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better,
                                               "latency": lat}, indent=1, default=float))
-    card = contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig)                                     # for decide.py
+    card = contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig, state, a.control, e.prior)         # for decide.py
     card["provenance"] = provenance_block(a, e, store, subj, gt_sig, tag, state, start=prov0, avail=list(suite.source.scenes()))  # which GT, evaluator, frames, data and model made it
     write_both("card", "json", json.dumps(card, indent=1))
     from evaluation import bev_legacy                                    # the n is in the name: an eval of another n never overwrites it
@@ -440,6 +451,13 @@ MEMORY_ROWS = (("drivable IoU@0 (in view)", "seg_fov/seg/{dt}/drivable_area/all/
                ("vehicle ATE", "det/{dt}/vehicle/all/ate"), ("vehicle AVE", "det/{dt}/vehicle/all/ave"))
 
 
+def interval_text(v: dict) -> str:
+    """the interval of one paired-bootstrap row (evalsuite stats): '95% [lo, hi]', '(excludes 0)', and the draws it rests on (n_valid / n_draws). A resample with
+    nothing to score is dropped, so with n_valid < n_draws the interval is conditional on the scorable resamples: the row says so"""
+    s = f"95% [{v['lo']:+.4f}, {v['hi']:+.4f}]" + ("  (excludes 0)" if v["lo"] > 0 or v["hi"] < 0 else "") + f"  draws {v['n_valid']}/{v['n_draws']}"
+    return s + ("  WARNING: only some resamples were scorable, the interval is conditional on them" if v["n_valid"] < v["n_draws"] else "")
+
+
 def cmd_memory(a, rest) -> int:
     """Does the carried world memory help? The same val frames twice: 'cold' = every frame from an empty memory, 'warm' = from an
     empty memory with the previous seq_len - 1 keyframes run first (what the clip-trained network saw); numbers per dt, and the
@@ -453,8 +471,8 @@ def cmd_memory(a, rest) -> int:
         raise SystemExit(f"{a.run}: seq_len = {L}, nothing carried")
     from evalsuite.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(m.clips, min_index=L - 1)
-    cold = suite.quant.run(frames=frames, state="reset", name=f"memory_cold_n{m.clips}", progress=50)
-    warm = suite.quant.run(frames=frames, state="warmup", name=f"memory_warm_n{m.clips}", progress=50)
+    cold = quant_run(suite, frames=frames, state="reset", name=f"memory_cold_n{m.clips}", progress=50)
+    warm = quant_run(suite, frames=frames, state="warmup", name=f"memory_warm_n{m.clips}", progress=50)
     flat = {f"{w}/{k}": v for w, st in (("warm", warm), ("cold", cold)) for k, v in to_legacy(suite.quant.table(st)).items()}
     use_ref = any(k.startswith("warm/detr/") for k in flat)
     lines = [f"{a.run} step {suite.subject.describe().get('step')}: warm vs cold memory on {len(frames)} val frames with {L - 1} keyframes of "
@@ -470,8 +488,7 @@ def cmd_memory(a, rest) -> int:
     cmp = suite.quant.compare(cold, warm, boot=1000)
     lines.append("paired scene bootstrap of the headline numbers, warm - cold (dt 0):")
     for k, v in cmp["metrics"].items():
-        lines.append(f"  {k:62s} cold {v['a']:.4f}  warm {v['b']:.4f}  diff {v['diff']:+.4f}  95% [{v['lo']:+.4f}, {v['hi']:+.4f}]"
-                     + ("  (excludes 0)" if v["lo"] > 0 or v["hi"] < 0 else ""))
+        lines.append(f"  {k:62s} cold {v['a']:.4f}  warm {v['b']:.4f}  diff {v['diff']:+.4f}  {interval_text(v)}")
     txt = "\n".join(lines)
     out = os.path.join(a.run, "eval")
     os.makedirs(out, exist_ok=True)
@@ -570,6 +587,9 @@ def frames_check(run_a: str, run_b: str, ra, rb, n: str, force: bool = False) ->
     return warn
 
 
+COMPARE_IGNORE = {"source": ("feature_cache", "control", "evaluator_hash")}   # the arms may differ in what the model is fed (t8: features); the evaluator hash only guards a resume
+
+
 def cmd_compare(argv) -> int:
     p = argparse.ArgumentParser(prog="compare")
     p.add_argument("run_a")
@@ -608,14 +628,17 @@ def cmd_compare(argv) -> int:
     for w in gt_check(c.run_a, c.run_b, {"evaluation GT": tuple((m.get("source") or {}).get("gt_signature") for m in mans),
                                          "training GT": train_ids}, c.force):
         print(w)
+    hashes = [(m.get("source") or {}).get("evaluator_hash") for m in mans]
+    if hashes[0] != hashes[1]:                                     # not a refusal (the stores were made at different times: decide.py's provenance check judges the cards)
+        print(f"WARNING: the two evaluations were made with different evaluator code ({c.run_a}: {hashes[0]}, {c.run_b}: {hashes[1]}); "
+              "part of a difference may come from the evaluator, not from the runs")
     task = _task_only(c.run_a, c.curves, c.fusion, c.velocity)
     q = Quantitative(SimpleNamespace(out=os.path.join(c.run_a, "eval", "suite"), task=task))
     res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed,
-                    force=c.force, ignore={"source": ("feature_cache", "control")})   # the arms may differ in what the model is fed (t8: features)
+                    force=c.force, ignore=COMPARE_IGNORE)
     print(f"paired scene bootstrap ({c.boot} resamples), b - a; a = {c.run_a}, b = {c.run_b}; val; {res['n_common_frames']} common frames")
     for k, v in res["metrics"].items():
-        print(f"{k:62s} a {v['a']:.4f}  b {v['b']:.4f}  b-a {v['diff']:+.4f}  95% [{v['lo']:+.4f}, {v['hi']:+.4f}]"
-              + ("  (excludes 0)" if v["lo"] > 0 or v["hi"] < 0 else ""))
+        print(f"{k:62s} a {v['a']:.4f}  b {v['b']:.4f}  b-a {v['diff']:+.4f}  {interval_text(v)}")
     return 0
 
 

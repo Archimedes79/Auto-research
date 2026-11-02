@@ -13,7 +13,8 @@ here: every cell is a key of metrics.json.
 
 Markers: ^ better and v worse than the band in every seed, ~ inside the band, ? the mean is beyond the band but the seeds disagree.
 Band per column = max(0.02, 2 x spread of the base seeds). An arm is compared only when GT signature, split and memory mode equal the
-base's (--force shows it anyway); a different code commit is flagged. The board is evidence: the decision is the card's rule (decide.py).
+base's (--force shows it anyway); a different code commit, number of frames or checkpoint is flagged (the plain metrics.json is the latest eval of any
+--n, so 200 frames can stand next to 1000). The board is evidence: the decision is the card's rule (decide.py).
 """
 import argparse
 import datetime
@@ -71,6 +72,8 @@ class Run:
         self.m = read_json(os.path.join(path, "eval", "metrics.json"))
         self.metrics = (self.m or {}).get("metrics") or {}
         self.identity = (self.m.get("gt_signature"), self.m.get("split"), self.m.get("memory")) if self.m else None
+        self.frames = self.metrics.get("info/n_samples")      # the plain eval/metrics.json is the latest eval of any --n: its frame count and checkpoint are part of what a number means
+        self.checkpoint = (self.m or {}).get("checkpoint")
         self.commit = self._commit()
 
     def _commit(self):
@@ -135,6 +138,17 @@ def same_code(a, b):
     return not (a and b) or a.startswith(b) or b.startswith(a)
 
 
+def setup_flags(base_runs, arm_runs):
+    """', FRAMES DIFFER (arm 200, base 1000)' / ', CHECKPOINT DIFFERS (...)': what the two sets of evals were measured on, where both record it (flagged like a
+    different code commit, not refused: the cells are shown); '' when equal or not recorded"""
+    out = ""
+    for label, attr in (("FRAMES DIFFER", "frames"), ("CHECKPOINT DIFFERS", "checkpoint")):
+        b, a = ({getattr(r, attr) for r in rs} - {None} for rs in (base_runs, arm_runs))
+        if a and b and a != b:
+            out += ", %s (arm %s, base %s)" % (label, "/".join(sorted(map(str, a))), "/".join(sorted(map(str, b))))
+    return out
+
+
 def compat(base, arm):
     """(comparable, unrecorded fields): a field recorded on both sides must be equal; an unrecorded one (older evals) is a warning, as in bev_suite compare"""
     unknown = []
@@ -159,7 +173,7 @@ def build(names, floor=FLOOR, force=False):
     bands = [band_of(v, floor) for v in base_vals]
     base_mean = [mean(v) if v else None for v in base_vals]
     base_commit = base_ev[0].commit
-    rows = [dict(name=names[0] + " (base)", state="%d seed(s), %s" % (len(base_ev), base_commit or "commit ?"),
+    rows = [dict(name=names[0] + " (base)", state="%d seed(s), %s%s" % (len(base_ev), base_commit or "commit ?", setup_flags(base_ev[:1], base_ev[1:])),
                  cells=["%.3f" % m if m is not None else "-" for m in base_mean], deltas=[None] * len(COLUMNS),
                  marks=[""] * len(COLUMNS), reading="")]
     for name in names[1:]:
@@ -189,7 +203,7 @@ def build(names, floor=FLOOR, force=False):
         unclear = [COLUMNS[i][1] for i, m in enumerate(marks) if m == "?"]
         reading = "%d better, %d worse" % (len(up), len(down)) + (" (%s)" % ", ".join(down) if down else "") + (", %d unclear" % len(unclear) if unclear else "")
         code = "" if all(same_code(r.commit, base_commit) for r in usable) else ", CODE DIFFERS (arm %s, base %s)" % (", ".join(sorted({r.commit or "?" for r in usable})), base_commit)
-        state = "%d of %d seed(s)%s%s" % (len(usable), len(g.runs), ", %s" % usable[0].commit if usable[0].commit else "", code)
+        state = "%d of %d seed(s)%s%s%s" % (len(usable), len(g.runs), ", %s" % usable[0].commit if usable[0].commit else "", code, setup_flags(base_ev, usable))
         if force and any(not compat(ident, r.identity)[0] for r in usable):
             state += ", FORCED: GT/split/memory differs"
         unrecorded = sorted({u for r in usable for u in compat(ident, r.identity)[1]})
@@ -223,24 +237,48 @@ def render(board, champ):
 
 
 def list_runs():
-    print("%-26s %-22s %-18s %-6s %-14s %s" % ("run", "state", "gt_signature", "split", "memory", "code"))
+    print("%-26s %-22s %-18s %-6s %-14s %-7s %-18s %s" % ("run", "state", "gt_signature", "split", "memory", "frames", "checkpoint", "code"))
     for p in sorted(glob.glob(os.path.join(RUNS, "*"))):
         if os.path.isdir(p) and os.path.exists(os.path.join(p, "eval", "metrics.json")):
             r = Run(p)
-            print("%-26s %-22s %-18s %-6s %-14s %s" % (r.name, r.state(), r.identity[0], r.identity[1], r.identity[2], r.commit))
+            print("%-26s %-22s %-18s %-6s %-14s %-7s %-18s %s" % (r.name, r.state(), r.identity[0], r.identity[1], r.identity[2], r.frames, r.checkpoint, r.commit))
+
+
+def selftest_setup(check):
+    """frames / checkpoint flags on synthetic stored evals (a throw-away runs folder): an arm evaluated on 200 frames or at another checkpoint stands next to the base
+    with its cells and a flag in the state; equal setups carry no flag"""
+    global RUNS
+    import tempfile
+    keep = RUNS
+    with tempfile.TemporaryDirectory() as d:
+        RUNS = d
+        try:
+            for name, frames, ckpt in (("base", 1000, "ckpt_00003000.pt"), ("same", 1000, "ckpt_00003000.pt"), ("short", 200, "ckpt_00003000.pt"),
+                                       ("early", 1000, "ckpt_00001000.pt")):
+                os.makedirs(os.path.join(d, name + "_s0", "eval"))
+                with open(os.path.join(d, name + "_s0", "eval", "metrics.json"), "w") as f:
+                    json.dump({"gt_signature": "g", "split": "val", "memory": "empty (cold)", "checkpoint": ckpt,
+                               "metrics": {COLUMNS[0][2]: 0.5, "info/n_samples": frames}}, f)
+            rows = {r["name"]: r for r in build(["base", "same", "short", "early"])["rows"]}
+        finally:
+            RUNS = keep
+    check("a different number of frames / checkpoint is flagged with both values, the cells stay; equal setups carry no flag",
+          "FRAMES DIFFER (arm 200, base 1000)" in rows["short"]["state"] and "CHECKPOINT DIFFERS" in rows["early"]["state"] and rows["short"]["cells"][0] != "-"
+          and "FRAMES" not in rows["early"]["state"] and "DIFFER" not in rows["same"]["state"] and "DIFFER" not in rows["base (base)"]["state"])
 
 
 def selftest():
-    need = [os.path.join(RUNS, n, "eval", "metrics.json") for n in ("t8_ctl_s0", "t8_bevfeat_s0")]
-    missing = [p for p in need if not os.path.exists(p)]
-    if missing:
-        print("selftest needs the stored runs:", missing)
-        return 1
     ok = []
 
     def check(name, cond):
         ok.append(bool(cond))
         print("%s  %s" % ("PASS" if cond else "FAIL", name))
+    selftest_setup(check)
+    need = [os.path.join(RUNS, n, "eval", "metrics.json") for n in ("t8_ctl_s0", "t8_bevfeat_s0")]
+    missing = [p for p in need if not os.path.exists(p)]
+    if missing:
+        print("selftest needs the stored runs:", missing)
+        return 1
 
     ctl, bev = Run(os.path.join(RUNS, "t8_ctl_s0")), Run(os.path.join(RUNS, "t8_bevfeat_s0"))
     table = {}

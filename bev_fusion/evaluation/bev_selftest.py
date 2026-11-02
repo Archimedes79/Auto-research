@@ -355,9 +355,21 @@ def _():
     json.dump({"seed": 3}, open(os.path.join(run, "config.json"), "w"))
     flat = dict(leg, **{"info/step": 7, "ms/idle": True, "ms/median_ms": 4.0, "det/dt+0.00/vehicle/all/nanx": float("nan")})
     card = bev_suite.contract_card(run, "val", "_warm", flat, dict(bt, **{"ms/median_ms": "lower", "det/dt+0.00/vehicle/all/nanx": "lower"}),
-                                   24, "sig1")
+                                   24, "sig1", "carry", "", 0)
     assert CARD.validate(card) == [], CARD.validate(card)
-    assert card["commit"] == "+?" and card["seed"] == 3 and card["name"] == os.path.basename(run) + "_warm" and card["protocol"] == {"gt_signature": "sig1"}
+    assert card["commit"] == "+?" and card["seed"] == 3 and card["name"] == os.path.basename(run) + "_warm"
+    assert card["protocol"] == {"gt_signature": "sig1", "state": "carry", "control": None, "prior": 0, "weights": "EMA"}
+    # decide.py compares the protocol dicts of the cards of the arms: a warm card against a cold one (same frames, same GT), a sanity control, the prior baseline or other
+    # weights is refused, not given a verdict (review 2026-11-02); the same protocol passes
+    exp = {"evaluate": {"split": "val", "allow": ["provenance"]}, "arms": ["v", "c"], "control": "c", "variant": "v", "rule": []}
+
+    def verdict_refusals(**kw):
+        other = bev_suite.contract_card(run, "val", "", flat, bt, 24, "sig1", **dict({"state": "reset", "control": "", "prior": 0}, **kw))
+        base = bev_suite.contract_card(run, "val", "", flat, bt, 24, "sig1", "reset", "", 0)
+        return DC.incompatible(exp, {"v": {"": [({}, other, "variant card")]}, "c": {"": [({}, base, "control card")]}})
+    assert verdict_refusals() == [], "the same protocol is comparable"
+    for kw in ({"state": "carry"}, {"control": "zero_radar"}, {"prior": 500}, {"weights": "raw"}):
+        assert any("differ in protocol" in r for r in verdict_refusals(**kw)), kw
     assert "info/step" not in card["metrics"] and "ms/idle" not in card["metrics"] and "det/dt+0.00/vehicle/all/nanx" not in card["better"]
     path = os.path.join(run, "card_warm.json")
     json.dump(card, open(path, "w"))
@@ -394,18 +406,18 @@ def _():
     assert pv["evaluator"]["paths"] == ["bev_fusion/evaluation", "autoresearch/evalsuite"] and pv["evaluator"]["code_hash"] not in (None, "unknown"), pv["evaluator"]
     assert pv["evaluator"]["settings"]["n"] == 2 and pv["evaluator"]["settings"]["weights"] == "EMA" and pv["seed"] == 3
     name = "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"
-    card = bev_suite.contract_card(run, "val", "", {name: 0.5}, {name: "higher"}, 2, "0.5_4_15efbde2d1")
+    card = bev_suite.contract_card(run, "val", "", {name: 0.5}, {name: "higher"}, 2, "0.5_4_15efbde2d1", "reset", "", 0)
     card["provenance"] = pv
     assert CARD.validate(card) == [], CARD.validate(card)                      # the card with the block stays valid
     moved = tempfile.mkdtemp()                                                 # a checkpoint that was moved is found through --ckpt-dir
     os.replace(os.path.join(run, "ckpt_00000007.pt"), os.path.join(moved, "ckpt_00000007.pt"))
     a.ckpt_dir = moved
     assert bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset")["subject"]["ckpt_hash"] == pv["subject"]["ckpt_hash"]
-    keep, bev_suite.PROVENANCE_DIR = bev_suite.PROVENANCE_DIR, os.path.join(run, "nowhere")
+    keep, A.PROVENANCE_DIR = A.PROVENANCE_DIR, os.path.join(run, "nowhere")
     try:                                                                       # no collector: a marked gap, the evaluation goes on
         gap = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset")
     finally:
-        bev_suite.PROVENANCE_DIR = keep
+        A.PROVENANCE_DIR = keep
     assert gap.get("error") and gap["schema"] == 1, gap
     # the START of the evaluation: hashes taken before the first frame; a change while it runs is marked, not hidden; the card stays serialisable
     import contextlib
@@ -430,13 +442,13 @@ def _():
     gone = bev_suite.provenance_block(a, e, store, subj, "0.5_4_15efbde2d1", "", "reset", start=start)
     assert gone["subject"]["ckpt_hash"] == start["ckpt"] and gone["subject"]["gone_at_end"], gone["subject"]
     buf = io.StringIO()                                                                 # a collector that cannot be loaded is said loudly: at the start and at the end
-    bev_suite.PROVENANCE_DIR = os.path.join(run, "nowhere")
+    A.PROVENANCE_DIR = os.path.join(run, "nowhere")
     try:
         with contextlib.redirect_stdout(buf):
             bad0 = bev_suite.provenance_start(suite0)
             bad1 = bev_suite.provenance_block(a, e, store, subj, "g", "", "reset", start=bad0)
     finally:
-        bev_suite.PROVENANCE_DIR = keep
+        A.PROVENANCE_DIR = keep
     assert buf.getvalue().count("WARNING: provenance") == 2 and bad0.get("error") and bad1.get("error"), buf.getvalue()
 
 
@@ -637,6 +649,82 @@ def _():
         assert S.pickle_meta(p) == {"frames": ["a", "b"], "gt_signature": "0.5_4_new"} and S.pickle_meta(os.path.join(d, "x")) is None
 
 
+class HashedSource(SynthSource):
+    """SynthSource that describes itself with an evaluator hash, as the BEV adapter's Source does"""
+    def __init__(self, evaluator, **kw):
+        super().__init__(**kw)
+        self.evaluator = evaluator
+
+    def describe(self):
+        return dict(super().describe(), evaluator_hash=self.evaluator)
+
+
+@check("evaluator hash: the BEV Source describes itself with it (taken once at build, changes with the evaluator's files); a store resumed with other evaluator code is "
+       "refused with the way out before any frame is run, an older store without the key resumes with the warning, compare ignores it (review 2026-11-02 F1)")
+def _():
+    import contextlib
+    import io
+    from types import SimpleNamespace as NS
+    from evaluation import bev_suite as S
+    from evalsuite.store import RunStore
+    # the adapter's Source: a stub dataset (2 keyframes of one scene), the real class and describe()
+    class Nusc:
+        def get(self, table, tok):
+            return {"scene_token": "s", "timestamp": int(tok[1:])} if table == "sample" else {"name": "scene-0001"}
+
+    class Ds:
+        samples, nusc, grid, gt_ss, gt = ["t0", "t1"], Nusc(), NS(res=0.5), 4, NS(signature=lambda: "sig")
+
+        def __len__(self):
+            return 2
+    src = A._make_source_class()(NS(version="v1.0-mini", feature_cache=None), Ds(), NS(T=NS(collate=None, collate_cached=None)), workers=0, evaluator="abcdef012345")
+    assert src.describe()["evaluator_hash"] == "abcdef012345" and src.describe()["gt_signature"] == "0.5_4_sig"
+    # the hash itself: 12 hex over the files of the evaluator paths; any edit changes it, the same files give the same value; build() takes it once
+    assert len(A.evaluator_hash()) == 12 and A.evaluator_hash() == A.evaluator_tree_hash()
+    with tempfile.TemporaryDirectory() as t:
+        keep, A.EVALUATOR_PATHS = A.EVALUATOR_PATHS, (os.path.join(t, "ev"),)
+        try:
+            os.makedirs(A.EVALUATOR_PATHS[0])
+            f = os.path.join(A.EVALUATOR_PATHS[0], "m.py")
+            open(f, "w").write("x = 1\n")
+            h1 = A.evaluator_hash()
+            assert A.evaluator_hash() == h1
+            open(f, "w").write("x = 2\n")
+            assert A.evaluator_hash() != h1
+        finally:
+            A.EVALUATOR_PATHS = keep
+    # the store: the identity rule refuses another value, quant_run says why
+    with tempfile.TemporaryDirectory() as d:
+        def suite_of(ev):                                                    # ev None: the plain SynthSource, which has no evaluator hash
+            return EvalSuite(HashedSource(ev) if ev else SynthSource(), SynthSubject(), BEVTask(GRID, SPEC, ["vehicle", "two_wheeler", "pedestrian"], refine=True),
+                             out=d, state="reset")
+        first = S.quant_run(suite_of("aaaaaaaaaaaa"), scenes=["bev-00"], name="x", progress=0)
+        assert first.manifest["source"]["evaluator_hash"] == "aaaaaaaaaaaa" and first.manifest["finished"]
+        again = S.quant_run(suite_of("aaaaaaaaaaaa"), scenes=["bev-00"], name="x", progress=0)         # the same evaluator: a resume
+        assert again.manifest["resumed"] == 1 and len(again.frames) == 8
+        msg = refused(lambda: S.quant_run(suite_of("bbbbbbbbbbbb"), scenes=["bev-00"], name="x", progress=0))
+        assert "evaluator code changed since this store was started" in msg and "aaaaaaaaaaaa -> bbbbbbbbbbbb" in msg and "use a new --name" in msg, msg
+        assert json.load(open(os.path.join(d, "quant", "x", "manifest.json")))["source"]["evaluator_hash"] == "aaaaaaaaaaaa", "the stored hash is not overwritten"
+        try:                                                                  # the store's own rule, independent of the pre-check
+            RunStore.create(os.path.join(d, "quant", "x"), dict(first.manifest, source=dict(first.manifest["source"], evaluator_hash="bbbbbbbbbbbb")))
+            raise AssertionError("the store must refuse a resume with another evaluator hash")
+        except ValueError as e:
+            assert "evaluator_hash" in str(e), e
+        S.quant_run(suite_of(None), scenes=["bev-00"], name="old", progress=0)
+        with contextlib.redirect_stderr(io.StringIO()) as err:                # a store made before the Source carried the key: resumes, with the warning
+            old = S.quant_run(suite_of("cccccccccccc"), scenes=["bev-00"], name="old", progress=0)
+        assert "evaluator_hash" in err.getvalue() and old.manifest["resumed"] == 1, err.getvalue()
+        assert "evaluator_hash" not in old.manifest["source"], "the stored description is kept"
+        other = S.quant_run(suite_of("bbbbbbbbbbbb"), scenes=["bev-00"], name="y", progress=0)
+        q = suite_of("bbbbbbbbbbbb").quant                                    # two stores of different evaluator code: the generic comparison refuses, bev_suite's ignore list lets them through
+        try:
+            q.compare("x", "y", boot=20)
+            raise AssertionError("the generic comparison must refuse a different Source description")
+        except ValueError:
+            pass
+        assert q.compare("x", "y", boot=20, ignore=S.COMPARE_IGNORE)["n_common_frames"] == 8 and other.manifest["source"]["evaluator_hash"] == "bbbbbbbbbbbb"
+
+
 def refused(fn) -> str:
     """the message of the SystemExit that fn must raise ('' if it returned)"""
     try:
@@ -711,6 +799,11 @@ def _():
         assert "frame counts 48 / 1000" in refused(lambda: cmp(p_, q))                 # two pre-suite records: equal counts needed
         rc, out = cmp(p_, run("r", old=True, metrics={"metrics": {"info/n_samples": 48}}), "--n", "48")
         assert rc == 0 and "same count 48 assumed" in out, out
+    # the interval line of compare / memory names the draws it rests on and warns when some resamples were dropped (review 2026-11-02)
+    full = bev_suite.interval_text({"lo": 0.01, "hi": 0.03, "n_valid": 1000, "n_draws": 1000})
+    assert "(excludes 0)" in full and "draws 1000/1000" in full and "WARNING" not in full, full
+    part = bev_suite.interval_text({"lo": -0.02, "hi": 0.03, "n_valid": 640, "n_draws": 1000})
+    assert "draws 640/1000" in part and "WARNING" in part and "excludes" not in part, part
 
 
 # ------------------------------------------------------------------------------------------------ optional: real data
