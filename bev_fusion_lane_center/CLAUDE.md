@@ -52,7 +52,7 @@
 ## Experiments
 - card before the run: question, hypothesis, prediction (a number), decision rule (result -> action, noise band), design (arms, controls, seeds, budget), gate, kill criterion
 - every block experiment: architecture drawing (no red blocks), numbers table with baselines, result images (key ones to the user with SendUserFile), ms per frame, honest negatives; a variant needs one summary line
-- every finished run gets a ledger row, also crashed and cut ones; catalogue row (E-id); experiment folder
+- every finished run gets a ledger row, also crashed and cut ones; an experiment folder (`experiments/E<id>_<slug>/experiment.md` with the card block); no separate catalogue file
 - decide with the written rule, by tool: `autoresearch/tools/decide.py --variant s0,s1 --control s0,s1 [--band 0.010] [--cost-variant ms --cost-control ms] --id <run> --write` gives KEEP / CUT / TIE / INCONCLUSIVE into the ledger; INCONCLUSIVE means add a seed, not adopt; TIE means the cheaper variant
 - every wake-up and every milestone: read the state (`schedule.py show`, `ledger.py tail`) and update the ledger (`ledger.py note <id> --result ... --decision ...`), the PLAN status and HANDOVER.md; a new chat must be able to continue from the files alone
 - a question answered the same way twice goes into experiment_execution/closed_questions.md; re-opening it needs a new mechanism

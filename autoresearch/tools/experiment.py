@@ -6,7 +6,7 @@ Both present: they must be equal (check says so), so a migration cannot leave tw
     python autoresearch/tools/experiment.py check E240          # gate G2 as code: fields, enums, arms, control, rule clauses, card refs resolve
     python autoresearch/tools/experiment.py show E240           # the arms with their cards and the headline numbers
     python autoresearch/tools/experiment.py check --all         # every experiment folder that has a card (block or experiment.json)
-    python autoresearch/tools/experiment.py migrate E240        # card block into experiment.md, the json moves to <problem>/_to_delete/ (--all: every folder)
+    python autoresearch/tools/experiment.py migrate E240        # card block into experiment.md, the json moves to <problem>/_to_delete/ (--all: every folder; --create-md: also folders without an experiment.md)
 
 An experiment is found by its id (prefix of a folder under experiments/), by its folder or by the path of its experiment.md / experiment.json. Card refs: a path relative to the
 problem folder, optionally '#a/b/c' into the JSON; a card has its metrics under 'metrics' (evaluate.py cards), a flat dict is the metrics itself.
@@ -250,12 +250,18 @@ def check(exp, path):
     return bad
 
 
-def migrate(folder, root):
+def migrate(folder, root, create_md=False):
     """card block into experiment.md (right after the first heading outside a fence, line endings kept), the json moves to <problem>/_to_delete/experiment_json_<date>/<folder>/ (never deleted); -> message"""
     js, md = os.path.join(folder, "experiment.json"), os.path.join(folder, "experiment.md")
     name = os.path.basename(folder)
     if not os.path.isfile(md):
-        return f"{name}: JSON-ONLY (no experiment.md to hold the block): left as it is"
+        if not create_md:
+            return f"{name}: JSON-ONLY (no experiment.md to hold the block): left as it is (--create-md makes one)"
+        try:
+            c = read(js)
+        except ValueError as e:
+            return f"{name}: NOT migrated, {e}"
+        open(md, "w", encoding="utf-8", newline="\n").write(f"# {c.get('id', name)} {c.get('title', '')}\n\n(experiment.md made from experiment.json by `experiment.py migrate --create-md`; the card follows, the story of the experiment is in the ledger and the summaries)\n")
     try:
         card = read(js)
         have = block_of(md)
@@ -350,6 +356,7 @@ def main():
     ap.add_argument("cmd", choices=["check", "show", "migrate", "kill"])
     ap.add_argument("exp", nargs="?")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--create-md", action="store_true", help="migrate: make an experiment.md for a folder that has only an experiment.json")
     ap.add_argument("--run", help="kill: the run folder whose kill.txt gets the rules of the card")
     ap.add_argument("--write", action="store_true", help="kill: write them (default: print)")
     a = ap.parse_args()
@@ -359,7 +366,7 @@ def main():
         todo = [d for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d)] if a.all else [os.path.dirname(find(a.exp))]
         for d in todo:
             if os.path.isfile(os.path.join(d, "experiment.json")):
-                print(migrate(d, P.root()))
+                print(migrate(d, P.root(), a.create_md))
         return 0
     files = [source(d) for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d) and source(d)] if a.all else [find(a.exp)]
     rc = 0

@@ -541,6 +541,8 @@ try:
     os.makedirs(f"{T}/experiments/E8_only", exist_ok=True)
     json.dump(exp, open(f"{T}/experiments/E8_only/experiment.json", "w"))
     assert "JSON-ONLY" in X.migrate(f"{T}/experiments/E8_only", T) and os.path.exists(f"{T}/experiments/E8_only/experiment.json"), "a json without experiment.md stays readable"
+    assert "migrated" in X.migrate(f"{T}/experiments/E8_only", T, create_md=True) and not os.path.exists(f"{T}/experiments/E8_only/experiment.json"), "--create-md makes the md"
+    assert X.block_of(f"{T}/experiments/E8_only/experiment.md") == exp and open(f"{T}/experiments/E8_only/experiment.md").read().startswith(f"# {exp['id']} {exp['title']}"), "the md holds the card and a heading"
     shutil.rmtree(bd)
     shutil.rmtree(f"{T}/experiments/E8_only")
     # plan.py status: the status of a plan node comes from the schedule and the ledger, not from a column of the plan
