@@ -133,6 +133,23 @@ def freeze_findings(mc, train_only, freeze):
     return ([] if any(plan.values()) else ["train_only / freeze froze every parameter: nothing is left to train"]), []
 
 
+def clip_split_findings(mc, split):
+    """problems of `grad_clip_split` (a prefix that names no trainable parameter, two prefixes that overlap, a bare string) on the model built on the meta device: train.py
+    would raise them only after the data are built"""
+    if not split:
+        return []
+    try:
+        with torch.device("meta"):
+            model = M.BEVFusionModel(dataclasses.replace(mc, pretrained="", trunk_pretrained="", lane_pretrained=""))
+    except Exception:                                           # noqa: BLE001 - freeze_findings already says a model cannot be built on meta
+        return []
+    try:
+        T.clip_groups(model, split)
+    except ValueError as e:
+        return [str(e)]
+    return []
+
+
 def check(path, root=ROOT, require_clean=False, expect_gt=""):
     """(problems, notes) of the config file `path`; nothing is read from the data, no model is built, nothing is trained"""
     problems, notes = [], []
@@ -182,6 +199,7 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
         p_, n_ = freeze_findings(mc, cfg.train_only, cfg.freeze)
         problems += p_
         notes += n_
+        problems += clip_split_findings(mc, cfg.grad_clip_split)
     named = [("data_root", cfg.data_root), ("feature_cache", cfg.feature_cache), ("feature_cache2", cfg.feature_cache2),
              ("gt_cache", cfg.gt_cache), ("radar_cache", cfg.radar_cache), ("lane_images", cfg.lane_images), ("init_from", cfg.init_from)]
     if mc is not None:

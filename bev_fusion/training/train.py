@@ -115,6 +115,9 @@ class TrainConfig:
                                                  # (training/augment.py: BEV, radar, ego motion and every target); 0 = off
     weight_decay: float = 1e-2
     grad_clip: float = 5.0
+    grad_clip_split: tuple = ()                  # module prefixes (as freeze / train_only) whose gradients are clipped to grad_clip ON THEIR OWN, the rest as one group: a block whose
+                                                 # gradient is far above the others' (the motion block in t16: 36 - 131 against 0.1 - 17) no longer sets the clip factor of the whole
+                                                 # network; () = one global clip as before (bit-identical)
     ema: float = 0.999
     amp: str = "off"                             # "off" | "bf16" | "fp16" (CUDA only). fp16 trains with a GradScaler (dynamic loss scaling). bf16 as it is: ledger row speed.c2 (an 8-step diagnostic, with cudnn.benchmark): no speed-up, gradient norm 25x fp32
     fp16_scale: float = 1024.0                   # amp "fp16": the start scale of the GradScaler (halved on an overflow; a power of two scales exactly)
@@ -405,7 +408,7 @@ def check_resume(old, cfg, name):
     a, b = norm(old), norm(dataclasses.asdict(cfg))
     diff = sorted(k for k in a if k not in RESUME_FREE and a[k] != b.get(k))
     diff += [k for k in ("train_only", "freeze") if k not in a and b.get(k)]               # a checkpoint from before freeze.py has no plan: a new one cannot resume it (its optimiser state has a slot per parameter)
-    diff += [k for k in ("cudnn_benchmark", "tf32") if k not in a and b.get(k)]            # a checkpoint from before these switches ran without them: turning one on changes the numbers in the middle of a run
+    diff += [k for k in ("cudnn_benchmark", "tf32", "grad_clip_split") if k not in a and b.get(k)]   # a checkpoint from before these switches ran without them: turning one on changes the numbers in the middle of a run
     if diff and os.environ.get("BF_RESUME_ANY") != "1":
         raise SystemExit(f"{name}: the configuration differs from the checkpoint's in {diff}; start a new run name "
                          f"(or set BF_RESUME_ANY=1)")
@@ -609,15 +612,45 @@ def scaler_extra(scaler):
     return {"scaler": scaler.state_dict()} if scaler is not None else {}
 
 
-def optimizer_step(opt, params, grad_clip, scaler=None, before_clip=None):
+def clip_groups(model, prefixes):
+    """the trainable parameters of each module prefix of `grad_clip_split` (a prefix matches the module itself and its children, never `motion_blockx`); a prefix that names none is an error"""
+    if isinstance(prefixes, str):
+        raise ValueError(f"grad_clip_split must be a list of module prefixes, got the string {prefixes!r}")
+    groups, seen = [], {}
+    for pre in prefixes:
+        ps = [p for n, p in model.named_parameters() if p.requires_grad and (n == pre or n.startswith(pre.rstrip(".") + "."))]
+        if not ps:
+            raise ValueError(f"grad_clip_split: the prefix {pre!r} names no trainable parameter")
+        for p in ps:
+            if id(p) in seen:
+                raise ValueError(f"grad_clip_split: the prefixes {seen[id(p)]!r} and {pre!r} overlap (a parameter would be clipped twice)")
+            seen[id(p)] = pre
+        groups.append(ps)
+    return groups
+
+
+def clip_gradients(params, grad_clip, split=()):
+    """clip the gradients to `grad_clip` and return the norm of ALL of them before the clip. split = lists of parameters (disjoint, from clip_groups): each list and the rest are clipped on
+    their own, so a group with a much larger gradient does not scale the others down; without split it is the one global torch call, the same bits as before"""
+    if not split:
+        return torch.nn.utils.clip_grad_norm_(params, grad_clip)
+    taken = {id(p) for g in split for p in g}
+    rest = [p for p in params if id(p) not in taken]
+    norms = [torch.nn.utils.clip_grad_norm_(g, grad_clip) for g in split] + ([torch.nn.utils.clip_grad_norm_(rest, grad_clip)] if rest else [])
+    dev = params[0].device                                  # a group without any gradient returns a CPU zero: bring every norm to one device before the stack
+    return torch.linalg.vector_norm(torch.stack([n.reshape(()).to(dev) for n in norms]))
+
+
+def optimizer_step(opt, params, grad_clip, scaler=None, before_clip=None, split=()):
     """gradient clip and optimiser step of one training step. -> (grad norm before the clip, status). Without a scaler this is what the loop did inline: clip, and step unless the
     norm is not finite ("nonfinite": no step, gradients dropped). With a scaler the gradients are unscaled first (before_clip, the probe, sees them unscaled), and a non-finite
-    gradient is an "overflow": no step, the scale is halved (an expected event of fp16, not a diverged run). "ok": the step was made (and the scale updated)"""
+    gradient is an "overflow": no step, the scale is halved (an expected event of fp16, not a diverged run). "ok": the step was made (and the scale updated).
+    split: parameter lists of `grad_clip_split` (clip_groups), each clipped to grad_clip on its own with the rest as one group; () = one global clip"""
     if scaler is not None:
         scaler.unscale_(opt)
     if before_clip is not None:
         before_clip()
-    gn = torch.nn.utils.clip_grad_norm_(params, grad_clip)
+    gn = clip_gradients(params, grad_clip, split)
     if not torch.isfinite(gn):
         opt.zero_grad(set_to_none=True)
         if scaler is not None:
@@ -866,6 +899,7 @@ def train(cfg, eval_fn=None, datasets=None):
         freeze_mod.apply(model, cfg.train_only, cfg.freeze)
         print("freeze:", freeze_mod.signature(cfg.train_only, cfg.freeze), flush=True)
         print(freeze_mod.report(model), flush=True)
+    clip_split = clip_groups(model, cfg.grad_clip_split)        # a typo in a prefix fails here, in seconds, not after the data are built
     train_ds, val_ds = datasets or make_datasets(cfg)
     check_grids(model, train_ds, val_ds)
     record_gt(out_dir, (train_ds, val_ds))                      # the GT is not pinned by the code snapshot: record which one is used
@@ -970,7 +1004,7 @@ def train(cfg, eval_fn=None, datasets=None):
             if dg:
                 acc["diag"] = dg
         if finite:                                              # the probe's gradient norm per module comes BEFORE clipping (a blow-up must not hide behind the clip), with the weights before the step
-            gn, status = optimizer_step(opt, params, cfg.grad_clip, scaler, before_clip=pstep.grads if pstep is not None else None)
+            gn, status = optimizer_step(opt, params, cfg.grad_clip, scaler, before_clip=pstep.grads if pstep is not None else None, split=clip_split)
         else:
             gn, status = None, "nonfinite"
             opt.zero_grad(set_to_none=True)
