@@ -18,6 +18,17 @@ current training (amp off, v8 GT, t16 full network); "latent" = no stored config
 Order suggestion for the module-iteration list (after the baseline pair): 3 first (the only one that changes the loss on many cells: the unknown / interpolated cells at dt +-0.5 s are 8 % of the cells, per report),
 then 2, 4, 6 and 1 as one "hygiene" change before the first module card (2 is a 6-line fix of 0.7 % of the boxes, 4 changes the head layout / init once), 5 as a card of its own (measure first).
 
+### Status 2026-11-02 (tools chat): built behind `LossConfig.hygiene_2026_11_02`, commit `df9d437` (default off, bit for bit)
+- #3 `w_obj` as a weight (object head: focal loss per cell, regression terms per object; motion L1): built. The weights are relative (normalisers clamp at 1), they act at dt +-0.5 s (`w_unknown`) and on
+  interpolated labels (`w_interpolated`); at dt 0 `w_obj` is 0 or 1, so the motion-loss weight is practically inert there (the critic: 0.15 % of the cells are fractional).
+- #2 `vel_known`: built for the moving / static BCE and the velocity L1 of the object head, and (via `flow_weight` 0) for the motion loss, which the first version missed (the critic found it).
+- #1 `batch_ego(strict=)`: built (raises on |dt| != 0.5 s, wired through `loss.cfg`).
+- #6 splat positions in float32 for bf16 / fp16 inputs: built, unconditional (bit for bit for float32 / float64). The cell centres of a 0.5 m grid are exactly representable in bf16; the real error was
+  `v * dt` and the rotation in bf16. `temporal.py`, `fallbacks.py`, `loss_extras.py` also build positions in a feature dtype; they are not on the splat_window path of t16 (temporal.py is imported by nothing live).
+- #4 dead code: the `radar_slot` branch removed (no numeric effect, `w_radar_slot` stays as an unused field). `radar_stationary` is deliberately NOT changed: dropping its untrained channel changes the head
+  layout and the init RNG of every later module, a confound in a one-seed arm. At the next baseline: `model.radar_stationary` and `loss.radar_stationary` false together.
+- #5 BatchNorm over dt: not built (a card of its own, one 5-minute GPU measurement first). #7, #8: not built.
+
 ### Review chat (bug hunter): independent confirmations and one fix, 2026-11-02
 A second, independent source: the Copilot review of Sol (CPU, in memory, synthetic reproductions without data, checkpoint or GPU; the probe code is not in the repo, the recipes below redo them). Where the table says "per report", these are the same findings found twice; I have not run the probes myself, the results are quoted from Sol's report.
 - #1 `batch_ego`: with `gap_steps` of one 0.5 s gap and dts (0.1, 0.5, 1.0) all three requests come back with the same decode duration 0.5 (Sol). Reading `train.py` (540) gives the same. Consistent with "latent, low now".
