@@ -238,7 +238,8 @@ preds = {0.0: {"obj": hl(torch.randn(1, 8, grid.nx, grid.ny)), "v_hat": torch.ze
 gts = {0.0: [synthetic_gt(scene, grid)]}
 lout = BEVLoss(grid=grid)(preds, gts)
 assert {"objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0"} <= set(tr.LOGGED_TERMS), tr.LOGGED_TERMS     # the card's change 5
-assert all(k in lout and torch.isfinite(lout[k]) for k in tr.LOGGED_TERMS), (tr.LOGGED_TERMS, sorted(lout))
+LOSS_TERMS = [k for k in tr.LOGGED_TERMS if k not in ("radar_aux", "radar_kept")]      # these two are made by train.forward_loss (the radar side loss), not by BEVLoss: test_radar_slot.py
+assert all(k in lout and torch.isfinite(lout[k]) for k in LOSS_TERMS), (LOSS_TERMS, sorted(lout))
 mov1 = float(lout["objhead.mov@+0.0"].detach())
 mov2 = float(BEVLoss(LossConfig(w_obj_mov=2.0), grid=grid)(preds, gts)["objhead.mov@+0.0"].detach())
 assert mov1 > 0.1 and abs(mov2 - 2 * mov1) < 1e-5 * mov1, ("w_obj_mov = 2.0 must double objhead.mov", mov1, mov2)
@@ -260,6 +261,6 @@ try:
     assert all(abs(ev.get(k, math.nan) - (20 + i)) < 1e-6 for i, k in enumerate(tr.LOGGED_TERMS)), ("val row", ev)
 finally:
     tr.forward_loss = real_forward
-print(f"G5 ok: a BEVLoss forward with object_moving has every logged term {tr.LOGGED_TERMS}, w_obj_mov doubles objhead.mov; "
+print(f"G5 ok: a BEVLoss forward with object_moving has every loss-made logged term {LOSS_TERMS}, w_obj_mov doubles objhead.mov; "
       "run_clip (training row) and evaluate (val row, mean over the batches) keep them")
 print("velocity hurdle gate PASSES (G1 - G5)")
