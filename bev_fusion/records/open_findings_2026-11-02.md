@@ -17,3 +17,11 @@ current training (amp off, v8 GT, t16 full network); "latent" = no stored config
 
 Order suggestion for the module-iteration list (after the baseline pair): 2 (changes the loss on every object: the largest effect on the moving / static split), then 3, then 4 together with 6 and 1 as one
 "hygiene" change before the first module card, 5 as a card of its own.
+
+### Review chat (bug hunter): independent confirmations and one fix, 2026-11-02
+A second, independent source: the Copilot review of Sol (CPU, in memory, synthetic reproductions without data, checkpoint or GPU; the probe code is not in the repo, the recipes below redo them). Where the table says "per report", these are the same findings found twice; I have not run the probes myself, the results are quoted from Sol's report.
+- #1 `batch_ego`: with `gap_steps` of one 0.5 s gap and dts (0.1, 0.5, 1.0) all three requests come back with the same decode duration 0.5 (Sol). Reading `train.py` (540) gives the same. Consistent with "latent, low now".
+- #2 unknown velocity: one box (`group` vehicle, `center` [2.25, 0.25, 0], `vel` [0, 0], `vel_known` False) through `object_head_terms` on a 4 x 4 m grid (res 0.5): the box stays in the target mask with target velocity [0, 0] and the "static" label gives the moving / static output at its centre cell a non-zero gradient (Sol: "invalid targets still produced gradients"; the gradient value is not in his report). Consistent with the table (the `mov` BCE gets the false label).
+- #6 bf16 splat: a 0.1 m motion at x = 50.25 m is lost when the positions go through `splat_positions` as bfloat16, intact in float32 (Sol). The table's number (mean 0.037 m, max 0.171 m) is from the first report.
+- #5 BatchNorm over dt: no number from either source.
+- Related and already fixed (`9805369`, on origin): `bev_adapter.load_run` built the optimiser over ALL parameters while `train()` applies `train_only` / `freeze` first, so loading a checkpoint of such a run for evaluation raised "parameter group size mismatch" (Sol reproduced it with a toy model; the new check in `bev_selftest.py` fails without the fix). It applies the plan now: the module-iteration runs that train one part can be evaluated with `bev_suite.py eval`. Checkpoints without `opt` (slimmed) never had the problem.
