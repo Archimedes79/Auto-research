@@ -1,11 +1,31 @@
 # bev_fusion - camera + radar BEV system
 
-The second problem of this repository: a camera + radar BEV perception system (lift with depth weight, radar raster, temporal fusion with ego motion and a world memory, semantic / object / motion heads at any dt) on nuScenes. Plan and decisions in `plan/plan.md`; code in `training/`; ground truth from the repository-level suite `../autogt/`; evaluation in `evaluation/` (the BEV adapter of `../autoresearch/evalsuite/`); trained runs in `runs/` (`t1`-`t10`). Since decision D23 (2026-10-31) it is a problem of `../autoresearch/`: a training starts through the launcher `run.py` (card, ledger row, code tag `bf/<id>`; start line in `records/README.md`); the runs before (and the queue scripts of `temp/study/`) were launched by `temp/train/run_cfg.sh` from a pinned commit. Experiments are compared by cards in `experiments/` (reviews: `temp/review/` of 2026-10-30, `../autoresearch/history/repo_review_2026-10-31.md` and its second pass `repo_review_2026-10-31_pass2.md`).
+The second problem of this repository: a camera + radar BEV perception system (lift with depth weight, radar raster, temporal fusion with ego motion and a world memory, semantic / object / motion heads at any dt) on nuScenes. Plan and decisions in `plan/plan.md`; code in `training/`; ground truth from the repository-level suite `../autogt/`; evaluation in `evaluation/` (the BEV adapter of `../autoresearch/evalsuite/`); trained runs in `runs/` (`t1`-`t18` so far). Since decision D23 (2026-10-31) it is a problem of `../autoresearch/`: a training starts through the launcher `run.py` (card, ledger row, code tag `bf/<id>`; start line in `records/README.md`); the runs before (and the queue scripts of `temp/study/`) were launched by `temp/train/run_cfg.sh` from a pinned commit. Experiments are compared by cards in `experiments/` (reviews: `temp/review/` of 2026-10-30, `../autoresearch/history/repo_review_2026-10-31.md` and its second pass `repo_review_2026-10-31_pass2.md`).
 
 ![bev_fusion architecture: precompute, input interface, network slots, output interface, and post-processing](training/architecture.svg)
 
 The architecture, drawn from the code ([five-layer design, file map and end-to-end table](training/architecture.md)): deterministic precompute supplies the input interface; swappable network slots produce the dense, differentiable output interface; hard box selection and line thresholding stay in post-processing for metrics and the prototype. The image encoders are frozen and cached, and the optional box refiner still uses GT matching inside the training path; see the design gaps in the file map. `python ../autoresearch/tools/archdraw.py check training/architecture.json` checks named files and symbols, code coverage, and that the picture and file map match the spec; it does not verify the wiring in the implementation.
 
+## Status (2026-11-02; live numbers are in `records/LEDGER.md` and the cards, not here)
+- **The framework.** The five layers (precompute, input interface, network slots, output interface, post-processing) are built and tested: `tests/run_gates.sh` (fast gates), `tests/test_slots.py` builds every kind of every slot and 13 combinations, `tests/equivalence.py` reproduces stored checkpoints. The ground truth is autogt v8 (`../data/autogt/c643a7539d`: all 850 trainval sequences, 34,149 keyframes; v5 is deleted, the versions are in `../autogt/README.md`).
+- **The full network** (config `training/configs/t16_full.json`, card `experiments/t16_full_network/`): dual camera features (DualBEV + BEVFusion, cached), delta-slot radar encoder, camera memory, concat fusion, DualBEV trunk, map / object / velocity heads with the velocity hurdle, the motion block in its joint form (the box velocity is read from its field) and a separate gradient clip for it. Brought up on autogt's small set (10 scenes): smoke test, 400-step runs, a module probe (every module's output is finite, not constant and responds to its input), timing (96.4 ms per frame at batch 1 on an idle RTX 3060, 12 % above the old chain; 3.6 s per training step at accumulation 2). Eight findings and their fixes are in the card (section 6); the radar memory with the Doppler static gate is off in the large run (an unlearned block).
+- **Running or queued** (state of 2026-11-02): the large baseline `t16.full_s0` (6000 steps, 428 train / 82 val scenes) and its matched control `t16.ctl_s0`; the data arm `t17.data` (700 train scenes, `experiments/t17_more_data/`) and the bundle arm `t18.fix` (the Training chat's hygiene fixes + the motion block's own learning rate, `experiments/t18_motion_lr/`). Their results go into the cards and the ledger; this README holds none of them.
+- **Open:** `records/open_findings_2026-11-02.md` (trainer / loss findings of the bug hunt, ordered), `records/cleanup_inventory_2026-11-02.md` (what can go, by which rule), `plan/head_design.md` (the heads' open GT: centre lines, radar stationary target, horizon beyond 0.5 s).
+
+## Quick start
+From this folder, in the WSL (env `gcar`, `~/miniconda3/envs/gcar/bin/python`); the tools need `AR_PROJECT=../bev_fusion` (the default problem is the lane one).
+
+| what | command |
+|---|---|
+| tests | `bash tests/run_gates.sh`; `python tests/test_slots.py` |
+| check a config without a GPU | `python training/startable.py training/configs/t16_full.json` |
+| start a training | from `../autoresearch/`: `python -m trainsuite start ../bev_fusion/training/configs/t16_full.json --id <id> --hyp "..." --pred "..." --rule "..." --go`; a small-set bring-up: `--preset small --preset small_set --no-card`; a chain: `--run-arg=--after --run-arg=<id>`; the launcher is `../autoresearch/tools/run.py`, the details are in `records/README.md` |
+| watch it | from `../autoresearch/`: `python -m trainsuite --root ../bev_fusion/runs status <run>` (also `health`, `curves`, `queue`, `stop`) |
+| evaluate a run | `python evaluation/bev_suite.py runs/<run> --curves --fusion --velocity eval --n 1000 --prior 500`; further commands: `... modules` (module probe), `... timing` (idle GPU), `... qual videos 3`, `... generalisation`, `... report --vs runs/<control>`, `compare` (paired bootstrap): see `evaluation/README.md` |
+| the ground truth | `python -m autogt sets` (what the store holds), `python -m autogt generate ...`: `../autogt/README.md` |
+| the system on frames without GT | `python runner/bev_runner.py precompute / network / full ...`: `runner/README.md` |
+
+## Folders
 | file / folder | content |
 |---|---|
 | `plan/` | the written plan (tidied out of the root on 2026-11-01, names unchanged): `plan/requirements.md` (what the system must satisfy, set by Mirko, each with its check and status), `plan/plan.md` (the current plan, draft 3: paper and code basis per block, the GT generation and viewer, the tests), `plan/radar_encoding.md` (radar grid encoding ideas, discussed separately until one is chosen) - see `plan/README.md`; the previous draft is in `_to_delete/root_docs_2026-11-01/` |
@@ -19,10 +39,11 @@ The architecture, drawn from the code ([five-layer design, file map and end-to-e
 | `literature/code/front_bev_code_sources.md` | repository, licence and module per block (read on the repository pages) |
 | `temp/scout_tables/` | the raw tables of the scouts |
 | `temp/` | scripts of the studies and of the setup; some of them are used as launchers and recipes (`temp/train/run_cfg.sh`, the cache builders of `temp/setup/`) - see `temp/README.md` |
+| `data/` | derived data, not in git: the caches of the frozen image heads (`cache/cam_feats*`, big ones on D: behind links), the GT and radar caches of the trainer, the small-set links - see `data/README.md` |
 | `runs/` | one folder per training run (not in git) - see `runs/README.md` |
 | `results/` | the result package of each run (`results/<run id>/`: `package.json`, `provenance.json`; D40) - see `results/README.md` |
 | `project.json`, `records/` | since D23 (2026-10-31) a problem of `../autoresearch/`: trainings start through `run.py` (card, ledger row, code tag `bf/<id>`, GPU slot shared with the lane problem); the ledger and the launcher's run records are in `records/`, the start line in `records/README.md` |
 | `_to_delete/` | what was taken out of the live tree, listed in `_to_delete/README.md` |
-| `experiments/` | one folder per experiment (card, detail plan, summary); first: `s1a_lift_pd_vs_p/` (camera-only real-data run, its synthetic unit test, idle-GPU timing) - see `experiments/README.md` |
+| `experiments/` | one folder per experiment (card, detail plan, summary); from `s1a_lift_pd_vs_p/` and `t1` to `t18`; the current ones: `t16_full_network/` (the full network and its bring-up log), `t17_more_data/`, `t18_motion_lr/` - see `experiments/README.md` |
 
-Shared data (nuScenes) is described in `../data/NuScenes/README.md`.
+Shared data (nuScenes) is described in `../data/NuScenes/README.md`; the rules for agents working here are in `../CLAUDE.md`.
