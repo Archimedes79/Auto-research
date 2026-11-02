@@ -51,6 +51,7 @@ def summary(run, ref=None, extra_rules=(), since_step=None):
     findings = health.check(run, ref, since_step)
     rules, problems = load_rules(run, extra_rules)
     findings += [Finding("alert", "kill_rule", p) for p in problems]
+    findings += [Finding("warn", "bad_config", p) for p in run.config_problems]
     kills = [(r, *r.evaluate(run)) for r in rules]
     findings += [Finding("warn", "kill_key", f"kill rule {r.text!r}: the run passed step {r.step} and never logged {r.key!r}")
                  for r, st, _ in kills if st == "unknown"]
@@ -476,7 +477,14 @@ def cmd_start(a):
     print(f"{a.base} -> {os.path.relpath(plan['composed'], root)}: {len(plan['changes'])} change(s)")
     print("\n".join(C.describe(plan["changes"], plan["base_keys"])))
     target, check = (plan["composed"], plan["check"]) if a.go else (plan["preview"], plan["check_preview"])      # a preview must not touch the file a running (or retrying) run reads
-    C.write(plan["config"], target)
+    if a.go and plan["held"]:                                    # run.py would refuse the training 3 s after a prepare job (hours of GT build) had started: refuse before any job
+        print(f"start: run id {a.id} is ON HOLD (hold.py show); nothing started, no prepare job either")
+        return 1
+    try:
+        C.write(plan["config"], target)
+    except C.ComposeError as e:
+        print(f"start: {e}", file=sys.stderr)
+        return 2
     for n in plan["notes"]:
         print(f"  note: {n}")
     if check and not a.no_check:
@@ -521,6 +529,9 @@ def cmd_start(a):
             rc = proc.wait(timeout=a.wait)                      # run.py refuses a held, running, finished or card-less id within a second: say so instead of "started"
         except subprocess.TimeoutExpired:
             rc = None
+        if rc == 0 and rid != a.id:                             # a prepare job that is done within the wait (the data was there after all) is a success: the training goes on
+            print(f"{rid} finished within {a.wait:g} s with exit 0")
+            continue
         if rc is not None:
             with open(log_, encoding="utf-8", errors="replace") as lf:
                 tail = lf.read().strip().splitlines()[-6:]

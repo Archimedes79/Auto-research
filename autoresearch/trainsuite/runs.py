@@ -78,7 +78,13 @@ class Run:
         self.text_name = opt.get("text_log", "train.log")
         self.loss_key = opt.get("loss", loss)
         self.progress = str(opt.get("progress", "step "))      # how a progress line of the text log starts (crash detection)
-        self.total = int(opt.get("steps") or self.cfg.get("steps") or 0)
+        raw = opt.get("steps") or self.cfg.get("steps") or 0
+        self.config_problems = []                               # findings about the run's own files (cli.summary lists them): one bad folder must not kill the table of all
+        try:
+            self.total = int(raw)
+        except (ValueError, TypeError, OverflowError):          # 'abc', [5], {}, NaN / Infinity (json.loads reads both): no total, not a crash of every status
+            self.total = 0
+            self.config_problems.append(f"steps {str(raw)[:40]!r} in config.json / trainsuite.json is not a number: the step total is unknown")
         self.resumes = []                                       # the first step of each later attempt (watch looks at the rows from there on)
         self.train, self.evals, self.restarts = read_log(self.p(self.log_name), self.resumes)
 
