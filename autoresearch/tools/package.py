@@ -24,7 +24,8 @@ younger than --min-age-days (at least one hour). Before anything is removed the 
 store files that mark an evaluation as finished (frames.jsonl, manifest.json) go first, so an interrupted delete leaves an unfinished store, never one
 that claims to be complete. A later clean adds to the `deleted` list, it never replaces it. Tags must be on origin to be a safe base for a rebuild:
 `check_git.py` lists the ones that are not.
-gt keeps the latest version of autogt/versions.csv (the highest number) and every store that a run which is not final names in its gt.json (also the
+gt keeps the latest version of autogt/versions.csv (the highest number; when its code makes the GT of an older version, `same_gt_as`, the store of that
+one: they share a folder) and every store that a run which is not final names in its gt.json (also the
 `earlier` ones; a resume needs them); an older store is deleted only when its tag autogt/vN exists (it can be regenerated from the tag and the options in
 its index.json) and it is a real folder inside data/autogt. A best-three network trained on an older GT cannot be evaluated again against its own GT
 after that store is gone: it is regenerated first. Deletions are appended to <records folder>/CLEAN_LOG.md.
@@ -360,6 +361,11 @@ def gt_plan(root=None):
     root = root or os.path.join(V.repo_root(), "data", "autogt")
     rows = versions()
     latest = max(rows, key=vnum)
+    by_version = {x["version"]: x for x in rows}
+    shared, seen = latest, set()                  # a version whose code makes the GT of an older one (`same_gt_as`) shares that one's store folder
+    while shared.get("same_gt_as") in by_version and shared["version"] not in seen:
+        seen.add(shared["version"])
+        shared = by_version[shared["same_gt_as"]]
     needed = {}
     for rid in run_ids():
         if is_final(run_record(rid)):
@@ -378,8 +384,8 @@ def gt_plan(root=None):
     for sig in gt_stores(root):
         row = by_sig.get(sig)
         path = os.path.join(root, sig)
-        if sig == latest["signature"]:
-            plan.append((sig, f"keep: the latest version ({latest['version']})"))
+        if sig == shared["signature"]:
+            plan.append((sig, f"keep: the latest version ({latest['version']})" + (f", its code makes the GT of {shared['version']}, the version of this store" if shared is not latest else "")))
         elif sig in needed:
             plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(needed[sig][:4])}"))
         elif row is None:
@@ -579,6 +585,10 @@ def selftest():
         tags.discard("tg/ok")
         assert dict(gt_plan(gtroot)[1])["old1"].startswith("keep: the tag"), "no tag, no deletion"
         tags.add("tg/ok")
+        versions = lambda: rows + [{"version": "v11", "signature": "eleven", "tag": "tg/ok", "same_gt_as": "v3"}]       # noqa: E731
+        latest2, plan2 = gt_plan(gtroot)               # v11 makes the GT of v3: the store of v3 stays, it is the one the latest version reads
+        assert latest2["version"] == "v11" and dict(plan2)["new"].startswith("keep: the latest version (v11)") and dict(plan2)["old1"].startswith("delete"), plan2
+        versions = lambda: rows       # noqa: E731
         n_before = len(open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read().splitlines())
         gt_clean(False, gtroot)
         assert len(open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read().splitlines()) == n_before and os.path.isdir(os.path.join(gtroot, "old1")), "a dry run changes nothing"
