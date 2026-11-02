@@ -40,6 +40,7 @@ run "grad scaler"       "$PY" tests/test_grad_scaler.py            # amp fp16: s
 run "lr groups"         "$PY" tests/test_lr_groups.py              # a module's own lr and warm-up: groups, schedule, resume
 run "hygiene"           "$PY" tests/test_hygiene.py                # w_obj as a weight, unknown velocity, splat precision, batch_ego (the flag hygiene_2026_11_02)
 run "clip split"        "$PY" tests/test_clip_split.py             # grad_clip_split: each listed module and the rest clipped on their own, the global call unchanged, resume, call site
+run "frozen frame"      "$PY" tests/test_frozen.py                 # the frame of FROZEN.md has the recorded hashes (a bug fix updates them with a changelog line)
 if [ -f runs/t10_dual_s0/ckpt_00003000.pt ]; then               # its G4 warm-starts from this real checkpoint (not in git)
   run "velocity hurdle" "$PY" tests/test_velocity_hurdle.py     # t11; CPU, about 1 min, 2.2 GB peak
 else

@@ -1,0 +1,30 @@
+{
+ "about": "the frozen frame of the BEV system (FROZEN.md): path relative to bev_fusion/ -> SHA-256 (line endings ignored); rewritten only by tests/test_frozen.py --update",
+ "frozen_at": "2026-11-02",
+ "files": {
+  "training/interface.py": "83ec2337c6e43bb2c95d6a401bb3a5e2693f40daf63aea7a2dcacaf6eac23271",
+  "training/precompute.py": "e4d10b23b57df07c9e9f9e81ec2a3b5e0571cf971e9c6ba0ceca7f3e3472fdf9",
+  "training/train.py": "a67233cc5d90603832288314a026d48737faa1c568b018cbf5ce3ae33106a9d2",
+  "training/nuscenes_dataset.py": "bbf246ccd4aec93e15ba02ed3eba5397c7f757e23ecb5aa9984b3718e13840c9",
+  "training/feature_cache.py": "c850d90d142330bf9867dda2d8ca127500168d9755257105236dd5c7f82828b5",
+  "training/augment.py": "dd94bc2b7795d1b532ca9731880e5f9d77378084b560caba20e44d907fe54907",
+  "training/freeze.py": "2050b32b805e434d55655d4830f502f2f93fe4bf522697f5ae862770ed5e5be0",
+  "training/probe.py": "e1acfd2050a43d9b6a4120bdcb5d760780b3627d25631de900827cc6f71fdaf2",
+  "training/debug.py": "fd32231989045de4264d9c993d657e21f16d0df4786daf3e4ef34e41c7543771",
+  "training/scratch.py": "d427ee2f759c82a1dc1a3860742c39a1f3ef2c95eb6e0201e9546e7a63e3f2f8",
+  "training/startable.py": "b7a4108398fcb9468c0d01b24f7897f63e8ebdd494873d725ff9cf5ba65c59aa",
+  "training/gt_cache_build.py": "9090f0e375cbaaa3f5052767674b4f3d392ab33b0ea83c17c3f09db8cd740df1",
+  "training/gt_scenes.py": "4e01f12340f11d3f380c7d79b8f70b94ffb6f1f6160e080dcefe28628ec5e89b",
+  "training/gt_bev.py": "82bb118c4918079d59c7a4348bcd85a10c4576eec9524034cb34e5835e029666",
+  "evaluation/bev_suite.py": "785d786339120836135a6d35dbec7ec830eca2278aa847aa608d9ec62f4297e5",
+  "evaluation/bev_adapter.py": "04496906b01c7d01a57e175d678093571e9f1c82c2165e110fe4ec4b1df883ec",
+  "evaluation/bev_task.py": "291c3d1eab50c0a4fc2766134cc2498dbb03cc9b2ec1fec33f2a997d80e778b2",
+  "evaluation/metrics.py": "a6cb004c085f625a9ecb917300f55f88a365d1832548e856fbeae56b92c88fba",
+  "evaluation/bev_curves.py": "661440a55a837b548973b206bea76d96f08d614c89317e413c7cedf3306799d0",
+  "evaluation/bev_velocity.py": "9e97e277fbd8277313d9e238b9dd9e5e538bda6334182d53d0d05a138622102d",
+  "evaluation/bev_fusion_area.py": "cd4f1d594edc0806fff6d1d0f07f5e48fbcab6948d613d31c304395e84c193d2",
+  "evaluation/bev_modules.py": "af824e5f0f94410fb3976e575ad008e1f025a83a365b87d71edab320038a1d69",
+  "evaluation/bev_timing.py": "fd4fa6649289a57a3b0043cb683b900a8e11387ce96742d968be7694cd4922cc",
+  "runner/bev_runner.py": "d1aba4b7b6864d43d60fe672f36b7b4868ee184f63174bd68ee13ac00dff3995"
+ }
+}
