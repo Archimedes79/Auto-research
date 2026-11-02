@@ -15,7 +15,7 @@ much of a set the store of the current generator holds. The store folder is shar
     sets.stored_for(scenes, ...)  the same for any list of sequence names, with the missing sample tokens: `python -m autogt have`
     sets.check_raw(dataroot, ...) are the raw files the generator reads on disk (tables, map expansion, CAM_FRONT, the five radars)?
                                   `python -m autogt data`; sets.report_raw(result) prints it. The tools that fetch, verify and link the raw
-                                  data are `datasets/NuScenes/tools/` (its README describes the layout on D:)
+                                  data are `data/NuScenes/tools/` (its README describes the layout on D:)
 """
 import os
 

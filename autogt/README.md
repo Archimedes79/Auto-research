@@ -35,7 +35,7 @@ GT version, the tree was clean and `full` is complete. Use a folder with `releas
 folder with `dirty: true` or no `gt_version` is scratch. The network input that a model precomputes from the GT (it needs the
 backbone) is not made here; it is a product of the model code and carries its own version and the `gt_version` it stands on.
 
-**The whole chain.** get the raw data (`../datasets/NuScenes/`: its README says what is on D: and which parts are there; its `tools/` list,
+**The whole chain.** get the raw data (`../data/NuScenes/`: its README says what is on D: and which parts are there; its `tools/` list,
 download, verify and unpack the archives and link the WSL views `~/data/nuscenes*`; downloads only with the user's OK) -> `python -m autogt
 data ~/data/nuscenes_full [--set small|full]` (are all raw files the generator reads on disk: json tables, map expansion, CAM_FRONT, the
 five radars; `sets.check_raw`) -> `generate` (above) -> look: `report` (every check, one PDF), `view`, `sheets`, `video`.
