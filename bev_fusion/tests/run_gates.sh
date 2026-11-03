@@ -73,6 +73,7 @@ run "radar memory ghost" "$PY" tests/test_radar_memory_ghost.py     # the Dopple
 run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 motion block through the trainer's path; CPU, 7 s
 run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, training/splits.py, the trainsuite hook; no data, 7 s
 run "layer table"       "$PY" tests/test_layers.py                  # training/layers.py: the table changes no number, the 1 m centre-line row; CPU, 7 s
+run "evaluate door"     "$PY" tests/test_evaluate_door.py           # evaluation/evaluate.py translates options into bev_suite commands (--real: the golden check, by hand); no data, 1 s
 if [ "${1:-}" = "--all" ]; then
   run "whole chain"     "$PY" training/model.py                     # nuScenes mini, CPU; minutes
   run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
