@@ -251,5 +251,43 @@ T.fit(make_model(), lambda m, b: (seen.append(float(b[0].sum())) or loss_fn(m, b
       **{**kw, "steps": 6, "batch_fn": None, "loader": torch.utils.data.DataLoader(ds, batch_size=32, shuffle=True), "ckpt_every": 0})
 assert len(seen) == 6 and seen[0:2] != seen[2:4] and seen[2:4] != seen[4:6], seen                      # 2 batches per epoch, reshuffled each epoch
 print("loader: a new pass every epoch, reshuffled:", True)
+
+# (8) the trainsuite contract: config.json, log.jsonl (rows with total / lr / grad_norm / grad.<module> / upd.<module> / t_data, an eval row), train.log; a stop request through CONTROL
+# ends the run with exit code 75 after a checkpoint (STOPPED, state "stopped", no .done), and a restart resumes to the SAME weights as an uninterrupted run
+import json
+kc = dict(kw, steps=60, log_every=20, ckpt_every=20, eval_fn=lambda m, s: {"val_mse": 0.5}, eval_every=30, probe=True, config={"freeze": []})
+mc = make_model()
+T.fit(mc, loss_fn, T.Run("c_contract", tmp), **kc)
+cdir = os.path.join(tmp, "c_contract")
+assert json.load(open(os.path.join(cdir, "config.json")))["steps"] == 60 and os.path.exists(os.path.join(cdir, "train.log")) and os.path.exists(os.path.join(cdir, ".done"))
+rows = [json.loads(ln) for ln in open(os.path.join(cdir, "log.jsonl"))]
+tr = [r for r in rows if "val" not in r]
+assert [r["step"] for r in tr] == [20, 40, 60], rows
+for key in ("total", "lr", "grad_norm", "s_per_step", "gpu_gb", "mse", "grad.0", "upd.0", "grad.2", "upd.2", "t_data", "t_step"):
+    assert key in tr[-1], (key, tr[-1])                                                    # (t_data / t_step: the first step of a run has no t_step; the logged ones do)
+assert tr[-1]["grad.0"] > 0 and tr[-1]["upd.0"] > 0 and any("val" in r and r["step"] == 30 and "val_mse" in r["val"] for r in rows)
+state = {"n": 0}
+
+
+def stopper(step):
+    if step == 25 and not os.path.exists(os.path.join(tmp, "d_stop", "STOPPED")):            # the stop request arrives while the run is going (the way `trainsuite stop` writes it)
+        json.dump({"cmd": "stop", "reason": "selftest"}, open(os.path.join(tmp, "d_stop", "CONTROL"), "w"))
+    return batch_fn(step)
+
+
+md = make_model()
+try:
+    T.fit(md, loss_fn, T.Run("d_stop", tmp), **dict(kc, batch_fn=stopper))
+    raise AssertionError("a stop request must end the run")
+except SystemExit as e:
+    assert e.code == T.EXIT_STOPPED == 75, e.code
+ddir = os.path.join(tmp, "d_stop")
+st = json.load(open(os.path.join(ddir, "STOPPED")))
+assert st["step"] == 26 and st["reason"] == "selftest" and not os.path.exists(os.path.join(ddir, ".done")) and json.load(open(os.path.join(ddir, "status.json")))["state"] == "stopped"
+T.fit(md, loss_fn, T.Run("d_stop", tmp), **dict(kc, batch_fn=stopper))                         # the restart moves CONTROL / STOPPED aside and resumes from the checkpoint of the stop
+assert os.path.exists(os.path.join(ddir, ".done")) and os.path.exists(os.path.join(ddir, "STOPPED.old")) and not os.path.exists(os.path.join(ddir, "CONTROL"))
+same_stop = all(torch.allclose(a, b, atol=1e-6) for a, b in zip(mc.parameters(), md.parameters()))
+print("trainsuite contract: log.jsonl rows with grad./upd. keys, a stop request exits with code 75 and the resumed run equals the uninterrupted one:", same_stop)
+assert same_stop
 shutil.rmtree(tmp, ignore_errors=True)
 print("trainer selftest passed")

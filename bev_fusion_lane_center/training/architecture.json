@@ -159,6 +159,6 @@
     "training/trainer_selftest.py": "selftest of trainer.fit",
     "training/models/p16_ref.py": "numpy reference of the tree spec, the oracle of evaluation/tests/test_p16_spec.py",
     "training/models/p16_interface.py": "contract of Builder.forward (input and output names, shapes, checks), E2E set-up step 0; not yet called by the live chain",
-    "training/legacy": "old loop 2-8 modules that live code or old experiments still import"
+    "training/probe.py": "gradient and update size per module for the trainer (trainsuite contract), copied from the BEV system"
   }
 }

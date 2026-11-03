@@ -10,7 +10,7 @@ The checkpoint files stay in `../runs/` (the live code loads them by those paths
 | dense heads, out-of-fold | `e37_fold0/1/2/model.pt` | 3 folds for perturbed TRAIN rows | loop 17 failure fine-tune |
 | trace network, **control** | `e94_a/model.pt` (+ `eval_*.json`, `graphs_*.pkl`) | E94 learned trace network (1.67 M) | control arm of loop 16 |
 | refinement decoder | `e120_a/model.pt` ... `e120_d` | E120 refinement of the traced graph (3 layers) | control chain E94 + E120 |
-| **champion builder** | `e123/e123_D7_r3_f1/model.pt` (4.7 MB) | D7 + junction head + time recursion (loop 16, rung 3) | `p16_fast_val.py --name e123_D7_r3_f1`, `p16_pipeline*.py`, `p16_fast_check.py` |
+| **champion builder** | `e123/e123_D7_r3_f1/model.pt` (4.7 MB) | D7 + junction head + time recursion (loop 16, rung 3) | `evaluate.py champion`, `p16_pipeline*.py`, `p16_fast_check.py` |
 | builder, other designs | `e123/e123_D<n>_r<rung>_<step>/model.pt` | ladder runs D1-D8 | `experiment_execution/history/indexes/TRIAGE_STATE_loop16.md` |
 | route head along the edges | `p16_f1m_route_s0/model.pt`, `..._s1`, `p16_f2h_route_s*`, `p16_rc1v_route_s*` | RouteXNet (cross-attention to SD-map tokens), loop 16b | `p10_route_train.py`, `p16_pipeline.py` |
 | planner consumer | `e121_b/model_cons.pt`, `e117_*`, chain consumers `p16_cons_*` | ConsB (route + ego) | `p14_chain_consumer.py` |

@@ -30,7 +30,7 @@ The delivered chain of `champion`, `fast_recall` and `recall`, drawn from the co
 - champion builder, route head, consumer: training/train/p16_train.py, p10_route_train.py, p14_chain_consumer.py
 - whole chain: training/pipeline/p16_pipeline.py
 - evaluate a named model (all metrics, paired comparison): evaluation/evaluate.py <name> [--compare <name>] (names in models/registry.json); metric code: evaluation/sparse_lanes, dense maps: evaluation/lane_grid
-- final, fast, timing evaluation: evaluation/drivers/p16_final_eval.py, p16_fast_val.py, p16_timing.py
+- final, fast, timing evaluation: evaluation/drivers/p16_final_eval.py, p16_timing.py
 - images, videos, tables, reports: tools/viz/render.py, tools/video/make_video.py, tools/catalogue/build_experiment_table.py, reports/build/
 
 ## Run

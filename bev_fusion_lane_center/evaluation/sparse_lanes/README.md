@@ -22,8 +22,8 @@ Metrics of a run (`sparse_metrics.card(preds, gts)`): `F1@0.5`, `F1@1.0`, `F1@1.
 | learned trace network E94, refinement E120 | `nodes` from the vertex bookkeeping | yes, all metrics |
 | differentiable builders D1-D8 (loop 16), champion D7 | `graph_from_vertices(xy, edges)` -> pieces + `nodes` | yes, all metrics |
 | literature baselines (SAM-Road-style nodes + edges, TopoLogic-style links, LoI single score) | same conversion from their vertices / edges | yes if converted by `graph_from_vertices` |
-| route head, assignment, planner consumer | not graphs | **no**: route success, route F, planner L2 are in `p10_route_eval2.py`, `p16_route_check.py`, `p14_chain_consumer.py` (kept in `scripts/`, they call this package for the graph part) |
-| temporal stability, robustness series | graphs per frame | geometry yes; flicker and series logic in `p17_*` (loop 17, `evaluation/loops/loop17/`), old `stability.py` in `training/legacy/` |
+| route head, assignment, planner consumer | not graphs | **no**: route success, route F, planner L2 are in `p10_route_eval2.py`, `eval_parts.py`, `p14_chain_consumer.py` (kept in `scripts/`, they call this package for the graph part) |
+| temporal stability, robustness series | graphs per frame | geometry yes; flicker and series logic in `p17_*` (loop 17, `evaluation/loops/loop17/`), old `stability.py` (removed 2026-11-03, in git history) |
 
 ## Review notes (2026-10-24) - read before comparing numbers
 
