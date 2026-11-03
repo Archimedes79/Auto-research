@@ -184,6 +184,7 @@ def gpu_state(samples=3, gap=0.5):
     """{"util_percent", "mem_used_mb" (max of `samples`), "other_processes" (nvidia-smi), "busy_processes" (ps), "load"} of this machine; None where a tool is missing"""
     st = {"util_percent": None, "mem_used_mb": None, "other_processes": [], "busy_processes": [],
           "load": open("/proc/loadavg").read().split()[:3] if os.path.exists("/proc/loadavg") else None}
+    own = {os.getpid(), os.getppid()}
     try:
         utils, mems = [], []
         for i in range(samples):
@@ -195,11 +196,11 @@ def gpu_state(samples=3, gap=0.5):
                 time.sleep(gap)
         st["util_percent"], st["mem_used_mb"] = max(utils), max(mems)
         p = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader"], capture_output=True, text=True, timeout=20).stdout
-        st["other_processes"] = [ln.strip() for ln in p.splitlines() if ln.strip()]
+        st["other_processes"] = [ln.strip() for ln in p.splitlines() if ln.strip() and ln.split(",")[0].strip() not in map(str, own)]      # nvidia-smi lists this process too once it holds a CUDA context
     except Exception:                                                   # noqa: BLE001  (no nvidia-smi: unknown)
         pass
     try:
-        st["busy_processes"] = busy_processes(subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=20).stdout, {os.getpid(), os.getppid()})
+        st["busy_processes"] = busy_processes(subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=20).stdout, own)
     except Exception:                                                   # noqa: BLE001
         pass
     return st
@@ -358,12 +359,27 @@ def selftest():
     w = torch.ones(1, requires_grad=True)
     ts = train_split(lambda: Slow.apply(w).sum(), lambda: setattr(w, "grad", None), "cpu", n=5, warmup=1)
     assert near(ts["forward_loss"], 6) and near(ts["backward"], 9) and ts["forward_loss_min_max"][0] <= ts["forward_loss"] <= ts["forward_loss_min_max"][1], ts
-    # the idle rule: GPU utilisation, memory, processes (nvidia-smi lists none under WSL2: ps is read), unknown is busy; a CPU run is idle
+    # the idle rule: GPU utilisation, memory, processes (nvidia-smi and ps are read; our own pid is not another user), unknown is busy; a CPU run is idle
     ok = {"util_percent": 2.0, "mem_used_mb": 1300.0, "other_processes": [], "busy_processes": []}
     assert is_idle(ok, "cuda") and is_idle({**ok, "util_percent": 99}, "cpu")
     for bad in ({"util_percent": 99.0}, {"util_percent": None}, {"mem_used_mb": 11800.0}, {"mem_used_mb": None}, {"other_processes": ["1, 5000 MiB"]}, {"busy_processes": ["7 python train.py"]}):
         assert not is_idle({**ok, **bad}, "cuda"), bad
     assert is_idle({**ok, "mem_used_mb": 11800.0}, "cuda", check_memory=False), "after our own model is loaded the memory says nothing"
+    # nvidia-smi under WSL2 lists the process that holds a CUDA context with its own pid (seen 2026-11-03: the second check, taken after the model load, refused an idle GPU
+    # because it counted this very process): the listing of gpu_state drops the own pid, another process stays
+    real_run = subprocess.run
+
+    def fake_run(cmd, **kw):
+        if cmd[0] != "nvidia-smi":
+            return real_run(cmd, **kw)
+        text = "5, 1000\n" if cmd[1].startswith("--query-gpu") else f"{os.getpid()}, [N/A]\n4242, [N/A]\n"
+        return subprocess.CompletedProcess(cmd, 0, stdout=text, stderr="")
+    subprocess.run = fake_run
+    try:
+        listed = gpu_state(samples=1)["other_processes"]
+    finally:
+        subprocess.run = real_run
+    assert listed == ["4242, [N/A]"], ("the own pid is not another GPU user", listed)
     ps = "  PID COMMAND\n  101 /usr/bin/python -u runs/t16/code/train.py cfg\n  102 python evaluation/bev_suite.py runs/x timing\n  103 bash -c sleep 5\n  104 python other.py\n"
     assert [x.split()[0] for x in busy_processes(ps, {102})] == ["101"] and busy_processes(ps, {101, 102}) == [], "ps: trainers / evaluations, not ourselves"
     # queued jobs are not GPU users (the bug: a run.py launcher waiting for a slot, whose arguments name train.py / run_ar.sh / bev_suite, refused the timing on an idle GPU)

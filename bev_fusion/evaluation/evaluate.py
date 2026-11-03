@@ -8,8 +8,9 @@ puts it. What the door adds is `RUN/eval/door.json`: the options and the command
     --videos N | V1,V2   qual videos N --seed S           N random scenes as videos, or the named scenes (scene-0061,...)
     --time               timing --n 30 + time             ms per module and ms per frame (idle GPU only: timing refuses a busy one)
     --all                what the evaluation chain of the t16 bring-up did: timing, the numbers with --curves --fusion --velocity --prior 500 --images 8,
-                         generalisation (train against val, ends with the report page), the module probe, 3 videos, 6 showcase videos
-                         (only the numbers are fatal there, a failed step is listed and the chain goes on; generalisation gets a second try)
+                         generalisation (train against val), the module probe, 3 videos, 6 showcase videos, and the report page last (with the train-against-val
+                         table and the videos; the chain made it inside generalisation, before the videos). Only the numbers are fatal there, a failed step is
+                         listed and the chain goes on; generalisation gets a second try
 Global options as in bev_suite: --device cuda|cpu  --workers N  --split val|train  --ckpt-dir DIR  --out DIR. The TEST split is not offered.
 Nothing asked for (no option): this help, exit 2.
 """
@@ -95,6 +96,9 @@ def plan(a) -> list:
     if a.all:
         show = os.path.join(a.out, "showcase") if a.out else os.path.join(a.run, "eval", "showcase")
         steps.append(step("showcase", global_options(show) + ["qual", "videos", str(SHOWCASE_VIDEOS), "--view", "overview", "--seed", str(SHOWCASE_SEED)], fatal=False))
+        by_n = os.path.join(a.run, "eval", "by_n")                                  # the page last, so that it shows the videos; generalisation made it once without them
+        steps.append(step("report", G + ["report", "--no-pictures", "--val-table", os.path.join(by_n, f"table_n{a.n}.txt"),
+                                         "--train-table", os.path.join(by_n, f"table_train_n{a.n}.txt")], fatal=False))
     return steps
 
 

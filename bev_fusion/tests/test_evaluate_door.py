@@ -1,8 +1,8 @@
 """Gate of the evaluation's front door `evaluation/evaluate.py` (plan 2026-11-03, section 1: one command for the evaluation).
 
 Without option (CPU, seconds, no data): the door only translates options into `bev_suite.py` commands and runs them, so
-1  the plan of `--all` is the evaluation chain of the t16 bring-up (command by command, in its order, with its constants), and every single option gives the command
-   its table says (eval --n N, qual random / frame, qual videos N / --scenes, time + timing); the TEST split is not offered; a bad value is refused
+1  the plan of `--all` is the evaluation chain of the t16 bring-up (command by command, in its order, with its constants) and then the report page, and every single
+   option gives the command its table says (eval --n N, qual random / frame, qual videos N / --scenes, timing + time); the TEST split is not offered; a bad value is refused
 2  the executor: a failed fatal step ends the call (exit 1), a failed soft step of `--all` is listed and the chain goes on (exit 0), generalisation gets a second try
    and its half-made store is moved out of quant/ (never deleted), `RUN/eval/door.json` holds every call with the commands and their exit codes
 With --real (a finished run, default runs/t16_full_s0, CPU, 4 frames, about 2 minutes: two bev_suite processes load nuScenes and the model): the golden check, the
@@ -55,9 +55,9 @@ def refused(*argv):
 
 
 def check_plan():
-    # 1  --all = temp/t16/eval_chain.sh, command by command, in its order
+    # 1  --all = temp/t16/eval_chain.sh, command by command, in its order, plus the report page as the last step (the chain made it inside generalisation, before the videos)
     allp = steps_of("--all")
-    assert [s["name"] for s in allp] == ["timing", "numbers", "generalisation", "modules", "videos", "showcase"], [s["name"] for s in allp]
+    assert [s["name"] for s in allp] == ["timing", "numbers", "generalisation", "modules", "videos", "showcase", "report"], [s["name"] for s in allp]
     c = cmds(allp)
     assert c["timing"] == ["timing", "--n", "30"]
     assert c["numbers"] == ["--curves", "--fusion", "--velocity", "eval", "--n", "1000", "--prior", "500", "--images", "8"]
@@ -65,11 +65,13 @@ def check_plan():
     assert c["modules"] == ["modules", "--frames", "4"]                              # the chain's `--device cuda` is the global option
     assert c["videos"] == ["qual", "videos", "3", "--seed", "1"]
     assert c["showcase"] == ["--out", "runs/x/eval/showcase", "qual", "videos", "6", "--view", "overview", "--seed", "21"]
-    assert [s["fatal"] for s in allp] == [False, True, False, False, False, False], "in the chain only the numbers are fatal"
+    assert c["report"] == ["report", "--no-pictures", "--val-table", "runs/x/eval/by_n/table_n1000.txt", "--train-table", "runs/x/eval/by_n/table_train_n1000.txt"], \
+        "the tables generalisation passes to its page"
+    assert [s["fatal"] for s in allp] == [False, True, False, False, False, False, False], "in the chain only the numbers are fatal"
     assert allp[2]["tries"] == 2 and allp[2]["store"] == "runs/x/eval/suite/quant/eval_train_n1000"
     plus = steps_of("--all", "--qual", "scene-0003/1", "--videos", "scene-0003")           # more asked for on top of the chain: soft too, and where they belong
     assert [(s["name"], s["fatal"]) for s in plus] == [("timing", False), ("numbers", True), ("generalisation", False), ("modules", False), ("frames", False),
-                                                       ("videos", False), ("showcase", False)]
+                                                       ("videos", False), ("showcase", False), ("report", False)]
     assert [(s["name"], s["fatal"]) for s in steps_of("--all", "--qual", "2")][4] == ("qual", False)
     assert cmds(steps_of("--all", "--n", "200", "--out", "o"))["showcase"][:2] == ["--out", "o/showcase"]
     # every single option
@@ -110,7 +112,7 @@ def check_execute():
         a.run = run
         # all pass
         runner, seen = fake_runner({})
-        assert E.execute(a, E.plan(a), runner) == 0 and seen == ["timing", "numbers", "generalisation", "modules", "videos", "showcase"]
+        assert E.execute(a, E.plan(a), runner) == 0 and seen == ["timing", "numbers", "generalisation", "modules", "videos", "showcase", "report"]
         # the numbers fail: fatal, nothing after them runs
         runner, seen = fake_runner({"numbers": [3]})
         assert E.execute(a, E.plan(a), runner) == 1 and seen == ["timing", "numbers"]
@@ -121,7 +123,7 @@ def check_execute():
             f.write("half\n")
         runner, seen = fake_runner({"timing": [2], "generalisation": [1, 1], "modules": [1]})
         assert E.execute(a, E.plan(a), runner) == 0
-        assert seen == ["timing", "numbers", "generalisation", "generalisation", "modules", "videos", "showcase"], seen
+        assert seen == ["timing", "numbers", "generalisation", "generalisation", "modules", "videos", "showcase", "report"], seen
         assert not os.path.exists(store)
         kept = glob.glob(os.path.join(run, "eval", "suite", "failed_stores", "eval_train_n1000.*", "frames.jsonl"))
         assert len(kept) == 1 and open(kept[0]).read() == "half\n"
