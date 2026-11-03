@@ -1,0 +1,52 @@
+{
+ "id": "E272.j_s0",
+ "hypothesis": "The grid chain as one differentiable function (hold + trained assignment, blocks then joint fine-tune from the E271 head) keeps the vertex quality of the E271 head alone: cov5 not worse by more than 0.03 at 11.2 vertices per 100 m",
+ "prediction": "cov5 j - a = +0.02 (a 0.721 / 0.728); prec1 not below a - 0.02; vgt100 not above a + 1.0",
+ "rule": "E272 card section 0 (band 0.03; guards prec1 -0.02, vgt100 +1.0), two seeds, VAL 873 frames, final checkpoint, nothing selected on VAL; by hand because card.validate cannot read vertex cards",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh chain_train.py --name e272_j_s0 --seed 0 --workers 3",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1569775,
+ "created": "2026-11-03T23:50:40",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-03T23:50:48",
+ "code_hash": "d88453e78c7d",
+ "commit": "16aace9d88",
+ "tag": "lcr/E272.j_s0",
+ "git_note": "",
+ "pid": 1569859,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/chain/probe_gate.py",
+   "bev_fusion_lane_center/temp/chain/start_j1_gated.sh",
+   "bev_fusion_lane_center/tools/viz/grid_view.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3667,
+ "attempts": 1,
+ "ended": "2026-11-04T00:52:06",
+ "last_lines": [
+  "00:21:46 step 700/1500 loss 2.8514 lr 1.81e-04 2.108 s/step h_cov 0.255 h_prec 0.370 h_vgt100 12.100 head 1.729 f_off 0.325 f_cov 0.255 f_prec 0.370 f_bud 0.032 assign 0.149 road_mass 0.898 vgt100 12.100",
+  "00:25:13 step 800/1500 loss 2.8061 lr 1.49e-04 2.104 s/step h_cov 0.207 h_prec 0.337 h_vgt100 12.252 head 1.476 f_off 0.296 f_cov 0.207 f_prec 0.337 f_bud 0.021 assign 0.169 road_mass 0.876 vgt100 12.252",
+  "00:28:38 step 900/1500 loss 2.7696 lr 1.17e-04 2.097 s/step h_cov 0.235 h_prec 0.293 h_vgt100 12.545 head 1.396 f_off 0.240 f_cov 0.235 f_prec 0.293 f_bud 0.044 assign 0.078 road_mass 0.932 vgt100 12.545",
+  "00:32:15 step 1000/1500 loss 2.7837 lr 8.69e-05 2.104 s/step h_cov 0.242 h_prec 0.292 h_vgt100 12.322 head 1.422 f_off 0.243 f_cov 0.242 f_prec 0.292 f_bud 0.033 assign 0.111 road_mass 0.887 vgt100 12.322",
+  "00:35:44 step 1100/1500 loss 2.8249 lr 5.98e-05 2.103 s/step h_cov 0.197 h_prec 0.348 h_vgt100 11.905 head 1.561 f_off 0.311 f_cov 0.197 f_prec 0.348 f_bud 0.011 assign 0.215 road_mass 0.863 vgt100 11.905",
+  "00:39:20 step 1200/1500 loss 2.7630 lr 3.72e-05 2.108 s/step h_cov 0.275 h_prec 0.379 h_vgt100 12.548 head 1.663 f_off 0.301 f_cov 0.275 f_prec 0.379 f_bud 0.045 assign 0.123 road_mass 0.912 vgt100 12.548",
+  "00:42:48 step 1300/1500 loss 2.7383 lr 2.02e-05 2.106 s/step h_cov 0.232 h_prec 0.326 h_vgt100 12.539 head 1.489 f_off 0.265 f_cov 0.232 f_prec 0.326 f_bud 0.044 assign 0.125 road_mass 0.907 vgt100 12.539",
+  "00:46:21 step 1400/1500 loss 2.7554 lr 9.63e-06 2.108 s/step h_cov 0.305 h_prec 0.321 h_vgt100 11.323 head 1.693 f_off 0.291 f_cov 0.305 f_prec 0.321 f_bud 0.000 assign 0.099 road_mass 0.927 vgt100 11.323",
+  "00:49:53 step 1500/1500 loss 2.7446 lr 6.00e-06 2.108 s/step h_cov 0.219 h_prec 0.341 h_vgt100 11.605 head 1.529 f_off 0.287 f_cov 0.219 f_prec 0.341 f_bud 0.004 assign 0.164 road_mass 0.891 vgt100 11.605",
+  "00:49:53 done 1500",
+  "00:51:31 VAL hold {'cov5': 0.7254, 'prec1': 0.8756, 'vgt100': 10.279} thr 0.0624 {'trained': {'road_acc': 0.9837300776460972, 'labelled': 39152, 'dust_off': 0.4863258026159334, 'off': 841}, 'start': {'road_acc': 0.9842153657539845, 'labelled': 39152, 'dust_off': 0.464922711058264, 'off': 841}}",
+  "00:51:31 VAL nohold {'cov5': 0.7254, 'prec1': 0.8756, 'vgt100': 10.279} thr 0.0624"
+ ]
+}

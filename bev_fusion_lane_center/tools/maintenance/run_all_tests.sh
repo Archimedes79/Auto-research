@@ -32,4 +32,14 @@ run "lane prototype: JSON graph == evaluate's graph, card reproduced" test_lane_
 run "champion fast path == reference graphs" p16_fast_check.py --n 10
 run "registration K188 (synthetic shifts, gradient)" p18_regis.py
 run "numba union == FastUnion graphs (120 frames)" p18_asm_check.py --n 120 --reps 1
+run "grid chain parts (soft_lines, hold, assign, targets, head, losses; E271 / E272)" grid/soft_lines.py
+run "grid hold: ego warp reproduces the second observation" grid/hold.py
+run "grid assign: soft assignment with a dustbin" grid/assign.py
+run "grid targets (cell targets, heat)" grid/targets.py
+run "grid head (2.05 M, reads x[:39])" grid/head.py
+run "grid losses" grid/losses.py
+run "grid chain: one function, gradient reaches every block (G2)" grid/chain.py
+run "grid head spec test (G1) on real frames" grid/test_grid.py
+run "grid oracle (G0): the GT through the chain reproduces itself" grid/test_oracle.py
+run "vertex scoring (selftest)" vertex_eval.py selftest
 exit $fail

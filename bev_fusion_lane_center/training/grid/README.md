@@ -9,9 +9,9 @@ frozen GaussianCaR 39 ch, 200 x 200 @ 0.5 m          (x[:39]: the old dense head
 [1] GRID HEAD     6 ch / cell @ 1 m: p (centre-lane logit), heading (cos, sin), sub-cell offset (ox, oy), keep gate s
    v   soft_lines.sparsify          w = sigmoid(p) * ridge(across the line) * sigmoid(s)     weights, no top-k, no threshold on the training path
 [2] SPARSE MAP    5 ch / cell: w, cos, sin, ox, oy          loss: coverage + precision + vertex budget (losses.py)
-   v   hold.Hold                    warp the last fused map with the ego motion (one grid_sample), gated noisy-or fuse          (follow-up card)
+   v   hold.Hold                    warp the last fused map with the ego motion (one grid_sample), gated noisy-or fuse          (E272: trained in the chain)
 [3] FUSED MAP
-   v   assign.Assigner              softmax over (map tokens + dustbin): distance^2 / sigma^2 + lam (1 - heading . tangent)    (follow-up card)
+   v   assign.Assigner              softmax over (map tokens + dustbin): distance^2 / sigma^2 + lam (1 - heading . tangent)    (E272: trained in the chain)
 [4] ASSIGNMENT    P(road | vertex), lateral offset, lane slot, presence per road
 ```
 The delivered list of vertices is a READ-OUT at inference (`evaluation/vertex_eval.py read_out`: cells with w >= thr that are the 3 x 3 maximum), a named rule step on the output. Where no map exists the output is the sparse vertices only (a named gap).
@@ -25,7 +25,9 @@ The delivered list of vertices is a READ-OUT at inference (`evaluation/vertex_ev
 | `data.py` | `GridData` / `loader`: the 39 frozen channels + GT lane points (VAL through `BuilderData.rows`, never the stored TEST rows) | `training/data/p16_data.py` (paths, rows, normalisation) | `test_grid.py` |
 | `hold.py` | `warp` (ego motion, heading and offset rotated), `Hold` (gate, noisy-or) | the idea of `bev_fusion/training/temporal_fusion.py` | `python hold.py` |
 | `assign.py` | `map_tokens` (SD map -> tokens), `Assigner` (soft assignment with a dustbin, lateral offset, lane slot), `present` | `training/data/assoc_lib.py` and `sd_lib.py` made soft; registration stays `training/models/p18_regis.py` | `python assign.py` |
+| `chain.py` | `GridChain` = head + sparsify + hold + assigner as ONE module, `chain_loss` (per-frame head loss + sparse-map terms on the fused map + assignment loss), G2 gradient test | the parts above | `python chain.py` |
+| `chain_data.py` | `ChainData`: T = 3 frames of a scene, the ego step between them (warp checked on real frames), SD map and plausible road labels of the last frame | `data.py`, `training/data/p16_data.py` poses | `ego_step` / `road_labels` used by `chain.py` self-test; warp IoU check in the E272 card |
 | `test_oracle.py` | G0: the GT through the chain must reproduce itself (real VAL frames, degraded copies must fall) | idea of `bev_fusion/evaluation/bev_gtcheck.py` | itself |
 | `test_grid.py` | G1: gradient reaches every parameter group, one batch can be overfitted, features equal `BuilderData`'s | - | itself |
 
-Trainer: `../train/grid_train.py` (on `../trainer.py`), scoring: `../../evaluation/vertex_eval.py`, pictures: `../../tools/viz/grid_view.py` (head, vertices, assignment, camera; E271 videos) and `../../tools/viz/assign_view.py` (a registry system's delivered graph against the SD map).
+Trainers: `../train/grid_train.py` (E271, the head alone) and `../train/chain_train.py` (E272, the chain: blocks first with the head frozen, then joint), both on `../trainer.py`, scoring: `../../evaluation/vertex_eval.py` and `../../evaluation/chain_eval.py` (hold on / off, trained and start-value assigner), pictures: `../../tools/viz/grid_view.py` (head, vertices, assignment, camera; E271 videos) and `../../tools/viz/assign_view.py` (a registry system's delivered graph against the SD map).

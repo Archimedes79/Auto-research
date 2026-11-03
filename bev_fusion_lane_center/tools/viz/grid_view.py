@@ -3,7 +3,7 @@ vertices to the SD-map roads (START-value assigner), and the front camera.
 
     wsl bash tools/env/_py14.sh grid_view.py RUN [--scene 7] [--frames 16] [--every 2] [--out DIR] [--video] [--device cpu]
 
-RUN = a grid run folder name under runs/ (e.g. e271_a_s0; its model.pt, and the read-out threshold of runs/e271/RUN/card.json). Four panels per frame (ego frame, metres, x right, y forward):
+RUN = a grid run folder name under runs/ (e.g. e271_a_s0, or a chain run e272_j_s0: then the FUSED map, the hold and the TRAINED assigner; model.pt and the read-out threshold of runs/e27x/RUN/card.json). Four panels per frame (ego frame, metres, x right, y forward):
   heat      sigmoid(p) of the head at 1 m (white = lane), ground truth in green
   vertices  the read-out vertices of the head (blue, arrow = heading, size = weight), the prototype's node ids (orange cross) and the ground truth (green); per frame cov5 / prec1 / vertices per 100 m
   assignment  the SD roads (grey, arrow = direction), the head's vertices coloured by the road they are assigned to, red cross = no road (START-value assigner of training/grid/assign.py: not trained)
@@ -29,6 +29,8 @@ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirna
 for sub in ("training/grid", "evaluation", "training/data", "tools/prototype", "tools/viz", "tools/video"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import assign as AS  # noqa: E402
+import chain as CH  # noqa: E402
+import chain_data as CD  # noqa: E402
 import head as GH  # noqa: E402
 import soft_lines as SL  # noqa: E402
 import vertex_eval as VE  # noqa: E402
@@ -91,27 +93,37 @@ def draw(fig, d):
         ax.imshow(d["cam"])
     ax.axis("off")
     ax.set_title("front camera", fontsize=8, loc="left")
-    ax = fig.add_subplot(gs[1, :2])
-    base(ax, "assignment of the head's vertices to the SD roads (start-value assigner)")
     mp = d["mp"]
     col = {}
+    ax = fig.add_subplot(gs[1, 0])
+    base(ax, "SD map: one colour per road (arrow = direction, n = lanes)")
     for k, (poly, cnt) in enumerate(d["sd"]["roads"]):
         poly = np.asarray(poly)
         if len(poly) < 2:
             continue
         col[k] = CMAP(k % 10)
-        ax.plot(poly[:, 0], poly[:, 1], color="0.75", lw=7, alpha=0.6, solid_capstyle="round", zorder=0)
-        ax.plot(poly[:, 0], poly[:, 1], color=col[k], lw=1.1, zorder=2)
+        ax.plot(poly[:, 0], poly[:, 1], color=col[k], lw=2.4, solid_capstyle="round", zorder=2)
         m = len(poly) // 2
-        ax.annotate("", xy=poly[min(m + 1, len(poly) - 1)], xytext=poly[m], arrowprops=dict(arrowstyle="-|>", color=col[k], lw=1.1), zorder=2)
+        ax.annotate("", xy=poly[min(m + 1, len(poly) - 1)], xytext=poly[m], arrowprops=dict(arrowstyle="-|>", color=col[k], lw=1.4), zorder=3)
+        ax.text(poly[m, 0], poly[m, 1], f" {k}  n={int(round(float(np.mean(cnt))))}", fontsize=6.5, color=col[k], zorder=4)
+    ax = fig.add_subplot(gs[1, 1])
+    base(ax, "system: vertices in the colour of the road they are assigned to")
+    for k, (poly, cnt) in enumerate(d["sd"]["roads"]):
+        poly = np.asarray(poly)
+        if len(poly) > 1:
+            ax.plot(poly[:, 0], poly[:, 1], color="0.85", lw=1.0, zorder=0)
     if len(V) and d["P"] is not None:
         P, R = d["P"], mp["n_ids"]
         best = P[:, :R].argmax(1)
         un = P[:, R] > 0.5
         ok = ~un
-        ax.scatter(V[ok, 0], V[ok, 1], s=18 + 40 * w[ok], c=[col.get(int(b), "0.5") for b in best[ok]], edgecolor="k", linewidth=0.4, zorder=5, alpha=0.9)
+        slot = d["slot"].argmax(1) if d.get("slot") is not None else np.zeros(len(V), int)
+        for sl, mk in enumerate(("o", "s", "^", "D")):
+            sel = ok & (slot == sl)
+            if sel.any():
+                ax.scatter(V[sel, 0], V[sel, 1], marker=mk, s=22 + 45 * w[sel], c=[col.get(int(b_), "0.5") for b_ in best[sel]], edgecolor="k", linewidth=0.4, zorder=5)
         ax.scatter(V[un, 0], V[un, 1], marker="x", c="red", s=34, zorder=6)
-        ax.text(-49, -48, f"{int(ok.sum())} of {len(V)} vertices on a road", fontsize=6.5, bbox=dict(fc="white", alpha=0.8, lw=0), zorder=10)
+        ax.text(-49, -48, f"{int(ok.sum())} of {len(V)} vertices on a road; red x = no road\nmarker = lane slot (circle 0, square 1, triangle 2, diamond 3)", fontsize=6.5, bbox=dict(fc="white", alpha=0.8, lw=0), zorder=10)
     ax = fig.add_subplot(gs[1, 2])
     ax.axis("off")
     ax.text(0, 1, d["title"], va="top", fontsize=8, family="monospace", wrap=True)
@@ -140,44 +152,52 @@ def main():
     out_dir = os.path.join(ROOT, a.out) if a.out else os.path.join(ROOT, "runs", "grid_view", a.run)
     os.makedirs(out_dir, exist_ok=True)
     ks = scene_ks(a.scene, a.frames, a.every)
-    card_p = os.path.join(ROOT, "runs", "e271", a.run, "card.json")
+    chain = a.run.startswith("e272")                                       # a chain run: the fused map and the TRAINED assigner
+    card_p = os.path.join(ROOT, "runs", "e272" if chain else "e271", a.run, "card.json")
     thr = a.thr if a.thr is not None else (json.load(open(card_p))["thr"] if os.path.exists(card_p) else 0.3)
-    model = GH.GridHead(width=json.load(open(os.path.join(ROOT, "runs", a.run, "config.json"))).get("width", 48))
+    width = json.load(open(os.path.join(ROOT, "runs", a.run, "config.json"))).get("width", 48)
+    model = CH.GridChain(width=width) if chain else GH.GridHead(width=width)
     model.load_state_dict(torch.load(os.path.join(ROOT, "runs", a.run, "model.pt"), map_location="cpu")["state"])
     model.eval().to(a.device)
-    ds, dl = GD.loader("val_clean", bs=4, workers=0, shuffle=False, ks=ks)
+    ds, dl = CD.loader("val_clean", bs=4, workers=0, shuffle=False, ks=ks) if chain else GD.loader("val_clean", bs=4, workers=0, shuffle=False, ks=ks)
     e = EV.registry()[a.registry]
     g_r, conf, gts, info = LP.delivered(e, "val", ks)
     ft = RV.frame_table("val")
     sds = L.cache("sd", ds.bd.part)
-    mod = AS.Assigner()
+    mod = model.assigner if chain else AS.Assigner()
     frames, n = [], 0
     with torch.no_grad():
         for b in dl:
-            outp = model(b["x"].to(a.device).float()).cpu()
-            sp = SL.sparsify(outp)
+            if chain:
+                o_ = model(b["x"].to(a.device), b["step"].to(a.device), b["has"].to(a.device))
+                outp, sp = o_["outs"][-1].cpu(), o_["fused"].cpu()
+            else:
+                outp = model(b["x"].to(a.device).float()).cpu()
+                sp = SL.sparsify(outp)
             for i in range(outp.shape[0]):
                 k, row = int(b["k"][i]), int(b["row"][i])
                 j = ks.index(k)
                 V, H, w = VE.read_out(sp[i], thr)
-                m = b["m05"][i] > 0
-                G, T = b["g05"][i][m].numpy().astype(np.float64), b["t05"][i][m].numpy().astype(np.float64)
+                m = (b["m05"][i, -1] if chain else b["m05"][i]) > 0
+                g_, t_ = (b["g05"][i, -1], b["t05"][i, -1]) if chain else (b["g05"][i], b["t05"][i])
+                G, T = g_[m].numpy().astype(np.float64), t_[m].numpy().astype(np.float64)
                 rV, rH, rids = VE.node_vertices(g_r[j])
                 sd = sds[row]
-                P, mp = None, None
+                P, mp, slot = None, None, None
                 if sd is not None:
                     mp = AS.map_tokens(dict(roads=sd["roads"], route=[]))
                     if len(V) and len(mp["pos"]):
                         o = mod(torch.from_numpy(to_grid(V)), torch.from_numpy(to_grid(H)), torch.from_numpy(w.astype(np.float32)), AS.to_torch(mp))
                         P = o["P_road"].numpy()
+                        slot = o["P_slot"].numpy()
                 cam = None
                 try:
                     cam = np.asarray(Image.open(f"{EV.HOME}/data/nuscenes_full/{ft['info'][k]['cam_infos']['CAM_FRONT']['filename']}").convert("RGB").resize((480, 270)))
                 except Exception:  # noqa: BLE001
                     pass
                 d = dict(heat=torch.sigmoid(outp[i, 0]).numpy(), gt=gts[j], V=V, H=H, w=w, rV=rV, txt_a=counts_text(V, H, G, T), txt_r=counts_text(rV, rH, G, T, rids),
-                         mp=mp, sd=sd if sd is not None else dict(roads=[], route=[]), P=P, cam=cam,
-                         title=f"{a.run}  VAL scene {a.scene}\nframe {n + 1}/{len(ks)}  (k {k})\nread-out thr {thr:.3f}\n\nassignment: start values,\nnot trained")
+                         mp=mp, slot=slot, sd=sd if sd is not None else dict(roads=[], route=[]), P=P, cam=cam,
+                         title=f"{a.run}  VAL scene {a.scene}\nframe {n + 1}/{len(ks)}  (k {k})\nread-out thr {thr:.3f}\n\n" + ("map: fused over 3 frames\nassignment: trained" if chain else "assignment: start values,\nnot trained"))
                 fig = plt.figure(figsize=(14, 8), dpi=80)
                 draw(fig, d)
                 path = os.path.join(out_dir, f"scene{a.scene}_f{n:02d}.png")

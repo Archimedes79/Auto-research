@@ -23,6 +23,32 @@ SIGMA = 1.0
 PER100 = 12.0           # the budget the loss asks for (vertices per 100 m of GT lane); the read-out threshold is fixed separately on TRAIN
 
 
+def sparse_terms(sp, d, off_t, g05, t05, m05, per100=PER100, k_along=4.0, k_across=1.0):
+    """the terms that act on a SPARSE map sp (B, 5, n, n) [w, cos, sin, ox, oy]: the head's own, or the fused map of the hold: offset, coverage (noisy-or), precision, vertex budget.
+    d (B, n, n) distance of the cell centres to the nearest GT point, off_t the offset target (cells), g05 / t05 / m05 the padded GT points, tangents and mask -> dict of tensors"""
+    B = sp.shape[0]
+    wt = TG.heat(d, SIGMA)
+    wt = wt / (wt.sum((1, 2), keepdim=True) + 1e-6)
+    l_off = ((sp[:, 3:5] - off_t.clamp(-0.5, 0.5)).abs().sum(1) * wt).sum((1, 2))
+    wv = sp[:, 0]
+    pos = SL.positions(sp, 1.0, (-50.0, -50.0)).flatten(2)                       # (B, 2, n*n) metres
+    pts = g05[:, ::2]                                                           # one lane point per metre
+    tan = t05[:, ::2]
+    ok = m05[:, ::2]
+    l_cov = []
+    for b in range(B):
+        rel = pos[b].T[None, :, :] - pts[b][:, None, :]                          # (G, n*n, 2)
+        lon = (rel * tan[b][:, None, :]).sum(-1)
+        lat = rel[..., 0] * tan[b][:, None, 1] - rel[..., 1] * tan[b][:, None, 0]
+        K = torch.exp(-(lat / k_across) ** 2 / 2 - (lon / k_along) ** 2 / 2)
+        logsurv = torch.log1p(-(wv[b].flatten()[None, :] * K).clamp(max=0.999)).sum(1)       # log prod (1 - w K)
+        l_cov.append((torch.exp(logsurv) * ok[b]).sum() / ok[b].sum().clamp_min(1.0))      # exp(logsurv) = 1 - C
+    dc = d.clamp(max=2.0)
+    l_prec = (wv * dc).sum((1, 2)) / (wv.sum((1, 2)) + 1.0)
+    l_bud = SL.budget(sp, m05.sum(1) * 0.5, per100)
+    return dict(off=l_off.mean(), cov=torch.stack(l_cov).mean(), prec=l_prec.mean(), bud=l_bud.mean())
+
+
 def grid_loss(out, batch, w=W, per100=PER100, sigma=SIGMA, k_along=4.0, k_across=1.0):
     """-> (loss, dict of floats)"""
     with torch.autocast(device_type="cuda", enabled=False):
@@ -40,26 +66,9 @@ def grid_loss(out, batch, w=W, per100=PER100, sigma=SIGMA, k_along=4.0, k_across
         h = out[:, 1:3] / torch.sqrt((out[:, 1:3] ** 2).sum(1, keepdim=True) + 1e-6)
         l_dir = ((1 - (h * head_t).sum(1)) * wt).sum((1, 2))
         sp = SL.sparsify(out)
-        l_off = ((sp[:, 3:5] - off_t.clamp(-0.5, 0.5)).abs().sum(1) * wt).sum((1, 2))
-        wv = sp[:, 0]
-        pos = SL.positions(sp, 1.0, (-50.0, -50.0)).flatten(2)                       # (B, 2, n*n) metres
-        pts = g05[:, ::2]                                                           # one lane point per metre
-        tan = t05[:, ::2]
-        ok = m05[:, ::2]
-        l_cov = []
-        for b in range(B):
-            rel = pos[b].T[None, :, :] - pts[b][:, None, :]                          # (G, n*n, 2)
-            lon = (rel * tan[b][:, None, :]).sum(-1)
-            lat = rel[..., 0] * tan[b][:, None, 1] - rel[..., 1] * tan[b][:, None, 0]
-            K = torch.exp(-(lat / k_across) ** 2 / 2 - (lon / k_along) ** 2 / 2)
-            logsurv = torch.log1p(-(wv[b].flatten()[None, :] * K).clamp(max=0.999)).sum(1)       # log prod (1 - w K)
-            miss = torch.exp(logsurv)                                                  # 1 - C
-            l_cov.append((miss * ok[b]).sum() / ok[b].sum().clamp_min(1.0))
-        l_cov = torch.stack(l_cov)
-        dc = d.clamp(max=2.0)
-        l_prec = (wv * dc).sum((1, 2)) / (wv.sum((1, 2)) + 1.0)
-        lines_m = m05.sum(1) * 0.5
-        l_bud = SL.budget(sp, lines_m, per100)
+        st = sparse_terms(sp, d, off_t, g05, t05, m05, per100, k_along, k_across)
+        l_off, l_cov, l_prec, l_bud = st["off"], st["cov"], st["prec"], st["bud"]
+        wv, lines_m = sp[:, 0], m05.sum(1) * 0.5
         terms = dict(p=l_p, dice=dice.mean(), dir=l_dir.mean(), off=l_off.mean(), cov=l_cov.mean(), prec=l_prec.mean(), bud=l_bud.mean())
         loss = sum(w[k] * v for k, v in terms.items())
         info = {k: float(v) for k, v in terms.items()}

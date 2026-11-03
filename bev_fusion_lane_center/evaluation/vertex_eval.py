@@ -94,15 +94,15 @@ def git_head():
         return "unknown"
 
 
-def write_card(arm, cs, scenes=None, seed=0, extra=None, name=None):
-    """runs/e271/<arm>/card.json: summed numbers + the per-frame counts (for a paired scene bootstrap)"""
+def write_card(arm, cs, scenes=None, seed=0, extra=None, name=None, exp="e271"):
+    """runs/<exp>/<arm>/card.json: summed numbers + the per-frame counts (for a paired scene bootstrap)"""
     num = M.vertex_numbers(total(cs))
     card = dict(schema=1, name=name or arm, arm=arm, seed=seed, split="val", frames=len(cs), metrics={k: float(v) for k, v in num.items()},
                 better={k: BETTER[k] for k in num}, commit=git_head(), date=time.strftime("%Y-%m-%d %H:%M"), counts=[{k: v.tolist() for k, v in c.items()} for c in cs])
     if scenes is not None:
         card["scenes"] = [int(s) for s in scenes]
     card.update(extra or {})
-    d = os.path.join(ROOT, "runs", "e271", name or arm)
+    d = os.path.join(ROOT, "runs", exp, name or arm)
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "card.json"), "w") as f:
         json.dump(card, f)
@@ -293,10 +293,10 @@ def paired_bootstrap(card_a, card_c, reps=2000, seed=0, lo=2.5, hi=97.5):
     return {m: dict(lo=float(np.percentile(d[:, j], lo)), hi=float(np.percentile(d[:, j], hi)), mean=float(full[j])) for j, m in enumerate(("cov5", "prec1", "vgt100"))}
 
 
-def write_compare(run, control="r"):
+def write_compare(run, control="r", exp="e271", control_exp="e271"):
     """add `compare` (name of the control card, paired scene bootstrap) to the card of a run, so that decide.py reads the interval"""
-    pa = os.path.join(ROOT, "runs", "e271", run, "card.json")
-    pc = os.path.join(ROOT, "runs", "e271", control, "card.json")
+    pa = os.path.join(ROOT, "runs", exp, run, "card.json")
+    pc = os.path.join(ROOT, "runs", control_exp, control, "card.json")
     a, c = json.load(open(pa)), json.load(open(pc))
     a["compare"] = dict(name=c["name"], paired=paired_bootstrap(a, c), reps=2000, how="paired scene bootstrap, 95 %, a - control")
     with open(pa, "w") as f:
@@ -379,6 +379,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["ref", "null", "head", "compare", "verdict", "selftest"])
     ap.add_argument("--control", default="r", help="compare: the control card (runs/e271/<name>/card.json)")
+    ap.add_argument("--exp", default="e271", help="compare: the experiment folder of the run's card (runs/<exp>/<run>)")
+    ap.add_argument("--control-exp", default="e271", help="compare: the experiment folder of the control card")
     ap.add_argument("--run", default=None, help="head: the run folder name under runs/ (model.pt, config.json)")
     ap.add_argument("--budget", type=float, nargs="*", default=[11.2, 8.0, 14.3], help="head: vertices per 100 m of GT lane, the first one is the card's")
     ap.add_argument("--name", default="recall_sp0_dp")
@@ -394,7 +396,7 @@ def main():
         print(verdict()["text"])
         return
     if a.cmd == "compare":
-        cmp = write_compare(a.run, a.control)
+        cmp = write_compare(a.run, a.control, a.exp, a.control_exp)
         print(a.run, "-", a.control, {m: {k: round(v, 4) for k, v in x.items()} for m, x in cmp["paired"].items()})
         return
     if a.cmd == "head":
