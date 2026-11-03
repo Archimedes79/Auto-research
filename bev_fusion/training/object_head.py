@@ -12,6 +12,8 @@ Run the self-test: python training/object_head.py
 """
 import math
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -75,53 +77,78 @@ def gaussian_radius(h, w, min_overlap=0.1):
 
 def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
     """boxes_batch: list (B) of lists of box dicts -> dict of target tensors (hm, ind, mask, group, off, size, rot,
-    rad, vel, is_box)."""
+    rad, vel, is_box, dir). `mask` is the box's `loss_w` (default 1); when any box carries `vel_known` (LossConfig.hygiene_2026_11_02) the dict also
+    has `known` (1 where the velocity of the object is known). The per-box fields are made for a whole frame at once in numpy and handed over with one
+    torch.from_numpy per field (the version before made a torch.tensor per field per box: 3.6 x slower); the Gaussian windows of a frame are
+    exponentiated in ONE torch.exp call, and torch.exp stays: numpy's exp differs from it in the last bit for ~40 % of the values, so the heatmaps are
+    bit-identical to the old version (tests/test_host_targets.py checks all tensors with torch.equal against a copy of the old function, including
+    loss_w / vel_known, the cap, unknown groups outside the grid and the inputs that used to raise)."""
     B, G, X, Y = len(boxes_batch), len(groups), grid.nx, grid.ny
     gidx = {name: i for i, (name, _) in enumerate(groups)}
-    t = {"hm": torch.zeros(B, G, X, Y), "ind": torch.zeros(B, max_obj, dtype=torch.long),
-         "mask": torch.zeros(B, max_obj), "group": torch.zeros(B, max_obj, dtype=torch.long),
-         "off": torch.zeros(B, max_obj, 2), "size": torch.zeros(B, max_obj, 2), "rot": torch.zeros(B, max_obj, 2),
-         "rad": torch.zeros(B, max_obj, 1), "vel": torch.zeros(B, max_obj, 2), "is_box": torch.zeros(B, max_obj),
-         "dir": torch.zeros(B, max_obj, 1)}
-    if any("vel_known" in bx for boxes in boxes_batch for bx in boxes):    # LossConfig.hygiene_2026_11_02: 1 where the velocity of the object is known (a box dict may carry `loss_w`, its loss weight, as well)
-        t["known"] = torch.ones(B, max_obj)
+    box_kind = np.array([k == "box" for _, k in groups])
+    has_known = any("vel_known" in bx for boxes in boxes_batch for bx in boxes)
+    hm = np.zeros((B, G, X, Y), np.float32)
+    ind, grp = np.zeros((B, max_obj), np.int64), np.zeros((B, max_obj), np.int64)
+    mask, is_box = np.zeros((B, max_obj), np.float32), np.zeros((B, max_obj), np.float32)
+    known = np.ones((B, max_obj), np.float32) if has_known else None
+    off, size, rot, vel = (np.zeros((B, max_obj, 2), np.float32) for _ in range(4))
+    rad, dcl = np.zeros((B, max_obj, 1), np.float32), np.zeros((B, max_obj, 1), np.float32)
+    f64 = lambda xs: np.array(xs, dtype=np.float64)                                   # noqa: E731 - python float semantics, also for numpy scalar inputs
     for b, boxes in enumerate(boxes_batch):
-        n = 0
-        for bx in boxes:
-            fx = (bx["cx"] - grid.x_min) / grid.res - 0.5                 # continuous cell index of the centre
-            fy = (bx["cy"] - grid.y_min) / grid.res - 0.5
-            ix, iy = int(math.floor(fx + 0.5)), int(math.floor(fy + 0.5))
-            if not (0 <= ix < X and 0 <= iy < Y) or n >= max_obj:
-                continue
-            g = gidx[bx["group"]]
-            kind = groups[g][1]
-            if kind == "box":
-                r = gaussian_radius(bx["length"] / grid.res, bx["width"] / grid.res)
-            else:
-                d = 2 * bx["radius"] / grid.res
-                r = gaussian_radius(d, d)
-            r = max(min_radius, int(r))
-            sigma = (2 * r + 1) / 6
-            x0, x1, y0, y1 = max(0, ix - r), min(X, ix + r + 1), max(0, iy - r), min(Y, iy + r + 1)     # the peak is 0 outside |dx|, |dy| <= r: only that window is computed (same values, 2x less CPU)
-            gx = torch.arange(x0, x1, dtype=torch.float32).view(-1, 1)
-            gy = torch.arange(y0, y1, dtype=torch.float32).view(1, -1)
-            peak = torch.exp(-((gx - ix) ** 2 + (gy - iy) ** 2) / (2 * sigma * sigma))
-            w = t["hm"][b, g, x0:x1, y0:y1]
-            w.copy_(torch.maximum(w, peak))
-            t["ind"][b, n], t["mask"][b, n], t["group"][b, n] = ix * Y + iy, bx.get("loss_w", 1.0), g
-            if "known" in t:
-                t["known"][b, n] = 1.0 if bx.get("vel_known", True) else 0.0
-            t["off"][b, n] = torch.tensor([fx - ix, fy - iy])
-            t["vel"][b, n] = torch.tensor([bx["vx"], bx["vy"]])
-            if kind == "box":
-                t["size"][b, n] = torch.tensor([math.log(bx["length"]), math.log(bx["width"])])
-                t["rot"][b, n] = torch.tensor([math.sin(bx["yaw"]), math.cos(bx["yaw"])])
-                t["dir"][b, n] = direction_class(bx["yaw"])
-                t["is_box"][b, n] = 1.0
-            else:
-                t["rad"][b, n] = math.log(bx["radius"])
-            n += 1
-    return t
+        if not boxes:
+            continue
+        fx = (f64([bx["cx"] for bx in boxes]) - grid.x_min) / grid.res - 0.5          # continuous cell index of the centre
+        fy = (f64([bx["cy"] for bx in boxes]) - grid.y_min) / grid.res - 0.5
+        if not (np.isfinite(fx).all() and np.isfinite(fy).all()):
+            raise ValueError("build_targets: a box centre is not finite")           # the old int(math.floor(nan)) raised as well
+        ix, iy = np.floor(fx + 0.5).astype(np.int64), np.floor(fy + 0.5).astype(np.int64)
+        sel = np.nonzero((ix >= 0) & (ix < X) & (iy >= 0) & (iy < Y))[0][:max_obj]
+        n = len(sel)
+        if not n:
+            continue
+        fx, fy, ix, iy = fx[sel], fy[sel], ix[sel], iy[sel]
+        bb = [boxes[i] for i in sel]
+        g = np.array([gidx[bx["group"]] for bx in bb])                             # only for the boxes that are kept (an unknown group outside the grid is skipped)
+        isb = box_kind[g]
+        length = f64([bx["length"] if k else 1.0 for bx, k in zip(bb, isb)])
+        width = f64([bx["width"] if k else 1.0 for bx, k in zip(bb, isb)])
+        radius = f64([1.0 if k else bx["radius"] for bx, k in zip(bb, isb)])
+        yaw = f64([bx["yaw"] if k else 0.0 for bx, k in zip(bb, isb)])
+        if np.any(np.where(isb, (length <= 0) | (width <= 0), radius <= 0)):
+            raise ValueError("math domain error: a box length / width / radius <= 0")     # the old math.log raised
+        r = np.array([gaussian_radius(ln / grid.res, w / grid.res) if k else gaussian_radius(2 * rd / grid.res, 2 * rd / grid.res)
+                      for ln, w, rd, k in zip(length.tolist(), width.tolist(), radius.tolist(), isb)])
+        r = np.maximum(min_radius, r.astype(np.int64))
+        sigma = (2 * r + 1) / 6
+        args, wins = [], []
+        for cx_, cy_, r_, s_ in zip(ix.tolist(), iy.tolist(), r.tolist(), sigma.tolist()):      # python numbers: float32 stays float32 (numpy 2 would promote an int64 scalar)
+            x0, x1, y0, y1 = max(0, cx_ - r_), min(X, cx_ + r_ + 1), max(0, cy_ - r_), min(Y, cy_ + r_ + 1)
+            gx = np.arange(x0, x1, dtype=np.float32)[:, None]
+            gy = np.arange(y0, y1, dtype=np.float32)[None, :]
+            args.append((-((gx - cx_) ** 2 + (gy - cy_) ** 2) / np.float32(2 * s_ * s_)).reshape(-1))
+            wins.append((x0, x1, y0, y1))
+        peaks = torch.exp(torch.from_numpy(np.concatenate(args))).numpy()
+        c = 0
+        for k, (x0, x1, y0, y1) in enumerate(wins):
+            m = (x1 - x0) * (y1 - y0)
+            win = hm[b, g[k], x0:x1, y0:y1]
+            np.maximum(win, peaks[c:c + m].reshape(x1 - x0, y1 - y0), out=win)
+            c += m
+        ind[b, :n], grp[b, :n] = ix * Y + iy, g
+        mask[b, :n] = [bx.get("loss_w", 1.0) for bx in bb]
+        if has_known:
+            known[b, :n] = [1.0 if bx.get("vel_known", True) else 0.0 for bx in bb]
+        off[b, :n] = np.stack([fx - ix, fy - iy], 1)
+        vel[b, :n] = np.stack([f64([bx["vx"] for bx in bb]), f64([bx["vy"] for bx in bb])], 1)
+        size[b, :n] = np.where(isb[:, None], np.log(np.stack([length, width], 1)), 0.0)
+        rot[b, :n] = np.where(isb[:, None], np.stack([np.sin(yaw), np.cos(yaw)], 1), 0.0)
+        dcl[b, :n, 0] = np.where(isb, ((yaw - DIR_OFFSET) % (2 * math.pi) < math.pi), 0.0)
+        rad[b, :n, 0] = np.where(isb, 0.0, np.log(radius))
+        is_box[b, :n] = isb
+    out = dict(hm=hm, ind=ind, mask=mask, group=grp, off=off, size=size, rot=rot, rad=rad, vel=vel, is_box=is_box, dir=dcl)
+    if has_known:
+        out["known"] = known
+    return {k: torch.from_numpy(v) for k, v in out.items()}
 
 
 # ------------------------------------------------------------------------------------------------ losses

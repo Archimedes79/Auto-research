@@ -1,0 +1,16 @@
+# Loss cost per family, CPU timings (2026-11-03). Made by: OMP_NUM_THREADS=2 nice -n 10 python temp/head_session_2026-11-01/bench_loss2.py (scratch script, kept by the commit message of this record).
+# 9 real GT frames (data/cache/gt, signature 15efbde2d1), real-size tensors (120 x 104), forward and forward + backward on leaf tensors, no optimiser step. Box load 3.63, 4.24, 4.77. The numbers rank the terms; they are NOT GPU times and move with the load.
+# The object head row is with the numpy build_targets of 2026-11-03 (10703 operators and 66 ms before: tests/test_host_targets.py measures the old and the new function side by side).
+loss family                                            fwd ms  fwd+bwd  ops fwd+bwd  x dt
+areas   BCE + 0.5 (1-IoU), 5 ch   (x3 dt)                 3.7     10.7          228     3
+   same, BCE only (no IoU term)                           1.5      5.4          106     0
+lines   dilated Dice + Huber, 2 ch (x3 dt)                6.7     14.0          351     3
+dense objects BCE + IoU, 3 ch (x3 dt)                     2.2      5.9          216     3
+object head: targets + focal + 8 L1/BCE (x3 dt)           7.8     16.5         1723     3
+motion  L1 on object cells + background (x1)              4.1      6.9          259     1
+camera aux head, 12 ch (x1)                              17.6     30.7          837     1
+radar aux head, objects (x1)                              2.5      5.3          236     1
+sum per micro-batch (x dt): forward 85 ms, forward + backward 184 ms (CPU, 2 threads, load-dependent: ranking only)
+  camera aux: 20.6 % of the forward, 16.7 % of forward + backward
+  radar aux: 2.9 % of the forward, 2.9 % of forward + backward
+  both aux heads: 23.4 % of the forward, 19.6 % of forward + backward

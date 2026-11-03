@@ -133,6 +133,22 @@ def _stack(gts, key, device):
     return x.unsqueeze(1) if x.dim() == 3 else x
 
 
+def _stack_many(gts, keys, device):
+    """{key: (B, 1 or K, X, Y)} as `_stack`, bit for bit, for all keys at once: the layers of all samples are stacked on the HOST, joined along the
+    channel axis and moved with ONE copy; the result is sliced back into views. (A copy per layer per sample was ~1300 of the step's copies.)"""
+    keys = list(dict.fromkeys(keys))
+    parts = []
+    for k in keys:
+        a = np.stack([np.asarray(g[k], dtype=np.float32) for g in gts])
+        parts.append(a[:, None] if a.ndim == 3 else a)
+    big = torch.from_numpy(np.concatenate(parts, 1)).to(device)
+    out, c = {}, 0
+    for k, p in zip(keys, parts):
+        out[k] = big[:, c:c + p.shape[1]]
+        c += p.shape[1]
+    return out
+
+
 def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     """gt_bev GT dicts of one target time (a list, one per batch sample, or one dict) -> dict of tensors:
     every layer by its GT key (B, 1 or K, X, Y), 'obj_cells' (instance >= 0), 'boxes' (meta boxes per sample) and the
@@ -145,15 +161,20 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     gts = [gts] if isinstance(gts, dict) else list(gts)
     T = {}
     rows = layer_table(cfg.centrelines, True, cfg.centreline_1m)          # the objects are always read: the aux heads' targets
+    has_stat = cfg.radar_stationary and all("radar_stationary" in g for g in gts)       # hook: another session builds it
+    has_flow = cfg.hygiene_2026_11_02 and all("flow_weight" in g for g in gts)          # autogt: 1 where the velocity is known, 0 on the cells of a box of unknown velocity (velocity 0 there)
+    has_ign = all("ignore" in g for g in gts)
+    S = _stack_many(gts, source_keys(rows) + ["velocity", "instance", "camera", "occluded", "radar", "undefined"]
+                    + (["radar_stationary"] if has_stat else []) + (["flow_weight"] if has_flow else []) + (["ignore"] if has_ign else []), device)
     for k in source_keys(rows) + ["velocity"]:
-        T[k] = _stack(gts, k, device)
-    if cfg.radar_stationary and all("radar_stationary" in g for g in gts):       # hook: another session builds it
-        T["radar_stationary"] = _stack(gts, "radar_stationary", device)
-    if cfg.hygiene_2026_11_02 and all("flow_weight" in g for g in gts):          # autogt: 1 where the velocity is known, 0 on the cells of a box of unknown velocity (velocity 0 there)
-        T["flow_weight"] = _stack(gts, "flow_weight", device)
-    T["obj_cells"] = (_stack(gts, "instance", device) >= 0).float()
-    cam, occ = _stack(gts, "camera", device), _stack(gts, "occluded", device)
-    radar, undef = _stack(gts, "radar", device), _stack(gts, "undefined", device)
+        T[k] = S[k]
+    if has_stat:
+        T["radar_stationary"] = S["radar_stationary"]
+    if has_flow:
+        T["flow_weight"] = S["flow_weight"]
+    T["obj_cells"] = (S["instance"] >= 0).float()
+    cam, occ = S["camera"], S["occluded"]
+    radar, undef = S["radar"], S["undefined"]
     w_map = (1 - undef) * torch.where(occ > 0, torch.full_like(occ, cfg.w_occluded_map), torch.ones_like(occ))
     w_cam = cam * (1 - occ)
     w_obj = torch.maximum(w_cam, radar)
@@ -165,7 +186,7 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     w_obj = w_obj * torch.where(interp > 0, torch.full_like(interp, cfg.w_interpolated), torch.ones_like(interp))
     # boxes without any lidar / radar point (gt_bev 'ignore' layer, meta box observed = False): footprint ignored in
     # every object-type target (dense layers, velocity / motion, aux heads), never background (plan 8.4 masks)
-    keep = (1 - _stack(gts, "ignore", device).clamp(0, 1)) if all("ignore" in g for g in gts) else torch.ones_like(cam)
+    keep = (1 - S["ignore"].clamp(0, 1)) if has_ign else torch.ones_like(cam)
     w_obj = w_obj * keep
     fusion = cam * radar                              # D37: the cells that camera and radar both observe
     if cfg.fusion_area_only:                          # D38 (b): don't care outside it, for the fused heads
