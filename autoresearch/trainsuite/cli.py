@@ -435,6 +435,92 @@ def cmd_queue(a):
         print("on hold (only the person's words clear a hold: hold.py clear ID --words ...):")
         for rid, when in held:
             print(f"  {rid}  (since {when})")
+    from . import trainqueue as TQ
+    TQ.show(TQ.context())
+    return 0
+
+
+def _queue(a):
+    """(the queue module, the project's context); a QueueError becomes a message and exit code 2 in `queue_cmd`"""
+    from . import trainqueue as TQ
+    return TQ, TQ.context(getattr(a, "project", None))
+
+
+def queue_cmd(fn):
+    def run(a):
+        from . import trainqueue as TQ
+        try:
+            return fn(a)
+        except TQ.QueueError as e:
+            print(f"queue: {e}", file=sys.stderr)
+            return 2
+    return run
+
+
+@queue_cmd
+def cmd_queue_add(a):
+    """compose a run like `start`, run the project's checks, and put it in the queue; the runner starts it (also after the launcher of an earlier item died)"""
+    import subprocess
+    from . import compose as C
+    TQ, c = _queue(a)
+    if not c.block:
+        raise TQ.QueueError('project.json has no "trainsuite" block')
+    try:
+        plan = C.plan_start(c.root, c.block, a.base, a.id, a.preset, a.set, a.hyp, a.pred, a.rule, a.no_card, a.run_arg, TQ.TOOLS, c.records)
+        C.write(plan["config"], plan["preview"])
+    except C.ComposeError as e:
+        raise TQ.QueueError(str(e))
+    print(f"{a.base} -> {os.path.relpath(plan['composed'], c.root)}: {len(plan['changes'])} change(s)")
+    print("\n".join(C.describe(plan["changes"], plan["base_keys"])))
+    for n in plan["notes"]:
+        print(f"  note: {n}")
+    if plan["held"]:
+        raise TQ.QueueError(f"run id {a.id} is ON HOLD (hold.py show): `queue resume {a.id} --words ...` clears it")
+    checks = ([] if a.no_check or not plan["check_preview"] else [("check", plan["check_preview"])]) + [(f"prepare {p['name']}", p["check_preview"]) for p in plan["prepare"]]
+    for name, argv in checks:                                    # a missing GT store is built first (start --prepare); a queued run would only fail when its turn comes
+        r = subprocess.run(argv, cwd=c.root, capture_output=True, text=True)
+        print(f"{name}: {' '.join(argv)} -> exit {r.returncode}")
+        if r.returncode:
+            print("\n".join("  " + x for x in (r.stdout + r.stderr).strip().splitlines()[-10:]))
+            raise TQ.QueueError(f"the {name} found problems; nothing queued")
+    TQ.add(c, plan, a.id, [x for x in a.after.split(",") if x], a.priority, a.note)
+    pid = TQ.ensure_runner(c) if not a.no_runner else 0
+    print(f"queued {a.id}" + (f"; the runner is running (pid {pid})" if pid else "; no runner started (queue serve)"))
+    TQ.show(c)
+    return 0
+
+
+@queue_cmd
+def cmd_queue_serve(a):
+    TQ, c = _queue(a)
+    return TQ.serve(c, a.every, a.idle_exit, a.once)
+
+
+@queue_cmd
+def cmd_queue_hold(a):
+    """stop what runs (checkpoint), keep the rest from starting; --all also pauses the runner"""
+    TQ, c = _queue(a)
+    if not a.ids and not a.all:
+        raise TQ.QueueError("name the runs to hold, or --all")
+    TQ.hold(c, a.ids, a.all, a.words, a.reason, a.wait)
+    return 0
+
+
+@queue_cmd
+def cmd_queue_resume(a):
+    """the person's words clear the holds; each run starts again from its checkpoint on the code of its first attempt"""
+    TQ, c = _queue(a)
+    if not a.ids and not a.all:
+        raise TQ.QueueError("name the runs to resume, or --all")
+    TQ.resume(c, a.ids, a.all, a.words, a.fresh_code, not a.no_runner)
+    return 0
+
+
+@queue_cmd
+def cmd_queue_drop(a):
+    TQ, c = _queue(a)
+    TQ.drop(c, a.id)
+    print(f"dropped {a.id} from the queue")
     return 0
 
 
@@ -565,9 +651,47 @@ def main(argv=None):
     p.add_argument("--out")
     p = add("speed", cmd_speed, "+", help="runs side by side, the first is the baseline: s/step and speed-up, data wait, GPU busy, peak memory, loss at the last shared step")
     p.add_argument("--skip", type=int, default=10, help="logged rows to leave out as warm-up (default 10)")
-    p = sub.add_parser("queue", help="the GPU slots, the line of waiting runs, the RAM gate and the runs on hold of the project (AR_PROJECT or --project)")
+    p = sub.add_parser("queue", help="the GPU slots, the line of waiting runs, the RAM gate, the holds and the queue items of the project; add / serve / hold / resume / drop (AR_PROJECT or --project)")
     p.add_argument("--project", help="project folder (default: AR_PROJECT)")
     p.set_defaults(fn=cmd_queue)
+    qs = p.add_subparsers(dest="qcmd")
+
+    def qsub(name, fn, **kw):
+        s = qs.add_parser(name, **kw)
+        s.add_argument("--project", default=argparse.SUPPRESS, help="project folder (default: AR_PROJECT)")
+        s.set_defaults(fn=fn)
+        return s
+    s = qsub("add", cmd_queue_add, help="compose a run like `start` and put it in the queue (the runner starts it when its turn comes)")
+    s.add_argument("base")
+    s.add_argument("--id", required=True)
+    s.add_argument("--preset", action="append", default=[])
+    s.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
+    s.add_argument("--hyp"), s.add_argument("--pred"), s.add_argument("--rule")
+    s.add_argument("--no-card", action="store_true", help="a diagnostic run (it never feeds a verdict)")
+    s.add_argument("--no-check", action="store_true", help="skip the project's static check of the composed config")
+    s.add_argument("--after", default="", help="run ids (comma separated) that must be done first; a failed or held one blocks this item")
+    s.add_argument("--priority", type=int, default=5, help="1 goes first (default 5); equal priorities go in the order of adding")
+    s.add_argument("--note", default="")
+    s.add_argument("--run-arg", action="append", default=[], help="an argument for run.py itself (repeatable)")
+    s.add_argument("--no-runner", action="store_true", help="do not start the runner")
+    s = qsub("serve", cmd_queue_serve, help="the runner: start the next item, restart a run whose launcher died; ends when nothing is left (a detached `add` / `resume` starts it)")
+    s.add_argument("--every", type=float, default=float(os.environ.get("TS_QUEUE_EVERY", "30")), help="seconds between looks (default 30, env TS_QUEUE_EVERY)")
+    s.add_argument("--idle-exit", type=float, default=float(os.environ.get("TS_QUEUE_IDLE", "600")), help="seconds without open items before the runner ends (default 600, env TS_QUEUE_IDLE)")
+    s.add_argument("--once", action="store_true", help="one look, then exit")
+    s = qsub("hold", cmd_queue_hold, help="stop what runs (a checkpoint, exit 75), keep what waits from starting; --all pauses the runner. Needs the person's words")
+    s.add_argument("ids", nargs="*")
+    s.add_argument("--all", action="store_true", help="every run of the project that runs, waits or is queued, and the runner itself")
+    s.add_argument("--words", default="", help="the person's own words that ordered it (required)")
+    s.add_argument("--reason", default="")
+    s.add_argument("--wait", type=float, default=180.0, help="seconds to wait for the trainers to stop")
+    s = qsub("resume", cmd_queue_resume, help="the person's words clear the holds; each stopped run continues from its checkpoint on the code of its first attempt")
+    s.add_argument("ids", nargs="*", help="a run of the queue, or any held / stopped / failed run (rebuilt from its record)")
+    s.add_argument("--all", action="store_true", help="every held item of the queue and the pause (holds of runs that are not in the queue stay)")
+    s.add_argument("--words", default="", help="the person's own words that allow it (required)")
+    s.add_argument("--fresh-code", action="store_true", help="continue on the code of now, not of the first attempt (the hot-fix loop)")
+    s.add_argument("--no-runner", action="store_true", help="do not start the runner")
+    s = qsub("drop", cmd_queue_drop, help="remove an item that is not running")
+    s.add_argument("id")
     p = add("stop", cmd_stop, 1, help="ask the trainer to checkpoint and stop (refused when its code snapshot has no stop check)")
     p.add_argument("--reason", default="stopped by hand")
     add("resume", cmd_resume, 1, help="move CONTROL / STOPPED of an earlier stop aside (the trainer does it itself at its start)")

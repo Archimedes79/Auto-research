@@ -1357,6 +1357,14 @@ def main():
 
         # 13 early: advice from learning curves (calibration over finished pairs)
         early_checks(tmp, ok)
+
+        # 14 the queue: real launchers, a real runner, a toy trainer (about a minute; TS_SELFTEST_NO_QUEUE=1 leaves it out)
+        if not os.environ.get("TS_SELFTEST_NO_QUEUE"):                         # a process of its own: run.py reads AR_STALE_S when it is imported, and the groups above import it
+            import subprocess
+            r = subprocess.run([sys.executable, "-m", "trainsuite.selftest_queue"], cwd=os.path.dirname(HERE), capture_output=True, text=True)
+            print(r.stdout, end="")
+            assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+            ok("queue self-test (selftest_queue.py) passed")
     print(f"trainsuite selftest: {n[0]} groups of checks passed")
     return 0
 

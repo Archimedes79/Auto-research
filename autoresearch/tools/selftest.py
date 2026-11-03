@@ -67,6 +67,23 @@ try:
     assert refused.returncode == 2 and "finished with exit 0" in refused.stdout, "a finished id must be refused without --again"
     again = go("S.ok", ["bash", "-c", "echo resume"], "--again")
     assert again.returncode == 0 and "tag existed" in rows()["S.ok"]["notes"] and "code changed since attempt 1" in rows()["S.ok"]["notes"], rows()["S.ok"]["notes"]
+    # --pin: a resumed id runs on the code of attempt 1 (the commit of its tag) although the code moved on: AR_COMMIT is that commit, no new commit or tag, no drift check,
+    # the ledger note says so; an unknown ref is refused (nothing runs), and --no-git with --pin is refused
+    tag_commit = subprocess.run(G + ["rev-list", "-n", "1", "t/S.ok"], capture_output=True, text=True).stdout.strip()[:10]
+    open(f"{T}/code/a.py", "w").write("x = 3\n")
+    tags_before, hash_before = tags(), json.load(open(f"{T}/runs/S.ok/run.json"))["code_hash"]
+    pinned = go("S.ok", ["bash", "-c", "echo pinned-at $AR_COMMIT"], "--again", "--pin", "t/S.ok")
+    assert pinned.returncode == 0 and f"pinned-at {tag_commit}" in open(f"{T}/runs/S.ok/run.log").read(), (pinned.stdout, pinned.stderr)
+    assert "pinned: this attempt ran the code of t/S.ok" in rows()["S.ok"]["notes"] and "code drift" not in rows()["S.ok"]["notes"] and tags() == tags_before, rows()["S.ok"]["notes"]
+    rec_ok = json.load(open(f"{T}/runs/S.ok/run.json"))
+    assert rec_ok["commit"] == tag_commit and "code_drift" not in rec_ok and "code_drift_check" not in rec_ok and rec_ok["code_hash"] == hash_before, rec_ok       # no drift check, not even a failed one; attempt 1's hash
+    nopin = go("S.bad", ["bash", "-c", "echo never"], "--pin", "no/such/ref")                  # an id with an earlier attempt (S.bad failed above) and a ref that is no commit
+    assert nopin.returncode == 1 and "not a commit" in nopin.stdout and not os.path.exists(f"{T}/runs/S.bad/done"), (nopin.returncode, nopin.stdout)
+    first_pin = go("S.pinfirst", ["bash", "-c", "echo never"], "--pin", "HEAD")                  # a first attempt has nothing to continue: refused, nothing ran untagged
+    assert first_pin.returncode == 2 and "this id has none" in first_pin.stdout and "t/S.pinfirst" not in tags(), first_pin.stdout
+    nogit = go("S.pinnogit", ["bash", "-c", "echo never"], "--pin", "HEAD", "--no-git")
+    assert nogit.returncode == 2 and "--no-git has none" in nogit.stdout, nogit.stdout
+    open(f"{T}/code/a.py", "w").write("x = 2\n")                         # as it was for the checks that follow
     # --after: waits for done flags, blocks when a dependency failed
     aft = go("S.after", ["bash", "-c", "echo after"], "--after", "S.ok,S.ok2")
     blk = go("S.blocked", ["bash", "-c", "echo never"], "--after", "S.bad")

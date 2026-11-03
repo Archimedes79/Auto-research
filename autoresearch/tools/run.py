@@ -22,7 +22,8 @@ What it does (paths from the problem's project.json, see project.py):
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
                 on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
                 user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger.
-                Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
+                --pin REF runs on the code of that commit or tag instead (a resume that continues on the code of attempt 1: `trainsuite queue resume`): no new
+                commit or tag, no drift check, a note in the record. Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
                 fixed by the metric card, which names the registry entry and the commit). Guaranteed: the commit names the code at LAUNCH. That the
                 command ran it is the command's job (it runs `git archive $AR_COMMIT`); every other command runs from the working tree. So when the
                 run ends the code files on disk (.py / .sh of the code folders and of autoresearch/, fingerprint_extra) are looked at again: a
@@ -253,6 +254,18 @@ def git_snapshot(root, cfg, prefix, run_id, msg):
         return commit[:10], tag, note
     except Exception as e:
         return "git-error", "", repr(e)[:120]
+
+
+def pin_snapshot(root, ref, prev):
+    """(commit, tag, note) of a --pin run: the commit that `ref` names (the tag of attempt 1, or any commit), nothing new is committed or tagged; the tag stays attempt 1's"""
+    try:
+        r = git(root, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}")
+    except Exception as e:
+        return "git-error", "", repr(e)[:120]
+    commit = r.stdout.strip()
+    if r.returncode != 0 or not commit:
+        return "git-error", "", f"--pin {ref}: not a commit of this repository"
+    return commit[:10], prev.get("tag", ""), f"pinned: this attempt ran the code of {ref} ({commit[:10]}), not a snapshot of the working tree"
 
 
 def drift_hash(root, cfg):
@@ -747,6 +760,8 @@ def main():
     ap.add_argument("--again", action="store_true", help="repeat an id that finished with exit 0 (otherwise refused)")
     ap.add_argument("--result", default="", help="json file the command writes its metrics to; embedded in the ledger when it exists")
     ap.add_argument("--no-git", action="store_true", help="do not snapshot and tag the code")
+    ap.add_argument("--pin", metavar="REF", help="run on the code of this commit or tag (a resume that must continue on the code of attempt 1) instead of a snapshot of the working tree: "
+                    "AR_COMMIT is that commit, no new commit or tag, no drift check; the record says so")
     ap.add_argument("--no-drift-check", action="store_true", help="do not look at the end of the run whether the code on disk changed since the snapshot")
     ap.add_argument("--cwd", default=root, help="working directory of the command (default: problem folder)")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
@@ -777,6 +792,9 @@ def main():
         if not re.search(r"(?<![\w.])" + re.escape(a.id) + r"(?![\w.])", log):  # the whole id, not a prefix of a longer id
             print(f"[{a.id}] refused: split={a.split} is the holdout split but {a.id} is not named in {os.path.relpath(test_log, root)} (log it first, with the person's OK)")
             return 2
+    if a.pin and a.no_git:
+        print(f"[{a.id}] refused: --pin names a commit, --no-git has none")
+        return 2
     if not a.no_git:
         err = git_identity_error(root)
         if err:
@@ -804,6 +822,9 @@ def main():
                 print(f"[{a.id}] refused: this id finished with exit 0 on {prev.get('ended')}; use a new id (the record would be overwritten) or --again")
                 return 2
             notes.append(f"attempt after {st}")
+        if a.pin and not prev.get("tag"):
+            print(f"[{a.id}] refused: --pin continues an earlier attempt of this id (the tag of attempt 1); this id has none: start it without --pin")
+            return 2
         if os.path.exists(os.path.join(d, "done")):
             os.remove(os.path.join(d, "done"))
         n = 1
@@ -890,14 +911,17 @@ def main():
         if ticket:
             ticket.leave()                                       # the place in the line is given up as soon as the run starts, not when it ends
         ch = code_hash(root, cfg)
-        if prev.get("code_hash") and prev["code_hash"] != ch:
+        if prev.get("code_hash") and prev["code_hash"] != ch and not a.pin:
             notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")
         try:
             before = drift_hash(root, cfg)  # before the snapshot: a change while the snapshot is made counts, the precise check at the end tells
         except OSError:  # a scratch file that vanished during the walk must not stop the launch: no hash, no drift check
             before = None
         for tries in range(1, SNAPSHOT_TRIES + 1):
-            commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
+            if a.pin:
+                commit, tag, gnote = pin_snapshot(root, a.pin, prev)
+            else:
+                commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
             if commit != "git-error" or tries == SNAPSHOT_TRIES:
                 break
             time.sleep(SNAPSHOT_RETRY_S)
@@ -909,7 +933,7 @@ def main():
             return 1
         if gnote:
             notes.append(gnote)
-        rec.update(status="running", started=now(), code_hash=ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
+        rec.update(status="running", started=now(), code_hash=(prev.get("code_hash") or ch) if a.pin else ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
         save_rec(os.path.join(d, "run.json"), rec)
         t1 = time.time()
         rc, attempt, tail, timed_out = 1, 0, "", False
@@ -917,7 +941,7 @@ def main():
         # also on a resumed id whose tag still names attempt 1; any other command runs from the working tree: see code_drift below)
         snapshotted = commit not in ("skipped", "no-git", "git-error")
         try:
-            launch_spec = snapshot_spec(root, cfg)[1] if snapshotted and not a.no_drift_check else None
+            launch_spec = snapshot_spec(root, cfg)[1] if snapshotted and not a.no_drift_check and not a.pin else None    # a pinned run runs another commit than the disk: nothing to compare
         except Exception:
             launch_spec = None
         cmd_env = dict(os.environ, AR_RUN_ID=a.id, **({"AR_COMMIT": commit, "AR_TAG": tag or prev.get("tag", "")} if snapshotted else {}))
@@ -948,7 +972,7 @@ def main():
             res = json.dumps(json.load(open(a.result)))[:400]
         except Exception:
             res = "(result file unreadable)"
-    if snapshotted and not a.no_drift_check:  # the commit names the code at launch; did the code on disk change while the command ran?
+    if snapshotted and not a.no_drift_check and not a.pin:  # the commit names the code at launch; did the code on disk change while the command ran? (not for --pin: it ran another commit)
         drift, drift_err = code_drift(root, cfg, commit, before, launch_spec)
         if drift:
             rec["code_drift"] = drift
