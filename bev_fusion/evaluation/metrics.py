@@ -11,6 +11,8 @@ numbers) and is keyed by the prediction time offset dt (seconds; dt = 0 is the c
   line ("zero crossing" of the field's slope): cells that are a local minimum along x or y and <= res / 2 (the GT
   mask rule of training/gt_bev.py); precision / recall / F1 of those cells at the same tolerances, plus the mean
   absolute field error on cells with GT distance < 1 m (the sub-cell accuracy the loss trains, plan 8.4).
+- directions (SegMeter.add_directions, the 1 m centre-line head): the mean absolute signed angle (rad, 0 .. pi) between the predicted (cos, sin) and the GT
+  direction over the GT cells of the layer, `<layer>:dir` / angle_mae.
 - detection (DetMeter), nuScenes style in the front field of view up to 60 m: greedy matching by BEV centre distance
   in score order over all frames (the logic of tests/test_object_head.py evaluate()), AP per class at 0.5 / 1 / 2 /
   4 m both as nuScenes computes it (precision interpolated at 101 recall points, recall <= 0.1 and precision <= 0.1
@@ -95,6 +97,13 @@ def dilate(m, radius_cells):
     return _maps.dilate(np.asarray(m, bool), radius_cells)
 
 
+def angle_error(pred_dir, gt_dir):
+    """(X, Y) absolute signed angle (rad, 0 .. pi) between two direction fields (2, X, Y) of (cos, sin); the prediction need not be a unit vector. A reversed line
+    is pi (not 0: centre-lines are directed); a zero prediction vector has no direction: pi."""
+    p, g = _np(pred_dir).astype(np.float64), _np(gt_dir).astype(np.float64)
+    return np.where(np.hypot(p[0], p[1]) > 1e-6, np.abs(np.arctan2(g[0] * p[1] - g[1] * p[0], g[0] * p[0] + g[1] * p[1])), np.pi)
+
+
 def line_cells(dist, res):
     """cells of the line decoded from an unsigned distance field (metres): local minimum along x or along y (<= both
     neighbours) and value <= res / 2."""
@@ -167,12 +176,20 @@ class SegMeter:
             P, G = line_cells(dp, self.grid.res), line_cells(dg, self.grid.res)
             self._count(name + ":zc", P, G, self._subsets(P.shape, mask, mass), dt, (np.abs(dp - dg), dg < 1.0))
 
+    def add_directions(self, pred_dir, gt_dir, gt_mask, mask=None, mass=None, dt=0.0):
+        """pred_dir, gt_dir: dict layer -> (2, X, Y) direction (cos, sin; the prediction raw, not normalised); gt_mask: dict layer -> (X, Y) the layer's GT cells.
+        Counted under '<layer>:dir': the mean absolute SIGNED angle between the two vectors (rad, 0 .. pi: a reversed line is pi, not 0) over the GT cells of the layer
+        (the prediction is read at every one of them, whether or not it says 'line' there). A zero prediction vector has no direction: pi."""
+        for name in pred_dir:
+            G = (_np(gt_mask[name]) > 0.5) & (np.hypot(*_np(gt_dir[name])) > 0.5)
+            self._count(name + ":dir", G, G, self._subsets(G.shape, mask, mass), dt, (angle_error(pred_dir[name], gt_dir[name]), G))
+
     def result(self):
-        """{dt: {name: {subset: {bin: {metric: value}}}}}; areas: iou@t, lines (':zc'): f1@t, p@t, r@t, field_mae."""
+        """{dt: {name: {subset: {bin: {metric: value}}}}}; areas: iou@t, lines (':zc'): f1@t, p@t, r@t, field_mae, directions (':dir'): angle_mae."""
         res = {}
         for (dt, name, sname, b), acc in sorted(self.c.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2])):
             row = {}
-            for i, t in enumerate(self.tol):
+            for i, t in ([] if name.endswith(":dir") else enumerate(self.tol)):          # a direction layer has no overlap numbers, its one number is the angle error
                 tp_p, fp, tp_g, fn = acc["cnt"][i]
                 tp = (tp_p + tp_g) / 2
                 if name.endswith(":zc"):
@@ -184,6 +201,8 @@ class SegMeter:
                     row["iou@%g" % t] = tp / (tp + fp + fn) if tp + fp + fn else float("nan")
             if name.endswith(":zc"):
                 row["field_mae"] = acc["err"] / acc["n_err"] if acc["n_err"] else float("nan")
+            if name.endswith(":dir"):
+                row["angle_mae"] = acc["err"] / acc["n_err"] if acc["n_err"] else float("nan")
             row["n_gt"] = acc["n_gt"]
             res.setdefault(dt, {}).setdefault(name, {}).setdefault(sname, {})[b] = row
         return res

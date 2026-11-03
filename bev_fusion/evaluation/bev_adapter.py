@@ -183,6 +183,37 @@ def predictions(p, b: int, spec):
     return prob, dist
 
 
+def _presence(kind):
+    """a 1 m channel that is the presence logit of a polyline layer (losses.layer_spec_1m: kind 'line' with a distance field, 'centreline' without)"""
+    return kind in ("line", "centreline")
+
+
+def predictions_1m(p, b, spec_1m):
+    """the 1 m centre-line head of one sample (p["sem_1m"], channels = spec_1m = losses.layer_spec_1m) on the 0.5 m grid of the other maps: ({layer: presence
+    probability (X, Y)}, {layer: direction (2, X, Y), the raw (cos, sin)}); every 1 m cell is copied to its 2 x 2 cells (nearest: layers.pool_polyline max-pools
+    the 2 x 2 blocks, so block (i, j) holds the cells 2i, 2i + 1, 2j, 2j + 1). The layer is scored under the name of its GT mask (`centreline`)."""
+    import torch
+    sem = p["sem_1m"][b].float()
+    s = p["sem"].shape[-1] // sem.shape[-1]
+    up = lambda a: a.repeat_interleave(s, -2).repeat_interleave(s, -1).cpu().numpy()      # noqa: E731
+    idx = {name: i for i, (name, _, _) in enumerate(spec_1m)}
+    prob, direction = {}, {}
+    for name, (i, kind, _) in layer_index(spec_1m).items():
+        if _presence(kind):
+            prob[name] = up(torch.sigmoid(sem[i]))
+            if name + "_cos" in idx:
+                direction[name] = up(sem[[idx[name + "_cos"], idx[name + "_sin"]]])
+    return prob, direction
+
+
+def task_spec(model):
+    """the layer rows the Task scores: the model's own (the 0.5 m head) + the presence layers of its 1 m head as line layers of the 0.5 m grid, against the GT mask
+    the pooled target comes from (key `centreline@1m` -> `centreline`); a model without the 1 m head: its spec itself. (Not the spec of `predictions`: these
+    rows have no channel in p["sem"].)"""
+    spec_1m = getattr(model, "spec_1m", None)
+    return model.spec if not spec_1m else list(model.spec) + [(n, "line", key.split("@")[0]) for n, kind, key in spec_1m if _presence(kind)]
+
+
 def _identity(x):
     return x
 
@@ -423,6 +454,9 @@ def _make_subject_classes():
                                "detr": list(refined[dt][0]) if self.refine else None,
                                "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None,
                                "objvel": p["obj"]["vel"][0].float().cpu().numpy() if "vel" in p["obj"] else None}     # the object head's raw velocity map (bev_velocity centres)
+                    if getattr(self.model, "spec_1m", None):                          # the 1 m centre-line head: its presence is a layer of `prob`, its direction goes to the angle check
+                        p1, dts[dt]["dir"] = predictions_1m(p, 0, self.model.spec_1m)
+                        prob.update(p1)
                 arrays = self.rec.read(0) if names else {}
                 if "memory_conf" in arrays:
                     arrays["memory_conf"] = arrays["memory_conf"][0]
@@ -529,7 +563,7 @@ def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, 
         del model, loss
     else:
         subject = Subject(run, device, ns, ckpt_dir)
-        spec, grid = subject.model.spec, subject.model.grid
+        spec, grid = task_spec(subject.model), subject.model.grid
         refine, z_levels = subject.refine, tuple(subject.model.cfg.z_levels)
     task = BEVTask(grid, spec, [g for g, _ in ns.NUSC_GROUPS], depth_centres=ns.depth_centres, z_levels=z_levels, refine=refine)
     return source, subject, task

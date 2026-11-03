@@ -4,7 +4,8 @@ Views (names as in `BEVTask.views()`):
     overview    camera with the projected ground truth | GT bird's-eye view | prediction (+ boxes) | three error maps
                 (drivable area, vehicle footprint, lane dividers): grey right, RED false, BLUE missed, cream not evaluated
     outputs     the detailed result page: GT / prediction / errors, dt = +-0.5 s with the unknown cells, splat mass, scores, speed
-    stages      the stages of the chain: camera heads, lift, camera BEV, temporal fusion, radar, trunk (needs the taps)
+    stages      the stages of the chain: camera heads, lift, camera BEV, temporal fusion, radar, trunk (needs the taps); a model with the 1 m centre-line head
+                gets two panels more (25 presence against the GT, 26 direction arrows: `centreline_panels`)
     dashboard   one compact picture of every stage of one frame (the video frame)
 Bird's-eye maps are drawn with x forward (up) and +y (left of the car) on the left; arrays are (x, y) = (rows, columns).
 Colour scheme (Mirko, 2026-11-03): black plot background, dark-grey road with a black boundary, white lane lines, light-grey crossings, a calmer green for walkways, dark-red
@@ -22,7 +23,7 @@ import numpy as np
 from evalsuite import Page, Panel, Prediction, Sample, Shape, View, ViewContext
 from evalsuite.render.figure import ERROR_LEGEND, FN_COLOR, FP_COLOR, SKIP_COLOR, TP_COLOR, error_counts
 from evalsuite.render.taps import energy, pca_rgb
-from evaluation.metrics import FRONT_HALF_FOV, dilate, gt_boxes_from_meta, line_cells
+from evaluation.metrics import FRONT_HALF_FOV, angle_error, dilate, gt_boxes_from_meta, line_cells
 
 # The colour scheme of the bird's-eye pictures (Mirko's proposal of 2026-11-03): black plot background, dark-grey road with a black boundary, white lane markings, light-grey
 # crossings, dark-red objects (vehicles, pedestrians, two-wheelers) and the same red, translucent, where they lie outside the observed area, a calmer green for walkways.
@@ -220,6 +221,27 @@ def _caption(counts, what) -> str:
     return f"{what}: right {tp}  false {fp}  missed {fn}"
 
 
+def centreline_panels(grid, g, o, valid, step: int = 4, length: float = 2.0) -> List[Panel]:
+    """The 1 m centre-line head of a frame (no panel for a model without it, or a GT without the layer): (1) its presence against the GT centre-line cells with the
+    tolerance of the numbers (+-1 m: grey right, RED false, BLUE missed, cream not evaluated), (2) its direction: arrows of `length` m on every `step`-th GT cell,
+    GT cyan (the colour of the camera panel's centre-lines), predicted amber, on the predicted presence (grey). o: one dt of the Prediction (`prob`, `dir`)."""
+    if not o.get("dir") or "centreline" not in o["prob"] or "centreline" not in g or "centreline_dir" not in g:
+        return []
+    prob, G = o["prob"]["centreline"], np.asarray(g["centreline"], np.float32) > 0.5
+    err, counts = tolerant_error_rgb(prob > 0.5, G, valid, tol_cells=1.0 / grid.res)
+    pd, gd = np.asarray(o["dir"]["centreline"], np.float32), np.asarray(g["centreline_dir"], np.float32)
+    cells = np.argwhere(G & valid)
+    ang = np.degrees(angle_error(pd, gd)[G & valid])
+    arrows = []
+    for ix, iy in cells[::step]:
+        x0, y0 = grid.x_min + (ix + 0.5) * grid.res, grid.y_min + (iy + 0.5) * grid.res
+        for vec, color in ((gd[:, ix, iy], LINE_RGB["centreline"]), (pd[:, ix, iy] / max(float(np.hypot(*pd[:, ix, iy])), 1e-6), DET_COLOR)):
+            arrows.append(Shape("arrow", (y0, x0, y0 + length * vec[1], x0 + length * vec[0]), color, "-", 1.0))
+    return [bev(grid, "rgb", "25 " + _caption(counts, "centre-line head, 1 m (+-1 m)"), err),
+            bev(grid, "rgb", f"26 centre-line direction on the GT cells: GT cyan, predicted amber (mean error {ang.mean() if len(ang) else float('nan'):.1f} deg, {len(ang)} cells)",
+                prob[..., None] * np.asarray((0.45, 0.45, 0.45), np.float32), arrows)]
+
+
 # ------------------------------------------------------------------------------------------------ views
 class BevView(View):
     """shared context of the BEV views: the spec of the head layers, the grid and the class names"""
@@ -407,6 +429,7 @@ class StagesView(BevView):
         if "camera_visibility" in tp:
             panels.append(bev(grid, "raster", "camera visibility (cells the camera sees; 1 = visible)", np.asarray(tp["camera_visibility"]),
                               boxes, cmap="gray", vmin=0, vmax=1))
+        panels += centreline_panels(grid, g0, self._preds(pred), cam)
         return Page(title="BEV stages", panels=[p for p in panels if p is not None], ncols=4, panel_size=(4.4, 4.0))
 
 

@@ -1,6 +1,7 @@
 """The BEV Task of the evaluation suite (evalsuite): what the outputs of the chain mean.
 
-    BevSegMetric   maps: tolerant IoU per layer / range bin / dt / subset and line zero-crossing F1 (metrics.SegMeter)
+    BevSegMetric   maps: tolerant IoU per layer / range bin / dt / subset and line zero-crossing F1 (metrics.SegMeter); a model with the 1 m centre-line
+                   head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad)
     BevDetMetric   boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows; 'det' = plain decode,
                    'detr' = boxes refined by S5c)
     BevLossMetric  the training loss of the frame (means over frames; per-frame totals rank frames)
@@ -29,8 +30,9 @@ MASKS = ("fov", "seen", "out", "obj")
 
 
 # ------------------------------------------------------------------------------------------------ maps
-def add_sample(meters, prob, dist, g, spec, dt, mass) -> None:
-    """all SegMeter updates of one sample at one dt; meters: {"fov": SegMeter, "seen": SegMeter, "obj": SegMeter}"""
+def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None) -> None:
+    """all SegMeter updates of one sample at one dt; meters: {"fov": SegMeter, "seen": SegMeter, "obj": SegMeter}. direction: layer -> (2, X, Y) predicted (cos, sin)
+    of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model"""
     k = layer_index(spec)
     m = masks(g)
     areas = {n: prob[n] for n, (_, kind, _) in k.items() if kind in ("area", "line")}       # line = the 1-cell mask head
@@ -41,6 +43,8 @@ def add_sample(meters, prob, dist, g, spec, dt, mass) -> None:
     for mname in ("fov", "seen", "out"):                    # out = the whole grid outside the current view (where a memory must help)
         meters[mname].add(areas, gt_a, mask=m[mname], mass=mass, dt=dt)
         meters[mname].add_lines(dist, gt_d, mask=m[mname], mass=mass, dt=dt)
+        if direction:
+            meters[mname].add_directions(direction, {n: np.asarray(g[n + "_dir"], np.float32) for n in direction}, gt_a, mask=m[mname], mass=mass, dt=dt)
     meters["obj"].add(objs, gt_o, mask=m["obj_fov"], mass=mass, dt=dt)
 
 
@@ -68,7 +72,7 @@ class BevSegMetric(Metric):
         meters = {m: SegMeter(self.grid) for m in MASKS}
         for dt, o in pred.outputs["dt"].items():
             mass = o["mass"] if (o["mass"] is not None and abs(dt) > 1e-6) else None
-            add_sample(meters, o["prob"], o["dist"], sample.reference[dt], self.spec, dt, mass)
+            add_sample(meters, o["prob"], o["dist"], sample.reference[dt], self.spec, dt, mass, o.get("dir"))
         keys, cnt, n_gt, err, n_err = [], [], [], [], []
         for mname, m in meters.items():
             for (dt, name, sname, b), acc in m.c.items():
@@ -134,7 +138,7 @@ class BevSegMetric(Metric):
         return {n: float(acc[_flat_to_ikey(k + "/n_gt")][1]) if _flat_to_ikey(k + "/n_gt") in acc else 0.0 for n, k in keys.items()}
 
     def direction(self, key):
-        return "low" if key.endswith("/field_mae") else "high"
+        return "low" if key.endswith(("/field_mae", "/angle_mae")) else "high"
 
 
 # ------------------------------------------------------------------------------------------------ boxes
@@ -245,7 +249,8 @@ class BevLossMetric(Metric):
 GUIDE = """Panels of the overview: camera with the ground truth drawn in (3D boxes: vehicle red, pedestrian magenta, two-wheeler orange, grey = no lidar/radar point;
 lines: lane dividers yellow, road dividers orange, centre-lines cyan); bird's-eye maps with x forward and +y on the left; error maps: grey = right,
 RED = false, BLUE = missed, cream = not evaluated (outside the camera's view). Stages (debug view): 1 input, 2-3 camera head depth and uncertainty,
-4 radar points, 5-6 lift, 7-8 camera BEV before / after temporal fusion, 9 what the past supplies, 10-11 radar, 12 trunk. Red flags: black input,
+4 radar points, 5-6 lift, 7-8 camera BEV before / after temporal fusion, 9 what the past supplies, 10-11 radar, 12 trunk, 25-26 the 1 m centre-line head (only a model
+with it): presence against the GT, direction arrows GT cyan / predicted amber. Red flags: black input,
 flat depth, energy outside the camera wedge, energy that does not follow the GT boxes, features without raster dots, one single colour in the trunk,
 large red or blue regions, boxes in empty space, objects that do not move at dt +-0.5 s."""
 

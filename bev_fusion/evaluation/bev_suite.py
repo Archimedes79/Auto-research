@@ -58,7 +58,8 @@ from evaluation import bev_adapter as A  # noqa: E402  (numpy only at import: th
 
 HEADLINE_LAYERS = (("drivable_area", "iou@0"), ("drivable_area", "iou@0.5"), ("ped_crossing", "iou@0"), ("walkway", "iou@0"),
                    ("carpark_area", "iou@0"), ("lane_divider", "iou@0.5"), ("lane_divider", "iou@1"), ("road_divider", "iou@1"),
-                   ("lane_divider:zc", "f1@0.5"), ("road_divider:zc", "f1@0.5"), ("lane_divider:zc", "field_mae"))
+                   ("lane_divider:zc", "f1@0.5"), ("road_divider:zc", "f1@0.5"), ("lane_divider:zc", "field_mae"),
+                   ("centreline", "iou@0.5"), ("centreline", "iou@1"), ("centreline:dir", "angle_mae"))        # the 1 m centre-line head's rows (headline_table lists only the keys a run has)
 
 
 def tag_of(warm: bool, on_train: bool, control: str) -> str:
@@ -521,7 +522,7 @@ def _task_only(run: str, curves: bool = False, fusion: bool = False, velocity: b
         cfg = ns.T.TrainConfig(**json.load(f))
     model, _, _ = ns.T.build(cfg)
     refine = bool(cfg.model.get("refine")) and hasattr(model, "boxes")
-    task = BEVTask(model.grid, model.spec, [g for g, _ in ns.NUSC_GROUPS], refine=refine)
+    task = BEVTask(model.grid, B.task_spec(model), [g for g, _ in ns.NUSC_GROUPS], refine=refine)
     task.curves, task.fusion, task.velocity = curves, fusion, velocity
     return task
 
