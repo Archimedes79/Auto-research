@@ -74,8 +74,10 @@ run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 mo
 run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, training/splits.py, the trainsuite hook; no data, 7 s
 run "layer table"       "$PY" tests/test_layers.py                  # training/layers.py: the table changes no number, the 1 m centre-line row; CPU, 7 s
 run "evaluate door"     "$PY" tests/test_evaluate_door.py           # evaluation/evaluate.py translates options into bev_suite commands (--real: the golden check, by hand); no data, 1 s
+run "trainkit selftest" bash -c "cd ../autoresearch && $PY -m trainkit.selftest"    # the engine of the trainer on a toy network; CPU
+run "trainkit equivalence" "$PY" tests/test_trainkit_equivalence.py # train() of commit df9d437 against the live one (trainkit): rows, weights, EMA, optimiser, RNG, files, exit codes; CPU, toy network
 if [ "${1:-}" = "--all" ]; then
-  run "whole chain"     "$PY" training/model.py                     # nuScenes mini, CPU; minutes
+  run "whole chain"    "$PY" training/model.py                     # nuScenes mini, CPU; minutes
   run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
   run "radar slot"      "$PY" tests/test_radar_slot.py              # delta_slots in the whole chain: side loss, gradients, old path unchanged; about 2 min
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
