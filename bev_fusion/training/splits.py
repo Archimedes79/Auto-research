@@ -49,10 +49,13 @@ def resolve(cfg, splits_dir=SPLITS):
         return cfg
     out = {k: v for k, v in cfg.items() if k != "split"}
     name = cfg["split"]
-    if not name:                                                    # "split": null = no split, the config keeps its own lists (e.g. a preset with a small set)
+    if name is None:                                                # "split": null = no split, the config keeps its own lists (e.g. a base with a split + a preset that brings a small set)
         return out
+    if not isinstance(name, str):
+        raise ValueError(f"split must be a split name (a string) or null, got {name!r}")
     if any(out.get(k) for k in LISTS):
-        raise ValueError(f"split {name!r} and inline train_scenes / val_scenes in one config: keep one (--set split=null keeps the inline lists)")
+        raise ValueError(f"split {name!r} and inline train_scenes / val_scenes in one config: keep one. Base with lists + a split: --set train_scenes=[] --set val_scenes=[] "
+                         f"--set split={name}; base with a split + a preset that brings lists (small_set): --set split=null")
     d = load(name, splits_dir)
     out.update(_split=name, train_scenes=d["train"], val_scenes=d["val"])
     return out

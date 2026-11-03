@@ -3,9 +3,10 @@
   1. the files: `large` = exactly the lists of the stored config t16_full.json (428 / 82 scenes), `xl` = those of t17_data.json (700 / 82, large inside it), `small` a
      subset of `large` (60 / 10); train and val never share a scene; every file names an autogt version of autogt/versions.csv; train scenes are official nuScenes train scenes, val scenes official val scenes
   2. resolve: `"split": "large"` gives the lists of the inline t16_full.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it; the
-     trainer's `read_config` accepts the result; an inline config comes back unchanged; `split: null` keeps the inline lists; split + inline lists, an unknown name and a
-     path in the name are refused
-  3. through `trainsuite start`'s code (`plan_start` with the project's block + the resolve command): the lists arrive in the config, a note says so
+     trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false, [] and a number
+     are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
+  3. through `trainsuite start`'s code (`plan_start` with the real block of project.json, whose resolve command is checked): the lists arrive in the config, a note says so;
+     the commands of splits/README.md (move a stored config to a split) work, the plain `--set split=NAME` on a config with lists is refused
   4. manifest and split.json of a run folder (built here with known content; the real run t16_full_s0 when it is on disk: split large, commit 40e7ff5b3c)
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_splits.py
 """
@@ -66,7 +67,11 @@ check(res["train_scenes"] == t16["train_scenes"] and res["val_scenes"] == t16["v
 check("split" not in res and res["_split"] == "large" and {k: v for k, v in res.items() if k not in ("train_scenes", "val_scenes", "_split")} == inline, "the key split is replaced, nothing else changes")
 check(S.resolve(t16) is t16 and S.resolve(dict(t16, name="x")) == dict(t16, name="x"), "an inline config comes back unchanged")
 check(S.resolve(dict(t16, split=None)) == t16, "split null drops the key and keeps the inline lists")
-check(S.resolve(dict(inline, split="")) == inline, "split '' is the same: no lists, nothing resolved")
+check(all(raises(lambda v=v: S.resolve(dict(inline, split=v)), "split") for v in ("", 0, False, [], 1, {})),
+      "only null drops the key: '', 0, false, [] and {} are refused with a message (1 too: a number is no name)")
+check(raises(lambda: S.resolve(dict(inline, split="large", val_scenes=["scene-0003"])), "keep one") and raises(lambda: S.resolve(dict(inline, split="large", train_scenes=["scene-0001"])), "keep one"),
+      "split + only an inline val_scenes (or only train_scenes) is refused too")
+check(S.resolve(dict(inline, split="large", train_scenes=[], val_scenes=[]))["train_scenes"] == large["train"], "empty inline lists are no lists: the split fills them (the documented way to move a stored config to a split)")
 check(raises(lambda: S.resolve(dict(t16, split="large")), "keep one") and raises(lambda: S.resolve(dict(inline, split="larg")), "no split 'larg'")
       and raises(lambda: S.resolve(dict(inline, split="../splits/large")), "letters, digits"), "split + inline lists, an unknown name and a path in the name are refused")
 with tempfile.TemporaryDirectory() as tmp:                       # a split file that is wrong is refused when it is read
@@ -99,7 +104,8 @@ with tempfile.TemporaryDirectory() as tmp:
 # 3 the trainsuite hook
 from trainsuite import compose as C  # noqa: E402
 with tempfile.TemporaryDirectory() as tmp:
-    block = dict(json.load(open("project.json"))["trainsuite"], resolve=f"{sys.executable} training/splits.py resolve")
+    block = json.load(open("project.json"))["trainsuite"]
+    check(block.get("resolve") == "python3 training/splits.py resolve", "project.json: trainsuite.resolve is the splits.py command (the hook is live)")
     base = os.path.join(tmp, "base.json")
     json.dump(dict(inline, split="small"), open(base, "w"))
     plan = C.plan_start(ROOT, block, base, "split.test", [], [], no_card=True)
@@ -113,6 +119,14 @@ with tempfile.TemporaryDirectory() as tmp:
         check("no split 'nope'" in str(e), "plan_start refuses an unknown split with the message of the resolver")
     json.dump(dict(t16, name="t16_full"), open(base, "w"))
     check(C.plan_start(ROOT, block, base, "split.test", [], [], no_card=True)["notes"] == [], "plan_start: an inline config passes the hook untouched, no note")
+    # the commands of splits/README.md: a stored config with lists moves to a split with --set train_scenes=[] --set val_scenes=[] --set split=NAME; plain --set split=NAME is refused
+    cfg_ = C.plan_start(ROOT, block, base, "split.test", ["small"], ["train_scenes=[]", "val_scenes=[]", "split=small"], no_card=True)["config"]
+    check(cfg_["train_scenes"] == small["train"] and cfg_["val_scenes"] == small["val"] and cfg_["steps"] == 400 and "split" not in cfg_, "plan_start: --preset small --set train_scenes=[] --set val_scenes=[] --set split=small on t16_full.json")
+    try:
+        C.plan_start(ROOT, block, base, "split.test", [], ["split=small"], no_card=True)
+        check(False, "plan_start refuses --set split=small on a config that has lists")
+    except C.ComposeError as e:
+        check("--set train_scenes=[]" in str(e), "plan_start refuses --set split=small on a config that has lists and the message names the command that works")
 
 # 4 manifest and split.json
 with tempfile.TemporaryDirectory() as tmp:
