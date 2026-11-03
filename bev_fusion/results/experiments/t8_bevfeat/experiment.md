@@ -7,7 +7,7 @@ commit and GT). `t8_ctl_s1` crashed at step 2500 with "CUDA unknown error"; the 
 (e.g. `sample_targets` keyed by side, a check in `dt_weight`, edits in `nuscenes_dataset.py` / `feature_cache.py`) and was not shown to be neutral; the agreement with
 `t8_ctl_s0` below is the only evidence. Its evaluation is run `t8.ctl_s1.eval` (`python evaluation/bev_suite.py runs/t8_ctl_s1 --workers 4 eval --n 1000` in the gcar env from the bev_fusion folder, started through a one-line wrapper script that was not kept; GT signature 15efbde2d1 like the other arms).
 3 camera frames, window memory, radar, 3000 steps, cold VAL 1000 frames.
-Numbers: `runs/<name>/eval/table.txt`; front-area objects `results_t8_x50_2ctl.md` (`python evaluation/bev_suite.py front runs/t8_ctl_s0 runs/t8_ctl_s1 runs/t8_bevfeat_s0 runs/t8_bevfeat_s1 --n 1000 --out experiments/t4_soa_front/results_t8_x50_2ctl.md`, 1000 bootstrap draws, the suite's `front` command (`evaluation/front_compare.py`);
+Numbers: `runs/<name>/eval/table.txt`; front-area objects `results_t8_x50_2ctl.md` (`python evaluation/bev_suite.py front runs/t8_ctl_s0 runs/t8_ctl_s1 runs/t8_bevfeat_s0 runs/t8_bevfeat_s1 --n 1000 --out results/experiments/t4_soa_front/results_t8_x50_2ctl.md`, 1000 bootstrap draws, the suite's `front` command (`evaluation/front_compare.py`);
 the earlier `results_t8_x50.md` has the three arms without the second control, made by the former script with 100 draws and its own random stream: same point numbers, slightly different intervals).
 
 ## Result (2026-10-31)

@@ -1,6 +1,6 @@
 # t9 encoder 2 x 2 - does a trained, finer image side lift the maps? (card written 2026-10-31, before any code or run; Mirko: "combine both into one experiment")
 
-Context: `../t6_soa_gap/report.md` and `experiment.md`. Our maps reach 17 - 85 % of GaussianCaR's IoU; the gap is not range, threshold, overfitting,
+Context: `../../results/experiments/t6_soa_gap/report.md` and `experiment.md`. Our maps reach 17 - 85 % of GaussianCaR's IoU; the gap is not range, threshold, overfitting,
 BEV trunk or task competition (the maps-only run closes only 7 - 12 % of it). What is left is the image side and the budget: the camera
 features are DETECTION-trained, FROZEN and at stride 16 (M6), and the runs are 9 - 27 x shorter (M8). The two levers offered to Mirko were
 "map-supervised finer features" (plan 2.7 / 2.8) and "an unfreezing arm"; this card runs them in ONE factorial experiment so that each can be

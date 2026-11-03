@@ -104,4 +104,4 @@ detail path -> time mover (velocity splat) -> semantic and CenterPoint-style obj
 
 `runs/t1_r4_soa` (config, log, 3 checkpoints, `eval/`), `training/configs/t1_r4_soa.json`, `training/augment.py`, `evaluation/evaluate_run.py`
 (`--warm`, `--on-train`), `temp/train/` (launch, pipeline, tables, drawing; scratch), `temp/audit/` (diagnostics),
-`experiments/t1_r4_soa/{images,results}`.
+`results/experiments/t1_r4_soa/{images,results}`.

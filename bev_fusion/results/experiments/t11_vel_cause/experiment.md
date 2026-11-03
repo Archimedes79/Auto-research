@@ -1,8 +1,8 @@
 # t11 vel cause - why the object head's box velocity is 0 m/s in every main-chain run: a dead hidden layer in the `vel` branch (card written 2026-11-01 00:10, after the stored-file checks below, before the probe and any run)
 
-Part of the t11 velocity group: `../t11_vel_hurdle/experiment.md` (fix: moving / static logit + velocity on moving centres only) and `../t11_motion_field/experiment.md`
+Part of the t11 velocity group: `../t11_vel_hurdle/experiment.md` (fix: moving / static logit + velocity on moving centres only) and `../../../experiments/t11_motion_field/experiment.md`
 (the time mover's motion head). This card is the cause; it changes how those two must start (section 1, decision rule C1).
-Scratch code: `../../temp/box_vel/` (`ckpt_weights.py`, `stored_dets.py`, `stored_ave.py`, `probe_features.py`); outputs in `../../temp/box_vel/out/`.
+Scratch code: `../../../temp/box_vel/` (`ckpt_weights.py`, `stored_dets.py`, `stored_ave.py`, `probe_features.py`); outputs in `../../../temp/box_vel/out/`.
 
 ## 0. What the tools run
 | field | value |
@@ -20,7 +20,7 @@ Scratch code: `../../temp/box_vel/` (`ckpt_weights.py`, `stored_dets.py`, `store
 |---|---|
 | lens | system review / training and losses |
 | group | objects + motion (velocity of moving objects) |
-| sources | review pass 2 section 2 (`../../../autoresearch/history/repo_review_2026-10-31_pass2.md`), the stored detections and checkpoints of t1 - t10, `../t11_vel_hurdle/`, `../t11_motion_field/`, CenterPoint (velocity L1, weight 0.2; its separate head has BatchNorm before the ReLU, our `_branch` has none) |
+| sources | review pass 2 section 2 (`../../../../autoresearch/history/repo_review_2026-10-31_pass2.md`), the stored detections and checkpoints of t1 - t10, `../t11_vel_hurdle/`, `../../../experiments/t11_motion_field/`, CenterPoint (velocity L1, weight 0.2; its separate head has BatchNorm before the ReLU, our `_branch` has none) |
 | status | proposed (layer-0 / 1 evidence in, probe pending) |
 
 **What the stored files already show (layer 0 - 1, nothing trained).**
@@ -51,7 +51,7 @@ Scratch code: `../../temp/box_vel/` (`ckpt_weights.py`, `stored_dets.py`, `store
    The untrained head (t6) outputs O(1) m/s random values at every detection; training is what drives the branch to its bias. Length alone does not save it
    (t3_ref_long, 6000 steps at batch 3, is dead). The two runs that learned real velocity (skill 0.20 - 0.25) both had an effective batch of 6 - 16, but a larger
    batch is not sufficient: t1_r3_combined (2 x 3) stayed near the zero level (0.025). It looks like a race in the early steps that the small batch loses every time.
-4. *The motion head never left its zero start* (also found by `../t11_motion_field/`): `mover.motion.f.net.2.weight` |W| 0.0019 (t8), 0.0017 (t10); v_hat <= 3e-6 m/s at the
+4. *The motion head never left its zero start* (also found by `../../../experiments/t11_motion_field/`): `mover.motion.f.net.2.weight` |W| 0.0019 (t8), 0.0017 (t10); v_hat <= 3e-6 m/s at the
    probe's centres, the motion term equal to the zero field's. Its gradient at the trunk feature (`log.jsonl` diag, every 500 steps) is 1e-6 - 1e-8 in every 3000-step run
    (objects 0.07 - 0.33); in t1_r4_soa it grows to 3e-3 - 8e-3 from step 4000 on (|W| 0.45 at step 7000). So the "box velocity from v_hat" test (suggested step 4) gives the
    zero predictor again for every batch-3 run; it is informative only for t1_r4_soa (probe below).
@@ -90,7 +90,7 @@ Scratch code: `../../temp/box_vel/` (`ckpt_weights.py`, `stored_dets.py`, `store
 ## 2. Results
 
 **P1 holds** (t8_ctl_s0, step 3000, EMA weights, 300 cold VAL frames spread over 30 val scenes, 2,632 supervised centres; `probe_features.py`,
-`p1_report.py` -> `../../temp/box_vel/out/p1_t8_ctl_s0_val.txt`):
+`p1_report.py` -> `../../../temp/box_vel/out/p1_t8_ctl_s0_val.txt`):
 
 | branch of the object head | hidden units active at the supervised centres | over all cells | units on at >= 1 cell of a frame (of 64) |
 |---|---|---|---|
@@ -112,7 +112,7 @@ today's L1, B' = fresh branch + the hurdle; their runs log `objhead.vel@` / `obj
 round; the instrumented-run driver `train_diag.py` stays available, smoke-tested on mini).
 
 **P2 fails: the trunk features hold almost no linear velocity information** (t8_ctl_s0, fit on 1,823 train-split vehicle centres of 300 frames / 40 scenes, tested on 1,670 val
-vehicle centres of 300 frames / 30 scenes; `probe_fit.py` -> `../../temp/box_vel/out/probe_fit_t8_ctl_s0.txt`; at the GT centres, so an optimistic localisation):
+vehicle centres of 300 frames / 30 scenes; `probe_fit.py` -> `../../../temp/box_vel/out/probe_fit_t8_ctl_s0.txt`; at the GT centres, so an optimistic localisation):
 
 | read-out on the frozen feature | vehicle skill on moving centres (1 - AVE / ave0) | static error (m/s) |
 |---|---|---|
@@ -132,7 +132,7 @@ the mechanism is not reproduced by the frozen replica; the death happens in the 
 the logistic AUC 0.77 is above the 0.65 bar but its BCE gain is 2 %, i.e. what it finds (cars on the road vs parked) is context, not motion.
 Consequence for `../t11_vel_hurdle/` (told to its owner): a null result of arm B' after 1000 steps means "not learned in 1000 steps", not "the input lacks motion".
 
-**Alive and dead velocity outputs across the 34 evaluated runs** (`alive_table.py` -> `../../temp/box_vel/out/alive_table.txt`; max predicted vehicle speed at dt 0):
+**Alive and dead velocity outputs across the 34 evaluated runs** (`alive_table.py` -> `../../../temp/box_vel/out/alive_table.txt`; max predicted vehicle speed at dt 0):
 
 | group | runs | effective batch (batch x accum, clips of 3 keyframes) | steps | max speed |
 |---|---|---|---|---|
@@ -146,7 +146,7 @@ An effective batch of 6 or more separates alive from dead in all 29 runs; the st
 alive; t1_r4_soa's config equals t8_ctl_s0's except steps and accum). It is an association over runs of one family, two of the alive ones also trained 7000 steps, and
 no seed twin exists at either batch; it is a lead for the cause of the early death, not a result.
 
-## 3. What working systems do (literature; the local notes in `../../literature/papers/`, the CenterPoint head checked against the mmdet3d source)
+## 3. What working systems do (literature; the local notes in `../../../literature/papers/`, the CenterPoint head checked against the mmdet3d source)
 
 | system | how velocity is obtained from current + past | velocity result (nuScenes val) | what is portable |
 |---|---|---|---|
@@ -187,7 +187,7 @@ Not worth porting: object-query memories (StreamPETR, Sparse4D: not a grid, woul
 ## 4. Input side: the radar Doppler at the GT vehicle boxes, and the positive control of the probe
 
 **P3 / positive control: t1_r4_soa** (its velocity branch learned; step 7000; 200 cold val frames over 30 scenes, 1,716 supervised centres; the read-out fitted on the first
-half of the frames, tested on the second, 461 / 642 vehicle centres; `probe_features.py`, `p1_report.py`, `probe_fit.py` -> `../../temp/box_vel/out/p1_t1_r4_soa_val.txt`,
+half of the frames, tested on the second, 461 / 642 vehicle centres; `probe_features.py`, `p1_report.py`, `probe_fit.py` -> `../../../temp/box_vel/out/p1_t1_r4_soa_val.txt`,
 `probe_fit_t1_r4_soa.txt`):
 - The alive branch is sparse too: 0.53 % of the (unit, centre) pairs are active (585 of 109,824; t8_ctl_s0: 0.011 %, 19 of 168,448), in 91 of 198 frames, but those units fire
   hard (pre-activation up to 36 against 0.09), 12 of 64 units are on somewhere in a frame (t8: 17, nearly all of them silent at the centres). `objhead.vel@+0.0` 1.709 against the
@@ -198,7 +198,7 @@ half of the frames, tested on the second, 461 / 642 vehicle centres; `probe_feat
   this small fit set is above the base-rate entropy, overfitting, only its AUC is used.)
 So the C2 reading stands: the t8_ctl_s0 trunk holds no linear motion information because nothing ever asked it to, not because the probe cannot see it.
 
-**The radar input holds the vehicle velocity** (`doppler_at_boxes.py` -> `../../temp/box_vel/out/doppler_at_boxes_val.txt`, `.json`; t8_ctl_s0's dataset, 300 cold val frames over 30
+**The radar input holds the vehicle velocity** (`doppler_at_boxes.py` -> `../../../temp/box_vel/out/doppler_at_boxes_val.txt`, `.json`; t8_ctl_s0's dataset, 300 cold val frames over 30
 scenes, 1,019 observed GT vehicles in the front sector, 329 of them moving; the radar field is exactly what the radar branch receives: ego-compensated radial velocity along the ray,
 positions shifted along the ray to the camera time, returns of the last 0.25 s inside the GT footprint + 1 m). Association by the GT box and the GT heading, so every number is an
 UPPER bound of a detector-side read-out. Estimate: `v = (v_r / (h . u)) h`, h = the box axis, median over the returns with |h . u| >= 0.3, 0 where none qualifies.

@@ -8,10 +8,10 @@ screening study of blocks, not a final system.
 
 ## Update 2026-11-01 (read this first; sections 1-11 are the state of 2026-10-30 and stay as written)
 
-Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps (`../t4_soa_front`, `../t6_soa_gap`, `../t7_lane_branch`, `../t8_bevfeat`,
-`../t10_dual_features`, `../t11_vel_cause`). Numbers: cold VAL, the same 1000 keyframes of the 82 validation scenes unless a row says otherwise; maps from
+Added since: tries 9 and 10 (`t3_vel10`, `t4_fpn_order`) and six follow-up steps (`../t4_soa_front`, `../t6_soa_gap`, `../../../experiments/t7_lane_branch`, `../t8_bevfeat`,
+`../../../experiments/t10_dual_features`, `../t11_vel_cause`). Numbers: cold VAL, the same 1000 keyframes of the 82 validation scenes unless a row says otherwise; maps from
 `runs/*/eval/metrics.json` (`temp/pitch/ladder.py`), objects in the front sector (0-50 m, +-32.3 deg) from `../t4_soa_front/results_*.md` and
-`../t10_dual_features/results_x50.md` and `results_x50_2seeds.md` (`temp/t4/compare_front.py`). Seeds: most arms have one seed; where a seed twin exists the row says so.
+`../../../experiments/t10_dual_features/results_x50.md` and `results_x50_2seeds.md` (`temp/t4/compare_front.py`). Seeds: most arms have one seed; where a seed twin exists the row says so.
 Counts and dates as of 2026-11-01 04:30. Reviewed against the primary files by a fresh reviewer at 04:20 (its corrections are applied). Updated 08:40 with the velocity fix (try 17) and
 the like-for-like map scores (try 18, replacing the indicative shares); these two additions have not been re-reviewed.
 
@@ -28,7 +28,7 @@ the like-for-like map scores (try 18, replacing the indicative shares); these tw
    (two-wheeler AP@2 control 0.121 / 0.051, dual 0.016 / 0.061; 3-class mAP control 0.251 / 0.235, dual 0.221 / 0.234: differences of the order of the control's own seed spread, but below its range except one value); an earlier one-seed gain of
    the pedestrian segmentation (0.000 -> 0.091) was noise, the control's second seed scores 0.090.
 2. **The velocity head was dead, not slow, and a fix revived it.** The output of the branch was its bias; 0.011 % of its hidden units are active at the supervised centres (13 - 50 % for the other
-   branches); 28 of the 30 runs with an effective batch of 3 are dead (`../../temp/box_vel/out/alive_table.txt`). Try 9 (loss weight x10) could not help a dead ReLU layer. A moving / static
+   branches); 28 of the 30 runs with an effective batch of 3 are dead (`../../../temp/box_vel/out/alive_table.txt`). Try 9 (loss weight x10) could not help a dead ReLU layer. A moving / static
    logit with the regression on moving centres only (`../t11_vel_hurdle`, card written before any code) lifted the vehicle velocity skill from 0.000 to 0.470 (batch 3) and 0.566 (accumulation 2)
    in 1000 warm-start steps from the dual chain, one seed: vehicle AVE 2.39 -> 1.19 m/s, at a price of front mAP2 -0.014 and an error of 0.28 m/s at static cars. The radar Doppler read-out at
    the GT boxes holds 0.79 of the velocity of moving vehicles (upper bound, GT heading); the older learned heads reached 0.22 - 0.25 only after 7000 x 2 steps.

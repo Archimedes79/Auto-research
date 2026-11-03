@@ -73,13 +73,13 @@ Context (system review of the motion term, 2026-10-31 night; numbers from the st
   - V2 in between: 0.05 <= B - A < 0.10 -> INCONCLUSIVE: seed twin, do not adopt.
   - V3 no gain (< 0.05) and the moving BCE at its prior -> information, not loss: the centre features do not separate moving from static. Next card = the input route
     (a zero-started 1 x 1 skip of the radar branch's features (Doppler code) into the head state, or the fused two-frame flow of plan 7.4); the motion-field card
-    (`../t11_motion_field/experiment.md`) is then moot, and every AVE comparison stays void.
+    (`../../../experiments/t11_motion_field/experiment.md`) is then moot, and every AVE comparison stays void.
   - V4 no gain but the moving BCE well below its prior -> the logit sees motion, the regression does not get the sign: try speed x axis (|v| from the regression, direction from the box axis + dir head) next.
   - maps or mAP2 of B below A by more than the band -> the hurdle costs the shared trunk: CUT even if the velocity gains.
   - A itself: if A's maps or mAP2 beat t10_dual_s0 by more than the band, longer training is a lever on its own (supports the 6000-step run).
 - **Kill / validity.** (1) G4 parity fails -> no run. (2) val at step 500: group.lines or group.areas of B above A's by more than 0.05 -> stop B (the head change disturbs the trunk). (3) NaN or CUDA
   unknown error -> resume once. (4) A's vehicle `ave_skill_moving` > 0.05 -> the continuation alone starts to learn velocity; then B is compared to A as written, but the reading "loss attractor" needs the twin.
-- **What it does not test.** The dense motion field of the time mover (`../t11_motion_field/experiment.md`); a from-scratch 3000-step run with the hurdle (the warm start is
+- **What it does not test.** The dense motion field of the time mover (`../../../experiments/t11_motion_field/experiment.md`); a from-scratch 3000-step run with the hurdle (the warm start is
   a cheaper proxy and is labelled so); pedestrian direction; latency (one 3 x 3 + 1 x 1 branch at 64 channels on the head: negligible, measured with the prototype).
 - **Cost.** ~2 GPU-hours (2 arms x ~55 min, whole GPU), ~40 lines in object_head.py, losses.py, train.py, model.py + the test file (coder, ~1 h); risk: the warm start
   hides an interaction with the restart (both arms share it).

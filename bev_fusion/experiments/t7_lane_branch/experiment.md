@@ -2,7 +2,7 @@
 
 Started 2026-10-30 (Mirko: "Test a BEV lane branch", after the t5 probe v2: the stride-4 stage of the frozen ResNet-50 and an RGB CNN
 draw the painted lines sharply in the image, the stride-16 context that feeds the lift gives blurred bands; the F1 of the probe could
-not separate them (TIE, `../t5_lane_probe/experiment.md` section 5)). Related: `../t6_soa_gap/report.md` (divider gap 0.29 vs 0.69,
+not separate them (TIE, `../../results/experiments/t5_lane_probe/experiment.md` section 5)). Related: `../../results/experiments/t6_soa_gap/report.md` (divider gap 0.29 vs 0.69,
 cause M6 = frozen, detection-trained, stride-16 image features, not isolated) and `../../plan/plan.md` 2.8 (encoder fix plan, another
 chat). This experiment tests the cheapest form of "more image resolution for the lines" inside the existing chain, without
 touching the image encoder: a side branch.

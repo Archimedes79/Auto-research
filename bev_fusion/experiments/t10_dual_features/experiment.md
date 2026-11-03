@@ -1,6 +1,6 @@
 # t10 dual features - can one trunk use the map-trained BEVFusion features AND the detection-trained DualBEV features? (card written 2026-10-31, before any code or run)
 
-Context: t8 (`../t8_bevfeat/experiment.md`, same-code control, two seeds, cold VAL 1000): frozen BEVFusion camera features (map-trained, stride 8, weak depth)
+Context: t8 (`../../results/experiments/t8_bevfeat/experiment.md`, same-code control, two seeds, cold VAL 1000): frozen BEVFusion camera features (map-trained, stride 8, weak depth)
 instead of the frozen DualBEV cache (detection-trained, stride 16, sharp depth) nearly double the maps (lane divider@0.5 0.191 -> 0.351 / 0.345, drivable 0.716 -> 0.804 /
 0.809, walkway 0.178 -> 0.339 / 0.342, crossing 0.002 -> 0.145 / 0.165) and halve the objects (front mAP2 0.367 -> 0.183 / 0.180, pedestrian AP@2 0.210 -> 0.001 / 0.002).
 M6 (the image features limit the maps) is supported; the reverse holds for objects. Neither cache alone gives both. This card is the cheapest test of "both":
@@ -110,7 +110,7 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
 ## 3 Lever 1: the dual chain at 6000 steps (card written 2026-11-01 before any run; proposed for the queue, not started)
 
 - **Question.** What is the slope of the dual features with training length, and does it carry the maps toward the SOA at a cost this machine can pay?
-- **Why now.** `../t6_soa_gap/report.md` section 5: for the OLD features the first doubling of the steps (3000 -> 6000) bought +0.053 on the lane divider, +0.034 walkway, +0.055
+- **Why now.** `../../results/experiments/t6_soa_gap/report.md` section 5: for the OLD features the first doubling of the steps (3000 -> 6000) bought +0.053 on the lane divider, +0.034 walkway, +0.055
   crossing and +0.023 drivable, and the remaining gap to GaussianCaR then needed 4 - 10 more doublings (16 - 1000 x the compute). With the new features the slope is unknown; it decides whether
   "the SOA is reachable on this hardware" is a claim or a wish (the sceptical review of the case file, 2026-11-01, objection 7).
 - **Hypothesis.** The dual chain is still under-trained at 3000 steps (0.55 epoch). At 6000 steps the maps gain at least 0.75 x the old features' first-doubling rate (the new features
@@ -134,10 +134,10 @@ It does not replace t9 (`../t9_encoder_2x2/experiment.md`, written before t8): t
 
 ### 3b Amendment (2026-11-01 08:15, before any run): the lead's version of the 6000-step run
 
-Source of the change: the lead of the overnight round (`../../records/morning_2026-11-01.md` section 4 and `../t11_vel_hurdle/experiment.md` section 3: the run "should carry the hurdle + accumulation 2"), relayed
+Source of the change: the lead of the overnight round (`../../records/morning_2026-11-01.md` section 4 and `../../results/experiments/t11_vel_hurdle/experiment.md` section 3: the run "should carry the hurdle + accumulation 2"), relayed
 by the queue owner as Mirko's wish; Mirko's own quoted words in D28 name only "the 6000 step run". The start is after the Architecture merge and smoke test, so Mirko can still veto the version below (the cost is the second bullet).
 
-- **Design change.** `t10_dual_long_s0` = `t10_dual_s0` + `steps` 6000 + `eval_every` 2000 (§3 as written) + `accum` 2 (effective batch 6) + `model.object_moving` true (the velocity hurdle of `../t11_vel_hurdle`
+- **Design change.** `t10_dual_long_s0` = `t10_dual_s0` + `steps` 6000 + `eval_every` 2000 (§3 as written) + `accum` 2 (effective batch 6) + `model.object_moving` true (the velocity hurdle of `../../results/experiments/t11_vel_hurdle`
   from step 0; `init_from` empty, `warmup_hold` / `warmup_ramp` at the t10 defaults). Samples seen: 6000 x 6 = 36,000 against 9,000 of the 3000-step chain (4x; the budget of the `t1_r4_soa` recipe, 7000 x 2).
   Config `training/configs/t10_dual_long_s0.json` (its `diff` to `t10_dual_s0.json`: name, steps, eval_every, accum, object_moving, a comment).
 - **Cost.** Arm B2 needed 5.06 s per optimiser step (ledger `t11.vel_hurdle_acc2`: 5056 s for 1000 steps with 2 in-training evaluations; `t10_dual_s0` 2.30 s per step): 6000 steps are about 8.4 h, plus about 15 min

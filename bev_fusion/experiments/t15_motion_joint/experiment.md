@@ -1,6 +1,6 @@
 # t15 motion block, joint form - does the motion block trained INSIDE the chain revive the velocity without costing the maps, and is it needed? (DRAFT card 2026-11-01, revised twice the same evening (BEV system chat's points; the IoU misreading; the t13 critic items that hit this card), before any run; Mirko's go for building the joint form: "Yes, go" in the Temporal Fusion chat, 2026-11-01 evening (answer to "Build the joint form of the motion block now?"), code and CPU tests only, no run before the conditions of section 1; critic pass (cards) by the BEV system chat before any run)
 
-Context: `../t12_motion_block/experiment.md` (KEEP on both seeds, block trained alone on the frozen `t10_dual_s0`: moving EPE
+Context: `../../results/experiments/t12_motion_block/experiment.md` (KEEP on both seeds, block trained alone on the frozen `t10_dual_s0`: moving EPE
 6.67 -> 3.32 m/s, box-centre field 2.26 / 2.29 against 2.43 for the hurdle object head; negative: static EPE 0.055 -> 0.08; 17 ms per
 frame; the "vehicle IoU at +-0.5 s -0.03" first reported there was a misreading of a loss term, `sem.obj_iou` = 1 - soft IoU, which
 the block LOWERED, see the correction in that card). That KEEP means "write the joint-training card": this card. t13 (complete

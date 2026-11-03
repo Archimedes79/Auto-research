@@ -1,6 +1,6 @@
 # t18 motion block, own learning rate - does a smaller step for M take the noise off the static cells without losing the moving ones? (card 2026-11-02, before any run; the M part of the bundle arm `t18.fix` of the BEV system lead chat (D44 / D46: a good working system by the afternoon of 2026-11-03); written as `t17_motion_lr`, renamed because t17 is the data card `../t17_more_data/`; the train.py change of section 3 is the Training chat's, reviewed by this chat)
 
-Context: `../t16_full_network/experiment.md`. On the small set (8 train / 2 val scenes, 400 steps, GT v8, `bev_suite.py --velocity eval --n 80`)
+Context: `../../../experiments/t16_full_network/experiment.md`. On the small set (8 train / 2 val scenes, 400 steps, GT v8, `bev_suite.py --velocity eval --n 80`)
 the chain with the motion block M (`t16.small_s0`) beat its control without M (`t16.small_ctl_s0`) on the moving parts and lost on the
 static cells:
 

@@ -69,7 +69,7 @@ VAL 500 samples (pinned GT 0.5_4_15efbde2d1, cold keyframes, dt 0), the same fra
   0.106 -> 0.097, @+0.5 0.105 -> 0.096 / 0.096): soft IoU of the moved vehicle maps 0.24 -> 0.27, i.e. both overlap terms improved,
   consistent with total_main. The earlier text (commit c155065) read it as an IoU and called it a negative; it is withdrawn. The
   thresholded IoU (the suite's `seg_obj/seg/dt+-0.50/vehicle/all/all/iou@0`, p > 0.5) was not measured in t12; it is the guard of
-  the joint card (`../t15_motion_joint/experiment.md`).
+  the joint card (`../../../experiments/t15_motion_joint/experiment.md`).
 - **Cost:** 294 k parameters, 17 ms per frame at batch 1 (s1; s0 measured 58 ms while the GPU was shared: not an idle-GPU number), peak 2.2-2.6 GB.
 - **Next:** the joint-training card (block inside the model, trained with it under run.py, 2 seeds), with the box velocity read from the field and the block's runtime cut (17 ms is too slow for 0.3 M parameters); guard metrics
   in its rule next to the loss: the thresholded vehicle IoU at +-0.5 s of the suite (must not fall by more than its band against the

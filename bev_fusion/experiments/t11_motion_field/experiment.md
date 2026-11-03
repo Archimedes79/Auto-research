@@ -11,8 +11,8 @@ Context (system review of the val loss group "motion", 2026-10-31 night; numbers
 - Why it does not move: the same zero-inflated L1 as the object head (about 80 % of the supervised object cells are slower than 1 m/s and set to 0; 19.6 % move, measured on the same
   400 keyframes, plus the background term to 0), with an extra trap: at an exactly-zero output the L1 subgradient of every zero-target cell is 0, and the only other teacher, the
   train-only cross-time consistency that the trainer's selftest names as the motion head's gradient source (`train.py:810`), is off in every run (`"consistency": 0.0`), and the
-  gradient through the splat from the dt +-0.5 losses is about 1e-6 at the BEV feature (t1 review, `../t1_full_chain/experiment.md`).
-- What it means. For AVE: nothing directly - AVE reads the object head's `vel` (`object_head.py:180`), see `../t11_vel_hurdle/experiment.md`. For the decoding at dt != 0: the time mover
+  gradient through the splat from the dt +-0.5 losses is about 1e-6 at the BEV feature (t1 review, `../../results/experiments/t1_full_chain/experiment.md`).
+- What it means. For AVE: nothing directly - AVE reads the object head's `vel` (`object_head.py:180`), see `../../results/experiments/t11_vel_hurdle/experiment.md`. For the decoding at dt != 0: the time mover
   moves the state by the ego motion only, so a moving vehicle (6.6 m/s mean over the matched moving vehicles) lands about 3.3 m from where it is 0.5 s later, beyond the 2 m
   match threshold. t10_dual_s0 (`eval/table.txt`): vehicle AP@2 0.614 at dt 0, 0.319 at +0.5 s, 0.365 at -0.5 s; vehicle footprint IoU 0.413 -> 0.318 at +0.5 s. 36 % of the
   matched vehicles move (1107 / 3087), so the dead field explains a good part, not all, of the halving.
@@ -23,7 +23,7 @@ Context (system review of the val loss group "motion", 2026-10-31 night; numbers
 |---|---|
 | lens | system review (a dead head with a flat val curve nobody flagged) / training and losses |
 | group | motion (time decoding at dt +-0.5 s) |
-| sources | val rows of t1 / t8 / t10, t10 checkpoint, t1 motion review, plan 8.2 / 8.4 motion head spec, `../t11_vel_hurdle/experiment.md` |
+| sources | val rows of t1 / t8 / t10, t10 checkpoint, t1 motion review, plan 8.2 / 8.4 motion head spec, `../../results/experiments/t11_vel_hurdle/experiment.md` |
 | status | proposed (runs after t11.vel_hurdle; stacked on its arm B) |
 
 - **Question.** Does a moving-cell logit next to the velocity field (hurdle: the field is trained on moving cells only, gated by the logit) make the motion head learn in 1000 steps, and does that lift detection at dt +-0.5 s?
@@ -36,7 +36,7 @@ Context (system review of the val loss group "motion", 2026-10-31 night; numbers
   3. `losses.motion_term`: with `v_parts`: moving cell = object cell with |v_gt| >= `motion_min_speed` (1 m/s); loss = BCE(logit, moving) on object cells (normalised by their count) +
      0.1 x BCE(logit, 0) on the other valid cells (normalised by theirs) + L1(v_raw, v_gt) on moving cells only; and always `terms["motion_l1"]` = today's `MotionHead.loss` of the
      effective field, logged and not trained, so every arm has the same comparable number (zero field: 1.0945 on the val subset).
-  4. Logging: `motion_l1@+0.0` joins the logged keys of `../t11_vel_hurdle/experiment.md` change 5.
+  4. Logging: `motion_l1@+0.0` joins the logged keys of `../../results/experiments/t11_vel_hurdle/experiment.md` change 5.
 - **Gate (layer 0, CPU).** `tests/test_motion_hurdle.py`: (G1) `motion_moving` False: `MotionHead` output and `motion_term` unchanged (same tensors for a fixed seed), the
   `timed_head.py` selftest passes; (G2) zero start: at init `v_hat` = 0 exactly, so the splat is the ego move (selftest cases 1-2 hold with `moving=True`); (G3) toy: a blob moving at
   6 m/s on a static field, Adam 300 steps: `v_hat` at the blob within 0.5 m/s of 6, background |v_hat| < 0.1 m/s; (G4) `motion_l1` equals `MotionHead.loss(v_hat_effective, ...)`;
@@ -71,6 +71,6 @@ Context (system review of the val loss group "motion", 2026-10-31 night; numbers
   separate arm, not tonight); from-scratch training; the warm protocol (memory over whole scenes); latency (a 1 x 1 MLP on the head state: negligible).
 - **Cost.** ~0.9 GPU-hours (one arm, whole GPU), ~30 lines in timed_head.py, model.py, losses.py + the test (coder, ~45 min, can be built while A and B train); risk: the gated
   field moves background in the splat if the logit leaks (kill 2 and G3 watch it).
-- **Inputs.** Ready: the t10 checkpoint, arms A and B of `../t11_vel_hurdle/experiment.md` as references. To build: the four changes and the test; config
+- **Inputs.** Ready: the t10 checkpoint, arms A and B of `../../results/experiments/t11_vel_hurdle/experiment.md` as references. To build: the four changes and the test; config
   `training/configs/t11_motion_hurdle.json` = `t11_vel_hurdle.json` + `model.motion_moving` true.
 - **Referee.** -
