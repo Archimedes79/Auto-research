@@ -78,6 +78,11 @@ def check_plan():
     assert cmds(steps_of("--quant", "--n", "50")) == {"numbers": ["eval", "--n", "50"]}, "the golden relation: --quant is a plain eval"
     assert cmds(steps_of("--quant", "--curves", "--velocity"))["numbers"] == ["--curves", "--velocity", "eval", "--n", "1000"]
     assert cmds(steps_of("--time")) == {"time": ["time"], "timing": ["timing", "--n", "30"]}
+    # --out: bev_timing's is a FILE (bev_suite hands its global --out on to it), so timing gets a file inside the folder; the rest the folder, the showcase a subfolder
+    assert cmds(steps_of("--time", "--out", "o")) == {"timing": ["--out", "o/timing_modules.json", "timing", "--n", "30"], "time": ["--out", "o", "time"]}
+    c = cmds(steps_of("--all", "--out", "temp/o"))
+    assert c["timing"][:2] == ["--out", "temp/o/timing_modules.json"] and c["numbers"][:2] == ["--out", "temp/o"] and c["showcase"][:2] == ["--out", "temp/o/showcase"]
+    assert c["generalisation"][:2] == ["--out", "temp/o"] and c["modules"][:2] == ["--out", "temp/o"] and c["report"][:2] == ["--out", "temp/o"]
     assert all(s["fatal"] for s in steps_of("--time", "--videos", "2")), "asked for by name: fatal"
     assert cmds(steps_of("--qual", "4", "--seed", "7")) == {"qual": ["qual", "random", "4", "--seed", "7"]}
     fr = steps_of("--qual", "scene-0061/12,scene-0003/5")
@@ -90,6 +95,7 @@ def check_plan():
     # refusals: no TEST split, no --all on train, malformed names
     assert refused("--quant", "--split", "test") and refused("--all", "--split", "train")
     assert refused("--qual", "scene-0061") and refused("--videos", "scene-0061/12") and refused("--qual", "0") and refused("--videos", ",")
+    assert refused("--quant", "--n", "0") and refused("--all", "--n", "0") and refused("--quant", "--n", "-5") and refused("--quant", "--n", "x")
     with contextlib.redirect_stdout(io.StringIO()) as out:                           # no option: the help, exit 2
         assert E.main(["runs/x"]) == 2 and E.main([]) == 2
     assert "--quant" in out.getvalue() and "--all" in out.getvalue()
@@ -106,42 +112,125 @@ def fake_runner(codes):
 
 
 def check_execute():
-    with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+    with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()) as out:
         run = os.path.join(tmp, "runs", "x")
         a = E.build_parser().parse_args([run, "--all"])
         a.run = run
         # all pass
         runner, seen = fake_runner({})
         assert E.execute(a, E.plan(a), runner) == 0 and seen == ["timing", "numbers", "generalisation", "modules", "videos", "showcase", "report"]
-        # the numbers fail: fatal, nothing after them runs
+        assert "all steps passed" in out.getvalue()
+        # the numbers fail: fatal, nothing after them runs, the call ends with the code of the step
         runner, seen = fake_runner({"numbers": [3]})
-        assert E.execute(a, E.plan(a), runner) == 1 and seen == ["timing", "numbers"]
-        # timing, generalisation (twice) and modules fail: listed, the chain goes on, exit 0; the half-made store is set aside, not deleted
+        assert E.execute(a, E.plan(a), runner) == 3 and seen == ["timing", "numbers"]
+        # timing, generalisation (twice) and modules fail: listed, the chain goes on, and the call still ends non-zero (the first failure's code);
+        # the half-made store is set aside, not deleted
         store = os.path.join(run, "eval", "suite", "quant", "eval_train_n1000")
         os.makedirs(store)
         with open(os.path.join(store, "frames.jsonl"), "w") as f:
             f.write("half\n")
         runner, seen = fake_runner({"timing": [2], "generalisation": [1, 1], "modules": [1]})
-        assert E.execute(a, E.plan(a), runner) == 0
+        assert E.execute(a, E.plan(a), runner) == 2
         assert seen == ["timing", "numbers", "generalisation", "generalisation", "modules", "videos", "showcase", "report"], seen
         assert not os.path.exists(store)
         kept = glob.glob(os.path.join(run, "eval", "suite", "failed_stores", "eval_train_n1000.*", "frames.jsonl"))
         assert len(kept) == 1 and open(kept[0]).read() == "half\n"
-        # generalisation passes at the second try
+        # generalisation passes at the second try: nothing failed
         runner, seen = fake_runner({"generalisation": [1, 0]})
         assert E.execute(a, E.plan(a), runner) == 0 and seen.count("generalisation") == 2
         # asked for by name (not --all): a failed timing is fatal and `time` does not run after it
         b = E.build_parser().parse_args([run, "--time"])
         runner, seen = fake_runner({"timing": [1]})
         assert E.execute(b, E.plan(b), runner) == 1 and seen == ["timing"]
+        # a soft step that gives no usable code (killed: -9, or 256) still fails the call, with 1
+        for bad in (-9, 256):
+            runner, seen = fake_runner({"modules": [bad]})
+            assert E.execute(a, E.plan(a), runner) == 1 and seen[-1] == "report", bad
         # door.json: every call, with the commands and exit codes
         calls = json.load(open(os.path.join(run, "eval", "door.json")))["calls"]
-        assert len(calls) == 5, len(calls)
-        assert [c["exit"] for c in calls] == [0, 1, 0, 0, 1] and calls[1]["failed"] == ["numbers"] and calls[2]["failed"] == ["timing", "generalisation", "modules"]
-        last = calls[-1]
+        assert len(calls) == 7, len(calls)
+        assert [c["exit"] for c in calls] == [0, 3, 2, 0, 1, 1, 1] and calls[1]["failed"] == ["numbers"] and calls[2]["failed"] == ["timing", "generalisation", "modules"]
+        last = calls[4]
         assert last["options"]["time"] is True and [s["name"] for s in last["steps"]] == ["timing"]
         assert last["steps"][0]["command"] == ["python", "evaluation/bev_suite.py", run] + G6 + ["timing", "--n", "30"] and last["steps"][0]["exit"] == 1
         assert calls[2]["steps"][2]["tries"] == 2 and calls[2]["steps"][2]["exit"] == 1
+        text = out.getvalue()                                                       # one summary line says what failed and what happened to the chain
+        assert "FAILED numbers (exit 3); the chain stopped there; exit code 3" in text
+        assert "FAILED timing (exit 2), generalisation (exit 1), modules (exit 1); the chain went on, these steps are not fatal; exit code 2" in text
+
+
+def check_refusals():
+    """the call is refused before any step: no checkpoint, outputs that would be overwritten (a stand-in run folder, never a real run), names that are not in the val list"""
+    def ns(*argv):
+        a = E.build_parser().parse_args([run, *argv])
+        a.run = run
+        return a
+
+    def lister(a):
+        calls.append(a.device)
+        return {"scene-0003": 38, "scene-0012": 38}
+    with tempfile.TemporaryDirectory() as tmp:
+        run, calls = os.path.join(tmp, "runs", "x"), []
+        os.makedirs(os.path.join(run, "eval"))
+        assert "not a run folder" in E.refusal(ns("--quant"), lister)
+        open(os.path.join(run, "config.json"), "w").write("{}")
+        assert "no checkpoint" in E.refusal(ns("--quant"), lister) and "--ckpt-dir" in E.refusal(ns("--quant"), lister)
+        moved = os.path.join(tmp, "moved")
+        assert "is not a folder" in E.refusal(ns("--quant", "--ckpt-dir", moved), lister)
+        os.makedirs(moved)
+        assert "no checkpoint" in E.refusal(ns("--quant", "--ckpt-dir", moved), lister)
+        open(os.path.join(moved, "ckpt_00000001.pt"), "w").write("x")
+        assert E.refusal(ns("--quant", "--ckpt-dir", moved), lister) is None, "a moved checkpoint is found"
+        open(os.path.join(run, "ckpt_00000001.pt"), "w").write("x")
+        for opts in (["--quant"], ["--time"], ["--all"], ["--videos", "2"], ["--qual", "3"], ["--quant", "--split", "train"]):
+            assert E.refusal(ns(*opts), lister) is None, opts                       # a run without outputs: go on
+        ev = os.path.join(run, "eval")
+        # outputs that exist are not rewritten without --replace; the message names the file; what the option does not write does not block it
+        for exists, opts, blocked in (("card.json", ["--quant"], True), ("card.json", ["--all"], True), ("card.json", ["--time"], False), ("card.json", ["--quant", "--split", "train"], False),
+                                      ("card_train.json", ["--quant", "--split", "train"], True), ("card.json", ["--videos", "2"], False),
+                                      ("timing_modules.json", ["--time"], True), ("timing_modules.json", ["--all"], True), ("timing_modules.json", ["--quant"], False),
+                                      ("latency.json", ["--time"], True), ("latency.json", ["--all"], False), ("latency.json", ["--quant"], False)):
+            path = os.path.join(ev, exists)
+            open(path, "w").write("{}")
+            why = E.refusal(ns(*opts), lister)
+            assert (why is not None) == blocked and (not blocked or (exists in why and "--replace" in why)), (exists, opts, why)
+            assert E.refusal(ns(*opts, "--replace"), lister) is None, (exists, opts, "--replace goes on")
+            os.remove(path)
+        out_dir = os.path.join(tmp, "o")                                            # with --out the timing file lives in the folder
+        os.makedirs(out_dir)
+        open(os.path.join(ev, "timing_modules.json"), "w").write("{}")
+        assert E.refusal(ns("--time", "--out", out_dir), lister) is None, "the run's own file is not what --out writes"
+        open(os.path.join(out_dir, "timing_modules.json"), "w").write("{}")
+        assert "timing_modules.json" in E.refusal(ns("--time", "--out", out_dir), lister)
+        os.remove(os.path.join(ev, "timing_modules.json"))
+        os.remove(os.path.join(out_dir, "timing_modules.json"))
+        # names: random picks need no list; named scenes / frames must be in it (a frame index below the number of frames)
+        assert E.refusal(ns("--qual", "3", "--videos", "2"), lister) is None and calls == []
+        for opts, ok in ((["--videos", "scene-0003,scene-0012"], True), (["--videos", "scene-0003,scene-9999"], False), (["--qual", "scene-0003/37,scene-0012/0"], True),
+                         (["--qual", "scene-0003/38"], False), (["--qual", "scene-0003/x"], False), (["--qual", "scene-9999/1"], False)):
+            why = E.refusal(ns(*opts), lister)
+            assert (why is None) == ok and (ok or opts[1].split(",")[-1].split("/")[0] in why or "frames" in why), (opts, why)
+        asked, real_run = [], E.subprocess.run                                      # the real lister: `bev_suite.py RUN list` on the CPU (it takes no GPU from a job), "scene frames" lines
+        E.subprocess.run = lambda cmd, **kw: asked.append(cmd) or subprocess.CompletedProcess(cmd, 0, stdout="scene-0003 38\nsome warning\nscene-0012 40\n", stderr="")
+        try:
+            assert E.list_scenes(ns("--videos", "scene-0003", "--device", "cuda", "--workers", "2")) == {"scene-0003": 38, "scene-0012": 40}
+        finally:
+            E.subprocess.run = real_run
+        assert asked[0][1:3] == [E.SUITE, run] and asked[0][3:9] == ["--device", "cpu", "--workers", "0", "--split", "val"] and asked[0][-1] == "list", asked
+        assert "no scenes" in E.refusal(ns("--videos", "scene-0003"), lambda a: {})
+        # through main: refused = exit 2 with the reason on stderr, nothing run; --replace goes on to execute
+        ran, real_execute = [], E.execute
+        E.execute = lambda a, steps: ran.append([s["name"] for s in steps]) or 0
+        try:
+            open(os.path.join(ev, "card.json"), "w").write("{}")
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                assert E.main([run, "--quant"]) == 2 and ran == []
+            assert "refused" in err.getvalue() and "card.json" in err.getvalue() and "--replace" in err.getvalue(), err.getvalue()
+            assert E.main([run, "--quant", "--replace"]) == 0 and ran == [["numbers"]]
+            with contextlib.redirect_stderr(io.StringIO()):
+                assert E.main([run, "--qual", "scene-0061"]) == 2 and ran == [["numbers"]], "a malformed name is refused too"
+        finally:
+            E.execute = real_execute
 
 
 def same(a, b, what):
@@ -203,7 +292,8 @@ def main():
     os.chdir(ROOT)
     check_plan()
     check_execute()
-    done = "plan and executor ok"
+    check_refusals()
+    done = "plan, executor and refusals ok"
     if a.real:
         done += "; " + ("golden check ok" if check_golden(a.real, a.n, a.device) else "golden check skipped")
     print(f"evaluate door: {done}")
