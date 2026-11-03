@@ -1,6 +1,6 @@
 """Synthetic data of the camera-only S1 pipeline in the format of the REAL feature cache (plan.md 10.1 / experiments/s1a_lift_pd_vs_p, section 3).
 
-One sample = one random synthetic scene (tests/synthetic_world.py) seen by the front camera with the geometry of the
+One sample = one random synthetic scene (tests/support/synthetic_world.py) seen by the front camera with the geometry of the
 real post-ida image (256 x 704, f = 560, 1.5 m high, feature map 16 x 44 = stride 16, the resolution of DualBEV's
 features - the oracle gate at stride 8 was too kind, plan 10.1):
 - ctx (80, 16, 44): what the image encoder would know without any depth: the pixel classes of every 16 x 16 group as
@@ -12,7 +12,7 @@ features - the oracle gate at stride 8 was too kind, plan 10.1):
   the cells the camera sees (the cells whose height samples project into the image, LiftPD.visibility), float
 - K, T_cam_car, hw: the rig, the same for every sample; ida = None
 Lane lines vary per sample (offset, spacing, yaw): a fixed position would let a per-cell prior solve them.
-Stored in `temp/cache/s1_synth.pt` (derived data, not in git). Build: python tests/synthetic_s1_data.py [n_train n_val]
+Stored in `temp/cache/s1_synth.pt` (derived data, not in git). Build: python studies/early/synthetic_s1_data.py build [n_train n_val] (without arguments: the self-test)
 The real data gets the same dict layout (prob, ctx, K, T_cam_car, hw, gt, mask, scene) in the S1a driver (to build, from
 training/feature_cache.py and training/gt_bev.py).
 """
@@ -24,13 +24,15 @@ import sys
 import torch
 import torch.nn.functional as F
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training"))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))     # the bev_fusion folder
+sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path.insert(0, os.path.join(ROOT, "tests"))                           # test_oracle_lift (a gate)
+sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
 from lift_pd import Grid, LiftPD  # noqa: E402
 from synthetic_world import camera, front_camera, gt_bev, random_scene  # noqa: E402
 from test_oracle_lift import DC, depth_hist  # noqa: E402
 
-CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "temp", "cache", "s1_synth.pt")
+CACHE = os.path.join(ROOT, "temp", "cache", "s1_synth.pt")
 CLASS_NAMES = ("lanes", "vehicles", "pedestrians")
 N_CTX, STRIDE = 80, 16
 # coverage fraction of a 0.5 m cell above which a class is present: a lane line (15 cm wide) touches a cell with a fraction

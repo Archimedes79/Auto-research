@@ -3,14 +3,14 @@
 A return measures only the radial component d = v . u (u the unit line of sight from its sensor). Several returns of
 the same object with different u are combined in the information form A = sum u u^T, b = sum d u (the A, b channels of
 the radar encoder); where A is well conditioned, v_hat = A^-1 b gives the full 2D velocity.
-Synthetic world (tests/synthetic_world.py): moving boxes, detections on their visible edges, noise: range 0.1 m,
+Synthetic world (tests/support/synthetic_world.py): moving boxes, detections on their visible edges, noise: range 0.1 m,
 azimuth 0.5 deg, Doppler 0.1 m/s (assumed values, not checked against a sensor data sheet). Per moving box with >= 2
 returns: v_hat by least squares (with a tiny ridge), its error split into the radial component (along the mean line of
 sight) and the tangential one, by range band. Cases: 1 radar 1 sweep; 3 radars (front, front-left, front-right as
 mounted in nuScenes, roughly) 1 sweep; 1 radar 6 sweeps over 0.5 s (ego and object move, so u changes; older returns
 expressed in the current frame, the object velocity assumed constant in the world).
 Known answer: the radial error must be at the noise level in every case; the tangential error shows what Doppler
-alone cannot give - the part the two-frame flow (test_flow_from_frames.py) must supply.
+alone cannot give - the part the two-frame flow (studies/early/flow_from_frames.py) must supply.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_doppler.py
 """
 import math
@@ -19,7 +19,7 @@ import sys
 
 import torch
 
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from synthetic_world import radar, random_scene  # noqa: E402
 
 RADARS_1 = [(3.6, 0.0, 0.0)]

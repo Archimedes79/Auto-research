@@ -1,6 +1,6 @@
 """Does the velocity field EXPLAIN the motion, or is the next frame only predicted well? (Mirko, 2026-10-26)
 
-Sequence of BEV maps with moving boxes (tests/synthetic_world.py: cars, trucks, pedestrians with ground velocities,
+Sequence of BEV maps with moving boxes (tests/support/synthetic_world.py: cars, trucks, pedestrians with ground velocities,
 lane lines, exact ego motion; frames F0, F1, F2 dt apart, like consecutive nuScenes GT keyframes). A small model of
 its own - encoder E (3 x 3 convs) per frame, the temporal block (training/temporal.py: TemporalPropagation velocity
 hypotheses + FlowRefine, K iterations, bounded steps) and decoder D - predicts F1 from F0 ONLY through the motion:
@@ -18,13 +18,13 @@ Claims (PASS / FAIL): EPE on vehicles < 1 m/s; raw move (3) and extrapolation (4
 IoU; the learned field beats v = 0 by > 0.1 IoU in 3; the prediction (1) is not much better than the raw move (3)
 (< 0.1 IoU: the decoder does not carry the motion).
 Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
-  wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_explains.py [--quick] [--seed N] [--dt 0.25] [--prior 1e-3]
+  wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_explains.py [--quick] [--seed N] [--dt 0.25] [--prior 1e-3]
       [--sharp] (softmax-splatting importance + pi entropy 5e-3) [--pyr] (FlowPyramid 2 + 1 + 1 iterations instead of
       4 iterations of FlowRefine at 0.5 m) [--smooth 0.05] (edge-aware smoothness of every flow, weights from the input
       map: one box moves as one body - the first run failed 0 / 5: the field was a patchwork inside each box, the raw
       move scattered the boxes into debris, the decoder repaired it; prediction IoU 0.85, raw move 0.27, v = 0 0.42)
       [--doppler] (simulated radar Doppler, a detection in half the occupied cells, applied to the start field and after
-      EVERY refinement iteration - in tests/test_flow_refine.py this kept the stripes static and improved A)
+      EVERY refinement iteration - in studies/early/flow_refine.py this kept the stripes static and improved A)
       [--pyr-leak] (the pyramid without detaching between levels: the pre-fix behaviour, compared on seeds)
       [--vmax 20] (soft physical speed bound of the refined field)
       [--rawwarp 1.0] (the explanation as a loss: MSE of the raw F0 moved with v alone against F1, on every refined flow;
@@ -41,7 +41,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 import scratch  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402

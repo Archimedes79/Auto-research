@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run the synthetic gates of bev_fusion block by block and report pass / fail per block (plan.md section 10.1).
-# Fast self-tests always; the training gates (flow, splat correction) and the slow self-tests of the chain (model, losses, trainer,
-# autoGT) only with --all (they take minutes on the CPU).
+# Fast self-tests always; the slow self-tests of the chain (model, losses, trainer, autoGT, radar slot, projection) only with --all
+# (they take minutes on the CPU). The early studies that were once gates here (flow from frames / correlation, 2026-10) live in
+# studies/early/ (D48): they train for up to 40 minutes and their recorded result is a narrow or open FAIL of the self-supervised arm.
 # Usage (from the bev_fusion folder): wsl bash tests/run_gates.sh [--all]
 cd "$(dirname "$0")/.." || exit 1
 export PYTHONPATH="$(cd .. && pwd)${PYTHONPATH:+:$PYTHONPATH}"     # autogt lives at the repository root since 2026-11-01 (`-m autogt selftest`)
@@ -17,7 +18,7 @@ run() {  # run <block> <command...>
     fail=1
   fi
 }
-run "synthetic world"   "$PY" tests/synthetic_world.py
+run "synthetic world"   "$PY" tests/support/synthetic_world.py
 run "lift PD"           "$PY" training/lift_pd.py
 run "camera encoder"    "$PY" training/camera_encoder.py
 run "radar encoder"     "$PY" training/radar_bev.py
@@ -69,8 +70,6 @@ if [ "${1:-}" = "--all" ]; then
   run "radar slot"      "$PY" tests/test_radar_slot.py              # delta_slots in the whole chain: side loss, gradients, old path unchanged; about 2 min
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
   run "autoGT"          "$PY" -m autogt selftest
-  run "flow from frames" "$PY" tests/test_flow_from_frames.py
-  run "flow correlation" "$PY" tests/test_flow_correlation.py
   run "projection (R-GEO)" "$PY" tests/test_projection_general.py
 fi
 exit $fail

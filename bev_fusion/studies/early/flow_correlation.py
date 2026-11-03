@@ -1,6 +1,6 @@
 """Gate, second attempt (plan.md 10.1 / 10.1.1): velocity field from two BEV frames with the fixes from existing work.
 
-Same data as tests/test_flow_from_frames.py (synthetic world, frames 1/12 s apart, features lanes / vehicles /
+Same data as studies/early/flow_from_frames.py (synthetic world, frames 1/12 s apart, features lanes / vehicles /
 pedestrians without a velocity channel; the newer frame ego-pulled into the older one, so the exact ego flow is
 subtracted and only object motion is left). Changes (literature/fixes_for_gate_findings.md):
 - network: a shared small encoder for both frames, a LOCAL CORRELATION volume over +-4 cells (81 displacements,
@@ -14,7 +14,7 @@ subtracted and only object motion is left). Changes (literature/fixes_for_gate_f
 - then supervised fine-tuning from the self-supervised weights; controls: supervised from scratch with the same
   number of steps as the fine-tuning, and with the full step budget
 Evaluation as before: mean end-point error on moving-box cells, per box mean / median, against the null v = 0.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_correlation.py
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_correlation.py
 (the pairs are cached in temp/cache/flow_pairs.pt; delete it after a change of the synthetic world)
 """
 import math
@@ -28,7 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from lift_pd import Grid  # noqa: E402
 from splat import splat_bev  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402

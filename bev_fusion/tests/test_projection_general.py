@@ -22,7 +22,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from lift_pd import Grid, LiftPD, build_table  # noqa: E402
 from synthetic_world import camera, random_scene  # noqa: E402
 from test_oracle_lift import DC, depth_dist, features, hit_cells, lifted, range_recall, score  # noqa: E402

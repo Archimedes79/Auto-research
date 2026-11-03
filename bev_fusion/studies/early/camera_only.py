@@ -1,6 +1,6 @@
 """Gate of the camera-only decoder (training/legacy/camera_decoder.py): semantic map + all objects from one camera alone.
 
-Synthetic world (tests/synthetic_world.py): per sample a random scene at the output time and the same scene 0.5 s
+Synthetic world (tests/support/synthetic_world.py): per sample a random scene at the output time and the same scene 0.5 s
 earlier (Scene.step(-0.5)); both are rendered by the ray-cast front camera (128 x 352, f = 280, 1.5 m high) with exact
 depth and class per pixel. Depth target per feature cell (stride 8): the histogram of all its pixel depths over the
 118 bins (tests/test_oracle_lift.depth_hist, the oracle gate's fix); cells that are all sky are ignored.
@@ -9,8 +9,8 @@ objects with velocity. Losses and metrics only on the ground the camera sees (ce
 the image); objects: those with at least one pixel in the current image ('seen'), plus a recall over all objects whose
 centre lies in the camera's ground field of view.
 Metrics on held-out scenes: semantic IoU at 0.5 per class and range band; objects AP at 0.5 / 1 / 2 m and the match
-errors (tests/test_object_head.evaluate); depth: mean absolute error of the expected depth on non-sky cells.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_camera_only.py [--quick]
+errors (studies/early/object_head_synth.evaluate); depth: mean absolute error of the expected depth on non-sky cells.
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/camera_only.py [--quick]
 """
 import math
 import os
@@ -23,7 +23,8 @@ import torch.nn.functional as F
 
 sys.path.insert(0, "training")
 sys.path.insert(0, "training/legacy")                 # camera_decoder (off the chain since 2026-10-31)
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests")                                        # test_oracle_lift (a gate)
+sys.path.insert(0, "tests/support")
 from camera_decoder import DEPTH_CENTRES, SEM_CLASSES, Z_LEVELS, CameraOnlyDecoder  # noqa: E402
 
 SEM_THR = (0.05, 0.5, 0.25)             # coverage threshold per class of SEM_CLASSES (a 0.6 m pedestrian often
@@ -31,7 +32,7 @@ SEM_THR = (0.05, 0.5, 0.25)             # coverage threshold per class of SEM_CL
 from lift_pd import Grid  # noqa: E402
 from object_head import GROUPS, build_targets, decode, head_loss  # noqa: E402
 from synthetic_world import camera, front_camera, gt_bev, random_scene  # noqa: E402
-from test_object_head import evaluate, show  # noqa: E402
+from object_head_synth import evaluate, show  # noqa: E402
 from test_oracle_lift import depth_hist  # noqa: E402
 
 G = Grid(z_levels=Z_LEVELS)

@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from lift_pd import Grid, build_table, lift_pd  # noqa: E402
 from synthetic_world import camera, front_camera, random_scene  # noqa: E402
 

@@ -19,7 +19,7 @@ import torch
 from torch import nn
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 import toy_train as TT  # noqa: E402
 import train as T  # noqa: E402
 

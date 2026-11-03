@@ -35,7 +35,8 @@ os.chdir(ROOT)
 sys.path.append(ROOT)
 sys.path.append(os.path.dirname(ROOT))                          # autogt (synthetic GT of losses.synthetic_gt): the repo root since its move out of bev_fusion
 import object_head  # noqa: E402
-import synthetic_world as sw  # noqa: E402 (tests/)
+sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
+import synthetic_world as sw  # noqa: E402
 import train as tr  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from losses import NUSC_GROUPS, BEVLoss, LossConfig, synthetic_gt  # noqa: E402

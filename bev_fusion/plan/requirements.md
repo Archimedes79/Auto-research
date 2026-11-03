@@ -17,14 +17,14 @@ Set by Mirko. Every design and every code change is checked against this file; a
 | id | requirement | source | how it is checked | status |
 |---|---|---|---|---|
 | R-DATA-1 | nuScenes is a dataset, not the problem. Calibration and timestamps are inputs; no block contains a nuScenes constant; the product is a BEV model for a vehicle with any number of cameras and radars at any mounting. | 2026-10-25: "Do not understand Nuscenes as Problem space. There is a real world outside Nuscenes." (plan section 0) | review rule; R-GEO-1 gate for the camera; radar: `radar_bev.to_vehicle` takes the sensor pose, self-test "rig independence" | by construction |
-| R-DATA-2 | Every sensor has its own timestamps; the fusion handles individual sensor times (dt of each sensor to the target time is an input, nothing assumes synchronised sensors). | 2026-10-25: a plan "how to consider individual timings of the sensors" | splat and temporal gates (`tests/test_temporal*.py`, `training/splat.py` self-test) with explicit dt | met in the synthetic gates, open on real data |
+| R-DATA-2 | Every sensor has its own timestamps; the fusion handles individual sensor times (dt of each sensor to the target time is an input, nothing assumes synchronised sensors). | 2026-10-25: a plan "how to consider individual timings of the sensors" | splat and temporal gates (`studies/early/temporal_*.py`, `training/splat.py` self-test) with explicit dt | met in the synthetic gates, open on real data |
 
 ## 3 Method rules (Mirko, from the conversation; confirmed 2026-10-30)
 | id | requirement | source |
 |---|---|---|
 | R-METH-1 | Every block is founded on a paper and its code, and has a documented fallback to a proven component. | 2026-10-25 "found every block on papers and paper code"; 2026-10-26 "plan a fallback to a proven network component" |
 | R-METH-2 | Every block is testable on synthetic data with a known answer before it is chained into a black box; the matching probe on real data is defined (plan 10.1 / 10.2). | 2026-10-26 "Make sure steps are synthetically testable before we build a blackbox"; "keep modular tests to debug each part of the network on synthetic data before blackboxing it. Also see how to debug on real data" |
-| R-METH-3 | Stay anchored to the state of the art: published designs run through the same code and the same test as ours (`training/s1_camera.py` presets, `tests/test_s1_pipeline.py`); new ideas are compared against them. | 2026-10-26 "make sure that we do not go away totally from SOA here" |
+| R-METH-3 | Stay anchored to the state of the art: published designs run through the same code and the same test as ours (`training/s1_camera.py` presets, `studies/early/s1_pipeline.py`); new ideas are compared against them. | 2026-10-26 "make sure that we do not go away totally from SOA here" |
 | R-METH-4 | Efficient and fast; milliseconds per frame are measured on an idle GPU (batch 1). | first message "super efficient bev transform"; `temp/timing/time_s1_chain.py` |
 
 ## 4 Goals of the first message (scope; confirmed 2026-10-30)

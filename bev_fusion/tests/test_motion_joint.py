@@ -18,7 +18,7 @@ import sys
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "..")]
+sys.path[:0] = [os.path.join(ROOT, "training"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "..")]
 import synthetic_world as sw  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from losses import BEVLoss, synthetic_gt  # noqa: E402

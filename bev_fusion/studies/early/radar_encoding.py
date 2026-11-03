@@ -17,7 +17,7 @@ Three levels, cheap first:
                   decoder can read the raster, so this reaches the ceiling by construction (the reference)
 A detection counts as recovered if ALL its fields lie within the tolerances at once (temp/radar/radar_recon_test.py).
 Pass criteria: A exact; C: tolweight on held-out >= 0.9 x the ceiling and train - held-out gap <= 3 points.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u tests/test_radar_encoding.py [--learned [steps]]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/radar_encoding.py [--learned [steps]]
 """
 import math
 import sys

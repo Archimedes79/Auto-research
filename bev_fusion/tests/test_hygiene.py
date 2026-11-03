@@ -16,7 +16,7 @@ import sys
 import torch
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 import losses as L  # noqa: E402
 import splat as S  # noqa: E402
 import timed_head as TH  # noqa: E402

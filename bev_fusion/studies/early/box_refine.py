@@ -1,5 +1,5 @@
 """Gate of the object head, stage 2 (plan.md 8.3, S5c): box refinement with 4 sampling points on the box faces.
-On the synthetic world (inputs, network and metrics of tests/test_object_head.py, rendered with ss = 2): stage 1
+On the synthetic world (inputs, network and metrics of studies/early/object_head_synth.py, rendered with ss = 2): stage 1
 (BEVTrunk + ObjectHead) trained as in its --quick setting (200 training scenes, 400 iterations, batch 8), then frozen;
 two refiners trained on its features (same seed, same budget): CenterPoint's fixed centre + 4 face points (control)
 and the deformable points (learned offsets). Candidates in training: the decoded stage-1 boxes plus jittered GT boxes;
@@ -7,7 +7,7 @@ at evaluation the decoded boxes only. Compared on 50 held-out scenes: stage 1 al
 0.5 / 1 / 2 m, and for the matches at 1 m BEV IoU, centre error, yaw error).
 Unobserved GT boxes (observed False, plan 8.4) are ignored by S5c: check_unobserved() runs first.
 Pass: the deformable refinement improves the mean BEV IoU of cars over stage 1 alone. Log: temp/checks/box_refine.log
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_box_refine.py
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/box_refine.py
 """
 import random
 import sys
@@ -16,10 +16,10 @@ import time
 import torch
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from object_head import BoxRefiner, refine_boxes, refine_candidates, refine_loss, sample_bev, boxes_to_tensor  # noqa: E402
 from synthetic_world import random_scene  # noqa: E402
-from test_object_head import DEV, G, evaluate, make_model, predict, scene_inputs, show, train  # noqa: E402
+from object_head_synth import DEV, G, evaluate, make_model, predict, scene_inputs, show, train  # noqa: E402
 
 LOG = "temp/checks/box_refine.log"
 REF_ITERS, BS = 1500, 8

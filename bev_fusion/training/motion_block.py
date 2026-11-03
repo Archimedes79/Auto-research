@@ -1,5 +1,5 @@
 """Motion block (t12, Mirko 2026-11-01): the velocity field at the current time k from TWO camera BEVs + ego motion + the
-radar Doppler, in a small learned pyramid - the fused flow model of tests/test_flow_fused.py (plan 7.4, the arm without
+radar Doppler, in a small learned pyramid - the fused flow model of studies/early/flow_fused.py (plan 7.4, the arm without
 correlation), moved from ground-truth maps onto the model's own BEV features.
 
     cur  = camera BEV of frame k          old = camera BEV of an older window frame, splatted to k by the EGO motion only

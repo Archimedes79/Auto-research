@@ -9,7 +9,7 @@ a moving object from its motion (a static box's heading is ambiguous by 180 deg:
 Metrics on held-out scenes: AP per class at centre distances 0.5 / 1 / 2 m (all-point AP, simplified), and for the
 matches at 1 m: centre error, BEV IoU (shapely polygons; circles as polygons), size error, yaw error, radius error,
 velocity error.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_object_head.py [--quick]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/object_head_synth.py [--quick]
 """
 import math
 import random
@@ -20,7 +20,7 @@ import torch
 from shapely.geometry import Point, Polygon
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from bev_trunk import BEVTrunk  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from object_head import GROUPS, ObjectHead, build_targets, decode, head_loss  # noqa: E402

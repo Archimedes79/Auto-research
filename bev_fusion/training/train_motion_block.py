@@ -11,7 +11,7 @@ its running statistics). Two hooks, no edit of the model code:
 So the block's velocity moves the trunk state to -0.5 / +0.5 s for the timed heads and is the "v_hat" of the motion
 loss; the outputs at dt = 0 do not change. Training loss = the base's loss (BEVLoss with its frozen Kendall weights, the
 GT of -0.5 / 0 / +0.5 s; the gradient reaches only the block: the motion term and the maps / boxes decoded at +-0.5 s)
-+ the motion term on the coarser levels with the weight of the motion group (deep supervision, as tests/test_flow_fused.py).
++ the motion term on the coarser levels with the weight of the motion group (deep supervision, as studies/early/flow_fused.py).
 Every keyframe runs cold (seq_len 1: no world memory carried), the same for both arms.
 
 Validation (the same `val_subset` frames for both arms): velocity error (EPE, m/s) on supervised object cells (all,

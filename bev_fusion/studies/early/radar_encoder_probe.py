@@ -2,7 +2,7 @@
 
 Mirko, 2026-10-26: use the reconstruction as a side loss to help first, but the side loss is not the goal. So three trainings of the
 same module (2000 steps, 8 train scenes, 2 held-out scenes, C = 64), each followed by the same honest measurement:
-  aux only         side loss alone (what tests/radar_codecs.py measured; the information ceiling of the module)
+  aux only         side loss alone (what studies/early/radar_codecs.py measured; the information ceiling of the module)
   task only        a proxy task alone: "does the cell hold a moving detection (|vr| > 1 m/s)?" - 1 x 1 head on the features
   task + aux       the proxy task plus the side loss with aux_weight(step): 1.0 decaying to the floor 0.05 (half life 500 steps)
 Measurement: kept fraction = share of the detections whose six fields (position, distance, direction, Doppler, RCS, age) all
@@ -12,7 +12,7 @@ probe can only keep more); where the side loss was on, the module's own jointly 
 side loss is off). The task score (F1 on occupied cells) shows that the side loss does not buy the
 information with the task: it has to stay close to "task only".
 Gate (printed, exit code): task + aux keeps >= 0.9 x the oracle on held-out scenes and its task F1 is within 0.03 of task only.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u tests/test_radar_encoder.py [steps]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/radar_encoder_probe.py [steps]
 """
 import sys
 

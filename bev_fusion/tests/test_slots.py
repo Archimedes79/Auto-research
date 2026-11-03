@@ -1,5 +1,5 @@
 """Contract test of every kind of every network slot (training/architecture.md) and of the main switches (camera_off, cam_adapter,
-head_channels, trunk_detail; the lane branch and the refiner have their own tests: test_lane_branch_chain.py, test_box_refine.py,
+head_channels, trunk_detail; the lane branch and the refiner have their own tests: test_lane_branch_chain.py, studies/early/box_refine.py,
 because they need pre-trained weights or GT boxes): each kind is built on a
 small grid inside the cached chain (CachedBEVFusionModel), run on a synthetic cached batch through the precompute step, and must
 (1) refuse no valid combination and refuse the invalid ones in model.check_config, (2) pass interface.check_inputs / check_outputs,

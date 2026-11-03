@@ -11,7 +11,7 @@ source map (types at t - 0.5 s) is propagated by the block and compared with the
 label. Learned velocity per type after training, for: (1) one hypothesis, bilinear, starting at 0 (the plain splat);
 (2) one hypothesis with a Gaussian kernel annealed from 2 cells to bilinear; (3) four hypotheses + static, bilinear;
 (4) (3) + Doppler evidence (radial velocity along rays from the origin, noise 0.1 m/s).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_temporal.py [--quick | --smoke]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/temporal_block.py [--quick | --smoke]
 (--smoke: only the smoke checks, exit code 1 on any FAIL - the fast gate of tests/run_gates.sh)
 """
 import math

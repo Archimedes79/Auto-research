@@ -3,7 +3,7 @@
 drift away from (Mirko, 2026-10-26: "make sure that we do not go away totally from SOA").
 
     prob (B, D, h, w) depth distribution + ctx (B, C, h, w) context per feature cell   <- the frozen DualBEV image heads
-    (real: training/feature_cache.py; synthetic: tests/synthetic_s1_data.py - the SAME dict layout)
+    (real: training/feature_cache.py; synthetic: studies/early/synthetic_s1_data.py - the SAME dict layout)
       -> lift (per sample calibration): PD pull with depth weight / P pull without depth / S splat (LSS)
       -> height: kept as channels (feat[z_car], Simple-BEV / ours) or summed (DualBEV's bev_pool over its 13 heights, LSS)
       -> 1x1 reduce (skipped when the summed volume already has the trunk's input width, as DualBEV)

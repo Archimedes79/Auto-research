@@ -1,5 +1,5 @@
 """Motion flow field with iterative refinement (plan.md 7.3; Mirko 2026-10-26: "get a good motion flow field, try 4
-refinements"). World of tests/test_temporal_stages.py: objects A (8, 2) m/s and B (-2, -6) m/s, static stripes,
+refinements"). World of studies/early/temporal_stages.py: objects A (8, 2) m/s and B (-2, -6) m/s, static stripes,
 random ego motion over 0.5 s. Trained on the warp MSE only (no velocity label).
 Arms:
   H        four velocity hypotheses + static (training/temporal.py TemporalPropagation), flow = pi-weighted mean
@@ -35,7 +35,7 @@ The refinement step is bounded by the lookup window (+-1.5 m per iteration; Flow
 Metrics on held-out scenes after each iteration: end-point error of the velocity (m/s) on the cells of A, of B and
 of the static stripes; warp MSE on the known cells. Image: temp/checks/flow_refine.png (direction = hue, speed =
 brightness, on occupied cells).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
     [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label,S+D+R4+smooth,S+DD+R4+smooth] [--smooth 0.05]
 """
 import math
@@ -46,10 +46,10 @@ import time
 import torch
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from flow_viz import flow_rgb, wheel  # noqa: E402
 from temporal import FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, propagate  # noqa: E402
-from test_temporal_stages import G, VA, VB, sample  # noqa: E402
+from temporal_stages import G, VA, VB, sample  # noqa: E402
 
 QUICK = "--quick" in sys.argv
 SEED = int(sys.argv[sys.argv.index("--seed") + 1]) if "--seed" in sys.argv else 0

@@ -1,12 +1,12 @@
 """Is the TRUE motion a minimum of the self-supervised loss? (plan.md 7.3, 2026-10-26)
 
-Finding that motivates it: in tests/test_flow_refine.py the refined velocity fields reach a warp MSE of 0.0013 on the
+Finding that motivates it: in studies/early/flow_refine.py the refined velocity fields reach a warp MSE of 0.0013 on the
 known cells while the TRUE field gets 0.0080 - per-cell velocities that reshape blobs and stripes beat the real motion,
 so the refinement learns to game the loss. Here, without any network: a per-cell velocity field is set to the TRUE
 field of each held-out scene of that test and then optimised directly (Adam, 200 steps) on the loss variant; a good
 loss keeps it at the truth (small drift), a gameable one moves it away while its own value falls.
 Loss variants: (1) warp MSE (the current loss); (2) + MSE of the 2x and 4x average-pooled maps (multi-scale);
-(3) MSE of the 4x pooled maps only; (4) warp MSE + edge-aware smoothness (tests/test_flow_refine.py smoothness);
+(3) MSE of the 4x pooled maps only; (4) warp MSE + edge-aware smoothness (studies/early/flow_refine.py smoothness);
 (5) warp MSE with a Gaussian splat (sigma 1 cell) for prediction AND a target blurred the same way; (6) / (7) warp MSE
 with the velocity on a COARSER grid (one velocity per 1 x 1 m / 2 x 2 m block, upsampled nearest; initialised with the
 occupancy-weighted mean of the true velocity in the block): motion has fewer degrees of freedom than appearance.
@@ -16,7 +16,7 @@ start (truth) and at the end. Claim checked per variant: the truth is (near) a m
 gameable loss: sub-cell reshaping).
 Result 2026-10-26: none holds - warp MSE falls 20x (drift 0.32), + pooled 16x (0.31), pooled 4x 10x (0.51),
 + smoothness 7x (0.21), Gaussian splat + blurred target 10x (0.63), coarse velocity 1 m 7x (0.52), 2 m 4x (0.88).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_warp_loss_minimum.py
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/warp_loss_minimum.py
 """
 import random
 import sys
@@ -25,9 +25,9 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from temporal import gaussian_splat, landing, propagate, steps_tensor  # noqa: E402
-from test_flow_refine import G, sample, smoothness, true_flow  # noqa: E402
+from flow_refine import G, sample, smoothness, true_flow  # noqa: E402
 
 
 def blur(m, sigma=1.0, r=2):

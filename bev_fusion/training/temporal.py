@@ -23,7 +23,7 @@ are marked by mass 0. Velocity labels, where available, can still supervise v_me
 Conventions as training/splat.py: x forward, y left, maps (B, C, X, Y), cell i centre x_min + (i + 0.5) res.
 Basis: softmax splatting (Niklaus & Liu, CVPR 2020, from memory), multiple-hypothesis / winner-takes-all prediction
 (e.g. MCL; from memory), CRT-Fusion's velocity shift and FIERY's ego warp (literature/code/).
-Run the self-test: python training/temporal.py; the gate tests: tests/test_temporal.py
+Run the self-test: python training/temporal.py; its checks and speed learning: studies/early/temporal_block.py
 """
 import math
 
@@ -436,7 +436,7 @@ def _selftest():
     wt = torch.rand(1, 5, dtype=dt64, requires_grad=True)
     assert torch.autograd.gradcheck(lambda a, b, c: gaussian_splat(a, b, c, gs, 0.7, 2)[0], (feat, pos, wt), eps=1e-6, atol=1e-5)
     print("temporal selftest ok: identity, mass conservation, known velocity, ego motion, aliasing wrap, gradcheck "
-          "(features, positions, hypothesis weights); full gates: tests/test_temporal.py")
+          "(features, positions, hypothesis weights); full checks: studies/early/temporal_block.py")
 
 
 if __name__ == "__main__":

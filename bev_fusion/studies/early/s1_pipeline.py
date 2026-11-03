@@ -1,6 +1,6 @@
 """Gate of the camera-only S1 pipeline on synthetic data (experiments/s1a_lift_pd_vs_p, section 3; plan.md 10.1): the REAL
 module (training/legacy/s1_camera.py), the REAL driver (training/legacy/train_s1.py: loss, training loop, per-scene SegMeters, null baseline,
-paired scene bootstrap) trained and tested on artificial data with a known answer (tests/synthetic_s1_data.py: the real
+paired scene bootstrap) trained and tested on artificial data with a known answer (studies/early/synthetic_s1_data.py: the real
 cache format at the real feature resolution, stride 16). What it proves: the pipeline is wired (it can overfit), it learns
 (above the prior-map null), the depth weight helps exactly when the depth carries information, and the presets of the
 published designs (DualBEV HeightTrans, Simple-BEV, LSS) run through the same code and learn the same task - so a later
@@ -18,7 +18,7 @@ camera-visible cells, held-out synthetic scenes):
                 ground groups within 1 m of the truth), so it is no null; replaced by G4b, not removed silently
   G5 anchors    each published preset (simplebev, lss, dualbev) learns: class mean >= null + 0.15; and ours >= max of them - 0.02
 Printed besides the gates: per class and range band, paired scene bootstrap PD - P, null, parameters, seconds per run.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_s1_pipeline.py [--steps N] [--arms a,b] [--quick]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/s1_pipeline.py [--steps N] [--arms a,b] [--quick]
 (GPU, about 1 s per 10 steps for width 0.5 on a shared 3060; the default 1200 steps x 9 runs takes about 1.5 hours with the DualBEV width-1.0 trunk.)
 """
 import argparse
@@ -31,16 +31,17 @@ import numpy as np
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "training"))
-sys.path.insert(0, os.path.join(HERE, "..", "training", "legacy"))          # s1_camera, train_s1 (off the chain since 2026-10-31)
+ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))                      # the bev_fusion folder
+sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path.insert(0, os.path.join(ROOT, "training", "legacy"))                # s1_camera, train_s1 (off the chain since 2026-10-31)
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, ROOT)
 import synthetic_s1_data as D  # noqa: E402
 import train_s1 as T  # noqa: E402
 from s1_camera import CameraBEVSeg, S1Config, n_params  # noqa: E402
 
 NAMES = D.CLASS_NAMES
-RESULT = os.path.join(HERE, "..", "temp", "checks", "s1_pipeline_result.json")
+RESULT = os.path.join(ROOT, "temp", "checks", "s1_pipeline_result.json")
 # arm name -> (preset, overrides, depth variant, seeds)
 ARMS = {"ours PD oracle": ("ours", {}, "oracle", (0, 1)),
         "ours P": ("ours", {"lift": "p"}, "oracle", (0, 1)),

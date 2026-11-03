@@ -10,8 +10,8 @@ constant object velocity, boxes in the ego frame of t + dt):
            the GT boxes at t + dt, predicting them directly
 Both networks see the same input at t (vehicle / pedestrian coverage, lane lines, all objects 0.5 s earlier), use the
 same trunk and the same budget. Measured on held-out scenes per dt: AP per class at 1 m centre distance, centre error
-and BEV IoU of the matches (tests/test_object_head.py evaluate()).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u tests/test_box_time.py
+and BEV IoU of the matches (studies/early/object_head_synth.py evaluate()).
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/box_time.py
 """
 import math
 import random
@@ -21,11 +21,11 @@ import time
 import torch
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from bev_trunk import BEVTrunk  # noqa: E402
 from object_head import ObjectHead, TimeObjectHead, build_targets, decode, head_loss, propagate_boxes  # noqa: E402
 from synthetic_world import random_scene  # noqa: E402
-from test_object_head import DEV, G, evaluate, scene_boxes, scene_inputs  # noqa: E402
+from object_head_synth import DEV, G, evaluate, scene_boxes, scene_inputs  # noqa: E402
 
 DTS = (-1.0, -0.5, 0.5, 1.0)
 TRAIN_DTS = (-1.0, -0.5, 0.0, 0.5, 1.0)

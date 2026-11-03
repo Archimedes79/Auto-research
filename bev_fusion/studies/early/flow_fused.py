@@ -26,11 +26,11 @@ Loss terms (--loss a,b,..., and --then x,y --pre f: switch to the second set aft
 Arms: --no-dop (no radar input), --corr (the correlation / hypothesis above instead of the concatenated W; the runs of
 plan 7.4 before 2026-10-31 had it on by default and --no-corr as the arm), --levels 1 (2 m only, upsampled), --ray (the heads output (radial, tangential) in the ray frame of the
 cell instead of (x, y)), --dop-sim (Doppler simulated from the GT velocity instead of the real radar: the input of
-tests/test_flow_explains.py, for comparison only).
+studies/early/flow_explains.py, for comparison only).
 Data: nuScenes GT cache (one generator signature, SIG), radar cache (all 5 radars, 0.5 s window, moved to the camera
 time of k with the Doppler shift); scene split 1 in 5 held out; samples with a moving vehicle (> 1 m/s) at k.
 Run from the bev_fusion folder:
-  wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_fused.py [--loss vel,box,static] [--then warp,dop] [--pre 0.5]
+  wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_fused.py [--loss vel,box,static] [--then warp,dop] [--pre 0.5]
       [--no-dop] [--corr] [--levels 1] [--ray] [--dop-sim] [--quick] [--seed N] [--iters N]
 """
 import glob
@@ -46,7 +46,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 import scratch  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from temporal import propagate  # noqa: E402
@@ -89,7 +89,7 @@ def yaw_of(T):
 
 def box_motion(cur, other):
     """per-cell target displacement (2, X, Y) in m, k's axes, of every observed box of keyframe k to the pose of the same
-    instance in the other keyframe (rigid: centre + yaw change), and its mask (tests/test_flow_timed.py)."""
+    instance in the other keyframe (rigid: centre + yaw change), and its mask (studies/early/flow_timed.py)."""
     T, To = cur["meta"]["T_e2g"], other["meta"]["T_e2g"]
     R, t = T[:3, :3], T[:3, 3]
     by_inst = {b["instance"]: b for b in other["meta"]["boxes"]}
@@ -191,7 +191,7 @@ def batch_of(data, idx):
     t = {k: torch.stack([x[k] for x in b]).to(DEV).float() for k in ("maps", "vel", "D", "M", "static", "radar")}
     t.update({k: [x[k] for x in b] for k in ("s_back", "s_fwd", "s_prev", "dt")})
     t["dtp"] = torch.tensor([abs(d[0]) for d in t["dt"]], device=DEV).view(-1, 1, 1, 1)   # k-1 -> k (stored as k -> k-1 < 0)
-    if DOPSIM:            # the simulated Doppler of tests/test_flow_explains.py: GT radial, origin rays, half the occupied cells
+    if DOPSIM:            # the simulated Doppler of studies/early/flow_explains.py: GT radial, origin rays, half the occupied cells
         u0 = ray_dirs(1)[None]
         occ = t["maps"][:, 1, 1:].amax(1) > 0.5                       # vehicles and pedestrians of k
         valid = (occ & (torch.rand_like(occ.float()) < 0.5)).float()

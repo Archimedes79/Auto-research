@@ -3,10 +3,10 @@ checkpoint in eval mode on n clips of 2 val keyframes (2 samples per batch, the 
 keyframe reading the memory state of the first through train.clip_step) and saves every forward output and the memory state, or
 compares them with the saved reference.
 
-    EQUIV_CODE=<old training/ snapshot> EQUIV_DEVICE=cpu python tests/equivalence.py save [--n 4]     before: the old code
-    EQUIV_DEVICE=cpu python tests/equivalence.py compare                                               after: the live tree;
+    EQUIV_CODE=<old training/ snapshot> EQUIV_DEVICE=cpu python tests/support/equivalence.py save [--n 4]     before: the old code
+    EQUIV_DEVICE=cpu python tests/support/equivalence.py compare                                               after: the live tree;
                                                                      max abs difference per output, exit 1 above 1e-5 or on other state keys
-    EQUIV_DEVICE=cuda python tests/equivalence.py repeat --n 6       the noise floor: the same code twice (GPU scatter order)
+    EQUIV_DEVICE=cuda python tests/support/equivalence.py repeat --n 6       the noise floor: the same code twice (GPU scatter order)
 Environment: EQUIV_RUN (run folder, default runs/t10_dual_s0), EQUIV_CKPT (default ckpt_00003000.pt), EQUIV_REF (default
 temp/equivalence/ref.pt), EQUIV_CODE (training code to import, default the live training/), EQUIV_DEVICE (cpu is deterministic; on the
 GPU the same code differs from itself by up to 3e-3 in the maps). An old snapshot: git archive <commit> bev_fusion/training | tar -x -C
@@ -19,7 +19,7 @@ import sys
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, ".."))
+ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))                   # the bev_fusion folder (this file lives in tests/support/)
 CODE = os.environ.get("EQUIV_CODE", os.path.join(ROOT, "training"))     # the training code to run: the live tree or an old snapshot
 DEV = os.environ.get("EQUIV_DEVICE", "cuda")                             # cpu: deterministic (no GPU scatter-order noise)
 sys.path.insert(0, CODE)

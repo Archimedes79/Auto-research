@@ -1,6 +1,6 @@
 """Gate of the radar-only decoder (training/legacy/radar_decoder.py): stationary map + moving objects from radar alone.
 
-Synthetic world (tests/synthetic_world.py): per sample a random scene at the output time; its past is reconstructed
+Synthetic world (tests/support/synthetic_world.py): per sample a random scene at the output time; its past is reconstructed
 with Scene.step(-age) for 6 sweeps at 12 Hz (ages 0 .. 5/12 s) and measured by 3 radars (front; front-left /
 front-right rotated by +-80 deg as in nuScenes, roughly; 60 deg half field of view, 80 m; noise: range 0.1 m, azimuth
 0.5 deg, Doppler 0.1 m/s - assumed values). Each detection is moved once to the output time (ego motion of its steps +
@@ -10,9 +10,9 @@ footprints of objects slower than 0.5 m/s; 'moving objects' = boxes / circles of
 evaluated inside the union of the radars' fields of view; moving objects are counted twice: those with at least one
 radar return in the 6 sweeps (detectable) and all moving objects in the field of view.
 Metrics on held-out scenes: static IoU at 0.5 (all, and per range band), moving objects AP at 0.5 / 1 / 2 m and the
-match errors (tests/test_object_head.evaluate), recall at 2 m of all moving objects.
+match errors (studies/early/object_head_synth.evaluate), recall at 2 m of all moving objects.
 Arms: --sweeps 6 (default) or 1 (control); --no-doppler (detections moved by the ego motion only).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_radar_only.py [--quick]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/radar_only.py [--quick]
 """
 import math
 import random
@@ -24,12 +24,12 @@ import torch.nn.functional as F
 
 sys.path.insert(0, "training")
 sys.path.insert(0, "training/legacy")                 # radar_decoder (off the chain since 2026-10-31)
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from lift_pd import Grid  # noqa: E402
 from object_head import GROUPS, build_targets, decode, head_loss  # noqa: E402
 from radar_decoder import RadarOnlyDecoder, to_output_time  # noqa: E402
 from synthetic_world import radar, random_scene  # noqa: E402
-from test_object_head import evaluate, show  # noqa: E402
+from object_head_synth import evaluate, show  # noqa: E402
 
 G = Grid()
 DEV = "cuda" if torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 3e9 else "cpu"

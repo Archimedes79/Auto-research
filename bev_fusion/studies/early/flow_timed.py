@@ -11,17 +11,17 @@ keyframe k is trained ONLY by predicting other times with dt = -0.5 s (k-1) and 
             motion of the box (centre and yaw from the world poses, in k's axes), loss |v dt - D| / |dt| (m/s), the
             box cells of each sample weighted to sum 1; cells outside every box are static (|v|, weight 0.1)
   --maps    the maps at k-1 / k+1 are predicted from k: decoder of h moved with v (BCE) + the raw map of k moved with
-            v alone (MSE x 3, the explanation term of tests/test_flow_explains.py)
+            v alone (MSE x 3, the explanation term of studies/early/flow_explains.py)
   --label   reference: the annotated velocity at k directly (the weights of --boxes; only the target differs)
   --fwd     only dt = +0.5 s (control: what the backward prediction adds)
   --corr    architecture arm: one local correlation layer at 2 m cells (E(F_k) against the previous E(F) moved to k,
             +-4 cells) into the U-Net bottom - the one piece of the flow block that measures displacement
-Evaluation (held-out scenes, the selection of tests/test_flow_explains.py: a moving vehicle in k-1): end-point error
+Evaluation (held-out scenes, the selection of studies/early/flow_explains.py: a moving vehicle in k-1): end-point error
 at k against the annotated velocity (vehicles all / moving / static, per box, pedestrians, lanes), raw map of k moved
 with v to k+1 and to k-1 (IoU of vehicles, with GT velocity and v = 0 as references), and the recursion over the
 cached held-out sequences of 5 keyframes (EPE per keyframe; the first keyframe has no past).
 Run from the bev_fusion folder (the GT cache data/cache/gt must exist):
-  wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_timed.py --boxes [--maps] [--label] [--fwd] [--quick] [--seed N]
+  wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_timed.py --boxes [--maps] [--label] [--fwd] [--quick] [--seed N]
 """
 import glob
 import math
@@ -36,7 +36,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 import scratch  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from temporal import propagate  # noqa: E402
@@ -98,7 +98,7 @@ def box_motion(cur, other):
 
 def item(path):
     """keyframes k-1, k, k+1 of one cached GT sample -> dict, or None without a moving vehicle in k-1 (the selection of
-    tests/test_flow_explains.py). Steps: k -> k-1 (negative dt), k -> k+1, k-1 -> k (the forward chain)."""
+    studies/early/flow_explains.py). Steps: k -> k-1 (negative dt), k -> k+1, k-1 -> k (the forward chain)."""
     g = np.load(path, allow_pickle=True)["gt"].item()
     p, c, n = g["prev"], g["cur"], g["next"]
     if not ((maps_of(p)[1] > 0.5) & (np.hypot(*p["velocity"]) > 1.0)).any():
@@ -316,7 +316,7 @@ def evaluate(model, test):
 
 @torch.no_grad()
 def sequences(model, path="temp/checks/flow_sequences_nusc_test_24_5.pt"):
-    """EPE per keyframe over the cached held-out sequences (tests/test_flow_explains.py --sequences): keyframe 0 has no
+    """EPE per keyframe over the cached held-out sequences (studies/early/flow_explains.py --sequences): keyframe 0 has no
     past, every later one carries h and v."""
     if not os.path.exists(path):
         print(f"(no {path}: sequence evaluation skipped)")

@@ -1,6 +1,6 @@
 """Gate: can a velocity head recover a real flow field from two consecutive BEV frames? (plan.md section 10.1)
 
-Data: synthetic world sequences (tests/synthetic_world.py), frames 1/12 s apart. Features per frame: the GT layers lane
+Data: synthetic world sequences (tests/support/synthetic_world.py), frames 1/12 s apart. Features per frame: the GT layers lane
 lines, vehicles, pedestrians as coverage maps - NO velocity channel. The newer frame is ego-pulled back into the older
 frame (splat with -dt, no object motion: exact for static content), so the only displacement left is object motion
 (up to 15 m/s x 1/12 s = 1.25 m = 2.5 cells). A small CNN (4 x 3x3 convs, dilations 1-2-4-1, receptive field 17 cells)
@@ -12,7 +12,7 @@ outputs v_hat (2 channels, m/s, axes of the older frame; last layer zero-initial
     of v_hat inside occupied cells
 Evaluated on held-out sequences (other seed): mean end-point error (m/s) of v_hat on the cells of moving boxes (speed
 > 0.5 m/s), the same per box (mean over its cells), and the null baseline v_hat = 0.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_flow_from_frames.py
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_from_frames.py
 """
 import math
 import random
@@ -24,7 +24,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
+sys.path.insert(0, "tests/support")
 from lift_pd import Grid  # noqa: E402
 from splat import grid_points, splat, splat_bev, splat_positions  # noqa: E402
 from synthetic_world import gt_bev, random_scene  # noqa: E402

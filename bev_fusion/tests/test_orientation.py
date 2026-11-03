@@ -9,7 +9,7 @@ drawer draw them and measures where they land on the screen:
   autogt/view.py       raster (show), motion arrows, colour key (colour_wheel) against flow_rgb
   autogt/video.py      the video's bird's-eye image against the pixel mapping of its overlays (_px)
   evaluation/bev_views.py   the evalsuite BEV panel and the box heading line
-  tests/flow_viz.py    the flow pictures of the temporal tests and their key
+  tests/support/flow_viz.py    the flow pictures of the temporal tests and their key
 
     python tests/test_orientation.py
 """
@@ -20,7 +20,7 @@ import sys
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for p in (ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch"), os.path.join(ROOT, "tests")):   # ".." = the repository root: import autogt
+for p in (ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch"), os.path.join(ROOT, "tests", "support")):   # ".." = the repository root: import autogt
     sys.path.insert(0, p)
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")

@@ -1,7 +1,7 @@
 """Is the box head optimal on the simplest question? And if not, why? (Mirko, 2026-10-26)
 
 The simplest question: boxes of a synthetic scene are rendered into a pixel map (vehicle / pedestrian coverage, lane lines, all
-objects 0.5 s earlier, as tests/test_object_head.py), a trunk + the object head must give the boxes back. With a perfect input the
+objects 0.5 s earlier, as studies/early/object_head_synth.py), a trunk + the object head must give the boxes back. With a perfect input the
 answer is (nearly) determined, so the trained head should approach it. This script separates the possible reasons for a gap:
   A  the INFORMATION CEILING: an analytic decoder (no learning) reads the same input: connected components of the coverage maps,
      centroid, area and second moments -> box (centre, length / width, yaw modulo pi, circle radius); velocity from the past map with
@@ -9,7 +9,7 @@ answer is (nearly) determined, so the trained head should approach it. This scri
   B  what an ERROR COSTS in IoU (analytic): centre shift, yaw error, velocity error x dt for a car and a pedestrian circle.
   C  LEARNING: the same network trained with more steps and more scenes: does it converge to the ceiling (then the gap is
      optimisation / data) or stay away from it (then capacity, loss or decoding)?
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_box_optimality.py [--configs 200:400,800:2000] [--quick]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/box_optimality.py [--configs 200:400,800:2000] [--quick]
 """
 import math
 import random
@@ -23,8 +23,8 @@ from shapely import affinity
 from shapely.geometry import Point, box as sbox
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "tests")
-import test_object_head as T  # noqa: E402
+sys.path.insert(0, "tests/support")
+import object_head_synth as T  # noqa: E402
 from synthetic_world import random_scene  # noqa: E402
 
 G, RES = T.G, T.G.res

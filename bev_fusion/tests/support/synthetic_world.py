@@ -10,7 +10,7 @@ frame (x forward, y left, z up), plus the ego speed v and yaw rate omega. From i
 - gt_bev(grid): layers (lane lines, vehicles, pedestrians) as coverage per cell, a velocity field per cell, a box id map
 - step(dt): the same world dt later, in the new ego frame: objects moved by their velocity, everything transformed by
   the EXACT constant-turn-rate ego motion, headings and velocity vectors rotated into the new axes
-Run the self-test: python tests/synthetic_world.py   (from the bev_fusion folder)
+Run the self-test: python tests/support/synthetic_world.py   (from the bev_fusion folder)
 """
 import math
 import random

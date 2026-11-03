@@ -1,5 +1,5 @@
 """Flow-field pictures for the temporal tests: velocity as colour (hue = direction, brightness = speed) and the colour
-wheel that explains it. Shared by tests/test_flow_refine.py and tests/test_flow_explains.py.
+wheel that explains it. Shared by studies/early/flow_refine.py and studies/early/flow_explains.py.
 BEV convention of the pictures: x forward = up, +y (left) = left, i.e. imshow(..., origin="lower") of a map flipped
 along y.
 """

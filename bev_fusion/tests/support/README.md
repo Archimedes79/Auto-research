@@ -1,0 +1,10 @@
+# tests/support - helpers of the gates (not gates themselves)
+
+Moved here from `tests/` on 2026-11-03 (D48). A gate or study adds this folder to `sys.path` (`sys.path.insert(0, "tests/support")` from the `bev_fusion` folder, `os.path.join(ROOT, "tests", "support")` where it has a `ROOT`). `training/losses.py` does the same in its self-tests.
+
+| file | what | used by |
+|---|---|---|
+| `synthetic_world.py` | the shared synthetic world: one BEV scene (lane lines, boxes with heading / velocity / height / class, ego speed and yaw rate) -> ray-cast camera image + exact depth + pixel classes, radar detections (Doppler = v . u + noise, RCS, road-edge clutter), GT layers with a velocity field, the next frame with exact ego motion. Its own self-test is the gate "synthetic world" of `run_gates.sh` (box and ground depth exact, Doppler, step, GT velocity) | `test_oracle_lift.py`, `test_doppler.py`, `test_hygiene.py`, `test_velocity_hurdle.py`, `test_motion_joint.py`, `test_projection_general.py`, `training/losses.py` (self-tests), the studies |
+| `flow_viz.py` | flow colouring (hue = direction, brightness = speed) and the colour-wheel key; self-test | `test_orientation.py`, the flow studies |
+| `toy_train.py` | the real `train()` on a toy network on the CPU (data path stubbed), batches with a `mode` (ok / inf_grad / nan_loss / bn_poison) | `test_lr_groups.py` |
+| `equivalence.py` | tool, not a gate: a refactor of `training/` must reproduce a checkpoint's forward outputs. `EQUIV_CODE=<old snapshot> python tests/support/equivalence.py save`, then `compare` on the live tree (CPU, deterministic; every output within 1e-5, same state-dict keys). Method of the five-layer build (2026-11-01: `t10_dual_s0` step 3000, 3 clips, 64 outputs, and `t10_dual_long_s0` step 5030, 70 outputs, max abs difference 0.0; on the GPU the same code differs from itself by up to 3e-3) and the model for the trainer-move test of D48 | run by hand |

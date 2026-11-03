@@ -308,7 +308,7 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
 
 def head_box(bx, groups=NUSC_GROUPS):
     """gt_bev meta box (center, size = w, l, h, yaw, vel, group) -> object_head box dict; circles: radius = half the
-    larger side (as tests/test_object_head.py). None for a group the head does not have."""
+    larger side (as studies/early/object_head_synth.py). None for a group the head does not have."""
     kinds = dict(groups)
     if bx["group"] not in kinds:
         return None
@@ -549,7 +549,7 @@ class BEVLoss(nn.Module):
 
 # ----------------------------------------------------------------------------------------------- self-test
 def synthetic_gt(scene, grid):
-    """A GT dict in the gt_bev layout from a synthetic-world scene (tests/synthetic_world.py): road band = drivable
+    """A GT dict in the gt_bev layout from a synthetic-world scene (tests/support/synthetic_world.py): road band = drivable
     area, inner lines = lane dividers, outer lines = road dividers, lane centres = centre-lines, a walkway band, boxes;
     camera fan +-50 deg from (1.5, 0), radar fan +-60 deg from (3.5, 0) up to 70 m; radar_stationary = parked boxes +
     a 1 m band inside the drivable edge (the 8.4 proxy)."""
@@ -612,7 +612,7 @@ def _selftest_fusion_area():
     import os
     import sys
     from dataclasses import replace
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "support"))
     import synthetic_world as sw
     from object_head import ObjectHead
     torch.set_num_threads(2)
@@ -698,7 +698,7 @@ def _selftest():
     import sys
     import time
     from dataclasses import replace
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "support"))
     import synthetic_world as sw
     from bev_trunk import SemanticHead
     from object_head import ObjectHead

@@ -16,7 +16,7 @@ Levels (second argument): none = D (codecs x capacity C = 64 / 128, ReLU probe);
 default / identity start - the probe starts as a pass-through, as a residual block does); f = F (tolerances x 0.25, two seeds,
 leaky + identity start); cv = 5-fold cross-validation over scenes, paired codec comparison with a written rule (arg 3 = seeds per fold).
 Results: tests/README.md and plan.md section 3.4.
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u tests/radar_codecs.py [steps] [e | f | cv [seeds]]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/radar_codecs.py [steps] [e | f | cv [seeds]]
 """
 import math
 import sys

@@ -1,4 +1,4 @@
-"""Radar encoder that keeps the information (Mirko, 2026-10-26; plan.md section 3.4, tests/radar_codecs.py).
+"""Radar encoder that keeps the information (Mirko, 2026-10-26; plan.md section 3.4, studies/early/radar_codecs.py).
 
 Replaces nothing: training/radar_bev.py stays (the simple block); this is the variant the unit test asked for.
 
@@ -15,7 +15,7 @@ sweeps by Doppler should supply the true origin.
 
 Learned part (RadarEncoder): two 3 x 3 convs with LeakyReLU(0.5) (invertible: a ReLU deletes the negative half of every signed
 channel), C >= the number of input channels, the first convs START AS A PASS-THROUGH (centre tap = identity + small noise): the net only
-has to keep the information, a random start has to find it (25 % kept from the default start, 94 % from this start, tests/radar_codecs.py).
+has to keep the information, a random start has to find it (25 % kept from the default start, 94 % from this start, studies/early/radar_codecs.py).
 
 Side loss, not the goal: `aux_loss` reconstructs the stored fields from the features (1 x 1 decoder, tolerance-weighted: every channel
 is weighted by 1 / the tolerance of its field, so the capacity goes where the sensor is precise). It helps the first phase of the

@@ -15,9 +15,9 @@ Stages (trained on the warp MSE only; held-out scenes):
 Metrics: MSE on all cells, on known cells, in the holes; velocity error of the types A, B (stage 3, 4).
 Claims checked (PASS / FAIL, every seed): ego < copy (all); hyp < ego (known); fill < no fill (holes, both for ego
 and hyp) and fill does not worsen the known cells (<= +1 %; "known" is the true-motion mask, whose border cells the
-fill may paint - the fill never changes a cell with mass >= 1, tests/test_temporal.py); hyp velocity error < 1 m/s.
+fill may paint - the fill never changes a cell with mass >= 1, studies/early/temporal_block.py); hyp velocity error < 1 m/s.
 Image: temp/checks/temporal_stages.png (one held-out scene: source, target, the stages, the hole mask).
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_temporal_stages.py [--quick]
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/temporal_stages.py [--quick]
 """
 import math
 import random
