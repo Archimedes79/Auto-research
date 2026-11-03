@@ -304,7 +304,7 @@ Reading depth of the level-1 notes: loop-16 notes (301) are method level (M) or 
 - A technique gets a K id in [register.md](register.md) before an experiment uses it.
 - No downloads, clones or installs without the user's OK (state file, source, size first). Reading pages is fine.
 - GPL-3 / AGPL / no-licence code: read, describe, re-implement; never copy. nuScenes data: non-commercial.
-- New paper: one note `papers/<ID>_<slug>.md` (fields as in `experiment_execution/history/literature_sources/lit16/SCHEMA.md`; ID = cluster prefix + number), add its row to `papers.csv`, then regenerate. A paper found by a search and not yet read needs only a row in `papers.csv` with title, url and idea.
+- New paper: one note `papers/<ID>_<slug>.md` (fields as in the section "Note format" of README.md; ID = cluster prefix + number), add its row to `papers.csv`, then regenerate. A paper found by a search and not yet read needs only a row in `papers.csv` with title, url and idea.
 - Regenerate and check after any change: `wsl python3 tools/literature/catalogue.py all` (render + check; selftest: `... selftest`).
 
 **Code: select, pull, make readable, summarise, link** (details and gates: [code/README.md](code/README.md)).
@@ -314,7 +314,7 @@ Reading depth of the level-1 notes: loop-16 notes (301) are method level (M) or 
 4. *Summarise* in the port card at the top of the code file: licence, portable (pure-torch / mmcv / cuda-op ...), reuse (read-only / adapt / vendored / metric-only / idea-only), effort, port targets in our tree, status (read / ported / verified).
 5. *Link:* the catalogue turns the port cards into the code table at the end of [CATALOGUE.md](CATALOGUE.md) and the `[code]` links of the paper rows; a port in `training/` or `evaluation/` cites the code file and the source file and line, gets a K id, and is marked `ported`, after a parity test `verified`.
 
-**Provenance.** The original multi-paper research notes of the loops (lit7, lit8, lit_extra*, lit_p16*, lit16 clusters with `cards.csv`, lit17 A / B / C) were moved out of this folder to `experiment_execution/history/literature_sources/`; the three local clones (CRN, GaussianCaR, BEVFusion) are listed in [code/README.md](code/README.md).
+**Provenance.** The original multi-paper research notes of the loops (lit7, lit8, lit_extra*, lit_p16*, lit16 clusters with `cards.csv`, lit17 A / B / C) were moved out of this folder and removed from the tree on 2026-11-03 (D49; only in the git tag `archive/docs-before-cleanup-2026-11-03`, the folder was called literature_sources and lay under the history of the experiment execution); the three local clones (CRN, GaussianCaR, BEVFusion) are listed in [code/README.md](code/README.md).
 
 ## 6. Related documents
 - [../experiment_execution/plans/Literature_Compatibility_Space_EN.md](../experiment_execution/plans/Literature_Compatibility_Space_EN.md): how each technique family fits the loop-16 builder (stages, adapters, conflicts).

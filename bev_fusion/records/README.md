@@ -13,6 +13,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `sensor_coverage_2026-11-01.md` | proposal: one coverage rule per output type for training, evaluation and execution (what the code does today, findings, open points; Mirko's question of 2026-11-01) |
 | `cleanup_inventory_2026-11-02.md` | the repository-wide clean-up of D44 (5): a size and a rule per class, what is protected, what each class needs (owner, tag, archive); read-only list, nothing deleted by it |
 | `open_findings_2026-11-02.md` | triage of the bug hunt's open findings (real? severity? fix size? what was checked and what is per report) for the module-iteration list after the baseline pair; nothing fixed |
+| `doc_review_2026-11-03.md` (+ `_autoresearch.md`, `_bev_fusion.md`, `_lane.md`) | the documentation review of D49: are the md files, decisions, READMEs and drawings up to date, what breaks if each is deleted, how to re-answer a decision, what was deleted and what is proposed next; the three long files are the evidence for the proposals and can be deleted when those are done |
 | `BOARD.md` | the board made by `python evaluation/board.py --write`: every open arm against the base, all heads, from the stored `metrics.json` files; regenerate it, do not edit it |
 
 ## Start a training
