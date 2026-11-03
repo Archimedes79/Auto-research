@@ -1,0 +1,16 @@
+{
+ "schema": 1,
+ "run": "t11.vel_hurdle_acc2",
+ "made": "2026-11-01T20:50:51",
+ "checkpoint": {
+  "path": "runs/t11_vel_hurdle_acc2/ckpt_00001000.pt",
+  "bytes": 223167269,
+  "sha256": "6b22a85d61493eacf34b39d0957849649411156e8847eaab2ab52997c85ca91f"
+ },
+ "parent": {
+  "path": "runs/t10_dual_s0/ckpt_00003000.pt",
+  "bytes": 222876927,
+  "sha256": "5f1e184b2005b0e5e728ecbc6d4ed833d255b1734ee2bb4c169cc93c6fc903ed",
+  "kind": "init"
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "id": "t20.small_s0",
+ "hypothesis": "t20 bundle bring-up on the small split: every module gets gradient, no non-finite loss, resume works, timing and VRAM as predicted",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/train/run_ar.sh temp/compose/t20_small_s0.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1516383,
+ "created": "2026-11-03T14:20:33",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-03T14:21:25",
+ "code_hash": "9dc46d377b99",
+ "commit": "5d8ed01486",
+ "tag": "bf/t20.small_s0",
+ "git_note": "",
+ "pid": 1516698,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion/evaluation/bev_views.py",
+   "bev_fusion/tests/run_gates.sh",
+   "bev_fusion/tests/test_centreline_eval.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3224,
+ "attempts": 1,
+ "ended": "2026-11-03T15:15:50",
+ "last_lines": [
+  "step 710: total 14.8950 lr 1.08e-05 grad 159.63",
+  "step 720: total 16.8463 lr 8.62e-06 grad 128.83",
+  "step 730: total 14.9364 lr 6.71e-06 grad 48.94",
+  "step 740: total 17.8349 lr 5.04e-06 grad 121.19",
+  "step 750: total 14.4879 lr 3.62e-06 grad 87.75",
+  "step 760: total 17.9740 lr 2.45e-06 grad 50.67",
+  "step 770: total 16.2227 lr 1.53e-06 grad 96.65",
+  "step 780: total 20.0664 lr 8.64e-07 grad 110.70",
+  "step 790: total 17.7290 lr 4.55e-07 grad 61.67",
+  "step 800: total 13.3479 lr 3.01e-07 grad 32.07",
+  "step 800: val total 17.9174",
+  "t20_small_s0 exit 0 15:15:09"
+ ]
+}

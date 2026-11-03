@@ -16,3 +16,8 @@ Order: D44 (5) of Mirko ("delete all old and unused files, intermediate files, c
 | J code | `check_structure.py`: bev_fusion 0 problems; lane project 30 + 9 dead paths (15+ of them in `DECISIONS.md` history: left as written); `check_git.py --used`: 41 scratch files that documents or code name (promotion work list, class C) | | promotion needs the owners |
 
 Tool note: `clean_temp.py` takes only `loopNN` folder names (the tag + move convention); for the folders above it would need an extension (any folder name under `temp/`) or the owner moves the folder after tagging by hand.
+
+State of 2026-11-03 (lead chat, after the large runs ended; training is stopped on Mirko's order, nothing runs):
+- E: `package.py clean` (dry run) deletes 0 B in 0 of 14 runs: best three, files younger than 2 days, a failed run (`t10.dual_long_s0`), and `t17.data` / `t18.fix` have no code tag here (they ran with `--no-git`, pinned by `AR_COMMIT`; their code is the copy in `runs/<run>/code`). Nothing is deleted, nothing to do before 2026-11-05.
+- F, G, H (old checkpoints to D:, lane runs, caches) and C, D (scratch of several chats) are unchanged: they need an owner per folder or Mirko's word. Not touched in this session. `bev_fusion/temp/t16` (the report work) is kept by the tag `bf/t16-report-scratch` (122 scripts), the folder itself stays until Mirko has read the report.
+- The held runs (`t16.ctl_s0`, `speed.d/e/f`) keep their HOLD markers; Mirko's "delete the cards" is unanswered, nothing was deleted.

@@ -1,0 +1,59 @@
+{
+ "schema": 1,
+ "made": "2026-11-02T00:15:17",
+ "gt": {
+  "key": "0.5_4_6a7aa7864a",
+  "signature": "6a7aa7864a",
+  "version": "unknown"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "unknown",
+  "manifest_hash": "48496f48f7e6",
+  "scenes": null,
+  "samples": null
+ },
+ "subject": {
+  "run": "speed.a3",
+  "ckpt": "ckpt_00000070.pt",
+  "ckpt_hash": "218411fb38f4p",
+  "config_hash": "2c9855d3072f",
+  "step": 70,
+  "train_gt": {
+   "key": "0.5_4_6a7aa7864a",
+   "signature": "6a7aa7864a",
+   "version": "unknown"
+  }
+ },
+ "environment": {
+  "python": "3.12.15",
+  "torch": "2.8.0+cu129",
+  "cuda": "12.9",
+  "numpy": "1.26.4",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "the interpreter of the run, read 2026-11-02 (the environment may have changed since the run): /home/ml/miniconda3/envs/gcar/bin/python"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "unknown",
+  "commit": "skipped",
+  "code_hash": "cb11653b3184",
+  "drift_files": [],
+  "command": "bash temp/speed_run.sh speed_base temp/compose/speed_a3.json",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": [],
+  "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag "
+ }
+}

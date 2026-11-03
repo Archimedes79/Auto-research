@@ -1,0 +1,119 @@
+{
+ "schema": 1,
+ "made": "2026-11-03T03:29:27",
+ "gt": {
+  "key": "0.5_4_6a7aa7864a",
+  "signature": "6a7aa7864a",
+  "version": "unknown"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "unknown",
+  "manifest_hash": "f615a7387e73",
+  "scenes": null,
+  "samples": null
+ },
+ "subject": {
+  "run": "t18.fix",
+  "ckpt": "ckpt_00006000.pt",
+  "ckpt_hash": "8ba95c77b368p",
+  "config_hash": "29d37da30837",
+  "step": 6000,
+  "train_gt": {
+   "key": "0.5_4_6a7aa7864a",
+   "signature": "6a7aa7864a",
+   "version": "unknown"
+  }
+ },
+ "environment": {
+  "python": "3.12.15",
+  "torch": "2.8.0+cu129",
+  "cuda": "12.9",
+  "numpy": "1.26.4",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "the interpreter of the run, read 2026-11-03 (the environment may have changed since the run): /home/ml/miniconda3/envs/gcar/bin/python"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "unknown",
+  "commit": "skipped",
+  "code_hash": "6c5f0ac43b62",
+  "drift_files": [],
+  "command": "bash temp/train/run_ar.sh temp/compose/t18_fix.json",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "029d98fbe293",
+  "files": [
+   "augment.py",
+   "bev_trunk.py",
+   "bevfusion_camera.py",
+   "blocks_new.py",
+   "camera_encoder.py",
+   "extract.py",
+   "fallbacks.py",
+   "fusion.py",
+   "lane_branch.py",
+   "lift_pd.py",
+   "loss_extras.py",
+   "losses.py",
+   "model.py",
+   "motion_block.py",
+   "object_head.py",
+   "precompute.py",
+   "radar_bev.py",
+   "radar_encoder.py",
+   "splat.py",
+   "temporal_fusion.py",
+   "timed_head.py"
+  ],
+  "repo_files": [
+   "autogt/__init__.py",
+   "autogt/coverage.py",
+   "autogt/layers.py"
+  ],
+  "repo_imports_unfollowed": [
+   "autogt/__init__.py -> autogt/cli.py",
+   "autogt/__init__.py -> autogt/flow.py",
+   "autogt/__init__.py -> autogt/grid.py",
+   "autogt/__init__.py -> autogt/sets.py",
+   "autogt/__init__.py -> autogt/suite.py",
+   "autogt/__init__.py -> autogt/versions.py",
+   "autogt/coverage.py -> autogt/grid.py"
+  ],
+  "roots": [
+   "model.py",
+   "losses.py"
+  ],
+  "missing_roots": [],
+  "excluded": [
+   "train.py",
+   "nuscenes_dataset.py",
+   "feature_cache.py"
+  ],
+  "imports_excluded": [],
+  "test_imports": [
+   "augment.py -> nuscenes_dataset.py",
+   "augment.py -> train.py",
+   "lane_branch.py -> train.py",
+   "model.py -> nuscenes_dataset.py",
+   "precompute.py -> feature_cache.py"
+  ],
+  "unparsed": [],
+  "external_local": [],
+  "dynamic_imports": [],
+  "source": "t18_fix/code",
+  "repo_files_from": "the working tree",
+  "config_hash": "29d37da30837",
+  "copied_to": "bundle"
+ }
+}

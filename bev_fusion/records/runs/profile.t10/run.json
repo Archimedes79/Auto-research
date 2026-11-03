@@ -1,0 +1,43 @@
+{
+ "id": "profile.t10",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/train/run_ar.sh temp/compose/profile_t10.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 657103,
+ "created": "2026-11-01T22:50:08",
+ "status": "stopped",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-01T22:51:14",
+ "code_hash": "bd2450c34cfe",
+ "commit": "270bee1d4d",
+ "tag": "bf/profile.t10",
+ "git_note": "",
+ "pid": 660764,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion/tests/test_motion_joint.py",
+   "bev_fusion/training/startable.py"
+  ]
+ },
+ "exit": 75,
+ "duration_s": 131,
+ "attempts": 1,
+ "ended": "2026-11-01T22:53:47",
+ "last_lines": [
+  "=== attempt 2026-11-01T22:51:14: bash temp/train/run_ar.sh temp/compose/profile_t10.json",
+  "=== 2026-11-01_22:51:17 run profile.t10 commit 270bee1d4d config temp/compose/profile_t10.json",
+  "step 0: stop requested (stopped at the user's request on 2026-11-01 (about 22:52): please stop all training activities; resume only on the user's word), checkpoint saved, exit 75",
+  "profile_t10 exit 75 22:53:25"
+ ]
+}

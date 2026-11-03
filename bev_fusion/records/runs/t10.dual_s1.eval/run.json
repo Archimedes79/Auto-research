@@ -1,0 +1,53 @@
+{
+ "id": "t10.dual_s1.eval",
+ "hypothesis": "evaluation (cold VAL 1000, bev_suite) of t10_dual_s1, the seed twin of the dual-feature chain (rule E1 of t10)",
+ "prediction": "lane divider@0.5 0.335 +- 0.03, drivable 0.806 +- 0.03, walkway 0.340 +- 0.03, front mAP2 0.361 +- 0.03 (the t10_dual_s0 numbers)",
+ "rule": "measurement, no decision of its own: s1 agrees with s0 (E1 again) -> the dual chain is the proposed new base (promotion stays Mirko); s1 fails E1 -> keep t8_bevfeat / t8_ctl (experiments/t10_dual_features/experiment.md)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/t10/eval_s1.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 231274,
+ "created": "2026-11-01T02:25:08",
+ "status": "ok",
+ "after": "t10.dual_s1",
+ "timeout_min": 0,
+ "started": "2026-11-01T02:50:56",
+ "code_hash": "ff9c0692c9be",
+ "commit": "05ef6ebc7e",
+ "tag": "bf/t10.dual_s1.eval",
+ "git_note": "",
+ "pid": 233912,
+ "code_drift": {
+  "n": 4,
+  "paths": [
+   "autoresearch/evalsuite/adapters/toy.py",
+   "autoresearch/evalsuite/selftest.py",
+   "autoresearch/evalsuite/selftest_comparison.py",
+   "bev_fusion/evaluation/bev_selftest.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1542,
+ "attempts": 1,
+ "ended": "2026-11-01T03:16:50",
+ "last_lines": [
+  "det/dt-0.50/two_wheeler/all/ave0_static                          0.0080",
+  "det/dt-0.50/two_wheeler/all/ave_skill_static                    -0.0076",
+  "det/dt-0.50/two_wheeler/all/n_tp_static                         56.0000",
+  "val_loss/group.areas                                             1.0063",
+  "val_loss/group.lines                                             1.0141",
+  "val_loss/group.motion                                            1.1837",
+  "val_loss/group.objects                                          11.9952",
+  "val_loss/total                                                  11.0629",
+  "info/step                                                          3000",
+  "info/n_samples                                                     1000",
+  "info/n_scenes                                                        82",
+  "done: 1000 val frames, 82 scenes, 1092 s -> runs/t10_dual_s1/eval (suite run /mnt/c/Auto-research/bev_fusion/runs/t10_dual_s1/eval/suite/quant/eval_n1000)"
+ ]
+}
