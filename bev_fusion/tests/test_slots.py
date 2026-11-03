@@ -33,7 +33,7 @@ KINDS = [("camera_features", "dualbev"), ("camera_features", "bevfusion"), ("cam
          ("camera_off", True), ("cam_adapter", True), ("head_channels", 16), ("trunk_detail", 8),
          ("lift", "pd"), ("lift", "p"), ("lift", "s"),
          ("cam_collapse", "zconv"), ("cam_collapse", "zsum"),
-         ("cam_temporal", "window_memory"), ("cam_temporal", "ego_gru"), ("cam_temporal", "none"),
+         ("cam_temporal", "window_memory"), ("cam_temporal", "ego_gru"), ("cam_temporal", "none"), ("cam_buffer", "recurrent"),
          ("rad_temporal", "none"), ("rad_temporal", "window_memory"), ("rad_temporal", "ego_gru"),
          ("radar_kind", "raster"), ("radar_kind", "pillars"), ("radar_kind", "off"),
          ("fusion", "concat"), ("fusion", "gate"), ("fusion", "cmx"),
@@ -53,7 +53,8 @@ COMBOS = [{"camera_features": "dual", "cam_temporal": "ego_gru"}, {"fusion": "cm
           {"camera_features": "bevfusion", "cam_collapse": "zsum", "trunk_kind": "second"}]
 COMBOS += [{"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "delta_slots", "c_rad": 64, "rad_temporal": "window_memory"},
            {"rad_temporal": "window_memory", "rad_static_gate": True}, {"rad_temporal": "ego_gru", "rad_static_gate": True}]
-INVALID = [dict(rad_static_gate=True), dict(rad_static_gate=True, rad_temporal="window_memory", radar_kind="off"), dict(rad_static_vr=0.0),
+INVALID = [dict(cam_buffer="pair", cam_temporal="none"), dict(cam_buffer="recurrent", cam_temporal="ego_gru"), dict(cam_buffer="stack"),   # t21 (pair: test_stream_temporal.py)
+           dict(rad_static_gate=True), dict(rad_static_gate=True, rad_temporal="window_memory", radar_kind="off"), dict(rad_static_vr=0.0),
            dict(camera_features="dual", lift="s"), dict(camera_features="bevfusion", lift="s"), dict(lift="xx"),
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 

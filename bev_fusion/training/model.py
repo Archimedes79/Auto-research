@@ -24,6 +24,13 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
   cam_temporal  "window_memory"  training/temporal_fusion.py TemporalFusion (window of original frames + world memory)
                 "ego_gru"        FIERY-style ego warp + ConvGRU - training/fallbacks.py EgoWarpGRU (control arm A)
                 "none"           current frame only
+  cam_buffer    "window" (default) the batch holds the window of n_cam frames, all lifted on every call; a static world memory is the only
+                state | "pair" the window is ONE frame (t-1): the batch holds 2 frames, or in stream mode ONE frame and the previous raw
+                camera BEV comes from state["buf"] | "recurrent" the temporal block's own output of the previous frame is the buffer
+                (state["buf"] = raw + fused): each frame is lifted once and fused with the previous fused state (splat_window on it, its
+                velocity head); a batch unrolls its F frames oldest -> newest, starting from the previous call's buffer (training: the
+                previous keyframe; none: cold). Train / deploy: training chains up to 3 keyframes x F frames, a stream is unbounded. The motion
+                block reads two RAW BEVs (current + the frame before it) in both modes. The radar keeps its own 0.5 s point buffer
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
                 (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
@@ -56,7 +63,7 @@ try:
     from .precompute import Precompute
     from .radar_bev import RadarBEV
     from .radar_encoder import RadarEncoder, n_channels
-    from .temporal_fusion import TemporalFusion
+    from .temporal_fusion import TemporalFusion, as_chain
     from .motion_block import MotionBlock, block_inputs
     from .timed_head import TimedHead, TimeMover
 except ImportError:                                   # run as a script
@@ -74,7 +81,7 @@ except ImportError:                                   # run as a script
     from precompute import Precompute
     from radar_bev import RadarBEV
     from radar_encoder import RadarEncoder, n_channels
-    from temporal_fusion import TemporalFusion
+    from temporal_fusion import TemporalFusion, as_chain
     from motion_block import MotionBlock, block_inputs
     from timed_head import TimedHead, TimeMover
 
@@ -94,6 +101,8 @@ class ModelConfig:
     camera_features: str = "dualbev"   # "dualbev" (frozen DualBEV heads, stride 16) | "bevfusion" (cached BEVFusion features, stride 8; needs feature_cache) | "dual" (both, needs feature_cache + feature_cache2)
     lift: str = "pd"
     cam_temporal: str = "window_memory"
+    cam_buffer: str = "window"         # t21: what the camera temporal block carries from the past: "window" (the batch's n_cam frames, today) | "pair" (the
+                                       # previous raw BEV) | "recurrent" (the previous fused output); the last two need cam_temporal 'window_memory'
     rad_temporal: str = "none"
     rad_static_gate: bool = False      # the radar memory writes only where the measured Doppler says static (precompute.radar_static), not
                                        # everywhere a detection is (radar_hits): a moving car is not remembered; needs rad_temporal
@@ -132,8 +141,8 @@ class ModelConfig:
     object_direction: bool = False     # object head: sign-free axis + front / back class (object_head.ObjectHead)
     object_moving: bool = False        # object head: moving / static logit, velocity on moving centres only (t11 hurdle)
     motion_block: bool = False         # t15: the time mover's velocity field from training/motion_block.py (the current and the oldest
-                                       # camera frame + the radar Doppler, a 3-level pyramid) instead of the 1x1 head on the trunk; needs
-                                       # >= 2 camera frames (n_cam) and a radar
+                                       # camera frame - with cam_buffer 'pair' / 'recurrent' the frame just before the current one - + the radar
+                                       # Doppler, a 3-level pyramid) instead of the 1x1 head on the trunk; needs >= 2 camera frames (n_cam) and a radar
     motion_strides: tuple = (4, 2, 1)  # its pyramid levels in cells, coarse to fine; (4, 2) = the runtime arm without the 0.5 m level
     box_vel_from_field: bool = False   # t15: the object head's `vel` = the motion block's field (at dt != 0 moved with the state, the
                                        # vector turned with the ego yaw); the object head's own vel branch stays (unused for the output)
@@ -216,6 +225,7 @@ TEMPORALS = {"window_memory": lambda c, grid: TemporalFusion(c, c, grid),     # 
 RADARS = {"raster": lambda grid, c: RadarBEV(grid, c), "off": lambda grid, c: RadarBEV(grid, c),
           "pillars": lambda grid, c: RadarPillars(grid, c),
           "delta_slots": lambda grid, c: RadarEncoder(grid, C=c)}      # radar_encoder.py: delta-coded slot raster, pass-through start, side loss
+CAM_BUFFERS = ("window", "pair", "recurrent")                          # what the camera temporal block gets from the past (forward: _camera_buffered)
 FUSIONS = {"concat": ConcatFusion, "gate": GateFusion, "cmx": None}  # cmx: the backbone takes both branch BEVs
 TRUNKS = {"dualbev": _dualbev_trunk, "second": _second_trunk}
 BACKBONES = dict(TRUNKS, cmx=_cmx_trunk)
@@ -225,7 +235,7 @@ def check_config(cfg):
     """every unknown kind and every combination of slot kinds that does not fit, in one place (one ValueError naming all)"""
     errs = [f"{name}={val!r}: one of {sorted(table)}" for name, val, table in
             (("camera_features", cfg.camera_features, CAMERAS), ("lift", cfg.lift, LIFTS), ("cam_collapse", cfg.cam_collapse, COLLAPSES),
-             ("cam_temporal", cfg.cam_temporal, TEMPORALS), ("rad_temporal", cfg.rad_temporal, TEMPORALS),
+             ("cam_temporal", cfg.cam_temporal, TEMPORALS), ("cam_buffer", cfg.cam_buffer, CAM_BUFFERS), ("rad_temporal", cfg.rad_temporal, TEMPORALS),
              ("radar_kind", cfg.radar_kind, RADARS), ("fusion", cfg.fusion, FUSIONS), ("trunk_kind", cfg.trunk_kind, TRUNKS))
             if val not in table]
     if len(CAMERAS.get(cfg.camera_features, ())) > 1 and (cfg.lift == "s" or cfg.cam_adapter):
@@ -235,6 +245,8 @@ def check_config(cfg):
     if cfg.lane_branch and (cfg.camera_features not in CAMERAS or CAMERAS[cfg.camera_features][0].features != "dualbev" or cfg.lift == "s"):
         errs.append("lane_branch reads the depth, the calibration and the crop of the FIRST feature source (the lane image is the DualBEV one): it needs "
                     "camera_features 'dualbev' or 'dual' and lift 'pd' / 'p'")
+    if cfg.cam_buffer != "window" and cfg.cam_temporal != "window_memory":
+        errs.append(f"cam_buffer={cfg.cam_buffer!r} buffers a frame for the window-memory block: it needs cam_temporal 'window_memory' (is {cfg.cam_temporal!r})")
     if cfg.radar_kind == "delta_slots" and cfg.c_rad < n_channels():
         errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
     if cfg.rad_static_gate and (cfg.rad_temporal == "none" or cfg.radar_kind == "off"):
@@ -372,6 +384,108 @@ class BEVFusionModel(nn.Module):
         out, new_state, _ = block(bevs[:, 0], past, state, step, obs_mass)
         return out, new_state
 
+    @staticmethod
+    def _streaming(frames):
+        """stream mode = ONE frame per call: its past comes from state["buf"], not from the batch (the one place of this rule)"""
+        return frames.shape[1] == 1
+
+    def _buffer_in(self, frames, state, step):
+        """the buffer this call continues from, None = cold start. Stream mode: state["buf"], the ego `step` since that frame is needed.
+        Batch mode: 'pair' never (its window is the batch's own previous frame); 'recurrent' the previous call's buffer when there is a
+        `step` (the previous keyframe is the frame before the oldest one: at stride 2 and n_cam 3 the chain has no gap, so training
+        carries the fused state from keyframe to keyframe); without state or step the chain starts cold at the oldest frame."""
+        buf = state.get("buf")
+        if buf is None:
+            return None
+        if self._streaming(frames):
+            if step is None:
+                raise ValueError("stream mode with a buffered frame needs `step`: the ego step since the previous frame")
+            return buf
+        return buf if self.cfg.cam_buffer == "recurrent" and step is not None else None
+
+    def _previous(self, frames, steps, buf, step):
+        """(current, previous raw BEV) as (B, 2, C, X, Y) with the ego steps [[], previous -> current], and whether the previous frame is a real
+        one: what the 'pair' window and the motion block read, in BOTH modes the frame just before the current one (batch: frame 1; stream:
+        state["buf"]["raw"] with the caller's `step`), so that stream = batch. Cold start in the stream only: the current frame itself with a
+        zero step (zero velocity evidence, mass 1) and no window."""
+        if not self._streaming(frames):
+            return frames[:, :2], steps[:2], True
+        cur = frames[:, 0]
+        if buf is None:
+            z = cur.new_zeros(cur.shape[0])
+            return torch.stack([cur, cur], 1), [[], [(z, z, z)]], False
+        return torch.stack([cur, buf["raw"]], 1), [[], as_chain(step, cur)], True
+
+    @staticmethod
+    def _next_buffer(frames, fused, recurrent):
+        """state["buf"] after this call: this frame's raw BEV (pair, recurrent) and its fused output (recurrent); not detached here (run_clip does)"""
+        return {"raw": frames[:, 0], "fused": fused} if recurrent else {"raw": frames[:, 0]}
+
+    @staticmethod
+    def _step_to_oldest(gap, steps, frames):
+        """the trainer's keyframe gap step (dt, v, omega) of the gap mean as the step to the OLDEST frame: dt less the time of the oldest
+        frame's own chain (clamped at 0), v and omega kept"""
+        dt, v, w = gap
+        used = sum((s[0] for s in as_chain(steps[-1], frames)), frames.new_zeros(frames.shape[0]))
+        return (dt - used).clamp(min=0), v, w
+
+    def _unroll(self, frames, steps, cam_state, step, obs, buf=None):
+        """cam_buffer 'recurrent': frames (B, F, C, X, Y), 0 = newest, through the temporal block oldest -> newest, every frame lifted once. A
+        call fuses its frame with the previous call's fused output only (past = [(fused, ego chain between the two frames)]: moved by
+        splat_window with the block's velocity head and mass gate); the world memory is read and written at every frame, as in a stream.
+        The chain continues from buf (the previous call's fused output) or starts cold at the oldest frame. `step` is the ego step to the
+        oldest frame: stream (one frame) as given (a triple or the sweep chain since the previous frame); batch the trainer's keyframe gap
+        step (one triple) reduced by `_step_to_oldest`. Needs steps[k + 1] = the sweeps k + 1 -> k, then steps[k] (the frames of a sample are consecutive).
+        -> (fused output of the newest frame, new cam state)"""
+        block, B, Fn = self.cam_temporal, frames.shape[0], frames.shape[1]
+        move = as_chain(step, frames)
+        if Fn > 1 and move:
+            if len(move) != 1:
+                raise ValueError("a batch of several frames takes the keyframe gap step as ONE (dt, v, omega) triple, not a chain")
+            move = [self._step_to_oldest(move[0], steps, frames)]
+        fused = buf["fused"] if buf is not None else None
+        for k in range(Fn - 1, -1, -1):
+            if k < Fn - 1:                                   # frame k + 1 -> k: the first sweeps of frame k + 1's chain
+                n = len(steps[k + 1]) - len(steps[k])
+                if n < 0:
+                    raise ValueError(f"frame {k + 1} has fewer ego steps ({len(steps[k + 1])}) than frame {k} ({len(steps[k])})")
+                move = as_chain(steps[k + 1][:n], frames)
+            fused, cam_state, _ = block(frames[:, k], [] if fused is None else [(fused, move)], cam_state, move, obs)
+        return fused, cam_state
+
+    def _camera_buffered(self, frames, steps, radar, state, step, obs):
+        """cam_buffer 'pair' / 'recurrent' (t21). The motion block, when present, reads (current raw BEV, previous raw BEV) in both - never the
+        fused state; its time baseline is the previous processed frame (0.167 s at stride 2), not the window's oldest frame, in batch mode
+        too (frame 1), so stream = batch. 'pair': the window is ONE frame, the previous one (a batch of 2 frames is the window path with
+        K = 1). 'recurrent': `_unroll`. radar None: no motion block (`advance`). -> (camera BEV, cam state, motion-block levels or None,
+        the new state["buf"])"""
+        Fn, mode = frames.shape[1], self.cfg.cam_buffer
+        if mode == "pair" and Fn > 2:
+            raise ValueError(f"cam_buffer 'pair' takes two frames (n_cam 2) or one (stream), the batch has {Fn}")
+        buf = self._buffer_in(frames, state, step)
+        pair, pair_steps, warm = self._previous(frames, steps, buf, step)
+        v_levels = None
+        if self.motion_block is not None and radar is not None:
+            v_levels = self.motion_block(*block_inputs(pair, pair_steps, radar, self.grid))
+        if mode == "pair":
+            cam, cam_state = self._branch_temporal(self.cam_temporal, pair if warm else pair[:, :1], pair_steps, state.get("cam"), step, obs)
+        else:
+            cam, cam_state = self._unroll(frames, steps, state.get("cam"), step, obs, buf)
+        return cam, cam_state, v_levels, self._next_buffer(frames, cam, mode == "recurrent")
+
+    def advance(self, batch, state=None, step=None):
+        """stream mode, a frame that needs no output (cam_buffer 'pair' / 'recurrent'): lift + the camera temporal block only - no motion block,
+        radar, trunk or heads - and the new state, the one `forward` would return for the cam / buf entries; forward() on the next frame
+        continues from it. One frame, `step` as in forward. Needs rad_temporal 'none' (its state would go stale); a mirror-augmented batch is
+        refused (training only)."""
+        if self.cfg.cam_buffer == "window" or self.rad_temporal is not None or (batch.get("flip") is not None and bool(batch["flip"].any())):
+            raise ValueError("advance: cam_buffer 'pair' / 'recurrent', rad_temporal 'none' and no flipped sample")
+        batch = Precompute.from_model(self)(dict(batch), ("vis_cam",))
+        frames = self.camera_bevs(batch)
+        steps = [[tuple(torch.as_tensor(t, dtype=frames.dtype, device=frames.device) for t in s) for s in f] for f in batch["steps"]]
+        _, cam_state, _, buf = self._camera_buffered(frames, steps, None, state or {}, step, batch["vis_cam"].to(frames))
+        return dict(state or {}, cam=cam_state, buf=buf)
+
     def _refine_train(self, obj, feat, gts, dt):
         """S5c training step of one target time: candidates = top-k decoded boxes (detached) + jittered GT copies,
         matched to the GT (losses.refine_gt_boxes: unobserved or unsupervised boxes ignored) -> the refiner's steps and
@@ -400,7 +514,11 @@ class BEVFusionModel(nn.Module):
     def forward(self, batch, dts=(0.0,), state=None, step=None, ego=None):
         """batch from nuscenes_dataset.collate (or the same layout); dts: the times to decode (s, either sign);
         state: per-branch temporal states of the previous call (sequence training), step: the ego step (dt, v, omega)
-        since that call, scalars or per-sample (B,) tensors. Returns {"out": preds, "state": ..., "features": trunk
+        since that call, scalars or per-sample (B,) tensors. cam_buffer 'pair' / 'recurrent' (t21): the state also holds "buf" (the previous
+        frame's raw camera BEV, and its fused output); a batch of ONE frame is a stream step: the previous frame comes from state["buf"] (none:
+        cold start) and `step` is the ego step since it, one triple or the per-sweep chain (a list of triples like batch["steps"][k], which
+        is what the batch path uses); with 'recurrent' a batch of several frames continues from state["buf"] too when `step` is given (the
+        trainer's keyframe gap step), 'pair' never. Returns {"out": preds, "state": ..., "features": trunk
         features}, preds in the layout of losses.BEVLoss: {dt: {"sem", "obj" (object head maps), "mass" (splat mass at dt), "v_hat" (dt = 0),
         "cam_aux" / "radar_aux" (dt = 0, training only)}}. ego: optional {nominal dt: (dt, v, omega)} as (B,) tensors -
         the true gap to the target keyframe and the gap-mean ego motion per sample (the GT keyframe is 0.40-0.60 s
@@ -417,10 +535,13 @@ class BEVFusionModel(nn.Module):
         flip = batch.get("flip")                                 # mirror augmentation (training/augment.py): the other inputs
         if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
             cam_frames = flip_cam(cam_frames, None, flip)[0]     # (the visibility map is mirrored by the precompute step)
-        v_levels = None
-        if self.motion_block is not None:                        # t15: the velocity field from two camera frames + radar (motion_block.py)
-            v_levels = self.motion_block(*block_inputs(cam_frames, steps, batch["radar"], self.grid))
-        cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
+        v_levels, buf = None, None
+        if self.cfg.cam_buffer != "window":                      # t21: one buffered frame instead of the window (_camera_buffered)
+            cam, cam_state, v_levels, buf = self._camera_buffered(cam_frames, steps, batch["radar"], state, step, cam_obs)
+        else:
+            if self.motion_block is not None:                    # t15: the velocity field from two camera frames + radar (motion_block.py)
+                v_levels = self.motion_block(*block_inputs(cam_frames, steps, batch["radar"], self.grid))
+            cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
         if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam; the depth, K, ida
                                                                  # are those of source 1 (DualBEV; with 'dual' also what batch["prob"], ["ida"] hold)
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
@@ -476,6 +597,8 @@ class BEVFusionModel(nn.Module):
                     p["cam_aux"], p["radar_aux"] = self.aux_cam(cam), self.aux_rad(rad)
             out[float(dt)] = p
         res = {"out": out, "state": {"cam": cam_state, "rad": rad_state}, "features": S}
+        if buf is not None:
+            res["state"]["buf"] = buf
         if radar_side is not None:
             res["radar_side"] = radar_side
         return res
@@ -583,7 +706,7 @@ def _selftest():
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
              {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"},
              {"radar_kind": "pillars"}, {"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
-             {"camera_off": True}, {"cam_adapter": True}, {"cam_collapse": "zsum"}]
+             {"camera_off": True}, {"cam_adapter": True}, {"cam_collapse": "zsum"}, {"cam_buffer": "recurrent"}]
     tried = []
     for kw in swaps:
         m = BEVFusionModel(ModelConfig(pretrained="", **kw)).eval()

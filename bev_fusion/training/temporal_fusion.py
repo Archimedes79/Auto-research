@@ -60,6 +60,24 @@ def advance_pose(pose, dt, v, omega):
                         pose[:, 1] + torch.sin(th) * dx + torch.cos(th) * dy, th + om * dt], 1)
 
 
+def as_chain(step, like=None):
+    """`step` as a list of (dt, v, omega) triples: None -> [], one triple -> [triple], a list of triples (the per-sweep chain, as
+    batch["steps"][k]) as it is. With `like` (a tensor with the batch first) every value becomes a (B,) tensor of its dtype / device."""
+    if step is None or not len(step):
+        return []
+    chain = list(step) if isinstance(step[0], (tuple, list)) else [step]
+    if like is None:
+        return chain
+    return [tuple(torch.as_tensor(t, dtype=like.dtype, device=like.device).reshape(-1).expand(like.shape[0]) for t in s) for s in chain]
+
+
+def advance_chain(pose, step):
+    """the pose after a step or a chain of steps (advance_pose one after the other)"""
+    for s in as_chain(step):
+        pose = advance_pose(pose, *s)
+    return pose
+
+
 def ego_to_memory(pose, pts):
     """Ego-frame points (N, 2) -> memory-frame positions (B, N, 2)."""
     th = pose[:, 2:3]
@@ -175,12 +193,12 @@ class TemporalFusion(nn.Module):
     def forward(self, cur, past=(), state=None, step=None, obs_mass=None):
         """cur (B, C, X, Y) current planes; past: list of (bev, steps) original past frames with their per-frame ego steps
         [(dt, v, omega), ...] to the current time (as splat_window); state: the dict of the previous call or None; step:
-        (dt, v, omega) from the previous current frame to this one (moves the memory pose); obs_mass (B, 1, X, Y): where
-        the sensor observed. Returns out (B, c_out, X, Y), the new state and aux (v_hat, static, mass_sum, age_mean,
-        mem_read, mem_conf, agg)."""
+        (dt, v, omega) from the previous current frame to this one (moves the memory pose), or the chain of such triples
+        (advanced one after the other, the decay time is their sum); obs_mass (B, 1, X, Y): where the sensor observed.
+        Returns out (B, c_out, X, Y), the new state and aux (v_hat, static, mass_sum, age_mean, mem_read, mem_conf, agg)."""
         B, C, X, Y = cur.shape
         state = state or self.init_state(B, cur.device, cur.dtype)
-        pose = state["pose"] if step is None else advance_pose(state["pose"], *step)
+        pose = advance_chain(state["pose"], step)
         M, W, pose = recentre(state["M"], state["W"], pose, self.grid.res)
         v_hat = self.head(cur)
         static = torch.exp(-v_hat.pow(2).sum(1, keepdim=True) / self.v_static ** 2)
@@ -206,7 +224,7 @@ class TemporalFusion(nn.Module):
             feats = torch.cat([cur[:, :Cm].reshape(B, Cm, -1), static.reshape(B, 1, -1), om.reshape(B, 1, -1)], 1)
             sp, mass = splat(feats, ego_to_memory(pose, self.ego_pts), self.mem_grid)
             w_new = mass.clamp(max=1.0) * sp[:, Cm:Cm + 1] * sp[:, Cm + 1:Cm + 2]
-            dt = _col(step[0], cur).abs().expand(B) if step is not None else cur.new_zeros(B)       # scalar or (B,)
+            dt = sum((_col(s[0], cur).abs() for s in as_chain(step)), cur.new_zeros(B))              # scalar or (B,) per step, summed over a chain
             Wd = W * torch.exp(-dt / self.mem_tau).view(B, 1, 1, 1)
             Wt = Wd + w_new
             M = (M * Wd + sp[:, :Cm] * w_new) / (Wt + 1e-6)
