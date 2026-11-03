@@ -214,15 +214,20 @@ try:
     assert all(torch.equal(emab.shadow[k], sdb[k]) for k in emab.shadow), "the EMA starts at the warm-started weights"
     tr.train(dataclasses.replace(cfg_b, name="a_like", model=base.model), datasets=data)
     assert torch.equal(torch.rand(4), draw_b), "the arms with and without the mov branch leave different random streams"
-    real = tr.warm_start
+    import trainkit.checkpoint as tk_ckpt                       # train() warm-starts through the engine's function (trainkit.loop.fit calls checkpoint.warm_start), not through train.warm_start
+    real, calls = tk_ckpt.warm_start, []
 
-    def no_second(*a, **k):
-        raise AssertionError("warm start in a run folder that has a checkpoint")
-    tr.warm_start = no_second
+    def counting(*a, **k):
+        calls.append(a[0])
+        return real(*a, **k)
+    tk_ckpt.warm_start = counting
     try:
-        tr.train(cfg_b, datasets=data)
+        tr.train(dataclasses.replace(cfg_b, name="b_new"), datasets=data)          # a new run folder: exactly one warm start (the hook is live)
+        assert calls == [start], calls
+        tr.train(cfg_b, datasets=data)                                             # the run folder that has a checkpoint (init_from still set): resumed, no second warm start
+        assert calls == [start], "warm start in a run folder that has a checkpoint"
     finally:
-        tr.warm_start = real
+        tk_ckpt.warm_start = real
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 print("G4b ok: train() warm-starts a new run folder (weights = the start's EMA, the reset vel branch = its seeded fresh "

@@ -8,6 +8,7 @@ import os
 import sys
 import tempfile
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -40,11 +41,22 @@ def toy_data(n=10):                                      # the DATA: any re-iter
     return [{"x": torch.randn(8, 4, generator=g), "y": torch.randn(8, 1, generator=g)} for _ in range(n)]
 
 
-def run(tmp, name="toy", batches=None, stop_check=None, hooks=None, step_fn=None, **kw):
-    cfg = Config(name=name, out_root=tmp, steps=12, accum=2, warmup=2, lr=0.05, device="cpu", log_every=4, save_every=6, eval_every=0, **kw)
+def stop_after(n, reason="selftest"):                  # a stop_check that asks for a stop from its (n + 1)-th call on: the run stops at the boundary of step n
+    calls = [0]
+
+    def stop_check(run_dir):
+        calls[0] += 1
+        return reason if calls[0] > n else None
+    return stop_check
+
+
+def run(tmp, name="toy", batches=None, stop_check=None, hooks=None, step_fn=None, fracs=None, **kw):
+    cfg = Config(**{**dict(name=name, out_root=tmp, steps=12, accum=2, warmup=2, lr=0.05, device="cpu", log_every=4, save_every=6, eval_every=0), **kw})
     model, loss = Net(), Loss()
 
     def default_step(batch, info: StepInfo):             # one micro-batch: forward, backward (info.backward divides by accum), the scalar terms, finite?
+        if fracs is not None:
+            fracs.append(info.frac)
         l = loss(model.fc(batch["x"]), batch["y"])
         info.backward(l)
         return {"total": float(l.detach())}, bool(torch.isfinite(l)), None
@@ -73,6 +85,11 @@ def main():
     with ema.applied(net):
         check(abs(net.weight.item() - ema.shadow["weight"].item()) < 1e-7 and not net.training, "EMA.applied: the average in eval mode ...")
     check(net.weight.item() == 3.0 and net.training, "... and the training weights back afterwards")
+    e3 = EMA(net, 0.3)                                   # the shadow starts at the weight, 3.0
+    with torch.no_grad():
+        net.weight.fill_(7.0)
+    e3.update(net, 5)                                    # the ramp says 6 / 15 = 0.4, the configured decay caps it at 0.3
+    check(abs(e3.shadow["weight"].item() - (0.3 * 3.0 + 0.7 * 7.0)) < 1e-6, "EMA: the ramp is capped by the configured decay")
     # clip and step rules
     p = nn.Parameter(torch.zeros(2))
     p.grad = torch.tensor([3.0, 4.0])
@@ -93,13 +110,24 @@ def main():
         control.request_stop(tmp, "why")
         check(control.stop_requested(tmp) == "why" and control.clear_stale(tmp) == ["CONTROL"] and control.stop_requested(tmp) is None, "control: a request is seen, the next start moves it aside")
         # the example: gradient reaches every parameter, the cadence of logs and checkpoints
-        cfg, model, loss, (_, _, _, last) = run(tmp)
+        fracs = []
+        cfg, model, loss, (_, _, _, last) = run(tmp, fracs=fracs)
         d = os.path.join(tmp, "toy")
         rows = [json.loads(ln) for ln in open(os.path.join(d, "log.jsonl"))]
         check([r["step"] for r in rows] == [1, 4, 8, 12] and last["step"] == 12 and all(math.isfinite(r["total"]) for r in rows), "fit: rows at step 1 and every log_every, the last row is returned")
         ref_model, ref_loss = Net(), Loss()
         check(all(not torch.equal(a, b) for a, b in list(zip(model.parameters(), ref_model.parameters())) + list(zip(loss.parameters(), ref_loss.parameters()))), "fit: every parameter of the model AND of the loss moved (the gradient reaches all)")
         check(sorted(f for f in os.listdir(d) if f.endswith(".pt")) == ["ckpt_00000006.pt", "ckpt_00000012.pt"] and os.path.exists(os.path.join(d, "config.json")), "fit: a checkpoint every save_every steps, the config copy")
+        check(fracs == [s / 12 for s in range(12) for _ in range(2)], "fit: step_fn is told step / steps, the position in the schedule, for each of the 2 micro-batches")
+        open(os.path.join(d, "ckpt_00000009.pt.tmp"), "wb").write(b"half a checkpoint")     # what a write that died leaves behind
+        checkpoint.prune_checkpoints(d, 5)
+        check(sorted(f for f in os.listdir(d) if f.startswith("ckpt_")) == ["ckpt_00000006.pt", "ckpt_00000012.pt"], "prune_checkpoints: the leftover .tmp of a failed write goes, the checkpoints stay")
+        o = torch.optim.AdamW(optim.param_groups(model, loss, 1e-3, 0.0), lr=1e-3)
+        e_rng = EMA(model, 0.9)
+        checkpoint.save_checkpoint(os.path.join(tmp, "rng.pt"), model, loss, o, e_rng, 1, cfg)
+        want = (torch.rand(()).item(), np.random.rand())
+        checkpoint.load_checkpoint(os.path.join(tmp, "rng.pt"), model, loss, o, e_rng)
+        check((torch.rand(()).item(), np.random.rand()) == want, "checkpoint: the torch and numpy random streams go on where they were saved")
         # accumulation: backward of two micro-batches (accum 2) = the gradient of their mean
         a, b = toy_data(2)
         m1, l1 = Net(), Loss()
@@ -109,15 +137,18 @@ def main():
         (0.5 * (l2(m2.fc(a["x"]), a["y"]) + l2(m2.fc(b["x"]), b["y"]))).backward()
         check(torch.allclose(m1.fc.weight.grad, m2.fc.weight.grad, atol=1e-7) and torch.allclose(l1.log_w.grad, l2.log_w.grad, atol=1e-7), "StepInfo.backward: accum micro-batches give the gradient of their mean")
         # a stop request at the 7th step boundary: checkpoint, STOPPED, exit 75; the resume finishes the run and the log has one row per step
-        calls = [0]
-        calls_step = lambda run_dir: "selftest" if (calls.__setitem__(0, calls[0] + 1) or calls[0]) > 6 else None      # noqa: E731
         try:
-            run(tmp, "stop", stop_check=calls_step)
+            run(tmp, "stop", stop_check=stop_after(6))
             raise AssertionError("the stop request must end the run")
         except SystemExit as e:
             check(e.code == control.EXIT_STOPPED == 75, "stop: exit code 75, never 0")
         st = json.load(open(os.path.join(tmp, "stop", "STOPPED")))
         check(st["step"] == 6 and st["reason"] == "selftest" and os.path.exists(os.path.join(tmp, "stop", "ckpt_00000006.pt")), "stop: STOPPED names the step, the checkpoint is there")
+        try:                                             # the stop checkpoint prunes the older ones too: a checkpoint every 2 steps, keep 1, stop at step 7
+            run(tmp, "keep", stop_check=stop_after(7), save_every=2, keep=1)
+        except SystemExit:
+            pass
+        check(sorted(f for f in os.listdir(os.path.join(tmp, "keep")) if f.startswith("ckpt_")) == ["ckpt_00000007.pt"], "stop: the checkpoint of the stop is the only one left with keep 1")
         events = []
 
         class Count(Hooks):
