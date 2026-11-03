@@ -18,7 +18,7 @@
   "training/gt_bev.py": "82bb118c4918079d59c7a4348bcd85a10c4576eec9524034cb34e5835e029666",
   "evaluation/bev_suite.py": "d64601944368034db678c6e5ebf7b07b85f11777030d1c1608ffebcadcb0e364",
   "evaluation/bev_adapter.py": "d135ed0a50c503386635bfe0676ade7eac5619239327b2527f1db74d0fd3623d",
-  "evaluation/bev_task.py": "eb93a279048c98a1736e8894258c8657bb462b1d46a3ec738b0a9b954db2ea60",
+  "evaluation/bev_task.py": "5b39ac87b76631b7c188674ccc9a381b335adde049e418b4cced49d44c4e23cc",
   "evaluation/metrics.py": "5d61dae054f9df68470552484ffb5e5141400f832fe48e552100d717662326c4",
   "evaluation/bev_curves.py": "661440a55a837b548973b206bea76d96f08d614c89317e413c7cedf3306799d0",
   "evaluation/bev_velocity.py": "9e97e277fbd8277313d9e238b9dd9e5e538bda6334182d53d0d05a138622102d",

@@ -62,8 +62,10 @@ class BevSegMetric(Metric):
     HEAD = {"drivable_iou": "fov/dt+0.00/drivable_area/all/all/iou@0", "walkway_iou": "fov/dt+0.00/walkway/all/all/iou@0",
             "lane_divider_iou": "fov/dt+0.00/lane_divider/all/all/iou@0.5", "lane_divider_f1": "fov/dt+0.00/lane_divider:zc/all/all/f1@0.5",
             "vehicle_iou": "obj/dt+0.00/vehicle/all/all/iou@0"}
-    headline = tuple(HEAD.values())
-    better = {}                                                            # higher is better, but for the distance-field error (direction)
+    # the paired bootstrap of `bev_suite.py compare` (D48): the headline plus the rows the t20 card and the weak-spot table name; HEAD and score() stay as they were
+    headline = tuple(HEAD.values()) + ("fov/dt+0.00/lane_divider/all/all/iou@1", "fov/dt+0.00/carpark_area/all/all/iou@0",
+                                       "fov/dt+0.00/ped_crossing/all/all/iou@0", "fov/dt+0.00/road_divider/all/all/iou@1")
+    better = {}                                                          # higher is better, but for the distance-field error (direction)
 
     def __init__(self, grid, spec):
         self.grid, self.spec = grid, spec
