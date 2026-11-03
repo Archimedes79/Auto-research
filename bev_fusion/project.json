@@ -32,13 +32,14 @@
     "runs": "runs",
     "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/startable.py {config}\"",
     "train": "bash temp/train/run_ar.sh {config}",
+    "resolve": "python3 training/splits.py resolve",
     "prepare": [{"name": "gt", "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} check\"",
                  "build": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} build\"", "wait_min": 600}]
   },
   "structure": {
-    "root_files": ["README.md", "project.json"],
-    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "temp", "tests", "training"],
-    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "temp", "training"],
+    "root_files": ["README.md", "project.json", "FROZEN.md", "frozen.json"],
+    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "training"],
+    "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "training"],
     "living": [],
     "skip_parts": [],
     "index_dirs": ["training", "evaluation", "../autogt", "tests", "temp"],
