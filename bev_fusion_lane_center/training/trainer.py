@@ -108,9 +108,9 @@ def _rng_state():
 def _set_rng(s):
     random.setstate(s["py"])
     np.random.set_state(s["np"])
-    torch.set_rng_state(s["torch"])
+    torch.set_rng_state(s["torch"].cpu())                                # a checkpoint loaded with map_location=cuda holds the RNG states on the GPU; set_rng_state wants CPU ByteTensors
     if s.get("cuda") is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(s["cuda"])
+        torch.cuda.set_rng_state_all([t.cpu() for t in s["cuda"]])
 
 
 def _lr_at(step, steps, lr, warmup, sched):

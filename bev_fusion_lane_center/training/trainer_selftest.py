@@ -289,5 +289,13 @@ assert os.path.exists(os.path.join(ddir, ".done")) and os.path.exists(os.path.jo
 same_stop = all(torch.allclose(a, b, atol=1e-6) for a, b in zip(mc.parameters(), md.parameters()))
 print("trainsuite contract: log.jsonl rows with grad./upd. keys, a stop request exits with code 75 and the resumed run equals the uninterrupted one:", same_stop)
 assert same_stop
+# (9) a checkpoint loaded onto the GPU (map_location=cuda, as fit does on a resume) restores the RNG states (reported 2026-11-03: set_rng_state refused the CUDA tensors, every GPU resume failed)
+if torch.cuda.is_available():
+    torch.save(T._rng_state(), os.path.join(tmp, "rng.pt"))
+    st_gpu = torch.load(os.path.join(tmp, "rng.pt"), map_location="cuda", weights_only=False)
+    T._set_rng(st_gpu)
+    print("RNG states of a GPU-loaded checkpoint restored:", True)
+else:
+    print("(9) skipped: no CUDA device here")
 shutil.rmtree(tmp, ignore_errors=True)
 print("trainer selftest passed")
