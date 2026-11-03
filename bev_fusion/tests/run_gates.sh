@@ -81,5 +81,10 @@ if [ "${1:-}" = "--all" ]; then
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
   run "autoGT"          "$PY" -m autogt selftest
   run "projection (R-GEO)" "$PY" tests/test_projection_general.py
+  if ls runs/t16_full_s0/ckpt_*.pt > /dev/null 2>&1; then          # the front door of the evaluation against bev_suite.py eval on a copy of the real run
+    run "evaluate door, golden" "$PY" tests/test_evaluate_door.py --real   # 4 val frames on the CPU, number for number; about 3 min, 2 x 6 GB
+  else
+    echo "SKIP  evaluate door, golden  | no checkpoint in runs/t16_full_s0"
+  fi
 fi
 exit $fail
