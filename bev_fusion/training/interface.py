@@ -64,7 +64,8 @@ OPTIONAL_PER_DT = {"boxes": "dense box output (extract.dense_boxes): peak weight
                    "lines": "soft line map (B, n_lines, X, Y) from the distance channels (extract.soft_line_map)",
                    "v_hat": "velocity field at dt = 0", "v_levels": "motion block (t15): the coarser levels' fields at dt = 0, dict l0, l1, ... (coarse to fine) of (B, 2, X, Y)",
                    "cam_aux": "camera aux head (training)", "radar_aux": "radar aux head (training)",
-                   "obj_feat": "refiner features", "obj_dt": "refiner dt", "refine": "refiner training targets"}
+                   "obj_feat": "refiner features", "obj_dt": "refiner dt", "refine": "refiner training targets",
+                   "sem_1m": "centreline_1m option (D48): the 1 m centre-line head, logits (B, C, X/2, Y/2), channels from losses.layer_spec_1m"}
 OPTIONAL_OUTPUTS = {"radar_side": "radar_kind 'delta_slots': {'features': (B, C, X, Y) encoder output, 'state': (B, 61, X, Y) lossless slot raster}, "
                                   "read by the radar side loss (train.py) and the kept-fraction monitor"}
 OUTPUTS = {"out": "{dt: per-dt dict}", "state": "{'cam': ..., 'rad': ...} temporal states for the next call",

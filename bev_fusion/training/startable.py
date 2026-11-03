@@ -161,7 +161,8 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
     mc = lc = None
     try:
         lc = losses.LossConfig(**cfg.loss)
-        layout = {"centrelines": lc.centrelines, "dense_objects": lc.dense_objects, "radar_stationary": lc.radar_stationary}
+        layout = {"centrelines": lc.centrelines, "dense_objects": lc.dense_objects, "radar_stationary": lc.radar_stationary,
+                  "centreline_1m": lc.centreline_1m}
         mc = M.ModelConfig(**{**layout, **cfg.model})
         M.check_config(mc)
         for k, v in layout.items():
