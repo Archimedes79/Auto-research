@@ -184,7 +184,6 @@ def gpu_state(samples=3, gap=0.5):
     """{"util_percent", "mem_used_mb" (max of `samples`), "other_processes" (nvidia-smi), "busy_processes" (ps), "load"} of this machine; None where a tool is missing"""
     st = {"util_percent": None, "mem_used_mb": None, "other_processes": [], "busy_processes": [],
           "load": open("/proc/loadavg").read().split()[:3] if os.path.exists("/proc/loadavg") else None}
-    own = {os.getpid(), os.getppid()}
     try:
         utils, mems = [], []
         for i in range(samples):
@@ -196,11 +195,11 @@ def gpu_state(samples=3, gap=0.5):
                 time.sleep(gap)
         st["util_percent"], st["mem_used_mb"] = max(utils), max(mems)
         p = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader"], capture_output=True, text=True, timeout=20).stdout
-        st["other_processes"] = [ln.strip() for ln in p.splitlines() if ln.strip() and ln.split(",")[0].strip() not in map(str, own)]      # nvidia-smi lists this process too once it holds a CUDA context
+        st["other_processes"] = [ln.strip() for ln in p.splitlines() if ln.strip() and ln.split(",")[0].strip() != str(os.getpid())]      # nvidia-smi lists this process too once it holds a CUDA context
     except Exception:                                                   # noqa: BLE001  (no nvidia-smi: unknown)
         pass
     try:
-        st["busy_processes"] = busy_processes(subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=20).stdout, own)
+        st["busy_processes"] = busy_processes(subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=20).stdout, {os.getpid(), os.getppid()})
     except Exception:                                                   # noqa: BLE001
         pass
     return st
@@ -208,7 +207,7 @@ def gpu_state(samples=3, gap=0.5):
 
 def settled_state(device, samples=2):
     """gpu_state after our own work has left the GPU: nvidia-smi's utilisation covers the last second, so the tail of the model load would read as a busy GPU"""
-    if str(device).startswith("cuda"):
+    if str(device).startswith("cuda") and torch.cuda.is_available():
         torch.cuda.synchronize()
         time.sleep(1.5)
     return gpu_state(samples)
@@ -374,32 +373,57 @@ def selftest():
         assert not is_idle({**ok, **bad}, "cuda"), bad
     assert is_idle({**ok, "mem_used_mb": 11800.0}, "cuda", check_memory=False), "after our own model is loaded the memory says nothing"
     # nvidia-smi under WSL2 lists the process that holds a CUDA context with its own pid (seen 2026-11-03: the second check, taken after the model load, refused an idle GPU
-    # because it counted this very process): the listing of gpu_state drops the own pid, another process stays
+    # because it counted this very process): the listing of gpu_state drops the own pid and ONLY that one (the parent is no GPU user either, but guessing is not our business)
     real_run = subprocess.run
 
     def fake_run(cmd, **kw):
         if cmd[0] != "nvidia-smi":
             return real_run(cmd, **kw)
-        text = "5, 1000\n" if cmd[1].startswith("--query-gpu") else f"{os.getpid()}, [N/A]\n4242, [N/A]\n"
+        text = "5, 1000\n" if cmd[1].startswith("--query-gpu") else f"{os.getpid()}, [N/A]\n4242, [N/A]\n{os.getppid()}, [N/A]\n"
         return subprocess.CompletedProcess(cmd, 0, stdout=text, stderr="")
     subprocess.run = fake_run
     try:
         listed = gpu_state(samples=1)["other_processes"]
     finally:
         subprocess.run = real_run
-    assert listed == ["4242, [N/A]"], ("the own pid is not another GPU user", listed)
+    assert listed == ["4242, [N/A]", f"{os.getppid()}, [N/A]"], ("only the own pid is not another GPU user", listed)
     # the second look is taken after our own work has left the GPU: nvidia-smi's utilisation covers the last second, and the tail of the model load read 12 - 33 % (seen 2026-11-03,
-    # nothing else running, 0 % half a second later), which refused an idle GPU; a CPU run waits for nothing
-    calls, real_gpu_state, real_sync, real_sleep = [], gpu_state, torch.cuda.synchronize, time.sleep
+    # nothing else running, 0 % half a second later), which refused an idle GPU; a CPU run waits for nothing, and so does a "cuda" request that fell back to the CPU (no CUDA GPU:
+    # torch.cuda.synchronize would raise where the old code reached the warning path of run_timing)
+    calls = []
+    saved = (globals()["gpu_state"], torch.cuda.synchronize, torch.cuda.is_available, time.sleep)
     globals()["gpu_state"], torch.cuda.synchronize, time.sleep = (lambda samples=3, gap=0.5: calls.append(f"look {samples}") or {}), (lambda *a: calls.append("sync")), (lambda s: calls.append(f"wait {s}"))
     try:
-        settled_state("cuda", samples=2)
-        settled_state("cpu", samples=2)
+        for available, device in ((True, "cuda"), (True, "cpu"), (False, "cuda")):
+            torch.cuda.is_available = lambda available=available: available
+            settled_state(device, samples=2)
     finally:
-        globals()["gpu_state"], torch.cuda.synchronize, time.sleep = real_gpu_state, real_sync, real_sleep
-    assert calls == ["sync", "wait 1.5", "look 2", "look 2"], calls
-    import inspect
-    assert "settled_state(" in inspect.getsource(run_timing) and "gpu_state(samples=2)" not in inspect.getsource(run_timing), "run_timing takes its second look through settled_state"
+        globals()["gpu_state"], torch.cuda.synchronize, torch.cuda.is_available, time.sleep = saved
+    assert calls == ["sync", "wait 1.5", "look 2", "look 2", "look 2"], calls
+    # run_timing: refuses a busy GPU at the first look (before the model is built) and at the second one (taken through settled_state), goes on when both are idle or with --force
+    from types import SimpleNamespace
+    from evaluation import bev_adapter as A
+    busy, seen = {**ok, "util_percent": 50.0}, []
+
+    def timing_with(first, second, **kw):
+        """what run_timing does with these two looks (fakes for the model build): the refusal text, or 'went on' (the fake model has no frames: it stops there)"""
+        seen.clear()
+        subj = SimpleNamespace(ns=SimpleNamespace(T=None), model=None, loss=None, cfg=SimpleNamespace(amp="off"), device="cuda:0", step=0)
+        saved = (globals()["gpu_state"], globals()["settled_state"], A.setup_paths, A.build)
+        globals()["gpu_state"], globals()["settled_state"] = (lambda samples=3, gap=0.5: seen.append("first") or first), (lambda device, samples=2: seen.append(f"second {device}") or second)
+        A.setup_paths, A.build = (lambda run: None), (lambda run, **k: seen.append("build") or (None, subj, None))
+        try:
+            run_timing("runs/x", device="cuda", **kw)
+        except SystemExit as e:
+            return str(e)
+        except Exception:                                                  # noqa: BLE001
+            return "went on"
+        finally:
+            globals()["gpu_state"], globals()["settled_state"], A.setup_paths, A.build = saved
+    assert timing_with(busy, ok).startswith("refused: the GPU is not idle") and seen == ["first"], seen
+    assert timing_with(ok, busy).startswith("refused before the timed loop") and seen == ["first", "build", "second cuda"], seen
+    assert timing_with(ok, ok) == "went on" and seen == ["first", "build", "second cuda"], seen
+    assert timing_with(ok, busy, force=True) == "went on" and timing_with(busy, ok, force=True) == "went on", "--force times a busy GPU (and marks the result not idle)"
     ps = "  PID COMMAND\n  101 /usr/bin/python -u runs/t16/code/train.py cfg\n  102 python evaluation/bev_suite.py runs/x timing\n  103 bash -c sleep 5\n  104 python other.py\n"
     assert [x.split()[0] for x in busy_processes(ps, {102})] == ["101"] and busy_processes(ps, {101, 102}) == [], "ps: trainers / evaluations, not ourselves"
     # queued jobs are not GPU users (the bug: a run.py launcher waiting for a slot, whose arguments name train.py / run_ar.sh / bev_suite, refused the timing on an idle GPU)
