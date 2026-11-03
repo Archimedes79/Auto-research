@@ -3,13 +3,17 @@
   UNITS (no data)   `adapter.predictions_1m` on a hand-made output: sigmoid of the presence channel, each 1 m cell copied to its 2 x 2 cells, the direction pair
                     from the channel NAMES of `losses.layer_spec_1m`; `task_spec`; `SegMeter.add_directions` on a hand example with a known mean (wrap-around, a reversed line
                     is pi, a zero vector is pi, cells outside the GT / the mask not counted, range bins); the table and the card direction; the two debug panels (arrows
-                    at exact plot coordinates; none for a model without the head); the real tiny model's `sem_1m` through the adapter
-  REAL GT           cached frames (data/cache/gt, 3 dt each, no model): a synthetic head output made by the training code's own pooling (`build_layer_targets`) from the GT is
+                    at exact plot coordinates; none for a model without the head; the cell count is the metric's); the real tiny model's `sem_1m` through the adapter
+  HAND FRAME        four GT centre cells through the REAL `_BEVSubject.predict` (a fake forward) and BevSegMetric: the angle on every meter (fov / seen / out), every mass subset
+                    (all / known / unknown) and dt, each with a known answer, the presence not needed
+  REAL GT          cached frames (data/cache/gt, 3 dt each, no model): a synthetic head output made by the training code's own pooling (`build_layer_targets`) from the GT is
                     the ORACLE: IoU@1 = 1, IoU@0 equals an independent numpy count (the pooled mask is a superset: |G| / |P|), the angle error equals an independent numpy
                     pooling; a constant forward direction scores the mean |angle of the GT|; GT of another frame scores low; null scores 0. And OLD RUNS: with no 1 m head the
-                    SegMeter counts of `add_sample` equal those of a frozen copy of the code before the change, on oracle / noisy / shuffled 0.5 m outputs
+                    SegMeter counts of `add_sample` and its `result()` equal those of frozen copies of the code before the change, on oracle / noisy / shuffled 0.5 m outputs, and
+                    the real predict of a model without `spec_1m` gives the old output keys
   MUTANTS           planted one at a time into the adapter / metric; each must make a check above fail (wrong presence channel, no upsample, a shifted upsample, wrong GT layer,
-                    no sigmoid, cos / sin swapped, a flipped direction, an angle without the wrap, an axis angle that cannot tell a reversed line, a missing layer)
+                    no sigmoid, cos / sin swapped, a flipped direction, an angle without the wrap, an axis angle that cannot tell a reversed line, a missing layer, the direction
+                    on the fov meter only / unmasked on seen and out / without the splat mass, a changed result(), predict dropping the layer or the direction)
 Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_centreline_eval.py   (PYTHONPATH = the repository root for autogt)
 """
 import math
@@ -23,6 +27,7 @@ import torch
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "training"), os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
 from evaluation import bev_adapter as A, bev_gtcheck as GC, bev_suite, bev_views as V, metrics as M  # noqa: E402
+import evaluation.bev_task as BT  # noqa: E402
 from evaluation.bev_task import BEVTask, BevSegMetric, add_sample  # noqa: E402
 from evalsuite import Prediction, Sample  # noqa: E402
 from evalsuite.contracts import FrameRef  # noqa: E402
@@ -112,15 +117,49 @@ def unit_checks(ck):
     g1["centreline"][40, 30], g1["centreline_dir"][:, 40, 30] = 1.0, (0.0, 1.0)                    # one GT cell, heading +y (left)
     o1 = {"prob": {"centreline": np.ones((X, Y), np.float32)}, "dir": {"centreline": np.zeros((2, X, Y), np.float32)}}
     o1["dir"]["centreline"][:, 40, 30] = (3.0, 0.0)                                              # predicted heading +x (forward), not a unit vector
+    g1["centreline"][50, 40], g1["centreline_dir"][:, 50, 40] = 1.0, (0.3, 0.0)                  # a GT cell without a direction (|dir| <= 0.5): the metric skips it, so does the panel
     panels = V.centreline_panels(GRID, g1, o1, np.ones((X, Y), bool))
     arrows = [s for s in panels[1].shapes if s.kind == "arrow"] if len(panels) == 2 else []
     x0, y0 = GRID.x_min + 40.5 * GRID.res, GRID.y_min + 30.5 * GRID.res
     ck(len(arrows) == 2 and np.allclose(arrows[0].xy, (y0, x0, y0 + 2.0, x0)) and np.allclose(arrows[1].xy, (y0, x0, y0, x0 + 2.0)) and arrows[0].color != arrows[1].color,
        f"debug panels: a GT arrow +y and a predicted arrow +x at the cell, 2 m long, plot coordinates (y, x, y', x') ({[tuple(np.round(s.xy, 2)) for s in arrows]})")
-    ck(len(panels) == 2 and panels[0].data.shape == (X, Y, 3) and panels[1].data.shape == (X, Y, 3) and "90.0 deg" in panels[1].title and "missed 0" in panels[0].title,
+    ck(len(panels) == 2 and panels[0].data.shape == (X, Y, 3) and panels[1].data.shape == (X, Y, 3) and "90.0 deg, 1 cells" in panels[1].title and "missed 0" in panels[0].title,
        f"... a presence panel (the error map) and a direction panel whose title says the mean error ({panels[1].title if panels else ''})")
     ck(V.centreline_panels(GRID, g1, {"prob": o1["prob"]}, np.ones((X, Y), bool)) == [] and V.centreline_panels(GRID, {}, o1, np.ones((X, Y), bool)) == [],
        "no panel for a model without the head (no `dir`) or a GT without the layer")
+
+
+def meter_checks(ck):
+    """the direction on each meter / mask / mass subset with a known answer, through the real predict and BevSegMetric (frame -> reduce -> SegMeter.result). Four GT centre cells
+    (GT direction 0 deg), the predicted direction 0 / 90 / 180 / 45 deg (errors 0 / 90 / 180 / 45): A, B in the camera view, C outside it but seen, D outside it and undefined;
+    at dt +0.5 s the splat mass says B and C are unknown, A and D known. The presence is nowhere predicted: the direction is scored on the GT cells anyway"""
+    X, Y = 120, 104
+    g = {key: np.zeros((X, Y), np.float32) for _, _, key in SPEC}
+    g.update(camera=np.zeros((X, Y), np.float32), undefined=np.zeros((X, Y), np.float32), centreline=np.zeros((X, Y), np.float32), centreline_dir=np.zeros((2, X, Y), np.float32))
+    cells = {"A": (10, 10), "B": (10, 20), "C": (10, 30), "D": (10, 40)}
+    g["camera"][cells["A"]] = g["camera"][cells["B"]] = 1.0
+    g["undefined"][cells["D"]] = 1.0
+    sem_1m, mass = torch.zeros(1, 4, X // 2, Y // 2), torch.full((1, 1, X, Y), 0.9)
+    sem_1m[0, 0] = -20.0
+    for name, deg in (("A", 0.0), ("B", 90.0), ("C", 180.0), ("D", 45.0)):
+        i, j = cells[name]
+        g["centreline"][i, j], g["centreline_dir"][:, i, j] = 1.0, (1.0, 0.0)
+        sem_1m[0, 2:4, i // 2, j // 2] = torch.tensor([2 * math.cos(math.radians(deg)), 2 * math.sin(math.radians(deg))])        # not a unit vector
+    mass[0, 0, cells["B"][0], cells["B"][1]] = mass[0, 0, cells["C"][0], cells["C"][1]] = 0.1
+    p = {"sem": torch.zeros(1, len(SPEC), X, Y), "sem_1m": sem_1m, "mass": mass}
+    metric = BevSegMetric(GRID, A.task_spec(SimpleNamespace(spec=SPEC, spec_1m=SPEC_1M)))
+    r = metric.reduce([metric.frame(Sample(ref=FrameRef("gt", 0, "x"), inputs=None, reference={0.0: g, 0.5: g}), Prediction(outputs={"dt": predict_outputs({0.0: p, 0.5: p})}))])
+    want = {("fov", "all"): (45.0, 2), ("fov", "known"): (0.0, 1), ("fov", "unknown"): (90.0, 1),
+            ("seen", "all"): (90.0, 3), ("seen", "known"): (0.0, 1), ("seen", "unknown"): (135.0, 2),
+            ("out", "all"): (112.5, 2), ("out", "known"): (45.0, 1), ("out", "unknown"): (180.0, 1)}
+    got = {k: (math.degrees(r.get(f"{k[0]}/dt+0.50/centreline:dir/{k[1]}/all/angle_mae", float("nan"))), r.get(f"{k[0]}/dt+0.50/centreline:dir/{k[1]}/all/n_gt")) for k in want}
+    ck(all(abs(got[k][0] - want[k][0]) < 1e-4 and got[k][1] == want[k][1] for k in want),
+       "direction on every meter and subset (dt +0.5 s; fov = camera cells, seen = defined cells, out = outside the camera; all / known / unknown by the splat mass), a hand frame: "
+       + "  ".join(f"{k[0]}/{k[1]} {got[k][0]:.1f} (n {got[k][1]})" for k in want))
+    ck(all(abs(math.degrees(r[f"{m}/dt+0.00/centreline:dir/all/all/angle_mae"]) - want[m, "all"][0]) < 1e-4 for m in ("fov", "seen", "out")) and "fov/dt+0.00/centreline:dir/known/all/angle_mae" not in r,
+       "the same at dt 0 without a mass map: the 'all' rows only")
+    ck(r["fov/dt+0.50/centreline/all/all/iou@1"] == 0.0 and r["fov/dt+0.50/centreline/all/all/n_gt"] == 2,
+       "the presence is scored on the same frame (nothing predicted: IoU 0 on the two GT cells in view)")
 
 
 def tiny_check(ck):
@@ -156,12 +195,21 @@ def head_p(g, forward=False, null=False):
     return {"sem": torch.zeros(1, len(SPEC), g["centreline"].shape[0], g["centreline"].shape[1]), "sem_1m": torch.cat(ch, 1)}
 
 
-def out_of(p):
-    """what _BEVSubject.predict hands to the Task for one dt (its 1 m lines, the 0.5 m ones from p["sem"])"""
-    prob, dist = A.predictions(p, 0, SPEC)
-    p1, d1 = A.predictions_1m(p, 0, SPEC_1M)
-    prob.update(p1)
-    return {"prob": prob, "dist": dist, "mass": None, "dets": [], "detr": None, "vhat": None, "dir": d1}
+SUBJECT = []
+
+
+def predict_outputs(ps, head=True):
+    """the REAL `_BEVSubject.predict` around a fake forward: {dt: p} (the model output of each target time, read from the batch) -> {dt: output} as the Task receives it. head:
+    the fake model has `spec_1m` (a model without the head has no such attribute, as the snapshots of old runs)"""
+    if not SUBJECT:
+        SUBJECT.append(A._make_subject_classes()[0])
+    forward = lambda model, loss, batch, frac, device, amp, cfg, train_terms=False, **kw: ({"total": torch.tensor(1.0)}, {"out": batch["_p"]}, None)  # noqa: E731
+    s = object.__new__(SUBJECT[0])
+    s.ns = SimpleNamespace(T=SimpleNamespace(forward_loss=forward), clip_step=None, detach_tree=None, decode=lambda *a, **k: [[]], NUSC_GROUPS=L.NUSC_GROUPS)
+    s.model = SimpleNamespace(grid=GRID, spec=SPEC, **({"spec_1m": SPEC_1M} if head else {}))
+    s.loss, s.cfg, s.device, s.state, s.prev, s.refine = None, SimpleNamespace(amp=False), "cpu", None, None, False
+    s.rec = SimpleNamespace(arm=lambda names: None, read=lambda i: {})
+    return s.predict(Sample(ref=FrameRef("gt", 0, "x"), inputs={"_p": {dt: dict(p, obj={}) for dt, p in ps.items()}}, reference={})).outputs["dt"]
 
 
 def numbers(samples, make):
@@ -170,7 +218,7 @@ def numbers(samples, make):
     counts = []
     for i, (name, s) in enumerate(samples):
         sample = Sample(ref=FrameRef("gt", i, name), inputs=None, reference=s)
-        counts.append(metric.frame(sample, Prediction(outputs={"dt": {dt: out_of(make(i, dt, g)) for dt, g in s.items()}})))
+        counts.append(metric.frame(sample, Prediction(outputs={"dt": predict_outputs({dt: make(i, dt, g) for dt, g in s.items()})})))
     return metric.reduce(counts)
 
 
@@ -242,7 +290,7 @@ def view_checks(ck, samples):
     rad = {k: torch.tensor(v, dtype=torch.float32) for k, v in (("x", [5.0, 12.0]), ("y", [0.0, 3.0]), ("vr", [0.0, 5.0]))}
     sample = Sample(ref=FrameRef("gt", 0, "x"), inputs={"radar": rad}, reference=s, display={"camera": None})
     orc = GC.variants(samples[:1], SPEC, GROUPS)["oracle"][0]                                  # the 0.5 m maps, boxes and velocity of the oracle
-    heads = {dt: out_of(head_p(s[dt])) for dt in orc}
+    heads = predict_outputs({dt: head_p(s[dt]) for dt in orc})
     with_head = {dt: dict(o, prob={**o["prob"], "centreline": heads[dt]["prob"]["centreline"]}, dir=heads[dt]["dir"]) for dt, o in orc.items()}
     for m in task.metrics():
         m.reduce([m.frame(sample, Prediction(outputs={"dt": with_head}))])
@@ -271,13 +319,42 @@ def legacy_add_sample(meters, prob, dist, g, spec, dt, mass):
     meters["obj"].add(objs, gt_o, mask=m["obj_fov"], mass=mass, dt=dt)
 
 
+def legacy_result(m):
+    """SegMeter.result as it was before the direction layers (a frozen copy)"""
+    res = {}
+    for (dt, name, sname, b), acc in sorted(m.c.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2])):
+        row = {}
+        for i, t in enumerate(m.tol):
+            tp_p, fp, tp_g, fn = acc["cnt"][i]
+            tp = (tp_p + tp_g) / 2
+            if name.endswith(":zc"):
+                p = tp_p / (tp_p + fp) if tp_p + fp else float("nan")
+                r = tp_g / (tp_g + fn) if tp_g + fn else float("nan")
+                row["f1@%g" % t] = 2 * p * r / (p + r) if p + r > 0 else (0.0 if p == p and r == r else float("nan"))
+                row["p@%g" % t], row["r@%g" % t] = p, r
+            else:
+                row["iou@%g" % t] = tp / (tp + fp + fn) if tp + fp + fn else float("nan")
+        if name.endswith(":zc"):
+            row["field_mae"] = acc["err"] / acc["n_err"] if acc["n_err"] else float("nan")
+        row["n_gt"] = acc["n_gt"]
+        res.setdefault(dt, {}).setdefault(name, {}).setdefault(sname, {})[b] = row
+    return res
+
+
+def same_numbers(a, b):
+    """nested dicts of numbers equal, nan = nan"""
+    if isinstance(a, dict):
+        return isinstance(b, dict) and a.keys() == b.keys() and all(same_numbers(a[k], b[k]) for k in a)
+    return a == b or (a != a and b != b)
+
+
 def old_run_checks(ck, samples):
     """a run WITHOUT the 1 m head: the counts of every layer / mask / dt / subset / range bin equal those of the code before the change, bit for bit, on real GT with the
     ceiling, a noisy, a half-dropped and a wrong (shuffled) 0.5 m output; the keys are the old ones (no centreline key, no `dir`)"""
     task_spec = A.task_spec(SimpleNamespace(spec=SPEC))
     ck(task_spec is SPEC, "no 1 m head: the Task's spec is the model's spec itself")
     variants = GC.variants(samples, SPEC, GROUPS, seed=1)
-    same, n_keys = True, 0
+    same, same_res, n_keys = True, True, 0
     for name in ("oracle", "noise 0.2", "dropout 50 %", "shuffled"):
         new, old = {m: M.SegMeter(GRID) for m in ("fov", "seen", "out", "obj")}, {m: M.SegMeter(GRID) for m in ("fov", "seen", "out", "obj")}
         for (_, s), outs in zip(samples, variants[name]):
@@ -290,11 +367,18 @@ def old_run_checks(ck, samples):
                                                                        and new[mname].c[k]["err"] == old[mname].c[k]["err"] and new[mname].c[k]["n_err"] == old[mname].c[k]["n_err"] for k in old[mname].c)
             n_keys += len(old[mname].c)
             same &= not any("centreline" in k[1] for k in new[mname].c)
+            same_res &= same_numbers(new[mname].result(), legacy_result(old[mname]))
     ck(same and n_keys > 100, f"NO 1 m HEAD: the SegMeter counts equal those of the code before the change (4 outputs, {n_keys} count rows, equal bit for bit), and no key mentions the centre-line")
+    ck(same_res, "NO 1 m HEAD: SegMeter.result() of the counts equals a frozen copy of the old result() (every IoU / F1 / precision / recall / field_mae / n_gt)")
+    s0 = samples[0][1][0.0]
+    out = predict_outputs({0.0: {"sem": torch.zeros(1, len(SPEC), *s0["centreline"].shape)}}, head=False)[0.0]
+    ck(set(out) == {"prob", "dist", "mass", "dets", "detr", "vhat", "objvel"} and set(out["prob"]) == {n for n, k, _ in SPEC if k in ("area", "line", "object")},
+       "NO 1 m HEAD: the real predict gives the old output keys (no `dir`) and the old prob layers for a model without `spec_1m` (as the snapshot of an old run)")
 
 
 def run_all(ck, samples, tiny=False):
     unit_checks(ck)
+    meter_checks(ck)
     if tiny:
         tiny_check(ck)
     if samples:
@@ -322,7 +406,37 @@ def mutants():
                 torch.sigmoid = keep
         return f
     roll = lambda t, k: torch.roll(t, k, 1)  # noqa: E731
+
+    def direction_bug(only=("fov", "seen", "out"), unmasked=(), no_mass=False):
+        """bev_task.add_sample with the direction scored wrongly: only on the meters `only`, without the mask on `unmasked`, without the splat mass"""
+        def f(real):
+            def add(meters, prob, dist, g, spec, dt, mass, direction=None):
+                real(meters, prob, dist, g, spec, dt, mass, None)
+                if direction:
+                    m, gt_dir = BT.masks(g), {n: np.asarray(g[n + "_dir"], np.float32) for n in direction}
+                    for mname in only:
+                        meters[mname].add_directions(direction, gt_dir, {n: np.asarray(g[n], np.float32) for n in direction}, mask=None if mname in unmasked else m[mname],
+                                                     mass=None if no_mass else mass, dt=dt)
+            return add
+        return lambda: swap(BT, "add_sample", f)
+
+    def drop_field_mae(real):
+        def f(self):
+            res = real(self)
+            for layers in res.values():
+                for subsets in layers.values():
+                    for bins in subsets.values():
+                        for row in bins.values():
+                            row.pop("field_mae", None)
+            return res
+        return f
     return [
+        ("direction scored on the fov meter only (not seen / out)", direction_bug(only=("fov",))),
+        ("direction of the seen / out meters without their cell mask", direction_bug(unmasked=("seen", "out"))),
+        ("direction without the splat mass (no known / unknown subsets)", direction_bug(no_mass=True)),
+        ("SegMeter.result loses the line field error", lambda: swap(M.SegMeter, "result", drop_field_mae)),
+        ("the presence layer is not put into prob (predict)", lambda: swap(A, "predictions_1m", with_p(lambda real, p, b, s: (lambda r: ({}, r[1]))(real(p, b, s))))),
+        ("the direction is not handed to the Task (predict)", lambda: swap(A, "predictions_1m", with_p(lambda real, p, b, s: (lambda r: (r[0], None))(real(p, b, s))))),
         ("presence read from the next channel (off by one)", lambda: swap(A, "predictions_1m", with_p(lambda real, p, b, s: real(dict(p, sem_1m=roll(p["sem_1m"], 1)), b, s)))),
         ("no upsample (the 1 m arrays are scored as they are)", lambda: swap(A, "predictions_1m", with_p(lambda real, p, b, s: real(dict(p, sem=p["sem"][..., ::2, ::2]), b, s)))),
         ("upsample shifted by one 0.5 m cell", lambda: swap(A, "predictions_1m", with_p(lambda real, p, b, s: (lambda r: ({k: np.roll(v, 1, 0) for k, v in r[0].items()}, r[1]))(real(p, b, s))))),

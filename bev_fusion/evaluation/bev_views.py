@@ -230,8 +230,9 @@ def centreline_panels(grid, g, o, valid, step: int = 4, length: float = 2.0) -> 
     prob, G = o["prob"]["centreline"], np.asarray(g["centreline"], np.float32) > 0.5
     err, counts = tolerant_error_rgb(prob > 0.5, G, valid, tol_cells=1.0 / grid.res)
     pd, gd = np.asarray(o["dir"]["centreline"], np.float32), np.asarray(g["centreline_dir"], np.float32)
-    cells = np.argwhere(G & valid)
-    ang = np.degrees(angle_error(pd, gd)[G & valid])
+    D = G & valid & (np.hypot(gd[0], gd[1]) > 0.5)                      # the cells the angle is scored on (metrics.SegMeter.add_directions: a GT direction needs |dir| > 0.5)
+    cells = np.argwhere(D)
+    ang = np.degrees(angle_error(pd, gd)[D])
     arrows = []
     for ix, iy in cells[::step]:
         x0, y0 = grid.x_min + (ix + 0.5) * grid.res, grid.y_min + (iy + 0.5) * grid.res
