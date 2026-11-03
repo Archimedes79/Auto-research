@@ -289,6 +289,12 @@ assert os.path.exists(os.path.join(ddir, ".done")) and os.path.exists(os.path.jo
 same_stop = all(torch.allclose(a, b, atol=1e-6) for a, b in zip(mc.parameters(), md.parameters()))
 print("trainsuite contract: log.jsonl rows with grad./upd. keys, a stop request exits with code 75 and the resumed run equals the uninterrupted one:", same_stop)
 assert same_stop
+# (8b) the last step is logged even when it is not a multiple of log_every (a 40-step smoke with the default log_every of 100 had no row)
+T.fit(make_model(), loss_fn, T.Run("e_last", tmp), **dict(kw, steps=45, log_every=20, ckpt_every=0, guard=False))
+steps_logged = [json.loads(ln)["step"] for ln in open(os.path.join(tmp, "e_last", "log.jsonl"))]
+assert steps_logged == [20, 40, 45], steps_logged
+print("the last step is logged:", steps_logged)
+
 # (9) a checkpoint loaded onto the GPU (map_location=cuda, as fit does on a resume) restores the RNG states (reported 2026-11-03: set_rng_state refused the CUDA tensors, every GPU resume failed)
 if torch.cuda.is_available():
     torch.save(T._rng_state(), os.path.join(tmp, "rng.pt"))

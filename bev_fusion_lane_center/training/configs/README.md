@@ -4,9 +4,11 @@ A config is the JSON of one run of a *design* (`training/startable.py` holds the
 Start it with the shared tools, from `autoresearch/` (the project's `project.json` block `trainsuite` says how):
 
 ```
-AR_PROJECT=../bev_fusion_lane_center python -m trainsuite start training/configs/e271_grid.json --id e271_a_s1 --preset seed1 --hyp "..." --pred "..." --rule "..." [--go]
+AR_PROJECT=../bev_fusion_lane_center python -m trainsuite start training/configs/e271_grid.json --id e271_a_s1 --preset seed1 --run-arg=--split --run-arg=val --hyp "..." --pred "..." --rule "..." [--go]
 python -m trainsuite --root ../bev_fusion_lane_center/runs status        # also health, curves, stop, watch, queue
 ```
+
+**Split argument:** `trainsuite start` always passes `--split train` to `run.py`, and this project's `splits` (protected, `project.json`) are val / test / confirm, so the launcher refuses it. Add `--run-arg=--split --run-arg=val` (the later `--split` wins; a training run that scores VAL at its end is a val run; it was tried end to end with the smoke `e271_cfg_smoke`, 2026-11-03). Adding `train` to `splits` would need a grant under a decided D-entry.
 
 `start` composes the base with the presets (`presets/<name>.json`, deep-merged overrides) and `--set key=value`, runs the check (`training/startable.py`), prints the exact `run.py` command and with `--go` starts it; the same command again resumes the run.
 Without the tools: `wsl bash tools/env/_py14.sh startable.py <config>` (the check, `--write-smoke DIR` writes the smoke twin) and `wsl bash tools/env/_py14.sh run_config.py <config>` (the training; the trainer's own command line stays as it is).

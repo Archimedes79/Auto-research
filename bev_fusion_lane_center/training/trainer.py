@@ -229,7 +229,7 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                         hist.append(float(loss))
                         updated = True
                         prow = sp.finish() if sp is not None else {}
-            if updated and step % log_every == 0:
+            if updated and (step % log_every == 0 or step == steps):                 # the last step is always logged: a short run (a smoke) has a row
                 cur = float(np.mean(hist[-log_every:]))
                 run.log(f"step {step}/{steps} loss {cur:.4f} lr {opt.param_groups[0]['lr']:.2e} {(time.time() - t0) / max(step, 1):.3f} s/step " + " ".join(f"{k} {v:.3f}" for k, v in (info or {}).items()))
                 row = dict(step=step, t=time.time(), total=cur, lr=opt.param_groups[0]["lr"], grad_norm=gn_last, s_per_step=(time.time() - t0) / max(step - step0, 1),
@@ -239,7 +239,7 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                 if timer is not None:
                     row.update(timer.row())
                 run.jsonl(row)
-                if guard and step >= 4 * log_every and os.path.exists(ck):
+                if guard and step % log_every == 0 and step >= 4 * log_every and os.path.exists(ck):
                     best = cur if best is None else min(best, cur)
                     if cur > guard_ratio * best and n_roll < max_rollbacks:
                         s = torch.load(ck, map_location=device, weights_only=False)
