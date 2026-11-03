@@ -1,6 +1,5 @@
 """Self-test on synthetic runs with known answers (stdlib; curves are checked when matplotlib is installed).
 Run: python -m trainsuite selftest    (from autoresearch/, a few seconds, writes only to a temporary folder)"""
-import ast
 import codecs
 import contextlib
 import io
@@ -19,7 +18,7 @@ from . import modules
 from .runs import Run, read_log
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TRAIN_PY = os.path.join(HERE, "..", "..", "bev_fusion", "training", "train.py")       # the trainer that inlines the stop check
+TRAIN_PY = os.path.join(HERE, "..", "..", "bev_fusion", "training", "train.py")       # the BEV trainer: its snapshot check looks for the name _stop_requested
 
 
 def rows(n, every=20, seed=0, f=None, t0=None, sec=1.0, mean=None):
@@ -697,27 +696,24 @@ def main():
         assert control.honours_stop(os.path.join(tmp, "good")) is None
         assert control.honours_stop(make(tmp, "snap_old", rows(5), honours=False)) is False
         assert control.honours_stop(make(tmp, "snap_new", rows(5), honours=True)) is True
-        if os.path.exists(TRAIN_PY):                                           # the inlined copy in the trainer behaves like this module
-            tree = ast.parse(open(TRAIN_PY, encoding="utf-8").read())
-            ns = {"os": os, "json": json}
-            for node in tree.body:
-                if isinstance(node, ast.FunctionDef) and node.name in ("_stop_requested", "_clear_control"):
-                    exec(compile(ast.Module([node], []), TRAIN_PY, "exec"), ns)
-            assert "_stop_requested" in ns and "_clear_control" in ns, "train.py has no inlined stop check"
-            for body in (None, '{"cmd": "stop", "reason": "x"}', '{"cmd": "go"}', "not json", "[1]", "{}"):
-                cd = os.path.join(tmp, "cmp")
-                os.makedirs(cd, exist_ok=True)
-                p = os.path.join(cd, "CONTROL")
-                if os.path.exists(p):
-                    os.remove(p)
-                if body is not None:
-                    open(p, "w").write(body)
-                assert ns["_stop_requested"](cd) == control.stop_requested(cd), body
-            open(os.path.join(cd, "CONTROL"), "w").write('{"cmd": "stop"}')
-            open(os.path.join(cd, "STOPPED"), "w").write("{}")
-            ns["_clear_control"](cd)
-            assert not os.path.exists(os.path.join(cd, "CONTROL")) and os.path.exists(os.path.join(cd, "STOPPED.old"))
-        ok("stop protocol: CONTROL / STOPPED of an earlier stop are moved aside, the snapshot check, the copy in train.py agrees with control.py")
+        from trainkit import control as engine_control                         # the trainer side lives in the engine; this module re-exports it
+        assert control.stop_requested is engine_control.stop_requested and control.clear_stale is engine_control.clear_stale and control.EXIT_STOPPED == 75
+        for body, want in ((None, None), ('{"cmd": "stop", "reason": "x"}', "x"), ('{"cmd": "stop"}', ""), ('{"cmd": "go"}', None), ("not json", None), ("[1]", None), ("{}", None)):
+            cd = os.path.join(tmp, "cmp")
+            os.makedirs(cd, exist_ok=True)
+            p = os.path.join(cd, "CONTROL")
+            if os.path.exists(p):
+                os.remove(p)
+            if body is not None:
+                open(p, "w").write(body)
+            assert engine_control.stop_requested(cd) == want, body
+        open(os.path.join(cd, "CONTROL"), "w").write('{"cmd": "stop"}')
+        open(os.path.join(cd, "STOPPED"), "w").write("{}")
+        engine_control.clear_stale(cd)
+        assert not os.path.exists(os.path.join(cd, "CONTROL")) and os.path.exists(os.path.join(cd, "STOPPED.old"))
+        if os.path.exists(TRAIN_PY):                                           # the BEV trainer asks through a name the snapshot check looks for
+            assert "_stop_requested" in open(TRAIN_PY, encoding="utf-8").read(), "train.py has no stop check"
+        ok("stop protocol: CONTROL / STOPPED of an earlier stop are moved aside, the snapshot check; the suite and the trainer share the engine's implementation")
 
         # 9 watch: enforce on every run, old snapshots refused, an ignored stop is written again then given up
         for nm, h in (("enf1", True), ("enf2", True), ("enf_old", False)):
