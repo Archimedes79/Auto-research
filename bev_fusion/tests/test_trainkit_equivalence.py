@@ -326,7 +326,6 @@ if __name__ == "__main__":
         config_fields(OLD_T)
         cases(OLD_T)
         warm_and_slim(OLD_T)
-        if importlib.util.find_spec("trainkit.loop") is not None:       # the loop is the engine's (stage B); before that the loop of train.py calls aliases the mutants cannot reach
-            kill_mutants(OLD_T)
+        kill_mutants(OLD_T)
     print("TRAINKIT EQUIVALENCE GATE: " + ("PASS" if not fails else f"FAIL ({len(fails)})"))
     sys.exit(1 if fails else 0)

@@ -37,7 +37,6 @@ import json
 import math
 import os
 import sys
-import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -52,16 +51,18 @@ if os.path.join(_REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(_REPO, "autoresearch"))
 from trainkit import checkpoint as tk_ckpt  # noqa: E402
 from trainkit import control  # noqa: E402
-from trainkit.amp import amp_context, make_scaler, scaler_extra  # noqa: E402,F401 - the old names stay importable as train.X
-from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume, warm_start  # noqa: E402,F401
 from trainkit.config import Config  # noqa: E402
 from trainkit.control import EXIT_STOPPED  # noqa: E402
+from trainkit.loop import Hooks, fit  # noqa: E402
+from trainkit.optim import clip_groups, lr_group_params  # noqa: E402
+from trainkit.util import detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
+# the old names of what moved, still importable as train.X (tests/, evaluation/, runner/, train_motion_block.py and the self-test below use them)
+from trainkit.amp import amp_context, make_scaler, scaler_extra  # noqa: E402,F401
+from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume, warm_start  # noqa: E402,F401
 from trainkit.ema import EMA  # noqa: E402,F401
-from trainkit.optim import (bad_steps_after, clip_gradients, clip_groups, lr_group_params, optimizer_step, param_groups,  # noqa: E402,F401
-                            poisoned_buffers)
-from trainkit.runlog import supersede_log, val_logged  # noqa: E402,F401
+from trainkit.optim import bad_steps_after, clip_gradients, optimizer_step, param_groups, poisoned_buffers  # noqa: E402,F401
+from trainkit.runlog import val_logged  # noqa: E402,F401
 from trainkit.schedule import lr_factor, scheduled_lr  # noqa: E402,F401
-from trainkit.util import detach_tree  # noqa: E402,F401
 
 try:
     from .augment import flip_batch
@@ -502,10 +503,8 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
     terms; eval_fn(model, loader) -> dict is an optional metrics hook. With clips (seq_len > 1) the state is carried through
     the clip, and the LAST keyframe is also run cold (no memory): total_last_warm / total_last_cold are the same frames with
     and without the carried memory (paired)."""
-    ema.apply(model)
-    model.eval()
     tot, n = {}, 0
-    try:
+    with ema.applied(model):
         with torch.no_grad():
             for i, item in enumerate(loader):
                 if i >= n_batches:
@@ -525,9 +524,6 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
         res = {k: v / max(1, n) for k, v in tot.items()}
         if eval_fn is not None:
             res.update(eval_fn(model, loader))
-    finally:
-        ema.restore(model)
-        model.train()
     return res
 
 
@@ -596,23 +592,61 @@ def apply_speed_flags(cfg):
     return done
 
 
+class ProbeHooks(Hooks):
+    """probe.py on the engine's hooks: the gradient norm and update ratio per module on the logged steps (ModuleProbe), the wait for the data and the length of a step (StepTimer),
+    torch.profiler over a window of steps (StepProfiler) and incident dumps for a skipped step (dump_incident); each one only if the config asks for it (TrainConfig.probe,
+    profile_steps). With both off every method does nothing, the loop's numbers are the same"""
+
+    def __init__(self, model, out_dir, cfg, device):
+        self.out_dir = out_dir
+        self.probe, self.timer = (ModuleProbe(model, every=cfg.log_every), StepTimer()) if cfg.probe else (None, None)
+        self.prof = StepProfiler(out_dir, cfg.profile_steps, device=device) if cfg.profile_steps > 0 else None
+        self.step_ids = []
+
+    def begin_step(self, n):
+        self.step_ids = []
+        return self.probe.begin(n) if self.probe is not None else None      # a StepProbe only on a step that is logged
+
+    def data_wait(self):
+        return self.timer.data() if self.timer is not None else contextlib.nullcontext()
+
+    def batch(self, item):
+        if self.probe is not None:
+            self.step_ids.append(batch_tokens(item))                        # the samples of every micro-batch of the step, for an incident dump
+
+    def skipped(self, step, what, gn, terms, step_frac):
+        if self.probe is not None:                                          # what a replay needs: the step and the samples of the micro-batches so far (the last one is the one that failed)
+            dump_incident(self.out_dir, step, "nonfinite", batch_ids=[t for ids in self.step_ids for t in ids], losses=terms,
+                          extra={"what": what, "micro": len(self.step_ids), "micro_batches": self.step_ids, "step_frac": step_frac,
+                                 "grad_norm": None if gn is None else float(gn)})
+
+    def end_step(self):
+        row = self.timer.row() if self.timer is not None else {}
+        if self.prof is not None:
+            self.prof.tick()
+        return row
+
+    def close(self):
+        if self.prof is not None:
+            self.prof.close()
+
+
 def train(cfg, eval_fn=None, datasets=None):
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
-    device = cfg.device if (cfg.device != "cuda" or torch.cuda.is_available()) else "cpu"
+    """the BEV training: builds the network, the loss and the data, then hands the loop to the engine (trainkit.loop.fit) with run_clip as the step and evaluate as the validation.
+    -> (model, loss, EMA, the last logged row)"""
+    seed_all(cfg.seed)
+    device = resolve_device(cfg.device)
     speed = apply_speed_flags(cfg)
     if speed:
         print("speed flags:", speed, flush=True)
-    out_dir = os.path.join(cfg.out_root, cfg.name)
-    os.makedirs(out_dir, exist_ok=True)
-    control.clear_stale(out_dir)
+    out_dir = prepare_run_dir(cfg)
     model, loss, _ = build(cfg)
     model, loss = model.to(device), loss.to(device)
     if cfg.train_only or cfg.freeze:                            # one module trains, the rest is frozen (freeze.py): before the optimiser is built
         freeze_mod.apply(model, cfg.train_only, cfg.freeze)
         print("freeze:", freeze_mod.signature(cfg.train_only, cfg.freeze), flush=True)
         print(freeze_mod.report(model), flush=True)
-    clip_split = clip_groups(model, cfg.grad_clip_split)        # a typo in a prefix fails here, in seconds, not after the data are built
+    clip_groups(model, cfg.grad_clip_split)                     # a typo in a prefix fails here, in seconds, not after the data are built
     if cfg.lr_groups:
         lr_group_params(model, cfg.lr_groups)                   # the same for lr_groups (prefix, overlap, values)
     train_ds, val_ds = datasets or make_datasets(cfg)
@@ -626,137 +660,20 @@ def train(cfg, eval_fn=None, datasets=None):
     if cfg.gap_ego and not supports_ego(model):
         print("WARNING: gap_ego is on but model.forward has no `ego` argument: dt = +-0.5 s is decoded with the nominal "
               "gap and the last step's ego motion (0.2-0.35 m of label error)", flush=True)
-    opt = torch.optim.AdamW(param_groups(model, loss, cfg.lr, cfg.weight_decay, cfg.lr_groups), lr=cfg.lr, betas=(0.9, 0.999))
-    scaler = make_scaler(cfg, device)                           # amp "fp16" only
-    if scaler is not None and cfg.grad_diag_every:
+    if cfg.amp == "fp16" and cfg.grad_diag_every:
         print("WARNING: amp fp16: grad_diag_every is ignored (the group gradients would be taken unscaled and underflow)", flush=True)
-    frozen = freeze_mod.frozen_keys(model) if (cfg.train_only or cfg.freeze) else ()
-    ema = EMA(model, cfg.ema, skip=frozen)
-    step, was_slim = 0, False
-    resumed = tk_ckpt.resume(out_dir, model, loss, opt, ema, scaler, cfg, external=_external(model))
-    if resumed is not None:                                     # the newest READABLE checkpoint: a damaged one falls back to the one before
-        step, was_slim = resumed
-    elif cfg.init_from:                                         # a new run warm-started from another run's checkpoint
-        fresh = warm_start(cfg.init_from, model, loss, reset=cfg.init_reset)
-        lost = sorted(set(fresh) & set(frozen))
-        if lost:                                                # a frozen weight that the checkpoint does not have stays what it was initialised to
-            print(f"WARNING: {len(lost)} frozen state key(s) are not in the warm-start checkpoint (or under init_reset) and stay at their random initialisation, e.g. {lost[:3]}", flush=True)
-        ema = EMA(model, cfg.ema, skip=frozen)
-        torch.manual_seed(cfg.seed)                             # the same data order and flips whatever the new branches drew
-        np.random.seed(cfg.seed)
-        print(f"warm start from {cfg.init_from}; fresh keys: {fresh}", flush=True)
-    supersede_log(out_dir, step)                                # also after a crash before the first save (rows of the lost steps)
-    with open(os.path.join(out_dir, "config.json"), "w") as f:
-        json.dump(dataclasses.asdict(cfg), f, indent=1)
-    log = open(os.path.join(out_dir, "log.jsonl"), "a")
-    if step and cfg.eval_every and step % cfg.eval_every == 0 and not val_logged(out_dir, step):   # the run died inside the evaluation
-        ev = evaluate(model, loss, ema, val_loader, 10 ** 9, device, cfg.amp, eval_fn, cfg)            # of this step (the checkpoint is
-        log.write(json.dumps({"step": step, "val": ev}) + "\n")                                         # saved before it): evaluate now
-        log.flush()
-        print(f"step {step}: val total {ev.get('total', float('nan')):.4f} (the evaluation a crash had cut)", flush=True)
-    model.train()
-    it = iter(train_loader)
 
-    def next_batch():
-        nonlocal it
-        try:
-            return next(it)
-        except StopIteration:
-            it = iter(train_loader)
-            return next(it)
-    params = [p for g in opt.param_groups for p in g["params"]]
-    bad, n_overflow, t0, step0, last = 0, 0, time.time(), step, {}
-    probe, timer = (ModuleProbe(model, every=cfg.log_every), StepTimer()) if cfg.probe else (None, None)
-    prof = StepProfiler(out_dir, cfg.profile_steps, device=device) if cfg.profile_steps > 0 else None
-    while step < cfg.steps:
-        reason = _stop_requested(out_dir)               # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
-        if reason is not None:
-            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, extra=scaler_extra(scaler))
-            prune_checkpoints(out_dir, cfg.keep)
-            control.mark_stopped(out_dir, step, reason)
-            print(f"step {step}: stop requested ({reason}), checkpoint saved, exit {EXIT_STOPPED}", flush=True)
-            raise SystemExit(EXIT_STOPPED)
-        f = lr_factor(step, cfg.warmup, cfg.steps, cfg.lr_min_frac)
-        for g in opt.param_groups:
-            g["lr"] = scheduled_lr(g, step, cfg, f)
-        diag = bool(cfg.grad_diag_every) and scaler is None and (step + 1) % cfg.grad_diag_every == 0         # not under fp16: the group gradients would be taken unscaled and underflow
-        opt.zero_grad(set_to_none=True)
-        acc, finite, prow, step_ids = {}, True, {}, []
-        pstep = probe.begin(step + 1) if probe is not None else None    # a StepProbe only on a step that is logged
-        for m in range(cfg.accum):                              # effective batch = batch_size * seq_len * accum samples
-            with (timer.data() if timer is not None else contextlib.nullcontext()):        # the wait for the data loader
-                item = next_batch()
-            if probe is not None:
-                step_ids.append(batch_tokens(item))                 # the samples of every micro-batch of the step, for an incident dump
-            out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], step / max(1, cfg.steps),
-                                      device, cfg.amp, cfg, diag=diag and m == 0, backward=True, augment=True, scaler=scaler)
-            if not ok:
-                finite = False
-                break
-            for k, v in out.items():
-                acc[k] = acc.get(k, 0.0) + v / cfg.accum
-            if dg:
-                acc["diag"] = dg
-        if finite:                                              # the probe's gradient norm per module comes BEFORE clipping (a blow-up must not hide behind the clip), with the weights before the step
-            gn, status = optimizer_step(opt, params, cfg.grad_clip, scaler, before_clip=pstep.grads if pstep is not None else None, split=clip_split)
-        else:
-            gn, status = None, "nonfinite"
-            opt.zero_grad(set_to_none=True)
-        skipped = status != "ok"
-        if status == "nonfinite" and gn is None and scaler is not None:      # a non-finite LOSS under fp16: the forward may have overflowed and written inf / nan into the batch-norm statistics
-            poisoned = poisoned_buffers(model)
-            if poisoned:
-                raise RuntimeError(f"step {step}: the forward pass left non-finite batch-norm statistics ({len(poisoned)} buffers, e.g. {poisoned[:3]}): an fp16 overflow of the activations "
-                                   "(above 65504), which no loss scale cures; resume from the last checkpoint with amp bf16 or off")
-        was_bad, bad = bad, bad_steps_after(status, bad, scaler)
-        if status == "overflow" and bad == was_bad:             # fp16: expected now and then, the scaler halved its scale
-            n_overflow += 1
-            print(f"step {step}: fp16 gradient overflow, skipped, loss scale -> {scaler.get_scale():g} ({n_overflow} since this start)", flush=True)
-        elif status == "overflow":                              # the scale is below 1: a diverged run, in the words the health check counts
-            n_overflow += 1
-            print(f"step {step}: non-finite gradient (fp16 overflow, loss scale {scaler.get_scale():g}), skipped ({bad} in a row)", flush=True)
-        elif skipped:
-            print(f"step {step}: non-finite {'loss' if gn is None else 'gradient'}, skipped ({bad} in a row)", flush=True)
-            if probe is not None:                               # what a replay needs: the step and the samples of the micro-batches so far (the last one is the one that failed)
-                dump_incident(out_dir, step, "nonfinite", batch_ids=[t for ids in step_ids for t in ids], losses=acc,
-                              extra={"what": "loss" if gn is None else "gradient", "micro": len(step_ids), "micro_batches": step_ids,
-                                     "step_frac": step / max(1, cfg.steps), "grad_norm": None if gn is None else float(gn)})
-        if skipped:
-            if bad >= cfg.max_bad_steps:
-                raise RuntimeError("too many non-finite steps in a row")
-        else:
-            ema.update(model, step)
-            if pstep is not None:
-                prow = pstep.finish()
-        step += 1
-        trow = timer.row() if timer is not None else {}
-        if prof is not None:
-            prof.tick()
-        if not skipped and (step % cfg.log_every == 0 or step == 1 or "diag" in acc):
-            rec = {"step": step, "t": time.time(), "lr": cfg.lr * f, "grad_norm": float(gn),
-                   "s_per_step": (time.time() - t0) / max(1, step - step0), **acc, **prow, **trow}
-            rec.update({f"lr.{g['lr_group']}": g["lr"] for g in opt.param_groups if "lr_group" in g})          # the own learning rate of every lr_groups prefix
-            if device.startswith("cuda"):
-                rec["gpu_gb"] = torch.cuda.max_memory_allocated() / 1e9
-            if scaler is not None:
-                rec["loss_scale"], rec["fp16_overflows"] = scaler.get_scale(), n_overflow
-            last = rec
-            log.write(json.dumps(rec) + "\n")
-            log.flush()
-            print(f"step {step}: total {rec['total']:.4f} lr {rec['lr']:.2e} grad {rec['grad_norm']:.2f}", flush=True)
-        if cfg.save_every and step % cfg.save_every == 0:       # before the evaluation (and also after a skipped step): an evaluation
-            save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, extra=scaler_extra(scaler))   # that dies no longer
-            prune_checkpoints(out_dir, cfg.keep)                                                                 # costs the steps since the last save
-        if cfg.eval_every and step % cfg.eval_every == 0:
-            ev = evaluate(model, loss, ema, val_loader, 10 ** 9, device, cfg.amp, eval_fn, cfg)
-            log.write(json.dumps({"step": step, "val": ev}) + "\n")
-            log.flush()
-            print(f"step {step}: val total {ev.get('total', float('nan')):.4f}", flush=True)
-    if prof is not None:
-        prof.close()                                            # a run shorter than warm-up + window writes what it has (before the final save: its wall time must not hold the checkpoint write)
-    save_checkpoint(os.path.join(out_dir, f"ckpt_{step:08d}.pt"), model, loss, opt, ema, step, cfg, extra=scaler_extra(scaler), slim=cfg.slim_at_end or was_slim)
-    prune_checkpoints(out_dir, 1 if (cfg.slim_at_end or was_slim) else cfg.keep)         # a finished run: the final weights only
-    return model, loss, ema, last
+    def step_fn(item, info):                                    # one micro-batch (a clip of keyframes): forward and backward
+        diag = bool(cfg.grad_diag_every) and info.scaler is None and (info.step + 1) % cfg.grad_diag_every == 0         # not under fp16: the group gradients would be taken unscaled and underflow
+        out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], info.frac, device, cfg.amp, cfg,
+                                  diag=diag and info.micro == 0, backward=True, augment=True, scaler=info.scaler)
+        return out, ok, ({"diag": dg} if dg else None)
+
+    return fit(cfg, model, loss, train_loader, step_fn, out_dir, device,
+               evaluate=lambda ema: evaluate(model, loss, ema, val_loader, 10 ** 9, device, cfg.amp, eval_fn, cfg),
+               hooks=ProbeHooks(model, out_dir, cfg, device),
+               frozen=freeze_mod.frozen_keys(model) if (cfg.train_only or cfg.freeze) else (), external=_external(model),
+               stop_check=lambda d: _stop_requested(d))         # looked up by name at every step, so a test can let a request arrive at a chosen step
 
 
 # ------------------------------------------------------------------------------------------------ self-test
