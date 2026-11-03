@@ -16,6 +16,14 @@
   "code_dirs": ["training", "evaluation", "tools", "reports/build", "temp"],
   "fingerprint_extra": ["data/splits.json", "models/registry.json"],
   "scratch": "temp",
+  "_trainsuite": "python -m trainsuite compose | start (autoresearch/trainsuite/compose.py): presets are json files of overrides, the composed config goes to out, check is the static check of training/startable.py, train is the command run.py wraps (training/train/run_config.py turns the config into the trainer's command line); the BEV system's block, adapted (2026-11-03)",
+  "trainsuite": {
+    "presets": "training/configs/presets",
+    "out": "temp/compose",
+    "runs": "runs",
+    "check": "bash tools/env/_py14.sh startable.py {config}",
+    "train": "bash tools/env/_py14.sh run_config.py {config}"
+  },
   "live_code": ["training", "evaluation", "tools", "reports/build"],
   "trash": "_to_delete",
   "decisions": "experiment_execution/DECISIONS.md",

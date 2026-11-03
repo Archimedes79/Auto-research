@@ -1,0 +1,13 @@
+{
+ "_about": "E271 arm a: the 1 m grid head + differentiable sparsification on the 39 frozen GaussianCaR channels, single frame (card experiments/E271_grid-chain-1m-sparse-hold-assign). The run name is set by the start (--id); seed 1 = preset seed1.",
+ "name": "e271_a_s0",
+ "design": "grid_head",
+ "seed": 0,
+ "steps": 4000,
+ "bs": 8,
+ "lr": 0.001,
+ "width": 48,
+ "workers": 3,
+ "budget": [11.2, 8.0, 14.3],
+ "per100": 12.0
+}

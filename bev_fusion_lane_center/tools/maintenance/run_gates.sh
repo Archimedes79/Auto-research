@@ -20,6 +20,8 @@ run "evaluate.py parts (stored inputs, CPU)" test_eval_parts.py
 run "lane task of the evaluation suite"     test_lane_task.py
 run "route data: one copy of resample_matrix / route_item" test_route_data.py
 run "seed ring + output union"              test_seed_ring_union.py
+run "start check of a training config (startable)" startable.py
+run "config -> trainer command line (run_config)" run_config.py --selftest
 run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "grid metric reproduces stored numbers" lane_grid/selftest.py
 exit $fail
