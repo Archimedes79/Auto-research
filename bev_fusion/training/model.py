@@ -28,7 +28,8 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
                 4-stage fuser + decoder, training/fallbacks.py CMXTrunk: replaces fusion AND backbone)
-  heads         semantic (channels = losses.layer_spec) and objects (CenterPoint, S5a), both decoded at any dt by
+  heads         semantic (channels = losses.layer_spec, made from the layer table layers.py; centreline_1m adds the 1 m branch sem_1m) and
+                objects (CenterPoint, S5a), both decoded at any dt by
                 training/timed_head.py (the shared TimeMover moves S to dt); the output is the prediction layout of losses.BEVLoss;
                 S5c refinement works on the decoded boxes (object_head.py). forward(ego=...) takes the true gap per sample.
 Conventions as the blocks: grid x 0..60 m forward, y -26..26 m left, 0.5 m; maps (B, C, X, Y).
@@ -38,6 +39,7 @@ from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 try:
     from .augment import flip_cam
@@ -48,7 +50,8 @@ try:
     from .fusion import ConcatFusion, GateFusion
     from .lane_branch import LaneBranch
     from .lift_pd import Grid, LiftPD
-    from .losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
+    from .layers import LEVELS
+    from .losses import NUSC_GROUPS, layer_spec, layer_spec_1m, radar_aux_spec, refine_gt_boxes, sample_targets
     from .object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
     from .precompute import Precompute
     from .radar_bev import RadarBEV
@@ -65,7 +68,8 @@ except ImportError:                                   # run as a script
     from fusion import ConcatFusion, GateFusion
     from lane_branch import LaneBranch
     from lift_pd import Grid, LiftPD
-    from losses import NUSC_GROUPS, layer_spec, radar_aux_spec, refine_gt_boxes, sample_targets
+    from layers import LEVELS
+    from losses import NUSC_GROUPS, layer_spec, layer_spec_1m, radar_aux_spec, refine_gt_boxes, sample_targets
     from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
     from precompute import Precompute
     from radar_bev import RadarBEV
@@ -118,6 +122,8 @@ class ModelConfig:
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
+    centreline_1m: bool = False        # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer
+                                       # table (layers.py): output p["sem_1m"] = losses.layer_spec_1m; LossConfig.centreline_1m must agree. Off = no new parameter
     dense_objects: bool = True
     radar_stationary: bool = True      # radar aux head = losses.radar_aux_spec(radar_stationary)
     n_sem: int = None                  # optional check: must equal len(layer_spec(...)) when given (train.py passes it)
@@ -245,6 +251,10 @@ def check_config(cfg):
         g = Grid(z_levels=cfg.z_levels, **cfg.grid_kwargs)
         if any(g.nx % s or g.ny % s for s in cfg.motion_strides):
             errs.append(f"motion_strides {cfg.motion_strides} must divide the grid {g.nx} x {g.ny}")
+    if cfg.centreline_1m:
+        g = Grid(z_levels=cfg.z_levels, **cfg.grid_kwargs)
+        if g.nx % LEVELS["1m"] or g.ny % LEVELS["1m"]:
+            errs.append(f"centreline_1m pools the grid by {LEVELS['1m']}: {g.nx} x {g.ny} must be even")
     if errs:
         raise ValueError("; ".join(errs))
 
@@ -304,6 +314,8 @@ class BEVFusionModel(nn.Module):
             self.motion_block = MotionBlock(cfg.c_cam, self.grid, strides=tuple(cfg.motion_strides))   # TimeMover, then dropped: it would
             self.mover.motion = None                             # get no gradient; TimeMover then needs v_field on every call)
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
+        self.spec_1m = layer_spec_1m(cfg.centreline_1m)
+        self.head_1m = SemanticHead(c, len(self.spec_1m)) if self.spec_1m else None   # one pyramid level down, reads the sem head's moved state
         self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction, moving=cfg.object_moving),
                                   c, self.mover)
         if cfg.box_vel_from_field:                               # its own vel branch is not read: frozen, so no parameter goes without a
@@ -442,6 +454,8 @@ class BEVFusionModel(nn.Module):
             if vf is not None and self.cfg.box_vel_from_field:   # the box velocity is the field (t12's second decision)
                 obj = dict(obj, vel=vf if carry is None else _turn(ao["carry"], w_i, dt_i))
             p = {"sem": sem, "obj": obj, "mass": a["mass"]}
+            if self.head_1m is not None:                         # the 1 m level: the state the sem head decoded at t + dt, average-pooled
+                p["sem_1m"] = self.head_1m(F.avg_pool2d(a["state"], LEVELS["1m"]))
             if self.cfg.refine:
                 p["obj_feat"] = ao["state"]                          # what the refiner samples (also at run time)
                 p["obj_dt"] = torch.as_tensor(dt_i).to(S).reshape(-1).expand(S.shape[0])

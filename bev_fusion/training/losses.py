@@ -11,13 +11,12 @@ The six open decisions of 8.4 are options of LossConfig, with the proposal's val
 (2) dense_objects, (3) radar_stationary, (4) use_w_reg (tolerance always; the per-frame weight meta["w_reg"] when the
 estimator writes it), (5) dt_weights / warmup_hold / warmup_ramp, (6) task_weighting.
 Reused, not duplicated: object_head.build_targets / head_loss (stage 1), timed_head.MotionHead.loss (motion).
-The semantic head's channels are declared by layer_spec (SemanticHead(c, len(spec)) gives logits in that order;
-distance channels are metres, linear).
+The semantic head's channels, their targets and their losses come from the layer table (layers.py: a row = name, kind, level; the kind decides
+them); layer_spec lists the channels of the 0.5 m head (SemanticHead(c, len(spec)) gives logits in that order; distance channels are metres,
+linear), layer_spec_1m those of the optional 1 m branch (LossConfig.centreline_1m).
 Run the self-test: python training/losses.py   (from the bev_fusion folder; CPU, one thread, 1-5 minutes)
 """
 import math
-import os
-import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,19 +24,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-_BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-while not os.path.isdir(os.path.join(_BEV_FUSION, "autogt")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
-    _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
-if _BEV_FUSION not in sys.path:
-    sys.path.append(_BEV_FUSION)                     # the GT layout: the standalone suite bev_fusion/autogt/
-from autogt.layers import AREAS, DIST_MAX, LINES, OBJECTS  # noqa: E402
-
 try:
+    from .layers import DIST_MAX, channels, layer_table, pool_targets, source_keys   # layers.py also puts autogt on the path
     from .lift_pd import Grid
     from .loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from .object_head import _gather, build_targets, head_loss, refine_loss
     from .timed_head import MotionHead
 except ImportError:                                   # run as a script
+    from layers import DIST_MAX, channels, layer_table, pool_targets, source_keys
     from lift_pd import Grid
     from loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from object_head import _gather, build_targets, head_loss, refine_loss
@@ -73,6 +67,8 @@ class LossConfig:
     dist_w_far: float = 0.25
     dist_max: float = DIST_MAX
     centrelines: bool = False          # mask + direction; off until the S1 baseline exists
+    centreline_1m: bool = False        # plan 2026-11-03: the centre-line row at the 1 m level (layers.py): presence + distance field + direction, targets pooled from
+                                       # the 0.5 m GT (pool_targets); the model's sem_1m output (ModelConfig.centreline_1m must agree). Off = every stored run is reproduced
     w_direction: float = 0.5
     dense_objects: bool = True         # decision (2): footprint coverage in the semantic head
     w_obj_vel: float = 0.2             # object_head.head_loss velocity weight
@@ -108,28 +104,23 @@ class LossConfig:
 
 # ------------------------------------------------------------------------------------------------ layer spec
 def layer_spec(centrelines=False, dense_objects=True, stationary=False):
-    """Ordered channels of a semantic-type head: list of (channel name, kind, GT key of training/gt_bev.py).
-    kinds: area (logit of the coverage), line (logit of the 1-cell mask), dist (truncated distance, metres, linear),
-    centreline (logit), dir (cos, sin of the heading; raw, normalised in the loss), object (logit of the footprint
-    coverage), stationary (logit of the radar stationary-structure proxy)."""
-    spec = [(a, "area", a) for a in AREAS]
-    for ln in LINES:
-        spec += [(ln, "line", ln)]
-    spec += [(ln + "_dist", "dist", ln + "_dist") for ln in LINES]
-    if centrelines:
-        spec += [("centreline", "centreline", "centreline"), ("centreline_cos", "dir", "centreline_dir"),
-                 ("centreline_sin", "dir", "centreline_dir")]
-    if dense_objects:
-        spec += [(o, "object", o) for o in OBJECTS]
-    if stationary:
-        spec += [("radar_stationary", "stationary", "radar_stationary")]
-    return spec
+    """Ordered channels of the 0.5 m semantic-type head: list of (channel name, kind, target key = GT key of training/gt_bev.py), made from
+    the layer table (layers.layer_table / channels). kinds: area (logit of the coverage), line (logit of the 1-cell mask), dist (truncated
+    distance, metres, linear), centreline (logit), dir (cos, sin of the heading; raw, normalised in the loss), object (logit of the footprint
+    coverage), stationary (logit of the radar stationary-structure proxy: a hook, not a table row)."""
+    spec = channels(layer_table(centrelines, dense_objects))
+    return spec + ([("radar_stationary", "stationary", "radar_stationary")] if stationary else [])
+
+
+def layer_spec_1m(centreline_1m=False):
+    """Channels of the 1 m branch (layers level '1m'; target keys end in '@1m', made by build_layer_targets): empty while the option is off."""
+    return channels(layer_table(False, False, centreline_1m), "1m")
 
 
 def radar_aux_spec(stationary=True):
     """radar aux head: dense objects (on radar coverage) + the stationary-structure channel."""
-    return [(o, "object", o) for o in OBJECTS] + ([("radar_stationary", "stationary", "radar_stationary")]
-                                                  if stationary else [])
+    return channels([r for r in layer_table(False, True) if r.kind == "dense_box"]) + (
+        [("radar_stationary", "stationary", "radar_stationary")] if stationary else [])
 
 
 def _t(a, device):
@@ -148,14 +139,13 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     per-cell weights (B, 1, X, Y): w_map (areas: undefined 0, occluded w_occluded_map), w_lines (w_map x w_reg),
     w_obj (objects, velocity: (camera and not occluded) or radar; x w_interpolated on interpolated labels),
     w_cam (camera and not occluded), w_radar (radar), w_fusion (camera x radar, D37); all x w_unknown where mass <
-    threshold at dt != 0. cfg.fusion_area_only (D38 (b), default off): w_map, w_lines and w_obj are also x w_fusion."""
+    threshold at dt != 0. cfg.fusion_area_only (D38 (b), default off): w_map, w_lines and w_obj are also x w_fusion.
+    cfg.centreline_1m (default off): + the pooled 1 m targets 'centreline@1m', 'centreline_dist@1m', 'centreline_dir@1m' and the weight 'w_lines@1m'."""
     cfg = cfg or LossConfig()
     gts = [gts] if isinstance(gts, dict) else list(gts)
     T = {}
-    keys = list(AREAS) + list(LINES) + [ln + "_dist" for ln in LINES] + list(OBJECTS) + ["velocity"]
-    if cfg.centrelines:
-        keys += ["centreline", "centreline_dir"]
-    for k in keys:
+    rows = layer_table(cfg.centrelines, True, cfg.centreline_1m)          # the objects are always read: the aux heads' targets
+    for k in source_keys(rows) + ["velocity"]:
         T[k] = _stack(gts, k, device)
     if cfg.radar_stationary and all("radar_stationary" in g for g in gts):       # hook: another session builds it
         T["radar_stationary"] = _stack(gts, "radar_stationary", device)
@@ -189,6 +179,7 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
         u = torch.where(m < cfg.mass_threshold, torch.full_like(m, cfg.w_unknown), torch.ones_like(m))
         W = {k: v * u for k, v in W.items()}
     T.update(W)
+    T.update(pool_targets(rows, T))                   # the 1 m level (centreline_1m): targets + w_lines@1m from the 0.5 m ones; nothing while it is off
     T["boxes"] = [g.get("meta", {}).get("boxes", []) for g in gts]
     return T
 
@@ -285,12 +276,17 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
             for j, n in enumerate(names["line"]):
                 terms[f"line_boundary.{n}"] = bnd[j]
             groups["lines"] = groups["lines"] + wb * bnd.mean()
-    if "centreline" in idx:
+    if "centreline" in idx:                                      # the first centre-line design: presence only, its direction follows
         w = weights["line"]
         dice = tolerant_dice_loss(torch.sigmoid(ch("centreline")), tg("centreline"), w, cfg.line_tolerance)[0]
-        dl = direction_l1(ch("dir"), T["centreline_dir"], T["centreline"], w)
-        terms["centreline_dice"], terms["centreline_dir"] = dice, dl
-        groups["lines"] = groups.get("lines", 0.0) + dice + cfg.w_direction * dl
+        terms["centreline_dice"] = dice
+        groups["lines"] = groups.get("lines", 0.0) + dice
+    if "dir" in idx:                                             # the direction of a polyline row (the centreline mask, or the 1 m row with its distance field)
+        w, (name, _, key) = weights["line"], spec[idx["dir"][0]]
+        pres = next(k for n, kd, k in spec if n == name.rsplit("_", 1)[0] and kd in ("line", "centreline"))
+        dl = direction_l1(ch("dir"), T[key], T[pres], w)
+        terms[key] = dl
+        groups["lines"] = groups.get("lines", 0.0) + cfg.w_direction * dl
     if "object" in idx:
         x, t, w = ch("object"), tg("object"), weights["object"]
         bce, iou = soft_bce(x, t, w), overlap_loss(torch.sigmoid(x), t, w, cfg)
@@ -458,7 +454,8 @@ class TaskWeights(nn.Module):
 
 class BEVLoss(nn.Module):
     """The 8.4 total. forward(preds, gts, step_frac):
-    preds: {dt: {'sem': (B, len(spec), X, Y) logits, 'obj': object head maps, 'v_hat': (B, 2, X, Y) motion field
+    preds: {dt: {'sem': (B, len(spec), X, Y) logits, 'sem_1m': (B, len(spec_1m), X / 2, Y / 2) logits (centreline_1m only; its terms are
+            'sem1m.*' and join the lines group), 'obj': object head maps, 'v_hat': (B, 2, X, Y) motion field
             (supervised at dt = 0 against the GT of t_c), 'mass': (B, 1, X, Y) splat mass at dt, 'delta': (..., 2)
             splat correction, 'cam_aux': (B, len(cam_spec), X, Y), 'radar_aux': (B, len(radar_spec), X, Y)}; every entry optional
     gts: {dt: [gt_bev GT dict per sample]} (sample_targets builds it from training samples)
@@ -469,6 +466,7 @@ class BEVLoss(nn.Module):
         self.cfg, self.grid, self.groups = cfg or LossConfig(), grid or Grid(), groups
         c = self.cfg
         self.spec = layer_spec(c.centrelines, c.dense_objects)
+        self.spec_1m = layer_spec_1m(c.centreline_1m)
         self.cam_spec = layer_spec(False, True)
         self.radar_spec = radar_aux_spec(c.radar_stationary)
         self.task = TaskWeights(TASK_GROUPS, c.task_weighting, c.fixed_weights, c.s_range)
@@ -486,6 +484,13 @@ class BEVLoss(nn.Module):
             w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
             t, g = map_terms(p["sem"], T, self.spec, w, cfg, step_frac)
             terms.update(("sem." + k, v) for k, v in t.items())
+            for k, v in g.items():
+                add(k, v)
+        if bool(self.spec_1m) != ("sem_1m" in p):                # the layout flag lives in two configs (LossConfig, ModelConfig): a mismatch must not pass silently
+            raise ValueError(f"centreline_1m: the loss has {len(self.spec_1m)} 1 m channels but the prediction {'has' if 'sem_1m' in p else 'has no'} 'sem_1m'")
+        if self.spec_1m:
+            t, g = map_terms(p["sem_1m"], T, self.spec_1m, {"line": T["w_lines@1m"]}, cfg, step_frac)
+            terms.update(("sem1m." + k, v) for k, v in t.items())
             for k, v in g.items():
                 add(k, v)
         tt = None
