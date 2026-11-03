@@ -1,0 +1,43 @@
+{
+ "id": "e271_cfg_smoke",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh run_config.py temp/compose/e271_cfg_smoke.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1454184,
+ "created": "2026-11-03T10:09:47",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-03T10:09:52",
+ "code_hash": "ec508d0aeb7e",
+ "commit": "20a2076b95",
+ "tag": "lcr/e271_cfg_smoke",
+ "git_note": "",
+ "pid": 1454227,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/temp/loop23/wait_cfg.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 68,
+ "attempts": 1,
+ "ended": "2026-11-03T10:11:06",
+ "last_lines": [
+  "=== attempt 2026-11-03T10:09:53: bash tools/env/_py14.sh run_config.py temp/compose/e271_cfg_smoke.json",
+  "_py14.sh: training/train/run_config.py",
+  "10:10:03 grid head, params 2.05 M, train frames 8414, steps 40, batch 8, seed 0",
+  "10:10:53 done 40",
+  "10:10:59 VAL {'cov5': 0.4403, 'prec1': 0.099, 'vgt100': 6.8137} thr 0.010166654363274574 frontier {'11.2': {'thr': 0.01, 'train_vgt100': 5.572, 'reached': 0, 'cov5': 0.44, 'prec1': 0.099, 'vgt100': 6.814}, '8.0': {'thr': 0.01, 'train_vgt100': 5.572, 'reached': 0, 'cov5': 0.44, 'prec1': 0.099, 'vgt100': 6.814}, '14.3': {'thr': 0.01, 'train_vgt100': 5.572, 'reached': 0, 'cov5': 0.44, 'prec1': 0.099, 'vgt100': 6.814}}"
+ ]
+}
