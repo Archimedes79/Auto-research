@@ -28,4 +28,4 @@ The delivered list of vertices is a READ-OUT at inference (`evaluation/vertex_ev
 | `test_oracle.py` | G0: the GT through the chain must reproduce itself (real VAL frames, degraded copies must fall) | idea of `bev_fusion/evaluation/bev_gtcheck.py` | itself |
 | `test_grid.py` | G1: gradient reaches every parameter group, one batch can be overfitted, features equal `BuilderData`'s | - | itself |
 
-Trainer: `../train/grid_train.py` (on `../trainer.py`), scoring: `../../evaluation/vertex_eval.py`, pictures: `../../tools/viz/assign_view.py`.
+Trainer: `../train/grid_train.py` (on `../trainer.py`), scoring: `../../evaluation/vertex_eval.py`, pictures: `../../tools/viz/grid_view.py` (head, vertices, assignment, camera; E271 videos) and `../../tools/viz/assign_view.py` (a registry system's delivered graph against the SD map).

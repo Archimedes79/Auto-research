@@ -8,7 +8,7 @@ L_dir   (1 - cos) between the heading and the tangent of the nearest lane point,
 L_off   L1 of the sub-cell offset against nearest point - cell centre (cells, clipped to +-0.5), weighted by the target
 L_cov   coverage of the GT points by the vertex weights, noisy-or: C(g) = 1 - prod_c (1 - w_c K(g, c)), K = exp(-across^2 / 2 (1 m)^2 - along^2 / 2 (4 m)^2) in the
         frame of the GT tangent, cell position = centre + offset; loss = mean(1 - C): a vertex pays for itself where it covers lane that nobody else covers
-L_prec  mean over the vertex weight of the clipped distance (2 m) of the vertex to the nearest lane point: weight off the lane is punished
+L_prec  mean over the vertex weight of the clipped distance (2 m) of the CELL CENTRE to the nearest lane point (the offset gets its gradient from L_off and L_cov): weight off the lane is punished
 L_bud   the vertex budget (`soft_lines.budget`), only the excess over `per100` vertices per 100 m of GT lane
 Run the self-test: python losses.py
 """

@@ -32,7 +32,7 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--width", type=int, default=48)
     ap.add_argument("--workers", type=int, default=3)
-    ap.add_argument("--budget", type=float, nargs="*", default=[12.8, 8.0, 14.3], help="vertices per 100 m of GT lane for the read-out threshold; the first one is the card's, all go to the frontier")
+    ap.add_argument("--budget", type=float, nargs="*", default=[11.2, 8.0, 14.3], help="vertices per 100 m of GT lane for the read-out threshold; the first one is the card's, all go to the frontier")
     ap.add_argument("--per100", type=float, default=GL.PER100, help="the budget the vertex loss asks for")
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()

@@ -445,6 +445,13 @@ def _vertex_measures():
     two = np.concatenate([V, V[:1] + [0.0, 3.0]]), np.concatenate([H, H[:1]])    # a graph node in two pieces: one wrong row, one right row = one right vertex
     nn_ = num(two[0], two[1], ids=np.concatenate([ids, [0]]))
     assert nn_["prec1"] == 1.0 and abs(nn_["vgt100"] - 20.0) < 1e-9, nn_
+    th = np.deg2rad(37.0)                                                         # a rotated lane: the across / along terms use the tangent, not the axes
+    Rm = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+    Gr, Tr, Vr, Hr = G @ Rm.T, T @ Rm.T, V @ Rm.T, H @ Rm.T
+    nr = M.vertex_numbers(M.vertex_counts(Vr, Hr, Gr, Tr))
+    assert abs(nr["cov5"] - 1.0) < 1e-9 and nr["prec1"] == 1.0, nr
+    assert M.vertex_numbers(M.vertex_counts(Vr + 2.0 * np.array([-np.sin(th), np.cos(th)]), Hr, Gr, Tr))["cov5"] == 0.0      # 2 m across the rotated lane
+    assert M.vertex_numbers(M.vertex_counts(Vr + 2.0 * np.array([np.cos(th), np.sin(th)]), Hr, Gr, Tr))["cov5"] > 0.9         # 2 m ALONG it: still covered
     cs = [M.vertex_counts(V, H, G, T), M.vertex_counts(V + [0, 2.0], H, G, T)]   # additive: the numbers of summed counts
     tot = {k: cs[0][k] + cs[1][k] for k in cs[0]}
     assert abs(M.vertex_numbers(tot)["cov5"] - 0.5) < 1e-9

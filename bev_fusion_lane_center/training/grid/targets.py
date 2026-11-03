@@ -21,7 +21,7 @@ def cell_targets(g05, t05, n=100, res=1.0, origin=-50.0):
     c = centres(n, res, origin, g05.device)
     d, off, head, idx = [], [], [], []
     for b in range(B):                                                   # one frame at a time: (n * n, G) floats, not (B, n * n, G)
-        dist = torch.cdist(c, g05[b])                                    # padded points (1e4) are never the nearest
+        dist = torch.cdist(c, g05[b], compute_mode="donot_use_mm_for_euclid_dist")  # exact (the matrix product is off by 1e-3 m); padded points (1e4) are never the nearest
         dm, im = dist.min(1)
         d.append(dm.view(n, n))
         off.append(((g05[b][im] - c) / res).T.reshape(2, n, n))
@@ -35,13 +35,15 @@ def heat(d, sigma=1.0):
 
 
 def _selftest():
-    g = torch.stack([torch.zeros(120), torch.linspace(-30, 29.5, 120)], 1)[None]        # a lane along y at x = 0, heading +y
+    g = torch.stack([torch.zeros(120), torch.linspace(-29.8, 29.7, 120)], 1)[None]       # a lane along y at x = 0, heading +y, points at y = -29.8 + 0.5 k
     g = torch.cat([g, torch.full((1, 10, 2), 1e4)], 1)
     t = torch.cat([torch.tensor([0.0, 1.0]).expand(120, 2), torch.zeros(10, 2)], 0)[None]
     d, off, head, idx = cell_targets(g, t)
-    # cell (49, 70) has its centre at x = -0.5, y = 20.5: the nearest lane point is (0, 20.5) -> offset (+0.5, 0) cells, distance 0.5
-    assert abs(float(d[0, 49, 70]) - 0.5) < 1e-4 and abs(float(off[0, 0, 49, 70]) - 0.5) < 1e-4 and abs(float(off[0, 1, 49, 70])) < 0.26, (d[0, 49, 70], off[0, :, 49, 70])
+    # cell (49, 70) has its centre at x = -0.5, y = 20.5: the nearest lane point is (0, 20.7) -> offset (+0.5, +0.2) cells, distance 0.54
+    assert abs(float(d[0, 49, 70]) - (0.5 ** 2 + 0.2 ** 2) ** 0.5) < 1e-4 and abs(float(off[0, 0, 49, 70]) - 0.5) < 1e-4, (d[0, 49, 70], off[0, :, 49, 70])
     assert torch.allclose(head[0, :, 49, 70], torch.tensor([0.0, 1.0]))
+    # the y offset too (a sign error of one axis stays under 1 m and is invisible to the metrics): cell centre y = 20.5, nearest lane point y = 20.7
+    assert abs(float(off[0, 1, 49, 70]) - 0.2) < 1e-4, off[0, :, 49, 70]
     assert float(d[0, 10, 10]) > 20 and float(heat(d)[0, 10, 10]) < 1e-6                 # far from the lane
     assert float(heat(d)[0, 49, 70]) > 0.8
     print("targets selftest ok")

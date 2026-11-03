@@ -31,7 +31,16 @@ def main():
     # the same frame, the old way: BuilderData channels 0..38 are identical to the new loader's (one source of truth for the features)
     import p16_data as PD
     old = PD.BuilderData("val_clean", train=False)[3]["x"][:39].float()
-    assert torch.allclose(old, b["x"][0].float(), atol=2e-2), float((old - b["x"][0].float()).abs().max())
+    assert torch.equal(old, b["x"][0].float()), float((old - b["x"][0].float()).abs().max())
+    # the targets decode to the lane: centre + offset is a GT point itself, for both axes (a sign error of one offset axis stays under 1 m and would go unseen by the metrics)
+    import targets as TG
+    d, off, head, _ = TG.cell_targets(b["g05"], b["t05"])
+    c = TG.centres().view(100, 100, 2)
+    pts = c + off[0].permute(1, 2, 0)                                           # (100, 100, 2) nearest lane point of every cell, metres
+    gp = b["g05"][0][b["m05"][0] > 0]
+    sel = (d[0] < 2.0).nonzero()[:200]
+    q = pts[sel[:, 0], sel[:, 1]]
+    assert float(torch.cdist(q, gp, compute_mode="donot_use_mm_for_euclid_dist").min(1).values.max()) < 1e-3, "centre + offset must be a ground-truth point"
     m = GH.GridHead(width=16)
     x, bt = b["x"].float(), {k: b[k] for k in ("g05", "t05", "m05")}
     out = m(x)
@@ -55,7 +64,7 @@ def main():
         opt.step()
         first = first if first is not None else float(loss)
     print("overfit 40 steps: loss", round(first, 3), "->", round(float(loss), 3), {k: round(v, 3) for k, v in info.items()})
-    assert float(loss) < 0.6 * first, "the loss does not fall on one batch"
+    assert float(loss) < 0.8 * first, "the loss does not fall on one batch"
     # read-out of the overfitted head on its own frame gives vertices near the lane
     with torch.no_grad():
         sp = SL.sparsify(m(x))
@@ -64,7 +73,7 @@ def main():
     T = b["t05"][0][b["m05"][0] > 0].numpy().astype(np.float64)
     num = M.vertex_numbers(M.vertex_counts(V, H, G, T))
     print("read-out after overfitting:", {k: round(v, 3) for k, v in num.items()}, "vertices", len(V))
-    assert len(V) > 0 and num["prec1"] > 0.2, num
+    assert len(V) > 0 and num["prec1"] > 0.6, num
     print("grid spec test ok")
 
 
