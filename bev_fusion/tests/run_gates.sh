@@ -64,6 +64,15 @@ run "startable"        "$PY" training/startable.py                         # sta
 run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s
+run "bundle"            "$PY" tests/test_bundle.py                  # model.py + losses.py import no loader and no trainer (the network is a closed bundle); 1 s
+run "camera features"   "$PY" tests/test_camera_features.py         # the CAMERAS table, feature swap, dual branches, refusals; CPU, 12 s
+run "dual camera geometry" "$PY" tests/test_dual_camera_geometry.py   # both branches put an image pixel at the same BEV cell (< 0.5 px); CPU, 5 s
+run "freeze, probe"     "$PY" tests/test_freeze_probe.py            # freeze.py / probe.py / debug.py on a toy network; CPU, 4 s
+run "GT prepare"        "$PY" tests/test_gt_prepare.py              # scene lists, autogt command lines; no data, 5 s
+run "radar memory ghost" "$PY" tests/test_radar_memory_ghost.py     # the Doppler write mask keeps a radial mover out of the radar memory; 3 s
+run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 motion block through the trainer's path; CPU, 7 s
+run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, training/splits.py, the trainsuite hook; no data, 7 s
+run "layer table"       "$PY" tests/test_layers.py                  # training/layers.py: the table changes no number, the 1 m centre-line row; CPU, 7 s
 if [ "${1:-}" = "--all" ]; then
   run "whole chain"     "$PY" training/model.py                     # nuScenes mini, CPU; minutes
   run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
