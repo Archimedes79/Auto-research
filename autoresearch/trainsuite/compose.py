@@ -12,6 +12,9 @@ project's project.json: {"presets": dir, "out": dir for the composed files, "che
 "prepare": [{"name": "gt", "check": command with {config} (exit 0 = present), "build": command with {config} (resumable), "wait_min": minutes the training may wait for it}]}.
 `start` runs the prepare checks; a missing item stops it unless `--prepare`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)
 and the training is started with `--after` it, so a failed build blocks the training instead of letting it start without its data.
+`"resolve"` (optional): a command (cwd = the project folder) that reads the composed config as json on stdin and writes the resolved one on stdout, for names that the project turns into values
+(bev_fusion: `"split": "large"` becomes its scene lists, `training/splits.py`); a non-zero exit refuses the start. The resolved config is what is written, checked, compared with a run's earlier
+config and trained, so the run pins the values, not the name.
 """
 import copy
 import difflib
@@ -19,6 +22,7 @@ import json
 import math
 import os
 import shlex
+import subprocess
 
 MISSING = "<missing>"
 
@@ -159,6 +163,25 @@ def write(cfg, out):
     os.replace(tmp, out)
 
 
+def resolve_config(cmd, cfg, cwd):
+    """(resolved config, notes): cfg passed through the project's resolve command (json on stdin, json on stdout; see the module doc); the notes name every key it set, changed or removed"""
+    try:
+        r = subprocess.run(shlex.split(cmd), input=json.dumps(cfg), cwd=cwd, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ComposeError(f"resolve: cannot run {cmd!r}: {e}")
+    if r.returncode:
+        raise ComposeError(f"resolve ({cmd}) refused: {(r.stderr or r.stdout).strip()[-400:]}")
+    try:
+        out = _clean(json.loads(r.stdout, parse_constant=_no_const), "resolve", False)
+    except ValueError as e:
+        raise ComposeError(f"resolve ({cmd}): its output is not json: {e}")
+    if not isinstance(out, dict):
+        raise ComposeError(f"resolve ({cmd}): its output must be a json object")
+    show = lambda v: f"{len(v)} entries" if isinstance(v, list) else json.dumps(v)                 # noqa: E731 - a scene list is not printed
+    notes = [f"resolve: {k} = {show(v)}" for k, v in out.items() if cfg.get(k, MISSING) != v] + [f"resolve: {k} removed" for k in cfg if k not in out]
+    return out, notes
+
+
 def same_folder_ids(records, run_id):
     """the OTHER run ids of the run records whose run folder is the same: the folder is the id with '.' as '_', so t1.a and t1_a share runs/t1_a"""
     folder = run_id.replace(".", "_")
@@ -187,11 +210,14 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
     if key and any(s.partition("=")[0].strip() == key for s in sets):
         raise ComposeError(f"--set {key}=...: the run folder is runs/{folder}, named by --id, and the launcher script names it after the config file: change --id instead")
     cfg, changes = compose(base, presets, sets, presets_dir)
+    resolved = []
+    if block.get("resolve"):                                  # names the project turns into values (a split into its scene lists); before the config is compared with a run's earlier one
+        cfg, resolved = resolve_config(block["resolve"], cfg, project_root)
     if key:                                                   # directly, not as a --set: an id like 123, 1e3 or true must stay a string, and a base without the key must not fall back to the default name
         changes.append((key, _put(cfg, [key], folder), folder, "--id"))
     out_dir = os.path.join(project_root, block.get("out", "temp/compose"))
     composed, preview = os.path.join(out_dir, folder + ".json"), os.path.join(out_dir, folder + ".preview.json")
-    notes = []
+    notes = list(resolved)
     run_dir = os.path.join(project_root, block.get("runs", "runs"), folder)
     has_run = os.path.isdir(run_dir) and any(f.startswith("ckpt_") or f == "log.jsonl" for f in os.listdir(run_dir))
     if has_run and os.path.isfile(os.path.join(run_dir, ".done")):

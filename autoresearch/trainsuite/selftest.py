@@ -448,7 +448,28 @@ def check_start_prepare_done(tmp):
     assert rc == 1 and "launcher of t16.q ended" in out, (rc, out)
 
 
-REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_start_hold, check_start_prepare_done)       # review of 2026-11-02, one rule each
+def check_resolve(tmp):
+    """the project's resolve command (json in, json out) fills in names before the config is written, checked and compared with a run's earlier one: what it sets is in the
+    config and named in a note, a refusal or output that is no json object refuses the start, a project without the key is untouched"""
+    from . import compose as C
+    proj = _start_project(tmp, "resolve", prepare=False)
+    prog = "import json, sys; d = json.load(sys.stdin); n = d.pop('split'); d['lists'] = [n] * 3; json.dump(d, sys.stdout)"
+    block = dict(json.load(open(os.path.join(proj, "project.json")))["trainsuite"], resolve=f"{sys.executable} -c \"{prog}\"")
+    json.dump({"steps": 3000, "name": "x", "split": "big"}, open(os.path.join(proj, "base.json"), "w"))
+    plan = C.plan_start(proj, block, "base.json", "t18.a", [], [], no_card=True)
+    assert plan["config"] == {"steps": 3000, "name": "t18_a", "lists": ["big"] * 3}, plan["config"]
+    assert plan["notes"] == ["resolve: lists = 3 entries", "resolve: split removed"], plan["notes"]
+    for cmd, text in ((f"{sys.executable} -c \"import sys; sys.exit('no such split')\"", "no such split"), (f"{sys.executable} -c \"print('[1]')\"", "must be a json object"),
+                      (f"{sys.executable} -c \"print('nope')\"", "not json"), ("no_such_command_xyz", "cannot run")):
+        try:
+            C.plan_start(proj, dict(block, resolve=cmd), "base.json", "t18.b", [], [], no_card=True)
+            raise AssertionError(f"resolve {cmd!r} must refuse the start")
+        except C.ComposeError as e:
+            assert text in str(e), (cmd, e)
+    assert C.plan_start(proj, {k: v for k, v in block.items() if k != "resolve"}, "base.json", "t18.c", [], [], no_card=True)["config"]["split"] == "big", "no resolve key, no change"
+
+
+REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_start_hold, check_start_prepare_done, check_resolve)       # review of 2026-11-02 (+ the resolve hook), one rule each
 
 
 def main():
@@ -1270,7 +1291,7 @@ def main():
         for check in REVIEW_CHECKS:
             check(tmp)
         ok("review fixes: a non-numeric steps is a finding (status goes on), --set / presets refuse NaN and read 1e3 as 1000, t1.a and t1_a do not share a run folder, "
-           "start --go refuses a held id before any job, a prepare job that finishes inside --wait does not stop the training")
+           "start --go refuses a held id before any job, a prepare job that finishes inside --wait does not stop the training, the project's resolve command fills in names (a split) before the config is written")
 
         # 16 the view of run.py's queue
         qp =os.path.join(tmp, "qproj")
