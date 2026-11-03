@@ -1,0 +1,14 @@
+﻿t16_full_s0: 1000 frames, 700 with at least 30 GT lane-divider cells
+lane-divider IoU over those frames: mean 0.362  q10 0.000  q25 0.196  median 0.357  q75 0.539  q90 0.687  share with IoU < 0.1: 0.17  share >= 0.5: 0.29
+PICK worst  scene-0017/027  lane_iou 0.000  f1 None  gt_cells 144
+PICK worst  scene-0018/002  lane_iou 0.000  f1 None  gt_cells 173
+PICK worst  scene-0038/031  lane_iou 0.000  f1 None  gt_cells 77
+PICK worst  scene-0039/002  lane_iou 0.000  f1 None  gt_cells 112
+PICK median scene-0099/036  lane_iou 0.357  f1 0.045  gt_cells 381
+PICK median scene-0552/034  lane_iou 0.358  f1 None  gt_cells 128
+PICK median scene-0344/032  lane_iou 0.355  f1 None  gt_cells 64
+PICK median scene-0627/024  lane_iou 0.353  f1 None  gt_cells 70
+PICK best   scene-0016/022  lane_iou 1.000  f1 0.671  gt_cells 107
+PICK best   scene-0102/019  lane_iou 0.915  f1 0.24  gt_cells 205
+PICK best   scene-0273/007  lane_iou 0.897  f1 0.498  gt_cells 190
+PICK best   scene-0522/006  lane_iou 0.844  f1 0.569  gt_cells 186

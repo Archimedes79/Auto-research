@@ -161,3 +161,16 @@ Open report.html in a browser (Chrome / Edge). It needs the folder videos/ next 
 
 The same report as a private web page (needs your Claude login): https://claude.ai/artifact/KoJDweCbGxz4TAzMfntGNo
 The working records are in the repository (github.com/Archimedes79/Auto-research): bev_fusion/experiments/ (cards), bev_fusion/records/ (ledger).
+
+@@@ lane_reading
+<h4>What the pictures show (four of the twelve frames were read in detail)</h4>
+<p>The pictures above are drawn with the memory warmed up by the frames before (as in the videos). The IoU in each caption is the stored number of the evaluation, where every frame starts from an empty memory, so the number printed in the picture title can differ a little.</p>
+<ul>
+<li><b>Two ways to read the same output.</b> The IoU table of section 5.2 scores the probability layer of the lane divider (a thresholded region, with a tolerance of 0.5 m). The last error panel in every picture shows the thin line that is read from the predicted distance field, which is what a planner would use. On the 1000 validation frames that thin line has precision 0.85 and recall 0.10 (0.5 m tolerance; F1 0.19, the value in the table of section 4); on the easier 384 frames of the GaussianCaR comparison it is 0.81 / 0.14 / 0.24. It is rarely wrong, but it is often missing. The headline IoU is therefore the generous reading; the thin-line reading is the stricter one and the weaker one.</li>
+<li><b>Best case (scene-0016, frame 22).</b> A straight road with one dashed centre line: the line is found along the whole stretch from about 6 m to 52 m (83 cells right, 0 false, 22 missed at the two ends). This is what the network does well: a clean, clearly painted line on a quiet road.</li>
+<li><b>Median case (scene-0099, frame 36).</b> A wide city street with several painted lanes and many parked and moving vehicles. The camera picture shows the white and yellow lines clearly, but the thin line has 7 cells right, 13 false and 371 missed. Painted lines that vehicles stand on or partly cover are not recovered.</li>
+<li><b>Worst case (scene-0017, frame 27).</b> An intersection: the map's divider segments lie mostly on the cross street 35 to 45 m ahead and on the far approach arms, and the network predicts no divider at all (0 right, 0 false, 144 missed). Far lines at a junction are a hard case.</li>
+<li><b>Worst case (scene-0038, frame 31).</b> A curved single carriageway: the map has a divider line along the road (the last panel), but on the road surface in the camera picture I see no painted marking along the projected lines, and the network predicts none (0 right, 0 false, 69 missed). If that reading is right, the label asks for a line that the image does not show. That is the label problem the lane-probe experiment (t5) described, and no network can fix it from the image alone.</li>
+</ul>
+<p>So the lane divider is limited from both sides: by what the camera can see (hidden or unpainted lines) and by what the features resolve (thin, far lines). The stride-8 map-trained features helped most (section 5.4); a higher-resolution image side for thin lines (the stride-4 branch of t7) gave +0.04 to +0.07 on the old ground truth and has not been combined with the full network.</p>
+

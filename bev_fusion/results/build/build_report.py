@@ -350,7 +350,7 @@ def bundle_tables(ctx):
             gaps[r["key"]] = tr[r["key"]] - val[r["key"]]
     full = (f"<h3>The numbers (VAL, {ctx.n} frames)</h3><p class=small>{esc(b['new_label'])}: <code>{esc(b['new']['id'])}</code>; {esc(b['ctl_label'])}: <code>{esc(b['ctl']['id'])}</code>. "
             f"Maps on the cells the front camera sees, detection on the fusion area, ms per frame at batch 1 on an idle GPU. The difference is new minus control (green = better, red = worse beyond "
-            f"{b['band']:g}); the paired column is the scene bootstrap of the same frames (b = new, a = control), the reading follows its interval.</p>"
+            f"{b['band']:g}); the paired column is the scene bootstrap of the same frames (b = new, a = control), the reading follows its interval. `n/a` = no paired test for the metric (the compare output bootstraps the headline numbers of the tasks only); the difference is then the unpaired one.</p>"
             + BN.table_full(b["rows"], b["new_label"], b["ctl_label"], b["band"]) + f"<p class=cap>{esc(b['head'])}</p>")
     weak = (f"<h3>Weak spots (updated from the numbers)</h3><p class=small>The outputs of the table that are scores between 0 and 1, lowest of the new run first; flagged when below {b['weak_below']:g}. "
             "The gap is the new run's score on its own training scenes minus the validation score.</p>"
@@ -457,7 +457,7 @@ def sec_lane(ctx):
     out.append(ctx.text("lane_53"))
     out.append("<h3>5.4 What moved the lane divider (the ladder of experiments)</h3>" + ladder(ctx))
     out.append(lane_gallery(ctx))
-    out.append(open(ctx.path("lane_reading"), encoding="utf-8").read())
+    out.append(ctx.text("lane_reading"))
     out.append("<h3>5.6 Against the state of the art</h3>" + lane_soa(ctx))
     return "".join(out)
 

@@ -2,8 +2,9 @@
 `bev_suite.py compare`), the reading rule, the weak-spot rule, and the compact key table of the summary. The rows (name, key, direction, weak or not) come from the
 `bundle.rows` of report_runs.json; nothing is typed here. A value that a run lacks stops the build, except where the row says `new_only` (a head the control never had).
 
-Reading rule (paired bootstrap, b = new, a = control): the interval excludes 0 -> `better` / `worse` by the direction of the row, else `not separated`; no paired row -> `-`
-(`compare` bootstraps the headline numbers only: rows outside them have no paired value; a whole missing group, e.g. all `vel.`, stops the build: a flag was left out).
+Reading rule (paired bootstrap, b = new, a = control): the interval excludes 0 -> `better` / `worse` by the direction of the row, else `not separated`; no paired row -> `n/a`,
+and the paired cell says why (no paired test for the metric / the control has no value); the difference column always keeps the unpaired difference
+(`compare` bootstraps the headline numbers of the tasks only (evaluation/bev_task.py BevSegMetric.headline): rows outside them have no paired value; a whole missing group, e.g. all `vel.`, stops the build: a flag was left out).
 Weak-spot rule: a row with `weak: true` is listed, lowest value of the new run first, and flagged `weak` when its value is below `bundle.weak_below`."""
 import re
 
@@ -18,7 +19,7 @@ def paired_ids(head):
 
 def reading(row_lower, paired):
     if paired is None:
-        return "-"
+        return "n/a"
     if not paired[5]:
         return "not separated"
     return "better" if (float(paired[2]) < 0) == row_lower else "worse"
@@ -77,7 +78,9 @@ def diff_cell(row, band):
 
 def paired_cell(row):
     p = row["paired"]
-    return "-" if p is None else f"{p[2]} [{p[3]}, {p[4]}]"
+    if p is not None:
+        return f"{p[2]} [{p[3]}, {p[4]}]"
+    return "n/a (the control has no such value)" if row["new"] is None or row["ctl"] is None else "n/a (no paired test for this metric)"      # the difference column keeps the unpaired difference
 
 
 def table_full(rows, new_label, ctl_label, band):

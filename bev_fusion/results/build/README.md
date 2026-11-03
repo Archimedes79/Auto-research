@@ -14,9 +14,9 @@ This writes `bev_fusion/results/BEV_result_report_v7/` (`report.html`, `artifact
 cd bev_fusion && python evaluation/bev_suite.py compare runs/t16_full_s0 runs/t20_base_s0 --curves --fusion --velocity --n 1000 --boot 1000 > experiments/t20_lane_grid_bundle/compare_vs_t16_full_s0.txt
 ```
 
-(`compare` bootstraps only the headline numbers of the tasks; the other rows of the bundle table show `-` in the paired column. A compare output made without `--velocity` or `--fusion` is refused.) Then write `chapters/t20.md` (the chapter), `chapters/mail_t20.txt` (the mail) and the `summary` block of `chapters/text_v7.txt`.
+(`compare` bootstraps only the headline numbers of the tasks (`BevSegMetric.headline` in `evaluation/bev_task.py`); the other rows of the bundle table say `n/a (no paired test for this metric)` in the paired column and keep their unpaired difference. A compare output made without `--velocity` or `--fusion` is refused.) Then write `chapters/t20.md` (the chapter), `chapters/mail_t20.txt` (the mail) and the `summary` block of `chapters/text_v7.txt`.
 
-**Test build before the new run exists:** `build_report.py --standin t18_fix --compare temp/t16/compare_t18_vs_base.txt` lets `t18_fix` play the new run, writes into `..._v7_test/` and puts a TEST banner on the page.
+**Test build before the new run exists:** `build_report.py --standin t18_fix --compare results/build/inputs/compare_t18_vs_base.txt` lets `t18_fix` play the new run, writes into `..._v7_test/` and puts a TEST banner on the page.
 
 ## Add a run
 
@@ -28,7 +28,7 @@ Section `bundle` of `sections` (the slot sits after the summary). Its text is `b
 
 | table | rule |
 |---|---|
-| numbers (VAL, 1000 frames) | per row: the new run, the control (evaluation tables; the ms row from the idle-GPU `timing_modules.json`), the difference (new - control; green / red beyond `bundle.band` by the direction of the row), the paired bootstrap `b - a [95 % interval]` from the compare output (b = new, a = control), the reading: interval excludes 0 -> `better` / `worse` by the direction, else `not separated`, no paired row -> `-` |
+| numbers (VAL, 1000 frames) | per row: the new run, the control (evaluation tables; the ms row from the idle-GPU `timing_modules.json`), the difference (new - control; green / red beyond `bundle.band` by the direction of the row), the paired bootstrap `b - a [95 % interval]` from the compare output (b = new, a = control), the reading: interval excludes 0 -> `better` / `worse` by the direction, else `not separated`, no paired row -> `n/a` (the paired cell says `no paired test for this metric`, or `the control has no such value`; the difference column is then the unpaired one) |
 | weak spots | the rows with `weak: true`, lowest value of the new run first, flagged `weak` below `bundle.weak_below`; with the new run's train - validation gap (its train table) and the paired value; it updates itself with the numbers |
 | summary | the same rows, compact (`summary.table: "bundle"`) |
 
@@ -45,6 +45,7 @@ A run lacking a key, a compare output about other runs (its header names a and b
 | `report_runs.json` | the v7 config: runs and roles, sections, bundle rows, inputs, ladder, cost rows, mail, sources of the numbers check |
 | `report_runs_v6.json` | the v6 config: rebuilds the v6 report (`test_report_build.py --real`) |
 | `page.css` | the style of the page |
+| `inputs/` | the stored inputs of the sections 2, 4, 5 and 6 (digests, re-scorings, compare outputs, lane picks; table below) |
 | `chapters/text_v6.txt`, `chapters/text_v7.txt` | text banks: blocks `@@@ name` of html prose with `@@fact@@` markers (v7 overrides `lead`, `summary`, `folder_readme`) |
 | `chapters/t20.md`, `chapters/mail_t20.txt` | the chapter and the mail of the t20 bundle (written by hand once the numbers exist; stubs until then) |
 | `chapters/mail_v6.txt` | the v6 mail |
@@ -57,4 +58,13 @@ Facts a text may ask for (`@@name@@`, computed from the files when first asked):
 - The numbers check at the end of a build (`check_numbers.txt`) lists the decimal numbers of the page that no source holds: the prose of the text banks (numbers typed by hand in the narrative), the differences the page computes. Advisory.
 - **v6 proof (2026-11-03):** the v6 config builds `report.html`, `artifact_page.html`, `mail.txt`, `tables/` and `videos/` byte for byte equal to a rebuild by the original scratch code from the same inputs. Against the stored `results/t16/report_big.html` the only differences are the commit hash of the lead paragraph and the architecture drawing (redrawn since); the stored `mail.txt` has a BOM and CRLF line ends (re-saved on Windows), the stored `README.txt` was edited by hand afterwards. `python tests/test_report_build.py --real` repeats the comparison.
 
-Inputs still in scratch: the digests, the re-scoring results, the compare outputs of t17 / t18 and the lane picks sit in `temp/t16/` (named in `inputs` and `compare`); move them with the config when `clean_temp.py` files that folder. Not promoted: `build_report.py` of the t16 scratch (the earlier 9 MB page, superseded) and `build_tables.py` (markdown tables for cards).
+Inputs: nothing of the builder or its configs reads from a `temp/` folder (the gate asserts it, and that every file a config names exists). The inputs of the v6 report were copied byte for byte from the scratch of the t16 report into `inputs/` (each under 60 KB); they are results of scratch scripts of that report (in its scratch tag), not made by this builder:
+
+| file in `inputs/` | what | how it was made / rebuilt |
+|---|---|---|
+| `history_digest.md`, `soa_digest.md` | the digests of the experiment cards and of the state-of-the-art numbers (section 2, 6.1 / 6.2 / 6.4) | by a read-only agent pass over the cards and the literature notes (2026-11-02 / 03), spot-checked; written by hand again when a card or a paper changes |
+| `soa_maps_v8_t16_full_s0.md`, `soa_maps_v8_t17_data.md`, `front_v8_n1000.md` | the re-scoring of GaussianCaR's cached map logits against our baseline / t17 (384 frames) and of DualBEV in the front sector (1000 frames) | scratch scripts `soa_maps_v8.py`, `soa_front_v8.py` (scratch tag of the t16 report); their pickles and the 1.6 MB `soa_front_v8_inputs.json` stay out; a new run needs the scripts promoted first |
+| `compare_t17.txt`, `compare_t18.txt`, `compare_t18_vs_base.txt` | the paired bootstrap outputs of section 4 | `bev_suite.py compare runs/<a> runs/<b> --curves --fusion --velocity --n 1000 --boot 1000` (the header line of each file names a and b; the scratch scripts `compare_t17.sh`, `compare_t18.sh` hold the commands) |
+| `lane_frames_t16_full_s0.txt` | the worst / median / best lane-divider frames of the baseline (gallery of section 5) | scratch `pick_lane_frames.py` |
+
+The lane reading of section 5 (four frames, in words) is the text block `lane_reading` of `chapters/text_v6.txt`. `temp/t16/report_static.md` is a document, no input of the builder. Not promoted: `build_report.py` of the t16 scratch (the earlier 9 MB page, superseded) and `build_tables.py` (markdown tables for cards).

@@ -42,21 +42,22 @@ ROWS = [dict(name="lane divider IoU@0.5", key=LANE05, weak=True), dict(name="lan
         dict(name="centre-line IoU@1", key=CL1, weak=True, new_only=True), dict(name="centre-line angle error (rad)", key=CLA, lower=True, new_only=True),
         dict(name="drivable area IoU", key=DRIV, weak=True), dict(name="walkway IoU", key=WALK, weak=True), dict(name="car park IoU", key=PARK, weak=True),
         dict(name="vehicle AP@2 m", key=VEH, weak=True), dict(name="velocity EPE (m/s)", key=VEL, lower=True), dict(name="inference (ms per frame)", timing=True, lower=True)]
+NOTEST, NOCTL = "n/a (no paired test for this metric)", "n/a (the control has no such value)"          # the paired cell of a row without a bootstrap: the difference column keeps the unpaired one
 # the rows the bundle table must show: name, new, control, difference, paired b - a [interval], reading
 EXPECT_TABLE = [["lane divider IoU@0.5", "0.490", "0.430", "+0.060", "+0.0600 [+0.0300, +0.0900]", "better"],
-                ["lane divider IoU@1", "0.610", "0.550", "+0.060", "-", "-"],
-                ["centre-line IoU@1", "0.400", "-", "-", "-", "-"],
-                ["centre-line angle error (rad), lower is better", "0.300", "-", "-", "-", "-"],
+                ["lane divider IoU@1", "0.610", "0.550", "+0.060", NOTEST, "n/a"],
+                ["centre-line IoU@1", "0.400", "-", "-", NOCTL, "n/a"],
+                ["centre-line angle error (rad), lower is better", "0.300", "-", "-", NOCTL, "n/a"],
                 ["drivable area IoU", "0.775", "0.780", "-0.005", "-0.0050 [-0.0200, +0.0100]", "not separated"],
                 ["walkway IoU", "0.380", "0.400", "-0.020", "-0.0200 [-0.0300, -0.0100]", "worse"],
-                ["car park IoU", "0.330", "0.300", "+0.030", "-", "-"],
+                ["car park IoU", "0.330", "0.300", "+0.030", NOTEST, "n/a"],
                 ["vehicle AP@2 m", "0.810", "0.800", "+0.010", "+0.0100 [-0.0100, +0.0300]", "not separated"],
                 ["velocity EPE (m/s), lower is better", "1.000", "1.100", "-0.100", "-0.1000 [-0.1500, -0.0500]", "better"],
-                ["inference (ms per frame), lower is better", "99.7", "96.4", "+3.3", "-", "-"]]
+                ["inference (ms per frame), lower is better", "99.7", "96.4", "+3.3", NOTEST, "n/a"]]
 # the weak-spot table: output, new, control, train - validation gap of the new run, paired, flag (lowest of the new run first; flagged below weak_below = 0.5)
-EXPECT_WEAK = [["car park IoU", "0.330", "0.300", "+0.170", "-", "weak"], ["walkway IoU", "0.380", "0.400", "+0.070", "-0.0200 [-0.0300, -0.0100]", "weak"],
-               ["centre-line IoU@1", "0.400", "-", "-", "-", "weak"], ["lane divider IoU@0.5", "0.490", "0.430", "+0.110", "+0.0600 [+0.0300, +0.0900]", "weak"],
-               ["lane divider IoU@1", "0.610", "0.550", "-", "-", ""], ["drivable area IoU", "0.775", "0.780", "+0.025", "-0.0050 [-0.0200, +0.0100]", ""],
+EXPECT_WEAK = [["car park IoU", "0.330", "0.300", "+0.170", NOTEST, "weak"], ["walkway IoU", "0.380", "0.400", "+0.070", "-0.0200 [-0.0300, -0.0100]", "weak"],
+               ["centre-line IoU@1", "0.400", "-", "-", NOCTL, "weak"], ["lane divider IoU@0.5", "0.490", "0.430", "+0.110", "+0.0600 [+0.0300, +0.0900]", "weak"],
+               ["lane divider IoU@1", "0.610", "0.550", "-", NOTEST, ""], ["drivable area IoU", "0.775", "0.780", "+0.025", "-0.0050 [-0.0200, +0.0100]", ""],
                ["vehicle AP@2 m", "0.810", "0.800", "-", "+0.0100 [-0.0100, +0.0300]", ""]]
 EXPECT_SUMMARY = [[r[0], r[1], r[2], r[5]] for r in EXPECT_TABLE]
 BANK = """@@@ lead
@@ -288,7 +289,7 @@ def unit():
     ck(BN.paired_ids("paired scene bootstrap (1000 resamples), b - a; a = runs/c, b = runs/n; val") == ("c", "n"), "ids of the compare header")
     ck(BN.reading(False, ("0", "0", "+0.02", "+0.01", "+0.03", True)) == "better" and BN.reading(True, ("0", "0", "+0.02", "+0.01", "+0.03", True)) == "worse"
        and BN.reading(True, ("0", "0", "-0.02", "-0.03", "-0.01", True)) == "better" and BN.reading(False, ("0", "0", "+0.02", "-0.01", "+0.03", False)) == "not separated"
-       and BN.reading(False, None) == "-", "the reading rule")
+       and BN.reading(False, None) == "n/a", "the reading rule")
     ck(BR.chapter_html("text", "FULL", "WEAK") == "FULLWEAK<p>text</p>", "a chapter without markers: the numbers, the weak spots, then the text")
     ck(BR.chapter_html("a\n\n@@WEAK@@\n\nb\n\n@@TABLE@@\n", "FULL", "WEAK") == "<p>a</p>WEAK<p>b</p>FULL", "markers in the order of the file")
     ck(L.fill("a @@x@@ b @@y@@", lambda n: {"x": 1, "y": "z"}.get(n)) == "a 1 b z", "fill")
@@ -296,6 +297,37 @@ def unit():
     open(bank, "w", encoding="utf-8").write("@@@ a\n\nx\ny\n\n@@@ b\nz\n")
     ck(L.read_bank(bank) == {"a": "\nx\ny", "b": "z"}, f"text bank blocks: {L.read_bank(bank)}")
     shutil.rmtree(os.path.dirname(bank))
+
+
+def scratch_free():
+    """the builder and its configs read nothing from a temp/ folder (the inputs are committed in results/build/inputs/), and every file the real configs name exists"""
+    import ast
+    scratch = re.compile(r"(^|[/\\])temp[/\\]")
+    assert scratch.search("temp/t16/x.md") and scratch.search("bev_fusion/temp/t16") and scratch.search("..\\temp\\x") and not scratch.search("results/build/inputs/x") \
+        and not scratch.search("template/x"), "the scratch pattern"
+    for name in sorted(os.listdir(BUILD)):
+        path = os.path.join(BUILD, name)
+        if name.endswith(".py"):
+            strings = [n.value for n in ast.walk(ast.parse(open(path, encoding="utf-8").read())) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        elif name.startswith("report_runs") and name.endswith(".json"):
+            cfg = json.load(open(path, encoding="utf-8"))
+            strings, todo = [], [cfg]
+            while todo:
+                x = todo.pop()
+                if isinstance(x, dict):
+                    todo += list(x.values())
+                elif isinstance(x, list):
+                    todo += x
+                elif isinstance(x, str):
+                    strings.append(x)
+            named = list(cfg["text"]) + [v for k, p in cfg["inputs"].items() for v in (p if isinstance(p, list) else [p])] + [c["file"] for c in cfg.get("compare", [])]
+            named += [cfg["mail"]["narrative"], cfg["bundle"]["chapter"]] if "bundle" in cfg else [cfg["mail"]["narrative"]]
+            missing = [p for p in named if not os.path.isfile(os.path.join(BUILD, "..", "..", p))]
+            assert not missing, f"{name}: files named in the config that do not exist: {missing}"
+        else:
+            continue
+        bad = [s for s in strings if scratch.search(s)]
+        assert not bad, f"{name} names a path in a temp/ folder (it is scratch and goes away with clean_temp.py): {bad[:3]}"
 
 
 def real():
@@ -326,6 +358,8 @@ def main():
     try:
         unit()
         print("unit: compare keys, the reading rule, markers, fill, the text bank")
+        scratch_free()
+        print("no path of the code or the configs is in a temp/ folder; every file the configs name exists")
         root = os.path.join(tmp, "good")
         fixture(root)
         rc, msg = build(BUILD, root)

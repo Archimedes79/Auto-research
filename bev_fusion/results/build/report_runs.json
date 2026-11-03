@@ -45,18 +45,17 @@
  },
  "summary": {"table": "bundle"},
  "inputs": {
-  "history_digest": "temp/t16/history_digest.md",
-  "soa_digest": "temp/t16/soa_digest.md",
-  "soa_maps": ["temp/t16/soa/soa_maps_v8_t16_full_s0.md", "temp/t16/soa/soa_maps_v8_t17_data.md"],
-  "soa_front": "temp/t16/soa/front_v8_n1000.md",
-  "lane_reading": "temp/t16/lane_reading.html",
-  "lane_picks": "temp/t16/lane_frames_t16_full_s0.txt",
+  "history_digest": "results/build/inputs/history_digest.md",
+  "soa_digest": "results/build/inputs/soa_digest.md",
+  "soa_maps": ["results/build/inputs/soa_maps_v8_t16_full_s0.md", "results/build/inputs/soa_maps_v8_t17_data.md"],
+  "soa_front": "results/build/inputs/front_v8_n1000.md",
+  "lane_picks": "results/build/inputs/lane_frames_t16_full_s0.txt",
   "architecture_svg": "training/architecture.svg"
  },
  "compare": [
-  {"file": "temp/t16/compare_t17.txt", "a": "baseline", "b": "more data", "title": "more data against the baseline (the t17 experiment)"},
-  {"file": "temp/t16/compare_t18.txt", "a": "more data", "b": "bundle (t18)", "title": "the bundle against more data (the t18 experiment)"},
-  {"file": "temp/t16/compare_t18_vs_base.txt", "a": "baseline", "b": "bundle (t18)", "title": "the bundle against the baseline"}
+  {"file": "results/build/inputs/compare_t17.txt", "a": "baseline", "b": "more data", "title": "more data against the baseline (the t17 experiment)"},
+  {"file": "results/build/inputs/compare_t18.txt", "a": "more data", "b": "bundle (t18)", "title": "the bundle against more data (the t18 experiment)"},
+  {"file": "results/build/inputs/compare_t18_vs_base.txt", "a": "baseline", "b": "bundle (t18)", "title": "the bundle against the baseline"}
  ],
  "lane": {"histograms": ["t16_full_s0", "t20_base_s0"]},
  "ladder": [
@@ -94,8 +93,7 @@
  "cost_rows": [["t17.feat", "BEVFusion features of the 272 new scenes"], ["t16.full_s0", "baseline, 6000 steps"], ["t17.data", "700 scenes, 6000 steps (interrupted once, resumed)"],
                ["t18.fix", "bundle (t18), 6000 steps (interrupted once, resumed)"], ["t20.base_s0", "t20 bundle, 6000 steps"]],
  "mail": {"narrative": "results/build/chapters/mail_t20.txt"},
- "check_sources": ["temp/t16/history_digest.md", "temp/t16/compare_t17.txt", "temp/t16/compare_t18.txt", "temp/t16/compare_t18_vs_base.txt", "temp/t16/soa_digest.md", "temp/t16/lane_reading.html",
-                   "temp/t16/soa/*.md", "temp/t16/soa/*.json", "records/LEDGER.csv", "runs/t1[6-8]*/eval/by_n/*", "runs/t1[6-8]*/eval/table_train.txt", "runs/t1[6-8]*/eval/timing_modules.json",
+ "check_sources": ["results/build/inputs/*", "records/LEDGER.csv", "runs/t1[6-8]*/eval/by_n/*", "runs/t1[6-8]*/eval/table_train.txt", "runs/t1[6-8]*/eval/timing_modules.json",
                    "runs/t20_base_s0/eval/by_n/*", "runs/t20_base_s0/eval/table_train.txt", "runs/t20_base_s0/eval/timing_modules.json", "experiments/t20_lane_grid_bundle/*.txt",
                    "experiments/t20_lane_grid_bundle/experiment.md", "results/experiments/t1[6-8]*/experiment.md", "experiments/t1[6-8]*/experiment.md"]
 }
