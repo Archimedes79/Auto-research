@@ -120,6 +120,79 @@ def old_map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
     return terms, groups
 
 
+class OldBEVLoss(L.BEVLoss):
+    """BEVLoss as it was before the table (commit 479100d): the old specs, the old terms_at (without the S5c refine branch, which the table does not
+    touch) and the old forward, all on old_map_terms; the Kendall weights, the dt weights and the total come out of the same copy."""
+
+    def __init__(self, cfg, grid):
+        super().__init__(cfg, grid)
+        c = self.cfg
+        self.spec, self.cam_spec, self.radar_spec = old_layer_spec(c.centrelines, c.dense_objects), old_layer_spec(False, True), old_radar_aux_spec(c.radar_stationary)
+
+    def terms_at(self, p, gts, dt, step_frac=1.0):
+        cfg = self.cfg
+        dev = next(v for v in p.values() if torch.is_tensor(v)) if "obj" not in p else p["obj"]["hm"]
+        T = L.build_layer_targets(gts, cfg, p.get("mass"), dt, dev.device)
+        terms, groups, fixed = {}, {}, {}
+
+        def add(g, v):
+            groups[g] = groups.get(g, 0.0) + v
+        if "sem" in p:
+            w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
+            t, g = old_map_terms(p["sem"], T, self.spec, w, cfg, step_frac)
+            terms.update(("sem." + k, v) for k, v in t.items())
+            for k, v in g.items():
+                add(k, v)
+        tt = None
+        if "obj" in p:
+            lo, tt = L.object_head_terms(p["obj"], T["boxes"], T["w_obj"], self.grid, self.groups, cfg.w_obj_vel, cfg.max_obj, cfg.w_obj_mov, hygiene=cfg.hygiene_2026_11_02)
+            terms.update(("objhead." + k, v) for k, v in lo.items())
+            add("objects", lo["total"])
+        if "v_hat" in p and abs(float(dt)) < 1e-6:
+            terms["motion"] = L.motion_term(p["v_hat"], T, cfg)
+            lv = [L.motion_term(v, T, cfg) for v in (p.get("v_levels") or {}).values()]
+            for i, t in enumerate(lv):
+                terms[f"motion_l{i}"] = t
+            add("motion", (terms["motion"] + sum(lv)) / (1 + len(lv)))
+            if cfg.consistency and tt is not None:
+                terms["motion_consistency"] = L.consistency_term(p["obj"]["vel"], p["v_hat"], tt)
+                add("motion", cfg.w_consistency * terms["motion_consistency"])
+        if "delta" in p:
+            terms["correction"] = L.correction_penalty(p["delta"])
+            fixed["correction"] = cfg.w_correction * terms["correction"]
+        if "cam_aux" in p:
+            wc = T["w_cam"]
+            t, g = old_map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg, step_frac)
+            terms.update(("cam_aux." + k, v) for k, v in t.items())
+            fixed["cam_aux"] = cfg.w_cam_aux * sum(g.values())
+        if "radar_aux" in p:
+            wr = T["w_radar"]
+            t, g = old_map_terms(p["radar_aux"], T, self.radar_spec, {"object": wr * T["w_keep"], "stationary": wr}, cfg, step_frac)
+            terms.update(("radar_aux." + k, v) for k, v in t.items())
+            fixed["radar_aux"] = cfg.w_radar_aux * sum(g.values())
+        return terms, groups, fixed
+
+    def forward(self, preds, gts, step_frac=1.0):
+        out, group_tot, aux = {}, {}, 0.0
+        for dt, p in preds.items():
+            w = L.dt_weight(dt, step_frac, self.cfg)
+            if w <= 0:
+                continue
+            terms, groups, fixed = self.terms_at(p, gts[dt], dt, step_frac)
+            tag = f"@{float(dt):+.1f}"
+            out.update((k + tag, v) for k, v in terms.items())
+            for g, v in groups.items():
+                group_tot[g] = group_tot.get(g, 0.0) + w * v
+            for k, v in fixed.items():
+                aux = aux + w * v
+        total, s = self.task(group_tot)
+        out.update(("group." + g, v) for g, v in group_tot.items())
+        out.update(("s." + g, v) for g, v in s.items())
+        out["aux"] = aux
+        out["total"] = total + aux
+        return out
+
+
 # ------------------------------------------------------------------------------------------------ the synthetic frame
 grid = Grid()
 X, Y = grid.nx, grid.ny
@@ -183,6 +256,29 @@ for cl, rs in product((False, True), repeat=2):
     wr = T["w_radar"]
     ref.update(("radar_aux." + k, v) for k, v in old_map_terms(p["radar_aux"], T, old_radar_aux_spec(rs), {"object": wr * T["w_keep"], "stationary": wr}, cfg, 0.7)[0].items())
     check(same(terms, ref), f"BEVLoss.terms_at (centrelines={cl}, radar_stationary={rs}): sem, cam_aux and radar_aux terms = the old body ({len(ref)} terms)")
+
+# the whole BEVLoss at dt 0 and 0.5 against the old copy: every term, the dt-weighted groups, the Kendall terms (s_g set to non-trivial values), aux and the total
+for cl, rs, boundary in product((False, True), (False, True), (False, True)):
+    cfg = L.LossConfig(centrelines=cl, radar_stationary=rs, line_boundary=boundary)
+    new, old = L.BEVLoss(cfg, grid), OldBEVLoss(cfg, grid)
+    s_g = torch.tensor([0.3, -0.7, 0.9, -1.1])
+    for lm in (new, old):
+        lm.task.s.data.copy_(s_g)
+    g = torch.Generator().manual_seed(7)
+    preds = {}
+    for dt in (0.0, 0.5):
+        q = {"sem": logits(len(new.spec), seed=11), "cam_aux": logits(len(new.cam_spec), seed=12), "radar_aux": logits(len(new.radar_spec), seed=13),
+             "obj": {k: torch.randn(1, c, X, Y, generator=g) for k, c in (("hm", 3), ("off", 2), ("size", 2), ("rot", 2), ("rad", 1), ("vel", 2))},
+             "delta": 0.1 * torch.randn(1, 20, 2, generator=g)}
+        if dt == 0.0:
+            q["v_hat"] = torch.randn(1, 2, X, Y, generator=g)
+        else:
+            q["mass"] = torch.rand(1, 1, X, Y, generator=g)
+        preds[dt] = q
+    got, ref = new(preds, gts, 0.7), old(preds, gts, 0.7)
+    groups_ = [k for k in ref if k.startswith(("group.", "s."))] + ["aux", "total"]
+    check(same(got, ref) and len(groups_) >= 8 and abs(float(ref["total"])) > 1.0,
+          f"whole BEVLoss = the old copy: centrelines={cl} radar_stationary={rs} line_boundary={boundary} ({len(ref)} entries: terms, {len(groups_) - 2} group / Kendall, aux, total {float(ref['total']):.3f})")
 
 # the network: the state_dict of a model with the option off is that of before (golden: key + shape rows of the code of 479100d)
 GRID = {"x_max": 16.0, "y_min": -8.0, "y_max": 8.0}                 # 32 x 32 cells
@@ -275,11 +371,21 @@ check(hub_far > 0.02, f"a distance field 0.8 m off costs (Huber {hub_far:.3f}; t
 
 # the tiny model with the option on: output, loss, gradient
 TINY1 = dict(TINY, centreline_1m=True)
-torch.manual_seed(0)
-off, on = CachedBEVFusionModel(ModelConfig(**TINY)), CachedBEVFusionModel(ModelConfig(**TINY1))
+
+
+def seeded(**kw):
+    torch.manual_seed(0)
+    return CachedBEVFusionModel(ModelConfig(**dict(TINY, **kw)))
+
+
+off, on = seeded(), seeded(centreline_1m=True)
 extra = sorted(set(on.state_dict()) - set(off.state_dict()))
 check(extra == [f"head_1m.net.{k}" for k in ("0.weight", "1.bias", "1.num_batches_tracked", "1.running_mean", "1.running_var", "1.weight", "3.bias", "3.weight")]
       and not set(off.state_dict()) - set(on.state_dict()), "option on: exactly one new SemanticHead (conv, BN, conv) in the state_dict, nothing else changes")
+for kw in ({}, {"aux_heads": False, "dense_objects": False, "object_direction": True}):          # the new head is built last: at one seed every other tensor is the same on / off
+    sa, sb = seeded(**kw).state_dict(), seeded(centreline_1m=True, **kw).state_dict()
+    check(list(sb)[:len(sa)] == list(sa) and all(k.startswith("head_1m.") for k in list(sb)[len(sa):]) and all(torch.equal(sa[k], sb[k]) for k in sa),
+          f"same seed, option on / off ({kw or 'default'}): all {len(sa)} shared tensors equal in value, key order and shape, the 1 m head's keys come last")
 on.train()
 with torch.no_grad():
     for q in on.parameters():                                       # zero-start layers cut the gradient at init by design (as test_slots does)
@@ -305,6 +411,15 @@ check(len(new) == 5 and all(q.grad is not None and torch.isfinite(q.grad).all() 
       f"a gradient reaches every new parameter ({len(new)} tensors) of the 1 m branch")
 check(all(any(q.grad is not None and q.grad.abs().sum() > 0 for q in mod.parameters()) for mod in (on.trunk, on.sem_head.refine)),
       "... and flows on through the sem head's state into the trunk")
+on.eval()                                                           # at dt != 0 the branch reads the MOVED state the sem head decodes, not the trunk state S
+with torch.no_grad():
+    S, v_, w_ = (lambda r: (r["features"], batch["v"].to(r["features"]), batch["omega"].to(r["features"])))(on(batch, dts=(0.0,)))
+    for dt in (0.5, -0.5, 0.0):
+        x = on.sem_head(S, dt, v_, w_, return_aux=True)[1]["state"]
+        want, wrong = on.head_1m(torch.nn.functional.avg_pool2d(x, 2)), on.head_1m(torch.nn.functional.avg_pool2d(S, 2))
+        got = on(batch, dts=(dt,))["out"][dt]["sem_1m"]
+        check(torch.allclose(got, want, atol=1e-6) and float((wrong - want).abs().max()) > 1e-3,
+              f"dt {dt:+.1f}: sem_1m = head_1m(avg_pool(the sem head's moved state)) (max |diff| {float((got - want).abs().max()):.1e}); reading the unmoved trunk state would differ by {float((wrong - want).abs().max()):.2f}")
 for lcfg, mdl, why in ((L.LossConfig(), on, "model has the branch, loss does not"), (L.LossConfig(centreline_1m=True), off, "loss has the row, model does not")):
     try:
         with torch.no_grad():

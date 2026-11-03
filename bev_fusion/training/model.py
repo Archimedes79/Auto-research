@@ -314,8 +314,6 @@ class BEVFusionModel(nn.Module):
             self.motion_block = MotionBlock(cfg.c_cam, self.grid, strides=tuple(cfg.motion_strides))   # TimeMover, then dropped: it would
             self.mover.motion = None                             # get no gradient; TimeMover then needs v_field on every call)
         self.sem_head = TimedHead(SemanticHead(c, len(self.spec)), c, self.mover)
-        self.spec_1m = layer_spec_1m(cfg.centreline_1m)
-        self.head_1m = SemanticHead(c, len(self.spec_1m)) if self.spec_1m else None   # one pyramid level down, reads the sem head's moved state
         self.obj_head = TimedHead(ObjectHead(c, groups=NUSC_GROUPS, direction=cfg.object_direction, moving=cfg.object_moving),
                                   c, self.mover)
         if cfg.box_vel_from_field:                               # its own vel branch is not read: frozen, so no parameter goes without a
@@ -329,6 +327,9 @@ class BEVFusionModel(nn.Module):
             self.aux_rad = SemanticHead(cfg.c_rad, len(radar_aux_spec(cfg.radar_stationary)))
         self.c_trunk = c
         self._dist_idx = [i for i, s in enumerate(self.spec) if s[1] == "dist"]    # distance channels -> the soft line map
+        self.spec_1m = layer_spec_1m(cfg.centreline_1m)
+        self.head_1m = SemanticHead(c, len(self.spec_1m)) if self.spec_1m else None   # one pyramid level down, reads the sem head's moved state.
+        # Built LAST: at one seed the init of every other module is the same with the option on or off (the random numbers it draws come after theirs)
 
     # ---- camera
     def camera_bevs(self, batch):
