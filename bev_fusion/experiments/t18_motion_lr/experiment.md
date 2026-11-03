@@ -78,4 +78,38 @@ before its motion term settled (0.07 - 1.7 between logs at steps 100 - 500).
 
 ## 4 Results
 
--
+Run `t18.fix` (bundle: the hygiene flags + `lr_groups` {"motion_block": {"lr": 1e-4, "warmup": 1000}} on the 700-scene recipe of `t17.data`) finished
+2026-11-03 03:29 (exit 0, 6000 steps, final validation loss 8.00 against 7.84 for `t17.data`). The first attempt died at 23:18 with a CUDA
+"unknown error"; `run.py` retried and the trainer resumed from `ckpt_00002500.pt`, so the run is not bit-identical to an
+uninterrupted one (the same happened to `t17.data`). Evaluated by
+`bev_suite.py runs/t18_fix --curves --fusion --velocity eval --n 1000` and compared with `t17.data` by the paired scene bootstrap
+(`temp/t16/compare_t18.txt`, the rule applied by `temp/t16/rule_t18.py`). VAL 1000 frames of 82 scenes, GT v8, one seed per arm.
+
+| quantity | `t17.data` (control) | `t18.fix` | b - a | band | reading |
+|---|---|---|---|---|---|
+| static EPE, cells (m/s) | 0.2164 | 0.2413 | +0.025 | 0.020 | not better; prediction (at most 0.6 x = 0.130) missed |
+| moving vehicle EPE, cells (m/s) | 1.364 | 1.575 | +0.211 | 0.10 | worse |
+| moving box-centre EPE (m/s) | 1.069 | 1.204 | +0.135 [+0.107, +0.163] | 0.10 | worse |
+| mean of the six map IoUs | 0.4425 | 0.4518 | +0.009 | 0.010 | guard holds (drivable area +0.007, walkway +0.021, both intervals above 0) |
+| front mAP (det) | 0.3423 | 0.3471 | +0.005 | 0.010 | guard holds |
+| vehicle IoU at +0.5 s | 0.3987 | 0.4054 | +0.007 | 0.02 | guard holds |
+
+Other changes with an interval that excludes 0: vehicle moving AVE skill 0.860 -> 0.826 (worse), vehicle IoU (dt 0) +0.013, walkway AP +0.014;
+the lane divider zero-crossing F1 moved -0.013 (inside the interval). Kill criteria not hit: the motion term of the training log at step
+2000 is +3 % over `t17.data`'s (limit 50 %), no non-finite loss.
+
+**Verdict: CUT** (by hand: one seed per arm; label **bundle: lr + hygiene flags** - the flags change the velocity losses that M learns from, so
+the lr alone is not isolated). The written rule: moving and centre EPE are worse than their band, static EPE is not better, so the smaller
+step costs the moving cells and does not remove the static noise. The static noise of the full run is small already (0.22 m/s, against 1.26 on
+the 400-step small set the card was motivated by), so the prediction was built on an early-training number. `t16.full_s0` stays the base.
+The hygiene flags are not separated from the lr by this run; their visible effect is the small gain on the maps and the vehicle IoU,
+inside the guards' bands. Next arm by the card: a lower output gain of M (it changes `motion_block.py` and t12's equivalence), not a smaller
+lr. Not started: Mirko ordered all BEV system trainings stopped after `t18.fix` (2026-11-02).
+
+**Against the baseline `t16.full_s0`** (same frames, paired bootstrap `temp/t16/compare_t18_vs_base.txt`; read by the numbers critic of the report, 2026-11-03):
+the bundle is worse on velocity (moving box-centre EPE 1.112 -> 1.204 m/s [+0.061, +0.121], static cells 0.189 -> 0.241 [+0.032, +0.068]) and its
+maps are mixed, not level: walkway +0.010 [+0.003, +0.018] and vehicle IoU +0.008 [+0.002, +0.015] are better, drivable area -0.006 and the lane divider
+IoU are inside the noise, car park 0.274 -> 0.253 (-0.020) and road divider IoU@1 m 0.572 -> 0.560 (-0.012) are worse than the 0.010 band (no
+bootstrap interval was computed for these two), and the thin-line F1 of the road divider falls 0.511 -> 0.307 (precision 0.81 -> 0.73, recall
+0.37 -> 0.19). The guard in section 1 was read against `t17.data`, where the mean of the six map IoUs holds; against the baseline the road divider
+is a loss the card did not look at. This strengthens the CUT; it is not part of the written rule.

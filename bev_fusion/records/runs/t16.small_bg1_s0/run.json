@@ -1,0 +1,52 @@
+{
+ "id": "t16.small_bg1_s0",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/train/run_ar.sh temp/compose/t16_small_bg1_s0.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 912225,
+ "created": "2026-11-02T03:08:01",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-02T03:09:01",
+ "code_hash": "a497cda103f6",
+ "commit": "741d3fecac",
+ "tag": "bf/t16.small_bg1_s0",
+ "git_note": "",
+ "pid": 912405,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion/tests/test_clip_split.py",
+   "bev_fusion/training/startable.py",
+   "bev_fusion/training/train.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1807,
+ "attempts": 1,
+ "ended": "2026-11-02T03:39:36",
+ "last_lines": [
+  "step 310: total 15.6266 lr 4.51e-05 grad 107.13",
+  "step 320: total 15.6251 lr 3.62e-05 grad 45.12",
+  "step 330: total 19.4084 lr 2.82e-05 grad 147.43",
+  "step 340: total 18.7149 lr 2.10e-05 grad 127.26",
+  "step 350: total 16.4275 lr 1.49e-05 grad 86.90",
+  "step 360: total 16.0732 lr 9.79e-06 grad 82.23",
+  "step 370: total 16.7916 lr 5.75e-06 grad 88.15",
+  "step 380: total 16.4027 lr 2.81e-06 grad 97.53",
+  "step 390: total 17.3128 lr 9.90e-07 grad 79.24",
+  "step 400: total 17.0724 lr 3.06e-07 grad 58.40",
+  "step 400: val total 18.4754",
+  "t16_small_bg1_s0 exit 0 03:39:08"
+ ]
+}
