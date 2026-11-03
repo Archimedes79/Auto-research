@@ -40,3 +40,6 @@ Each step is one commit of its own paths (`commit_paths.py`), tests green before
 - Step 2 (trainer contract + probe) done: 38d7c51; the RNG-on-GPU resume bug found by the experiments chat fixed in 7cd81b8 (selftest group 9 fails without the fix); `python -m trainsuite status` reads the running E271 runs.
 - Step 3 (configs, `startable.py`, `run_config.py`, project.json `trainsuite` block) done: 54ebc03; the oracle (G0) is the experiments chat's `training/grid/test_oracle.py`, so no `lane_gtcheck.py` is written.
 - Open: steps 4 - 6 (gates are in place; board / module probe / timing / freeze wait for two trained heads), and the alignment with the BEV chat's plan of the same day (trainkit, manifests, split lists): messages sent; lane `trainer.py` stays a subset of the trainkit contract.
+
+## 5. D50 (Mirko, 2026-11-03)
+The lane project is a separate codebase from the BEV system (a head on the frozen GaussianCaR features; the BEV system is not its trunk). What was copied from `bev_fusion/` stays as this project's own tooling; the alignment with the BEV chat's plan (trainkit contract, split fields, a shared lane_graph layer) is void, and the holdout-names file was removed again.
