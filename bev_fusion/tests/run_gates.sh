@@ -76,6 +76,7 @@ run "layer table"       "$PY" tests/test_layers.py                  # training/l
 run "centre-line eval"  "$PY" tests/test_centreline_eval.py         # the 1 m centre-line head in the evaluation (D48): oracle / null / shuffled on real cached GT, hand examples, old runs' counts unchanged, 19 mutants killed; CPU, about 100 s
 run "lane branch, dual" "$PY" tests/test_lane_branch_dual.py        # L4 on camera_features 'dual' (t20): the rule, state_dict as before, zero start, gradient, geometry inputs, mirror, t20_base.json diff; CPU, no data
 run "evaluate door"     "$PY" tests/test_evaluate_door.py           # evaluation/evaluate.py translates options into bev_suite commands (--real: the golden check, by hand); no data, 1 s
+run "report build"      "$PY" tests/test_report_build.py            # results/build: a fixture report (every number in a source file, every cell in place), missing / wrong inputs stop the build, 20 mutants; CPU, 8 s, no data
 run "trainkit selftest" bash -c "cd ../autoresearch && $PY -m trainkit.selftest"    # the engine of the trainer on a toy network; CPU
 run "trainkit equivalence" "$PY" tests/test_trainkit_equivalence.py # train() of commit df9d437 against the live one (trainkit): rows, weights, EMA, optimiser, RNG, files, exit codes; CPU, toy network
 if [ "${1:-}" = "--all" ]; then

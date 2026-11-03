@@ -1,6 +1,6 @@
 # results/ - the result package of each run
 
-One folder per run id (`results/<run id>/`), written by `autoresearch/tools/package.py` and `autoresearch/tools/provenance.py` (D40). It answers: how was this run made, what came out, and where is the deeper material. Next to the run folders: `experiments/` (the finished experiments, below) and report pages (`t16/`, `BEV_result_report/`).
+One folder per run id (`results/<run id>/`), written by `autoresearch/tools/package.py` and `autoresearch/tools/provenance.py` (D40). It answers: how was this run made, what came out, and where is the deeper material. Next to the run folders: `experiments/` (the finished experiments, below), report pages (`t16/`, `BEV_result_report/`, not in git) and `build/` (the code that builds a report page from the stored evaluation files, with its config, texts and gate: `build/README.md`).
 
 | file | what | in git |
 |---|---|---|

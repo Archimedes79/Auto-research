@@ -1,0 +1,11 @@
+Hi Mirko,
+
+(The narrative of this mail is written once the t20 numbers exist: bev_fusion/results/build/chapters/mail_t20.txt. The marker lines below are replaced by numbers read from the stored files by build_mail.py; everything else is plain text.)
+
+=== TABLE (validation set, @@frames@@ frames, ground truth v8, maps on the front-camera cells, detection on the fusion area, one training seed per run; first column = the control, second = the new run) ===
+@@MAIL_TABLE@@
+
+Cost (batch 1, three time offsets, the cached chain without the two frozen image encoders, idle RTX 3060):
+@@MAIL_COST@@
+
+Repository: github.com/Archimedes79/Auto-research, main at @@head@@ when this mail was written.

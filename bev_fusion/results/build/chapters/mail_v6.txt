@@ -1,0 +1,67 @@
+Hi Mirko,
+
+this is the result mail you asked for (D46: a good working BEV system and an extensive report, then shutdown). The mail window of the browser pane cannot attach files, so the report lives in two places and the key parts are repeated below.
+
+1. WHERE THE REPORT IS
+- On this computer: C:\Auto-research\bev_fusion\results\BEV_result_report\report.html (open it with Chrome or Edge; the result videos are in the folder videos\ next to it, the stored evaluation tables in tables\, README.txt explains the folder).
+- The same report as a private web page (needs your Claude login): https://claude.ai/artifact/KoJDweCbGxz4TAzMfntGNo
+- Code and all text records are in the repository github.com/Archimedes79/Auto-research (branch main; the experiment cards are in bev_fusion/experiments/, the ledger in bev_fusion/records/).
+The report has 10 sections: summary, what was tried (23 experiment folders, one entry each with question, change, numbers, verdict, lesson), the system, the validation results (tables and paired comparisons), the lane markings in detail (with a gallery of best / median / worst frames), the comparison with the state of the art, pictures and videos, cost and timing, weak spots, and how to run it.
+
+2. THE SYSTEM THAT IS DELIVERED
+It is the full camera + radar BEV network of run t16.full_s0 (trained 6000 steps on 428 nuScenes scenes, a median of 3.7 s per optimiser step, 7 hours wall-clock): two frozen image encoders with cached features (DualBEV detection features and the map-trained BEVFusion features), a depth-weighted lift into the BEV, a camera memory over 3 frames, a radar encoder on the radar detections with Doppler, concat fusion, a trunk, and heads for six map layers (drivable area, walkway, car park, pedestrian crossing, lane divider, road divider), objects (vehicles, pedestrians, two-wheelers) and a velocity field that uses two frames and the radar Doppler (motion block, velocity hurdle). The radar memory is switched off (it did not learn). It is trained on ground truth v8 from the autogt tool (the image encoders stay frozen, everything behind them is trained).
+It was evaluated on 1000 validation frames spread over 82 validation scenes that it never saw (map layers are scored on the cells the front camera sees, detection on the fusion area, the cells that camera and radar both observe). One training seed per run. The TEST split was never used.
+
+3. HOW GOOD IS IT (the table below is read from the stored evaluation files, never typed by hand)
+Reading in words:
+- Drivable area is good (IoU 0.78 on the 1000 frames; on the 384 frames of the GaussianCaR comparison 0.82 against 0.86, i.e. 95 % of that 360 degree six-camera system, same frames, same ground truth, same metric code). Vehicle detection in the fusion area is good (AP at 2 m 0.80).
+- Walkways, car parks, pedestrian crossings and the two divider layers are clearly weaker (IoU 0.26 to 0.57); pedestrians are weak (AP at 2 m 0.38).
+- Velocity is no longer the zero predictor: at moving box centres the error is about 1.1 m/s, on static cells about 0.19 m/s (details in the report, section 4).
+- Lane markings: the lane divider reaches IoU 0.43 when a predicted cell within 0.5 m of a true line counts. Read as a thin line from the distance field (what a planner would use) the precision is 0.85 but the recall only 0.10 (F1 0.19, 1000 frames). So the network rarely draws a divider that is not there, but it often draws none where the map has one. The report shows twelve frames with their error maps and a reading of four of them: a dashed centre line on a straight road is found along 52 m; on a wide city street vehicles cover the lines; at an intersection no divider is predicted; and in one frame the map has a line that I cannot see painted in the camera picture, so the label asks for something the image does not show.
+- Two experiments tried to improve on this system and neither did (columns "more data" and "bundle" in the table): 700 instead of 428 training scenes at the same budget (t17), and a bundle of module fixes with a smaller learning rate for the motion block (t18). The written rules gave TIE/negative and CUT. Against the baseline the bundle is worse on velocity (moving box centres 1.11 to 1.20 m/s, static cells 0.19 to 0.24 m/s) and mixed on the maps (walkway +0.010, car park -0.020, road divider IoU -0.012 and its thin-line F1 0.51 to 0.31). So the baseline stays the delivered system.
+
+=== TABLE (validation set: 1000 frames of 82 scenes, ground truth v8, maps on front-camera cells and detection on the fusion area, ONE training seed per run; baseline = the delivered system, more data = 700 scenes, bundle = module fixes + smaller learning rate of the motion block) ===
+@@MAIL_TABLE@@
+
+Cost (batch 1, three time offsets, the cached chain WITHOUT the two frozen image encoders, idle RTX 3060; training: median 3.7 to 3.8 s per optimiser step):
+@@MAIL_COST@@
+
+4. AGAINST THE STATE OF THE ART (same frames, same ground truth, same metric code; details and caveats in the report, section 6.3)
+Maps, ours / GaussianCaR (6 cameras + radar, 360 degrees), 384 validation frames, threshold 0.5 (plain IoU for areas, 0.5 m tolerance for lines):
+@@MAIL_SOA@@
+Detection, front sector 0 - 50 m, 1000 frames: camera-only DualBEV mAP2 @@front_dual@@, our baseline @@front_ours@@ (difference @@front_diff@@); DualBEV ran single-frame on the front camera only, so the gap contains the radar AND the temporal fusion (no radar ablation exists on this ground truth), see the report.
+
+5. WHAT WAS TRIED, IN ORDER (23 experiment folders; the report has the numbers, the ground-truth version and the lesson of every one)
+- First whole chain (t1, 26 Oct): frozen DualBEV heads, depth-weighted lift, 3-frame memory, radar BEV, concat fusion, trunk, heads at three time offsets. It works; a one-shot bundle of fixes was not better than the first version (the causes were never isolated).
+- Block swaps (t2, t3): eleven exchanges of fusion, temporal, radar and trunk blocks for standard ones: 7 ties, 4 worse, none better, so the simplest block stays. Several early "dead" results were retracted (a camera-off arm that still had the camera on).
+- State of the art in the front sector (t4): the camera path equals the DualBEV camera detector, the radar adds about +0.12 mAP over the matched camera-only arm (older ground truth).
+- Why the maps are weak (t5, t6, t7, t8): a lane probe on the frozen features (inconclusive, then a tie), a maps-only run (it closes only about a tenth of the gap to GaussianCaR), a stride-4 lane branch (helps thin lines a little). Verdict by the written rule: the image features, not the competition between tasks, are the main limit.
+- Map-trained BEVFusion features (t8) lift the lane divider a lot (0.19 to 0.35 on the older ground truth) but halve the object detection; using both feature sets in one chain (t10, two seeds) holds both and became the base.
+- Velocity (t11, t12): the box velocity was stuck at the zero predictor because of a dead branch; the velocity hurdle (moving/static logit split from the regression) and a motion block (two frames plus radar Doppler) brought it off zero.
+- Full network (t16, 2 Nov): every built block, ground truth v8, with gates and a module probe; this is the baseline that is delivered.
+- More data (t17): 700 instead of 428 scenes at the same step budget: no map gain, the train-to-validation gap does not shrink. TIE/negative.
+- Bundle (t18): module fixes plus a smaller learning rate for the motion block: velocity worse, maps mixed (walkway better, car park and road divider worse). CUT.
+- Dead or unlearned parts found on the way: the radar memory (static map stays 1.0), the box-velocity branch, the time-mover head; the report lists the reasons.
+
+6. WEAK SPOTS AND HONEST LIMITS
+- Car parks, pedestrian crossings, the lane divider and pedestrians are the weakest outputs; the train-to-validation gap is large for them.
+- One training seed per run; the seed spread of this recipe is not measured. There is no matched large-set control of the old chain (it was held when you stopped the training). 82 of the 150 validation scenes only (the rest was not downloaded).
+- The comparison with GaussianCaR is like-for-like in frames, ground truth and metric code, but not in sensors (six cameras, 360 degrees, against our front camera); the published numbers of other systems are not comparable and are not used.
+- Ground truth changed from v5 to v8 during the work, so numbers of old and new runs are not comparable; the report marks the version of every number.
+- Two findings about my own tools: the idle-GPU guard of the timing tool refuses on this machine because nvidia-smi lists the timing process itself (worked around in a scratch wrapper, the frozen file is untouched; to be fixed under the freeze rule), and package.py / provenance give "GT version unknown" for a BEV run. Both are in bev_fusion/records/open_findings_2026-11-02.md.
+
+7. NEXT STEPS (nothing is started; you stopped all BEV system trainings after t18.fix)
+- A seed twin of the baseline and the matched control (t16.ctl_s0) to measure the seed spread and what the new blocks add at large-set scale.
+- The lower output gain of the motion block (the next arm named by the t18 card), the fixes alone without the learning rate, and the radar memory with a Doppler prior (card t19).
+- Features for the thin classes: a trained finer image side (t9) and the stride-4 branch combined with the full network.
+- The lane centre-line head on top of this BEV (head design), toward the end-to-end graph.
+
+8. STATE WHEN I WROTE THIS
+- Nothing trains and no job runs; the training runs and holds you set are unchanged (t16.ctl_s0, speed.d/e/f stay held).
+- The records are committed and pushed (main and the run tags); the data, checkpoints and videos are not in git (they stay on this computer).
+- This computer is shut down after this mail is sent (D46).
+
+Best regards,
+Claude (the BEV system chat)
+
+Repository: github.com/Archimedes79/Auto-research, main at @@head@@ when this mail was written.

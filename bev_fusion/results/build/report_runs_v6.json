@@ -1,0 +1,83 @@
+{
+ "_about": "The config of the v6 report (t16 / t17 / t18, 2026-11-03), kept as the regression case of the builder: build_report.py --config this file gives the page that results/t16/report_big.html was (test_report_build.py --real). Paths are relative to bev_fusion/.",
+ "title": "BEV camera + radar system: result report",
+ "out": "temp/report_v6",
+ "frames": 1000,
+ "ledger": "records/LEDGER.csv",
+ "text": ["results/build/chapters/text_v6.txt"],
+ "sections": ["summary", "tried", "system", "results", "lane", "soa", "qual", "cost", "weak", "files"],
+ "runs": [
+  {"id": "t16_full_s0", "label": "baseline", "role": "baseline", "long": "t16.full_s0, the baseline: the full network, 428 train scenes"},
+  {"id": "t16_ctl_s0", "label": "control (old chain)", "role": "control", "optional": true, "long": "t16.ctl_s0, the matched control: the old chain's recipe on the same data"},
+  {"id": "t17_data", "label": "more data", "role": "arm", "long": "t17.data: the baseline recipe on 700 train scenes"},
+  {"id": "t18_fix", "label": "bundle", "role": "arm", "long": "t18.fix: 700 scenes + the module fixes + the motion block on its own learning rate"}
+ ],
+ "inputs": {
+  "history_digest": "temp/t16/history_digest.md",
+  "soa_digest": "temp/t16/soa_digest.md",
+  "soa_maps": ["temp/t16/soa/soa_maps_v8_t16_full_s0.md", "temp/t16/soa/soa_maps_v8_t17_data.md"],
+  "soa_front": "temp/t16/soa/front_v8_n1000.md",
+  "lane_reading": "temp/t16/lane_reading.html",
+  "lane_picks": "temp/t16/lane_frames_t16_full_s0.txt",
+  "architecture_svg": "training/architecture.svg"
+ },
+ "compare": [
+  {"file": "temp/t16/compare_t17.txt", "a": "baseline", "b": "more data", "title": "more data against the baseline (the t17 experiment)"},
+  {"file": "temp/t16/compare_t18.txt", "a": "more data", "b": "bundle", "title": "the bundle against more data (the t18 experiment)"},
+  {"file": "temp/t16/compare_t18_vs_base.txt", "a": "baseline", "b": "bundle", "title": "the bundle against the baseline"}
+ ],
+ "summary": {"table": "baseline", "rows": [
+  ["drivable area IoU", "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0", "plain IoU on the cells the front camera sees"],
+  ["walkway IoU", "seg_fov/seg/dt+0.00/walkway/all/all/iou@0", "plain IoU"],
+  ["pedestrian crossing IoU", "seg_fov/seg/dt+0.00/ped_crossing/all/all/iou@0", "plain IoU"],
+  ["lane divider IoU (0.5 m tolerance)", "seg_fov/seg/dt+0.00/lane_divider/all/all/iou@0.5", "a predicted cell within 0.5 m of a true line cell counts; the plain IoU of these 1-cell lines is @@lane_plain@@"],
+  ["road divider IoU (1 m tolerance)", "seg_fov/seg/dt+0.00/road_divider/all/all/iou@1", "same idea with 1 m"],
+  ["mAP, fusion area (vehicles, pedestrians, two-wheelers)", "detf/dt+0.00/mean/all/mAP", "mean AP over 0.5 / 1 / 2 / 4 m"],
+  ["vehicle AP at 2 m / pedestrian AP at 2 m", ["detf/dt+0.00/vehicle/all/ap@2", "detf/dt+0.00/pedestrian/all/ap@2"], "fusion area"],
+  ["velocity error at moving box centres (m/s)", "vel/dt+0.00/centre/field/moving/epe", "a predictor that always says 'standing still' has @@vel_zero3@@"],
+  ["train-minus-validation gap of the six map IoUs", "@@gap6@@", "the network fits the training scenes better than new ones (section 4, 'Train against validation')"]
+ ]},
+ "lane": {"histograms": ["t16_full_s0", "t17_data"]},
+ "ladder": [
+  {"title": "Lane divider IoU at 0.5 m tolerance over the experiments (validation)", "vmax": 0.5, "items": [
+   {"label": "t2_ref_s0, 3000 steps (first chain)", "value": 0.181, "gt": "old"},
+   {"label": "t3_ref_long, 6000 steps", "value": 0.234, "gt": "old"},
+   {"label": "t1_r4_soa, 7000 steps x 2", "value": 0.273, "gt": "old"},
+   {"label": "t7 stride-4 side branch (res4 s0)", "value": 0.246, "gt": "old"},
+   {"label": "t8 BEVFusion features alone (s0)", "value": 0.351, "gt": "v5"},
+   {"label": "t10 dual features (s0 / s1: 0.335 / 0.350)", "value": 0.335, "gt": "v5"},
+   {"label": "t16.full_s0 full network", "run": "t16_full_s0", "key": "seg_fov/seg/dt+0.00/lane_divider/all/all/iou@0.5", "gt": "v8"}]},
+  {"title": "Walkway IoU over the experiments (validation)", "vmax": 0.5, "items": [
+   {"label": "t2_ref_s0, 3000 steps", "value": 0.191, "gt": "old"},
+   {"label": "t3_ref_long, 6000 steps", "value": 0.225, "gt": "old"},
+   {"label": "t1_r4_soa, 7000 steps x 2", "value": 0.246, "gt": "old"},
+   {"label": "t8 BEVFusion features alone (s0)", "value": 0.339, "gt": "v5"},
+   {"label": "t10 dual features (s0 / s1: 0.340 / 0.354)", "value": 0.340, "gt": "v5"},
+   {"label": "t16.full_s0 full network", "run": "t16_full_s0", "key": "seg_fov/seg/dt+0.00/walkway/all/all/iou@0", "gt": "v8"}]}
+ ],
+ "lane_published": {
+  "header": ["method", "published divider number", "how it is defined"],
+  "rows": [
+   ["BEVFusion (camera + LiDAR)", "53.7 (divider)", "6 cameras + LiDAR, +-50 m, 200 x 200, plain IoU; divider = road + lane dividers merged"],
+   ["BEVFusion (camera only)", "46.4 (divider)", "same"],
+   ["GaussianCaR (camera + radar)", "50.1 (lane divider)", "6 cameras + radar, +-50 m, 0.5 m, labels drawn 1 m thick, plain IoU"],
+   ["RCBEVDet++ (camera + radar)", "50.5 (lane)", "ResNet-101, settings of LSS"],
+   ["BEVCar (camera + radar, ViT-B/14)", "45.3 (lane)", "+-50 m, 200 x 200"],
+   ["GaussianBeV (camera)", "47.4 (lane divider)", "via the GaussianCaR table"],
+   ["GaussianLSS (camera)", "38.7 (divider)", "+-50 m, 200 x 200"]],
+  "ours": ["this system, baseline", "ONE front camera + 5 radars, 0 - 60 m x +-26 m, 1-cell lines, front-camera cells only"]
+ },
+ "soa": {"old_shares": {"drivable_area": "0.94", "walkway": "0.57 - 0.62", "carpark_area": "0.31 - 0.34", "ped_crossing": "0.26 - 0.31", "lane_divider": "0.50 - 0.52", "road_divider": "0.72 - 0.76"}},
+ "cost_rows": [["t17.feat", "BEVFusion features of the 272 new scenes"], ["t16.full_s0", "baseline, 6000 steps"], ["t17.data", "700 scenes, 6000 steps (interrupted once, resumed)"],
+               ["t18.fix", "bundle, 6000 steps (interrupted once, resumed)"]],
+ "mail": {"narrative": "results/build/chapters/mail_v6.txt", "runs": ["t16_full_s0", "t17_data", "t18_fix"], "rows": [
+  ["drivable area IoU", "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"], ["walkway IoU", "seg_fov/seg/dt+0.00/walkway/all/all/iou@0"],
+  ["car park IoU", "seg_fov/seg/dt+0.00/carpark_area/all/all/iou@0"], ["pedestrian crossing IoU", "seg_fov/seg/dt+0.00/ped_crossing/all/all/iou@0"],
+  ["lane divider IoU (0.5 m tolerance)", "seg_fov/seg/dt+0.00/lane_divider/all/all/iou@0.5"], ["road divider IoU (1 m tolerance)", "seg_fov/seg/dt+0.00/road_divider/all/all/iou@1"],
+  ["lane divider zero-crossing F1 (0.5 m)", "seg_fov/seg/dt+0.00/lane_divider:zc/all/all/f1@0.5"], ["mAP (fusion area)", "detf/dt+0.00/mean/all/mAP"],
+  ["vehicle AP@2 m", "detf/dt+0.00/vehicle/all/ap@2"], ["pedestrian AP@2 m", "detf/dt+0.00/pedestrian/all/ap@2"],
+  ["velocity error, moving box centres (m/s, lower better)", "vel/dt+0.00/centre/field/moving/epe"], ["velocity error, static cells (m/s, lower better)", "vel/dt+0.00/cells/static/epe"]]},
+ "check_sources": ["temp/t16/history_digest.md", "temp/t16/compare_t17.txt", "temp/t16/compare_t18.txt", "temp/t16/compare_t18_vs_base.txt", "temp/t16/rule_t18.txt", "temp/t16/rule_t17.txt",
+                   "temp/t16/soa_digest.md", "temp/t16/lane_reading.html", "records/LEDGER.csv", "temp/t16/soa/*.md", "temp/t16/soa/*.json", "runs/t1*/eval/by_n/table_n1000.txt",
+                   "runs/t1*/eval/table_train.txt", "runs/t1*/eval/timing_modules.json", "experiments/t1[6-8]*/experiment.md", "results/experiments/t1[6-8]*/experiment.md"]
+}

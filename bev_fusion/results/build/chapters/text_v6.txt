@@ -1,0 +1,163 @@
+@@@ lead
+For Mirko, 2026-11-02 / 03. What was tried, what came out, the lane markings, the comparison with the state of the art, quantitative and qualitative, with videos. Repository state <code>@@head@@</code>; numbers come from the stored evaluation files of the runs (VAL, 1000 frames, GT v8) and from the experiment cards, never typed by hand; every comparison is single seed unless it says otherwise.
+
+@@@ summary
+
+<div class=card><b>In short.</b> The system that was asked for exists and works end to end: a camera + radar BEV network with dense map layers (drivable area, walkways, car parks, pedestrian crossings, lane dividers, road dividers),
+object detection, and a velocity field that uses the radar Doppler. It was trained for 6000 steps on 428 scenes and evaluated on 1000 validation frames of 82 scenes that it never saw
+(ground truth v8, one training seed per run). Below: what was tried to get here, what every experiment gave, the lane markings in detail, the comparison with the state of the art, and videos.
+Runs in this report (finished): @@done@@.</div>
+<h3>The numbers of the baseline (validation, 1000 frames; maps on the cells the front camera sees, detection on the fusion area)</h3>
+@@key_table@@
+<h3>What this report says, in nine lines</h3>
+<ul>
+<li><b>What was tried</b> (section 2): 23 experiment folders from the first chain (2026-10-26) to the full network (2026-11-02). What moved the numbers: using both sensors (the radar adds about +0.12 mAP over the camera-only chain at equal training length: +0.133 and +0.117 in the front sector on the older ground truth), the map-trained BEVFusion image features (lane divider 0.19 to 0.35 on the old ground truth), keeping both feature sets in one chain, the velocity hurdle and the motion block (the velocity left the zero predictor), and longer training. What did not: swapping standard blocks in and out (7 of 11 swaps tied, 4 were worse, none better), a one-shot bundle of fixes, a stride-4 side branch beyond the thin lines, 64 % more training scenes at the same step budget, and, last, a bundle of module fixes with a smaller learning rate for the motion block (velocity worse, maps mixed).</li>
+<li><b>Which system is delivered:</b> the baseline <code>t16.full_s0</code>. Against it, the more-data run (t17) is a tie or worse on the maps, and the bundle (t18) is worse on velocity (moving box centres 1.11 to 1.20 m/s, static cells 0.19 to 0.24 m/s, intervals above 0) with mixed maps: level on drivable area, lane divider and the mean of the six IoUs, better on walkway (+0.010), worse on car park (-0.020) and road divider (IoU -0.012, thin-line F1 0.51 to 0.31; no bootstrap interval was computed for these two). Both are reported next to the baseline; neither replaces it.</li>
+<li><b>Lane markings</b> (section 5): the baseline finds lane dividers well in some frames and not at all in others. Over the @@lane_n@@ validation frames with at least 30 lane-divider cells in the ground truth the median frame IoU (0.5 m tolerance) is @@lane_median@@, @@lane_lo@@ % of the frames are below 0.1 and @@lane_hi@@ % reach 0.5 or more. Read as a thin line from the distance field (what a planner would use), the lane divider has precision @@zc_p@@ and recall @@zc_r@@ on the 1000 frames (F1 @@zc_f1@@): rarely a false line, often a missing one. The lane divider is the weakest line output, car parks and pedestrian crossings are the weakest areas; the experiments say the image features, not the blocks, are the limit.</li>
+<li><b>State of the art</b> (section 6): @@soa_sentence@@</li>
+<li><b>Velocity:</b> the radar Doppler + two frames give a velocity field whose error at moving box centres is @@vel_field@@ m/s against @@vel_zero@@ for the zero predictor: this was a dead output until the hurdle and the motion block (section 2).</li>
+<li><b>Negative results are reported as results:</b> more data did not close the train-to-validation gap; a whole family of block swaps changed nothing; several heads and memories were dead or unlearned (section 2, 'What did not work').</li>
+<li><b>Cost:</b> @@ms_t16_full_s0@@ ms per frame for the baseline at batch 1 (the cached chain without the two frozen image encoders, whose outputs are stored; three time offsets, idle RTX 3060, median of 30 frames; the more-data run and the bundle @@ms_t17_data@@ and @@ms_t18_fix@@ ms) and a median of 3.7 to 3.8 s per optimiser step in training (section 8). The image encoders' time is not included in the per-frame figure.</li>
+<li><b>Honest limits:</b> one seed per run; no matched large-set control of the old chain (training was stopped after t18.fix); 82 of the 150 validation scenes (the rest was not downloaded); the TEST split was never used; ground truth versions changed from v5 to v8, so numbers of old runs and new runs are not comparable.</li>
+<li><b>Videos</b> (section 7): @@nvid@@ result videos next to this page: random validation scenes with camera, ground truth, prediction and error maps, including the lane dividers.</li>
+</ul>
+
+@@@ soa_sentence
+two like-for-like re-scorings were made on the current ground truth, the same frames and the same metric code. <b>Maps:</b> the published camera + radar map model GaussianCaR (6 cameras, 360 degrees, trained for maps only on 700 scenes) and our baseline (one front camera + radar) on 384 validation frames, on the cells the front camera sees, ours / GaussianCaR (ours as a share): @@soa_parts@@. <b>Detection, front sector 0 - 50 m:</b> the camera-only DualBEV reaches mAP2 @@front_dual@@, our baseline @@front_ours@@ (@@front_diff@@); DualBEV was run as a single-frame front-camera detector, so the gap contains the radar AND the temporal fusion; there is no radar ablation on the current ground truth, so this says what the whole chain adds over that detector, not that one block is better. The 384 frames of the map comparison are easier than the 1000 of the record (car park @@carpark_soa2@@ against @@carpark_val2@@, drivable area @@drivable_soa2@@ against @@drivable_val2@@), so the shares are not shares of the 1000-frame numbers. No leaderboard number can be set beside ours (range, cameras, classes, ground truth and scoring differ, section 6.4); section 6.3 has the tables and the caveats.
+
+@@@ tried_intro
+<p>Every experiment of the BEV system in date order, with the question, what was changed, the decisive numbers, the verdict as the card or the ledger states it, and the lesson. The numbers are copied from the experiment cards (never recomputed); the GT version and the number of seeds are part of every entry because they decide what may be compared. The digest was written by a read-only pass over all cards and spot-checked against the cards (the long run, the latency and the t16 / t17 entries were re-checked by hand).</p>
+
+@@@ system
+
+<p>The system is drawn from the code (<code>bev_fusion/training/architecture.svg</code>, file map in <code>training/architecture.md</code>). A camera path and a radar path are brought to one BEV grid (120 x 104 cells of 0.5 m, x 0 - 60 m, y +-26 m),
+fused, passed through a trunk and decoded by heads at any time offset dt (-0.5 / 0 / +0.5 s). Everything on the training path is dense and differentiable; box selection and line thresholding stay in post-processing.</p>
+<table><tr><th>slot</th><th>what the full network uses</th></tr>
+<tr><td>camera encoder</td><td>two frozen image encoders with cached outputs (DualBEV heads, stride 16; BEVFusion map-trained Swin-T, stride 8), two depth-weighted lifts merged by a 1x1 conv, 3 frames</td></tr>
+<tr><td>camera memory</td><td>window of the last frames + a world-aligned static memory</td></tr>
+<tr><td>radar encoder</td><td>delta-coded slot raster (3 exact slots per cell + remainder), lossless side loss that decays over the run; radar detections of 0.5 s compensated to now</td></tr>
+<tr><td>fusion, trunk</td><td>concat fusion with modality dropout; DualBEV trunk (pre-trained, width 1.0) with a detail path</td></tr>
+<tr><td>heads</td><td>5 area layers, 2 line layers + distance fields, dense object maps; object head with sign-free direction and the moving / static hurdle; radar auxiliary head</td></tr>
+<tr><td>motion block</td><td>velocity field from two camera frames + the radar Doppler in a 3-level pyramid; the object head's box velocity is read from it; its gradient is clipped on its own</td></tr>
+<tr><td>left out</td><td>radar memory with the Doppler static gate (an unlearned block in the small-set probe), lane branch, box refiner, centre-line head (no head design yet)</td></tr></table>
+<div style="overflow:auto">@@architecture_svg@@</div>
+
+
+@@@ results_intro
+<p>VAL: 1000 frames spread over the 82 validation scenes, cold memory per frame, GT v8 (store <code>c643a7539d</code>, the trainer's cache key <code>0.5_4_6a7aa7864a</code>), map layers (seg_fov) scored on the cells the front camera sees, detection (detf) on the fusion area (cells that camera and radar both observe). The small number beside a value is the difference to the first column; green = better, red = worse, one seed per run, so the seed spread of this recipe is not measured; differences below about 0.01 are treated as noise because earlier recipe families (3000 steps, ground truth v5) spread by 0.003 to 0.010 between seeds.</p>
+
+@@@ results_warn
+<div class=warn><b>No matched control.</b> A control run (the old chain's recipe on the same 428 scenes and the same 6000 steps) was planned to show what the new blocks add, but no further training was started after t18.fix (Mirko's order of 2026-11-02, evening). The only matched old-chain references are the small-set control of the t16 card (400 steps, 77 frames: velocity at moving centres 1.40 m/s against 1.92, static cells 1.26 against 0.51) and the older chains t8 / t10 (section 2), which used GT v5. So how much of the result the new blocks add over the old chain at equal budget is not measured at large-set scale; the evidence is the small-set pair and the stage-by-stage experiments of section 2.</div>
+
+@@@ results_cov_note
+<p class=small>Reading: this is a recall ceiling (nearest prediction to each true box, every score counts), not recall at an operating point, and the rows are different subsets of the ground-truth boxes (seen by both sensors, by one, by neither), not an ablation. Some subsets are small (pedestrians seen only by the radar hold under 100 boxes in the evaluation files), so differences of a few hundredths there are a handful of boxes.</p>
+
+@@@ results_gen_note
+<p>Each cell: IoU or AP on 1000 frames of the run's own TRAIN scenes / on the 1000 validation frames / the difference. The train frames are scored with the same code; the gap is what is lost on scenes the network has not seen.</p>
+
+@@@ lane_51
+<h3>5.1 What is measured, and why the numbers look the way they do</h3>
+<ul><li><b>Ground truth.</b> The two line layers <code>lane_divider</code> and <code>road_divider</code> of the nuScenes map expansion (autogt v8) are drawn as lines one cell (0.5 m) wide in a bird's-eye grid of 120 x 104 cells (x 0 - 60 m ahead, y +-26 m). Pedestrian crossings are polygons.</li>
+<li><b>Plain IoU of a 1-cell line is very harsh:</b> a line that is predicted one cell beside the true one scores zero. We therefore report the plain IoU (0 m) and two tolerant versions: a predicted cell within 0.5 m (or 1 m) of a true line cell counts as a hit, and symmetrically for the true cells. Some published map models (GaussianCaR) draw their divider labels about 1 m thick and score the plain IoU: that is a similar kind of generosity as our 0.5 m tolerance, but not the same number (section 6.4).</li>
+<li><b>Zero-crossing F1 and field error.</b> The network predicts a signed distance field to the nearest line (and a probability). The line is read where the field crosses zero; <code>zc f1@0.5</code> is the F1 of that thin line against the true line within 0.5 m, <code>field MAE</code> is the mean absolute error of the distance field in metres.</li>
+<li><b>Area.</b> Scored on the cells the front camera sees (about 62 % of the grid); the network also gets the radar, but a painted line is a camera feature.</li></ul>
+
+@@@ lane_52_note
+<p class=small>The 'prior' baseline (a fixed per-cell map of the training scenes) scores 0.000 on all three line / crossing layers, and its field MAE is 1.33 m against 0.57 m for the network: the numbers above are not what a lookup of typical road layout gives.</p>
+
+@@@ lane_53
+<p>The shape is the point: the network is not 'a bit off everywhere'. In @@lane_hi@@ % of these frames the divider IoU is 0.5 or more, and in @@lane_lo@@ % it is below 0.1 (the line is almost entirely missed). The experiments (t5, t6, t7, t8) give the reasons the cards name: the nuScenes labels miss part of the visible paint (so a good prediction is also punished), painted lines are blurred in the stride-16 image features that the first chains used, and map-trained stride-8 features nearly doubled the divider IoU (0.19 to 0.35 on the old ground truth; chart below).</p>
+
+@@@ ladder_note
+grey = older ground truth (live code, no version), amber = GT v5, blue = GT v8: the bars are NOT strictly comparable (see the caveats)
+
+@@@ lane_gallery_intro
+<h3>5.5 The frames: worst, median and best lane-divider frames of different scenes (not hand-picked for looks)</h3><p>Selection rule: of the frames with at least 30 true divider cells, the four with the lowest IoU, the four closest to the median and the four with the highest IoU, each from a different scene. Each picture: front camera with the true boxes and map lines projected, the true BEV, the prediction, and error maps (grey = right, red = false, blue = missed; the last panel is the lane dividers at 0.5 m tolerance).</p>
+
+@@@ lane_published_note
+<p class=small>Published values are IoU in per cent from the papers (sources and protocols in section 6.1); ours is a fraction. They are NOT comparable (different area, number of cameras, line thickness, tolerance): the table shows where the numbers sit, not who is ahead.</p>
+
+@@@ soa_howto
+<div class=warn><b>How to read this section.</b> A number is only worth comparing with a published one when range, cameras, classes, ground truth and scoring are the same. Here they are not
+(one front camera and five radars, 0 - 60 m ahead, three merged object groups, tolerance-based line scoring, a map ground truth that changed twice). So: 6.1 lists the published numbers, 6.2 lists every time the repository scored a state-of-the-art model
+with OUR metric on OUR frames (the only like-for-like facts), 6.3 is the new re-scoring on the current ground truth, 6.4 puts our numbers next to the published ones and says plainly why they cannot be ranked.</div>
+
+@@@ soa_61_note
+<p class=small>Numbers marked 'web' were read through a page summariser and are to be spot-checked against the paper before they are quoted elsewhere; 97 of the 161 numbers of the digest come from the repository's own literature notes.</p>
+
+@@@ soa_reading
+
+<h4>What the two re-scorings say</h4>
+<p><b>Maps, ours against GaussianCaR</b> (384 validation frames of 41 scenes, ground truth v8, the cells the front camera sees, threshold 0.5, plain IoU for areas and 0.5 m tolerance for lines):</p>@@maps_table@@
+<p>The last column is the share the dual-feature chain of 3000 steps reached in the older scoring of the same kind (section 6.2, S2: ground truth v5, 400 frames): the shares of the full network are higher on every layer, but the two columns are NOT a measured improvement of one system: ground truth version, frame set and training budget differ, and how much of the rise is the network cannot be separated.</p>
+<p><b>Detection in the front sector (x 0 - 50 m, +-32 degrees), 1000 validation frames, same ground truth:</b> the pre-trained camera-only DualBEV (front camera only, unchanged weights) reaches mAP2 @@front_dual@@; our baseline @@front_ours@@ (difference @@front_diff@@, paired scene bootstrap). The earlier scoring on the older ground truth had our <i>camera-only</i> arm at 0.242 against DualBEV 0.250 (a tie), so the camera path is at the level of the published camera detector and the difference is what the radar and the temporal fusion add.</p>
+<ul>
+<li><b>GaussianCaR has more input.</b> It uses six cameras with 360 degrees and seven radar sweeps; ours uses one front camera and five radars. Only the cells the front camera sees are scored, but GaussianCaR still gets the side and rear views as context.</li>
+<li><b>Training budget.</b> GaussianCaR was trained for 40 epochs on four A100 GPUs on the 700 official train scenes for maps only; ours for 6000 steps (about six passes over 428 scenes) on one RTX 3060, together with detection and velocity.</li>
+<li><b>Threshold.</b> The tables in section 6.3 also give the best of three thresholds per layer, chosen on these frames (in-sample, as GaussianCaR was trained with another loss): the lane-divider share drops from 0.66 to 0.60 and GaussianCaR stays ahead on every layer.</li>
+<li><b>Frames.</b> These 384 frames are easier than the 1000 of the record: our lane divider scores @@lane_soa3@@ here and @@lane_val3@@ on the 1000 frames, drivable area @@drivable_soa3@@ against @@drivable_val3@@.</li>
+<li><b>Checks.</b> Our numbers on 130 of these frames equal the stored GPU evaluation (3992 of 4160 per-frame count arrays are identical, the others differ by at most 5 cells at the 0.5 threshold); GaussianCaR's own numbers on the older and the current ground truth differ by at most 0.02 on all six layers.</li>
+</ul>
+
+@@@ qual_intro
+<p>Pictures are produced by the evaluation suite, not by hand: each frame is drawn with the same code for every run; random frames are chosen by a fixed seed, not for looks. Error maps: grey = right, red = false positive, blue = missed, cream = not evaluated (not seen by the camera).</p>
+
+@@@ videos_intro
+<p>Each video runs one validation scene (about 38 frames, 2 Hz keyframes shown at 4 frames per second) with the memory carried along. 'overview' videos show the front camera with the true boxes and map lines, the true BEV, the prediction with boxes and the error maps including the lane dividers; 'dashboard' videos show every stage of the chain (radar, camera BEV, trunk, predictions at -0.5 / 0 / +0.5 s, speed field). The videos are files next to this page (<code>videos/&lt;run&gt;/&lt;name&gt;.mp4</code>); the scenes are random (seed 21, 11 and 1), the same scenes for every run where the run has them.</p>
+
+@@@ cost
+
+<ul>
+<li><b>Inference</b> (batch 1, three time offsets, cached chain without the frozen image heads, idle RTX 3060): full network 96.4 ms, control chain 86.2 ms (small-set runs, step 400); per module: lift 14.0, camera memory 13.9, trunk 10.9, heads 10.0 (3 calls), motion block 4.5, radar encoder 4.0 ms. The idle-GPU timing of the three large runs is in the table below.</li>
+<li><b>Training</b> on the large set (from the logs of the three runs, <code>runs/&lt;run&gt;/log.jsonl</code>): median 3.7 to 3.8 s per optimiser step (18 keyframes; the mean per run is 3.9 to 4.7 s because side jobs on the machine stall single steps), 8 to 11 % of the step waiting for the data, peak GPU memory 9.3 GB; 6000 steps took 6.9 to 7.2 h wall-clock (last table, includes validation, the restart of two runs and side jobs).</li>
+<li><b>Training-code speed work</b> (Training chat): the step is host bound (GPU kernels busy about a third of the time); fp16 with a gradient scaler is built and tested, its speed is not measured yet.</li>
+</ul>
+
+
+@@@ cost_timing_intro
+<h3>Idle-GPU timing of the large runs (measured 2026-11-03)</h3><p>Batch 1, the dts -0.5 / 0 / +0.5 s, a cold memory, the cached chain without the frozen image heads, fp32, median of 30 frames on the idle RTX 3060 (<code>bev_suite.py RUN timing</code>, stored in <code>runs/&lt;run&gt;/eval/timing_modules.json</code>). 'sum of modules' is the sum of the per-module times, 'unattributed' the host work outside every module. The three runs have the same architecture (t18 only lost an unused branch), and the totals differ by at most @@spread@@ ms; each was measured once, so a difference of that size is not interpreted. The small-set bring-up measured the same 96.4 ms for the baseline. The guard of the timing tool had to be worked around for this measurement (open finding of 2026-11-03: it counted the timing process itself as a GPU user); every other idle check was kept and the stored files say idle.</p>
+
+@@@ weak
+
+<ul>
+<li>Car parks, pedestrian crossings and the lane divider are the weakest map outputs (IoU 0.27, 0.26 and 0.43 with a 0.5 m tolerance, 0.19 plain; the road divider reaches 0.57 with a 1 m tolerance); the baseline's train-to-val gap is large for them (carpark 0.17, lane divider 0.13, road divider 0.10); the data arm t17 (700 instead of 428 scenes) did not reduce the gap and gave no map gain, so the next levers are the features and the training schedule, not the amount of data alone.</li>
+<li>Pedestrians and two-wheelers: AP@2 m far below vehicles.</li>
+<li>The hurdle's moving probability is not calibrated away from objects; the dense velocity field is only supervised near objects and on a weak background term.</li>
+<li>Open findings of the bug hunt (<code>records/open_findings_2026-11-02.md</code>): w_unknown / w_interpolated were ignored by the object head, unknown-velocity objects trained the moving / static head toward static (0.7 % of the observed boxes), the batch decoder accepts dts it cannot decode; the bundle arm t18 tested the fixes together with the motion block's own learning rate and was cut (velocity worse than the baseline and than the more-data run; the maps are mixed against the baseline: walkway +0.010, car park -0.020, road divider IoU -0.012 and its thin-line F1 0.51 to 0.31); the fixes are not separated from the learning rate by that run, so a run with the fixes alone is open.</li>
+<li>Single seeds everywhere: the seed spread of this recipe is not measured; the first open item is a seed twin of the baseline.</li>
+</ul>
+
+
+@@@ howto
+
+<p>From <code>bev_fusion/</code> in the WSL (env <code>gcar</code>); the full table is in <code>bev_fusion/README.md</code>.</p>
+<ul>
+<li>tests: <code>bash tests/run_gates.sh</code></li>
+<li>train: from <code>autoresearch/</code>: <code>AR_PROJECT=../bev_fusion python3 -m trainsuite start ../bev_fusion/training/configs/t16_full.json --id &lt;id&gt; --hyp "..." --pred "..." --rule "..." --go</code></li>
+<li>evaluate: <code>python evaluation/bev_suite.py runs/&lt;run&gt; --curves --fusion --velocity eval --n 1000 --prior 500</code>; then <code>modules</code>, <code>timing</code>, <code>qual videos 3</code>, <code>generalisation --n 1000</code>, <code>report --vs runs/&lt;control&gt;</code></li>
+<li>the trained systems: <code>runs/t16_full_s0</code> (baseline), further runs as listed in the ledger; the checkpoints stay complete (best three rule)</li>
+</ul>
+
+
+@@@ files
+
+<ul>
+<li>cards: <code>bev_fusion/experiments/t16_full_network/</code> (bring-up log), <code>t17_more_data/</code>, <code>t18_motion_lr/</code>, <code>t19_radar_memory/</code> (draft)</li>
+<li>decisions: <code>bev_fusion_lane_center/experiment_execution/DECISIONS.md</code> (D44 order, D46 deadline / mail / shutdown)</li>
+<li>open lists: <code>bev_fusion/records/open_findings_2026-11-02.md</code>, <code>bev_fusion/records/cleanup_inventory_2026-11-02.md</code></li>
+<li>this report and the videos: <code>bev_fusion/results/t16/</code> (not in git, binary)</li>
+</ul>
+
+
+@@@ folder_readme
+BEV camera + radar system - result report (made 2026-11-02 / 03 by the BEV system chat for Mirko)
+
+Open report.html in a browser (Chrome / Edge). It needs the folder videos/ next to it for the video players; fonts come from the internet if available, otherwise the browser's default fonts are used.
+
+  report.html      the report: what was tried (23 experiments), results (tables, paired comparisons), lane markings, comparison with the state of the art, pictures, videos, cost, limits
+  videos/<run>/    result videos (mp4): <scene>_overview.mp4 = camera with true boxes and map lines, true BEV, prediction, error maps incl. lane dividers; <scene>_dashboard.mp4 = every stage of the chain
+                   t16_full_s0 = the baseline (full network, 428 scenes), t17_data = the same recipe on 700 scenes, t18_fix = the bundle arm (cut by its rule; the baseline t16_full_s0 is the delivered system)
+  tables/          the stored evaluation tables of the runs (one line per metric): <run>_table_n1000.txt (validation, 1000 frames, ground truth v8), <run>_table_train.txt (train scenes, for the generalisation gap)
+
+The same report as a private web page (needs your Claude login): https://claude.ai/artifact/KoJDweCbGxz4TAzMfntGNo
+The working records are in the repository (github.com/Archimedes79/Auto-research): bev_fusion/experiments/ (cards), bev_fusion/records/ (ledger).

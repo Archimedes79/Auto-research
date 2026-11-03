@@ -1,0 +1,22 @@
+@@@ lead
+Result report v7 (after the t20 bundle). What was tried, what came out, the t20 bundle against t16.full_s0, the lane markings, the comparison with the state of the art, quantitative and qualitative, with videos. Repository state <code>@@head@@</code>; numbers come from the stored evaluation files of the runs (VAL, @@frames@@ frames, GT v8) and from the experiment cards, never typed by hand; every comparison is single seed unless it says otherwise.
+
+@@@ summary
+
+<div class=card><b>In short.</b> (To be written once the t20 numbers exist: the block <code>summary</code> of <code>results/build/chapters/text_v7.txt</code>. The table below is the same as the one of the chapter 'The t20 bundle'.) Runs in this report: @@done@@.</div>
+<h3>The key numbers: @@new_label@@ against @@ctl_label@@ (validation, @@frames@@ frames; maps on the cells the front camera sees, detection on the fusion area)</h3>
+@@key_table@@
+
+@@@ folder_readme
+BEV camera + radar system - result report v7 (made by the BEV system chat for Mirko)
+
+Open report.html in a browser (Chrome / Edge). It needs the folder videos/ next to it for the video players; fonts come from the internet if available, otherwise the browser's default fonts are used.
+
+  report.html      the report: summary, the t20 bundle against t16.full_s0, what was tried, results (tables, paired comparisons), lane markings, comparison with the state of the art, pictures, videos, cost, limits
+  report.txt       the same text without pictures (for proofreading)
+  videos/<run>/    result videos (mp4): <scene>_overview.mp4 = camera with true boxes and map lines, true BEV, prediction, error maps incl. lane dividers; <scene>_dashboard.mp4 = every stage of the chain
+  tables/          the stored evaluation tables of the runs (one line per metric): <run>_table_n1000.txt (validation, 1000 frames, ground truth v8), <run>_table_train.txt (train scenes, for the generalisation gap)
+  mail.txt         the text of the result mail (plain text, the key parts of the report)
+  check_numbers.txt  the decimal numbers of the page that no source file holds (first-pass check, advisory)
+
+The working records are in the repository (github.com/Archimedes79/Auto-research): bev_fusion/experiments/ (cards), bev_fusion/records/ (ledger). Built by bev_fusion/results/build/build_report.py from report_runs.json.
