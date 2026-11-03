@@ -30,7 +30,7 @@
     {"id": "a_problem", "label": "Planner\nproblem draft", "kind": "agent", "col": 0, "row": 1, "code": ["agents/ar-planner.md"], "note": "the planner in mode problem drafts changes of PROBLEM.md from the prompt; the file stays protected, the person approves"},
     {"id": "a_research", "label": "Researcher\nscouts, summaries", "kind": "agent", "col": 1, "row": 1, "code": ["agents/ar-researcher.md", "prompts/research_steps.md"], "note": "only on a trigger (METHOD.md, Planning a round): scouts in parallel, one per topic, then a summary with its digest per problem group"},
     {"id": "a_branch", "label": "Planner: branches\n(one per lens); critic", "kind": "agent", "col": 2, "row": 1, "code": ["agents/ar-planner.md", "agents/ar-critic.md"], "note": "the planner writes cards once per lens, in parallel; the critic (fresh context) accepts, revises or rejects each card"},
-    {"id": "a_build", "label": "Planner, coder\n+ critic", "kind": "agent", "col": 3, "row": 1, "code": ["agents/ar-coder.md", "agents/ar-critic.md"], "note": "only for a block experiment (new code): detail plan naming the boxes it changes, code with its spec test, a critic pass on shared code; a variant needs no agent"},
+    {"id": "a_build", "label": "Planner, coder\n+ critic", "kind": "agent", "col": 3, "row": 1, "code": ["agents/ar-coder.md", "agents/ar-critic.md", "prompts/experiment_flow.md"], "note": "only for a block experiment (new code): detail plan naming the boxes it changes, code with its spec test, a critic pass on shared code; a variant needs no agent; prompts/experiment_flow.md is one experiment in six steps (plan card, coding, experiment, training, evaluation, store to the result folder)"},
     {"id": "a_track", "label": "Planner: tracking\nn best, next round", "kind": "agent", "col": 6, "row": 1, "code": ["agents/ar-planner.md"], "note": "reads the verdicts, updates the set of n best by the written rule, proposes a promotion, plans the next branches"},
     {"id": "a_close", "label": "Critic\nnumbers of the report", "kind": "agent", "col": 7, "row": 1, "code": ["agents/ar-critic.md"], "note": "a fresh reviewer checks the round's report against the primary sources"},
     {"id": "g_write", "label": "WRITE GATE: protected truth files only with a grant under a decided D<n>; a card only when complete (G2)", "kind": "gate", "col": 0, "row": 2, "w": 8, "hpx": 34, "code": ["tools/guard_hook.py", "tools/experiment.py"], "note": "transition agents -> files"},
@@ -47,10 +47,11 @@
     {"id": "k_research", "label": "the problem's\nliterature tools", "kind": "problem", "col": 1, "row": 5, "code": ["../bev_fusion_lane_center/tools/literature/catalogue.py"], "note": "no code in autoresearch/ yet; the lane problem's catalogue would move up once a second problem uses it"},
     {"id": "k_branch", "label": "experiment.py\ncard.py, schemas", "kind": "exec", "col": 2, "row": 5, "code": ["tools/experiment.py", "tools/card.py", "schemas/"]},
     {"id": "k_build", "label": "spec tests\nselftest.py", "kind": "exec", "col": 3, "row": 5, "code": ["tools/selftest.py"]},
-    {"id": "k_train", "label": "launcher + train\nsuite, kill rules", "kind": "exec", "col": 4, "row": 5, "code": ["tools/run.py", "tools/schedule.py", "tools/ledger.py", "tools/plan.py", "tools/run_report.py", "tools/hold.py", "trainsuite/"], "note": "a training is watched by code: the card's kill rules stop it (`watch --enforce`), `trainsuite early` only advises from the learning curves; an alarm wakes the lead chat, no agent watches"},
-    {"id": "k_eval", "label": "eval suite (VAL)\ndecide.py: the rule", "kind": "gate", "col": 5, "row": 5, "code": ["evalsuite/", "tools/decide.py", "tools/provenance.py", "tools/lineage.py"], "note": "numbers, pictures and ms on VAL; decide.py turns the cards into KEEP / CUT / TIE / INCONCLUSIVE by the card's written rule"},
+    {"id": "k_train", "label": "launcher + train\nsuite, kill rules", "kind": "exec", "col": 4, "row": 5, "code": ["tools/run.py", "tools/schedule.py", "tools/ledger.py", "tools/plan.py", "tools/run_report.py", "tools/hold.py", "trainsuite/"], "note": "a training is watched by code: the card's kill rules stop it (`watch --enforce`), `trainsuite early` only advises from the learning curves; an alarm wakes the lead chat, no agent watches; `trainsuite start` composes and launches, `trainsuite queue` shows the GPU slots and the line of waiting runs; the loop that is watched is the engine below"},
+    {"id": "k_engine", "label": "training engine\ntrainkit: fit loop", "kind": "exec", "col": 4, "row": 6, "code": ["trainkit/"], "note": "D48: the project-independent training loop (accumulation, EMA, learning-rate schedule per module, clipping, non-finite skip, AMP, atomic checkpoints with resume, the stop request); a project supplies model, loss, data and config (contract in trainkit/README.md); it writes log.jsonl, checkpoints and STOPPED, reads CONTROL, so the trainsuite and run.py need no project code; the BEV trainer bev_fusion/training/train.py is its first user, a run trains from a pinned copy in runs/<id>/code"},
+    {"id": "k_eval", "label": "eval suite (VAL)\ndecide.py: the rule", "kind": "gate", "col": 5, "row": 5, "code": ["evalsuite/", "tools/decide.py", "tools/provenance.py", "tools/lineage.py", "tools/package.py"], "note": "numbers, pictures and ms on VAL; decide.py turns the cards into KEEP / CUT / TIE / INCONCLUSIVE by the card's written rule; package.py writes the result package of a run (with the scene lists in split.json) and cleans derived data"},
     {"id": "k_track", "label": "board, prototype\n(per problem)", "kind": "problem", "col": 6, "row": 5, "code": ["../bev_fusion/evaluation/board.py", "../bev_fusion_lane_center/tools/prototype/lane_prototype.py", "tools/keep3.py", "../bev_fusion/records/keep3.json", "../bev_fusion_lane_center/experiment_execution/keep3.json"], "note": "tools/keep3.py keeps the best three networks complete (one slot per checkpoint, per arm with its seeds in bev_fusion; the records are the keep3.json of each problem); the deployment suite: each problem's prototype command runs a version on chosen frames, writes planner-ready outputs and copies the numbers of its metric card and the ms per frame of its timing record (bev_fusion: evaluation/bev_prototype.py); a shared tool only when a third problem needs one"},
-    {"id": "k_close", "label": "cleanup, checks\nclean_temp, archdraw", "kind": "gate", "col": 7, "row": 5, "code": ["tools/clean_temp.py", "tools/check_structure.py", "tools/check_numbers.py", "tools/metrics.py", "tools/archdraw.py", "tools/check_git.py", "architecture.json"], "note": "tags the scratch and moves temp/ away, finds dead paths, checks the report's numbers, the per-round table, these drawings"}
+    {"id": "k_close", "label": "cleanup, checks\nclean_temp, archdraw", "kind": "gate", "col": 7, "row": 5, "code": ["tools/clean_temp.py", "tools/check_structure.py", "tools/check_numbers.py", "tools/metrics.py", "tools/archdraw.py", "tools/check_git.py", "tools/commit_paths.py", "architecture.json"], "note": "tags the scratch and moves temp/ away, finds dead paths, checks the report's numbers, the per-round table, these drawings; commit_paths.py commits exactly the named paths of a unit of work (scratch and forbidden files refused)"}
   ],
   "edges": [
     {"from": "p_prompt", "to": "a_problem"},
@@ -75,6 +76,7 @@
     {"from": "f_branch", "to": "k_branch", "both": true},
     {"from": "f_build", "to": "k_build", "both": true},
     {"from": "f_train", "to": "k_train", "both": true},
+    {"from": "k_train", "to": "k_engine", "both": true, "label": "CONTROL / STOPPED, log.jsonl"},
     {"from": "f_eval", "to": "k_eval", "both": true},
     {"from": "f_versions", "to": "k_track", "both": true},
     {"from": "f_close", "to": "k_close", "both": true}
@@ -83,7 +85,7 @@
     {"label": "PERSON", "nodes": ["p_prompt", "p_promote"], "fill": "none"},
     {"label": "AGENTS: four roles, run by the lead chat", "nodes": ["a_problem", "a_research", "a_branch", "a_build", "a_track", "a_close"], "fill": "none"},
     {"label": "FILES in the problem folder: the only contract between the layers", "nodes": ["f_problem", "f_research", "f_branch", "f_build", "f_train", "f_eval", "f_versions", "f_close"], "fill": "none"},
-    {"label": "CODE: core and suites", "nodes": ["k_problem", "k_research", "k_branch", "k_build", "k_train", "k_eval", "k_track", "k_close"], "fill": "none"}
+    {"label": "CODE: core and suites", "nodes": ["k_problem", "k_research", "k_branch", "k_build", "k_train", "k_engine", "k_eval", "k_track", "k_close"], "fill": "none"}
   ],
   "covers": [
     {"dir": "tools", "glob": "*.py"},
@@ -92,6 +94,7 @@
     {"dir": "prompts", "glob": "*.md"},
     {"dir": "schemas", "glob": "*.json"},
     {"dir": "evalsuite", "glob": "*.py"},
-    {"dir": "trainsuite", "glob": "*.py"}
+    {"dir": "trainsuite", "glob": "*.py"},
+    {"dir": "trainkit", "glob": "*.py"}
   ]
 }

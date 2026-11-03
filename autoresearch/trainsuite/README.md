@@ -1,94 +1,150 @@
-# trainsuite - see, stop and judge a training run from the files it writes
+# trainsuite - start, supervise and stop a training from the files it writes
 
-A training is a process that writes files. This suite reads them and tells you where the run is, whether it looks healthy and whether a kill criterion of its card is hit; it can ask the trainer to stop. It imports no project code, needs only the standard library (curves also matplotlib) and knows no network, loss or dataset. Run it from `autoresearch/`; `--root` is the folder of the run directories (default `./runs`, so from here e.g. `--root ../bev_fusion/runs`).
+Who does what in a training (the folders are the BEV system's; another project plugs in the same way):
 
-## Try it
-```
-python -m trainsuite selftest                                  # synthetic runs with known answers, a few seconds
-python -m trainsuite --root ../bev_fusion/runs status          # runs active in the last 24 h, also one that died before its first row (--all: every run with a metrics file or a text log)
-AR_PROJECT=../bev_fusion python -m trainsuite queue            # who holds the GPU slots, who waits in the line (first come, first served), what the RAM gate says (run.py --ram-mb), which runs lie on hold
-python -m trainsuite --root ../bev_fusion/runs health t8_bevfeat_s0:t8_ctl_s0 --kill "group.lines@1000 > 1.48"
-python -m trainsuite --root ../bev_fusion/runs curves t8_bevfeat_s0 t8_ctl_s0      # png: total, every group.*, grad_norm
-python -m trainsuite --root ../bev_fusion/runs watch t8_bevfeat_s0:t8_ctl_s0 t8_bevfeat_s1:t8_ctl_s1 --kill "group.lines@1000 > 1.48" --enforce
-python -m trainsuite --root ../bev_fusion/runs stop t8_bevfeat_s0
-python -m trainsuite --root ../bev_fusion/runs early --calibrate --better lower --band 0.2 --key val.total --out calib.json   # how well does an early gap predict the final one?
-python -m trainsuite --root ../bev_fusion/runs early t3_radar_only --vs t2_ref_s0 --better lower --calib calib.json --at 0.5 --min-rows 1   # advice only
-python -m trainsuite --root ../bev_fusion/runs speed base_run fast_run --skip 10   # s/step and speed-up against the first run, data wait, GPU busy (profile.txt), peak GPU memory, loss at the last shared step
-```
-`speed` puts runs side by side for a speed experiment: the median seconds per step (the first `--skip` logged rows are warm-up) and the speed-up against the first run, the share of a step that waits for the data (`t_data / t_step` of a run with `probe`), the GPU busy share (the line `GPU kernels busy: ... = N %` of the run's `profile.txt`, if the trainer wrote one), the peak GPU memory, and the loss at the last step all runs share, so that a faster run whose loss moved shows it. `run:reference` gives a run its own reference for the loss comparison (`--vs` is one reference for all). `status` with one run adds the phase and readiness, the findings, the kill rules, the loss groups, the module table (grad, change against the earlier rows, update ratio), the time split, the incidents and the last eval; `health` exits 1 on an alert or a kill hit. `watch` prints **one line per change** (state, new finding, kill rule, new eval) and ends when every run is finished: it is made for an agent's Monitor, which then sleeps until something happens. A run that is not running when the watch begins (not started, failed, stopped) is waited for up to `--give-up` minutes (default 180), because it may be restarted. A finding that comes and goes is reported once. Without `--enforce` it only reports; with it a kill hit asks the trainer to stop (`--honour-wait` seconds later, default 300, it writes the request once more if nothing happened, then gives up and says so).
-
-## The contract: what a trainer writes into its run directory
-| file | content | the suite uses it for |
+| part | where | job |
 |---|---|---|
-| `config.json` | `{"steps": N, ...}` | % and ETA |
-| `log.jsonl` | one JSON line per logged step: `{"step", "t" (unix time), "total", "lr", "grad_norm", "s_per_step", "gpu_gb", <any scalar, e.g. "group.lines">}`; an eval line `{"step", "val": {<scalars>}}`. After a resume the file may hold steps twice: the later one wins | loss and every other curve, speed, health |
-| `train.log` | the text output | a traceback at its end = crashed; lines `non-finite ... skipped (k in a row)` |
-| `ckpt_*.pt` | atomic checkpoints; **starting the same command again resumes** | nothing (the trainer's business) |
-| `.done` | written only when the process exits with code 0 | state `done` |
-| `incident_<step>.json` | optional: one file per incident (a skipped non-finite step, a spike): `{"step", "kind", "batch": [sample ids], "losses": {...}}` | finding `incident`; listed by `status RUN` |
-| `CONTROL` / `STOPPED` | the suite writes `CONTROL`; the trainer answers with `STOPPED` | stop (below) |
+| model, loss, data | `bev_fusion/training/` (`model.py`, `losses.py`, `nuscenes_dataset.py`, `train.py`) | what is trained; `train.py` builds them and calls the engine |
+| the engine | `autoresearch/trainkit/` (contract model / loss / data / config: [README](../trainkit/README.md)) | the loop: accumulation, EMA, clipping, checkpoints with resume, skipping non-finite steps, the stop request |
+| the launcher | `autoresearch/tools/run.py` | card, ledger row, code tag, GPU slot, retry |
+| this suite | `autoresearch/trainsuite/` | compose a config, start, queue, status / health / watch / curves, stop; no project code, standard library only (`curves` also needs matplotlib) |
 
-Optional scalars in a `log.jsonl` row, for the module view: `grad.<module>` (gradient norm of one top-level module), `upd.<module>` (update-to-weight ratio of that module per step), `t_data` / `t_step` (seconds waiting for the data / the whole step). A module that is frozen on purpose is named in `config.json` (`"freeze": [prefix, ...]` or `"train_only": [prefix, ...]`; `fusion`, `fusion.` and `fusion.*` are one spelling, a single string is a list of one, anything else names nothing) and is not asked to learn; a `freeze` prefix inside a module (`head.gate`) does not exempt the whole module (the rest of it trains). A module that gets no gradient at all reports 0.0, which is the finding. A trainer that writes none of them loses nothing.
-
-The loss key is `total` (`--loss KEY`). A project with other names puts a `trainsuite.json` into the run directory (`EXTENSIONS.md` 1).
-
-**Stop.** At every step boundary the trainer looks at `CONTROL`. If it says `{"cmd": "stop"}` the trainer saves a checkpoint, writes `STOPPED` (`{"step", "reason"}`) and exits with code **75**, never 0, so no `.done` appears and nobody evaluates a half-trained model. The launcher `autoresearch/tools/run.py` knows the code: exit 75 is the run status `stopped` (not `failed`, not counted as a failure in `metrics.py`), is never retried even when the log tail holds an older CUDA error, blocks its `--after` dependents and is resumed by starting the same id again. At its **start** the trainer moves `CONTROL` and `STOPPED` of an earlier stop aside (`*.old`), so an old request never stops a resume; no clocks are compared. A request written before the trainer's `train()` begins (imports take 10-40 s) is moved aside too; `watch` notices that nothing happened and writes it again. The trainer side of the protocol (`stop_requested`, `clear_stale`, `mark_stopped`, `EXIT_STOPPED`) is implemented once, in the training engine `autoresearch/trainkit/control.py` (standard library only; a run's code snapshot carries the engine), and `control.py` of this suite re-exports it. **A trainer older than this contract ignores CONTROL**: `stop` and `--enforce` look into `<run>/code/train.py` and refuse (`stop` exits 2) when the check is not there; a stop of such a run is a decision about the process. `resume <run>` moves the stop files aside by hand.
-
-## Readiness: how far is the run, and when is it ready?
-`status` shows `ready` (0 - 100 %), the ETA and the clock time at which the last step should be logged (`last step`; the final checkpoint and the evaluation follow it, the percentage stays at 99 until then); `status RUN` adds the phase; `status --json` has `phase`, `ready_pct`, `ready_at` (the time of the last step); `watch` prints one line per 10 %. Ready is the share of the steps that are logged, held at **99 % until the process has exited with code 0** (`.done`): a run whose last step is logged and whose final checkpoint is still being written is not ready. A stalled, failed or stopped run keeps the share it reached; a run without `steps` (or with a total below 1) has no percentage. One look gives one answer: the fields of a summary come from one reading of the state. Phases: `new` (nothing written) - `starting` (output, no row yet: imports, caches, first batch) - `training` - `finishing` (all steps logged, no exit 0 yet) - `done` / `failed` / `stopped` / `stalled` / `ended`.
-
-## States and what is checked
-`new` (no output yet) - `running` - `stalled` (no output for 15 min or 10 rows' time, `TS_STALE_S` seconds) - `failed` (a traceback at the end of `train.log` that no `step` line follows; seen at once) - `stopped` - `ended` (all steps logged, no `.done`) - `done`. A process killed by the OOM killer leaves no traceback: it shows `running` until it is `stalled`.
-
-| code | level | meaning |
-|---|---|---|
-| `failed`, `stalled` | alert | crashed (last line of the traceback) / no output |
-| `nonfinite`, `skipped` | alert / warn | NaN or inf in a logged row / steps the trainer skipped (3 in a row = alert) |
-| `spike` | warn | a value 8 robust sigmas above the recent median (`watch` tests every row since its last look; after a restart from an earlier checkpoint the rows from the resume step on count as new, also when the run has passed the old step again) |
-| `shift` | warn after 50 % of the steps, else info | the last 10 rows of `total` jumped by more than 30 % and 5 standard errors over the 30 before, and stay there |
-| `rising` | same | window mean of `total` or a `group.*` rose by more than 3 standard errors |
-| `grad_norm`, `gpu`, `slow` | warn | grad norm > 10 x its median / the trainer's peak GPU allocation > 11 GB / s per step 1.5 x the typical one of the current attempt (rows with a time `t` only, running runs only) |
-| `overfit` | warn | `val.total` rose by 5 % while the training loss fell |
-| `vs_ref` | warn if 10 % **and** 3 standard errors worse over the last 50 rows after 20 % of the steps, else info | the loss against a reference run at the same step; a reference with another step total is on another schedule (warm-up, learning rate): info "not compared" |
-| `dead_module` | warn | a module's gradient norm is zero over the last 20 rows (detached, frozen by mistake, or unused on purpose: a switched-off branch, a loss weight of 0; modules named in `freeze` / `train_only` are exempt) |
-| `grad_module` | warn | a module's gradient norm is 10 times its own earlier median (a single module blows up while the total looks fine) |
-| `update_ratio` | warn | one step changes a module's weights by less than 1e-7 or more than 20 % of their size (measured against at least 0.01, so a module that starts at zero does not show millions); Adam moves each weight by about the learning rate, so 1e-2 is normal; the thresholds are not calibrated on a real probe run yet |
-| `data_bound` | warn | more than 30 % of a step waits for the data loader (median of the last 50 rows with `t_data` and `t_step`) |
-| `incident` | warn | `incident_<step>.json` files exist: the trainer dumped the step and the batch ids of a failure |
-| `flat`, `no_metrics` | info | the loss did not move over the last rows / nothing logged yet |
-| `bad_config` | warn | `steps` in the run's `config.json` / `trainsuite.json` is not a number: the step total is unknown (0), the rest of the table is unaffected |
-| `kill_rule`, `kill_key` | alert / warn | a line of `kill.txt` or `--kill` is not a rule / the run passed the rule's step and never logged its key (a typo) |
-
-**Healthy is not good.** These checks say the training is sound; whether the network is good is the evaluation (`evalsuite`). And the loss of a multi-task run is not a number that must fall: the bev_fusion `total` rises from 8.5 to 12.5 between steps 500 and 1300 in every run, reference runs included (the warm-up of the dt = +-0.5 loss terms explains it: they enter between 20 % and 40 % of the steps, steps 600-1200 of 3000, and each group sum grows by up to a factor 2; the timing matches, no ablation was run). The reliable early signal is the comparison with a **reference run of the same code and ground truth** (`--vs`, `curves` with two runs) and a kill rule. A loss that jumps and stays is `shift`; a loss that is simply dead (flat) is only `flat` (info).
-
-## Kill rules
-The kill criterion of an experiment card as a line a program can check, from `--kill "..."` (repeatable) and `<run>/kill.txt` (UTF-8, with or without BOM, or UTF-16 with a BOM as PowerShell 5.1 writes it; bytes that are no text are one `kill_rule` alert, never a crash); `#` starts a comment:
+Run every command from `autoresearch/`. `AR_PROJECT=../bev_fusion` names the problem (the default is the lane one); `R=../bev_fusion/runs` is the folder of the run directories. `python -m trainsuite selftest` checks the suite on synthetic runs in seconds.
 ```
-group.lines@1000 > 1.48              # mean of the last 10 logged values up to step 1000
-total@500 > 30 window 5              # the last 5 values
-val.total@2000 >= 13.5               # the eval row at step 2000 (or the first after it)
+export AR_PROJECT=../bev_fusion; R=../bev_fusion/runs
 ```
-A rule is `pending` until the run has reached its step, then `ok` or `hit` (a non-finite value is a hit) or `unknown` (the key was never logged). A bad line is reported and the other rules still work.
 
-## Early advice (`early`, advisory)
-`early <run> --vs <control>` takes the gap to the control run (signed so that positive = the run is better; the direction is **required**: `--better higher|lower` or `--lower KEY`; a logged `val.*` is mostly a loss) at the fraction of the steps the run has reached (or `--at F`), needs `--min-rows` (3) rows of the key, and compares it with the seed-noise band (`--band`, **required, in the units of the key**; with `--calib` it is the calibration's band and a different value is refused). `early --calibrate [root] --out calib.json` asks, over the finished pairs of a runs root (same step total, same name prefix before the first `_`, or `--pair variant:control`), how often the sign of the gap at f = 0.1 / 0.25 / 0.5 / 0.75 equals the sign of the final gap and how the two rank (Spearman); with fewer than 6 usable pairs it says `not enough pairs to calibrate` and gives no number. The verdict is one of: `behind control by G > band B ... predicted the final sign in X of N pairs ...: `consider stopping` (only if the 95 % Wilson lower bound of the agreement is >= `--min-agree` 0.8 **and** the pairs beyond the band number >= 15 and come from >= 8 distinct runs), `... lower bound below 0.8: no reliable signal`, `... not enough independent evidence`, `inside the band: no signal`, `ahead of the control ...`, `not calibrated: gap only`. `--as-rule` also prints a `key@step > value` line for `kill.txt` to review, only for `consider stopping`; nothing is written, the exit code is 0 (2 = usage error), only `watch --enforce` stops a run. Details and limits: `EXTENSIONS.md` 5.
+## 1. What a config and a manifest look like
+A training is one JSON file with a value for every choice: `bev_fusion/training/configs/t20_base.json` (an unknown key is an error). The keys that matter:
 
-## Start a training: modes are values in the config
-The modes of a training are not code paths but values of the config file. `compose` builds the config of one run from a base file, presets and overrides, and prints every change with its old value; `start` does that, runs the project's static check and prints the exact `run.py` command (`--go` starts it detached and waits 3 s to see whether `run.py` refused the id: a held, running, finished or card-less id; **the same command again resumes the run**):
-```
-python -m trainsuite compose training/configs/t10_dual_s0.json --preset small --set seed=3 --out /tmp/c.json
-AR_PROJECT=../bev_fusion python -m trainsuite start training/configs/t10_dual_s0.json --id t15.a --preset small --set seed=3 --hyp "..." --pred "..." --rule "..." [--go]
-```
-| mode | how |
+| key | meaning |
 |---|---|
-| preprocessing on the fly | `--preset onfly` (all caches off) |
-| training on data that was computed elsewhere | `--set feature_cache=<path>` (and the other cache keys) |
-| small, fast | `--preset small` (400 steps, evaluation every 100) or `--preset smoke` (20 steps: the end-to-end smoke of a new version) |
-| full | the base config as it is |
-| one module, the rest frozen | `--set 'train_only=["fusion."]'` or `--set 'freeze=["obj_head."]'` (the module prefixes of the model; needs the trainer's freeze support) |
-A preset is a json file of overrides in the project's presets folder, merged in the order given; `--set a.b=c` reads `c` as json when it parses; an object (`--set 'model={"x": 1}'`) sets its keys one by one, a value for a group of keys (`--set model=5`) is refused; an integral float is an int (`steps=1e3` is 1000) and NaN / Infinity / 1e400 are refused (in `--set`, presets and the base; the writer never emits them). A key the base file did not have is marked **NEW** (a typo shows there, with the nearest key), and the project's check (for bev_fusion `training/startable.py`) refuses an unknown key before a GPU is touched. `start` needs a `trainsuite` block in the project's `project.json`: `presets`, `out` (where the composed configs go: scratch), `runs`, `check` and `train` (commands with `{config}`); the composed file is named after the run folder (id with `.` as `_`) and the key `name` of the config is set to it (a `--set name=` is refused: the trainer writes to `runs/<name>` and the launcher script names the run after the config file, they must agree). Without `--go` the composed config goes to `<id>.preview.json`, so a preview never changes the file a running or retrying run reads; for an id that already has a run, a different config is refused (a resume needs the same one; the trainer copies the config it ran with into the run folder); `t1.a` and `t1_a` are one run folder, so an id is refused when another id with the same folder has a run record; with `--go` a held id (`hold.py`) stops the start before any job, a prepare build included. The card (`--hyp --pred --rule`, or `--no-card` for a diagnostic run) is required, as for `run.py`.
+| `name`, `out_root` | the run folder `runs/<name>`; `start` sets `name` from `--id` |
+| `split` | `"large"`: the scene lists `bev_fusion/splits/large.json` (`small` 60 / 10 scenes, `large` 428 / 82, `xl` 700 / 82) |
+| `steps`, `lr`, `warmup`, `batch_size`, `accum`, `seed` | the schedule; effective batch = `batch_size` x `accum` (3 x 2) |
+| `feature_cache`, `feature_cache2`, `gt_cache`, `radar_cache`, `lane_images` | the derived data the run reads (caches, not in git) |
+| `model`, `loss` | `ModelConfig` (which blocks: `camera_features: "dual"`, `lane_branch`, `motion_block`, ...) and `LossConfig` (head layout, loss terms); the layout flags (`centreline_1m`, `radar_stationary`) must agree in both |
+| `log_every`, `eval_every`, `save_every`, `keep`, `probe` | what is logged and saved, how often (section 6) |
+| `_about` | a comment (keys starting with `_` are ignored): why the file exists |
 
-**Data the run needs (`prepare`).** The `trainsuite` block may list `"prepare": [{"name": "gt", "check": "<command with {config}, exit 0 = present>", "build": "<command with {config}, resumable>", "wait_min": 1440}]`. `start` runs every check (shown as `prepare gt: ... (present)` or `(MISSING)`). A missing item stops the start and prints the build command: a build of hours belongs in the schedule, not inside the start. With `--prepare` the build is a run of its own (`<id>.prep_<name>`, `run.py --no-card`, so it has a ledger row and shows in `schedule.py`) and the training starts with `--after <id>.prep_<name> --wait-after <wait_min>`: a failed build blocks the training instead of letting it start without its data. `--go` launches the build first and stops if its launcher is refused (a build that ends with exit 0 inside the 3 s wait counts as done); `--skip-prepare` does not look. The project supplies the two commands (bev_fusion: `training/gt_scenes.py CONFIG check|build` turns the config into a file of sequence names and calls `python -m autogt have|generate --scenes-file`; a passing check says that the autogt store `data/autogt/<signature>/` holds the GT of those sequences for the current generator).
+Variants are values, not code. A **preset** is a JSON of overrides (`bev_fusion/training/configs/presets/`: `small` = 400 steps, `smoke` = 20 steps, `onfly` = no caches); `--set key=value` changes one value (`a.b=c` for nested keys, `c` is read as JSON). `start` (section 3) prints every change with its old value and marks a key the base did not have as NEW, so a typo shows.
 
-## Not in this suite (yet)
-A queue of runs (`run.py` does the process side: record, GPU slots, retry), a run fingerprint that refuses comparisons across different code / ground truth / caches, and a ledger row for a killed run. More in `EXTENSIONS.md`.
+What a run records, next to its checkpoints:
+- `runs/<id>/config.json`: the config the trainer ran with. `start` replaced `split` by the exact scene lists, so the run is pinned to the lists, not to the split file.
+- `runs/<id>/gt.json`: the ground-truth signature and version it trained on.
+- `runs/<id>/manifest.json`: the identity in one small file. It is made after the launch (the commit exists only then), from `bev_fusion/`: `python training/splits.py manifest runs/<id> --card records/runs/<id>/run.json`. For `t16_full_s0` it holds
+```
+{"run": "t16_full_s0",
+ "split": {"name": "large", "train": {"n": 428, "hash": "b694b2e11f43"}, "val": {"n": 82, "hash": "e290142492cd"}},
+ "gt": {"signature": "0.5_4_6a7aa7864a", "version": "v8"},
+ "code": {"commit": "40e7ff5b3c", "tag": "bf/t16.full_s0"},
+ "card": {"hypothesis": "...", "prediction": "...", "rule": "..."}}
+```
+- the card (hypothesis, prediction, decision rule) is given at the start (`--hyp --pred --rule`) and kept in `bev_fusion/records/runs/<id>/run.json` and the ledger row; the experiment's story is `experiments/<id>/experiment.md` (open) or `results/experiments/<id>/` (finished).
+
+## 2. How a run is tied to its data and its code
+| what | pinned by | not pinned |
+|---|---|---|
+| scenes | `split` becomes the lists in `runs/<id>/config.json` (name, counts and hashes in `manifest.json`); a new split is a new file in `bev_fusion/splits/` ([README](../../bev_fusion/splits/README.md)) | |
+| ground truth | `gt` in the split file = the autogt version its caches were checked against (v8); the run writes `gt.json`; evaluation compares only runs with the same signature | `autogt/` is imported live; the run's tag records its state |
+| derived data | the cache paths in the config; `bev_fusion/data/README.md` says how each is built; `start` runs the project's `prepare` check (is the GT store complete for these scenes?), `--prepare` builds a missing one as a run of its own | the caches, raw nuScenes and the pretrained weights are files, not versions |
+| experiment code | `run.py` commits the code and tags it `bf/<id>`; `run_ar.sh` unpacks `bev_fusion/training` and `autoresearch/trainkit` of that commit into `runs/<id>/code/` and trains from there | editing `training/` while a run trains changes nothing for it; a resume trains from a new snapshot |
+```
+cat ../bev_fusion/runs/t16_full_s0/code/SNAPSHOT.txt      # commit 40e7ff5b3c (git archive of bev_fusion/training; run t16.full_s0, tag bf/t16.full_s0)
+git tag -l 'bf/t16.full*'                                 # bf/t16.full_s0, bf/t16.full_s0.eval
+```
+
+## 3. How to start
+```
+python -m trainsuite start training/configs/t20_base.json --id t20.demo --preset small --set split=small --set steps=600 --no-card
+```
+Without `--go` this is a preview: nothing starts, the composed config goes to `bev_fusion/temp/compose/<id>.preview.json` (scratch). It prints the changes, the notes of the split resolution, the project's static check and `prepare` check (`training/startable.py`, `gt_scenes.py`), and the exact `run.py` command:
+```
+t20_base.json -> temp/compose/t20_demo.json: 10 change(s)
+  steps: 6000 -> 400  (preset small)  ...  split: "large" -> "small"  (--set)   steps: 400 -> 600  (--set)   name: "t20_base" -> "t20_demo"  (--id)
+  note: resolve: train_scenes = 60 entries     note: resolve: val_scenes = 10 entries
+cd <bev_fusion> && AR_PROJECT=<bev_fusion> python3 .../tools/run.py --id t20.demo --gpu --split train --no-card -- bash temp/train/run_ar.sh temp/compose/t20_demo.json
+(nothing started: add --go)
+```
+- **`--go`** starts it detached and waits 3 s to see whether `run.py` refused the id (held, running, finished, no card). **The same command again resumes** a stopped or crashed run from its last checkpoint.
+- **The card.** A run that may feed a verdict needs `--hyp "..." --pred "..." --rule "..."`. `--no-card` is for diagnostic runs (smoke, bring-up, timing): the ledger row says "no card" and the run never feeds a verdict.
+- **`run.py` itself** (`python3 tools/run.py --id ... --gpu -- <command>`) is what `start` calls; its options (`--after`, `--timeout`, `--retries`, `--ram-mb`) are in its docstring, the BEV start line in `bev_fusion/records/README.md`.
+- **GPU slots.** `--gpu` waits for one of 2 slots (shared with the lane project, one GPU) and for 10 GB of free RAM; section 7.
+
+## 4. How to stop and resume
+```
+python -m trainsuite --root $R stop t20_demo --reason "why"
+# stop requested for t20_demo: .../runs/t20_demo/CONTROL
+# the trainer sees it at the next step boundary, saves a checkpoint, writes STOPPED and exits with code 75
+```
+- At every step the trainer looks for `CONTROL`. It saves a checkpoint, writes `STOPPED` and exits with **75**, never 0, so no `.done` exists and nobody evaluates half a model.
+- `run.py` calls exit 75 `stopped` (not a failure, no retry) and puts the id **on hold**: it refuses the id and blocks its `--after` dependents until the person's words clear it: `python3 tools/hold.py clear <id> --words "<their words>"` (`hold.py show` lists the holds). Then the same start command resumes the run, from a new snapshot of the code: stop, fix, start again is the hot-fix loop.
+- A crash (traceback, OOM, CUDA error) has no hold: start the same command again; `run.py` retries a CUDA "unknown error" by itself.
+- `trainsuite resume <run>` moves a stale `CONTROL` / `STOPPED` aside by hand (the trainer does it itself at its start). A snapshot older than this protocol ignores `CONTROL`: `stop` refuses it (exit 2).
+
+## 5. How to supervise
+| command | answers |
+|---|---|
+| `status [RUN]` | where is every run (state, step, ETA, loss); for one run also the loss groups, the module table, the time split, the last eval |
+| `health RUN [--vs REF] [--kill RULE]` | is it sound: crash, stall, NaN, spike, rising loss, dead module, data-bound; exit 1 on an alert or a kill hit |
+| `watch RUNS [--enforce]` | one line per change until all are finished, made for an agent's Monitor; `--enforce` stops a run on a kill hit |
+| `curves RUN [RUN]` | a png of the loss, its groups and the gradient norm; needs matplotlib (the `gcar` python) |
+| `speed BASE FAST` | s per step, speed-up, data wait, GPU busy, peak memory, loss at the last shared step |
+| `early RUN --vs CONTROL` | advice from the gap to a control run, calibrated on finished pairs; stops nothing |
+| the **module table** (in `status RUN`) | per module the gradient norm and the update size per step; gradient 0.0 = that module learns nothing (needs `probe`) |
+| **kill rules** | the card's kill criterion as a line: `--kill "group.lines@1000 > 1.48"` or `<run>/kill.txt` |
+```
+python -m trainsuite --root $R status                                  # run  state  step/total  ready  s/step  ETA  last step  loss  flags
+python -m trainsuite --root $R health t16_full_s0 --kill "group.lines@1000 > 1.48"
+#   [kill ] group.lines@1000 > 1.48: ok (value 0.6306)    modules (median of the last 20 rows): trunk  grad 2.12  update 6.18e-06 ...
+python -m trainsuite --root $R watch <run> --enforce --kill "group.lines@1000 > 1.48"      # runs until <run> is finished: start it as a Monitor
+#   [16:21:04] t16_full_s0: kill rule 'group.lines@1000 > 1.48': ok (value 0.6306)       (what `watch t16_full_s0 --once ...` prints for a finished run)
+```
+A healthy run is not a good network: the checks say the training is sound, the evaluation says whether the result is good. All checks, their thresholds, the stop details and the kill-rule syntax: [EXTENSIONS.md](EXTENSIONS.md) chapters 2, 3, 8, 9, 10.
+
+## 6. How to log more for deep debugging
+A row of `log.jsonl` has the loss, its groups, `grad_norm`, `lr`, `s_per_step`, `gpu_gb`. Switch on more with config values (`--set key=value`):
+
+| value | adds | costs |
+|---|---|---|
+| `probe: true` (on in `t20_base`) | per module `grad.<module>` and `upd.<module>` (gradient norm, update-to-weight ratio), `t_data` / `t_step` (seconds waiting for data / the whole step) in every `log_every` row; `incident_<step>.json` (step, kind, sample ids of the batch, losses; at most 50) when a step is skipped as non-finite | one copy of the trainable weights per logged step |
+| `grad_diag_every: N` | every N steps the cosines of the task-group gradients (do the tasks pull against each other?); not under fp16 | extra gradient work on those steps (not measured) |
+| `profile_steps: n` (n <= 8) | `profile.txt` in the run folder: torch.profiler over n steps after 10 warm-up steps (GPU busy share, host synchronisations per step, top operators) | host RAM (30 steps held 22 GB): a short run on a quiet box only |
+
+Without a run: `bev_fusion/training/debug.py` needs one batch, no GPU: `overfit_one_batch` (the loss must go to about 0; if not, the bug is in the loss, the targets or the wiring), `frozen_stayed`, `anomaly()` (names the operation of the first NaN), `replay_ids` (rebuilds the batch of an incident). `probe.py` and `debug.py` are the BEV side; the loop's hooks (`trainkit.loop.Hooks`) are how another project adds its own.
+```
+python -m trainsuite start training/configs/t20_base.json --id t20.diag --preset small --set split=small --set steps=600 --set grad_diag_every=100 --set profile_steps=4 --no-card
+python -m trainsuite --root $R status t20_diag                        # the module table and the time split
+```
+`start` marks `profile_steps` as NEW (the base file does not list it); it is a `TrainConfig` field, so the check accepts it. The trainer accepts a changed `probe`, `profile_steps` or `grad_diag_every` on a resume, but `start` refuses a different config for an id that has a run: use a new id.
+
+## 7. The training queue
+```
+python -m trainsuite queue                                            # (output shortened)
+# GPU slots (2, ../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots):
+#   slot 0: t20.base_s0  (pid 1520792, since 2026-11-03T16:06:03)     slot 1: free
+# queue (the first goes first): empty
+# RAM: 12226 MB available, the gate asks for 10000 MB on 3 looks in a row: a run could start
+# on hold (only the person's words clear a hold: hold.py clear ID --words ...):  profile.t10  speed.d  t16.ctl_s0 ...
+```
+**It exists** (since 2026-11-01). Every `run.py --gpu` is a launcher process that waits in one first-come-first-served line, takes one of the 2 GPU slots (the lane project counts against the same two) and starts only when the RAM gate lets it (`ram_mb` 10000 in `project.json`: two trainings run in parallel only when the box has RAM for both). A held id is refused. `--after <id>` waits for that run's done flag and is blocked when it failed or was stopped; a chain is `start ... --run-arg=--after --run-arg=<id>`:
+```
+python -m trainsuite start training/configs/t20_base.json --id t20.demo3 --preset small --set split=small --no-card --run-arg=--after --run-arg=t20.demo2
+#   ... run.py --id t20.demo3 --gpu --split train --no-card --after t20.demo2 -- bash temp/train/run_ar.sh temp/compose/t20_demo3.json
+```
+**What it does not do:** there is no persistent list that starts runs by itself. The waiting launchers are processes of this session: a WSL shutdown or a reboot ends them, and the same commands start them again. The to-do list is `bev_fusion/records/schedule.csv` (`python3 tools/schedule.py show | next`, states read from the run records); whoever works the list starts the items with `start --go`. A tool that did start ready items (`tick.py`) was removed under D32 (it started 0 of 61 runs). If you want it, it is about 30 lines on top of `schedule.py next` and `start --go`.
+
+## 8. Simple speed-up chances, ranked
+The step is **host-bound**, not GPU-bound: in a 70-step profile of `t10_dual_s0` (accumulation 1, 2.66 s per step on a calm box, `speed.a3`) the GPU kernels were busy 33 % of the time, the main thread 85 %, and every step did 691 `.item()` calls, 1283 stream synchronisations and 1779 host-device copies (`speed.b`). The current chain (accumulation 2, 6 loader workers) takes 3.6 - 3.9 s per step: `t16.full_s0` median 3.62 s over the last 100 logged rows, 7 % of it waiting for data; `t20.small_s0` 3.86 s, 6 %. Measured so far, `bev_fusion/records/LEDGER.md` rows `speed.*`:
+
+| rank | lever | measured | not measured |
+|---|---|---|---|
+| 1 | fewer host synchronisations (log every N steps, no `.item()` in the loop) | the counts above. Already cut, with the same numbers: one read-back per clip, multi-tensor EMA, targets from a window; the run with the read-back cut (`speed.b`) stayed inside the spread of the baseline (2.27 - 2.65 s against 2.44 - 3.14 s per step) | what the remaining ~690 syncs cost: `profile_steps` on a run of the current chain, then the top operators in `profile.txt` |
+| 2 | larger micro-batch, fewer accumulation steps | t1 chain, effective batch 16, idle GPU: 4 x 4 = 2.5 s per step (4.4 GB), 8 x 2 = 2.1 s (8.6 GB), 2 x 8 = 5.3 s (`training/configs/README.md`) | the current chain: 3 x 2 peaks at 8.8 - 9.3 GB of the 11 GB allowed, so there is little room; BatchNorm sees other batches, so this changes the training, not only its speed |
+| 3 | CUDA graphs / `torch.compile` of the trunk (43 of 78 GMACs of the cached chain; static shapes in training) | nothing: never tried | compile time, the dt loop, the pinned code snapshot |
+| 4 | more loader workers | data wait is 4 % (`speed.a3`) to 7 % (`t16.full_s0`) of a step: at most that much to win | each worker costs RAM (one run takes about 10 GB) |
+| tried | bf16 + `cudnn_benchmark` (`speed.c2`) | 2.71 against 2.66 s per step (no gain), peak memory -40 %, gradient norm median 865 against 34, loss +8 %: it changes the training | `tf32`, `pin_memory`, `prefetch_factor` and fp16 with a loss scale are `TrainConfig` switches, not measured alone |
+
+Measure a change on a short run with a quiet GPU (the same config on a busy box ran at 7.7 s per step, `speed.a`, against 2.66 s on a calm one, `speed.a3`): `python -m trainsuite --root $R speed <base run> <changed run> --skip 10` puts them side by side. Three of the levers wait as held runs (`speed.d/e/f`).
+
+More: [EXTENSIONS.md](EXTENSIONS.md) (the run directory contract, all checks, kill rules, early advice, `compose`, `prepare`, what is not built), the engine contract [../trainkit/README.md](../trainkit/README.md).
