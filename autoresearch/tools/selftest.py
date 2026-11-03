@@ -617,6 +617,15 @@ try:
     try:
         assert X.find("E7") == f"{T}/results/experiments/E7_done/experiment.json" and X.find("E1") == f"{T}/experiments/E1_x/experiment.json", "both card folders are searched, the open one first"
         assert [os.path.basename(d) for d in X.folders()][-1] == "E7_done" and X.problem_of(X.find("E7")) == T and X.check(exp, X.find("E7")) == [], "the card refs resolve from the problem folder"
+        os.makedirs(f"{T}/experiments/E7_done")                      # the same folder name in both card folders: a copy instead of a move is an error, not a silent pick
+        try:
+            X.find("E7")
+            raise AssertionError("a folder in two card folders must be an error")
+        except SystemExit as e:
+            assert str(e).count("E7_done") >= 3 and f"{T}/experiments/E7_done" in str(e) and f"{T}/results/experiments/E7_done" in str(e), str(e)
+        dup = subprocess.run([sys.executable, f"{HERE}/experiment.py", "check", "--all"], capture_output=True, text=True, env=env)
+        assert dup.returncode == 1 and "DUPLICATE" in dup.stdout and "E7_done" in dup.stdout, (dup.stdout, dup.stderr)
+        os.rmdir(f"{T}/experiments/E7_done")
         json.dump(pj_cards, open(f"{T}/project.json", "w"))
         try:
             X.find("E7")

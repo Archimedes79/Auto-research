@@ -6,7 +6,7 @@
     python training/splits.py manifest RUN_DIR [--card records/runs/<id>/run.json]
                                                        writes RUN_DIR/manifest.json: the split, GT, code and card of a run, read from the files it wrote
     python training/splits.py split-json RUN_DIR OUT_DIR
-                                                       writes OUT_DIR/split.json (the scene lists of the run; `package.py` puts it into results/<id>/)
+                                                       writes OUT_DIR/split.json (the scene lists of the run, nulls and a note when it wrote no config.json; `package.py` puts it into results/<id>/)
 
 A config says `"split": "large"` instead of carrying 500 scene names. `resolve` replaces the key by `train_scenes` / `val_scenes` (and the comment key `_split`, which
 `train.read_config` ignores), so the config the trainer reads, and copies into `runs/<id>/config.json`, holds the exact lists: the run is pinned to them, not to the file.
@@ -122,13 +122,19 @@ def manifest(run_dir, card=None, splits_dir=SPLITS):
 
 def write_split_json(run_dir, out_dir, frames=None, splits_dir=SPLITS):
     """OUT_DIR/split.json: the scene lists the run trained and validated on (from its config.json), the split name, the GT version and the official nuScenes split names;
-    `frames` = the keys of the evaluation frames when the caller has them (the evaluation card holds their count and hash only), else null. -> the path"""
-    cfg, gt = _run_files(run_dir)
-    train, val = cfg.get("train_scenes") or [], cfg.get("val_scenes") or []
-    out = {"run": os.path.basename(os.path.normpath(run_dir)), "split": name_of(train, val, splits_dir),
+    `frames` = the keys of the evaluation frames when the caller has them (the evaluation card holds their count and hash only), else null. A run folder without config.json
+    (an older run that wrote none) gets nulls for the lists and the split and a `note`; a folder that does not exist is refused (ValueError). -> the path"""
+    if not os.path.isdir(run_dir):
+        raise ValueError(f"{run_dir}: no run folder")
+    cfg = _read(os.path.join(run_dir, "config.json"))
+    gt = _read(os.path.join(run_dir, "gt.json")) or {}
+    train, val = (cfg.get("train_scenes") or [], cfg.get("val_scenes") or []) if cfg is not None else (None, None)
+    cfg = cfg or {}
+    out = {"run": os.path.basename(os.path.normpath(run_dir)), "split": None if train is None else name_of(train, val, splits_dir),
            "official_split": {"train": cfg.get("train_split"), "val": cfg.get("val_split")},
            "gt": {"signature": gt.get("gt_signature"), "version": gt.get("gt_version")},
-           "train": list(train), "val": list(val), "evaluation_frames": None if frames is None else list(frames)}
+           "train": None if train is None else list(train), "val": None if val is None else list(val), "evaluation_frames": None if frames is None else list(frames),
+           "note": "no config.json: scene lists unknown" if train is None else None}
     path = os.path.join(out_dir, "split.json")
     _write(path, out)
     return path

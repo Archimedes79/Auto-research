@@ -8,8 +8,9 @@
     python autoresearch/tools/package.py --selftest
 
 A project whose project.json has "package": {"split_record": "<command>"} (the placeholders {run_dir} and {out_dir} are paths relative to the problem folder, which is also the
-working folder of the command; bev_fusion: `python3 training/splits.py split-json {run_dir} {out_dir}`) gets <out_dir>/split.json (the scene lists of the run) in every package:
-`package` and `clean` refuse, and leave package.json as it was, when the command fails or leaves no json object there. A project without the key is unaffected.
+working folder of the command, bare or inside quotes; bev_fusion: `python3 training/splits.py split-json {run_dir} {out_dir}`) gets results/<id>/split.json (the scene lists of the
+run) in every package. The command writes into a temp folder, the file moves to results/<id>/ only after it was checked and before package.json is written: `package` and `clean` (also
+its dry run) refuse, and leave results/ as it was, when the command fails, leaves no json object or the run folder is missing. A project without the key is unaffected.
 
 The result folder <problem>/results/<run id>/ holds the package: package.json, provenance.json and the copy of the model bundle (bundle/, not in git:
 the code is in the tag). The package is the one place that says how a run was made and what came out: the code tag and commit, the GT version and
@@ -219,39 +220,56 @@ def experiment_of(run_id, folder):
     return V.UNKNOWN
 
 
-def split_record(run_id, run_dir):
-    """the split record of a run: the project's hook (project.json "package" -> "split_record") writes <results folder>/split.json. -> {"file", "hash"}, None when the
-    project has no hook; SystemExit when there is no run folder, the command fails or it leaves no json object: a run without its split record gets no package"""
+def split_hook(run_id, run_dir):
+    """run the project's split-record command (project.json "package" -> "split_record") into a fresh temp folder; -> (folder, file) with a split.json that holds a json
+    object, or None when the project has no hook. SystemExit (nothing written below results/, the temp folder removed) when there is no run folder, the command fails or
+    it leaves no json object: a run without its split record gets no package. A file from an earlier package is never looked at"""
     cmd = (P.cfg().get("package") or {}).get("split_record")
     if not cmd:
         return None
     if not run_dir or not os.path.isdir(run_dir):
         sys.exit(f"{run_id}: no run folder, so no split record (project.json package.split_record): the package is not written")
-    out_dir = V.results_dir(run_id)
-    rel = lambda p: shlex.quote(os.path.relpath(p, P.root()).replace("\\", "/"))        # noqa: E731
-    argv = shlex.split(cmd.replace("{run_dir}", rel(run_dir)).replace("{out_dir}", rel(out_dir)))
+    tmp = tempfile.mkdtemp(prefix="split_")
     try:
-        r = subprocess.run(argv, cwd=P.root(), capture_output=True, text=True, timeout=120)
-    except (OSError, subprocess.SubprocessError) as e:
-        sys.exit(f"{run_id}: the split record command {cmd!r} cannot run ({e}): the package is not written")
-    path = os.path.join(out_dir, "split.json")
-    try:
-        ok = r.returncode == 0 and isinstance(json.load(open(path, encoding="utf-8")), dict)
-    except (OSError, ValueError):
-        ok = False
-    if not ok:
-        sys.exit(f"{run_id}: the split record command {cmd!r} failed (exit {r.returncode}) or wrote no json object to {path}: the package is not written; "
-                 + (r.stderr or r.stdout).strip()[-300:])
-    return {"file": "split.json", "hash": V.file_hash(path)}
+        def rel(p):
+            try:
+                return os.path.relpath(p, P.root()).replace("\\", "/")
+            except ValueError:                                     # another drive
+                return p
+        argv = [t.replace("{run_dir}", rel(run_dir)).replace("{out_dir}", rel(tmp)) for t in shlex.split(cmd)]      # substituted after the split: a path with a space stays one argument, quotes in the template work
+        try:
+            r = subprocess.run(argv, cwd=P.root(), capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError) as e:
+            sys.exit(f"{run_id}: the split record command {cmd!r} cannot run ({e}): the package is not written")
+        path = os.path.join(tmp, "split.json")
+        try:
+            ok = r.returncode == 0 and isinstance(json.load(open(path, encoding="utf-8")), dict)
+        except (OSError, ValueError):
+            ok = False
+        if not ok:
+            sys.exit(f"{run_id}: the split record command {cmd!r} failed (exit {r.returncode}) or wrote no json object: the package is not written; "
+                     + (r.stderr or r.stdout).strip()[-300:])
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return tmp, path
 
 
 def write(run_id, run_dir=None):
-    """write the package; the list of earlier deletions is carried over, never replaced; the split record (if the project has one) first: no record, no package"""
+    """write the package; the list of earlier deletions is carried over, never replaced. The split record (if the project has one) is made first, in a temp folder, and moved
+    to results/<id>/split.json when the package is built: no record, no package, and a refused run leaves nothing behind in results/"""
     old = json.load(open(package_path(run_id), encoding="utf-8")) if os.path.isfile(package_path(run_id)) else {}
-    pk = build(run_id, run_dir)
-    sp = split_record(run_id, run_dir or V.find_run_dir(run_id))
-    if sp:
-        pk["split_record"] = sp
+    hook = split_hook(run_id, run_dir or V.find_run_dir(run_id))
+    try:
+        pk = build(run_id, run_dir)
+        if hook:
+            dest = os.path.join(V.results_dir(run_id), "split.json")
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            P.atomic_write(dest, open(hook[1], encoding="utf-8").read())
+            pk["split_record"] = {"file": "split.json", "hash": V.file_hash(dest)}
+    finally:
+        if hook:
+            shutil.rmtree(hook[0], ignore_errors=True)
     pk["deleted"] = old.get("deleted", [])
     os.makedirs(os.path.dirname(package_path(run_id)), exist_ok=True)
     P.atomic_write(package_path(run_id), json.dumps(pk, indent=1) + "\n")
@@ -342,6 +360,13 @@ def clean(apply=False, min_age_days=2.0, only=None, now=None):
             out.append((rid, "skip: " + why, total))
             continue
         if not apply:
+            try:
+                hook = split_hook(rid, run_dir)                    # the dry run asks what --apply asks (the command writes into a temp folder only)
+                if hook:
+                    shutil.rmtree(hook[0], ignore_errors=True)
+            except SystemExit as e:
+                out.append((rid, f"skip: {e}", total))
+                continue
             out.append((rid, "delete", total))
             continue
         try:
@@ -364,7 +389,10 @@ def clean(apply=False, min_age_days=2.0, only=None, now=None):
             while d != run_dir and os.path.isdir(d) and not os.listdir(d) and os.path.relpath(d, run_dir).split(os.sep)[0] not in NEVER_DIRS:
                 os.rmdir(d)
                 d = os.path.dirname(d)
-        pk = write(rid, run_dir)                                   # rebuilt: the files that are left, and the list of deletions carried over
+        try:
+            write(rid, run_dir)                                    # rebuilt: the files that are left, and the list of deletions carried over
+        except SystemExit as e:                                    # the files are gone and listed in the package written above: the other runs go on
+            print(f"warning: {rid}: deleted and listed, but the package could not be refreshed: {e}", file=sys.stderr)
         out.append((rid, "deleted", total))
     return out
 
@@ -632,41 +660,91 @@ def selftest():
         _, _, done = gt_clean(True, gtroot)
         assert sorted(done) == ["new", "old1"] and not os.path.exists(os.path.join(gtroot, "old1")) and os.path.isdir(os.path.join(gtroot, "old2")), done
         assert "GT store old1" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
-        # the split record: a project whose project.json names a hook gets results/<id>/split.json in the package and no package when the hook fails (a stale file does not count)
-        hook = os.path.join(tmp, "split_hook.py")
-        open(hook, "w").write("import json, os, sys\nrun, out = sys.argv[1:3]\nif os.path.exists(os.path.join(run, 'no_split')):\n    sys.exit(3)\n"
-                              "if not os.path.exists(os.path.join(run, 'silent')):\n    os.makedirs(out, exist_ok=True)\n"
-                              "    json.dump({'run': os.path.basename(run), 'seed': json.load(open(os.path.join(run, 'config.json')))['seed']}, open(os.path.join(out, 'split.json'), 'w'))\n")
+        # the second card folder (project.json experiment_dirs): a card there is found, the open one wins when both name the run
         pj0 = json.load(open(os.path.join(proj, "project.json")))
+        os.makedirs(os.path.join(proj, "results", "experiments", "E5_done"))
+        open(os.path.join(proj, "results", "experiments", "E5_done", "experiment.md"), "w").write("# E5\n\nruns x.fin_s0 and x.a_s0\n")
+        assert experiment_of("x.fin_s0", "x_fin_s0") == V.UNKNOWN, "without the key only experiments/ is searched"
+        json.dump(dict(pj0, experiment_dirs=["experiments", "results/experiments"]), open(os.path.join(proj, "project.json"), "w"))
+        assert experiment_of("x.fin_s0", "x_fin_s0") == "results/experiments/E5_done/experiment.md" and experiment_of("x.a_s0", "x_a_s0") == "experiments/E1_demo/experiment.md", "both folders, open first"
+        json.dump(pj0, open(os.path.join(proj, "project.json"), "w"))
+        # the split record: a project whose project.json names a hook gets results/<id>/split.json in the package and no package when the hook fails (markers in the run folder steer the hook)
+        hook = os.path.join(tmp, "split_hook.py")
+        open(hook, "w").write(
+            "import json, os, sys\n"
+            "if len(sys.argv) != 3:\n    sys.exit(4)\n"
+            "run, out = sys.argv[1:3]\n"
+            "has = lambda m: os.path.exists(os.path.join(run, m))\n"
+            "cnt = os.path.join(run, 'calls')\n"
+            "n = int(open(cnt).read()) + 1 if os.path.exists(cnt) else 1\n"
+            "open(cnt, 'w').write(str(n))\n"
+            "if has('no_split') or (has('fail_from') and n >= int(open(os.path.join(run, 'fail_from')).read())):\n    sys.exit(3)\n"
+            "if has('list'):\n    json.dump([1, 2], open(os.path.join(out, 'split.json'), 'w'))\n"
+            "elif not has('silent'):\n"
+            "    json.dump({'run': os.path.basename(run), 'seed': json.load(open(os.path.join(run, 'config.json')))['seed']}, open(os.path.join(out, 'split.json'), 'w'))\n")
+        bare = f"{shlex.quote(sys.executable)} {shlex.quote(hook)} {{run_dir}} {{out_dir}}"
+        quoted = f"{shlex.quote(sys.executable)} {shlex.quote(hook)} \"{{run_dir}}\" '{{out_dir}}'"
+        with_hook = lambda cmd: json.dump(dict(pj0, package={"split_record": cmd}), open(os.path.join(proj, "project.json"), "w"))     # noqa: E731
+        stmp = os.path.join(tmp, "tt")
+        os.makedirs(stmp)
+        tempfile.tempdir = stmp                                    # the hook's temp folders go here: none may be left behind
         s0 = mk("x.s_s0")
         assert "split_record" not in write("x.s_s0") and not os.path.exists(os.path.join(proj, "results", "x.s_s0", "split.json")), "a project without the key is unaffected"
-        json.dump(dict(pj0, package={"split_record": f"{shlex.quote(sys.executable)} {shlex.quote(hook)} {{run_dir}} {{out_dir}}"}), open(os.path.join(proj, "project.json"), "w"))
+        with_hook(bare)
         pks = write("x.s_s0")
         sj = os.path.join(proj, "results", "x.s_s0", "split.json")
         assert json.load(open(sj)) == {"run": "x_s_s0", "seed": 0} and pks["split_record"] == {"file": "split.json", "hash": V.file_hash(sj)}, pks.get("split_record")
-        before = open(package_path("x.s_s0"), "rb").read()
-        open(os.path.join(s0, "no_split"), "w").close()
-        for why in ("no_split", "silent", "no run folder"):
-            if why == "silent":
-                os.remove(os.path.join(s0, "no_split"))
-                open(os.path.join(s0, "silent"), "w").close()
-                os.remove(sj)                                       # the hook exits 0 and writes nothing: no file, no package
-            elif why == "no run folder":
+        assert os.listdir(stmp) == [], "the temp folder of the hook is removed"
+        before, before_sj = open(package_path("x.s_s0"), "rb").read(), open(sj, "rb").read()
+        for why in ("no_split", "silent", "list", "no run folder"):
+            for m in ("no_split", "silent", "list"):
+                if os.path.exists(os.path.join(s0, m)):
+                    os.remove(os.path.join(s0, m))
+            if why == "no run folder":
                 shutil.move(s0, s0 + "_away")
+            else:
+                open(os.path.join(s0, why), "w").close()           # 'silent': the hook exits 0 and writes nothing; the split.json of the package above is still there and must not count
             try:
                 write("x.s_s0")
                 raise AssertionError(f"the package must be refused: {why}")
             except SystemExit as e:
                 assert "package is not written" in str(e), (why, str(e))
         shutil.move(s0 + "_away", s0)
-        assert open(package_path("x.s_s0"), "rb").read() == before, "a refused package leaves package.json as it was"
+        assert open(package_path("x.s_s0"), "rb").read() == before and open(sj, "rb").read() == before_sj, "a refused package leaves package.json and split.json as they were"
+        assert os.listdir(stmp) == [], "a refused run leaves no temp folder"
+        p0 = mk("x.p_s0")                                          # refused before anything is made: no provenance.json, no bundle/ in results/
+        open(os.path.join(p0, "no_split"), "w").close()
+        try:
+            write("x.p_s0")
+            raise AssertionError("must be refused")
+        except SystemExit:
+            assert not os.path.exists(os.path.join(proj, "results", "x.p_s0")), os.listdir(os.path.join(proj, "results", "x.p_s0"))
+        # a path with a space is one argument, with the placeholders bare or inside quotes of the template
+        mk("x.sp s0")
+        for cmd in (bare, quoted):
+            with_hook(cmd)
+            write("x.sp s0")
+            spj = os.path.join(proj, "results", "x.sp s0", "split.json")
+            assert json.load(open(spj)) == {"run": "x_sp s0", "seed": 0}, cmd
+            os.remove(spj)
+        with_hook(bare)
+        # clean: the dry run and --apply both skip a run without its split record and delete nothing of it; a failure of the second write does not stop the other runs
         u = mk("x.u_s0")
         open(os.path.join(u, "no_split"), "w").close()
-        res = clean(apply=True, only=["x.u_s0"])
-        assert res[0][1].startswith("skip: ") and "split record" in res[0][1] and os.path.isfile(os.path.join(u, "eval", "pic.png")), res      # clean skips the run, deletes nothing
+        for apply in (False, True):
+            res = clean(apply=apply, only=["x.u_s0"])
+            assert res[0][1].startswith("skip: ") and "split record" in res[0][1] and os.path.isfile(os.path.join(u, "eval", "pic.png")), (apply, res)
+        w = mk("x.w_s0")
+        open(os.path.join(w, "fail_from"), "w").write("2")        # the first write (before the delete) works, the second (after it) fails
+        mk("x.v_s0")
+        got = {rid: v for rid, v, _ in clean(apply=True, only=["x.u_s0", "x.w_s0", "x.v_s0"])}
+        assert got["x.u_s0"].startswith("skip: ") and got["x.w_s0"] == "deleted" and got["x.v_s0"] == "deleted", got
+        assert not os.path.exists(os.path.join(w, "eval", "pic.png")) and len(json.load(open(package_path("x.w_s0")))["deleted"][0]["files"]) == 4, "w: deleted and listed in the package written before"
+        tempfile.tempdir = None
         json.dump(pj0, open(os.path.join(proj, "project.json"), "w"))
         print("package selftest passed")
     finally:
+        tempfile.tempdir = None
         tag_exists, versions = real_tag, real_versions
         if old_env is None:
             os.environ.pop("AR_PROJECT", None)

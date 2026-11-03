@@ -71,14 +71,15 @@ def collect(root=None, cfg=None):
     if os.path.exists(p):
         with open(p, newline="", encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
-    decisions = []
+    decisions = {}
     for d in [f for base in cfg.get("experiment_dirs", ["experiments"]) for f in glob.glob(os.path.join(root, base, "*", "decision*.json"))]:
         try:
             d = json.load(open(d, encoding="utf-8"))
         except (OSError, ValueError):
             continue
         if isinstance(d, dict):
-            decisions.append(d)
+            decisions.setdefault(d["id"] if d.get("id") is not None else len(decisions), d)       # one per experiment id, also when a copy sits in two card folders (the open one first)
+    decisions = list(decisions.values())
     test_log = os.path.join(root, cfg.get("test_log", ""))
     test_rows = open(test_log, encoding="utf-8").read().splitlines() if os.path.isfile(test_log) else []
     out = {name: dict(loop=name, runs=0, failed=0, gpu_s=0.0, exps=set(), KEEP=0, CUT=0, TIE=0, INCONCLUSIVE=0, other=0, keep2=0,
@@ -162,10 +163,10 @@ def selftest():
     json.dump(dict(id="E2", verdict="KEEP", variant="a", control="c", diffs=[0.02, 0.018], band=0.01, metric="Q", prediction="prediction +0.015, measured +0.0200 (error +0.0050)"),
               open(os.path.join(root, "experiments", "E2_x", "decision.json"), "w"))
     for n, metric, err in ((3, "vert100", "+11.1503"), (4, "Q", "-0.0150")):       # another unit in the same loop must not enter the Q mean
-        d = os.path.join(root, "results", "experiments" if n == 4 else "experiments", f"E{n}_y")      # a finished experiment lives in the second card folder
-        os.makedirs(d)
-        json.dump(dict(id=f"E{n}", verdict="TIE", variant="a", control="c", metric=metric, prediction=f"prediction x, measured y (error {err})"),
-                  open(os.path.join(d, "decision.json"), "w"))
+        for d in (os.path.join(root, "results", "experiments" if n == 4 else "experiments", f"E{n}_y"),) + ((os.path.join(root, "experiments", "E4_y"),) if n == 4 else ()):
+            os.makedirs(d)         # E4 sits in the second card folder, and a copy of it in the first: it counts once
+            json.dump(dict(id=f"E{n}", verdict="TIE", variant="a", control="c", metric=metric, prediction=f"prediction x, measured y (error {err})"),
+                      open(os.path.join(d, "decision.json"), "w"))
     open(os.path.join(root, "TEST.md"), "w").write("| 2026-10-25 | 1 | champion | E2 | S 0.7 | once |\n| 2026-10-26 | 2 | not used | - | - | - |\n")
     cfg = dict(P.DEFAULTS, ledger="LEDGER.csv", test_log="TEST.md", loops={"1": [1, 5], "2": [6, None]}, experiment_dirs=["experiments", "results/experiments"])
     out = collect(root, cfg)

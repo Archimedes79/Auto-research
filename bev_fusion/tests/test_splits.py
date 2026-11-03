@@ -159,6 +159,13 @@ with tempfile.TemporaryDirectory() as tmp:
           "split.json holds the lists of the run, the split name, the GT and the evaluation frames it was given")
     check(json.load(open(S.write_split_json(run, os.path.join(tmp, "results", "other"))))["evaluation_frames"] is None, "frames unknown = null")
     check(raises(lambda: S.manifest(os.path.join(tmp, "none")), "no readable config.json"), "a folder without config.json is refused")
+    check(d["note"] is None, "a run with a config has no note")
+    old = os.path.join(tmp, "runs", "t99_old_s0")                                  # an older run: a folder, no config.json (9 such folders in runs/ on 2026-11-03)
+    os.makedirs(old)
+    d0 = json.load(open(S.write_split_json(old, os.path.join(tmp, "results", "old"))))
+    check((d0["train"], d0["val"], d0["split"]) == (None, None, None) and d0["note"] == "no config.json: scene lists unknown" and d0["gt"] == {"signature": None, "version": None},
+          "split.json of a run without config.json: nulls and a note, not a refusal")
+    check(raises(lambda: S.write_split_json(os.path.join(tmp, "none"), os.path.join(tmp, "results", "none")), "no run folder"), "split.json of a run folder that does not exist is refused")
 real = os.path.join("runs", "t16_full_s0")
 if os.path.isdir(real):
     m = S.manifest(real)

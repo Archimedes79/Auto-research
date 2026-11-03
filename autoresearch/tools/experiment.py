@@ -72,6 +72,14 @@ def folders():
     return [d for base in P.experiment_dirs() for d in sorted(glob.glob(os.path.join(base, "*"))) if os.path.isdir(d)]
 
 
+def duplicates():
+    """[(folder name, [paths])] of experiment folders that exist in more than one card folder: a copy instead of a move; the tools would read the open one and ignore the other"""
+    seen = {}
+    for d in folders():
+        seen.setdefault(os.path.basename(d), []).append(d)
+    return [(n, ps) for n, ps in seen.items() if len(ps) > 1]
+
+
 def problem_of(path):
     """the problem folder of a card file: the nearest parent with a project.json (the card folders may be nested: experiments/<x>/ or results/experiments/<x>/), else the current problem"""
     d = os.path.dirname(os.path.abspath(path))
@@ -89,6 +97,9 @@ def find(exp):
     if os.path.isdir(exp):
         return source(exp) or os.path.join(exp, "experiment.json")
     cand = [h for base in P.experiment_dirs() for h in sorted(glob.glob(os.path.join(base, exp + "_*")) + glob.glob(os.path.join(base, exp)))]
+    twice = [ps for n, ps in duplicates() if any(os.path.basename(c) == n for c in cand)]
+    if twice:
+        sys.exit(f"experiment folder {os.path.basename(twice[0][0])} is in two card folders: {' and '.join(twice[0])} (a copy, not a move: keep one)")
     hits = [h for h in (source(d) for d in cand if os.path.isdir(d)) if h]
     if not hits:
         sys.exit(f"no card (experiment.md with a ```json card block, or experiment.json) for {exp} under {', '.join(P.experiment_dirs())}")
@@ -385,6 +396,9 @@ def main():
         return 0
     files = [source(d) for d in folders() if source(d)] if a.all else [find(a.exp)]
     rc = 0
+    for n, ps in duplicates() if a.all else []:
+        print(f"?        DUPLICATE  {n} is in two card folders: {' and '.join(ps)} (a copy, not a move: keep one)")
+        rc = 1
     for f in files:
         try:
             exp = read(f)
