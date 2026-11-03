@@ -34,3 +34,9 @@ Kept on purpose: `training/data/prep/` (the recipes of the caches, the maintain-
 3. head: config, interface, `lane_gtcheck.py`, `startable.py`; stages 1 + 2 of E271 as a model with a matching-free loss; oracle first, small run, then the card's arms.
 4. fast gates; 5. board / module / timing tools with the first two arms; 6. freeze after the baseline.
 Each step is one commit of its own paths (`commit_paths.py`), tests green before it. The machine is idle (the BEV trainings are stopped), the lane head may use the GPU through `run.py` (slot rules, D19 lock).
+
+## 4. Status (2026-11-03 10:00)
+- Step 1 (removal) done: 39 files, commit 38d7c51; baseline of `run_all_tests.sh` before: all pass except the autoresearch selftest (it sees the live runs of other chats); after: the fast gates, `evaluate.py --golden check --cached-only`, `test_lane_prototype.py` and `p18_regis.py` pass.
+- Step 2 (trainer contract + probe) done: 38d7c51; the RNG-on-GPU resume bug found by the experiments chat fixed in 7cd81b8 (selftest group 9 fails without the fix); `python -m trainsuite status` reads the running E271 runs.
+- Step 3 (configs, `startable.py`, `run_config.py`, project.json `trainsuite` block) done: 54ebc03; the oracle (G0) is the experiments chat's `training/grid/test_oracle.py`, so no `lane_gtcheck.py` is written.
+- Open: steps 4 - 6 (gates are in place; board / module probe / timing / freeze wait for two trained heads), and the alignment with the BEV chat's plan of the same day (trainkit, manifests, split lists): messages sent; lane `trainer.py` stays a subset of the trainkit contract.
