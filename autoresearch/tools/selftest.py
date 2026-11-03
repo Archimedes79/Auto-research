@@ -608,6 +608,25 @@ try:
     assert X.block_of(f"{T}/experiments/E8_only/experiment.md") == exp and open(f"{T}/experiments/E8_only/experiment.md").read().startswith(f"# {exp['id']} {exp['title']}"), "the md holds the card and a heading"
     shutil.rmtree(bd)
     shutil.rmtree(f"{T}/experiments/E8_only")
+    # project.json "experiment_dirs": a finished experiment in a second card folder is found by id, listed by --all, and its refs still resolve from the problem folder
+    os.makedirs(f"{T}/results/experiments/E7_done", exist_ok=True)
+    json.dump(exp, open(f"{T}/results/experiments/E7_done/experiment.json", "w"))
+    pj_cards = json.load(open(f"{T}/project.json"))
+    json.dump(dict(pj_cards, experiment_dirs=["experiments", "results/experiments"]), open(f"{T}/project.json", "w"))
+    os.environ["AR_PROJECT"] = T
+    try:
+        assert X.find("E7") == f"{T}/results/experiments/E7_done/experiment.json" and X.find("E1") == f"{T}/experiments/E1_x/experiment.json", "both card folders are searched, the open one first"
+        assert [os.path.basename(d) for d in X.folders()][-1] == "E7_done" and X.problem_of(X.find("E7")) == T and X.check(exp, X.find("E7")) == [], "the card refs resolve from the problem folder"
+        json.dump(pj_cards, open(f"{T}/project.json", "w"))
+        try:
+            X.find("E7")
+            raise AssertionError("without the key only experiments/ is searched")
+        except SystemExit:
+            pass
+    finally:
+        del os.environ["AR_PROJECT"]
+        json.dump(pj_cards, open(f"{T}/project.json", "w"))
+    shutil.rmtree(f"{T}/results")
     # plan.py status: the status of a plan node comes from the schedule and the ledger, not from a column of the plan
     import plan as PL
     ptxt = "| node | experiment | h |\n|---|---|---|\n| N1 | E265 spurs | a |\n| N2 | `t10.dual` long | b |\n| N3 | E26 other | c |\nnot a row | x\n"

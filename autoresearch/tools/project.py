@@ -26,6 +26,7 @@ DEFAULTS = {
     "scratch": "temp",
     "live_code": [],
     "trash": "_to_delete",
+    "experiment_dirs": ["experiments"],
     "structure": {},
 }
 
@@ -65,6 +66,13 @@ def cfg():
 
 def path(key):
     return os.path.join(root(), cfg()[key])
+
+
+def experiment_dirs(problem_root=None):
+    """absolute paths of the folders that hold experiment folders: project.json "experiment_dirs" (default ["experiments"]; bev_fusion adds
+    results/experiments for the finished ones, so an open card and a finished one are both found by id)"""
+    r = problem_root or root()
+    return [os.path.join(r, d) for d in cfg_of(r)["experiment_dirs"]]
 
 
 def _holds(lock, token):

@@ -7,6 +7,10 @@
     python autoresearch/tools/package.py gt [--apply]                      GT stores of versions older than the latest: dry run, --apply deletes
     python autoresearch/tools/package.py --selftest
 
+A project whose project.json has "package": {"split_record": "<command>"} (the placeholders {run_dir} and {out_dir} are paths relative to the problem folder, which is also the
+working folder of the command; bev_fusion: `python3 training/splits.py split-json {run_dir} {out_dir}`) gets <out_dir>/split.json (the scene lists of the run) in every package:
+`package` and `clean` refuse, and leave package.json as it was, when the command fails or leaves no json object there. A project without the key is unaffected.
+
 The result folder <problem>/results/<run id>/ holds the package: package.json, provenance.json and the copy of the model bundle (bundle/, not in git:
 the code is in the tag). The package is the one place that says how a run was made and what came out: the code tag and commit, the GT version and
 signature, the model bundle hash (provenance.py manifest), the numbers (top-level numbers of eval/metrics.json and latency.json, with the hash of the
@@ -36,7 +40,9 @@ import datetime as dt
 import json
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -198,26 +204,54 @@ def evaluation_block(card_path):
 
 
 def experiment_of(run_id, folder):
-    """the experiment card that names this run: the first experiments/*/experiment.md that holds the run id or the run folder name; unknown when none does"""
-    base = os.path.join(P.root(), "experiments")
-    if not os.path.isdir(base):
-        return V.UNKNOWN
-    for d in sorted(os.listdir(base)):
-        md = os.path.join(base, d, "experiment.md")
-        try:
-            if os.path.isfile(md) and os.path.getsize(md) < 400_000:
-                text = open(md, encoding="utf-8", errors="replace").read()
-                if any(re.search(r"(?<![\w.])" + re.escape(x) + r"(?![\w])", text) for x in (run_id, folder) if x):
-                    return f"experiments/{d}/experiment.md"
-        except OSError:
-            continue
+    """the experiment card that names this run: the first experiment.md (folders of project.json "experiment_dirs" in order, open cards first) that holds the run id
+    or the run folder name; path from the problem folder; unknown when none does"""
+    for base in P.experiment_dirs():
+        for d in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            md = os.path.join(base, d, "experiment.md")
+            try:
+                if os.path.isfile(md) and os.path.getsize(md) < 400_000:
+                    text = open(md, encoding="utf-8", errors="replace").read()
+                    if any(re.search(r"(?<![\w.])" + re.escape(x) + r"(?![\w])", text) for x in (run_id, folder) if x):
+                        return os.path.relpath(md, P.root()).replace("\\", "/")
+            except OSError:
+                continue
     return V.UNKNOWN
 
 
+def split_record(run_id, run_dir):
+    """the split record of a run: the project's hook (project.json "package" -> "split_record") writes <results folder>/split.json. -> {"file", "hash"}, None when the
+    project has no hook; SystemExit when there is no run folder, the command fails or it leaves no json object: a run without its split record gets no package"""
+    cmd = (P.cfg().get("package") or {}).get("split_record")
+    if not cmd:
+        return None
+    if not run_dir or not os.path.isdir(run_dir):
+        sys.exit(f"{run_id}: no run folder, so no split record (project.json package.split_record): the package is not written")
+    out_dir = V.results_dir(run_id)
+    rel = lambda p: shlex.quote(os.path.relpath(p, P.root()).replace("\\", "/"))        # noqa: E731
+    argv = shlex.split(cmd.replace("{run_dir}", rel(run_dir)).replace("{out_dir}", rel(out_dir)))
+    try:
+        r = subprocess.run(argv, cwd=P.root(), capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        sys.exit(f"{run_id}: the split record command {cmd!r} cannot run ({e}): the package is not written")
+    path = os.path.join(out_dir, "split.json")
+    try:
+        ok = r.returncode == 0 and isinstance(json.load(open(path, encoding="utf-8")), dict)
+    except (OSError, ValueError):
+        ok = False
+    if not ok:
+        sys.exit(f"{run_id}: the split record command {cmd!r} failed (exit {r.returncode}) or wrote no json object to {path}: the package is not written; "
+                 + (r.stderr or r.stdout).strip()[-300:])
+    return {"file": "split.json", "hash": V.file_hash(path)}
+
+
 def write(run_id, run_dir=None):
-    """write the package; the list of earlier deletions is carried over, never replaced"""
+    """write the package; the list of earlier deletions is carried over, never replaced; the split record (if the project has one) first: no record, no package"""
     old = json.load(open(package_path(run_id), encoding="utf-8")) if os.path.isfile(package_path(run_id)) else {}
     pk = build(run_id, run_dir)
+    sp = split_record(run_id, run_dir or V.find_run_dir(run_id))
+    if sp:
+        pk["split_record"] = sp
     pk["deleted"] = old.get("deleted", [])
     os.makedirs(os.path.dirname(package_path(run_id)), exist_ok=True)
     P.atomic_write(package_path(run_id), json.dumps(pk, indent=1) + "\n")
@@ -310,7 +344,11 @@ def clean(apply=False, min_age_days=2.0, only=None, now=None):
         if not apply:
             out.append((rid, "delete", total))
             continue
-        pk = write(rid, run_dir)                                   # the package and the log first: they list what goes, also when the delete stops halfway
+        try:
+            pk = write(rid, run_dir)                               # the package and the log first: they list what goes, also when the delete stops halfway
+        except SystemExit as e:                                    # e.g. the split record cannot be written: nothing of this run is deleted
+            out.append((rid, f"skip: {e}", total))
+            continue
         pk["deleted"].append({"date": dt.date.today().isoformat(), "bytes": total, "files": [{"path": p, "bytes": b} for p, b, _ in files],
                               "how_to_rebuild": f"git tag {r.get('tag')} + GT {pk['gt']['version']} + the checkpoint {pk['model']['ckpt']}: run the evaluation again"})
         P.atomic_write(package_path(rid), json.dumps(pk, indent=1) + "\n")
@@ -412,7 +450,6 @@ def gt_clean(apply=False, root=None):
 
 
 def selftest():
-    import subprocess
     tmp = tempfile.mkdtemp()
     old_env = os.environ.get("AR_PROJECT")
     global tag_exists, versions
@@ -595,6 +632,39 @@ def selftest():
         _, _, done = gt_clean(True, gtroot)
         assert sorted(done) == ["new", "old1"] and not os.path.exists(os.path.join(gtroot, "old1")) and os.path.isdir(os.path.join(gtroot, "old2")), done
         assert "GT store old1" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
+        # the split record: a project whose project.json names a hook gets results/<id>/split.json in the package and no package when the hook fails (a stale file does not count)
+        hook = os.path.join(tmp, "split_hook.py")
+        open(hook, "w").write("import json, os, sys\nrun, out = sys.argv[1:3]\nif os.path.exists(os.path.join(run, 'no_split')):\n    sys.exit(3)\n"
+                              "if not os.path.exists(os.path.join(run, 'silent')):\n    os.makedirs(out, exist_ok=True)\n"
+                              "    json.dump({'run': os.path.basename(run), 'seed': json.load(open(os.path.join(run, 'config.json')))['seed']}, open(os.path.join(out, 'split.json'), 'w'))\n")
+        pj0 = json.load(open(os.path.join(proj, "project.json")))
+        s0 = mk("x.s_s0")
+        assert "split_record" not in write("x.s_s0") and not os.path.exists(os.path.join(proj, "results", "x.s_s0", "split.json")), "a project without the key is unaffected"
+        json.dump(dict(pj0, package={"split_record": f"{shlex.quote(sys.executable)} {shlex.quote(hook)} {{run_dir}} {{out_dir}}"}), open(os.path.join(proj, "project.json"), "w"))
+        pks = write("x.s_s0")
+        sj = os.path.join(proj, "results", "x.s_s0", "split.json")
+        assert json.load(open(sj)) == {"run": "x_s_s0", "seed": 0} and pks["split_record"] == {"file": "split.json", "hash": V.file_hash(sj)}, pks.get("split_record")
+        before = open(package_path("x.s_s0"), "rb").read()
+        open(os.path.join(s0, "no_split"), "w").close()
+        for why in ("no_split", "silent", "no run folder"):
+            if why == "silent":
+                os.remove(os.path.join(s0, "no_split"))
+                open(os.path.join(s0, "silent"), "w").close()
+                os.remove(sj)                                       # the hook exits 0 and writes nothing: no file, no package
+            elif why == "no run folder":
+                shutil.move(s0, s0 + "_away")
+            try:
+                write("x.s_s0")
+                raise AssertionError(f"the package must be refused: {why}")
+            except SystemExit as e:
+                assert "package is not written" in str(e), (why, str(e))
+        shutil.move(s0 + "_away", s0)
+        assert open(package_path("x.s_s0"), "rb").read() == before, "a refused package leaves package.json as it was"
+        u = mk("x.u_s0")
+        open(os.path.join(u, "no_split"), "w").close()
+        res = clean(apply=True, only=["x.u_s0"])
+        assert res[0][1].startswith("skip: ") and "split record" in res[0][1] and os.path.isfile(os.path.join(u, "eval", "pic.png")), res      # clean skips the run, deletes nothing
+        json.dump(pj0, open(os.path.join(proj, "project.json"), "w"))
         print("package selftest passed")
     finally:
         tag_exists, versions = real_tag, real_versions
@@ -619,7 +689,8 @@ def main():
         return selftest()
     if a.cmd == "package" and a.run:
         pk = write(a.run, a.run_dir)
-        print(f"written: {package_path(a.run)} (tier {pk['tier']}, GT {pk['gt']['version']}, bundle {pk['bundle']['code_hash']}, {len(pk['deep']['files'])} derived files, {human(pk['deep']['bytes'])})")
+        print(f"written: {package_path(a.run)} (tier {pk['tier']}, GT {pk['gt']['version']}, bundle {pk['bundle']['code_hash']}, {len(pk['deep']['files'])} derived files, {human(pk['deep']['bytes'])}"
+              + (f", {pk['split_record']['file']}" if pk.get("split_record") else "") + ")")
     elif a.cmd == "show" and a.run:
         print(open(package_path(a.run), encoding="utf-8").read())
     elif a.cmd == "clean":

@@ -8,7 +8,7 @@ Both present: they must be equal (check says so), so a migration cannot leave tw
     python autoresearch/tools/experiment.py check --all         # every experiment folder that has a card (block or experiment.json)
     python autoresearch/tools/experiment.py migrate E240        # card block into experiment.md, the json moves to <problem>/_to_delete/ (--all: every folder; --create-md: also folders without an experiment.md)
 
-An experiment is found by its id (prefix of a folder under experiments/), by its folder or by the path of its experiment.md / experiment.json. Card refs: a path relative to the
+An experiment is found by its id (prefix of a folder under experiments/ or under the other folders of project.json "experiment_dirs"), by its folder or by the path of its experiment.md / experiment.json. Card refs: a path relative to the
 problem folder, optionally '#a/b/c' into the JSON; a card has its metrics under 'metrics' (evaluate.py cards), a flat dict is the metrics itself.
 """
 import argparse
@@ -67,16 +67,31 @@ def source(folder):
     return js if os.path.isfile(js) else None
 
 
+def folders():
+    """every experiment folder of the problem, the folders of "experiment_dirs" in their order (open cards first), each sorted"""
+    return [d for base in P.experiment_dirs() for d in sorted(glob.glob(os.path.join(base, "*"))) if os.path.isdir(d)]
+
+
+def problem_of(path):
+    """the problem folder of a card file: the nearest parent with a project.json (the card folders may be nested: experiments/<x>/ or results/experiments/<x>/), else the current problem"""
+    d = os.path.dirname(os.path.abspath(path))
+    while os.path.dirname(d) != d:
+        if os.path.isfile(os.path.join(d, "project.json")):
+            return d
+        d = os.path.dirname(d)
+    return P.root()
+
+
 def find(exp):
     """path of the file that holds the card (experiment.md or experiment.json) for an id, a folder or a file"""
     if os.path.isfile(exp):
         return exp
     if os.path.isdir(exp):
         return source(exp) or os.path.join(exp, "experiment.json")
-    cand = sorted(glob.glob(os.path.join(P.root(), "experiments", exp + "_*")) + glob.glob(os.path.join(P.root(), "experiments", exp)))
+    cand = [h for base in P.experiment_dirs() for h in sorted(glob.glob(os.path.join(base, exp + "_*")) + glob.glob(os.path.join(base, exp)))]
     hits = [h for h in (source(d) for d in cand if os.path.isdir(d)) if h]
     if not hits:
-        sys.exit(f"no card (experiment.md with a ```json card block, or experiment.json) for {exp} under {P.root()}/experiments")
+        sys.exit(f"no card (experiment.md with a ```json card block, or experiment.json) for {exp} under {', '.join(P.experiment_dirs())}")
     return hits[0]
 
 
@@ -160,7 +175,7 @@ def check(exp, path):
             bad.append(f"{k} must be one of {allowed}")
     if bad:
         return bad
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path)))) if "experiments" in path.replace("\\", "/") else P.root()
+    root = problem_of(path)
     arms = exp["arms"]
     if exp["control"] not in arms:
         bad.append(f"control {exp['control']} is not an arm")
@@ -363,12 +378,12 @@ def main():
     if not a.all and not a.exp:
         ap.error("name an experiment (E240, a folder or a file) or pass --all")
     if a.cmd == "migrate":
-        todo = [d for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d)] if a.all else [os.path.dirname(find(a.exp))]
+        todo = folders() if a.all else [os.path.dirname(find(a.exp))]
         for d in todo:
             if os.path.isfile(os.path.join(d, "experiment.json")):
                 print(migrate(d, P.root(), a.create_md))
         return 0
-    files = [source(d) for d in sorted(glob.glob(os.path.join(P.root(), "experiments", "*"))) if os.path.isdir(d) and source(d)] if a.all else [find(a.exp)]
+    files = [source(d) for d in folders() if source(d)] if a.all else [find(a.exp)]
     rc = 0
     for f in files:
         try:

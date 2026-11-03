@@ -424,7 +424,7 @@ def main():
         bad = X.check(exp, path)
         if bad:
             sys.exit(f"{exp.get('id')}: experiment file not ready: " + "; ".join(bad))
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(path))))
+        root = X.problem_of(path)
         try:
             d = decide_experiment(exp, root)
         except ValueError as e:  # e.g. cards that disagree about a metric's direction
