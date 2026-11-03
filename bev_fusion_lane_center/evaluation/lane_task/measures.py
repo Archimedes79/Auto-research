@@ -266,3 +266,46 @@ def image_numbers(c: Counts, taus: Sequence[float], sweep: Sequence[float]) -> D
     k = int(np.argmax(F)) if len(F) else 0
     out["best_F1_rel"], out["best_thr"] = (float(F[k]), float(sweep[k])) if len(F) else (0.0, float("nan"))
     return out
+
+
+# ------------------------------------------------------------------------------------------------------------------ vertices (E271)
+# A sparse system that delivers VERTICES (a grid head with a read-out, the node ids of a graph), scored without a polyline: the ground truth is the dense
+# lane points of the frame (every `ds` m, with the travel tangent), a vertex is a point with an optional heading.
+def vertex_counts(V: np.ndarray, H, G: np.ndarray, T: np.ndarray, ds: float = 0.5, along: float = 5.0, across: float = 1.0, ang_deg: float = 30.0,
+                  ids=None) -> Counts:
+    """counts of one frame. V (N, 2) vertices in metres, H (N, 2) unit headings or None, G (M, 2) ground-truth lane points every `ds` m, T (M, 2) their tangents.
+    cov: a GT point is covered when a vertex lies within `along` m along its tangent and within `across` m across it (`along` = half the budgeted vertex spacing, so
+    a sparse system is not punished for being sparse). prec: a vertex is right when a GT point lies within `across` m of it and, with headings, its tangent agrees
+    within `ang_deg` degrees. ids (N,): rows with the same id are one vertex (a graph node that sits in several pieces): right when any of its rows is right."""
+    V, G, T = np.asarray(V, np.float64).reshape(-1, 2), np.asarray(G, np.float64).reshape(-1, 2), np.asarray(T, np.float64).reshape(-1, 2)
+    nv, ng = len(V), len(G)
+    if nv and ng:
+        d = V[None, :, :] - G[:, None, :]                                           # (M, N, 2)
+        lon = np.abs((d * T[:, None, :]).sum(-1))
+        lat = np.abs(d[..., 0] * T[:, None, 1] - d[..., 1] * T[:, None, 0])
+        cov = ((lon <= along) & (lat <= across)).any(1)
+        near = np.linalg.norm(d, axis=-1) <= across                                 # (M, N)
+        if H is not None:
+            h = np.asarray(H, np.float64).reshape(-1, 2)
+            agree = (T[:, None, :] * h[None, :, :]).sum(-1) >= np.cos(np.deg2rad(ang_deg))
+            near = near & agree
+        ok = near.any(0)
+    else:
+        cov, ok = np.zeros(ng, bool), np.zeros(nv, bool)
+    if ids is not None and nv:
+        ids = np.asarray(ids)
+        u, inv = np.unique(ids, return_inverse=True)
+        okid = np.zeros(len(u), bool)
+        np.logical_or.at(okid, inv, ok)
+        n_v, n_ok = len(u), int(okid.sum())
+    else:
+        n_v, n_ok = nv, int(ok.sum())
+    return {"cov": _arr(cov.sum() * ds, ng * ds), "prec": _arr(n_ok, n_v)}
+
+
+def vertex_numbers(c: Counts) -> Dict[str, float]:
+    """cov5 (share of GT lane length covered), prec1 (share of right vertices; no vertex = 1, the vacuous convention of `prf`), vgt100 (vertices per 100 m of GT lane:
+    the budget basis; `vert100` of sparse_lanes divides by the length of the PREDICTED polylines and cannot be formed for vertices without polylines)"""
+    cov, glen = c["cov"]
+    ok, n = c["prec"]
+    return {"cov5": cov / glen if glen > 0 else 1.0, "prec1": ok / n if n > 0 else 1.0, "vgt100": 100.0 * n / glen if glen > 0 else 0.0}

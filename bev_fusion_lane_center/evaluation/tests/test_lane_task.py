@@ -420,6 +420,36 @@ def t_constant_prediction():
         assert gl == want and len(set(gl.values())) > 1, (gl, want)
 
 
+@check("vertex measures (E271): coverage along / across, precision with heading, ids, the controls respond")
+def _vertex_measures():
+    G = np.stack([np.arange(0, 100, 0.5), np.zeros(200)], 1)                  # a straight lane along x, 100 m
+    T = np.tile([1.0, 0.0], (200, 1))
+    V = np.stack([np.arange(2.5, 100, 5.0), np.zeros(20)], 1)                 # a vertex every 5 m: each GT point has one within 2.5 m along
+    H = np.tile([1.0, 0.0], (20, 1))
+
+    def num(V, H=None, ids=None):
+        return M.vertex_numbers(M.vertex_counts(V, H, G, T, ids=ids))
+
+    n = num(V, H)
+    assert abs(n["cov5"] - 1.0) < 1e-9 and n["prec1"] == 1.0 and abs(n["vgt100"] - 20.0) < 1e-9, n
+    assert num(V[::4], H[::4])["cov5"] < 0.6                                      # one vertex every 20 m: about half the lane is within 5 m
+    m = num(V + [0.0, 2.0], H)                                                    # shifted 2 m across: nothing is covered, nothing is right
+    assert m["cov5"] == 0.0 and m["prec1"] == 0.0, m
+    assert num(V, -H)["prec1"] == 0.0 and num(V, -H)["cov5"] == 1.0               # flipped heading: wrong direction, same coverage
+    assert num(V, None)["prec1"] == 1.0                                           # without headings the direction is not asked
+    assert num(np.zeros((0, 2)))["prec1"] == 1.0 and num(np.zeros((0, 2)))["cov5"] == 0.0   # no vertices: vacuous precision, nothing covered
+    dense = np.stack([np.arange(0, 100, 0.5), np.zeros(200)], 1)                  # a dense system covers everything but costs 200 per 100 m
+    d = num(dense)
+    assert d["cov5"] == 1.0 and abs(d["vgt100"] - 200.0) < 1e-9
+    ids = np.arange(20)
+    two = np.concatenate([V, V[:1] + [0.0, 3.0]]), np.concatenate([H, H[:1]])    # a graph node in two pieces: one wrong row, one right row = one right vertex
+    nn_ = num(two[0], two[1], ids=np.concatenate([ids, [0]]))
+    assert nn_["prec1"] == 1.0 and abs(nn_["vgt100"] - 20.0) < 1e-9, nn_
+    cs = [M.vertex_counts(V, H, G, T), M.vertex_counts(V + [0, 2.0], H, G, T)]   # additive: the numbers of summed counts
+    tot = {k: cs[0][k] + cs[1][k] for k in cs[0]}
+    assert abs(M.vertex_numbers(tot)["cov5"] - 0.5) < 1e-9
+
+
 def main(only=()) -> int:
     checks = [c for c in CHECKS if not only or any(o in c[0] for o in only)]
     t0, bad = time.time(), 0
