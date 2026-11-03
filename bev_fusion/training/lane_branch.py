@@ -12,7 +12,9 @@ at 20 m, a stride-4 cell 0.14 m x 2 m.
          normalised image coordinates, so the features are read at stride 4 and the depth at stride 16), same heights
       -> 1 x 1 conv over heights x channels to 16, BN, ReLU -> 1 x 1 conv to c_out, ZERO-initialised (the chain starts exactly
          as without the branch; ControlNet-style zero start)
-The model adds the output to the camera BEV after the temporal block (model.py, ModelConfig.lane_branch).
+The model adds the output to the camera BEV after the temporal block (model.py, ModelConfig.lane_branch). With camera_features 'dual' (t20)
+the depth probabilities, K and ida it reads are those of the FIRST feature source (DualBEV, the same crop as the cached image) and the output
+is added to the merged BEV of both sources; model.check_config refuses a first source that is not the DualBEV family.
 
 Image source for cached training: a key-frame image cache (`build-cache`): JPEG (quality 95) of the 256 x 704 image after the
 dataset's own resize + crop, one file per CAM_FRONT sample_data token; `CachedFrontRadarDataset(lane_images=...)` reads it and

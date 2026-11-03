@@ -118,7 +118,8 @@ class ModelConfig:
                                        # radar input is zeroed, p / 2 each); forced to 0 when a sensor is off (camera_off, radar_kind
                                        # "off"): dropping the only live sensor would blank the sample (review 2026-10-31 pass 2)
     lane_branch: str = ""              # t7: stride-4 lane branch of the current frame added to the camera BEV after the temporal
-                                       # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch)
+                                       # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch);
+                                       # camera_features 'dualbev' or 'dual' (t20: it reads the first source = DualBEV, and adds to the merged BEV)
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
@@ -231,8 +232,9 @@ def check_config(cfg):
         errs.append(f"camera_features={cfg.camera_features!r} (several feature sources) is not supported with lift 's' or cam_adapter")
     if cfg.camera_features == "bevfusion" and cfg.lift == "s":
         errs.append("camera_features='bevfusion' is not supported with lift 's'")
-    if cfg.lane_branch and (cfg.camera_features != "dualbev" or cfg.lift == "s"):
-        errs.append("lane_branch needs camera_features 'dualbev' and lift 'pd' / 'p'")
+    if cfg.lane_branch and (cfg.camera_features not in CAMERAS or CAMERAS[cfg.camera_features][0].features != "dualbev" or cfg.lift == "s"):
+        errs.append("lane_branch reads the depth, the calibration and the crop of the FIRST feature source (the lane image is the DualBEV one): it needs "
+                    "camera_features 'dualbev' or 'dual' and lift 'pd' / 'p'")
     if cfg.radar_kind == "delta_slots" and cfg.c_rad < n_channels():
         errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
     if cfg.rad_static_gate and (cfg.rad_temporal == "none" or cfg.radar_kind == "off"):
@@ -419,7 +421,8 @@ class BEVFusionModel(nn.Module):
         if self.motion_block is not None:                        # t15: the velocity field from two camera frames + radar (motion_block.py)
             v_levels = self.motion_block(*block_inputs(cam_frames, steps, batch["radar"], self.grid))
         cam, cam_state = self._branch_temporal(self.cam_temporal, cam_frames, steps, state.get("cam"), step, cam_obs)
-        if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam
+        if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam; the depth, K, ida
+                                                                 # are those of source 1 (DualBEV; with 'dual' also what batch["prob"], ["ida"] hold)
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
             prob0 = batch["prob"][:, 0].float() if "prob" in batch else self._prob0
             hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
