@@ -1,11 +1,45 @@
 Hi Mirko,
 
-(The narrative of this mail is written once the t20 numbers exist: bev_fusion/results/build/chapters/mail_t20.txt. The marker lines below are replaced by numbers read from the stored files by build_mail.py; everything else is plain text.)
+this is the one result mail of the D48 chain, which D51 moved behind the experiment t21 (one buffered frame for the temporal fusion). It covers what happened since the long report of D46: the redesign bundle t20 and your t21 question. The report is built, the numbers below are read from the stored evaluation files. A fresh numbers critic read the t21 texts against the primary files; its corrections are in.
 
-=== TABLE (validation set, @@frames@@ frames, ground truth v8, maps on the front-camera cells, detection on the fusion area, one training seed per run; first column = the control, second = the new run) ===
+1. WHERE THE REPORT IS
+- On this computer: C:\Auto-research\bev_fusion\results\BEV_result_report_v7\report.html (open it with Chrome or Edge; videos in the folder videos\ next to it, the stored tables in tables\, README.txt explains the folder). It is a report of the whole system: the t20 and t21 chapters come first, then what was tried, the results, the lane markings, the comparison with the state of the art, the weak spots.
+- Code and text records: github.com/Archimedes79/Auto-research, local main at @@head@@. I have NOT pushed (a push needs your word); the cards are in bev_fusion/experiments/ (t20_lane_grid_bundle, t21_one_frame_temporal), the ledger in bev_fusion/records/, the day's log in bev_fusion/records/t21_temporal_2026-11-03.md.
+- Validation only (@@frames@@ frames of 82 scenes, ground truth v8), one training seed per run; the TEST split was never used.
+
+2. YOUR QUESTION (t21): CAN THE TEMPORAL FUSION RUN WITH ONE BUFFERED FRAME?
+Yes, at the quality of the three-frame window by the guards of the card. You were right that the network lifted three images per call. Three arms with ONE buffered frame were trained 1500 steps each from the t20 baseline and compared with an equal-budget control that keeps the three-frame window (paired scene bootstrap, one seed per arm, all verdicts "by hand: D51, one seed"):
+- P (pair): the previous frame's camera BEV is the buffer; one new image is lifted per step.
+- R (recurrent, "predicting"): the buffer is the previous fused state, moved to the present by the same splat and fused with the new frame; no older image is lifted again. Training carries the state from keyframe to keyframe (a chain of up to nine recurrent steps); the evaluation of a frame starts it cold; a stream carries it without limit.
+- P4: P with the previous frame 0.333 s back instead of 0.167 s (see below).
+Reading in words:
+- By the point estimates no arm is beyond a guard of the card (velocity error at moving box centres within 0.10 m/s, mAP within 0.020, lane divider IoU@1 within 0.010): by the written rule all three are ties with the window. The intervals are wider than the points: on whole warm scenes the lower end of the lane IoU change reaches past the 0.010 band for P (-0.017) and P4 (-0.025), and the upper end of P's velocity change is +0.102.
+- P and R lose about 0.05 m/s in velocity (separated from 0 by the scene resampling, inside the band; the card had predicted losses of 0.15 and 0.25). That is consistent with a halved time baseline of the velocity block, which was trained on 0.333 s and has no time input; it is not isolated. P4 keeps the 0.333 s baseline: velocity level with the window (+0.008 m/s, interval just containing 0) and better than P (-0.041, interval excludes 0).
+- Cost, batch path on an idle GPU: 88.9 ms (P) and 90.0 ms (P4) against 102.5 ms for the window; R 110.2 ms (it unrolls three frames; the card had expected it dearer). The saving is in a stream with one new image per step: 57 ms against 85 ms at dt 0 (synthetic timing of the same modules; the window in that comparison lifts all its frames on every call, a window with cached lifted frames was not built).
+- The stream equals the batch computation within about 5e-3 in the maps and 3e-5 in the velocity on one scene (identical for R), and the carried state drifts away from a cold start with time. The gain of a warm memory outside the camera view is the same in the window control, so it comes from the world memory, not from the new buffer.
+- Honest costs: R loses a little on several outputs (road divider, vehicle and pedestrian AP at 1 m over the whole area); P4 has two separated losses on secondary lane metrics (the F1 of the lane-line zero crossings, -0.018 against the control, and on whole warm scenes the road divider IoU@1, -0.015), and its stream needs a buffer 0.333 s old (3 Hz, or a ring of two raw BEVs at 6 Hz), so it is NOT "one frame at 6 Hz". These are differences found among about forty metrics of one seed: hints, not findings.
+
+=== TABLE (validation set, @@frames@@ frames, ground truth v8, maps on the front-camera cells, detection on the fusion area, one training seed per run; control = three-frame window, R = recurrent, P = pair, P4 = pair with the 0.333 s baseline; the last digit is rounded from the four-decimal stored tables) ===
 @@MAIL_TABLE@@
 
 Cost (batch 1, three time offsets, the cached chain without the two frozen image encoders, idle RTX 3060):
 @@MAIL_COST@@
 
-Repository: github.com/Archimedes79/Auto-research, main at @@head@@ when this mail was written.
+3. WHAT t20 SAID (the redesign bundle, trained before t21)
+The bundle (stride-4 lane branch L4, a 1 m centre-line head in the grid head, the correctness fixes, the dead radar channel removed) did NOT improve the lane layer of the full network: lane divider IoU@1 0.542 against 0.549 for t16.full_s0 (the card predicted 0.60: missed). The 1 m centre-line head works as a first output (IoU@1 0.643) but its direction is poor (mean angle error 0.73 rad). The other outputs are level or mixed: drivable area slightly better, walkway slightly worse (-0.017), the velocity error on static and vehicle cells higher (0.228 against 0.189 and 0.641 against 0.613 m/s), detection and the velocity at moving box centres not separated. t20.base_s0 was accepted as the reference baseline by the card's rules, and t21 continues it.
+
+4. WHAT I NEED FROM YOU
+- P or P4 as the temporal fusion of the system? Both pass the written rule. P4 keeps the velocity but needs the older buffer (3 Hz stream or a ring of two at 6 Hz); P is one frame at 6 Hz and 0.05 m/s worse in velocity. I recommend P4 unless the stream rate must be 6 Hz with a single buffered frame; R stays in the code as the more general mechanism.
+- The next lever for the lane layer is open (the bundle did not move it). Candidates in the report: the supervision side (thin paint, uncertain map registration), a finer image side, a time input for the velocity block (it could bring P to P4's level at 6 Hz).
+
+5. WEAK SPOTS AND HONEST LIMITS
+- One seed per arm; the intervals come from resampling scenes, not from repeating the training, so seed-to-seed spread is unmeasured. The differences between the versions are small.
+- The first R run (`t21.rec_s0`) ran at 53 s per step for no found reason and was stopped by me (a HOLD on it stays: only you clear it); it was repeated unchanged as `t21.rec_s0b` at about 5 s per step.
+- The stream-drift diagnostic crashed once in the chain (a device mismatch in my scratch script); I fixed it and ran it on the CPU. The t21 diagnostics (stream drift, stream timing, the guards table, the evaluation chain of an arm) are promoted from scratch into bev_fusion/evaluation/ with a test; the rest of the scratch in bev_fusion/temp/ is not cleaned up yet (the old scripts that records still name stay in git until promoted).
+- The batch path of R is dearer than the window; its saving exists only in a stream.
+- Lane markings are still the weakest output (IoU@0.5 about 0.43), as before.
+
+6. STATE WHEN I WROTE THIS
+- All t21 trainings and evaluations are finished; nothing of the BEV system runs. The lane chat's job E272.j_s1 still ran on the GPU when I wrote this (expected to end about 14:30): I shut the computer down only when it is done and nothing else runs. If you read this and the machine is still on, the shutdown is waiting for that job or for something I will name in the chat.
+
+Repository: github.com/Archimedes79/Auto-research, local main at @@head@@ when this mail was written.
