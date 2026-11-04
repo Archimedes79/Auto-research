@@ -1,0 +1,35 @@
+"""One-off patch of plan/head_design.md after D43: selection row, gaps 3 / 4 / 11, and a section 6 with the directions and answers of 2026-11-02.
+Whole lines are replaced by their starting cell; each prefix must match exactly one line."""
+import os
+
+P = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "plan", "head_design.md"))
+lines = open(P, encoding="utf-8").read().split("\n")
+
+
+def swap(prefix, new):
+    hit = [i for i, l in enumerate(lines) if l.startswith(prefix)]
+    assert len(hit) == 1, (prefix, hit)
+    lines[hit[0]] = new
+
+
+swap("| selection |", "| selection | `extract.boxes_from_maps` (and `extract.select_boxes` on a dense output) | the head maps / the dense boxes | the box dicts of `object_head.decode` | - | built: **the one box extractor** since 2026-11-02 (D43). It gathers only the K peak cells of the maps and parametrises them in float64 with the same `_params` as the dense output; `object_head.decode`, `BEVFusionModel.boxes()`, the evaluation adapter and the prototype all call it. 6.5 -> 1.7 ms (`decode`) and 9.0 -> 1.5 ms (`model.boxes()`) per frame at 100 candidates, CPU; checked box by box against the plain per-box loop (6 mutants caught). The line cells stay `evaluation/metrics.line_cells` |")
+swap("| 3 |", "| 3 | D43 (4): refinement is neither part of `BEVFusionModel` nor of `BEVLoss`. Today `refine` is a `ModelConfig` option wired through `forward`, `_refine_train` (GT matching inside the model) and the refine terms of `BEVLoss`; it ran only in `t1_r3_combined` | nothing blocks it; `model.py`, `losses.py`, `evaluation/bev_adapter.py`, `bev_prototype.py` and `tests/test_box_refine.py` touch it | a separate second-stage module: `BoxRefiner`, candidates made from detached first estimates plus jittered GT, its own loss and training step; nothing of it in the single-network model or loss (old runs evaluate from their pinned code) |")
+swap("| 4 |", "| 4 | (closed 2026-11-02) Two box extractors | - | done: see the selection row of section 1 |")
+swap("| 11 |", "| 11 | The dense outputs (`extract.dense_boxes`, `soft_line_map`) are a main goal (D43) and untrained: no loss reads them, so a planner loss flowing back is a design, not a fact | the loss on the dense outputs is not designed | section 6, item 5: a card for the first matching-free losses on the dense outputs; the prototype reads them without gradient meanwhile |")
+
+SECTION = '''
+
+## 6. D43 (2026-11-02): Mirko's directions and answers to his questions
+
+His message and my reading are recorded as D43 in `../../bev_fusion_lane_center/experiment_execution/DECISIONS.md`. What each point means for the heads:
+
+1. **Centre-line GT (sparse and dense with splits and merges).** The lane project already has the sparse one: `bev_fusion_lane_center/training/data/prep/make_graph_gt.py` builds per sample the lane and lane-connector polylines (0.5 m, nuScenes map arcs) with their `incoming` / `outgoing` links, the directed edges, splits (a piece with >= 2 successors) and merges (>= 2 predecessors), in its own window (x right, y forward, +-50 m); its metric is `evaluation/sparse_lanes/graph_eval.py` (split / merge F1 at 3 m). autogt has the dense side only (mask, one averaged direction, the polylines without tokens or links). To close it: port the graph builder into autogt in the BEV frame (x forward 0..60 m, y left +-26 m), keep the arc tokens and links, and derive the dense fields from the graph: distance field, direction bins with several modes per cell, split / merge heat maps. The lane project's metric then scores the same graphs.
+2. **The radar aux head.** It is a training-only side head on the radar branch's BEV (not on the trunk features S): objects on the radar cells plus a stationary-structure channel with no target. Its job (D38 (a), Mirko: "a test and debug tool"): show that the radar branch keeps the information. The final network does not need it, and no stored run compares aux on / off. In the incumbent its loss is about 5 % of the total (0.65 of 12.5 at step 1000 of `t11_vel_hurdle_acc2`, by difference from the logged groups, Kendall weights and total), but its gradient share is not logged.
+3. **Forecast.** The data is there: autogt generates every keyframe, and the GT cache of a token holds cur / prev / next. Only the sample builder (`autogt.training_sample`, `losses.SIDE_DT`) stops at +-1 keyframe. dt = +-1.0 s is the keyframe k +- 2: add `prev2` / `next2` from the cache entries of the neighbouring tokens (no regeneration), add +-1.0 to `SIDE_DT`; the loss weight (1.0: 0.25), the time mover and the ego steps of a longer gap already exist. Longer sequences (the clips of 3 keyframes) already contain k + 2 for their first frame.
+4. **The registration weight.** The nuScenes map is drawn in the localisation frame and sits 0.3 - 1 m beside the paint in places (Boston worst, Singapore mostly inside the noise); the GT layers inherit it, boxes do not. Mirko's rule of 2026-10-26: stationary GT never moves per frame; a correction is allowed only per map element in world coordinates (`map_offsets`). So a registration estimate can only act as a loss **weight** per frame (`w_reg` in [0.2, 1], lower where the estimate says the map is off): the loss reads `meta["w_reg"]` if it exists, nothing makes it. Today the loss tolerates the offset instead (dilated Dice, flat Huber region). The lane project's graph-ICP (`training/data/prep/reg_precompute.py`) registers a disturbed map to the extracted lane graph, for the map-pose noise of its route head: another question (map against our prediction, not against the paint), so it does not seed this estimator. The cheapest first step is to measure how much the tolerance already absorbs before building one.
+5. **Dense outputs are a main goal.** The first losses on them have to be matching-free: (a) the soft line map against the GT line cells (soft Dice on `soft_line_map`), which ties the distance field and the mask together; (b) for the dense boxes, a peak-weight map against the GT centre heatmap plus the box parameters at the weighted cells (the CenterPoint loss, read from the dense output instead of the raw maps), so that one set of tensors is trained and delivered. A card with a prediction comes before the code.
+6. **Aux heads must not dominate.** Proposal (not built): (i) the aux heads read **detached** branch features, so they diagnose and cannot shape the branches (D38 (a): "probes on detached features"); (ii) their weights stay outside the Kendall groups but are logged with the gradient share they get, so a dominating head is visible; (iii) an optional decay to 0 over the run, as the radar slot encoder's side loss already does (`radar_aux_floor`); (iv) off in the final end-to-end arms. (i) and (ii) are small; (iii) and (iv) are config. Nothing is built while the training stop of 2026-11-01 holds, and (i) changes training, so it enters as an option, default off.
+'''
+text = "\n".join(lines).rstrip("\n") + "\n" + SECTION
+open(P, "w", encoding="utf-8", newline="\n").write(text)
+print("patched", P)
