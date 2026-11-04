@@ -1,10 +1,10 @@
 """Stage B of the lane head (E273): one node slot per 2 m cell, with existence, type flags, an offset that pulls the node onto the line, a direction and the section / long-link scores.
 
-    NodeHead()(feat2, feat1, feat05, road2) -> dict
+    NodeHead()(feat2, feat1, feat05, road2, centre1) -> dict
         e (B, 50, 50) existence logit; flags (B, 8, 50, 50) logits in the order of `qtargets.FLAGS`; off (B, 2, 50, 50) offset in metres inside the cell (tanh, +-1 m); dir_raw (B, 2, 50, 50)
         (normalise with `unit`); s (B, 50, 50) section-start logit; uout, uin (B, 50, 50) logits: the node is the start / the end of a LONG link; tok (B, d, 50, 50) the node token; pos (B, 2, 50, 50)
         the node position in metres (cell centre + off), rows = x (right), columns = y (forward)
-The token of a cell = the 2 m feature + the pooled 1 m / 0.5 m features + road and intersection probabilities + a Fourier code of the cell centre; two layers of neighbourhood attention
+The token of a cell = the 2 m feature + the pooled 1 m / 0.5 m features + road and intersection probabilities + the pooled centre-lane and event probabilities of the pixel stage (8 channels) + a Fourier code of the cell centre; two layers of neighbourhood attention
 (7 x 7 cells = +-6 m, a relative-position bias; the card says 9 x 9: smaller for memory, `k=9` is a parameter) give it the context (a split is only a split if the lane diverges ahead);
 then the REFINEMENT: the 1 m and 0.5 m feature maps are sampled bilinearly at the pulled position (differentiable), the token is updated and offset, direction and flags are re-read.
 Run the self-test: python qnodes.py
@@ -69,7 +69,7 @@ class NodeHead(nn.Module):
     def __init__(self, c2=144, c1=48, c05=32, d=64, heads=4, layers=2, k=7):
         super().__init__()
         self.d = d
-        self.inp = nn.Sequential(nn.Conv2d(c2 + c1 + c05 + 2 + 16, d, 1), nn.GroupNorm(8, d), nn.GELU())
+        self.inp = nn.Sequential(nn.Conv2d(c2 + c1 + c05 + 2 + 16 + 8, d, 1), nn.GroupNorm(8, d), nn.GELU())
         self.att = nn.ModuleList([LocalAttn(d, heads, k) for _ in range(layers)])
         self.head1 = nn.Conv2d(d, 16, 1)
         self.fine = nn.Sequential(nn.Conv2d(d + c1 + c05 + 4, d, 1), nn.GELU(), nn.Conv2d(d, d, 1))
@@ -85,10 +85,12 @@ class NodeHead(nn.Module):
             self.head1.bias.copy_(b)
             self.head2.bias.zero_()
 
-    def forward(self, feat2, feat1, feat05, road2):
+    def forward(self, feat2, feat1, feat05, road2, centre1):
         B = feat2.shape[0]
         c = cell_centres(feat2.device).expand(B, -1, -1, -1)
-        t = self.inp(torch.cat([feat2, F.avg_pool2d(feat1, 2), F.avg_pool2d(feat05, 4), road2.sigmoid(), fourier(c[:1]).expand(B, -1, -1, -1)], 1))
+        cen, ev = centre1[:, :1].float().sigmoid(), centre1[:, 6:12].float().sigmoid()           # the pixel stage's own centre-lane and event probabilities, pooled to the 2 m grid
+        pm = torch.cat([F.avg_pool2d(cen, 2), F.max_pool2d(cen, 2), F.avg_pool2d(ev, 2)], 1)
+        t = self.inp(torch.cat([feat2, F.avg_pool2d(feat1, 2), F.avg_pool2d(feat05, 4), road2.sigmoid(), fourier(c[:1]).expand(B, -1, -1, -1), pm.to(feat2.dtype)], 1))
         for a in self.att:
             t = a(t)
         o1 = self.head1(t)
@@ -105,8 +107,9 @@ def _selftest():
     B = 2
     f2, f1, f05 = (torch.randn(B, 24, 50, 50, requires_grad=True), torch.randn(B, 16, 100, 100, requires_grad=True), torch.randn(B, 8, 200, 200, requires_grad=True))
     road = torch.randn(B, 2, 50, 50)
+    cen1 = torch.randn(B, 12, 100, 100)
     m = NodeHead(c2=24, c1=16, c05=8, d=32, heads=4, layers=2, k=7)
-    o = m(f2, f1, f05, road)
+    o = m(f2, f1, f05, road, cen1)
     assert o["e"].shape == (B, 50, 50) and o["flags"].shape == (B, 8, 50, 50) and o["off"].shape == (B, 2, 50, 50) and o["tok"].shape == (B, 32, 50, 50) and o["pos"].shape == (B, 2, 50, 50)
     assert float(o["off"].abs().max()) <= 1.0 and torch.allclose(o["pos"][0, :, 0, 0], torch.tensor([-49.0, -49.0]) + o["off"][0, :, 0, 0])
     loss = sum(v.square().mean() for v in o.values())

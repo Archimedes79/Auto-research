@@ -54,12 +54,12 @@ class QGraph(torch.nn.Module):
         out["P"] = P
         if stage_i < 1:
             return out
-        no = run("nodes", self.nodes, P["feat2"], P["feat1"], P["feat05"], P["road2"])
+        no = run("nodes", self.nodes, P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
         out["no"] = no
         if stage_i < 2:
             return out
         cen = P["centre1"][:, :1].sigmoid()
-        gtd = {k: batch[k].to(dev) for k in ("exists", "uout", "uin", "lk")} if gt else None
+        gtd = {k: batch[k].to(dev) for k in ("exists", "uout", "uin", "lk", "offset")} if gt else None
         L = run("links", self.links, no, cen, gt=gtd)
         out["L"] = L
         if stage_i < 3:
@@ -119,7 +119,7 @@ def node_loss(no, batch):
     info = {}
     l_e = focal_bce(no["e"].float(), ex, norm=npos)
     fl = batch["flags"].to(dev).float()
-    l_f = (F.binary_cross_entropy_with_logits(no["flags"].float(), fl, reduction="none", pos_weight=torch.tensor(3.0, device=dev)) * m[:, None]).sum() / (npos * 8)
+    l_f = (F.binary_cross_entropy_with_logits(no["flags"].float(), fl, reduction="none", pos_weight=torch.tensor(6.0, device=dev)) * m[:, None]).sum() / npos
     off_t = batch["offset"].to(dev).float()
     l_o = ((no["off"].float() - off_t).abs().sum(1) * m).sum() / npos
     dr = QN.unit(no["dir_raw"].float())
@@ -127,7 +127,7 @@ def node_loss(no, batch):
     l_s = (F.binary_cross_entropy_with_logits(no["s"].float(), batch["sstart"].to(dev).float(), reduction="none", pos_weight=torch.tensor(3.0, device=dev)) * m).sum() / npos
     l_u = sum((F.binary_cross_entropy_with_logits(no[k].float(), batch[k].to(dev).float(), reduction="none", pos_weight=torch.tensor(8.0, device=dev)) * m).sum() / npos for k in ("uout", "uin"))
     info.update(e=float(l_e), flags=float(l_f), off=float(l_o), dir=float(l_d), s=float(l_s), u=float(l_u))
-    return l_e + l_f + l_o + 0.5 * l_d + 0.5 * l_s + 0.5 * l_u, info
+    return l_e + 0.5 * l_f + l_o + 0.5 * l_d + 0.5 * l_s + 2.0 * l_u, info
 
 
 def link_loss(L, batch):
@@ -163,7 +163,7 @@ def link_loss(L, batch):
             tgt = sg[j][hit]
             l_sc = ((L["sa"][pos][hit] - tgt[:, 0]).abs() + (L["sb"][pos][hit] - tgt[:, 1]).abs()).mean()
     info.update(link=float(l_b), deg=float(l_deg), scale=float(l_sc), pos=int(npos), pairs=len(y), miss=int(L.get("gt_missing", 0)))
-    return l_b + 0.5 * l_deg + 2.0 * l_sc, info
+    return l_b + 2.0 * l_sc, info                                                            # the degree term is logged, not trained: with one-to-many labels a node has several true successors
 
 
 def assign_loss(A, L, batch):

@@ -20,7 +20,7 @@ import math
 import torch
 import torch.nn as nn
 
-from qnodes import N, sample, unit
+from qnodes import N, cell_centres, sample, unit
 
 SHORT = 8.0
 CONE = math.cos(math.radians(75.0))
@@ -53,7 +53,7 @@ class LinkHead(nn.Module):
             self.scale[-1].bias.fill_(math.log(0.333 / 0.9 / (1 - 0.333 / 0.9)))              # sigmoid(.) * 0.9 = 1/3 at the start
             self.mlp[-1].bias.fill_(-4.0)
 
-    def forward(self, no, cen, gt=None, K=512, KL=32, thr=0.05):
+    def forward(self, no, cen, gt=None, K=512, KL=64, thr=0.05):
         B = no["e"].shape[0]
         dev = no["e"].device
         ep = no["e"].detach().sigmoid().flatten(1)
@@ -124,7 +124,17 @@ class LinkHead(nn.Module):
         out = dict(act=idx, valid=valid, pos=pos, dirv=dirv, tok=tok, cell=torch.stack([ci, cj], -1), pb=pb, pa=pa, pc=pc, is_long=is_long, logit=logit, sa=sa, sb=sb, evidence=evf)
         if gt is not None:
             key = (pb * N * N + fa[pb, pa]) * (N * N) + fa[pb, pc]
-            out["label"] = torch.isin(key, pair_key).float()
+            lab = torch.isin(key, pair_key)
+            if "offset" in gt:                                                                  # one-to-many: a node counts for the GT node nearest to it (within 1.5 m)
+                gx = gt["exists"].flatten(1) > 0.5
+                gp = cell_centres(dev).flatten(2).transpose(1, 2) + gt["offset"].flatten(2).transpose(1, 2)           # (B, N*N, 2) GT node positions
+                dist_g = torch.cdist(pos.float(), gp.float()).masked_fill(~gx[:, None, :], float("inf"))
+                dmin, gidx = dist_g.min(-1)
+                gmap = torch.where(dmin <= 1.5, gidx, torch.full_like(gidx, -1))                 # (B, K) flat cell of the nearest GT node
+                ga_, gc_ = gmap[pb, pa], gmap[pb, pc]
+                kgeo = (pb * N * N + ga_.clamp_min(0)) * (N * N) + gc_.clamp_min(0)
+                lab = lab | (torch.isin(kgeo, pair_key) & (ga_ >= 0) & (gc_ >= 0) & (ga_ != gc_))
+            out["label"] = lab.float()
             out["gt_missing"] = int(okl.sum()) - int(torch.isin(pair_key, key).sum())          # GT links that did not make it into the candidate list (trimmed or outside K)
         return out
 

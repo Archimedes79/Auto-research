@@ -22,7 +22,7 @@ import lane_gt_data as LD  # noqa: E402
 import qgraph as QG  # noqa: E402
 import trainer as T  # noqa: E402
 
-STEPS = {2: 3000, 3: 3000, 4: 3000, 5: 1500, 6: 1500, 7: 2000}
+STEPS = {2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000}
 LR = {2: 1e-3, 3: 1e-3, 4: 1e-3, 5: 5e-4, 6: 1e-3, 7: 2e-4}
 
 
@@ -47,8 +47,11 @@ def main():
         n = model.pyr.load_e271(hp)
     else:
         n = -1
-    if a.resume_from:
-        model.load_state_dict(torch.load(a.resume_from, map_location="cpu")["state"])
+    if a.resume_from:                                                                       # the tensors of an earlier phase model whose shapes still fit (a changed stage keeps its fresh start)
+        sd, own = torch.load(a.resume_from, map_location="cpu")["state"], model.state_dict()
+        fit = {k: v for k, v in sd.items() if k in own and own[k].shape == v.shape}
+        model.load_state_dict(fit, strict=False)
+        print(f"resume-from {a.resume_from}: {len(fit)} of {len(own)} tensors loaded; not loaded: {sorted(set(own) - set(fit))[:6]}...", flush=True)
     ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train")
     steps = dict(zip(a.phases, a.steps)) if a.steps else {k: STEPS[k] for k in a.phases}
     import qgates as QGt

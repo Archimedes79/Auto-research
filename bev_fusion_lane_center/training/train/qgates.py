@@ -87,7 +87,7 @@ def gate_pixels(model, run, n):
 def _node_stats(model, b, dev):
     x = b["x"].to(dev).float()
     P = model.pyr(x)
-    no = model.nodes(P["feat2"], P["feat1"], P["feat05"], P["road2"])
+    no = model.nodes(P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
     return P, no
 
 
