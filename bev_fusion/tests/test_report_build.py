@@ -7,7 +7,7 @@
      missing key, missing or non-idle timing, unknown fact in a text, unknown section)
   D  mutants: the builder is copied, one rule is broken, and the checks above must notice (each of the listed ones must be killed)
   python tests/test_report_build.py          the gate
-  python tests/test_report_build.py --real   by hand (needs the real files): the v6 config rebuilds results/t16/report_big.html, the mail and the tables (see results/build/README.md)"""
+  python tests/test_report_build.py --real   by hand (needs the real files): the v6 config rebuilds results/BEV_result_report/report.html, the mail and the tables (see results/build/README.md)"""
 import html
 import json
 import os
@@ -346,13 +346,13 @@ def scratch_free():
 
 
 def real():
-    """by hand: the v6 config rebuilds the v6 page; compared with the stored one without what changed since (the commit hash, the architecture drawing) and the mail without BOM / CR"""
+    """by hand: the v6 config rebuilds the v6 page; compared with the stored one without what changed since (the commit hash, the architecture drawing, the folder pointer of the last list: it names no folder now, the live v7 build shares the text) and the mail without BOM / CR"""
     out = tempfile.mkdtemp()
     rc, msg = build_real(out)
     print(msg.strip().splitlines()[-1] if msg.strip() else "")
-    norm = lambda s: re.sub(r"main at [0-9a-f]{7}", "main at HEAD", re.sub(r"<svg.*?</svg>", "<svg/>", re.sub(r"<code>[0-9a-f]{7}</code>", "<code>HEAD</code>", s, count=1), flags=re.S))      # noqa: E731
+    norm = lambda s: re.sub(r"<li>this report and the videos:.*?</li>", "<li>this report and the videos</li>", re.sub(r"main at [0-9a-f]{7}", "main at HEAD", re.sub(r"<svg.*?</svg>", "<svg/>", re.sub(r"<code>[0-9a-f]{7}</code>", "<code>HEAD</code>", s, count=1), flags=re.S)))      # noqa: E731
     root = os.path.join(HERE, "..")
-    pairs = [("report.html", "results/t16/report_big.html"), ("mail.txt", "results/BEV_result_report/mail.txt")]
+    pairs = [("report.html", "results/BEV_result_report/report.html"),("mail.txt", "results/BEV_result_report/mail.txt")]
     for new, old in pairs:
         a = open(os.path.join(out, new), encoding="utf-8").read()
         b = open(os.path.join(root, old), encoding="utf-8").read().replace("\r\n", "\n").lstrip("﻿")

@@ -1,5 +1,5 @@
 {
- "_about": "The config of the v6 report (t16 / t17 / t18, 2026-11-03), kept as the regression case of the builder: build_report.py --config this file gives the page that results/t16/report_big.html was (test_report_build.py --real). Paths are relative to bev_fusion/.",
+ "_about": "The config of the v6 report (t16 / t17 / t18, 2026-11-03), kept as the regression case of the builder: build_report.py --config this file gives the page that results/BEV_result_report/report.html is (it was results/t16/report_big.html, the same bytes; test_report_build.py --real). Paths are relative to bev_fusion/.",
  "title": "BEV camera + radar system: result report",
  "out": "results/BEV_result_report_v6_rebuild",
  "frames": 1000,

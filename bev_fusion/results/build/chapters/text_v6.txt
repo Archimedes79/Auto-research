@@ -145,7 +145,7 @@ with OUR metric on OUR frames (the only like-for-like facts), 6.3 is the new re-
 <li>cards: <code>bev_fusion/experiments/t16_full_network/</code> (bring-up log), <code>t17_more_data/</code>, <code>t18_motion_lr/</code>, <code>t19_radar_memory/</code> (draft)</li>
 <li>decisions: <code>bev_fusion_lane_center/experiment_execution/DECISIONS.md</code> (D44 order, D46 deadline / mail / shutdown)</li>
 <li>open lists: <code>bev_fusion/records/open_findings_2026-11-02.md</code>, <code>bev_fusion/records/cleanup_inventory_2026-11-02.md</code></li>
-<li>this report and the videos: <code>bev_fusion/results/t16/</code> (not in git, binary)</li>
+<li>this report and the videos: the folder of this page (<code>report.html</code> with <code>videos/</code> and <code>tables/</code> next to it; not in git, binary)</li>
 </ul>
 
 
