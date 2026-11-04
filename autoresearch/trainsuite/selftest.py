@@ -6,6 +6,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import random
 import tempfile
@@ -468,7 +469,202 @@ def check_resolve(tmp):
     assert C.plan_start(proj, {k: v for k, v in block.items() if k != "resolve"}, "base.json", "t18.c", [], [], no_card=True)["config"]["split"] == "big", "no resolve key, no change"
 
 
-REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_start_hold, check_start_prepare_done, check_resolve)       # review of 2026-11-02 (+ the resolve hook), one rule each
+def check_status_views(tmp):
+    """2026-11-04: what a person looks at in a training: the gradient norm over the run (now against before, the peak), the non-finite steps the trainer skipped (how many, which
+    steps), and the data the run trained on (read from the run's own config.json and gt.json, nothing dataset-specific); the table of all runs carries them"""
+    from . import cli as cli_mod
+    root = os.path.join(tmp, "views")
+    gn = lambda base: (lambda r: {**r, "grad_norm": base * (1 + r["step"] / 2000)})                   # noqa: E731 - a gradient norm that doubles over 2000 steps
+    rs = [gn(10.0)(r) for r in rows(100)]
+    rs[40]["grad_norm"] = 900.0                                                                        # one spike at step 820
+    skips = "".join(f"step {s}: non-finite loss, skipped ({k} in a row)\n" for k, s in ((1, 300), (2, 320), (1, 900)))
+    d = make(root, "g", rs, text=skips + "".join(f"step {r['step']}: total {r['total']:.4f}\n" for r in rs[-5:]))
+    json.dump({"steps": 3000, "dataset": "waymo", "train_split": "train", "val_split": "val", "train_scenes": list(range(798)), "val_scenes": list(range(202))}, open(os.path.join(d, "config.json"), "w"))
+    json.dump({"gt_signature": "abc123", "gt_version": "v2"}, open(os.path.join(d, "gt.json"), "w"))
+    run = Run(d)
+    t = modules.grad_trend(run)
+    assert t["peak"] == 900.0 and t["peak_step"] == 820 and t["rows"] == 100, t
+    assert 18 < t["now"] < 20.1 and 1.2 < t["ratio"] < 1.5 and 10 < t["first"] < 12, t                # median of the last 20 rows, against the median of the rows before the window
+    assert modules.grad_trend(Run(make(root, "nogn", [{k: v for k, v in r.items() if k != "grad_norm"} for r in rows(30)]))) is None, "no grad_norm, no trend"
+    assert run.skipped_at() == [300, 320, 900] and run.skipped_steps() == (3, 2), (run.skipped_at(), run.skipped_steps())
+    assert modules.data_of(run) == "waymo train 798 / val 202 scenes, gt v2 abc123", modules.data_of(run)
+    assert modules.data_of(Run(make(root, "plain", rows(5)))) == "", "a run that names no data says nothing"
+    c = json.load(open(os.path.join(d, "config.json")))
+    c.pop("dataset")
+    c["data_root"] = "~/data/nuscenes_full"
+    json.dump(c, open(os.path.join(root, "g", "config.json"), "w"))
+    assert modules.data_of(Run(d)).startswith("nuscenes_full train 798"), modules.data_of(Run(d))
+    s, f, _ = cli_mod.summary(Run(d))
+    assert s["grad"]["peak"] == 900.0 and s["skipped"] == 3 and s["data"].startswith("nuscenes_full"), s
+    rc, out = run_cli("--root", root, "status", "g")
+    assert rc == 0 and "grad" in out.splitlines()[0] and "skip" in out.splitlines()[0], out
+    assert re.search(r"g\s+running\s+2000/3000.*\s3\s", out), out                                      # the row of the table: the skipped count
+    assert "gradient norm: first 10 rows" in out and "peak 900" in out and "step 820" in out, out
+    assert "non-finite: 3 step(s) skipped at 300, 320, 900 (up to 2 in a row)" in out, out
+    assert "data: nuscenes_full train 798 / val 202 scenes, gt v2 abc123" in out, out
+    # a comparison against a run on other data is flagged (a loss on another dataset is no reference)
+    other = make(root, "h", rows(100))
+    json.dump({"steps": 3000, "dataset": "kitti", "train_split": "train"}, open(os.path.join(other, "config.json"), "w"))
+    assert "data_differs" in codes(Run(d), ref=Run(other)), "runs on different data must say so"
+    assert "data_differs" not in codes(Run(d), ref=Run(d)) and "data_differs" not in codes(Run(d), ref=Run(make(root, "plain2", rows(100)))), "same data, or no data named: no finding"
+    # what counts as other data: both name it and it differs; a version label over the same signature is a name, a field that only one run names is no difference, the scene LIST counts
+    def with_data(name, cfg, gt=None):
+        dd = make(root, name, rows(100))
+        json.dump({"steps": 3000, **cfg}, open(os.path.join(dd, "config.json"), "w"))
+        if gt is not None:
+            json.dump(gt, open(os.path.join(dd, "gt.json"), "w"))
+        return Run(dd)
+    base_cfg = {"dataset": "nu", "train_split": "train", "train_scenes": [f"s{i}" for i in range(10)], "val_scenes": ["v1", "v2"]}
+    a = with_data("da", base_cfg, {"gt_signature": "sig1", "gt_version": "v8"})
+    assert modules.data_differs(a, with_data("db", base_cfg, {"gt_signature": "sig1", "gt_version": "v9"})) == "", "same signature, another version label: the same ground truth"
+    assert "ground truth sig1 against sig2" in modules.data_differs(a, with_data("dc", base_cfg, {"gt_signature": "sig2", "gt_version": "v8"}))
+    assert modules.data_differs(a, with_data("dd", base_cfg)) == "" and modules.data_differs(with_data("de", base_cfg), a) == "", "an older run without gt.json knows nothing: no difference"
+    assert "ground truth version v8 against v9" in modules.data_differs(with_data("df", base_cfg, {"gt_version": "v8"}), with_data("dg", base_cfg, {"gt_version": "v9"})), "no signature on either side: the version"
+    assert "other train scenes (10 each)" in modules.data_differs(a, with_data("dh", {**base_cfg, "train_scenes": [f"t{i}" for i in range(10)]}, {"gt_signature": "sig1"})), "10 other scenes are other data"
+    assert modules.data_differs(a, with_data("di", {**base_cfg, "train_scenes": list(reversed(base_cfg["train_scenes"]))}, {"gt_signature": "sig1"})) == "", "the order of the scenes does not matter"
+    assert "train scenes 10 against 60" in modules.data_differs(a, with_data("dj", {**base_cfg, "train_scenes": list(range(60))})) and "dataset nu against kitti" in modules.data_differs(a, with_data("dk", {**base_cfg, "dataset": "kitti"}))
+    assert modules.data_differs(with_data("p1", {"train_scenes": 428}), with_data("p2", {"train_split": "trainval", "train_scenes": 428})) == "", "a split that only one run names is no difference"
+    assert modules.data_of(with_data("p3", {"train_scenes": 428})) == "train 428 scenes", "...but the display says 'train' for a count"
+    # odd values never crash and say nothing false: empty scene lists, a count, a bool or a list for a name, only val named, a bool / nan version
+    assert modules.data_of(with_data("o1", {"train_scenes": [], "val_scenes": [], "train_split": "train"}, {})) == "train", "empty lists (a legacy run) say nothing about counts"
+    assert modules.data_of(with_data("o2", {"val_scenes": ["a", "b", "c"]})) == "val 3 scenes", modules.data_of(with_data("o2", {"val_scenes": ["a", "b", "c"]}))
+    assert modules.data_of(with_data("o3", {"dataset": True, "data_root": ["x"], "train_scenes": 12, "val_scenes": float("nan")}, {"gt_version": True, "gt_signature": float("nan")})) == "train 12 scenes", modules.data_of(with_data("o3", {"train_scenes": 12}))
+    assert modules.data_of(with_data("o4", {"dataset": "x", "train_scenes": {"a": 1}}, {"gt_version": 8})) == "x, gt 8", "a dict is no scene list; a numeric version is text"
+    # the gradient norm: an inf row, a window of non-finite rows, fewer rows than a window, a zero base
+    inf_rows = [{**r, "grad_norm": 5.0} for r in rows(60)]
+    inf_rows[10]["grad_norm"] = float("inf")
+    t = modules.grad_trend(Run(make(root, "ginf", inf_rows)))
+    assert t["peak"] == 5.0 and t["now"] == 5.0 and t["nonfinite_recent"] == 0 and t["rows"] == 60, "an inf row is no peak"
+    bad_tail = [{**r, "grad_norm": 5.0 if i < 40 else float("nan")} for i, r in enumerate(rows(60))]
+    t = modules.grad_trend(Run(make(root, "gnan", bad_tail)))
+    assert t["now"] is None and t["nonfinite_recent"] == 20 and t["peak"] == 5.0 and t["ratio"] is None, t         # the last 20 rows say nothing finite: no calm 'now' from older rows
+    rc, out = run_cli("--root", root, "status", "gnan")
+    assert "non-finite" in out.splitlines()[1] and "20 of those rows are NOT finite" in out, out
+    short = modules.grad_trend(Run(make(root, "gshort", [{**r, "grad_norm": 3.0} for r in rows(8)])))
+    assert short["now"] == 3.0 and short["base"] is None and short["ratio"] is None and short["first"] == 3.0, short
+    zero = modules.grad_trend(Run(make(root, "gzero", [{**r, "grad_norm": 0.0 if i < 40 else 2.0} for i, r in enumerate(rows(60))])))
+    assert zero["base"] == 0.0 and zero["ratio"] is None, "a zero base gives no ratio (no division)"
+    assert modules.grad_trend(Run(make(root, "gonly_nan", [{**r, "grad_norm": float("nan")} for r in rows(30)])))["now"] is None
+
+
+def check_queue_view(tmp):
+    """2026-11-04: `queue` names the machine lock and the launchers it holds back, a slot that is still loading, and the memory gate of a training start"""
+    from . import compose as C
+    tools = os.path.join(os.path.dirname(HERE), "tools")
+    proj = os.path.join(tmp, "qview")
+    os.makedirs(os.path.join(proj, "records", "runs", ".gpu_slots", ".queue"))
+    json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "gpu_slots": 2, "ram_mb": 0, "gpu_settle_s": 180,
+               "trainsuite": {"runs": "runs", "out": "temp/compose", "train": "python3 train.py {config}", "gpu_max_mb": 3000}}, open(os.path.join(proj, "project.json"), "w"))
+    lockf = os.path.join(proj, "lock.json")
+    old = {k: os.environ.get(k) for k in ("AR_MACHINE_LOCK", "AR_PROJECT", "AR_LOCK_OWNER")}
+    os.environ.update(AR_MACHINE_LOCK=lockf, AR_PROJECT=proj)
+    os.environ.pop("AR_LOCK_OWNER", None)
+    try:
+        sys.path.insert(0, tools)
+        import run as R
+        slot = os.path.join(proj, "records", "runs", ".gpu_slots", "0")
+        os.makedirs(slot)
+        json.dump(dict(id="loader", pid=os.getpid(), run_dir=os.path.join(proj, "runs", "loader"), taken=R.now()), open(os.path.join(slot, "run.json"), "w"))
+        R.save_rec(os.path.join(proj, "records", "runs", ".gpu_slots", ".queue", "00000000000000000001_aa"), dict(id="waiter", pid=os.getpid(), since=R.now(), owner=""), indent=None)
+        rc, out = run_cli("queue")
+        assert "machine lock: free" in out and "slot 0: loader" in out and "loading:" in out and "held back" not in out, out
+        assert "GPU memory:" in out and "a training starts only below 3000 MB" in out, out
+        json.dump(dict(owner="timing", start="2026-01-01T00:00:00", end="2999-01-01T00:00:00", exclusive=True, note="phase timing"), open(lockf, "w"))
+        rc, out = run_cli("queue")
+        assert "machine lock: timing until 2999-01-01T00:00:00 (EXCLUSIVE" in out and "phase timing" in out and "1. waiter" in out and "held back by the machine lock of timing" in out, out
+        json.dump(dict(owner="timing", end="2999-01-01T00:00:00", exclusive=False), open(lockf, "w"))
+        rc, out = run_cli("queue")
+        assert "a reservation: it holds nobody" in out and "held back" not in out, out
+        # the items of the line carry what a person looks for: the gradient norm now (against before), the skipped non-finite steps, the health flags
+        rs = [{**r, "grad_norm": 10.0 * (1 + r["step"] / 2000)} for r in rows(100)]
+        make(os.path.join(proj, "runs"), "g", rs, text="".join(f"step {s}: non-finite loss, skipped ({k} in a row)\n" for k, s in ((1, 300), (2, 320), (1, 900))) + "step 2000: total 9.0\n")
+        make(os.path.join(proj, "runs"), "clean", rows(100))
+        item = lambda rid, seq: dict(id=rid, argv=["python3", "run.py", "--id", rid, "--", "x"], seq=seq, priority=5, added="2026-11-04T00:00:00", after=[], held=None, pin=None, restarts=0, note="", by="")      # noqa: E731
+        json.dump(dict(paused=None, seq=3, items=[item("g", 1), item("clean", 2), item("nometrics", 3)]), open(os.path.join(proj, "records", "runs", ".gpu_slots", "queue.qview.json"), "w"))
+        rc, out = run_cli("queue")
+        line = {rid: next(x for x in out.splitlines() if x.strip().startswith(rid + " ")) for rid in ("g", "clean", "nometrics")}
+        assert "grad 19" in line["g"] and "(x1.4)" in line["g"] and "3 skipped" in line["g"] and "flags: skipped" in line["g"], line["g"]
+        assert "grad 1" in line["clean"] and "skipped" not in line["clean"] and "flags" not in line["clean"], line["clean"]
+        assert "grad" not in line["nometrics"] and "flags" not in line["nometrics"], line["nometrics"]
+    finally:
+        sys.path.remove(tools)
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    block = json.load(open(os.path.join(proj, "project.json")))["trainsuite"]
+    base = os.path.join(proj, "base.json")
+    json.dump({"steps": 10}, open(base, "w"))
+    argv = C.plan_start(proj, block, "base.json", "t.gate", [], [], no_card=True)["argv"]
+    assert "--gpu" in argv and argv[argv.index("--gpu-max-mb") + 1] == "3000" and argv.index("--gpu-max-mb") < argv.index("--"), argv
+    argv = C.plan_start(proj, {k: v for k, v in block.items() if k != "gpu_max_mb"}, "base.json", "t.gate2", [], [], no_card=True)["argv"]
+    assert "--gpu-max-mb" not in argv, "no key, no gate"
+    for bad in (True, "3000", 2.5, -1, float("nan"), float("inf"), float("-inf"), [3000]):
+        try:
+            C.plan_start(proj, dict(block, gpu_max_mb=bad), "base.json", "t.gate3", [], [], no_card=True)
+            raise AssertionError(f"gpu_max_mb {bad!r} must be refused (true would be a 1 MB gate: no training would ever start)")
+        except C.ComposeError as e:
+            assert "gpu_max_mb" in str(e), e
+    assert C.gpu_gate({"gpu_max_mb": 3000.0}) == 3000 and C.gpu_gate({"gpu_max_mb": 0}) == 0 and C.gpu_gate({}) == 0, "a whole float, 0 and no key are fine"
+    # the queue runner puts the same gate on every training it launches: an item queued before the gate existed, one rebuilt from a run record, one added by hand
+    import types
+    from . import trainqueue as TQ
+    old_p = os.environ.get("AR_PROJECT")
+    try:
+        c = TQ.context(proj)
+    finally:
+        if old_p is None:
+            os.environ.pop("AR_PROJECT", None)
+        else:
+            os.environ["AR_PROJECT"] = old_p
+    plain = ["python3", "run.py", "--id", "x", "--gpu", "--split", "train", "--", "python3", "t.py"]
+    gated = TQ.with_gate(c, plain)
+    assert gated == ["python3", "run.py", "--id", "x", "--gpu", "--split", "train", "--gpu-max-mb", "3000", "--", "python3", "t.py"], gated
+    assert TQ.with_gate(c, gated) == gated, "a command that has a gate keeps it"
+    mine = plain[:5] + ["--gpu-max-mb", "9000"] + plain[5:]
+    assert TQ.with_gate(c, mine) == mine, "an explicit gate of the item is not overridden"
+    eq_form = plain[:5] + ["--gpu-max-mb=9000"] + plain[5:]
+    assert TQ.with_gate(c, eq_form) == eq_form, "`--gpu-max-mb=N` is a gate of the item too"
+    no_gpu = ["python3", "run.py", "--id", "x", "--", "python3", "t.py"]
+    assert TQ.with_gate(c, no_gpu) == no_gpu, "a job that asks for no GPU is not gated"
+    # the runner's own launch: the command that really starts has the gate before the `--` (a stub run.py writes the argv it got); a gate that is no number starts nothing and does not
+    # mark the item refused (the cause is the project's, the view says it)
+    stub = os.path.join(proj, "stub_run.py")
+    open(stub, "w").write("import json, sys\njson.dump(sys.argv[1:], open(sys.argv[0] + '.argv.json', 'w'))\n")
+    it = dict(id="gl", argv=["python3", stub, "--id", "gl", "--gpu", "--split", "train", "--", "python3", "t.py"], pin=None)
+    ok, text = TQ.launch(c, it, wait=30)
+    got = json.load(open(stub + ".argv.json"))
+    assert ok and got[got.index("--gpu-max-mb") + 1] == "3000" and got.index("--gpu-max-mb") < got.index("--"), (ok, text, got)
+    os.remove(stub + ".argv.json")
+    it2 = dict(id="gl2", argv=list(it["argv"]), pin=None)
+    ok, text = TQ.launch(types.SimpleNamespace(**{**vars(c), "block": {"gpu_max_mb": float("inf")}}), it2, wait=30)
+    assert not ok and "not started" in text and "gpu_max_mb" in text and "refused" not in it2 and not os.path.exists(stub + ".argv.json"), (ok, text, it2)
+    # `queue` with such a project.json says it in the view, it does not crash
+    pj = os.path.join(proj, "project.json")
+    good = open(pj).read()
+    bad_cfg = json.loads(good)
+    bad_cfg["trainsuite"]["gpu_max_mb"] = float("inf")
+    json.dump(bad_cfg, open(pj, "w"))
+    os.environ["AR_PROJECT"] = proj
+    try:
+        rc, out = run_cli("queue")
+        assert rc == 0 and "GPU memory gate:" in out and "NO queue item can start" in out, out
+    finally:
+        open(pj, "w").write(good)
+        if old_p is None:
+            os.environ.pop("AR_PROJECT", None)
+        else:
+            os.environ["AR_PROJECT"] = old_p
+    assert TQ.with_gate(types.SimpleNamespace(**{**vars(c), "block": {}}), plain) == plain, "no key in the project: nothing added"
+    try:
+        TQ.with_gate(types.SimpleNamespace(**{**vars(c), "block": {"gpu_max_mb": True}}), plain)
+        raise AssertionError("a gate that is no number is refused")
+    except TQ.QueueError:
+        pass
+
+
+REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_start_hold, check_start_prepare_done, check_resolve, check_status_views, check_queue_view)       # review of 2026-11-02 (+ the resolve hook), then the views of 2026-11-04, one rule each
 
 
 def main():

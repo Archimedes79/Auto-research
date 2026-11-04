@@ -58,7 +58,7 @@ def summary(run, ref=None, extra_rules=(), since_step=None):
     loss = run.last(run.loss_key)
     ready = run.ready_pct(st)
     return dict(run=run.name, state=st, phase=run.phase(st), step=run.step, total=run.total, pct=ready, ready_pct=ready, ready_at=run.ready_at(st),
-                s_per_step=run.s_per_step(), eta_s=run.eta_s(), loss=loss,
+                s_per_step=run.s_per_step(), eta_s=run.eta_s(), loss=loss, grad=modules.grad_trend(run), skipped=run.skipped_steps()[0], data=modules.data_of(run),
                 restarts=run.restarts, findings=[f._asdict() for f in findings],
                 kill=[dict(rule=r.text, status=s, value=v) for r, s, v in kills]), findings, kills
 
@@ -89,7 +89,7 @@ def cmd_status(a):
     if not rows:
         print(f"no runs with metrics or a text log under {a.root} (use --all for the old ones)")
         return 0
-    print(f"{'run':<24}{'state':<9}{'step/total':<13}{'ready':>5}  {'s/step':>6}  {'ETA':>7}  {'last step':>9}  {'loss':>8}  flags")
+    print(f"{'run':<24}{'state':<9}{'step/total':<13}{'ready':>5}  {'s/step':>6}  {'ETA':>7}  {'last step':>9}  {'loss':>8}  {'grad (x before)':>15}  {'skip':>4}  flags")
     for s, f, k in rows:
         flags = ",".join(sorted({x.code for x in f if x.level != "info"})) or "-"
         flags += "".join(f" KILL[{r.text}]" for r, st, _ in k if st == "hit")
@@ -99,7 +99,9 @@ def cmd_status(a):
         eta = fmt_dur(s["eta_s"]) if s["state"] == "running" else "-"
         at = clock(s["ready_at"])
         loss = "-" if s["loss"] is None else "%.4g" % s["loss"]
-        print(f"{s['run']:<24}{s['state']:<9}{prog:<13}{pct:>5}  {sp:>6}  {eta:>7}  {at:>9}  {loss:>8}  {flags}")
+        g = s["grad"]
+        grad = "-" if not g else "non-finite" if g["now"] is None else "%.3g" % g["now"] + (" (x%.1f)" % g["ratio"] if g["ratio"] else "")
+        print(f"{s['run']:<24}{s['state']:<9}{prog:<13}{pct:>5}  {sp:>6}  {eta:>7}  {at:>9}  {loss:>8}  {grad:>15}  {s['skipped'] or '-':>4}  {flags}")
     if len(rows) == 1:
         return cmd_detail(runs[0][0], rows[0])
     return 0
@@ -142,6 +144,18 @@ def cmd_detail(run, row):
             f"{k[4:]} {v:.4g}" for k, v in run.evals[-1].items() if k.startswith("val.") and "last" not in k)))
     if run.restarts:
         print(f"  the stream was resumed {run.restarts} time(s); the later attempt of each step is used")
+    if s.get("data"):
+        print(f"  data: {s['data']}")
+    g = s.get("grad")
+    if g:
+        print(f"  gradient norm: first 10 rows {_num(g['first'])}, now {_num(g['now'])} (median of the finite values in the last {modules.WINDOW} rows"
+              + (f"; x{g['ratio']:.1f} against the rows before" if g["ratio"] else "") + f"), peak {_num(g['peak'])}" + ("" if g["peak_step"] is None else f" at step {g['peak_step']}")
+              + (f"; {g['nonfinite_recent']} of those rows are NOT finite" if g["nonfinite_recent"] else ""))
+    skipped = run.skipped_at()
+    if skipped:
+        n_skip, in_row = run.skipped_steps()
+        shown = ", ".join(str(x) for x in skipped[:8]) + (f", ... (last {skipped[-1]})" if len(skipped) > 8 else "")
+        print(f"  non-finite: {n_skip} step(s) skipped at {shown} (up to {in_row} in a row)")
     groups = [k for k in run.keys() if k.startswith("group.")]
     if groups:
         print("  loss groups (mean of the first 10 logged values -> the last 10):")
@@ -394,14 +408,24 @@ def cmd_queue(a):
     records = P.path("run_records")
     base = R.slot_dir(root, cfg, records)
     n = int(cfg.get("gpu_slots", 2))
+    settle = R.settle_s(cfg)
+    loading = dict(R.GpuSlot(records, n, "queue-view", records, base=base).settling(settle))
     print(f"GPU slots ({n}, {os.path.relpath(base, root)}):")
     for i in range(n):
         s = os.path.join(base, str(i))
         o = R.record(s) if os.path.isdir(s) else {}
         if o and R.pid_alive(o.get("pid")):
-            print(f"  slot {i}: {o.get('id', '?')}  (pid {o.get('pid')}, since {o.get('taken', '?')})")
+            young = f", loading: {loading[o.get('id', '?')]} of {settle:g} s settle time, the next launcher waits" if o.get("id", "?") in loading else ""
+            print(f"  slot {i}: {o.get('id', '?')}  (pid {o.get('pid')}, since {o.get('taken', '?')}{young})")
         else:
             print(f"  slot {i}: free" + ("  (a stale owner is reclaimed by the next launcher)" if o else ""))
+    import machine_lock
+    lk = machine_lock.current()
+    if lk:
+        what = "EXCLUSIVE: no other owner starts a run" if lk.get("exclusive") is True else "a reservation: it holds nobody"
+        print(f"machine lock: {lk['owner']} until {lk['end']} ({what})" + (f", {lk['note']}" if lk.get("note") else ""))
+    else:
+        print("machine lock: free")
     qd = os.path.join(base, ".queue")
     line = []
     for name in sorted(os.listdir(qd)) if os.path.isdir(qd) else []:
@@ -414,7 +438,8 @@ def cmd_queue(a):
             line.append(o)
     print("queue (the first goes first):" + ("" if line else " empty"))
     for i, o in enumerate(line, 1):
-        print(f"  {i}. {o.get('id', '?')}  (waiting since {o.get('since', '?')}, pid {o.get('pid')})")
+        back = f", held back by the machine lock of {lk['owner']}: it does not hold up the others" if lk and R.blocked_by_lock(o.get("owner", "")) else ""
+        print(f"  {i}. {o.get('id', '?')}  (waiting since {o.get('since', '?')}, pid {o.get('pid')}{back})")
     need, avail = int(cfg.get("ram_mb", 0)), R.mem_available_mb()
     if avail is None:
         print("RAM: /proc/meminfo is not readable here: no gate")
@@ -422,6 +447,16 @@ def cmd_queue(a):
         print(f"RAM: {avail} MB available, the gate asks for {need} MB on {R.RAM_CHECKS} looks in a row: " + ("a run could start" if avail >= need else "a run waits"))
     else:
         print(f"RAM: {avail} MB available, no gate (project.json ram_mb is 0)")
+    from . import compose as C
+    try:
+        gate = C.gpu_gate(cfg.get("trainsuite") or {})
+    except C.ComposeError as e:
+        gate = 0
+        print(f"GPU memory gate: {e}: NO queue item can start until project.json is corrected")
+    if gate:
+        used = R.gpu_used_mb()
+        ok_ = used is not None and used < gate
+        print(f"GPU memory: {'unreadable (nvidia-smi)' if used is None else str(used) + ' MB in use'}; a training starts only below {gate} MB: " + ("a training could start" if ok_ else "a training waits"))
     held = []
     for rid in sorted(os.listdir(records)) if os.path.isdir(records) else []:
         h = os.path.join(records, rid, "HOLD")
