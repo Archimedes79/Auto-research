@@ -57,7 +57,7 @@
 - every wake-up and every milestone: read the state (`schedule.py show`, `ledger.py tail`) and update the ledger (`ledger.py note <id> --result ... --decision ...`), the PLAN status and HANDOVER.md; a new chat must be able to continue from the files alone
 - a question answered the same way twice goes into experiment_execution/closed_questions.md; re-opening it needs a new mechanism
 - quality AND speed: ms per frame (idle GPU, batch 1, cached features); an optimisation must reproduce the reference graphs; on a tie inside the noise band take the cheaper variant
-- fully differentiable path: no argmax, no matching, no rule step on the training path, gradient reaches every module; better short lane graphs than false ones; say whether a head is pixel- or graph-based
+- end-to-end differentiable forward path (D55: soft steps up to and including the assignment and the classification, no rule step, a loss on the output reaches every module; matching inside the loss is allowed, hard selection only on the output and named); better short lane graphs than false ones; say whether a head is pixel- or graph-based
 - a loop owns one or two levels of the experiment tree; it ends with updated state files and a handover
 
 ## Numbers: seven layers, controls, TEST rules

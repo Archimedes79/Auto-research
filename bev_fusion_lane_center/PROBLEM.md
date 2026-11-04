@@ -5,7 +5,7 @@ Owned by Mirko. Read by every agent of `../autoresearch/` (method: `../autoresea
 ## Goal and constraints
 - A planner-ready lane graph without an HD map: lane centre-lines with forks and merges, travel direction, fused over time, assigned to the SD-map route (lane level, road level as fallback), with confidence.
 - Very good AND very fast: quality at <= 14.3 vertices per 100 m, ms per frame on one RTX 3060 (idle GPU, batch 1, cached foundation features).
-- Fully differentiable training path: no argmax, no matching, no rule step; the gradient reaches every module. Better short lane graphs than false ones.
+- End-to-end differentiable (D55, 2026-11-04): the forward path from the BEV features to the delivered output, including the map assignment and the classification, is made of soft, differentiable steps (no rule step), and a loss on the output reaches every module. Matching inside the loss (bipartite, one-to-many, Sinkhorn: which prediction is compared with which ground-truth element) is allowed. Hard selection (argmax, thresholds, peak picking) only on the output, and named. Better short lane graphs than false ones.
 - Data: nuScenes (non-commercial licence), 255 scenes, scene-disjoint TRAIN 8,414 / VAL 873 / TEST 833 frames; frozen GaussianCaR camera + radar BEV features; simulated ADASIS-like SD map with controlled errors. TEST only once per finished design, with Mirko's OK.
 - Compute: one RTX 3060 12 GB, at most 2 GPU jobs at once (3 stall each other), WSL2 + conda env `gcar`.
 
