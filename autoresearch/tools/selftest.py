@@ -26,8 +26,10 @@ open(f"{T}/code/a.py", "w").write("x = 1\n")
 json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", ledger_md="LEDGER.md", run_records="runs", schedule="schedule.csv", test_log="TEST.md",
                code_dirs=["code"], scratch="temp", live_code=["code"], lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))
 open(f"{T}/TEST.md", "w").write("| S.test.ok | logged |\n")
-env = dict(os.environ, AR_PROJECT=T, AR_MACHINE_LOCK=f"{T}/state/machine_lock.json")  # never the real machine lock
+env = dict(os.environ, AR_PROJECT=T, AR_MACHINE_LOCK=f"{T}/state/machine_lock.json", AR_SETTLE_S="0")  # never the real machine lock; no settle wait except in the tests of it
 env.pop("AR_LOCK_OWNER", None)  # the operator's own lock name must not let the selftest's runs pass a lock
+os.environ["AR_MACHINE_LOCK"] = env["AR_MACHINE_LOCK"]  # the in-process tests (Ticket.ahead reads the lock) too: a lock that another chat holds on this box must not change them
+os.environ.pop("AR_LOCK_OWNER", None)
 G = ["git", "-c", "safe.directory=*", "-C", T]
 subprocess.run(G[:3] + ["init", "-q", T], check=True)
 for k, v in (("user.name", "selftest"), ("user.email", "selftest@example.invalid"), ("core.autocrlf", "false")):
@@ -363,6 +365,115 @@ try:
     started = [int(open(f"{T}/order_{w}.txt").read()) for w in ("S.q1", "S.q2", "S.q3")]
     assert started == sorted(started) and rows()["S.q1"]["status"] == rows()["S.q3"]["status"] == "ok", (started, [rows()[w]["status"] for w in ("S.q1", "S.q2", "S.q3")])
     assert not os.listdir(f"{T}/runs/.gpu_slots/.queue"), "no ticket is left after the runs"
+    # review 2026-11-04 (lock and line): a launcher that the exclusive machine lock holds back is no candidate for the slot, so its ticket does not hold up the others. Before,
+    # the lock owner's own second launch waited behind the held-back ticket of another chat until the lock ran out (a measurement stood still 55 minutes, 2026-11-04)
+    lockf = f"{T}/state/machine_lock.json"
+    old_env = {k: os.environ.get(k) for k in ("AR_MACHINE_LOCK", "AR_LOCK_OWNER")}
+    os.environ["AR_MACHINE_LOCK"] = lockf
+    os.makedirs(f"{T}/state", exist_ok=True)
+    json.dump(dict(owner="timing", start="2026-01-01T00:00:00", end="2999-01-01T00:00:00", exclusive=True, note="selftest"), open(lockf, "w"))
+    qd2 = tempfile.mkdtemp()
+    try:
+        os.environ.pop("AR_LOCK_OWNER", None)
+        tx = RUN.Ticket(qd2, "X")
+        tx.join()                                                                   # another chat's launcher: the lock holds it back
+        os.environ["AR_LOCK_OWNER"] = "timing"
+        ty = RUN.Ticket(qd2, "Y")
+        ty.join()                                                                   # the lock owner's own launch, later in the line
+        assert ty.ahead() == [], ty.ahead()
+        assert tx.ahead() == [], "nobody stands before the oldest ticket"
+        os.remove(lockf)
+        assert ty.ahead() == ["X"], "the lock is gone: the older ticket is ahead again, the order is kept"
+        # the other direction: the lock OWNER's own older launcher still stands before its later launches (two launches of the owner must not start together), and a reservation
+        # (a lock that is not exclusive) holds nobody back
+        json.dump(dict(owner="timing", start="2026-01-01T00:00:00", end="2999-01-01T00:00:00", exclusive=True, note="selftest"), open(lockf, "w"))
+        qd3 = tempfile.mkdtemp()
+        os.environ["AR_LOCK_OWNER"] = "timing"
+        t1, t2 = RUN.Ticket(qd3, "own1"), RUN.Ticket(qd3, "own2")
+        t1.join()
+        t2.join()
+        assert t2.ahead() == ["own1"], "the lock owner's older ticket counts: a launcher is held back only by somebody else's lock"
+        json.dump(dict(owner="timing", end="2999-01-01T00:00:00", exclusive=False), open(lockf, "w"))
+        os.environ.pop("AR_LOCK_OWNER", None)
+        t3, t4 = RUN.Ticket(qd3, "res1"), RUN.Ticket(qd3, "res2")
+        t3.join()
+        t4.join()
+        assert t4.ahead() == ["own1", "own2", "res1"], t4.ahead()            # nothing is skipped under a reservation
+        shutil.rmtree(qd3, ignore_errors=True)
+        os.remove(lockf)
+    finally:
+        for k, v in old_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(qd2, ignore_errors=True)
+    json.dump(dict(owner="timing", start="2026-01-01T00:00:00", end="2999-01-01T00:00:00", exclusive=True, note="selftest"), open(lockf, "w"))
+    wx = subprocess.Popen(base_cmd + ["--id", "S.dl.x", "--", "bash", "-c", "echo x"], env=qenv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # held back by the lock, in the line
+    for _ in range(100):
+        if os.path.isdir(f"{T}/runs/.gpu_slots/.queue") and os.listdir(f"{T}/runs/.gpu_slots/.queue"):
+            break
+        time.sleep(0.2)
+    wy = subprocess.Popen(base_cmd + ["--id", "S.dl.y", "--", "bash", "-c", "echo y"], env=dict(qenv, AR_LOCK_OWNER="timing"), stdout=subprocess.PIPE, text=True)
+    try:
+        y_out = wy.communicate(timeout=40)[0]
+    except subprocess.TimeoutExpired:
+        wy.kill()
+        y_out = "(still waiting after 40 s: it stands behind the ticket of the launcher that the lock holds back)"
+    assert wy.returncode == 0 and rows()["S.dl.y"]["status"] == "ok", y_out
+    assert wx.poll() is None, "the launcher that the lock holds back is still waiting"
+    os.remove(lockf)
+    wx.wait(timeout=60)
+    assert rows()["S.dl.x"]["status"] == "ok", "it starts once the lock is gone"
+    # review 2026-11-04 (start race): a launcher that took a slot a moment ago has not loaded its data or allocated its memory, so the RAM and memory gates of the next
+    # launcher read the box too early: two trainings started in the same second and slowed each other 13 times. The next launcher waits until the slot is SETTLE_S old
+    shutil.rmtree(f"{T}/runs/.gpu_slots", ignore_errors=True)
+    slot0 = f"{T}/runs/.gpu_slots/0"
+    os.makedirs(slot0)
+    loader = dict(id="loader", pid=os.getpid(), run_dir=f"{T}/runs/S.loader", taken=RUN.now())
+    json.dump(loader, open(f"{slot0}/run.json", "w"))
+    sl = {"AR_SETTLE_S": "120"}
+    young = go_env("S.settle1", sl, "--gpu", "--gpu-slots", "2", "--wait-gpu", "0")
+    assert young.returncode == 1 and rows()["S.settle1"]["status"] == "gpu_busy" and "still loading" in rows()["S.settle1"]["notes"], (young.stdout, rows()["S.settle1"])
+    assert "GPU memory" not in rows()["S.settle1"]["notes"], "no memory gate was asked for: the note must not name one"
+    assert "1 of 2 GPU slots taken" in rows()["S.settle1"]["notes"] and "all 2" not in rows()["S.settle1"]["notes"], "the note says how many slots are taken, not that all are"
+    assert RUN.settle_s({}) == 0 and RUN.settle_s({"gpu_settle_s": "x"}) == 0, "off by default; a value that is no number is off"
+    keep = os.environ.pop("AR_SETTLE_S", None)
+    try:
+        assert RUN.settle_s({"gpu_settle_s": 180}) == 180.0, "the project key is the default"
+        os.environ["AR_SETTLE_S"] = "7"
+        assert RUN.settle_s({"gpu_settle_s": 180}) == 7.0, "the environment overrides it (the selftests)"
+    finally:
+        os.environ.pop("AR_SETTLE_S", None)
+        if keep is not None:
+            os.environ["AR_SETTLE_S"] = keep
+    young2 = go_env("S.settle1b", {"AR_SETTLE_S": "0"}, "--gpu", "--gpu-slots", "2", "--wait-gpu", "0", "--settle-s", "120")
+    assert young2.returncode == 1 and "still loading" in rows()["S.settle1b"]["notes"], "--settle-s is the option; it beats the default"
+    cfg0 = json.load(open(f"{T}/project.json"))                         # project.json gpu_settle_s is the default of --settle-s (the environment of the selftest would override it)
+    json.dump(dict(loader, taken=RUN.now()), open(f"{slot0}/run.json", "w"))
+    json.dump(dict(cfg0, gpu_settle_s=120), open(f"{T}/project.json", "w"))
+    try:
+        env_no_settle = {k: v for k, v in env.items() if k != "AR_SETTLE_S"}
+        proj_key = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.settle4", "--hyp", "selftest", "--pred", "x >= 1", "--rule", "keep if x >= 1", "--gpu", "--gpu-slots", "2", "--wait-gpu", "0",
+                                   "--", "bash", "-c", "echo gpu"], capture_output=True, text=True, env=env_no_settle)
+        assert proj_key.returncode == 1 and "still loading" in rows()["S.settle4"]["notes"] and "(120 s settle time)" in rows()["S.settle4"]["notes"], (proj_key.stdout, rows().get("S.settle4"))
+    finally:
+        json.dump(cfg0, open(f"{T}/project.json", "w"))
+    mem = go_env("S.memgate", {"AR_SETTLE_S": "0"}, "--gpu", "--gpu-slots", "3", "--gpu-max-mb", "1", "--wait-gpu", "0")
+    assert mem.returncode == 1 and ("the gate wants less than 1 MB" in rows()["S.memgate"]["notes"] or "nvidia-smi unreadable" in rows()["S.memgate"]["notes"]), rows()["S.memgate"]["notes"]
+    gs = RUN.GpuSlot(f"{T}/runs", 2, "me", f"{T}/runs/S.me", base=f"{T}/runs/.gpu_slots")
+    assert [i for i, _ in gs.settling(120)] == ["loader"] and gs.settling(0) == [], "a young slot of another launcher settles; settle 0 = off"
+    old = (datetime.datetime.now() - datetime.timedelta(minutes=10)).isoformat(timespec="seconds")
+    json.dump(dict(loader, taken=old), open(f"{slot0}/run.json", "w"))
+    assert gs.settling(120) == [] and go_env("S.settle2", sl, "--gpu", "--gpu-slots", "2", "--wait-gpu", "0").returncode == 0, "settled: the second slot starts at once"
+    future = (datetime.datetime.now() + datetime.timedelta(hours=1)).isoformat(timespec="seconds")
+    json.dump(dict(loader, taken=future), open(f"{slot0}/run.json", "w"))
+    assert gs.settling(120) == [], "a slot time in the future (a clock that jumped) delays nobody"
+    json.dump({k: v for k, v in loader.items() if k != "taken"}, open(f"{slot0}/run.json", "w"))
+    assert gs.settling(120) == [] and go_env("S.settle3", sl, "--gpu", "--gpu-slots", "2", "--wait-gpu", "0").returncode == 0, "a slot record without a time (an older launcher) delays nobody"
+    json.dump(dict(loader, pid=2 ** 30), open(f"{slot0}/run.json", "w"))
+    assert gs.settling(120) == [], "a dead owner is not loading"
+    shutil.rmtree(f"{T}/runs/.gpu_slots", ignore_errors=True)
     # --again clears the earlier attempt's result and decision
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "S.ok2", "--decision", "KEEP"], check=True, env=env, capture_output=True)
     assert go("S.ok2", ["bash", "-c", "echo again"], "--again").returncode == 0 and rows()["S.ok2"]["decision"] == "", rows()["S.ok2"]["decision"]

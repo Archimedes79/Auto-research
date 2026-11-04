@@ -25,6 +25,8 @@
   "live_code": ["training", "evaluation", "../autogt", "../autoresearch/trainkit"],
   "trash": "_to_delete",
   "gpu_slots": 2,
+  "_gpu_settle_s": "run.py waits while another launcher took its GPU slot less than this many seconds ago: that run has not loaded its data or allocated its memory yet, so the RAM / memory gates would read the box too early (two trainings started in the same second and slowed each other 13 times, 2026-11-04); a training takes about 70 s to its first logged step; 0 = off",
+  "gpu_settle_s": 180,
   "_ram_mb": "run.py --gpu waits in one first-come-first-served line and starts only when this much RAM is available (3 looks in a row): two trainings run in parallel only if the 24 GB hold both (one with 6 loader workers wants about 10 GB); the box swapped with two trainings and a selftest",
   "ram_mb": 10000,
   "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
@@ -37,6 +39,8 @@
     "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/startable.py {config}\"",
     "train": "bash temp/train/run_ar.sh {config}",
     "resolve": "python3 training/splits.py resolve",
+    "_gpu_max_mb": "a training starts only when the card has less than this in use (run.py --gpu-max-mb, passed by start / queue add): a t20-sized run holds 8-9 GB of the 12, a second one next to it pages the GPU memory and both ran 13 times slower (2026-11-04); desktop apps hold about 1.3 GB",
+    "gpu_max_mb": 3000,
     "prepare": [{"name": "gt", "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} check\"",
                  "build": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} build\"", "wait_min": 600}]
   },

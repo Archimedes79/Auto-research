@@ -23,9 +23,10 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 From `bev_fusion/` (the problem folder), in the WSL. `AR_PROJECT` names this problem (the tools default to the lane problem):
 
 ```
-wsl bash -c 'AR_PROJECT=../bev_fusion nohup python3 ../autoresearch/tools/run.py --id t9.C --gpu --split train --hyp "..." --pred "..." --rule "..." -- bash temp/train/run_ar.sh training/configs/t9_C.json > runs/t9_C.launcher.log 2>&1 &'
+wsl bash -c 'AR_PROJECT=../bev_fusion nohup python3 ../autoresearch/tools/run.py --id t9.C --gpu --gpu-max-mb 3000 --split train --hyp "..." --pred "..." --rule "..." -- bash temp/train/run_ar.sh training/configs/t9_C.json > runs/t9_C.launcher.log 2>&1 &'
 ```
 
+- `--gpu-max-mb 3000` is `project.json` `trainsuite.gpu_max_mb`: a training starts only when the card has less than that in use (a t20-sized run holds 8-9 of the 12 GB; a second one next to it pages the GPU memory and both ran 13 times slower). `trainsuite start` and `queue add` pass it themselves (the start line that `training/startable.py` prints does not: that file is frozen, add the flag by hand); `gpu_settle_s` (180) makes the next launcher wait while a run that has just started loads its data.
 - `temp/train/run_ar.sh` (not `run_cfg.sh`, which always exits 0) trains from a `git archive` of `training/` at `$AR_COMMIT`, the snapshot commit `run.py` made for this attempt (also on a resumed id, whose tag still names attempt 1), with the config copy inside that snapshot, and exits with `train.py`'s exit code, so a crash is a failed run and a CUDA "unknown error" is retried (`train.py` resumes from its last checkpoint).
 - Not pinned: `autogt/` is imported from the live tree when the training starts. The tag records its state, and the run writes the GT signature it used to `runs/<name>/gt.json`; `evaluation/bev_suite.py compare` checks it.
 - The training itself still writes `runs/<config name>/` (`train.log`, `log.jsonl`, checkpoints, `.done`) as before; the run record here holds the launcher's facts and the ledger row.
