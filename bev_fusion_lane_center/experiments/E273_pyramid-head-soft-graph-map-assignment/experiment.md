@@ -43,7 +43,7 @@ Verdict rule (by hand, as E271 / E272: `card.validate` demands the project's gra
 - **The best graph** `recall_sp0_dp` (lane suite, run `graphs_recall_sp0_dp_carry_20261104_181557`): Q 0.742, F1@1.0 0.878, lanes found 0.781, topo F1 0.740 (P 0.811, R 0.682), duplicates 0.077, **junction F1 0.273** (P 0.213, R 0.382). The slow control (E94 trace network): topo F1 0.763, junction F1 0.333, 21.8 vertices per 100 m, 628 ms. Errors by situation: the quarter of frames with the most GT lane length holds 51 % of the error, the quarter with the most predicted pieces 48 % (fragmentation). Its connections are rules (path union, fork pruning), and a loss on the delivered graph reaches none of its node positions, validity or links (E269 measured exactly zero).
 - **Why a grid of centre pixels cannot carry the connections:** at 1 m, 12.1 % of the lane cells hold two or more pieces and 1.9 % crossing pieces (headings apart by more than 30 degrees), 18.4 % / 3.7 % at 2 m; almost all of it is connectors.
 - **Connectors dominate the graph:** 54 % of the pieces in the window are connectors (median 19.8 m, their ends 19.1 m apart, 47 % farther than 20 m); the middle of a connector collides with another piece's middle in 31 % of the cases (lane pieces: 0 %); 61 % of the connectors join a lane end to a lane start, 35 % a lane to the window edge, 3 % are chained. Their shape is cheap: a cubic Hermite / Bezier between the two end poses with two handle lengths fits 99.5 % of all pieces within 0.5 m.
-- **GT status.** The lane GT is its own version of autogt (`autogt/lane_gt.py`, tag `autogt/lane-l1`, signature 42a3d08f8f, commit cf0ac51, local): pieces with ids that change only at splits and merges, successors, left / right neighbours, lane index and count, events (split, merge, stop, start, end, window, cross) with in / out ids and directions, roads, dividers, road boundary with corners; **l2** adds the drivable-area and intersection polygons; the front GT (c643a7539d) is untouched. The full store builds in the background (about 45-60 min, nice 15). Against our `make_graph_gt.py` its points agree within 0.3 m (99.9 % / 99.6 %); its 2 m minimum piece length drops only stubs.
+- **GT status.** The lane GT is its own version of autogt (`autogt/lane_gt.py`, tag `autogt/lane-l1`, signature 42a3d08f8f, commit cf0ac51, local): pieces with ids that change only at splits and merges, successors, left / right neighbours, lane index and count, events (split, merge, stop, start, end, window, cross) with in / out ids and directions, roads, dividers, road boundary with corners; **l3** (tag `autogt/lane-l3`, signature 3576fa1f7e, commit 4df1032, local) adds the drivable-area and intersection polygons (`g["areas"]`, not dilated), the two additions of this plan (`exit` events, `segments` per piece) and review fixes (joined-piece stops now name their continuation, aligned direction rows, `opposite` on both sides, short parts with a natural end are kept); the front GT (c643a7539d) is untouched. The full store (850 sequences) builds with l3 in the background (about 45 min, nice 15). The piece id `piece` is the same in every frame (use it for the assignment targets); `id` differs only for a part that comes back into the window (`<piece>#1`). Against our `make_graph_gt.py` its points agree within 0.3 m (99.9 % / 99.6 %); its 2 m minimum piece length drops only stubs.
 - **Literature:** the field trains query-based lane graphs end to end with matching only in the loss (TopoNet, MapTRv2, LaneSegNet, CGNet, RATopo); D55 allows that; the design below does not need it (targets by location) and keeps it as the fallback (section 7).
 
 ## 2. The pipeline (one function, five stages)
@@ -51,7 +51,7 @@ Verdict rule (by hand, as E271 / E272: `card.validate` demands the project's gra
 frozen GaussianCaR 39 ch, 200 x 200 @ 0.5 m, window |x|, |y| < 50 m, lane frame (x right, y forward)
   A  pixel maps (one encoder, three taps)      0.5 m: lane divider, road divider, road boundary (logit + truncated distance)
                                                1 m:   centre lane (p, cos, sin, ox, oy, gate = E271's 6 ch) + event heats (split, merge, stop, exit, start, end)
-                                               2 m:   road, intersection (dilated by 3 m); the 2 m feature map is the node grid
+                                               2 m:   road, intersection (polygon rasterised at 2 m); the 2 m feature map is the node grid
   B  nodes: one per 2 m cell (50 x 50 = 2500), 1 slot, type flags, pulled onto the line (offset, direction), refined once on the fine features
   C  links: node -> node (short, forward, <= 8 m: all cells; long, through intersections: the top-K entries x top-K exits); curve = cubic Hermite from the two node poses
   D  sections (the ids): absorbing walk backwards on the link matrix -> every node gets a distribution over section starts
@@ -63,7 +63,7 @@ frozen GaussianCaR 39 ch, 200 x 200 @ 0.5 m, window |x|, |y| < 50 m, lane frame 
 - One shared stride-2 U-Net (E271's head, 2.05 M parameters, GroupNorm) widened by three taps. The 1 m tap starts from the E271 head's weights, so the centre-lane channels keep their numbers.
 - **0.5 m** (200 x 200): lane divider, road divider, road boundary, each as a line logit and a truncated distance (2 m, sub-cell position); 6 channels. The stop line is an optional later layer.
 - **1 m** (100 x 100): E271's six channels (p, cos, sin, ox, oy, keep gate) and six event heats (split, merge, stop = lane end in front of an intersection, exit = lane start after it, start, end) with Gaussian sigma 1.5 m. They give the nodes dense help and give the pictures their layer.
-- **2 m** (50 x 50): road (drivable area) and intersection (the polygon dilated by 3 m: the stop points sit just inside it); the road-level graph is a v2 item (section 8).
+- **2 m** (50 x 50): road (drivable area) and intersection: the GT polygons rasterised at 2 m, a cell counts when any part of it is covered (that is the slight enlargement); Mirko told the GT chat to leave the dilation out of the GT, so a further dilation is a loader parameter, default 0 m; the road-level graph is a v2 item (section 8).
 - Targets: the lane GT vectors rasterised at load time (lines with exact distance, centre pieces, events, areas): nothing is stored besides the vectors. Losses: focal BCE + Dice on masks, L1 on truncated distances, E271's `grid_loss` unchanged on the 1 m channels, focal BCE on the event heats, BCE + Dice on road and intersection.
 - 8 heading bins per cell (revision 3) are dropped: once the connectors carry no nodes, lanes never share a 2 m cell (section 2.8).
 
@@ -130,9 +130,9 @@ With the connectors kept as nodes 18.5 % of the occupied cells would hold two no
 ### 3.1 One vector source
 Everything (pixel maps, nodes, links, sections, map tokens) is drawn from the lane GT of the autogt chat (`autogt.lane_gt`, frame "lane", window 100 x 100 m): pieces (ids, polylines every 0.5 m, successor / predecessor, left / right, lane index and count, road), events, roads, lines (dividers, boundary with corners), areas (l2: drivable, intersection). Only vectors are stored; rasters and targets are made in the data loader; the 39 frozen channels and the poses come from `BuilderData` as before, the sample tokens from `feats/{train,val}_tokens.json`.
 ### 3.2 Requests to the GT chat (small, light)
-- **R1 exit events:** the mirror of `stop`: the first point of a lane whose predecessor connector lies inside an intersection (same fields: `on`, `s`, the intersection test of `stop`). Needed for the type "exit" of the nodes.
-- **R2 (done in l2):** area polygons.
-- **R3 segments per piece:** `segments = [{token, kind, i0, i1, in_intersection}]` (index ranges of the piece's points per original map piece, with the test result), so that the loader can drop the points of connectors inside intersections and keep the points of connectors outside them (16-20 % of the connectors are plain continuations).
+- **R1 exit events (done in l3):** the mirror of `stop`: the start of a lane whose predecessor connector lies inside an intersection (fields `on`, `s`, `n_pred`, `in`, `out`, `dirs_in`, `dirs_out`; `pos` is the joint vertex). Needed for the type "exit" of the nodes.
+- **R2 (done in l2 / l3):** area polygons (`areas.road`, `areas.intersection`, polygons with holes, not dilated).
+- **R3 segments per piece (done in l3):** `segments = [{token, kind, i0, i1, in_intersection}]` (contiguous index ranges of the part's points per original map piece, with the test result; False for lanes), so that the loader can drop the points of connectors inside intersections and keep the points of connectors outside them (16-20 % of the connectors are plain continuations).
 - The open parameters stay the GT chat's defaults (boundary layers, corner 30 degrees, stop rule "intersection_branch").
 ### 3.3 Target builder (lane side, `training/grid/qtargets.py`): the rules
 | item | rule |
@@ -179,7 +179,7 @@ results/E273/
   README.md          the index: question, verdict, the numbers table (from the cards, never typed), key pictures, how to rebuild everything   (git)
   <run id>/package.json, provenance.json     from autoresearch/tools/package.py                                                          (git)
       names: code tag lcr/<run id> + commit; the head / graph code bundle hash (training/grid/*.py copied into bundle/, not in git); front GT version and signature
-             (c643a7539d, gt.json); lane GT version and signature (autogt/lane-l1 / l2, 42a3d08f8f / 36847fdc49); the map-error set and its seed; training version
+             (c643a7539d, gt.json); lane GT version and signature (autogt/lane-l3, 3576fa1f7e); the map-error set and its seed; training version
              (trainer commit, config.json, steps per phase, seeds); dataset (nuScenes v1.0-trainval, data/splits.json hash, frame counts); evaluation code version
              (commit + hash of qgraph_eval.py and lane_suite.py); the numbers (quantitative); the derived files with the command that rebuilds them
   figures/, videos/  pictures and mp4 (not in git: binaries), the qualitative part
@@ -189,7 +189,7 @@ The lane project has no `results/` folder yet; `package.py` runs per problem and
 ## 6. Steps, gates, cost (nothing past step 1 runs before Mirko's word)
 | step | what | where | gate / done when | cost |
 |---|---|---|---|---|
-| 0 | GT requests R1, R3 to the GT chat; target builder, map simulator, oracle | `training/grid/qtargets.py`, `map_sim.py`, `training/data/lane_gt_data.py`, tests | section 3.4 passes | CPU, about 3 days of coding (estimate), light runs |
+| 0 | (R1, R3 are in l3, the l3 store is building); target builder, map simulator, oracle | `training/grid/qtargets.py`, `map_sim.py`, `training/data/lane_gt_data.py`, tests | section 3.4 passes | CPU, about 3 days of coding (estimate), light runs |
 | 1 | scorer and pictures first | `evaluation/qgraph_eval.py`, `tools/viz/qgraph_view.py` | GT scores 1.0, degradations respond, d reproduced, g scored | CPU, about 1 day (estimate) |
 | 2 | pixel maps | `training/grid/pyramid.py`, `training/train/qgraph_train.py` | G1 (gradient into every tap, one batch overfits); centre-pixel F1 at 1 m not below the E271 dense head - 0.02 | GPU about 0.5 h / seed |
 | 3 | nodes | `training/grid/qnodes.py` | node F1 (2 m) not more than 0.05 below the E271 read-out at the same tolerance; median position error <= 0.5 m; event recall reported | GPU about 0.5 h / seed |
@@ -197,7 +197,7 @@ The lane project has no `results/` folder yet; `package.py` runs per problem and
 | 5 | sections | `training/grid/sections.py` | at most 2 delivered pieces per GT piece; section starts right for at least 95 % of the nodes | GPU about 0.3 h / seed |
 | 6 | map + assignment | `training/grid/map_graph.py`, `qassign.py` | at the start equal to g; `lane_acc_err` above g | GPU about 0.3 h / seed |
 | 7 | joint, both seeds, scoring, pictures, videos, result folder | `results/E273/` | verdict by the rule of section 0 | GPU about 1 h / seed + 0.5 h scoring |
-Estimate from the step times of E271 / E272 (0.6 s per step for a frozen-head stage, 2.1 s for the joint stage): about 5 GPU hours per seed with development, 10 in all; replaced by measured values after step 2. Code rules: a test and a README row per module in the same commit, the grid tests registered in `run_all_tests.sh`, an `ar-critic` pass (mode code) on the shared code before step 2, commit by path, scratch to `temp/`. Dependencies on other chats: the GT chat (R1, R3, the lane store); the BEV system chat owns the GPU slots (trainsuite queue, `run.py`).
+Estimate from the step times of E271 / E272 (0.6 s per step for a frozen-head stage, 2.1 s for the joint stage): about 5 GPU hours per seed with development, 10 in all; replaced by measured values after step 2. Code rules: a test and a README row per module in the same commit, the grid tests registered in `run_all_tests.sh`, an `ar-critic` pass (mode code) on the shared code before step 2, commit by path, scratch to `temp/`. Dependencies on other chats: the GT chat (the l3 lane store); the BEV system chat owns the GPU slots (trainsuite queue, `run.py`).
 
 ## 7. Risks and fallbacks
 | risk | effect | what we do |
