@@ -1,0 +1,1497 @@
+{
+ "schema": 1,
+ "made": "2026-11-04T00:11:00",
+ "run": "t20.base_s0",
+ "run_dir": "runs/t20_base_s0",
+ "status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "tier": "normal",
+ "code": {
+  "tag": "bf/t20.base_s0",
+  "commit": "bd7eb0181b",
+  "code_hash": "a783e1da9ea5"
+ },
+ "gt": {
+  "version": "unknown",
+  "signature": "6a7aa7864a"
+ },
+ "bundle": {
+  "code_hash": "cd6449a4bf7c",
+  "files": 22
+ },
+ "model": {
+  "ckpt": "ckpt_00006000.pt",
+  "ckpt_hash": "c66710205c1bp",
+  "step": 6000,
+  "config_hash": "c4964aa3441a",
+  "seed": 0
+ },
+ "provenance": {
+  "file": "provenance.json",
+  "hash": "94b73cda38c8"
+ },
+ "metrics": {
+  "eval/metrics.json": {}
+ },
+ "metric_files": {
+  "eval/metrics.json": "b0c650c3ab3b"
+ },
+ "deep": {
+  "files": [
+   {
+    "path": "eval/images/scene-0003_000_outputs.png",
+    "bytes": 322593
+   },
+   {
+    "path": "eval/images/scene-0003_000_overview.png",
+    "bytes": 343446
+   },
+   {
+    "path": "eval/images/scene-0039_026_outputs.png",
+    "bytes": 308810
+   },
+   {
+    "path": "eval/images/scene-0039_026_overview.png",
+    "bytes": 353626
+   },
+   {
+    "path": "eval/images/scene-0103_020_outputs.png",
+    "bytes": 361357
+   },
+   {
+    "path": "eval/images/scene-0103_020_overview.png",
+    "bytes": 306484
+   },
+   {
+    "path": "eval/images/scene-0271_013_outputs.png",
+    "bytes": 295328
+   },
+   {
+    "path": "eval/images/scene-0271_013_overview.png",
+    "bytes": 293882
+   },
+   {
+    "path": "eval/images/scene-0344_007_outputs.png",
+    "bytes": 335999
+   },
+   {
+    "path": "eval/images/scene-0344_007_overview.png",
+    "bytes": 323503
+   },
+   {
+    "path": "eval/images/scene-0554_029_outputs.png",
+    "bytes": 306139
+   },
+   {
+    "path": "eval/images/scene-0554_029_overview.png",
+    "bytes": 283181
+   },
+   {
+    "path": "eval/images/scene-0625_014_outputs.png",
+    "bytes": 322654
+   },
+   {
+    "path": "eval/images/scene-0625_014_overview.png",
+    "bytes": 276706
+   },
+   {
+    "path": "eval/images/scene-0638_038_outputs.png",
+    "bytes": 292932
+   },
+   {
+    "path": "eval/images/scene-0638_038_overview.png",
+    "bytes": 273490
+   },
+   {
+    "path": "eval/modules/frame_0.png",
+    "bytes": 434950
+   },
+   {
+    "path": "eval/modules/frame_1.png",
+    "bytes": 467138
+   },
+   {
+    "path": "eval/modules/frame_2.png",
+    "bytes": 492317
+   },
+   {
+    "path": "eval/modules/frame_3.png",
+    "bytes": 432126
+   },
+   {
+    "path": "eval/scene_records.pkl",
+    "bytes": 39424485
+   },
+   {
+    "path": "eval/scene_records_n1000.pkl",
+    "bytes": 39424485
+   },
+   {
+    "path": "eval/scene_records_train.pkl",
+    "bytes": 38550254
+   },
+   {
+    "path": "eval/scene_records_train_n1000.pkl",
+    "bytes": 38550254
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0094_overview.mp4",
+    "bytes": 936743
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0094_overview_scores.png",
+    "bytes": 58759
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0104_overview.mp4",
+    "bytes": 1240605
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0104_overview_scores.png",
+    "bytes": 63100
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0106_overview.mp4",
+    "bytes": 1307280
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0106_overview_scores.png",
+    "bytes": 59326
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0519_overview.mp4",
+    "bytes": 1304404
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0519_overview_scores.png",
+    "bytes": 66640
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0557_overview.mp4",
+    "bytes": 982938
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0557_overview_scores.png",
+    "bytes": 53951
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0563_overview.mp4",
+    "bytes": 1119386
+   },
+   {
+    "path": "eval/showcase/qualitative/videos/scene-0563_overview_scores.png",
+    "bytes": 51181
+   },
+   {
+    "path": "eval/suite/qualitative/videos/index.html",
+    "bytes": 1405
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0035_dashboard.mp4",
+    "bytes": 2841416
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0035_dashboard_scores.json",
+    "bytes": 11060
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0035_dashboard_scores.png",
+    "bytes": 54467
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0097_dashboard.mp4",
+    "bytes": 1761600
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0097_dashboard_scores.json",
+    "bytes": 12078
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0097_dashboard_scores.png",
+    "bytes": 52347
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0561_dashboard.mp4",
+    "bytes": 2274347
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0561_dashboard_scores.json",
+    "bytes": 11379
+   },
+   {
+    "path": "eval/suite/qualitative/videos/scene-0561_dashboard_scores.png",
+    "bytes": 45180
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00000.npz",
+    "bytes": 14878
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00001.npz",
+    "bytes": 16792
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00002.npz",
+    "bytes": 16109
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00003.npz",
+    "bytes": 17031
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00004.npz",
+    "bytes": 17892
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00005.npz",
+    "bytes": 15950
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00006.npz",
+    "bytes": 15447
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00007.npz",
+    "bytes": 17582
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00008.npz",
+    "bytes": 15715
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00009.npz",
+    "bytes": 16796
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00010.npz",
+    "bytes": 16720
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00011.npz",
+    "bytes": 15983
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00012.npz",
+    "bytes": 16769
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00013.npz",
+    "bytes": 16107
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00014.npz",
+    "bytes": 15520
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_cov_00015.npz",
+    "bytes": 9662
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00000.npz",
+    "bytes": 6702327
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00001.npz",
+    "bytes": 6594148
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00002.npz",
+    "bytes": 7181779
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00003.npz",
+    "bytes": 8394535
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00004.npz",
+    "bytes": 8265257
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00005.npz",
+    "bytes": 7428138
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00006.npz",
+    "bytes": 6972814
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00007.npz",
+    "bytes": 7059621
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00008.npz",
+    "bytes": 7150028
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00009.npz",
+    "bytes": 8174070
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00010.npz",
+    "bytes": 7886078
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00011.npz",
+    "bytes": 7886140
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00012.npz",
+    "bytes": 7396437
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00013.npz",
+    "bytes": 7667997
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00014.npz",
+    "bytes": 6729109
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_curve_00015.npz",
+    "bytes": 4711131
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00000.npz",
+    "bytes": 176369
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00001.npz",
+    "bytes": 215781
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00002.npz",
+    "bytes": 206965
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00003.npz",
+    "bytes": 239862
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00004.npz",
+    "bytes": 265385
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00005.npz",
+    "bytes": 210714
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00006.npz",
+    "bytes": 192132
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00007.npz",
+    "bytes": 232757
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00008.npz",
+    "bytes": 200291
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00009.npz",
+    "bytes": 225599
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00010.npz",
+    "bytes": 229827
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00011.npz",
+    "bytes": 211167
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00012.npz",
+    "bytes": 232291
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00013.npz",
+    "bytes": 208134
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00014.npz",
+    "bytes": 189188
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_det_00015.npz",
+    "bytes": 121247
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00000.npz",
+    "bytes": 163488
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00001.npz",
+    "bytes": 188432
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00002.npz",
+    "bytes": 175458
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00003.npz",
+    "bytes": 195874
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00004.npz",
+    "bytes": 215066
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00005.npz",
+    "bytes": 180882
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00006.npz",
+    "bytes": 171374
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00007.npz",
+    "bytes": 201305
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00008.npz",
+    "bytes": 161304
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00009.npz",
+    "bytes": 195552
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00010.npz",
+    "bytes": 192023
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00011.npz",
+    "bytes": 186159
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00012.npz",
+    "bytes": 191017
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00013.npz",
+    "bytes": 177986
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00014.npz",
+    "bytes": 156915
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detf_00015.npz",
+    "bytes": 108952
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00000.npz",
+    "bytes": 165051
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00001.npz",
+    "bytes": 195346
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00002.npz",
+    "bytes": 184156
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00003.npz",
+    "bytes": 204731
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00004.npz",
+    "bytes": 227550
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00005.npz",
+    "bytes": 186056
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00006.npz",
+    "bytes": 173511
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00007.npz",
+    "bytes": 207912
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00008.npz",
+    "bytes": 176466
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00009.npz",
+    "bytes": 203755
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00010.npz",
+    "bytes": 202448
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00011.npz",
+    "bytes": 190558
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00012.npz",
+    "bytes": 198233
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00013.npz",
+    "bytes": 185773
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00014.npz",
+    "bytes": 169454
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_detfp_00015.npz",
+    "bytes": 113101
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00000.npz",
+    "bytes": 30180
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00001.npz",
+    "bytes": 30177
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00002.npz",
+    "bytes": 30175
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00003.npz",
+    "bytes": 30166
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00004.npz",
+    "bytes": 30173
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00005.npz",
+    "bytes": 30174
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00006.npz",
+    "bytes": 30168
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00007.npz",
+    "bytes": 30177
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00008.npz",
+    "bytes": 30185
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00009.npz",
+    "bytes": 30175
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00010.npz",
+    "bytes": 30176
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00011.npz",
+    "bytes": 30180
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00012.npz",
+    "bytes": 30187
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00013.npz",
+    "bytes": 30193
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00014.npz",
+    "bytes": 30194
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_loss_00015.npz",
+    "bytes": 18858
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00000.npz",
+    "bytes": 751228
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00001.npz",
+    "bytes": 772627
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00002.npz",
+    "bytes": 846084
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00003.npz",
+    "bytes": 937687
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00004.npz",
+    "bytes": 943905
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00005.npz",
+    "bytes": 871951
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00006.npz",
+    "bytes": 780823
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00007.npz",
+    "bytes": 812405
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00008.npz",
+    "bytes": 814301
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00009.npz",
+    "bytes": 887426
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00010.npz",
+    "bytes": 903444
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00011.npz",
+    "bytes": 886303
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00012.npz",
+    "bytes": 846540
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00013.npz",
+    "bytes": 891083
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00014.npz",
+    "bytes": 763841
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_seg_00015.npz",
+    "bytes": 526437
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00000.npz",
+    "bytes": 184396
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00001.npz",
+    "bytes": 193184
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00002.npz",
+    "bytes": 187867
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00003.npz",
+    "bytes": 204828
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00004.npz",
+    "bytes": 206019
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00005.npz",
+    "bytes": 202823
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00006.npz",
+    "bytes": 191141
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00007.npz",
+    "bytes": 204141
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00008.npz",
+    "bytes": 166021
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00009.npz",
+    "bytes": 204635
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00010.npz",
+    "bytes": 203277
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00011.npz",
+    "bytes": 199665
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00012.npz",
+    "bytes": 206634
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00013.npz",
+    "bytes": 189950
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00014.npz",
+    "bytes": 168186
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/counts_vel_00015.npz",
+    "bytes": 108420
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/frames.jsonl",
+    "bytes": 1622425
+   },
+   {
+    "path": "eval/suite/quant/eval_curves_fusion_vel_n1000/manifest.json",
+    "bytes": 9637
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00000.npz",
+    "bytes": 189986
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00001.npz",
+    "bytes": 212389
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00002.npz",
+    "bytes": 202072
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00003.npz",
+    "bytes": 203414
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00004.npz",
+    "bytes": 205681
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00005.npz",
+    "bytes": 272803
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00006.npz",
+    "bytes": 235191
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00007.npz",
+    "bytes": 218061
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00008.npz",
+    "bytes": 210928
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00009.npz",
+    "bytes": 204201
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00010.npz",
+    "bytes": 174251
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00011.npz",
+    "bytes": 205090
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00012.npz",
+    "bytes": 232499
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00013.npz",
+    "bytes": 218558
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00014.npz",
+    "bytes": 195946
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_det_00015.npz",
+    "bytes": 126344
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00000.npz",
+    "bytes": 30173
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00001.npz",
+    "bytes": 30182
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00002.npz",
+    "bytes": 30181
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00003.npz",
+    "bytes": 30181
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00004.npz",
+    "bytes": 30175
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00005.npz",
+    "bytes": 30159
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00006.npz",
+    "bytes": 30189
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00007.npz",
+    "bytes": 30184
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00008.npz",
+    "bytes": 30179
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00009.npz",
+    "bytes": 30177
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00010.npz",
+    "bytes": 30164
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00011.npz",
+    "bytes": 30169
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00012.npz",
+    "bytes": 30177
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00013.npz",
+    "bytes": 30167
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00014.npz",
+    "bytes": 30169
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_loss_00015.npz",
+    "bytes": 18853
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00000.npz",
+    "bytes": 777117
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00001.npz",
+    "bytes": 824846
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00002.npz",
+    "bytes": 795786
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00003.npz",
+    "bytes": 770081
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00004.npz",
+    "bytes": 809173
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00005.npz",
+    "bytes": 935068
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00006.npz",
+    "bytes": 894861
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00007.npz",
+    "bytes": 867758
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00008.npz",
+    "bytes": 782677
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00009.npz",
+    "bytes": 814675
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00010.npz",
+    "bytes": 713629
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00011.npz",
+    "bytes": 860203
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00012.npz",
+    "bytes": 843838
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00013.npz",
+    "bytes": 851705
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00014.npz",
+    "bytes": 827293
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/counts_seg_00015.npz",
+    "bytes": 523146
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/frames.jsonl",
+    "bytes": 808567
+   },
+   {
+    "path": "eval/suite/quant/eval_train_n1000/manifest.json",
+    "bytes": 19189
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00000.npz",
+    "bytes": 13620
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00001.npz",
+    "bytes": 14003
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00002.npz",
+    "bytes": 13855
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00003.npz",
+    "bytes": 14088
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00004.npz",
+    "bytes": 14318
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00005.npz",
+    "bytes": 13848
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00006.npz",
+    "bytes": 13790
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00007.npz",
+    "bytes": 14368
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00008.npz",
+    "bytes": 13564
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00009.npz",
+    "bytes": 14136
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00010.npz",
+    "bytes": 13997
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00011.npz",
+    "bytes": 13892
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00012.npz",
+    "bytes": 14132
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00013.npz",
+    "bytes": 13910
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00014.npz",
+    "bytes": 13584
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_cov_00015.npz",
+    "bytes": 8556
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00000.npz",
+    "bytes": 2826693
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00001.npz",
+    "bytes": 2815325
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00002.npz",
+    "bytes": 2860690
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00003.npz",
+    "bytes": 2919460
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00004.npz",
+    "bytes": 2889776
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00005.npz",
+    "bytes": 2898202
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00006.npz",
+    "bytes": 2826881
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00007.npz",
+    "bytes": 2816494
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00008.npz",
+    "bytes": 2907223
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00009.npz",
+    "bytes": 2911708
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00010.npz",
+    "bytes": 2939906
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00011.npz",
+    "bytes": 2931175
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00012.npz",
+    "bytes": 2933851
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00013.npz",
+    "bytes": 2943287
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00014.npz",
+    "bytes": 2896800
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_curve_00015.npz",
+    "bytes": 1811411
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00000.npz",
+    "bytes": 120741
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00001.npz",
+    "bytes": 121775
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00002.npz",
+    "bytes": 121212
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00003.npz",
+    "bytes": 121922
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00004.npz",
+    "bytes": 122414
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00005.npz",
+    "bytes": 121488
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00006.npz",
+    "bytes": 121334
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00007.npz",
+    "bytes": 122298
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00008.npz",
+    "bytes": 120512
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00009.npz",
+    "bytes": 121928
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00010.npz",
+    "bytes": 121580
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00011.npz",
+    "bytes": 121316
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00012.npz",
+    "bytes": 121766
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00013.npz",
+    "bytes": 121292
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00014.npz",
+    "bytes": 120410
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_det_00015.npz",
+    "bytes": 75505
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00000.npz",
+    "bytes": 120659
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00001.npz",
+    "bytes": 121398
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00002.npz",
+    "bytes": 120875
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00003.npz",
+    "bytes": 121627
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00004.npz",
+    "bytes": 122061
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00005.npz",
+    "bytes": 121160
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00006.npz",
+    "bytes": 121145
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00007.npz",
+    "bytes": 121917
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00008.npz",
+    "bytes": 120076
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00009.npz",
+    "bytes": 121455
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00010.npz",
+    "bytes": 121167
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00011.npz",
+    "bytes": 121007
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00012.npz",
+    "bytes": 121298
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00013.npz",
+    "bytes": 121024
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00014.npz",
+    "bytes": 120133
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detf_00015.npz",
+    "bytes": 75367
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00000.npz",
+    "bytes": 120778
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00001.npz",
+    "bytes": 121637
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00002.npz",
+    "bytes": 121085
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00003.npz",
+    "bytes": 121748
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00004.npz",
+    "bytes": 122274
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00005.npz",
+    "bytes": 121345
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00006.npz",
+    "bytes": 121217
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00007.npz",
+    "bytes": 122147
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00008.npz",
+    "bytes": 120366
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00009.npz",
+    "bytes": 121664
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00010.npz",
+    "bytes": 121386
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00011.npz",
+    "bytes": 121125
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00012.npz",
+    "bytes": 121586
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00013.npz",
+    "bytes": 121202
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00014.npz",
+    "bytes": 120417
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_detfp_00015.npz",
+    "bytes": 75480
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00000.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00001.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00002.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00003.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00004.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00005.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00006.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00007.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00008.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00009.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00010.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00011.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00012.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00013.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00014.npz",
+    "bytes": 23534
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_loss_00015.npz",
+    "bytes": 14702
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00000.npz",
+    "bytes": 270890
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00001.npz",
+    "bytes": 275039
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00002.npz",
+    "bytes": 273125
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00003.npz",
+    "bytes": 282030
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00004.npz",
+    "bytes": 300539
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00005.npz",
+    "bytes": 299732
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00006.npz",
+    "bytes": 275165
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00007.npz",
+    "bytes": 281082
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00008.npz",
+    "bytes": 290195
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00009.npz",
+    "bytes": 289742
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00010.npz",
+    "bytes": 298309
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00011.npz",
+    "bytes": 291033
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00012.npz",
+    "bytes": 283995
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00013.npz",
+    "bytes": 308300
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00014.npz",
+    "bytes": 281124
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_seg_00015.npz",
+    "bytes": 183684
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00000.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00001.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00002.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00003.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00004.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00005.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00006.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00007.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00008.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00009.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00010.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00011.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00012.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00013.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00014.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/counts_vel_00015.npz",
+    "bytes": 22
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/frames.jsonl",
+    "bytes": 1649880
+   },
+   {
+    "path": "eval/suite/quant/prior500_n1000/manifest.json",
+    "bytes": 7423
+   },
+   {
+    "path": "report/curves.png",
+    "bytes": 322360
+   }
+  ],
+  "bytes": 396466840
+ },
+ "deleted": [],
+ "evaluation": {
+  "evaluator": {
+   "commit": "2fc373146d",
+   "code_hash": "56ff7eca943c",
+   "dirty": "1 file(s) differed from the commit"
+  },
+  "split": "val",
+  "frames": 1000,
+  "frame_hash": "269a72ac0884",
+  "manifest_hash": "f615a7387e73",
+  "gt": {
+   "version": "unknown",
+   "signature": "6a7aa7864a"
+  },
+  "card": "t20_base_s0/eval/card.json"
+ },
+ "experiment": "experiments/t20_lane_grid_bundle/experiment.md",
+ "split_record": {
+  "file": "split.json",
+  "hash": "bf6c4d921148"
+ }
+}
