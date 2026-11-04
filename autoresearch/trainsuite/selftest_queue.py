@@ -119,7 +119,7 @@ def add(proj, rid, steps, *extra):
 
 
 def queue_checks(tmp, ok):
-    env = {"TS_QUEUE_EVERY": "0.5", "TS_QUEUE_IDLE": "3", "AR_HEARTBEAT_S": "0.5", "AR_STALE_S": "4", "AR_RAM_CHECKS": "1"}
+    env = {"TS_QUEUE_EVERY": "0.5", "TS_QUEUE_IDLE": "3", "AR_HEARTBEAT_S": "0.5", "AR_STALE_S": "4", "AR_RAM_CHECKS": "1", "AR_SETTLE_S": "0"}
     old = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
     proj = make_project(tmp)

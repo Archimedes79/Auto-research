@@ -223,6 +223,20 @@ def pinned_argv(it):
     return argv
 
 
+def with_gate(c, argv):
+    """the run.py command with the project's memory gate (`gpu_max_mb` of the trainsuite block) before the `--`, unless it has one or asks for no GPU: an item queued before the gate
+    existed, one rebuilt from its run record and one added by hand start under the same rule as `start` and `add`"""
+    from . import compose as C
+    try:
+        gate = C.gpu_gate(c.block)
+    except C.ComposeError as e:
+        raise QueueError(str(e))
+    head = argv[:argv.index("--")] if "--" in argv else list(argv)
+    if not gate or "--gpu" not in head or "--gpu-max-mb" in head:
+        return list(argv)
+    return head + ["--gpu-max-mb", str(gate)] + argv[len(head):]
+
+
 def argv_from_record(c, rid, rec):
     """the run.py command of a run that is not in the list, rebuilt from its record (the launcher is gone: nothing else is left to read it from)"""
     if not rec.get("command"):
@@ -284,7 +298,11 @@ def write_config(c, it):
 def launch(c, it, wait=3.0):
     """start the item's run.py detached; a launcher that refuses within `wait` seconds (held id, finished, no card ...) marks the item `refused`"""
     write_config(c, it)
-    argv = pinned_argv(it)
+    try:
+        argv = with_gate(c, pinned_argv(it))
+    except QueueError as e:                             # a project.json whose gate is no number: the item is refused, the runner goes on
+        it["refused"] = str(e)[:300]
+        return False, f"launcher refused: {it['refused']}"
     log = os.path.join(c.runs, folder(it["id"]) + ".launcher.log")
     os.makedirs(os.path.dirname(log), exist_ok=True)
     with open(log, "ab") as lf:
@@ -590,6 +608,28 @@ def drop(c, rid):
         q["items"].remove(it)
 
 
+def run_brief(c, rid):
+    """what a person wants to see of a run in the line: the gradient norm now (against before), the skipped non-finite steps and the health flags that are no info, in one
+    text ('grad 19.1 (x1.4); 3 skipped; flags: grad_norm,skipped'); '' for a run without metrics or one that cannot be read"""
+    from . import health, modules
+    from .runs import Run
+    try:
+        run = Run(os.path.join(c.runs, folder(rid)))
+        if not run.train:
+            return ""
+        parts, g, n_skip = [], modules.grad_trend(run), run.skipped_steps()[0]
+        if g:
+            parts.append("grad NOT finite" if g["now"] is None else f"grad {g['now']:.3g}" + (f" (x{g['ratio']:.1f})" if g["ratio"] else ""))
+        if n_skip:
+            parts.append(f"{n_skip} skipped")
+        flags = sorted({f.code for f in health.check(run) if f.level != "info"})
+        if flags:
+            parts.append("flags: " + ",".join(flags))
+        return "; ".join(parts)
+    except Exception as e:  # noqa: BLE001  a damaged run folder must not break the view of the line
+        return f"(its metrics could not be read: {type(e).__name__})"
+
+
 def show(c, out=print):
     """the runner, the pause and the items with their derived state"""
     try:
@@ -610,6 +650,9 @@ def show(c, out=print):
         s = states[it["id"]]
         step, total = last_step(os.path.join(c.runs, folder(it["id"])))
         extra = [f"step {step}/{total}"] if step or total else []
+        brief = run_brief(c, it["id"])
+        if brief:
+            extra.append(brief)
         if s == "interrupted" and not restartable(it):
             extra.append("its launcher was killed in this boot: `resume` continues it")
         if it.get("after"):
