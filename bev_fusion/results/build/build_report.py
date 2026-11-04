@@ -74,18 +74,29 @@ class Ctx:
         self.bank = {}
         for p in cfg.get("text", []):
             self.bank.update(read_bank(p))
+        def has_table(r, what):
+            """True when the run has its evaluation table; a run that may be missing ("optional") is skipped with a note, any other missing run stops the build"""
+            if os.path.isfile(f"{r['eval']}/by_n/table_n{self.n}.txt"):
+                return True
+            if r.get("optional"):
+                print(f"skipped (no evaluation yet): {r['id']}")
+                return False
+            fail(f"{what} {r['id']}: no evaluation table {r['eval']}/by_n/table_n{self.n}.txt (a run that may be missing says \"optional\": true in the config)")
+
         self.runs = []
         for r in cfg["runs"]:
             r = dict(r, role=r.get("role", "arm"))
             r.setdefault("eval", f"runs/{r['id']}/eval")
-            if not os.path.isfile(f"{r['eval']}/by_n/table_n{self.n}.txt"):
-                if r.get("optional"):
-                    print(f"skipped (no evaluation yet): {r['id']}")
-                    continue
-                fail(f"run {r['id']}: no evaluation table {r['eval']}/by_n/table_n{self.n}.txt (a run that may be missing says \"optional\": true in the config)")
-            self.runs.append(r)
-        self.by_id = {r["id"]: r for r in self.runs}
-        self.T = {r["id"]: read_table(f"{r['eval']}/by_n/table_n{self.n}.txt") for r in self.runs}
+            if has_table(r, "run"):
+                self.runs.append(r)
+        self.extra = []         # runs of the experiment chapters (bundle2, ...): their tables are read, but they do not enter the general tables of the other sections
+        for r in cfg.get("extra_runs", []):
+            r = dict(r, role="arm")
+            r.setdefault("eval", f"runs/{r['id']}/eval")
+            if has_table(r, "extra run"):
+                self.extra.append(r)
+        self.by_id = {r["id"]: r for r in self.runs + self.extra}
+        self.T = {r["id"]: read_table(f"{r['eval']}/by_n/table_n{self.n}.txt") for r in self.runs + self.extra}
         bases = [r for r in self.runs if r["role"] == "baseline"]
         if len(bases) > 1:
             fail("more than one run has the role baseline")
@@ -321,28 +332,28 @@ def side(ctx, r):
     return dict(id=r["id"], table=ctx.T[r["id"]], ms=t["inference_ms"]["total_ms"] if t else None, idle=bool(t and t.get("idle")))
 
 
-def bundle(ctx):
-    """the rows of the bundle table (bundle_numbers.collect), once"""
+def bundle(ctx, key="bundle"):
+    """the rows of the bundle table (bundle_numbers.collect), once; key = the config entry ("bundle" = the first chapter, "bundle2", ... further chapters)"""
     def build():
-        b = ctx.cfg.get("bundle")
+        b = ctx.cfg.get(key)
         if not b:
-            fail("report_runs.json has no \"bundle\" (the new run and its control)")
+            fail(f"report_runs.json has no \"{key}\" (the new run and its control)")
         new, ctl = ctx.by_id.get(b["run"]), ctx.by_id.get(b["control"])
         if new is None or ctl is None:
-            fail(f"bundle: run {b['run']} or control {b['control']} is not among the runs with an evaluation")
+            fail(f"{key}: run {b['run']} or control {b['control']} is not among the runs with an evaluation")
         if not os.path.isfile(b["compare"]):
-            fail(f"bundle: {b['compare']} does not exist; make it (CPU, from bev_fusion/): python evaluation/bev_suite.py compare runs/{b['control']} runs/{b['run']} "
+            fail(f"{key}: {b['compare']} does not exist; make it (CPU, from bev_fusion/): python evaluation/bev_suite.py compare runs/{b['control']} runs/{b['run']} "
                  f"--curves --fusion --velocity --n {ctx.n} --boot 1000 > {b['compare']}")
         head, paired = read_paired(b["compare"])
         rows = BN.collect(b["rows"], side(ctx, new), side(ctx, ctl), paired, head, test=bool(ctx.cfg.get("test")))
         return dict(rows=rows, new=new, ctl=ctl, new_label=b.get("new_label", new["label"]), ctl_label=b.get("control_label", ctl["label"]), band=b.get("band", 0.010), head=head,
                     weak_below=b.get("weak_below", 0.5))
-    return ctx.memo("bundle", build)
+    return ctx.memo(key, build)
 
 
-def bundle_tables(ctx):
-    """(the numbers table, the weak-spot table) of the bundle chapter, as html"""
-    b = bundle(ctx)
+def bundle_tables(ctx, key="bundle"):
+    """(the numbers table, the weak-spot table) of the bundle chapter, as html; the weak-spot table is empty when the entry says `"weak_table": false`"""
+    b = bundle(ctx, key)
     gaps = {}
     tr, val = ctx.train_table(b["new"]), ctx.T[b["new"]["id"]]
     for r in b["rows"]:
@@ -355,6 +366,8 @@ def bundle_tables(ctx):
     weak = (f"<h3>Weak spots (updated from the numbers)</h3><p class=small>The outputs of the table that are scores between 0 and 1, lowest of the new run first; flagged when below {b['weak_below']:g}. "
             "The gap is the new run's score on its own training scenes minus the validation score.</p>"
             + BN.table_weak(b["rows"], gaps, b["weak_below"], b["new_label"], b["ctl_label"]))
+    if ctx.cfg[key].get("weak_table") is False:
+        weak = ""
     return full, weak
 
 
@@ -369,8 +382,8 @@ def chapter_html(text, full, weak):
     return "".join(render_md(p, bullets=True) if i % 2 == 0 else {"TABLE": full, "WEAK": weak}[p] for i, p in enumerate(parts))      # odd pieces: the captured marker names
 
 
-def sec_bundle(ctx):
-    return chapter_html(open(need(ctx.cfg["bundle"]["chapter"], "bundle chapter"), encoding="utf-8").read(), *bundle_tables(ctx))
+def sec_bundle(ctx, key="bundle"):
+    return chapter_html(open(need(ctx.cfg[key]["chapter"], f"{key} chapter"), encoding="utf-8").read(), *bundle_tables(ctx, key))
 
 
 # ------------------------------------------------------------------------------------------------ sections
@@ -662,8 +675,8 @@ def page(ctx):
     cfg = ctx.cfg
     secs = []
     for name in cfg["sections"]:
-        if name == "bundle":
-            secs.append(("bundle", cfg["bundle"]["title"], sec_bundle(ctx)))
+        if re.fullmatch(r"bundle\d*", name):        # "bundle" = the first experiment chapter, "bundle2", ... further ones (each with its own config entry)
+            secs.append((name, cfg[name]["title"], sec_bundle(ctx, name)))
         elif name in SECTIONS:
             secs.append((TITLES[name][0], TITLES[name][1], SECTIONS[name](ctx)))
         else:

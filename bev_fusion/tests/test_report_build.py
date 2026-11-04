@@ -113,13 +113,19 @@ def fixture(root):
     write(root, "chapters/mail.txt", MAIL)
     write(root, "report_runs.json", json.dumps(config(), indent=1))
     write(root, "labels.txt", "static numbers of the table labels: dt -0.5 s, dt +0.5 s\n")
+    write(root, "runs/ext/eval/by_n/table_n1000.txt", lines(NEW))             # an extra run (a second experiment chapter): the numbers of the new run, so its chapter must equal the first
+    write(root, "runs/ext/eval/timing_modules.json", timing(MS["new"]))
+    write(root, "cmp_ext.txt", COMPARE.replace("runs/new", "runs/ext"))
+    write(root, "chapters/b2.md", CHAPTER)
 
 
 def config():
-    return {"title": "Test report", "out": "out", "frames": 1000, "text": ["chapters/text.txt"], "sections": ["summary", "bundle", "results"],
+    bundle = {"title": "The bundle", "run": "new", "control": "ctl", "new_label": "t.new", "control_label": "t.ctl", "compare": "cmp.txt", "chapter": "chapters/b.md",
+              "band": 0.010, "weak_below": 0.5, "rows": ROWS}
+    return {"title": "Test report", "out": "out", "frames": 1000, "text": ["chapters/text.txt"], "sections": ["summary", "bundle", "bundle2", "results"],
             "runs": [{"id": "ctl", "label": "control run", "role": "baseline"}, {"id": "new", "label": "new run", "role": "arm"}],
-            "bundle": {"title": "The bundle", "run": "new", "control": "ctl", "new_label": "t.new", "control_label": "t.ctl", "compare": "cmp.txt", "chapter": "chapters/b.md",
-                       "band": 0.010, "weak_below": 0.5, "rows": ROWS},
+            "extra_runs": [{"id": "ext", "label": "ext run"}],
+            "bundle": bundle, "bundle2": dict(bundle, title="The second chapter", run="ext", new_label="t.ext", compare="cmp_ext.txt", chapter="chapters/b2.md"),
             "summary": {"table": "bundle"}, "mail": {"narrative": "chapters/mail.txt"}}
 
 
@@ -177,6 +183,11 @@ def failures(root, out="out"):
         bad.append("B: the chapter's text and the two tables are not in the order of the markers")
     if '<span class="delta good">+0.060</span>' not in bundle or '<span class="delta bad">-0.020</span>' not in bundle or '<span class="delta">-0.005</span>' not in bundle:
         bad.append("B: the difference is not coloured by the direction and the band")
+    second = [cells(t) for t in re.findall(r"<table.*?</table>", section(page, "bundle2"), re.S)]                 # E: an extra run in a second chapter
+    if not second or second[0][1:] != EXPECT_TABLE or second[0][0][1] != "t.ext":
+        bad.append(f"E: the second chapter does not show the extra run against the control: {second[0][:2] if second else 'no table'}")
+    if "ext run" in page:
+        bad.append("E: an extra run entered the general tables of the other sections")
     mail = open(os.path.join(root, out, "mail.txt"), encoding="utf-8").read()
     want = [("lane divider IoU@0.5", ["0.430", "0.490"]), ("centre-line IoU@1", ["-", "0.400"]), ("walkway IoU", ["0.400", "0.380"])]
     for name, vals in want:
@@ -212,6 +223,7 @@ def cut_group(r):
 
 
 SCENARIOS = {"no eval of a run": (lambda r: shutil.rmtree(os.path.join(r, "runs/new/eval")), "no evaluation table"),
+             "no eval of an extra run": (lambda r: shutil.rmtree(os.path.join(r, "runs/ext/eval")), "extra run ext: no evaluation table"),
              "no chapter file": (drop("chapters/b.md"), "bundle chapter"),
              "no compare file": (drop("cmp.txt"), "bev_suite.py compare"),
              "compare of other runs": (sub("cmp.txt", "b = runs/new", "b = runs/other"), "compare file is about"),
@@ -249,6 +261,9 @@ MUTANTS = [("columns swapped", "bundle_numbers.py", 'vals = [side["table"].get(s
            ("a head of the new run only is refused", "bundle_numbers.py", 'not (s.get("new_only") and role == "control")', "True", "out"),
            ("missing input does not stop", "report_lib.py", "    if not os.path.isfile(path):\n        fail(", "    if False:\n        fail(", "no chapter file"),
            ("missing run is skipped", "build_report.py", 'if r.get("optional"):', "if True:", "no eval of a run"),
+           ("a missing extra run is skipped", "build_report.py", 'if has_table(r, "extra run"):', "if True:", "no eval of an extra run"),
+           ("an extra run enters the general tables", "build_report.py", 'if has_table(r, "extra run"):\n                self.extra.append(r)', 'if has_table(r, "extra run"):\n                self.runs.append(r)', "out"),
+           ("every chapter shows the first run", "build_report.py", "*bundle_tables(ctx, key))", '*bundle_tables(ctx, "bundle"))', "out"),
            ("compare of other runs accepted", "bundle_numbers.py", "if ids != (ctl[\"id\"], new[\"id\"]):", "if False:", "compare of other runs"),
            ("compare disagreeing with the table accepted", "bundle_numbers.py", "abs(v - float(p)) > 1e-3", "abs(v - float(p)) > 1e9", "compare disagrees with the table"),
            ("a missing group accepted", "bundle_numbers.py", 'ck.split(".")[0] not in groups', "False", "compare lacks a group"),
