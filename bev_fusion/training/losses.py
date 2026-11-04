@@ -127,6 +127,8 @@ def radar_aux_spec(stationary=True):
 
 
 def _t(a, device):
+    if LS.on("sync"):                                  # D54: from pinned memory, no wait for the GPU (launch_saving.to_dev)
+        return LS.to_dev(torch.as_tensor(np.asarray(a, dtype=np.float32)), device)
     return torch.as_tensor(np.asarray(a, dtype=np.float32), device=device)
 
 
@@ -144,7 +146,7 @@ def _stack_many(gts, keys, device):
     for k in keys:
         a = np.stack([np.asarray(g[k], dtype=np.float32) for g in gts])
         parts.append(a[:, None] if a.ndim == 3 else a)
-    big = torch.from_numpy(np.concatenate(parts, 1)).to(device)
+    big = LS.to_dev(torch.from_numpy(np.concatenate(parts, 1)), device)
     out, c = {}, 0
     for k, p in zip(keys, parts):
         out[k] = big[:, c:c + p.shape[1]]
@@ -194,8 +196,8 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     fusion = cam * radar                              # D37: the cells that camera and radar both observe
     if cfg.fusion_area_only:                          # D38 (b): don't care outside it, for the fused heads
         w_map, w_obj = w_map * fusion, w_obj * fusion
-    w_reg = torch.tensor([float(g.get("meta", {}).get("w_reg", 1.0)) if cfg.use_w_reg else 1.0 for g in gts],
-                         device=device).view(-1, 1, 1, 1)
+    w_reg = LS.to_dev(torch.tensor([float(g.get("meta", {}).get("w_reg", 1.0)) if cfg.use_w_reg else 1.0 for g in gts]),
+                      device).view(-1, 1, 1, 1)
     W = {"w_map": w_map, "w_lines": w_map * w_reg, "w_obj": w_obj, "w_cam": w_cam, "w_radar": radar,
          "w_keep": keep, "w_fusion": fusion}
     if mass is not None and abs(float(dt)) > 1e-6:
@@ -274,7 +276,7 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
     names = {k: [spec[i][0] for i in v] for k, v in idx.items()}
 
     def ch(kind):
-        return logits[:, idx[kind]]
+        return logits[:, LS.index(idx[kind], logits.device)]      # D54: with the sync switch on the index tensor is made once, not at every call (a copy from pageable memory)
 
     def tg(kind):
         return torch.cat([T[spec[i][2]] for i in idx[kind]], 1)
@@ -391,7 +393,7 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
     t = build_targets(keep, grid, groups, max_obj)
     ign = (w_obj <= 0).expand_as(out["hm"])
     if any(drop):
-        ign = ign | ((build_targets(drop, grid, groups, max_obj)["hm"].to(dev) > 0) & (t["hm"].to(dev) == 0))
+        ign = ign | ((LS.to_dev(build_targets(drop, grid, groups, max_obj)["hm"], dev) > 0) & (LS.to_dev(t["hm"], dev) == 0))
     hm = torch.where(ign, torch.full_like(out["hm"], -1e4), out["hm"])
     return head_loss(dict(out, hm=hm), t, w_vel, w_mov=w_mov, cell_w=w_obj if hygiene else None), t
 
@@ -413,8 +415,8 @@ def motion_term(v_hat, T, cfg):
 
 def consistency_term(obj_vel, v_hat, t):
     """L1 between the object head's vel and the motion field at the GT centres (8.2 / 8.4 optional)."""
-    m = t["mask"].to(v_hat.device).unsqueeze(-1)
-    ind = t["ind"].to(v_hat.device)
+    m = LS.to_dev(t["mask"], v_hat.device).unsqueeze(-1)
+    ind = LS.to_dev(t["ind"], v_hat.device)
     return ((_gather(obj_vel, ind) - _gather(v_hat, ind)).abs() * m).sum() / (2 * m.sum()).clamp(min=1)
 
 
