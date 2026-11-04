@@ -18,6 +18,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+try:
+    from . import launch_saving as LS
+except ImportError:                                   # run as a script
+    import launch_saving as LS
+
 GROUPS = (("car", "box"), ("truck", "box"), ("pedestrian", "circle"))     # (name, kind); synthetic-world classes
 
 
@@ -181,7 +186,7 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0, cell_w=None):
     `loss_w` of a box dict), which then weights every regression term; t["known"] (1 where the velocity of the object is known) takes the objects of unknown velocity out of the moving / static
     BCE and of the velocity L1 (their velocity target is 0, which would read as "static")."""
     dev = out["hm"].device
-    t = {k: v.to(dev) for k, v in t.items()}
+    t = {k: LS.to_dev(v, dev) for k, v in t.items()}         # D54: with the sync switch on, from pinned memory without a wait for the GPU; else v.to(dev)
     m = t["mask"].unsqueeze(-1)
     mb = (t["mask"] * t["is_box"]).unsqueeze(-1)
     mc = (t["mask"] * (1 - t["is_box"])).unsqueeze(-1)

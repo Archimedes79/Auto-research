@@ -62,7 +62,8 @@ run "fusion-area loss" "$PY" training/losses.py --fusion-area              # D38
 run "fusion area, real" "$PY" tests/test_fusion_area_real.py               # the same option on real cached GT frames (skips without data/cache/gt); seconds
 run "host targets"     "$PY" tests/test_host_targets.py                    # D52: build_targets / GT stacking bit for bit against the old code; CPU, seconds
 run "launch saving"    "$PY" tests/test_launch_saving.py                   # D53: share_mover / splat_fused / sync_free equal to the plain code (bit for bit on the CPU); CPU, about 30 s
-run "startable"        "$PY" training/startable.py                         # static config check, GT identity, smoke twin; CPU, seconds
+run "host batch"       "$PY" tests/test_host_batch.py                      # D54: the host copies (batch["host"]), the one-copy ego tensors, the keyed lift: the same numbers, no wait for the GPU (the GPU part runs when one is there); about 1 min
+run "startable"        "$PY" training/startable.py                        # static config check, GT identity, smoke twin; CPU, seconds
 run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
 run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
 run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s

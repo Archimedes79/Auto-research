@@ -268,6 +268,16 @@ def to_device(batch, device, non_blocking=False):
     return out
 
 
+HOST_KEYS = ("K", "T_cam_car", "ida", "ida2", "flip")        # the batch entries the network needs as Python numbers (cache key of the lift, "any flipped?")
+
+
+def host_side(batch):
+    """{key: CPU tensor} of HOST_KEYS in a batch that is still on the host: references, not copies. Taken BEFORE `to_device`, because a `.tolist()` / `.any()` of the GPU copy
+    waits until the GPU has finished everything queued (D54: ~290 such waits per step for the projection-table cache key alone). forward_loss puts the dict into the device
+    batch as batch["host"] (interface.INPUTS); the network uses it only with ModelConfig.sync_free."""
+    return {k: batch[k] for k in HOST_KEYS if torch.is_tensor(batch.get(k)) and batch[k].device.type == "cpu"}
+
+
 # ------------------------------------------------------------------------------------------------ optimisation
 # EMA, the schedule, the optimiser groups and step, AMP, warm start, pruning and the log files are the engine's (autoresearch/trainkit, imported above under the old names);
 # what stays here names BEV things: the state that is not saved (the frozen camera heads) and the config fields a resume may change
@@ -370,11 +380,21 @@ def gap_ego_motion(steps):
     return T, chord_x / T, th / T
 
 
+def _one_copy(rows, device):
+    """float32 tensor of the nested Python lists `rows` on `device` with ONE host-to-device copy, made from pinned memory without waiting (D54). The values are those of
+    torch.tensor(rows, dtype=torch.float32, device=device), which converts on the host as well; the old code made one tensor, i.e. one copy from pageable memory
+    (a copy that first waits until the GPU has finished everything queued) per element of the result: three per dt and three per clip step."""
+    flat = torch.tensor(rows, dtype=torch.float32)
+    if torch.device(device).type == "cuda":
+        return flat.pin_memory().to(device, non_blocking=True)
+    return flat.to(device)
+
+
 def batch_ego(gap_steps, dts, device, strict=False):
     """{nominal dt != 0: (dt, v, omega)} as (B,) tensors: the true gap and the gap-mean ego motion of every sample, from batch["gap_steps"]
     (the dataset makes them from the poses: the network input needs no ground truth). gap_steps holds the previous and the next keyframe only, i.e. dt = -0.5 and +0.5 s: any other dt
-    would silently get the 0.5 s gap; strict (LossConfig.hygiene_2026_11_02) raises instead."""
-    ego = {}
+    would silently get the 0.5 s gap; strict (LossConfig.hygiene_2026_11_02) raises instead. All tensors are views of one (n_dt, 3, B) tensor (one copy to the GPU, D54)."""
+    keys, rows = [], []
     for dt in dts:
         if abs(dt) < 1e-6:
             continue
@@ -382,8 +402,12 @@ def batch_ego(gap_steps, dts, device, strict=False):
             raise ValueError(f"batch_ego: dt {dt:+.2f} s has no ego gap (gap_steps holds the keyframe before and after, dt = -0.5 and +0.5 s); the sample builder must provide the gap of that dt")
         key = "prev" if dt < 0 else "next"
         vals = [gap_ego_motion(g[key]) for g in gap_steps]
-        ego[dt] = tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
-    return ego
+        keys.append(dt)
+        rows.append([[v[i] for v in vals] for i in range(3)])
+    if not keys:
+        return {}
+    flat = _one_copy(rows, device)
+    return {dt: (flat[j, 0], flat[j, 1], flat[j, 2]) for j, dt in enumerate(keys)}
 
 
 def supports_ego(model):
@@ -402,7 +426,8 @@ def clip_step(prev_batch, device):
     previous batch toward its next keyframe (batch["gap_steps"], from the poses), composed into one splat step; the model's memory pose
     advances by it."""
     vals = [gap_ego_motion(g["next"]) for g in prev_batch["gap_steps"]]
-    return tuple(torch.tensor([v[i] for v in vals], dtype=torch.float32, device=device) for i in range(3))
+    flat = _one_copy([[v[i] for v in vals] for i in range(3)], device)           # one copy to the GPU, three views (D54)
+    return flat[0], flat[1], flat[2]
 
 
 _CONTRACT_CHECKED = []      # interface.check_inputs / check_outputs run on the first forward_loss call of the process
@@ -418,7 +443,10 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     dts = tuple(sorted(gts))
     strict = bool(getattr(getattr(loss, "cfg", None), "hygiene_2026_11_02", False))       # LossConfig.hygiene_2026_11_02: a dt without an ego gap is an error
     ego = batch_ego(batch["gap_steps"], dts, device, strict=strict) if cfg is not None and cfg.gap_ego and supports_ego(model) else None
+    host = host_side(batch)
     batch = to_device(batch, device, non_blocking=bool(cfg is not None and cfg.pin_memory))
+    if host:
+        batch["host"] = host
     ctx = amp_context(amp, device)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
     first = not _CONTRACT_CHECKED

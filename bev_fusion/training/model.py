@@ -57,7 +57,7 @@ try:
     from .extract import boxes_from_maps, dense_boxes, soft_line_map
     from .fusion import ConcatFusion, GateFusion
     from .lane_branch import LaneBranch
-    from .lift_pd import Grid, LiftPD
+    from .lift_pd import Grid, LiftPD, lift_key
     from .layers import LEVELS
     from .losses import NUSC_GROUPS, layer_spec, layer_spec_1m, radar_aux_spec, refine_gt_boxes, sample_targets
     from .object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
@@ -76,7 +76,7 @@ except ImportError:                                   # run as a script
     from extract import boxes_from_maps, dense_boxes, soft_line_map
     from fusion import ConcatFusion, GateFusion
     from lane_branch import LaneBranch
-    from lift_pd import Grid, LiftPD
+    from lift_pd import Grid, LiftPD, lift_key
     from layers import LEVELS
     from losses import NUSC_GROUPS, layer_spec, layer_spec_1m, radar_aux_spec, refine_gt_boxes, sample_targets
     from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
@@ -367,11 +367,32 @@ class BEVFusionModel(nn.Module):
         if self.cam_adapter is not None:
             ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
         hw = img.shape[-2:]
+        keys = self._lift_keys(batch, hw)
         bevs = []
         for b in range(B):                                       # one calibration per sample (scenes differ)
-            vol = self.lift(ctx[b], prob[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], hw, batch["ida"])
+            vol = self.lift(ctx[b], prob[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], hw, batch["ida"], key=None if keys is None else keys[b])
             bevs.append(self.cam_reduce(vol))
         return torch.stack(bevs)
+
+    @staticmethod
+    def _lift_keys(batch, hw, ida_name="ida"):
+        """the projection-table cache key of every sample's current-frame camera (lift_pd.lift_key), made from the CPU copies in batch["host"] (train.host_side; kept in the
+        batch only when sync_free is on), so the lift does not wait for the GPU to read its calibration; None when the batch has no such copies (the lift makes the key itself).
+        ida_name: the batch entry of the crop transform this lift uses ('ida', or 'ida2' for the BEVFusion source)"""
+        host = batch.get("host")
+        if not host or "K" not in host or "T_cam_car" not in host or ((ida_name in batch) != (ida_name in host)):
+            return None
+        Kh, Th, ida = host["K"], host["T_cam_car"], host.get(ida_name)
+        return [lift_key(Kh[b, 0], Th[b, 0], hw, ida) for b in range(Kh.shape[0])]
+
+    @staticmethod
+    def _flip_any(batch):
+        """True if a sample of the batch is mirrored: read from the CPU copy in batch["host"] when there is one (a `.any()` of the GPU tensor waits for the GPU)"""
+        fl = batch.get("flip")
+        if fl is None:
+            return False
+        hf = (batch.get("host") or {}).get("flip")
+        return bool((fl if hf is None else hf).any())
 
     def camera_visibility(self, batch, like):
         """(B, 1, X, Y): the cells the current camera frame observes (LiftPD.visibility per sample) - the obs_mass of the
@@ -484,7 +505,7 @@ class BEVFusionModel(nn.Module):
         radar, trunk or heads - and the new state, the one `forward` would return for the cam / buf entries; forward() on the next frame
         continues from it. One frame, `step` as in forward. Needs rad_temporal 'none' (its state would go stale); a mirror-augmented batch is
         refused (training only)."""
-        if self.cfg.cam_buffer == "window" or self.rad_temporal is not None or (batch.get("flip") is not None and bool(batch["flip"].any())):
+        if self.cfg.cam_buffer == "window" or self.rad_temporal is not None or self._flip_any(batch):
             raise ValueError("advance: cam_buffer 'pair' / 'recurrent', rad_temporal 'none' and no flipped sample")
         batch = Precompute.from_model(self)(dict(batch), ("vis_cam",))
         frames = self.camera_bevs(batch)
@@ -535,6 +556,8 @@ class BEVFusionModel(nn.Module):
 
     def _forward(self, batch, dts, state, step, ego):
         state = state or {}
+        if "host" in batch and not self.cfg.sync_free:           # D54: the CPU copies of the calibration and the flip flags are used only with sync_free; without it the old code runs
+            batch = {k: v for k, v in batch.items() if k != "host"}
         need = (("vis_cam",) if self.cam_temporal is not None else ()) + \
                ((self._rad_mask,) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
         batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
@@ -543,7 +566,8 @@ class BEVFusionModel(nn.Module):
                  for f in batch["steps"]]
         cam_obs = batch["vis_cam"].to(cam_frames) if "vis_cam" in need else None
         flip = batch.get("flip")                                 # mirror augmentation (training/augment.py): the other inputs
-        if flip is not None and bool(flip.any()):                # and the targets of these samples were mirrored by flip_batch
+        flipped = self._flip_any(batch)
+        if flipped:                                              # and the targets of these samples were mirrored by flip_batch
             cam_frames = flip_cam(cam_frames, None, flip)[0]     # (the visibility map is mirrored by the precompute step)
         v_levels, buf = None, None
         if self.cfg.cam_buffer != "window":                      # t21: one buffered frame instead of the window (_camera_buffered)
@@ -557,8 +581,8 @@ class BEVFusionModel(nn.Module):
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
             prob0 = batch["prob"][:, 0].float() if "prob" in batch else self._prob0
             hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
-            lane = self.lane(img0, prob0, batch["K"][:, 0], batch["T_cam_car"][:, 0], hw, batch["ida"])
-            if flip is not None and bool(flip.any()):
+            lane = self.lane(img0, prob0, batch["K"][:, 0], batch["T_cam_car"][:, 0], hw, batch["ida"], keys=self._lift_keys(batch, hw))
+            if flipped:
                 lane = flip_cam(lane[:, None], None, flip)[0][:, 0]
             cam = cam + lane
         radar_side = None

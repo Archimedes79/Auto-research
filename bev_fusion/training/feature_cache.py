@@ -317,7 +317,9 @@ def CachedBEVFusionModel(cfg=None):
                 if i == 0 and self.cam_adapter is not None:
                     ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
                 lift, collapse = getattr(self, "lift" + s), getattr(self, "cam_reduce" + s)
-                bevs.append(torch.stack([collapse(lift(ctx[b], p[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida" + s]))
+                keys = self._lift_keys(batch, batch["hw"], "ida" + s)    # D54: the projection-table cache keys from the CPU copies in batch["host"] (None: the lift makes them)
+                bevs.append(torch.stack([collapse(lift(ctx[b], p[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida" + s],
+                                                       key=None if keys is None else keys[b]))
                                          for b in range(B)]))           # one calibration per sample (scenes differ)
             if len(bevs) == 1:
                 return bevs[0]

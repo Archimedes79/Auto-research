@@ -19,6 +19,8 @@ Run the self-test: python training/launch_saving.py
 import contextlib
 import threading
 
+import torch
+
 NAMES = ("splat", "sync")
 
 
@@ -51,6 +53,32 @@ def enabled(**flags):
     finally:
         for k, v in old.items():
             setattr(_STATE, k, v)
+
+
+# ------------------------------------------------------------------------------------------------ host-to-device copies (D54)
+def to_dev(t, device):
+    """`t.to(device)`. With the `sync` switch on and a CPU tensor on its way to a CUDA device, the copy is made from pinned memory and non-blocking: a copy from
+    pageable memory first waits until the GPU has finished everything queued before it (CUDA's rule), so every such copy cut the host's lead over the GPU. The values
+    are the same; the pinned buffer is a copy, so the caller may change or free `t` at once."""
+    if on("sync") and torch.is_tensor(t) and t.device.type == "cpu" and torch.device(device).type == "cuda":
+        return t.pin_memory().to(device, non_blocking=True)
+    return t.to(device)
+
+
+_INDEX = {}
+
+
+def index(items, device):
+    """a list of ints as an index tensor on `device`, made once per (list, device): `x[:, [1, 2]]` builds the index tensor from the list at every call, a pageable copy
+    to the GPU each time (with the `sync` switch off: the list itself, as before)"""
+    if not on("sync"):
+        return list(items)
+    key = (tuple(items), str(device))
+    if key not in _INDEX:
+        if len(_INDEX) > 256:
+            _INDEX.clear()
+        _INDEX[key] = torch.tensor(list(items), dtype=torch.long, device=device)
+    return _INDEX[key]
 
 
 def _selftest():
