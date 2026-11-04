@@ -159,7 +159,9 @@ def write_md(c, path):
          f"| p - g, exact map | {c['diff']['exact']['mean']:+.4f} [{c['diff']['exact']['lo']:+.4f}, {c['diff']['exact']['hi']:+.4f}] | | |",
          f"| topo F1 | {gr.get('topo_F1', float('nan')):.4f} | | {dd['topo_F1']:.4f} |", f"| F1@1.0 | {gr.get('F1@1.0', float('nan')):.4f} | | {dd['F1_1']:.4f} |",
          f"| junction F1 | {gr.get('junction_F1', float('nan')):.4f} | | {dd['junction_F1']:.4f} |", f"| lanes found | {gr.get('lanes_found', float('nan')):.4f} | | {dd['lanes_found']:.4f} |",
-         f"| Q | {gr.get('Q', float('nan')):.4f} | | {dd['Q']:.4f} |", "", "graph numbers of p: `qgraph_eval.graph_metrics` (the lane suite's functions); d from " + dd["source"] + ".", "",
+         f"| Q | {gr.get('Q', float('nan')):.4f} | | {dd['Q']:.4f} |",
+         f"| vertices per 100 m: node ids / Douglas-Peucker 0.3 m (budget 14.3 on the DP basis) | {gr.get('vert100', float('nan')):.1f} / {gr.get('vert100_dp', float('nan')):.1f} | | {dd['vert100']:.1f} / |",
+         f"| pieces per GT piece, id switches per 100 m | {gr.get('pieces_per_gt_piece', float('nan')):.3f}, {gr.get('id_switches_per_100m', float('nan')):.3f} | | |", "", "graph numbers of p: `qgraph_eval.graph_metrics` (the lane suite's functions); d from " + dd["source"] + ".", "",
          "```json", json.dumps({k: c["p"][k] for k in ("graph", "nodes")}, indent=1, default=float)[:3000], "```"]
     open(path, "w", encoding="utf-8").write("\n".join(L) + "\n")
 

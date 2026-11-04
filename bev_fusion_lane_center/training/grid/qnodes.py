@@ -33,8 +33,8 @@ def fourier(c, nf=4):
 
 def sample(feat, xy):
     """bilinear sample of a map (B, C, H, W) that spans +-50 m (rows = x, columns = y) at xy (B, 2, h, w) metres -> (B, C, h, w); positions outside are clamped to the border"""
-    grid = torch.stack([xy[:, 1] / HALF, xy[:, 0] / HALF], -1).to(feat.dtype)
-    return F.grid_sample(feat, grid, mode="bilinear", padding_mode="border", align_corners=False)
+    grid = torch.stack([xy[:, 1] / HALF, xy[:, 0] / HALF], -1).float()                         # float32 even under bf16 autocast (a bf16 grid has 0.2 m steps beyond 25 m)
+    return F.grid_sample(feat.float(), grid, mode="bilinear", padding_mode="border", align_corners=False).to(feat.dtype)
 
 
 def unit(v, dim=1, eps=1e-6):

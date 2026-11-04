@@ -172,11 +172,12 @@ def _touched(polys, n, res):
     return m
 
 
-def areas2(g, n=50, res=2.0, dilate=0.0, ss=4):
-    """-> (2, n, n) float32: channel 0 road (cell covered >= 0.5 by the drivable polygons, ss x ss sub-cells), channel 1 intersection (any part of the cell covered)"""
+def areas2(g, n=50, res=2.0, dilate=0.0, ss=4, dilate_road=0.0):
+    """-> (2, n, n) float32: channel 0 road (cell covered >= 0.5 by the drivable polygons, ss x ss sub-cells), channel 1 intersection (any part of the cell covered); `dilate` grows the INTERSECTION polygons only
+    (the loader's 2 m), `dilate_road` the road polygons (default 0)"""
     a = g.get("areas", {})
     out = np.zeros((2, n, n), np.float32)
-    road, inter = _polygons(a.get("road", []), dilate), _polygons(a.get("intersection", []), dilate)
+    road, inter = _polygons(a.get("road", []), dilate_road), _polygons(a.get("intersection", []), dilate)
     if road:
         out[0] = _coverage(road, n, res, ss) >= 0.5
     if inter:
@@ -244,7 +245,9 @@ def _selftest():
     g["areas"]["intersection"] = [dict(exterior=sq(2, 0, 6, 6), holes=[], area=24.0)]
     assert set(zip(*np.nonzero(areas2(g)[1]))) == {(i, j) for i in (26, 27) for j in (25, 26, 27)}, "a polygon edge on a cell edge does not mark the neighbour"
     r3 = areas2(g, dilate=2.0)
-    assert r3[1].sum() > areas2(g)[1].sum() and r3[0].sum() > r2[0].sum(), "dilate grows the polygons"
+    assert r3[1].sum() > areas2(g)[1].sum() and (r3[0] == areas2(g)[0]).all(), "dilate grows the INTERSECTION polygons only"
+    r4 = areas2(g, dilate_road=2.0)
+    assert r4[0].sum() > r2[0].sum() and (r4[1] == areas2(g)[1]).all(), "dilate_road grows the road polygons only"
     # centre points: the format of GridData (float32, unit tangents), pieces of one point and points beyond the box are left out
     pc = lambda pts: dict(pts=np.array(pts, np.float32))
     g["pieces"] = [pc([(0, y) for y in np.arange(-10, 10.1, 0.5)]), pc([(1.0, 1.0)]), pc([(48.0, 0.0), (49.0, 0.0)]), pc([(40.0, y) for y in np.arange(46.0, 50.1, 0.5)])]

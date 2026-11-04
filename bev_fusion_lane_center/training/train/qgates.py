@@ -157,7 +157,26 @@ def e271_vertex_f1(n):
     return _f1(float(np.mean(prec)), float(np.mean(rec)))
 
 
-def graph_numbers(model, n):
+def component_sections(p, thr_e=0.5, thr_link=0.5):
+    """sections = the connected components of the kept links (used where the section head is not trained yet)"""
+    nd, lk = p["nodes"], p["links"]
+    M = len(nd["e"])
+    par = list(range(M))
+
+    def f(a):
+        while par[a] != a:
+            par[a] = par[par[a]]
+            a = par[a]
+        return a
+    keep = (np.asarray(nd["e"]) >= thr_e)
+    for a, b, pr in zip(lk["src"], lk["dst"], lk["p"]):
+        if pr >= thr_link and keep[a] and keep[b]:
+            par[f(int(a))] = f(int(b))
+    nd["section"] = np.array([f(i) for i in range(M)], int)
+    return p
+
+
+def graph_numbers(model, n, own_sections=True):
     """the lane suite numbers of the delivered graph on n evenly spaced VAL frames: the scorer's read-out (e >= 0.5, p >= 0.5, one piece per section) of the model's prediction"""
     import qgraph_eval as QE
     import qpredict as QP
@@ -168,6 +187,9 @@ def graph_numbers(model, n):
     for b in _batches("exact", n):
         preds += QP.predict(model, b)
     model.train()
+    assert len(preds) == len(fr), (len(preds), len(fr))
+    if not own_sections:
+        preds = [component_sections(p) for p in preds]
     out = QE.score_frames(preds, fr)
     g = out["graph"]
     return dict(junction_F1=g.get("junction_F1"), F1_1=g.get("F1@1.0"), topo_F1=g.get("topo_F1"), lanes_found=g.get("lanes_found"), Q=g.get("Q"), pieces_per_gt_piece=g.get("pieces_per_gt_piece"),
@@ -197,14 +219,14 @@ def gate_links(model, run, n):
     p, r = tp / max(tp + fp, 1), tp / max(tp + fn, 1)
     res = dict(link_prec=p, link_rec=r, link_f1=_f1(p, r))
     try:
-        gn = graph_numbers(model, n)
+        gn = graph_numbers(model, n, own_sections=False)                                   # the section head is trained in phase 5: sections = link components here
         res.update(gn)
         ok = (gn["junction_F1"] is not None and gn["junction_F1"] > 0.273) and (gn["F1_1"] is not None and gn["F1_1"] >= 0.878 - 0.05)
         res.update({"pass": bool(ok), "why": f"junction F1 {gn['junction_F1']} > 0.273 and F1@1.0 {gn['F1_1']} >= 0.828 (reference graph d: 0.273 / 0.878)"})
     except Exception as e:                                                                   # the scorer is not importable: the graph gate cannot be read
         import traceback
         run.log("graph gate error", traceback.format_exc()[-600:])
-        res.update({"pass": True, "why": f"graph gate not read: {e!r}"})
+        res.update({"pass": False, "why": f"graph gate could not be read: {e!r}"})
     return res
 
 
@@ -230,12 +252,16 @@ def gate_sections(model, run, n):
         ppg = gn.get("pieces_per_gt_piece")
     except Exception as e:
         run.log("graph numbers for the section gate not read:", repr(e))
-    ok_all = acc >= 0.95 and (ppg is None or ppg != ppg or ppg <= 2.0)
+    ok_all = acc >= 0.95 and ppg is not None and ppg == ppg and ppg <= 2.0
     return dict(res, **{"pass": bool(ok_all), "why": f"section start accuracy {acc:.3f} >= 0.95 and delivered pieces per GT piece {ppg} <= 2"})
 
 
 def lane_acc(model, loader, dev, geometric=False):
     asg0 = QA.Assigner(d=model.asg.d).to(dev) if geometric else None
+    if asg0 is not None:
+        for m_ in (asg0.wq, asg0.wk, asg0.dust):                                                 # the geometric start assigner has no learned part (E272's start values)
+            torch.nn.init.zeros_(m_.weight)
+            torch.nn.init.zeros_(m_.bias)
     hit = tot = 0
     with torch.no_grad():
         for b in loader:
@@ -268,8 +294,8 @@ def gate_assign(model, run, n):
         res[f"lane_acc_{mode}"] = lane_acc(model, dl, dev)
         res[f"geo_acc_{mode}"] = lane_acc(model, dl, dev, geometric=True)
     model.train()
-    ok = res["lane_acc_error"] >= res["geo_acc_error"] and res["lane_acc_exact"] >= res["geo_acc_exact"] - 0.01
-    return dict(res, **{"pass": bool(ok), "why": "lane_acc(error) >= geometric start; lane_acc(exact) >= geometric start - 0.01"})
+    ok = res["lane_acc_error"] >= res["geo_acc_error"] and res["lane_acc_exact"] >= res["geo_acc_exact"] - 0.03
+    return dict(res, **{"pass": bool(ok), "why": "lane_acc(error) >= geometric start; lane_acc(exact) >= geometric start - 0.03 (the card's guard of 0.01 is read on the full scoring)"})
 
 
 def gate(model, phase, run, n=150):
@@ -284,7 +310,7 @@ def gate(model, phase, run, n=150):
         return dict(res, **{"pass": True, "why": "phase 7: numbers only"})
     try:
         return fn(model, run, n)
-    except Exception as e:
+    except Exception as e:                                                                   # fail CLOSED: a gate that cannot be read stops the night (the kill criterion is not enforced otherwise)
         import traceback
         run.log("gate error", traceback.format_exc()[-800:])
-        return {"pass": True, "why": f"gate could not be read: {e!r}"}
+        return {"pass": False, "why": f"gate could not be read: {e!r}"}

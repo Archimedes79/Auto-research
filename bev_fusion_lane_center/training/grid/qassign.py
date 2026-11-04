@@ -114,7 +114,7 @@ class Assigner(nn.Module):
             sxx = torch.einsum("bat,bax,btx->b", W, pc, tc)
             sxy = torch.einsum("bat,bay,btx->b", W, pc, tc)
             syx = torch.einsum("bat,bax,bty->b", W, pc, tc)
-            th = torch.atan2(sxy - syx, sxx + torch.einsum("bat,bay,bty->b", W, pc, tc)).clamp(-math.radians(6), math.radians(6))
+            th = torch.atan2(sxy - syx, sxx + torch.einsum("bat,bay,bty->b", W, pc, tc) + 1e-6).clamp(-math.radians(6), math.radians(6))
             c, s = th.cos(), th.sin()
             R = torch.stack([torch.stack([c, -s], -1), torch.stack([s, c], -1)], -2)           # (B, 2, 2)
             u = (pbar - torch.einsum("bij,bj->bi", R, tbar)).clamp(-5.0, 5.0)

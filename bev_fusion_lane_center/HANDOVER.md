@@ -1,23 +1,17 @@
-# HANDOVER - 2026-11-04 14:00
+# HANDOVER - 2026-11-04 23:30
 
 New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko is often interrupted and reads little: one small step per turn, say where we are.
 
-## What this project is (D50, Mirko 2026-11-03; restated 2026-11-04: "GaussianCaR is right now the development foundation")
-A lane-centre head on **GaussianCaR** (frozen camera + radar BEV features, 39 channels `dec32` + `logit7`, cached in `~/exp_gcar_b123/feats`), E2E differentiable, no rule step on the training path. GaussianCaR is the foundation for all development and every number here. The `bev_fusion/` system is a separate codebase and not this head's trunk (it cannot yet extract lanes well: lane divider IoU@1 0.55); nothing here depends on it. Shared: `autoresearch/` (tools, trainsuite, evalsuite), `autogt/`.
+## What this project is (D50, D55)
+A separate codebase from the BEV system: a **lane head on the frozen GaussianCaR features**, end-to-end differentiable (D55, 2026-11-04: soft forward path up to the map assignment; matching inside the loss is allowed; hard selection only on the output, named). Nothing here depends on `bev_fusion/`. Shared: `autoresearch/`, `autogt/` (the lane GT is its own version `autogt.lane_gt`, tag `autogt/lane-l3`, signature 3576fa1f7e, built by the GT chat; the front GT c643a7539d is untouched).
 
-## Who does what
-- **Lead chat "BEV Fusion Spurmitte"**: shared code of the folder (`training/trainer.py`, tools, docs), reviews, decisions. **"BEV Fusion Spurmitte Experiments"**: the head (`training/grid/`, `training/train/grid_train.py`, `evaluation/vertex_eval.py`, `lane_task/measures.py`): do not edit its files. GT chat: `autogt/`.
+## Where we are: E273 (card `experiments/E273_*/experiment.md`, revision 6 = the full plan)
+Pixel maps (0.5 / 1 / 2 m) -> one node per 2 m cell (type flags, pulled onto the line) -> Hermite links (short: chord / 3; long through intersections: learned handle scales) -> sections (soft absorbing walk, ids only at splits / merges) -> assignment to a lane-level map with simulated errors (cross-attention + E272's geometric term + dustbin + soft registration). Code: `training/grid/{qtargets,qformat,map_sim,qraster,pyramid,qnodes,qlinks,sections,qassign,qgraph,qpredict}.py`, `training/data/lane_gt_data.py`, `training/train/{qgraph_train,qgates}.py`, `evaluation/{qgraph_eval,qgraph_run_eval}.py` (the scorer reproduces the lane suite numbers of recall_sp0_dp exactly), `tools/viz/{qgraph_view,qgraph_results}.py`. Oracle on real GT frames: lane points 99.9 %, connectors 98.7 % within 1 m.
+- Run `E273.p_s0` (all phases 2-7, a gate after each; `temp/e273/start_p.sh 0`): started 2026-11-04 23:09; phase logs `runs/e273_p_s0_p<k>/log.txt`, gates in the last lines. Seed 1 after it (`start_p.sh 1`). Then `qgraph_run_eval.py score --run e273_p_s<k> --seed <k>`, `verdict --runs e273_p_s0 e273_p_s1` (by hand, the card's rule), pictures `qgraph_results.py --run ...`, result folder `results/E273/` (README + package.json in git, figures / videos not).
+- Reference d = recall_sp0_dp: Q 0.742, F1@1.0 0.878, topo F1 0.740, junction F1 0.273. Control g = E272 chain + geometric assigner on the same map.
 
-## Where we are
-- Prototype of record (chain with rule steps): `recall_sp0_dp` (VAL lanes found 0.781, Q 0.742; TEST E268.p 0.740 / 0.727). D4 (route success, idle timing) waits for Mirko.
-- E271 1 m head + differentiable sparsification: KEEP by hand (VAL 873 frames, cov5 0.721 / 0.728, prec1 0.871, ~10.3 vertices per 100 m; reference r 0.591). E272 chain (head, sparsify, hold, assignment) as one function: TIE by hand on both seeds (cov5 +0.006), accepted as THE end-to-end function. Cached GaussianCaR features only, VAL only; the head has never seen TEST.
-- Gaps named: the hold switches itself off on clean frames (value untested: needs degraded frames); no delivered lane graph (lane ends, edges); coverage stops near 0.74; no live check through the real GaussianCaR forward pass; budget-matched strong baseline (GT resampled every 10 m) missing; ms not measured.
-- Lane tooling (own): trainsuite contract in `training/trainer.py` + `probe.py`, `startable.py` + `configs/` + `train/run_config.py`, fast gates `wsl bash tools/maintenance/run_gates.sh`.
-
-## Next
-1. Live check on ~100 VAL frames: raw camera + radar -> GaussianCaR checkpoint -> head, against the cached numbers (recipes `training/data/prep/`).
-2. Degraded-frame test of the hold; delivered lane graph card; coverage by range / situation (`lane_suite.py dense:<run>`).
-3. A critic pass (mode code) on the grid head code. TEST only with Mirko's recorded OK. Open for Mirko: D4, D5, headline_metrics override for vertex-level cards (protected project.json).
+## Not done / named gaps
+Route attribute, temporal fusion (follow-up: cross-attention to earlier nodes), perceived road graph, ms per frame per stage, TEST (never touched). Vertex budget: node ids 33 per 100 m, Douglas-Peucker 11.7 (budget 14.3 on the DP basis).
 
 ## Pointers
-PROBLEM.md; experiment_execution/{DECISIONS,PLAN,LEDGER}.md; experiments/E271_*, E272_*; training/README.md, training/grid/README.md. Commit by path (`autoresearch/tools/commit_paths.py`); other chats have uncommitted files in this tree. Pushes only on request.
+PROBLEM.md (D55 wording); experiment_execution/{DECISIONS,PLAN,LEDGER}.md; training/grid/README.md; git: tag `lcr/<id>` per run, pushes only on request. Commit by path (`autoresearch/tools/commit_paths.py`); other chats have uncommitted files in this tree.

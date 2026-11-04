@@ -79,7 +79,7 @@ class QGraph(torch.nn.Module):
         return out
 
 
-def focal_bce(logit, y, alpha=0.25, gamma=2.0, norm=None):
+def focal_bce(logit, y, alpha=0.5, gamma=2.0, norm=None):
     p = logit.sigmoid()
     ce = F.binary_cross_entropy_with_logits(logit, y, reduction="none")
     pt = p * y + (1 - p) * (1 - y)
@@ -195,7 +195,9 @@ def assign_loss(A, L, batch):
         pb, pa, pc = L["pb"][pos], L["pa"][pos], L["pc"][pos]
         Pa, Pc = Pp[pb, pa], Pp[pb, pc]
         C = torch.eye(K1, device=dev)[None].repeat(len(pb), 1, 1)
-        C[:, :K, :K] += batch["map_adj"].to(dev)[pb, 0].float()
+        A1 = batch["map_adj"].to(dev)[pb, 0].float()
+        C[:, :K, :K] += A1 + A1 @ A1                                                           # a long link crosses a suppressed connector piece: two successor steps
+        C.clamp_(max=1.0)
         s = torch.einsum("pi,pij,pj->p", Pa, C, Pc)
         l_st = -torch.log(s.clamp_min(1e-6)).mean()
     info = dict(asg=float(l_a), fp=float(l_fp), road=float(l_r), struct=float(l_st))
@@ -210,10 +212,10 @@ def qgraph_loss(model, batch, phase):
     if phase in (2, 7):
         l, i = pixel_loss(out["P"], batch)
         loss, info = loss + W["pix"] * l, {**info, **{"px_" + k: v for k, v in i.items()}}
-    if phase in (3, 4, 5, 6, 7):
+    if phase in (3, 5, 7):
         l, i = node_loss(out["no"], batch)
         loss, info = loss + W["node"] * l, {**info, **{"n_" + k: v for k, v in i.items()}}
-    if phase in (4, 6, 7):
+    if phase in (4, 7):
         l, i = link_loss(out["L"], batch)
         loss, info = loss + W["link"] * l, {**info, **{"l_" + k: v for k, v in i.items()}}
     if phase in (5, 7):

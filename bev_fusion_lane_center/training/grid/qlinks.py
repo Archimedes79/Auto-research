@@ -118,7 +118,7 @@ class LinkHead(nn.Module):
             sel = (pb == b).nonzero(as_tuple=True)[0]
             if len(sel):
                 xy = curve[sel].permute(2, 0, 1)[None]                                         # (1, 2, P_b, NPT)
-                ev[sel] = sample(cen[b: b + 1], xy.to(cen.dtype))[0, 0]
+                ev[sel] = sample(cen[b: b + 1], xy)[0, 0].to(ev.dtype)
         evf = torch.stack([ev.mean(1), ev.min(1)[0], torch.sigmoid((0.2 - ev) * 20).mean(1)], -1)
         logit = self.mlp(torch.cat([x0, sa[:, None], sb[:, None], evf], -1))[:, 0]
         out = dict(act=idx, valid=valid, pos=pos, dirv=dirv, tok=tok, cell=torch.stack([ci, cj], -1), pb=pb, pa=pa, pc=pc, is_long=is_long, logit=logit, sa=sa, sb=sb, evidence=evf)
