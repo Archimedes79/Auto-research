@@ -141,6 +141,10 @@ def check(run, ref=None, since_step=None):
         a, b = run.window_mean(key, ev[-2][0]), run.window_mean(key, ev[-1][0])
         if a is not None and b is not None and b < a:
             add("warn", "overfit", f"val.total rose {ev[-2][1]:.3g} -> {ev[-1][1]:.3g} while {key} fell {a:.3g} -> {b:.3g}")
+    if ref is not None:
+        diff = modules.data_differs(run, ref)
+        if diff:
+            add("warn", "data_differs", f"{ref.name} and this run differ in the data ({diff}): a loss on other data is no reference")
     if ref is not None and ref.train and run.step > 0 and run.total and ref.total and run.total != ref.total:
         add("info", "vs_ref", f"{ref.name} has {ref.total} steps and this run {run.total}: at the same step the two are on different schedules (warm-up, learning rate), so "
                               "their losses are not compared")

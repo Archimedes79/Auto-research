@@ -144,6 +144,14 @@ class Run:
             return 0, 0
         return len(hits), max(hits, default=0)
 
+    def skipped_at(self):
+        """the steps of the non-finite steps the trainer skipped, in the order of the text log (`step N: non-finite ... skipped (k in a row)`)"""
+        try:
+            with open(self.p(self.text_name), encoding="utf-8", errors="replace") as f:
+                return [int(m.group(1)) for m in re.finditer(r"step (\d+): non-finite .*?skipped \(\d+ in a row\)", f.read())]
+        except OSError:
+            return []
+
     def stopped(self):
         """the STOPPED marker (dict) when the run ended because of a stop request and has not run since, else None. A trainer with
         the stop check moves STOPPED aside at its start (10-40 s after a restart, while the imports run); until then, and for any other trainer, STOPPED must not

@@ -51,9 +51,14 @@ What it does (paths from the problem's project.json, see project.py):
   * queue / RAM the GPU jobs that wait stand in ONE line (tickets under <slots dir>/.queue, shared by the problems that share the GPU): first come, first
                 served, a ticket of a dead launcher does not count, the place is given up when the run starts. --ram-mb N (project.json ram_mb, 0 = off): the run
                 starts only when /proc/meminfo MemAvailable is at least N on AR_RAM_CHECKS (3) looks in a row, so two jobs run in parallel exactly when the RAM is
-                there for both and the box does not swap (a training with 6 loader workers wants about 10 GB of the 24); the heartbeat says what it waits for
+                there for both and the box does not swap (a training with 6 loader workers wants about 10 GB of the 24); the heartbeat says what it waits for.
+                Settle time (--settle-s, project.json gpu_settle_s, 0 = off; bev_fusion 180; AR_SETTLE_S overrides): a launcher waits while another one took its slot less
+                than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet and the RAM / memory gates would read the box too early
+                (two trainings that started in the same second slowed each other 13 times); it delays only the launchers of a project that sets it. A ticket whose
+                launcher the machine lock holds back does not hold up the line
   * machine lock (D19) every run, GPU or not, waits (max --wait-gpu minutes, then gpu_busy) while another owner holds a live exclusive lock of
-                machine_lock.py; the launcher's own owner name is AR_LOCK_OWNER from its environment (the lock owner's own runs pass)
+                machine_lock.py; the launcher's own owner name is AR_LOCK_OWNER from its environment (the lock owner's own runs pass, also when a launcher
+                that the lock holds back stands earlier in the line)
   * environment the command gets AR_RUN_ID and, with a snapshot, AR_COMMIT / AR_TAG (the commit this attempt was launched from; the tag names attempt 1)
   * timeout     --timeout <minutes>: the command and its process group are killed after the limit (status timeout, exit 124)
   * retry       a run whose LAST attempt printed a CUDA 'unknown error' is repeated (--retries) after 15 s; any other failure stops at once
@@ -340,9 +345,27 @@ class RamGate:
         self.n = 0
 
 
+def settle_s(cfg):
+    """seconds a slot counts as `loading` after it was taken: project.json gpu_settle_s (0 = off); AR_SETTLE_S overrides it (the selftests)"""
+    try:
+        return float(os.environ.get("AR_SETTLE_S", cfg.get("gpu_settle_s", 0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def blocked_by_lock(owner):
+    """does the live exclusive machine lock of another owner hold back a launcher of this lock owner? (the lock must never be what breaks a launch: a failure says no)"""
+    try:
+        return machine_lock.blocks(owner) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 class Ticket:
     """a place in the line of the launchers that wait for a GPU slot (and RAM): first come, first served, so the run that has waited longest starts first. A ticket
-    whose launcher is dead does not count and is removed. The tickets lie next to the GPU slots, so the problems that share the GPU share the line"""
+    whose launcher is dead does not count and is removed; a ticket whose launcher the exclusive machine lock of somebody else holds back does not count either (it
+    cannot start, so it must not hold up the lock owner's own launches; it is ahead again the moment the lock is gone). The tickets lie next to the GPU slots, so the
+    problems that share the GPU share the line"""
 
     def __init__(self, base, run_id):
         self.dir, self.id, self.name = os.path.join(base, ".queue"), run_id, None
@@ -350,7 +373,7 @@ class Ticket:
     def join(self):
         os.makedirs(self.dir, exist_ok=True)
         self.name = f"{time.time_ns():020d}_{uuid.uuid4().hex[:8]}"
-        save_rec(os.path.join(self.dir, self.name), dict(id=self.id, pid=os.getpid(), since=now()), indent=None)
+        save_rec(os.path.join(self.dir, self.name), dict(id=self.id, pid=os.getpid(), since=now(), owner=os.environ.get("AR_LOCK_OWNER", "")), indent=None)
 
     def ahead(self):
         """the ids of the live tickets older than mine"""
@@ -374,7 +397,8 @@ class Ticket:
                     continue
                 o = {}
             if alive:
-                out.append(o.get("id", "?"))
+                if not blocked_by_lock(o.get("owner", "")):
+                    out.append(o.get("id", "?"))
             else:
                 try:
                     os.remove(f)
@@ -666,6 +690,24 @@ class GpuSlot:
             return True
         return False
 
+    def settling(self, settle_s):
+        """[(id, seconds since it took the slot)] of the other live launchers that took their slot less than settle_s ago. Their run has not loaded its data or allocated
+        its GPU memory yet, so the RAM gate and the memory gate would read the box too early and start a second job next to it (two trainings that started in the same
+        second on a 12 GB card slowed each other 13 times). A slot record without a time (an older launcher), a dead owner and a time in the future count for nothing"""
+        out = []
+        for i in range(self.n if settle_s > 0 else 0):
+            s = os.path.join(self.base, str(i))
+            o = record(s) if os.path.isdir(s) else {}
+            if not o or o.get("token") == self.token or o.get("id") == self.id or not pid_alive(o.get("pid")):
+                continue
+            try:
+                age = (dt.datetime.now() - dt.datetime.fromisoformat(o["taken"])).total_seconds()
+            except (KeyError, TypeError, ValueError):
+                continue
+            if 0 <= age < settle_s:
+                out.append((o.get("id", "?"), int(age)))
+        return out
+
     def release(self):
         if self.held and record(self.held).get("token") == self.token:  # a slot that was reclaimed belongs to its new owner
             shutil.rmtree(self.held, ignore_errors=True)
@@ -753,6 +795,7 @@ def main():
     ap.add_argument("--gpu", action="store_true", help="GPU job: start only when one of the GPU slots is free")
     ap.add_argument("--gpu-max-mb", type=int, default=0, help="GPU job: additionally wait until the GPU memory in use is below this (implies --gpu)")
     ap.add_argument("--gpu-slots", type=int, default=int(cfg.get("gpu_slots", 2)), help="number of GPU slots on this machine")
+    ap.add_argument("--settle-s", type=float, default=settle_s(cfg), help="GPU job: wait while another launcher took its slot less than this many seconds ago, so its data is loaded and its GPU memory allocated before the RAM / memory gates look (project.json gpu_settle_s; 0 = off)")
     ap.add_argument("--ram-mb", type=int, default=int(cfg.get("ram_mb", 0)), help="GPU job: start only when this much RAM is available (project.json ram_mb; 0 = no gate): two jobs run in parallel only if the RAM is there for both")
     ap.add_argument("--wait-gpu", type=int, default=720, help="minutes to wait for a GPU slot")
     ap.add_argument("--timeout", type=float, default=0, help="minutes after which the command is killed (0 = none)")
@@ -888,20 +931,29 @@ def main():
             if not lk and not slot:
                 break
             ahead = ticket.ahead() if ticket else []
+            loading = slot.settling(a.settle_s) if slot else []    # another launcher took its slot a moment ago: let it load before the gates look at the box
+            u = gpu_used_mb() if (slot and a.gpu_max_mb) else None
+            mem_wait = bool(a.gpu_max_mb) and not mem_ok(u, a.gpu_max_mb)
             beat(hb, f"waiting for the machine lock of {lk['owner']}" if lk else
                  f"waiting in the queue behind {', '.join(ahead[:3])}" if ahead else
+                 f"waiting for {loading[0][0]} to load ({loading[0][1]} of {a.settle_s:g} s)" if loading else
+                 f"waiting for GPU memory ({'unreadable' if u is None else str(u) + ' MB in use'}, the gate wants less than {a.gpu_max_mb} MB)" if mem_wait else
                  f"waiting for RAM ({ram.last} of {a.ram_mb} MB available)" if (ram and ram.n < RAM_CHECKS and ram.last is not None) else "waiting for the GPU")
-            u = gpu_used_mb() if (slot and a.gpu_max_mb) else None
-            if not lk and not ahead and mem_ok(u, a.gpu_max_mb):
+            if not lk and not ahead and not loading and mem_ok(u, a.gpu_max_mb):
                 if (ram is None or ram.passed()) and slot.try_take():
                     break
             elif ram:
                 ram.reset()
             if time.time() - t0 > a.wait_gpu * 60:
-                why = (f"machine lock of {lk['owner']} until {lk['end']}" if lk else
-                       ("nvidia-smi unreadable" if (a.gpu_max_mb and u is None) else f"GPU memory {u} MB in use") + f" or all {a.gpu_slots} slots taken"
-                       + (f", RAM {ram.last} of {a.ram_mb} MB available" if (ram and ram.last is not None and ram.n < RAM_CHECKS) else "")
-                       + (f", {len(ahead)} run(s) ahead in the queue ({', '.join(ahead[:3])})" if ahead else ""))
+                reasons = [f"{len(ahead)} run(s) ahead in the queue ({', '.join(ahead[:3])})"] if ahead else []
+                if loading:
+                    reasons.append(f"{loading[0][0]} took its slot {loading[0][1]} s ago and is still loading ({a.settle_s:g} s settle time)")
+                if mem_wait:
+                    reasons.append("nvidia-smi unreadable" if u is None else f"GPU memory {u} MB in use (the gate wants less than {a.gpu_max_mb} MB)")
+                if ram and ram.last is not None and ram.n < RAM_CHECKS:
+                    reasons.append(f"RAM {ram.last} of {a.ram_mb} MB available")
+                taken = sum(os.path.isdir(os.path.join(slot.base, str(i))) for i in range(a.gpu_slots))
+                why = (f"machine lock of {lk['owner']} until {lk['end']}" if lk else ", ".join(reasons + [f"{taken} of {a.gpu_slots} GPU slots taken"]))
                 rec.update(status="gpu_busy", ended=now(), notes=why + f" for {a.wait_gpu} min")
                 save_rec(os.path.join(d, "run.json"), rec)
                 ledger_safe(ledger, dict(rec, exit=1, duration_s=0), clear)
