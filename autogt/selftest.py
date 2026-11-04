@@ -630,6 +630,20 @@ def run(root=None, verbose=True):
     # 5h the lane graph (lane_graph.py, road_graph.py, lane_lines.py): a made-up map for the logic, mini for the checks against the map
     from .lane_graph_selftest import run as lane_graph_selftest
     lane_graph_msg = lane_graph_selftest(root, verbose=False)
+    # 5i one release, one command: the standard GT and the lane GT of the same sequences come out of one `generate`, into two stores of one release
+    from . import lane_gt as lane_gt_mod
+    from .suite import scene_tokens as tokens_of_scene
+    assert V.current_release() is not None, (f"this source (front {V.version_of(gt.signature())}, lane {lane_gt_mod.version_of(lane_gt_mod.signature())}) has no row in "
+                                             "autogt/releases.csv: add one (the release is the front version, with a point when only the lane GT changed)")
+    with tempfile.TemporaryDirectory() as d:
+        toks_ = tokens_of_scene("scene-0061", "v1.0-mini", root)
+        both = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False)
+        assert both["written"] == len(toks_) and both["lane"] and both["lane"]["written"] == len(toks_), both
+        assert os.path.isdir(os.path.join(d, "lane", both["lane"]["signature"])) and lane_gt_mod.missing(toks_, data=os.path.join(d, "lane")) == []
+        assert json.load(open(os.path.join(both["out"], "index.json")))["suite_release"] == V.current_release()
+        only = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False, lane=False)
+        assert only["lane"] is None and only["written"] == 0, only
+        assert cli_mod.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False)["lane"] is None, "the lane GT is made for every keyframe: nothing at stride 20"
     # 6 a one-second video encodes to H.264 and plays back (read-back check inside encode)
     from .video import run as make_video
     with tempfile.TemporaryDirectory() as d:

@@ -12,6 +12,8 @@ command and the check that it is the checkout's package that runs: README.md, se
     autogt.versions.version_of(sig)  "v5" or None; autogt.current_version() the GT version of THIS source with the default options
     autogt.versions.canonical(sig)   the signature of the store that `sig`'s code fills (`same_gt_as`: v9 makes the GT of v8, so it uses its store)
     autogt.versions.version_of_key(k) the same for a training cache key '0.5_4_<signature>' (what runs/<name>/gt.json and the cards record)
+    autogt.versions.releases()       the rows of releases.csv: ONE number for the whole suite (the front GT version and the lane GT version that belong together)
+    autogt.versions.current_release()  the release of THIS source ("v9"), or None when the pair (front version, lane version) has no row yet
     python -m autogt versions        the table, the current version marked, which GT is stored
     autogt.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
 """
@@ -19,6 +21,7 @@ import csv
 import os
 
 FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "versions.csv")
+RELEASES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "releases.csv")
 
 # the modules of this package that do NOT shape the GT (command line, storage, reports, pictures, checks, scene sets, the light devkit loader,
 # this table). Every other module is hashed into the signature (nuscenes_gt.SIGNATURE_FILES); `python -m autogt selftest` fails for a module
@@ -53,6 +56,26 @@ def version_of_key(key):
     '0.5_x0_40_y-20_20_4_15efbde2d1' (or a bare signature): "v5", or None when it is not a released version (or has other options). A
     version that makes the same GT as an older one gives the older key: the key names the GT, the signature the code."""
     return version_of(canonical(str(key).rsplit("_", 1)[-1]))
+
+
+def releases():
+    """the rows of releases.csv, oldest first: release, front (a version of versions.csv), lane (a version of lane_versions.csv), date, what_changed.
+    A release is the suite as one: `python -m autogt generate` makes the standard nuScenes GT (front) and the lane GT together, and the pair carries one
+    number. The number is the front version it stands on; when only the lane part changes it gets a point (v9, v9.1, ...), a new front version starts the next number."""
+    with open(RELEASES, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def release_of(front, lane):
+    """the release of a pair (front GT version, lane GT version), or None"""
+    return next((r["release"] for r in releases() if r["front"] == front and r["lane"] == lane), None)
+
+
+def current_release():
+    """the release of THIS source: its front version (default options) and its lane version"""
+    from . import lane_gt
+    from .suite import code_signature
+    return release_of(version_of(code_signature()), lane_gt.version_of(lane_gt.signature()))      # the version of the code (v9), not of its store (v8)
 
 
 def row_of(version):

@@ -94,7 +94,8 @@ def run_manifest(sig_dir, version, dataroot, set_name=None):
     from . import sets, versions
     from .suite import code_signature
     return {"set": set_name, **versions.code_state(), "generator": code_signature(), "environment": _environment(),
-            "sets_complete": sets.complete_in(sig_dir, version, dataroot), "sets_checked": sets.checkable(version, dataroot)}
+            "sets_complete": sets.complete_in(sig_dir, version, dataroot), "sets_checked": sets.checkable(version, dataroot),
+            "suite_release": versions.current_release()}
 
 
 def _environment():
@@ -150,11 +151,12 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
     # check (small is in mini, full is not) keeps its old entry
     sets_complete = sorted((set(kept.get("sets_complete", [])) - set((run or {}).get("sets_checked", []))) | set((run or {}).get("sets_complete", [])))
     if run is None:
-        idx.update({k: kept[k] for k in ("set", "generator", "environment", "commit", "dirty", "release") if k in kept})
+        idx.update({k: kept[k] for k in ("set", "generator", "environment", "commit", "dirty", "release", "suite_release") if k in kept})
         if "release" in idx and not complete:
             idx["release"] = False                                 # a run in progress (its provisional index) is not a release
     else:
         idx.update(set=run.get("set"), generator=run.get("generator"), environment=run.get("environment"), commit=run.get("commit"), dirty=run.get("dirty"),
+                   suite_release=run.get("suite_release"),
                    release=bool(complete and gt_version and run.get("dirty") is False and "full" in sets_complete))
     if sets_complete:
         idx["sets_complete"] = sets_complete
@@ -261,7 +263,7 @@ def detect_version(dataroot):
     return found[0]
 
 
-def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, set_name=None, **options):
+def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, set_name=None, lane=True, **options):
     """THE entry point of the suite: read nuScenes from `dataroot` and write the GT of every keyframe.
 
     dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
@@ -273,6 +275,8 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
                autogt/sets/; instead of scenes (both given: an error)
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
     workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see AutoGT)
+    lane       also make the lane GT (lane graph, roads, lines, polygons: autogt/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
+               store of the same release (releases.csv); only with stride 1, the lane GT is made for every keyframe
     -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
         "written": new files, "release": the folder is a release (see write_index)}
     The index.json of the folder is the manifest: gt_version, commit and dirty flag of the generator code, the sets it holds in full.
@@ -340,8 +344,14 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx['commit']}"
               f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx.get('sets_complete', [])})\n"
               f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
+    lane_result = None
+    if lane and stride == 1:
+        from .lane_gt import generate as generate_lane
+        lane_result = generate_lane(dataroot, out=os.path.join(out, "lane"), version=version, scenes=names, workers=workers, verbose=verbose)
+    elif lane and verbose:
+        print("the lane GT is made for every keyframe: skipped with stride", stride)
     return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
-            "keyframes": n_total, "written": done, "release": idx["release"]}
+            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result}
 
 
 def _print_versions():
@@ -356,6 +366,17 @@ def _print_versions():
               f"{r['what_changed'][:70]}{same}")
     if cur not in {r["signature"] for r in rows}:
         print(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased); add a row, commit, tag autogt/v<N>")
+    from . import lane_gt
+    here = versions.current_release()
+    print("lane GT (own versions, autogt/lane_versions.csv):")
+    for r in lane_gt.table():
+        print(f"  {r['version']:3s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == lane_gt.signature() else '       '}  "
+              f"{'stored    ' if os.path.isdir(os.path.join(lane_gt.DATA, r['signature'])) else 'not stored'}  {r['what_changed'][:70]}")
+    print("releases (the suite as one number, autogt/releases.csv):")
+    for r in versions.releases():
+        print(f"  {r['release']:5s} front {r['front']:4s} + lane {r['lane']:3s}  {r['date']}  {'CURRENT' if r['release'] == here else '       '}  {r['what_changed'][:80]}")
+    if here is None:
+        print(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.signature())}) has no row in autogt/releases.csv: add one")
 
 
 def _print_sets():
@@ -418,6 +439,7 @@ def _parser():
     ge.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all of trainval)")
     ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
     ge.add_argument("--scenes-file", help="a file of sequence names, one per line (instead of --scenes)")
+    ge.add_argument("--no-lane", action="store_true", help="only the standard GT, not the lane GT of the same sequences")
     dg = sub.add_parser("digest", help="a digest per frame of nuScenes mini: two generators that make the same GT give the same file (same_gt_as)")
     dg.add_argument("out", nargs="?", help="write the digests to this json file")
     dg.add_argument("--compare", nargs=2, metavar=("A", "B"), help="compare two digest files: exit 1 when any frame differs")
@@ -498,7 +520,7 @@ def _cmd_data(a):
 
 
 def _cmd_generate(a):
-    generate(a.dataroot, a.out, a.version, _scene_names(a), a.stride, a.res, workers=a.workers, set_name=a.set_name, **_options(a))
+    generate(a.dataroot, a.out, a.version, _scene_names(a), a.stride, a.res, workers=a.workers, set_name=a.set_name, lane=not a.no_lane, **_options(a))
 
 
 def _cmd_digest(a):

@@ -191,6 +191,14 @@ covariance, source, flag; plus the dense arrays when a grid is given)
 - the occlusion mask is 2D: it also hides about 11 % of boxes that annotators rate as 80-100 % visible (pedestrians behind cars)
 - radar gives only the radial velocity; the tangential part comes from the annotations. Not validated against lidar scene flow
   (no lidar on disk)
+- `coverage.shares_in` (one rule for the share f of a ground-truth box and of a detection) counts every observed box of the frame as a possible occluder, also the one that the
+  detection IS. The GT shares are not affected (a box does not hide itself). A caller that scores a detection against its matched box passes a frame dict whose
+  `meta["boxes"]` leaves that box out; a fix inside coverage.py would change the front signature, i.e. the key of the BEV GT cache, so it is not made (decided 2026-11-04)
+- the lane GT: the definitions that were open with Mirko stand at their defaults, confirmed by the lane project on 2026-11-04 (boundary = outline of the drivable area including
+  driveways and parking, corner = 30 degrees over a 2 m chord, stop rule = the intersection branches only); another value is a parameter and another lane signature. Not built:
+  visibility masks for the six cameras (only if they are wanted), the vector -> raster -> vector round trip (it belongs to the lane project's rasteriser)
+- the light devkit reads sample_data.json (700 MB of text) once per group of 60 sequences: measured 31 s (35 s with the radars), 18 % of the lane GT run (15 groups, 2606 s) and about
+  5 % of the front run; a cache of the filtered tables is not worth its invalidation rules (decided 2026-11-04)
 
 ## Versions (decision D29, 2026-11-01)
 The GT may change, but every state of the generator is a **version** with a key, so that an old GT and the training on it can be
@@ -227,6 +235,13 @@ trainval; the tags v3 - v5 predate `generate`). A `PYTHONPATH` that does not nam
 first: `PYTHONPATH=bev_fusion python -c "import autogt; print(autogt.__file__)"` must print a path inside `temp/gt_v5`. Then `<folder>` holds
 `<signature>/` of that version (v5: 15efbde2d1). v1 and v2 are `bev_fusion/training/gt_bev.py` at their tag (`NuScenesGT.keyframe_gt`,
 no `generate`). Tags are pushed with the code (`git push origin autogt/v1 ...`).
+
+## Releases: the suite as one number (`releases.csv`)
+`python -m autogt generate` makes the standard nuScenes GT (the front GT, signature and versions as above) and the lane GT (own signature, `lane_versions.csv`) of the same
+sequences, so the pair carries ONE number: the release. It is the front version it stands on, with a point when only the lane part changes (v9, v9.1, ...); a new front version
+starts the next number. `v9` = front v9 + lane l3 (2026-11-04). The front store is not touched by the lane GT (the BEV training and evaluation key their GT cache on the front
+signature), and the manifest of a front store records `suite_release`. `python -m autogt selftest` fails when the pair (front version, lane version) of this source has no row in
+`releases.csv`. `python autoresearch/tools/package.py gt` knows both families of stores: the latest front version and the latest lane version stay.
 
 ## Adding a dataset
 Write an adapter that builds the four inputs of `estimate_flow` (`Track`, `Ego`, `RadarFrame`, `GridSpec`) and a generator for

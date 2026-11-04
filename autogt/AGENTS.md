@@ -116,6 +116,9 @@ run it live) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, 
   `camera_cells(gx, gy, K, T_c2e, size, z=<slice height>)` to share the function.
 
 ## 3b. The lane GT (own version and store; `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`)
+ONE command makes both: `python -m autogt generate ~/data/nuscenes_full --set full` writes the standard GT (data/autogt/<signature>/) and the lane GT of the same sequences
+(data/autogt/lane/<lane signature>/) and stamps the release (`releases.csv`: v9 = front v9 + lane l3; `--no-lane` for the standard GT only, stride > 1 skips the lane GT).
+`python -m autogt generate-lane` makes the lane GT alone. `python -m autogt versions` shows the front versions, the lane versions and the releases.
 The lane graph of a keyframe window is NOT part of the front generator: the front GT, its signature and its store do not change when the lane GT does. It is made from the
 nuScenes map and the ego pose at the front-camera time only (about 40 ms per keyframe) and has its own signature (hash of those four files + the parameters that differ from
 `lane_gt.DEFAULTS`), its own table `lane_versions.csv` (l1, ...; git tag `autogt/lane-lN`) and its own store `data/autogt/lane/<lane signature>/<sample token>.pkl.gz` + `index.json`.

@@ -29,6 +29,8 @@ younger than --min-age-days (at least one hour). Before anything is removed the 
 store files that mark an evaluation as finished (frames.jsonl, manifest.json) go first, so an interrupted delete leaves an unfinished store, never one
 that claims to be complete. A later clean adds to the `deleted` list, it never replaces it. Tags must be on origin to be a safe base for a rebuild:
 `check_git.py` lists the ones that are not.
+gt also looks at the lane GT stores (data/autogt/lane/<lane signature>, versions in autogt/lane_versions.csv, l1, l2, ...): the latest lane version stays, so does a store that a run which
+is not final names in its gt.json (`lane_signature`), an older one goes when its tag autogt/lane-lN exists (it is made again by `python -m autogt generate-lane`).
 gt keeps the latest version of autogt/versions.csv (the highest number; when its code makes the GT of an older version, `same_gt_as`, the store of that
 one: they share a folder) and every store that a run which is not final names in its gt.json (also the
 `earlier` ones; a resume needs them); an older store is deleted only when its tag autogt/vN exists (it can be regenerated from the tag and the options in
@@ -413,13 +415,84 @@ def vnum(row):
     return int(m.group(1)) if m else -1
 
 
-def sigs_of(gt_json):
-    """the bare signatures a gt.json names: gt_signature as a string or a list, and the `earlier` ones"""
+def sigs_of(gt_json, keys=("gt_signature", "earlier")):
+    """the bare signatures a gt.json names: gt_signature as a string or a list, and the `earlier` ones (or the other `keys`)"""
     vals = []
-    for k in ("gt_signature", "earlier"):
+    for k in keys:
         v = gt_json.get(k)
         vals += v if isinstance(v, list) else [v]
     return {str(v).split("_")[-1] for v in vals if isinstance(v, str) and v and not v.startswith("unknown")}
+
+
+def needed_by_unfinished(keys=("gt_signature", "earlier")):
+    """signature -> [run ids] of the runs that are not final and name it in their gt.json under one of `keys` (a resume needs it)"""
+    needed = {}
+    for rid in run_ids():
+        if is_final(run_record(rid)):
+            continue
+        rd = V.find_run_dir(rid)
+        g = os.path.join(rd, "gt.json") if rd else ""
+        if g and os.path.isfile(g):
+            try:
+                found = sigs_of(json.load(open(g, encoding="utf-8")), keys)
+            except (OSError, ValueError, AttributeError):
+                found = set()
+            for sig in found:
+                needed.setdefault(sig, []).append(rid)
+    return needed
+
+
+def lane_versions():
+    p = os.path.join(V.repo_root(), "autogt", "lane_versions.csv")
+    if not os.path.isfile(p):
+        return []
+    with open(p, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def lane_stores(root):
+    return sorted(d for d in os.listdir(root) if os.path.isfile(os.path.join(root, d, "index.json"))) if os.path.isdir(root) else []
+
+
+def lane_plan(root=None):
+    """-> (latest lane row or None, [(signature, verdict text)]) for data/autogt/lane/: the latest lane version stays, so does a store that a run which is not final
+    names (`lane_signature` in its gt.json); an older one goes when its tag exists"""
+    root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
+    rows = lane_versions()
+    if not rows:
+        return None, []
+    num = lambda r: int(re.fullmatch(r"l(\d+)", r.get("version", "")).group(1)) if re.fullmatch(r"l(\d+)", r.get("version", "")) else -1      # noqa: E731
+    latest = max(rows, key=num)
+    needed = needed_by_unfinished(("lane_signature",))
+    by_sig = {x["signature"]: x for x in rows}
+    plan = []
+    for sig in lane_stores(root):
+        row, path = by_sig.get(sig), os.path.join(root, sig)
+        if sig == latest["signature"]:
+            plan.append((sig, f"keep: the latest lane version ({latest['version']})"))
+        elif sig in needed:
+            plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(needed[sig][:4])}"))
+        elif row is None:
+            plan.append((sig, "keep: not in autogt/lane_versions.csv, it cannot be regenerated from a tag"))
+        elif os.path.islink(path) or not inside(path, root):
+            plan.append((sig, "keep: a link, not a store folder of this data/autogt/lane"))
+        elif not tag_exists(row["tag"]):
+            plan.append((sig, f"keep: the tag {row['tag']} does not exist here"))
+        else:
+            plan.append((sig, f"delete: lane {row['version']}, regenerated from the tag {row['tag']} (python -m autogt generate-lane in a worktree of it)"))
+    return latest, plan
+
+
+def lane_clean(apply=False, root=None):
+    root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
+    latest, plan = lane_plan(root)
+    done = []
+    for sig, text in plan:
+        if text.startswith("delete") and apply:
+            log_line(f"lane GT store {sig} ({text.split(':')[1].split(',')[0].strip()}) is being deleted; regenerate from its tag autogt/lane-lN with `python -m autogt generate-lane`")
+            shutil.rmtree(os.path.join(root, sig))
+            done.append(sig)
+    return latest, plan, done
 
 
 def gt_plan(root=None):
@@ -432,19 +505,7 @@ def gt_plan(root=None):
     while shared.get("same_gt_as") in by_version and shared["version"] not in seen:
         seen.add(shared["version"])
         shared = by_version[shared["same_gt_as"]]
-    needed = {}
-    for rid in run_ids():
-        if is_final(run_record(rid)):
-            continue
-        rd = V.find_run_dir(rid)
-        g = os.path.join(rd, "gt.json") if rd else ""
-        if g and os.path.isfile(g):
-            try:
-                found = sigs_of(json.load(open(g, encoding="utf-8")))
-            except (OSError, ValueError, AttributeError):
-                found = set()
-            for sig in found:
-                needed.setdefault(sig, []).append(rid)
+    needed = needed_by_unfinished()
     plan = []
     by_sig = {x["signature"]: x for x in rows}
     for sig in gt_stores(root):
@@ -480,8 +541,8 @@ def gt_clean(apply=False, root=None):
 def selftest():
     tmp = tempfile.mkdtemp()
     old_env = os.environ.get("AR_PROJECT")
-    global tag_exists, versions
-    real_tag, real_versions = tag_exists, versions
+    global tag_exists, versions, lane_versions
+    real_tag, real_versions, real_lane = tag_exists, versions, lane_versions
     try:
         proj = os.path.join(tmp, "proj")
         os.makedirs(os.path.join(proj, "records"))
@@ -742,10 +803,30 @@ def selftest():
         assert not os.path.exists(os.path.join(w, "eval", "pic.png")) and len(json.load(open(package_path("x.w_s0")))["deleted"][0]["files"]) == 4, "w: deleted and listed in the package written before"
         tempfile.tempdir = None
         json.dump(pj0, open(os.path.join(proj, "project.json"), "w"))
+        # the lane GT stores: the latest lane version stays (numeric order: l10 > l2), one that an unfinished run names stays, an older one with a tag goes
+        lroot = os.path.join(tmp, "lane")
+        for sig in ("lold", "lnew", "lorph", "lneed"):
+            os.makedirs(os.path.join(lroot, sig))
+            json.dump({"signature": sig}, open(os.path.join(lroot, sig, "index.json"), "w"))
+        lane_versions = lambda: [{"version": "l1", "signature": "lold", "tag": "tg/ok"}, {"version": "l2", "signature": "lneed", "tag": "tg/ok"},    # noqa: E731
+                                 {"version": "l10", "signature": "lnew", "tag": "tg/ok"}]
+        json.dump({"gt_signature": "0.5_4_zzz", "lane_signature": ["lneed"]}, open(os.path.join(proj, "runs", "x_b_s0", "gt.json"), "w"))
+        llatest, lplan = lane_plan(lroot)
+        lgot = dict(lplan)
+        assert llatest["version"] == "l10" and lgot["lnew"].startswith("keep: the latest") and lgot["lneed"].startswith("keep: needed by") \
+            and lgot["lorph"].startswith("keep: not in") and lgot["lold"].startswith("delete"), lgot
+        tags.discard("tg/ok")
+        assert dict(lane_plan(lroot)[1])["lold"].startswith("keep: the tag"), "no tag, no deletion"
+        tags.add("tg/ok")
+        lane_clean(False, lroot)
+        assert os.path.isdir(os.path.join(lroot, "lold")), "a dry run changes nothing"
+        _, _, ldone = lane_clean(True, lroot)
+        assert ldone == ["lold"] and not os.path.exists(os.path.join(lroot, "lold")) and os.path.isdir(os.path.join(lroot, "lneed")), ldone
+        assert "lane GT store lold" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
         print("package selftest passed")
     finally:
         tempfile.tempdir = None
-        tag_exists, versions = real_tag, real_versions
+        tag_exists, versions, lane_versions = real_tag, real_versions, real_lane
         if old_env is None:
             os.environ.pop("AR_PROJECT", None)
         else:
@@ -782,7 +863,12 @@ def main():
         print(f"latest GT version: {latest['version']} ({latest['signature']})")
         for sig, text in plan:
             print(f"  {sig:14} {text}")
-        print(("deleted: " + ", ".join(done)) if a.apply else "dry run: nothing deleted (--apply)")
+        lane_latest, lane_p, lane_done = lane_clean(a.apply)
+        if lane_latest:
+            print(f"latest lane GT version: {lane_latest['version']} ({lane_latest['signature']})")
+            for sig, text in lane_p:
+                print(f"  {sig:14} {text}")
+        print(("deleted: " + ", ".join(done + lane_done)) if a.apply else "dry run: nothing deleted (--apply)")
     else:
         ap.error("package <run id> | show <run id> | clean [--apply] | gt [--apply] | --selftest")
 

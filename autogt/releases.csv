@@ -1,0 +1,2 @@
+release,front,lane,date,what_changed
+v9,v9,l3,2026-11-04,"the suite as one number: the standard nuScenes GT (front v9, the store c643a7539d, the same GT as v8) and the lane GT (l3: lane graph with ids, events, neighbours, roads, lines, road and intersection polygons) are made by ONE command, python -m autogt generate, into two stores of one release; the front part is unchanged"
