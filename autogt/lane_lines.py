@@ -25,12 +25,13 @@ CHUNK = 200                                                  # vertices per chun
 
 
 def _chunks(P, kind):
-    """a long polyline in overlapping chunks with their bounding boxes (a chunk shares its last vertex with the next one)"""
+    """a long polyline in overlapping chunks with their bounding boxes (a chunk shares its last vertex with the next one); `closed`: a ring"""
     out = []
+    closed = bool(len(P) > 3 and np.allclose(P[0], P[-1]))
     for i in range(0, max(len(P) - 1, 1), CHUNK):
         Q = P[i:i + CHUNK + 1]
         if len(Q) >= 2:
-            out.append(dict(kind=kind, pts=Q, bbox=np.r_[Q.min(0), Q.max(0)], first=i == 0, last=i + CHUNK + 1 >= len(P)))
+            out.append(dict(kind=kind, pts=Q, bbox=np.r_[Q.min(0), Q.max(0)], first=i == 0, last=i + CHUNK + 1 >= len(P), closed=closed))
     return out
 
 
@@ -166,7 +167,7 @@ def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=
             continue
         for pts, cut0, cut1, first, last in clip_square(to_frame(c["pts"], T_e2g, frame), half):
             at_start, at_end = first == 0 and not cut0, last == len(c["pts"]) - 2 and not cut1      # the part runs up to the chunk's first / last vertex
-            found[c["kind"]].append(dict(line=c["line"], chunk_first=c["first"], pts=pts, joint_start=at_start, joint_end=at_end,
+            found[c["kind"]].append(dict(line=c["line"], chunk_first=c["first"], closed=c["closed"], pts=pts, joint_start=at_start, joint_end=at_end,
                                          start_open=bool(cut0) or (at_start and not c["first"]),      # the line goes on in the chunk before / after
                                          end_open=bool(cut1) or (at_end and not c["last"])))
     out = {}
@@ -182,11 +183,20 @@ def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=
                 m["end_open"], m["joint_end"] = it["end_open"], it["joint_end"]
             else:
                 merged.append(dict(it))
-        out[kind] = []
+        by_line = {}
         for m in merged:
+            by_line.setdefault(m["line"], []).append(m)
+        joined = []
+        for ms in by_line.values():                                    # a ring that leaves the window and has its first vertex inside: its last and first parts are one line
+            if len(ms) >= 2 and ms[0]["closed"] and ms[0]["joint_start"] and ms[-1]["joint_end"] and np.linalg.norm(ms[-1]["pts"][-1] - ms[0]["pts"][0]) < 1e-6:
+                last = ms.pop()
+                ms[0]["pts"] = np.concatenate([last["pts"], ms[0]["pts"][1:]])
+                ms[0]["start_open"], ms[0]["joint_start"] = last["start_open"], False
+            joined += ms
+        out[kind] = []
+        for m in joined:
             P = m["pts"]
-            cs = find_corners(P, corner_deg, corner_base)
-            for c in cs:
-                c["dir_in"], c["dir_out"] = c["dir_in"], c["dir_out"]
-            out[kind].append(dict(pts=P.astype(np.float32), start_open=m["start_open"], end_open=m["end_open"], corners=cs))
+            if np.linalg.norm(np.diff(P, axis=0), axis=1).sum() < 0.5:     # a line of under half a metre is a clipping crumb
+                continue
+            out[kind].append(dict(pts=P.astype(np.float32), start_open=m["start_open"], end_open=m["end_open"], corners=find_corners(P, corner_deg, corner_base)))
     return out

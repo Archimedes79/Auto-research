@@ -46,7 +46,11 @@ def _params(params):
     if unknown:
         raise TypeError(f"unknown lane GT parameter(s) {sorted(unknown)}; known: {sorted(DEFAULTS)}")
     out = {**DEFAULTS, **params}
-    out["boundary_layers"] = tuple(out["boundary_layers"])
+    out["boundary_layers"] = (out["boundary_layers"],) if isinstance(out["boundary_layers"], str) else tuple(out["boundary_layers"])
+    for k in ("half", "min_len", "step", "inter_frac", "corner_deg", "corner_base"):
+        out[k] = float(out[k])                                       # 60 and 60.0 are one parameter, one signature
+    if out["step"] != 0.5:
+        raise ValueError("the lane GT is made for a map sampling of 0.5 m (step); other values are not supported")
     return out
 
 

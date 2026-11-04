@@ -127,12 +127,15 @@ autogt.lane_gt.missing(tokens)                                              # th
 A graph is a dict: `frame` ("lane": x RIGHT, y forward, ego rear axle at the front-camera time, the lane project's frame; `lane_graph.in_frame(g, "ego")` turns it into x forward,
 y left), `half` (50 m: the window is |x|, |y| <= 50), `location`, `sample`, `signature`, `params`, and
 - `pieces`: lanes and connectors joined while the join is 1 in, 1 out (a new id only at a split or a merge), cut to the window: `id` (the first 8+ characters of the token
-  of its first map piece; "<id>#1" for a second part that comes back into the window), `piece`, `part`, `kind` (lane / connector / mixed), `pts` (n, 2) float32 every 0.5 m
-  in travel order, `start_open` / `end_open` (cut by the window), `length`, `tokens` (the nuScenes map pieces it covers), `succ` / `pred` (ids inside the window),
-  `left` / `right` / `opposite` (ids of the lanes beside it), `road`, `roads_along`, `lane_count`, `lane_index` (0 = leftmost);
-- `events`: `type` split / merge / cross / stop / start / end / window, `pos`, `in` / `out` (piece ids), `dirs_in` / `dirs_out` (unit vectors), `partial` (a branch lies outside the
-  window); a stop has `on`, `s` (metres along the part), `n_succ`; a window event has `io` ("in" / "out"). A stop point is the end of a LANE whose successor connector lies
-  inside an intersection (`stop_rule`, default: for the intersection branches only);
+  of its first map piece; "<id>#1" for a second part that comes back into the window: its number depends on the window, so use `piece`, the id of the piece, which is the same
+  in every frame, for anything that must be stable), `piece`, `part`, `kind` (lane / connector / mixed), `pts` (n, 2) float32 every 0.5 m in travel order, `start_open` /
+  `end_open` (cut by the window), `length`, `tokens` (the nuScenes map pieces it covers), `segments` (`[{token, kind, i0, i1, in_intersection}]`: the index ranges of `pts` per
+  map piece, contiguous; `in_intersection` is the test of lane_graph for a connector), `succ` / `pred` (ids inside the window), `left` / `right` / `opposite` (ids of the lanes
+  beside it; the opposite lane on either side), `road`, `roads_along`, `lane_count`, `lane_index` (0 = leftmost);
+- `events`: `type` split / merge / cross / stop / exit / start / end / window, `pos`, `in` / `out` (piece ids), `dirs_in` / `dirs_out` (unit vectors, one row per id in the same
+  order), `partial` (a branch lies outside the window); a stop or exit has `on`, `s` (metres along the part), `n_succ` (stop) / `n_pred` (exit); a window event has `io`
+  ("in" / "out"). A stop point is the end of a LANE whose successor connector lies inside an intersection, an exit the start of a LANE whose predecessor connector does (`stop_rule`,
+  default: for the intersection branches only). Both can lie inside a joined piece (a lane with one connector after it): then `out` of the stop (`in` of the exit) is that piece;
 - `roads`: the roads and intersections of the window (`id`, `kind`, `lane_max`, `pieces`, `succ`, `opposite`); the nuScenes map has no road graph, roads are derived from the
   lanes (road_graph.py docstring);
 - `lines`: `lane_divider`, `road_divider`, `boundary` (the outline of the drivable area; `params["boundary_layers"]`), each a list of `{pts, start_open, end_open, corners}` with

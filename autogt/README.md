@@ -128,8 +128,11 @@ own signature, table (`lane_versions.csv`, git tag `autogt/lane-lN`) and store (
 graph holds is listed in `AGENTS.md`, section 3b.
 - PIECES. A lane or connector is a map piece; chains of map pieces are joined while every join is 1 in, 1 out, so an id changes only at a split or a merge. EVENTS at the joins:
   split, merge, cross (n in, n out), start / end (no predecessor / successor in the map), window (the polyline crosses the border; per keyframe) and STOP: the end of a lane
-  whose successor connector lies inside an intersection (`road_segment.is_intersection`; 80 - 84 % of the connectors do, 0.2 - 1.5 % of the lanes). With several successors the
-  stop is for the intersection branches only (`stop_rule`, open with Mirko). Pass-through joins are not events.
+  whose successor connector lies inside an intersection (`road_segment.is_intersection`; 80 - 84 % of the connectors do, 0.2 - 1.5 % of the lanes), and its mirror EXIT: the start of
+  a lane whose predecessor connector does. With several successors the stop is for the intersection branches only (`stop_rule`, open with Mirko). Pass-through joins are not events.
+  Per piece `segments` gives the index range of its points per map piece with the intersection flag, so a consumer can drop the points of connectors inside intersections and keep
+  the connectors outside (16 - 20 % of the connectors are plain continuations). A part cut by the window at both ends is dropped when shorter than `min_len`; a short part with a
+  natural end stays, so links and events never dangle.
 - ROADS. nuScenes has no road graph (a lane's edge-line tokens match no road block in 0 of 3,662 lanes; in singapore-queenstown and -hollandvillage the road segments are only
   intersections and the road blocks do not point at a segment), so neighbours, lane counts and roads are derived from the lanes (`road_graph.py` docstring). Check: of the
   730 lane pairs that share a divider node on nuScenes mini, 723 are found as right neighbours and none as left.

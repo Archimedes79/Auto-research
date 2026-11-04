@@ -14,14 +14,22 @@ EVENTS. Where pieces meet or end, in the window:
   stop     the end of a LANE whose successor connector lies inside an intersection (road_segment.is_intersection, at least `inter_frac` of the
            connector's points inside); it can lie inside a joined piece (`on` = the piece, `s` = metres from the start of the piece part);
            `out` are the stop branches, `n_succ` the number of successors of the lane in the map (n_succ > len(out): a branch that is not a stop)
+  exit     the mirror of stop: the START of a LANE whose predecessor connector lies inside an intersection (same fields: `on`, `s`; `n_pred` = predecessors of the lane
+           in the map, `in` = the intersection branches that lead into it, `out` = the piece it starts); `stop_rule` decides here the same way
   start    a piece without a predecessor in the map;  end   a piece without a successor in the map
+A stop or an exit can lie inside a joined piece (a lane followed by one connector): then `out` of the stop (`in` of the exit) is that piece itself, the continuation after `s`.
+`dirs_in` / `dirs_out` have one row per id of `in` / `out`, in the same order.
   window   the polyline crosses the window border (io "in" / "out"); per frame
 `stop_rule` decides a lane with several successors: "intersection_branch" (default: a stop point for the intersection branches only), "any_successor"
 (if one is an intersection connector, all branches), "all_successors", "none". `dirs_in` / `dirs_out` are the unit directions of the pieces at the event.
 
 FRAME. frame="lane" (default): the lane project's frame, ego (rear axle) at the front-camera time, x to the RIGHT, y forward; frame="ego": the frame of
 the other autogt layers, x forward, y left. The window is the square |x|, |y| <= half (default 50 m). Polylines are cut exactly at the border; a
-part shorter than `min_len` is dropped; a piece that leaves the window and comes back is several parts (`part` 0, 1, ...; id "<piece>#<part>").
+part shorter than `min_len` is dropped, but only when the window cuts it at both ends (a short part with a natural end keeps its links and its events); a piece that leaves the window and comes back is several parts (`part` 0, 1, ...; id "<piece>#<part>").
+Every part has `segments`: [{token, kind, i0, i1, in_intersection}], the index ranges of its `pts` per map piece (a connector inside an intersection can be dropped by a
+consumer that has no nodes there, a connector outside one is a plain continuation, also on a piece of kind "mixed").
+`piece` is the id of the piece and is the same in every frame; `id` equals it except for a part that comes back into the window ("<piece>#1": its number depends on the
+window, so use `piece` for anything that must be stable from frame to frame).
 A part's `succ` / `pred` lists the ids of the parts that continue it inside the window (a part that ends at the border has none: its window event says so).
 
 The result is plain data (dicts, lists, float32 arrays). `graph` -> {"frame", "half", "location", "pieces": [...], "events": [...], ...}.
@@ -187,7 +195,7 @@ def build_map_graph(nmap, step=0.5, inter_frac=0.5, stop_rule="intersection_bran
     for pid, p in pieces.items():
         p["succ"] = [piece_of[v] for v in succ[p["tokens"][-1]]]
         p["pred"] = [piece_of[u] for u in pred[p["tokens"][0]]]
-    events = _map_events(pieces, piece_of, succ, kind, in_inter, stop_rule, step)
+    events = _map_events(pieces, piece_of, succ, pred, kind, in_inter, stop_rule, step)
     n = 8                                                       # ids in the output are the first n characters of the token (the shortest unique prefix, at least 8)
     while len({pid[:n] for pid in pieces}) < len(pieces):
         n += 2
@@ -196,7 +204,7 @@ def build_map_graph(nmap, step=0.5, inter_frac=0.5, stop_rule="intersection_bran
                 params=dict(inter_frac=inter_frac, stop_rule=stop_rule))
 
 
-def _map_events(pieces, piece_of, succ, kind, in_inter, stop_rule, step):
+def _map_events(pieces, piece_of, succ, pred, kind, in_inter, stop_rule, step):
     ev = []
     parent = {}
 
@@ -234,27 +242,43 @@ def _map_events(pieces, piece_of, succ, kind, in_inter, stop_rule, step):
             ev.append(dict(type="end", pos=p["pts"][-1], **{"in": [pid], "out": []}, dirs_in=np.array([_tangent(p["pts"], True, step=step)]),
                            dirs_out=np.zeros((0, 2))))
     if stop_rule != "none":
-        for tok in sorted(succ):
-            if kind[tok] != "lane" or not succ[tok]:
-                continue
-            into = [c for c in succ[tok] if kind[c] == "connector" and in_inter.get(c)]
+        def branches(tokens, at_end):
+            """[(piece id, unit direction)] sorted by piece id: the map pieces `tokens` with their direction at the end (at_end) or at the start"""
+            out = []
+            for c in tokens:
+                pc = piece_of[c]
+                sp = _span(pieces, pc, c)
+                P = pieces[pc]["pts"]
+                out.append((pc, _tangent(P[:sp[2] + 1], True, step=step) if at_end else _tangent(P[sp[1]:], False, step=step)))
+            return sorted(out, key=lambda b: b[0])
+
+        def chosen(neigh, tok):
+            """the successors (or predecessors) of a lane that count for a stop (an exit) under the rule"""
+            into = [c for c in neigh[tok] if kind[c] == "connector" and in_inter.get(c)]
             if stop_rule == "intersection_branch":
-                out = into
-            elif stop_rule == "any_successor":
-                out = succ[tok] if into else []
-            else:
-                out = succ[tok] if len(into) == len(succ[tok]) else []
-            if not out:
+                return into
+            if stop_rule == "any_successor":
+                return neigh[tok] if into else []
+            return neigh[tok] if len(into) == len(neigh[tok]) else []
+        for tok in sorted(succ):
+            if kind[tok] != "lane" or not succ[tok] or not chosen(succ, tok):
                 continue
             pid = piece_of[tok]
             sp = _span(pieces, pid, tok)
             P = pieces[pid]["pts"]
-            dirs_out = []
-            for c in out:
-                pc = piece_of[c]
-                dirs_out.append(_tangent(pieces[pc]["pts"][_span(pieces, pc, c)[1]:], False, step=step))
-            ev.append(dict(type="stop", pos=P[sp[2]], on=pid, idx=sp[2], n_succ=len(succ[tok]), **{"in": [pid], "out": sorted({piece_of[c] for c in out})},
-                           dirs_in=np.array([_tangent(P[:sp[2] + 1], True, step=step)]), dirs_out=np.array(dirs_out)))
+            br = branches(chosen(succ, tok), False)
+            ev.append(dict(type="stop", pos=P[sp[2]], on=pid, idx=sp[2], n_succ=len(succ[tok]), **{"in": [pid], "out": [b[0] for b in br]},
+                           dirs_in=np.array([_tangent(P[:sp[2] + 1], True, step=step)]), dirs_out=np.array([b[1] for b in br])))
+        for tok in sorted(pred):                                 # the mirror: the start of a lane that an intersection connector leads into
+            if kind[tok] != "lane" or not pred[tok] or not chosen(pred, tok):
+                continue
+            pid = piece_of[tok]
+            sp = _span(pieces, pid, tok)
+            P = pieces[pid]["pts"]
+            br = branches(chosen(pred, tok), True)
+            j = sp[1] - 1 if sp[1] > 0 else 0                    # the joint vertex belongs to the map piece before (the duplicate is dropped from the lane)
+            ev.append(dict(type="exit", pos=P[j], on=pid, idx=j, n_pred=len(pred[tok]), **{"in": [b[0] for b in br], "out": [pid]},
+                           dirs_in=np.array([b[1] for b in br]), dirs_out=np.array([_tangent(P[j:], False, step=step)])))
     return ev
 
 
@@ -278,11 +302,15 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None):
         Q = to_frame(p["pts"], T_e2g, frame)
         k = 0
         for pts, cut0, cut1, first, last in clip_square(Q, half):
-            if _length(pts) < min_len:
+            if _length(pts) < (min_len if (cut0 and cut1) else 0.05):             # a fragment cut at both ends is dropped when short; a natural end keeps its links
                 continue
             part = dict(id=short[pid] if k == 0 else f"{short[pid]}#{k}", piece=pid, part=k, kind=p["kind"], pts=pts.astype(np.float32), start_open=bool(cut0),
                         end_open=bool(cut1), length=_length(pts), tokens=[s[0] for s in p["spans"] if s[1] <= last + 1 and s[2] >= first],
                         succ=[], pred=[], seg=(first, last))
+            # the index ranges of the part's points per map piece: point j is the original vertex first + j (the first and the last one may be cut points)
+            part["segments"] = [dict(token=s[0], kind=mg["kind"][s[0]], i0=int(max(s[1] - first, 0)), i1=int(min(s[2] - first, len(pts) - 1)),
+                                     in_intersection=bool(mg["in_inter"].get(s[0], False)))
+                                for s in p["spans"] if s[1] <= last + 1 and s[2] >= first and min(s[2] - first, len(pts) - 1) >= max(s[1] - first, 0)]
             out_parts.append(part)
             parts_of.setdefault(pid, []).append(part)
             k += 1
@@ -305,28 +333,32 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None):
 
     def inside(p):
         return abs(p[0]) <= half + 1e-6 and abs(p[1]) <= half + 1e-6
+    def pick(ids, dirs, table, on=None, q=None):
+        """the ids that exist in this window (the part of the piece through `table`; the part `q` for the piece `on` that carries the event) with their direction rows"""
+        keep = [k for k, i in enumerate(ids) if (q is not None and i == on) or table.get(i) is not None]
+        return [q["id"] if (q is not None and ids[k] == on) else table[ids[k]]["id"] for k in keep], np.asarray(dirs).reshape(-1, 2)[keep]
     for e in mg["events"]:
         pos = to_frame(e["pos"][None], T_e2g, frame)[0]
         if not inside(pos):
             continue
-        if e["type"] == "stop":
+        extra, q = {}, None
+        if e["type"] in ("stop", "exit"):                                   # they lie on a piece, possibly inside it: the part that carries the point
             ps = parts_of.get(e["on"], [])
-            best = min(((project(q["pts"].astype(float), pos), q) for q in ps), key=lambda x: x[0][1], default=None)
+            best = min(((project(q_["pts"].astype(float), pos), q_) for q_ in ps), key=lambda x: x[0][1], default=None)
             if best is None or best[0][1] > 0.6:
                 continue
             (s, _), q = best
-            ids_in, ids_out = [q["id"]], [head[o]["id"] for o in e["out"] if head.get(o) is not None]
-            events.append(dict(type="stop", pos=pos.astype(np.float32), on=q["id"], s=s, n_succ=e["n_succ"], **{"in": ids_in, "out": ids_out},
-                               dirs_in=dirs_to_frame(e["dirs_in"], T_e2g, frame).astype(np.float32),
-                               dirs_out=dirs_to_frame(e["dirs_out"], T_e2g, frame).astype(np.float32), partial=False))
-            continue
-        ids_in = [tail[i]["id"] for i in e["in"] if tail.get(i) is not None]
-        ids_out = [head[o]["id"] for o in e["out"] if head.get(o) is not None]
+            extra = dict(on=q["id"], s=s, **({"n_succ": e["n_succ"]} if e["type"] == "stop" else {"n_pred": e["n_pred"]}))
+        if e["type"] == "stop":
+            ids_in, d_in, (ids_out, d_out) = [q["id"]], np.asarray(e["dirs_in"]).reshape(-1, 2), pick(e["out"], e["dirs_out"], head, e["on"], q)
+        elif e["type"] == "exit":
+            (ids_in, d_in), ids_out, d_out = pick(e["in"], e["dirs_in"], tail, e["on"], q), [q["id"]], np.asarray(e["dirs_out"]).reshape(-1, 2)
+        else:
+            (ids_in, d_in), (ids_out, d_out) = pick(e["in"], e["dirs_in"], tail), pick(e["out"], e["dirs_out"], head)
         if len(ids_in) + len(ids_out) == 0:
             continue
-        events.append(dict(type=e["type"], pos=pos.astype(np.float32), **{"in": ids_in, "out": ids_out},
-                           dirs_in=dirs_to_frame(e["dirs_in"], T_e2g, frame).astype(np.float32),
-                           dirs_out=dirs_to_frame(e["dirs_out"], T_e2g, frame).astype(np.float32),
+        events.append(dict(type=e["type"], pos=pos.astype(np.float32), **extra, **{"in": ids_in, "out": ids_out},
+                           dirs_in=dirs_to_frame(d_in, T_e2g, frame).astype(np.float32), dirs_out=dirs_to_frame(d_out, T_e2g, frame).astype(np.float32),
                            partial=bool(len(ids_in) != len(e["in"]) or len(ids_out) != len(e["out"]))))
     for part in out_parts:                                   # the window border
         if part["start_open"]:

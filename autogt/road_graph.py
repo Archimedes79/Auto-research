@@ -47,14 +47,14 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
     X, H, lane, toks = _samples(polys, kind)
     n = len(X)
     cos_par = np.cos(np.radians(par_deg))
-    cell = np.floor(X / lat_max).astype(np.int64)
+    cell = np.floor(X / (lat_max + lon_max)).astype(np.int64)             # a cell is as wide as the search reaches: the 3 x 3 cells around it hold every candidate
     key = cell[:, 0] * 1000003 + cell[:, 1]
     order = np.argsort(key)
     skey = key[order]
     uniq, start = np.unique(skey, return_index=True)
     stop = np.r_[start[1:], len(skey)]
     where = {int(k): (int(a), int(b)) for k, a, b in zip(uniq, start, stop)}
-    left_of, right_of, opp_of = (np.full(n, -1, np.int64) for _ in range(3))
+    left_of, right_of, opp_l, opp_r = (np.full(n, -1, np.int64) for _ in range(4))
     for k, (a, b) in where.items():
         mine = order[a:b]
         cx, cy = divmod(k, 1000003)
@@ -76,7 +76,7 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
         cosang = (H[cand][None, :, :] * h).sum(-1)
         other = lane[cand][None, :] != lane[mine][:, None]
         abeam = (np.abs(lon) <= lon_max) & other
-        for sign, target, par in ((1, left_of, True), (-1, right_of, True), (1, opp_of, False)):
+        for sign, target, par in ((1, left_of, True), (-1, right_of, True), (1, opp_l, False), (-1, opp_r, False)):
             side = lat * sign
             ok = abeam & (side >= lat_min) & (side <= lat_max) & ((cosang >= cos_par) if par else (cosang <= -cos_par))
             cost = np.where(ok, side, np.inf)
@@ -84,7 +84,7 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
             has = np.isfinite(cost[np.arange(len(mine)), j])
             target[mine[has]] = cand[j[has]]
     pair = {}
-    for name, arr in (("left", left_of), ("right", right_of), ("opposite", opp_of)):
+    for name, arr in (("left", left_of), ("right", right_of), ("opposite", opp_l), ("opposite", opp_r)):         # the nearest opposite lane on each side
         for i in np.nonzero(arr >= 0)[0]:
             pair[(name, lane[i], lane[arr[i]])] = pair.get((name, lane[i], lane[arr[i]]), 0) + 1
     out = {name: {t: [] for t in toks} for name in ("left", "right", "opposite")}

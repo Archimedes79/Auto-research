@@ -27,15 +27,16 @@ def _curve(p0, p1, p2, step=0.5):
 
 
 class _Map:
-    """just enough of NuScenesMap: lanes A, H and D, E, F; connectors B1, B2 inside an intersection.
-    A -> B1 -> D, A -> B2 -> E -> F, H -> D (so D merges B1 and H, and A splits into B1 and B2 E F)"""
+    """just enough of NuScenesMap: lanes A, H, D, E, F, X, Z; connectors B1, B2, Y inside an intersection.
+    A -> B1 -> D, A -> B2 -> E -> F, H -> D (so D merges B1 and H, and A splits into B1 and B2 E F); X -> Y -> Z (one joined piece with a stop and an exit inside)"""
     def __init__(self):
         from shapely.geometry import box
         self.arcs = {"A": _line((0, 0), (0, 40)), "B1": _line((0, 40), (0, 60)), "B2": _curve((0, 40), (0, 50), (10, 50)),
-                     "D": _line((0, 60), (0, 100)), "E": _line((10, 50), (50, 50)), "F": _line((50, 50), (60, 50)), "H": _line((-10, 60), (0, 60))}
-        self.lane = [{"token": t, "left_lane_divider_segments": [], "right_lane_divider_segments": []} for t in ("A", "D", "E", "F", "H")]
-        self.lane_connector = [{"token": t} for t in ("B1", "B2")]
-        out = {"A": ["B1", "B2"], "B1": ["D"], "B2": ["E"], "E": ["F"], "H": ["D"], "D": [], "F": []}
+                     "D": _line((0, 60), (0, 100)), "E": _line((10, 50), (50, 50)), "F": _line((50, 50), (60, 50)), "H": _line((-10, 60), (0, 60)),
+                     "X": _line((-3, 10), (-3, 38)), "Y": _line((-3, 38), (-3, 62)), "Z": _line((-3, 62), (-3, 90))}
+        self.lane = [{"token": t, "left_lane_divider_segments": [], "right_lane_divider_segments": []} for t in ("A", "D", "E", "F", "H", "X", "Z")]
+        self.lane_connector = [{"token": t} for t in ("B1", "B2", "Y")]
+        out = {"A": ["B1", "B2"], "B1": ["D"], "B2": ["E"], "E": ["F"], "H": ["D"], "D": [], "F": [], "X": ["Y"], "Y": ["Z"], "Z": []}
         inc = {t: [u for u, vs in out.items() if t in vs] for t in out}
         self.connectivity = {t: {"incoming": inc[t], "outgoing": out[t]} for t in out}
         self.road_segment = [{"is_intersection": True, "polygon_token": "x"}, {"is_intersection": False, "polygon_token": "y"}]
@@ -59,20 +60,38 @@ def _pose(x, y, yaw):
 def _made_up():
     mg = LG.build_map_graph(_Map())
     P = mg["pieces"]
-    assert sorted(P) == ["A", "B1", "B2", "D", "H"], sorted(P)                               # B2 + E + F joined, nothing else
+    assert sorted(P) == ["A", "B1", "B2", "D", "H", "X"], sorted(P)                          # B2 + E + F and X + Y + Z joined, nothing else
+    assert P["X"]["tokens"] == ["X", "Y", "Z"]
     assert P["B2"]["tokens"] == ["B2", "E", "F"] and P["B2"]["kind"] == "mixed" and P["A"]["kind"] == "lane" and P["B1"]["kind"] == "connector"
     assert [s[0] for s in P["B2"]["spans"]] == ["B2", "E", "F"] and P["B2"]["spans"][0][1] == 0
     ev = collections.Counter(e["type"] for e in mg["events"])
-    assert ev == {"split": 1, "merge": 1, "start": 2, "end": 2, "stop": 1}, ev
+    assert ev == {"split": 1, "merge": 1, "start": 3, "end": 3, "stop": 2, "exit": 3}, ev
     split = next(e for e in mg["events"] if e["type"] == "split")
     assert split["in"] == ["A"] and split["out"] == ["B1", "B2"] and np.allclose(split["pos"], (0, 40), atol=0.3) and split["dirs_out"].shape == (2, 2)
     merge = next(e for e in mg["events"] if e["type"] == "merge")
     assert merge["in"] == ["B1", "H"] and merge["out"] == ["D"] and np.allclose(merge["pos"], (0, 60), atol=0.3)
-    stop = next(e for e in mg["events"] if e["type"] == "stop")
+    stops = {e["on"]: e for e in mg["events"] if e["type"] == "stop"}
+    assert sorted(stops) == ["A", "X"], stops
+    stop = stops["A"]
     assert stop["on"] == "A" and stop["out"] == ["B1", "B2"] and stop["n_succ"] == 2 and np.allclose(stop["pos"], (0, 40), atol=0.1)
+    assert stops["X"]["out"] == ["X"] and stops["X"]["in"] == ["X"] and stops["X"]["n_succ"] == 1 and np.allclose(stops["X"]["pos"], (-3, 38), atol=0.1) \
+        and stops["X"]["dirs_out"].shape == (1, 2), stops["X"]                                  # a stop inside a joined piece: the piece goes on
+    exits = {e["on"]: e for e in mg["events"] if e["type"] == "exit"}
+    assert sorted(exits) == ["B2", "D", "X"], exits                                          # lane D (B1 and H lead into it), lane E inside B2 E F, lane Z inside X Y Z
+    assert exits["D"]["in"] == ["B1"] and exits["D"]["out"] == ["D"] and exits["D"]["n_pred"] == 2 and np.allclose(exits["D"]["pos"], (0, 60), atol=0.1)
+    assert exits["B2"]["in"] == ["B2"] and exits["B2"]["out"] == ["B2"] and exits["B2"]["n_pred"] == 1 and np.allclose(exits["B2"]["pos"], (10, 50), atol=0.1) \
+        and exits["B2"]["idx"] == mg["pieces"]["B2"]["spans"][1][1] - 1, exits["B2"]                # inside a joined piece, at the start of E
+    assert np.allclose(exits["X"]["pos"], (-3, 62), atol=0.1) and exits["X"]["dirs_in"].shape == (1, 2) and exits["X"]["dirs_out"].shape == (1, 2)
+    for e in mg["events"]:                                                                   # one direction row per id, in the same order
+        assert len(e["dirs_in"]) == len(e["in"]) and len(e["dirs_out"]) == len(e["out"]), e
+    assert np.allclose(split["dirs_out"][0], (0, 1), atol=0.05) and split["out"][0] == "B1", "the rows follow the order of the ids (B1 goes straight on)"
     # the rules for a lane with several successors
     one = LG.build_map_graph(_Map(), stop_rule="none")
-    assert not [e for e in one["events"] if e["type"] == "stop"]
+    assert not [e for e in one["events"] if e["type"] in ("stop", "exit")]
+    anyb = LG.build_map_graph(_Map(), stop_rule="any_successor")
+    assert next(e for e in anyb["events"] if e["type"] == "exit" and e["on"] == "D")["in"] == ["B1", "H"], "any: all branches when one of them is an intersection connector"
+    allb = LG.build_map_graph(_Map(), stop_rule="all_successors")
+    assert not [e for e in allb["events"] if e["type"] == "exit" and e["on"] == "D"] and [e for e in allb["events"] if e["type"] == "stop" and e["on"] == "A"]
     try:
         LG.build_map_graph(_Map(), stop_rule="nope")
         raise AssertionError("an unknown stop rule must be refused")
@@ -81,18 +100,30 @@ def _made_up():
     # ego at (0, 20) looking north: the lane frame is x right (east), y forward (north)
     g = LG.crop(mg, _pose(0, 20, math.pi / 2), half=50.0)
     by = {q["id"]: q for q in g["pieces"]}
-    assert set(by) == {"A", "B1", "B2", "D", "H"} and g["frame"] == "lane"
+    assert set(by) == {"A", "B1", "B2", "D", "H", "X"} and g["frame"] == "lane"
+    assert {q["id"] for q in LG.crop(mg, _pose(0, 20, math.pi / 2), half=50.0, min_len=100.0)["pieces"]} == set(by), \
+        "a part with a natural end is kept whatever min_len says (only a fragment cut at both ends is dropped)"
     assert np.allclose(by["A"]["pts"][0], (0, -20), atol=1e-4) and np.allclose(by["A"]["pts"][-1], (0, 20), atol=1e-4)
     assert by["A"]["succ"] == ["B1", "B2"] and by["B1"]["pred"] == ["A"] and by["D"]["pred"] == ["B1", "H"] and by["D"]["succ"] == []
     assert by["D"]["end_open"] and not by["D"]["start_open"] and np.allclose(by["D"]["pts"][-1], (0, 50), atol=1e-4)        # cut at y = 50
     assert by["B2"]["pts"][-1][0] > 0 and by["H"]["pts"][0][0] < 0                                                        # east is positive x
     w = [e for e in g["events"] if e["type"] == "window"]
-    assert len(w) == 2 and {e["io"] for e in w} == {"out"} and all(abs(e["pos"][1] - 50) < 1e-4 or abs(e["pos"][0]) > 49.9 for e in w), w
+    assert len(w) == 3 and {e["io"] for e in w} == {"out"} and all(abs(e["pos"][1] - 50) < 1e-4 or abs(e["pos"][0]) > 49.9 for e in w), w
+    for e in g["events"]:
+        assert len(e["dirs_in"]) == len(e["in"]) and len(e["dirs_out"]) == len(e["out"]), e
+    sx = {e["type"]: e for e in g["events"] if e["type"] in ("stop", "exit") and e.get("on") == "X"}
+    assert sx["stop"]["out"] == ["X"] and abs(sx["stop"]["s"] - 28.0) < 0.3 and sx["exit"]["in"] == ["X"] and abs(sx["exit"]["s"] - 52.0) < 0.3, sx   # inside the joined piece
+    # the segments of every part: index ranges per map piece, contiguous, with the intersection flag of the connectors
+    sg = by["X"]["segments"]
+    assert [s["token"] for s in sg] == ["X", "Y", "Z"] and [s["kind"] for s in sg] == ["lane", "connector", "lane"] and [s["in_intersection"] for s in sg] == [False, True, False]
+    assert sg[0]["i0"] == 0 and sg[-1]["i1"] == len(by["X"]["pts"]) - 1 and all(b["i0"] == a["i1"] + 1 for a, b in zip(sg[:-1], sg[1:])), sg
+    assert [s["token"] for s in by["B2"]["segments"]] == ["B2", "E"] and [s["in_intersection"] for s in by["B2"]["segments"]] == [True, False],         "F lies beyond the window border (x = 50), the part B2 E ends there"
+    assert [s["token"] for s in by["A"]["segments"]] == ["A"] and by["A"]["segments"][0]["i1"] == len(by["A"]["pts"]) - 1
     ego = LG.crop(mg, _pose(0, 20, math.pi / 2), half=50.0, frame="ego")
     assert np.allclose(LG.in_frame(g, "ego")["pieces"][0]["pts"], ego["pieces"][0]["pts"], atol=1e-5), "lane -> ego by rotation"
     back = LG.in_frame(LG.in_frame(g, "ego"), "lane")
     assert np.allclose(back["pieces"][1]["pts"], g["pieces"][1]["pts"], atol=1e-5) and np.allclose(back["events"][0]["pos"], g["events"][0]["pos"], atol=1e-5)
-    stop_c = next(e for e in g["events"] if e["type"] == "stop")
+    stop_c = next(e for e in g["events"] if e["type"] == "stop" and e["on"] == "A")
     assert stop_c["on"] == "A" and abs(stop_c["s"] - 40.0) < 0.3 and np.allclose(stop_c["pos"], (0, 20), atol=0.1)
     # a window that cuts a piece in two parts: ids "<piece>#<part>", and a stub shorter than min_len is dropped
     P = np.array([[-10.0, 0], [10, 0], [10, 3], [-10, 3]])              # crosses the square |x| <= 5 twice (there and back)
@@ -122,6 +153,15 @@ def _lines():
         out = LL.crop_lines(lg, _pose(0, 0, math.pi / 2), half=20.0)
         assert len(out["boundary"]) == 1 and out["boundary"][0]["start_open"] and out["boundary"][0]["end_open"], out["boundary"]
         assert abs(out["boundary"][0]["pts"][:, 0].min() + 20) < 1e-4 and abs(out["boundary"][0]["pts"][:, 0].max() - 20) < 1e-4 and np.allclose(out["boundary"][0]["pts"][:, 1], 1.0)       # lane frame: x right = east
+        ring = np.vstack([_line((-10, -10), (30, -10)), _line((30, -10), (30, 30))[1:], _line((30, 30), (-10, 30))[1:], _line((-10, 30), (-10, -10))[1:]])
+        lg = {"chunks": LL._chunks(ring, "boundary"), "params": {}}
+        for c in lg["chunks"]:
+            c["line"] = 7
+        out = LL.crop_lines(lg, _pose(0, 0, math.pi / 2), half=15.0)
+        assert len(lg["chunks"]) > 3 and lg["chunks"][0]["closed"] and len(out["boundary"]) == 1, out["boundary"]
+        r = out["boundary"][0]
+        assert r["start_open"] and r["end_open"] and np.allclose(r["pts"][0], (-10, 15), atol=1e-4) and np.allclose(r["pts"][-1], (15, -10), atol=1e-4), r["pts"][[0, -1]]
+        assert any(np.allclose(p, (-10, -10)) for p in r["pts"]) and len(r["corners"]) >= 1, "the closure vertex is inside the line and the corner there is found"
     finally:
         LL.CHUNK = old
 
@@ -187,10 +227,10 @@ def run(root=None, verbose=True):
     _areas()
     # neighbours: three lanes side by side, going the same way, and an opposite lane
     polys = {"a": _line((0, 0), (0, 30)), "b": _line((3.5, 0), (3.5, 30)), "c": _line((7, 0), (7, 30)), "o": _line((-3.5, 30), (-3.5, 0)),
-             "far": _line((30, 0), (30, 30))}
+             "p": _line((3.5, 30), (3.5, 0)), "far": _line((30, 0), (30, 30))}
     nb = RG.neighbours(polys, {t: "lane" for t in polys})
-    assert nb["right"]["a"] == ["b"] and nb["left"]["b"] == ["a"] and nb["right"]["b"] == ["c"] and nb["left"]["a"] == [] and nb["opposite"]["a"] == ["o"], nb
-    assert nb["lane_count"]["a"] == nb["lane_count"]["b"] == nb["lane_count"]["c"] == 3 and nb["lane_index"] == {"a": 0, "b": 1, "c": 2, "o": 0, "far": 0} \
+    assert nb["right"]["a"] == ["b"] and nb["left"]["b"] == ["a"] and nb["right"]["b"] == ["c"] and nb["left"]["a"] == [] and nb["opposite"]["a"] == ["o", "p"], nb       # the opposite lane on the left AND on the right
+    assert nb["lane_count"]["a"] == nb["lane_count"]["b"] == nb["lane_count"]["c"] == 3 and nb["lane_index"] == {"a": 0, "b": 1, "c": 2, "o": 0, "p": 0, "far": 0} \
         and nb["lane_count"]["far"] == 1, nb
     # the lane GT has its own version: nothing of it is in the signature of the front GT, a parameter makes another signature, an unknown one is refused
     assert not set(lane_gt.SOURCE_FILES) & set(SIGNATURE_FILES), "the lane GT must not change the front GT's signature"
@@ -237,6 +277,12 @@ def run(root=None, verbose=True):
                     if str(q.get("road")).startswith("x"):
                         n_conn += 1
                         n_conn_in += any(poly.buffer(0.5).contains(Point(*mid)) for poly in inter)
+            for e in lg["events"]:
+                assert len(e["dirs_in"]) == len(e["in"]) and len(e["dirs_out"]) == len(e["out"]), e
+                assert e["type"] not in ("stop", "exit") or (e["in"] and e["out"]), e                              # a stop / exit always names where it leads
+            for q in lg["pieces"]:
+                sg = q["segments"]
+                assert sg and sg[0]["i0"] == 0 and sg[-1]["i1"] == len(q["pts"]) - 1 and all(b["i0"] == a["i1"] + 1 for a, b in zip(sg[:-1], sg[1:])), q["id"]
             ids = {x["id"] for x in lg["pieces"]}
             for q in lg["pieces"]:                                    # every id of a link names a piece of the crop
                 assert set(q["succ"]) <= ids and set(q["pred"]) <= ids and set(q["left"]) <= ids and set(q["right"]) <= ids, q["id"]

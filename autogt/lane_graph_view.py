@@ -2,7 +2,7 @@
 
     python -m autogt lanegraph SAMPLE_TOKEN [--version v1.0-mini] [--dataroot DIR] [--out lane_graph.png]
 
-The pieces are drawn in one colour per piece id, the events as markers (split orange up-triangle, merge blue down-triangle, stop red square, start green
+The pieces are drawn in one colour per piece id, the events as markers (split orange up-triangle, merge blue down-triangle, stop red square, exit yellow square, start green
 circle, end grey circle, window edge white tick). Points lie on the ground plane of the ego frame (z = 0), as the other autogt layers do; every camera
 uses its own ego pose and calibration, so the motion between the six exposures is accounted for.
 """
@@ -17,7 +17,7 @@ from .nuscenes_adapter import pose_matrix
 
 CAMERAS = ("CAM_FRONT_LEFT", "CAM_FRONT", "CAM_FRONT_RIGHT", "CAM_BACK_LEFT", "CAM_BACK", "CAM_BACK_RIGHT")
 LINE = {"lane_divider": (255, 255, 255), "road_divider": (0, 220, 255), "boundary": (255, 255, 0)}                 # BGR: white, yellow, cyan
-MARK = {"split": ((0, 165, 255), "^"), "merge": ((255, 128, 0), "v"), "cross": ((255, 0, 255), "d"), "stop": ((0, 0, 255), "s"),
+MARK = {"split": ((0, 165, 255), "^"), "merge": ((255, 128, 0), "v"), "cross": ((255, 0, 255), "d"), "stop": ((0, 0, 255), "s"), "exit": ((0, 255, 255), "s"),
         "start": ((0, 200, 0), "o"), "end": ((128, 128, 128), "o"), "window": ((255, 255, 255), "|"), "corner": ((255, 255, 0), "d")}
 
 
