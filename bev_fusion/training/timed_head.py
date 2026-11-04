@@ -61,7 +61,9 @@ class MotionHead(nn.Module):
 
 class TimeMover(nn.Module):
     """Move the state to t_c + dt (either sign): ego motion + velocity head + bilinear splat with a mass channel.
-    Shared by all heads. Returns (state at t_c + dt, mass (B, 1, X, Y), v_hat), with `carry` a 4th output (the carried channels)."""
+    Shared by all heads. Returns (state at t_c + dt, mass (B, 1, X, Y), v_hat), with `carry` a 4th output (the carried channels).
+    With a `carry` the splat runs over [state; carry]: the first C channels are the state moved exactly as a call without carry would move it (every channel
+    is scattered on its own and the weights do not depend on the channels), which is why one call can serve both heads (ModelConfig.share_mover)."""
 
     def __init__(self, c, grid=None, hidden=64, v_max=40.0, corr=None):
         super().__init__()
@@ -99,9 +101,15 @@ class TimedHead(nn.Module):
             nn.init.zeros_(m.weight)
             nn.init.zeros_(m.bias)
 
-    def forward(self, state, dt=0.0, v=0.0, omega=0.0, return_aux=False, v_field=None, carry=None):
+    def forward(self, state, dt=0.0, v=0.0, omega=0.0, return_aux=False, v_field=None, carry=None, premoved=None):
+        """premoved: (moved, mass, v_hat, carried) from one call of the shared mover made by the caller (ModelConfig.share_mover: the semantic and the object head
+        read the same moved state, so the model splats once per dt, not once per head); the mover is then not called here, and `carried` is only returned"""
         B = state.shape[0]
-        if carry is None:
+        if premoved is not None:
+            if carry is not None or v_field is not None:
+                raise ValueError("premoved is the result of a mover call that already used v_field / carry: pass neither with it")
+            moved, mass, v_hat, carried = premoved
+        elif carry is None:
             moved, mass, v_hat = self.mover(state, dt, v, omega, v_field=v_field)
             carried = None
         elif not return_aux:

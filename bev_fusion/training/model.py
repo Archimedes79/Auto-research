@@ -49,6 +49,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 try:
+    from . import launch_saving as LS
     from .augment import flip_cam
     from .bev_trunk import BEVTrunk, SemanticHead
     from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
@@ -67,6 +68,7 @@ try:
     from .motion_block import MotionBlock, block_inputs
     from .timed_head import TimedHead, TimeMover
 except ImportError:                                   # run as a script
+    import launch_saving as LS
     from augment import flip_cam
     from bev_trunk import BEVTrunk, SemanticHead
     from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
@@ -146,6 +148,10 @@ class ModelConfig:
     motion_strides: tuple = (4, 2, 1)  # its pyramid levels in cells, coarse to fine; (4, 2) = the runtime arm without the 0.5 m level
     box_vel_from_field: bool = False   # t15: the object head's `vel` = the motion block's field (at dt != 0 moved with the state, the
                                        # vector turned with the ego yaw); the object head's own vel branch stays (unused for the output)
+    share_mover: bool = False          # D53: the semantic and the object head read the same moved state: ONE splat per dt instead of two (same math; the
+                                       # sum of the two heads' gradients meets in one backward node, so a GPU run is equal up to rounding, a CPU forward bit for bit)
+    splat_fused: bool = False          # D53: splat.splat scatters the four bilinear corners in one call (launch_saving.py: same arithmetic, fewer launches)
+    sync_free: bool = False            # D53: fixed-shape / host-side forms of the data-dependent steps of the forward (radar raster, memory re-centring; launch_saving.py)
     refine: bool = False               # S5c: deformable box refinement (object_head.BoxRefiner, n = 1, dt-aware) on the
                                        # object head's features at the target time; trained on decoded + jittered GT
     refine_k: int = 50                 # candidates: top-k decoded boxes per sample + refine_jitter copies of each GT box
@@ -524,6 +530,10 @@ class BEVFusionModel(nn.Module):
         the true gap to the target keyframe and the gap-mean ego motion per sample (the GT keyframe is 0.40-0.60 s
         away, not the nominal 0.5 s); without it a head decodes at the nominal dt with the batch's v, omega. The output
         key stays the nominal dt."""
+        with LS.enabled(splat=self.cfg.splat_fused, sync=self.cfg.sync_free):       # D53: the launch-saving variants, for this call only
+            return self._forward(batch, dts, state, step, ego)
+
+    def _forward(self, batch, dts, state, step, ego):
         state = state or {}
         need = (("vis_cam",) if self.cam_temporal is not None else ()) + \
                ((self._rad_mask,) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
@@ -573,9 +583,15 @@ class BEVFusionModel(nn.Module):
             e = (ego or {}).get(float(dt))
             dt_i, v_i, w_i = (dt, v, w) if e is None else (torch.as_tensor(x).to(S) for x in e)
             vf = v_levels[-1] if v_levels is not None else None
-            sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf)
             carry = vf if (vf is not None and self.cfg.box_vel_from_field and abs(float(dt)) > 1e-6) else None
-            obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf, carry=carry)
+            if self.cfg.share_mover:                             # D53: one splat per dt for both heads (with a carry the object head's splat carries the state too)
+                pre = self.mover(S, dt_i, v_i, w_i, v_field=vf, carry=carry)
+                pre = pre if carry is not None else pre + (None,)
+                sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, premoved=pre[:3] + (None,))
+                obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, premoved=pre)
+            else:
+                sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf)
+                obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf, carry=carry)
             if vf is not None and self.cfg.box_vel_from_field:   # the box velocity is the field (t12's second decision)
                 obj = dict(obj, vel=vf if carry is None else _turn(ao["carry"], w_i, dt_i))
             p = {"sem": sem, "obj": obj, "mass": a["mass"]}

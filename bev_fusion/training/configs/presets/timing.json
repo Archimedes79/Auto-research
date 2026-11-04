@@ -1,0 +1,10 @@
+{
+ "steps": 70,
+ "warmup": 10,
+ "log_every": 5,
+ "eval_every": 0,
+ "save_every": 70,
+ "keep": 1,
+ "probe": true,
+ "slim_at_end": true
+}

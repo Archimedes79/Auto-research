@@ -25,12 +25,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 try:
+    from . import launch_saving as LS
     from .layers import DIST_MAX, channels, layer_table, pool_targets, source_keys   # layers.py also puts autogt on the path
     from .lift_pd import Grid
     from .loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from .object_head import _gather, build_targets, head_loss, refine_loss
     from .timed_head import MotionHead
 except ImportError:                                   # run as a script
+    import launch_saving as LS
     from layers import DIST_MAX, channels, layer_table, pool_targets, source_keys
     from lift_pd import Grid
     from loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
@@ -85,6 +87,7 @@ class LossConfig:
     radar_stationary: bool = True      # decision (3): the proxy target, used when the GT dict carries it. NO GT layer carries it (autogt writes none), so its branch never runs and the
                                        # radar aux head has one untrained channel; false removes the channel and changes the head layout and the init (open_findings #4: at the next baseline)
     w_radar_slot: float = 0.1          # UNUSED: no model output `radar_slot` exists (the branch was removed 2026-11-02); the field stays so that stored configs load
+    sync_free: bool = False            # D53 (launch_saving.py): fixed-shape / host-side forms of the data-dependent steps of the loss (the motion term's one index, the distance-target discs); same numbers
     hygiene_2026_11_02: bool = False   # lead 2026-11-02, off = every stored run is reproduced bit for bit. On: (#3) the object head and the motion loss apply w_obj as a WEIGHT (w_interpolated,
                                        # w_unknown, ... reach the focal loss per cell, the regression terms per object and the motion L1 per cell; they only decided keep / ignore before),
                                        # (#2) an object of unknown velocity (meta vel_known False) trains neither the moving / static logit nor the velocity, (#1) train.batch_ego raises on a
@@ -400,8 +403,10 @@ def motion_term(v_hat, T, cfg):
     if cfg.hygiene_2026_11_02 and "flow_weight" in T:
         valid = valid & (T["flow_weight"][:, 0] > 0)
 
+    pick = torch.nonzero(valid, as_tuple=True) if LS.on("sync") else valid       # D53: one nonzero (one host sync) for the four selections, not one per boolean index; the same cells in the same order
+
     def sel(x):
-        return x.permute(0, 2, 3, 1)[valid].t().reshape(1, x.shape[1], -1, 1)
+        return x.permute(0, 2, 3, 1)[pick].t().reshape(1, x.shape[1], -1, 1)
     return MotionHead.loss(sel(v_hat), sel(T["velocity"]), sel(T["obj_cells"]), cfg.motion_min_speed,
                            cfg.motion_w_background, weight=sel(T["w_obj"]) if cfg.hygiene_2026_11_02 else None)
 
@@ -553,6 +558,10 @@ class BEVLoss(nn.Module):
         return terms, groups, fixed
 
     def forward(self, preds, gts, step_frac=1.0):
+        with LS.enabled(sync=self.cfg.sync_free):                       # D53: the launch-saving variants of the loss, for this call only
+            return self._forward(preds, gts, step_frac)
+
+    def _forward(self, preds, gts, step_frac=1.0):
         out, group_tot, aux = {}, {}, 0.0
         for dt, p in preds.items():
             w = dt_weight(dt, step_frac, self.cfg)

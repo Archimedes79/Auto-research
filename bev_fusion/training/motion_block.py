@@ -27,9 +27,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 try:
+    from . import launch_saving as LS
     from .lift_pd import Grid
     from .splat import splat_window
 except ImportError:                                   # run as a script
+    import launch_saving as LS
     from lift_pd import Grid
     from splat import splat_window
 
@@ -45,19 +47,28 @@ def radar_raster(det, B, grid):
     ix = torch.floor((det["x"] - grid.x_min) / grid.res).long()
     iy = torch.floor((det["y"] - grid.y_min) / grid.res).long()
     ok = (ix >= 0) & (ix < X) & (iy >= 0) & (iy < Y)
-    idx = (det["b"].long()[ok] * X + ix[ok]) * Y + iy[ok]
     N = B * X * Y
+    if LS.on("sync"):                                       # D53: every detection is scattered, the ones outside the grid with weight 0 (to a clamped cell): no boolean-mask
+        idx = (torch.where(ok, det["b"].long(), torch.zeros((), dtype=torch.long, device=dev)) * X + ix.clamp(0, X - 1)) * Y + iy.clamp(0, Y - 1)   # index = no host sync (a
+        # detection outside the grid, even with a stray sample index, goes to cell 0 with weight 0); adding 0.0 changes no sum, so the raster is bit for bit the same
 
-    def acc(w):
-        return torch.zeros(N, device=dev, dtype=torch.float32).index_add_(0, idx, w.float()).view(B, X, Y)
+        def acc(w):
+            w = torch.where(ok, w.float(), torch.zeros((), device=dev))
+            return torch.zeros(N, device=dev, dtype=torch.float32).index_add_(0, idx, w).view(B, X, Y)
+        psi, vr, age = det["psi"], det["vr"], det["dt"]
+    else:
+        idx = (det["b"].long()[ok] * X + ix[ok]) * Y + iy[ok]
+
+        def acc(w):
+            return torch.zeros(N, device=dev, dtype=torch.float32).index_add_(0, idx, w.float()).view(B, X, Y)
+        psi, vr, age = det["psi"][ok], det["vr"][ok], det["dt"][ok]
     cnt = acc(torch.ones_like(idx, dtype=torch.float32))
     m = cnt.clamp(min=1.0)
-    psi = det["psi"][ok]
     ux, uy = acc(torch.cos(psi)), acc(torch.sin(psi))
     un = torch.sqrt(ux ** 2 + uy ** 2).clamp(min=1e-6)
     has = (cnt > 0).float()
-    return torch.stack([has, torch.log1p(cnt), acc(det["vr"][ok]) / m, ux / un * has, uy / un * has,
-                        acc(det["dt"][ok]) / m], 1)
+    return torch.stack([has, torch.log1p(cnt), acc(vr) / m, ux / un * has, uy / un * has,
+                        acc(age) / m], 1)
 
 
 def pool_radar(r, s):

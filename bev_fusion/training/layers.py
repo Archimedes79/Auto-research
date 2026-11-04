@@ -26,6 +26,11 @@ from itertools import groupby
 import torch
 import torch.nn.functional as F
 
+try:
+    from . import launch_saving as LS
+except ImportError:                                   # run as a script
+    import launch_saving as LS
+
 _BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 while not os.path.isdir(os.path.join(_BEV_FUSION, "autogt")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
     _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
@@ -102,6 +107,10 @@ def source_keys(rows):
 def truncated_distance(mask, res=GT_RES, dist_max=DIST_MAX):
     """(B, 1, X, Y) mask {0, 1} -> (B, 1, X, Y) metres: from each cell centre to the nearest centre of a mask cell, capped at dist_max. Exact:
     one convolution with the discs of every distinct radius below dist_max says whether a mask cell lies within it (the cap is 2 m = 4 cells)."""
+    if LS.on("sync"):                                       # D53: the discs and radii are constants: built once per (res, dist_max, device), no mask index / device copy per call
+        R, radii, discs, full = _discs(res, dist_max, mask.device)
+        hit = F.conv2d(mask.float(), discs, padding=R) > 0.5
+        return torch.where(hit, radii.view(1, -1, 1, 1), full).amin(1, keepdim=True)
     R = int(math.ceil(dist_max / res - 1e-9))
     off = torch.arange(-R, R + 1, dtype=torch.float32)
     rr = torch.hypot(off[:, None], off[None, :]) * res
@@ -110,6 +119,22 @@ def truncated_distance(mask, res=GT_RES, dist_max=DIST_MAX):
     hit = F.conv2d(mask.float(), discs, padding=R) > 0.5                                     # (B, n, X, Y): a mask cell within radii[k]
     d = torch.where(hit, radii.view(1, -1, 1, 1).to(mask.device), torch.full((), float(dist_max), device=mask.device))
     return d.amin(1, keepdim=True)
+
+
+_DISC_CACHE = {}
+
+
+def _discs(res, dist_max, device):
+    """(R, radii, discs, cap) of truncated_distance on `device`, the very tensors the plain code builds on every call, kept"""
+    key = (res, dist_max, str(device))
+    if key not in _DISC_CACHE:
+        R = int(math.ceil(dist_max / res - 1e-9))
+        off = torch.arange(-R, R + 1, dtype=torch.float32)
+        rr = torch.hypot(off[:, None], off[None, :]) * res
+        radii = torch.unique(torch.round(rr[rr < dist_max - 1e-6] * 1e6) / 1e6)
+        discs = (rr[None] <= radii.view(-1, 1, 1) + 1e-6).float().unsqueeze(1).to(device)
+        _DISC_CACHE[key] = (R, radii.to(device), discs, torch.full((), float(dist_max), device=device))
+    return _DISC_CACHE[key]
 
 
 def pool_polyline(mask, direction=None, stride=2, res=GT_RES, dist_max=DIST_MAX):

@@ -27,8 +27,10 @@ import torch
 import torch.nn as nn
 
 try:
+    from . import launch_saving as LS
     from .lift_pd import Grid
 except ImportError:                                   # run as a script
+    import launch_saving as LS
     from lift_pd import Grid
 
 
@@ -146,11 +148,12 @@ class CorrectionHead(nn.Module):
         return (self.d_max * torch.tanh(raw / self.d_max)).permute(0, 2, 1)
 
 
-def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False):
+def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False, fused=None):
     """feat (B, C, N), pos (B, N, 2) target positions in metres, importance (B, N) or None -> (out (B, C, X, Y),
     mass (B, 1, X, Y)). Bilinear kernel on the cell centres; sources whose 4 corners all fall outside are dropped.
     mass_gate: out *= min(mass, 1), so cells that only received a weak bilinear tail are not scaled up to full
-    strength by the normalisation (helped in every variant of temp/checks/check_splat_coordinates.py)."""
+    strength by the normalisation (helped in every variant of temp/checks/check_splat_coordinates.py).
+    fused: the four corners as one scatter (same arithmetic, fewer launches; None = the process-wide switch launch_saving 'splat', ModelConfig.splat_fused)."""
     B, C, N = feat.shape
     X, Y = grid.nx, grid.ny
     if pos.dtype in (torch.float16, torch.bfloat16):           # geometry at least float32 under half-precision autocast (bf16
@@ -164,6 +167,25 @@ def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False):
     den = feat.new_zeros(B, X * Y)
     mass = feat.new_zeros(B, X * Y)
     boff = (torch.arange(B, device=feat.device) * X * Y).view(B, 1)
+    if fused if fused is not None else LS.on("splat"):
+        # the four corners as one scatter: the same arithmetic as the loop below (the corner arrays are stacked corner-major, so a cell receives its contributions
+        # in the same order and a CPU sum is bit for bit the same), 4 index_add calls become 3 and the 4 copies of the (C, B X Y) sum become one
+        ix = torch.stack([x0, x0 + 1, x0, x0 + 1])                               # (4, B, N), corners (0, 0), (1, 0), (0, 1), (1, 1); built from the positions: no tensor
+        iy = torch.stack([y0, y0, y0 + 1, y0 + 1])                               # is copied from the host (that would be a stream sync per call on the GPU)
+        k = torch.stack([1 - ax, ax, 1 - ax, ax]) * torch.stack([1 - ay, 1 - ay, ay, ay])
+        ok = (ix >= 0) & (ix < X) & (iy >= 0) & (iy < Y)
+        k = (k * ok).to(feat.dtype)
+        flat = (ix.clamp(0, X - 1).long() * Y + iy.clamp(0, Y - 1).long() + boff).reshape(-1)
+        wk = (k * w_imp).to(feat.dtype)                                          # (4, B, N)
+        src = feat.permute(1, 0, 2).reshape(C, 1, B * N) * wk.reshape(4, B * N).unsqueeze(0)
+        num_flat = num.permute(1, 0, 2).reshape(C, B * X * Y).index_add(1, flat, src.reshape(C, 4 * B * N))
+        num = num_flat.reshape(C, B, X * Y).permute(1, 0, 2)
+        den = den.reshape(-1).index_add(0, flat, wk.reshape(-1)).reshape(B, X * Y)
+        mass = mass.reshape(-1).index_add(0, flat, k.reshape(-1)).reshape(B, X * Y)
+        out = num / (den.unsqueeze(1) + eps)
+        if mass_gate:
+            out = out * mass.clamp(max=1.0).unsqueeze(1)
+        return out.view(B, C, X, Y), mass.view(B, 1, X, Y)
     for dx, dy in ((0, 0), (1, 0), (0, 1), (1, 1)):
         ix, iy = x0 + dx, y0 + dy
         k = (ax if dx else 1 - ax) * (ay if dy else 1 - ay)

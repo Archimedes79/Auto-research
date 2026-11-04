@@ -39,9 +39,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 try:
+    from . import launch_saving as LS
     from .lift_pd import Grid
     from .splat import VelocityHead, grid_points, splat, splat_window
 except ImportError:                                   # run as a script
+    import launch_saving as LS
     from lift_pd import Grid
     from splat import VelocityHead, grid_points, splat, splat_window
 
@@ -92,8 +94,9 @@ def recentre(M, W, pose, res):
     shift = torch.round(pose[:, :2] / res)
     pose = torch.cat([pose[:, :2] - shift * res, pose[:, 2:]], 1)
     Ms, Ws = [], []
+    host = shift.cpu().tolist() if LS.on("sync") else None             # D53: one device-to-host read instead of two per sample; int() per element as before (a NaN pose raises as before)
     for b in range(M.shape[0]):
-        sx, sy = int(shift[b, 0]), int(shift[b, 1])
+        sx, sy = (int(host[b][0]), int(host[b][1])) if host is not None else (int(shift[b, 0]), int(shift[b, 1]))
         if sx == 0 and sy == 0:
             Ms.append(M[b]), Ws.append(W[b])
             continue
