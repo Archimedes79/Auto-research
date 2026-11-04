@@ -72,5 +72,35 @@ What: `ModelConfig.share_mover`, `splat_fused`, `sync_free` + `LossConfig.sync_f
 Reading: the two identical runs differ by 4.4 % (3.86 against 3.69 s), so a single lever is inside the noise; all four together are 9 % under the first plain run and 5 % under the second, and use 1.2 GB less peak memory (share_mover -0.8, splat_fused -0.6: the fewer
 copies of the (C, B X Y) sum). The loss at step 70 agrees within 0.5 % in every run (the identical pair differs by 0.1 %): on the GPU the scatter sums are not bit-reproducible, the CPU test proves the arithmetic. This is what section 6 predicts: the splat is about 0.15 s of the 4.1 s, the
 measured stalls are elsewhere. Not done, and the larger lever: `lift_pd.py` calibration key `.tolist()` (0.50 s), the ego tensors `train.py:405` (0.20 s), `flip.any()` `model.py:418` (0.09 s), `_unpack` (0.11 s): a host-side calibration key from the data path and the frozen files. The memory the variants free
-is the room for a larger micro-batch (lever 4 of the first ranking), not measured.
+is the room for a larger micro-batch (lever 4 of the first ranking), not measured. (Section 8: the host-side key and the ego tensors were done under D54; they save nothing measurable.)
 
+
+## 8. The host copies of the batch measured (D54, 2026-11-04, diagnostic, no verdict)
+What: the waits section 6 named, removed without changing a value (D54: `train.host_side` / `batch["host"]`, `batch_ego` and `clip_step` in one pinned copy, the projection-table cache key and the flip test read from the host copies, pinned copies and a cached index in the loss, the dt embedding filled on the GPU; all behind `ModelConfig.sync_free` / `LossConfig.sync_free` except the ego tensors, which are always the one-copy form; `tests/test_host_batch.py`, FROZEN.md changelog 2026-11-04).
+
+**Census** (how many calls wait for the GPU, per step): `torch.cuda.set_sync_debug_mode("warn")` over 10 steps of the preset-`fast` t20 chain, counted per Python line (`speed3.census0` before, `speed3.census1` after, with `pin_memory`; the probe, checkpoint and model-load lines are left out, they are artefacts of the 10-step run).
+
+| group | before, per step | after, per step |
+|---|---|---|
+| the batch's own tensors, `to_device` (pageable copies) | 252 | 0 (`pin_memory`) |
+| lift and visibility cache keys (`.tolist()` of K, T_cam_car, ida, the height and depth buffers) | 288 | 0 (7 in the whole run: the first tables) |
+| loss targets of the object head, GT stacking, weights (`.to(dev)`) | 173 + 93 | 0 |
+| channel index lists in the map loss (`logits[:, [..]]`) | 131 | 0 |
+| ego tensors (`batch_ego`, `clip_step`) | 48 | 0 |
+| `flip.any()` (model, precompute) | 18 | 0 |
+| left: radar raster slots (boolean masks), the motion term's one `nonzero`, the object weights read, the memory shift, `isfinite` of the loss | | about 108 in all (radar encoder 54, losses 32) |
+| **all, without probe / checkpoint** | **1,122** | **108** |
+
+**Timing** (the section 7 protocol: `t20_base`, preset `timing`, split small, 70 steps, alone on the GPU under the machine lock, preset `fast` = the D53 flags): 
+
+| run | what | s per step | data wait | peak GB | loss at step 70 |
+|---|---|---|---|---|---|
+| speed2.fast | D53 flags, code of 53e5a22 (section 7) | 3.51 | 4 % | 8.3 | 31.78 |
+| speed3.fastb | + D54 host copies (the working tree of this record) | 3.51 | 0 % | 8.3 | 31.89 |
+| speed3.pinb | + `pin_memory: true` | 3.28 | 0 % | 8.3 | 31.83 |
+| speed3.pin | the same, first run | 3.33 | 0 % | 8.3 | 31.72 |
+| speed3.pind | the same, started directly with run.py like the control below | 3.32 | 0 % | 8.3 | 31.84 |
+| **speed3.pinold** | **control: `pin_memory: true` on the code of HEAD (D53 only, no D54 copies), started directly** | **4.93** | 0 % | 8.3 | 31.86 |
+| (speed3.fast | the D54 run of the first pair: 3.82 s, data wait 8 %; the `ar-critic` ran its tests on the same box at the time, so it is not used) | | | | |
+
+Reading: **the 1,014 waits that went away save nothing by themselves (3.51 s against 3.51 s without `pin_memory`). They are what makes `pin_memory` usable.** The step is bound by the host issuing its ~45 thousand operators (section 1), not by waiting: a wait costs time only when the GPU is far behind, and it is not (kernel busy 64 %); the 4.1 s of section 6 were not a sum of stalls to be recovered. `pin_memory: true` on the D53 code is **40 % slower** (4.93 s, the control; every step of the run is slow, the launch path is not the cause: the D54 code started the same way takes 3.32 s), on the D54 code it is **6 % faster** than without it: 3.28, 3.32 and 3.33 s in three runs against 3.51 s (data wait 4 % -> 0 %). Why is not measured; the likely mechanism is that the loader's pinning thread (a pinned allocation synchronises the device) and the ~1,100 copies and reads from pageable memory of the main thread get in each other's way, and only the second one is removed by D54. Against the plain run of section 7 (3.86 s; its twin 3.69 s) the best configuration, preset `fast` + D54 + `pin_memory`, is -14 % (-11 %). Memory is unchanged, the loss at step 70 agrees with all earlier runs within 0.5 % (scatter order on the GPU). To get further the number of operators has to fall (CUDA graphs per phase, `torch.compile` of the blocks, section 3), not the waits.

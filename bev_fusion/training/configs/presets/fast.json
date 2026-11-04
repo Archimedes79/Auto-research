@@ -1,4 +1,5 @@
 {
  "model": {"share_mover": true, "splat_fused": true, "sync_free": true},
- "loss": {"sync_free": true}
+ "loss": {"sync_free": true},
+ "pin_memory": true
 }
