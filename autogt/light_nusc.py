@@ -43,7 +43,7 @@ def scene_names(dataroot, version):
         return [s["name"] for s in json.load(f)]
 
 
-def light_nuscenes(dataroot, version, scenes=None, verbose=False):
+def light_nuscenes(dataroot, version, scenes=None, verbose=False, cameras=("CAM_FRONT",), radars=True):
     from nuscenes.nuscenes import NuScenes
     dataroot = os.path.expanduser(dataroot)
     root = osp.join(dataroot, version)
@@ -53,13 +53,14 @@ def light_nuscenes(dataroot, version, scenes=None, verbose=False):
             want = {s["token"] for s in json.load(f) if s["name"] in set(scenes)}
         with open(osp.join(root, "sample.json")) as f:
             samples = {s["token"] for s in json.load(f) if s["scene_token"] in want}
+    keep = tuple(f"/{c}/" for c in cameras) + (("/RADAR_",) if radars else ())     # other cameras only for pictures, no radars for the lane GT
     state = {}
 
     def kept_sample_data():
         """the CAM_FRONT / RADAR records of the wanted samples: read once, the devkit asks for ego_pose first and needs their pose tokens"""
         if "sd" not in state:
             state["sd"] = [json.loads(t) for t in _records(osp.join(root, "sample_data.json"))
-                           if any(k in t for k in _KEEP) and (want is None or _value(t, "sample_token") in samples)]
+                           if any(k in t for k in keep) and (want is None or _value(t, "sample_token") in samples)]
             state["ego"] = {r["ego_pose_token"] for r in state["sd"]}
         return state["sd"]
 

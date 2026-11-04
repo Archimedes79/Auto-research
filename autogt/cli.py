@@ -446,6 +446,18 @@ def _parser():
     v.add_argument("picks", nargs="*", help="scene-0061:8 (mini, generated now) or a sample token (stored GT, mini or trainval)")
     v.add_argument("--total", action="store_true", help="4th panel: total apparent flow (ego motion included) instead of motion relative to the static world")
     sub.add_parser("sheets").add_argument("out")
+    gl = sub.add_parser("generate-lane", help="the lane GT (lane graph, roads, lines; own version and store) of a nuScenes folder: resumable")
+    gl.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
+    gl.add_argument("--out", default=None, help="default data/autogt/lane; the files go to OUT/<lane signature>/")
+    gl.add_argument("--version", default=None)
+    gl.add_argument("--set", dest="set_name", default=None, help="small (the 10 sequences of mini) or full (all of trainval)")
+    gl.add_argument("--scenes", nargs="*")
+    gl.add_argument("--workers", type=int, default=1)
+    lgp = sub.add_parser("lanegraph", help="picture of the lane graph of a keyframe: the six cameras and the top view")
+    lgp.add_argument("out", help="the png to write")
+    lgp.add_argument("pick", help="scene-0061:8 (the scene's 9th keyframe)")
+    lgp.add_argument("--version", default="v1.0-mini")
+    lgp.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
     r = sub.add_parser("report", parents=[gen], help="evaluate the GT of all sequences, store it, write one PDF report with samples")
     r.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
     r.add_argument("--version", default="v1.0-mini")
@@ -532,6 +544,27 @@ def _cmd_view(a):
     run(a.out, [x.split(":") for x in a.picks] or None, total=a.total)
 
 
+def _cmd_lanegraph(a):
+    import cv2
+    from . import lane_graph_view as V
+    from .light_nusc import light_nuscenes
+    from .suite import AutoGT, default_root
+    root = os.path.expanduser(a.dataroot or default_root(a.version))
+    name, k = a.pick.split(":")
+    from .lane_gt import LaneGT
+    nusc = light_nuscenes(root, a.version, [name], cameras=V.CAMERAS, radars=False)
+    gt = AutoGT(root, a.version, nusc=nusc)
+    tok = gt.keyframes(name)[int(k)]
+    g = LaneGT(root, a.version, nusc=nusc).graph(tok)
+    cv2.imwrite(a.out, V.mosaic(gt, tok, g, title=f"{name}:{k} {g['location']}  " + V.legend_text(g)))
+    print(f"{a.out}: {V.legend_text(g)}")
+
+
+def _cmd_generate_lane(a):
+    from .lane_gt import generate
+    generate(a.dataroot, a.out, a.version, a.scenes, a.set_name, a.workers)
+
+
 def _cmd_sheets(a):
     from .view import sheets
     sheets(a.out)
@@ -560,9 +593,9 @@ def _cmd_video(a):
 
 
 COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "digest": _cmd_digest, "have": _cmd_have,
-            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets,
+            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets, "lanegraph": _cmd_lanegraph, "generate-lane": _cmd_generate_lane,
             "report": _cmd_report, "clean": _cmd_clean, "video": _cmd_video}
-CHECKS_ARGUMENTS = ("data", "digest", "generate", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
+CHECKS_ARGUMENTS = ("data", "digest", "generate", "generate-lane", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
 
 
 def main(argv=None):
