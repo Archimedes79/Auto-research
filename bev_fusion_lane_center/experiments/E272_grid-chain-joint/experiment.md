@@ -57,18 +57,18 @@ x_t (39 ch, 0.5 m) --head--> 6 ch @ 1 m --sparsify--> sparse_t --\
 | 5 score, pictures, verdict | cards, paired bootstrap against the E271 cards, side-by-side assignment pictures and videos, result page | `chain_eval.py`, `grid_view.py`, `vertex_report.py` | verdict written by hand with the rule above |
 
 ## 3. Summary
-**Interim, seed 0 only (2026-11-04): the chain is one trained differentiable function and matches the E271 head; verdict TIE on seed 0, the card's verdict needs seed 1, which waits behind the BEV system's t21 runs on the shared GPU** (`temp/chain/start_j1_gated.sh`; the gate opens when the BEV queue has run, fallback after 04:00).
+**Final (2026-11-04), both seeds: verdict TIE by hand (rule of section 0): the chain is one trained differentiable function and matches the E271 head; accepted as THE end-to-end function by the card's tie rule.** Mean `cov5` j - a = +0.0063 (seed 0 +0.0042, seed 1 +0.0084), far inside the band 0.03; guards held on both seeds; both seeds on the same side. The prediction (+0.02) was too high.
 
 | VAL, 873 frames, 11.2 vertices per 100 m | cov5 | prec1 | vertices / 100 m |
 |---|---|---|---|
-| a = E271 head alone, seed 0 (control) | 0.7212 | 0.8711 | 10.279 |
-| **j = chain, hold on, seed 0** (E272.j_s0) | **0.7254** | **0.8756** | 10.279 |
-| j with the hold off (same weights) | 0.7254 | 0.8756 | 10.279 |
+| a = E271 head alone, seed 0 / seed 1 (control) | 0.7212 / 0.7280 | 0.8711 / 0.8725 | 10.279 / 10.311 |
+| **j = chain, hold on, seed 0 / seed 1** (E272.j_s0, E272.j_s1) | **0.7254 / 0.7364** | **0.8756 / 0.8781** | 10.279 / 10.345 |
+| j with the hold off (same weights) | 0.7254 / 0.7364 | 0.8756 / 0.8781 | 10.279 / 10.345 |
 
-- **Rule (seed 0):** `cov5` j - a = +0.004, paired scene bootstrap 95 % [+0.001, +0.007] (above zero but far inside the 0.03 band), `prec1` +0.0045 [+0.001, +0.008], `vgt100` -0.0004; guards held: **TIE** by the written rule (prediction was +0.02, the gain is smaller). Accepted as the end-to-end function by the card's tie rule once seed 1 agrees.
-- **The hold learned to switch itself off on clean frames:** the trained gate has mean 0.001 and maximum 0.22 on real VAL chains, so the fused map equals the current sparse map to 0.008 and the hold-on and hold-off cards are identical (same threshold to 6 digits). This is a result, not a bug: the weights of a fused map add vertex mass under the budget and a clean frame needs no past (E112 expects the gain on night and blur frames). The hold is therefore built, differentiable and trained, but **its value is untested**: that needs a degraded-frame evaluation (not part of this card).
-- **Assignment:** `road_acc` (plausible road, 39,152 vertices within 1 m of a lane) trained 0.9837 against start values 0.9842; `dust_off` (841 vertices farther than 2 m from every lane) 0.486 against 0.465 (+0.02, below the declared +0.10): the assignment is geometry alone, nothing learned beyond it (the SD map is GT-derived and exact). In the pictures the trained assigner colours a corridor with the road the map draws there; off-lane vertices still partly go to roads.
-- **What the joint fine-tune changed:** the head is slightly better in precision and coverage at the same budget; the phases reached loss 1.27 (blocks, head frozen) and 2.74 (joint, includes the three per-frame head losses).
-- **Speed:** training 0.6 s/step (blocks) and 2.1 s/step (joint, batch 4 chains of 3 frames); ms per frame of the chain not measured (the GPU is not idle).
-- **Honest negatives / gaps (named):** no delivered lane graph (no lane ends / lane-level edges), so Q and topo F1 do not exist for this chain; the read-out rule step on the output; ego motion from stored poses; clean frames only; the SD map is GT-derived and registered exactly (a real map would be neither); a learned threshold for the read-out is in-sample on TRAIN chains.
-- **Pictures:** `runs/grid_view/e272_j_s0/` (scene 7 and 23: SD map and system side by side in road colours); `tools/viz/grid_view.py e272_j_s0 --scene 7 --video`.
+- **Rule:** `cov5` j - a, paired scene bootstrap 95 %: seed 0 +0.004 [+0.001, +0.007], seed 1 +0.008 [+0.0045, +0.0126]; `prec1` +0.0045 / +0.0056 (both above zero); `vgt100` -0.0004 / +0.034 (guard +1.0 held). TIE.
+- **The hold switches itself off on clean frames** (seed 0: gate mean 0.001; hold-on and hold-off cards identical on both seeds). The hold is built, differentiable and trained, but its value is untested: that needs a degraded-frame evaluation (not part of this card).
+- **Assignment:** `road_acc` trained / start values: seed 0 0.9837 / 0.9842, seed 1 0.9844 / 0.9853; `dust_off` seed 0 0.486 / 0.465, seed 1 0.493 / 0.472 (+0.02 each, below the declared +0.10). The assignment is geometry alone: nothing learned beyond it (the SD map is GT-derived and exact).
+- **What the joint fine-tune changed:** the head is slightly better in precision and coverage at the same budget (small, consistent over both seeds).
+- **Speed:** training 0.6 s/step (blocks), 2.1 s/step (joint); run time of seed 1 3593 s including scoring. ms per frame of the chain not measured (the GPU was shared).
+- **Honest negatives / gaps (named):** no delivered lane graph (no lane ends / lane-level edges), so Q and topo F1 do not exist for this chain; the read-out (threshold + 3 x 3 maximum) is a rule step on the output; ego motion from stored poses; clean frames only; the SD map is GT-derived and registered exactly; the read-out threshold is in-sample on TRAIN chains; TEST not used.
+- **Pictures:** `runs/grid_view/e272_j_s0/`, `runs/grid_view/e272_j_s1/` (SD map and system side by side in road colours); `tools/viz/grid_view.py e272_j_s1 --scene 7 --video`.
