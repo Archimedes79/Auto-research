@@ -60,4 +60,9 @@ Context: `../../plan/plan_2026-11-03.md` (the order, the answers, the sequence),
 
 ## 3. Summary
 
-(after the run)
+Result of `t20.base_s0` (VAL, 1000 frames, GT v8, one seed; numbers in `compare_vs_t16_full_s0.txt` and `runs/t20_base_s0/eval/card.json`, the narrative in `results/build/chapters/t20.md`):
+
+- **The lane lever is not confirmed.** Lane divider IoU@1 0.542 against 0.549 of `t16.full_s0` (paired interval contains 0; prediction 0.60 missed, the card's reading rule: inside plus or minus 0.01 = not confirmed); IoU@0.5 0.426 against 0.429. The three bundled changes cannot be separated by this run.
+- The 1 m centre-line head works as a first output (IoU@1 0.643, floor of the card 0.35; mean absolute angle error 0.73 rad: where the lines are, not yet which way they run).
+- Guards inside their bands: maps mean IoU +0.0015, mAP in the fusion area -0.0066, velocity at moving box centres 1.104 against 1.112 m/s; drivable area +0.009, walkway -0.017 (intervals exclude 0); velocity on static and vehicle cells higher (cause not isolated). Cost 102.1 ms per frame against 96.4 ms (the card allowed 105).
+- **Verdict (by hand: D48, one seed): accepted as the reference baseline for the next experiments** (the training ended without a stop or a non-finite value, the gates are green); the lane prediction was missed. Which part of the lane problem is the image side and which the supervision is the open question for the next lane step. The ledger row `t20.base_s0` carries the same result and decision; the baseline is the start of t21 (`../t21_one_frame_temporal/experiment.md`).
