@@ -124,7 +124,11 @@ class Precompute:
     def camera(self, batch):
         K, T = batch["K"], batch["T_cam_car"]
         hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
-        vis = [camera_visibility(self.grid, self.z_levels, self.depth_centres, K[b, 0], T[b, 0], hw, batch.get("ida"), self.oversample)
+        host = batch.get("host") or {}                           # D54: CPU copies of K, T_cam_car, ida (train.host_side): the cache key is made from them, no wait for the GPU
+        Kh, Th, idah = host.get("K"), host.get("T_cam_car"), host.get("ida")
+        use_host = Kh is not None and Th is not None and ((batch.get("ida") is None) == (idah is None))
+        vis = [camera_visibility(self.grid, self.z_levels, self.depth_centres, K[b, 0], T[b, 0], hw, batch.get("ida"), self.oversample,
+                                 host=(Kh[b, 0], Th[b, 0], idah) if use_host else None)
                for b in range(K.shape[0])]
         return torch.stack(vis)[:, None].to(device=K.device, dtype=torch.float32)
 
@@ -149,7 +153,8 @@ class Precompute:
         augmentation mirrored already. Without radar points there are no radar hits (key not added)."""
         B, dev = batch["K"].shape[0], batch["K"].device
         fl = batch.get("flip")
-        mirror = (lambda m: torch.where(fl.to(dev).view(-1, 1, 1, 1), m.flip(-1), m)) if fl is not None and bool(fl.any()) else (lambda m: m)
+        hf = (batch.get("host") or {}).get("flip")                  # D54: the CPU copy of the flags answers "any flipped?" without a wait for the GPU
+        mirror = (lambda m: torch.where(fl.to(dev).view(-1, 1, 1, 1), m.flip(-1), m)) if fl is not None and bool((fl if hf is None else hf).any()) else (lambda m: m)
         need = set(keys) | ({"vis_cam", "vis_radar"} if "vis_fusion" in keys else set())
         if "vis_cam" in need and "vis_cam" not in batch:
             batch["vis_cam"] = mirror(self.camera(batch))

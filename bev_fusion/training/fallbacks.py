@@ -230,7 +230,9 @@ class LiftS(nn.Module):
             self._cache = (key, tab)
         return self._cache[1]
 
-    def forward(self, feat, depth_prob, K, T_cam_car, image_hw, ida=None):
+    def forward(self, feat, depth_prob, K, T_cam_car, image_hw, ida=None, key=None):
+        """key: accepted for the signature of LiftPD (the callers pass the projection-table cache key when the batch has host copies); this lift keeps its own key
+        (it holds the feature size too) and makes it as before"""
         assert depth_prob.shape[1] == len(self.depth_centres)
         tab = self.table(tuple(feat.shape[-2:]), K, T_cam_car, image_hw, ida)
         return height_to_channels(lift_s(feat, depth_prob, tab))
