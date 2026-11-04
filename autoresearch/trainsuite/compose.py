@@ -188,6 +188,17 @@ def same_folder_ids(records, run_id):
     return sorted(r for r in os.listdir(records) if r != run_id and r.replace(".", "_") == folder) if records and os.path.isdir(records) else []
 
 
+def gpu_gate(block):
+    """`gpu_max_mb` of the project's trainsuite block: a training starts only when less than this many MB of the GPU are in use (run.py --gpu-max-mb). 0 when the key is absent or
+    0; a value that is no whole positive number (true, "3000", -1, 2.5) is refused: a gate of `true` would be 1 MB and no training would ever start"""
+    v = block.get("gpu_max_mb")
+    if v is None or (not isinstance(v, bool) and v == 0):
+        return 0
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 or v != int(v):
+        raise ComposeError(f'"gpu_max_mb" of the trainsuite block must be a whole number of MB (3000), not {v!r}')
+    return int(v)
+
+
 def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=None, pred=None, rule=None, no_card=False, extra=(), ar_tools=None, records=None):
     """everything `start` will do, without doing it: {config, held (the id is ON HOLD), composed, changes, check (argv list or None), argv (the run.py command), notes, log}.
     Raises ComposeError for what must be fixed first (unknown preset, a missing card field, no train command, another run id with the same run folder)"""
@@ -241,6 +252,8 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
     check_preview = sub(block["check"], preview) if block.get("check") else None
     run_py = os.path.join(ar_tools or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"), "run.py")
     argv = ["python3", run_py, "--id", run_id, "--gpu", "--split", "train"]
+    if gpu_gate(block):                                          # a training starts only when the card is nearly empty: a second big job next to it would page the GPU memory and slow both
+        argv += ["--gpu-max-mb", str(gpu_gate(block))]
     if no_card:
         argv.append("--no-card")
     for flag, val in (("--hyp", hyp), ("--pred", pred), ("--rule", rule)):

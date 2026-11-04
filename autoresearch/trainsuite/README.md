@@ -86,8 +86,8 @@ python -m trainsuite --root $R stop t20_demo --reason "why"
 ## 5. How to supervise
 | command | answers |
 |---|---|
-| `status [RUN]` | where is every run (state, step, ETA, loss); for one run also the loss groups, the module table, the time split, the last eval |
-| `health RUN [--vs REF] [--kill RULE]` | is it sound: crash, stall, NaN, spike, rising loss, dead module, data-bound; exit 1 on an alert or a kill hit |
+| `status [RUN]` | where is every run (state, step, ETA, loss, the gradient norm now and against before, how many non-finite steps were skipped); for one run also the data it trained on, the gradient norm (first rows, now, peak and its step), the steps that were skipped, the loss groups, the module table, the time split, the last eval |
+| `health RUN [--vs REF] [--kill RULE]` | is it sound: crash, stall, NaN / inf, skipped steps, spike, rising loss, exploding gradient, dead module, data-bound; `--vs` warns when the reference trained on other data; exit 1 on an alert or a kill hit |
 | `watch RUNS [--enforce]` | one line per change until all are finished, made for an agent's Monitor; `--enforce` stops a run on a kill hit |
 | `curves RUN [RUN]` | a png of the loss, its groups and the gradient norm; needs matplotlib (the `gcar` python) |
 | `speed BASE FAST` | s per step, speed-up, data wait, GPU busy, peak memory, loss at the last shared step |
@@ -123,12 +123,14 @@ python -m trainsuite --root $R status t20_diag                        # the modu
 ```
 python -m trainsuite queue                                            # (output shortened)
 # GPU slots (2, ../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots):
-#   slot 0: t20.base_s0  (pid 1520792, since 2026-11-03T16:06:03)     slot 1: free
-# queue (the first goes first): empty
+#   slot 0: t20.base_s0  (pid 1520792, since 2026-11-03T16:06:03, loading: 40 of 180 s settle time, the next launcher waits)     slot 1: free
+# machine lock: free                         (or: timing until 2026-11-04T09:00 (EXCLUSIVE: no other owner starts a run), phase timing)
+# queue (the first goes first): empty        (a launcher the lock holds back is marked 'held back by the machine lock': it does not hold up the others)
 # RAM: 12226 MB available, the gate asks for 10000 MB on 3 looks in a row: a run could start
+# GPU memory: 8718 MB in use; a training starts only below 3000 MB: a training waits
 # on hold (only the person's words clear a hold: hold.py clear ID --words ...):  profile.t10  speed.d  t16.ctl_s0 ...
 ```
-**It exists** (since 2026-11-01). Every `run.py --gpu` is a launcher process that waits in one first-come-first-served line, takes one of the 2 GPU slots (the lane project counts against the same two) and starts only when the RAM gate lets it (`ram_mb` 10000 in `project.json`: two trainings run in parallel only when the box has RAM for both). A held id is refused. `--after <id>` waits for that run's done flag and is blocked when it failed or was stopped; a chain is `start ... --run-arg=--after --run-arg=<id>`:
+**It exists** (since 2026-11-01). The view shows the **machine lock** (`machine_lock.py`: a measurement that needs the box alone; an exclusive lock holds every other launcher back, and its ticket in the line does not hold up the lock owner's own launches), and a slot that is still **loading** (see below). Every `run.py --gpu` is a launcher process that waits in one first-come-first-served line, takes one of the 2 GPU slots (the lane project counts against the same two) and starts only when the RAM gate lets it (`ram_mb` 10000 in `project.json`: two jobs run in parallel only when the box has RAM for both; with the memory gate below, two big trainings never overlap). A held id is refused. **Settle time** (`gpu_settle_s` in `project.json`, `--settle-s`, 0 = off, `AR_SETTLE_S` overrides; bev_fusion sets 180): a launcher waits while another one took its slot less than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet, so the RAM and memory gates would read the box too early (on 2026-11-04 two trainings started in the same second on the 12 GB card and slowed each other 13 times). It delays only launchers of a project that sets it, evaluations of that project included (a run that ends within the time frees its slot and delays nobody). **Memory gate:** the `trainsuite` block of `project.json` may set `"gpu_max_mb": 3000`; `start`, `queue add` and the queue runner then pass `--gpu-max-mb 3000` to `run.py`, so a training starts only when the card has less than that in use, i.e. when no other big job holds it (a hand-typed `run.py` line without the flag is not gated; the view shows the memory in use against the gate, and a waiting launcher says in its heartbeat what it waits for).
 ```
 python -m trainsuite start training/configs/t20_base.json --id t20.demo3 --preset small --set split=small --no-card --run-arg=--after --run-arg=t20.demo2
 #   ... run.py --id t20.demo3 --gpu --split train --no-card --after t20.demo2 -- bash temp/train/run_ar.sh temp/compose/t20_demo3.json
@@ -136,7 +138,7 @@ python -m trainsuite start training/configs/t20_base.json --id t20.demo3 --prese
 **The queue that outlives its launchers** (since 2026-11-03). A launcher waits as a process: a WSL shutdown, a kill or `--wait-after` running out ended every chain behind it (the chain behind `t17.data` went "blocked" on 2026-11-02). The queue is a persistent list plus one small runner:
 ```
 python -m trainsuite queue add training/configs/t20_base.json --id t20.b --hyp "..." --pred "..." --rule "..." [--after t20.a] [--priority 3]
-python -m trainsuite queue                                       # the view above plus the items: state, step, --after, pin
+python -m trainsuite queue                                       # the view above plus the items: state, step, gradient norm now (x against before), skipped non-finite steps, health flags, --after, pin
 python -m trainsuite queue hold --all --words "..."              # stop what runs (checkpoint), nothing new starts      (or: hold t20.b --words "...")
 python -m trainsuite queue resume --all --words "..."            # everything continues from its checkpoint            (or: resume t20.b ...; --fresh-code)
 python -m trainsuite queue drop t20.b                            # take an item that has not started out of the line
