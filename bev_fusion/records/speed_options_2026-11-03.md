@@ -55,3 +55,22 @@ Command: `temp/speed_tools/phase_sampler.py` (scratch; a wall-clock stack sample
 
 Reading: the operator floor measured with tiny tensors (26k forward + 20k backward operators, 21 / 32 us) is 0.56 s forward and 0.64 s backward; the forward and the backward each take about twice that. Copies and syncs are 1.34 s (33 %), not the 0.5 s of the first estimate. The GPU is not idle-bound: it ran a kernel 64 % of the time, so the step alternates between host-limited stretches (copies, tiny operators) and GPU-limited ones (the waits at the syncs, the backward). A sync that waits 0.5 s per step over 6 to 18 calls waits for queued GPU work, so removing it moves the wait to the next consumer; the most the host stalls can give is the GPU idle share, 36 % of 4.1 s (4.1 -> about 2.6 s), the real gain is less.
 Drift: a fresh model in a fresh process takes 4.10 s today, as long as the late steps of the training (4.1-4.2 s), against 3.2 s in its first 1,000 steps. So the growth of the step time is not (only) a property of the weights or of a long-running process; the box (CPU load of other chats, clocks) or the sampler's own cost remain. Not settled: `timing.phase_c` (warm start from the trained checkpoint) was run next to t21.rec_s0 and is void (see the memory note training-speedup-queue); the rerun adds `phase_b` (fresh, no sampler) to price the instrument.
+
+## 7. The launch- and sync-saving variants measured (D53, 2026-11-04, diagnostic, no verdict)
+What: `ModelConfig.share_mover`, `splat_fused`, `sync_free` + `LossConfig.sync_free` (training/launch_saving.py, commit 53e5a22; levers 1 - 3 above, lever 4 was D52). Command: six `queue add` items of `training/configs/t20_base.json` with `--preset timing --set split=small --no-card`
+(70 steps, batch 3 x accumulation 2, the 10-scene small set, probe on), one after the other, alone on the GPU (machine lock `tools-timing-d53`), `python -m trainsuite --root ../bev_fusion/runs speed ... --skip 3`; box load 1.6 - 2.3 during the batch. Run ids `speed2.*`.
+
+| run | flags | s per step | vs plain | peak GB | loss at step 70 |
+|---|---|---|---|---|---|
+| speed2.plain | none | 3.86 | x1.00 | 9.5 | 31.95 |
+| speed2.plain2 | none (the same again, last of the batch) | 3.69 | x1.05 | 9.5 | 31.92 |
+| speed2.share | model.share_mover | 3.65 | x1.06 | 8.7 | 31.85 |
+| speed2.fused | model.splat_fused | 3.61 | x1.07 | 8.9 | 32.03 |
+| speed2.sync | model.sync_free + loss.sync_free | 3.68 | x1.05 | 9.5 | 31.96 |
+| speed2.fast | all four (preset `fast`) | 3.51 | x1.10 | 8.3 | 31.78 |
+
+Reading: the two identical runs differ by 4.4 % (3.86 against 3.69 s), so a single lever is inside the noise; all four together are 9 % under the first plain run and 5 % under the second, and use 1.2 GB less peak memory (share_mover -0.8, splat_fused -0.6: the fewer
+copies of the (C, B X Y) sum). The loss at step 70 agrees within 0.5 % in every run (the identical pair differs by 0.1 %): on the GPU the scatter sums are not bit-reproducible, the CPU test proves the arithmetic. This is what section 6 predicts: the splat is about 0.15 s of the 4.1 s, the
+measured stalls are elsewhere. Not done, and the larger lever: `lift_pd.py` calibration key `.tolist()` (0.50 s), the ego tensors `train.py:405` (0.20 s), `flip.any()` `model.py:418` (0.09 s), `_unpack` (0.11 s): a host-side calibration key from the data path and the frozen files. The memory the variants free
+is the room for a larger micro-batch (lever 4 of the first ranking), not measured.
+
