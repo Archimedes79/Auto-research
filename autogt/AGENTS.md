@@ -136,7 +136,10 @@ y left), `half` (50 m: the window is |x|, |y| <= 50), `location`, `sample`, `sig
 - `roads`: the roads and intersections of the window (`id`, `kind`, `lane_max`, `pieces`, `succ`, `opposite`); the nuScenes map has no road graph, roads are derived from the
   lanes (road_graph.py docstring);
 - `lines`: `lane_divider`, `road_divider`, `boundary` (the outline of the drivable area; `params["boundary_layers"]`), each a list of `{pts, start_open, end_open, corners}` with
-  `corners` = `{pos, angle, idx, dir_in, dir_out}` (turning angle over +-2 m above 30 degrees).
+  `corners` = `{pos, angle, idx, dir_in, dir_out}` (turning angle over +-2 m above 30 degrees);
+- `areas`: `road` (the drivable area, the same layers as the boundary) and `intersection` (the connected areas of the road segments flagged is_intersection, `id` = the node id in
+  `roads`, None when no lane connector lies in it), each a list of polygons `{id, exterior, holes, area}` cut to the window. NOT dilated: rasterise a polygon to get the
+  intersection pixels as they are, dilate in the head if it wants more.
 Only vectors and events are stored; rasters are drawn from them where they are needed. Picture: `python -m autogt lanegraph out.png scene-0061:8` (six cameras + top view).
 Open with Mirko, kept as parameters (another value = another lane signature): `boundary_layers`, `corner_deg`, `stop_rule`.
 

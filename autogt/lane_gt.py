@@ -8,7 +8,8 @@ is made from the nuScenes map and the ego pose at the front-camera time only (no
     g = lane_gt.LaneGT("~/data/nuscenes_full", "v1.0-trainval", scenes=[name]).graph(sample_token)       # made on demand
     lane_gt.generate("~/data/nuscenes_full", set_name="full")         # the complete set: resumable, groups of sequences, workers=N
 
-What a graph holds: lane_graph.py (pieces, events), road_graph.py (neighbours, lane counts, roads), lane_lines.py (dividers, boundary, corners); the fields are
+What a graph holds: lane_graph.py (pieces, events), road_graph.py (neighbours, lane counts, roads), lane_lines.py (dividers, boundary, corners, the road and intersection
+areas as polygons, not dilated); the fields are
 listed in AGENTS.md, section 3b. Frame "lane" (x right, y forward, ego rear axle at the camera time; `lane_graph.in_frame(g, "ego")` for x forward, y left).
 
 VERSION. The signature of the lane GT is the hash of the source of lane_graph.py, road_graph.py, lane_lines.py and this file plus the parameters that differ from
@@ -98,7 +99,9 @@ class LaneGT:
             p = self.params
             nmap = NuScenesMap(dataroot=self.dataroot, map_name=location)
             mg = LG.build_map_graph(nmap, step=p["step"], inter_frac=p["inter_frac"], stop_rule=p["stop_rule"])
-            self._maps[location] = (mg, RG.build_road_graph(mg), LL.build_line_graph(nmap, boundary_layers=p["boundary_layers"]))
+            rg = RG.build_road_graph(mg)
+            rg["area_chunks"] = LL.polygon_chunks(rg["area_geoms"])
+            self._maps[location] = (mg, rg, LL.build_line_graph(nmap, boundary_layers=p["boundary_layers"]))
         return self._maps[location]
 
     def pose(self, sample_token):
@@ -116,6 +119,7 @@ class LaneGT:
         T = self.pose(sample_token)
         g = LG.crop(mg, T, half=p["half"], min_len=p["min_len"], frame=frame, rg=rg)
         g["lines"] = LL.crop_lines(lg, T, half=p["half"], frame=frame, corner_deg=p["corner_deg"], corner_base=p["corner_base"])
+        g["areas"] = {"road": LL.crop_areas(lg["road"], T, half=p["half"], frame=frame, merge=True), "intersection": LL.crop_areas(rg["area_chunks"], T, half=p["half"], frame=frame)}
         g["params"].update(step=p["step"], boundary_layers=list(p["boundary_layers"]), corner_deg=p["corner_deg"], corner_base=p["corner_base"])
         g["location"], g["sample"], g["signature"] = loc, sample_token, self.signature()
         return g

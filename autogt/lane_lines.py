@@ -8,6 +8,11 @@ CORNERS. Along every polyline the turning angle is measured between the chord of
 `corner_base` metres; a vertex whose angle exceeds `corner_deg` (default 30 degrees) and is the largest within 2 m is a corner (a kerb corner,
 a sharp end of a divider). A corner is {"pos", "angle" (degrees), "idx" (the nearest point of the polyline), "dir_in", "dir_out"}.
 
+AREAS. The ROAD area is the union of the polygons of `boundary_layers` (the area inside the boundary), the INTERSECTION areas are the connected areas of the road
+segments flagged is_intersection (road_graph.py gives them an id that matches the road nodes); `crop_areas` cuts them to the window as polygons
+{"id", "exterior", "holes", "area"} (exterior counter-clockwise, holes clockwise). They are NOT dilated: a head that wants intersection pixels dilated by a few
+metres does that itself; rasterising the polygon gives the intersection pixels as they are.
+
 The result of `crop_lines` is {"lane_divider": [line, ...], "road_divider": [...], "boundary": [...]} in the frame of `autogt.lane_graph` (lane frame by
 default, x right, y forward), cut to the square window; a line is {"pts" (float32, travel / outline order), "start_open", "end_open", "corners"}.
 """
@@ -58,7 +63,64 @@ def build_line_graph(nmap, boundary_layers=("drivable_area",), simplify=0.05):
                 c["line"] = ring_id
                 chunks.append(c)
             ring_id += 1
-    return dict(chunks=chunks, params=dict(boundary_layers=tuple(boundary_layers), simplify=simplify))
+    return dict(chunks=chunks, road=polygon_chunks([(None, union)]) if union is not None else [],
+                params=dict(boundary_layers=tuple(boundary_layers), simplify=simplify))
+
+
+def polygon_chunks(items, tile=100.0, min_area=0.0):
+    """[(id, shapely geometry)] -> chunks {"id", "poly", "bbox"}: every polygon cut into tiles of `tile` metres where it is bigger (the road area of a map is one
+    polygon with 100,000 vertices; a keyframe takes the tiles near the ego)"""
+    import shapely
+    chunks = []
+    for ident, geom in items:
+        for poly in (geom.geoms if hasattr(geom, "geoms") else [geom]):
+            if poly.is_empty or poly.geom_type != "Polygon":
+                continue
+            x0, y0, x1, y1 = poly.bounds
+            if max(x1 - x0, y1 - y0) <= 1.5 * tile:
+                chunks.append(dict(id=ident, poly=poly, bbox=np.array(poly.bounds)))
+                continue
+            for ix in range(int(np.floor(x0 / tile)), int(np.floor(x1 / tile)) + 1):
+                for iy in range(int(np.floor(y0 / tile)), int(np.floor(y1 / tile)) + 1):
+                    part = shapely.clip_by_rect(poly, ix * tile, iy * tile, (ix + 1) * tile, (iy + 1) * tile)
+                    for q in (part.geoms if hasattr(part, "geoms") else [part]):
+                        if not q.is_empty and q.geom_type == "Polygon" and q.area > min_area:
+                            chunks.append(dict(id=ident, poly=q, bbox=np.array(q.bounds)))
+    return chunks
+
+
+def crop_areas(chunks, T_e2g, half=50.0, frame="lane", margin=25.0, merge=False, min_area=0.5):
+    """the polygons of `chunks` cut to the window of one keyframe: [{"id", "exterior" (n, 2) float32 counter-clockwise, "holes" [(m, 2)] clockwise, "area"}];
+    `merge`: the pieces that touch (the tiles of a big polygon) are united first"""
+    import shapely
+    from shapely import affinity
+    from shapely.geometry.polygon import orient
+    t, Re = T_e2g[:2, 3], T_e2g[:2, :2]
+    A = Re if frame == "ego" else Re @ np.array([[0.0, 1.0], [-1.0, 0.0]])              # frame point = (global point - t) @ A
+    mat = [A[0, 0], A[1, 0], A[0, 1], A[1, 1], -(t[0] * A[0, 0] + t[1] * A[1, 0]), -(t[0] * A[0, 1] + t[1] * A[1, 1])]
+    r = half * np.sqrt(2.0) + margin
+    cut = {}
+    for c in chunks:
+        b = c["bbox"]
+        if b[2] < t[0] - r or b[0] > t[0] + r or b[3] < t[1] - r or b[1] > t[1] + r:
+            continue
+        g = shapely.clip_by_rect(affinity.affine_transform(c["poly"], mat), -half, -half, half, half)
+        if not g.is_empty:
+            cut.setdefault(c["id"], []).append(g)
+    out = []
+    for ident in sorted(cut, key=lambda x: (x is None, str(x))):
+        geoms = cut[ident]
+        if merge:
+            geoms = [shapely.union_all(geoms)]
+        for g in geoms:
+            for poly in (g.geoms if hasattr(g, "geoms") else [g]):
+                if poly.is_empty or poly.geom_type != "Polygon" or poly.area < min_area:
+                    continue
+                poly = orient(poly, 1.0)
+                out.append(dict(id=ident, exterior=np.asarray(poly.exterior.coords, np.float32), holes=[np.asarray(h.coords, np.float32) for h in poly.interiors],
+                                area=float(poly.area)))
+    out.sort(key=lambda d: (str(d["id"]), -d["area"]))
+    return out
 
 
 def find_corners(P, deg=30.0, base=2.0):

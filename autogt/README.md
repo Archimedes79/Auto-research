@@ -134,6 +134,8 @@ graph holds is listed in `AGENTS.md`, section 3b.
   intersections and the road blocks do not point at a segment), so neighbours, lane counts and roads are derived from the lanes (`road_graph.py` docstring). Check: of the
   730 lane pairs that share a divider node on nuScenes mini, 723 are found as right neighbours and none as left.
 - LINES. `lane_divider`, `road_divider` and the BOUNDARY (the outline of the union of the drivable-area polygons; nuScenes has no boundary record) cut to the window, with corners.
+- AREAS. The road area (inside the boundary) and the intersection areas (the road segments flagged is_intersection, one id per connected area, matching the nodes of `roads`) as
+  polygons, not dilated: the head draws road and intersection pixels from them.
 - CHECKS (`lane_graph_selftest.py`, in `selftest`): a made-up map (split, merge, stop, join, window cut, frames), the points lie on autogt's own centre-lines (median 0.01 m, 99 % 0.05 m
   both ways), the junction events rebuild the map's junctions (F1 0.99), the neighbours against the map's divider tokens, corners and chunked outlines, the store (generate, resume,
   load, another parameter = another folder). Against the lane project's own `make_graph_gt.py` (same frame and window) 47 of 107,538 points differ by more than 0.3 m (pieces

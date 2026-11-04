@@ -59,6 +59,15 @@ def bev_image(graph, ppm=8, title=None, labels=True):
 
     def px(p):
         return (p[..., 0] + half) * ppm, (half - p[..., 1]) * ppm
+    for kind, fill in (("road", (60, 60, 60)), ("intersection", (40, 70, 110))):             # the drivable area and the intersection areas, under everything else
+        layer = img.copy()
+        for poly in graph.get("areas", {}).get(kind, []):
+            u, v = px(poly["exterior"])
+            cv2.fillPoly(layer, [np.c_[u, v].astype(np.int32)], fill)
+            for h in poly["holes"]:
+                u, v = px(h)
+                cv2.fillPoly(layer, [np.c_[u, v].astype(np.int32)], (28, 28, 28))
+        img = cv2.addWeighted(layer, 0.8, img, 0.2, 0) if kind == "road" else cv2.addWeighted(layer, 0.6, img, 0.4, 0)
     for part in graph["pieces"]:
         u, v = px(part["pts"])
         pts = np.c_[u, v].astype(np.int32)

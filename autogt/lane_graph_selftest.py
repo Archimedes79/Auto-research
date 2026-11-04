@@ -126,6 +126,35 @@ def _lines():
         LL.CHUNK = old
 
 
+def _areas():
+    """polygons: cut to the window, holes kept, orientation fixed, tiles of a big polygon give the same area, frames"""
+    from shapely.geometry import Polygon, box
+    from shapely.geometry.polygon import orient
+    T = _pose(10, 10, math.pi / 2)
+    out = LL.crop_areas(LL.polygon_chunks([("a", box(0, 0, 20, 20))]), T, half=5.0)
+    assert len(out) == 1 and out[0]["id"] == "a" and abs(out[0]["area"] - 100.0) < 1e-3 and np.abs(out[0]["exterior"]).max() <= 5.0 + 1e-5, out
+    ring = Polygon([(0, 0), (20, 0), (20, 20), (0, 20)], [[(8, 8), (8, 12), (12, 12), (12, 8)]])          # a hole of 16 m2 at the centre of the window
+    out = LL.crop_areas(LL.polygon_chunks([(None, ring)]), T, half=5.0)
+    assert len(out) == 1 and out[0]["id"] is None and len(out[0]["holes"]) == 1 and abs(out[0]["area"] - 84.0) < 1e-3, out
+    sa = lambda P: 0.5 * float(np.sum(P[:-1, 0] * P[1:, 1] - P[1:, 0] * P[:-1, 1]))
+    assert sa(out[0]["exterior"].astype(float)) > 0 > sa(out[0]["holes"][0].astype(float)), "exterior counter-clockwise, holes clockwise"
+    # a polygon 600 m wide is cut into tiles; the cut window has the same area as a direct cut, with and without the tiles
+    big = Polygon([(-300, -300), (300, -300), (300, 300), (-300, 300)], [[(-30, -30), (-30, 30), (30, 30), (-0.0, -30)]])
+    T2 = _pose(120.0, 40.0, 0.3)
+    direct = LL.crop_areas([dict(id=None, poly=big, bbox=np.array(big.bounds))], T2, half=50.0)
+    tiled = LL.crop_areas(LL.polygon_chunks([(None, big)]), T2, half=50.0, merge=True)
+    assert len(LL.polygon_chunks([(None, big)])) > 20 and abs(sum(d["area"] for d in direct) - sum(d["area"] for d in tiled)) < 1e-2, (direct, tiled)
+    # the frame: a polygon east of the ego (x_global > 0, ego looking north) is at positive x in the lane frame and at negative y in the ego frame
+    east = LL.crop_areas(LL.polygon_chunks([("e", box(3, -2, 8, 2))]), _pose(0, 0, math.pi / 2), half=20.0)
+    assert np.allclose([east[0]["exterior"][:, 0].min(), east[0]["exterior"][:, 0].max()], [3, 8], atol=1e-4) and np.allclose(east[0]["exterior"][:, 1].max(), 2, atol=1e-4)
+    ego = LL.crop_areas(LL.polygon_chunks([("e", box(3, -2, 8, 2))]), _pose(0, 0, math.pi / 2), half=20.0, frame="ego")
+    assert np.allclose([ego[0]["exterior"][:, 1].min(), ego[0]["exterior"][:, 1].max()], [-8, -3], atol=1e-4)
+    g_lane = {"frame": "lane", "areas": {"road": east}}
+    back = LG.in_frame(LG.in_frame(g_lane, "ego"), "lane")
+    assert np.allclose(back["areas"]["road"][0]["exterior"], east[0]["exterior"], atol=1e-5)
+    assert np.allclose(LG.in_frame(g_lane, "ego")["areas"]["road"][0]["exterior"], ego[0]["exterior"], atol=1e-4), "in_frame turns polygons like crop_areas does"
+
+
 # ---------------------------------------------------------------------------------------------------------------- checks against the map
 def _junction_f1(g, mg, T_e2g, half):
     """events and links against the map: the junction points the events name vs the nodes of the raw map graph (>= 2 successors or >= 2
@@ -155,6 +184,7 @@ def run(root=None, verbose=True):
     root = os.path.expanduser(root or "~/data/nuscenes")
     mg, g = _made_up()
     _lines()
+    _areas()
     # neighbours: three lanes side by side, going the same way, and an opposite lane
     polys = {"a": _line((0, 0), (0, 30)), "b": _line((3.5, 0), (3.5, 30)), "c": _line((7, 0), (7, 30)), "o": _line((-3.5, 30), (-3.5, 0)),
              "far": _line((30, 0), (30, 30))}
@@ -175,6 +205,7 @@ def run(root=None, verbose=True):
     gt = AutoGT(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
     lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
     n_frames, d_graph, d_ref, f1s, divpairs, found = 0, [], [], [], 0, 0
+    n_lane_pts = n_lane_on_road = n_conn = n_conn_in = 0
     for name in ("scene-0061", "scene-0103", "scene-1077"):
         for tok in gt.keyframes(name)[::10]:
             lg = lgt.graph(tok)
@@ -193,6 +224,19 @@ def run(root=None, verbose=True):
             f1, n_truth = _junction_f1(lg, lgt._maps[lg["location"]][0], T, 50.0)
             if n_truth:
                 f1s.append(f1)
+            from shapely.geometry import MultiPolygon, Point, Polygon
+            road = MultiPolygon([Polygon(p["exterior"], p["holes"]) for p in lg["areas"]["road"]]).buffer(0.5) if lg["areas"]["road"] else None
+            inter = [Polygon(p["exterior"], p["holes"]) for p in lg["areas"]["intersection"]]
+            for q in lg["pieces"]:                                    # lanes lie on the drivable area, connectors in an intersection lie in an intersection area
+                P = q["pts"][(np.abs(q["pts"]) < 49.0).all(1)]
+                if q["kind"] == "lane" and len(P) and road is not None:
+                    n_lane_pts += len(P)
+                    n_lane_on_road += sum(road.contains(Point(*p)) for p in P[::4]) * 4
+                if q["kind"] == "connector" and len(P):
+                    mid = P[len(P) // 2]
+                    if str(q.get("road")).startswith("x"):
+                        n_conn += 1
+                        n_conn_in += any(poly.buffer(0.5).contains(Point(*mid)) for poly in inter)
             ids = {x["id"] for x in lg["pieces"]}
             for q in lg["pieces"]:                                    # every id of a link names a piece of the crop
                 assert set(q["succ"]) <= ids and set(q["pred"]) <= ids and set(q["left"]) <= ids and set(q["right"]) <= ids, q["id"]
@@ -201,6 +245,7 @@ def run(root=None, verbose=True):
     assert np.median(d_graph) < 0.05 and np.percentile(d_graph, 99) < 0.25, (np.median(d_graph), np.percentile(d_graph, 99))      # on the lane graph
     assert np.percentile(d_ref, 99) < 0.25, np.percentile(d_ref, 99)                                                                # nothing of it missing
     assert np.mean(f1s) > 0.95 and min(f1s) > 0.8, (np.mean(f1s), min(f1s))                                                         # events + links
+    assert n_lane_on_road >= 0.97 * n_lane_pts > 0 and n_conn_in >= 0.95 * n_conn > 0, (n_lane_on_road, n_lane_pts, n_conn_in, n_conn)      # areas and graph agree
     # neighbours against the map's own divider tokens (the lanes that have them): a.right divider == b.left divider means b is right of a
     for loc, (mgm, rgm, lgm) in lgt._maps.items():
         nmap = gt.map_for(next(s["token"] for s in gt.nusc.scene if gt.nusc.get("log", s["log_token"])["location"] == loc))

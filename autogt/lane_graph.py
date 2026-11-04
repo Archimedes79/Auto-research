@@ -356,8 +356,15 @@ def in_frame(graph, frame):
 
     def walk(x):
         if isinstance(x, dict):
-            return {k: (turn(v) if k in ("pts", "pos", "dirs_in", "dirs_out", "dir_in", "dir_out") and len(np.asarray(v)) else walk(v)
-                        if not isinstance(v, np.ndarray) else v) for k, v in x.items()}
+            out = {}
+            for k, v in x.items():
+                if k in ("pts", "pos", "dirs_in", "dirs_out", "dir_in", "dir_out", "exterior") and len(np.asarray(v)):
+                    out[k] = turn(v)
+                elif k == "holes":
+                    out[k] = [turn(h) for h in v]
+                else:
+                    out[k] = walk(v) if not isinstance(v, np.ndarray) else v
+            return out
         if isinstance(x, list):
             return [walk(v) for v in x]
         return x

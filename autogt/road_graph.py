@@ -145,7 +145,7 @@ def build_road_graph(mg, **params):
         for t in members:
             road_of[t] = rid
     # intersections: the connected areas of the intersection segments, the connectors inside them
-    area_of, areas = {}, {}
+    area_of, areas, area_geoms = {}, {}, []
     inter = mg.get("inter")
     if inter is not None:
         geoms = list(inter.geoms) if hasattr(inter, "geoms") else [inter]
@@ -164,6 +164,7 @@ def build_road_graph(mg, **params):
         for a, ts in by_area.items():
             areas[names[a]] = dict(id=names[a], kind="intersection", connectors=sorted(ts))
         area_of = {t: names[a] for t, a in area_of.items()}
+        area_geoms = [(names.get(a), g) for a, g in enumerate(geoms)]               # every intersection area, with the id of its node (None: no connector in it)
     for t in polys:                                                       # connectors outside every intersection: the road of the lane before / after
         if kind[t] == "connector" and t not in area_of:
             ref = [u for u in pred[t] if u in road_of] or [v for v in succ[t] if v in road_of]
@@ -200,7 +201,7 @@ def build_road_graph(mg, **params):
         link["lane_count"] = int(np.median([nb["lane_count"][t] for t in tokens_lane])) if tokens_lane else 0
         link["lane_index"] = int(np.median([nb["lane_index"][t] for t in tokens_lane])) if tokens_lane else 0
         plinks[pid] = link
-    return dict(nb=nb, roads=roads, areas=areas, road_of=road_of, area_of=area_of, node_of=node_of, edges=edges, opposite=opposite, plinks=plinks,
+    return dict(nb=nb, roads=roads, areas=areas, area_geoms=area_geoms, road_of=road_of, area_of=area_of, node_of=node_of, edges=edges, opposite=opposite, plinks=plinks,
                 params=p)
 
 
