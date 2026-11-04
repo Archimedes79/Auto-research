@@ -1,0 +1,33 @@
+paired scene bootstrap (1000 resamples), b - a; a = runs/t21_pair_s0, b = runs/t21_pair4_s0; val; 456 common frames
+seg.fov/dt+0.00/drivable_area/all/all/iou@0                    a 0.7805  b 0.7781  b-a -0.0025  95% [-0.0107, +0.0029]  draws 1000/1000
+seg.fov/dt+0.00/walkway/all/all/iou@0                          a 0.4134  b 0.4167  b-a +0.0033  95% [-0.0060, +0.0146]  draws 1000/1000
+seg.fov/dt+0.00/lane_divider/all/all/iou@0.5                   a 0.4474  b 0.4457  b-a -0.0016  95% [-0.0140, +0.0088]  draws 1000/1000
+seg.fov/dt+0.00/lane_divider:zc/all/all/f1@0.5                 a 0.2659  b 0.2119  b-a -0.0540  95% [-0.0827, -0.0095]  (excludes 0)  draws 1000/1000
+seg.obj/dt+0.00/vehicle/all/all/iou@0                          a 0.3968  b 0.3985  b-a +0.0017  95% [-0.0068, +0.0074]  draws 1000/1000
+seg.fov/dt+0.00/lane_divider/all/all/iou@1                     a 0.5429  b 0.5427  b-a -0.0002  95% [-0.0151, +0.0100]  draws 1000/1000
+seg.fov/dt+0.00/carpark_area/all/all/iou@0                     a 0.1753  b 0.1492  b-a -0.0261  95% [-0.0335, +0.0013]  draws 1000/1000
+seg.fov/dt+0.00/ped_crossing/all/all/iou@0                     a 0.3424  b 0.3380  b-a -0.0043  95% [-0.0231, +0.0063]  draws 1000/1000
+seg.fov/dt+0.00/road_divider/all/all/iou@1                     a 0.5153  b 0.5064  b-a -0.0089  95% [-0.0299, +0.0097]  draws 1000/1000
+det.dt+0.00/vehicle/all/ap@1                                   a 0.4776  b 0.4719  b-a -0.0057  95% [-0.0187, +0.0048]  draws 1000/1000
+det.dt+0.00/vehicle/all/ap@2                                   a 0.6350  b 0.6248  b-a -0.0102  95% [-0.0195, +0.0003]  draws 1000/1000
+det.dt+0.00/pedestrian/all/ap@1                                a 0.1846  b 0.1940  b-a +0.0094  95% [-0.0080, +0.0317]  draws 1000/1000
+det.dt+0.00/pedestrian/all/ap@2                                a 0.2601  b 0.2776  b-a +0.0175  95% [+0.0034, +0.0405]  (excludes 0)  draws 1000/1000
+det.dt+0.00/vehicle/all/ave_skill_moving                       a 0.8286  b 0.8305  b-a +0.0019  95% [-0.0102, +0.0172]  draws 1000/1000
+det.dt+0.00/mean/all/mAP                                       a 0.3893  b 0.3917  b-a +0.0024  95% [-0.0038, +0.0121]  draws 1000/1000
+detf.dt+0.00/vehicle/all/ap@1                                  a 0.6137  b 0.6143  b-a +0.0005  95% [-0.0178, +0.0149]  draws 1000/1000
+detf.dt+0.00/vehicle/all/ap@2                                  a 0.7950  b 0.7904  b-a -0.0046  95% [-0.0179, +0.0067]  draws 1000/1000
+detf.dt+0.00/pedestrian/all/ap@1                               a 0.2403  b 0.2414  b-a +0.0011  95% [-0.0198, +0.0323]  draws 1000/1000
+detf.dt+0.00/pedestrian/all/ap@2                               a 0.3386  b 0.3655  b-a +0.0270  95% [+0.0015, +0.0636]  (excludes 0)  draws 1000/1000
+detf.dt+0.00/vehicle/all/ave_skill_moving                      a 0.8587  b 0.8608  b-a +0.0021  95% [-0.0069, +0.0130]  draws 1000/1000
+detf.dt+0.00/mean/all/mAP                                      a 0.4437  b 0.4441  b-a +0.0004  95% [-0.0092, +0.0117]  draws 1000/1000
+detfp.dt+0.00/vehicle/all/ap@1                                 a 0.5866  b 0.5856  b-a -0.0010  95% [-0.0184, +0.0097]  draws 1000/1000
+detfp.dt+0.00/vehicle/all/ap@2                                 a 0.7807  b 0.7757  b-a -0.0050  95% [-0.0193, +0.0051]  draws 1000/1000
+detfp.dt+0.00/pedestrian/all/ap@1                              a 0.2300  b 0.2323  b-a +0.0023  95% [-0.0163, +0.0293]  draws 1000/1000
+detfp.dt+0.00/pedestrian/all/ap@2                              a 0.3260  b 0.3426  b-a +0.0166  95% [-0.0014, +0.0456]  draws 1000/1000
+detfp.dt+0.00/vehicle/all/ave_skill_moving                     a 0.8427  b 0.8449  b-a +0.0022  95% [-0.0082, +0.0160]  draws 1000/1000
+detfp.dt+0.00/mean/all/mAP                                     a 0.4340  b 0.4365  b-a +0.0024  95% [-0.0058, +0.0117]  draws 1000/1000
+vel.dt+0.00/centre/field/moving/epe                            a 1.0793  b 1.0276  b-a -0.0516  95% [-0.0840, -0.0209]  (excludes 0)  draws 1000/1000
+vel.dt+0.00/centre/objhead/moving/epe                          a 1.0793  b 1.0276  b-a -0.0516  95% [-0.0840, -0.0209]  (excludes 0)  draws 1000/1000
+vel.dt+0.00/cells/static/epe                                   a 0.1951  b 0.1789  b-a -0.0162  95% [-0.0448, -0.0032]  (excludes 0)  draws 1000/1000
+vel.dt+0.00/cells/vehicle/epe                                  a 0.4476  b 0.4356  b-a -0.0119  95% [-0.0448, +0.0132]  draws 1000/1000
+loss.mean/total                                                a 7.6856  b 7.6474  b-a -0.0382  95% [-0.0924, +0.0196]  draws 1000/1000

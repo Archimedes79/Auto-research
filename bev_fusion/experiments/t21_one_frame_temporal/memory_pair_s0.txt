@@ -1,0 +1,57 @@
+runs/t21_pair_s0 step 1500: warm vs cold memory on 400 val frames with 2 keyframes of history (clips of 3 keyframes; EMA, VAL)
+dt+0.00
+  drivable IoU@0 (in view)             warm   0.7973  cold   0.7926  warm - cold  +0.0047
+  drivable IoU@0 (outside view)        warm   0.6380  cold   0.5958  warm - cold  +0.0422
+  walkway IoU@0 (outside view)         warm   0.2823  cold   0.2310  warm - cold  +0.0513
+  lane-div mask IoU@1 (outside view)   warm   0.3678  cold   0.2979  warm - cold  +0.0699
+  drivable IoU@0 (camera or radar)     warm   0.7476  cold   0.7320  warm - cold  +0.0156
+  walkway IoU@0                        warm   0.4168  cold   0.3920  warm - cold  +0.0248
+  lane-divider mask IoU@1              warm   0.5579  cold   0.5554  warm - cold  +0.0025
+  vehicle coverage IoU                 warm   0.4315  cold   0.4364  warm - cold  -0.0048
+  vehicle AP@2                         warm   0.6524  cold   0.6580  warm - cold  -0.0056
+  pedestrian AP@2                      warm   0.2981  cold   0.2847  warm - cold  +0.0134
+  vehicle ATE                          warm   0.5957  cold   0.6016  warm - cold  -0.0058
+  vehicle AVE                          warm   0.3845  cold   0.4025  warm - cold  -0.0180
+dt+0.50
+  drivable IoU@0 (in view)             warm   0.7751  cold   0.7715  warm - cold  +0.0036
+  drivable IoU@0 (outside view)        warm   0.6513  cold   0.6205  warm - cold  +0.0308
+  walkway IoU@0 (outside view)         warm   0.3065  cold   0.2611  warm - cold  +0.0454
+  lane-div mask IoU@1 (outside view)   warm   0.3799  cold   0.3372  warm - cold  +0.0427
+  drivable IoU@0 (camera or radar)     warm   0.7360  cold   0.7245  warm - cold  +0.0115
+  walkway IoU@0                        warm   0.3950  cold   0.3717  warm - cold  +0.0233
+  lane-divider mask IoU@1              warm   0.5371  cold   0.5347  warm - cold  +0.0023
+  vehicle coverage IoU                 warm   0.3930  cold   0.3961  warm - cold  -0.0031
+  vehicle AP@2                         warm   0.5996  cold   0.6110  warm - cold  -0.0114
+  pedestrian AP@2                      warm   0.2462  cold   0.2394  warm - cold  +0.0068
+  vehicle ATE                          warm   0.6946  cold   0.6843  warm - cold  +0.0103
+  vehicle AVE                          warm   0.4382  cold   0.4358  warm - cold  +0.0025
+dt-0.50
+  drivable IoU@0 (in view)             warm   0.8025  cold   0.7960  warm - cold  +0.0065
+  drivable IoU@0 (outside view)        warm   0.5860  cold   0.5445  warm - cold  +0.0415
+  walkway IoU@0 (outside view)         warm   0.2260  cold   0.1759  warm - cold  +0.0500
+  lane-div mask IoU@1 (outside view)   warm   0.2968  cold   0.2141  warm - cold  +0.0827
+  drivable IoU@0 (camera or radar)     warm   0.7370  cold   0.7204  warm - cold  +0.0167
+  walkway IoU@0                        warm   0.4147  cold   0.3827  warm - cold  +0.0320
+  lane-divider mask IoU@1              warm   0.5533  cold   0.5502  warm - cold  +0.0031
+  vehicle coverage IoU                 warm   0.4291  cold   0.4282  warm - cold  +0.0009
+  vehicle AP@2                         warm   0.6546  cold   0.6467  warm - cold  +0.0079
+  pedestrian AP@2                      warm   0.2719  cold   0.2295  warm - cold  +0.0423
+  vehicle ATE                          warm   0.6462  cold   0.6541  warm - cold  -0.0079
+  vehicle AVE                          warm   0.4732  cold   0.4601  warm - cold  +0.0130
+paired scene bootstrap of the headline numbers, warm - cold (dt 0):
+  seg.fov/dt+0.00/drivable_area/all/all/iou@0                    cold 0.7926  warm 0.7973  diff +0.0047  95% [+0.0021, +0.0076]  (excludes 0)  draws 1000/1000
+  seg.fov/dt+0.00/walkway/all/all/iou@0                          cold 0.3920  warm 0.4168  diff +0.0248  95% [+0.0126, +0.0386]  (excludes 0)  draws 1000/1000
+  seg.fov/dt+0.00/lane_divider/all/all/iou@0.5                   cold 0.4388  warm 0.4440  diff +0.0052  95% [-0.0002, +0.0104]  draws 1000/1000
+  seg.fov/dt+0.00/lane_divider:zc/all/all/f1@0.5                 cold 0.1835  warm 0.2214  diff +0.0379  95% [+0.0286, +0.0471]  (excludes 0)  draws 1000/1000
+  seg.obj/dt+0.00/vehicle/all/all/iou@0                          cold 0.4364  warm 0.4315  diff -0.0048  95% [-0.0088, -0.0007]  (excludes 0)  draws 1000/1000
+  seg.fov/dt+0.00/lane_divider/all/all/iou@1                     cold 0.5554  warm 0.5579  diff +0.0025  95% [-0.0026, +0.0073]  draws 1000/1000
+  seg.fov/dt+0.00/carpark_area/all/all/iou@0                     cold 0.2925  warm 0.3027  diff +0.0103  95% [-0.0157, +0.0317]  draws 1000/1000
+  seg.fov/dt+0.00/ped_crossing/all/all/iou@0                     cold 0.2687  warm 0.2753  diff +0.0066  95% [-0.0004, +0.0136]  draws 1000/1000
+  seg.fov/dt+0.00/road_divider/all/all/iou@1                     cold 0.5928  warm 0.5919  diff -0.0009  95% [-0.0116, +0.0093]  draws 1000/1000
+  det.dt+0.00/vehicle/all/ap@1                                   cold 0.5309  warm 0.5132  diff -0.0177  95% [-0.0294, -0.0063]  (excludes 0)  draws 1000/1000
+  det.dt+0.00/vehicle/all/ap@2                                   cold 0.6580  warm 0.6524  diff -0.0056  95% [-0.0150, +0.0020]  draws 1000/1000
+  det.dt+0.00/pedestrian/all/ap@1                                cold 0.2207  warm 0.2233  diff +0.0026  95% [-0.0105, +0.0147]  draws 1000/1000
+  det.dt+0.00/pedestrian/all/ap@2                                cold 0.2847  warm 0.2981  diff +0.0134  95% [+0.0006, +0.0290]  (excludes 0)  draws 1000/1000
+  det.dt+0.00/vehicle/all/ave_skill_moving                       cold 0.8484  warm 0.8484  diff -0.0000  95% [-0.0071, +0.0062]  draws 1000/1000
+  det.dt+0.00/mean/all/mAP                                       cold 0.3304  warm 0.3327  diff +0.0023  95% [-0.0099, +0.0127]  draws 1000/1000
+  loss.mean/total                                                cold 7.9098  warm 7.7605  diff -0.1493  95% [-0.1765, -0.1256]  (excludes 0)  draws 1000/1000

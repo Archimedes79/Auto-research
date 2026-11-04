@@ -1,0 +1,18 @@
+checkpoint runs/t21_pair4_s0/ckpt_00001500.pt: 0 model keys missing, 84 checkpoint keys not used (lane branch off)
+scene-0003: 50 frames (38 key samples), cam_buffer pair, reported at t = [1, 2, 3, 4, 6, 9, 12, 18, 24, 36, 48]
+
+  t key | exact (stream vs batch unroll / pair batch)      | cold (harness: last 2 frames from cold)
+        | sem max   sem mean  v max     v mean    | sem max   sem mean  v max     v mean
+  1     |         -         -         -         - |         -         -         -         -
+  2     |  3.41e-03  9.18e-05  1.02e-08  5.01e-12 |  3.82e+00  1.96e-01  0.00e+00  0.00e+00
+  3 *   |  2.92e-04  6.20e-08  2.98e-08  8.25e-12 |  4.17e+00  1.98e-01  5.38e-06  2.72e-09
+  4     |  2.64e-03  7.86e-05  1.69e-05  4.97e-08 |  3.75e+00  2.01e-01  0.00e+00  0.00e+00
+  6 *   |  1.93e-03  8.03e-05  2.90e-05  3.56e-08 |  5.74e+00  2.13e-01  2.53e-07  6.24e-11
+  9 *   |  0.00e+00  0.00e+00  1.67e-05  4.51e-08 |  4.16e+00  2.31e-01  0.00e+00  0.00e+00
+ 12 *   |  0.00e+00  0.00e+00  3.58e-07  3.05e-10 |  7.82e+00  2.52e-01  0.00e+00  0.00e+00
+ 18 *   |  3.21e-03  1.37e-04  0.00e+00  0.00e+00 |  5.71e+00  2.39e-01  1.49e-08  7.46e-13
+ 24 *   |  3.32e-03  1.66e-04  0.00e+00  0.00e+00 |  1.20e+01  2.60e-01  0.00e+00  0.00e+00
+ 36 *   |  2.72e-03  4.32e-05  2.38e-07  3.94e-11 |  1.67e+01  4.27e-01  2.38e-07  4.60e-11
+ 48 *   |  3.14e-03  1.24e-04  0.00e+00  0.00e+00 |  1.65e+01  5.12e-01  1.02e-08  9.40e-13
+(4 s; * = a key frame of the dataset, its own radar)
+written /mnt/c/Auto-research/bev_fusion/temp/t21/drift_scene-0003_pair_config.json
