@@ -1,5 +1,7 @@
 # configs - training configurations (`python training/train.py <config.json>`)
 
+Cards: the `experiments/<folder>/` cards named in the rows below were deleted on 2026-11-04 (D56); they are in the git tag `archive/cards-before-delete-2026-11-04` (`experiments/README.md`). The t14 pair has no start gates or rule any more and needs a new card before it starts.
+
 A config is the JSON of `train.TrainConfig` (unknown keys are an error); `model` holds `model.ModelConfig` fields, `loss` holds
 `losses.LossConfig` fields (the head layout flags are taken from `loss`). One run = one config; an arm is the base config with
 the listed fields changed (copy the file, change the name and the fields, never edit the base).

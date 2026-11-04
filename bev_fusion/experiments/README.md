@@ -1,19 +1,26 @@
-# experiments - the OPEN cards of bev_fusion
+# experiments - result files left beside the deleted cards of bev_fusion
 
-Each folder holds one growing file `experiment.md` (card -> detail plan -> summary, in the form of `../../autoresearch/templates/experiment.md`). Ids follow the stages of `../plan/plan.md` section 11 (S1a = first experiment of stage S1). The last line of every card is `scratch left behind: <size of its temp/ files, caches and checkpoints>, keep / move to D: / delete` (rules: `../temp/README.md`, helpers: `../training/scratch.py`).
+The 12 open cards of this folder (`<folder>/experiment.md`) were deleted on 2026-11-04 at Mirko's word ("All 12 cards", D56). They are not lost: the git tag `archive/cards-before-delete-2026-11-04` (commit 8aa0953) holds every one of them.
 
-Only cards that are not finished stay here (not run, draft, proposed, running, on hold). A finished experiment moves, with its result files, to `../results/experiments/<same folder name>/` (D48, 2026-11-03; 13 moved: t1_full_chain, t1_r4_soa, t2_block_swaps, t3_improve_loop, t4_soa_front, t5_lane_probe, t6_soa_gap, t8_bevfeat, t11_vel_cause, t11_vel_hurdle, t12_motion_block, t17_more_data, t18_motion_lr). The tools look in both folders (`project.json` "experiment_dirs"), so an id finds its card in either place; old path -> new path: the map in `../results/README.md`.
+```
+git show archive/cards-before-delete-2026-11-04:bev_fusion/experiments/<folder>/experiment.md
+```
 
-| folder | question | status |
-|---|---|---|
-| `t20_lane_grid_bundle/` | does the stride-4 lane branch (L4, on the dual camera features) + a 1 m centre-line head in the grid-based map head + the correctness fixes give a better lane layer and a corrected baseline on the large split? one bundled arm `t20.base_s0` against `t16.full_s0`, no per-item ablation, verdict by hand (D48) | card 2026-11-03 (D48), the check passes; the redesign (plan step 2) first, then code, a short bug-finding training, the baseline first in the queue |
-| `t19_radar_memory/` | does the radar memory (`rad_temporal` "window_memory") with the Doppler static gate lift the full chain above the same chain without it? | DRAFT 2026-11-02, nothing run (the Doppler gate exists in the code; the memory is off in the large t16 run because in the small-set probe its learned static map stayed 1.0) |
-| `t16_full_network/` | does the complete chain (every built block, five-layer framework, GT v8) train, and what is its baseline? bring-up gates S0 - S4 on the small set, then the large baseline `t16.full_s0` | bring-up log and the baseline result are in the card (sections 6, 7); open because the matched control `t16.ctl_s0` is held (the card judges the baseline against it by hand) |
-| `t15_motion_joint/` | does the motion block trained INSIDE the chain (joint form) revive the velocity without costing the maps, and is it needed? arms M and C2 against the `t10_dual` reference, 2 seeds | DRAFT 2026-11-01, no run of its own; the joint form M is part of `t16_full` / `t16.full_s0` (its M-less control was a small-set run only); open item for the lead: close it or fold it into t16 |
-| `t14_dontcare/` | does a hard don't-care outside the fusion area (camera x radar; `LossConfig.fusion_area_only`, D38 (b) first step) cost the fused heads anything? the matched control D38 asked for: the hurdle model `t11_vel_hurdle_acc2` continued 1000 steps with and without the option, scored on the fusion area; rule D1 - D3 | card 2026-11-01, configs `training/configs/t14_dc_*.json`; option + test built, not run (waits for the fusion-area scoring and a smoke run) |
-| `t13_complete_network/` | does adding the blocks that passed their own rules to the incumbent chain (`t10_dual` + the joint motion block of t15) help? a ladder, one comparison per rung; first candidate rung: the radar slot `delta_slots` (arm MR against the t15 reference, 2 seeds, 3000 steps, GT v5 pinned); numbers, guards and margins from the suite; the long run is a successor card | DRAFT revision 2 (2026-11-01 night): critic pass 1 (REVISE) answered, inputs missing (t15 result, r2 verdict, a target of the radar slot above its margin); nothing run |
-| `t11_motion_field/` | is the dead motion head of the time mover (last layer still at its zero start after 3000 steps, val group motion flat at 1.0945) revived by the same hurdle, and does it lift detection at dt +-0.5 s? | card 2026-10-31; nothing built; PROPOSED to close: t12 (a separate motion block replaces the dead head, KEEP) and t15 (joint training) answer its question in a stronger form (`../records/schedule.csv`) |
-| `t10_dual_features/` | can one trunk use the map-trained BEVFusion features AND the detection-trained DualBEV features? both cached feature sets side by side (two lifts, merged BEV), arm `t10_dual_s0` against the same-code controls `t8_ctl_*` / `t8_bevfeat_*`; gate G1 - G6, prediction, rule E1 - E4 | card written 2026-10-31; DONE for the 3000-step arms: `t10_dual_s0` and `s1` trained and evaluated (rule E1 held: maps of t8_bevfeat kept, front mAP2 0.361 +- 0.03), `t10_dual` is the new base (D39); the 6000-step lever `t10.dual_long_s0` was stopped at step 5030 and is on HOLD (Mirko's word resumes it) |
-| `t9_encoder_2x2/` | does a trained, finer image side lift the maps? 2 x 2 around the reference: frozen / unfrozen DualBEV side x without / with a trainable stride-8 ResNet-18 branch (arms C, R, U, UR); gate, rule D1 - D5, build list | card written 2026-10-31; nothing built or queued (needs Mirko's go and the owners of `lane_branch.py`, `model.py`, `train.py`) |
-| `t7_lane_branch/` | does a stride-4 lane branch (frozen ResNet-50 layer 1, or an RGB CNN from scratch) lifted into the BEV with the existing depth close part of the divider gap? two arms x two seeds against `t2_ref`, 3000 steps | provisional (2026-10-31): res4 lane divider +0.065 / +0.042 (both seeds, intervals exclude 0), rgb s0 +0.015; waits for the equal-GT control t8_ctl and the resumed rgb s1 |
-| `s1a_lift_pd_vs_p/` | front camera, frozen DualBEV heads: lift PD (depth-weighted pull) against lift P (no depth) on nuScenes VAL, IoU by class and range; its synthetic unit test of the same pipeline; idle-GPU timing per block | plan (2026-10-26) |
+The twelve folders were s1a_lift_pd_vs_p, t7_lane_branch, t9_encoder_2x2, t10_dual_features, t11_motion_field, t13_complete_network, t14_dontcare, t15_motion_joint, t16_full_network, t19_radar_memory, t20_lane_grid_bundle, t21_one_frame_temporal. Older text that names `experiments/<folder>/experiment.md` (ledger, records, reports, `_about` strings of configs, docstrings) points at that tag; it is history and was not rewritten.
+
+What is left here are the result files that sat beside the cards:
+
+| folder | files |
+|---|---|
+| `t7_lane_branch/` | `images/` |
+| `t10_dual_features/` | `results_x50.md`, `results_x50_2seeds.md` |
+| `t14_dontcare/` | `results/fusion_area_real_gt.txt` (read by `tests/test_fusion_area_real.py`) |
+| `t20_lane_grid_bundle/` | `compare_vs_t16_full_s0.txt` (read by `results/build/report_runs.json`) |
+| `t21_one_frame_temporal/` | `compare_*.txt`, `memory_*.txt`, `stream_*.txt` (read by `results/build/report_runs.json`) |
+
+What this changes:
+
+- A run that is to feed a verdict needs a new card first (a hypothesis, a prediction and a decision rule written before the run: `run.py --require-card`; hard rule 4). Without one only a diagnostic run is possible (`--no-card`), and it never feeds a verdict.
+- The t14 pair (`training/configs/t14_dc_ctl_s0.json`, `t14_dc_fusion_s0.json`) lost its start gates G1 - G5, its prediction, its rule and its kill criterion with the card. The configs and the option `LossConfig.fusion_area_only` stay; do not start the pair without a new card.
+- The cards of the finished experiments in `../results/experiments/` are not touched (map of old and new paths: `../results/README.md`).
+- `project.json` "experiment_dirs" still lists this folder, so a new card written here is found as before (`../../autoresearch/templates/experiment.md`).
