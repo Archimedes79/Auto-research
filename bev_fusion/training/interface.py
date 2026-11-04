@@ -39,6 +39,9 @@ INPUTS = {
     "radar_hits": (False, "(B, 1, X, Y) cells with radar detections of this frame (precompute.py): the radar memory's write mask"),
     "radar_static": (False, "(B, 1, X, Y) the same cells weighted by how static their detections are by the measured Doppler (precompute.py): "
                             "the radar memory's write mask with rad_static_gate"),
+    "host": (False, "dict of CPU tensors: the batch's K, T_cam_car, ida and flip as they were BEFORE the move to the GPU (train.host_side; D54). Same values as the entries of the same name: "
+                    "the network reads from them what it needs as Python numbers (the projection-table cache key of the lift, 'any sample flipped?') without waiting for the GPU. "
+                    "Used only with ModelConfig.sync_free; a batch without it works as before"),
     "gt": (False, "list (B) of GT dicts; read inside the network only by the refiner option (training)"),
     "tokens": (False, "list (B) of sample tokens (bookkeeping)"),
     "steps_raw": (False, "per sample the steps as python floats (bookkeeping)"),

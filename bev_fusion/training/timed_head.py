@@ -18,16 +18,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 try:
+    from . import launch_saving as LS
     from .lift_pd import Grid
     from .splat import VelocityHead, splat_bev
 except ImportError:                                   # run as a script
+    import launch_saving as LS
     from lift_pd import Grid
     from splat import VelocityHead, splat_bev
 
 
 def dt_embedding(dt, B, like):
     """dt scalar or (B,) -> (B, 3): dt, |dt|, sign(dt)."""
-    d = torch.as_tensor(dt, dtype=like.dtype, device=like.device).reshape(-1).expand(B)
+    if LS.on("sync") and isinstance(dt, (int, float)):               # D54: a number made into a GPU tensor is a copy from pageable memory (a wait for the GPU); filled on the GPU it is none
+        d = like.new_full((1,), float(dt)).expand(B)
+    else:
+        d = torch.as_tensor(dt, dtype=like.dtype, device=like.device).reshape(-1).expand(B)
     return torch.stack([d, d.abs(), torch.sign(d)], 1)
 
 
