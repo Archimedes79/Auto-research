@@ -55,7 +55,7 @@ def load(token, data=DATA, **options):
     dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""
     sig_dir = os.path.join(data, current_signature(**options))
     if not os.path.exists(os.path.join(sig_dir, token + ".npz")):
-        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "examples")) if os.path.isdir(data) else []
+        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "examples", "lane")) if os.path.isdir(data) else []
         raise FileNotFoundError(f"no stored GT for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
                                 "`autogt.generate(<nuScenes folder>)` (shell: `python -m autogt generate`), or the generator source changed "
                                 "since it was stored")

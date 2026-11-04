@@ -1,0 +1,2 @@
+version,signature,tag,date,what_changed
+l1,42a3d08f8f,autogt/lane-l1,2026-11-04,"the lane GT for the lane project (Mirko 2026-11-04 'GT chat builds it'): lane graph (pieces whose ids change only at splits and merges, successors, events split / merge / cross / stop / start / end / window), neighbours, lane counts and derived roads, dividers, road boundary and corners, for the 100 x 100 m window in the lane project's frame; own version and store, the front GT (v9) is untouched"

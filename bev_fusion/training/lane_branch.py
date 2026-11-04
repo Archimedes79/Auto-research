@@ -116,13 +116,14 @@ class LaneBranch(nn.Module):
             img = (img.float() - self.mean) / self.std
         return self.reduce(self.features(img))
 
-    def forward(self, img, prob, K, T_cam_car, image_hw, ida=None):
+    def forward(self, img, prob, K, T_cam_car, image_hw, ida=None, keys=None):
         """img (B, 3, H, W) current frame; prob (B, D, h, w) its depth probabilities (any stride); K (B, 3, 3), T_cam_car
-        (B, 4, 4) per sample -> (B, c_out, X, Y)."""
+        (B, 4, 4) per sample -> (B, c_out, X, Y). keys: the projection-table cache key of each sample (lift_pd.lift_key of its K, T_cam_car, image_hw, ida, made from the host
+        copies), or None: made from the GPU tensors, as before."""
         f = self.image_map(img)
         out = []
         for b in range(f.shape[0]):                              # one calibration per sample (scenes differ)
-            vol = self.lift(f[b:b + 1], prob[b:b + 1].to(f.dtype), K[b], T_cam_car[b], image_hw, ida)
+            vol = self.lift(f[b:b + 1], prob[b:b + 1].to(f.dtype), K[b], T_cam_car[b], image_hw, ida, key=None if keys is None else keys[b])
             out.append(self.collapse(vol))
         return self.mix(torch.cat(out))
 

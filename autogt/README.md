@@ -71,6 +71,7 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
 | `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
+| `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py` | **the lane GT** (own version, not part of the front generator; numpy + shapely, the nuScenes map only): the lane graph with ids, successors and events, neighbours / lane counts / roads, dividers + road boundary with corners (section Lane GT); `lane_versions.csv` its versions; `lane_graph_view.py` draws it (`python -m autogt lanegraph`), `lane_graph_selftest.py` tests it |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m autogt data` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
@@ -119,6 +120,25 @@ velocity on the fusion area, the camera aux head on the camera cells not hidden,
   table of the BEV chat's study (`bev_fusion/records/footprint_share_study_2026-11-01.md`, 48,724 objects of the val frames).
 - `num_lidar_pts` / `num_radar_pts` per box are the nuScenes counts, stored as information (Mirko: no per-box radar gate).
 - To share "the camera sees the cell" with a model: `camera_cells(gx, gy, K, T_c2e, size, z=<height of the slice>)`.
+
+## Lane GT (`lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`; own version l1 ..., asked for by the lane project, Mirko 2026-11-04 "GT chat builds it")
+One window of 100 x 100 m around the ego (rear axle at the front-camera time) in the lane project's frame (x right, y forward; `in_frame(g, "ego")` for x forward, y left), built
+from the nuScenes map only (no image, radar or box). It is NOT part of the front generator: the front GT, its signature and its store are unchanged by it, and the lane GT has its
+own signature, table (`lane_versions.csv`, git tag `autogt/lane-lN`) and store (`data/autogt/lane/<lane signature>/<token>.pkl.gz`, `python -m autogt generate-lane`). What a
+graph holds is listed in `AGENTS.md`, section 3b.
+- PIECES. A lane or connector is a map piece; chains of map pieces are joined while every join is 1 in, 1 out, so an id changes only at a split or a merge. EVENTS at the joins:
+  split, merge, cross (n in, n out), start / end (no predecessor / successor in the map), window (the polyline crosses the border; per keyframe) and STOP: the end of a lane
+  whose successor connector lies inside an intersection (`road_segment.is_intersection`; 80 - 84 % of the connectors do, 0.2 - 1.5 % of the lanes). With several successors the
+  stop is for the intersection branches only (`stop_rule`, open with Mirko). Pass-through joins are not events.
+- ROADS. nuScenes has no road graph (a lane's edge-line tokens match no road block in 0 of 3,662 lanes; in singapore-queenstown and -hollandvillage the road segments are only
+  intersections and the road blocks do not point at a segment), so neighbours, lane counts and roads are derived from the lanes (`road_graph.py` docstring). Check: of the
+  730 lane pairs that share a divider node on nuScenes mini, 723 are found as right neighbours and none as left.
+- LINES. `lane_divider`, `road_divider` and the BOUNDARY (the outline of the union of the drivable-area polygons; nuScenes has no boundary record) cut to the window, with corners.
+- CHECKS (`lane_graph_selftest.py`, in `selftest`): a made-up map (split, merge, stop, join, window cut, frames), the points lie on autogt's own centre-lines (median 0.01 m, 99 % 0.05 m
+  both ways), the junction events rebuild the map's junctions (F1 0.99), the neighbours against the map's divider tokens, corners and chunked outlines, the store (generate, resume,
+  load, another parameter = another folder). Against the lane project's own `make_graph_gt.py` (same frame and window) 47 of 107,538 points differ by more than 0.3 m (pieces
+  shorter than 2 m, which this code drops).
+- COST. About 40 ms per keyframe; the map graphs are made once per location and process.
 
 ## The flow box (`flow.py`): one function, five steps
 `estimate_flow(tracks, ego, t, grid=None, radar=(), config=Config())` -> `FlowGT` (`objects` = the product: pose at `t`, velocity,

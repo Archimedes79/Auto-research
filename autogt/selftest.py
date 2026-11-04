@@ -627,6 +627,9 @@ def run(root=None, verbose=True):
         assert r4["keyframes"] > r1["keyframes"] and r4["written"] > 0, r4
     from . import clean as cleanmod                                                  # the cleanup lists, moves, deletes only its own
     cleanmod.selftest()
+    # 5h the lane graph (lane_graph.py, road_graph.py, lane_lines.py): a made-up map for the logic, mini for the checks against the map
+    from .lane_graph_selftest import run as lane_graph_selftest
+    lane_graph_msg = lane_graph_selftest(root, verbose=False)
     # 6 a one-second video encodes to H.264 and plays back (read-back check inside encode)
     from .video import run as make_video
     with tempfile.TemporaryDirectory() as d:
@@ -637,6 +640,7 @@ def run(root=None, verbose=True):
               f"static layers move with the ego (IoU {iou:.3f}); {len(fixed)} stationary instances fixed in the world; "
               f"{len(moving)} moving boxes in scene-0061 kf 8 (median speed difference to the devkit {np.median(diffs):.2f} m/s); "
               f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
+        print(lane_graph_msg)
 
 
 if __name__ == "__main__":

@@ -115,6 +115,31 @@ run it live) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, 
 - The camera mask is the ground plane z = 0 (what the maps need); the model's `camera_visibility` uses height slices: call
   `camera_cells(gx, gy, K, T_c2e, size, z=<slice height>)` to share the function.
 
+## 3b. The lane GT (own version and store; `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`)
+The lane graph of a keyframe window is NOT part of the front generator: the front GT, its signature and its store do not change when the lane GT does. It is made from the
+nuScenes map and the ego pose at the front-camera time only (about 40 ms per keyframe) and has its own signature (hash of those four files + the parameters that differ from
+`lane_gt.DEFAULTS`), its own table `lane_versions.csv` (l1, ...; git tag `autogt/lane-lN`) and its own store `data/autogt/lane/<lane signature>/<sample token>.pkl.gz` + `index.json`.
+```
+g = autogt.lane_gt.load(sample_token)                                       # stored (python -m autogt generate-lane ~/data/nuscenes_full --set full)
+g = autogt.lane_gt.LaneGT("~/data/nuscenes_full", "v1.0-trainval", scenes=[name]).graph(sample_token)       # made on demand
+autogt.lane_gt.missing(tokens)                                              # the tokens without a stored graph for this source
+```
+A graph is a dict: `frame` ("lane": x RIGHT, y forward, ego rear axle at the front-camera time, the lane project's frame; `lane_graph.in_frame(g, "ego")` turns it into x forward,
+y left), `half` (50 m: the window is |x|, |y| <= 50), `location`, `sample`, `signature`, `params`, and
+- `pieces`: lanes and connectors joined while the join is 1 in, 1 out (a new id only at a split or a merge), cut to the window: `id` (the first 8+ characters of the token
+  of its first map piece; "<id>#1" for a second part that comes back into the window), `piece`, `part`, `kind` (lane / connector / mixed), `pts` (n, 2) float32 every 0.5 m
+  in travel order, `start_open` / `end_open` (cut by the window), `length`, `tokens` (the nuScenes map pieces it covers), `succ` / `pred` (ids inside the window),
+  `left` / `right` / `opposite` (ids of the lanes beside it), `road`, `roads_along`, `lane_count`, `lane_index` (0 = leftmost);
+- `events`: `type` split / merge / cross / stop / start / end / window, `pos`, `in` / `out` (piece ids), `dirs_in` / `dirs_out` (unit vectors), `partial` (a branch lies outside the
+  window); a stop has `on`, `s` (metres along the part), `n_succ`; a window event has `io` ("in" / "out"). A stop point is the end of a LANE whose successor connector lies
+  inside an intersection (`stop_rule`, default: for the intersection branches only);
+- `roads`: the roads and intersections of the window (`id`, `kind`, `lane_max`, `pieces`, `succ`, `opposite`); the nuScenes map has no road graph, roads are derived from the
+  lanes (road_graph.py docstring);
+- `lines`: `lane_divider`, `road_divider`, `boundary` (the outline of the drivable area; `params["boundary_layers"]`), each a list of `{pts, start_open, end_open, corners}` with
+  `corners` = `{pos, angle, idx, dir_in, dir_out}` (turning angle over +-2 m above 30 degrees).
+Only vectors and events are stored; rasters are drawn from them where they are needed. Picture: `python -m autogt lanegraph out.png scene-0061:8` (six cameras + top view).
+Open with Mirko, kept as parameters (another value = another lane signature): `boundary_layers`, `corner_deg`, `stop_rule`.
+
 ## 4. Rules you must follow when you use or change it
 - **Signature = identity of a GT version.** `signature()` is a hash of the six generator files (`grid.py layers.py flow.py
   nuscenes_adapter.py nuscenes_gt.py coverage.py`) plus the options. ANY edit of those files makes every stored GT unreadable by the new code

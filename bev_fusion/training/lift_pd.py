@@ -138,6 +138,14 @@ def height_to_channels(vol):
     return vol.permute(0, 4, 1, 2, 3).reshape(B, Z * C, X, Y)
 
 
+def lift_key(K, T_cam_car, image_hw, ida=None):
+    """The projection-table cache key: what decides whether the cached table (which image pixel and depth bin every BEV cell and height maps to) can be reused - the camera
+    intrinsics K, the camera-to-car extrinsics T_cam_car, the image size and the crop / resize transform ida. Python numbers only. Made from CPU tensors it costs no wait for the
+    GPU (`.tolist()` of a GPU tensor does): the batch carries the CPU copies (batch["host"], train.host_side)."""
+    return (tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(image_hw),
+            None if ida is None else tuple(ida.flatten().tolist()))
+
+
 class LiftPD(nn.Module):
     """Lift PD for one camera with optional learned elevations; the table is cached unless the heights are learned."""
 
@@ -160,10 +168,13 @@ class LiftPD(nn.Module):
             self.register_buffer("z_levels", z)
         self._cache = None
 
-    def forward(self, feat, depth_prob, K, T_cam_car, image_hw, ida=None):
+    def forward(self, feat, depth_prob, K, T_cam_car, image_hw, ida=None, key=None):
+        """key: the projection-table cache key of this calibration (`lift_key`), made by the caller from the host copies of K, T_cam_car and ida (D54: the key made here
+        from GPU tensors waits for the GPU at every `.tolist()`); None: made here, as before. A wrong key gives a wrong table: pass only `lift_key` of the same K, T_cam_car,
+        image_hw and ida."""
         learned = isinstance(self.z_levels, nn.Parameter)
-        key = (tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(image_hw),
-               None if ida is None else tuple(ida.flatten().tolist()))
+        if key is None:
+            key = lift_key(K, T_cam_car, image_hw, ida)
         n = self.oversample
         if learned or self._cache is None or self._cache[0] != key:
             z = self.z_levels
@@ -193,20 +204,53 @@ class LiftPD(nn.Module):
 _VIS_CACHE = {}
 
 
-def camera_visibility(grid, z_levels, depth_centres, K, T_cam_car, image_hw, ida=None, oversample=1, slice_height=0.5):
+_HOST_CONST = {}
+
+
+def _host_consts(z_levels, depth_centres, oversample, slice_height):
+    """(z as a tuple of floats with the oversampled sub-heights, len(depth_centres), first, last) of two model buffers, read from the GPU once: they do not change (the
+    entry holds the tensors, so the address is not reused while it is cached, and a change in place counts through `_version`)."""
+    dev = depth_centres.device
+    zk = (z_levels.data_ptr(), z_levels._version, tuple(z_levels.shape)) if torch.is_tensor(z_levels) else tuple(float(v) for v in z_levels)     # the heights may be a plain tuple
+    ck = (zk, depth_centres.data_ptr(), depth_centres._version, tuple(depth_centres.shape), str(dev), oversample, slice_height)
+    if ck not in _HOST_CONST:
+        if len(_HOST_CONST) > 64:
+            _HOST_CONST.clear()
+        z = torch.as_tensor(z_levels, dtype=torch.float32, device=dev)
+        if oversample > 1:
+            off = ((torch.arange(oversample, dtype=z.dtype, device=z.device) + 0.5) / oversample - 0.5) * slice_height
+            z = (z.view(-1, 1) + off.view(1, -1)).reshape(-1)
+        _HOST_CONST[ck] = (z_levels, depth_centres, tuple(z.tolist()), len(depth_centres), float(depth_centres[0]), float(depth_centres[-1]))
+    return _HOST_CONST[ck][2:]
+
+
+def camera_visibility(grid, z_levels, depth_centres, K, T_cam_car, image_hw, ida=None, oversample=1, slice_height=0.5, host=None):
     """(X, Y) float mask of the cells a camera observes: any of the cell's height samples projects into the image within
     the depth range (the `valid` of build_table, any over height). The obs_mass of the temporal memory - outside it the
     camera BEV is empty, and writing that with full weight erased what the memory had seen before (temporal_fusion
-    write, found 2026-10-26). Independent of the lift type; cached per calibration (nuScenes has few)."""
-    z = torch.as_tensor(z_levels, dtype=torch.float32, device=depth_centres.device)
-    if oversample > 1:
-        off = ((torch.arange(oversample, dtype=z.dtype, device=z.device) + 0.5) / oversample - 0.5) * slice_height
-        z = (z.view(-1, 1) + off.view(1, -1)).reshape(-1)
-    key = (grid.x_min, grid.x_max, grid.y_min, grid.y_max, grid.res, tuple(z.tolist()), str(z.device),
-           len(depth_centres), float(depth_centres[0]), float(depth_centres[-1]),       # the depth range decides the mask too
-           tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(int(v) for v in image_hw),
-           None if ida is None else tuple(ida.flatten().tolist()))
+    write, found 2026-10-26). Independent of the lift type; cached per calibration (nuScenes has few).
+    host (D54): (K, T_cam_car, ida) as CPU tensors, the same values as the arguments: the cache key is made from them and from the host copies of the two buffers
+    (`_host_consts`), so a cached mask costs no wait for the GPU (the key made from GPU tensors costs about ten)."""
+    def heights():
+        z = torch.as_tensor(z_levels, dtype=torch.float32, device=depth_centres.device)
+        if oversample > 1:
+            off = ((torch.arange(oversample, dtype=z.dtype, device=z.device) + 0.5) / oversample - 0.5) * slice_height
+            z = (z.view(-1, 1) + off.view(1, -1)).reshape(-1)
+        return z
+    if host is None:
+        z = heights()
+        key = (grid.x_min, grid.x_max, grid.y_min, grid.y_max, grid.res, tuple(z.tolist()), str(z.device),
+               len(depth_centres), float(depth_centres[0]), float(depth_centres[-1]),       # the depth range decides the mask too
+               tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(int(v) for v in image_hw),
+               None if ida is None else tuple(ida.flatten().tolist()))
+    else:
+        zt, nd, d0, d1 = _host_consts(z_levels, depth_centres, oversample, slice_height)
+        Kh, Th, idah = host
+        key = (grid.x_min, grid.x_max, grid.y_min, grid.y_max, grid.res, zt, str(depth_centres.device), nd, d0, d1,
+               tuple(Kh.flatten().tolist()), tuple(Th.flatten().tolist()), tuple(int(v) for v in image_hw),
+               None if idah is None else tuple(idah.flatten().tolist()))
     if key not in _VIS_CACHE:
+        z = heights() if host is not None else z
         if len(_VIS_CACHE) > 64:
             _VIS_CACHE.clear()
         tab = build_table(grid, z, K.to(z.device), T_cam_car.to(z.device), image_hw, depth_centres, None if ida is None
