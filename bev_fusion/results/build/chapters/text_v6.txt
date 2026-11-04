@@ -72,7 +72,7 @@ fused, passed through a trunk and decoded by heads at any time offset dt (-0.5 /
 grey = older ground truth (live code, no version), amber = GT v5, blue = GT v8: the bars are NOT strictly comparable (see the caveats)
 
 @@@ lane_gallery_intro
-<h3>5.5 The frames: worst, median and best lane-divider frames of different scenes (not hand-picked for looks)</h3><p>Selection rule: of the frames with at least 30 true divider cells, the four with the lowest IoU, the four closest to the median and the four with the highest IoU, each from a different scene. Each picture: front camera with the true boxes and map lines projected, the true BEV, the prediction, and error maps (grey = right, red = false, blue = missed; the last panel is the lane dividers at 0.5 m tolerance).</p>
+<h3>5.5 The frames: worst, median and best lane-divider frames of different scenes (not hand-picked for looks)</h3><p>Selection rule: of the frames with at least 30 true divider cells, the four with the lowest IoU, the four closest to the median and the four with the highest IoU, each from a different scene. Each picture: front camera with the true boxes and map lines projected, the true BEV, the prediction, and error maps (class colour = right, green tint = false, blue tint = missed; the last panel is the lane dividers at 0.5 m tolerance).</p>
 
 @@@ lane_published_note
 <p class=small>Published values are IoU in per cent from the papers (sources and protocols in section 6.1); ours is a fraction. They are NOT comparable (different area, number of cameras, line thickness, tolerance): the table shows where the numbers sit, not who is ahead.</p>
@@ -100,7 +100,7 @@ with OUR metric on OUR frames (the only like-for-like facts), 6.3 is the new re-
 </ul>
 
 @@@ qual_intro
-<p>Pictures are produced by the evaluation suite, not by hand: each frame is drawn with the same code for every run; random frames are chosen by a fixed seed, not for looks. Error maps: grey = right, red = false positive, blue = missed, cream = not evaluated (not seen by the camera).</p>
+<p>Pictures are produced by the evaluation suite, not by hand: each frame is drawn with the same code for every run; random frames are chosen by a fixed seed, not for looks. Error maps: grey = right, green tint = false positive, blue tint = missed, dark grey = not evaluated (not seen by the camera); red is not used for errors. The error maps use the class colours of the ground-truth picture (grey road, white lane lines, dark-red vehicles) with false cells tinted green and missed cells tinted blue; the videos were rendered before this change and still show the older red / blue error maps.</p>
 
 @@@ videos_intro
 <p>Each video runs one validation scene (about 38 frames, 2 Hz keyframes shown at 4 frames per second) with the memory carried along. 'overview' videos show the front camera with the true boxes and map lines, the true BEV, the prediction with boxes and the error maps including the lane dividers; 'dashboard' videos show every stage of the chain (radar, camera BEV, trunk, predictions at -0.5 / 0 / +0.5 s, speed field). The videos are files next to this page (<code>videos/&lt;run&gt;/&lt;name&gt;.mp4</code>); the scenes are random (seed 21, 11 and 1), the same scenes for every run where the run has them.</p>

@@ -770,7 +770,7 @@ def _():
 
 
 # ------------------------------------------------------------------------------------------------ rendering
-@check("figure: error colours at the right cells (TP grey, FP red, FN blue, not evaluated cream); counts")
+@check("figure: error colours at the right cells (TP grey, FP grey-green, FN grey-blue, no red, not evaluated cream); counts")
 def _():
     p = np.array([[1, 1], [0, 0]], bool)
     g = np.array([[1, 0], [1, 0]], bool)

@@ -2,7 +2,7 @@
 
 Views (names as in `BEVTask.views()`):
     overview    camera with the projected ground truth | GT bird's-eye view | prediction (+ boxes) | three error maps
-                (drivable area, vehicle footprint, lane dividers): grey right, RED false, BLUE missed, cream not evaluated
+                (drivable area, vehicle footprint, lane dividers): class colour right, tinted green false, tinted blue missed, black background, dark grey not evaluated
     outputs     the detailed result page: GT / prediction / errors, dt = +-0.5 s with the unknown cells, splat mass, scores, speed
     stages      the stages of the chain: camera heads, lift, camera BEV, temporal fusion, radar, trunk (needs the taps); a model with the 1 m centre-line head
                 gets two panels more (25 presence against the GT, 26 direction arrows: `centreline_panels`)
@@ -10,7 +10,8 @@ Views (names as in `BEVTask.views()`):
 Bird's-eye maps are drawn with x forward (up) and +y (left of the car) on the left; arrays are (x, y) = (rows, columns).
 Colour scheme (Mirko, 2026-11-03): black plot background, dark-grey road with a black boundary, white lane lines, light-grey crossings, a calmer green for walkways, dark-red
 objects (vehicles, pedestrians, two-wheelers) and the same red translucent where they lie outside the observed area (camera x radar x not hidden); boxes: GT outline red
-(translucent outside), the dashed GT outline on a prediction white, predicted boxes amber. The error maps (right grey, false red, missed blue, cream) are unchanged.
+(translucent outside), the dashed GT outline on a prediction white, predicted boxes amber. The error maps (Mirko, 2026-11-04) use the same class colours: right = the class colour, false = mixed with green, missed = mixed with blue, black
+background, no red (`ERR`, `class_colors`).
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from evalsuite import Page, Panel, Prediction, Sample, Shape, View, ViewContext
-from evalsuite.render.figure import ERROR_LEGEND, FN_COLOR, FP_COLOR, SKIP_COLOR, TP_COLOR, error_counts
+from evalsuite.render.figure import error_counts
 from evalsuite.render.taps import energy, pca_rgb
 from evaluation.metrics import FRONT_HALF_FOV, angle_error, dilate, gt_boxes_from_meta, line_cells
 
@@ -41,6 +42,24 @@ GROUP_COLOR = {"vehicle": (0.95, 0.15, 0.15), "pedestrian": (0.9, 0.2, 0.9), "tw
 LINE_RGB = {"lane_divider": (1.0, 0.9, 0.1), "road_divider": (1.0, 0.5, 0.0), "centreline": (0.1, 0.9, 0.9)}
 EDGES = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
 MAP_LEGEND = [(n, c) for n, c in list(COLORS.items()) + list(LINE_COLORS.items())] + [("object outside the observed area", OUT_RED)]
+
+# The error maps in the convention of the ground-truth picture (Mirko, 2026-11-04): right = the class colour, a false cell (predicted, not in the ground truth) = the class colour
+# mixed with green, a missed cell = mixed with blue, nothing = the black background; never red (red is for moving targets). Not evaluated = dark grey.
+GREEN, BLUE, TINT, SKIP_DARK = (0.20, 0.85, 0.35), (0.25, 0.45, 1.0), 0.5, (0.17, 0.17, 0.15)
+
+
+def tinted(c, toward, amount: float = TINT) -> tuple:
+    return tuple(float(x) * (1 - amount) + float(y) * amount for x, y in zip(c, toward))
+
+
+def class_colors(c) -> Dict[str, tuple]:
+    return dict(tp=tuple(c), fp=tinted(c, GREEN), fn=tinted(c, BLUE), tn=BG, skip=SKIP_DARK)
+
+
+ERR = {"drivable_area": class_colors(COLORS["drivable_area"]), "vehicle": class_colors(COLORS["vehicle"]),
+       "lane_divider": class_colors(LINE_COLORS["lane_divider"]), "centreline": class_colors(LINE_RGB["centreline"])}
+ERR_LEGEND = [("right (the class colour, as in the ground truth)", ERR["drivable_area"]["tp"]), ("false: predicted, not in the ground truth (class colour + green)", ERR["drivable_area"]["fp"]),
+              ("missed: ground truth, not predicted (class colour + blue)", ERR["drivable_area"]["fn"]), ("not evaluated", SKIP_DARK)]
 
 
 # ------------------------------------------------------------------------------------------------ geometry helpers
@@ -116,7 +135,8 @@ def _edge(mask: np.ndarray) -> np.ndarray:
 
 
 def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_width: float = 0.35, observed: Optional[np.ndarray] = None) -> np.ndarray:
-    """RGB (X, Y, 3) on the black background: the areas (alpha = probability, in the order of COLORS), a black boundary along the drivable area, then crossings, the object
+    """RGB (X, Y, 3) on the black background: the areas (alpha = probability where the model says yes, i.e. >= 0.5, in the order of COLORS; below that the cell stays
+    black, so the non-road area is black as in the ground-truth picture, Mirko 2026-11-04), a black boundary along the drivable area, then crossings, the object
     layers (dark red; outside `observed`, a bool grid, the same red translucent) and the lines (from the distance field)"""
     shape = next(iter(prob.values())).shape
     img = np.zeros(shape + (3,), np.float32) + np.asarray(BG, np.float32)
@@ -124,15 +144,19 @@ def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_wid
     def paint(c, a):
         nonlocal img
         img = img * (1 - a[..., None]) + np.asarray(c, np.float32) * a[..., None]
+
+    def decided(p):                                                              # the layer paints only where the model says yes: no faint haze in the non-road area
+        p = np.clip(p, 0, 1)
+        return np.where(p >= 0.5, p, 0.0).astype(np.float32)
     for name in ("drivable_area", "carpark_area", "walkway"):
         if name in prob:
-            paint(COLORS[name], np.clip(prob[name], 0, 1))
+            paint(COLORS[name], decided(prob[name]))
     if "drivable_area" in prob:                                                 # the road boundary, black, over the neighbouring walkway / car park
         paint(ROAD_EDGE, _edge(prob["drivable_area"] > 0.5).astype(np.float32))
     for name, c in COLORS.items():
         if name in ("drivable_area", "carpark_area", "walkway") or name not in prob:
             continue
-        a = np.clip(prob[name], 0, 1)
+        a = decided(prob[name])
         if name in OBJECT_LAYERS and observed is not None:
             paint(OUT_RED, a * np.where(observed, 0.0, OUT_ALPHA))
             paint(c, a * np.where(observed, 1.0, 0.0))
@@ -144,19 +168,20 @@ def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_wid
     return img
 
 
-def tolerant_error_rgb(P, G, valid, tol_cells: float = 1.0) -> Tuple[np.ndarray, Tuple[int, int, int]]:
-    """error picture of two thin cell sets with a tolerance (a cell within tol_cells of the other set counts as found):
-    grey = found, RED = predicted but nothing of the ground truth near, BLUE = ground truth without prediction near,
-    cream = not evaluated. -> (rgb, (tp, fp, fn))"""
+def tolerant_error_rgb(P, G, valid, tol_cells: float = 1.0, colors: Optional[Dict[str, tuple]] = None) -> Tuple[np.ndarray, Tuple[int, int, int]]:
+    """error picture of two thin cell sets with a tolerance (a cell within tol_cells of the other set counts as found), in the colours of `colors`
+    (default: the lane divider's, ERR): right = the class colour, false = predicted but nothing of the ground truth near (class colour + green), missed = ground truth
+    without prediction near (class colour + blue), black background, dark grey = not evaluated. -> (rgb, (tp, fp, fn))"""
     P, G, valid = np.asarray(P, bool), np.asarray(G, bool), np.asarray(valid, bool)
+    c = colors or ERR["lane_divider"]
     DG, DP = dilate(G, tol_cells), dilate(P, tol_cells)
-    img = np.ones(P.shape + (3,), np.float32)
+    img = np.zeros(P.shape + (3,), np.float32) + np.asarray(c["tn"], np.float32)
     ok = (P & DG | G & DP) & valid
     fp, fn = P & ~DG & valid, G & ~DP & valid
-    img[ok] = TP_COLOR
-    img[fp] = FP_COLOR
-    img[fn] = FN_COLOR
-    img[~valid] = SKIP_COLOR
+    img[ok] = c["tp"]
+    img[fp] = c["fp"]
+    img[fn] = c["fn"]
+    img[~valid] = c["skip"]
     return img, (int((P & DG & valid).sum()), int(fp.sum()), int(fn.sum()))
 
 
@@ -223,12 +248,12 @@ def _caption(counts, what) -> str:
 
 def centreline_panels(grid, g, o, valid, step: int = 4, length: float = 2.0) -> List[Panel]:
     """The 1 m centre-line head of a frame (no panel for a model without it, or a GT without the layer): (1) its presence against the GT centre-line cells with the
-    tolerance of the numbers (+-1 m: grey right, RED false, BLUE missed, cream not evaluated), (2) its direction: arrows of `length` m on every `step`-th GT cell,
+    tolerance of the numbers (+-1 m: the cyan class colour right, tinted green false, tinted blue missed, dark grey not evaluated), (2) its direction: arrows of `length` m on every `step`-th GT cell,
     GT cyan (the colour of the camera panel's centre-lines), predicted amber, on the predicted presence (grey). o: one dt of the Prediction (`prob`, `dir`)."""
     if not o.get("dir") or "centreline" not in o["prob"] or "centreline" not in g or "centreline_dir" not in g:
         return []
     prob, G = o["prob"]["centreline"], np.asarray(g["centreline"], np.float32) > 0.5
-    err, counts = tolerant_error_rgb(prob > 0.5, G, valid, tol_cells=1.0 / grid.res)
+    err, counts = tolerant_error_rgb(prob > 0.5, G, valid, tol_cells=1.0 / grid.res, colors=ERR["centreline"])
     pd, gd = np.asarray(o["dir"]["centreline"], np.float32), np.asarray(g["centreline_dir"], np.float32)
     D = G & valid & (np.hypot(gd[0], gd[1]) > 0.5)                      # the cells the angle is scored on (metrics.SegMeter.add_directions: a GT direction needs |dir| > 0.5)
     cells = np.argwhere(D)
@@ -273,9 +298,9 @@ class OverviewView(BevView):
         gt_dist = {n: np.asarray(g0[n + "_dist"], np.float32) for n in o["dist"]}
         dets = [d for d in o["dets"] if d["score"] >= 0.3]
         P, G = o["prob"]["drivable_area"] > 0.5, np.asarray(g0["drivable_area"], np.float32) > 0.5
-        e_drv = _err(P, G, m["fov"])
+        e_drv = _err(P, G, m["fov"], "drivable_area")
         Pv, Gv = o["prob"]["vehicle"] > 0.5, np.asarray(g0["vehicle"], np.float32) > 0.5
-        e_veh = _err(Pv, Gv, m["obj_fov"])
+        e_veh = _err(Pv, Gv, m["obj_fov"], "vehicle")
         e_lane, c_lane = tolerant_error_rgb(line_cells(o["dist"]["lane_divider"], grid.res), line_cells(gt_dist["lane_divider"], grid.res),
                                             m["fov"])
         cam = sample.get("camera")
@@ -293,12 +318,12 @@ class OverviewView(BevView):
                   bev(grid, "rgb", _caption(error_counts(P, G, m["fov"]), "drivable area (cells)"), e_drv),
                   bev(grid, "rgb", _caption(error_counts(Pv, Gv, m["obj_fov"]), "vehicle footprint (cells)"), e_veh),
                   bev(grid, "rgb", _caption(c_lane, "lane dividers (+-0.5 m)"), e_lane)]
-        return Page(title="BEV overview", panels=panels, ncols=3, legend=ERROR_LEGEND, panel_size=(5.0, 4.4))
+        return Page(title="BEV overview", panels=panels, ncols=3, legend=ERR_LEGEND, panel_size=(5.0, 4.4))
 
 
-def _err(P, G, valid):
+def _err(P, G, valid, cls: str = "drivable_area"):
     from evalsuite.render.figure import error_rgb
-    return error_rgb(P, G, valid)
+    return error_rgb(P, G, valid, colors=ERR[cls])
 
 
 def _doppler_colors(vr) -> np.ndarray:
@@ -320,14 +345,12 @@ class OutputsView(BevView):
         gt_dist = {n: np.asarray(g0[n + "_dist"], np.float32) for n in o0["dist"]}
         m = masks(g0)
         P, G = o0["prob"]["drivable_area"] > 0.5, np.asarray(g0["drivable_area"], np.float32) > 0.5
-        pv, gv = o0["prob"]["vehicle"], np.asarray(g0["vehicle"], np.float32)
-        rgb = np.ones(pv.shape + (3,), np.float32)
-        rgb[..., 0], rgb[..., 1], rgb[..., 2] = 1 - pv * 0.8, 1 - np.maximum(pv, gv) * 0.6, 1 - gv * 0.8
+        pv, gv = o0["prob"]["vehicle"] > 0.5, np.asarray(g0["vehicle"], np.float32) > 0.5
         panels = [bev(grid, "rgb", "13 ground truth, dt 0 (areas, lines, vehicles)", composite(gt_prob, gt_dist, observed=observed_area(g0)), box_shapes(gtb, GT_BOX_COLOR, observed=observed_area(g0))),
                   bev(grid, "rgb", "14 prediction, dt 0 (amber boxes: score >= 0.3, dashed white: GT)", composite(o0["prob"], o0["dist"], observed=observed_area(g0)),
                       box_shapes(gtb, GT_OVERLAY, "--", 0.7) + box_shapes([d for d in o0["dets"] if d["score"] >= 0.3], DET_COLOR)),
-                  bev(grid, "rgb", "15 drivable area: right grey, false red, missed blue, cream = not seen by the camera", _err(P, G, m["fov"])),
-                  bev(grid, "rgb", "16 vehicle footprint: prediction red, GT blue, both = dark", rgb)]
+                  bev(grid, "rgb", "15 drivable area: class colour = right, green tint = false, blue tint = missed, dark grey = not seen by the camera", _err(P, G, m["fov"], "drivable_area")),
+                  bev(grid, "rgb", "16 vehicle footprint: same convention (class colour right, green tint false, blue tint missed)", _err(pv, gv, m["obj_fov"], "vehicle"))]
         for dt in (0.5, -0.5):
             if dt not in pred.outputs["dt"]:
                 panels.append(Panel("text", f"dt {dt:+.1f}", "not decoded"))
@@ -363,7 +386,7 @@ class OutputsView(BevView):
                    f"vehicle cells: GT speed mean {gsp[veh].mean():.2f}, predicted mean {sp[veh].mean():.2f} m/s,\n"
                    f"correlation {np.corrcoef(gsp[veh], sp[veh])[0, 1] if gsp[veh].std() > 0 and sp[veh].std() > 0 else float('nan'):.2f}")
             panels.append(Panel("text", "24 speed on vehicle cells: predicted against GT", txt))
-        return Page(title="BEV outputs", panels=panels, ncols=4, legend=ERROR_LEGEND, panel_size=(4.4, 4.0))
+        return Page(title="BEV outputs", panels=panels, ncols=4, legend=ERR_LEGEND, panel_size=(4.4, 4.0))
 
 
 class StagesView(BevView):

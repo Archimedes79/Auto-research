@@ -27,7 +27,7 @@ A frame is named `scene/index` (`demo-1/3`; the files and tables write `demo-1/0
 
 | you want | command | you get |
 |---|---|---|
-| one frame | `qual frame demo-1/3` | png: ground truth, prediction, errors (red = false positive, blue = missed, grey = right), the frame's own scores in the header |
+| one frame | `qual frame demo-1/3` | png: ground truth, prediction, errors (green tint = false positive, blue tint = missed, grey = right), the frame's own scores in the header |
 | random frames | `qual random 6 --seed 1` | a page: first a random video, then a random frame in it, n times |
 | result videos | `qual videos 2` | mp4 per video + a strip of the per-frame scores |
 | numbers over all videos | `quant run --name a`, `quant table a` | the counts of every frame stored; the dataset-level numbers; ms per frame of the run |

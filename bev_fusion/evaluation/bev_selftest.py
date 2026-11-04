@@ -475,8 +475,11 @@ def _():
         assert page.panels and img.min() != img.max(), v
     ov = task.views()["overview"].render(s, p, ctx)
     assert ov.panels[0].kind == "image" and len(ov.panels[0].shapes) > 10, "GT boxes and map lines are projected into the camera image"
-    err = ov.panels[3].data                                          # the drivable-area error map: FP red, FN blue exist for a noisy prediction
-    assert (np.abs(err - np.array(figure.FP_COLOR)).max(-1) < 1e-6).any() and (np.abs(err - np.array(figure.FN_COLOR)).max(-1) < 1e-6).any()
+    err = ov.panels[3].data                                          # the drivable-area error map: FP (green tint), FN (blue tint) exist for a noisy prediction
+    from evaluation.bev_views import ERR
+    pal = ERR["drivable_area"]                                         # class colour right, tinted green false, tinted blue missed, black background, never red
+    assert all((np.abs(err - np.array(pal[k])).max(-1) < 1e-6).any() for k in ("tp", "fp", "fn", "tn")), "all four colours of the class palette are drawn"
+    assert not ((err[..., 0] > 0.8) & (err[..., 1] < 0.4) & (err[..., 2] < 0.4)).any(), "no red in an error map"
     assert "drivable" in ov.panels[3].title and "missed" in ov.panels[3].title
 
 

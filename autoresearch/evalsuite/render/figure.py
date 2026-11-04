@@ -1,9 +1,9 @@
 """The figure engine: a Page (title, panels, overlays, legend) -> an image. One style for every view of every network.
 
 Panel kinds: image | raster | rgb | text | table | bars (see contracts.Panel). The error colour code is the same everywhere:
-a cell both predicted and in the ground truth is grey, predicted but not in the ground truth is RED (false positive), in the
-ground truth but not predicted is BLUE (false negative), not evaluated is cream, correct background is white
-(`error_rgb`, `ERROR_LEGEND`).
+a cell both predicted and in the ground truth is grey, predicted but not in the ground truth is grey mixed with GREEN (false positive), in the
+ground truth but not predicted is grey mixed with BLUE (false negative), not evaluated is cream, correct background is white
+(`error_rgb`, `ERROR_LEGEND`). Subtle on purpose and never red: red belongs to moving targets (Mirko, 2026-11-04).
 """
 from __future__ import annotations
 
@@ -15,25 +15,27 @@ import numpy as np
 from ..contracts import Page, Panel, Shape
 
 TP_COLOR = (0.70, 0.70, 0.70)
-FP_COLOR = (0.90, 0.20, 0.20)
-FN_COLOR = (0.20, 0.40, 0.95)
+FP_COLOR = (0.45, 0.75, 0.50)          # TP grey mixed with green
+FN_COLOR = (0.45, 0.58, 0.90)          # TP grey mixed with blue
 SKIP_COLOR = (0.95, 0.95, 0.88)
 TN_COLOR = (1.0, 1.0, 1.0)
 ERROR_LEGEND = [("true positive", TP_COLOR), ("false positive", FP_COLOR), ("false negative", FN_COLOR),
                 ("not evaluated", SKIP_COLOR)]
 
 
-def error_rgb(pred, gt, valid=None) -> np.ndarray:
+def error_rgb(pred, gt, valid=None, colors=None) -> np.ndarray:
     """(H, W, 3) float colour image of a binary prediction against a binary ground truth on the evaluated cells (`valid`,
-    default all): TP grey, FP red, FN blue, TN white, not evaluated cream."""
+    default all): TP grey, FP grey-green, FN grey-blue, TN white, not evaluated cream. `colors` = a dict with any of the keys tp / fp / fn / tn / skip
+    replaces those colours (a view that wants the class colour of its ground-truth picture and a black background)."""
     p, g = np.asarray(pred).astype(bool), np.asarray(gt).astype(bool)
     v = np.ones_like(p) if valid is None else np.asarray(valid).astype(bool)
+    c = colors or {}
     img = np.empty(p.shape + (3,), np.float32)
-    img[:] = TN_COLOR
-    img[p & g & v] = TP_COLOR
-    img[p & ~g & v] = FP_COLOR
-    img[~p & g & v] = FN_COLOR
-    img[~v] = SKIP_COLOR
+    img[:] = c.get("tn", TN_COLOR)
+    img[p & g & v] = c.get("tp", TP_COLOR)
+    img[p & ~g & v] = c.get("fp", FP_COLOR)
+    img[~p & g & v] = c.get("fn", FN_COLOR)
+    img[~v] = c.get("skip", SKIP_COLOR)
     return img
 
 

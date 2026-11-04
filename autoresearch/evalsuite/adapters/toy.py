@@ -179,7 +179,7 @@ def _box_shape(b, color="k", ls="--"):
 
 
 class OverviewView(View):
-    """input | ground truth | prediction (GT boxes dashed) | errors highlighted (FP red, FN blue)"""
+    """input | ground truth | prediction (GT boxes dashed) | errors highlighted (FP grey-green, FN grey-blue)"""
     name = "overview"
     description = "ground truth next to the prediction, errors highlighted"
 
@@ -217,7 +217,7 @@ class ToyTask(Task):
         return out
 
     def guide(self) -> str:
-        return "toy world: dark = rectangles; in the error panel red = false positive, blue = false negative, grey = true positive."
+        return "toy world: dark = rectangles; in the error panel green tint = false positive, blue tint = false negative, grey = true positive."
 
     def probe(self, sample: Sample, pred: Prediction) -> Dict[str, float]:
         """for the probing: tags of the situation and the error cells split by cause (near / far half of the plane)"""
