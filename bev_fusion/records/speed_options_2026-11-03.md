@@ -40,3 +40,18 @@ Not worth it while the step is host-bound: fused AdamW (below 1 %), `cudnn_bench
 
 ## 5. Not done
 No GPU timing. The full-grid B = 1 run peaked at 3.44 GB, so B = 3 at full size was not run: the per-step table is scaled from B = 1 and B = 2 on the small grid. The box and radar sections depend on real data (here 15 boxes, 40 radar points). The profiler returned no stack information, so the sync sites come from a dispatch trace and the code, not from stacks.
+
+## 6. Measured on the GPU: where the 4.1 s of a t20 step go (2026-11-04, diagnostic, no verdict)
+Command: `temp/speed_tools/phase_sampler.py` (scratch; a wall-clock stack sampler, every 3 ms, on the pinned code of t20.base_s0, config `temp/compose/t20_base_s0.json`, fresh init, 44 steps, the first 10 not counted), run as `timing.phase_a` through run.py (`--no-card`, alone on the GPU, machine lock). Window: 34 steps, median 4.10 s, mean 4.10 s, min 3.64, max 4.66; no trend inside it (first half 4.12, second half 4.09). Box load average 2.3 before and 3.2-3.8 after (other chats' CPU work). `nvidia-smi dmon`: an SM kernel was running 64 % of the window (138 one-second samples). The sampler's wall time per section adds up to the step time by construction; time at a blocking call is counted where the main thread waits.
+
+| what | s per step | share | where |
+|---|---|---|---|
+| `backward()` (one call, the autograd engine) | 1.24 | 30 % | `train.py:492` |
+| blocking reads GPU -> host (wait for the queue to drain) | 0.70 | 17 % | `lift_pd.py:165` `.tolist()` of K and T_cam_car 0.50, `_unpack` 0.11, `model.py:418` `flip.any()` 0.09 |
+| small copies host -> GPU (pageable) | 0.64 | 15 % | `splat.py:57` 0.20, `losses.py:127` 0.20, `train.py:405` (ego tensors) 0.20, `to_device` + `head_loss` 0.04 |
+| wait for the data (6 workers) | 0.32 | 8 % | `loop.py:132` |
+| forward operators (model + loss, without the lines above) | 1.11 | 27 % | `lift_pd` 0.03, `splat` ~0.15, `build_targets` 0.10, the rest spread over 30 files |
+| optimiser, EMA, glue, flip augment, radar aux loss | 0.10 | 2 % | |
+
+Reading: the operator floor measured with tiny tensors (26k forward + 20k backward operators, 21 / 32 us) is 0.56 s forward and 0.64 s backward; the forward and the backward each take about twice that. Copies and syncs are 1.34 s (33 %), not the 0.5 s of the first estimate. The GPU is not idle-bound: it ran a kernel 64 % of the time, so the step alternates between host-limited stretches (copies, tiny operators) and GPU-limited ones (the waits at the syncs, the backward). A sync that waits 0.5 s per step over 6 to 18 calls waits for queued GPU work, so removing it moves the wait to the next consumer; the most the host stalls can give is the GPU idle share, 36 % of 4.1 s (4.1 -> about 2.6 s), the real gain is less.
+Drift: a fresh model in a fresh process takes 4.10 s today, as long as the late steps of the training (4.1-4.2 s), against 3.2 s in its first 1,000 steps. So the growth of the step time is not (only) a property of the weights or of a long-running process; the box (CPU load of other chats, clocks) or the sampler's own cost remain. Not settled: `timing.phase_c` (warm start from the trained checkpoint) was run next to t21.rec_s0 and is void (see the memory note training-speedup-queue); the rerun adds `phase_b` (fresh, no sampler) to price the instrument.
