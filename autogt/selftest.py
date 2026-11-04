@@ -634,7 +634,7 @@ def run(root=None, verbose=True):
     from . import lane_gt as lane_gt_mod
     from .suite import scene_tokens as tokens_of_scene
     assert V.current_release() is not None, (f"this source (front {V.version_of(gt.signature())}, lane {lane_gt_mod.version_of(lane_gt_mod.signature())}) has no row in "
-                                             "autogt/releases.csv: add one (the release is the front version, with a point when only the lane GT changed)")
+                                             "autogt/releases.csv: add one (the releases are one running number: the next change of the front or the lane GT is the next number)")
     with tempfile.TemporaryDirectory() as d:
         toks_ = tokens_of_scene("scene-0061", "v1.0-mini", root)
         both = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False)
@@ -644,6 +644,25 @@ def run(root=None, verbose=True):
         only = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False, lane=False)
         assert only["lane"] is None and only["written"] == 0, only
         assert cli_mod.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False)["lane"] is None, "the lane GT is made for every keyframe: nothing at stride 20"
+    # 5j the light devkit cache: a group read from it equals the group scanned from the tables, a changed table invalidates it, other cameras take the scan
+    from .light_nusc import cache_valid, ensure_cache, light_nuscenes
+    with tempfile.TemporaryDirectory() as d:
+        assert not cache_valid(root, "v1.0-mini", d)
+        ensure_cache(root, "v1.0-mini", d, verbose=False)
+        assert cache_valid(root, "v1.0-mini", d)
+        names_ = ["scene-0061", "scene-0553"]
+        fast, scan = light_nuscenes(root, "v1.0-mini", names_, cache_base=d), light_nuscenes(root, "v1.0-mini", names_, cache_base=os.path.join(d, "none"))
+        for tab_ in ("sample_data", "ego_pose", "sample_annotation", "sample", "scene"):
+            ta, tb = {r["token"]: r for r in getattr(fast, tab_)}, {r["token"]: r for r in getattr(scan, tab_)}
+            assert ta == tb and ta, f"the cached {tab_} equals the scanned one"
+        assert {s["token"]: s["data"] for s in fast.sample} == {s["token"]: s["data"] for s in scan.sample}, "the reverse index (sample['data']) is the same"
+        assert all("RADAR" not in r["filename"] for r in light_nuscenes(root, "v1.0-mini", names_, radars=False, cache_base=d).sample_data)
+        assert any("CAM_BACK" in r["filename"] for r in light_nuscenes(root, "v1.0-mini", names_, cameras=("CAM_FRONT", "CAM_BACK"), cache_base=d).sample_data)
+        idx_path = os.path.join(d, "light_v1.0-mini", "index.json")
+        idx_ = json.load(open(idx_path))
+        idx_["sources"]["ego_pose"][0] += 1                                  # the table on disk is no longer the one the cache was made from
+        json.dump(idx_, open(idx_path, "w"))
+        assert not cache_valid(root, "v1.0-mini", d)
     # 6 a one-second video encodes to H.264 and plays back (read-back check inside encode)
     from .video import run as make_video
     with tempfile.TemporaryDirectory() as d:

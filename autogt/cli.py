@@ -319,6 +319,9 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         if todo:                                                          # a finished group needs no devkit load
             groups.append((f"group {g0 // size + 1}/{-(-len(names) // size)}", grp, todo))
     code_sig = code_signature(**options)
+    if groups and "trainval" in version:                                  # the big tables once, not once per group (31 s each, light_nusc.py)
+        from .light_nusc import ensure_cache
+        ensure_cache(dataroot, version, verbose=verbose)
     if groups:                                                        # a finished store is not flagged incomplete by a rerun that has nothing to do
         write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)       # before the first keyframe, also on a resume
     done = 0
@@ -584,7 +587,11 @@ def _cmd_lanegraph(a):
 
 def _cmd_generate_lane(a):
     from .lane_gt import generate
-    generate(a.dataroot, a.out, a.version, a.scenes, a.set_name, a.workers)
+    from .light_nusc import ensure_cache
+    version = a.version or detect_version(a.dataroot)
+    if "trainval" in version:
+        ensure_cache(a.dataroot, version)
+    generate(a.dataroot, a.out, version, a.scenes, a.set_name, a.workers)
 
 
 def _cmd_sheets(a):
