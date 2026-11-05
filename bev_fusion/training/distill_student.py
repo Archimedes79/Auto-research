@@ -3,16 +3,26 @@ the frozen teachers, H16 = DualBEV (`data/cache/cam_feats`) and H8 = BEVFusion (
 
     python training/distill_student.py --name A1_s0 --split small --freeze-backbone               # stage A1: ImageNet backbone frozen, FPN + heads trained (about 5 epochs)
     python training/distill_student.py --name A2_s0 --split large --epochs 6 --batch 16 --lr 1e-3 --backbone-mult 0.1      # stage A2: all weights, backbone at 0.1 x lr
+    python training/distill_student.py --name A1_s0 --split small --eval-only --device cpu --threads 2 --workers 0      # re-score the newest checkpoint of runs/A1_s0 (EMA weights) -> eval_metrics.json
     options: --backbone efficientvit_b1|resnet18  --workers 4  --max-steps N (a short run)  --resume (continue an existing run folder)  --force (skip the resource gate)
+             --eval-every 1000  --null-frames 512  --eval-only  --threads 2 (eval-only only)  --device cuda|cpu (the default cuda is refused, exit 3, when there is no CUDA: no silent CPU run)
 From the bev_fusion folder (the paths are relative to it). Output `runs/<name>/`: config.json, log.jsonl (a row per 20 steps: the loss terms, lr, s_per_step, samples_per_s, data_wait_s,
-gpu_gb), ckpt_*.pt every 200 steps (resumes; the trainkit engine), metrics.json at the end (validation under the averaged weights, per head and per range band, samples/s, peak GPU memory).
+gpu_gb), ckpt_*.pt every 200 steps (resumes; the trainkit engine), metrics.json at the end (validation under the averaged weights, per head and per range band, the null baseline and the
+skill against it, the student's KL per output row and per column, samples/s, peak GPU memory). --eval-only trains nothing: it loads the EMA weights of the newest checkpoint of the run,
+makes the same validation on --split and writes eval_metrics.json (metrics.json is never touched).
 
 Samples: the key frames of the split's scenes (`splits/<name>.json`): the tokens of the cache shards (a shard is named by its scene) that have a JPEG in `data/cache/img_front` (the
 cache holds exactly the samples of the dataset: small 2283 / 378, large 428 / 82 scenes). No devkit is read. Loss, equal weights, per cell: KL(teacher || student) of the depth
 distribution on H16 and H8, context (1 - cosine) + MSE on H16 and H8; every term is logged. No augmentation (a flip would not flip the cached targets). fp32.
 Validation bands: the ground range of an image row on a flat road, near < 15 m, mid 15 - 30 m, far 30 - 60 m (a row proxy; the lower half of the image holds only the first 16 m, the
-horizon is at row 76 of the 256), in the DualBEV window. Stop: the CONTROL file of the trainkit protocol (`python -m trainsuite stop <run>`) -> checkpoint, STOPPED, exit 75.
-Exit codes: 3 = a resource is short (free host RAM < 3 GB or more than 6 GB of the GPU in use by others; --force overrides), 2 = the run folder has checkpoints and --resume is missing.
+horizon is at row 76 of the 256), in the DualBEV window. H16 has 16 rows: ONE row is in mid (7) and ONE in far (6), rows 0 - 5 (above the horizon or beyond 60 m) are in no band, so
+its mid / far numbers are single rows; H8: far row 10, mid rows 11 - 14, near 15 - 31, rows 0 - 9 in no band.
+Null baseline: the per-cell mean depth distribution and mean context vector of the first --null-frames (512) training key frames in sorted-token order (a floor of 1e-6 per depth bin so
+that no bin has probability 0), scored on the same validation frames and bands; metrics.json holds it as null.* (null.kl16, null.kl16.near, null.cos16, ...) and the skill of each head's
+depth, skill<k> = 1 - kl<k> / null.kl<k> (also per band). A student that has learned only where depth and context usually are has skill 0.
+Stop: the CONTROL file of the trainkit protocol (`python -m trainsuite stop <run>`) -> checkpoint, STOPPED, exit 75.
+Exit codes: 3 = a resource is short (free host RAM < 3 GB or more than 6 GB of the GPU in use by others; --force overrides) or cuda was asked for and is not there, 2 = the run folder has
+checkpoints and --resume is missing (eval-only: has none).
 Test: tests/test_student_encoder.py
 """
 import argparse
@@ -35,9 +45,10 @@ while not os.path.isdir(os.path.join(_REPO, "autoresearch", "trainkit")) and os.
     _REPO = os.path.dirname(_REPO)
 if os.path.join(_REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(_REPO, "autoresearch"))
+from trainkit.checkpoint import warm_start  # noqa: E402
 from trainkit.config import Config  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
-from trainkit.util import prepare_run_dir, resolve_device, seed_all  # noqa: E402
+from trainkit.util import prepare_run_dir, seed_all  # noqa: E402
 
 import splits  # noqa: E402
 from feature_cache import FeatureStore  # noqa: E402
@@ -70,7 +81,8 @@ class DistillConfig(Config):
     keep: int = 2
     save_every: int = 200
     eval_every: int = 1000
-    RESUME_FREE = Config.RESUME_FREE + ("workers",)
+    null_frames: int = 512                              # training key frames of the null baseline (reported at the end, not part of the training)
+    RESUME_FREE = Config.RESUME_FREE + ("workers", "null_frames")
 
 
 # ------------------------------------------------------------------------------------------------ data
@@ -86,13 +98,13 @@ def split_tokens(store, scenes, img_root):
 
 
 class KeyFrames(torch.utils.data.Dataset):
-    """one key frame: the JPEG (uint8, 3 x 256 x 704) and the teachers' outputs (float16): probabilities p16 / p8, context c16 / c8"""
+    """one key frame: the JPEG (uint8, 3 x 256 x 704; left out with images=False) and the teachers' outputs (float16): probabilities p16 / p8, context c16 / c8"""
 
-    def __init__(self, tokens, img_root, store16, store8):
+    def __init__(self, tokens, img_root, store16, store8, images=True):
         miss = [t for t in tokens if not store8.has(t)]
         if miss:
             raise ValueError(f"{len(miss)} token(s) are in the DualBEV cache but not in the BEVFusion cache, e.g. {miss[:2]}")
-        self.tokens, self.img_root, self.store16, self.store8 = tokens, img_root, store16, store8
+        self.tokens, self.img_root, self.store16, self.store8, self.images = tokens, img_root, store16, store8, images
 
     def __len__(self):
         return len(self.tokens)
@@ -100,7 +112,10 @@ class KeyFrames(torch.utils.data.Dataset):
     def __getitem__(self, i):
         tok = self.tokens[i]
         (p16, c16), (p8, c8) = self.store16.get(tok), self.store8.get(tok)
-        return {"img": load_image(self.img_root, tok), "p16": p16, "c16": c16, "p8": p8, "c8": c8}
+        item = {"p16": p16, "c16": c16, "p8": p8, "c8": c8}
+        if self.images:
+            item["img"] = load_image(self.img_root, tok)
+        return item
 
 
 # ------------------------------------------------------------------------------------------------ loss and validation
@@ -146,25 +161,94 @@ def head_rows(model):
     return {"16": 16 * np.arange(16) + 7.5, "8": rows8}
 
 
+NULL_FLOOR = 1e-6                                       # probability floor per depth bin of the null baseline (a bin the sample never saw is not infinitely wrong)
+
+
+def null_baseline(ds, n, workers=0, batch=32):
+    """the null predictor: per-cell mean depth distribution and mean context vector of the first n frames of the KeyFrames `ds` (its tokens are sorted: the same frames every time)
+    -> {"p16", "c16", "p8", "c8"} float32 (118 / 80, h, w). Each frame's probabilities are renormalised before the mean; the mean gets the floor NULL_FLOOR per bin."""
+    sub = KeyFrames(ds.tokens[:n], ds.img_root, ds.store16, ds.store8, images=False)
+    sums, count = {}, 0
+    for b in torch.utils.data.DataLoader(sub, batch, num_workers=workers):
+        for k, v in b.items():
+            v = v.double()
+            if k[0] == "p":
+                v = v / v.sum(1, keepdim=True)
+            sums[k] = sums.get(k, 0) + v.sum(0)
+        count += len(b["p16"])
+    null = {k: (v / count).float() for k, v in sums.items()}
+    for k in ("p16", "p8"):
+        p = null[k].clamp_min(NULL_FLOOR)
+        null[k] = p / p.sum(0, keepdim=True)
+    return null
+
+
+def null_output(null, n, device):
+    """the null baseline as the output of a model for n frames (logit = log of the mean distribution)"""
+    out = {}
+    for k in ("16", "8"):
+        out["logit" + k] = null["p" + k].log().to(device)[None].expand(n, -1, -1, -1)
+        out["ctx" + k] = null["c" + k].to(device)[None].expand(n, -1, -1, -1)
+    return out
+
+
+class RowSums:
+    """the cell terms summed over samples, per output row and per output column: what the means, the range bands and the curves of a validation are made of"""
+
+    def __init__(self):
+        self.rows, self.cols, self.n = {}, {}, 0
+
+    def add(self, maps, n):
+        for name, m in maps.items():
+            self.rows[name] = self.rows.get(name, 0) + m.sum((0, 2)).double().cpu()
+            self.cols[name] = self.cols.get(name, 0) + m.sum((0, 1)).double().cpu()
+        self.n += n
+
+    def result(self, ys):
+        """(flat dict: kl<k>, cos<k>, mse<k> as the mean over all cells, the same per range band as <name>.near / .mid / .far, and total; the KL per output row (mean over the columns)
+        and per output column (mean over the rows) of each head, rounded)"""
+        res, mean, curves = {}, {}, {"by_row": {}, "by_col": {}}
+        for name in self.rows:
+            per_row = (self.rows[name] / (self.n * len(self.cols[name]))).numpy()        # every row has the same number of cells, every column the same number of rows
+            per_col = (self.cols[name] / (self.n * len(self.rows[name]))).numpy()
+            mean[name] = res[name] = float(per_row.mean())
+            for band, idx in band_rows(ys["16" if name.endswith("16") else "8"]).items():
+                res[f"{name}.{band}"] = float(per_row[idx].mean()) if len(idx) else float("nan")
+            if name.startswith("kl"):
+                curves["by_row"][name], curves["by_col"][name] = [round(float(x), 5) for x in per_row], [round(float(x), 5) for x in per_col]
+        res["total"] = float(total_of(mean))
+        return res, curves
+
+
+def skill(kl, kl_null):
+    """1 - kl / kl_null: 0 = no better than the null predictor, 1 = exact (nan when the null is exact or undefined)"""
+    return 1 - kl / kl_null if kl_null > 0 else float("nan")
+
+
 @torch.no_grad()
-def validate(model, loader, device):
-    """flat dict: kl<k>, cos<k>, mse<k> per head, the same per range band (<name>.near / .mid / .far), total (the training loss on the validation frames) and n"""
+def score(model, loader, device, null=None):
+    """(flat dict, curves) of the model on the validation frames: see RowSums.result, plus n. With `null` (null_baseline) the null predictor is scored on the same frames and bands
+    as null.* and the depth skill of each head (and band) as skill<k>[.band]."""
     model.eval()
-    rows, width, n = {}, {}, 0
+    stud, base = RowSums(), RowSums()
     for batch in loader:
         img, tgt = to_device(batch, device)
-        for name, m in cell_maps(model(img), tgt).items():
-            rows[name] = rows.get(name, 0) + m.sum((0, 2)).double().cpu()            # per output row, summed over samples and columns
-            width[name] = m.shape[2]
-        n += len(img)
-    ys, res, mean = head_rows(model), {"n": n}, {}
-    for name, r in rows.items():
-        per_row = (r / (n * width[name])).numpy()
-        mean[name] = res[name] = float(per_row.mean())                              # every row has the same number of cells
-        for band, idx in band_rows(ys["16" if name.endswith("16") else "8"]).items():
-            res[f"{name}.{band}"] = float(per_row[idx].mean()) if len(idx) else float("nan")
-    res["total"] = float(total_of(mean))
-    return res
+        stud.add(cell_maps(model(img), tgt), len(img))
+        if null is not None:
+            base.add(cell_maps(null_output(null, len(img), device), tgt), len(img))
+    ys = head_rows(model)
+    res, curves = stud.result(ys)
+    res["n"] = stud.n
+    if null is not None:
+        res.update({"null." + k: v for k, v in base.result(ys)[0].items()})
+        for k in ("16", "8"):
+            for band in ("", ".near", ".mid", ".far"):
+                res[f"skill{k}{band}"] = skill(res[f"kl{k}{band}"], res[f"null.kl{k}{band}"])
+    return res, curves
+
+
+def validate(model, loader, device, null=None):
+    return score(model, loader, device, null)[0]
 
 
 def to_device(batch, device):
@@ -175,21 +259,21 @@ def to_device(batch, device):
 class Throughput(Hooks):
     """samples per second of the training steps (data wait and compute, not the validation or the checkpoint between steps) and the data wait per step, over the last 20 steps"""
 
-    def __init__(self, batch, window=20, skip=5):
-        self.size, self.skip, self.wait, self.durs, self.waits = batch, skip, 0.0, deque(maxlen=window), deque(maxlen=window)
+    def __init__(self, batch, window=20, skip=5, clock=time.time):
+        self.size, self.skip, self.clock, self.wait, self.durs, self.waits = batch, skip, clock, 0.0, deque(maxlen=window), deque(maxlen=window)
         self.t0, self.steps, self.total = None, 0, 0.0
 
     def begin_step(self, n):
-        self.t0, self.wait = time.time(), 0.0
+        self.t0, self.wait = self.clock(), 0.0
 
     @contextlib.contextmanager
     def data_wait(self):
-        t = time.time()
+        t = self.clock()
         yield
-        self.wait += time.time() - t
+        self.wait += self.clock() - t
 
     def end_step(self):
-        dur = time.time() - self.t0
+        dur = self.clock() - self.t0
         self.durs.append(dur)
         self.waits.append(self.wait)
         self.steps += 1
@@ -245,14 +329,17 @@ def parse(argv):
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--max-steps", type=int, default=0, help="steps instead of epochs (a short run)")
     ap.add_argument("--log-every", type=int, default=20)
+    ap.add_argument("--eval-every", type=int, default=1000, help="validate every N steps (0 or >= the steps of the run: only at the end)")
+    ap.add_argument("--null-frames", type=int, default=512, help="training key frames of the null baseline")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--device", default="cuda")
+    ap.add_argument("--device", default="cuda", help="cuda (refused when there is none) or cpu")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--eval-only", action="store_true", help="re-score the newest checkpoint of runs/<name> (EMA weights) on --split -> eval_metrics.json; trains nothing")
+    ap.add_argument("--threads", type=int, default=2, help="torch threads of --eval-only")
     for k, v in (("out-root", "runs"), ("img-root", DistillConfig.img_root), ("feats16", DistillConfig.feats16), ("feats8", DistillConfig.feats8), ("splits-dir", DistillConfig.splits_dir)):
         ap.add_argument("--" + k, default=v)
     return ap.parse_args(argv)
-
 
 
 def build_data(cfg):
@@ -268,8 +355,19 @@ def build_data(cfg):
     return sets, loader(sets["train"], True), loader(sets["val"], False)
 
 
+def write_json(path, obj):
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=1)
+    os.replace(path + ".tmp", path)
+
+
+def report(val):
+    return (f"val total {val['total']:.4f}: kl16 {val['kl16']:.3f} (null {val['null.kl16']:.3f}, skill {val['skill16']:.2f}) cos16 {val['cos16']:.3f} (null {val['null.cos16']:.3f}); "
+            f"kl8 {val['kl8']:.3f} (null {val['null.kl8']:.3f}, skill {val['skill8']:.2f}) cos8 {val['cos8']:.3f} (null {val['null.cos8']:.3f})")
+
+
 def run(cfg, out_dir, resumed, stop_check=None):
-    """build data and student, train with the trainkit loop, validate under the averaged weights, write metrics.json"""
+    """build data and student, train with the trainkit loop, validate under the averaged weights (with the null baseline), write metrics.json"""
     device = cfg.device
     sets, train_loader, val_loader = build_data(cfg)
     cfg.steps = cfg.max_steps or cfg.epochs * (len(sets["train"]) // cfg.batch)
@@ -300,30 +398,59 @@ def run(cfg, out_dir, resumed, stop_check=None):
         torch.cuda.reset_peak_memory_stats()
     meter, t0 = Throughput(cfg.batch), time.time()
     model, _, ema, _ = fit(cfg, model, torch.nn.Module(), train_loader, step_fn, out_dir, device, evaluate=evaluate, hooks=meter, stop_check=stop_check)
+    null = null_baseline(sets["train"], cfg.null_frames, cfg.workers)
     with ema.applied(model):
-        val = validate(model, val_loader, device)
+        val, curves = score(model, val_loader, device, null)
     metrics = {"name": cfg.name, "split": cfg.split, "backbone": cfg.backbone, "freeze_backbone": cfg.freeze_backbone, "n_train": len(sets["train"]), "n_val": len(sets["val"]),
-               "steps": cfg.steps, "batch": cfg.batch, "device": device, "resumed": resumed, "weights": "ema", "params_m": n_par / 1e6, "trained_params_m": n_train / 1e6,
-               "train_samples_per_s": meter.mean_rate(), "peak_gpu_allocated_gb": torch.cuda.max_memory_allocated() / 1e9 if cuda else None,
-               "peak_gpu_reserved_gb": torch.cuda.max_memory_reserved() / 1e9 if cuda else None, "seconds": time.time() - t0, "val": val}
-    with open(os.path.join(out_dir, "metrics.json.tmp"), "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=1)
-    os.replace(os.path.join(out_dir, "metrics.json.tmp"), os.path.join(out_dir, "metrics.json"))
-    print(f"done: val total {val['total']:.4f} (kl16 {val['kl16']:.3f} cos16 {val['cos16']:.3f} kl8 {val['kl8']:.3f} cos8 {val['cos8']:.3f}), "
-          f"{metrics['train_samples_per_s'] or float('nan'):.1f} samples/s", flush=True)
+               "steps": cfg.steps, "batch": cfg.batch, "device": device, "resumed": resumed, "weights": "ema", "null_frames": min(cfg.null_frames, len(sets["train"])),
+               "params_m": n_par / 1e6, "trained_params_m": n_train / 1e6, "train_samples_per_s": meter.mean_rate(),
+               "peak_gpu_allocated_gb": torch.cuda.max_memory_allocated() / 1e9 if cuda else None, "peak_gpu_reserved_gb": torch.cuda.max_memory_reserved() / 1e9 if cuda else None,
+               "seconds": time.time() - t0, "val": val, "val_by_row": curves["by_row"], "val_by_col": curves["by_col"]}
+    write_json(os.path.join(out_dir, "metrics.json"), metrics)
+    print(f"done: {report(val)}, {metrics['train_samples_per_s'] or float('nan'):.1f} samples/s", flush=True)
+
+
+def eval_only(cfg):
+    """--eval-only: the EMA weights of the newest checkpoint of runs/<name>, the validation of `run` (with the null baseline) on cfg.split -> eval_metrics.json. Nothing is trained,
+    metrics.json and the checkpoints are not touched. -> exit code"""
+    out_dir = os.path.join(cfg.out_root, cfg.name)
+    ckpts = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt")) if os.path.isdir(out_dir) else []
+    if not ckpts:
+        print(f"{out_dir} has no checkpoint to evaluate", flush=True)
+        return 2
+    path = os.path.join(out_dir, ckpts[-1])
+    ck = torch.load(path, map_location="cpu", weights_only=False)
+    model = StudentEncoder(ck["cfg"]["backbone"], pretrained=False)            # every weight comes from the checkpoint
+    warm_start(path, model, torch.nn.Module(), ck=ck)                          # its EMA tensors (and the integer buffers): the weights `run` validated
+    model.to(cfg.device)
+    sets, _, val_loader = build_data(cfg)
+    null = null_baseline(sets["train"], cfg.null_frames, cfg.workers)
+    t0 = time.time()
+    val, curves = score(model, val_loader, cfg.device, null)
+    write_json(os.path.join(out_dir, "eval_metrics.json"),
+               {"name": cfg.name, "checkpoint": ckpts[-1], "step": ck["step"], "weights": "ema", "split": cfg.split, "backbone": ck["cfg"]["backbone"], "n_train": len(sets["train"]),
+                "n_val": len(sets["val"]), "null_frames": min(cfg.null_frames, len(sets["train"])), "device": cfg.device, "seconds": time.time() - t0, "val": val,
+                "val_by_row": curves["by_row"], "val_by_col": curves["by_col"]})
+    print(f"{cfg.name} {ckpts[-1]} on {cfg.split}: {report(val)}", flush=True)
+    return 0
 
 
 def main(argv=None, stop_check=None):
     a = parse(argv)
-    device = resolve_device(a.device)
+    if a.device.startswith("cuda") and not torch.cuda.is_available():
+        print("refused to start: cuda is asked for (the default) and not available; --device cpu runs on the CPU on purpose", flush=True)
+        return 3
     if not a.force:
-        why = check_resources(device, mem_available_mb(), gpu_used_mb() if device.startswith("cuda") else None)
+        why = check_resources(a.device, mem_available_mb(), gpu_used_mb() if a.device.startswith("cuda") else None)
         if why:
             print(f"refused to start: {why} (--force overrides)", flush=True)
             return 3
     cfg = DistillConfig(name=a.name, out_root=a.out_root, split=a.split, backbone=a.backbone, freeze_backbone=a.freeze_backbone, backbone_mult=a.backbone_mult, epochs=a.epochs,
-                        max_steps=a.max_steps, batch=a.batch, lr=a.lr, workers=a.workers, log_every=a.log_every, seed=a.seed, device=device, img_root=a.img_root, feats16=a.feats16,
-                        feats8=a.feats8, splits_dir=a.splits_dir)
+                        max_steps=a.max_steps, batch=a.batch, lr=a.lr, workers=a.workers, log_every=a.log_every, eval_every=a.eval_every, null_frames=a.null_frames, seed=a.seed,
+                        device=a.device, img_root=a.img_root, feats16=a.feats16, feats8=a.feats8, splits_dir=a.splits_dir)
+    if a.eval_only:
+        torch.set_num_threads(a.threads)
+        return eval_only(cfg)
     out_dir = os.path.join(cfg.out_root, cfg.name)
     ckpts = [f for f in os.listdir(out_dir) if f.startswith("ckpt_")] if os.path.isdir(out_dir) else []
     if ckpts and not a.resume:
