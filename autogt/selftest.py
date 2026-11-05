@@ -644,6 +644,9 @@ def run(root=None, verbose=True):
         only = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False, lane=False)
         assert only["lane"] is None and only["written"] == 0, only
         assert cli_mod.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False)["lane"] is None, "the lane GT is made for every keyframe: nothing at stride 20"
+    # 5k the two coverage masks (rig_masks.py): orientation, the static front mask against the per-frame GT layers, symmetry
+    from .rig_masks import selftest as rig_masks_selftest
+    rig_masks_msg = rig_masks_selftest(root, verbose=False)
     # 5j the light devkit cache: a group read from it equals the group scanned from the tables, a changed table invalidates it, other cameras take the scan
     from .light_nusc import cache_valid, ensure_cache, light_nuscenes
     with tempfile.TemporaryDirectory() as d:
@@ -674,6 +677,7 @@ def run(root=None, verbose=True):
               f"{len(moving)} moving boxes in scene-0061 kf 8 (median speed difference to the devkit {np.median(diffs):.2f} m/s); "
               f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
         print(lane_graph_msg)
+        print(rig_masks_msg)
 
 
 if __name__ == "__main__":

@@ -72,6 +72,7 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
 | `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
 | `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py` | **the lane GT** (own version, not part of the front generator; numpy + shapely, the nuScenes map only): the lane graph with ids, successors and events, neighbours / lane counts / roads, dividers + road boundary with corners (section Lane GT); `lane_versions.csv` its versions; `lane_graph_view.py` draws it (`python -m autogt lanegraph`), `lane_graph_selftest.py` tests it |
+| `rig_masks.py` | **the two coverage masks**, one per sensor rig, static from the calibration: `bev_fusion_mask()` (front camera + 5 radars, the BEV-fusion grid) and `lane_mask()` (6 cameras + 5 radars, the Spurmitte window); `python -m autogt masks out.png` draws both |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m autogt data` |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
@@ -98,6 +99,17 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
   keyframes: `meta["dt"]`, `meta["steps"]`); the GT of every frame is at its own camera time
 - rules: stationary GT does not move (stationary objects have ONE world pose and velocity 0; map corrections only per element in
   world coordinates, `map_offsets`, never per frame)
+
+## Two coverage masks: BEV fusion and Spurmitte (`rig_masks.py`)
+Who uses which: `autogt.rig_masks.mask_for("bev_fusion")` (project folder `bev_fusion/`: the front grid, ego frame) and `mask_for("lane_center")` (project folder `bev_fusion_lane_center/`:
+the 100 x 100 m window, lane frame); any other name is an error. The two arrays differ in shape (120 x 104 against 200 x 200) and frame, so a wrong choice does not fit and fails at once.
+The two projects have different rigs and so different coverage. BEV fusion sees with the front camera and the five radars on the front grid (x forward 0 - 60 m, y +-26 m): the static
+mask covers 63 % of the grid with the camera, 100 % with the radar fans, the fusion area (camera and radar) 63 %; with the boxes that hide cells it is the per-frame mask of the stored
+GT (`camera`, `occluded`, `radar`, layers, `coverage.fusion_cells`). Spurmitte (lane centres on GaussianCaR features) works on a 100 x 100 m window round the ego with six cameras and
+five radars: the six cameras together cover 99 % of that window on the ground plane, the radars 100 %, so no region of the window is unseen by geometry alone; what is unseen there is
+what boxes hide, and the static Spurmitte mask does not know that. Both masks come from the calibration alone (the mean of the 850 logs; the logs differ by at most 0.04 m and 1 - 3 degrees),
+nothing is stored, there is no GT version; the same functions as in `coverage.py`. The static front camera mask equals the per-frame layer of the stored GT with IoU 0.993, the radar 0.9999.
+Lane frame arrays: [ix, iy] with x RIGHT and y forward, cell centres at -50 + (i + 0.5) res.
 
 ## Coverage (`coverage.py`, v7; decisions D36 - D38 of the BEV project, `bev_fusion/records/sensor_coverage_2026-11-01.md`)
 The rig is one front camera and five radars, so the GT says per cell and per object what the rig can observe. **Fusion area** = `camera`

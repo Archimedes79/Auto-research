@@ -115,6 +115,13 @@ run it live) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, 
 - The camera mask is the ground plane z = 0 (what the maps need); the model's `camera_visibility` uses height slices: call
   `camera_cells(gx, gy, K, T_c2e, size, z=<slice height>)` to share the function.
 
+## 3a2. Two coverage masks (`rig_masks.py`)
+Who uses which: `autogt.rig_masks.mask_for("bev_fusion")` for the project in `bev_fusion/`, `mask_for("lane_center")` for the project in `bev_fusion_lane_center/`; another name is an error.
+`autogt.rig_masks.bev_fusion_mask()` (front camera + 5 radars, the BEV-fusion grid, ego frame x forward) and `autogt.rig_masks.lane_mask(res=0.5)` (6 cameras + 5 radars, the Spurmitte window
+100 x 100 m, LANE frame x right, y forward): static bool arrays from the calibration, `{"camera", "radar", "fusion"}` (+ `n_cameras` for Spurmitte). No boxes are taken into account:
+for BEV fusion the stored front GT has the per-frame version (`camera`, `occluded`, `radar`, `coverage.fusion_cells`); for Spurmitte the six cameras cover 99 % of the window.
+`python -m autogt masks out.png` draws both.
+
 ## 3b. The lane GT (own version and store; `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`)
 ONE command makes both: `python -m autogt generate ~/data/nuscenes_full --set full` writes the standard GT (data/autogt/<signature>/) and the lane GT of the same sequences
 (data/autogt/lane/<lane signature>/) and stamps the release (`releases.csv`: v10 = front v9 + lane l3; `--no-lane` for the standard GT only, stride > 1 skips the lane GT).
