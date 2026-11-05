@@ -1,0 +1,48 @@
+{
+ "id": "E273.p_s0",
+ "hypothesis": "The lane head (pixel maps -> grid-cell nodes -> Hermite links -> soft sections -> map assignment) as one differentiable function assigns map pieces to the delivered lane nodes better than the geometric assignment of the E272 chain when the map is 1-2 m off, and its delivered graph is not worse than recall_sp0_dp in topo F1 and F1@1.0 while its junction F1 is higher",
+ "prediction": "lane_acc_err p - g = +0.10; junction F1 0.27 -> 0.45; topo F1 level with d (0.740); F1@1.0 level with d (0.878)",
+ "rule": "E273 card section 0 (band 0.03; guards lane_acc_exact not below g - 0.01, topo_F1 and F1@1.0 not below d - 0.03), two seeds, VAL 873 frames, final checkpoint, gates per phase from the card kill criterion; by hand because card.validate cannot read assignment numbers",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh qgraph_train.py --name e273_p_s0 --seed 0 --workers 3 --phases 5 6 7 --no-gates --resume-from /mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s0_p4/model.pt",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 21837,
+ "created": "2026-11-05T02:54:36",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "attempts_before": 7,
+ "started": "2026-11-05T02:54:42",
+ "code_hash": "3fa9f98c3095",
+ "commit": "ab72b01707",
+ "tag": "lcr/E273.p_s0",
+ "git_note": "tag existed (resume): tag lcr/E273.p_s0 is attempt 1 (6da45a8882), this attempt ran ab72b01707",
+ "pid": 21889,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/e273/start_p3.sh",
+   "bev_fusion_lane_center/temp/e273_probes/bridge_diag.py",
+   "bev_fusion_lane_center/temp/e273_probes/scene_diag.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 4972,
+ "attempts": 1,
+ "ended": "2026-11-05T04:17:39",
+ "last_lines": [
+  "x_lines 0.439 px_road 0.147 n_e 0.074 n_flags 0.427 n_off 0.297 n_dir 0.012 n_s 0.165 n_u 0.303 l_link 0.131 l_long 0.097 l_deg 1.613 l_scale 0.196 l_pos 1726.000 l_pairs 35260.000 l_miss 0.000 s_ce 1.076 s_pair 0.435 a_asg 0.071 a_fp 1.032 a_road 0.053 a_struct 0.293 a_acc 0.977",
+  "04:04:13 step 1800/2000 loss 7.4789 lr 9.36e-06 1.815 s/step px_centre 1.399 px_events 0.727 px_lines 0.457 px_road 0.142 n_e 0.103 n_flags 0.789 n_off 0.409 n_dir 0.039 n_s 0.275 n_u 0.395 l_link 0.313 l_long 0.146 l_deg 1.854 l_scale 0.196 l_pos 2381.000 l_pairs 53906.000 l_miss 0.000 s_ce 1.189 s_pair 0.380 a_asg 0.227 a_fp 0.933 a_road 0.529 a_struct 0.409 a_acc 0.891",
+  "04:07:18 step 1900/2000 loss 7.2326 lr 5.36e-06 1.817 s/step px_centre 1.513 px_events 0.780 px_lines 0.636 px_road 0.213 n_e 0.105 n_flags 0.733 n_off 0.393 n_dir 0.041 n_s 0.271 n_u 0.364 l_link 0.180 l_long 0.107 l_deg 1.702 l_scale 0.175 l_pos 2100.000 l_pairs 49721.000 l_miss 0.000 s_ce 1.517 s_pair 0.287 a_asg 0.115 a_fp 0.962 a_road 0.117 a_struct 0.324 a_acc 0.963",
+  "04:10:16 step 2000/2000 loss 7.6532 lr 4.00e-06 1.815 s/step px_centre 1.450 px_events 0.693 px_lines 0.407 px_road 0.139 n_e 0.085 n_flags 0.755 n_off 0.401 n_dir 0.064 n_s 0.312 n_u 0.288 l_link 0.176 l_long 0.082 l_deg 1.572 l_scale 0.201 l_pos 1468.000 l_pairs 35242.000 l_miss 0.000 s_ce 2.061 s_pair 0.431 a_asg 0.174 a_fp 0.853 a_road 0.156 a_struct 0.353 a_acc 0.931",
+  "04:10:17 done 2000",
+  "04:17:25 GATE {\"p2\": {\"centre_f1\": 0.9103460880933937, \"e271_centre_f1\": 0.9171841900372891, \"road_iou\": 0.863851253923617, \"inter_iou\": 0.76961166529279}, \"p3\": {\"node_f1\": 0.7721276549891064, \"node_prec\": 0.9099085326993013, \"node_rec\": 0.6705857047205316, \"e271_f1\": 0.6123079052987367, \"pos_err_med\": 0.25361399352550507, \"flag_recall\": {\"stop\": 0.5069444444444444, \"exit\": 0.4035608308605341, \"split\": 0.37789203084832906, \"merge\": 0.378021978021978, \"start\": 0.25842696629213485, \"end\": 0.1839080459770115, \"win_in\": 0.6987179487179487, \"win_out\": 0.7360335195530726}}, \"p4\": {\"link_prec\": 0.2174887441710886, \"link_rec\": 0.8106457896314054, \"link_f1\": 0.34296354992076067, \"junction_F1\": 0.12328614424255936, \"F1_1\": 0.8357321128310604, \"topo_F1\": 0.5864353444658892, \"lanes_found\": 0.6516661919681003, \"Q\": 0.6364495640031378, \"pieces_per_gt_piece\": 1.3061088977423638, \"id_switches\": 0.6425575497463909, \"vert100_dp\": 29.4054301549005, \"node_f1_scorer\": 0.8525424687494108}, \"p5\": {\"section_start_acc\": 0.4680184331797235, \"junction_F1\": 0.1263307310149042, \"F1_1\": 0.8357096339577027, \"topo_F1\": 0.6008584447713662, \"lanes_found\": 0.6510965536884079, \"Q\": 0.636527853199817, \"pieces_per_gt_piece\": 1.6075697211155378, \"id_switches\": 1.3924112368318378, \"vert100_dp\": 29.259750072437193, \"node_f1_scorer\": 0.8525424687494108}, \"p6\": {\"lane_acc_error\": 0.8935600692804283, \"geo_acc_error\": 0.8710832939694536, \"lane_acc_exact\": 0.9245714285714286, \"geo_acc_exact\": 0.9422304147465438}, \"pass\": true, \"why\": \"phase 7: numbers only\"}",
+  "04:17:26 all phases done [5, 6, 7]"
+ ]
+}

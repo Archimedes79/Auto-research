@@ -1,4 +1,4 @@
-"""The pictures and videos of a trained lane head (E273) for the result folder: `results/E273/<run>/{figures,videos}/` (not in git; the package names the command).
+"""The pictures and videos of a trained lane head (E273) for the result folder: `results/<run id>/{figures,videos}/` (next to the package.json of `package.py`) (not in git; the package names the command).
 
     wsl bash tools/env/_py14.sh qgraph_results.py --run e273_p_s0 [--scenes 11 39 23] [--every 1] [--map error|exact] [--device cuda]
 
@@ -21,12 +21,13 @@ import qpredict as QP  # noqa: E402
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", required=True)
+    ap.add_argument("--id", default=None, help="the run id of the launcher (E273.p_s0): the result folder is results/<id>/")
     ap.add_argument("--scenes", nargs="*", default=["11", "39", "23"])
     ap.add_argument("--every", type=int, default=1)
     ap.add_argument("--map", default="error")
     ap.add_argument("--device", default="cuda")
     a = ap.parse_args()
-    out = os.path.join(ROOT, "results", "E273", a.run)
+    out = os.path.join(ROOT, "results", a.id or a.run)
     vid, fig = os.path.join(out, "videos"), os.path.join(out, "figures")
     os.makedirs(vid, exist_ok=True)
     os.makedirs(fig, exist_ok=True)

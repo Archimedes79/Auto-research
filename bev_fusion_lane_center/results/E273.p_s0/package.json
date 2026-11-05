@@ -1,0 +1,80 @@
+{
+ "schema": 1,
+ "made": "2026-11-05T05:45:10",
+ "run": "E273.p_s0",
+ "run_dir": "runs/e273_p_s0",
+ "status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "tier": "normal",
+ "code": {
+  "tag": "lcr/E273.p_s0",
+  "commit": "ab72b01707",
+  "code_hash": "3fa9f98c3095"
+ },
+ "gt": {
+  "version": "autogt/lane-l3",
+  "signature": "3576fa1f7e"
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": 0
+ },
+ "model": {
+  "ckpt": "model.pt",
+  "ckpt_hash": "cea068319415",
+  "step": null,
+  "config_hash": "unknown",
+  "seed": "0"
+ },
+ "provenance": {
+  "file": "provenance.json",
+  "hash": "019a51eb0fe1"
+ },
+ "metrics": {
+  "eval/metrics.json": {
+   "F1@1.0": 0.8324511801236067,
+   "Q": 0.6363040109035557,
+   "dup_frac": 0.23206348357227616,
+   "junction_F1": 0.12970684728542703,
+   "lane_acc_error_g": 0.876677257869111,
+   "lane_acc_error_p": 0.9489130276961018,
+   "lane_acc_error_p_minus_g": 0.07223576982699076,
+   "lane_acc_exact_g": 0.9870391112533431,
+   "lane_acc_exact_p": 0.9798663326027356,
+   "lane_acc_exact_p_minus_g": -0.007172778650607503,
+   "lanes_found": 0.6437994722955145,
+   "node_F1": 0.8525274968004314,
+   "pieces_per_gt_piece": 1.606521986137939,
+   "topo_F1": 0.5970817627132082,
+   "vert100_dp": 28.88062371075208
+  }
+ },
+ "metric_files": {
+  "eval/metrics.json": "925a4da85aff"
+ },
+ "deep": {
+  "files": [],
+  "bytes": 0
+ },
+ "deleted": [],
+ "evaluation": {
+  "evaluator": {
+   "commit": "5c87b96f7e",
+   "code_hash": "e67cfd0a9500",
+   "dirty": []
+  },
+  "split": "val",
+  "frames": 873,
+  "frame_hash": "e04e6704a782",
+  "manifest_hash": "see provenance.json",
+  "gt": {
+   "version": "autogt/lane-l3",
+   "signature": "3576fa1f7e"
+  },
+  "card": "e273_p_s0/eval/card.json"
+ },
+ "experiment": "unknown"
+}

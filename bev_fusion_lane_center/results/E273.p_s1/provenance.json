@@ -1,0 +1,67 @@
+{
+ "schema": 1,
+ "made": "2026-11-05T05:44:09",
+ "gt": {
+  "version": "autogt/lane-l3",
+  "signature": "3576fa1f7e",
+  "key": "lane-l3"
+ },
+ "data": {
+  "split": "val",
+  "n": 873,
+  "frame_hash": "e04e6704a782",
+  "dataset": "nuScenes v1.0-trainval (validation scenes of data/splits.json)",
+  "manifest_hash": "f615a7387e73",
+  "scenes": 850,
+  "samples": 34149
+ },
+ "subject": {
+  "run": "E273.p_s1",
+  "ckpt": "model.pt",
+  "ckpt_hash": "0a8e6d5dd8f1",
+  "train_gt": {
+   "version": "autogt/lane-l3",
+   "signature": "3576fa1f7e"
+  }
+ },
+ "environment": {
+  "python": "3.10.12",
+  "torch": "unknown",
+  "cuda": "unknown",
+  "numpy": "unknown",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "run record (the trainer's interpreter was not found)"
+ },
+ "seed": "1",
+ "code": {
+  "tag": "lcr/E273.p_s1",
+  "commit": "8e8d73ff3f",
+  "code_hash": "5408ffd8e5d1",
+  "drift_files": [
+   "bev_fusion_lane_center/evaluation/qgraph_timing.py",
+   "bev_fusion_lane_center/temp/e273/finish_run.py",
+   "bev_fusion_lane_center/temp/e273/ledger_help.sh",
+   "bev_fusion_lane_center/temp/e273/ledger_s0.sh",
+   "bev_fusion_lane_center/temp/e273/make_table.py",
+   "bev_fusion_lane_center/temp/e273/pictures.sh",
+   "bev_fusion_lane_center/temp/e273/score_run.sh",
+   "bev_fusion_lane_center/temp/e273/status.sh",
+   "bev_fusion_lane_center/temp/e273/wait_s1.sh",
+   "bev_fusion_lane_center/temp/e273_probes/scene_diag.py"
+  ],
+  "command": "bash tools/env/_pyr.sh qgraph_train.py --name e273_p_s1 --seed 1 --workers 3 --no-gates",
+  "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": [],
+  "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag lcr/E273.p_s1"
+ }
+}

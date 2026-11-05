@@ -166,3 +166,12 @@ status.json
 !/bev_fusion/training/architecture.svg
 !/bev_fusion/training/architecture_target.svg
 !/bev_fusion_lane_center/training/architecture.svg
+# E273 (lane head) result folders: the experiment index and the packages (package.json) in git, pictures / videos / frames not
+!/bev_fusion_lane_center/results/
+/bev_fusion_lane_center/results/*
+!/bev_fusion_lane_center/results/E273/
+!/bev_fusion_lane_center/results/E273.*/
+/bev_fusion_lane_center/results/E273.*/*
+!/bev_fusion_lane_center/results/E273.*/package.json
+!/bev_fusion_lane_center/results/E273.*/provenance.json
+!/bev_fusion_lane_center/results/E273.*/README.md

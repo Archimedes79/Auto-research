@@ -1,6 +1,6 @@
 # E273 The lane graph from pixels to map ids as ONE differentiable function: pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment (full plan)
 
-Card of 2026-11-04, **revision 6 = the full plan; nothing is started, nothing trains** (Mirko: "Plan for now, do not yet start a training, because I cannot use my computer, if you do"). Steps 0 and 1 are CPU only (light, low priority); every GPU step waits for Mirko's word. Revisions 1-5 (vertex soft graph, lane-piece decoder, ports, port graph; git a256c38 ... 1da51e9) are replaced by this one; the measurements they produced are kept in section 1.
+Card of 2026-11-04, **revision 6 = the full plan; run overnight 2026-11-04/05 on Mirko's word ("Yes, start, but work automatically"): result CUT by hand, see section 10.** Until that word the plan said: nothing trains ("Plan for now, do not yet start a training, because I cannot use my computer, if you do"; steps 0 and 1 CPU only, every GPU step waits for Mirko's word). Revisions 1-5 (vertex soft graph, lane-piece decoder, ports, port graph; git a256c38 ... 1da51e9) are replaced by this one; the measurements they produced are kept in section 1.
 
 Mirko's brief and decisions of 2026-11-04 (in short): a pyramidal head (markings and road boundaries at 0.5 m, lane centres at 1 m, roads at 2 m); an end-to-end differentiable graph that understands connectivity and neighbourhood; the map graph encoded with one id per lane, splits and merges create new ids; an assignment of map ids to perception ids; differentiable up to and including the classification; "pixel map modification first, then queries with Hermite, then connection, then assignment"; **D55: the rule is end-to-end differentiable, matching in the loss is allowed**; the lane GT is built by the GT chat; a local evaluation (overlay pictures, videos, numbers) and one result folder per experiment.
 
@@ -227,5 +227,69 @@ Estimate from the step times of E271 / E272 (0.6 s per step for a frozen-head st
 | MGMap, PseudoMapTrainer (ICCV 2025) | multi-scale BEV features; finer grids help lines, not areas | the pyramid taps and their resolutions |
 Gap: nobody assigns perceived lane-level ids to a lane-level map graph with a soft, structure-aware assignment and trains it through the perception; published association is road-level (MAT) or hard.
 
-## 10. Summary
-Open.
+## 10. Summary (2026-11-05; the plan above was built, trained and scored overnight on Mirko's word of 2026-11-04: "Yes, start, but work automatically")
+
+**Verdict: CUT, by hand (the card's rule 4 read by `qgraph_run_eval.py verdict`; both seeds on the same side).** The map assignment lever is real and large; the delivered graph is not yet good enough, so the card sends us back to the step that broke it (nodes and links, steps 3-4), not to a new card. Runs `E273.p_s0` and `E273.p_s1` (ledger rows, git tags `lcr/E273.p_s0`, `lcr/E273.p_s1`, run folders `runs/e273_p_s0`, `runs/e273_p_s1`, scoring cards `runs/e273/<run>/card.json` and `results.md`); the result folders are `results/E273.p_s0`, `results/E273.p_s1`, the index and the plain-words explanation of the targets are `results/E273/README.md`.
+
+| VAL 873 frames | p seed 0 | p seed 1 | mean p | g, mean of the seeds (E272 chain + geometric assigner) | d (recall_sp0_dp) |
+|---|---|---|---|---|---|
+| lane_acc, map error 1-2 m | 0.9489 | 0.9501 | 0.9495 | 0.8781 |  |
+| lane_acc, exact map | 0.9799 | 0.9797 | 0.9798 | 0.9864 |  |
+| road_acc (road level derived from the lanes), map error | 0.9487 | 0.9468 | 0.9478 | 0.9321 |  |
+| p - g, map error | 0.0722 | 0.0706 | 0.0714 |  |  |
+| p - g, exact map | -0.0072 | -0.0061 | -0.0066 |  |  |
+| topo_F1 | 0.597 | 0.595 | 0.596 |  | 0.741 |
+| F1@1.0 | 0.832 | 0.821 | 0.827 |  | 0.878 |
+| junction_F1 | 0.130 | 0.120 | 0.125 |  | 0.273 |
+| lanes_found | 0.644 | 0.630 | 0.637 |  | 0.781 |
+| Q | 0.636 | 0.630 | 0.633 |  | 0.742 |
+| dup_frac | 0.232 | 0.192 | 0.212 |  | 0.077 |
+| vert100_dp | 28.881 | 31.453 | 30.167 |  |  |
+| pieces_per_gt_piece | 1.607 | 1.596 | 1.602 |  |  |
+| id_switches_per_100m | 1.398 | 1.372 | 1.385 |  |  |
+| node F1 (2 m grid) | 0.8525 | 0.8505 | 0.8515 |  |  |
+| node position error, median (m) | 0.2772 | 0.2747 | 0.2759 |  |  |
+
+p - g with the 95 % scene bootstrap (873 VAL frames, 1000 resamples of scenes, paired):
+- seed 0: map error +0.0722 [+0.0563, +0.0871]; exact map -0.0072 [-0.0151, +0.0004]
+- seed 1: map error +0.0706 [+0.0551, +0.0853]; exact map -0.0061 [-0.0144, +0.0023]
+
+The assignment guard numbers are VAL 873 frames, map error "1-2 m" = one fixed perturbation per frame (translation 1-2 m, yaw 1 degree, thinned shape points, 5 % of the pieces dropped); g is the E272 chain of the same seed with its geometric assigner on the same map tokens; d is `recall_sp0_dp` read from the lane suite run named in the scoring card. All graph numbers are the lane suite's own functions (the scorer reproduces d exactly: Q 0.7424, F1@1.0 0.8781, topo F1 0.7405, junction F1 0.2730).
+
+**Rule 4, clause by clause (mean of the two seeds):** `lane_acc_err` p - g = +0.0714 (above the band 0.03, each seed's 95 % interval [+0.055, +0.087] excludes 0): holds. `lane_acc_exact` p - g = -0.0066 (guard -0.01): holds. topo F1 0.596 against d - 0.03 = 0.7105: **broken**. F1@1.0 0.827 against d - 0.03 = 0.8481: **broken**. **Prediction:** lane_acc_err +0.10 over g (observed +0.071: the lever is confirmed, the size was over-estimated); junction F1 0.27 -> 0.45 (observed 0.125: missed, the graph is worse than d at junctions, not better); topo F1 and F1@1.0 level with d (observed -0.145 and -0.051: missed).
+
+**Stage by stage (the gates of section 6 read on the final models, 150 VAL frames; seed 0 / seed 1; the link, event and full-scorer node numbers are the 873-frame scorer):**
+
+| stage | measured | gate | |
+|---|---|---|---|
+| pixel maps | centre F1 at 1 m 0.910 / 0.908 (E271 head 0.917); road IoU 0.864 / 0.864; intersection IoU 0.770 / 0.763 | centre F1 not below E271 - 0.02 | pass |
+| nodes | node F1 on the cell grid 0.772 / 0.776 (E271 read-out 0.612); median position error 0.254 / 0.259 m; full VAL scorer at 2 m: node F1 0.853 / 0.850 (P 0.87, R 0.83) | F1 not 0.05 below E271, error <= 0.5 m | pass |
+| links | short links P 0.84 R 0.96; **long links P 0.17-0.19 R 0.47-0.50**; junction F1 0.123 / 0.118; F1@1.0 0.836 / 0.823 | junction F1 above 0.273, F1@1.0 not 0.05 below d | **fail** |
+| sections | delivered pieces per GT piece 1.61 / 1.59; **section start accuracy 0.468 / 0.481** | at most 2 pieces and start accuracy >= 0.95 | pieces pass, start accuracy **fail** |
+| assignment | beats the geometric start value (the numbers above are the full scoring) | above g, exact map within 0.03 | pass |
+
+**How the night went (all by hand, recorded in the ledger notes):** the gates were fail-closed and stopped the first link-stage attempts; the head was revised four times on the evidence of each gate (table below), the best attempt (v5) was kept although it still failed its gate, and phases 5-7 of seed 0 and all phases of seed 1 were run with `--no-gates` so that the chain could be scored and the lever measured; the card's verdict is read on the final VAL numbers, not on the gates. Seed 0's phases 2-4 come from earlier launches of the same run id (the run folders of the aborted attempts are in `runs/_superseded/`), its phases 5-7 and all of seed 1 from the launches named in the packages; the pixel stage code (`pyramid.py`, `qraster.py`, the data loader, the pixel loss) did not change between the attempts.
+
+| attempt (code commit) | change | phase-4 gate: junction F1 | F1@1.0 | topo F1 | lanes found | pieces per GT piece |
+|---|---|---|---|---|---|---|
+| v2 (db3cdb00) | first complete pipeline, critic fixes | 0.021 | 0.647 | 0.372 | 0.320 | 4.09 |
+| v3 (399bed50) | node head reads the pixel stage's centre / event probabilities; all flags and long-link endpoint scores weigh fully; one-to-many link labels (a node counts for the nearest GT node within 1.5 m); 64 long-link endpoints | 0.064 | 0.670 | 0.462 | 0.373 | 2.33 |
+| v4 (c28e6b73) | a balanced BCE of its own for the long links (their positives are 0.3 % of their candidates) | 0.170 | 0.844 | 0.499 | 0.739 | 1.73 |
+| **v5 (59ad3009), kept** | self-attention over the active nodes of a frame with the node scores as input; long-link positive weight capped at 15 | 0.181 | 0.832 | 0.576 | 0.627 | 1.95 |
+| v6 (8ff361ac), reverted | the successors of a node as a row softmax with a "none" entry (multi-positive NLL) | 0.122 | 0.706 | 0.467 | 0.436 | 2.39 |
+
+(reference d: junction F1 0.273, F1@1.0 0.878, topo F1 0.740, lanes found 0.781; gate numbers of the aborted run folders in `runs/_superseded/e273_p_s0_v<k>_p4/log.txt`.)
+
+**Where the graph loses (measured, one-off probes in `temp/e273_probes/`, then tagged):**
+- **Node recall caps the topology.** 17 % of the GT nodes are not delivered (node R 0.83); on the oracle graph (VAL GT) dropping 10 % of the nodes at random alone lowers topo F1 from 0.97 to 0.70. The events are the weakest nodes: recall stop 0.72-0.74, exit 0.67-0.72, split 0.56-0.59, merge 0.63-0.64, start 0.45-0.49, end 0.35-0.40 (window in / out 0.80-0.84); precision of the event flags is only 0.3-0.4.
+- **Long links through intersections are the failure.** Short links are good (P 0.84, R 0.96). Long links have P 0.17-0.19 and R 0.47-0.50: 19-23 % of the delivered length is duplicate (dup_frac 0.21 mean of the seeds against d 0.077), the junction P is 0.07 at R 0.62-0.65 (d: 0.21 / 0.38), and the pictures show a ring of false (red) and missed (blue) connectors around every intersection. A lane chain of 30 m has about 15 links, so independent link decisions break chains: at 0.87 per link only 12 % of the paths stay whole; the row-softmax variant (v6) did not fix it.
+- **The delivered graph is 2-3 times denser than d:** 28.9 / 31.5 vertices per 100 m after Douglas-Peucker 0.3 m (18.2 / 20.5 node ids) against the budget 14.3 and d's 10.9; Q (S without the sparsity term) 0.633 against 0.742. The E271 differentiable sparsification is not yet applied on the node chain.
+- **Sections:** the soft absorbing walk gives 1.6 delivered pieces per GT piece and 1.4 id switches per 100 m, but only 47-48 % of the nodes get the right section start (gate 0.95); the section output is only as good as the links.
+
+**What is good (the base to build on):** the full chain trains end to end in 2.4 GPU hours per seed; every stage on the training path is differentiable, there is no matching in the loss (targets by location, one-to-many link labels), the only hard steps are the named read-out thresholds (node existence e >= 0.5, link p >= 0.5) and the top-K node selection (K = 512, D7 convention: gradient through the chosen values); the pixel maps and nodes meet their gates; the map assignment beats the geometric assigner by +0.07 in lane accuracy when the map is 1-2 m off, with a 95 % interval that excludes 0 and the band, on both seeds, and costs 0.006 when the map is exact (road level derived from the lanes: 0.948 against 0.932); a complete local evaluation, pictures and videos, one result folder per run.
+
+**Cost.** Head only, batch 1, cached features, bf16, idle GPU (RTX 3060, median of 60 frames; `evaluation/qgraph_timing.py`, `runs/e273/<run>/timing.json`): **24.2 ms per frame (seed 0), 23.2 ms (seed 1)** = pixel maps 4.3 + nodes 2.9 + links 5.0-5.5 + sections 2.7-2.8 (dense solve on 512 nodes) + map encoder and assignment 7.9-8.3; the CPU read-out and the frozen GaussianCaR feature extraction are not included (the map encoder can be cached per map). Training: about 7.5 GPU hours of wall time in all (seed 0 about 5 h including the five aborted attempts, seed 1 2.4 h, partly overlapping; budget 10).
+
+**Not done / gaps, named (E2E rule: rule steps in the delivered graph are a named gap):** the delivered graph still goes through the output thresholds above and a read-out that cuts to the vertex list (CPU); the navigation / route attribute is not produced; temporal fusion (the hold) is out of this card (follow-up: cross-attention from the current nodes to the nodes of earlier frames, as Mirko suggested); arm Q (a query decoder, CGNet as a reference row) was not run; the verdict rests on VAL only (TEST untouched, no grant); the road-level assignment is derived from the lanes; section start accuracy and the dense gates use 150 frames, the scorer's numbers use all 873 (the gate's own lane accuracy is a rougher 150-frame number, not comparable with the table).
+
+**What to do next (recommendation, not a decision):** (1) node recall before anything else: a recall-weighted node loss and the event flags first (a second node slot per cell at junction cells, a lower existence threshold with the sparsification after it), then re-run the link stage; (2) a path-level link loss (the probability that a whole GT path is delivered, differentiable along the chain) instead of per-link BCE, with the long links as their own objective; (3) apply the E271 differentiable sparsification on the node chain to meet the vertex budget; (4) only then the follow-ups: temporal cross-attention to earlier nodes, arm Q as a reference. The assignment module does not need to change.
