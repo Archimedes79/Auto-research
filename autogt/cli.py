@@ -471,6 +471,7 @@ def _parser():
     v.add_argument("picks", nargs="*", help="scene-0061:8 (mini, generated now) or a sample token (stored GT, mini or trainval)")
     v.add_argument("--total", action="store_true", help="4th panel: total apparent flow (ego motion included) instead of motion relative to the static world")
     sub.add_parser("sheets").add_argument("out")
+    sub.add_parser("masks", help="the two coverage masks (BEV fusion: front; Spurmitte: surround) as one picture").add_argument("out")
     gl = sub.add_parser("generate-lane", help="the lane GT (lane graph, roads, lines; own version and store) of a nuScenes folder: resumable")
     gl.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
     gl.add_argument("--out", default=None, help="default data/autogt/lane; the files go to OUT/<lane signature>/")
@@ -594,6 +595,11 @@ def _cmd_generate_lane(a):
     generate(a.dataroot, a.out, version, a.scenes, a.set_name, a.workers)
 
 
+def _cmd_masks(a):
+    from .rig_masks import picture
+    print(picture(a.out))
+
+
 def _cmd_sheets(a):
     from .view import sheets
     sheets(a.out)
@@ -622,7 +628,7 @@ def _cmd_video(a):
 
 
 COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "digest": _cmd_digest, "have": _cmd_have,
-            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets, "lanegraph": _cmd_lanegraph, "generate-lane": _cmd_generate_lane,
+            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets, "lanegraph": _cmd_lanegraph, "masks": _cmd_masks, "generate-lane": _cmd_generate_lane,
             "report": _cmd_report, "clean": _cmd_clean, "video": _cmd_video}
 CHECKS_ARGUMENTS = ("data", "digest", "generate", "generate-lane", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
 
