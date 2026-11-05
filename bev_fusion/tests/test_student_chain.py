@@ -22,6 +22,9 @@ oracles); the encoder itself is tests/test_student_encoder.py.
      prob changes; the gradient of the lane branch reaches a trainable student; with the option off the branch still gets the cached depth (section A)
   I  grad_clip_split: 'student' names exactly the student's trainable tensors (refused for a frozen one); with it a huge student gradient leaves the others' gradient as it is, the
      global clip scales them down
+  J  the trainable student recomputes its backbone in the backward (the memory fix of the smoke run: 9 frames x backbone activations were 16.3 GB): the option follows
+     student_trainable; the encoder runs twice with it and once without; gradients of every student tensor equal (relative 1e-5), also through the chain; BatchNorm
+     statistics unmoved; nothing recomputed in evaluation mode, under no_grad, or for a frozen student
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_student_chain.py"""
 import copy
 import dataclasses
@@ -494,6 +497,69 @@ check(all(torch.equal(p.grad, torch.full_like(p, small)) for p in others) and ab
 set_grads()
 clip_gradients(params, 5.0)
 check(all(float(p.grad.max()) < 0.01 * small for p in others), "control: the global clip scales every other gradient down by the student's size (what 'student' in the split prevents)")
+
+# ------------------------------------------------------------------------------------------------ J
+print("J: the trainable student recomputes its backbone in the backward (memory)")
+# the smoke run of 2026-11-05 held the backbone activations of 9 frames per micro-batch: 16.3 GB on a 12 GB card. The numbers must not change, only what is kept.
+check(tr.student.checkpoint_encode is True and fro.student.checkpoint_encode is False, "the option follows student_trainable: a training student recomputes, a frozen one does not")
+st = tr.student
+orig_encode = st.encode
+calls = []
+st.encode = lambda x: (calls.append(1), orig_encode(x))[1]
+img_j = images(2, seed=5)
+wj = {k: torch.randn_like(v) for k, v in st(img_j).items() if k.startswith(("logit", "ctx"))}
+bn_j = [mod for mod in st.modules() if isinstance(mod, nn.modules.batchnorm._BatchNorm)]
+stats_j = [(mod.running_mean.clone(), mod.running_var.clone()) for mod in bn_j]
+
+
+def grads_of(flag, train=True):
+    st.checkpoint_encode = flag
+    st.train(train)
+    st.zero_grad(set_to_none=True)
+    del calls[:]
+    out = st(img_j)
+    sum((out[k] * wj[k]).sum() for k in wj).backward()
+    return [p.grad.clone() for p in st.parameters() if p.requires_grad], len(calls)
+
+
+g_on, n_on = grads_of(True)
+g_off, n_off = grads_of(False)
+check(n_on == 2 and n_off == 1, f"with the option the encoder runs twice (forward + recomputation in the backward), without it once ({n_on}, {n_off})")
+check(len(g_on) == len(g_off) > 0 and all(a.shape == b.shape for a, b in zip(g_on, g_off)) and max(float((a - b).abs().max()) for a, b in zip(g_on, g_off)) < 1e-5 * max(float(b.abs().max()) for b in g_off),
+      "the gradient of every student tensor is the same with and without the recomputation (relative 1e-5)")
+check(all(torch.equal(mod.running_mean, m0) and torch.equal(mod.running_var, v0) for mod, (m0, v0) in zip(bn_j, stats_j)), "BatchNorm statistics did not move in either (eval mode, so the recomputation does not count them twice)")
+st.checkpoint_encode = True
+del calls[:]
+st.eval()
+st(img_j)
+n_eval = len(calls)
+del calls[:]
+st.train()
+with torch.no_grad():
+    st(img_j)
+n_nograd = len(calls)
+fro.student.checkpoint_encode = True
+fz_calls = []
+fz_orig = fro.student.encode
+fro.student.encode = lambda x: (fz_calls.append(1), fz_orig(x))[1]
+fro.train()
+fro.student(img_j)
+check(n_eval == 1 and n_nograd == 1 and len(fz_calls) == 1, f"no recomputation where nothing is saved for a backward: evaluation mode ({n_eval}), no_grad ({n_nograd}), a frozen student with the flag forced on ({len(fz_calls)})")
+fro.student.encode = fz_orig
+fro.student.checkpoint_encode = False
+st.encode = orig_encode
+# through the chain: the camera BEV loss reaches the same student gradients
+bj = data(2)
+bj["lane_img"] = img_j
+res_g = []
+for flag in (True, False):
+    tr.student.checkpoint_encode = flag
+    tr.train()
+    tr.zero_grad(set_to_none=True)
+    tr.camera_bevs(bj).square().sum().backward()
+    res_g.append([p.grad.clone() for p in tr.student.parameters() if p.requires_grad])
+check(max(float((a - b).abs().max()) for a, b in zip(*res_g)) < 1e-5 * max(float(b.abs().max()) for b in res_g[1]), "... and so does a loss on the camera BEV of the whole chain")
+tr.student.checkpoint_encode = True
 
 print(f"\ntest_student_chain: {'ALL PASSED' if not fails else str(len(fails)) + ' FAILED'} ({time.time() - t0:.0f} s)")
 sys.exit(1 if fails else 0)

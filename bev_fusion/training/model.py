@@ -272,6 +272,7 @@ def _build_student(cfg):
         load_trained(student, cfg.student_init)
     student.keep_bn_eval()
     student.requires_grad_(cfg.student_trainable)
+    student.checkpoint_encode = bool(cfg.student_trainable)       # a training student keeps no backbone activations of the 9 frames of a micro-batch (StudentEncoder.forward)
     return student
 
 
