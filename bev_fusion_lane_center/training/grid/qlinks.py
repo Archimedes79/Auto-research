@@ -9,8 +9,7 @@ Candidates (index choices with the gradient through the values, named in the car
   short links    pairs of active nodes within 4 cells (+-8 m) in each axis, not behind the node (the offset of j in i's frame along > -1 m)
   long links     the top-KL nodes by `uout` x the top-KL nodes by `uin`, 8 m < distance <= 100 m, inside a 75 degree forward cone (through intersections: the stop -> exit connectors)
 The tokens first pass 2 layers of self-attention over the active nodes of the frame (with the node's position, direction and scores e / flags / u as extra input: which entry joins which exit is a question about the whole junction).
-The successors of a node are a DISTRIBUTION over its candidates and 'none' (row softmax; trained with the multi-positive NLL of the true successors, `row_nll`; the link probability is the row probability, `sigmoid(logit)`):
-score of a pair = MLP([token i, token j, geometry (offset of j in i's frame along / across / distance at two scales, heading change cos / sin, long flag), evidence along the curve (mean, minimum,
+Link logit = MLP([token i, token j, geometry (offset of j in i's frame along / across / distance at two scales, heading change cos / sin, long flag), evidence along the curve (mean, minimum,
 gap share of the centre probability at 16 points of the Hermite curve)]); the curve is a cubic Hermite segment from (pos i, dir i) to (pos j, dir j) with handles a, b x chord: 1/3 for short
 links, 0.9 x sigmoid(MLP) for long links (the learned scales; the targets are the fitted scales of `qtargets.fit_long_scales`).
 Output (dict): act (B, K) flat cell indices, valid (B, K), pos (B, K, 2), dirv (B, K, 2), pb / pa / pc (P,) batch element, source and target index in the active list, is_long (P,), logit (P,),
@@ -68,13 +67,11 @@ class LinkHead(nn.Module):
         self.ctx = nn.ModuleList([SetBlock(d) for _ in range(ctx_layers)])
         nin = 2 * d + 9
         self.scale = nn.Sequential(nn.Linear(nin, 64), nn.GELU(), nn.Linear(64, 2))
-        self.none = nn.Linear(d, 1)                                                               # the logit of 'no successor' of a node (a lane end, a window exit, a false node)
         self.mlp = nn.Sequential(nn.Linear(nin + 2 + 3, hidden), nn.GELU(), nn.Linear(hidden, hidden), nn.GELU(), nn.Linear(hidden, 1))
         nn.init.normal_(self.scale[-1].weight, std=0.01)
         with torch.no_grad():
             self.scale[-1].bias.fill_(math.log(0.333 / 0.9 / (1 - 0.333 / 0.9)))              # sigmoid(.) * 0.9 = 1/3 at the start
-            self.mlp[-1].bias.fill_(-2.0)
-            self.none.bias.fill_(1.0)
+            self.mlp[-1].bias.fill_(-4.0)
 
     def forward(self, no, cen, gt=None, K=512, KL=64, thr=0.05):
         B = no["e"].shape[0]
@@ -146,13 +143,8 @@ class LinkHead(nn.Module):
                 xy = curve[sel].permute(2, 0, 1)[None]                                         # (1, 2, P_b, NPT)
                 ev[sel] = sample(cen[b: b + 1], xy)[0, 0].to(ev.dtype)
         evf = torch.stack([ev.mean(1), ev.min(1)[0], torch.sigmoid((0.2 - ev) * 20).mean(1)], -1)
-        score = self.mlp(torch.cat([x0, sa[:, None], sb[:, None], evf], -1))[:, 0]
-        # the successors of a node: a distribution over its candidates and 'none' (row softmax); the link probability is the row probability
-        Ld = torch.full((B, K, K), float("-inf"), device=dev, dtype=score.dtype).index_put((pb, pa, pc), score)
-        Pr = torch.softmax(torch.cat([Ld, self.none(tok).to(score.dtype)], -1), -1)                  # (B, K, K + 1)
-        p_pair = Pr[pb, pa, pc].float().clamp(1e-6, 1 - 1e-6)
-        logit = torch.log(p_pair) - torch.log1p(-p_pair)                                          # sigmoid(logit) = the row probability
-        out = dict(act=idx, valid=valid, pos=pos, dirv=dirv, tok=tok, cell=torch.stack([ci, cj], -1), pb=pb, pa=pa, pc=pc, is_long=is_long, logit=logit, sa=sa, sb=sb, evidence=evf, pnone=Pr[..., K])
+        logit = self.mlp(torch.cat([x0, sa[:, None], sb[:, None], evf], -1))[:, 0]
+        out = dict(act=idx, valid=valid, pos=pos, dirv=dirv, tok=tok, cell=torch.stack([ci, cj], -1), pb=pb, pa=pa, pc=pc, is_long=is_long, logit=logit, sa=sa, sb=sb, evidence=evf)
         if gt is not None:
             key = (pb * N * N + fa[pb, pa]) * (N * N) + fa[pb, pc]
             lab = torch.isin(key, pair_key)
@@ -166,11 +158,6 @@ class LinkHead(nn.Module):
                 kgeo = (pb * N * N + ga_.clamp_min(0)) * (N * N) + gc_.clamp_min(0)
                 lab = lab | (torch.isin(kgeo, pair_key) & (ga_ >= 0) & (gc_ >= 0) & (ga_ != gc_))
             out["label"] = lab.float()
-            Y = torch.zeros(B, K, K, dtype=torch.bool, device=dev).index_put((pb, pa, pc), lab)
-            has = Y.any(-1)
-            tgt = torch.where(has, (Pr[..., :K] * Y).sum(-1), Pr[..., K])                       # a node with true successors puts its mass on them, any other node on 'none'
-            nll = -torch.log(tgt.clamp_min(1e-6))
-            out["row_nll"] = (nll * valid).sum() / valid.sum().clamp_min(1)
             out["gt_missing"] = int(okl.sum()) - int(torch.isin(pair_key, key).sum())          # GT links that did not make it into the candidate list (trimmed or outside K)
         return out
 

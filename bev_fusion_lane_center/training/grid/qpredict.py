@@ -20,8 +20,6 @@ for sub in ("training/grid", "training/data", "training"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import qgraph as QG  # noqa: E402
 
-LINK_READ = 0.25                      # output step: a successor counts when its row probability is at least this (the row sums to 1 with 'none': a split has two of about 0.4)
-
 
 def predict_from_out(out, batch, keep_maps=False, min_p=0.02):
     L, no, A, M = out["L"], out["no"], out["A"], out["M"]
@@ -43,7 +41,6 @@ def predict_from_out(out, batch, keep_maps=False, min_p=0.02):
         sel = (L["pb"] == b) & v[L["pa"]] & v[L["pc"]] & (L["logit"].float().sigmoid() >= min_p)          # links below min_p are dropped (memory); the read-out threshold is 0.5
         links = dict(src=new[L["pa"][sel]].cpu().numpy(), dst=new[L["pc"][sel]].cpu().numpy(), p=L["logit"][sel].float().sigmoid().cpu().numpy(), long=L["is_long"][sel].cpu().numpy(),
                      a=L["sa"][sel].float().cpu().numpy(), b=L["sb"][sel].float().cpu().numpy(), curves=None)
-        links["p"] = np.clip(links["p"] / (2.0 * LINK_READ), 0.0, 1.0)                    # the successor distribution is read at LINK_READ: p >= 0.5 <=> row probability >= LINK_READ
         k = len(batch["map_ids"][b])
         R = len(batch["map_roads"][b])
         assign = dict(P=A["P_piece"][b][idx][:, list(range(k)) + [A["P_piece"].shape[-1] - 1]].float().cpu().numpy(), map_ids=list(batch["map_ids"][b]),

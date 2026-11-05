@@ -171,9 +171,6 @@ def link_loss(L, batch):
             tgt = sg[j][hit]
             l_sc = ((L["sa"][pos][hit] - tgt[:, 0]).abs() + (L["sb"][pos][hit] - tgt[:, 1]).abs()).mean()
     info.update(link=float(l_b), long=float(l_long), deg=float(l_deg), scale=float(l_sc), pos=int(npos), pairs=len(y), miss=int(L.get("gt_missing", 0)))
-    if "row_nll" in L:
-        info["row"] = float(L["row_nll"])
-        return L["row_nll"] + 2.0 * l_sc, info                                                    # the successor distribution of every node (the BCE terms above are logged only)
     return l_b + 2.0 * l_long + 2.0 * l_sc, info                                                            # the degree term is logged, not trained: with one-to-many labels a node has several true successors
 
 
