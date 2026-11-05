@@ -747,6 +747,8 @@
  "not_drawn": {
   "training/train_motion_block.py": "t12 experiment trainer of the motion block on a frozen, trained base model (the block itself is in the chain since t15, box Motion block M); not the main training",
   "training/startable.py": "tool: static checks, smoke config and start lines of a training config; no GPU, not part of the network",
+  "training/student_encoder.py": "t22 student image encoder (stage A: reproduces the cached DualBEV / BEVFusion outputs from the key-frame JPEG); not in the chain until stage B registers it in model.CAMERAS",
+  "training/distill_student.py": "t22 stage A trainer of the student encoder (offline, against the cached teacher outputs); not part of the network",
   "training/temporal.py": "older multi-hypothesis temporal propagation, superseded by temporal_fusion.py; imported only by tests and scratch",
   "training/gt_bev.py": "compatibility shim that re-exports autogt",
   "training/legacy": "S1 single-sensor pipeline and the t4 DualBEV front; nothing in model / train / evaluation imports it"
