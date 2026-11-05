@@ -195,7 +195,7 @@ The lane project has no `results/` folder yet; `package.py` runs per problem and
 | 3 | nodes | `training/grid/qnodes.py` | node F1 (2 m) not more than 0.05 below the E271 read-out at the same tolerance; median position error <= 0.5 m; event recall reported | GPU about 0.5 h / seed |
 | 4 | links + Hermite | `training/grid/qlinks.py` | junction F1 above 0.273; F1@1.0 and topo F1 not more than 0.05 below d | GPU about 0.5 h / seed |
 | 5 | sections | `training/grid/sections.py` | at most 2 delivered pieces per GT piece; section starts right for at least 95 % of the nodes | GPU about 0.3 h / seed |
-| 6 | map + assignment | `training/grid/map_graph.py`, `qassign.py` | at the start equal to g; `lane_acc_err` above g | GPU about 0.3 h / seed |
+| 6 | map + assignment | `training/grid/map_sim.py`, `qassign.py` | at the start equal to g; `lane_acc_err` above g | GPU about 0.3 h / seed |
 | 7 | joint, both seeds, scoring, pictures, videos, result folder | `results/E273/` | verdict by the rule of section 0 | GPU about 1 h / seed + 0.5 h scoring |
 Estimate from the step times of E271 / E272 (0.6 s per step for a frozen-head stage, 2.1 s for the joint stage): about 5 GPU hours per seed with development, 10 in all; replaced by measured values after step 2. Code rules: a test and a README row per module in the same commit, the grid tests registered in `run_all_tests.sh`, an `ar-critic` pass (mode code) on the shared code before step 2, commit by path, scratch to `temp/`. Dependencies on other chats: the GT chat (the l3 lane store); the BEV system chat owns the GPU slots (trainsuite queue, `run.py`).
 
@@ -229,7 +229,7 @@ Gap: nobody assigns perceived lane-level ids to a lane-level map graph with a so
 
 ## 10. Summary (2026-11-05; the plan above was built, trained and scored overnight on Mirko's word of 2026-11-04: "Yes, start, but work automatically")
 
-**Verdict: CUT, by hand (the card's rule 4 read by `qgraph_run_eval.py verdict`; both seeds on the same side).** The map assignment lever is real and large; the delivered graph is not yet good enough, so the card sends us back to the step that broke it (nodes and links, steps 3-4), not to a new card. Runs `E273.p_s0` and `E273.p_s1` (ledger rows, git tags `lcr/E273.p_s0`, `lcr/E273.p_s1`, run folders `runs/e273_p_s0`, `runs/e273_p_s1`, scoring cards `runs/e273/<run>/card.json` and `results.md`); the result folders are `results/E273.p_s0`, `results/E273.p_s1`, the index and the plain-words explanation of the targets are `results/E273/README.md`.
+**Verdict: CUT, by hand (the card's rule 4 read by `qgraph_run_eval.py verdict`; both seeds on the same side).** The map assignment lever is real and large; the delivered graph is not yet good enough, so the card sends us back to the step that broke it (nodes and links, steps 3-4), not to a new card. Runs `E273.p_s0` and `E273.p_s1` (ledger rows, git tags `lcr/E273.p_s0`, `lcr/E273.p_s1`, run folders `runs/e273_p_s0`, `runs/e273_p_s1`, scoring cards `runs/e273/<run>/card.json` and `runs/e273/<run>/results.md`); the result folders are `results/E273.p_s0`, `results/E273.p_s1`, the index and the plain-words explanation of the targets are `results/E273/README.md`.
 
 | VAL 873 frames | p seed 0 | p seed 1 | mean p | g, mean of the seeds (E272 chain + geometric assigner) | d (recall_sp0_dp) |
 |---|---|---|---|---|---|
