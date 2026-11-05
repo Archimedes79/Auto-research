@@ -84,5 +84,37 @@ Estimate 8-9 GPU h in all, budget 10; replaced by measured values after step 2. 
 ## 6. Assumptions I chose
 1. Weights 3 / 2 and 0.5 are first guesses; no tuning on VAL before the run (the numbers of section 1 are diagnostics on the E273 checkpoints, not selections). 2. The topo F1 band is 0.02. 3. TEST is not used; a TEST check of a finished design needs Mirko's recorded OK. 4. The map is the lane-level map of E273 (lane GT with simulated errors). 5. Out of this card: the sparsification (arm s), temporal fusion by cross-attention to earlier nodes, the route attribute, the query-decoder reference (CGNet), the GT additions discussed in the report (events with or without painted evidence, occlusion by boxes), an ablation of the two node weights. 6. The scripts of section 1 (`diag_nodes.py`, `diag_nodes2.py`, `pixel_eval.py`, `thr_sweep.py`, `thr_sweep_nms.py`) are scratch kept in the git tag `lcr/e274-scratch`; they are promoted into a code folder with a test when a second card uses them.
 
-## 7. Summary
-Open.
+## 7. Summary (2026-11-05; VAL 873 frames, TEST untouched; numbers from `runs/e273/` and `runs/e274/` cards, ledger rows E274.*)
+**Verdicts (by hand, the rule of section 0, `verdict274`): arm r against c = CUT, arm p against r = CUT, arm p against c = CUT.** Baseline B (= c) stays the baseline of the lane head (D58); nothing of r or p is adopted.
+
+| VAL 873, mean of 2 seeds | c = B | c_thr (seed 1, node thr 0.4) | r | p | d |
+|---|---|---|---|---|---|
+| topo F1 | 0.596 | 0.551 | 0.557 | 0.580 | 0.741 |
+| F1@1.0 | 0.827 | 0.863 | 0.860 | 0.857 | 0.878 |
+| junction F1 | 0.125 | 0.088 | 0.121 | 0.123 | 0.273 |
+| lanes found | 0.637 | 0.768 | 0.767 | 0.744 | - |
+| node recall / precision | 0.833 / 0.871 | 0.909 / 0.761 | 0.883 / 0.813 | 0.882 / 0.813 | - |
+| duplicates (dup_frac) | 0.21 | 0.286 | 0.35 | 0.30 | 0.077 |
+| long-link precision / recall | 0.18 / 0.49 | - | 0.18 / 0.51 | 0.22 / 0.48 | - |
+| assignment p-g, exact map (guard >= -0.01) | -0.007 | - | -0.017 | -0.016 | - |
+| assignment p-g, map error 1-2 m (guard >= +0.03) | +0.071 | - | +0.061 | +0.060 | - |
+
+- **r.** Topo F1 -0.039 / -0.038 against c (band 0.02), the exact-map guard broken (-0.0173 / -0.0160), F1@1.0 +0.033 and the map-error gain kept. Reading: the weights move the operating point, they do not make the existence map cleaner. The matched reference c_thr (c at a lower node threshold, seed 1, in-sample) has the same topo F1 (0.551 against 0.557) and lanes found (0.768 against 0.756); r has the better junction F1 (0.121 against 0.088) and the better node precision (0.814 against 0.761), but more duplicates (0.34 against 0.29). Predictions: topo +0.05 missed (-0.039), junction F1 0.16 missed (0.121); node recall 0.883, F1@1.0 0.860 and node precision above 0.80 hit.
+- **p.** The dual-softmax loss raised the long-link precision (0.18 to 0.22) and lowered the duplicates (0.35 to 0.30), the topo F1 rose +0.025 / +0.020 over r, but the junction F1 gain over r is +0.003 / +0.0002 (predicted +0.06, band 0.03). Against c: topo -0.015 / -0.018 (inside the band), the exact-map guard broken (-0.0164 / -0.0156). The long-link loss is not the junction lever; where the junction F1 is lost is not the competition between long-link candidates.
+- **The assignment guard.** The gain with a 1-2 m map error holds in all arms (c +0.071, r +0.061, p +0.060). The exact-map guard breaks in r and p (about -0.016 against -0.007 for c): more duplicate nodes make the sections ambiguous for the assigner. The read-out step below was not yet scored on the assignment: that is a step of the new card.
+- **Gate caution (found 13:57).** The live GATE line printed at the end of phase 4 or 5 and the phase-7 record are different models (the phase-7 gate re-runs gates 2-6 on the final model). Junction F1 is 0.16-0.18 live and 0.11-0.126 final for c, r and p alike (joint refinement, phase 7, lowers it and raises the vertices per 100 m from 22-24 to 28-32; 150-frame gate, not verified on 873). My first reading of the p run (a junction gain of about +0.05 over r) compared a live line with a final record and was wrong; the 873-frame scoring above is not affected.
+- **Read-out diagnostic, in-sample on VAL (not a verdict).** `temp/e274/sweep_gpu.py` (scratch, tag `lcr/e274-scratch`): one prediction per model, then several read-outs. The position rule (greedy by existence probability, a node is dropped when a kept node lies within R m, applied before the link read-out) with R = 1.5 m, mean of the two seeds:
+
+| VAL 873, in-sample | topo F1 | F1@1.0 | junction F1 | lanes found | node recall / precision |
+|---|---|---|---|---|---|
+| c = B plain (thr 0.5) | 0.596 | 0.827 | 0.125 | 0.637 | 0.833 / 0.871 |
+| B + rule, thr 0.5 | 0.626 | 0.822 | 0.260 | 0.621 | 0.793 / 0.912 |
+| B + rule, thr 0.4 | 0.634 | 0.858 | 0.242 | 0.740 | 0.847 / 0.857 |
+| B + rule, thr 0.3 | 0.619 | 0.867 | 0.222 | 0.779 | 0.877 / 0.795 |
+| r + rule, thr 0.5 | 0.614 | 0.856 | 0.239 | 0.738 | 0.836 / 0.868 |
+| B + rule R = 2.5 m, thr 0.4 | 0.204 | 0.480 | 0.254 | 0.220 | 0.458 / 0.894 |
+| d (reference) | 0.741 | 0.878 | 0.273 | - | - |
+
+The rule doubles the junction F1 of B and gives +0.03 to +0.04 topo F1; the gap to d on the junction F1 shrinks from 0.15 to 0.03, the gap on topo F1 stays 0.11. With the rule r is not better than B (0.614 against 0.634 topo F1 at equal F1@1.0): the existence weights add nothing once close nodes are removed. The R = 2.5 m rule removes half the nodes (2 m grid) and the topology collapses. The 3 x 3 cell rule (also in the sweep) deleted about 85 % of the nodes: an indexing error in my scratch code, **discarded**. The duplicate share `dup_frac` does not fall with the rule (0.19 to 0.20 for seed 1), so "duplicates" is a hypothesis for what the rule repairs; which nodes it drops is not yet looked at. Selection freedom: two radii, three thresholds, on the set that is also scored: in-sample, labelled so.
+- **Consequences.** (1) The reweighting line (r) and the long-link competition line (p) are closed for the junction problem; closed_questions.md gets no entry yet (the read-out result changes the question). (2) A name for the rule and a clean test are the card E275 (`experiments/E275_node-readout-suppression/`); the soft, trained replacement (D55) follows as its own card after E275's analysis. (3) Open: an ablation of the two weights (events, intersections) was not run; seed 0 of c shares phases 2-4 with earlier launches (loose twin).
+- **Cost.** Job hours: r 2 x 3.6 h (estimate 2.4 h each: at the 1.5 x kill line, not past it), p 2 x 1.8 h (estimate 1.1 h), scoring and sweeps about 1.3 h: 12 job hours against the 10 budgeted, about 6.7 h of wall clock because two jobs ran at once. The estimates of section 4 were too low for r.

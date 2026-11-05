@@ -175,3 +175,5 @@ status.json
 !/bev_fusion_lane_center/results/E273.*/package.json
 !/bev_fusion_lane_center/results/E273.*/provenance.json
 !/bev_fusion_lane_center/results/E273.*/README.md
+# E274: the experiment's result page in git (numbers per seed, tags, hashes, rebuild commands)
+!/bev_fusion_lane_center/results/E274/

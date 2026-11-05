@@ -1,0 +1,46 @@
+{
+ "id": "E274.r_s0",
+ "hypothesis": "E274: the E273 pyramid head with recall weights (positives of the node existence loss) at event cells and inside intersections (arm r) and a dual-softmax loss over the long links (arm p = r + it) raises node recall and the topology of the delivered graph: topo F1 above the E273 checkpoints by more than 0.02 on both seeds with the assignment gain kept",
+ "prediction": "r: topo F1 0.596 -> about 0.65 (+0.05), node recall 0.83 -> 0.90 at precision >= 0.80, F1@1.0 -> 0.86; p: junction F1 +0.06 over r, long-link precision 0.18 -> 0.30",
+ "rule": "E274 card section 0: KEEP if topo F1 gain over c > +0.02 on both seeds (band 0.02), guards lane_acc_exact p-g >= -0.01, lane_acc_err p-g >= +0.03, F1@1.0 not below c - 0.01; p vs r on junction F1 band 0.03; two seeds, VAL 873, final checkpoint; by hand (verdict274) because card.validate cannot read assignment numbers",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh qgraph_train.py --name e274_r_s0 --seed 0 --workers 3 --node-w-evt 2 --node-w-inter 1 --gate-phases 3 --gate-node-prec 0.75",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 36573,
+ "created": "2026-11-05T08:30:14",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-05T08:30:26",
+ "code_hash": "96380a298864",
+ "commit": "03acfe78a7",
+ "tag": "lcr/E274.r_s0",
+ "git_note": "",
+ "pid": 36635,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/temp/e274/wait_gate.sh",
+   "bev_fusion_lane_center/temp/e274/wait_r_done.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 13004,
+ "attempts": 1,
+ "ended": "2026-11-05T12:07:15",
+ "last_lines": [
+  "39 n_u 0.238 l_link 0.122 l_long 0.092 l_deg 1.672 l_scale 0.161 l_pos 1660.000 l_pairs 35303.000 l_miss 0.000 s_ce 0.818 s_pair 0.395 a_asg 0.091 a_fp 0.948 a_road 0.109 a_struct 0.315 a_acc 0.961",
+  "11:54:54 step 1800/2000 loss 7.5533 lr 9.36e-06 1.716 s/step px_centre 1.408 px_events 0.734 px_lines 0.460 px_road 0.142 n_e 0.137 n_flags 0.874 n_off 0.397 n_dir 0.042 n_s 0.319 n_u 0.429 l_link 0.311 l_long 0.128 l_deg 1.730 l_scale 0.211 l_pos 2252.000 l_pairs 51522.000 l_miss 0.000 s_ce 1.530 s_pair 0.362 a_asg 0.235 a_fp 0.997 a_road 0.321 a_struct 0.399 a_acc 0.906",
+  "11:57:41 step 1900/2000 loss 7.2891 lr 5.36e-06 1.714 s/step px_centre 1.522 px_events 0.785 px_lines 0.639 px_road 0.216 n_e 0.140 n_flags 0.851 n_off 0.398 n_dir 0.045 n_s 0.248 n_u 0.410 l_link 0.192 l_long 0.110 l_deg 1.753 l_scale 0.201 l_pos 2087.000 l_pairs 48959.000 l_miss 0.000 s_ce 1.410 s_pair 0.311 a_asg 0.130 a_fp 0.939 a_road 0.433 a_struct 0.303 a_acc 0.964",
+  "12:00:17 step 2000/2000 loss 7.6861 lr 4.00e-06 1.706 s/step px_centre 1.422 px_events 0.703 px_lines 0.407 px_road 0.141 n_e 0.101 n_flags 0.799 n_off 0.380 n_dir 0.062 n_s 0.275 n_u 0.245 l_link 0.181 l_long 0.080 l_deg 1.491 l_scale 0.173 l_pos 1386.000 l_pairs 33196.000 l_miss 0.000 s_ce 1.899 s_pair 0.396 a_asg 0.134 a_fp 0.847 a_road 0.119 a_struct 0.356 a_acc 0.950",
+  "12:00:17 done 2000",
+  "12:06:59 GATE {\"p2\": {\"centre_f1\": 0.9109989345014595, \"e271_centre_f1\": 0.9171841900372891, \"road_iou\": 0.8655864063062166, \"inter_iou\": 0.7697186360233709}, \"p3\": {\"node_f1\": 0.8043323118370033, \"node_prec\": 0.8935800274138571, \"node_rec\": 0.7312932448101981, \"node_prec_2m\": 0.8991539300030961, \"node_rec_2m\": 0.9331411166975069, \"e271_f1\": 0.6123079052987367, \"pos_err_med\": 0.26694028079509735, \"flag_recall\": {\"stop\": 0.6666666666666666, \"exit\": 0.5816023738872403, \"split\": 0.4781491002570694, \"merge\": 0.5186813186813187, \"start\": 0.3595505617977528, \"end\": 0.22988505747126436, \"win_in\": 0.8371794871794872, \"win_out\": 0.8296089385474861}}, \"p4\": {\"link_prec\": 0.2262615582369283, \"link_rec\": 0.8176131255618819, \"link_f1\": 0.3544379851255237, \"junction_F1\": 0.11251735118804604, \"F1_1\": 0.8662060679684613, \"topo_F1\": 0.5332048965002922, \"lanes_found\": 0.7758473369410425, \"Q\": 0.6472034830660509, \"pieces_per_gt_piece\": 1.3781307269395235, \"id_switches\": 0.9510339445961764, \"vert100_dp\": 28.36126047398843, \"node_f1_scorer\": 0.8472507956603541}, \"p5\": {\"section_start_acc\": 0.4713732718894009, \"junction_F1\": 0.11711867334600103, \"F1_1\": 0.8661015143983939, \"topo_F1\": 0.5536394631429323, \"lanes_found\": 0.7761321560808886, \"Q\": 0.6475172579120884, \"pieces_per_gt_piece\": 1.919975565058033, \"id_switches\": 2.384900507218104, \"vert100_dp\": 27.995846327495833, \"node_f1_scorer\": 0.8472507956603541}, \"p6\": {\"lane_acc_error\": 0.9005668398677373, \"geo_acc_error\": 0.8714769327664935, \"lane_acc_exact\": 0.9308755760368663, \"geo_acc_exact\": 0.9447741935483871}, \"pass\": true, \"why\": \"phase 7: numbers only\"}",
+  "12:07:00 all phases done [2, 3, 4, 5, 6, 7]"
+ ]
+}
