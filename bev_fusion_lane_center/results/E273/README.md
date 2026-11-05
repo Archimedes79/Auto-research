@@ -63,7 +63,7 @@ wsl bash tools/env/_py14.sh qgraph_run_eval.py verdict --runs e273_p_s0 e273_p_s
 wsl bash tools/env/_py14.sh qgraph_timing.py --run e273_p_s0 --n 60                  # ms per stage (idle GPU)
 wsl bash tools/env/_py14.sh qgraph_results.py --run e273_p_s0 --id E273.p_s0 --device cpu --scenes 11 39 23   # figures, videos, frames
 ```
-Training (through the launcher; seed 1 shown): `python3 ../autoresearch/tools/run.py --id E273.p_s1 --seed 1 --gpu --retries 0 --require-card -- bash tools/env/_pyr.sh qgraph_train.py --name e273_p_s1 --seed 1 --workers 3 --no-gates`. The files `eval/metrics.json` and `package.json` of a run were written from its scoring card by a scratch script (in the scratch tag of this loop).
+Training (through the launcher; seed 1 shown): `python3 ../autoresearch/tools/run.py --id E273.p_s1 --seed 1 --gpu --retries 0 --require-card -- bash tools/env/_pyr.sh qgraph_train.py --name e273_p_s1 --seed 1 --workers 3 --no-gates`. The files `eval/metrics.json` and `package.json` of a run were written from its scoring card by a scratch script (`finish_run.py` in the git tag `lcr/e273-scratch`, which keeps the text files of all E273 scratch: launchers, probes, patch scripts, picture and ledger scripts).
 
 ## Qualitative
 Each run's `videos/` hold three VAL scenes (the six camera views with the lane graph projected, the pixel maps with their errors, the node graph with Hermite links, GT piece ids and delivered ids as colours); `figures/` one frame of each. On plain roads the nodes lie on the lanes with the right ids (colour constant along a lane); every intersection shows a ring of false (red) and missed (blue) connectors, which is the number story above. Start with `E273.p_s0/videos/scene-0221_e273_p_s0.mp4`.

@@ -280,7 +280,7 @@ The assignment guard numbers are VAL 873 frames, map error "1-2 m" = one fixed p
 
 (reference d: junction F1 0.273, F1@1.0 0.878, topo F1 0.740, lanes found 0.781; gate numbers of the aborted run folders in `runs/_superseded/e273_p_s0_v<k>_p4/log.txt`.)
 
-**Where the graph loses (measured, one-off probes in `temp/e273_probes/`, then tagged):**
+**Where the graph loses (measured, one-off probes in `temp/e273_probes/`, kept in the git tag `lcr/e273-scratch`):**
 - **Node recall caps the topology.** 17 % of the GT nodes are not delivered (node R 0.83); on the oracle graph (VAL GT) dropping 10 % of the nodes at random alone lowers topo F1 from 0.97 to 0.70. The events are the weakest nodes: recall stop 0.72-0.74, exit 0.67-0.72, split 0.56-0.59, merge 0.63-0.64, start 0.45-0.49, end 0.35-0.40 (window in / out 0.80-0.84); precision of the event flags is only 0.3-0.4.
 - **Long links through intersections are the failure.** Short links are good (P 0.84, R 0.96). Long links have P 0.17-0.19 and R 0.47-0.50: 19-23 % of the delivered length is duplicate (dup_frac 0.21 mean of the seeds against d 0.077), the junction P is 0.07 at R 0.62-0.65 (d: 0.21 / 0.38), and the pictures show a ring of false (red) and missed (blue) connectors around every intersection. A lane chain of 30 m has about 15 links, so independent link decisions break chains: at 0.87 per link only 12 % of the paths stay whole; the row-softmax variant (v6) did not fix it.
 - **The delivered graph is 2-3 times denser than d:** 28.9 / 31.5 vertices per 100 m after Douglas-Peucker 0.3 m (18.2 / 20.5 node ids) against the budget 14.3 and d's 10.9; Q (S without the sparsity term) 0.633 against 0.742. The E271 differentiable sparsification is not yet applied on the node chain.
