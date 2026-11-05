@@ -3,6 +3,9 @@
     wsl bash tools/env/_py14.sh qgraph_run_eval.py score --run e273_p_s0 [--seed 0] [--n 0]      # p: graph, nodes, assignment (exact map and map error 1-2 m); g: E272 chain + geometric assigner
     wsl bash tools/env/_py14.sh qgraph_run_eval.py verdict --runs e273_p_s0 e273_p_s1               # the rule of the card, mean of the seeds (by hand: the numbers are printed)
 
+E275: `score --exp e275 --readouts plain@0.5 close:1.5@0.5 close:1.5@0.4 plain@0.4 [--curve 1.0 1.25 1.75 2.0] [--dump]` scores several read-outs (`qgraph_readout.py`) of one model on one prediction pass,
+one card per read-out in `runs/e275/<run>.<spec>/`; `verdict275` = the written rule of the E275 card (tested by `tests/test_verdict275.py`).
+
 p = the lane head (`runs/<run>/model.pt`), its delivered graph read out by `evaluation/qgraph_eval.py` (e >= 0.5, p >= 0.5; the named output step); frames = `qgraph_eval.val_frames()` (VAL only,
 never TEST). g = the E272 chain of the same seed (`runs/e272_j_s<seed>`, read out at the card threshold) whose delivered vertices are assigned to the same lane-level map tokens by the
 GEOMETRIC start-value assigner of E272 (sigma 1.5 m, lambda 2, dustbin 4: `qassign.Assigner` without its learned part); d = the stored numbers of the lane suite run of `recall_sp0_dp`
@@ -25,6 +28,7 @@ for sub in ("evaluation", "training", "training/grid", "training/data", ".."):
 import lane_gt_data as LD  # noqa: E402
 import map_sim as MS  # noqa: E402
 import qgraph_eval as QE  # noqa: E402
+import qgraph_readout as RO  # noqa: E402
 import qpredict as QP  # noqa: E402
 
 # the reference graph d = recall_sp0_dp: lane suite run graphs_recall_sp0_dp_carry_20261104_181557 (VAL 873)
@@ -111,20 +115,57 @@ def bootstrap_diff(rec_a, rec_b, scenes, B=1000, seed=0):
     return float(d0), float(np.percentile(ds, 2.5)), float(np.percentile(ds, 97.5))
 
 
-def score(run, seed, n=0, device="cuda", exp="e273"):
+def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), dump=None, max_drop=0.20, repro=None, repro_tol=0.005):
+    """one prediction pass per map mode, then every read-out in `readouts` (qgraph_readout specs, 'plain@0.5' / 'close:1.5@0.5') is scored on it. readouts=None is the E273 / E274 way: one
+    card runs/<exp>/<run>/ at e >= 0.5. With readouts: one card per spec, runs/<exp>/<run>.<spec name>/ (card['run'] stays the model; card['readout'] holds the step's counts and ms per frame; the
+    control g is computed once and shared). curve: radii of close-node suppression scored on the delivered graph only (exact map, e >= 0.5) -> runs/<exp>/<run>.curve.json. dump: path for the
+    candidate nodes (e >= 0.2) of the exact-map pass (scratch pickle for the analysis). max_drop: the kill criterion of the E275 card, a close-node spec that deletes a larger share of the
+    nodes delivered at its threshold stops the scoring before any card is written. repro: path of the E274 sweep json of this model; the close:1.5@0.5 read-out must reproduce its entry
+    'pos1.5_e0.5' (topo F1, F1@1.0, junction F1, lanes found, node P / R) within repro_tol, else the scoring stops after the exact-map pass, before the control and before any card is written."""
     t0 = time.time()
     frames = QE.val_frames()[: n or None]
     share = QE.stored_share(frames)
     assert share == 1.0, f"only {share:.3f} of the VAL frames have a stored lane GT"
     card = dict(run=run, seed=seed, split="val", frames=len(frames), date=time.strftime("%Y-%m-%d %H:%M"), d_ref=D_REF)
-    res, recs = {}, {}
+    specs = [RO.parse(s) for s in readouts] if readouts else [RO.parse("plain@0.5")]
+    res, recs, info, curve_out = {s: {} for s in specs}, {s: {} for s in specs}, {}, {}
     for mode in ("exact", "error"):
         ds, preds = predict_val(run, mode, n, device)
         assert [int(ds.bd.rows[k]) for k in ds.ks][: len(frames)] == [f.row for f in frames], "the frame order of the loader differs from the scorer's"
-        out, rec = QE.score_frames(preds, frames, records=True)
-        res[mode], recs[mode] = out, rec
-    card["p"] = dict(graph=res["exact"]["graph"], nodes=res["exact"]["nodes"], assign_exact=res["exact"]["assign"], assign_error=res["error"]["assign"])
-    # the control g
+        if mode == "exact":
+            if dump:
+                os.makedirs(os.path.dirname(dump), exist_ok=True)
+                RO.dump_nodes(preds, [f.row for f in frames], dump)
+            for s in specs:
+                if s.kind != "close":
+                    continue
+                before, after = RO.counts(preds, s)
+                info[s] = dict(spec=RO.name(s), radius=s.radius, thr_e=s.thr, nodes_before=before, nodes_after=after, dropped_frac=1.0 - after / max(before, 1), tied_pairs_within_radius=RO.tied_pairs(preds, s), ms_per_frame=RO.timed(preds, s))
+                print(f"{run} {RO.name(s)}: {before} nodes delivered, {after} after the step ({100 * info[s]['dropped_frac']:.1f} % dropped), {info[s]['ms_per_frame']:.3f} ms per frame", flush=True)
+                if info[s]["dropped_frac"] > max_drop:                                                    # the kill criterion of the card is for the judged spec (threshold 0.5); the others only warn
+                    msg = f"{RO.name(s)} drops {100 * info[s]['dropped_frac']:.1f} % of the delivered nodes (limit {100 * max_drop:.0f} %)"
+                    if s.thr >= 0.5:
+                        raise SystemExit(f"KILL CRITERION: {msg}: nothing written, search the code")
+                    print(f"WARNING (reported spec, not judged): {msg}", flush=True)
+            for r in curve:                                                                              # graph numbers only, at e >= 0.5
+                o = QE.score_frames([RO.apply(p, RO.Spec("close", float(r), 0.5)) for p in preds], frames)
+                curve_out[f"{r:g}"] = {k: o["graph"][k] for k in ("topo_F1", "F1@1.0", "junction_F1", "lanes_found", "Q", "dup_frac", "vert100_dp")} | {k: o["nodes"][k] for k in ("node_P", "node_R")}
+                print(f"{run} close {r:g} m, e>=0.5: topo {curve_out[f'{r:g}']['topo_F1']:.3f} F1@1 {curve_out[f'{r:g}']['F1@1.0']:.3f} junction {curve_out[f'{r:g}']['junction_F1']:.3f} "
+                      f"lanes {curve_out[f'{r:g}']['lanes_found']:.3f} node R {curve_out[f'{r:g}']['node_R']:.3f}", flush=True)
+        for s in specs:
+            out, rec = QE.score_frames([RO.apply(p, s) for p in preds], frames, thr_e=s.thr, records=True)
+            res[s][mode], recs[s][mode] = out, rec
+            if mode == "exact" and repro and s == RO.Spec("close", 1.5, 0.5):                          # layer 1: the named step must reproduce the scratch sweep of E274
+                ref = json.load(open(repro))["pos1.5_e0.5"]
+                mine = dict(topo_F1=out["graph"]["topo_F1"], F1_1=out["graph"]["F1@1.0"], junction_F1=out["graph"]["junction_F1"], lanes_found=out["graph"]["lanes_found"],
+                            node_P=out["nodes"]["node_P"], node_R=out["nodes"]["node_R"])
+                dif = {k: abs(mine[k] - ref[k]) for k in mine}
+                print(f"{run} close1.5_t0.5 against the E274 sweep: max abs difference {max(dif.values()):.2e} ({repro})", flush=True)
+                if max(dif.values()) > repro_tol:
+                    raise SystemExit(f"KILL CRITERION: the step does not reproduce the E274 sweep (tolerance {repro_tol}): {dif}: nothing written, search the code")
+                info[s]["reproduces_e274_sweep_max_abs_diff"] = max(dif.values())
+        del preds
+    # the control g (does not depend on the read-out of p)
     vs = chain_vertices(seed, n, device)
     g_rec = {}
     g_res = {}
@@ -137,21 +178,36 @@ def score(run, seed, n=0, device="cuda", exp="e273"):
             f._lane = f._ref = None
         g_rec[mode] = rec
         g_res[mode] = QE.assign_numbers(QE.pool_counts(rec))
-    card["g"] = dict(assign_exact=g_res["exact"], assign_error=g_res["error"], vertices_per_frame=float(np.mean([len(v[0]) for v in vs])))
     scenes = [f.scene for f in frames]
-    card["diff"] = {mode: dict(zip(("mean", "lo", "hi"), bootstrap_diff(recs[mode]["assign"], g_rec[mode], scenes))) for mode in ("exact", "error")}
-    card["seconds"] = round(time.time() - t0, 1)
-    out_dir = os.path.join(ROOT, "runs", exp, run)                                                      # runs/e273/<run> (E273) or runs/e274/<run> (E274)
-    os.makedirs(out_dir, exist_ok=True)
-    json.dump(card, open(os.path.join(out_dir, "card.json"), "w"), indent=1, default=float)
-    write_md(card, os.path.join(out_dir, "results.md"))
-    return card
+    cards = {}
+    for s in specs:
+        c = dict(card)
+        c["p"] = dict(graph=res[s]["exact"]["graph"], nodes=res[s]["exact"]["nodes"], assign_exact=res[s]["exact"]["assign"], assign_error=res[s]["error"]["assign"])
+        c["g"] = dict(assign_exact=g_res["exact"], assign_error=g_res["error"], vertices_per_frame=float(np.mean([len(v[0]) for v in vs])))
+        c["diff"] = {mode: dict(zip(("mean", "lo", "hi"), bootstrap_diff(recs[s][mode]["assign"], g_rec[mode], scenes))) for mode in ("exact", "error")}
+        if readouts:
+            c["readout"] = {**dict(spec=RO.name(s), kind=s.kind, radius=s.radius, thr_e=s.thr), **(info.get(s) or {})}
+            old = next((json.load(open(p)) for p in (os.path.join(ROOT, "runs", e, run, "card.json") for e in ("e273", "e274")) if os.path.exists(p)), None)
+            if s == RO.Spec("plain", None, 0.5) and old is not None and old.get("frames") == len(frames):    # layer 1: the unchanged read-out must give the stored card (same frames)
+                diffs = [abs(c["p"]["graph"][k] - old["p"]["graph"][k]) for k in ("topo_F1", "F1@1.0", "junction_F1", "lanes_found", "Q", "dup_frac")]
+                diffs += [abs(c["diff"][m]["mean"] - old["diff"][m]["mean"]) for m in ("exact", "error")]
+                c["readout"]["reproduces_stored_card_max_abs_diff"] = max(diffs)
+                print(f"{run} plain@0.5 against the stored card: max abs difference {max(diffs):.2e}", flush=True)
+        c["seconds"] = round(time.time() - t0, 1)
+        out_dir = os.path.join(ROOT, "runs", exp, f"{run}.{RO.name(s)}" if readouts else run)         # runs/e273/<run> (E273), runs/e274/<run> (E274), runs/e275/<run>.<spec> (E275)
+        os.makedirs(out_dir, exist_ok=True)
+        json.dump(c, open(os.path.join(out_dir, "card.json"), "w"), indent=1, default=float)
+        write_md(c, os.path.join(out_dir, "results.md"))
+        cards[s] = c
+    if curve_out:
+        json.dump(dict(run=run, seed=seed, thr_e=0.5, frames=len(frames), curve=curve_out), open(os.path.join(ROOT, "runs", exp, f"{run}.curve.json"), "w"), indent=1, default=float)
+    return cards[specs[0]] if not readouts else cards
 
 
 def write_md(c, path):
     p, g, dd = c["p"], c["g"], c["d_ref"]
     gr = p["graph"]
-    L = [f"# {c['run']} (seed {c['seed']}), VAL {c['frames']} frames, {c['date']}", "",
+    L = [f"# {c['run']}{' [' + c['readout']['spec'] + ']' if 'readout' in c else ''} (seed {c['seed']}), VAL {c['frames']} frames, {c['date']}", "",
          "| | p (lane head) | g (E272 chain + geometric assigner) | d (recall_sp0_dp) |", "|---|---|---|---|",
          f"| lane_acc, exact map | {p['assign_exact'].get('lane_acc', float('nan')):.4f} | {g['assign_exact']['lane_acc']:.4f} | |",
          f"| lane_acc, map error 1-2 m | {p['assign_error'].get('lane_acc', float('nan')):.4f} | {g['assign_error']['lane_acc']:.4f} | |",
@@ -163,6 +219,9 @@ def write_md(c, path):
          f"| vertices per 100 m: node ids / Douglas-Peucker 0.3 m (budget 14.3 on the DP basis) | {gr.get('vert100', float('nan')):.1f} / {gr.get('vert100_dp', float('nan')):.1f} | | {dd['vert100']:.1f} / |",
          f"| pieces per GT piece, id switches per 100 m | {gr.get('pieces_per_gt_piece', float('nan')):.3f}, {gr.get('id_switches_per_100m', float('nan')):.3f} | | |", "", "graph numbers of p: `qgraph_eval.graph_metrics` (the lane suite's functions); d from " + dd["source"] + ".", "",
          "```json", json.dumps({k: c["p"][k] for k in ("graph", "nodes")}, indent=1, default=float)[:3000], "```"]
+    if "readout" in c:                                                                                  # E275: the read-out step and its counts
+        L.insert(1, "")
+        L.insert(2, "read-out: " + ", ".join(f"{k} {v:.4g}" if isinstance(v, float) else f"{k} {v}" for k, v in c["readout"].items() if v is not None))
     open(path, "w", encoding="utf-8").write("\n".join(L) + "\n")
 
 
@@ -189,7 +248,7 @@ def verdict(runs):
     return out
 
 
-def verdict274(var, ctl, exp_var="e274", exp_ctl="e273", metric="topo_F1", band=0.02, root=None):
+def verdict274(var, ctl, exp_var="e274", exp_ctl="e273", metric="topo_F1", band=0.02, root=None, verbose=True, topo_guard=True):
     """the rule of the E274 card (section 0), by hand like E273: the variant's gain of `metric` over the control (per seed, same seed number), guards on the assignment and the delivered graph, and
     the system pass against the reference d (reported). KEEP: gain above the band on both seeds and every guard held; CUT: a gain below -band on any seed or a guard broken; TIE: both gains
     inside the band; anything else INCONCLUSIVE (add a seed). Guards: lane_acc_exact p - g >= -0.01, lane_acc_err p - g >= +0.03 (mean of the seeds), F1@1.0 not below the control by more than 0.01 on
@@ -204,7 +263,7 @@ def verdict274(var, ctl, exp_var="e274", exp_ctl="e273", metric="topo_F1", band=
     guards = dict(lane_acc_exact_p_minus_g=mean(lambda c: c["diff"]["exact"]["mean"]) >= -0.01, lane_acc_err_p_minus_g=mean(lambda c: c["diff"]["error"]["mean"]) >= 0.03,
                   F1_1_not_below_control_by_0_01=all(g >= -0.01 for g in f1))
     topo_gain = [a["p"]["graph"]["topo_F1"] - b["p"]["graph"]["topo_F1"] for a, b in zip(cv, cc)]
-    if metric != "topo_F1":
+    if metric != "topo_F1" and topo_guard:                                                    # the E274 card's guard for arm p against r; the E275 card has none (verdict275 passes False)
         guards["topo_F1_not_below_control_by_0_01"] = all(g >= -0.01 for g in topo_gain)
     side = ("up" if all(g > band for g in gain) else "down" if any(g < -band for g in gain) else "inside" if all(abs(g) <= band for g in gain) else "mixed")
     v = "CUT" if (side == "down" or not all(guards.values())) else "KEEP" if side == "up" else "TIE" if side == "inside" else "INCONCLUSIVE (seeds differ: add a seed)"
@@ -214,7 +273,43 @@ def verdict274(var, ctl, exp_var="e274", exp_ctl="e273", metric="topo_F1", band=
     sysm["system_pass_vs_d"] = bool(sysm["topo_F1"] >= D_REF["topo_F1"] - 0.03 and sysm["F1_1"] >= D_REF["F1_1"] - 0.03)
     out = dict(verdict=v, metric=metric, band=band, gain_per_seed=gain, side=side, guards=guards, F1_1_gain_per_seed=f1, topo_F1_gain_per_seed=topo_gain, variant_numbers=sysm, variant=var, control=ctl,
                note="by hand: card.validate cannot read assignment numbers; the written rule of the E274 card (section 0), both seeds on the same side; density and system pass are reported, not judged, for arms r and p")
-    print(json.dumps(out, indent=1))
+    if verbose:
+        print(json.dumps(out, indent=1))
+    return out
+
+
+def verdict275(var, ctl, exp_var="e275", exp_ctl="e273", root=None, lanes_tol=0.03, verbose=True, spec="close1.5_t0.5", frames=873):
+    """the rule of the E275 card (section 0) for the close-node suppression (variant `var`: the cards of the step, control `ctl`: the same models read out as before; both lists in the same seed
+    order). Two calls of verdict274 (topo_F1, band 0.02; junction_F1, band 0.03: each with the assignment guards and the F1@1.0 guard of that function, WITHOUT the topo guard of the E274 card) and
+    one more guard: lanes_found not below the control by more than `lanes_tol` on any seed. KEEP: both headlines up on both seeds and every guard held. CUT: either headline down on a seed or any
+    guard broken. TIE: both inside their bands and the guards held. Everything else: INCONCLUSIVE (goes to Mirko: there is no further seed without retraining).
+    What it judges is checked first: two seeds (0 and 1) in the same order, `frames` frames in every card, the variant cards carry the read-out `spec`, the control cards none (or plain_t0.5)."""
+    root = root or ROOT
+    load = lambda exp, r: json.load(open(os.path.join(root, "runs", exp, r, "card.json")))  # noqa: E731
+    cv, cc = [load(exp_var, r) for r in var], [load(exp_ctl, r) for r in ctl]
+    assert [c["seed"] for c in cv] == [c["seed"] for c in cc] == [0, 1], f"the rule needs seeds 0 and 1 in this order, got {[c['seed'] for c in cv]} against {[c['seed'] for c in cc]}"
+    assert all(c["frames"] == frames for c in cv + cc), f"every card must hold {frames} frames: {[c['frames'] for c in cv + cc]}"
+    assert all(c.get("readout", {}).get("spec") == spec for c in cv), f"the variant cards must carry the read-out {spec}: {[c.get('readout', {}).get('spec') for c in cv]}"
+    assert all(c.get("readout", {}).get("spec", "plain_t0.5") == "plain_t0.5" for c in cc), "the control cards must be read out as before (no read-out step)"
+    t = verdict274(var, ctl, exp_var, exp_ctl, "topo_F1", 0.02, root, verbose=False, topo_guard=False)
+    j = verdict274(var, ctl, exp_var, exp_ctl, "junction_F1", 0.03, root, verbose=False, topo_guard=False)
+    lanes = [a["p"]["graph"]["lanes_found"] - b["p"]["graph"]["lanes_found"] for a, b in zip(cv, cc)]
+    guards = dict(t["guards"])
+    guards["lanes_found_not_below_control_by_%g" % lanes_tol] = all(x >= -lanes_tol for x in lanes)
+    sides = (t["side"], j["side"])
+    if "down" in sides or not all(guards.values()):
+        v = "CUT"
+    elif sides == ("up", "up"):
+        v = "KEEP"
+    elif sides == ("inside", "inside"):
+        v = "TIE"
+    else:
+        v = "INCONCLUSIVE (the two headlines or the seeds disagree; goes to Mirko)"
+    out = dict(verdict=v, topo_F1=dict(side=t["side"], gain_per_seed=t["gain_per_seed"]), junction_F1=dict(side=j["side"], gain_per_seed=j["gain_per_seed"]), lanes_found_gain_per_seed=lanes,
+               F1_1_gain_per_seed=t["F1_1_gain_per_seed"], guards=guards, variant_numbers=t["variant_numbers"], variant=var, control=ctl,
+               note="by hand: the written rule of the E275 card (section 0); in-sample on VAL; density and system pass are reported, not judged")
+    if verbose:
+        print(json.dumps(out, indent=1))
     return out
 
 
@@ -225,7 +320,17 @@ def main():
     s.add_argument("--run", required=True)
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--n", type=int, default=0)
-    s.add_argument("--exp", default="e273", help="the experiment folder of the scoring card: runs/<exp>/<run>/")
+    s.add_argument("--exp", default=None, help="the experiment folder of the scoring card: runs/<exp>/<run>/ (default e273; required with --readouts, e.g. e275)")
+    s.add_argument("--readouts", nargs="+", default=None, help="E275: read-out specs (plain@0.5 close:1.5@0.5 ...); one card per spec in runs/<exp>/<run>.<spec>/ (qgraph_readout.py)")
+    s.add_argument("--curve", nargs="*", type=float, default=[], help="E275: radii of close-node suppression scored on the graph only (e >= 0.5) -> runs/<exp>/<run>.curve.json")
+    s.add_argument("--dump", action="store_true", help="E275: write the candidate nodes of the exact-map pass to temp/<exp>/pred_<run>.pkl (scratch, for the analysis)")
+    s.add_argument("--max-drop", type=float, default=0.20, help="E275 kill criterion: stop when a close-node spec (threshold >= 0.5) drops more than this share of the delivered nodes")
+    s.add_argument("--repro", default=None, help="E275: the E274 sweep json of this model (temp/e274/sweep_<run>.json): close:1.5@0.5 must reproduce its pos1.5_e0.5 entry within 0.005")
+    x = sub.add_parser("verdict275")
+    x.add_argument("--var", nargs="+", required=True, help="the cards of the step, runs/<exp-var>/<name>/ (both seeds)")
+    x.add_argument("--ctl", nargs="+", required=True, help="the control cards (both seeds)")
+    x.add_argument("--exp-var", default="e275")
+    x.add_argument("--exp-ctl", default="e273")
     v = sub.add_parser("verdict")
     v.add_argument("--runs", nargs="+", required=True)
     w = sub.add_parser("verdict274")
@@ -237,10 +342,17 @@ def main():
     w.add_argument("--band", type=float, default=0.02)
     a = ap.parse_args()
     if a.cmd == "score":
-        c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu", exp=a.exp)
-        print(open(os.path.join(ROOT, "runs", a.exp, a.run, "results.md"), encoding="utf-8").read())
+        if a.readouts and not a.exp:
+            ap.error("--readouts needs --exp (e.g. e275): the default folder of the E273 cards must not receive read-out cards")
+        a.exp = a.exp or "e273"
+        dump = os.path.join(ROOT, "temp", a.exp, f"pred_{a.run}.pkl") if a.dump else None
+        c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu", exp=a.exp, readouts=a.readouts, curve=a.curve, dump=dump, max_drop=a.max_drop, repro=a.repro)
+        if not a.readouts:
+            print(open(os.path.join(ROOT, "runs", a.exp, a.run, "results.md"), encoding="utf-8").read())
     elif a.cmd == "verdict274":
         verdict274(a.var, a.ctl, a.exp_var, a.exp_ctl, a.metric, a.band)
+    elif a.cmd == "verdict275":
+        verdict275(a.var, a.ctl, a.exp_var, a.exp_ctl)
     else:
         verdict(a.runs)
 
