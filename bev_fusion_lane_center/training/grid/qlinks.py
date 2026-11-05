@@ -8,6 +8,7 @@ Candidates (index choices with the gradient through the values, named in the car
   active nodes   the K cells with the largest existence (and above 0.05, or a GT node in training)
   short links    pairs of active nodes within 4 cells (+-8 m) in each axis, not behind the node (the offset of j in i's frame along > -1 m)
   long links     the top-KL nodes by `uout` x the top-KL nodes by `uin`, 8 m < distance <= 100 m, inside a 75 degree forward cone (through intersections: the stop -> exit connectors)
+The tokens first pass 2 layers of self-attention over the active nodes of the frame (with the node's position, direction and scores e / flags / u as extra input: which entry joins which exit is a question about the whole junction).
 Link logit = MLP([token i, token j, geometry (offset of j in i's frame along / across / distance at two scales, heading change cos / sin, long flag), evidence along the curve (mean, minimum,
 gap share of the centre probability at 16 points of the Hermite curve)]); the curve is a cubic Hermite segment from (pos i, dir i) to (pos j, dir j) with handles a, b x chord: 1/3 for short
 links, 0.9 x sigmoid(MLP) for long links (the learned scales; the targets are the fitted scales of `qtargets.fit_long_scales`).
@@ -20,6 +21,7 @@ import math
 import torch
 import torch.nn as nn
 
+from qassign import fourier_pts
 from qnodes import N, cell_centres, sample, unit
 
 SHORT = 8.0
@@ -42,9 +44,27 @@ def gather(m, idx):
     return m.flatten(2).gather(2, idx[:, None, :].expand(B, C, -1)).transpose(1, 2)
 
 
-class LinkHead(nn.Module):
-    def __init__(self, d=64, hidden=128):
+class SetBlock(nn.Module):
+    """self-attention over the active nodes of a frame (all pairs, padding masked), pre-norm, residual, feed-forward"""
+
+    def __init__(self, d, heads=4):
         super().__init__()
+        self.n1, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.att = nn.MultiheadAttention(d, heads, batch_first=True)
+        self.ffn = nn.Sequential(nn.Linear(d, 2 * d), nn.GELU(), nn.Linear(2 * d, d))
+
+    def forward(self, x, pad):
+        h = self.n1(x)
+        a = self.att(h, h, h, key_padding_mask=pad, need_weights=False)[0]
+        x = x + torch.nan_to_num(a)
+        return x + self.ffn(self.n2(x))
+
+
+class LinkHead(nn.Module):
+    def __init__(self, d=64, hidden=128, ctx_layers=2):
+        super().__init__()
+        self.nin = nn.Sequential(nn.Linear(16 + 2 + 11, d), nn.GELU(), nn.Linear(d, d))
+        self.ctx = nn.ModuleList([SetBlock(d) for _ in range(ctx_layers)])
         nin = 2 * d + 9
         self.scale = nn.Sequential(nn.Linear(nin, 64), nn.GELU(), nn.Linear(64, 2))
         self.mlp = nn.Sequential(nn.Linear(nin + 2 + 3, hidden), nn.GELU(), nn.Linear(hidden, hidden), nn.GELU(), nn.Linear(hidden, 1))
@@ -64,7 +84,10 @@ class LinkHead(nn.Module):
         ci, cj = idx // N, idx % N
         pos = gather(no["pos"], idx)
         dirv = unit(gather(no["dir_raw"], idx), dim=-1)
-        tok = gather(no["tok"], idx)
+        sc11 = torch.cat([no["e"][:, None], no["flags"], no["uout"][:, None], no["uin"][:, None]], 1).float().sigmoid()                 # the node scores of the cell: e, 8 flags, uout, uin
+        tok = gather(no["tok"], idx) + self.nin(torch.cat([fourier_pts(pos.float()), dirv.float(), gather(sc11, idx)], -1)).to(no["tok"].dtype)
+        for blk in self.ctx:                                                                    # context: every active node attends to all others of its frame
+            tok = blk(tok, ~valid)
         # candidate masks
         eye = torch.eye(K, dtype=torch.bool, device=dev)[None]
         both = valid[:, :, None] & valid[:, None, :] & ~eye
@@ -142,7 +165,7 @@ class LinkHead(nn.Module):
 def _selftest():
     torch.manual_seed(0)
     B, d = 2, 16
-    no = dict(e=torch.full((B, N, N), -6.0), uout=torch.full((B, N, N), -6.0), uin=torch.full((B, N, N), -6.0), dir_raw=torch.zeros(B, 2, N, N), tok=torch.randn(B, d, N, N, requires_grad=True),
+    no = dict(e=torch.full((B, N, N), -6.0), flags=torch.full((B, 8, N, N), -4.0), uout=torch.full((B, N, N), -6.0), uin=torch.full((B, N, N), -6.0), dir_raw=torch.zeros(B, 2, N, N), tok=torch.randn(B, d, N, N, requires_grad=True),
               pos=torch.zeros(B, 2, N, N))
     no["dir_raw"][:, 1] = 1.0
     c = -49.0 + 2.0 * torch.arange(N).float()

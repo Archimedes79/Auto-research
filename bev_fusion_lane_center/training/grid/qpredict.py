@@ -64,10 +64,16 @@ def predict(model, batch, keep_maps=False, min_p=0.02):
 
 
 def load_model(run_dir, device="cuda"):
-    sd = torch.load(os.path.join(run_dir, "model.pt"), map_location="cpu")
-    a = sd.get("args") or {}
+    """a trained run (`model.pt`) or, while it trains, its last checkpoint (`ckpt.pt`)"""
+    mp = os.path.join(run_dir, "model.pt")
+    if os.path.exists(mp):
+        sd = torch.load(mp, map_location="cpu")
+        a, state = sd.get("args") or {}, sd["state"]
+    else:
+        sd = torch.load(os.path.join(run_dir, "ckpt.pt"), map_location="cpu", weights_only=False)
+        a, state = {}, sd["model"]
     m = QG.QGraph(width=int(a.get("width", 48)))
-    m.load_state_dict(sd["state"])
+    m.load_state_dict(state)
     return m.to(device).eval()
 
 

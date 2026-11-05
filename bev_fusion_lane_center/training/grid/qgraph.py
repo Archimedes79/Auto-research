@@ -142,7 +142,7 @@ def link_loss(L, batch):
     if lg.any():                                                                                  # long links: their positives are ~5 % of all positives and ~0.3 % of their own candidates: a balanced BCE of their own
         yl = y[lg]
         npl, nnl = yl.sum(), (1 - yl).sum()
-        wgt = torch.where(yl > 0.5, (nnl / npl.clamp_min(1.0)).clamp(1.0, 80.0), torch.ones_like(yl))
+        wgt = torch.where(yl > 0.5, (nnl / npl.clamp_min(1.0)).clamp(1.0, 15.0), torch.ones_like(yl))
         l_long = (F.binary_cross_entropy_with_logits(L["logit"].float()[lg], yl, reduction="none") * wgt).sum() / (wgt.sum() + 1.0)
     # degree: the expected number of outgoing links of every active node against the GT degree of its cell
     B, K = L["valid"].shape
