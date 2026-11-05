@@ -18,6 +18,10 @@ oracles); the encoder itself is tests/test_student_encoder.py.
   F  anchor: zero for student = teacher and positive otherwise (by hand), the weight schedule at 0 / until/2 / until / 1, forward_loss adds weight x anchor to the total in
      training (with its gradient reaching the student) and only logs it in validation, run_clip logs it
   G  the camera-off class of bug: the evaluation's zero_cam and the shuffle control change the camera BEV of a model WITH the student, and zeroing / swapping only lane_img does
+  H  the lane branch lifts with the STUDENT's DualBEV depth of frame 0 (not the cached one): its contribution changes when only the student's p16 changes and not when only the cached
+     prob changes; the gradient of the lane branch reaches a trainable student; with the option off the branch still gets the cached depth (section A)
+  I  grad_clip_split: 'student' names exactly the student's trainable tensors (refused for a frozen one); with it a huge student gradient leaves the others' gradient as it is, the
+     global clip scales them down
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_student_chain.py"""
 import copy
 import dataclasses
@@ -41,7 +45,7 @@ from losses import BEVLoss, synthetic_gt  # noqa: E402
 from model import CAMERAS, BEVFusionModel, ModelConfig, check_config  # noqa: E402
 from test_slots import BASE, batch_for  # noqa: E402
 from trainkit import checkpoint as tk_ckpt  # noqa: E402
-from trainkit.optim import param_groups  # noqa: E402
+from trainkit.optim import clip_gradients, clip_groups, param_groups  # noqa: E402
 from trainkit.schedule import lr_factor, scheduled_lr  # noqa: E402
 
 torch.set_num_threads(2)
@@ -182,6 +186,12 @@ for name, kw in (("dualbev", dict(camera_features="dualbev")), ("bevfusion", dic
           f"{name}: the whole forward at dt 0 / +0.5 equals the old code's")
     check(m.student is None and not any(k.startswith("student.") for k in m.state_dict()) and "student_side" not in o_new and m._student_side is None,
           f"{name}: no student module, no `student.*` key, no student_side in the result")
+lm, bl, seen = build(lane_branch="rgb", lane_pretrained="").eval(), data(2), []
+hk = lm.lane.lift.register_forward_pre_hook(lambda mod, a: seen.append(a[1].detach().clone()))
+with torch.no_grad():
+    lm(bl, dts=(0.0,))
+hk.remove()
+check(len(seen) == 2 and all(torch.equal(s, bl["prob"][i:i + 1, 0].float()) for i, s in enumerate(seen)), "lane branch, option off: it still lifts with the cached DualBEV depth of frame 0 (bit for bit)")
 
 # ------------------------------------------------------------------------------------------------ B
 print("B: splice")
@@ -348,7 +358,7 @@ check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, student_t
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, cam_adapter=True, camera_off=True))), "cam_adapter", "camera_off"),
       "several problems: one ValueError names them all")
 check(not raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, lane_branch="rgb")))),
-      "lane_branch stays allowed (the t21 chain has it; the branch keeps reading the cached teacher depth)")
+      "lane_branch stays allowed (the t21 chain has it; section H: the branch then lifts with the student depth)")
 check(raises(ValueError, lambda: BEVFusionModel(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True))), "cached chain"), "the live-camera model refuses the option")
 
 
@@ -420,6 +430,70 @@ frames = lambda i: [{k: b[k][i, f] for k in ("prob", "ctx", "prob2", "ctx2")} fo
 item_a, item_b = {"frames": frames(0), "lane_img": b["lane_img"][0]}, {"frames": frames(1), "lane_img": b["lane_img"][1]}
 A.perturb_camera(item_a, item_b, "shuffle_cam")
 check(torch.equal(item_a["lane_img"], b["lane_img"][1]) and all(torch.equal(f["prob"], b["prob"][1, i]) for i, f in enumerate(item_a["frames"])), "the shuffle control swaps the image together with the cached tensors")
+
+# ------------------------------------------------------------------------------------------------ H
+print("H: the lane branch lifts with the student's depth")
+ln = build(camera_student="stub", student_trainable=True, lane_branch="rgb", lane_pretrained="").eval()
+with torch.no_grad():
+    ln.lane.mix.weight.normal_(0, 0.1)                        # the branch starts at zero: give it a contribution to compare
+    ln.lane.mix.bias.normal_(0, 0.1)
+
+
+def lane_run(m, b, grad=False):
+    """(the depth the branch's lift got per sample, the branch's contribution) of one forward"""
+    seen, out = [], []
+    h1 = m.lane.lift.register_forward_pre_hook(lambda mod, a: seen.append(a[1].detach().clone()))
+    h2 = m.lane.register_forward_hook(lambda mod, a, o: out.append(o))
+    try:
+        with torch.set_grad_enabled(grad):
+            m(b, dts=(0.0,))
+    finally:
+        h1.remove()
+        h2.remove()
+    return seen, out[0]
+
+
+bh = data(2)
+echo = echo_of(bh)
+ln.student.echo = echo
+seen0, c0 = lane_run(ln, bh)
+check(len(seen0) == 2 and all(torch.equal(s, echo["prob16"][i:i + 1].float()) for i, s in enumerate(seen0)), "the branch's lift gets, per sample, the student's DualBEV depth of frame 0 (p16)")
+torch.manual_seed(3)
+junk = dict(bh, prob=torch.rand_like(bh["prob"]).softmax(2), prob2=torch.rand_like(bh["prob2"]).softmax(2))     # the cached depth of every frame replaced
+_, c_junk = lane_run(ln, junk)
+check(torch.equal(c0, c_junk) and float(c0.abs().max()) > 0, "its contribution does not change when only the cached depth changes (the student's replaces it)")
+other = (4 * torch.randn_like(echo["prob16"])).softmax(1)                      # a sharply different depth distribution
+ln.student.echo = dict(echo, prob16=other, logit16=other.log())
+seen1, c1 = lane_run(ln, bh)
+check(torch.equal(seen1[0], other[:1]) and float((c1 - c0).abs().max()) > 1e-3 * float(c0.abs().max()), "... and it changes when only the student's p16 changes (image, context, BEVFusion outputs as before)")
+ln.student.echo = None
+_, c2 = lane_run(ln, bh, grad=True)
+gs, = torch.autograd.grad(c2.sum(), ln.student.scale)
+check(float(gs.abs()) > 0, "a trainable student gets the gradient of the lane branch through its depth")
+
+# ------------------------------------------------------------------------------------------------ I
+print("I: grad_clip_split with the student")
+student_ids = {id(p) for p in tr.student.parameters() if p.requires_grad}
+split = clip_groups(tr, ["student"])
+check(len(split) == 1 and {id(p) for p in split[0]} == student_ids, "the prefix 'student' names exactly the student's trainable tensors")
+check(raises(ValueError, lambda: clip_groups(fro, ["student"]), "student"), "... and none of a frozen student: list it in grad_clip_split only when it trains")
+params = [p for p in tr.parameters() if p.requires_grad]
+others = [p for p in params if id(p) not in student_ids]
+small = 1e-4
+
+
+def set_grads():
+    for p in params:
+        p.grad = torch.full_like(p, 10.0 if id(p) in student_ids else small)
+
+
+set_grads()
+clip_gradients(params, 5.0, split)
+st_norm = float(torch.linalg.vector_norm(torch.stack([p.grad.norm() for p in tr.student.parameters() if p.requires_grad])))
+check(all(torch.equal(p.grad, torch.full_like(p, small)) for p in others) and abs(st_norm - 5.0) < 0.05, f"with the split a huge student gradient is clipped on its own (norm {st_norm:.3f}) and leaves the other gradients as they were")
+set_grads()
+clip_gradients(params, 5.0)
+check(all(float(p.grad.max()) < 0.01 * small for p in others), "control: the global clip scales every other gradient down by the student's size (what 'student' in the split prevents)")
 
 print(f"\ntest_student_chain: {'ALL PASSED' if not fails else str(len(fails)) + ' FAILED'} ({time.time() - t0:.0f} s)")
 sys.exit(1 if fails else 0)

@@ -31,8 +31,8 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 velocity head); a batch unrolls its F frames oldest -> newest, starting from the previous call's buffer (training: the
                 previous keyframe; none: cold). Train / deploy: training chains up to 3 keyframes x F frames, a stream is unbounded. The motion
                 block reads two RAW BEVs (current + the frame before it) in both modes. The radar keeps its own 0.5 s point buffer
-  camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, training/student_encoder.py): a small trained image encoder replaces the cached teacher outputs of the
-                current frame (both feature sources of camera_features 'dual'); older frames keep their cached outputs
+  camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, training/student_encoder.py): a small trained image encoder replaces, for the current frame, the DualBEV
+                depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached outputs
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
                 (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
@@ -136,9 +136,12 @@ class ModelConfig:
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
     camera_student: str = ""           # t22 stage B: "" = off | a key of STUDENTS (training/student_encoder.py): a small trained image encoder that replaces the cached teacher outputs of
                                        # the CURRENT frame (frame 0) of both feature sources, from batch["lane_img"] (TrainConfig.lane_images); older frames keep their cached teacher
-                                       # outputs. Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the same on or off)
+                                       # outputs, and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the main lift uses), gradient included.
+                                       # Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the same on or off).
+                                       # Know: a frozen student's EMA copy drifts by about 3e-7 and warm_start / the evaluation apply that copy, not student_init; zero_cam (the
+                                       # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of the student of every key frame of a clip stay in memory (not measured)
     student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
-    student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed); False: frozen, not part of the checkpoints (loaded from student_init)
+    student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the checkpoints (loaded from student_init)
     student_frames: str = "current"    # the frames the student replaces: "current" (frame 0, the only frame with a JPEG) | "all" (needs a sweep-image cache: NotImplementedError)
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
@@ -639,7 +642,10 @@ class BEVFusionModel(nn.Module):
         if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam; the depth, K, ida
                                                                  # are those of source 1 (DualBEV; with 'dual' also what batch["prob"], ["ida"] hold)
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
-            prob0 = batch["prob"][:, 0].float() if "prob" in batch else self._prob0
+            if student_side is not None:                         # t22: the student replaces the depth of frame 0 here too: the lane branch lifts with the same student depth as the main lift
+                prob0 = student_side["p16"].float()              # (its graph is kept: a student that trains gets the lane branch's gradient too)
+            else:
+                prob0 = batch["prob"][:, 0].float() if "prob" in batch else self._prob0
             hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
             lane = self.lane(img0, prob0, batch["K"][:, 0], batch["T_cam_car"][:, 0], hw, batch["ida"], keys=self._lift_keys(batch, hw))
             if flipped:
