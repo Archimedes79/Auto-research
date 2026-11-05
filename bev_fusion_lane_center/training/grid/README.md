@@ -36,7 +36,7 @@ The delivered list of vertices is a READ-OUT at inference (`evaluation/vertex_ev
 | `qlinks.py` | E273 stage C: the connection matrix (short links in the 8 m neighbourhood, long links between the top-K entries and exits), Hermite curves with learned handle scales, evidence along the curve | new | `python qlinks.py` |
 | `sections.py` | E273 stage D: sections (ids) as a soft absorbing walk backwards on the link matrix (a linear solve) and its loss | new | `python sections.py` |
 | `qassign.py` | E273 stage E: map encoder (graph transformer over the pieces along succ / pred / left / right / opposite) and the assignment (cross-attention + E272's geometric term + dustbin + soft registration) | `assign.py`, SMERF / SEPT / MAT | `python qassign.py` |
-| `qgraph.py` | E273: the whole lane head as one module, the loss of every phase, trainable groups | the parts above | `python qgraph.py` (every phase: gradient reaches the trainable groups, none the frozen ones) |
+| `qgraph.py` | E273: the whole lane head as one module, the loss of every phase, trainable groups; E274: loss switches `CFG` (event loss weight, existence-positive weights at event / intersection cells, dual-softmax loss over the long links `long_match_loss`; defaults = the E273 loss) | the parts above | `python qgraph.py` (every phase: gradient reaches the trainable groups, none the frozen ones) |
 | `test_oracle.py` | G0: the GT through the chain must reproduce itself (real VAL frames, degraded copies must fall) | idea of `bev_fusion/evaluation/bev_gtcheck.py` | itself |
 | `test_grid.py` | G1: gradient reaches every parameter group, one batch can be overfitted, features equal `BuilderData`'s | - | itself |
 

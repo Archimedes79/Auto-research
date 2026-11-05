@@ -6,7 +6,7 @@
 p = the lane head (`runs/<run>/model.pt`), its delivered graph read out by `evaluation/qgraph_eval.py` (e >= 0.5, p >= 0.5; the named output step); frames = `qgraph_eval.val_frames()` (VAL only,
 never TEST). g = the E272 chain of the same seed (`runs/e272_j_s<seed>`, read out at the card threshold) whose delivered vertices are assigned to the same lane-level map tokens by the
 GEOMETRIC start-value assigner of E272 (sigma 1.5 m, lambda 2, dustbin 4: `qassign.Assigner` without its learned part); d = the stored numbers of the lane suite run of `recall_sp0_dp`
-(graph reference). The map with an error is `map_sim.make_map(g, "error", token)`: the same fixed perturbation for p and g. Output: `runs/e273/<run>/card.json`, `results.md`.
+(graph reference). The map with an error is `map_sim.make_map(g, "error", token)`: the same fixed perturbation for p and g. Output: `runs/<exp>/<run>/card.json`, `results.md` (exp = e273 by default, `--exp e274` for E274; `verdict274` is the rule of the E274 card).
 `lane_acc` is the e-weighted share of delivered nodes within 1 m of a GT lane whose most probable map piece is a piece of that lane (qgraph_eval.assign_metrics); the p - g interval is a paired
 bootstrap over scenes of the per-frame (right, total) counts.
 """
@@ -111,7 +111,7 @@ def bootstrap_diff(rec_a, rec_b, scenes, B=1000, seed=0):
     return float(d0), float(np.percentile(ds, 2.5)), float(np.percentile(ds, 97.5))
 
 
-def score(run, seed, n=0, device="cuda"):
+def score(run, seed, n=0, device="cuda", exp="e273"):
     t0 = time.time()
     frames = QE.val_frames()[: n or None]
     share = QE.stored_share(frames)
@@ -141,7 +141,7 @@ def score(run, seed, n=0, device="cuda"):
     scenes = [f.scene for f in frames]
     card["diff"] = {mode: dict(zip(("mean", "lo", "hi"), bootstrap_diff(recs[mode]["assign"], g_rec[mode], scenes))) for mode in ("exact", "error")}
     card["seconds"] = round(time.time() - t0, 1)
-    out_dir = os.path.join(ROOT, "runs", "e273", run)
+    out_dir = os.path.join(ROOT, "runs", exp, run)                                                      # runs/e273/<run> (E273) or runs/e274/<run> (E274)
     os.makedirs(out_dir, exist_ok=True)
     json.dump(card, open(os.path.join(out_dir, "card.json"), "w"), indent=1, default=float)
     write_md(card, os.path.join(out_dir, "results.md"))
@@ -151,7 +151,7 @@ def score(run, seed, n=0, device="cuda"):
 def write_md(c, path):
     p, g, dd = c["p"], c["g"], c["d_ref"]
     gr = p["graph"]
-    L = [f"# E273 {c['run']} (seed {c['seed']}), VAL {c['frames']} frames, {c['date']}", "",
+    L = [f"# {c['run']} (seed {c['seed']}), VAL {c['frames']} frames, {c['date']}", "",
          "| | p (lane head) | g (E272 chain + geometric assigner) | d (recall_sp0_dp) |", "|---|---|---|---|",
          f"| lane_acc, exact map | {p['assign_exact'].get('lane_acc', float('nan')):.4f} | {g['assign_exact']['lane_acc']:.4f} | |",
          f"| lane_acc, map error 1-2 m | {p['assign_error'].get('lane_acc', float('nan')):.4f} | {g['assign_error']['lane_acc']:.4f} | |",
@@ -189,6 +189,35 @@ def verdict(runs):
     return out
 
 
+def verdict274(var, ctl, exp_var="e274", exp_ctl="e273", metric="topo_F1", band=0.02, root=None):
+    """the rule of the E274 card (section 0), by hand like E273: the variant's gain of `metric` over the control (per seed, same seed number), guards on the assignment and the delivered graph, and
+    the system pass against the reference d (reported). KEEP: gain above the band on both seeds and every guard held; CUT: a gain below -band on any seed or a guard broken; TIE: both gains
+    inside the band; anything else INCONCLUSIVE (add a seed). Guards: lane_acc_exact p - g >= -0.01, lane_acc_err p - g >= +0.03 (mean of the seeds), F1@1.0 not below the control by more than 0.01 on
+    any seed and, when the headline is not topo_F1 (arm p against r), topo_F1 not below the control by more than 0.01 on any seed."""
+    root = root or ROOT
+    load = lambda exp, r: json.load(open(os.path.join(root, "runs", exp, r, "card.json")))  # noqa: E731
+    cv, cc = [load(exp_var, r) for r in var], [load(exp_ctl, r) for r in ctl]
+    assert [c["seed"] for c in cv] == [c["seed"] for c in cc], "variant and control must list the same seeds in the same order"
+    gain = [a["p"]["graph"][metric] - b["p"]["graph"][metric] for a, b in zip(cv, cc)]
+    mean = lambda f: float(np.mean([f(c) for c in cv]))  # noqa: E731
+    f1 = [a["p"]["graph"]["F1@1.0"] - b["p"]["graph"]["F1@1.0"] for a, b in zip(cv, cc)]
+    guards = dict(lane_acc_exact_p_minus_g=mean(lambda c: c["diff"]["exact"]["mean"]) >= -0.01, lane_acc_err_p_minus_g=mean(lambda c: c["diff"]["error"]["mean"]) >= 0.03,
+                  F1_1_not_below_control_by_0_01=all(g >= -0.01 for g in f1))
+    topo_gain = [a["p"]["graph"]["topo_F1"] - b["p"]["graph"]["topo_F1"] for a, b in zip(cv, cc)]
+    if metric != "topo_F1":
+        guards["topo_F1_not_below_control_by_0_01"] = all(g >= -0.01 for g in topo_gain)
+    side = ("up" if all(g > band for g in gain) else "down" if any(g < -band for g in gain) else "inside" if all(abs(g) <= band for g in gain) else "mixed")
+    v = "CUT" if (side == "down" or not all(guards.values())) else "KEEP" if side == "up" else "TIE" if side == "inside" else "INCONCLUSIVE (seeds differ: add a seed)"
+    g = lambda c, k: c["p"]["graph"][k]  # noqa: E731
+    sysm = dict(topo_F1=mean(lambda c: g(c, "topo_F1")), F1_1=mean(lambda c: g(c, "F1@1.0")), junction_F1=mean(lambda c: g(c, "junction_F1")), node_R=mean(lambda c: c["p"]["nodes"]["node_R"]), node_P=mean(lambda c: c["p"]["nodes"]["node_P"]),
+                vert100_dp=mean(lambda c: g(c, "vert100_dp")), dup_frac=mean(lambda c: g(c, "dup_frac")), long_link_P=mean(lambda c: c["p"]["nodes"]["link_long_P"]), long_link_R=mean(lambda c: c["p"]["nodes"]["link_long_R"]))
+    sysm["system_pass_vs_d"] = bool(sysm["topo_F1"] >= D_REF["topo_F1"] - 0.03 and sysm["F1_1"] >= D_REF["F1_1"] - 0.03)
+    out = dict(verdict=v, metric=metric, band=band, gain_per_seed=gain, side=side, guards=guards, F1_1_gain_per_seed=f1, topo_F1_gain_per_seed=topo_gain, variant_numbers=sysm, variant=var, control=ctl,
+               note="by hand: card.validate cannot read assignment numbers; the written rule of the E274 card (section 0), both seeds on the same side; density and system pass are reported, not judged, for arms r and p")
+    print(json.dumps(out, indent=1))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -196,12 +225,22 @@ def main():
     s.add_argument("--run", required=True)
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--n", type=int, default=0)
+    s.add_argument("--exp", default="e273", help="the experiment folder of the scoring card: runs/<exp>/<run>/")
     v = sub.add_parser("verdict")
     v.add_argument("--runs", nargs="+", required=True)
+    w = sub.add_parser("verdict274")
+    w.add_argument("--var", nargs="+", required=True, help="the variant runs (both seeds), cards in runs/<exp-var>/")
+    w.add_argument("--ctl", nargs="+", required=True, help="the control runs (both seeds)")
+    w.add_argument("--exp-var", default="e274")
+    w.add_argument("--exp-ctl", default="e273")
+    w.add_argument("--metric", default="topo_F1")
+    w.add_argument("--band", type=float, default=0.02)
     a = ap.parse_args()
     if a.cmd == "score":
-        c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu")
-        print(open(os.path.join(ROOT, "runs", "e273", a.run, "results.md"), encoding="utf-8").read())
+        c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu", exp=a.exp)
+        print(open(os.path.join(ROOT, "runs", a.exp, a.run, "results.md"), encoding="utf-8").read())
+    elif a.cmd == "verdict274":
+        verdict274(a.var, a.ctl, a.exp_var, a.exp_ctl, a.metric, a.band)
     else:
         verdict(a.runs)
 

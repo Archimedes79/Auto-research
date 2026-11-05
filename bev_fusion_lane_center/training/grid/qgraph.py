@@ -27,6 +27,9 @@ PHASE_UPTO = {2: "pyr", 3: "nodes", 4: "links", 5: "sections", 6: "assign", 7: "
 PHASE_TRAIN = {2: ("pyr",), 3: ("nodes",), 4: ("links",), 5: ("nodes_s",), 6: ("menc", "asg"), 7: ("pyr", "nodes", "links", "menc", "asg")}
 PHASE_FROZEN = {2: (), 3: ("pyr",), 4: ("pyr", "nodes"), 5: ("pyr", "links"), 6: ("pyr", "nodes", "links"), 7: ()}
 W = dict(pix=1.0, node=1.0, link=1.0, sec=1.0, asg=1.0)
+# E274 switches (the defaults are the E273 loss): ev_w = weight of the 1 m event heat-map loss in the pixel stage; node_w_evt / node_w_inter = extra weight of the POSITIVES of the existence loss
+# at event cells / at cells inside the (grown) intersection mask (weight 1 + w_evt * event + w_inter * inter); long_match = weight of the dual-softmax loss over the long-link candidates (E274)
+CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0)
 
 
 class QGraph(torch.nn.Module):
@@ -79,11 +82,12 @@ class QGraph(torch.nn.Module):
         return out
 
 
-def focal_bce(logit, y, alpha=0.5, gamma=2.0, norm=None):
+def focal_bce(logit, y, alpha=0.5, gamma=2.0, norm=None, pos_w=None):
     p = logit.sigmoid()
     ce = F.binary_cross_entropy_with_logits(logit, y, reduction="none")
     pt = p * y + (1 - p) * (1 - y)
-    l = ce * (1 - pt) ** gamma * (alpha * y + (1 - alpha) * (1 - y))
+    a_pos = alpha if pos_w is None else alpha * pos_w                                   # pos_w: a per-element weight of the positives (E274)
+    l = ce * (1 - pt) ** gamma * (a_pos * y + (1 - alpha) * (1 - y))
     return l.sum() / (norm if norm is not None else y.sum().clamp_min(1.0))
 
 
@@ -108,7 +112,7 @@ def pixel_loss(P, batch):
     rd, yr = P["road2"].float(), batch["road2"].to(dev).float()
     l_rd = F.binary_cross_entropy_with_logits(rd, yr) + dice(rd, yr)
     info["road"] = float(l_rd)
-    return l1 + l_ev + l_ln + l_rd, info
+    return l1 + CFG["ev_w"] * l_ev + l_ln + l_rd, info
 
 
 def node_loss(no, batch):
@@ -117,7 +121,12 @@ def node_loss(no, batch):
     m = ex > 0.5
     npos = ex.sum().clamp_min(1.0)
     info = {}
-    l_e = focal_bce(no["e"].float(), ex, norm=npos)
+    wmap = None
+    if CFG["node_w_evt"] or CFG["node_w_inter"]:                                           # E274: recall where the nodes are weak (event cells, intersections)
+        evt = (batch["flags"].to(dev).float().max(1)[0] > 0.5).float()
+        inter = (batch["road2"].to(dev).float()[:, 1] > 0.5).float()
+        wmap = 1.0 + CFG["node_w_evt"] * evt + CFG["node_w_inter"] * inter
+    l_e = focal_bce(no["e"].float(), ex, norm=npos, pos_w=wmap)
     fl = batch["flags"].to(dev).float()
     l_f = (F.binary_cross_entropy_with_logits(no["flags"].float(), fl, reduction="none", pos_weight=torch.tensor(6.0, device=dev)) * m[:, None]).sum() / npos
     off_t = batch["offset"].to(dev).float()
@@ -128,6 +137,34 @@ def node_loss(no, batch):
     l_u = sum((F.binary_cross_entropy_with_logits(no[k].float(), batch[k].to(dev).float(), reduction="none", pos_weight=torch.tensor(8.0, device=dev)) * m).sum() / npos for k in ("uout", "uin"))
     info.update(e=float(l_e), flags=float(l_f), off=float(l_o), dir=float(l_d), s=float(l_s), u=float(l_u))
     return l_e + 0.5 * l_f + l_o + 0.5 * l_d + 0.5 * l_s + 2.0 * l_u, info
+
+
+def _seg_lse(z, gid, G, extra):
+    """log(sum_j exp(z_j) + exp(extra)) per group (a segment log-sum-exp with one fixed 'none' logit per group)"""
+    m = torch.full((G,), float("-inf"), device=z.device).scatter_reduce(0, gid, z, "amax", include_self=True)
+    m = torch.maximum(m, torch.full_like(m, extra))
+    s = torch.zeros(G, device=z.device).scatter_add(0, gid, torch.exp(z - m[gid])) + math.exp(extra) * torch.exp(-m)
+    return m + torch.log(s)
+
+
+def long_match_loss(L, none_logit=0.0):
+    """Dual softmax over the long-link candidates (SuperGlue / LoFTR style, one 'none' entry per row and per column, no iterations): the candidates of one source node compete, so do the
+    candidates of one destination node. Multi-positive NLL (a node may have several true successors: the mass of the true ones adds up); a node without a true long link goes to 'none'.
+    Training signal only: the read-out still thresholds the independent link probability."""
+    lg = L["is_long"]
+    z = L["logit"].float()[lg]
+    y = (L["label"][lg] > 0.5).float()
+    K = L["valid"].shape[1]
+    total = z.new_zeros(())
+    for gid_ in (L["pb"][lg] * K + L["pa"][lg], L["pb"][lg] * K + L["pc"][lg]):                 # rows: the source node, columns: the destination node
+        _, inv = torch.unique(gid_, return_inverse=True)
+        G = int(inv.max()) + 1
+        lse = _seg_lse(z, inv, G, none_logit)
+        has = torch.zeros(G, device=z.device).scatter_add(0, inv, y) > 0
+        lse_pos = _seg_lse(torch.where(y > 0, z, torch.full_like(z, -1e4)), inv, G, -1e4)       # log of the summed weight of the true candidates only (no clamp: no dead zone)
+        nll = torch.where(has, lse - lse_pos, lse - none_logit)                                  # -log(mass of the true ones) = lse - lse_pos; -log(P(none)) = lse - none_logit
+        total = total + nll.mean()
+    return total / 2
 
 
 def link_loss(L, batch):
@@ -171,7 +208,11 @@ def link_loss(L, batch):
             tgt = sg[j][hit]
             l_sc = ((L["sa"][pos][hit] - tgt[:, 0]).abs() + (L["sb"][pos][hit] - tgt[:, 1]).abs()).mean()
     info.update(link=float(l_b), long=float(l_long), deg=float(l_deg), scale=float(l_sc), pos=int(npos), pairs=len(y), miss=int(L.get("gt_missing", 0)))
-    return l_b + 2.0 * l_long + 2.0 * l_sc, info                                                            # the degree term is logged, not trained: with one-to-many labels a node has several true successors
+    l_m = torch.zeros((), device=dev)
+    if CFG["long_match"] > 0 and lg.any():                                                       # E274: the long-link candidates of one entry (or one exit) compete, with a 'none' entry
+        l_m = long_match_loss(L)
+        info["match"] = float(l_m)
+    return l_b + 2.0 * l_long + 2.0 * l_sc + CFG["long_match"] * l_m, info                                  # the degree term is logged, not trained: with one-to-many labels a node has several true successors
 
 
 def assign_loss(A, L, batch):
@@ -288,6 +329,65 @@ def _selftest():
         frozen_got = [n for n in PHASE_FROZEN[phase] if any(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in {"pyr": m.pyr, "nodes": m.nodes, "links": m.links}[n].parameters())]
         assert not frozen_got, f"phase {phase}: frozen stage {frozen_got} got a gradient"
         print("phase", phase, "loss", round(float(loss), 3), {k: (round(v, 3) if isinstance(v, float) else v) for k, v in list(info.items())[:8]})
+    base_losses = {ph: float(qgraph_loss(m, b, ph)[0]) for ph in (2, 3, 4)}                       # the E273 loss (switches at their defaults)
+    # E274 switches: finite loss and a gradient with the recall weights and the long-link matching on
+    CFG.update(ev_w=3.0, node_w_evt=2.0, node_w_inter=1.0, long_match=0.5)
+    try:
+        for phase in (2, 3, 4):
+            m.zero_grad()
+            loss, info = qgraph_loss(m, b, phase)
+            assert torch.isfinite(loss), ("E274 switches", phase, info)
+            loss.backward()
+            assert sum(float(p.grad.abs().sum()) for p in trainable_params(m, phase) if p.grad is not None) > 0, f"E274 switches, phase {phase}: no gradient"
+        # the weight of the positives raises the loss of a missed positive and leaves the negatives alone
+        lg_, y_ = torch.full((1, 4), -3.0), torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+        base = focal_bce(lg_, y_, norm=1.0)
+        heavy = focal_bce(lg_, y_, norm=1.0, pos_w=torch.tensor([[3.0, 3.0, 3.0, 3.0]]))
+        ones = torch.ones(1, 4)
+        assert abs(float(focal_bce(lg_, ones, norm=1.0, pos_w=torch.tensor([[3.0, 3.0, 3.0, 3.0]]))) / float(focal_bce(lg_, ones, norm=1.0)) - 3.0) < 1e-5     # the weight scales the positive term exactly
+        assert float(heavy) > float(base)
+        only_neg = focal_bce(lg_, torch.zeros(1, 4), norm=1.0)
+        assert abs(float(focal_bce(lg_, torch.zeros(1, 4), norm=1.0, pos_w=torch.tensor([[1.0, 3.0, 3.0, 3.0]]))) - float(only_neg)) < 1e-6      # and leaves the negatives alone
+        # the weight map of node_loss: an event cell and an intersection cell weigh 1 + w_evt / 1 + w_inter, other cells 1 (real channels: flags (B, 8, 50, 50), road2[:, 1] = intersection)
+        nb = dict(exists=torch.zeros(1, 50, 50), flags=torch.zeros(1, 8, 50, 50), road2=torch.zeros(1, 2, 50, 50), offset=torch.zeros(1, 2, 50, 50), dirv=torch.zeros(1, 2, 50, 50), sstart=torch.zeros(1, 50, 50),
+                  uout=torch.zeros(1, 50, 50), uin=torch.zeros(1, 50, 50))
+        nb["exists"][0, 5, 5] = nb["exists"][0, 6, 6] = nb["exists"][0, 7, 7] = 1.0
+        nb["flags"][0, 2, 5, 5] = 1.0                                                                 # an event at (5, 5)
+        nb["road2"][0, 1, 6, 6] = 1.0                                                                 # an intersection cell at (6, 6)
+        nb["dirv"][0, 0] = 1.0
+        no_ = dict(e=torch.full((1, 50, 50), -2.0, requires_grad=True), flags=torch.zeros(1, 8, 50, 50), off=torch.zeros(1, 2, 50, 50), dir_raw=torch.ones(1, 2, 50, 50), s=torch.zeros(1, 50, 50),
+                   uout=torch.zeros(1, 50, 50), uin=torch.zeros(1, 50, 50))
+        CFG.update(node_w_evt=2.0, node_w_inter=1.0)
+        node_loss(no_, nb)[0].backward()
+        gr = no_["e"].grad[0].abs()
+        assert abs(float(gr[5, 5]) / float(gr[7, 7]) - 3.0) < 1e-3 and abs(float(gr[6, 6]) / float(gr[7, 7]) - 2.0) < 1e-3, (float(gr[5, 5]), float(gr[6, 6]), float(gr[7, 7]))
+        # dual softmax: small for the right logits, large for the wrong ones, a source without a true link goes to 'none'
+        pa = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2, 2])
+        pc = torch.tensor([0, 1, 2, 0, 1, 2, 0, 1, 2])
+        lab = torch.tensor([1.0, 0, 0, 0, 1.0, 0, 0, 0, 0])                                     # source 0 -> 0, source 1 -> 1, source 2 has no true link
+        Ld = dict(is_long=torch.ones(9, dtype=torch.bool), label=lab, pb=torch.zeros(9, dtype=torch.long), pa=pa, pc=pc, valid=torch.ones(1, 4, dtype=torch.bool))
+        good = long_match_loss(dict(Ld, logit=torch.where(lab > 0, 6.0, -6.0)))
+        wrong = long_match_loss(dict(Ld, logit=torch.where(lab > 0, -6.0, 6.0)))
+        assert 0.0 <= float(good) < 0.1 and float(wrong) > 3.0, (float(good), float(wrong))
+        # a source with two true successors: the mass of the two adds up (loss small when each has about half); two frames are kept apart (a missing batch index in the group key would mix them)
+        two = dict(is_long=torch.ones(6, dtype=torch.bool), label=torch.tensor([1.0, 1.0, 0, 1.0, 0, 0]), pb=torch.tensor([0, 0, 0, 1, 1, 1]), pa=torch.zeros(6, dtype=torch.long),
+                   pc=torch.tensor([0, 1, 2, 0, 1, 2]), valid=torch.ones(2, 4, dtype=torch.bool))
+        lz = torch.tensor([3.0, 3.0, -9.0, 6.0, -9.0, -9.0])
+        assert float(long_match_loss(dict(two, logit=lz))) < 0.5
+        # a dead zone: a true logit far below its competitors still gets a gradient
+        gz = torch.tensor([-14.5, 2.0, 2.0], requires_grad=True)
+        long_match_loss(dict(is_long=torch.ones(3, dtype=torch.bool), label=torch.tensor([1.0, 0, 0]), pb=torch.zeros(3, dtype=torch.long), pa=torch.zeros(3, dtype=torch.long),
+                             pc=torch.tensor([0, 1, 2]), valid=torch.ones(1, 4, dtype=torch.bool), logit=gz)).backward()
+        assert float(gz.grad[0].abs()) > 0.1, float(gz.grad[0])
+        g = torch.where(lab > 0, 0.0, 0.0).requires_grad_(True)
+        long_match_loss(dict(Ld, logit=g)).backward()
+        assert float(g.grad.abs().sum()) > 0
+    finally:
+        CFG.update(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0)
+    for ph in (2, 3, 4):
+        again = float(qgraph_loss(m, b, ph)[0])
+        assert abs(again - base_losses[ph]) < 1e-6 * max(1.0, abs(again)), (ph, base_losses[ph], again)         # switched off again = the E273 loss
+    print("E274 switches ok: weights, dual softmax, defaults give the E273 loss")
     print("qgraph selftest ok")
 
 

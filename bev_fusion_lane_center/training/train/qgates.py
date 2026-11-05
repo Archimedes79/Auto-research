@@ -28,6 +28,7 @@ import sections as SE  # noqa: E402
 import targets as TG  # noqa: E402
 
 REF = {}
+GATE_CFG = dict(node_prec_min=None, node_rec_min=None)          # E274: floors on the node precision / recall within 2 m of the node gate (set by `qgraph_train.py --gate-node-prec / --gate-node-rec`)
 
 
 def _batches(map_mode, n, bs=4):
@@ -94,6 +95,7 @@ def _node_stats(model, b, dev):
 def gate_nodes(model, run, n):
     dev = _dev(model)
     prec, rec, err, rec_flag, n_flag = [], [], [], np.zeros(8), np.zeros(8)
+    prec2, rec2 = [], []
     from scipy.spatial import cKDTree
     model.eval()
     with torch.no_grad():
@@ -110,6 +112,10 @@ def gate_nodes(model, run, n):
                 prec.append((tg.query(pos)[0] <= 2.0).mean() if len(pos) else 0.0)
                 rec.append((cKDTree(pos).query(gpts)[0] <= 2.0).mean() if len(pos) else 0.0)
                 ex = b["exists"][i] > 0.5
+                if ex.any() and len(pos):                                                       # E274: the scorer's definition: delivered nodes (e > 0.5, predicted position) against the true node positions (cell centre + offset), 2 m
+                    tp = (b["offset"][i] + torch.from_numpy(QN.cell_centres("cpu")[0].numpy()))[:, ex].T.numpy()
+                    prec2.append((cKDTree(tp).query(pos)[0] <= 2.0).mean())
+                    rec2.append((cKDTree(pos).query(tp)[0] <= 2.0).mean())
                 both = ex & m.cpu()
                 if both.any():
                     gp = (b["offset"][i] + torch.from_numpy(QN.cell_centres("cpu")[0].numpy()))
@@ -127,9 +133,17 @@ def gate_nodes(model, run, n):
         REF["e271_nodes"] = e271_vertex_f1(n)
     ref = REF["e271_nodes"]
     pos_err = float(np.median(err)) if err else float("nan")
+    p2, r2 = (float(np.mean(prec2)) if prec2 else float("nan")), (float(np.mean(rec2)) if rec2 else float("nan"))
     ok = (f >= ref - 0.05) and (pos_err <= 0.5)
-    return dict(node_f1=f, node_prec=p, node_rec=r, e271_f1=ref, pos_err_med=pos_err, flag_recall={f"{k}": float(rec_flag[i] / max(n_flag[i], 1)) for i, k in enumerate(("stop", "exit", "split", "merge", "start", "end", "win_in", "win_out"))},
-                **{"pass": bool(ok), "why": f"node F1 {f:.3f} vs E271 {ref:.3f} - 0.05; median position error {pos_err:.2f} m <= 0.5"})
+    why_extra = ""
+    if GATE_CFG["node_prec_min"] is not None:
+        ok = ok and p2 >= GATE_CFG["node_prec_min"]
+        why_extra += f"; node precision within 2 m {p2:.3f} >= {GATE_CFG['node_prec_min']}"
+    if GATE_CFG["node_rec_min"] is not None:
+        ok = ok and r2 >= GATE_CFG["node_rec_min"]
+        why_extra += f"; node recall within 2 m {r2:.3f} >= {GATE_CFG['node_rec_min']}"
+    return dict(node_f1=f, node_prec=p, node_rec=r, node_prec_2m=p2, node_rec_2m=r2, e271_f1=ref, pos_err_med=pos_err, flag_recall={f"{k}": float(rec_flag[i] / max(n_flag[i], 1)) for i, k in enumerate(("stop", "exit", "split", "merge", "start", "end", "win_in", "win_out"))},
+                **{"pass": bool(ok), "why": f"node F1 {f:.3f} vs E271 {ref:.3f} - 0.05; median position error {pos_err:.2f} m <= 0.5" + why_extra})
 
 
 def e271_vertex_f1(n):

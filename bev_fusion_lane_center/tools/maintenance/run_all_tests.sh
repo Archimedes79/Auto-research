@@ -49,11 +49,12 @@ run "E273 lane head: node head" grid/qnodes.py
 run "E273 lane head: link head" grid/qlinks.py
 run "E273 lane head: sections" grid/sections.py
 run "E273 lane head: map encoder + assignment" grid/qassign.py
-run "E273 lane head: all phases, gradients" grid/qgraph.py
+run "E273 / E274 lane head: all phases, gradients, E274 switches" grid/qgraph.py
 run "E273 pixel targets (synthetic)" grid/qraster.py
 run "E273 pixel targets on real lane GT frames" grid/test_qraster.py
 run "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
 run "E273 local scorer (oracle, degradations, lane suite reproduction)" test_qgraph_eval.py
 run "E273 pictures: selftest" viz/qgraph_view.py --selftest
+run "E274 verdict rule (fake cards)" test_verdict274.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
 exit $fail
