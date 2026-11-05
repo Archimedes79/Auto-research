@@ -75,6 +75,7 @@ try:
     from .model import CAMERAS, BEVFusionModel, ModelConfig
     from .nuscenes_dataset import FrontRadarDataset, available_scenes, collate
     from .radar_encoder import aux_weight
+    from .student_encoder import anchor_terms, student_anchor_weight
 except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from augment import flip_batch
@@ -87,13 +88,14 @@ except ImportError:                                   # run as a script
     from model import CAMERAS, BEVFusionModel, ModelConfig
     from nuscenes_dataset import FrontRadarDataset, available_scenes, collate
     from radar_encoder import aux_weight
+    from student_encoder import anchor_terms, student_anchor_weight
 
 
 # a resume may change these on top of the engine's (paths, workers, the cadence of logging and saving, the switches that only look); every other difference is refused
 RESUME_FREE = Config.RESUME_FREE + ("data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers", "eval_batches", "grad_diag_every",
                                     "probe", "pin_memory", "prefetch_factor", "profile_steps")
 # switches a checkpoint from before them lacks: turning one on in the middle of a run changes the numbers (a freeze plan, the speed flags, the split clip, the lr groups)
-RESUME_SWITCHES = ("train_only", "freeze", "cudnn_benchmark", "tf32", "grad_clip_split", "lr_groups")
+RESUME_SWITCHES = ("train_only", "freeze", "cudnn_benchmark", "tf32", "grad_clip_split", "lr_groups", "student_anchor")
 
 
 @dataclass
@@ -126,6 +128,11 @@ class TrainConfig(Config):
                                                  # helps the first phase, the task losses are the goal; 0 = off (kept-fraction not computed either)
     radar_aux_floor: float = 0.05                # weight it decays to
     radar_aux_half: float = 0.2                  # half-life in fractions of the training
+    student_anchor: float = 0.0                  # model.camera_student trainable (t22 stage B): weight at the start of the training of the anchor, the distillation loss of stage A
+                                                 # (student_encoder.distill_terms) between the student's current-frame outputs and the cached teachers'; keeps the depth from drifting
+                                                 # (no depth ground truth); 0 = off (nothing computed, nothing logged)
+    student_anchor_floor: float = 0.1            # the fraction of student_anchor it falls to ...
+    student_anchor_until: float = 0.5            # ... linearly until this fraction of the steps, constant after (student_encoder.student_anchor_weight)
     grad_diag_every: int = 0                     # log the cosines of the task-group gradients at the BEV feature every N steps
     seq_len: int = 1                             # keyframes per clip: > 1 trains on clips of consecutive keyframes of one scene with
                                                  # the world memory carried from keyframe to keyframe (batch_size = clips per
@@ -175,8 +182,26 @@ def build(cfg):
                          "('dual') need feature_cache2 (the BEVFusion cache), and feature_cache2 needs such a kind")
     if mcfg.lane_branch and cached and not cfg.lane_images:
         raise ValueError("model.lane_branch with a feature_cache needs lane_images (lane_branch.py build-cache)")
+    problems = student_findings(cfg, mcfg)
+    if problems:
+        raise ValueError("; ".join(problems))
     model = CachedBEVFusionModel(mcfg) if cached else BEVFusionModel(mcfg)
     return model, loss, cached
+
+
+def student_findings(cfg, mcfg):
+    """what model.camera_student and the anchor need of the config, as messages (build raises them, startable.py lists them): the student replaces cached outputs of the current frame, so a
+    feature cache and the key-frame image folder (lane_images); the anchor needs a student that trains, and a schedule that makes sense"""
+    out = []
+    if mcfg.camera_student and not cfg.feature_cache:
+        out.append("model.camera_student replaces cached teacher outputs: it needs a feature_cache")
+    if mcfg.camera_student and not cfg.lane_images:
+        out.append("model.camera_student reads the current key-frame image: it needs lane_images (the folder of the key-frame JPEGs, data/cache/img_front)")
+    if cfg.student_anchor < 0 or not 0 <= cfg.student_anchor_floor <= 1 or not 0 < cfg.student_anchor_until <= 1:
+        out.append(f"student_anchor {cfg.student_anchor} (>= 0), student_anchor_floor {cfg.student_anchor_floor} (0..1), student_anchor_until {cfg.student_anchor_until} (0 < until <= 1)")
+    if cfg.student_anchor > 0 and not (mcfg.camera_student and mcfg.student_trainable):
+        out.append("student_anchor > 0 pulls a trainable student towards the cached teachers: it needs model.camera_student and model.student_trainable")
+    return out
 
 
 def make_datasets(cfg):
@@ -287,9 +312,12 @@ def camera_frozen(model):
 
 
 def _external(model):
-    """the state prefixes that are not in a checkpoint: the frozen camera heads. With freeze_camera false the camera weights are trained, so they belong to the state: a resume must
-    restore them, not start them from the pre-trained file again"""
-    return ("camera.",) if camera_frozen(model) else ()
+    """the state prefixes that are not in a checkpoint: the frozen camera heads, and a frozen camera student (model.student_trainable false: it is loaded from student_init). With
+    freeze_camera false the camera weights are trained, so they belong to the state: a resume must restore them, not start them from the pre-trained file again; a student that trains
+    is part of the state (checkpoints, resume, EMA)"""
+    cfg = getattr(model, "cfg", None)
+    frozen_student = bool(getattr(cfg, "camera_student", "")) and not cfg.student_trainable
+    return (("camera.",) if camera_frozen(model) else ()) + (("student.",) if frozen_student else ())
 
 
 def trainable_state(model, loss):
@@ -477,6 +505,14 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
                 out["total"] = out["total"] + aux_weight(step_frac, cfg.radar_aux, cfg.radar_aux_floor, cfg.radar_aux_half) * la
             else:                                                                  # validation: how much of the detections the features hold
                 out["radar_kept"] = enc.kept_fraction(batch["radar"], f_side.shape[0], features=f_side)[0]
+        side = res.get("student_side")                                             # model.camera_student only
+        if side is not None and cfg is not None and cfg.student_anchor > 0:
+            la = anchor_terms(side)["total"]
+            if train_terms:                                                        # the anchor: the student's current-frame outputs stay near the teachers', its weight decays to a floor
+                out["student_anchor"] = la
+                out["total"] = out["total"] + student_anchor_weight(step_frac, cfg.student_anchor, cfg.student_anchor_floor, cfg.student_anchor_until) * la
+            else:                                                                  # validation: how far the student has drifted from the teachers (the total is the task loss only)
+                out["student_anchor"] = la.detach()
         if diag:
             groups = {k[len("group."):]: v for k, v in out.items() if k.startswith("group.") and torch.is_tensor(v) and v.requires_grad}
             if wc > 0 and out["consistency"].requires_grad:      # its gradient norm at the BEV feature calibrates its weight
@@ -487,7 +523,7 @@ def forward_loss(model, loss, batch, step_frac, device, amp, cfg=None, diag=Fals
     return out, res, gts
 
 
-LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0", "radar_aux", "radar_kept")     # single terms logged (train and val) next to the groups:
+LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0", "radar_aux", "radar_kept", "student_anchor")     # single terms logged (train and val) next to the groups:
                                                                              # the velocity terms (t11), hidden in group.objects / motion
 
 

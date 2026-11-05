@@ -35,6 +35,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path.insert(0, os.path.join(ROOT, "training"))
 OLD_COMMIT = "df9d4370723116462e879a335da9d3ec83841229"            # the last commit of training/train.py before the engine moved out (hygiene flag, lr_groups)
 WALL = ("t", "s_per_step", "t_data", "t_step")                   # wall-clock fields of a log row
+ADDED = ("student_anchor", "student_anchor_floor", "student_anchor_until")      # TrainConfig fields added after OLD_COMMIT (t22 stage B, default off): the old trainer has none, so they are left out of every config compared
 if os.path.isdir("/dev/shm"):
     tempfile.tempdir = "/dev/shm"                               # the run folders of the toy are small and written with fsync: keep them off the disk
 
@@ -187,7 +188,7 @@ def snapshot(root, name):
             r = json.loads(ln) if ln.strip().endswith("}") else {"cut": ln}
             out.append(json.dumps({k: v for k, v in r.items() if k not in WALL}, sort_keys=True))
         return out
-    here = lambda x: json.loads(json.dumps(x, default=str).replace(root.replace("\\", "\\\\"), "<root>"))      # noqa: E731 - the two roots differ: compare the rest of every path
+    here = lambda x: {k: v for k, v in json.loads(json.dumps(x, default=str).replace(root.replace("\\", "\\\\"), "<root>")).items() if k not in ADDED}      # noqa: E731 - the two roots differ: compare the rest of every path
     snap = dict(files=files, log=rows("log.jsonl"), superseded=rows("log_superseded.jsonl"),
                 config=here(json.load(open(os.path.join(d, "config.json")))) if "config.json" in files else None)
     snap["stopped"] = {k: v for k, v in json.load(open(os.path.join(d, "STOPPED"))).items() if k != "t"} if "STOPPED" in files else None
@@ -296,7 +297,7 @@ def scenarios(OLD):
 
 
 def config_fields(OLD):
-    a, b = dataclasses.asdict(OLD.TrainConfig()), dataclasses.asdict(NEW.TrainConfig())
+    a, b = dataclasses.asdict(OLD.TrainConfig()), {k: v for k, v in dataclasses.asdict(NEW.TrainConfig()).items() if k not in ADDED}
     d = diff(a, b) or diff(sorted(OLD.RESUME_FREE), sorted(NEW.RESUME_FREE))
     check(d is None, "TrainConfig: the same fields and defaults and the same RESUME_FREE as before" + ("" if d is None else f"  [{d}]"))
 

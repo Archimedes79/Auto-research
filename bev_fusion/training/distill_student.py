@@ -36,7 +36,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -45,7 +44,6 @@ while not os.path.isdir(os.path.join(_REPO, "autoresearch", "trainkit")) and os.
     _REPO = os.path.dirname(_REPO)
 if os.path.join(_REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(_REPO, "autoresearch"))
-from trainkit.checkpoint import warm_start  # noqa: E402
 from trainkit.config import Config  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
 from trainkit.util import prepare_run_dir, seed_all  # noqa: E402
@@ -53,7 +51,7 @@ from trainkit.util import prepare_run_dir, seed_all  # noqa: E402
 import splits  # noqa: E402
 from feature_cache import FeatureStore  # noqa: E402
 from lane_branch import image_path, load_image  # noqa: E402
-from student_encoder import StudentEncoder, h8_warp_grid  # noqa: E402
+from student_encoder import StudentEncoder, cell_maps, distill_terms, h8_warp_grid, load_trained, newest_checkpoint, total_of  # noqa: E402
 
 MIN_RAM_MB, MAX_GPU_MB = 3000, 6144                    # the resource gate: free host RAM, GPU memory already in use by others
 # flat-ground range of an image row (nuScenes CAM_FRONT: fy 1266.4 px, cy 491.5 px at 1600 x 900, 1.5 m above the road) in the JPEG's window (resize 0.44, top 140 rows cut)
@@ -119,34 +117,7 @@ class KeyFrames(torch.utils.data.Dataset):
 
 
 # ------------------------------------------------------------------------------------------------ loss and validation
-def cell_maps(out, tgt):
-    """the per-cell terms, each (B, h, w): kl<k> = KL(teacher || student) over the 118 depth bins, cos<k> = cosine similarity of the 80 context channels, mse<k> = their mean squared
-    error; k = 16 (DualBEV) and 8 (BEVFusion). The teacher probabilities are renormalised (they are stored as float16)."""
-    m = {}
-    for k in ("16", "8"):
-        t = tgt["p" + k].float()
-        t = t / t.sum(1, keepdim=True)
-        m["kl" + k] = (t * (t.clamp_min(1e-8).log() - out["logit" + k].float().log_softmax(1))).sum(1)
-        c, tc = out["ctx" + k].float(), tgt["c" + k].float()
-        m["cos" + k] = F.cosine_similarity(c, tc, dim=1)
-        m["mse" + k] = (c - tc).pow(2).mean(1)
-    return m
-
-
-def total_of(mean):
-    """the loss from the cell means: kl + (1 - cos) + mse on both heads, equal weights"""
-    return sum(mean["kl" + k] + 1 - mean["cos" + k] + mean["mse" + k] for k in ("16", "8"))
-
-
-def distill_terms(out, tgt):
-    """the training terms: kl<k>, cosl<k> (= 1 - cosine), mse<k>, total"""
-    mean = {n: v.mean() for n, v in cell_maps(out, tgt).items()}
-    terms = {n: v for n, v in mean.items() if not n.startswith("cos")}
-    terms.update({"cosl" + k: 1 - mean["cos" + k] for k in ("16", "8")})
-    terms["total"] = total_of(mean)
-    return terms
-
-
+# the loss itself (cell_maps, total_of, distill_terms) lives in student_encoder.py: train.py uses it as the stage-B anchor
 def band_rows(ys):
     """{band: row indices} of the cell rows whose centres lie at the pixel rows `ys` of the JPEG's window: the flat-ground range f z / (y - y_horizon) falls in the band (rows above the
     horizon or beyond 60 m are in none)"""
@@ -414,24 +385,23 @@ def eval_only(cfg):
     """--eval-only: the EMA weights of the newest checkpoint of runs/<name>, the validation of `run` (with the null baseline) on cfg.split -> eval_metrics.json. Nothing is trained,
     metrics.json and the checkpoints are not touched. -> exit code"""
     out_dir = os.path.join(cfg.out_root, cfg.name)
-    ckpts = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt")) if os.path.isdir(out_dir) else []
-    if not ckpts:
+    path = newest_checkpoint(out_dir)
+    if path is None:
         print(f"{out_dir} has no checkpoint to evaluate", flush=True)
         return 2
-    path = os.path.join(out_dir, ckpts[-1])
     ck = torch.load(path, map_location="cpu", weights_only=False)
     model = StudentEncoder(ck["cfg"]["backbone"], pretrained=False)            # every weight comes from the checkpoint
-    warm_start(path, model, torch.nn.Module(), ck=ck)                          # its EMA tensors (and the integer buffers): the weights `run` validated
+    load_trained(model, path, ck=ck)                                           # its EMA tensors (and the integer buffers): the weights `run` validated
     model.to(cfg.device)
     sets, _, val_loader = build_data(cfg)
     null = null_baseline(sets["train"], cfg.null_frames, cfg.workers)
     t0 = time.time()
     val, curves = score(model, val_loader, cfg.device, null)
     write_json(os.path.join(out_dir, "eval_metrics.json"),
-               {"name": cfg.name, "checkpoint": ckpts[-1], "step": ck["step"], "weights": "ema", "split": cfg.split, "backbone": ck["cfg"]["backbone"], "n_train": len(sets["train"]),
+               {"name": cfg.name, "checkpoint": os.path.basename(path), "step": ck["step"], "weights": "ema", "split": cfg.split, "backbone": ck["cfg"]["backbone"], "n_train": len(sets["train"]),
                 "n_val": len(sets["val"]), "null_frames": min(cfg.null_frames, len(sets["train"])), "device": cfg.device, "seconds": time.time() - t0, "val": val,
                 "val_by_row": curves["by_row"], "val_by_col": curves["by_col"]})
-    print(f"{cfg.name} {ckpts[-1]} on {cfg.split}: {report(val)}", flush=True)
+    print(f"{cfg.name} {os.path.basename(path)} on {cfg.split}: {report(val)}", flush=True)
     return 0
 
 

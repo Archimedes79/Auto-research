@@ -305,15 +305,30 @@ def CachedBEVFusionModel(cfg=None):
     cfg = cfg or ModelConfig()
 
     class _Cached(BEVFusionModel):
+        CACHED = True
+
+        def _run_student(self, batch):
+            """camera_student (t22): the student on the current key-frame image batch["lane_img"] (uint8, B x 3 x 256 x 704) -> its output dict; no graph unless it trains"""
+            if "lane_img" not in batch:
+                raise KeyError("camera_student reads the current key-frame image batch['lane_img']: set TrainConfig.lane_images (the folder of the key-frame JPEGs, data/cache/img_front)")
+            with torch.set_grad_enabled(torch.is_grad_enabled() and self.cfg.student_trainable):
+                return self.student(batch["lane_img"])
+
         def camera_bevs(self, batch):
             prob = batch["prob"].float()
             B, Fn = prob.shape[:2]
             if self.cfg.camera_off:                                     # radar-only system (was ignored here until 2026-10-30:
                 return torch.zeros(B, Fn, self.cfg.c_cam, self.grid.nx, self.grid.ny, device=prob.device)   # t2_cam_off ran WITH camera)
+            stud, side = (self._run_student(batch) if self.student is not None else None), {}
             bevs = []
             for i, src in enumerate(CAMERAS[self.cfg.camera_features]):  # one lift + collapse per feature source, each with its own ida
                 s = src.suffix
                 p, ctx = (prob if i == 0 else batch["prob" + s].float()), batch["ctx" + s].float()
+                if stud is not None:                                    # t22: frame 0 from the student, the older frames keep their cached teacher outputs; `side` for the anchor loss
+                    h = self.student.HEAD_OF[src.features]
+                    side.update({"p" + h: stud["prob" + h], "c" + h: stud["ctx" + h], "l" + h: stud["logit" + h], "t_p" + h: p[:, 0].detach(), "t_c" + h: ctx[:, 0].detach()})
+                    p = torch.cat([stud["prob" + h].float()[:, None], p[:, 1:]], 1)
+                    ctx = torch.cat([stud["ctx" + h].float()[:, None], ctx[:, 1:]], 1)
                 if i == 0 and self.cam_adapter is not None:
                     ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
                 lift, collapse = getattr(self, "lift" + s), getattr(self, "cam_reduce" + s)
@@ -321,6 +336,7 @@ def CachedBEVFusionModel(cfg=None):
                 bevs.append(torch.stack([collapse(lift(ctx[b], p[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida" + s],
                                                        key=None if keys is None else keys[b]))
                                          for b in range(B)]))           # one calibration per sample (scenes differ)
+            self._student_side = side or None
             if len(bevs) == 1:
                 return bevs[0]
             return self.cam_merge(torch.cat(bevs, 2).flatten(0, 1)).view_as(bevs[0])

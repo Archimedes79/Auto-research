@@ -21,7 +21,14 @@ Cells are assumed at the centre convention above; a constant sub-cell offset of 
 
 forward(img) -> {"prob16" (B, 118, 16, 44), "ctx16" (B, 80, 16, 44), "prob8" (B, 118, 32, 88), "ctx8" (B, 80, 32, 88), "logit16", "logit8"} (probabilities = softmax of the logits
 over the 118 bins). Test: tests/test_student_encoder.py
+
+Stage B (in the chain, ModelConfig.camera_student): the same module is `model.student`; this file also holds what the chain needs of it: the distillation loss (`distill_terms`, used by
+distill_student.py and, as the anchor, by train.forward_loss: `anchor_terms`, `student_anchor_weight`), the BatchNorm switch (`keep_bn_eval`) and the loader of a trained student
+(`load_trained`). Test: tests/test_student_chain.py
 """
+import os
+import sys
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -99,6 +106,8 @@ class Head(nn.Module):
 
 
 class StudentEncoder(nn.Module):
+    HEAD_OF = {"dualbev": "16", "bevfusion": "8"}      # model.CAMERAS feature family -> the head that stands in for its cached teacher output (H16: DualBEV, H8: BEVFusion)
+
     def __init__(self, backbone="efficientvit_b1", pretrained=True, c_fpn=128, warp_h8=True):
         super().__init__()
         self.backbone, chans = make_backbone(backbone, pretrained)
@@ -109,6 +118,7 @@ class StudentEncoder(nn.Module):
         self.register_buffer("std", torch.tensor(IMG_STD).view(1, 3, 1, 1), persistent=False)
         self.register_buffer("grid8", h8_warp_grid()[0] if warp_h8 else None, persistent=False)
         self._frozen = False
+        self._bn_eval = False
 
     def encode(self, img):
         """img (B, 3, 256, 704) RGB 0..255 (uint8 or float) -> the four backbone maps (strides 4 / 8 / 16 / 32)"""
@@ -143,12 +153,94 @@ class StudentEncoder(nn.Module):
             p.requires_grad_(not flag)
         return self.train(self.training)
 
+    def keep_bn_eval(self, flag=True):
+        """flag: every BatchNorm of the encoder stays in eval mode (its running statistics are fixed, its scale and shift still train) whatever .train() of the model around it asks:
+        stage B fine-tunes on the few key frames of a micro-batch, which would drag the statistics the distillation fitted"""
+        self._bn_eval = flag
+        return self.train(self.training)
+
     def train(self, mode=True):
         super().train(mode)
         if self._frozen:
             self.backbone.eval()
+        if self._bn_eval:
+            for m in self.modules():
+                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                    m.eval()
         return self
 
     def lr_groups(self, lr, backbone_mult=0.1, prefix=""):
         """trainkit's `Config.lr_groups` for this encoder (`prefix` = its name inside a bigger model): the backbone at backbone_mult x lr, FPN and heads at lr; {} while frozen."""
         return {} if self._frozen else {prefix + "backbone": {"lr": lr * backbone_mult}}
+
+
+# ------------------------------------------------------------------------------------------------ the loss against the teachers (stage A training, stage B anchor)
+def cell_maps(out, tgt):
+    """the per-cell terms, each (B, h, w): kl<k> = KL(teacher || student) over the 118 depth bins, cos<k> = cosine similarity of the 80 context channels, mse<k> = their mean squared
+    error; k = 16 (DualBEV) and 8 (BEVFusion). The teacher probabilities are renormalised (they are stored as float16)."""
+    m = {}
+    for k in ("16", "8"):
+        t = tgt["p" + k].float()
+        t = t / t.sum(1, keepdim=True)
+        m["kl" + k] = (t * (t.clamp_min(1e-8).log() - out["logit" + k].float().log_softmax(1))).sum(1)
+        c, tc = out["ctx" + k].float(), tgt["c" + k].float()
+        m["cos" + k] = F.cosine_similarity(c, tc, dim=1)
+        m["mse" + k] = (c - tc).pow(2).mean(1)
+    return m
+
+
+def total_of(mean):
+    """the loss from the cell means: kl + (1 - cos) + mse on both heads, equal weights"""
+    return sum(mean["kl" + k] + 1 - mean["cos" + k] + mean["mse" + k] for k in ("16", "8"))
+
+
+def distill_terms(out, tgt):
+    """the training terms: kl<k>, cosl<k> (= 1 - cosine), mse<k>, total"""
+    mean = {n: v.mean() for n, v in cell_maps(out, tgt).items()}
+    terms = {n: v for n, v in mean.items() if not n.startswith("cos")}
+    terms.update({"cosl" + k: 1 - mean["cos" + k] for k in ("16", "8")})
+    terms["total"] = total_of(mean)
+    return terms
+
+
+# ------------------------------------------------------------------------------------------------ in the chain (stage B)
+def anchor_terms(side):
+    """distill_terms of the chain's `student_side` (model._forward's result entry): the student's logits and context of the current frame against the cached teacher's probabilities and
+    context of the same frame -> the stage-A terms; the anchor of train.forward_loss is its ["total"]"""
+    out = {n + k: side[c + k] for k in ("16", "8") for n, c in (("logit", "l"), ("ctx", "c"))}
+    tgt = {n + k: side["t_" + n + k] for k in ("16", "8") for n in ("p", "c")}
+    return distill_terms(out, tgt)
+
+
+def student_anchor_weight(step_frac, start, floor, until):
+    """the weight of the distillation anchor at the fraction `step_frac` of the steps: `start` at the beginning, falling linearly to start * floor at the fraction `until`, constant after"""
+    return start * (1.0 - (1.0 - floor) * min(1.0, max(0.0, step_frac) / until))
+
+
+def newest_checkpoint(path):
+    """the checkpoint a path names: a file as it is, or the newest ckpt_*.pt of a run folder; None when there is none"""
+    if os.path.isfile(path):
+        return path
+    names = sorted(f for f in os.listdir(path) if f.startswith("ckpt_") and f.endswith(".pt")) if os.path.isdir(path) else []
+    return os.path.join(path, names[-1]) if names else None
+
+
+def load_trained(model, path, ck=None):
+    """`model` takes the weights of a trained student: the EMA tensors (the weights the validation of the run saw) and the integer buffers of the checkpoint `path` names (a file or a run folder:
+    its newest one), strictly: a tensor the checkpoint lacks, one it has too many or of another shape is an error. ck = the checkpoint already read. -> the checkpoint dict"""
+    try:
+        from trainkit.checkpoint import warm_start     # the engine's loader (autoresearch/trainkit): on sys.path once train.py / distill_student.py is imported, a run's snapshot carries a copy
+    except ImportError:                                # else the live autoresearch/ of the repository, found by walking up (as train.py does)
+        root = os.path.dirname(os.path.abspath(__file__))
+        while not os.path.isdir(os.path.join(root, "autoresearch", "trainkit")) and os.path.dirname(root) != root:
+            root = os.path.dirname(root)
+        sys.path.append(os.path.join(root, "autoresearch"))
+        from trainkit.checkpoint import warm_start
+    file = newest_checkpoint(path)
+    if file is None:
+        raise FileNotFoundError(f"{path}: no checkpoint (a ckpt_*.pt file or a run folder with one)")
+    ck = ck if ck is not None else torch.load(file, map_location="cpu", weights_only=False)
+    fresh = warm_start(file, model, nn.Module(), ck=ck)
+    if fresh:
+        raise ValueError(f"{file} lacks {len(fresh)} tensor(s) of this student, e.g. {fresh[:3]}")
+    return ck

@@ -35,7 +35,7 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 ## Network slots
 | slot | contract | kinds (builder table) |
 |---|---|---|
-| camera encoder | `BEVInputs` -> BEVs (B, F, C_cam, X, Y); visibility from layer 1 | `camera_features` dualbev / bevfusion / dual (the `CAMERAS` table); `LIFTS` pd / p / s; `COLLAPSES` zconv / zsum |
+| camera encoder | `BEVInputs` -> BEVs (B, F, C_cam, X, Y); visibility from layer 1 | `camera_features` dualbev / bevfusion / dual (the `CAMERAS` table); `LIFTS` pd / p / s; `COLLAPSES` zconv / zsum; option `camera_student` (t22 stage B, off): a small trained image encoder (`STUDENTS` evit_b1 / resnet18) replaces the cached teacher outputs of the CURRENT frame of both sources from `lane_img`, older frames keep the cached ones |
 | radar encoder | radar points -> (B, C_rad, X, Y); the raster is its first op, before any weight | `RADARS` raster / delta_slots (lossless slot raster + side loss, `radar_encoder.py`) / pillars / off |
 | temporal fusion | (BEV now, past BEVs with their ego steps, state, step, visibility) -> (BEV, state); the memory re-centre is a whole-cell roll, the gradient passes | `TEMPORALS` window_memory / ego_gru / none, one block per branch (`cam_temporal`, `rad_temporal`) |
 | lane add-on | (lane image, K, T, ida, the camera depth) -> a BEV added after the camera's temporal block | `lane_branch` res4 / rgb / off, with `camera_features` dualbev or dual (t20) |

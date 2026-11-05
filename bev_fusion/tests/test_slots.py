@@ -59,10 +59,13 @@ INVALID = [dict(cam_buffer="pair", cam_temporal="none"), dict(cam_buffer="recurr
            dict(rad_temporal="xx"), dict(lane_branch="res4", camera_off=True), dict(trunk_kind="cmx")]
 
 COMBOS += [{"motion_block": True, "motion_strides": (4, 2)}, {"motion_block": True, "box_vel_from_field": True}, {"motion_block": True, "box_vel_from_field": True, "object_moving": True}]   # t15
+COMBOS += [{"camera_features": "dual", "camera_student": "resnet18", "student_trainable": True}]    # t22 stage B: the camera student (random ResNet-18) trains in the chain; test_student_chain.py
 COMBOS += [{"camera_features": "dual", "radar_kind": "delta_slots", "c_rad": 64, "rad_temporal": "window_memory", "rad_static_gate": True,
             "object_direction": True, "object_moving": True, "motion_block": True, "box_vel_from_field": True}]   # t16: the full network (configs/t16_full.json)
 INVALID += [dict(box_vel_from_field=True), dict(motion_block=True, radar_kind="off"), dict(motion_block=True, camera_off=True),
             dict(motion_block=True, motion_strides=(1, 2)), dict(motion_block=True, motion_strides=(4, 3))]
+INVALID += [dict(camera_student="resnet18", student_trainable=True), dict(camera_features="dual", camera_student="resnet18"),            # t22: the student needs 'dual' and, frozen, a student_init
+            dict(camera_features="dual", camera_student="resnet18", student_trainable=True, camera_off=True), dict(student_trainable=True)]
 
 
 def batch_for(cfg, B=2, Fn=3, seed=0):
@@ -88,6 +91,8 @@ def batch_for(cfg, B=2, Fn=3, seed=0):
     if cfg.camera_features == "dual":
         p2 = torch.rand(B, Fn, len(DEPTHS), 32, 88, generator=g)
         b.update(prob2=p2 / p2.sum(2, keepdim=True), ctx2=torch.randn(B, Fn, N_CTX, 32, 88, generator=g), ida2=bevfusion_ida())
+    if cfg.camera_student:                                       # t22: the student reads the current key-frame image
+        b["lane_img"] = torch.randint(0, 256, (B, 3, *DST_HW), dtype=torch.uint8, generator=g)
     return b
 
 

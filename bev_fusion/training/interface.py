@@ -28,7 +28,8 @@ INPUTS = {
     "prob2": (False, "(B, F, D2, h2, w2) cached BEVFusion depth (camera_features dual)"),
     "ctx2": (False, "(B, F, 80, h2, w2) cached BEVFusion context (camera_features dual)"),
     "ida2": (False, "crop / resize of the BEVFusion features (camera_features dual)"),
-    "lane_img": (False, "(B, 3, H, W) uint8 image of the current frame for the lane add-on"),
+    "lane_img": (False, "(B, 3, H, W) uint8 image of the current frame for the lane add-on; it also feeds the camera student (ModelConfig.camera_student, t22), which REQUIRES it: "
+                        "the contract cannot see the config, so the cached model raises a KeyError naming TrainConfig.lane_images when it is missing"),
     "flip": (False, "(B,) bool: samples mirrored by the augmentation (y -> -y); the camera BEV is mirrored after the camera slot"),
     "gap_steps": (False, "list (B) of {'prev': steps, 'next': steps}: the ego steps (dt, v, omega) from now to the neighbouring keyframes "
                          "(python floats, from the poses; dt < 0 backwards): the true gap and ego motion for decoding dt = +-0.5 s and the memory step between calls"),
@@ -70,7 +71,9 @@ OPTIONAL_PER_DT = {"boxes": "dense box output (extract.dense_boxes): peak weight
                    "obj_feat": "refiner features", "obj_dt": "refiner dt", "refine": "refiner training targets",
                    "sem_1m": "centreline_1m option (D48): the 1 m centre-line head, logits (B, C, X/2, Y/2), channels from losses.layer_spec_1m"}
 OPTIONAL_OUTPUTS = {"radar_side": "radar_kind 'delta_slots': {'features': (B, C, X, Y) encoder output, 'state': (B, 61, X, Y) lossless slot raster}, "
-                                  "read by the radar side loss (train.py) and the kept-fraction monitor"}
+                                  "read by the radar side loss (train.py) and the kept-fraction monitor",
+                    "student_side": "camera_student (t22): the student's current-frame outputs p<k> / c<k> / l<k> (probabilities, context, logits) and the cached teacher's t_p<k> / t_c<k> "
+                                    "(detached) for k = 16 (DualBEV) and 8 (BEVFusion); read by the anchor loss (train.py, student_encoder.anchor_terms)"}
 OUTPUTS = {"out": "{dt: per-dt dict}", "state": "{'cam': ..., 'rad': ...} temporal states for the next call",
            "features": "(B, C, X, Y) BEV features S after the backbone (and neck)"}
 

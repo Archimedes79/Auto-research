@@ -244,7 +244,7 @@ preds = {0.0: {"obj": hl(torch.randn(1, 8, grid.nx, grid.ny)), "v_hat": torch.ze
 gts = {0.0: [synthetic_gt(scene, grid)]}
 lout = BEVLoss(grid=grid)(preds, gts)
 assert {"objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0"} <= set(tr.LOGGED_TERMS), tr.LOGGED_TERMS     # the card's change 5
-LOSS_TERMS = [k for k in tr.LOGGED_TERMS if k not in ("radar_aux", "radar_kept")]      # these two are made by train.forward_loss (the radar side loss), not by BEVLoss: test_radar_slot.py
+LOSS_TERMS = [k for k in tr.LOGGED_TERMS if k not in ("radar_aux", "radar_kept", "student_anchor")]      # these are made by train.forward_loss (the radar side loss: test_radar_slot.py; the t22 student anchor: test_student_chain.py), not by BEVLoss
 assert all(k in lout and torch.isfinite(lout[k]) for k in LOSS_TERMS), (LOSS_TERMS, sorted(lout))
 mov1 = float(lout["objhead.mov@+0.0"].detach())
 mov2 = float(BEVLoss(LossConfig(w_obj_mov=2.0), grid=grid)(preds, gts)["objhead.mov@+0.0"].detach())

@@ -31,6 +31,8 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 velocity head); a batch unrolls its F frames oldest -> newest, starting from the previous call's buffer (training: the
                 previous keyframe; none: cold). Train / deploy: training chains up to 3 keyframes x F frames, a stream is unbounded. The motion
                 block reads two RAW BEVs (current + the frame before it) in both modes. The radar keeps its own 0.5 s point buffer
+  camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, training/student_encoder.py): a small trained image encoder replaces the cached teacher outputs of the
+                current frame (both feature sources of camera_features 'dual'); older frames keep their cached outputs
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
                 (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
@@ -132,6 +134,12 @@ class ModelConfig:
                                        # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch);
                                        # camera_features 'dualbev' or 'dual' (t20: it reads the first source = DualBEV, and adds to the merged BEV)
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
+    camera_student: str = ""           # t22 stage B: "" = off | a key of STUDENTS (training/student_encoder.py): a small trained image encoder that replaces the cached teacher outputs of
+                                       # the CURRENT frame (frame 0) of both feature sources, from batch["lane_img"] (TrainConfig.lane_images); older frames keep their cached teacher
+                                       # outputs. Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the same on or off)
+    student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
+    student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed); False: frozen, not part of the checkpoints (loaded from student_init)
+    student_frames: str = "current"    # the frames the student replaces: "current" (frame 0, the only frame with a JPEG) | "all" (needs a sweep-image cache: NotImplementedError)
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     centreline_1m: bool = False        # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer
@@ -237,6 +245,33 @@ TRUNKS = {"dualbev": _dualbev_trunk, "second": _second_trunk}
 BACKBONES = dict(TRUNKS, cmx=_cmx_trunk)
 
 
+def _student(backbone):
+    try:
+        from .student_encoder import StudentEncoder
+    except ImportError:
+        from student_encoder import StudentEncoder
+    return StudentEncoder(backbone, pretrained=False, warp_h8=True)           # the weights come from student_init (or from the training)
+
+
+# camera student (t22 stage B, option camera_student): kind -> the encoder that stands in for the cached teachers of the current frame; which of its outputs replaces which
+# feature family's cached tensors: StudentEncoder.HEAD_OF
+STUDENTS = {"evit_b1": lambda: _student("efficientvit_b1"), "resnet18": lambda: _student("resnet18")}
+
+
+def _build_student(cfg):
+    """the module `student` of ModelConfig.camera_student: its trained weights (student_init), BatchNorm statistics fixed, frozen unless student_trainable"""
+    student = STUDENTS[cfg.camera_student]()
+    if cfg.student_init:
+        try:
+            from .student_encoder import load_trained
+        except ImportError:
+            from student_encoder import load_trained
+        load_trained(student, cfg.student_init)
+    student.keep_bn_eval()
+    student.requires_grad_(cfg.student_trainable)
+    return student
+
+
 def check_config(cfg):
     """every unknown kind and every combination of slot kinds that does not fit, in one place (one ValueError naming all)"""
     errs = [f"{name}={val!r}: one of {sorted(table)}" for name, val, table in
@@ -261,6 +296,20 @@ def check_config(cfg):
         errs.append(f"rad_static_vr must be positive (m/s), is {cfg.rad_static_vr}")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
+    if cfg.camera_student:                                            # t22 stage B
+        if cfg.camera_student not in STUDENTS:
+            errs.append(f"camera_student={cfg.camera_student!r}: one of {sorted(STUDENTS)}")
+        if cfg.camera_features != "dual":
+            errs.append("camera_student replaces the cached outputs of BOTH feature sources (DualBEV and BEVFusion) of the current frame: it needs camera_features 'dual'")
+        # lift 's' and cam_adapter need no rule of their own: 'dual' (several feature sources) refuses both above
+        if cfg.camera_off:
+            errs.append("camera_student reads the camera image: it cannot be combined with camera_off")
+        if not cfg.student_trainable and not cfg.student_init:
+            errs.append("a frozen student (student_trainable False) needs student_init: a random frozen encoder stands in for nothing")
+    elif cfg.student_init or cfg.student_trainable:
+        errs.append("student_init / student_trainable do nothing without camera_student")
+    if cfg.student_frames not in ("current", "all"):
+        errs.append(f"student_frames={cfg.student_frames!r}: one of ['all', 'current']")
     if cfg.motion_block and (cfg.camera_off or cfg.radar_kind == "off"):
         errs.append("motion_block reads two camera frames and the radar Doppler: it needs the camera and a radar")
     if cfg.box_vel_from_field and not cfg.motion_block:
@@ -277,13 +326,21 @@ def check_config(cfg):
             errs.append(f"centreline_1m pools the grid by {LEVELS['1m']}: {g.nx} x {g.ny} must be even")
     if errs:
         raise ValueError("; ".join(errs))
+    if cfg.student_frames == "all":
+        raise NotImplementedError("student_frames='all' would run the student on the older frames of the window / pair too: they are sweeps, and no sweep-image cache exists "
+                                  "(about 58 k JPEGs, 3 GB, a separate step); only 'current' is supported")
 
 
 class BEVFusionModel(nn.Module):
+    CACHED = False                         # True in the cached model (feature_cache.CachedBEVFusionModel): camera_student replaces cached outputs, so it needs it
+    _student_side = None                   # camera_student: the student's and the cached teacher's current-frame tensors of the last camera_bevs call, taken by _forward
+
     def __init__(self, cfg=None):
         super().__init__()
         self.cfg = cfg = cfg or ModelConfig()
         check_config(cfg)
+        if cfg.camera_student and not self.CACHED:
+            raise ValueError("camera_student replaces cached teacher outputs: it needs the cached chain (a feature_cache; feature_cache.CachedBEVFusionModel), not the live camera heads")
         self.grid = Grid(z_levels=cfg.z_levels, **cfg.grid_kwargs)
         # camera slot: pre-trained image heads (only image_features is used; the cached chain drops them) + lift + height collapse
         self.camera = FrontCameraEncoder()
@@ -350,6 +407,7 @@ class BEVFusionModel(nn.Module):
         self.spec_1m = layer_spec_1m(cfg.centreline_1m)
         self.head_1m = SemanticHead(c, len(self.spec_1m)) if self.spec_1m else None   # one pyramid level down, reads the sem head's moved state.
         # Built LAST: at one seed the init of every other module is the same with the option on or off (the random numbers it draws come after theirs)
+        self.student = _build_student(cfg) if cfg.camera_student else None            # t22: the image encoder that stands in for the cached teachers of frame 0 (the cached model uses it)
 
     # ---- camera
     def camera_bevs(self, batch):
@@ -509,6 +567,7 @@ class BEVFusionModel(nn.Module):
             raise ValueError("advance: cam_buffer 'pair' / 'recurrent', rad_temporal 'none' and no flipped sample")
         batch = Precompute.from_model(self)(dict(batch), ("vis_cam",))
         frames = self.camera_bevs(batch)
+        self._student_side = None                                 # no loss follows an advance
         steps = [[tuple(torch.as_tensor(t, dtype=frames.dtype, device=frames.device) for t in s) for s in f] for f in batch["steps"]]
         _, cam_state, _, buf = self._camera_buffered(frames, steps, None, state or {}, step, batch["vis_cam"].to(frames))
         return dict(state or {}, cam=cam_state, buf=buf)
@@ -562,6 +621,7 @@ class BEVFusionModel(nn.Module):
                ((self._rad_mask,) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
         batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
         cam_frames = self.camera_bevs(batch)                                         # the batch's frame (kept when precomputed)
+        student_side, self._student_side = self._student_side, None                  # camera_student: set by the cached model's camera_bevs, handed out with the result
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
                  for f in batch["steps"]]
         cam_obs = batch["vis_cam"].to(cam_frames) if "vis_cam" in need else None
@@ -641,6 +701,8 @@ class BEVFusionModel(nn.Module):
             res["state"]["buf"] = buf
         if radar_side is not None:
             res["radar_side"] = radar_side
+        if student_side is not None:                              # t22: the anchor of train.forward_loss reads it (student_encoder.anchor_terms)
+            res["student_side"] = student_side
         return res
 
 

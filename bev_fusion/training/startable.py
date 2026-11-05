@@ -9,7 +9,7 @@
 The checks repeat what `train.build` / `check_resume` refuse and what a start needs: the file parses (an unknown key is an error),
 `ModelConfig` / `LossConfig` / `model.check_config` accept it, the head layout flags of model and loss agree, the camera kind and its feature
 caches fit (`model.CAMERAS`), `loss.fusion_area_only` is not combined with `model.refine` (the refiner builds its own box mask), every named path
-exists (data root, caches, all pre-trained weights, `init_from`), an existing run folder is not finished and its stored config equals this one
+exists (data root, caches, all pre-trained weights, `init_from`, `model.student_init` with a checkpoint in it), an existing run folder is not finished and its stored config equals this one
 (`train.check_resume`), the configs that stop at the first step or after the model is built are refused (`motion_block` needs `n_cam` >= 2, `loss.dt_weights`
 needs a weight near |dt| 0 and 0.5, `train_only` / `freeze` must name parameters: `freeze.plan` on a model built on the meta device, no weights),
 `radar_aux` without `delta_slots` and `loss.w_obj_mov` without `model.object_moving` are noted as doing nothing, the disk has room, and the GT: the autogt that would be imported (a pinned copy `<out_root>/<name>/autogt`, else the live
@@ -40,6 +40,7 @@ import freeze as freeze_mod                                     # noqa: E402
 import losses                                                   # noqa: E402
 import model as M                                               # noqa: E402
 import train as T                                               # noqa: E402
+from student_encoder import newest_checkpoint                   # noqa: E402
 
 SMOKE = dict(steps=20, warmup=5, eval_every=10, save_every=10, keep=1, log_every=5)
 SMOKE_LOSS = dict(warmup_hold=0.0, warmup_ramp=0.01)           # the dt != 0 terms and the aux heads run inside 20 steps
@@ -181,6 +182,10 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
             problems.append(f"camera_features {mc.camera_features!r} and feature_cache2 do not match (the kinds with a second feature source need it, the others must not set it)")
         if mc.lane_branch and cached and not cfg.lane_images:
             problems.append("model.lane_branch with a feature_cache needs lane_images")
+        problems += T.student_findings(cfg, mc)                 # camera_student: a feature cache, lane_images, the anchor's schedule and student
+        si = _abs(mc.student_init, root) if mc.student_init else ""
+        if si and os.path.exists(si) and newest_checkpoint(si) is None:
+            problems.append(f"model.student_init: {mc.student_init} holds no checkpoint (ckpt_*.pt)")
         if mc.refine and lc.fusion_area_only:
             problems.append("loss.fusion_area_only with model.refine: the refiner builds its own box mask (losses.refine_gt_boxes) and ignores the option")
         if not cached and cfg.device == "cuda":
@@ -205,7 +210,7 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
              ("gt_cache", cfg.gt_cache), ("radar_cache", cfg.radar_cache), ("lane_images", cfg.lane_images), ("init_from", cfg.init_from)]
     if mc is not None:
         named += [("model.pretrained", mc.pretrained), ("model.trunk_pretrained", mc.trunk_pretrained),
-                  ("model.lane_pretrained", mc.lane_pretrained if mc.lane_branch == "res4" else "")]
+                  ("model.lane_pretrained", mc.lane_pretrained if mc.lane_branch == "res4" else ""), ("model.student_init", mc.student_init)]
     for key, p in named:
         if p and not os.path.exists(_abs(p, root)):
             problems.append(f"{key}: {p} does not exist")
@@ -311,9 +316,21 @@ def _selftest():
                (dict(loss={"dt_weights": [[0.0, 1.0]]}), "loss.dt_weights"),
                (dict(train_only=["fusoin."]), "freeze prefix 'fusoin.'"), (dict(freeze=["fusion.", "nosuchmodule"]), "freeze prefix 'nosuchmodule'"),
                (dict(train_only=["fusion."], freeze=["fusion."]), "froze every parameter")]
+        os.makedirs(os.path.join(tmp, "student_run"))
+        stud = {"camera_features": "dual", "camera_student": "resnet18", "student_trainable": True, "pretrained": ""}
+        dual = dict(feature_cache2=os.path.join(tmp, "cache2"), lane_images=os.path.join(tmp, "data"))
+        bad += [(dict(model=stud, feature_cache2=dual["feature_cache2"]), "needs lane_images"),                                                         # t22: the camera student
+                (dict(model=dict(stud, student_init="runs/none"), **dual), "model.student_init: runs/none does not exist"),
+                (dict(model=dict(stud, student_init="student_run"), **dual), "holds no checkpoint"),
+                (dict(model=dict(stud, student_trainable=False), **dual), "frozen student"),
+                (dict(model=dict(stud, student_trainable=False, student_init="student_run"), student_anchor=1.0, **dual), "student_anchor > 0")]
         for kw, text in bad:
             pr, _ = check(write(**kw), tmp)
             assert has(pr, text), (kw, text, pr)
+        open(os.path.join(tmp, "student_run", "ckpt_00000001.pt"), "w").close()
+        for kw in (dict(model=stud, **dual), dict(model=dict(stud, student_init="student_run"), student_anchor=1.0, **dual)):                           # a student that trains, with and without a start
+            pr, _ = check(write(**kw), tmp)
+            assert pr == [], (kw, pr)
         # the same switches done right are no problem; a flag that does nothing is a note, not a refusal
         for kw in (dict(model={"motion_block": True, "pretrained": ""}), dict(train_only=["fusion."]), dict(save_every=0)):    # save_every 0 once raised ZeroDivisionError
             pr, _ = check(write(**kw), tmp)
@@ -393,7 +410,7 @@ def _selftest():
         assert "<hypothesis of the card>" in start_lines(s, "t14_dc_ctl_s0") and "--id t14.dc_ctl_s0 " in start_lines(s, "t14_dc_ctl_s0")
         pr, _ = check(write(), tmp, require_clean=True)                                              # tmp lies in the outer repo's ignored temp/
         assert isinstance(pr, list)
-    print("startable selftest passed: 20 kinds of bad config and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
+    print("startable selftest passed: 25 kinds of bad config (incl. the t22 camera student) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
           "uncommitted files (rename, space, untracked folder) are listed, the GT identity is told against a tagged version (CRLF-safe), "
           "the smoke twin is a valid config, the start lines make up no card")
 
