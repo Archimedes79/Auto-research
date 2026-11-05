@@ -22,6 +22,11 @@ oracles); the encoder itself is tests/test_student_encoder.py.
      prob changes; the gradient of the lane branch reaches a trainable student; with the option off the branch still gets the cached depth (section A)
   I  grad_clip_split: 'student' names exactly the student's trainable tensors (refused for a frozen one); with it a huge student gradient leaves the others' gradient as it is, the
      global clip scales them down
+  J  the trainable student recomputes its backbone and the lift in the backward (the memory fix of the smoke run: 9 frames x backbone activations + frustum features were 16.3 GB
+     on a 12 GB card). Independent oracle (the camera_bevs of the commit before the student on a batch with the student's frame 0, no recomputation) on 3 samples with 3
+     cameras: outputs, every gradient and every state tensor / buffer equal bit for bit; encoder and lift call counts after a backward (training 2 x, evaluation mode 1 x,
+     the encoder's switch alone); no recomputation of an encoder whose BatchNorm is not held in eval mode; the bytes autograd saves for the backward fall (encoder to a
+     quarter at most, camera path to half at most)
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_student_chain.py"""
 import copy
 import dataclasses
@@ -494,6 +499,131 @@ check(all(torch.equal(p.grad, torch.full_like(p, small)) for p in others) and ab
 set_grads()
 clip_gradients(params, 5.0)
 check(all(float(p.grad.max()) < 0.01 * small for p in others), "control: the global clip scales every other gradient down by the student's size (what 'student' in the split prevents)")
+
+# ------------------------------------------------------------------------------------------------ J
+print("J: the trainable student recomputes its backbone and the lift in the backward (memory)")
+# The smoke run of 2026-11-05 held the backbone activations and the lift's frustum features of 9 frames per micro-batch: 16.3 GB on a 12 GB card. The numbers must not change, only what is kept.
+# The oracle is independent of the code under test: the camera_bevs of the commit before the student (`old_camera_bevs`) on a batch whose frame 0 was replaced by the student's outputs
+# of an encoder WITHOUT the recomputation; outputs, every gradient and every buffer of the model must be equal bit for bit (CPU), on three samples with three different cameras.
+check(tr.student.checkpoint_encode is True and fro.student.checkpoint_encode is False, "the option follows student_trainable: a training student recomputes, a frozen one does not")
+st = tr.student
+img_j = images(3, seed=5)
+bj = data(2, B=3)
+bj["lane_img"] = img_j
+for b_ in range(3):                                               # a different camera per sample: a call that mixes the samples up changes the result
+    bj["K"][b_] = bj["K"][b_] * (1.0 + 0.04 * b_)
+    bj["K"][b_, :, 2, 2] = 1.0
+    bj["T_cam_car"][b_, :, 0, 3] += 0.3 * b_
+    bj["T_cam_car"][b_, :, 2, 3] += 0.1 * b_
+state0 = copy.deepcopy(tr.state_dict())
+w_j = torch.randn_like(old_camera_bevs(tr, frame0_replaced(bj, st(img_j))))
+
+
+def chain_run(oracle):
+    """(output, {param name: grad}, state after) of one training-mode forward + backward of the camera BEV: the live camera_bevs, or the independent oracle"""
+    tr.load_state_dict(state0)
+    tr.train()
+    tr.zero_grad(set_to_none=True)
+    st.checkpoint_encode = not oracle
+    out = old_camera_bevs(tr, frame0_replaced(bj, st(img_j))) if oracle else tr.camera_bevs(bj)
+    (out * w_j).sum().backward()
+    st.checkpoint_encode = True
+    return out.detach().clone(), {n: p.grad.clone() for n, p in tr.named_parameters() if p.grad is not None}, {k: v.clone() for k, v in tr.state_dict().items()}
+
+
+o_live, g_live, s_live = chain_run(False)
+o_ref, g_ref, s_ref = chain_run(True)
+check(torch.equal(o_live, o_ref), "the camera BEV of the live chain (encoder + lift recomputed) equals the independent oracle, bit for bit, on three samples with three cameras")
+student_named = ["student." + n for n, p_ in st.named_parameters() if p_.requires_grad]
+check(set(g_live) == set(g_ref) and all(n in g_ref for n in student_named) and all(torch.equal(g_live[n], g_ref[n]) for n in g_ref),
+      f"... and so does the gradient of each of the {len(g_ref)} tensors that receive one (all {len(student_named)} of the student, the camera reduction)")
+check(set(s_live) == set(s_ref) and all(torch.equal(s_live[k], s_ref[k]) for k in s_ref),
+      f"... and every one of the {len(s_ref)} state tensors / buffers after the step (BatchNorm statistics and counters counted once, not twice)")
+
+# how often the encoder and the lift run: after a BACKWARD (a recomputation happens only there)
+calls, lift_calls = [], []
+orig_encode, lift_fwd = st.encode, tr.lift.forward
+st.encode = lambda x: (calls.append(1), orig_encode(x))[1]
+tr.lift.forward = lambda *a, **k: (lift_calls.append(k.get("key")), lift_fwd(*a, **k))[1]
+
+
+def counted(train, student_flag=True):
+    tr.load_state_dict(state0)
+    tr.train(train)
+    tr.zero_grad(set_to_none=True)
+    st.checkpoint_encode = student_flag
+    del calls[:], lift_calls[:]
+    (tr.camera_bevs(bj) * w_j).sum().backward()
+    st.checkpoint_encode = True
+    return len(calls), len(lift_calls), list(lift_calls)
+
+
+n_enc, n_lift, keys_seen = counted(True)
+check((n_enc, n_lift) == (2, 6), f"training mode: the encoder runs twice (forward + recomputation) and the lift twice per sample after the backward ({n_enc} encoder calls, {n_lift} lift calls for 3 samples)")
+n_enc, n_lift, _ = counted(True, student_flag=False)
+check((n_enc, n_lift) == (1, 6), f"... the encoder's own switch off: once, the lift unchanged ({n_enc}, {n_lift})")
+n_enc, n_lift, _ = counted(False)
+check(all(k_ is not None for k_ in keys_seen), "every lift call, the recomputations included, gets the projection-table key made once in the forward (no wait for the GPU inside a backward)")
+check((n_enc, n_lift) == (1, 3), f"evaluation mode (grad enabled, a backward follows): nothing recomputed, once ({n_enc}, {n_lift})")
+fro.train()
+fro_calls = []
+fro_fwd = fro.lift.forward
+fro.lift.forward = lambda *a, **k: (fro_calls.append(1), fro_fwd(*a, **k))[1]
+fro.camera_bevs(bj)
+check(len(fro_calls) == 3, f"a frozen student: the lift runs once per sample ({len(fro_calls)}); nothing is saved for a backward there, the gates cannot be seen from outside")
+st.encode, tr.lift.forward, fro.lift.forward = orig_encode, lift_fwd, fro_fwd
+
+# BatchNorm held in eval mode is the condition of the encoder's recomputation: a train-mode BatchNorm would count its statistics twice
+plain_j = S.StudentEncoder("resnet18", pretrained=False)
+plain_j.checkpoint_encode = True
+plain_j.train()
+bn_pj = [mod for mod in plain_j.modules() if isinstance(mod, nn.modules.batchnorm._BatchNorm)]
+pj_calls = []
+pj_enc = plain_j.encode
+plain_j.encode = lambda x: (pj_calls.append(1), pj_enc(x))[1]
+o_pj = plain_j(images(2, seed=6))
+(o_pj["logit16"] * torch.randn_like(o_pj["logit16"])).sum().backward()
+check(len(pj_calls) == 1 and all(int(mod.num_batches_tracked) == 1 for mod in bn_pj), f"a student whose BatchNorm is NOT held in eval mode is not recomputed (encoder calls {len(pj_calls)}, statistics counted once)")
+
+
+# the memory claim itself: the bytes autograd saves for the backward (CPU, the same tensors the GPU keeps)
+def saved_bytes(fn):
+    seen, total = set(), [0]
+
+    def pack(x):
+        k = (x.data_ptr(), x.dtype, tuple(x.shape))
+        if x.numel() and k not in seen:
+            seen.add(k)
+            total[0] += x.numel() * x.element_size()
+        return x
+
+    with torch.autograd.graph.saved_tensors_hooks(pack, lambda x: x):
+        fn()
+    return total[0]
+
+
+tr.load_state_dict(state0)
+tr.train()
+b_enc_on, b_enc_off = [], []
+for flag, acc in ((True, b_enc_on), (False, b_enc_off)):
+    st.checkpoint_encode = flag
+    acc.append(saved_bytes(lambda: st(img_j)))
+b_chain = {}
+for flag in (True, False):
+    st.checkpoint_encode = flag
+    if not flag:                                                  # the lift's recomputation is not switchable on its own: patch the checkpoint out for the control
+        real_ckpt = torch.utils.checkpoint.checkpoint
+        torch.utils.checkpoint.checkpoint = lambda fn, *a, use_reentrant=False, **k: fn(*a, **k)
+    try:
+        b_chain[flag] = saved_bytes(lambda: tr.camera_bevs(bj))
+    finally:
+        if not flag:
+            torch.utils.checkpoint.checkpoint = real_ckpt
+st.checkpoint_encode = True
+check(b_enc_on[0] < 0.25 * b_enc_off[0], f"the encoder keeps {b_enc_on[0] / 1e6:.1f} MB for the backward with the recomputation, {b_enc_off[0] / 1e6:.1f} MB without (a quarter at most)")
+check(b_chain[True] < 0.5 * b_chain[False], f"the whole camera path keeps {b_chain[True] / 1e6:.1f} MB for the backward with the recomputations, {b_chain[False] / 1e6:.1f} MB without (half at most)")
+tr.load_state_dict(state0)
+tr.train()
 
 print(f"\ntest_student_chain: {'ALL PASSED' if not fails else str(len(fails)) + ' FAILED'} ({time.time() - t0:.0f} s)")
 sys.exit(1 if fails else 0)

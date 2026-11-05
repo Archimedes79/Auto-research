@@ -32,6 +32,7 @@ import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 import torchvision
 
 try:
@@ -119,6 +120,7 @@ class StudentEncoder(nn.Module):
         self.register_buffer("grid8", h8_warp_grid()[0] if warp_h8 else None, persistent=False)
         self._frozen = False
         self._bn_eval = False
+        self.checkpoint_encode = False                 # True: the backbone is recomputed in the backward instead of keeping its activations (set by model._build_student for a student that trains)
 
     def encode(self, img):
         """img (B, 3, 256, 704) RGB 0..255 (uint8 or float) -> the four backbone maps (strides 4 / 8 / 16 / 32)"""
@@ -143,7 +145,15 @@ class StudentEncoder(nn.Module):
         return out
 
     def forward(self, img):
-        return self.decode(self.encode(img))
+        # t22 stage B: 9 key frames of a micro-batch (batch 3 x clips of 3, the graph kept over the clip) held the backbone activations of every frame at once: peak 16.3 GB on the 12 GB card
+        # (smoke run 2026-11-05, 56 s per step from GPU-memory paging). The encoder is then recomputed in the backward and only its four output maps (2.7 MB per frame) stay. Every backward
+        # that reaches a frame recomputes it (with seq_bptt a clip of 3 runs the encoder 3 + 1 + 2 + 3 = 9 times, not 6). Only with BatchNorm held in eval mode (keep_bn_eval): a train-mode
+        # BatchNorm would count its statistics twice; the backbone has no dropout, so the recomputation is the same function.
+        if self.checkpoint_encode and self._bn_eval and self.training and torch.is_grad_enabled() and any(p.requires_grad for p in self.backbone.parameters()):
+            feats = torch.utils.checkpoint.checkpoint(self.encode, img, use_reentrant=False)
+        else:
+            feats = self.encode(img)
+        return self.decode(feats)
 
     # ---- training
     def freeze_backbone(self, flag=True):

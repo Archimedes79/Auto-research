@@ -26,12 +26,15 @@ import time
 
 import numpy as np
 import torch
+import torch.utils.checkpoint
 
 try:
+    from .lift_pd import lift_key
     from .camera_encoder import FrontCameraEncoder, camera_vector
     from .nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate, pose_matrix
 except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from lift_pd import lift_key
     from camera_encoder import FrontCameraEncoder, camera_vector
     from nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate, pose_matrix
 
@@ -320,6 +323,7 @@ def CachedBEVFusionModel(cfg=None):
             if self.cfg.camera_off:                                     # radar-only system (was ignored here until 2026-10-30:
                 return torch.zeros(B, Fn, self.cfg.c_cam, self.grid.nx, self.grid.ny, device=prob.device)   # t2_cam_off ran WITH camera)
             stud, side = (self._run_student(batch) if self.student is not None else None), {}
+            recompute_lift = stud is not None and self.cfg.student_trainable and self.training and torch.is_grad_enabled()
             bevs = []
             for i, src in enumerate(CAMERAS[self.cfg.camera_features]):  # one lift + collapse per feature source, each with its own ida
                 s = src.suffix
@@ -333,9 +337,17 @@ def CachedBEVFusionModel(cfg=None):
                     ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
                 lift, collapse = getattr(self, "lift" + s), getattr(self, "cam_reduce" + s)
                 keys = self._lift_keys(batch, batch["hw"], "ida" + s)    # D54: the projection-table cache keys from the CPU copies in batch["host"] (None: the lift makes them)
-                bevs.append(torch.stack([collapse(lift(ctx[b], p[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida" + s],
-                                                       key=None if keys is None else keys[b]))
-                                         for b in range(B)]))           # one calibration per sample (scenes differ)
+                vols = []
+                for b in range(B):                                      # one calibration per sample (scenes differ)
+                    args = (ctx[b], p[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], batch["hw"], batch["ida" + s])
+                    key = None if keys is None else keys[b]
+                    if recompute_lift:      # t22: the student's depth + context carry a graph into the lift; without this the 118 x C frustum features of the 9 frames of a micro-batch stay in memory
+                        if key is None:     # the key the lift would make from the GPU tensors (three waits for the GPU): made once here, so that no recomputation inside a backward has to wait
+                            key = lift_key(*args[2:])
+                        vols.append(collapse(torch.utils.checkpoint.checkpoint(lift, *args, key=key, use_reentrant=False)))
+                    else:
+                        vols.append(collapse(lift(*args, key=key)))
+                bevs.append(torch.stack(vols))
             self._student_side = side or None
             if len(bevs) == 1:
                 return bevs[0]

@@ -139,7 +139,7 @@ class ModelConfig:
                                        # outputs, and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the main lift uses), gradient included.
                                        # Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the same on or off).
                                        # Know: a frozen student's EMA copy drifts by about 3e-7 and warm_start / the evaluation apply that copy, not student_init; zero_cam (the
-                                       # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of the student of every key frame of a clip stay in memory (not measured)
+                                       # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of every key frame of a clip stay in memory: measured 16.3 GB at batch 3 x clips of 3 (paging on a 12 GB card), 9.1 GB with the encoder and the lift recomputed in the backward (checkpoint_encode, camera_bevs; +2.6 s per step)
     student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
     student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the checkpoints (loaded from student_init)
     student_frames: str = "current"    # the frames the student replaces: "current" (frame 0, the only frame with a JPEG) | "all" (needs a sweep-image cache: NotImplementedError)
@@ -272,6 +272,7 @@ def _build_student(cfg):
         load_trained(student, cfg.student_init)
     student.keep_bn_eval()
     student.requires_grad_(cfg.student_trainable)
+    student.checkpoint_encode = bool(cfg.student_trainable)       # a training student keeps no backbone activations of the 9 frames of a micro-batch (StudentEncoder.forward)
     return student
 
 
