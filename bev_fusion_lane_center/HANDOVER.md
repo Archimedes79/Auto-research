@@ -3,7 +3,7 @@
 New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko reads little: one small step per turn, explain terms plainly (he did not know what "targets" meant; `results/E273/README.md` has it).
 
 ## What this project is (D50, D55)
-A separate codebase from the BEV system: a **lane head on the frozen GaussianCaR features**, end-to-end differentiable (D55: soft forward path up to the map assignment; matching in the loss allowed; hard selection only on the output, named). Shared: `autoresearch/`, `autogt/` (lane GT = own version, tag `autogt/lane-l3`, signature 3576fa1f7e).
+A separate codebase from the BEV system: a **lane head on the frozen GaussianCaR features**, end-to-end differentiable (D55: soft forward path up to the map assignment; matching in the loss allowed; hard selection only on the output, named). Shared: `autoresearch/`, `autogt/` (lane GT = own version, tag `autogt/lane-l3`, signature 3576fa1f7e; audited clean 2026-11-05, no l4).
 
 ## Where we are: E273 run and CUT by hand (2026-11-05, 2 seeds, VAL 873, TEST untouched)
 Pixel maps -> one node per 2 m cell -> Hermite links -> soft sections -> assignment to a lane-level map with errors; 24 ms per frame (head). Card section 10 has table, attempts, diagnosis.

@@ -46,7 +46,7 @@ Road boundary = edge of the drivable area including driveways and parking; a bou
 ## Versions (everything that makes the numbers)
 | what | version |
 |---|---|
-| lane GT | `autogt/lane-l3`, signature `3576fa1f7e` (tag `autogt/lane-l3`, commit 4df1032) |
+| lane GT | `autogt/lane-l3`, signature `3576fa1f7e` (tag `autogt/lane-l3`, commit 4df1032); the GT chat audited all 34,149 files on 2026-11-05 (schema, ids, links, directions, segments, window events, polygons): no problem touching pieces, links, events or segments, so there is no l4 and the E273 numbers stand |
 | front GT of the cached features | `c643a7539d` (v8; not read by the head) |
 | head code | `training/grid/{pyramid,qnodes,qlinks,sections,qassign,qgraph,qpredict,qtargets,qformat,map_sim,qraster}.py`, data `training/data/lane_gt_data.py`; seed 0 tag `lcr/E273.p_s0` (code commit `ab72b01707`, phases 5-7; phases 2-4 from earlier launches of the same run id, see the card's section 10), seed 1 tag `lcr/E273.p_s1` (code commit `8e8d73ff3f`, all phases) |
 | training | `training/train/qgraph_train.py` on the shared `training/trainer.py` (`T.fit`: AdamW, one-cycle, bf16, clip 3, checkpoint and resume); phases 2-7 with 3000 / 6000 / 5000 / 2000 / 1500 / 2000 steps, lr 1e-3 / 1e-3 / 1e-3 / 5e-4 / 1e-3 / 2e-4, batch 4, width 48, map errors random in training (`map_sim` mode "train"), E271 head `runs/e271_a_s<seed>/model.pt` for the 1 m branch; seeds 0 and 1; seed 1 all phases `--no-gates` (by hand, see the card) |
