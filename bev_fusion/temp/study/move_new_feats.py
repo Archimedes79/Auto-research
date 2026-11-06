@@ -6,7 +6,7 @@ import shutil
 import sys
 
 src = "data/cache/cam_feats"
-dst = "/mnt/d/Auto-research/bev_fusion_cache_parts7_10/cam_feats"
+dst = "data/cache/cam_feats_parts7_10"       # a link to D:\Auto-research\NuScenes_cache\bev_fusion\cam_feats_parts7_10 (data/NuScenes/tools/link_storage.sh)
 old = json.load(open("data/scenes_parts1_6.json"))
 keep = set(old["train"]) | set(old["val"])
 back = len(sys.argv) > 1 and sys.argv[1] == "back"
