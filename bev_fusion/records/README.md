@@ -6,7 +6,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 |---|---|
 | `LEDGER.csv` / `LEDGER.md` | one row per run (`ledger.py`); made by the first run |
 | `runs/<run id>/` | run record of the launcher: `run.json` (command, commit, tag, status, duration), `run.log`, `heartbeat`, `done` |
-| `schedule.csv` | optional work list for `schedule.py` (not used yet) |
+| `schedule.csv` | the open work of the BEV system as one list for `schedule.py` (rewritten 2026-11-07; the old list of 2 November is in the tag `archive/docs-before-cleanup-2026-11-07`): what waits for the GPU, for the owner chat or for Mirko's words |
 | `champion.json` | the base chain every card is compared against (`base` = a run name with its seeds, `open` = the arms on the board, `options` = adopted options, `promoted` = null until Mirko's OK); read by `../evaluation/board.py` |
 | `CKPT_SLIM_2026-11-01.md` | what the cleanup of 2026-11-01 did: 34 finished runs slimmed to one checkpoint each (per-run sizes), the outdated caches deleted, what was kept on purpose and what is open |
 | `morning_2026-11-01.md` | summary of the overnight round of 2026-11-01 (D28): t10_dual seed twin, the velocity fix t11 (arms B' / B2), the prototype command, incidents and open items |
@@ -16,7 +16,6 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `bn_over_dt_2026-11-03.md` | open finding #5 measured on `t16.full_s0` (EMA weights, 225 val frames): the dt 0 loss and tolerant IoU with the stored BatchNorm statistics (a mixture of dt -0.5 / 0 / +0.5), with batch statistics, and with statistics re-estimated from dt 0 only; the mixture costs at most 0.9 % of a group loss and 0.001 lane divider IoU@1, a per-dt BatchNorm is not worth a card now (a diagnostic, no verdict) |
 | `open_findings_2026-11-02.md` | triage of the bug hunt's open findings (real? severity? fix size? what was checked and what is per report) for the module-iteration list after the baseline pair; nothing fixed |
 | `speed_options_2026-11-03.md` | where the host-bound step spends its ~45 thousand operators (counted on CPU per section), the sync-like operations, what `torch.compile` can take, and the ranked speed levers with the GPU measurement that would confirm each; nothing changed |
-| `doc_review_2026-11-03.md` (+ `_autoresearch.md`, `_bev_fusion.md`, `_lane.md`) | the documentation review of D49: are the md files, decisions, READMEs and drawings up to date, what breaks if each is deleted, how to re-answer a decision, what was deleted and what is proposed next; the three long files are the evidence for the proposals and can be deleted when those are done |
 | `BOARD.md` | the board made by `python evaluation/board.py --write`: every open arm against the base, all heads, from the stored `metrics.json` files; regenerate it, do not edit it |
 
 ## Start a training
