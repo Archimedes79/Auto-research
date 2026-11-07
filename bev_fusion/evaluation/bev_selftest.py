@@ -671,6 +671,12 @@ def _():
     assert {sh.color for sh in V.box_shapes([inside, outside], "w")} == {"w"}, "without an observed area one colour"
 
 
+@check("bev_views helpers: radar opacity and Doppler direction, speed-direction colours, the moving layer, faded past boxes through the poses, the error colours of boxes")
+def _():
+    from evaluation import bev_views
+    bev_views.selftest()
+
+
 @check("taps of the new modules: the hooks pick the delta-slot features and the lossless state out of the radar encoder's pair, the radar memory, the three motion levels (the finest "
        "last, any number of levels); a plain radar tensor gives no state (and is not mistaken for a pair)")
 def _():
