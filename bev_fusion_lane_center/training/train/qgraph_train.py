@@ -73,6 +73,7 @@ def main():
         model.load_state_dict(fit, strict=False)
         print(f"resume-from {a.resume_from}: {len(fit)} of {len(own)} tensors loaded; not loaded: {sorted(set(own) - set(fit))[:6]}...", flush=True)
     ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train")
+    assert not a.steps or len(a.steps) == len(a.phases), f"--steps needs one value per phase: {a.steps} for the phases {a.phases} (a bare zip would fail only after the first phases have trained)"
     steps = dict(zip(a.phases, a.steps)) if a.steps else {k: STEPS[k] for k in a.phases}
     import qgates as QGt
     tier_arm = bool(a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0 or a.sparse)

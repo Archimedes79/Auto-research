@@ -62,3 +62,19 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 
 ## D. Known findings of `check_structure.py` that wait for the end of loop 18
 - `experiment_execution/PROGRAM.md` names `indexes/LOOP17_STATE.md` (the loop-17 state file is `loop17_recovery/out__loop2__e17__LOOP17_STATE.md`) and a memory note outside the project; PROGRAM.md belongs to the running loop, fix it in the next plan.
+
+## E. Dead code and bugs found by the read-only hunt of 2026-11-07 (agent report, checked by `git grep -w`; the lane chat applied the bug fixes C1-C6, the removals wait for a quiet time and a decision)
+**Dead code** (SAFE = no card / record names it; NEEDS-DECISION = it is the recipe of old numbers, git history keeps it)
+| what | size | verdict |
+|---|---|---|
+| `training/data/p8_lib.py`: row_features, refine_per_road, scene_sd_features, sd_vertices, piece_labels, template_vertices, localise, _nearest_dir, resample_k, perceived_vertices, piece_points, sd_to_ego, KPT, NODE_GEO, NODE_SD, N_SCENE | ~280 of 420 lines | NEEDS-DECISION (recipe of the loop-8 `ds_*` caches; extends item above) |
+| `training/models/p8_seg.py`: everything except `NSEG_MAX` (read by p8_assign.py) | 168 of 194 lines | NEEDS-DECISION |
+| `training/models/p10_wave.py` ExpertPolicy, `p10_expert.py` sample_check | 33 + 23 lines | SAFE |
+| `training/models/p18_regmap.py` RegMapWrap | 50 lines | NEEDS-DECISION (loop-17/18 numbers) |
+| `lane_grid/grid_eval.py` skeletons, est_eval (only its self-test and README name them) | 49 lines | NEEDS-DECISION |
+| `tools/viz/render.py` montage, render_compare; `tools/video/make_video.py` side_by_side; `tools/prototype/lane_prototype.py` graph_of_frame, from_planner; `qgraph_eval.paired` (only a test) | ~50 lines | SAFE with their test lines |
+| 1-7 line names with 0 references: assoc_lib.register_around, p16_geom.path_validity, measures._E, e2e_catalogue.TAGS, catalogue.STAGE_AXIS, bflc_paths.REPORTS, p16_common.D_FEAT, soft_lines.HEAD_CH, qnodes.NF, line_tracer.REASON, qgraph_eval.HEADLINE | ~30 lines | SAFE |
+| modules: `training/data/prep/gcar_orient.py` (62) and `orient_check.py` (94), 0 importers, German docstrings | 156 lines | SAFE |
+| modules: `tools/maintenance/purge_and_compact_2026-11-01.ps1`, `wsl_purge_d5_2026-11-01.sh`, `wsl_second_wave_2026-11-01.sh`, `PURGE_2026-10-31.md` (ran on 2026-11-01); `training/data/p14_chain_data.py` (named by `data/rebuild.json`) | ~370 lines | NEEDS-DECISION (records of what was deleted) |
+**Bugs fixed on 2026-11-07:** C1 `qgates._batches` refuses an incomplete VAL store (the gates paired item i with frame i of `val_frames()`); C2 `qgraph_timing.py` wrote to `runs/e273/<run>` without `makedirs` (failed for an E276 run after the timing loop); C3 the card records `node_sparse` (an arm-s model scored without `--sparse` was not recognisable); C4 `run_all_tests.sh` now runs the six E275 / E276 tests it did not know; C5 `qgraph_train.py` asserts one `--steps` value per phase; C6 `z0_P_1` and `z0_node_P` (identically 0) are no longer reported.
+**Open, deliberately not changed during E276 (it would change the numerics of the training path against the stored baseline):** C7 `qgraph._seg_lse`: `math.exp(extra) * torch.exp(-m)` is 0 * inf = NaN for a group without a true candidate (masked by the later `torch.where`, gradient finite): write `torch.exp(extra - m)` after E276; C8 `qlinks.py` trims candidate pairs above 80,000 with the global torch RNG also at inference (unlikely to trigger): warn or raise when `gt is None`; C9 stale comments: qlinks.py:5 (KL = 32, code 64), sections.py:67 (half same-piece, code uniform), qgates.py reference head of seed 0 for every seed, `Frame.lane()` inserts into `sys.path` on every call.

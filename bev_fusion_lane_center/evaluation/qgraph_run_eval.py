@@ -115,13 +115,14 @@ def bootstrap_diff(rec_a, rec_b, scenes, B=1000, seed=0):
     return float(d0), float(np.percentile(ds, 2.5)), float(np.percentile(ds, 97.5))
 
 
-def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), dump=None, max_drop=0.20, repro=None, repro_tol=0.005):
+def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), dump=None, max_drop=0.20, repro=None, repro_tol=0.005, dump_full=None):
     """one prediction pass per map mode, then every read-out in `readouts` (qgraph_readout specs, 'plain@0.5' / 'close:1.5@0.5') is scored on it. readouts=None is the E273 / E274 way: one
     card runs/<exp>/<run>/ at e >= 0.5. With readouts: one card per spec, runs/<exp>/<run>.<spec name>/ (card['run'] stays the model; card['readout'] holds the step's counts and ms per frame; the
     control g is computed once and shared). curve: radii of close-node suppression scored on the delivered graph only (exact map, e >= 0.5) -> runs/<exp>/<run>.curve.json. dump: path for the
     candidate nodes (e >= 0.2) of the exact-map pass (scratch pickle for the analysis). max_drop: the kill criterion of the E275 card, a close-node spec that deletes a larger share of the
     nodes delivered at its threshold stops the scoring before any card is written. repro: path of the E274 sweep json of this model; the close:1.5@0.5 read-out must reproduce its entry
-    'pos1.5_e0.5' (topo F1, F1@1.0, junction F1, lanes found, node P / R) within repro_tol, else the scoring stops after the exact-map pass, before the control and before any card is written."""
+    'pos1.5_e0.5' (topo F1, F1@1.0, junction F1, lanes found, node P / R) within repro_tol, else the scoring stops after the exact-map pass, before the control and before any card is written.
+    dump_full (E276): path of the pickle with ALL numbers of the candidate nodes, links, assignment rows and two pixel layers of the exact-map pass (`qgraph_readout.dump_full`; scratch for the analyses)."""
     t0 = time.time()
     if repro:                                                                                       # before any GPU work; a relative path is relative to the project root (the scorer runs in evaluation/)
         repro = repro if os.path.isabs(repro) else os.path.join(ROOT, repro)
@@ -140,6 +141,9 @@ def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), du
             if dump:
                 os.makedirs(os.path.dirname(dump), exist_ok=True)
                 RO.dump_nodes(preds, [f.row for f in frames], dump)
+            if dump_full:
+                os.makedirs(os.path.dirname(dump_full), exist_ok=True)
+                RO.dump_full(preds, [f.row for f in frames], dump_full)
             for s in specs:
                 if s.kind != "close":
                     continue
@@ -189,6 +193,8 @@ def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), du
         c["p"] = dict(graph=res[s]["exact"]["graph"], nodes=res[s]["exact"]["nodes"], assign_exact=res[s]["exact"]["assign"], assign_error=res[s]["error"]["assign"])
         if res[s]["exact"].get("tier"):                                                                  # E276: the tier numbers (only with the l4 lane GT)
             c["p"]["tier"] = res[s]["exact"]["tier"]
+        if QE.NODE_SPARSE:                                                                               # the node numbers are scored against the SPARSE GT nodes (no key = the E273 dense nodes, the card format of E273 - E275 is unchanged)
+            c["node_sparse"] = list(QE.NODE_SPARSE)
         c["g"] = dict(assign_exact=g_res["exact"], assign_error=g_res["error"], vertices_per_frame=float(np.mean([len(v[0]) for v in vs])))
         c["diff"] = {mode: dict(zip(("mean", "lo", "hi"), bootstrap_diff(recs[s][mode]["assign"], g_rec[mode], scenes))) for mode in ("exact", "error")}
         if readouts:
@@ -373,6 +379,7 @@ def main():
     s.add_argument("--readouts", nargs="+", default=None, help="E275: read-out specs (plain@0.5 close:1.5@0.5 ...); one card per spec in runs/<exp>/<run>.<spec>/ (qgraph_readout.py)")
     s.add_argument("--curve", nargs="*", type=float, default=[], help="E275: radii of close-node suppression scored on the graph only (e >= 0.5) -> runs/<exp>/<run>.curve.json")
     s.add_argument("--dump", action="store_true", help="E275: write the candidate nodes of the exact-map pass to temp/<exp>/pred_<run>.pkl (scratch, for the analysis)")
+    s.add_argument("--dump-full", action="store_true", help="E276: write every number of the candidate nodes / links / assignment of the exact-map pass to temp/<exp>/predfull_<run>.pkl (scratch, for the analyses)")
     s.add_argument("--max-drop", type=float, default=0.20, help="E275 kill criterion: stop when a close-node spec (threshold >= 0.5) drops more than this share of the delivered nodes")
     s.add_argument("--repro", default=None, help="E275: the E274 sweep json of this model (temp/e274/sweep_<run>.json): close:1.5@0.5 must reproduce its pos1.5_e0.5 entry within 0.005")
     s.add_argument("--sparse", nargs=2, type=float, default=None, metavar=("EPS", "CHORD"), help="E276: score the node numbers against the SPARSE GT nodes the model was trained on (qtargets.node_table)")
@@ -404,7 +411,8 @@ def main():
         if a.sparse:
             QE.NODE_SPARSE = (float(a.sparse[0]), float(a.sparse[1]))
         dump = os.path.join(ROOT, "temp", a.exp, f"pred_{a.run}.pkl") if a.dump else None
-        c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu", exp=a.exp, readouts=a.readouts, curve=a.curve, dump=dump, max_drop=a.max_drop, repro=a.repro)
+        dump_full = os.path.join(ROOT, "temp", a.exp, f"predfull_{a.run}.pkl") if a.dump_full else None
+        c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu", exp=a.exp, readouts=a.readouts, curve=a.curve, dump=dump, max_drop=a.max_drop, repro=a.repro, dump_full=dump_full)
         if not a.readouts:
             print(open(os.path.join(ROOT, "runs", a.exp, a.run, "results.md"), encoding="utf-8").read())
     elif a.cmd == "verdict274":

@@ -105,6 +105,39 @@ def timed(preds, spec):
     return 1000.0 * (time.perf_counter() - t0) / max(len(preds), 1)
 
 
+def dump_full(preds, rows, path, e_min=0.2, p_min=0.05):
+    """E276 (the analyses of the video notes: assignment, temporal consistency, endpoints, link uncertainty): the candidate nodes (e >= e_min) of every frame with ALL their numbers, the links between
+    them (p >= p_min, node indices renumbered to the stored nodes), the assignment rows of those nodes (float32) and the two pixel layers the pictures need (road2 = road / intersection, events1, float16);
+    [{'row', 'idx', 'e', 'pos', 'dirv', 'flags', 's', 'section', 'link_src', 'link_dst', 'link_p', 'link_long', 'link_a', 'link_b', 'assign_P', 'map_ids', 'assign_road', 'road_ids', 'road2', 'events1'}],
+    pickled to `path` (scratch, about 150 KB per frame)"""
+    import pickle
+    out = []
+    for p, r in zip(preds, rows):
+        nd, lk = p["nodes"], p["links"]
+        e = np.asarray(nd["e"], float).reshape(-1)
+        k = np.flatnonzero(e >= e_min)
+        new = -np.ones(len(e), int)
+        new[k] = np.arange(len(k))
+        src, dst = np.asarray(lk["src"]).reshape(-1).astype(int), np.asarray(lk["dst"]).reshape(-1).astype(int)
+        pl = np.asarray(lk["p"], float).reshape(-1)
+        m = (pl >= p_min) & (new[src] >= 0) & (new[dst] >= 0) & (src != dst)
+        d = dict(row=int(r), idx=k, e=e[k], pos=np.asarray(nd["pos"], float).reshape(-1, 2)[k], dirv=np.asarray(nd["dirv"], float).reshape(-1, 2)[k],
+                 flags=np.asarray(nd["flags"], float).reshape(len(e), -1)[k], s=np.asarray(nd["s"], float).reshape(-1)[k] if "s" in nd else None, section=np.asarray(nd["section"]).reshape(-1)[k],
+                 link_src=new[src[m]], link_dst=new[dst[m]], link_p=pl[m], link_long=np.asarray(lk["long"]).reshape(-1).astype(bool)[m], link_a=np.asarray(lk["a"], float).reshape(-1)[m],
+                 link_b=np.asarray(lk["b"], float).reshape(-1)[m])
+        a = p.get("assign")
+        if a is not None:
+            d.update(assign_P=np.asarray(a["P"], np.float32)[k], map_ids=list(a["map_ids"]), assign_road=np.asarray(a["road"], np.float32)[k] if a.get("road") is not None else None,
+                     road_ids=list(a.get("road_ids", [])))
+        mp = p.get("maps")
+        if mp is not None:
+            d.update(road2=np.asarray(mp["road2"], np.float16), events1=np.asarray(mp["events1"], np.float16))
+        out.append(d)
+    with open(path, "wb") as f:
+        pickle.dump(out, f, protocol=4)
+    return len(out)
+
+
 def dump_nodes(preds, rows, path, e_min=0.2):
     """the delivered-candidate nodes (e >= e_min) of every frame for the CPU analysis, values as the scorer sees them (float64 copies of the model's float32): [{'row', 'pos', 'dirv', 'e', 'flags', 'cell', 'section'}], pickled to `path` (scratch)"""
     import pickle

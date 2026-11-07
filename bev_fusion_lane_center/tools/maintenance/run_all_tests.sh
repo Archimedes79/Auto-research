@@ -56,5 +56,11 @@ run "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
 run "E273 local scorer (oracle, degradations, lane suite reproduction)" test_qgraph_eval.py
 run "E273 pictures: selftest" viz/qgraph_view.py --selftest
 run "E274 verdict rule (fake cards)" test_verdict274.py
+run "E275 close-node suppression (cases, 300 random frames, toy scorer)" test_qgraph_readout.py
+run "E275 verdict rule (fake cards)" test_verdict275.py
+run "E275 scorer glue (toy lane, CPU: cards, kill criterion, reproduction gate, dumps)" test_qgraph_score_glue.py
+run "E276 tier metrics and verdict276 (toy lane, fake cards)" test_tier_metrics.py
+run "E276 tier / vis / sparse targets (toy lane, 40 real frames)" grid/test_tiers_sparse.py
+run "E276 tier loss switches (defaults = the frozen E273 loss)" grid/test_tier_loss.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
 exit $fail

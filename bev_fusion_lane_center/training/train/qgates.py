@@ -33,6 +33,7 @@ GATE_CFG = dict(node_prec_min=None, node_rec_min=None, tier_mode=False)         
 
 def _batches(map_mode, n, bs=4):
     ds = LD.QData("val_clean", map_mode=map_mode, pixels=True)
+    assert ds.missing == 0, f"{ds.missing} VAL frames have no stored lane GT: the gates pair item i with frame i of val_frames() and would judge mismatched frames (bug hunt 2026-11-07)"
     ks = np.linspace(0, len(ds) - 1, min(n, len(ds))).astype(int)
     sub = torch.utils.data.Subset(ds, ks.tolist())
     return torch.utils.data.DataLoader(sub, batch_size=bs, shuffle=False, num_workers=2, collate_fn=LD.collate)

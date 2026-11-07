@@ -77,7 +77,8 @@ def main():
             old = json.load(open(os.path.join(R, "e273", "toy", "card.json")))
             # the read-out call
             dump = os.path.join(root, "temp", "e275", "pred_toy.pkl")
-            cards = quiet(QR.score, "toy", 0, 0, "cpu", exp="e275", readouts=ro, curve=[1.0, 2.0], dump=dump)
+            dumpf = os.path.join(root, "temp", "e275", "predfull_toy.pkl")
+            cards = quiet(QR.score, "toy", 0, 0, "cpu", exp="e275", readouts=ro, curve=[1.0, 2.0], dump=dump, dump_full=dumpf)
             assert sorted(os.listdir(os.path.join(R, "e275"))) == sorted([f"toy.{n}" for n in ("plain_t0.5", "close1.5_t0.5", "close1.5_t0.4", "plain_t0.4")] + ["toy.curve.json"])
             assert [s.kind for s in cards] == ["plain", "close", "close", "plain"]
             p5 = json.load(open(os.path.join(R, "e275", "toy.plain_t0.5", "card.json")))
@@ -102,6 +103,12 @@ def main():
             import pickle
             d = pickle.load(open(dump, "rb"))
             assert len(d) == N and [x["row"] for x in d] == list(range(N))
+            df = pickle.load(open(dumpf, "rb"))                                                                              # the full dump: every candidate node with its numbers, the links between them, the assignment rows
+            assert len(df) == N and [x["row"] for x in df] == list(range(N))
+            for x, y in zip(df, d):
+                assert np.array_equal(x["e"], y["e"]) and x["pos"].shape == (len(x["e"]), 2) and x["flags"].shape[0] == len(x["e"])
+                assert (len(x["link_src"]) == len(x["link_dst"]) == len(x["link_p"])) and (x["link_src"].max(initial=-1) < len(x["e"])) and (x["link_dst"].max(initial=-1) < len(x["e"]))
+                assert ("assign_P" not in x) or x["assign_P"].shape[0] == len(x["e"])
             # the kill criterion: the judged spec (threshold 0.5) stops before any card is written ...
             try:
                 quiet(QR.score, "toy_kill", 0, 0, "cpu", exp="e275", readouts=["close:1.5@0.5"], max_drop=0.001)

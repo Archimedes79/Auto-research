@@ -61,8 +61,12 @@ def main():
                 t["total"].append(marks[0].elapsed_time(marks[5]))
     out = {k: dict(median=float(np.median(v)), p90=float(np.percentile(v, 90))) for k, v in t.items()}
     out["gpu_other_processes"] = "see the run record: measure only on an idle GPU"
-    json.dump(out, open(os.path.join(ROOT, "runs", "e273", a.run, "timing.json"), "w"), indent=1)
     print({k: round(v["median"], 2) if isinstance(v, dict) else v for k, v in out.items()})
+    d = os.path.join(ROOT, "runs", "e273", a.run)                                       # the E273 scoring folder when it exists, else the run's own folder (an E276 arm has none in e273: it used to fail here after the timing loop)
+    if not os.path.isdir(d):
+        d = os.path.join(ROOT, "runs", a.run)
+    os.makedirs(d, exist_ok=True)
+    json.dump(out, open(os.path.join(d, "timing.json"), "w"), indent=1)
 
 
 if __name__ == "__main__":

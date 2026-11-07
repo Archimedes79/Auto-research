@@ -349,7 +349,8 @@ def tier_numbers(tc, nc=None):
         r = rec[k - 1]
         out[f"t{k}_R_1"], out[f"t{k}_R_1all"], out[f"t{k}_len"] = _ratio(r[0], r[1], 1.0), _ratio(r[2], r[3], 1.0), 0.5 * float(r[1])
     for k in range(4):
-        out[f"z{k}_P_1"] = _ratio(prec[k][0], prec[k][1], 1.0)
+        if k:                                                                               # zone 0 (no GT lane within 2.5 m) can never be "right within 1 m": its precision is identically 0, only the count is reported
+            out[f"z{k}_P_1"] = _ratio(prec[k][0], prec[k][1], 1.0)
         out[f"z{k}_n"] = 0.5 * float(prec[k][1])
     r12, p12 = rec[:2, :2].sum(0), prec[1:3].sum(0)
     out["t12_R_1"], out["t12_P_1"] = _ratio(r12[0], r12[1], 1.0), _ratio(p12[0], p12[1], 1.0)
@@ -358,7 +359,7 @@ def tier_numbers(tc, nc=None):
         tn, zn = np.asarray(nc["tn"], float), np.asarray(nc["zn"], float)
         for k in (1, 2, 3):
             out[f"t{k}_node_R"] = _ratio(tn[k - 1][0], tn[k - 1][1], 1.0)
-        for k in range(4):
+        for k in (1, 2, 3):                                                                 # zone 0 (off the lanes) has no matched node by construction: only its count and false nodes are reported
             out[f"z{k}_node_P"] = _ratio(zn[k][0], zn[k][1], 1.0)
         pr, rc = _ratio(zn[1][0] + zn[2][0], zn[1][1] + zn[2][1], 1.0), _ratio(tn[0][0] + tn[1][0], tn[0][1] + tn[1][1], 1.0)
         out["t12_node_P"], out["t12_node_R"] = pr, rc
