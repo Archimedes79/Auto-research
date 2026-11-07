@@ -21,8 +21,8 @@ import numpy as np
 import qtargets as QT
 
 
-def oracle_prediction(g, marker_dist=0.0, with_assign=True):
-    nt = QT.node_table(g, marker_dist=marker_dist)
+def oracle_prediction(g, marker_dist=0.0, with_assign=True, sparse=None):
+    nt = QT.node_table(g, marker_dist=marker_dist, sparse=sparse)                  # sparse = None: the E273 nodes; (eps, max_chord): the E276 sparse node target
     M, L = len(nt["pos"]), len(nt["src"])
     nodes = dict(pos=nt["pos"].copy(), dirv=nt["dirv"].copy(), e=np.ones(M), flags=nt["flags"].astype(float), s=nt["sstart"].astype(float), cell=nt["cell"].copy(),
                  section=nt["piece"].astype(int).copy())

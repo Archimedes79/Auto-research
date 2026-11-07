@@ -324,7 +324,7 @@ def verdict276(var, ctl, exp_var="e276", exp_ctl="e276", kind="t", root=None, ba
     Both lists in the same seed order (0, 1), `frames` frames in every card, the tier numbers present. Per seed: gain = t12_F1_1(var) - t12_F1_1(ctl). Guards: t1_R_1 not below the control by more
     than `recall_tol`; kind 't': topo_F1 not below it by more than `topo_tol` (the price of not demanding unseen parts); both: assignment `lane_acc_exact` p - g >= -0.01 and `lane_acc_err` p - g >= +0.03
     (mean of the seeds, as E274). kind 't': KEEP when both gains exceed `band`, TIE when both are inside, CUT when a gain is below -band or a guard broke, else INCONCLUSIVE. kind 's': KEEP when
-    vert100_dp falls by at least `density_cut` on both seeds AND t12_F1_1 stays within `band` below the control on both seeds AND the guards hold; CUT when t12_F1_1 falls by more than `band`
+    the delivered nodes per 100 m of GT lane (`p.nodes.nodes_per_100m`) fall by at least `density_cut` on both seeds AND t12_F1_1 stays within `band` below the control on both seeds AND the guards hold; CUT when t12_F1_1 falls by more than `band`
     on a seed or a guard broke; else TIE (no density gain: t stays)."""
     root = root or ROOT
     load = lambda exp, r: json.load(open(os.path.join(root, "runs", exp, r, "card.json")))  # noqa: E731
@@ -337,7 +337,8 @@ def verdict276(var, ctl, exp_var="e276", exp_ctl="e276", kind="t", root=None, ba
     gain = [tier(a, "t12_F1_1") - tier(b, "t12_F1_1") for a, b in zip(cv, cc)]
     r1 = [tier(a, "t1_R_1") - tier(b, "t1_R_1") for a, b in zip(cv, cc)]
     topo = [a["p"]["graph"]["topo_F1"] - b["p"]["graph"]["topo_F1"] for a, b in zip(cv, cc)]
-    dens = [1.0 - a["p"]["graph"]["vert100_dp"] / b["p"]["graph"]["vert100_dp"] for a, b in zip(cv, cc)]
+    dens = [1.0 - a["p"]["nodes"]["nodes_per_100m"] / b["p"]["nodes"]["nodes_per_100m"] for a, b in zip(cv, cc)]       # the density the arm s changes: DELIVERED NODES per 100 m of GT lane (the oracle diagnostic P1 of the card:
+    # vert100_dp counts the Douglas-Peucker vertices of the GEOMETRY and is 15 for a perfect network whatever the node target, so it is reported, not judged)
     mean = lambda f: float(np.mean([f(c) for c in cv]))  # noqa: E731
     guards = {}
     guards["lane_acc_exact_p_minus_g"] = mean(lambda c: c["diff"]["exact"]["mean"]) >= -0.01
@@ -351,7 +352,8 @@ def verdict276(var, ctl, exp_var="e276", exp_ctl="e276", kind="t", root=None, ba
         dens_ok = all(d >= density_cut for d in dens)
         side = "no_loss" if all(g >= -band for g in gain) else "loss"
         v = "CUT" if (side == "loss" or not all(guards.values())) else "KEEP" if dens_ok else "TIE (the density did not fall by %g: arm t stays)" % density_cut
-    out = dict(verdict=v, kind=kind, band=band, side=side, t12_F1_1_gain_per_seed=gain, t1_R_1_gain_per_seed=r1, topo_F1_gain_per_seed=topo, vert100_dp_fall_per_seed=dens, guards=guards,
+    out = dict(verdict=v, kind=kind, band=band, side=side, t12_F1_1_gain_per_seed=gain, t1_R_1_gain_per_seed=r1, topo_F1_gain_per_seed=topo, nodes_per_100m_fall_per_seed=dens,
+               vert100_dp_fall_per_seed=[1.0 - a["p"]["graph"]["vert100_dp"] / b["p"]["graph"]["vert100_dp"] for a, b in zip(cv, cc)], guards=guards,
                variant_numbers={k: mean(lambda c, k=k: c["p"]["tier"][k]) for k in ("t12_F1_1", "t12_R_1", "t12_P_1", "t1_R_1", "t1_R_1all", "z1_P_1", "z2_P_1", "z3_P_1")} | dict(
                    topo_F1=mean(lambda c: c["p"]["graph"]["topo_F1"]), junction_F1=mean(lambda c: c["p"]["graph"]["junction_F1"]), vert100_dp=mean(lambda c: c["p"]["graph"]["vert100_dp"])),
                variant=var, control=ctl, note="by hand: the written rule of the E276 card (section 0); the tier numbers are not in PROBLEM.md (D59 point 3); in-sample on VAL, no TEST")

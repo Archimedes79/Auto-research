@@ -52,7 +52,7 @@ def cards_root(spec):
     for name, s in spec.items():
         d = os.path.join(root, "runs", "e276", name)
         os.makedirs(d)
-        card = dict(seed=s["seed"], frames=873, p=dict(graph=dict(topo_F1=s["topo"], vert100_dp=s["dens"], junction_F1=0.2), tier=dict(t12_F1_1=s["t12"], t1_R_1=s["r1"], t1_R_1all=s["r1"], t12_R_1=0.8, t12_P_1=0.8, z1_P_1=0.8, z2_P_1=0.8,
+        card = dict(seed=s["seed"], frames=873, p=dict(nodes=dict(nodes_per_100m=s["dens"]), graph=dict(topo_F1=s["topo"], vert100_dp=s["dens"], junction_F1=0.2), tier=dict(t12_F1_1=s["t12"], t1_R_1=s["r1"], t1_R_1all=s["r1"], t12_R_1=0.8, t12_P_1=0.8, z1_P_1=0.8, z2_P_1=0.8,
                                                                                                         z3_P_1=0.8)),
                     diff=dict(exact=dict(mean=s.get("exact", 0.0)), error=dict(mean=s.get("err", 0.05))))
         json.dump(card, open(os.path.join(d, "card.json"), "w"))
