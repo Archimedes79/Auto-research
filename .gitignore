@@ -177,3 +177,6 @@ status.json
 !/bev_fusion_lane_center/results/E273.*/README.md
 # E274: the experiment's result page in git (numbers per seed, tags, hashes, rebuild commands)
 !/bev_fusion_lane_center/results/E274/
+# E275: the result page in git (numbers per seed, tags, rebuild commands); the 80 pictures of the dropped nodes are not
+!/bev_fusion_lane_center/results/E275/
+/bev_fusion_lane_center/results/E275/figures/
