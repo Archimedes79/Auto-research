@@ -63,6 +63,11 @@ with tempfile.TemporaryDirectory() as root:
 
 # B ---------------------------------------------------------------------------------------------------------------------------------------------
 print("B  stream_drift (CPU smoke, nuScenes mini)")
+with tempfile.TemporaryDirectory() as out:                     # t22: a camera_student chain is refused up front (its one-frame batches drop the image the student reads); no data needed
+    cfgp = os.path.join(out, "student.json")
+    json.dump({"model": {"camera_features": "dual", "camera_student": "resnet18", "student_trainable": True}}, open(cfgp, "w"))
+    r = run(["evaluation/stream_drift.py", "--config", cfgp, "--buffer", "pair"], out)
+    check(r.returncode != 0 and "camera_student" in r.stderr and "Traceback" not in r.stderr, "a camera_student chain is refused with a message that names the reason (no traceback)")
 mini = os.path.expanduser("~/data/nuscenes/v1.0-mini")
 if not (os.path.isdir(mini) and os.path.isdir(os.path.join(ROOT, "data", "cache", "cam_feats_mini"))):
     print("  skipped: nuScenes mini or data/cache/cam_feats_mini is missing")

@@ -197,6 +197,8 @@ def student_findings(cfg, mcfg):
         out.append("model.camera_student replaces cached teacher outputs: it needs a feature_cache")
     if mcfg.camera_student and not cfg.lane_images:
         out.append("model.camera_student reads the current key-frame image: it needs lane_images (the folder of the key-frame JPEGs, data/cache/img_front)")
+    if mcfg.camera_student and mcfg.student_frames == "all" and cfg.n_cam < 2:
+        out.append("model.student_frames 'all' feeds the student the older frames of the pair / window: it needs n_cam >= 2")
     if cfg.student_anchor < 0 or not 0 <= cfg.student_anchor_floor <= 1 or not 0 < cfg.student_anchor_until <= 1:
         out.append(f"student_anchor {cfg.student_anchor} (>= 0), student_anchor_floor {cfg.student_anchor_floor} (0..1), student_anchor_until {cfg.student_anchor_until} (0 < until <= 1)")
     if cfg.student_anchor > 0 and not (mcfg.camera_student and mcfg.student_trainable):
@@ -225,6 +227,7 @@ def make_datasets(cfg):
                                                store=FeatureStore(cfg.feature_cache), radar_cache=cfg.radar_cache or None,
                                                camera_features=cfg.model.get("camera_features", "dualbev"),
                                                lane_images=cfg.lane_images or None,
+                                               lane_images_older=bool(cfg.model.get("camera_student")) and cfg.model.get("student_frames", "current") == "all",
                                                store2=FeatureStore(cfg.feature_cache2) if cfg.feature_cache2 else None, **kw))
         else:
             out.append(FrontRadarDataset(root, cfg.version, scenes(split, names), **kw))

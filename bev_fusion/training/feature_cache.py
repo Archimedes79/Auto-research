@@ -185,19 +185,24 @@ class CachedFrontRadarDataset(FrontRadarDataset):
     are stored once per sample as .npz and read back exactly (float32 / int64 as computed): reading the ~35 sweep files of a
     sample costs ~0.3-0.6 s, the cached entry ~5 ms (t1, 2026-10-26: the loader was the bottleneck of training)."""
 
-    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", lane_images=None, store2=None, **kw):
+    def __init__(self, *args, store, radar_cache=None, camera_features="dualbev", lane_images=None, store2=None, lane_images_older=False, **kw):
         """lane_images (folder, optional): the key-frame image cache of the lane branch (lane_branch.py, experiment t7); the
-        item then carries the current frame as uint8 "lane_img" (3, H, W).
+        item then carries the current frame as uint8 "lane_img" (3, H, W). lane_images_older (t22, model.student_frames 'all'): the item
+        also carries the images of the older frames as uint8 "lane_img_old" (F - 1, 3, H, W), read from <lane_images>/sweeps
+        (lane_branch.py build-cache-older).
         camera_features: a key of model.CAMERAS; its feature sources take the stores in order: `store` for the first, `store2` for the second
         ("dual", t10: the DualBEV cache, then the BEVFusion cache). Every frame carries prob<suffix> / ctx<suffix> of each source and the item
         ida<suffix> of the sources after the first (the first source's transform is `ida`: the DualBEV one, or BEVFusion's when it is the
         BEVFusion family alone)."""
+        if lane_images_older and not lane_images:
+            raise ValueError("lane_images_older reads <lane_images>/sweeps: it needs lane_images")
         super().__init__(*args, **kw)
         try:
             from .model import CAMERAS
         except ImportError:
             from model import CAMERAS
         self.store, self.radar_cache, self.lane_images, self.store2 = store, radar_cache, lane_images, store2
+        self.lane_images_older = bool(lane_images_older)
         if camera_features not in CAMERAS:
             raise ValueError(camera_features)
         self.sources = CAMERAS[camera_features]
@@ -257,6 +262,15 @@ class CachedFrontRadarDataset(FrontRadarDataset):
             except ImportError:
                 from lane_branch import load_image
             item["lane_img"] = load_image(self.lane_images, item["frames"][0]["token"])
+            if self.lane_images_older:                    # t22 student_frames 'all': the older frames of the pair / window (sweeps), the same crop
+                try:
+                    from .lane_branch import older_root
+                except ImportError:
+                    from lane_branch import older_root
+                try:
+                    item["lane_img_old"] = torch.stack([load_image(older_root(self.lane_images), f["token"]) for f in item["frames"][1:]])
+                except FileNotFoundError as e:
+                    raise FileNotFoundError(f"{e}; the older frames' images are made by python training/lane_branch.py build-cache-older <config> (into {older_root(self.lane_images)})") from e
         return item
 
 
@@ -296,6 +310,8 @@ def collate_cached(items):
     batch["hw"] = DST_HW
     if "lane_img" in items[0]:
         batch["lane_img"] = torch.stack([it["lane_img"] for it in items])                               # (B, 3, H, W) uint8
+    if "lane_img_old" in items[0]:
+        batch["lane_img_old"] = torch.stack([it["lane_img_old"] for it in items])                       # (B, F - 1, 3, H, W) uint8
     return batch
 
 
@@ -317,12 +333,32 @@ def CachedBEVFusionModel(cfg=None):
             with torch.set_grad_enabled(torch.is_grad_enabled() and self.cfg.student_trainable):
                 return self.student(batch["lane_img"])
 
+        def _run_student_older(self, batch):
+            """camera_student with student_frames 'all' (t22): the student on the images of the OLDER frames batch["lane_img_old"] (uint8, B x (F - 1) x 3 x 256 x 704) -> its
+            outputs per older frame (B x (F - 1) x ...), never with a graph: in the stream the buffered frame was made one step before and enters as a constant; the student's
+            own parameters get their gradient from the current frame (BatchNorm of the student is held in eval mode, so the batch of images does not matter). Values, not gradients: in
+            TRAINING mode a loss on the older frames' BEV still reaches the student through the batch statistics of the BatchNorm layers behind the lift (cam_reduce, cam_merge,
+            cam_temporal), exactly as the cached frames are coupled to frame 0 with 'current'; with those layers in eval mode it does not"""
+            if "lane_img_old" not in batch:
+                raise KeyError("student_frames='all' reads the older frames' images batch['lane_img_old']: set TrainConfig.lane_images and have its sweeps sub-folder "
+                               "(python training/lane_branch.py build-cache-older <config>)")
+            img = batch["lane_img_old"]
+            B, K = img.shape[:2]
+            with torch.no_grad():
+                out = self.student(img.flatten(0, 1))
+            return {k: v.view(B, K, *v.shape[1:]) for k, v in out.items() if torch.is_tensor(v)}
+
         def camera_bevs(self, batch):
             prob = batch["prob"].float()
             B, Fn = prob.shape[:2]
             if self.cfg.camera_off:                                     # radar-only system (was ignored here until 2026-10-30:
                 return torch.zeros(B, Fn, self.cfg.c_cam, self.grid.nx, self.grid.ny, device=prob.device)   # t2_cam_off ran WITH camera)
             stud, side = (self._run_student(batch) if self.student is not None else None), {}
+            # the older frames from the student too (no graph); a one-frame batch (the stream step of a pair / recurrent buffer) has no older frame to make: the buffered one was made one step before
+            # by the same student, which is the point of 'all'. Keep this call AFTER _run_student: under autocast the weight casts made inside no_grad would otherwise be reused by the call with a graph.
+            old = self._run_student_older(batch) if stud is not None and self.cfg.student_frames == "all" and Fn > 1 else None
+            if old is not None and next(iter(old.values())).shape[1] != Fn - 1:
+                raise ValueError(f"student_frames='all': batch['lane_img_old'] holds {next(iter(old.values())).shape[1]} older frame(s), the batch has {Fn - 1}")
             recompute_lift = stud is not None and self.cfg.student_trainable and self.training and torch.is_grad_enabled()
             bevs = []
             for i, src in enumerate(CAMERAS[self.cfg.camera_features]):  # one lift + collapse per feature source, each with its own ida
@@ -331,8 +367,8 @@ def CachedBEVFusionModel(cfg=None):
                 if stud is not None:                                    # t22: frame 0 from the student, the older frames keep their cached teacher outputs; `side` for the anchor loss
                     h = self.student.HEAD_OF[src.features]
                     side.update({"p" + h: stud["prob" + h], "c" + h: stud["ctx" + h], "l" + h: stud["logit" + h], "t_p" + h: p[:, 0].detach(), "t_c" + h: ctx[:, 0].detach()})
-                    p = torch.cat([stud["prob" + h].float()[:, None], p[:, 1:]], 1)
-                    ctx = torch.cat([stud["ctx" + h].float()[:, None], ctx[:, 1:]], 1)
+                    p = torch.cat([stud["prob" + h].float()[:, None], p[:, 1:] if old is None else old["prob" + h].float()], 1)
+                    ctx = torch.cat([stud["ctx" + h].float()[:, None], ctx[:, 1:] if old is None else old["ctx" + h].float()], 1)
                 if i == 0 and self.cam_adapter is not None:
                     ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
                 lift, collapse = getattr(self, "lift" + s), getattr(self, "cam_reduce" + s)

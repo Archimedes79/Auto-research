@@ -27,10 +27,17 @@ oracles); the encoder itself is tests/test_student_encoder.py.
      cameras: outputs, every gradient and every state tensor / buffer equal bit for bit; encoder and lift call counts after a backward (training 2 x, evaluation mode 1 x,
      the encoder's switch alone); no recomputation of an encoder whose BatchNorm is not held in eval mode; the bytes autograd saves for the backward fall (encoder to a
      quarter at most, camera path to half at most)
+  K  student_frames 'all' (the older frames of the pair / window from their own images, <lane_images>/sweeps): the BEV equals the student-free model's on a batch whose every
+     frame is the student's output of that frame's image (oracle made one frame at a time), F = 2, 3; frame 0 as with 'current'; 'current' ignores lane_img_old; garbage in the
+     cached older frames changes nothing; a missing / miscounted lane_img_old is an error; the older outputs carry no graph and the gradient reaches the student by the current
+     frame only (also in training mode with the recomputed lift); collate_cached and the dataset item (independent JPEG decode); the builder's frame choice (older_records,
+     _fill_older, resumable); student_findings; train.make_datasets asks for the older images exactly with a student and 'all'
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_student_chain.py"""
+import atexit
 import copy
 import dataclasses
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -173,6 +180,7 @@ def with_gt(batch, grid):
 
 t0 = time.time()
 tmp = tempfile.mkdtemp(prefix="student_chain_", dir=os.path.join(ROOT, "temp") if os.path.isdir(os.path.join(ROOT, "temp")) else None)
+atexit.register(shutil.rmtree, tmp, ignore_errors=True)       # about 290 MB of stub checkpoints and images: gone when the test ends, passed or failed (35 of them piled up in temp/ until D63)
 
 # ------------------------------------------------------------------------------------------------ A
 print("A: OFF is the code before")
@@ -356,8 +364,9 @@ check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_st
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, camera_off=True))), "camera_off"), "refused with camera_off")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="nope", student_trainable=True))), "camera_student='nope'", "stub"), "an unknown kind is refused and the kinds are named")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_frames="oldest", student_trainable=True))), "student_frames"), "an unknown student_frames is refused")
-check(raises(NotImplementedError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_frames="all", student_trainable=True))), "sweep-image cache"),
-      "student_frames 'all' = NotImplementedError naming the missing sweep-image cache")
+check(not raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_frames="all", student_trainable=True)))),
+      "student_frames 'all' with a student is accepted (section K)")
+check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, student_frames="all"))), "student_frames", "without camera_student"), "student_frames 'all' without camera_student is refused")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub"))), "frozen", "student_init"), "a frozen student without student_init is refused")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, student_trainable=True))), "without camera_student"), "student_init / student_trainable without camera_student: refused")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, cam_adapter=True, camera_off=True))), "cam_adapter", "camera_off"),
@@ -586,6 +595,38 @@ o_pj = plain_j(images(2, seed=6))
 check(len(pj_calls) == 1 and all(int(mod.num_batches_tracked) == 1 for mod in bn_pj), f"a student whose BatchNorm is NOT held in eval mode is not recomputed (encoder calls {len(pj_calls)}, statistics counted once)")
 
 
+# the same proof for the student of the run (EfficientViT-B1: its own blocks, norms and attention) and the global random state: a recomputation must not move it
+def equal_runs(model, state):
+    """{oracle?: (output, gradients, state tensors, global CPU RNG before, after the backward)} of one training-mode forward + backward of the camera BEV, live (recomputed) and the oracle"""
+    st_ = model.student
+    w_ = torch.randn_like(old_camera_bevs(model, frame0_replaced(bj, st_(img_j))))
+    res = {}
+    for oracle in (False, True):
+        model.load_state_dict(state)
+        model.train()
+        model.zero_grad(set_to_none=True)
+        st_.checkpoint_encode = not oracle
+        torch.manual_seed(4321)
+        before = torch.get_rng_state().clone()
+        out = old_camera_bevs(model, frame0_replaced(bj, st_(img_j))) if oracle else model.camera_bevs(bj)
+        (out * w_).sum().backward()
+        res[oracle] = (out.detach().clone(), {n: p.grad.clone() for n, p in model.named_parameters() if p.grad is not None}, {k: v.clone() for k, v in model.state_dict().items()},
+                       before, torch.get_rng_state().clone())
+    st_.checkpoint_encode = True
+    return res
+
+
+trE = build(camera_student="evit_b1", student_trainable=True)
+for label, model_, state_ in (("resnet18", tr, state0), ("evit_b1", trE, copy.deepcopy(trE.state_dict()))):
+    r_ = equal_runs(model_, state_)
+    live, ref = r_[False], r_[True]
+    check(torch.equal(live[0], ref[0]) and set(live[1]) == set(ref[1]) and all(torch.equal(live[1][n], ref[1][n]) for n in ref[1]) and all(torch.equal(live[2][k], ref[2][k]) for k in ref[2]),
+          f"{label}: recomputed output, all {len(ref[1])} gradients and all {len(ref[2])} state tensors equal the oracle's bit for bit")
+    check(torch.equal(live[3], live[4]) and torch.equal(ref[3], ref[4]), f"{label}: the global CPU random state after the backward is the one before the forward (the recomputation draws nothing and resets nothing)")
+tr.load_state_dict(state0)
+tr.train()
+
+
 # the memory claim itself: the bytes autograd saves for the backward (CPU, the same tensors the GPU keeps)
 def saved_bytes(fn):
     seen, total = set(), [0]
@@ -624,6 +665,273 @@ check(b_enc_on[0] < 0.25 * b_enc_off[0], f"the encoder keeps {b_enc_on[0] / 1e6:
 check(b_chain[True] < 0.5 * b_chain[False], f"the whole camera path keeps {b_chain[True] / 1e6:.1f} MB for the backward with the recomputations, {b_chain[False] / 1e6:.1f} MB without (half at most)")
 tr.load_state_dict(state0)
 tr.train()
+
+# ------------------------------------------------------------------------------------------------ K
+print("K: student_frames 'all' (the older frames of the pair / window from their own images, no graph)")
+import feature_cache as FC  # noqa: E402
+import lane_branch as LB  # noqa: E402
+
+
+def older_images(B, K):
+    """uint8 images of the older frames: another brightness than the current ones and than each other (the stub reads the mean), (B, K, 3, H, W)"""
+    return torch.stack([(images(B, seed=20 + k).float() * 0.5 + 25 * (k + 1)).clamp(0, 255).to(torch.uint8) for k in range(K)], 1)
+
+
+def all_replaced(b, outs):
+    """the batch with EVERY frame of both sources replaced by the student's outputs of that frame (outs: one output dict per frame, made one frame at a time)"""
+    r = dict(b)
+    for suffix, k in (("", "16"), ("2", "8")):
+        r["prob" + suffix] = torch.stack([o["prob" + k].float() for o in outs], 1)
+        r["ctx" + suffix] = torch.stack([o["ctx" + k].float() for o in outs], 1)
+    return r
+
+
+for F in (2, 3):
+    off, cur = build(), build(camera_student="stub", student_trainable=True)
+    on = build(camera_student="stub", student_trainable=True, student_frames="all")
+    b = data(F)
+    b["lane_img_old"] = older_images(2, F - 1)
+    with torch.no_grad():
+        outs = [on.student(b["lane_img"])] + [on.student(b["lane_img_old"][:, k]) for k in range(F - 1)]
+        want = off.eval().camera_bevs(all_replaced(b, outs))
+        got = on.eval().camera_bevs(b)
+        got_cur = cur.eval().camera_bevs(b)
+        plain = off.camera_bevs(b)
+    check(torch.equal(got, want), f"F = {F}: the BEV equals the student-free model's on the batch whose every frame is the student's output of that frame's own image (oracle made one frame at a time)")
+    check(torch.equal(got[:, 0], got_cur[:, 0]) and not torch.allclose(got[:, 1:], plain[:, 1:]) and not torch.allclose(got[:, 1:], got_cur[:, 1:]),
+          f"F = {F}: frame 0 is the same as with 'current', the older frames differ from the cached teachers' and from 'current'")
+    with torch.no_grad():
+        no_old = cur.camera_bevs({k: v for k, v in b.items() if k != "lane_img_old"})
+    check(torch.equal(got_cur, no_old), f"F = {F}: 'current' ignores lane_img_old (the batch with and without it gives the same BEV)")
+    with torch.no_grad():
+        dim = on.camera_bevs(dict(b, lane_img_old=(b["lane_img_old"].float() * 0.5).to(torch.uint8)))
+        junk = on.camera_bevs(dict(b, prob=torch.cat([b["prob"][:, :1], torch.rand_like(b["prob"][:, 1:])], 1), ctx2=torch.cat([b["ctx2"][:, :1], torch.randn_like(b["ctx2"][:, 1:])], 1)))
+    check(torch.equal(dim[:, 0], got[:, 0]) and not torch.equal(dim[:, 1:], got[:, 1:]), f"F = {F}: other older images change the older frames only")
+    check(torch.equal(junk, got), f"F = {F}: garbage in the cached older frames changes nothing (they are not read)")
+    check(raises(KeyError, lambda: on.camera_bevs({k: v for k, v in b.items() if k != "lane_img_old"}), "lane_img_old", "build-cache-older"), f"F = {F}: no lane_img_old: KeyError that names it and the cache builder")
+    check(raises(ValueError, lambda: on.camera_bevs(dict(b, lane_img_old=torch.cat([b["lane_img_old"], b["lane_img_old"][:, :1]], 1))), "older frame"), f"F = {F}: one image too many: ValueError")
+
+on = build(camera_student="stub", student_trainable=True, student_frames="all")
+b = data(3)
+b["lane_img_old"] = older_images(2, 2)
+on.eval()
+old_out = on._run_student_older(b)
+check(all(not v.requires_grad for v in old_out.values()) and all(v.shape[:2] == (2, 2) for v in old_out.values()), "the older frames' student outputs carry no graph and are (B, F - 1, ...) while gradients are on")
+cur_out = on._run_student(b)
+check(all(v.requires_grad for k, v in cur_out.items() if k.startswith(("prob", "ctx", "logit"))), "the current frame's outputs carry the graph of a trainable student")
+sc = on.student.scale
+g_cur = torch.autograd.grad(on.camera_bevs(b)[:, 0].sum(), sc, allow_unused=True)[0]
+g_old = torch.autograd.grad(on.camera_bevs(b)[:, 1:].sum(), sc, allow_unused=True)[0]
+check(g_cur is not None and float(g_cur.abs()) > 0 and (g_old is None or float(g_old.abs()) == 0.0), "gradient (evaluation mode): the current frame's BEV reaches the student, the older frames' BEV does not")
+on.train()
+on.zero_grad()
+on.camera_bevs(b).sum().backward()
+check(on.student.scale.grad is not None and float(on.student.scale.grad.abs()) > 0, "training mode (the lift recomputed in the backward, the older frames constants): a loss on the camera BEV reaches the student")
+
+# collate: the images of the older frames stack to (B, F - 1, 3, H, W), only when the items carry them
+real_collate = FC.collate
+FC.collate = lambda items: {}
+try:
+    tiny = lambda: torch.zeros(1)  # noqa: E731
+    items = [{"frames": [{"prob": tiny(), "ctx": tiny()}] * 2, "lane_img": torch.full((3, 4, 6), i, dtype=torch.uint8), "lane_img_old": torch.full((1, 3, 4, 6), 10 + i, dtype=torch.uint8)} for i in range(3)]
+    cb = FC.collate_cached(items)
+    cb0 = FC.collate_cached([{k: v for k, v in it.items() if k != "lane_img_old"} for it in items])
+finally:
+    FC.collate = real_collate
+check(cb["lane_img_old"].shape == (3, 1, 3, 4, 6) and cb["lane_img_old"].dtype == torch.uint8 and [int(cb["lane_img_old"][i].flatten()[0]) for i in range(3)] == [10, 11, 12],
+      "collate_cached: lane_img_old is (B, F - 1, 3, H, W) uint8 in item order")
+check("lane_img_old" not in cb0 and cb0["lane_img"].shape == (3, 3, 4, 6), "collate_cached: without it in the items, no lane_img_old in the batch and lane_img as before")
+
+# the dataset reads <lane_images>/sweeps for frames[1:] only when asked
+from torchvision.io import decode_jpeg, encode_jpeg, write_file  # noqa: E402
+img_root = os.path.join(tmp, "imgs")
+toks = ["aa" + "0" * 30, "bb" + "1" * 30, "cc" + "2" * 30]                  # current, older 1, older 2 (sample_data tokens)
+rng = torch.Generator().manual_seed(3)
+disk = {}
+for tok, folder in ((toks[0], img_root), (toks[1], LB.older_root(img_root)), (toks[2], LB.older_root(img_root))):
+    pth = LB.image_path(folder, tok)
+    os.makedirs(os.path.dirname(pth), exist_ok=True)
+    jp = encode_jpeg(torch.randint(0, 256, (3, 16, 24), dtype=torch.uint8, generator=rng), quality=95)
+    write_file(pth, jp)
+    disk[tok] = decode_jpeg(jp)
+base_get = FC.FrontRadarDataset.__getitem__
+FC.FrontRadarDataset.__getitem__ = lambda self, i: {"frames": [{"token": t} for t in toks]}
+try:
+    def make_ds(older):
+        d = object.__new__(FC.CachedFrontRadarDataset)
+        d.sources, d.stores, d.lane_images, d.lane_images_older = [], [], img_root, older
+        return d
+    it_on, it_off = make_ds(True)[0], make_ds(False)[0]
+    miss = make_ds(True)
+    FC.FrontRadarDataset.__getitem__ = lambda self, i: {"frames": [{"token": toks[0]}, {"token": "dd" + "3" * 30}]}
+    missing_ok = raises(FileNotFoundError, lambda: miss[0], "build-cache-older")           # the hint names the builder of the OLDER frames, not the key-frame builder
+finally:
+    FC.FrontRadarDataset.__getitem__ = base_get
+check(torch.equal(it_on["lane_img"], disk[toks[0]]) and it_on["lane_img_old"].shape == (2, 3, 16, 24) and torch.equal(it_on["lane_img_old"][0], disk[toks[1]]) and torch.equal(it_on["lane_img_old"][1], disk[toks[2]]),
+      "dataset item: lane_img_old = the JPEGs of frames[1:] from <lane_images>/sweeps, in frame order (compared with an independent decode)")
+check("lane_img_old" not in it_off, "dataset item: without lane_images_older, no lane_img_old")
+check(missing_ok, "dataset item: an older frame without a file: FileNotFoundError that names the cache builder")
+check(raises(ValueError, lambda: FC.CachedFrontRadarDataset.__init__(object.__new__(FC.CachedFrontRadarDataset), store=None, lane_images=None, lane_images_older=True), "lane_images"),
+      "dataset: lane_images_older without lane_images is refused")
+
+# the builder's frame choice: the track, cam_stride apart, clamped at the start of the scene (the dataset's own rule)
+class FakeGT:
+    ids = ["t%d" % i for i in range(10)]
+
+    def camera_track(self, tok):
+        return [{"token": t, "filename": t + ".jpg"} for t in self.ids]
+
+    def cam(self, tok):
+        return {"token": {"s0": "t2", "s1": "t7"}[tok]}
+
+
+fake = types.SimpleNamespace(gt=FakeGT(), n_cam=3, cam_stride=4)
+check([r["token"] for r in LB.older_records(fake, "s1")] == ["t3", "t0"] and [r["token"] for r in LB.older_records(fake, "s0")] == ["t0", "t0"],
+      "older_records: the frames 1 and 2 strides behind the current one, clamped at the start of the scene (t7 -> t3, t0; t2 -> t0, t0)")
+written = []
+fake._image_uint8 = lambda sd: (written.append(sd["token"]), torch.zeros(16, 24, 3, dtype=torch.uint8).numpy())[1]
+LB._DS = fake
+fill_root = os.path.join(tmp, "fill")
+LB._fill_older((fill_root, ["s0", "s1"]))
+files = sorted(os.path.relpath(os.path.join(d, f), fill_root).replace(os.sep, "/") for d, _, fs in os.walk(fill_root) for f in fs)
+check(files == ["sweeps/t0/t0.jpg", "sweeps/t3/t3.jpg"] and sorted(written) == ["t0", "t3"],
+      "_fill_older: one file per distinct older record under <root>/sweeps/<token[:2]>/, a record already there is not made twice")
+LB._fill_older((fill_root, ["s0", "s1"]))
+check(sorted(written) == ["t0", "t3"], "_fill_older is resumable (a second run writes nothing)")
+
+import inspect  # noqa: E402
+check(inspect.signature(FC.CachedFrontRadarDataset.__init__).parameters["lane_images_older"].default is False, "the dataset reads no older images unless asked (lane_images_older defaults to False)")
+
+# the builder's frame choice is the one rule of the teacher caches (feature_cache.used_frames): the same fake scene through both
+class FakeNusc:
+    def get(self, table, tok):
+        return {"scene_token": "sc"} if table == "sample" else {"name": "scene-x"}
+
+
+fake2 = types.SimpleNamespace(gt=FakeGT(), n_cam=3, cam_stride=4, samples=["s0", "s1"], nusc=FakeNusc())
+used = FC.used_frames(fake2)["scene-x"]
+want = {"t2", "t7"} | {r["token"] for s in fake2.samples for r in LB.older_records(fake2, s)}
+check(used == want, f"older_records + the current frame = feature_cache.used_frames for the same scene ({sorted(used)})")
+
+# the finished-build marker of build_cache(older=True): written after every sample, keyed by the pair / window, merged by a second build
+mk_root = os.path.join(tmp, "marker")
+fake3 = types.SimpleNamespace(gt=FakeGT(), n_cam=3, cam_stride=4, samples=["s0", "s1"], _image_uint8=lambda sd: torch.zeros(16, 24, 3, dtype=torch.uint8).numpy())
+check(LB.older_built(mk_root) == {}, "no BUILT.json: no finished build")
+LB.build_cache([fake3], mk_root, 1, older=True)
+fake3.cam_stride = 2
+LB.build_cache([fake3], mk_root, 1, older=True)
+bt = LB.older_built(mk_root)
+check(set(bt) == {LB.older_key(3, 4), LB.older_key(3, 2)} and bt[LB.older_key(3, 4)]["samples"] == 2, f"BUILT.json holds one entry per (n_cam, cam_stride) and the second build kept the first ({sorted(bt)})")
+LB.build_cache([fake3], os.path.join(tmp, "marker_key_frames"), 1)
+check(LB.older_built(os.path.join(tmp, "marker_key_frames")) == {} and not os.path.exists(os.path.join(tmp, "marker_key_frames", LB.OLDER)), "the key-frame build writes no marker and no sweeps folder")
+
+# a one-frame batch (the stream step of a pair / recurrent buffer) needs no older images: the buffered frame was made one step before by the same student
+on1, cur1 = build(camera_student="stub", student_trainable=True, student_frames="all"), build(camera_student="stub", student_trainable=True)
+b1 = data(1)
+with torch.no_grad():
+    check(torch.equal(on1.eval().camera_bevs(b1), cur1.eval().camera_bevs(b1)), "'all' with a one-frame batch and no lane_img_old = 'current' (no KeyError in the stream step)")
+
+# the real ResNet-18 student: the batch of older frames equals the frames made one at a time (flatten / view with real convolutions and BatchNorm in eval mode)
+off_r, on_r = build(), build(camera_student="resnet18", student_trainable=True, student_frames="all")
+b3 = data(3)
+b3["lane_img_old"] = older_images(2, 2)
+with torch.no_grad():
+    outs_r = [on_r.student(b3["lane_img"])] + [on_r.student(b3["lane_img_old"][:, k]) for k in range(2)]
+    want_r = off_r.eval().camera_bevs(all_replaced(b3, outs_r))
+    got_r = on_r.eval().camera_bevs(b3)
+    swapped = on_r.camera_bevs(dict(b3, lane_img_old=b3["lane_img_old"].flip(0)))
+check(torch.allclose(got_r, want_r, atol=1e-6, rtol=1e-5) and not torch.allclose(swapped[:, 1:], got_r[:, 1:]), "real ResNet-18 student: the batch of older frames equals the frames made one at a time; swapping the samples' images changes the older frames")
+
+# training mode: encoder-free here, the lift recomputed in the backward, the older frames as constants: output, every gradient and every state tensor equal the oracle's (section J's proof for 'all')
+tr_all = build(camera_student="resnet18", student_trainable=True, student_frames="all")
+b_all = dict(bj, lane_img_old=older_images(3, 1))
+state_all = copy.deepcopy(tr_all.state_dict())
+w_all = torch.randn_like(tr_all.eval().camera_bevs(b_all))
+runs_all = {}
+for oracle in (False, True):
+    tr_all.load_state_dict(state_all)
+    tr_all.train()
+    tr_all.zero_grad(set_to_none=True)
+    tr_all.student.checkpoint_encode = not oracle
+    if oracle:
+        with torch.no_grad():
+            older_out = tr_all.student(b_all["lane_img_old"][:, 0])
+        out_ = old_camera_bevs(tr_all, all_replaced(b_all, [tr_all.student(b_all["lane_img"]), older_out]))
+    else:
+        out_ = tr_all.camera_bevs(b_all)
+    (out_ * w_all).sum().backward()
+    runs_all[oracle] = (out_.detach().clone(), {n: p.grad.clone() for n, p in tr_all.named_parameters() if p.grad is not None}, {k: v.clone() for k, v in tr_all.state_dict().items()})
+live_, ref_ = runs_all[False], runs_all[True]
+check(torch.equal(live_[0], ref_[0]) and set(live_[1]) == set(ref_[1]) and all(torch.equal(live_[1][n], ref_[1][n]) for n in ref_[1]) and all(torch.equal(live_[2][k], ref_[2][k]) for k in ref_[2]),
+      f"'all' in training mode (lift recomputed, older frames constant): output, all {len(ref_[1])} gradients and all {len(ref_[2])} state tensors equal the oracle's bit for bit")
+
+# the camera controls of the evaluation take the older frames' images away too (the t3 cam_off class of bug: a control that leaves a camera input in the batch)
+from evaluation import bev_adapter as A_  # noqa: E402
+from evaluation import bev_modules as BM_  # noqa: E402
+from evaluation import bev_probe as BP_  # noqa: E402
+on_c = build(camera_student="stub", student_trainable=True, student_frames="all").eval()
+bc = data(3)
+bc["lane_img_old"] = older_images(2, 2)
+with torch.no_grad():
+    base_c = on_c.camera_bevs(bc)
+    zero_c = on_c.camera_bevs(BM_.zero_cam(bc))
+    zero_cache_only = on_c.camera_bevs({**bc, **{k: bc[k] * 0 for k in ("prob", "ctx", "prob2", "ctx2", "lane_img") if k in bc}})
+check(all(not torch.equal(zero_c[:, k], base_c[:, k]) for k in range(3)), "bev_modules.zero_cam changes the BEV of EVERY frame of an 'all' model")
+check(torch.equal(zero_c[:, 1:], zero_cache_only[:, 1:]) is False, "...and a zeroing that left lane_img_old in would not do the same (the older frames still see their images)")
+pb = {k: (v.clone() if torch.is_tensor(v) else v) for k, v in bc.items()}
+pb["tokens"] = ["a", "b"]
+BP_.perturb(pb, "zero_cam")
+check(int(pb["lane_img_old"].sum()) == 0 and int(pb["lane_img"].sum()) == 0, "bev_probe.perturb zero_cam zeroes lane_img_old")
+pb = {"tokens": ["a", "b"], "lane_img": bc["lane_img"].clone(), "lane_img_old": bc["lane_img_old"].clone()}
+BP_.perturb(pb, "shuffle_cam")
+check(torch.equal(pb["lane_img_old"], torch.roll(bc["lane_img_old"], 1, 0)), "bev_probe.perturb shuffle_cam rolls lane_img_old over the samples")
+
+
+def item_c(v):
+    return {"frames": [{k: torch.full((2,), float(v)) for k in A_.CAMERA_FRAME_KEYS} | {"token": "t"} for _ in range(3)],
+            "lane_img": torch.full((3, 2), v, dtype=torch.uint8), "lane_img_old": torch.full((2, 3, 2), v, dtype=torch.uint8)}
+
+
+it_, other_ = item_c(5), item_c(9)
+A_.perturb_camera(it_, other_, "zero_cam")
+check(int(it_["lane_img"].sum()) == 0 and int(it_["lane_img_old"].sum()) == 0, "bev_adapter.perturb_camera zero_cam zeroes lane_img_old of a dataset item")
+it_ = item_c(5)
+A_.perturb_camera(it_, other_, "shuffle_cam")
+check(int(it_["lane_img_old"][0, 0, 0]) == 9 and int(it_["lane_img"][0, 0]) == 9, "...and shuffle_cam replaces it with the other item's")
+it_ = item_c(5)
+it_["lane_img_new_kind"] = it_["lane_img"].clone()
+check(raises(ValueError, lambda: A_.perturb_camera(it_, dict(other_, lane_img_new_kind=other_["lane_img"]), "zero_cam"), "lane_img_new_kind", "LANE_IMAGE_KEYS"), "an unknown lane_img* key of an item is refused rather than left in")
+
+# config findings and the dataset wiring of train.make_datasets
+check(any("n_cam >= 2" in m for m in T.student_findings(T.TrainConfig(name="x", device="cpu", feature_cache="c", lane_images="i", n_cam=1), ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, student_frames="all")))),
+      "student_findings: student_frames 'all' with n_cam 1 is reported")
+check(not any("n_cam" in m for m in T.student_findings(T.TrainConfig(name="x", device="cpu", feature_cache="c", lane_images="i", n_cam=2), ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, student_frames="all")))),
+      "student_findings: n_cam 2 is fine")
+seen_kw = []
+
+
+class RecDS:
+    def __init__(self, *a, **k):
+        seen_kw.append(k.get("lane_images_older"))
+
+
+fake_nusc = types.SimpleNamespace(scene=[], get=lambda *a: {"name": "x"})
+real = (T.CachedFrontRadarDataset, T.FeatureStore, T.available_scenes)
+prev_mods = {k: sys.modules.get(k) for k in ("nuscenes", "nuscenes.nuscenes")}
+sys.modules["nuscenes"], sys.modules["nuscenes.nuscenes"] = types.ModuleType("nuscenes"), types.SimpleNamespace(NuScenes=lambda *a, **k: fake_nusc)
+T.CachedFrontRadarDataset, T.FeatureStore, T.available_scenes = RecDS, lambda p: None, lambda n, s: []
+try:
+    for frames in ("all", "current"):
+        T.make_datasets(T.TrainConfig(name="x", device="cpu", feature_cache="c", feature_cache2="c2", lane_images="img", model={**DUAL, "camera_student": "stub", "student_frames": frames}))
+    T.make_datasets(T.TrainConfig(name="x", device="cpu", feature_cache="c", model=dict(BASE)))
+finally:
+    T.CachedFrontRadarDataset, T.FeatureStore, T.available_scenes = real
+    for k, v in prev_mods.items():
+        if v is None:
+            sys.modules.pop(k, None)
+        else:
+            sys.modules[k] = v
+check(seen_kw == [True, True, False, False, False, False], f"train.make_datasets asks the datasets for the older images exactly with a student and student_frames 'all' (train, val: {seen_kw})")
 
 print(f"\ntest_student_chain: {'ALL PASSED' if not fails else str(len(fails)) + ' FAILED'} ({time.time() - t0:.0f} s)")
 sys.exit(1 if fails else 0)

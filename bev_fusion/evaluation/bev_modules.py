@@ -144,9 +144,10 @@ def velocity_rows(frame, ego_v, fields, gv, undefined):
 
 # ------------------------------------------------------------------------------------------------ the response test: remove an input
 def zero_cam(batch):
-    """every camera input times 0: the cached probability / context tensors the lift reads, and the images the lane branch reads (`lane_img`, `img`) - a camera
+    """every camera input times 0: the cached probability / context tensors the lift reads, and the images the lane branch and the camera student read (`lane_img`,
+    `lane_img_old` of student_frames 'all', `img`) - a camera
     path that is left in the batch would make the test say 'the camera does not matter' (the t3 cam_off bug)"""
-    return {**batch, **{k: batch[k] * 0 for k in ("prob", "ctx", "prob2", "ctx2", "lane_img", "img") if k in batch and torch.is_tensor(batch[k])}}
+    return {**batch, **{k: batch[k] * 0 for k in ("prob", "ctx", "prob2", "ctx2", "lane_img", "lane_img_old", "img") if k in batch and torch.is_tensor(batch[k])}}
 
 
 def zero_radar(batch):
@@ -396,12 +397,13 @@ def selftest():
     assert abs(row["static_epe"] - 0.5) < 1e-6 and abs(row["moving_epe"] - 0.5) < 1e-6 and abs(row["moving_gt_speed"] - 4.0) < 1e-6 and row["static_std_x"] < 1e-6 and row["ego_v_mps"] == 7.0
     assert velocity_rows("f", 0.0, {"v": torch.zeros(2, 3, 3)}, torch.zeros(2, 3, 3), torch.zeros(3, 3).bool())[0]["moving_epe"] is None, "no moving cell: None, not nan"
     # every perturbation changes exactly what it names (the cam_off bug of t3: a flag that changed nothing)
-    batch = {"prob": torch.ones(1, 2), "ctx": torch.ones(1, 2), "lane_img": torch.ones(1, 3, dtype=torch.uint8), "radar_hits": torch.ones(1, 3), "v": torch.ones(1),
+    batch = {"prob": torch.ones(1, 2), "ctx": torch.ones(1, 2), "lane_img": torch.ones(1, 3, dtype=torch.uint8), "lane_img_old": torch.ones(1, 2, 3, dtype=torch.uint8),
+             "radar_hits": torch.ones(1, 3), "v": torch.ones(1),
              "radar": {"x": torch.arange(5.0), "vr": torch.ones(5), "y": torch.ones(5)}}
     snapshot = {k: (v.clone() if torch.is_tensor(v) else {kk: vv.clone() for kk, vv in v.items()}) for k, v in batch.items()}
     c, r, d = zero_cam(batch), zero_radar(batch), zero_doppler(batch)
-    assert c["prob"].abs().sum() == 0 and c["ctx"].abs().sum() == 0 and c["lane_img"].sum() == 0 and c["radar"] is batch["radar"] and c["radar_hits"].sum() == 3 and c["v"].sum() == 1
-    assert r["radar"]["x"].numel() == 0 and r["radar"]["vr"].numel() == 0 and r["radar_hits"].abs().sum() == 0 and r["prob"].sum() == 2 and r["lane_img"].sum() == 3
+    assert c["prob"].abs().sum() == 0 and c["ctx"].abs().sum() == 0 and c["lane_img"].sum() == 0 and c["lane_img_old"].sum() == 0 and c["radar"] is batch["radar"] and c["radar_hits"].sum() == 3 and c["v"].sum() == 1
+    assert r["radar"]["x"].numel() == 0 and r["radar"]["vr"].numel() == 0 and r["radar_hits"].abs().sum() == 0 and r["prob"].sum() == 2 and r["lane_img"].sum() == 3 and r["lane_img_old"].sum() == 6
     assert d["radar"]["vr"].abs().sum() == 0 and d["radar"]["x"].sum() == 10 and d["radar"]["y"].sum() == 5 and d["prob"].sum() == 2
     assert all(torch.equal(batch[k], snapshot[k]) if torch.is_tensor(batch[k]) else all(torch.equal(batch[k][kk], snapshot[k][kk]) for kk in batch[k]) for k in batch), "the batch is not changed in place"
     # response row: a stage that follows its input changes, one that does not stays

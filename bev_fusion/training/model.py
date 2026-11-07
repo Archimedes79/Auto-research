@@ -142,7 +142,9 @@ class ModelConfig:
                                        # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of every key frame of a clip stay in memory: measured 16.3 GB at batch 3 x clips of 3 (paging on a 12 GB card), 9.1 GB with the encoder and the lift recomputed in the backward (checkpoint_encode, camera_bevs; +2.6 s per step)
     student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
     student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the checkpoints (loaded from student_init)
-    student_frames: str = "current"    # the frames the student replaces: "current" (frame 0, the only frame with a JPEG) | "all" (needs a sweep-image cache: NotImplementedError)
+    student_frames: str = "current"    # the frames the student replaces: "current" (frame 0 only; the older frames of a pair / window keep their cached teacher outputs) | "all" (the older frames too, from their
+                                       # images in <lane_images>/sweeps (lane_branch.py build-cache-older), under no_grad: the older frames enter as constants (values, not gradients: in training mode the
+                                       # BatchNorm statistics behind the lift still couple the frames); train and stream then see one source; a one-frame (stream) batch needs no older images)
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     centreline_1m: bool = False        # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer
@@ -330,9 +332,8 @@ def check_config(cfg):
             errs.append(f"centreline_1m pools the grid by {LEVELS['1m']}: {g.nx} x {g.ny} must be even")
     if errs:
         raise ValueError("; ".join(errs))
-    if cfg.student_frames == "all":
-        raise NotImplementedError("student_frames='all' would run the student on the older frames of the window / pair too: they are sweeps, and no sweep-image cache exists "
-                                  "(about 58 k JPEGs, 3 GB, a separate step); only 'current' is supported")
+    if cfg.student_frames == "all" and not cfg.camera_student:
+        raise ValueError("student_frames='all' does nothing without camera_student")
 
 
 class BEVFusionModel(nn.Module):

@@ -385,6 +385,10 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError:
         check(True, "a token missing from the BEVFusion cache is an error")
 
+    if not os.path.exists(S.WEIGHTS["efficientvit_b1"]):       # the CLI builds the student with the ImageNet file (gitignored): without it the runs below cannot be made
+        print("  SKIP the CLI runs of section 6: " + S.WEIGHTS["efficientvit_b1"] + " is missing (the weights are not in git)")
+        print("FAILED: " + "; ".join(fails) if fails else "student encoder + distillation tests: all checks passed (the CLI runs of section 6 skipped: no ImageNet weights)")
+        sys.exit(1 if fails else 0)
     base = ["--name", "smoke", "--split", "syn", "--freeze-backbone", "--max-steps", "4", "--log-every", "2", "--batch", "2", "--workers", "0", "--device", "cpu", "--force", "--out-root", os.path.join(tmp, "runs"),
             "--img-root", root_img, "--feats16", root16, "--feats8", root8, "--splits-dir", root_splits]
     calls = []

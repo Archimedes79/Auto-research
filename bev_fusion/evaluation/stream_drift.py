@@ -115,6 +115,9 @@ def main():
     dev = torch.device(a.device)
     cfg = json.load(open(os.path.join(ROOT, a.config))) if a.config else None
     buf = a.buffer or (cfg["model"].get("cam_buffer", "recurrent") if cfg else "recurrent")
+    if cfg and cfg["model"].get("camera_student"):
+        sys.exit("the drift test does not run a camera_student chain (t22): its one-frame batches drop the image the student reads (lane_img), so the model would raise a KeyError "
+                 "naming lane_images; compare stream and batch of a student chain with the evaluation of the stand-in instead")
     if buf not in ("pair", "recurrent"):
         sys.exit("the drift of a window model is not defined: --buffer pair | recurrent")
     mc = dict(TINY, camera_features="dualbev") if cfg is None else dict(cfg["model"], pretrained="", trunk_pretrained="", lane_branch="", lane_pretrained="")

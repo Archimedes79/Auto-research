@@ -40,6 +40,7 @@ import freeze as freeze_mod                                     # noqa: E402
 import losses                                                   # noqa: E402
 import model as M                                               # noqa: E402
 import train as T                                               # noqa: E402
+from lane_branch import older_built, older_key, older_root      # noqa: E402
 from student_encoder import newest_checkpoint                   # noqa: E402
 
 SMOKE = dict(steps=20, warmup=5, eval_every=10, save_every=10, keep=1, log_every=5)
@@ -183,6 +184,14 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
         if mc.lane_branch and cached and not cfg.lane_images:
             problems.append("model.lane_branch with a feature_cache needs lane_images")
         problems += T.student_findings(cfg, mc)                 # camera_student: a feature cache, lane_images, the anchor's schedule and student
+        if mc.camera_student and mc.student_frames == "all" and cfg.lane_images and os.path.isdir(_abs(cfg.lane_images, root)):
+            li = _abs(cfg.lane_images, root)
+            built = older_built(li)
+            if not os.path.isdir(older_root(li)):
+                problems.append(f"model.student_frames 'all' reads the older frames' images from {cfg.lane_images}/sweeps: it does not exist (python training/lane_branch.py build-cache-older <config>)")
+            elif older_key(cfg.n_cam, cfg.cam_stride) not in built:       # a half-built cache fails at its first missing frame, perhaps only in the first evaluation
+                problems.append(f"model.student_frames 'all': {cfg.lane_images}/sweeps has no finished build for {older_key(cfg.n_cam, cfg.cam_stride)} (BUILT.json lists "
+                                f"{sorted(built) or 'nothing'}; python training/lane_branch.py build-cache-older <config> covers the config's own scenes only)")
         si = _abs(mc.student_init, root) if mc.student_init else ""
         if si and os.path.exists(si) and newest_checkpoint(si) is None:
             problems.append(f"model.student_init: {mc.student_init} holds no checkpoint (ckpt_*.pt)")
@@ -323,12 +332,22 @@ def _selftest():
                 (dict(model=dict(stud, student_init="runs/none"), **dual), "model.student_init: runs/none does not exist"),
                 (dict(model=dict(stud, student_init="student_run"), **dual), "holds no checkpoint"),
                 (dict(model=dict(stud, student_trainable=False), **dual), "frozen student"),
-                (dict(model=dict(stud, student_trainable=False, student_init="student_run"), student_anchor=1.0, **dual), "student_anchor > 0")]
+                (dict(model=dict(stud, student_trainable=False, student_init="student_run"), student_anchor=1.0, **dual), "student_anchor > 0"),
+                (dict(model=dict(stud, student_frames="all"), n_cam=1, **dual), "n_cam >= 2"),                                                         # student_frames 'all': the older frames' images
+                (dict(model=dict(stud, student_frames="all"), n_cam=2, **dual), "build-cache-older")]                                                   # (no <lane_images>/sweeps yet)
         for kw, text in bad:
             pr, _ = check(write(**kw), tmp)
             assert has(pr, text), (kw, text, pr)
         open(os.path.join(tmp, "student_run", "ckpt_00000001.pt"), "w").close()
-        for kw in (dict(model=stud, **dual), dict(model=dict(stud, student_init="student_run"), student_anchor=1.0, **dual)):                           # a student that trains, with and without a start
+        os.makedirs(os.path.join(tmp, "data", "sweeps"))
+        older = dict(model=dict(stud, student_frames="all"), n_cam=2, **dual)
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "no finished build"), pr                                    # the folder is there, no BUILT.json: a half-built cache
+        json.dump({"built": {older_key(2, T.TrainConfig.cam_stride): {"samples": 1}}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))
+        pr, _ = check(write(**dict(older, cam_stride=T.TrainConfig.cam_stride + 1)), tmp)
+        assert has(pr, "no finished build"), pr                                    # a finished build for another stride does not count
+        for kw in (dict(model=stud, **dual), dict(model=dict(stud, student_init="student_run"), student_anchor=1.0, **dual),                          # a student that trains, with and without a start
+                   dict(model=dict(stud, student_frames="all"), n_cam=2, **dual)):                                                                       # ... and with the older frames' cache
             pr, _ = check(write(**kw), tmp)
             assert pr == [], (kw, pr)
         # the same switches done right are no problem; a flag that does nothing is a note, not a refusal
@@ -410,7 +429,7 @@ def _selftest():
         assert "<hypothesis of the card>" in start_lines(s, "t14_dc_ctl_s0") and "--id t14.dc_ctl_s0 " in start_lines(s, "t14_dc_ctl_s0")
         pr, _ = check(write(), tmp, require_clean=True)                                              # tmp lies in the outer repo's ignored temp/
         assert isinstance(pr, list)
-    print("startable selftest passed: 25 kinds of bad config (incl. the t22 camera student) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
+    print("startable selftest passed: 29 kinds of bad config (incl. the t22 camera student and its older frames' cache, missing or half-built) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
           "uncommitted files (rename, space, untracked folder) are listed, the GT identity is told against a tagged version (CRLF-safe), "
           "the smoke twin is a valid config, the start lines make up no card")
 

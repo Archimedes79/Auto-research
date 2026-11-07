@@ -28,6 +28,7 @@ import numpy as np
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 AUTORESEARCH = os.path.abspath(os.path.join(ROOT, "..", "autoresearch"))
 CAMERA_FRAME_KEYS = ("prob", "ctx", "img", "prob2", "ctx2")     # the camera inputs of a frame dict (the camera controls replace all of them)
+LANE_IMAGE_KEYS = ("lane_img", "lane_img_old")                  # the images an item carries beside its frames (t7 lane branch / t22 student; _old: the older frames, student_frames 'all')
 
 
 def perturb_camera(item, other, control):
@@ -42,8 +43,12 @@ def perturb_camera(item, other, control):
         for k in CAMERA_FRAME_KEYS:
             if k in f:
                 f[k] = o[k] if control == "shuffle_cam" else f[k] * 0
-    if "lane_img" in item:
-        item["lane_img"] = other["lane_img"] if control == "shuffle_cam" else item["lane_img"] * 0
+    unknown = [k for k in item if k.startswith("lane_img") and k not in LANE_IMAGE_KEYS]
+    if unknown:
+        raise ValueError(f"camera control: item keys {unknown} are not handled (add them to LANE_IMAGE_KEYS)")
+    for k in LANE_IMAGE_KEYS:              # the current frame's image and, with model.student_frames 'all' (t22), the older frames' images
+        if k in item:
+            item[k] = other[k] if control == "shuffle_cam" else item[k] * 0
 
 
 def setup_paths(run: Optional[str] = None) -> str:

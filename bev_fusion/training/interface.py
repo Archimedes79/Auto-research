@@ -30,6 +30,8 @@ INPUTS = {
     "ida2": (False, "crop / resize of the BEVFusion features (camera_features dual)"),
     "lane_img": (False, "(B, 3, H, W) uint8 image of the current frame for the lane add-on; it also feeds the camera student (ModelConfig.camera_student, t22), which REQUIRES it: "
                         "the contract cannot see the config, so the cached model raises a KeyError naming TrainConfig.lane_images when it is missing"),
+    "lane_img_old": (False, "(B, F-1, 3, H, W) uint8 images of the OLDER frames of the pair / window (<lane_images>/sweeps); only with ModelConfig.student_frames 'all' (t22), which REQUIRES it: "
+                            "the cached model raises a KeyError naming the sweeps cache when it is missing"),
     "flip": (False, "(B,) bool: samples mirrored by the augmentation (y -> -y); the camera BEV is mirrored after the camera slot"),
     "gap_steps": (False, "list (B) of {'prev': steps, 'next': steps}: the ego steps (dt, v, omega) from now to the neighbouring keyframes "
                          "(python floats, from the poses; dt < 0 backwards): the true gap and ego motion for decoding dt = +-0.5 s and the memory step between calls"),
@@ -97,6 +99,8 @@ def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=Fa
         for k in ("v", "omega", "flip", "radar_poses"):
             if k in batch and batch[k].shape[0] != B:
                 errs.append(f"{k}: {batch[k].shape[0]} samples != B = {B}")
+        if "lane_img_old" in batch and tuple(batch["lane_img_old"].shape[:2]) != (B, Fn - 1):       # t22 student_frames 'all': one image per older frame
+            errs.append(f"lane_img_old: leading shape {tuple(batch['lane_img_old'].shape[:2])} != (B, F - 1) = {(B, Fn - 1)}")
         if "radar_poses" in batch and tuple(batch["radar_poses"].shape[1:]) != (5, 4, 4):
             errs.append(f"radar_poses: shape {tuple(batch['radar_poses'].shape)} != (B, 5, 4, 4)")
         for k in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits", "radar_static"):
@@ -165,6 +169,9 @@ def _selftest():
     assert any("omega" in x for x in e) and any("extra" in x for x in e) and any("v:" in x for x in e), e
     bad = dict(batch, ctx=torch.full((B, Fn, 80, 2, 3), float("nan")))
     assert any("not finite" in x for x in check_inputs(bad))
+    assert check_inputs(dict(batch, lane_img_old=z(B, Fn - 1, 3, 4, 4))) == [], "t22 student_frames 'all': one older image per older frame"
+    assert any("lane_img_old" in x for x in check_inputs(dict(batch, lane_img_old=z(B, Fn, 3, 4, 4)))) and any("lane_img_old" in x for x in check_inputs(dict(batch, lane_img_old=z(B + 1, Fn - 1, 3, 4, 4)))), \
+        "lane_img_old: a wrong number of older frames or of samples is named"
     try:
         check_inputs(dict(batch, radar=dict({f: z(1) for f in RADAR_FIELDS}, b=torch.tensor([3]))), raise_on=True)
         raise AssertionError("no raise")

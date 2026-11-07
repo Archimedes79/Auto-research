@@ -142,6 +142,38 @@ def load_image(root, sd_token):
     return decode_jpeg(read_file(p))
 
 
+OLDER = "sweeps"                                          # sub-folder of the image cache with the OLDER frames of a pair / window (t22, model.student_frames 'all'): same layout, one file per CAM_FRONT sample_data token
+
+
+BUILT = "BUILT.json"                                      # written into <root>/sweeps/ when build-cache-older has been through EVERY sample of its datasets: {"built": {"n_cam=2,cam_stride=4": {...}}}
+
+
+def older_root(root):
+    return os.path.join(root, OLDER)
+
+
+def older_key(n_cam, cam_stride):
+    """the frames a build covers depend on the pair / window: the older frames of n_cam = 2, cam_stride = 4 are other sweeps than those of n_cam = 3, cam_stride = 2"""
+    return f"n_cam={n_cam},cam_stride={cam_stride}"
+
+
+def older_built(root):
+    """{older_key: {"samples": n, "when": ...}} of the finished builds in <root>/sweeps/BUILT.json ({} when there is none)"""
+    import json
+    try:
+        return json.load(open(os.path.join(older_root(root), BUILT)))["built"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def older_records(ds, sample_token):
+    """the CAM_FRONT sample_data records of the older frames (k = 1 .. n_cam - 1) of one sample: the track of the scene, cam_stride records
+    apart, clamped at its start (the rule of nuscenes_dataset._cam_frames and feature_cache.used_frames, so these are the frames the teacher caches hold)"""
+    track = ds.gt.camera_track(sample_token)
+    i0 = [x["token"] for x in track].index(ds.gt.cam(sample_token)["token"])
+    return [track[max(0, i0 - k * ds.cam_stride)] for k in range(1, ds.n_cam)]
+
+
 _DS = None                                                # dataset of build_cache, inherited by the forked workers
 
 
@@ -161,25 +193,53 @@ def _fill(args):
     return len(tokens)
 
 
-def build_cache(datasets, root, workers=1):
-    """Write the current CAM_FRONT frame of every sample of the datasets (resumable)."""
+def _fill_older(args):
+    """the older frames of the samples (older_records) into <root>/sweeps/: every record, also one that is a key frame (a clamped frame at the start of a scene)"""
+    from PIL import Image
+    root, tokens = args
+    for tok in tokens:
+        for sd in older_records(_DS, tok):
+            p = image_path(older_root(root), sd["token"])
+            if os.path.exists(p):
+                continue
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            arr = _DS._image_uint8(sd)
+            tmp = p[:-4] + f".tmp{os.getpid()}.jpg"
+            Image.fromarray(arr).save(tmp, quality=JPEG_QUALITY)
+            os.replace(tmp, p)                             # atomic: a reader never sees a partial file
+    return len(tokens)
+
+
+def build_cache(datasets, root, workers=1, older=False):
+    """Write the current CAM_FRONT frame of every sample of the datasets (resumable); older=True: the older frames of the pair / window into <root>/sweeps/ instead."""
     import multiprocessing as mp
     import time
     global _DS
+    fill = _fill_older if older else _fill
     t0, n = time.time(), 0
     for ds in datasets:
         _DS = ds
         chunks = [ds.samples[i::max(workers, 1) * 16] for i in range(max(workers, 1) * 16)]
         if workers <= 1:                                   # one process: no forked copies of the devkit (shared box, 2026-10-30:
-            done = map(_fill, [(root, c) for c in chunks])  # two forked workers + the devkit ran the box out of memory)
+            done = map(fill, [(root, c) for c in chunks])   # two forked workers + the devkit ran the box out of memory)
             for k in done:
                 n += k
-                print(f"lane image cache: {n} samples, {time.time() - t0:.0f} s", flush=True)
+                print(f"lane image cache{' (older frames)' if older else ''}: {n} samples, {time.time() - t0:.0f} s", flush=True)
             continue
         with mp.get_context("fork").Pool(workers) as pool:
-            for k in pool.imap_unordered(_fill, [(root, c) for c in chunks]):
+            for k in pool.imap_unordered(fill, [(root, c) for c in chunks]):
                 n += k
-                print(f"lane image cache: {n} samples, {time.time() - t0:.0f} s", flush=True)
+                print(f"lane image cache{' (older frames)' if older else ''}: {n} samples, {time.time() - t0:.0f} s", flush=True)
+    if older and datasets:                                 # every record of every sample is there now: say so (startable.py asks for this, so a half-built cache is not started on)
+        import datetime
+        import json
+        built = older_built(root)
+        built[older_key(datasets[0].n_cam, datasets[0].cam_stride)] = {"samples": n, "when": datetime.datetime.now().isoformat(timespec="seconds")}
+        os.makedirs(older_root(root), exist_ok=True)
+        path = os.path.join(older_root(root), BUILT)
+        tmp = path + f".tmp{os.getpid()}"
+        json.dump({"built": built}, open(tmp, "w"), indent=1)
+        os.replace(tmp, path)
     return n
 
 
@@ -187,7 +247,7 @@ def _cli(argv):
     import argparse
     import json
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["build-cache", "check-cache"])
+    ap.add_argument("cmd", choices=["build-cache", "check-cache", "build-cache-older", "check-cache-older"])
     ap.add_argument("config")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--n", type=int, default=20, help="check-cache: samples compared with the dataset's own image")
@@ -199,6 +259,18 @@ def _cli(argv):
     dss = T.make_datasets(cfg)
     if a.cmd == "build-cache":
         print("written / checked", build_cache(dss, cfg_root(a.config), a.workers), "samples")
+    elif a.cmd == "build-cache-older":
+        print("written / checked the older frames of", build_cache(dss, cfg_root(a.config), a.workers, older=True), "samples")
+    elif a.cmd == "check-cache-older":
+        import numpy as np
+        ds, errs = dss[1], []
+        for i in range(0, len(ds.samples), max(1, len(ds.samples) // a.n))[:a.n]:
+            for sd in older_records(ds, ds.samples[i]):
+                ref = torch.tensor(ds._image_uint8(sd)).permute(2, 0, 1).float()
+                got = load_image(older_root(cfg_root(a.config)), sd["token"]).float()
+                errs.append((got - ref).abs().mean().item())
+        print(f"older-frame cache vs dataset image, mean abs error per pixel (0..255) over {len(errs)} val frames: mean {np.mean(errs):.2f}, max {np.max(errs):.2f}")
+        assert np.max(errs) < 3.0, "the older-frame cache does not match the dataset's image"
     else:
         import numpy as np
         ds, errs = dss[1], []

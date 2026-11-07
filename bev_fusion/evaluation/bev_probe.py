@@ -121,7 +121,7 @@ def perturb(batch, control):
     elif control == "zero_radar":
         batch["radar"] = {k: v[:0] for k, v in batch["radar"].items()}
     elif control in ("shuffle_cam", "zero_cam"):          # every camera input of the batch: both feature caches (t10), the lane image (t7)
-        for k in ("prob", "ctx", "prob2", "ctx2", "img", "lane_img"):
+        for k in ("prob", "ctx", "prob2", "ctx2", "img", "lane_img", "lane_img_old"):      # lane_img_old: the older frames' images of student_frames 'all' (t22)
             if k in batch:
                 batch[k] = torch.roll(batch[k], 1, 0) if control == "shuffle_cam" else torch.zeros_like(batch[k])
     else:
