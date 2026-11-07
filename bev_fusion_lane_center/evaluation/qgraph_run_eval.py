@@ -123,6 +123,10 @@ def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), du
     nodes delivered at its threshold stops the scoring before any card is written. repro: path of the E274 sweep json of this model; the close:1.5@0.5 read-out must reproduce its entry
     'pos1.5_e0.5' (topo F1, F1@1.0, junction F1, lanes found, node P / R) within repro_tol, else the scoring stops after the exact-map pass, before the control and before any card is written."""
     t0 = time.time()
+    if repro:                                                                                       # before any GPU work; a relative path is relative to the project root (the scorer runs in evaluation/)
+        repro = repro if os.path.isabs(repro) else os.path.join(ROOT, repro)
+        if not os.path.isfile(repro):
+            raise SystemExit(f"--repro: the sweep file {repro} does not exist (stopped before any prediction pass)")
     frames = QE.val_frames()[: n or None]
     share = QE.stored_share(frames)
     assert share == 1.0, f"only {share:.3f} of the VAL frames have a stored lane GT"

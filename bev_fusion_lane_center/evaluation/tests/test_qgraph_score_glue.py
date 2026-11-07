@@ -126,6 +126,22 @@ def main():
             except SystemExit as e:
                 assert "does not reproduce" in str(e), e
             assert not [x for x in os.listdir(os.path.join(R, "e275")) if x.startswith("toy_bad")]
+            # a relative sweep path is relative to the project root, not to the folder the scorer runs in (it cost the first E275 night: `_py14.sh` runs in evaluation/); a missing file stops
+            # the scoring before the first prediction pass
+            assert os.path.abspath(os.getcwd()) != os.path.abspath(root)
+            quiet(QR.score, "toy_rel", 0, 0, "cpu", exp="e275", readouts=["close:1.5@0.5"], repro="sweep_ok.json")
+            assert json.load(open(os.path.join(R, "e275", "toy_rel.close1.5_t0.5", "card.json")))["readout"]["reproduces_e274_sweep_max_abs_diff"] < 1e-12
+            calls, pv = [], QR.predict_val
+            QR.predict_val = lambda *a, **k: (calls.append(1), pv(*a, **k))[1]
+            try:
+                quiet(QR.score, "toy_gone", 0, 0, "cpu", exp="e275", readouts=["close:1.5@0.5"], repro="no_such_sweep.json")
+                raise SystemExit("a missing sweep file did not stop the scoring")
+            except SystemExit as e:
+                assert "does not exist" in str(e), e
+            finally:
+                QR.predict_val = pv
+            assert not calls, "the sweep file was looked for only after a prediction pass"
+            assert not [x for x in os.listdir(os.path.join(R, "e275")) if x.startswith("toy_gone")]
             # --readouts without --exp is refused (the E273 cards must not receive read-out cards)
             sys.argv = ["qgraph_run_eval.py", "score", "--run", "toy", "--readouts", "plain@0.5"]
             try:
@@ -137,7 +153,7 @@ def main():
     finally:
         QE.val_frames, QE.stored_share, QR.predict_val, QR.chain_vertices, QR.ROOT = keep
     print("qgraph_run_eval.score glue (toy lane, CPU): old call unchanged, one card per read-out in its own folder, plain@0.5 = old card, kill criterion (judged spec stops, 0.4 spec warns), "
-          "reproduction gate, curve, dump, --exp required with --readouts: ok")
+          "reproduction gate (relative path against the project root, missing file stops before any prediction), curve, dump, --exp required with --readouts: ok")
 
 
 if __name__ == "__main__":
