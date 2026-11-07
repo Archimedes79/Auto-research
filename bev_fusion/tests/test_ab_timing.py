@@ -119,6 +119,10 @@ st3 = AB.paired_stats([-4.0, -6.0])
 check(st["resolved"] and abs(st["mean"] + 5.0) < 1e-9 and 0 < st["half"] < 1.0 and not st2["resolved"] and st2["half"] > abs(st2["mean"]) and not st3["resolved"] and abs(st3["half"] - 12.71) < 1e-6,
       f"paired_stats: [-5.0 -5.2 -4.8 -5.0] resolved (+-{st['half']:.2f}), a scatter around zero is not, two rounds need the t of one degree of freedom (12.7)")
 check(not AB.paired_stats([2.0, 2.0, 2.0, 2.0])["half"] > 0 and AB.paired_stats([2.0, 2.0, 2.0, 2.0])["resolved"], "paired_stats: identical per-round differences have no scatter")
+pm12, pm40 = [1.0, -1.0] * 6, [1.0, -1.0] * 20
+se12, se40 = math.sqrt(12 / 11) / math.sqrt(12), math.sqrt(40 / 39) / math.sqrt(40)
+check(abs(AB.paired_stats(pm12)["half"] - 2.20 * se12) < 1e-9 and abs(AB.paired_stats(pm40)["half"] - 2.0 * se40) < 1e-9 and AB.T_CRIT[30] == 2.04 and AB.T_CRIT[10] == 2.23,
+      "paired_stats: the t table runs to 30 degrees of freedom (12 rounds use 2.20, not 2.0), 2.0 beyond")
 txt = AB.report(AB.run_ab(arms, fake_block, 4, prime=False), 2, 1)
 check("RESOLVED" in txt and "against a" in txt and "-10." in txt and "odd number" not in txt and "WARNING" not in txt, "report: a clear difference says RESOLVED with its interval; no odd-rounds note, no warning")
 noisy = iter([1.0, 1.0, 1.0, 1.0 + 0.2, 1.0, 1.0 - 0.2, 1.0, 1.0 + 0.1])
@@ -204,7 +208,10 @@ def ostep(*a, **k):
 T.run_clip, T.optimizer_step = rc, ostep
 bench.ema.update = lambda *a, **k: (spy.__setitem__("ema", spy["ema"] + 1), _eu(*a, **k))[1]
 bench.opt.zero_grad = lambda *a, **k: (spy.__setitem__("zero", spy["zero"] + 1), _zg(*a, **k))[1]
-bench._sync = lambda: spy.__setitem__("sync", spy["sync"] + 1)
+events = []
+_sync_cuda = torch.cuda.synchronize
+torch.cuda.synchronize = lambda *a, **k: (spy.__setitem__("sync", spy["sync"] + 1), events.append("s"))[1]      # the REAL Bench._sync runs; it calls this
+bench._sync_gpu = True
 before = {k: v.detach().clone() for k, v in m.named_parameters()}        # parameters, not buffers: the batch-norm statistics move in any forward
 try:
     Loader.taken = 0
@@ -236,6 +243,23 @@ try:
     bench.make_loader = lambda c: make_loader(c, n=100, delay=0.05)
     bw = bench.block({}, 4)
     check(all(w >= 0.05 * tcfg.accum * 0.9 for w in bw["wait"]), f"the data wait is what the loader took ({min(bw['wait']):.3f} s per step for 2 x 0.05 s)")
+    # the order inside a step: sync, timer start, the micro-batches (a timer call before and after each fetch), sync, timer stop (counted steps only)
+    ticks = []
+    real_pc = time.perf_counter
+    AB.time = SimpleNamespace(perf_counter=lambda: (events.append("t"), real_pc())[1])
+    events.clear()
+    bench.make_loader = make_loader
+    try:
+        bench.block({}, 6)
+    finally:
+        AB.time = time
+    step = ["s", "t"] + ["t", "t"] * tcfg.accum + ["s"]
+    check(events == step + (step + ["t"]) * 2, f"inside a step the GPU is waited for before the timer starts and after the work, before it stops (events: {''.join(events)})")
+    bench._sync_gpu = False
+    events.clear()
+    bench._sync()
+    bench._sync_gpu = True
+    check(events == [], "Bench._sync does nothing on the CPU (no CUDA wait)")
     # a step with a non-finite loss is not timed but counted
     bench.make_loader = make_loader
     spy["run_clip"].clear()
@@ -245,7 +269,8 @@ try:
 finally:
     T.run_clip, T.optimizer_step = _rc, _os
     bench.ema.update, bench.opt.zero_grad = _eu, _zg
-    del bench._sync
+    torch.cuda.synchronize = _sync_cuda
+    bench._sync_gpu = False
 
 # ---- 6 the command line end to end
 cfg_json = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
@@ -265,7 +290,27 @@ with contextlib.redirect_stdout(buf):
     rc_ = AB.main([cfg_json.name, "--arm", "plain", "--arm", "fast:model.sync_free=true,loss.sync_free=true", "--rounds", "2", "--steps", "2", "--warm", "1", "--json", out_json], builder=builder)
 text = buf.getvalue()
 res_file = json.load(open(out_json)) if os.path.exists(out_json) else {}
-check(rc_ == 0 and built == [(3, 1, 2)] and "plan: 2 arms x 2 rounds" in text and "A/B timing:" in text and ("RESOLVED" in text or "not resolved" in text), "main: reads the config, builds the bench with warm and steps, prints plan and report with a verdict")
+with contextlib.redirect_stdout(io.StringIO()):
+    AB.main([cfg_json.name, "--arm", "fastref:model.sync_free=true,loss.sync_free=true", "--arm", "plain", "--rounds", "2", "--steps", "1", "--warm", "1"], builder=builder)
+check(m.cfg.sync_free is False and loss.cfg.sync_free is False and not torch.backends.cudnn.benchmark, "main: model.cfg, loss.cfg and the torch switches are back at their start values after the run (the last block was the sync-free arm)")
+restored, failing = [], {"n": 0}
+
+
+def failing_block(settings, r):
+    failing["n"] += 1
+    return {"times": [1.0], "wait": [0.0]} if failing["n"] < 4 else {"times": [], "wait": []}      # the priming block and two counted ones, then a block with nothing counted
+
+
+fake_bench = SimpleNamespace(block=failing_block, effective=lambda s: dict(s), apply=lambda s: restored.append(dict(s)))
+partial_json = cfg_json.name + ".partial.json"
+with contextlib.redirect_stdout(io.StringIO()):
+    failed = raises(lambda: AB.main([cfg_json.name, "--arm", "a", "--arm", "b", "--rounds", "2", "--json", partial_json], builder=lambda c, w, s: fake_bench), RuntimeError)
+part = json.load(open(partial_json)) if os.path.exists(partial_json) else {}
+check(failed and part.get("partial") is True and [b["arm"] for b in part.get("blocks", [])] == ["a", "b"] and restored == [{}] and "settings" in part,
+      "main: a block with no counted step stops the run, but the file holds the blocks so far (partial) and the switches are restored")
+if os.path.exists(partial_json):
+    os.unlink(partial_json)
+check(rc_ == 0 and built[:1] == [(3, 1, 2)] and "plan: 2 arms x 2 rounds" in text and "A/B timing:" in text and ("RESOLVED" in text or "not resolved" in text), "main: reads the config, builds the bench with warm and steps, prints plan and report with a verdict")
 check(len(res_file.get("blocks", [])) == 4 and res_file.get("steps") == 2 and res_file.get("warm") == 1 and set(res_file.get("settings", {})) == {"plain", "fast"}
       and res_file["settings"]["fast"]["model.sync_free"] is True and res_file["settings"]["plain"]["model.sync_free"] is False and all(len(b["times"]) == 2 and b["load"] is not None for b in res_file["blocks"]),
       "main --json: four blocks with their step times, steps and warm, the effective settings of both arms")

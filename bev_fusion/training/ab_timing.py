@@ -6,7 +6,9 @@ machine between two runs (identical runs differ by 4 %). Here ONE process builds
 round are neighbours in time, so a drift of the machine cancels in the paired difference (exactly for an even number of rounds and a drift that is linear in time), and the
 startup is paid once. Every block starts with the same random seed in all arms of a round (same samples, same mirror flips); the loader is rebuilt for every block
 (pin_memory, workers and prefetch_factor are loader settings); the first block of the process is a priming block that is not counted, and a few warm-up steps of every
-block are not counted either. A step with a non-finite loss is not timed (it is shorter) and is reported as skipped.
+block are not counted either. A step with a non-finite loss is not timed (it is shorter) and is reported as skipped. Loader arms: a new loader's prefetch queue is full when the
+counted window starts (this favours a deeper prefetch_factor / more workers), and workers=0 against workers=N draws the mirror flips in other processes, so those arms do not see
+the same flips: compare them with a longer --warm (at least prefetch_factor x workers / accum steps) and read the result as indicative.
 
     ~/miniconda3/envs/gcar/bin/python training/ab_timing.py <composed config.json> --arm plain --arm "fast:@fast" --arm "nopin:@fast,pin_memory=false" [--rounds 4] [--json out.json]
 
@@ -51,7 +53,8 @@ INT_SWITCHES = ("prefetch_factor", "workers")
 SWITCHES = BOOL_SWITCHES + INT_SWITCHES
 LR_FRACTION = 0.1                    # the learning rate while timing: constant, a tenth of the config's
 GPU_BUSY_MB = 3000                   # more GPU memory in use than this before the model is built: another job is there (a desktop holds ~1.5 GB)
-T_CRIT = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26}       # two-sided 95 %, by degrees of freedom; 2.0 beyond
+T_CRIT = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23, 11: 2.20, 12: 2.18, 13: 2.16, 14: 2.14, 15: 2.13, 16: 2.12, 17: 2.11, 18: 2.10,
+          19: 2.09, 20: 2.09, 21: 2.08, 22: 2.07, 23: 2.07, 24: 2.06, 25: 2.06, 26: 2.06, 27: 2.05, 28: 2.05, 29: 2.05, 30: 2.04}       # two-sided 95 %, by degrees of freedom; 2.0 beyond 30
 
 
 # ------------------------------------------------------------------------------------------------ arms
@@ -120,9 +123,10 @@ def paired_stats(per_round):
     return {"mean": mean, "se": se, "half": half, "resolved": abs(mean) > half}
 
 
-def run_ab(arms, block, rounds, prime=True):
+def run_ab(arms, block, rounds, prime=True, on_block=None):
     """arms: [(name, settings)], the first is the reference. block(settings, r) -> {"times": [seconds per counted step], "wait": [...], optional "skipped", "load", "peak_gb"};
-    r is the round (-1 for the priming block, which is run with the reference arm first and not counted). -> {"arms", "ref", "diff", "blocks"}"""
+    r is the round (-1 for the priming block, which is run with the reference arm first and not counted). on_block(blocks) is called after every counted block with the blocks so
+    far (a failure later does not lose them). -> {"arms", "ref", "diff", "blocks"}"""
     if len(arms) < 2:
         raise ValueError("an A/B needs at least two arms")
     if rounds < 2:
@@ -141,7 +145,7 @@ def run_ab(arms, block, rounds, prime=True):
             name, settings = arms[i]
             res = block(settings, r)
             if not res["times"]:
-                raise RuntimeError(f"arm {name}, round {r}: no step was counted")
+                raise RuntimeError(f"arm {name}, round {r}: no step was counted (every step was skipped as non-finite?)")
             means[name][r] = sum(res["times"]) / len(res["times"])
             waits[name] += res["wait"]
             extra[name]["skipped"] += res.get("skipped", 0)
@@ -149,6 +153,8 @@ def run_ab(arms, block, rounds, prime=True):
                 if res.get(k) is not None:
                     extra[name][k].append(res[k])
             blocks.append({"arm": name, "round": r, "mean": means[name][r], **{k: res.get(k) for k in ("times", "wait", "skipped", "load", "peak_gb")}})
+            if on_block is not None:
+                on_block(blocks)
     out = {"arms": {}, "ref": names[0], "diff": {}, "blocks": blocks, "rounds": rounds}
     for n in names:
         m = means[n]
@@ -191,6 +197,7 @@ class Bench:
     def __init__(self, cfg, model, loss, make_loader, device, warm=3, steps=8, frozen=()):
         self.cfg, self.model, self.loss, self.make_loader, self.device = cfg, model, loss, make_loader, device
         self.warm, self.steps = warm, steps
+        self._cuda = self._sync_gpu = str(device).startswith("cuda")         # _sync_gpu: whether to wait for the GPU around a step (a test switches it separately)
         self.model.train()
         self.opt = torch.optim.AdamW(T.param_groups(model, loss, cfg.lr * LR_FRACTION, cfg.weight_decay, cfg.lr_groups), lr=cfg.lr * LR_FRACTION, betas=(0.9, 0.999))
         self.params = [p for g in self.opt.param_groups for p in g["params"]]
@@ -234,13 +241,13 @@ class Bench:
         return dataclasses.replace(self.cfg, **{k: full[k] for k in ("pin_memory", "prefetch_factor", "workers")})
 
     def _sync(self):
-        if str(self.device).startswith("cuda"):
+        if self._sync_gpu:
             torch.cuda.synchronize()
 
     def block(self, settings, r=0):
         cfg = self.apply(settings)
         torch.manual_seed(cfg.seed + 7919 * (r + 1))            # the same samples and mirror flips in every arm of a round
-        cuda = str(self.device).startswith("cuda")
+        cuda = self._cuda
         if cuda:
             torch.cuda.reset_peak_memory_stats()
         loader = self.make_loader(cfg)
@@ -351,14 +358,20 @@ def main(argv=None, builder=None):
         print(f"refused: another job holds GPU memory (> {GPU_BUSY_MB} MB); the step times would not be clean (--force to run anyway)")
         return 2
     bench = (builder or build_bench)(T.read_config(a.config), a.warm, a.steps)
-    res = run_ab(arms, bench.block, a.rounds)
-    res.update(steps=a.steps, warm=a.warm, config=os.path.abspath(a.config), settings={n: bench.effective(s) for n, s in arms})
-    print(report(res, a.steps, a.warm))
-    for n, s in res["settings"].items():
+    info = dict(steps=a.steps, warm=a.warm, config=os.path.abspath(a.config), settings={n: bench.effective(s) for n, s in arms})
+
+    def write(res):
+        if a.json:
+            with open(a.json, "w") as f:
+                json.dump({**res, **info}, f, indent=1)
+    try:
+        res = run_ab(arms, bench.block, a.rounds, on_block=lambda blocks: write({"partial": True, "blocks": blocks}))      # the file holds the blocks so far if a later one fails
+    finally:
+        bench.apply({})                                         # model.cfg, loss.cfg and the torch switches go back to what they were at the start
+    print(report({**res, **info}, a.steps, a.warm))
+    for n, s in info["settings"].items():
         print(f"  effective settings of {n}: {s}")
-    if a.json:
-        with open(a.json, "w") as f:
-            json.dump(res, f, indent=1)
+    write(res)
     return 0
 
 
