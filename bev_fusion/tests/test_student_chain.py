@@ -13,7 +13,7 @@ oracles); the encoder itself is tests/test_student_encoder.py.
      BEV reaches every student tensor, BatchNorm statistics do not move under model.train() / ema.applied (a plain StudentEncoder's do); frozen: no gradient, no graph, no
      `student.` key in the checkpoint state; built last (every other tensor equal with the option on or off); lr_groups give the student its own rate; warm start keeps the
      student as loaded; a checkpoint of the chain without a student loads into the chain with a frozen one (the stand-in evaluation path)
-  E  config: each refusal of model.check_config on its own, lane_branch stays allowed, the base model refuses the option, student_frames 'all' = NotImplementedError; train.build
+  E  config: each refusal of model.check_config on its own, lane_branch stays allowed, the base model refuses the option, student_frames 'all' accepted with a student and refused without one; train.build
      refusals (feature cache, lane_images, anchor without a trainable student, schedule range)
   F  anchor: zero for student = teacher and positive otherwise (by hand), the weight schedule at 0 / until/2 / until / 1, forward_loss adds weight x anchor to the total in
      training (with its gradient reaching the student) and only logs it in validation, run_clip logs it
@@ -821,7 +821,8 @@ LB.build_cache([fake3], mk_root, 1, older=True)
 fake3.cam_stride = 2
 LB.build_cache([fake3], mk_root, 1, older=True)
 bt = LB.older_built(mk_root)
-check(set(bt) == {LB.older_key(3, 4), LB.older_key(3, 2)} and bt[LB.older_key(3, 4)]["samples"] == 2, f"BUILT.json holds one entry per (n_cam, cam_stride) and the second build kept the first ({sorted(bt)})")
+check(set(bt) == {"n_cam=3,cam_stride=4", "n_cam=3,cam_stride=2"} and len(bt) == 2 and bt["n_cam=3,cam_stride=4"]["samples"] == 2 and LB.older_key(2, 4) == "n_cam=2,cam_stride=4",
+      f"BUILT.json holds one entry per (n_cam, cam_stride), keyed as written in the card, and the second build kept the first ({sorted(bt)})")
 LB.build_cache([fake3], os.path.join(tmp, "marker_key_frames"), 1)
 check(LB.older_built(os.path.join(tmp, "marker_key_frames")) == {} and not os.path.exists(os.path.join(tmp, "marker_key_frames", LB.OLDER)), "the key-frame build writes no marker and no sweeps folder")
 
@@ -864,6 +865,17 @@ for oracle in (False, True):
 live_, ref_ = runs_all[False], runs_all[True]
 check(torch.equal(live_[0], ref_[0]) and set(live_[1]) == set(ref_[1]) and all(torch.equal(live_[1][n], ref_[1][n]) for n in ref_[1]) and all(torch.equal(live_[2][k], ref_[2][k]) for k in ref_[2]),
       f"'all' in training mode (lift recomputed, older frames constant): output, all {len(ref_[1])} gradients and all {len(ref_[2])} state tensors equal the oracle's bit for bit")
+
+# autocast: the current-frame student call (with a graph) runs BEFORE the older-frame no_grad call inside one autocast region (feature_cache.camera_bevs says why: the weight casts of the first call
+# are cached for the region); with that order every student tensor gets its gradient. CPU bf16 stands in for the GPU's fp16 here.
+tr_all.load_state_dict(state_all)
+tr_all.train()
+tr_all.zero_grad(set_to_none=True)
+with torch.autocast("cpu", dtype=torch.bfloat16):
+    out_ac = tr_all.camera_bevs(b_all)
+out_ac.float().sum().backward()
+no_grad_params = [n for n, p in tr_all.student.named_parameters() if p.requires_grad and p.grad is None]
+check(not no_grad_params and torch.isfinite(out_ac.float()).all(), f"'all' under autocast (bf16 on the CPU), training mode: finite output and a gradient on every trainable student tensor ({len([1 for p in tr_all.student.parameters() if p.requires_grad])}; missing: {no_grad_params[:3]})")
 
 # the camera controls of the evaluation take the older frames' images away too (the t3 cam_off class of bug: a control that leaves a camera input in the batch)
 from evaluation import bev_adapter as A_  # noqa: E402
