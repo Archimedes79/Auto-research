@@ -1,24 +1,17 @@
-# HANDOVER - 2026-11-05 22:10
+# HANDOVER - 2026-11-07 18:50
 
-New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko reads little: one small step per turn, plain terms, no letter clashes (B = baseline only, tiers are 1 / 2 / 3). **D57: Spurmitte first.** GPU only in his windows (nights 22-07, Mon-Fri 08:30-17:30). The BEV system chat knows tonight's plan.
+New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko reads little: one small step per turn, plain terms (B = baseline only; tiers 1 / 2 / 3). **D57: Spurmitte first.** GPU only in his windows (nights 22-07, Mon-Fri 08:30-17:30).
 
 ## Project (D50, D55)
-Lane head on frozen GaussianCaR features, end-to-end differentiable (soft up to the map assignment; matching in the loss allowed; hard selection only on the output, named). Shared: `autoresearch/`, `autogt/` (lane GT l3, signature 3576fa1f7e).
+Lane head on frozen GaussianCaR features, end-to-end differentiable (matching in the loss allowed; hard selection only on the output, named). Shared: `autoresearch/`, `autogt/` (lane GT l3).
 
 ## Where we are
-**Baseline B (D58)** = E273 head, `runs/e273_p_s0/s1`. VAL 873, mean of 2 seeds: topo F1 0.596, F1@1.0 0.827, junction F1 0.125, lanes found 0.637; reference d 0.741 / 0.878 / 0.273. E274 closed (r, p CUT).
-**E275** (`experiments/E275_node-readout-suppression/`): close-node suppression (drop a node < 1.5 m from a stronger one) built, tested, critic pass (c8df1a13). In-sample: junction F1 0.125 -> 0.26, topo 0.596 -> 0.626. Prediction 3 missed on the GT alone: 32.3 % of GT nodes have a GT neighbour < 1.5 m.
-**D59 (Mirko, 22:0x):** relevance tiers in the GT (1 = ego lane along the driven path, 2 = lanes left / right of it, 3 = rest, plus a visibility flag) and in the loss (weights by tier, wrong costs more than missing, unseen junction branches not demanded). Open: weight values, an "unknown" output flag, PROBLEM.md metrics. **Next small step:** tier labels as a tested CPU module (path from the following ego poses, left / right from the road graph, visibility from autogt coverage), pictures on real VAL frames, critic; then a loss switch in `CFG`, then the card (E276 line).
-
-## E275 scoring: attempt 1 FAILED 11-05 22:11, fixed 11-07, re-armed
-E275.n_s0 died after 627 s: `--repro temp/e274/sweep_...json` was opened relative to `evaluation/` (where `_py14.sh` runs), after all GPU passes; the launcher exited 1, the GPU idle all night, and the computer was shut down on Mirko's order at 04:23 on 11-06 (found then). Fixed 11-07: the path is resolved against the project root and checked before any GPU work (test fails without the fix, three E275 tests green; the launcher also checks the four sweep files first). Kill rule held (9.1 % dropped at thr 0.5, 16.6 % at 0.4). Ledger note written; run.py resumes the same id.
-**Re-armed Sat 11-07 ~18:30:** `temp/e275/launch_scoring.sh 150` (log `temp/e275/launch.log`) waits for the window (22:00 tonight) and a free GPU, then n_s0, n_s1, rn_s0, rn_s1 (about 75 min; flag `temp/e275/SCORED`). Cards `runs/e275/<model>.<spec>/`, dumps `temp/e275/pred_<model>.pkl`.
+**Baseline B (D58)** = E273 head, `runs/e273_p_s0/s1`. VAL 873: topo F1 0.596, junction F1 0.125 (P 0.07, R 0.65), lanes found 0.637; d 0.741 / 0.273. Card seed 0: `vert100_dp` 28.9 vs budget 14.3; end events P/R 0.36 / 0.35 (3 m); assignment lane_acc 0.98 per node (blind to duplicates). E274 closed (r, p CUT).
+**E275** (close-node suppression, `experiments/E275_node-readout-suppression/`): built, tested (c8df1a13); in-sample junction F1 0.125 -> 0.26. Scoring attempt 1 died 11-05 22:11 on a path bug (fixed a5e52acc). **Re-armed 11-07 ~18:30:** `temp/e275/launch_scoring.sh 150` (WSL, log `temp/e275/launch.log`) waits for 22:00, then n_s0, n_s1, rn_s0, rn_s1 (~75 min, flag `temp/e275/SCORED`). BEV chat told.
+**D59:** tiers in the GT (1 ego lane along the driven path, 2 left / right lanes, 3 rest, + visibility) and in the loss. **Next small step:** tier-label module (CPU, test, pictures on VAL).
+**Mirko's notes on the videos (11-07):** intersection label not always good; assignment looked bad (1:1?); no temporal consistency at junctions; endpoints?; node density too high; are the metrics good?; own lane much more important, non-causal GT ok, no demand without visibility; show uncertainty of links. Ideas: GT nodes by Douglas-Peucker (GT has a node every 2 m now), tier + visibility weights, flicker and endpoint measures, calibrated link p as opacity, risk-coverage curve.
 
 ## After SCORED
-1. `wsl env CUDA_VISIBLE_DEVICES= bash tools/env/_py14.sh analyse.py e273_p_s0 e273_p_s1 e274_r_s0 e274_r_s1` (CPU).
+1. `wsl env CUDA_VISIBLE_DEVICES= bash tools/env/_py14.sh analyse.py e273_p_s0 e273_p_s1 e274_r_s0 e274_r_s1`.
 2. `qgraph_run_eval.py verdict275 --var e273_p_s0.close1.5_t0.5 e273_p_s1.close1.5_t0.5 --ctl e273_p_s0 e273_p_s1`.
-3. Ledger notes E275.*, card section 7, `results/E275/README.md` (+ `.gitignore` line), commit by path, refresh tag `lcr/e275-scratch`, tell the BEV chat the GPU is free.
-Report (artifact v5) lacks E274 / E275. TEST only with his OK. Nothing pushed.
-
-## Where
-Report https://claude.ai/artifact/Vdey4Vj4D6CD942ymy1qwB (private), `results/E273.report/index.html`. Ledger E273.*, E274.*; tags `lcr/E274.*`, `lcr/e274-scratch-2`, `lcr/e275-scratch`. Commit by path (`autoresearch/tools/commit_paths.py`).
+3. Ledger notes E275.*, card section 7, `results/E275/README.md` (+ `.gitignore`), commit by path (`autoresearch/tools/commit_paths.py`), refresh tag `lcr/e275-scratch`, tell the BEV chat the GPU is free. TEST only with his OK; nothing pushed. Report (artifact v5, https://claude.ai/artifact/Vdey4Vj4D6CD942ymy1qwB) lacks E274 / E275.
