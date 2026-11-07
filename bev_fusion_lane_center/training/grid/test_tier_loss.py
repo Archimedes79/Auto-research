@@ -109,9 +109,18 @@ def main():
     L, bb, _ = links()
     lv, _ = QG.link_loss(L, bb)
     gv = torch.autograd.grad(lv, L["logit"])[0]
-    assert float(gv[2]) == 0.0 and float(gv[0]) != 0.0, "a link from an invisible node is not demanded"
+    assert float(gv[2]) == 0.0 and float(gv[0]) != 0.0, "a missing real link out of an invisible node is not demanded"
+    # ... but a FALSE link out of an unseen node still costs (the card: no demand, a wrong one is punished): the negative pair keeps its tier weight
+    grads_neg = []
+    for vw in (1.0, 0.0):
+        QG.CFG.update(vis_w=vw)
+        L, bb, _ = links()
+        L["label"] = torch.tensor([1.0, 1.0, 0.0])
+        ln, _ = QG.link_loss(L, bb)
+        grads_neg.append(torch.autograd.grad(ln, L["logit"])[0])
+    assert float(grads_neg[1][2]) == float(grads_neg[0][2]) != 0.0 and float(grads_neg[1][0]) == float(grads_neg[0][0]), grads_neg
     reset()
-    print("test_tier_loss (qgraph): defaults = E273 bit for bit; tier_w x3 / x1.5 / x1 on the positives; vis_w = 0 silences an invisible node; neg_w x2 near the own lane; link weights by the source tier: ok")
+    print("test_tier_loss (qgraph): defaults = E273 bit for bit; tier_w x3 / x1.5 / x1 on the positives; vis_w = 0 silences an invisible node and the missing real links out of it (a false link still costs); neg_w x2 near the own lane; link weights by the source tier: ok")
 
 
 if __name__ == "__main__":

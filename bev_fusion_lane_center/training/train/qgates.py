@@ -117,6 +117,9 @@ def gate_nodes(model, run, n):
                     tp = (b["offset"][i] + torch.from_numpy(QN.cell_centres("cpu")[0].numpy()))[:, ex].T.numpy()
                     prec2.append((cKDTree(tp).query(pos)[0] <= 2.0).mean())
                     rec2.append((cKDTree(pos).query(tp)[0] <= 2.0).mean())
+                elif ex.any():                                                                  # nothing delivered on a frame that has nodes: 0, as in the two lines above, not skipped (review chat 2026-11-07: the E276 floors would pass an empty head)
+                    prec2.append(0.0)
+                    rec2.append(0.0)
                 both = ex & m.cpu()
                 if both.any():
                     gp = (b["offset"][i] + torch.from_numpy(QN.cell_centres("cpu")[0].numpy()))

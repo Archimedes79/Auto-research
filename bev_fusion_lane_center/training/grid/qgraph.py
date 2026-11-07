@@ -211,10 +211,11 @@ def link_loss(L, batch):
     if CFG["link_tier_w"] is not None or CFG["vis_w"] != 1.0:
         tier_act = batch["tier"].to(dev).flatten(1).gather(1, L["act"]).long().clamp(0, 3)
         w_act = tier_lut(CFG["link_tier_w"], dev)[tier_act] if CFG["link_tier_w"] is not None else torch.ones(tier_act.shape, device=dev)
-        if CFG["vis_w"] != 1.0:
-            va = batch["vis"].to(dev).flatten(1).gather(1, L["act"]).float()
-            w_act = w_act * (va + (1.0 - va) * CFG["vis_w"])
         lw = w_act[L["pb"], L["pa"]]
+        if CFG["vis_w"] != 1.0:                                                                   # a missing real link out of an unseen node is not demanded (positives x vis_w), a FALSE link out of it still costs (negatives keep the tier weight): the card's "no demand, but a false one is punished"
+            va = batch["vis"].to(dev).flatten(1).gather(1, L["act"]).float()
+            vf = (va + (1.0 - va) * CFG["vis_w"])[L["pb"], L["pa"]]
+            lw = lw * torch.where(y > 0.5, vf, torch.ones_like(vf))
     l_b = focal_bce(L["logit"].float()[sh], y[sh], norm=y[sh].sum().clamp_min(1.0), w=None if lw is None else lw[sh])               # short links: focal BCE over all candidate pairs
     l_long = torch.zeros((), device=dev)
     if lg.any():                                                                                  # long links: their positives are ~5 % of all positives and ~0.3 % of their own candidates: a balanced BCE of their own

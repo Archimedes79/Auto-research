@@ -3,6 +3,7 @@ Run: wsl bash tools/env/_py14.sh test_tier_metrics.py"""
 import json
 import os
 import sys
+import shutil
 import tempfile
 
 import numpy as np
@@ -46,9 +47,13 @@ def numbers(raw, fr):
     return QE.tier_numbers(QE.pool_counts([c]))
 
 
+_ROOTS = []                                                                 # temporary roots of the fake cards, removed at the end of main
+
+
 def cards_root(spec):
     """spec: {name: dict(seed, t12, r1, topo, dens, exact, err)} -> a temporary root with runs/e276/<name>/card.json"""
     root = tempfile.mkdtemp()
+    _ROOTS.append(root)
     for name, s in spec.items():
         d = os.path.join(root, "runs", "e276", name)
         os.makedirs(d)
@@ -119,6 +124,8 @@ def main():
         raise SystemExit("the seed order was not checked")
     except AssertionError:
         pass
+    for r in _ROOTS:
+        shutil.rmtree(r, ignore_errors=True)
     print("test_tier_metrics: tier recall / precision / F1 on the toy lane (oracle, null, missing own lane, shifted copy, invisible part, no labels, pooling), score_frames, verdict276 (t and s, every guard): ok")
 
 
