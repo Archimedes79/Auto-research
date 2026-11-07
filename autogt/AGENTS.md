@@ -124,7 +124,7 @@ for BEV fusion the stored front GT has the per-frame version (`camera`, `occlude
 
 ## 3b. The lane GT (own version and store; `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`)
 ONE command makes both: `python -m autogt generate ~/data/nuscenes_full --set full` writes the standard GT (data/autogt/<signature>/) and the lane GT of the same sequences
-(data/autogt/lane/<lane signature>/) and stamps the release (`releases.csv`: v10 = front v9 + lane l3; `--no-lane` for the standard GT only, stride > 1 skips the lane GT).
+(data/autogt/lane/<lane signature>/) and stamps the release (`releases.csv`: v10 = front v9 + lane l3, v11 = front v9 + lane l4; `--no-lane` for the standard GT only, stride > 1 skips the lane GT).
 `python -m autogt generate-lane` makes the lane GT alone. `python -m autogt versions` shows the front versions, the lane versions and the releases.
 The lane graph of a keyframe window is NOT part of the front generator: the front GT, its signature and its store do not change when the lane GT does. It is made from the
 nuScenes map and the ego pose at the front-camera time only (about 40 ms per keyframe) and has its own signature (hash of those four files + the parameters that differ from
@@ -153,6 +153,15 @@ y left), `half` (50 m: the window is |x|, |y| <= 50), `location`, `sample`, `sig
 - `areas`: `road` (the drivable area, the same layers as the boundary) and `intersection` (the connected areas of the road segments flagged is_intersection, `id` = the node id in
   `roads`, None when no lane connector lies in it), each a list of polygons `{id, exterior, holes, area}` cut to the window. NOT dilated: rasterise a polygon to get the
   intersection pixels as they are, dilate in the head if it wants more.
+**l4 (2026-11-07, `lane_tiers.py`, decisions D59 / D60 of the lane project): relevance tiers and camera visibility as LABELS on the same graph** (the geometry, ids, events and polygons are those of l3, checked on every test keyframe).
+Per point of every piece (arrays of the length of `pts`): `tier` (uint8) 1 = the ego lane on the path the car really drives (the CAM_FRONT ego poses 25 m before and 55 m after the keyframe: NON-CAUSAL, labels only, never
+an input of a model; where the car stands or the sequence ends the path goes on along the map, the straightest successor, to 55 m ahead: `tier_src` 2), 2 = the left / right neighbours of a tier-1 piece (same direction)
+within 10 m of a tier-1 point, 3 = the rest (branches not taken, opposite lanes, far lanes); `vis` (bool) = at least one of the six cameras of the rig sees the ground point and no observed vehicle / pedestrian /
+two-wheeler box hides it (real box height; the ground UNDER a box is hidden, a rear box hides for the rear cameras; static structures are not in the map, so a point behind a building counts as visible; boxes
+are at the annotation time); `occ` (bool) = in a camera's view but hidden by a box; `tier_src` (uint8) 0 / 1 driven / 2 map extension. Per event: `tier`, `vis`. Per graph: `ego_path` = `{"pts" (n, 2) in the frame of the graph,
+"back_m", "ahead_m" (the driven metres)}` and `tier_info` (metres per tier, visible metres per tier, hiding boxes, extension metres). New parameters (part of the lane signature): `tier_back` 25, `tier_ahead` 55,
+`path_tol` 1.5, `path_cos` 0.7, `neighbour_tol` 10, `min_ahead` 40, `extend` True, `opposite_tier` 3. The cost is about 27 ms per keyframe. Self-test: `python -m autogt.lane_tiers`. Picture of the test run:
+`temp/gt_l4/out/topviews.png`. `rig_masks.py` is part of the lane signature from l4 on (the camera calibration the visibility uses).
 Only vectors and events are stored; rasters are drawn from them where they are needed. Picture: `python -m autogt lanegraph out.png scene-0061:8` (six cameras + top view).
 Open with Mirko, kept as parameters (another value = another lane signature): `boundary_layers`, `corner_deg`, `stop_rule`.
 

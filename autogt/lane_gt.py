@@ -29,14 +29,16 @@ import time
 
 from . import lane_graph as LG
 from . import lane_lines as LL
+from . import lane_tiers as LT
 from . import road_graph as RG
 from .nuscenes_adapter import pose_matrix
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(os.path.dirname(HERE), "data", "autogt", "lane")          # <repository root>/data/autogt/lane
-SOURCE_FILES = ("lane_graph.py", "road_graph.py", "lane_lines.py", "lane_gt.py")
+SOURCE_FILES = ("lane_graph.py", "road_graph.py", "lane_lines.py", "lane_gt.py", "lane_tiers.py", "rig_masks.py")          # l4: the tiers and the camera rig they use
 DEFAULTS = dict(half=50.0, min_len=2.0, step=0.5, inter_frac=0.5, stop_rule="intersection_branch", boundary_layers=("drivable_area",),
-                corner_deg=30.0, corner_base=2.0)
+                corner_deg=30.0, corner_base=2.0,
+                tier_back=25.0, tier_ahead=55.0, path_tol=1.5, path_cos=0.7, neighbour_tol=10.0, min_ahead=40.0, min_back=20.0, extend=True, opposite_tier=3)      # l4: lane_tiers.py
 GROUP_SCENES = 60
 _SIGNATURES = {}
 
@@ -47,8 +49,11 @@ def _params(params):
         raise TypeError(f"unknown lane GT parameter(s) {sorted(unknown)}; known: {sorted(DEFAULTS)}")
     out = {**DEFAULTS, **params}
     out["boundary_layers"] = (out["boundary_layers"],) if isinstance(out["boundary_layers"], str) else tuple(out["boundary_layers"])
-    for k in ("half", "min_len", "step", "inter_frac", "corner_deg", "corner_base"):
+    for k in ("half", "min_len", "step", "inter_frac", "corner_deg", "corner_base", "tier_back", "tier_ahead", "path_tol", "path_cos", "neighbour_tol", "min_ahead", "min_back"):
         out[k] = float(out[k])                                       # 60 and 60.0 are one parameter, one signature
+    out["extend"], out["opposite_tier"] = bool(out["extend"]), int(out["opposite_tier"])
+    if out["opposite_tier"] not in (2, 3):
+        raise ValueError("opposite_tier is 2 or 3")
     if out["step"] != 0.5:
         raise ValueError("the lane GT is made for a map sampling of 0.5 m (step); other values are not supported")
     return out
@@ -126,6 +131,8 @@ class LaneGT:
         g["areas"] = {"road": LL.crop_areas(lg["road"], T, half=p["half"], frame=frame, merge=True), "intersection": LL.crop_areas(rg["area_chunks"], T, half=p["half"], frame=frame)}
         g["params"].update(step=p["step"], boundary_layers=list(p["boundary_layers"]), corner_deg=p["corner_deg"], corner_base=p["corner_base"])
         g["location"], g["sample"], g["signature"] = loc, sample_token, self.signature()
+        g["params"].update({k: p[k] for k in DEFAULTS if k.startswith("tier_") or k in ("path_tol", "path_cos", "neighbour_tol", "min_ahead", "min_back", "extend", "opposite_tier")})
+        LT.add_tiers(g, self.nusc, sample_token, T, p)                                                    # l4: tier / vis per point, the driven path (lane_tiers.py)
         return g
 
 

@@ -248,8 +248,8 @@ no `generate`). Tags are pushed with the code (`git push origin autogt/v1 ...`).
 
 ## Releases: the suite as one number (`releases.csv`)
 `python -m autogt generate` makes the standard nuScenes GT (the front GT, signature and versions as above) and the lane GT (own signature, `lane_versions.csv`) of the same
-sequences, so the pair carries ONE number: the release. The numbers are one running sequence with the front versions: `v10` = front v9 + lane l3 (2026-11-04), every later
-change of the front GT or of the lane GT is the next number (v11, ...; the next front row of versions.csv is v11, v10 is taken by the release). The front store is not touched by the lane GT (the BEV training and evaluation key their GT cache on the front
+sequences, so the pair carries ONE number: the release. The numbers are one running sequence with the front versions: `v10` = front v9 + lane l3 (2026-11-04), `v11` = front v9 + lane l4 (2026-11-07: tiers and visibility), every later
+change of the front GT or of the lane GT is the next number (v12, ...; the next front row of versions.csv is v12, v10 and v11 are taken by releases). The front store is not touched by the lane GT (the BEV training and evaluation key their GT cache on the front
 signature), and the manifest of a front store records `suite_release`. `python -m autogt selftest` fails when the pair (front version, lane version) of this source has no row in
 `releases.csv`. `python autoresearch/tools/package.py gt` knows both families of stores: the latest front version and the latest lane version stay.
 
