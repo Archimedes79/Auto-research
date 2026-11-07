@@ -1,5 +1,5 @@
 item,node,kind,state,depends_on,resource,budget,priority,owner,run_ids,note,command
-frozen.update,frame,code,running,,cpu,1h,1,Image Encoder chat,,"the frozen-frame test is red since the t22 student code (interface, train, feature_cache, startable): gates, one critic pass, FROZEN.md line, tests/test_frozen.py --update (Mirko 2026-11-07, D62)",
+frozen.update,frame,code,done,,cpu,1h,1,Image Encoder chat,,"the frozen-frame test is red since the t22 student code (interface, train, feature_cache, startable): gates, one critic pass, FROZEN.md line, tests/test_frozen.py --update (Mirko 2026-11-07, D62)",
 t22.refC_gate,t22,evaluate,planned,frozen.update,gpu,20m,2,Image Encoder chat,,"gate C0 of refinement C (student_frames 'all': the student also makes the older frame): two evaluations; goes on only if the static-cell EPE falls by >= 0.03; night window 22:00-07:00, lane first (D57)",
 t22.B2,t22,train,blocked,t22.refC_gate,gpu,3h,2,Image Encoder chat,,"stage B2 with student_frames 'all' (1500 steps, P4 chain, warm start t20.base_s0), control t21.pair4_s0",
 t22.twin,t22,train,blocked,t22.B2,gpu,5h,3,Image Encoder chat,,seed twin of student and control; the small network becomes the baseline of the image side only when the card's margins are met on the twin (D62),
