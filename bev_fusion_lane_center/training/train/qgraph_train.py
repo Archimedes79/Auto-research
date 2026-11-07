@@ -77,7 +77,7 @@ def main():
     import qgates as QGt
     tier_arm = bool(a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0 or a.sparse)
     QGt.GATE_CFG.update(node_prec_min=a.gate_node_prec, node_rec_min=a.gate_node_rec, tier_mode=tier_arm)
-    assert not tier_arm or ds.missing == 0, f"an E276 arm needs the complete lane GT store: {ds.missing} training frames have no stored graph (the loader would silently drop them)"
+    assert not tier_arm or ds.missing == 0 or a.smoke, f"an E276 arm needs the complete lane GT store: {ds.missing} training frames have no stored graph (the loader would silently drop them)"
     for k in a.phases:
         sk = 20 if a.smoke else steps[k]
         run = T.Run(f"{a.name}_p{k}")
