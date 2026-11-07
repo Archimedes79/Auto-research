@@ -453,6 +453,9 @@ def mutants():
     ]
 
 
+NEEDS_REAL_GT = {"SegMeter.result loses the line field error"}      # killed only by the real-GT check of the line field error (the tiny toy GT has no field error to lose)
+
+
 def main():
     sig = "15efbde2d1"
     samples = GC.pick(8, sig, 0) if os.path.isdir(GC.cache_dir()) and sig in GC.signatures() else []
@@ -462,6 +465,9 @@ def main():
     run_all(ck, samples, tiny=True)
     survived = []
     for label, patch in mutants():
+        if not samples and label in NEEDS_REAL_GT:                  # the message above promises it: without cached GT these mutants cannot be killed, so they are not run
+            print(f"  skipped  mutant: {label}  (needs the cached GT)")
+            continue
         undo = patch()
         quiet = Fails(loud=False)
         try:

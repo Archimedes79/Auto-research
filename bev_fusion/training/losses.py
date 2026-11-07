@@ -66,7 +66,8 @@ class LossConfig:
     boundary_w_max: float = 0.5
     line_bce: float = 0.0              # t23: weight of a tolerance-aware BCE on the line presence (lane / road divider), added to the lines group; 0 = off = every stored run is reproduced.
                                        # Positives: GT line cells (weight line_bce_pos); negatives: cells farther than line_bce_ignore metres from every GT line (weight 1); the band in
-                                       # between (the Dice's tolerance) is ignored, so a line found within the tolerance costs nothing, a confident cell farther away costs as in any BCE
+                                       # between (1 m by default, wider than the Dice's tolerance of line_tolerance cells = 0.5 m, on purpose: t23 card) is ignored, so a line found within
+                                       # that band costs nothing, a confident cell farther away costs as in any BCE
     line_bce_pos: float = 3.0          # positive weight of that BCE (the lines are ~1.3 % of the cells)
     line_bce_ignore: float = 1.0       # m: distance from a GT line below which a non-line cell is not a negative
     huber_delta: float = 0.5           # m
