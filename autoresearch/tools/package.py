@@ -29,7 +29,8 @@ younger than --min-age-days (at least one hour). Before anything is removed the 
 store files that mark an evaluation as finished (frames.jsonl, manifest.json) go first, so an interrupted delete leaves an unfinished store, never one
 that claims to be complete. A later clean adds to the `deleted` list, it never replaces it. Tags must be on origin to be a safe base for a rebuild:
 `check_git.py` lists the ones that are not.
-gt also looks at the lane GT stores (data/autogt/lane/<lane signature>, versions in autogt/lane_versions.csv, l1, l2, ...): the latest lane version stays, so does a store that a run which
+gt also looks at the lane GT stores (data/autogt/lane/<lane signature>, versions in autogt/lane_versions.csv, l1, l2, ...): the latest lane version stays, per rig (lane_center = Spurmitte,
+bev_fusion = BEV Fusion; when its code makes the GT of an older version, `same_gt_as`, the store of that one), so does a store that a run which
 is not final names in its gt.json (`lane_signature`), an older one goes when its tag autogt/lane-lN exists (it is made again by `python -m autogt generate-lane`).
 gt keeps the latest version of autogt/versions.csv (the highest number; when its code makes the GT of an older version, `same_gt_as`, the store of that
 one: they share a folder) and every store that a run which is not final names in its gt.json (also the
@@ -455,21 +456,35 @@ def lane_stores(root):
 
 
 def lane_plan(root=None):
-    """-> (latest lane row or None, [(signature, verdict text)]) for data/autogt/lane/: the latest lane version stays, so does a store that a run which is not final
-    names (`lane_signature` in its gt.json); an older one goes when its tag exists"""
+    """-> (latest lane row or None, [(signature, verdict text)]) for data/autogt/lane/: the latest lane version stays, for each rig (lane_center = Spurmitte, bev_fusion = BEV Fusion;
+    a row without `rig` is lane_center), and when its code makes the GT of an older version (`same_gt_as`) that version's store is the one that stays; so does a store that a
+    run which is not final names (`lane_signature` in its gt.json); an older one goes when its tag exists"""
     root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
     rows = lane_versions()
     if not rows:
         return None, []
     num = lambda r: int(re.fullmatch(r"l(\d+)", r.get("version", "")).group(1)) if re.fullmatch(r"l(\d+)", r.get("version", "")) else -1      # noqa: E731
+    rig = lambda r: r.get("rig") or "lane_center"                                                                                         # noqa: E731
     latest = max(rows, key=num)
     needed = needed_by_unfinished(("lane_signature",))
     by_sig = {x["signature"]: x for x in rows}
+    keep_sig = {}                                    # store signature -> the latest row (per rig) whose store it is
+    for r_ in sorted({rig(x) for x in rows}):
+        last = max((x for x in rows if rig(x) == r_), key=num)
+        shared, seen = last, set()
+        while (shared.get("same_gt_as") or "") and shared["version"] not in seen:
+            seen.add(shared["version"])
+            nxt = next((x for x in rows if x["version"] == shared["same_gt_as"] and rig(x) == r_), None)
+            if nxt is None:
+                break
+            shared = nxt
+        keep_sig[shared["signature"]] = (last, shared)
     plan = []
     for sig in lane_stores(root):
         row, path = by_sig.get(sig), os.path.join(root, sig)
-        if sig == latest["signature"]:
-            plan.append((sig, f"keep: the latest lane version ({latest['version']})"))
+        if sig in keep_sig:
+            last, shared = keep_sig[sig]
+            plan.append((sig, f"keep: the latest lane version ({last['version']}, {rig(last)})" + (f", its code makes the GT of {shared['version']}, the version of this store" if shared is not last else "")))
         elif sig in needed:
             plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(needed[sig][:4])}"))
         elif row is None:
@@ -818,6 +833,21 @@ def selftest():
         tags.discard("tg/ok")
         assert dict(lane_plan(lroot)[1])["lold"].startswith("keep: the tag"), "no tag, no deletion"
         tags.add("tg/ok")
+        # two rigs and a version that makes an older version's GT (autogt/lane_versions.csv, l5): per rig the latest version stays, and where `same_gt_as` is set the earlier store
+        for sig in ("lbf", "l4s"):
+            os.makedirs(os.path.join(lroot, sig))
+            json.dump({"signature": sig}, open(os.path.join(lroot, sig, "index.json"), "w"))
+        saved_rows = lane_versions
+        lane_versions = lambda: [{"version": "l1", "signature": "lold", "tag": "tg/ok"}, {"version": "l2", "signature": "lneed", "tag": "tg/ok"},    # noqa: E731
+                                 {"version": "l4", "signature": "l4s", "tag": "tg/ok"}, {"version": "l5", "signature": "l5code", "tag": "tg/ok", "same_gt_as": "l4"},
+                                 {"version": "l5", "signature": "lbf", "tag": "tg/ok", "rig": "bev_fusion"}]
+        rlatest, rplan = lane_plan(lroot)
+        rgot = dict(rplan)
+        assert rlatest["version"] == "l5" and rgot["l4s"].startswith("keep: the latest lane version (l5, lane_center), its code makes the GT of l4") \
+            and rgot["lbf"].startswith("keep: the latest lane version (l5, bev_fusion)") and rgot["lold"].startswith("delete") and rgot["lneed"].startswith("keep: needed by"), rgot
+        lane_versions = saved_rows
+        shutil.rmtree(os.path.join(lroot, "lbf"))
+        shutil.rmtree(os.path.join(lroot, "l4s"))
         lane_clean(False, lroot)
         assert os.path.isdir(os.path.join(lroot, "lold")), "a dry run changes nothing"
         _, _, ldone = lane_clean(True, lroot)

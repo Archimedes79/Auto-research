@@ -71,7 +71,7 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
 | `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
-| `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py` | **the lane GT** (own version, not part of the front generator; numpy + shapely, the nuScenes map only): the lane graph with ids, successors and events, neighbours / lane counts / roads, dividers + road boundary with corners (section Lane GT); `lane_versions.csv` its versions; `lane_graph_view.py` draws it (`python -m autogt lanegraph`), `lane_graph_selftest.py` tests it |
+| `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`, `lane_tiers.py` | **the lane GT** (own version, not part of the front generator; numpy + shapely, the nuScenes map and, for the l4 labels, the ego poses and boxes): the lane graph with ids, successors and events, neighbours / lane counts / roads, dividers + road boundary with corners, tiers 1 / 2 / 3 and camera visibility per point (section Lane GT); two rigs, Spurmitte and BEV Fusion (l5); `lane_versions.csv` its versions; `lane_graph_view.py` draws it (`python -m autogt lanegraph`), `lane_graph_selftest.py` and `lane_tiers_selftest.py` test it |
 | `rig_masks.py` | **the two coverage masks**, one per sensor rig, static from the calibration: `bev_fusion_mask()` (front camera + 5 radars, the BEV-fusion grid) and `lane_mask()` (6 cameras + 5 radars, the Spurmitte window); `python -m autogt masks out.png` draws both |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m autogt data` |
@@ -138,6 +138,10 @@ One window of 100 x 100 m around the ego (rear axle at the front-camera time) in
 from the nuScenes map only (no image, radar or box). It is NOT part of the front generator: the front GT, its signature and its store are unchanged by it, and the lane GT has its
 own signature, table (`lane_versions.csv`, git tag `autogt/lane-lN`) and store (`data/autogt/lane/<lane signature>/<token>.pkl.gz`, `python -m autogt generate-lane`). What a
 graph holds is listed in `AGENTS.md`, section 3b.
+- RIGS (l5, Mirko 2026-11-07: BEV Fusion and Spurmitte are different systems, GT for both). The window above is the `lane_center` rig (Spurmitte: frame "lane", the square 100 x 100 m, `vis` from the six cameras;
+  the default, `lane_gt.load(token)`). The `bev_fusion` rig (`rig="bev_fusion"`) is the same graph in the frame of the BEV grid (x forward, y left) cut to its window x 0 .. 60 m, y -26 .. 26 m, with `vis` / `occ`
+  from the front camera only; it has its own store. Same code, same tiers; the table of differences is in `AGENTS.md`, section 3b (l5). `python -m autogt generate` makes both. The `lane_center` output of l5 is the
+  l4 output byte for byte (so the l4 store is its store, `same_gt_as`); `lane_graph_selftest.py` checks the rectangle (`clip_rect`), the table of stores and BEV Fusion graphs against the bigger square cut to the rectangle.
 - PIECES. A lane or connector is a map piece; chains of map pieces are joined while every join is 1 in, 1 out, so an id changes only at a split or a merge. EVENTS at the joins:
   split, merge, cross (n in, n out), start / end (no predecessor / successor in the map), window (the polyline crosses the border; per keyframe) and STOP: the end of a lane
   whose successor connector lies inside an intersection (`road_segment.is_intersection`; 80 - 84 % of the connectors do, 0.2 - 1.5 % of the lanes), and its mirror EXIT: the start of
@@ -248,8 +252,9 @@ no `generate`). Tags are pushed with the code (`git push origin autogt/v1 ...`).
 
 ## Releases: the suite as one number (`releases.csv`)
 `python -m autogt generate` makes the standard nuScenes GT (the front GT, signature and versions as above) and the lane GT (own signature, `lane_versions.csv`) of the same
-sequences, so the pair carries ONE number: the release. The numbers are one running sequence with the front versions: `v10` = front v9 + lane l3 (2026-11-04), `v11` = front v9 + lane l4 (2026-11-07: tiers and visibility), every later
-change of the front GT or of the lane GT is the next number (v12, ...; the next front row of versions.csv is v12, v10 and v11 are taken by releases). The front store is not touched by the lane GT (the BEV training and evaluation key their GT cache on the front
+sequences, so the pair carries ONE number: the release. The numbers are one running sequence with the front versions: `v10` = front v9 + lane l3 (2026-11-04), `v11` = front v9 + lane l4 (2026-11-07: tiers and visibility), `v12` = front v9 + lane l5 (2026-11-07: the lane GT for both systems, one store per rig:
+Spurmitte = `lane_center`, BEV Fusion = `bev_fusion`), every later
+change of the front GT or of the lane GT is the next number (v13, ...; the next front row of versions.csv is v13, v10 - v12 are taken by releases). The front store is not touched by the lane GT (the BEV training and evaluation key their GT cache on the front
 signature), and the manifest of a front store records `suite_release`. `python -m autogt selftest` fails when the pair (front version, lane version) of this source has no row in
 `releases.csv`. `python autoresearch/tools/package.py gt` knows both families of stores: the latest front version and the latest lane version stay.
 
