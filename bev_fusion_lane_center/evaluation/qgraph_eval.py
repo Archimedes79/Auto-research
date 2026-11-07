@@ -51,6 +51,8 @@ CFG = LS.config()                 # the lane suite's settings: box 48 m, topo se
 BOX = CFG.box[1]
 STEP = 0.5                        # sampling of the delivered curves (m)
 TIE = 0.3                         # GT points this much farther than the nearest one still tie with it: a point shared by pieces (qtargets groups events within 0.3 m too)
+NODE_SPARSE = None                # E276: None = the GT nodes of E273 (a node in every 2 m cell); (eps, max chord) = the sparse node target the model was trained on (qtargets.node_table)
+TIER_HIT, TIER_ZONE = 1.0, 2.5    # E276 tier metrics: a point is right within 1.0 m of the other graph; a delivered point belongs to the zone of its nearest GT point within 2.5 m
 NODE_TOL, EVENT_TOL = 2.0, 3.0    # node / event matching tolerances (m)
 SEC_NEAR, LANE_NEAR, DUST_FAR = 2.0, 1.0, 2.0
 RAGGED = ("pos_err", "dir_err")   # counts that are concatenated, not summed
@@ -167,8 +169,10 @@ class LaneRef:
     """the lane GT of a frame prepared for lookups: the GT nodes / links (`qtargets.node_table`), the points of all pieces in a KD-tree, the GT lane length inside the metrics' box"""
 
     def __init__(self, g):
-        self.nt = nt = QT.node_table(g)
+        self.nt = nt = QT.node_table(g, sparse=NODE_SPARSE)
         self.pts, self.pid, self.pj = nt["pts"], nt["pid"], nt["pj"]
+        self.ptier, self.pvis = nt["ptier"], nt["pvis"]                                  # E276: the l4 labels of the GT points (tier 0 / visible when the graph has none)
+        self.labelled = bool((self.ptier > 0).any())
         self.tree = cKDTree(self.pts) if len(self.pts) else None
         self.length = 0.5 * float((np.abs(self.pts) < BOX).all(1).sum()) if len(self.pts) else 0.0       # points every 0.5 m
         self.ids = [p["piece"] for p in g["pieces"]]
@@ -230,9 +234,19 @@ def node_counts(pred, g, thr_e=0.5, thr_link=0.5):
     pos_err = np.linalg.norm(P[pi] - G[gi], axis=1)
     dir_err = np.degrees(np.arccos(np.clip((H[pi] * nt["dirv"][gi]).sum(1), -1.0, 1.0)))
     ev = np.zeros((len(QT.FLAGS), 3))                                                  # per flag: matched, delivered, GT
+    evt = np.zeros((len(QT.FLAGS), 3, 2))                                              # E276, per flag and tier of the GT event node (demanded ones only): matched, GT
+    tg, vg = np.where(nt["tier"] > 0, nt["tier"], 3), nt["vis"]
     for f in range(len(QT.FLAGS)):
         sp, sg = np.flatnonzero(F[:, f] >= 0.5), np.flatnonzero(nt["flags"][:, f])
-        ev[f] = (len(MS.match_1to1(P[sp], G[sg], EVENT_TOL)), len(sp), len(sg))
+        pr = MS.match_1to1(P[sp], G[sg], EVENT_TOL)
+        ev[f] = (len(pr), len(sp), len(sg))
+        if ref.labelled and len(sg):
+            hitg = np.zeros(len(sg), bool)
+            if len(pr):
+                hitg[pr[:, 1]] = True
+            for k in (1, 2, 3):
+                m = (tg[sg] == k) & vg[sg]
+                evt[f, k - 1] = [(m & hitg).sum(), m.sum()]
     # links on matched nodes: a delivered link counts when both ends are matched; correct when the two GT nodes are joined by a GT link of the same kind
     g_of_p = -np.ones(len(P), int)
     g_of_p[pi] = gi
@@ -254,7 +268,20 @@ def node_counts(pred, g, thr_e=0.5, thr_link=0.5):
         if p_of_g[a] >= 0 and p_of_g[b] >= 0:
             lkc[int(lg), 2] += 1
     gt_out = np.bincount(nt["src"], minlength=len(G)) if len(nt["src"]) else np.zeros(len(G), int)
-    return dict(node=[len(pi), len(P), len(G)], pos_err=pos_err, dir_err=dir_err, ev=ev, link=lkc, deg=[int((out_deg[pi] == gt_out[gi]).sum()), len(pi)], dens=[len(P), ref.length])
+    out = dict(node=[len(pi), len(P), len(G)], pos_err=pos_err, dir_err=dir_err, ev=ev, link=lkc, deg=[int((out_deg[pi] == gt_out[gi]).sum()), len(pi)], dens=[len(P), ref.length])
+    if ref.labelled:                                                                   # E276: the node numbers by tier (GT nodes) and by zone (delivered nodes)
+        tn, zn = np.zeros((3, 4)), np.zeros((4, 2))
+        hit = p_of_g >= 0
+        for k in (1, 2, 3):
+            m = tg == k
+            tn[k - 1] = [(m & vg & hit).sum(), (m & vg).sum(), (m & hit).sum(), m.sum()]
+        if len(P) and ref.tree is not None:
+            dz, iz = ref.tree.query(P)
+            zone = np.where(dz <= TIER_ZONE, np.where(ref.ptier[iz] > 0, ref.ptier[iz], 3), 0)
+            for k in range(4):
+                zn[k] = [((zone == k) & (g_of_p >= 0)).sum(), (zone == k).sum()]
+        out.update(tn=tn, zn=zn, evt=evt)
+    return out
 
 
 def node_numbers(c):
@@ -274,6 +301,77 @@ def node_numbers(c):
 def node_metrics(pred, g, thr_e=0.5, thr_link=0.5):
     """the node numbers of one frame (against the lane GT dict `g`, or a LaneRef)"""
     return node_numbers(pool_counts([node_counts(pred, g, thr_e, thr_link)]))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ tiers (E276)
+def _densify(p, step=STEP):
+    """a polyline resampled so that no two neighbouring points are farther apart than `step` (the vertices stay)"""
+    p = np.asarray(p, float).reshape(-1, 2)
+    if len(p) < 2:
+        return p
+    seg = np.linalg.norm(np.diff(p, axis=0), axis=1)
+    n = np.maximum(np.ceil(seg / step - 1e-9).astype(int), 1)
+    return np.concatenate([p[:1]] + [p[i] + (p[i + 1] - p[i]) * (np.arange(1, n[i] + 1) / n[i])[:, None] for i in range(len(seg))])
+
+
+def tier_counts(raw, ref):
+    """E276, additive counts of one frame by the l4 tier of the GT lane points (None when the lane GT carries no labels): `rec` (3, 4): per tier 1 - 3 [visible GT points within 1.0 m of a
+    delivered polyline point, visible GT points, the same for all GT points], `prec` (4, 2): per ZONE 0 - 3 (the tier of the nearest GT point within 2.5 m, 0 = none) [delivered polyline points
+    within 1.0 m of a GT point, delivered polyline points]; only points inside the metrics' box; delivered and GT points are every 0.5 m, so counts are half-metres"""
+    if not ref.labelled or ref.tree is None:
+        return None
+    dp = [_densify(p) for p in raw["pts"] if len(p)]                                 # a raw graph (the reference d) may have vertices farther apart than 0.5 m
+    P = np.concatenate(dp) if dp else np.zeros((0, 2))
+    P = P[(np.abs(P) < BOX).all(1)]
+    G = ref.pts
+    t = np.where(ref.ptier > 0, ref.ptier, 3)
+    inbox = (np.abs(G) < BOX).all(1)
+    hit = (cKDTree(P).query(G)[0] <= TIER_HIT) if len(P) else np.zeros(len(G), bool)
+    rec, prec = np.zeros((3, 4)), np.zeros((4, 2))
+    for k in (1, 2, 3):
+        m = inbox & (t == k)
+        rec[k - 1] = [(m & ref.pvis & hit).sum(), (m & ref.pvis).sum(), (m & hit).sum(), m.sum()]
+    if len(P):
+        dg, ig = ref.tree.query(P)
+        zone = np.where(dg <= TIER_ZONE, t[ig], 0)
+        for k in range(4):
+            prec[k] = [((zone == k) & (dg <= TIER_HIT)).sum(), (zone == k).sum()]
+    return dict(rec=rec, prec=prec)
+
+
+def tier_numbers(tc, nc=None):
+    """the E276 numbers from pooled tier counts `tc` (dict rec, prec) and pooled node counts `nc` (dict tn, zn; may be empty): t<k>_R_1 / t<k>_R_1all (recall of the visible / all GT points of tier k),
+    z<k>_P_1 (precision of the delivered points of zone k; z0 = off the lanes), t12_R_1 / t12_P_1 / t12_F1_1 (tiers and zones 1 + 2 pooled; the primary numbers of the E276 card), t<k>_len (visible GT
+    metres of tier k), and the node numbers t<k>_node_R / z<k>_node_P / t12_node_F1 (within 2 m, against the GT nodes of this scorer: dense for the E273 target, sparse for NODE_SPARSE)"""
+    out = {}
+    rec, prec = np.asarray(tc["rec"], float), np.asarray(tc["prec"], float)
+    for k in (1, 2, 3):
+        r = rec[k - 1]
+        out[f"t{k}_R_1"], out[f"t{k}_R_1all"], out[f"t{k}_len"] = _ratio(r[0], r[1], 1.0), _ratio(r[2], r[3], 1.0), 0.5 * float(r[1])
+    for k in range(4):
+        out[f"z{k}_P_1"] = _ratio(prec[k][0], prec[k][1], 1.0)
+        out[f"z{k}_n"] = 0.5 * float(prec[k][1])
+    r12, p12 = rec[:2, :2].sum(0), prec[1:3].sum(0)
+    out["t12_R_1"], out["t12_P_1"] = _ratio(r12[0], r12[1], 1.0), _ratio(p12[0], p12[1], 1.0)
+    out["t12_F1_1"] = 2 * out["t12_P_1"] * out["t12_R_1"] / (out["t12_P_1"] + out["t12_R_1"]) if out["t12_P_1"] + out["t12_R_1"] > 0 else 0.0
+    if nc and "tn" in nc:
+        tn, zn = np.asarray(nc["tn"], float), np.asarray(nc["zn"], float)
+        for k in (1, 2, 3):
+            out[f"t{k}_node_R"] = _ratio(tn[k - 1][0], tn[k - 1][1], 1.0)
+        for k in range(4):
+            out[f"z{k}_node_P"] = _ratio(zn[k][0], zn[k][1], 1.0)
+        pr, rc = _ratio(zn[1][0] + zn[2][0], zn[1][1] + zn[2][1], 1.0), _ratio(tn[0][0] + tn[1][0], tn[0][1] + tn[1][1], 1.0)
+        out["t12_node_P"], out["t12_node_R"] = pr, rc
+        out["t12_node_F1"] = 2 * pr * rc / (pr + rc) if pr + rc > 0 else 0.0
+        for k in range(4):                                                                  # delivered nodes per zone and how many of them have no GT node within 2 m (prediction 5 of the card)
+            out[f"z{k}_node_n"], out[f"z{k}_node_false"] = float(zn[k][1]), float(zn[k][1] - zn[k][0])
+        if "evt" in nc:                                                                      # recall of the GT event nodes (demanded ones) per tier, within the event tolerance (prediction 6)
+            evt = np.asarray(nc["evt"], float)
+            for f, name in enumerate(QT.FLAGS):
+                for k in (1, 2, 3):
+                    out[f"t{k}_ev_{name}_R"] = float(evt[f][k - 1][0] / evt[f][k - 1][1]) if evt[f][k - 1][1] > 0 else float("nan")
+                    out[f"t{k}_ev_{name}_n"] = float(evt[f][k - 1][1])
+    return out
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ assignment
@@ -367,6 +465,13 @@ def graph_counts(graph, frame):
             c["sec"] = section_counts(meta, frame.ref())
         except FileNotFoundError:
             pass
+    if hasattr(frame, "ref"):                                                          # E276: the tier counts (graphs of any origin, d included; frames without l4 labels: none)
+        try:
+            tc = tier_counts(raw, frame.ref())
+        except FileNotFoundError:
+            tc = None
+        if tc is not None:
+            c["tier"] = tc
     return c
 
 
@@ -400,6 +505,8 @@ def score_frames(preds, frames, thr_e=0.5, thr_link=0.5, records=False):
         cached = getattr(f, "_ref", None) is not None                        # a frame loaded before keeps its lane GT; one loaded here lets it go (873 of them are large)
         if "pts" in p:
             rec["graph"].append(graph_counts(p, f))
+            if not cached:                                                       # graph_counts now loads the lane GT for the tier counts: let it go again
+                f._lane = f._ref = None
             continue
         graph, _ = readout(p, thr_e, thr_link)
         rec["graph"].append(graph_counts(graph, f))
@@ -414,8 +521,10 @@ def score_frames(preds, frames, thr_e=0.5, thr_link=0.5, records=False):
             rec["assign"].append(a)
         if not cached:
             f._lane = f._ref = None
+    tg = [c["tier"] for c in rec["graph"] if c.get("tier") is not None]
     out = dict(frames=len(frames), lane_missing=miss, graph=graph_numbers(rec["graph"]) if rec["graph"] else {},
-               nodes=node_numbers(pool_counts(rec["node"])) if rec["node"] else {}, assign=assign_numbers(pool_counts(rec["assign"])) if rec["assign"] else {})
+               nodes=node_numbers(pool_counts(rec["node"])) if rec["node"] else {}, assign=assign_numbers(pool_counts(rec["assign"])) if rec["assign"] else {},
+               tier=tier_numbers(pool_counts(tg), pool_counts([{k: c[k] for k in ("tn", "zn", "evt")} for c in rec["node"] if "tn" in c])) if tg else {})
     return (out, rec) if records else out
 
 

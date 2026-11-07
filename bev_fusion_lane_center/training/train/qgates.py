@@ -28,7 +28,7 @@ import sections as SE  # noqa: E402
 import targets as TG  # noqa: E402
 
 REF = {}
-GATE_CFG = dict(node_prec_min=None, node_rec_min=None)          # E274: floors on the node precision / recall within 2 m of the node gate (set by `qgraph_train.py --gate-node-prec / --gate-node-rec`)
+GATE_CFG = dict(node_prec_min=None, node_rec_min=None, tier_mode=False)          # tier_mode (E276): the F1-against-E271 condition of the node gate is dropped (it counts recall against ALL GT points, an arm that does not demand unseen nodes fails it by design); the floors stay          # E274: floors on the node precision / recall within 2 m of the node gate (set by `qgraph_train.py --gate-node-prec / --gate-node-rec`)
 
 
 def _batches(map_mode, n, bs=4):
@@ -134,8 +134,8 @@ def gate_nodes(model, run, n):
     ref = REF["e271_nodes"]
     pos_err = float(np.median(err)) if err else float("nan")
     p2, r2 = (float(np.mean(prec2)) if prec2 else float("nan")), (float(np.mean(rec2)) if rec2 else float("nan"))
-    ok = (f >= ref - 0.05) and (pos_err <= 0.5)
-    why_extra = ""
+    ok = ((f >= ref - 0.05) or GATE_CFG.get("tier_mode", False)) and (pos_err <= 0.5)
+    why_extra = "; tier mode: no F1 condition (unseen nodes are not demanded)" if GATE_CFG.get("tier_mode", False) else ""
     if GATE_CFG["node_prec_min"] is not None:
         ok = ok and p2 >= GATE_CFG["node_prec_min"]
         why_extra += f"; node precision within 2 m {p2:.3f} >= {GATE_CFG['node_prec_min']}"

@@ -187,6 +187,8 @@ def score(run, seed, n=0, device="cuda", exp="e273", readouts=None, curve=(), du
     for s in specs:
         c = dict(card)
         c["p"] = dict(graph=res[s]["exact"]["graph"], nodes=res[s]["exact"]["nodes"], assign_exact=res[s]["exact"]["assign"], assign_error=res[s]["error"]["assign"])
+        if res[s]["exact"].get("tier"):                                                                  # E276: the tier numbers (only with the l4 lane GT)
+            c["p"]["tier"] = res[s]["exact"]["tier"]
         c["g"] = dict(assign_exact=g_res["exact"], assign_error=g_res["error"], vertices_per_frame=float(np.mean([len(v[0]) for v in vs])))
         c["diff"] = {mode: dict(zip(("mean", "lo", "hi"), bootstrap_diff(recs[s][mode]["assign"], g_rec[mode], scenes))) for mode in ("exact", "error")}
         if readouts:
@@ -317,6 +319,47 @@ def verdict275(var, ctl, exp_var="e275", exp_ctl="e273", root=None, lanes_tol=0.
     return out
 
 
+def verdict276(var, ctl, exp_var="e276", exp_ctl="e276", kind="t", root=None, band=0.02, topo_tol=0.05, recall_tol=0.02, density_cut=0.25, verbose=True, frames=873):
+    """the rule of the E276 card (section 0), by hand. kind 't': arm t (`var`) against the baseline B scored on GT l4 (`ctl`, cards runs/<exp_ctl>/<run>/); kind 's': arm s against arm t.
+    Both lists in the same seed order (0, 1), `frames` frames in every card, the tier numbers present. Per seed: gain = t12_F1_1(var) - t12_F1_1(ctl). Guards: t1_R_1 not below the control by more
+    than `recall_tol`; kind 't': topo_F1 not below it by more than `topo_tol` (the price of not demanding unseen parts); both: assignment `lane_acc_exact` p - g >= -0.01 and `lane_acc_err` p - g >= +0.03
+    (mean of the seeds, as E274). kind 't': KEEP when both gains exceed `band`, TIE when both are inside, CUT when a gain is below -band or a guard broke, else INCONCLUSIVE. kind 's': KEEP when
+    vert100_dp falls by at least `density_cut` on both seeds AND t12_F1_1 stays within `band` below the control on both seeds AND the guards hold; CUT when t12_F1_1 falls by more than `band`
+    on a seed or a guard broke; else TIE (no density gain: t stays)."""
+    root = root or ROOT
+    load = lambda exp, r: json.load(open(os.path.join(root, "runs", exp, r, "card.json")))  # noqa: E731
+    cv, cc = [load(exp_var, r) for r in var], [load(exp_ctl, r) for r in ctl]
+    assert kind in ("t", "s"), kind
+    assert [c["seed"] for c in cv] == [c["seed"] for c in cc] == [0, 1], f"the rule needs seeds 0 and 1 in this order, got {[c['seed'] for c in cv]} against {[c['seed'] for c in cc]}"
+    assert all(c["frames"] == frames for c in cv + cc), f"every card must hold {frames} frames: {[c['frames'] for c in cv + cc]}"
+    assert all("tier" in c["p"] for c in cv + cc), "a card without tier numbers (scored on a lane GT without the l4 labels)"
+    tier = lambda c, k: c["p"]["tier"][k]  # noqa: E731
+    gain = [tier(a, "t12_F1_1") - tier(b, "t12_F1_1") for a, b in zip(cv, cc)]
+    r1 = [tier(a, "t1_R_1") - tier(b, "t1_R_1") for a, b in zip(cv, cc)]
+    topo = [a["p"]["graph"]["topo_F1"] - b["p"]["graph"]["topo_F1"] for a, b in zip(cv, cc)]
+    dens = [1.0 - a["p"]["graph"]["vert100_dp"] / b["p"]["graph"]["vert100_dp"] for a, b in zip(cv, cc)]
+    mean = lambda f: float(np.mean([f(c) for c in cv]))  # noqa: E731
+    guards = {}
+    guards["lane_acc_exact_p_minus_g"] = mean(lambda c: c["diff"]["exact"]["mean"]) >= -0.01
+    guards["lane_acc_err_p_minus_g"] = mean(lambda c: c["diff"]["error"]["mean"]) >= 0.03
+    guards["t1_R_1_not_below_control_by_%g" % recall_tol] = all(x >= -recall_tol for x in r1)
+    if kind == "t":
+        guards["topo_F1_not_below_control_by_%g" % topo_tol] = all(x >= -topo_tol for x in topo)
+        side = "up" if all(g > band for g in gain) else "down" if any(g < -band for g in gain) else "inside" if all(abs(g) <= band for g in gain) else "mixed"
+        v = "CUT" if (side == "down" or not all(guards.values())) else "KEEP" if side == "up" else "TIE" if side == "inside" else "INCONCLUSIVE (seeds differ; goes to Mirko)"
+    else:
+        dens_ok = all(d >= density_cut for d in dens)
+        side = "no_loss" if all(g >= -band for g in gain) else "loss"
+        v = "CUT" if (side == "loss" or not all(guards.values())) else "KEEP" if dens_ok else "TIE (the density did not fall by %g: arm t stays)" % density_cut
+    out = dict(verdict=v, kind=kind, band=band, side=side, t12_F1_1_gain_per_seed=gain, t1_R_1_gain_per_seed=r1, topo_F1_gain_per_seed=topo, vert100_dp_fall_per_seed=dens, guards=guards,
+               variant_numbers={k: mean(lambda c, k=k: c["p"]["tier"][k]) for k in ("t12_F1_1", "t12_R_1", "t12_P_1", "t1_R_1", "t1_R_1all", "z1_P_1", "z2_P_1", "z3_P_1")} | dict(
+                   topo_F1=mean(lambda c: c["p"]["graph"]["topo_F1"]), junction_F1=mean(lambda c: c["p"]["graph"]["junction_F1"]), vert100_dp=mean(lambda c: c["p"]["graph"]["vert100_dp"])),
+               variant=var, control=ctl, note="by hand: the written rule of the E276 card (section 0); the tier numbers are not in PROBLEM.md (D59 point 3); in-sample on VAL, no TEST")
+    if verbose:
+        print(json.dumps(out, indent=1))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -330,6 +373,13 @@ def main():
     s.add_argument("--dump", action="store_true", help="E275: write the candidate nodes of the exact-map pass to temp/<exp>/pred_<run>.pkl (scratch, for the analysis)")
     s.add_argument("--max-drop", type=float, default=0.20, help="E275 kill criterion: stop when a close-node spec (threshold >= 0.5) drops more than this share of the delivered nodes")
     s.add_argument("--repro", default=None, help="E275: the E274 sweep json of this model (temp/e274/sweep_<run>.json): close:1.5@0.5 must reproduce its pos1.5_e0.5 entry within 0.005")
+    s.add_argument("--sparse", nargs=2, type=float, default=None, metavar=("EPS", "CHORD"), help="E276: score the node numbers against the SPARSE GT nodes the model was trained on (qtargets.node_table)")
+    y = sub.add_parser("verdict276")
+    y.add_argument("--kind", choices=("t", "s"), required=True, help="t: arm t against B scored on l4; s: arm s against arm t")
+    y.add_argument("--var", nargs="+", required=True, help="the variant runs (seeds 0 and 1), cards in runs/<exp-var>/")
+    y.add_argument("--ctl", nargs="+", required=True, help="the control runs (seeds 0 and 1), cards in runs/<exp-ctl>/")
+    y.add_argument("--exp-var", default="e276")
+    y.add_argument("--exp-ctl", default="e276")
     x = sub.add_parser("verdict275")
     x.add_argument("--var", nargs="+", required=True, help="the cards of the step, runs/<exp-var>/<name>/ (both seeds)")
     x.add_argument("--ctl", nargs="+", required=True, help="the control cards (both seeds)")
@@ -349,6 +399,8 @@ def main():
         if a.readouts and not a.exp:
             ap.error("--readouts needs --exp (e.g. e275): the default folder of the E273 cards must not receive read-out cards")
         a.exp = a.exp or "e273"
+        if a.sparse:
+            QE.NODE_SPARSE = (float(a.sparse[0]), float(a.sparse[1]))
         dump = os.path.join(ROOT, "temp", a.exp, f"pred_{a.run}.pkl") if a.dump else None
         c = score(a.run, a.seed, a.n, "cuda" if torch.cuda.is_available() else "cpu", exp=a.exp, readouts=a.readouts, curve=a.curve, dump=dump, max_drop=a.max_drop, repro=a.repro)
         if not a.readouts:
@@ -357,6 +409,8 @@ def main():
         verdict274(a.var, a.ctl, a.exp_var, a.exp_ctl, a.metric, a.band)
     elif a.cmd == "verdict275":
         verdict275(a.var, a.ctl, a.exp_var, a.exp_ctl)
+    elif a.cmd == "verdict276":
+        verdict276(a.var, a.ctl, a.exp_var, a.exp_ctl, a.kind)
     else:
         verdict(a.runs)
 

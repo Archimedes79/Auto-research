@@ -23,6 +23,7 @@ N, RES, HALF = 50, 2.0, 50.0
 FLAGS = ("stop", "exit", "split", "merge", "start", "end", "win_in", "win_out")
 FI = {f: i for i, f in enumerate(FLAGS)}
 SHORT = 8.0
+NEAR_BLIND = 8.0                                                   # E276: the cameras do not see the ground within about 5 m of the car; a point this close to the ego that no box hides counts as demanded
 STARTERS = ("merge", "exit", "start", "win_in")                    # the piece STARTS at the event
 
 
@@ -68,9 +69,42 @@ def _groups(events, tol=0.3):
     return groups
 
 
-def node_table(g, marker_dist=0.0, short=SHORT):
-    """-> dict: nodes (M): cell (M, 2) int, pos (M, 2), dirv (M, 2), flags (M, 8) bool, piece (M,) index into g["pieces"], j (M,) point index in the piece, ev (M,) bool, sstart (M,) bool;
-    links: src (L,), dst (L,) node indices, long (L,) bool, path (L,) lists of global point ids; points: pts (P, 2), pid (P,), pj (P,), supp (P,) bool, off (n pieces + 1); stats"""
+def _sparse_keep(nodes, pts, off, eps, max_chord):
+    """E276 sparse node target: the set of global point ids of the NORMAL nodes to keep. Per piece the anchors are the event nodes and the first and the last node; between two anchors
+    the straight chord must stay within `eps` metres of every point of the piece in between and be at most `max_chord` metres long, else the candidate node nearest to the point of the
+    largest deviation (or, for a long chord, to the middle) is kept and both halves are checked again (Douglas-Peucker restricted to the candidate nodes)"""
+    keep = set()
+    for i in range(len(off) - 1):
+        ids = sorted(gd for gd in nodes if off[i] <= gd < off[i + 1])
+        if not ids:
+            continue
+        anchors = sorted({gd for gd in ids if nodes[gd]["ev"]} | {ids[0], ids[-1]})
+        keep.update(gd for gd in anchors if not nodes[gd]["ev"])
+        cand_all = [gd for gd in ids if not nodes[gd]["ev"] and gd not in anchors]
+        stack = [(a, b) for a, b in zip(anchors[:-1], anchors[1:])]
+        while stack:
+            a, b = stack.pop()
+            cand = [c for c in cand_all if a < c < b]
+            if not cand:
+                continue
+            seg = pts[a:b + 1]
+            ch = pts[b] - pts[a]
+            L = float(np.linalg.norm(ch))
+            dev = np.linalg.norm(seg - pts[a], axis=1) if L < 1e-9 else np.abs((seg - pts[a]) @ np.array([-ch[1], ch[0]]) / L)
+            if dev.max() <= eps and L <= max_chord:
+                continue
+            k = a + int(dev.argmax()) if dev.max() > eps else (a + b) // 2
+            c = min(cand, key=lambda x: abs(x - k))
+            keep.add(c)
+            stack += [(a, c), (c, b)]
+    return keep
+
+
+def node_table(g, marker_dist=0.0, short=SHORT, sparse=None):
+    """-> dict: nodes (M): cell (M, 2) int, pos (M, 2), dirv (M, 2), flags (M, 8) bool, piece (M,) index into g["pieces"], j (M,) point index in the piece, ev (M,) bool, sstart (M,) bool,
+    tier (M,) uint8 (1 / 2 / 3 of the node's point, 0 = the graph has no l4 labels), vis (M,) bool = DEMANDED (a camera sees it, or it lies within NEAR_BLIND m of the ego and no box hides it; True without labels);
+    links: src (L,), dst (L,) node indices, long (L,) bool, path (L,) lists of global point ids; points: pts (P, 2), pid (P,), pj (P,), supp (P,) bool, off (n pieces + 1), ptier (P,), pvis (P,);
+    stats. `sparse` = None (a node in every 2 m cell, E273) or (eps, max_chord) metres (E276: `_sparse_keep`; events, the first and the last node of a piece always stay)"""
     pieces = g["pieces"]
     idx = {p["id"]: i for i, p in enumerate(pieces)}
     off = np.zeros(len(pieces) + 1, int)
@@ -87,16 +121,24 @@ def node_table(g, marker_dist=0.0, short=SHORT):
         from scipy.spatial import cKDTree
         lines = [l["pts"] for k in ("lane_divider", "road_divider") for l in g["lines"].get(k, []) if len(l["pts"])]
         div = cKDTree(np.concatenate(lines)) if lines else None
+    ptier, pvis, pocc = np.zeros(P, np.uint8), np.ones(P, bool), np.zeros(P, bool)             # l4 labels of the points (0 / True / False when the graph has none)
     for i, p in enumerate(pieces):
         q = np.asarray(p["pts"], float)
         a, b = off[i], off[i + 1]
         pts[a:b], tan[a:b], pid[a:b], pj[a:b] = q, _tangents(q), i, np.arange(len(q))
+        if "tier" in p:
+            ptier[a:b], pvis[a:b] = p["tier"], p["vis"]
+            if "occ" in p:
+                pocc[a:b] = p["occ"]
         for s in p["segments"]:
             if s["kind"] == "connector" and s["in_intersection"]:
                 supp[a + s["i0"]: a + s["i1"] + 1] = True
         if div is not None and supp[a:b].any():
             near = div.query(q)[0] <= marker_dist
             supp[a:b] &= ~near
+    # `vis` of the targets and of the scorer = DEMANDED: seen by a camera, or inside the blind zone right at the car (within NEAR_BLIND m of the ego, no camera sees the ground there) unless a box
+    # hides it: the own lane at the car is not "unseen", the car stands on it (critic pass 2026-11-07: with the camera flag alone the first ~5 m of the own lane were not demanded)
+    pvis = pvis | ((np.linalg.norm(pts, axis=1) <= NEAR_BLIND) & ~pocc)
     # successors of every point: the next point of the piece; the last point -> the first point of every succ part
     succ = [[] for _ in range(P)]
     for i, p in enumerate(pieces):
@@ -149,6 +191,12 @@ def node_table(g, marker_dist=0.0, short=SHORT):
     for c, (d, gid) in per_cell.items():
         nodes[gid] = dict(flags=set(), pos=pts[gid].copy(), ev=False)
     n_dropped = n_cand - len(per_cell) - sum(1 for (i, c) in best if c in cell_event)
+    n_sparse = 0
+    if sparse is not None:                                                                       # E276: keep only the nodes the geometry needs
+        keep = _sparse_keep(nodes, pts, off, float(sparse[0]), float(sparse[1]))
+        for gd in [gd for gd, v in nodes.items() if not v["ev"] and gd not in keep]:
+            del nodes[gd]
+            n_sparse += 1
     gids = sorted(nodes)
     M = len(gids)
     node_of = {gid: m for m, gid in enumerate(gids)}
@@ -193,18 +241,31 @@ def node_table(g, marker_dist=0.0, short=SHORT):
     pos = np.array([nodes[gd]["pos"] for gd in gids]) if M else np.zeros((0, 2))
     dist = np.linalg.norm(pos[src] - pos[dst], axis=1) if len(src) else np.zeros(0)
     return dict(cell=cell, pos=pos, dirv=tan[gids] if M else np.zeros((0, 2)), flags=flags, piece=piece, j=j, ev=np.array([nodes[gd]["ev"] for gd in gids], bool), sstart=sstart,
+                tier=ptier[gids] if M else np.zeros(0, np.uint8), vis=pvis[gids] if M else np.zeros(0, bool), ptier=ptier, pvis=pvis,
                 src=src, dst=dst, long=dist > short, dist=dist, path=paths, pts=pts, tan=tan, pid=pid, pj=pj, supp=supp, off=off, gid=np.array(gids, int),
                 stats=dict(nodes=M, events=int(sum(nodes[gd]["ev"] for gd in gids)), dropped=int(n_dropped), cand=int(n_cand), ev_merged=n_ev_merged, links=len(src),
-                           long=int((dist > short).sum())))
+                           long=int((dist > short).sum()), sparse_dropped=n_sparse))
 
 
 def grid_targets(nt, n=N):
     """the maps of the node head from a node table: exists (n, n), flags (8, n, n), offset (2, n, n) metres from the cell centre, dirv (2, n, n), sstart (n, n), piece (n, n) int (-1 = none),
-    uout / uin (n, n): the node starts / ends a long link"""
+    uout / uin (n, n): the node starts / ends a long link; E276: tier (n, n) the tier of the node of the cell (0 = none or no l4 labels), vis (n, n) 1 where a camera sees the node (1 without
+    labels and in cells without a node), ztier (n, n) the lowest tier of the GT lane points within the cell dilated by 1 m (0 = no lane there; unlabelled points count as tier 3)"""
     t = dict(exists=np.zeros((n, n), np.float32), flags=np.zeros((len(FLAGS), n, n), np.float32), offset=np.zeros((2, n, n), np.float32), dirv=np.zeros((2, n, n), np.float32),
-             sstart=np.zeros((n, n), np.float32), piece=-np.ones((n, n), np.int32), uout=np.zeros((n, n), np.float32), uin=np.zeros((n, n), np.float32))
+             sstart=np.zeros((n, n), np.float32), piece=-np.ones((n, n), np.int32), uout=np.zeros((n, n), np.float32), uin=np.zeros((n, n), np.float32),
+             tier=np.zeros((n, n), np.float32), vis=np.ones((n, n), np.float32), ztier=np.zeros((n, n), np.float32))
+    pt = np.asarray(nt["pts"], float)
+    if len(pt):
+        zt = np.where(nt["ptier"] > 0, nt["ptier"], 3).astype(np.float32)
+        z = np.full((n, n), 9.0, np.float32)
+        for dx in (-1.0, 0.0, 1.0):
+            for dy in (-1.0, 0.0, 1.0):
+                c = cell_of(pt + np.array([dx, dy]))
+                np.minimum.at(z, (c[:, 0], c[:, 1]), zt)
+        t["ztier"] = np.where(z < 9.0, z, 0.0).astype(np.float32)
     for m in range(len(nt["pos"])):
         i, j = nt["cell"][m]
+        t["tier"][i, j], t["vis"][i, j] = nt["tier"][m], float(nt["vis"][m])
         t["exists"][i, j] = 1
         t["flags"][:, i, j] = nt["flags"][m]
         t["offset"][:, i, j] = nt["pos"][m] - centre_of((i, j))

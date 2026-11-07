@@ -29,7 +29,11 @@ PHASE_FROZEN = {2: (), 3: ("pyr",), 4: ("pyr", "nodes"), 5: ("pyr", "links"), 6:
 W = dict(pix=1.0, node=1.0, link=1.0, sec=1.0, asg=1.0)
 # E274 switches (the defaults are the E273 loss): ev_w = weight of the 1 m event heat-map loss in the pixel stage; node_w_evt / node_w_inter = extra weight of the POSITIVES of the existence loss
 # at event cells / at cells inside the (grown) intersection mask (weight 1 + w_evt * event + w_inter * inter); long_match = weight of the dual-softmax loss over the long-link candidates (E274)
-CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0)
+# E276 switches (defaults = the E273 loss; they need the l4 maps tier / vis / ztier in the batch): tier_w = (w1, w2, w3) factor of the POSITIVE terms of the node loss (existence, flags, offset, direction,
+# section start, long-link endpoints) at a GT node of tier 1 / 2 / 3; vis_w = extra factor for GT nodes that no camera sees (0 = not demanded); neg_w = (z1, z2, z3, z0) factor of the NEGATIVES of the
+# existence loss by the zone of the cell (the lowest tier of the GT lane points near it, z0 = no lane: the cost of a false node near the own lane); link_tier_w = (w1, w2, w3) factor of the link losses
+# by the tier of the source node (and vis_w for invisible ones)
+CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0, tier_w=None, vis_w=1.0, neg_w=None, link_tier_w=None)
 
 
 class QGraph(torch.nn.Module):
@@ -82,13 +86,34 @@ class QGraph(torch.nn.Module):
         return out
 
 
-def focal_bce(logit, y, alpha=0.5, gamma=2.0, norm=None, pos_w=None):
+def focal_bce(logit, y, alpha=0.5, gamma=2.0, norm=None, pos_w=None, neg_w=None, w=None):
     p = logit.sigmoid()
     ce = F.binary_cross_entropy_with_logits(logit, y, reduction="none")
     pt = p * y + (1 - p) * (1 - y)
     a_pos = alpha if pos_w is None else alpha * pos_w                                   # pos_w: a per-element weight of the positives (E274)
-    l = ce * (1 - pt) ** gamma * (a_pos * y + (1 - alpha) * (1 - y))
+    a_neg = (1 - alpha) if neg_w is None else (1 - alpha) * neg_w                       # neg_w: a per-element weight of the negatives (E276)
+    l = ce * (1 - pt) ** gamma * (a_pos * y + a_neg * (1 - y))
+    if w is not None:                                                                   # w: a per-element weight of positives and negatives alike (E276, the links)
+        l = l * w
     return l.sum() / (norm if norm is not None else y.sum().clamp_min(1.0))
+
+
+def tier_lut(values, dev, first=1.0):
+    """a lookup table indexed by a tier 0 / 1 / 2 / 3: tier 0 (no label) -> `first`, tiers 1 - 3 -> `values`"""
+    return torch.tensor([first, *[float(v) for v in values]], device=dev)
+
+
+def node_pos_weight(batch, dev):
+    """E276: the (B, 50, 50) factor of the positive terms of the node loss from the tier and visibility maps of the batch (tier_w, vis_w); None when both are at their defaults"""
+    if CFG["tier_w"] is None and CFG["vis_w"] == 1.0:
+        return None
+    tw = torch.ones(batch["exists"].shape, device=dev)
+    if CFG["tier_w"] is not None:
+        tw = tier_lut(CFG["tier_w"], dev)[batch["tier"].to(dev).long().clamp(0, 3)]
+    if CFG["vis_w"] != 1.0:
+        vis = batch["vis"].to(dev).float()
+        tw = tw * (vis + (1.0 - vis) * CFG["vis_w"])
+    return tw
 
 
 def dice(logit, y, eps=1.0):
@@ -126,7 +151,15 @@ def node_loss(no, batch):
         evt = (batch["flags"].to(dev).float().max(1)[0] > 0.5).float()
         inter = (batch["road2"].to(dev).float()[:, 1] > 0.5).float()
         wmap = 1.0 + CFG["node_w_evt"] * evt + CFG["node_w_inter"] * inter
-    l_e = focal_bce(no["e"].float(), ex, norm=npos, pos_w=wmap)
+    posm = node_pos_weight(batch, dev)                                                      # E276: tier / visibility of the GT node (None = the E273 loss)
+    if posm is not None:
+        wmap = posm if wmap is None else wmap * posm
+        m = m.float() * posm
+    negw = None
+    if CFG["neg_w"] is not None:                                                            # E276: a false node costs more near the own lane (zone of the cell)
+        z1, z2, z3, z0 = CFG["neg_w"]
+        negw = torch.tensor([z0, z1, z2, z3], device=dev)[batch["ztier"].to(dev).long().clamp(0, 3)]
+    l_e = focal_bce(no["e"].float(), ex, norm=npos, pos_w=wmap, neg_w=negw)
     fl = batch["flags"].to(dev).float()
     l_f = (F.binary_cross_entropy_with_logits(no["flags"].float(), fl, reduction="none", pos_weight=torch.tensor(6.0, device=dev)) * m[:, None]).sum() / npos
     off_t = batch["offset"].to(dev).float()
@@ -174,12 +207,22 @@ def link_loss(L, batch):
     info = {}
     lg = L["is_long"]
     sh = ~lg
-    l_b = focal_bce(L["logit"].float()[sh], y[sh], norm=y[sh].sum().clamp_min(1.0))               # short links: focal BCE over all candidate pairs
+    lw = None                                                                                     # E276: the weight of every candidate pair by the tier / visibility of its source node (None = E273)
+    if CFG["link_tier_w"] is not None or CFG["vis_w"] != 1.0:
+        tier_act = batch["tier"].to(dev).flatten(1).gather(1, L["act"]).long().clamp(0, 3)
+        w_act = tier_lut(CFG["link_tier_w"], dev)[tier_act] if CFG["link_tier_w"] is not None else torch.ones(tier_act.shape, device=dev)
+        if CFG["vis_w"] != 1.0:
+            va = batch["vis"].to(dev).flatten(1).gather(1, L["act"]).float()
+            w_act = w_act * (va + (1.0 - va) * CFG["vis_w"])
+        lw = w_act[L["pb"], L["pa"]]
+    l_b = focal_bce(L["logit"].float()[sh], y[sh], norm=y[sh].sum().clamp_min(1.0), w=None if lw is None else lw[sh])               # short links: focal BCE over all candidate pairs
     l_long = torch.zeros((), device=dev)
     if lg.any():                                                                                  # long links: their positives are ~5 % of all positives and ~0.3 % of their own candidates: a balanced BCE of their own
         yl = y[lg]
         npl, nnl = yl.sum(), (1 - yl).sum()
         wgt = torch.where(yl > 0.5, (nnl / npl.clamp_min(1.0)).clamp(1.0, 15.0), torch.ones_like(yl))
+        if lw is not None:
+            wgt = wgt * lw[lg]
         l_long = (F.binary_cross_entropy_with_logits(L["logit"].float()[lg], yl, reduction="none") * wgt).sum() / (wgt.sum() + 1.0)
     # degree: the expected number of outgoing links of every active node against the GT degree of its cell
     B, K = L["valid"].shape

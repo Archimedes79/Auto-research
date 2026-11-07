@@ -35,9 +35,13 @@ def lane_store():
 
 
 class QData(torch.utils.data.Dataset):
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0):
+    DEFAULT_SPARSE = None                                          # E276: set by `qgraph_train.py --sparse EPS CHORD` so that the train loader AND the gates (they build their own QData) see the same targets
+
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None):
         self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
+        sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
+        self.sparse = None if sparse is None else (float(sparse[0]), float(sparse[1]))                   # E276: the sparse node target (eps, max chord) in metres, None = a node in every 2 m cell
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{PD.D}/feats/{part}_tokens.json"))
         self.lg, d = lane_store()
@@ -64,7 +68,7 @@ class QData(torch.utils.data.Dataset):
         x = np.concatenate([np.asarray(m[row], np.float32) for m in self.mm], 0)
         x = ((x - self.bd.mean[:39, None, None]) / self.bd.std[:39, None, None]).astype(np.float16)
         g = self.lg.load(token)
-        nt = QT.node_table(g)
+        nt = QT.node_table(g, sparse=self.sparse)
         t = QT.grid_targets(nt)
         lk, lk_long = QT.link_array(nt)
         lk_scale = QT.fit_long_scales(nt).astype(np.float32)
@@ -82,7 +86,7 @@ class QData(torch.utils.data.Dataset):
 def collate(b):
     B = len(b)
     out = dict(row=torch.tensor([o["row"] for o in b]), k=torch.tensor([o["k"] for o in b]), token=[o["token"] for o in b])
-    for n in ("x", "exists", "flags", "offset", "dirv", "sstart", "piece", "uout", "uin"):
+    for n in ("x", "exists", "flags", "offset", "dirv", "sstart", "piece", "uout", "uin", "tier", "vis", "ztier"):        # tier / vis / ztier: E276 (l4 labels, zeros / ones without them)
         out[n] = torch.stack([o[n] for o in b])
     for n in ("lines_mask", "lines_dist", "events1", "road2"):
         if n in b[0]:
@@ -120,8 +124,8 @@ def collate(b):
     return out
 
 
-def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False):
-    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict)
+def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None):
+    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle,
                                            persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 

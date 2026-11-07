@@ -31,6 +31,8 @@ def run(n=200, marker=0.0):
     st = dict(nodes=0, dropped=0, ev=0, links=0, long=0, ev_merged=0, cells2=0)
     bad = []
     for g in frames(n):
+        if not any(len(p["pts"]) for p in g["pieces"]):                              # a keyframe without any lane in the window (a map hole, e.g. a Boston Seaport construction site): nothing to decode
+            continue
         nt = QT.node_table(g, marker_dist=marker)
         s = nt["stats"]
         for k in ("nodes", "dropped", "links", "long", "ev_merged"):

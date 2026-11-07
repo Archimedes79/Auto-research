@@ -46,10 +46,21 @@ def main():
     ap.add_argument("--node-w-evt", type=float, default=0.0, help="E274: extra weight of the existence positives at event cells")
     ap.add_argument("--node-w-inter", type=float, default=0.0, help="E274: extra weight of the existence positives inside the grown intersection mask")
     ap.add_argument("--long-match", type=float, default=0.0, help="E274: weight of the dual-softmax loss over the long-link candidates")
+    ap.add_argument("--tier-w", type=float, nargs=3, default=None, help="E276: factor of the positive node terms at a GT node of tier 1 / 2 / 3 (needs the l4 lane GT)")
+    ap.add_argument("--vis-w", type=float, default=1.0, help="E276: extra factor for GT nodes that no camera sees (0 = not demanded)")
+    ap.add_argument("--neg-w", type=float, nargs=4, default=None, help="E276: factor of the negatives of the existence loss by zone: tier 1, tier 2, tier 3, no lane")
+    ap.add_argument("--link-tier-w", type=float, nargs=3, default=None, help="E276: factor of the link losses by the tier of the source node")
+    ap.add_argument("--sparse", type=float, nargs=2, default=None, metavar=("EPS", "CHORD"), help="E276: the sparse node target: deviation (m) and longest chord (m)")
     ap.add_argument("--resume-from", default=None, help="a model.pt of an earlier phase to start from (the phases before it are skipped by listing only the later ones)")
     a = ap.parse_args()
     T.seed_all(a.seed)
     QG.CFG.update(ev_w=a.ev_w, node_w_evt=a.node_w_evt, node_w_inter=a.node_w_inter, long_match=a.long_match)               # E274 switches (defaults = E273)
+    QG.CFG.update(tier_w=a.tier_w, vis_w=a.vis_w, neg_w=a.neg_w, link_tier_w=a.link_tier_w)                                 # E276 switches (defaults = E273)
+    if a.sparse:
+        LD.QData.DEFAULT_SPARSE = tuple(a.sparse)
+    if (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0):
+        from autogt import lane_gt                                                                                          # the tier switches need the l4 labels: refuse an l3 store
+        assert lane_gt.version_of(lane_gt.signature()) not in (None, "l1", "l2", "l3"), "the tier switches need the lane GT l4 (this source is " + str(lane_gt.version_of(lane_gt.signature())) + ")"
     model = QG.QGraph(width=a.width)
     hp = a.head or os.path.join(ROOT, "runs", f"e271_a_s{a.seed}", "model.pt")
     if os.path.exists(hp):
@@ -64,7 +75,9 @@ def main():
     ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train")
     steps = dict(zip(a.phases, a.steps)) if a.steps else {k: STEPS[k] for k in a.phases}
     import qgates as QGt
-    QGt.GATE_CFG.update(node_prec_min=a.gate_node_prec, node_rec_min=a.gate_node_rec)
+    tier_arm = bool(a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0 or a.sparse)
+    QGt.GATE_CFG.update(node_prec_min=a.gate_node_prec, node_rec_min=a.gate_node_rec, tier_mode=tier_arm)
+    assert not tier_arm or ds.missing == 0, f"an E276 arm needs the complete lane GT store: {ds.missing} training frames have no stored graph (the loader would silently drop them)"
     for k in a.phases:
         sk = 20 if a.smoke else steps[k]
         run = T.Run(f"{a.name}_p{k}")
