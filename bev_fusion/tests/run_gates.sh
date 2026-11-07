@@ -76,6 +76,7 @@ run "radar memory ghost" "$PY" tests/test_radar_memory_ghost.py     # the Dopple
 run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 motion block through the trainer's path; CPU, 7 s
 run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, training/splits.py, the trainsuite hook; no data, 7 s
 run "layer table"       "$PY" tests/test_layers.py                  # training/layers.py: the table changes no number, the 1 m centre-line row; CPU, 7 s
+run "line BCE"          "$PY" tests/test_line_bce.py                # t23: the tolerance-aware BCE on the line presence (analytic value, gradients, head isolation, default path = dice + huber); CPU, seconds
 run "centre-line eval"  "$PY" tests/test_centreline_eval.py         # the 1 m centre-line head in the evaluation (D48): oracle / null / shuffled on real cached GT, hand examples, old runs' counts unchanged, 19 mutants killed; CPU, about 100 s
 run "lane branch, dual" "$PY" tests/test_lane_branch_dual.py        # L4 on camera_features 'dual' (t20): the rule, state_dict as before, zero start, gradient, geometry inputs, mirror, t20_base.json diff; CPU, no data
 run "stream temporal"  "$PY" tests/test_stream_temporal.py          # cam_buffer pair / recurrent (t21): stream = batch, buffer rules, gradient through the carry, window unchanged, 8 mutants; CPU, about 2 min, no data

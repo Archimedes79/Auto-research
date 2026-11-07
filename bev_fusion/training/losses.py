@@ -64,6 +64,11 @@ class LossConfig:
     boundary_hold: float = 0.2         # ramp of the boundary term: 0 for this fraction, then linear
     boundary_ramp: float = 0.4
     boundary_w_max: float = 0.5
+    line_bce: float = 0.0              # t23: weight of a tolerance-aware BCE on the line presence (lane / road divider), added to the lines group; 0 = off = every stored run is reproduced.
+                                       # Positives: GT line cells (weight line_bce_pos); negatives: cells farther than line_bce_ignore metres from every GT line (weight 1); the band in
+                                       # between (the Dice's tolerance) is ignored, so a line found within the tolerance costs nothing, a confident cell farther away costs as in any BCE
+    line_bce_pos: float = 3.0          # positive weight of that BCE (the lines are ~1.3 % of the cells)
+    line_bce_ignore: float = 1.0       # m: distance from a GT line below which a non-line cell is not a negative
     huber_delta: float = 0.5           # m
     dist_near: float = 1.0             # m: Huber weight 1 below, dist_w_far above
     dist_w_far: float = 0.25
@@ -237,6 +242,17 @@ def tolerant_dice_loss(prob, target, w, tol=1):
     return torch.where(_wsum(g, w) > 0, 1 - num / den.clamp(min=EPS), torch.zeros_like(num))
 
 
+def line_bce_loss(logits, target, dist, w, pos=3.0, ignore=1.0):
+    """t23: BCE on the line presence with an ignore band -> (K,). Cell weights: GT line cell (target > 0.5) pos, non-line cell with the GT distance >= ignore (m) 1,
+    the band in between 0 (the tolerance of the Dice: a line found there costs nothing); times the map weight w (B, 1, X, Y). Normalised by the weights it uses.
+    Unlike the Dice it punishes every confident cell far from a line, also in a channel without GT."""
+    assert ignore <= DIST_MAX, f"line_bce_ignore {ignore} m is beyond the truncated GT distance ({DIST_MAX} m): no cell could be a negative"
+    pos_m = (target > 0.5).to(logits.dtype)
+    neg_m = ((target <= 0.5) & (dist >= ignore)).to(logits.dtype)
+    ww = w * (pos * pos_m + neg_m)
+    return _wsum(F.binary_cross_entropy_with_logits(logits, target, reduction="none"), ww) / ww.sum((0, 2, 3)).clamp(min=EPS)
+
+
 def dist_huber(pred, target, w, delta=0.5, near=1.0, w_far=0.25, dist_max=DIST_MAX):
     """Huber (delta, metres) on the truncated distance field -> (K,); cell weight 1 below `near`, w_far above; where the
     GT is truncated (>= dist_max) a prediction beyond dist_max is not penalised."""
@@ -266,10 +282,11 @@ def overlap_loss(prob, target, w, cfg):
     return soft_iou_loss(prob, target, w)
 
 
-def map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
+def map_terms(logits, T, spec, weights, cfg, step_frac=1.0, line_bce=False):
     """Losses of a semantic-type head (main or auxiliary) whose channels follow `spec`. weights: kind group -> (B, 1,
     X, Y) ('area', 'line', 'object', 'stationary'). Returns (terms, groups): per-channel terms and the group sums
-    (per-channel terms averaged inside a group, so a group is of order 1). step_frac: training progress (ramps)."""
+    (per-channel terms averaged inside a group, so a group is of order 1). step_frac: training progress (ramps).
+    line_bce: the t23 BCE term (cfg.line_bce) is added to the line channels only when the caller asks for it; BEVLoss asks for the main head, not for the 1 m centre-line head or the camera aux head."""
     idx = {}
     for i, (_, kind, _) in enumerate(spec):
         idx.setdefault(kind, []).append(i)
@@ -302,6 +319,11 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
             for j, n in enumerate(names["line"]):
                 terms[f"line_boundary.{n}"] = bnd[j]
             groups["lines"] = groups["lines"] + wb * bnd.mean()
+        if line_bce and cfg.line_bce > 0.0:                      # t23: presence channels and distance channels are in the same line order (layers.channels)
+            lb = line_bce_loss(ch("line"), tg("line"), tg("dist"), w, cfg.line_bce_pos, cfg.line_bce_ignore)
+            for j, n in enumerate(names["line"]):
+                terms[f"line_bce.{n}"] = lb[j]
+            groups["lines"] = groups["lines"] + cfg.line_bce * lb.mean()
     if "centreline" in idx:                                      # the first centre-line design: presence only, its direction follows
         w = weights["line"]
         dice = tolerant_dice_loss(torch.sigmoid(ch("centreline")), tg("centreline"), w, cfg.line_tolerance)[0]
@@ -510,7 +532,7 @@ class BEVLoss(nn.Module):
             groups[g] = groups.get(g, 0.0) + v
         if "sem" in p:
             w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
-            t, g = map_terms(p["sem"], T, self.spec, w, cfg, step_frac)
+            t, g = map_terms(p["sem"], T, self.spec, w, cfg, step_frac, line_bce=True)
             terms.update(("sem." + k, v) for k, v in t.items())
             for k, v in g.items():
                 add(k, v)
