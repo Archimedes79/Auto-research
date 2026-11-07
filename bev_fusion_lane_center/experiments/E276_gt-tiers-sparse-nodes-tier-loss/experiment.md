@@ -123,4 +123,32 @@ B is only a little better in its own lane than elsewhere (node F1 0.888 in tier 
 
 **P4 - how good is the map-extension rule of the tier-1 label** (`exp_extension_accuracy.py`: stored frames where the car drove at least 54 m ahead and 24 m behind (256 frames), the driven path cut and the label redone by the extension rule, compared with the driven label): extension ahead from 10 / 20 / 30 m of driven path: tier-1 recall 0.935 / 0.921 / 0.950, precision 0.947 / 0.946 / 0.965; 8 - 14 % of the frames with recall below 0.8 (a wrong branch at a junction). Behind (5 m driven): recall 0.926, precision 0.834 (the backward extension adds whole pieces: more than the 25 m asked); both cut: recall 0.859, precision 0.784, 26 % of the frames below 0.8. Reading: the extension labels the own lane right in about nine of ten frames; it over-labels behind the car; the clip of the extension to the asked length is a candidate for a later GT version (l5), not worth a regeneration now.
 
+**P5 - temporal consistency of the delivered nodes** (video note 3; `exp_temporal.py`, the E275 node dump of B seed 0, the poses of the VAL file, the l4 store; 851 pairs of consecutive keyframes 0.5 s apart; the nodes of the previous frame are moved by the ego motion (the convention of the pose file is found by the GT nodes: the pose acts on the lane frame, median alignment 0.49 m) and count as persistent when a node lies within 2 m in the keyframe):
+
+| group | GT nodes persistent | delivered nodes persistent | excess flicker (GT - delivered) |
+|---|---|---|---|
+| all | 0.999 | 0.975 | +0.024 |
+| own lane (zone 1) | 0.999 | 0.987 | +0.012 |
+| far lanes (zone 3) | 0.999 | 0.974 | +0.026 |
+| near an intersection (within 3 m of an in-intersection connector) | 0.998 | 0.947 | +0.051 |
+| elsewhere | 1.000 | 0.983 | +0.017 |
+| own lane near an intersection | 0.997 | 0.957 | +0.040 |
+| own lane elsewhere | 1.000 | 0.994 | +0.006 |
+Mirko's observation is real and local: near intersections the delivered nodes flicker about three times as much as elsewhere (5.3 % against 1.7 % do not persist), and in the own lane near an intersection seven times (4.3 % against 0.6 %). At node level the flicker is small; the full dump of the scoring pass allows the same count for links and sections (the graph structure, where the videos looked worst).
+
+**P6 - endpoints** (video note 4; `exp_endpoints.py`, B seed 0, the demanded GT events of the 873 VAL frames against the delivered nodes with the flag of that event type):
+
+| GT event | n | flagged node within 3 m | within 6 m | any node within 3 m | median error of a flagged node within 6 m |
+|---|---|---|---|---|---|
+| end (a lane ends in the window) | 321 | 0.296 | 0.417 | 0.667 | 1.42 m |
+| start | 339 | 0.469 | 0.599 | 0.664 | 1.09 m |
+| split | 1520 | 0.584 | 0.670 | 0.918 | 0.89 m |
+| merge | 1777 | 0.638 | 0.754 | 0.926 | 0.96 m |
+| exit | 3914 | 0.688 | 0.816 | 0.913 | 0.97 m |
+| stop | 3798 | 0.741 | 0.862 | 0.924 | 0.88 m |
+| all events, tier 1 / 2 / 3 | 2153 / 1291 / 8225 | 0.713 / 0.695 / 0.650 | 0.819 / 0.851 / 0.766 | 0.939 / 0.887 / 0.900 | 0.84 / 0.82 / 0.98 m |
+The position is not the problem where a node exists (median error 0.9 - 1.4 m): the weak points are the FLAG (a node is there, 91 - 93 % of the events, but only 58 - 74 % carry the right event flag within 3 m) and, for the lane ends and starts, the node itself (one third have no delivered node within 3 m). All demanded end events are in tier 3: no own-lane or neighbour-lane end occurs in the VAL frames, so the E276 weights (tier 1 / 2) cannot help the ends; they can help the flags of stops, exits, splits and merges in the own lane (0.71 against 0.65).
+
+**P7 - the intersection label** (video note 1; `exp_intersection_label.py`, the l4 store, 873 VAL frames): only 77.3 % of the connector points that the lane graph marks as inside an intersection lie inside the intersection polygons (84.3 % within 1 m, 88.6 % within 2 m, the dilation of the head's target); 6.2 % of the polygon area has no lane within 6 m; 113 of 2600 polygons have no node id (no connector in them); the stop / exit points lie a median 1.35 m and p90 6.4 m before the polygon (6.7 % inside). The label and the lane graph disagree for 11 - 23 % of the connector points: part of the "intersection label did not always look good" is the label, not the head. Sent to the GT chat as a wish for a later lane version (an `intersection_lane` area built from the connectors). The pixel head itself scores F1 0.892 on the grown intersection mask (E274 scratch `pixel_eval.py`, 300 VAL frames, 1-cell tolerance).
+
 **What the pre-experiments change in this card:** prediction 2 missed (section 0, status), prediction 4 revised and the s rule moved to the delivered nodes per 100 m (section 0), the label-noise estimate of P4 and the dense-vs-sparse equality of P1 are the evidence for the GT and the target choices of sections 2.1 and 2.2.
