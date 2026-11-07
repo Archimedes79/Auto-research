@@ -18,8 +18,12 @@ Kinds (the reason an error is what it is; the first that applies wins, in the or
       below_score     a detection of its class within `thr` m exists but its score is under `min-score` (a threshold effect, not a miss of the network)
       wrong_class     a detection of another class sits on it and is itself a false positive (the class confusion)
       missed          nothing of the kinds above (`explained_by` then names the nearest detection within 2 x `thr`, if any)
-The tables count every annotated box of the scored window, like the plain `det` numbers; the pictures (bev_views) apply the D38 'no care' rule on top (boxes with less than half of
-their footprint in the observed area are neither right nor false nor missed there), so a count on a picture can be smaller. The table also lists, for every error, the frame (scene, index, token), the position and range, the score (FP) or the size (FN) and the command that redraws the frame.
+The tables count every annotated box of the scored window WITH a lidar / radar point (the plain `det` numbers: the GT of the evaluation is `observed_only`); the pictures (bev_views)
+use the D38 `detf` rule instead: every annotated box, and those with less than half of their footprint in the observed area are neither right nor false nor missed there. So a
+count on a picture can differ from the table in both directions, and an 'isolated' false positive can be a real annotated box that has no lidar / radar point (the picture shows
+it as no-care or right, the table as a ghost). `range_m` in the CSV is the Euclidean distance; the range tables use x ahead of the car, the metric's bins.
+The redraw command asks for the history the evaluation had (`--history none`: a cold start for every frame; `full` for the _warm evaluation), so a model with a temporal memory
+shows the frame the way the table saw it. The table also lists, for every error, the frame (scene, index, token), the position and range, the score (FP) or the size (FN) and the command that redraws the frame.
 Summaries: by class and kind, by range bin, by score bin, by scene (where the errors concentrate: the scenes to watch the video of)."""
 from __future__ import annotations
 
@@ -35,9 +39,8 @@ from collections import Counter, defaultdict
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
 from evalsuite.comparison import boxes as BX  # noqa: E402
-from evaluation.metrics import in_front  # noqa: E402
+from evaluation.metrics import RANGE_BINS, in_front  # noqa: E402
 
-RANGE_BINS = ((0.0, 20.0), (20.0, 40.0), (40.0, 60.0))                       # = evaluation/metrics.RANGE_BINS (not imported: this module needs no torch)
 SCORE_BINS = ((0.3, 0.5), (0.5, 0.7), (0.7, 0.9), (0.9, 1.01))
 
 
@@ -65,7 +68,7 @@ def classify_frame(dets, gts, groups, thr=2.0, min_score=0.3):
             if j >= 0:
                 out["tp"].append((d, gs[j]))
                 continue
-            twin = next((gs[k] for k in range(len(gs)) if _dist(d, gs[k]) <= thr), None)
+            twin = min((g_ for g_ in gs if _dist(d, g_) <= thr), key=lambda g_: _dist(d, g_), default=None)
             other = [g for g in free_gt if g["group"] != cls and _dist(d, g) <= thr]
             if twin is not None:
                 out["fp"].append((d, "duplicate", twin))                                      # a box of its class is near, but another detection has it
@@ -126,7 +129,7 @@ def load_boxes(run, n, tag="", dt=0.0):
     return {(s, k): fr for s, per in rec["det"].items() for k, fr in enumerate(per.get(dt, []))}, rec.get("meta") or {}
 
 
-def error_rows(run, n, tag="", groups=("vehicle", "pedestrian", "two_wheeler"), thr=2.0, min_score=0.3, dt=0.0, store=None):
+def error_rows(run, n, tag="", groups=("vehicle", "pedestrian", "two_wheeler"), thr=2.0, min_score=0.3, dt=0.0, store=None, only=None):
     """-> (rows, totals, n_frames): one dict per error (kind FP / FN) with the frame it is in and the command that redraws it; totals {class: {"tp","fp","fn"}}. The records and
     the store must be one evaluation: same number of frames, and when the records carry their frame keys (every evaluation since 2026-10-31) the same keys in the same order."""
     frames, (boxes, meta) = load_frames(run, n, tag, store), load_boxes(run, n, tag, dt)
@@ -145,22 +148,27 @@ def error_rows(run, n, tag="", groups=("vehicle", "pedestrian", "two_wheeler"), 
         dets, gts = boxes[(scene, k)]
         r = classify_frame([d for d in dets if in_front(d)], [g for g in gts if in_front(g)], groups, thr, min_score)      # the scored window of the metric (x < 60 m, +-32.3 deg)
         for d, g in r["tp"]:
-            tot[d["group"]]["tp"] += 1
+            if only is None or d["group"] == only:
+                tot[d["group"]]["tp"] += 1
         for d, kind, other in r["fp"]:
+            if only is not None and d["group"] != only:                      # every class is classified (a class confusion needs the other class), only the rows are filtered
+                continue
             tot[d["group"]]["fp"] += 1
-            rows.append(_row("FP", kind, d, other, scene, index, token, label, run, n))
+            rows.append(_row("FP", kind, d, other, scene, index, token, label, run, n, tag))
         for g, kind, other in r["fn"]:
+            if only is not None and g["group"] != only:
+                continue
             tot[g["group"]]["fn"] += 1
-            rows.append(_row("FN", kind, g, other, scene, index, token, label, run, n))
+            rows.append(_row("FN", kind, g, other, scene, index, token, label, run, n, tag))
     return rows, {c: dict(v) for c, v in tot.items()}, len(frames)
 
 
-def _row(what, kind, b, other, scene, index, token, label, run, n):
+def _row(what, kind, b, other, scene, index, token, label, run, n, tag=""):
     size = (round(b.get("length", 2 * b.get("radius", 0.0)), 1), round(b.get("width", 2 * b.get("radius", 0.0)), 1))
     return {"what": what, "kind": kind, "class": b["group"], "scene": scene, "index": index, "token": token, "x": round(b["cx"], 2), "y": round(b["cy"], 2),
             "range_m": round(math.hypot(b["cx"], b["cy"]), 1), "score": round(b["score"], 3) if "score" in b else "", "size": f"{size[0]}x{size[1]}",
             "explained_by": ("" if other is None else f"{other['group']} at ({other['cx']:.1f}, {other['cy']:.1f})" + (f" score {other['score']:.2f}" if "score" in other else "")),
-            "redraw": f"python evaluation/bev_suite.py {run} qual frame {label} --view overview"}
+            "redraw": f"python evaluation/bev_suite.py {run} qual frame {label} --view overview --history {'full' if tag == '_warm' else 'none'}"}
 
 
 def _bin(x, bins):
@@ -221,15 +229,15 @@ def main(argv=None):
         return 0
     if not a.run:
         ap.error("RUN is required (or --selftest)")
-    groups = (a.cls,) if a.cls else ("vehicle", "pedestrian", "two_wheeler")
+    groups = ("vehicle", "pedestrian", "two_wheeler")
+    if a.check and a.thr != 2.0:                                           # (before anything is computed: the card's n_tp is counted at 2.0 m)
+        ap.error("--check compares with the card's n_tp, which is counted at 2.0 m")
     if a.check:
         bad = check_against_card(a.run.rstrip("/"), a.n, a.tag, groups, a.thr, a.store)
         print("check against the card (every detection counted): " + ("IDENTICAL for tp / fn / fp of every class" if not bad else f"DIFFERENT: {bad}"))
         if bad:
             return 1
-    if a.check and a.thr != 2.0:
-        ap.error("--check compares with the card's n_tp, which is counted at 2.0 m")
-    rows, totals, nf = error_rows(a.run.rstrip("/"), a.n, a.tag, groups, a.thr, a.min_score, store=a.store)
+    rows, totals, nf = error_rows(a.run.rstrip("/"), a.n, a.tag, groups, a.thr, a.min_score, store=a.store, only=a.cls)
     out = a.out or os.path.join(a.run, "eval", f"errors{a.tag}_n{a.n}.csv")
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]) if rows else ["what"])
@@ -237,7 +245,7 @@ def main(argv=None):
         w.writerows(rows)
     print(f"{a.run}: {nf} frames, {len(rows)} errors (score >= {a.min_score}, match within {a.thr} m) -> {out}\n")
     print(summaries(rows, totals))
-    for what, key, rev in (("FP", lambda r: -r["score"], False), ("FN", lambda r: r["range_m"], False)):
+    for what, key in (("FP", lambda r: -r["score"]), ("FN", lambda r: r["range_m"])):
         sel = sorted([r for r in rows if r["what"] == what], key=key)[:a.top]
         print(f"\n{'highest-scoring false positives' if what == 'FP' else 'nearest missed boxes'} ({len(sel)} of {sum(1 for r in rows if r['what'] == what)}):")
         for r in sel:
@@ -352,6 +360,28 @@ def selftest():
             pass
         else:
             raise AssertionError("a store without records must be refused")
+    # the proof against the card: a card that agrees passes, one that does not is reported
+    with tempfile.TemporaryDirectory() as d_:
+        run = os.path.join(d_, "runs", "y")
+        os.makedirs(os.path.join(run, "eval", "suite", "quant", "eval_n1"))
+        with open(os.path.join(run, "eval", "suite", "quant", "eval_n1", "frames.jsonl"), "w") as f:
+            f.write(json.dumps({"label": "scene-1/000", "scene": "scene-1", "index": 0, "key": "t0"}) + "\n")
+        with open(os.path.join(run, "eval", "scene_records_n1.pkl"), "wb") as f:
+            pickle.dump({"det": {"scene-1": {0.0: [(dets, gts)]}}, "meta": {"frames": ["t0"]}}, f)
+        mine = {"vehicle": [3, 5, 5], "pedestrian": [1, 1, 2], "two_wheeler": [0, 0, 0]}          # tp, n_gt, n_det with every detection counted, counted by hand from the frame above
+        card = {"metrics": {f"det/dt+0.00/{c}/all/{k}": float(v) for c, (tp, ng, nd) in mine.items() for k, v in (("n_tp", tp), ("n_gt", ng), ("n_det", nd))}}
+        with open(os.path.join(run, "eval", "card.json"), "w") as f:
+            json.dump(card, f)
+        assert check_against_card(run, 1) == [], check_against_card(run, 1)
+        card["metrics"]["det/dt+0.00/vehicle/all/n_tp"] += 1
+        with open(os.path.join(run, "eval", "card.json"), "w") as f:
+            json.dump(card, f)
+        bad = check_against_card(run, 1)
+        assert [(b[0], b[1]) for b in bad] == [("vehicle", "tp"), ("vehicle", "fn"), ("vehicle", "fp")] and bad[0][2] == 3 and bad[0][3] == 4, bad    # one more tp on the card: tp, n_gt - n_tp and n_det - n_tp all differ
+        # --class filters the rows but classifies every class: a pedestrian on a car nobody found is still a class confusion
+        rows_p, tot_p, _ = error_rows(run, 1, only="pedestrian")
+        assert all(x["class"] == "pedestrian" for x in rows_p) and set(tot_p) == {"pedestrian"} and any(x["kind"] == "wrong_class" for x in rows_p), (tot_p, [x["kind"] for x in rows_p])
+        assert "--history none" in rows_p[0]["redraw"]
     print("bev_errors selftest ok: FP duplicate / wrong class / isolated, FN below score / wrong class / missed / taken, counts equal the metric's matching, frame trace through the files")
 
 

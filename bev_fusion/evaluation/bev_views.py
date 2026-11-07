@@ -134,11 +134,9 @@ def error_box_shapes(dets, gts_all, shares, area, thr: float = 2.0, min_score: f
     from evaluation.bev_fusion_area import prepare
     shown = [d for d in dets if d.get("score", 1.0) >= min_score]
     inside_d = [d for d in shown if in_front(d)]
-    pairs = [(g, f) for g, f in zip(gts_all, shares) if in_front(g)]
-    gts_in, shares_in = [g for g, _ in pairs], [f for _, f in pairs]
-    kept, scored = prepare(inside_d, gts_in, shares_in, area, include_partial=False)
+    kept, scored = prepare(inside_d, list(gts_all), list(shares), area, include_partial=False)         # as the metric: ALL annotated boxes, the ones beyond the window only neutralise
     neutral_d = [d for d in inside_d if not any(d is k for k in kept)]
-    neutral_g = [g for g in gts_in if not any(g is k for k in scored)]
+    neutral_g = [g for g in gts_all if in_front(g) and not any(g is k for k in scored)]               # counted: the window's no-care boxes
     r = classify_frame(kept, scored, sorted({b["group"] for b in list(kept) + list(scored)}), thr, 0.0)
     out: List[Shape] = box_shapes([b for b in list(shown) + list(gts_all) if not in_front(b)], OUTSIDE_COLOR, "-", 0.6)
     out += box_shapes(neutral_g + neutral_d, NOCARE_COLOR, "-", 0.8)
@@ -468,11 +466,24 @@ class OutputsView(BevView):
             return [Panel("text", "25 - 31 moving / stationary layers and loss heat", "not available for this frame")]
 
     def _layer_panels(self, grid, o0, g0, gt_prob, gt_dist, m, vel, gvel):
+        if vel is None:                                                       # this subject predicts no velocity: "moving" and "stationary" cannot be compared
+            return [Panel("text", "25 - 28 moving objects / stationary world", "this subject has no velocity output: no moving / stationary comparison"),
+                    *self._heat_panels(grid, o0, g0, gt_prob, gt_dist, m, None, gvel)]
         known = np.asarray(g0["flow_weight"], np.float32) > 0 if "flow_weight" in g0 else np.ones(np.asarray(gvel[0]).shape, bool)
         pm, gm, ps, gs = (x & known for x in moving_layers(o0["prob"], vel, gt_prob, gvel))
         valid = m["obj_fov"] & known
         stat_pred = {n: (a if n not in OBJECT_LAYERS else np.where(ps, a, 0.0)) for n, a in o0["prob"].items()}
         stat_gt = {n: (a if n not in OBJECT_LAYERS else np.where(gs, a, 0.0)) for n, a in gt_prob.items()}
+        obs = observed_area(g0)
+        heat = self._heat_panels(grid, o0, g0, gt_prob, gt_dist, m, vel, gvel)
+        return [bev(grid, "rgb", "25 moving objects, ground truth (velocity above 0.5 m/s, known velocity)", np.where(gm[..., None], np.asarray(MOVING_RED, np.float32), np.asarray(BG, np.float32))),
+                bev(grid, "rgb", _caption(error_counts(pm, gm, valid), "26 moving objects, system (red right, + green false, + blue missed)"), _layer_err(pm, gm, valid, MOVING_RED)),
+                bev(grid, "rgb", "27 stationary world, ground truth (areas, lines, standing objects)", composite(stat_gt, gt_dist, observed=obs)),
+                bev(grid, "rgb", "28 stationary world, system", composite(stat_pred, o0["dist"], observed=obs))] + heat
+
+    def _heat_panels(self, grid, o0, g0, gt_prob, gt_dist, m, vel, gvel):
+        """the loss of the drivable-area / vehicle layers and the velocity error as a heat over the GT"""
+        known = np.asarray(g0["flow_weight"], np.float32) > 0 if "flow_weight" in g0 else np.ones(np.asarray(gvel[0]).shape, bool)
         obs = observed_area(g0)
         heat = []
         for name, title in (("drivable_area", "29 drivable area"), ("vehicle", "30 vehicle footprint")):
@@ -486,10 +497,7 @@ class OutputsView(BevView):
             lv = np.hypot(vel[0] - gvel[0], vel[1] - gvel[1]) * (objs & known)
             heat.append(bev(grid, "rgb", "31 velocity error on the object cells of known velocity (|v_pred - v_GT|, white = 4 m/s) as a heat over the GT",
                             loss_overlay(composite(gt_prob, gt_dist, observed=obs), lv, vmax=4.0)))
-        return [bev(grid, "rgb", "25 moving objects, ground truth (velocity above 0.5 m/s, known velocity)", np.where(gm[..., None], np.asarray(MOVING_RED, np.float32), np.asarray(BG, np.float32))),
-                bev(grid, "rgb", _caption(error_counts(pm, gm, valid), "26 moving objects, system (red right, + green false, + blue missed)"), _layer_err(pm, gm, valid, MOVING_RED)),
-                bev(grid, "rgb", "27 stationary world, ground truth (areas, lines, standing objects)", composite(stat_gt, gt_dist, observed=obs)),
-                bev(grid, "rgb", "28 stationary world, system", composite(stat_pred, o0["dist"], observed=obs))] + heat
+        return heat
 
     def render(self, sample: Sample, pred: Prediction, ctx: ViewContext) -> Page:
         t, grid = self.t, self.t.grid
@@ -537,7 +545,7 @@ class OutputsView(BevView):
             sp = np.hypot(vel[0], vel[1])
             panels.append(bev(grid, "rgb", "22 predicted velocity on the same cells (same scale and colours)", speed_dir_rgb(np.where(veh, 1.0, 0.0) * vel, vmax),
                               box_shapes(gtb, "0.55", "--", 0.7)))
-            panels.append(bev(grid, "rgb", f"23 predicted velocity everywhere (full colour = {vmax:.1f} m/s; the static world should stay black)", speed_dir_rgb(vel, vmax),
+            panels.append(bev(grid, "rgb", f"23 predicted velocity everywhere (full colour = {vmax:.1f} m/s, the same scale as 21 / 22; the predicted maximum is {sp.max():.1f} m/s; the static world should stay black)", speed_dir_rgb(vel, vmax),
                               box_shapes(gtb, "0.55", "--", 0.7)))
             txt = ("no vehicle cells" if gsp is None or not veh.any() else
                    f"vehicle cells: GT speed mean {gsp[veh].mean():.2f}, predicted mean {sp[veh].mean():.2f} m/s,\n"
@@ -737,6 +745,9 @@ def selftest():
     dets2 = dets + [box(10, 15, s=0.9)]
     shapes2, cnt2 = error_box_shapes(dets2, gts + [box(70, 0), box(10, -15)], shares + [1.0, 1.0], area)
     assert cnt2 == cnt, (cnt2, cnt)
+    # a ground-truth box just beyond the window (60.8 m) neutralises a detection inside it, as in the metric (the detection is ignored, not a false alarm)
+    shapes3, cnt3 = error_box_shapes(dets + [box(59.4, 0, s=0.9)], gts + [box(60.8, 0)], shares + [1.0], area)
+    assert cnt3 == dict(cnt, nocare=cnt["nocare"] + 1), (cnt3, cnt)
     far = [x for x in shapes2 if x.kind == "polygon" and abs(np.mean([q[1] for q in x.xy]) - 70) < 0.3][0]
     assert abs(np.asarray(far.color, float)[3] - OUTSIDE_COLOR[3]) < 1e-9, "outside the window: faint violet"
     # robustness: a NaN Doppler / RCS, a model without object layers, no radar strength at all

@@ -473,6 +473,8 @@ def _():
         page = suite.qual.page(s, p, v, ctx)
         img = figure.render_page(page)
         assert page.panels and img.min() != img.max(), v
+        gone = [pn.title for pn in page.panels if "not available" in str(pn.title)]
+        assert not gone, (v, gone, "a decoration fell back: the new picture code failed silently on a frame that has everything it needs")
     ov = task.views()["overview"].render(s, p, ctx)
     assert ov.panels[0].kind == "image" and len(ov.panels[0].shapes) > 10, "GT boxes and map lines are projected into the camera image"
     err = ov.panels[3].data                                          # the drivable-area error map: FP (green tint), FN (blue tint) exist for a noisy prediction
@@ -1016,12 +1018,14 @@ def real():
 
 def main() -> int:
     ap_golden, ap_real = "--golden" in sys.argv, "--real" in sys.argv
+    only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None            # --only TEXT: just the checks whose name contains TEXT (a gate for one of them)
     if ap_golden or ap_real:                                                 # real data: each in a process of its own
         todo = ([("golden: the numbers of the former evaluate_run.py on 24 real frames", golden)] if ap_golden else []) + \
             ([("real run: adapter contract, views, quantitative run, outliers, report, video", real)] if ap_real else [])
     else:
         init_synthetic()
-        todo = list(CHECKS)
+        todo = [c for c in CHECKS if only is None or only in c[0]]
+        assert todo, f"no check named like {only!r}"
     t0, bad = time.time(), 0
     for name, fn in todo:
         t = time.time()
