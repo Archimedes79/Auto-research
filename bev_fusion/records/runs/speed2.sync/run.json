@@ -1,0 +1,50 @@
+{
+ "id": "speed2.sync",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/train/run_ar.sh temp/compose/speed2_sync.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 9882,
+ "created": "2026-11-04T19:04:00",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-04T19:04:58",
+ "code_hash": "037adcd18b30",
+ "commit": "887647e2f7",
+ "tag": "bf/speed2.sync",
+ "git_note": "",
+ "pid": 10589,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "autoresearch/tools/selftest.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 344,
+ "attempts": 1,
+ "ended": "2026-11-04T19:11:11",
+ "last_lines": [
+  "step 20: total 21.1148 lr 2.84e-04 grad 72.76",
+  "step 25: total 28.4809 lr 2.62e-04 grad 149.28",
+  "step 30: total 39.5757 lr 2.32e-04 grad 93.60",
+  "step 35: total 28.6997 lr 1.96e-04 grad 142.81",
+  "step 40: total 33.1865 lr 1.58e-04 grad 213.15",
+  "step 45: total 35.6654 lr 1.19e-04 grad 262.65",
+  "step 50: total 37.5731 lr 8.21e-05 grad 271.09",
+  "step 55: total 33.2764 lr 4.99e-05 grad 481.44",
+  "step 60: total 28.0949 lr 2.45e-05 grad 350.44",
+  "step 65: total 29.5577 lr 7.63e-06 grad 274.56",
+  "step 70: total 25.5346 lr 5.05e-07 grad 108.32",
+  "speed2_sync exit 0 19:10:42"
+ ]
+}

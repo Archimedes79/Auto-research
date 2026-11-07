@@ -1,0 +1,33 @@
+{
+ "id": "t22.A2_s0",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c ~/miniconda3/envs/gcar/bin/python -u training/distill_student.py --name t22_A2_s0 --split large --epochs 6 --batch 16 --lr 1e-3 --backbone-mult 0.1 --workers 4 >> runs/t22_A2_s0.log 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 55320,
+ "created": "2026-11-05T22:14:53",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-05T22:15:42",
+ "code_hash": "7b3dcb5bd10e",
+ "commit": "f5efbe9a7f",
+ "tag": "bf/t22.A2_s0",
+ "git_note": "243 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 55624,
+ "exit": 0,
+ "duration_s": 1661,
+ "attempts": 1,
+ "ended": "2026-11-05T22:43:26",
+ "last_lines": [
+  "=== attempt 2026-11-05T22:15:42: bash -c ~/miniconda3/envs/gcar/bin/python -u training/distill_student.py --name t22_A2_s0 --split large --epochs 6 --batch 16 --lr 1e-3 --backbone-mult 0.1 --workers 4 >> runs/t22_A2_s0.log 2>&1"
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "made": "2026-11-05T22:56:02",
+ "gt": {
+  "key": "0.5_4_6a7aa7864a",
+  "signature": "6a7aa7864a",
+  "version": "unknown"
+ },
+ "data": {
+  "split": "val",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "unknown",
+  "manifest_hash": "f615a7387e73",
+  "scenes": null,
+  "samples": null
+ },
+ "subject": {
+  "run": "t22.standin_pair4",
+  "config_hash": "4505f837377e",
+  "train_gt": {
+   "key": "0.5_4_6a7aa7864a",
+   "signature": "6a7aa7864a",
+   "version": "unknown"
+  }
+ },
+ "environment": {
+  "python": "3.10.12",
+  "torch": "unknown",
+  "cuda": "unknown",
+  "numpy": "unknown",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "run record (the trainer's interpreter was not found)"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "bf/t22.standin_pair4",
+  "commit": "9219ad86d5",
+  "code_hash": "7b3dcb5bd10e",
+  "drift_files": [],
+  "command": "bash -c /home/ml/miniconda3/envs/gcar/bin/python -u evaluation/evaluate.py runs/t22_standin_pair4 --quant --curves --fusion --velocity --n 1000 --ckpt-dir runs/t21_pair4_s0 >> runs/t22_standin_pair4.log 2>&1",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": [],
+  "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag bf/t22.standin_pair4"
+ }
+}

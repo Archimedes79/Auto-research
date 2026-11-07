@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "made": "2026-11-04T02:33:25",
+ "gt": {
+  "key": "0.5_4_6a7aa7864a",
+  "signature": "6a7aa7864a",
+  "version": "unknown"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "unknown",
+  "manifest_hash": "f615a7387e73",
+  "scenes": null,
+  "samples": null
+ },
+ "subject": {
+  "run": "timing.phase_c",
+  "config_hash": "5e700eb03fe7",
+  "train_gt": {
+   "key": "0.5_4_6a7aa7864a",
+   "signature": "6a7aa7864a",
+   "version": "unknown"
+  }
+ },
+ "environment": {
+  "python": "3.12.15",
+  "torch": "2.8.0+cu129",
+  "cuda": "12.9",
+  "numpy": "1.26.4",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "the interpreter of the run, read 2026-11-04 (the environment may have changed since the run): /home/ml/miniconda3/envs/gcar/bin/python"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "unknown",
+  "commit": "skipped",
+  "code_hash": "d8e0fe2a7630",
+  "drift_files": [],
+  "command": "bash temp/speed_tools/phase_run.sh c runs/t20_base_s0/ckpt_00006000.pt",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "timeout",
+  "exit": 124,
+  "final": false
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": [],
+  "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag "
+ }
+}

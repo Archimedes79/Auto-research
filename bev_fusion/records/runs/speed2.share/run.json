@@ -1,0 +1,50 @@
+{
+ "id": "speed2.share",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/train/run_ar.sh temp/compose/speed2_share.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1336,
+ "created": "2026-11-04T18:49:50",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-04T18:50:45",
+ "code_hash": "037adcd18b30",
+ "commit": "25dda28484",
+ "tag": "bf/speed2.share",
+ "git_note": "",
+ "pid": 2105,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "autoresearch/tools/run.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 335,
+ "attempts": 1,
+ "ended": "2026-11-04T18:56:48",
+ "last_lines": [
+  "step 20: total 21.0842 lr 2.84e-04 grad 117.54",
+  "step 25: total 28.6508 lr 2.62e-04 grad 178.52",
+  "step 30: total 39.6024 lr 2.32e-04 grad 100.36",
+  "step 35: total 28.9923 lr 1.96e-04 grad 108.25",
+  "step 40: total 33.2625 lr 1.58e-04 grad 215.18",
+  "step 45: total 34.6478 lr 1.19e-04 grad 311.70",
+  "step 50: total 36.9403 lr 8.21e-05 grad 272.10",
+  "step 55: total 33.9540 lr 4.99e-05 grad 540.56",
+  "step 60: total 27.5925 lr 2.45e-05 grad 385.43",
+  "step 65: total 29.2690 lr 7.63e-06 grad 308.88",
+  "step 70: total 25.5435 lr 5.05e-07 grad 89.38",
+  "speed2_share exit 0 18:56:20"
+ ]
+}

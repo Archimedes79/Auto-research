@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "made": "2026-11-05T22:43:26",
+ "gt": {
+  "key": "unknown",
+  "signature": "unknown",
+  "version": "unknown"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "unknown",
+  "manifest_hash": "f615a7387e73",
+  "scenes": null,
+  "samples": null
+ },
+ "subject": {
+  "run": "t22.A2_s0",
+  "ckpt": "ckpt_00006108.pt",
+  "ckpt_hash": "c4c0b1ada280p",
+  "config_hash": "b2405181dd2c",
+  "step": 6108
+ },
+ "environment": {
+  "python": "3.10.12",
+  "torch": "unknown",
+  "cuda": "unknown",
+  "numpy": "unknown",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "run record (the trainer's interpreter was not found)"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "bf/t22.A2_s0",
+  "commit": "f5efbe9a7f",
+  "code_hash": "7b3dcb5bd10e",
+  "drift_files": [],
+  "command": "bash -c ~/miniconda3/envs/gcar/bin/python -u training/distill_student.py --name t22_A2_s0 --split large --epochs 6 --batch 16 --lr 1e-3 --backbone-mult 0.1 --workers 4 >> runs/t22_A2_s0.log 2>&1",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": [],
+  "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag bf/t22.A2_s0"
+ }
+}
