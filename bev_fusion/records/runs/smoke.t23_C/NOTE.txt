@@ -1,0 +1,9 @@
+smoke.t23_C (diagnostic, no card, never feeds a verdict) - note of the BEV system chat, 2026-11-08 03:55
+
+run.json says "running" / the heartbeat is stale because the launcher (run.py, pid 111600) was ended at about 03:43 when the BEV system chat stopped its own wrapper script
+(chain4.sh) so that the real round (t23.C_s0) would not follow the smoke at once: the lane chat asked for the GPU (E279, lane first, D57 / D61).
+The training process itself was not touched and ended by itself at 03:53 after 20 steps (runs/smoke_t23_C/: log.jsonl, ckpt_00000020.pt, train.log).
+What the smoke shows (read by hand, temp/lane_tests/check_step1.py): all 20 steps finite; step-1 row equal to runs/t21_ctl_s0 in every term the line BCE cannot touch
+(group.areas, group.objects, group.motion, objhead.vel, objhead.mov, motion, radar_aux, within 1e-4 relative); group.lines 3.226 against 0.888 of the control (the BCE term is in the main head);
+grad norm 19.4 (step 1; control 17.9), no blow-up. Per-term values (sem.line_bce.*) are not in log.jsonl, only the groups.
+The state of this record is not "ok" and no done flag exists; nothing depends on it.
