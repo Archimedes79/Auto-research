@@ -1,0 +1,42 @@
+{
+ "id": "E278.qp_s1",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_py14.sh qgraph_run_eval.py score --run e273_p_s1_p6 --seed 1 --exp e278 --readouts plain@0.5 close:1.5@0.5",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 107325,
+ "created": "2026-11-08T03:16:07",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-08T03:16:15",
+ "code_hash": "9acbaea1dd43",
+ "commit": "5f1f233b8c",
+ "tag": "lcr/E278.qp_s1",
+ "git_note": "",
+ "pid": 107406,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/temp/e276/check_u2.sh",
+   "bev_fusion_lane_center/temp/e276/run_views.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 596,
+ "attempts": 1,
+ "ended": "2026-11-08T03:26:21",
+ "last_lines": [
+  "=== attempt 2026-11-08T03:16:16: bash tools/env/_py14.sh qgraph_run_eval.py score --run e273_p_s1_p6 --seed 1 --exp e278 --readouts plain@0.5 close:1.5@0.5",
+  "_py14.sh: evaluation/qgraph_run_eval.py",
+  "e273_p_s1_p6 close1.5_t0.5: 149345 nodes delivered, 134872 after the step (9.7 % dropped), 1.161 ms per frame"
+ ]
+}

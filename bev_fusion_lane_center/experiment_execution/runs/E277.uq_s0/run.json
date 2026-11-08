@@ -1,0 +1,42 @@
+{
+ "id": "E277.uq_s0",
+ "hypothesis": "E277: the E273 lane head trained with the close-node suppression as a soft step in its forward path (radius 1.5 m, smoothness 0.1 m, 3 passes) delivers at e >= 0.5, without a hard step, a graph as good as the baseline with the hard step of E275: topo F1 and junction F1 above the baseline read out as before, topo F1 not below the hard step by more than 0.01, the assignment guards held",
+ "prediction": "topo F1 0.62 +- 0.01 on both seeds (baseline + 0.025, hard step 0.626 / 0.625); junction F1 0.22 or more; lanes found 0.60 - 0.64; vertices per 100 m 18 - 22; exact-map assignment p-g >= -0.01",
+ "rule": "E277 card section 0: verdict277 = verdict275 (soft step against the baseline: topo F1 gain > +0.02 and junction F1 gain > +0.03 on both seeds, guards held: lane_acc_exact p-g >= -0.01, lane_acc_err p-g >= +0.03, F1@1.0 >= c - 0.01, lanes_found >= c - 0.03) and the topo F1 not below the hard step by more than 0.01 on either seed: KEEP (replaces the hard step) / TIE (helps, hard step stays) / CUT / INCONCLUSIVE; by hand, VAL 873, final checkpoint, in-sample, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh qgraph_run_eval.py score --run e277_u_s0 --seed 0 --exp e277 --readouts plain@0.5 close:1.5@0.5",
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 108238,
+ "created": "2026-11-08T03:21:08",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-08T03:21:17",
+ "code_hash": "9acbaea1dd43",
+ "commit": "8c0371e6f7",
+ "tag": "lcr/E277.uq_s0",
+ "git_note": "",
+ "pid": 108319,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/temp/e276/check_u2.sh",
+   "bev_fusion_lane_center/temp/e276/run_views.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 565,
+ "attempts": 1,
+ "ended": "2026-11-08T03:30:49",
+ "last_lines": [
+  "=== attempt 2026-11-08T03:21:17: bash tools/env/_py14.sh qgraph_run_eval.py score --run e277_u_s0 --seed 0 --exp e277 --readouts plain@0.5 close:1.5@0.5",
+  "_py14.sh: evaluation/qgraph_run_eval.py",
+  "e277_u_s0 close1.5_t0.5: 135451 nodes delivered, 135450 after the step (0.0 % dropped), 1.149 ms per frame"
+ ]
+}
