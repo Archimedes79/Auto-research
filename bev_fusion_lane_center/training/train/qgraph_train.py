@@ -3,6 +3,8 @@
     wsl bash tools/env/_py14.sh qgraph_train.py --name e273_p_s0 --seed 0 [--phases 2 3 4 5 6 7] [--bs 4] [--smoke]
 
 E274 switches (`--ev-w`, `--node-w-evt`, `--node-w-inter`, `--long-match`, see `qgraph.CFG`) default to the E273 loss; `--gate-phases` lets only the named phases stop the script.
+E282 switches (`--node-loss zone --zone-bias 0.05`, with `--sparse EPS CHORD`, phase 3 only, no tier switches; default `e273` = the per-cell loss): the zone-matching existence loss `qgraph.zone_targets` on the
+sparse node target (zones from `qzones`); the node gate of phase 3 is for per-cell targets, so use `--gate-phases` with an empty list and score with the zone metrics (`evaluation/zone_metrics.py`).
 Phase 2 pixel maps (the 1 m branch starts from the E271 head `runs/e271_a_s<seed>/model.pt`), 3 nodes (pixels frozen), 4 links + Hermite scales (pixels, nodes frozen), 5 sections (the node
 head's s output; links frozen), 6 map encoder + assignment (rest frozen), 7 everything jointly at a lower learning rate. Every phase is a run of its own (`runs/<name>_p<k>`, model.pt, .done)
 and the next one starts from the previous model; after every phase the gate of the card (kill criterion) is read on 150 VAL frames: a failed gate stops the script with exit code 3 (the run
@@ -51,14 +53,22 @@ def main():
     ap.add_argument("--neg-w", type=float, nargs=4, default=None, help="E276: factor of the negatives of the existence loss by zone: tier 1, tier 2, tier 3, no lane")
     ap.add_argument("--link-tier-w", type=float, nargs=3, default=None, help="E276: factor of the link losses by the tier of the source node")
     ap.add_argument("--sparse", type=float, nargs=2, default=None, metavar=("EPS", "CHORD"), help="E276: the sparse node target: deviation (m) and longest chord (m)")
+    ap.add_argument("--node-loss", choices=("e273", "zone"), default="e273", help="E282: e273 = the per-cell existence loss; zone = the zone-matching loss on the sparse target (needs --sparse; the tier switches must be off; the node gate of phase 3 is for per-cell targets, use --gate-phases with an empty list and score with the zone metrics)")
+    ap.add_argument("--zone-bias", type=float, default=0.05, help="E282: the logit bonus of the cell that holds the sparse GT node when the winner of a zone is chosen (a tie-break)")
     ap.add_argument("--soft-nms", type=float, nargs=3, default=None, metavar=("RADIUS", "TAU", "PASSES"), help="E277: the close-node suppression as a soft step after the node head (radius m, smoothness m, passes)")
     ap.add_argument("--resume-from", default=None, help="a model.pt of an earlier phase to start from (the phases before it are skipped by listing only the later ones)")
     a = ap.parse_args()
     T.seed_all(a.seed)
     QG.CFG.update(ev_w=a.ev_w, node_w_evt=a.node_w_evt, node_w_inter=a.node_w_inter, long_match=a.long_match)               # E274 switches (defaults = E273)
     QG.CFG.update(tier_w=a.tier_w, vis_w=a.vis_w, neg_w=a.neg_w, link_tier_w=a.link_tier_w)                                 # E276 switches (defaults = E273)
+    QG.CFG.update(node_loss=a.node_loss, zone_bias=a.zone_bias)                                                            # E282 switches (default = E273)
     if a.sparse:
         LD.QData.DEFAULT_SPARSE = tuple(a.sparse)
+    if a.node_loss == "zone":
+        assert a.sparse, "--node-loss zone needs --sparse EPS CHORD"
+        assert list(a.phases) == [3], "--node-loss zone is for phase 3 only (E282 stage 1): the later phases train the links on the GT cells as forced candidates, which a free placement breaks"
+        assert not (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0), "--node-loss zone runs without the E276 tier switches"
+        LD.QData.DEFAULT_ZONE = True
     if (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0):
         from autogt import lane_gt                                                                                          # the tier switches need the l4 labels: refuse an l3 store
         assert lane_gt.version_of(lane_gt.signature()) not in (None, "l1", "l2", "l3"), "the tier switches need the lane GT l4 (this source is " + str(lane_gt.version_of(lane_gt.signature())) + ")"

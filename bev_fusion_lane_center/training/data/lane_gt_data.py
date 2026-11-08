@@ -25,8 +25,10 @@ for sub in ("training/data", "training/grid", ".."):
 import map_sim as MS  # noqa: E402
 import p16_data as PD  # noqa: E402
 import qtargets as QT  # noqa: E402
+import qzones as QZ  # noqa: E402
 
 BOX = 48.0
+ZONE_NAMES = ("zone", "zone_kind", "zone_gt", "exists_dense", "offset_dense", "dirv_dense")          # E282: the maps of `qzones.zone_maps` (only with zone=True)
 
 
 def lane_store():
@@ -36,12 +38,15 @@ def lane_store():
 
 class QData(torch.utils.data.Dataset):
     DEFAULT_SPARSE = None                                          # E276: set by `qgraph_train.py --sparse EPS CHORD` so that the train loader AND the gates (they build their own QData) see the same targets
+    DEFAULT_ZONE = False                                           # E282: set by `qgraph_train.py --node-loss zone`: the batch also carries the zone maps (needs a sparse target)
 
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None):
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None):
         self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
         sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
         self.sparse = None if sparse is None else (float(sparse[0]), float(sparse[1]))                   # E276: the sparse node target (eps, max chord) in metres, None = a node in every 2 m cell
+        self.zone = QData.DEFAULT_ZONE if zone is None else bool(zone)
+        assert not self.zone or self.sparse is not None, "the zone maps need the sparse node target"
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{PD.D}/feats/{part}_tokens.json"))
         self.lg, d = lane_store()
@@ -76,6 +81,8 @@ class QData(torch.utils.data.Dataset):
         out = dict(x=torch.from_numpy(x), row=row, k=k, token=token, lk=torch.from_numpy(lk), lk_long=torch.from_numpy(lk_long), lk_scale=torch.from_numpy(lk_scale),
                    piece_map=MS.piece_targets(g, mp), piece_road=MS.road_targets(g, mp), mp=mp, n_pieces=len(g["pieces"]))
         out.update({n: torch.from_numpy(v) for n, v in t.items()})
+        if self.zone:                                                                                  # E282: zones of the sparse target + the DENSE offset / direction of every cell's node
+            out.update({n: torch.from_numpy(np.ascontiguousarray(v)) for n, v in QZ.zone_maps(QZ.zones(g, self.sparse)).items()})
         if self.pixels:
             import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
@@ -88,7 +95,7 @@ def collate(b):
     out = dict(row=torch.tensor([o["row"] for o in b]), k=torch.tensor([o["k"] for o in b]), token=[o["token"] for o in b])
     for n in ("x", "exists", "flags", "offset", "dirv", "sstart", "piece", "uout", "uin", "tier", "vis", "ztier"):        # tier / vis / ztier: E276 (l4 labels, zeros / ones without them)
         out[n] = torch.stack([o[n] for o in b])
-    for n in ("lines_mask", "lines_dist", "events1", "road2"):
+    for n in ("lines_mask", "lines_dist", "events1", "road2") + ZONE_NAMES:
         if n in b[0]:
             out[n] = torch.stack([o[n] for o in b])
     if "g05" in b[0]:
@@ -124,8 +131,8 @@ def collate(b):
     return out
 
 
-def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None):
-    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse)
+def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None, zone=None):
+    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse, zone=zone)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle,
                                            persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 

@@ -64,5 +64,8 @@ run "E276 tier / vis / sparse targets (toy lane, 40 real frames)" grid/test_tier
 run "E276 tier loss switches (defaults = the frozen E273 loss)" grid/test_tier_loss.py
 run "E277 soft close-node step (hard limit on 183 random frames, chain, ties, gradients, model switch, load_model)" grid/test_soft_nms.py
 run "E277 verdict rule (fake cards)" test_verdict277.py
+run "E282 zones of the sparse node target, zone-matching loss (toy lane, winner rules, E273 loss bit for bit, 6 real frames)" grid/test_zones.py
+run "E282 zone metrics (hand cases, position membership, additivity, bootstrap, matched threshold, density against the scorer)" test_zone_metrics.py
+run "E282 pilot runner (gate outcomes on fake results, control matched density, targets per arm, run names)" train/test_qnode_pilot.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
 exit $fail

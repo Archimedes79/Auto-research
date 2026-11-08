@@ -33,7 +33,9 @@ W = dict(pix=1.0, node=1.0, link=1.0, sec=1.0, asg=1.0)
 # section start, long-link endpoints) at a GT node of tier 1 / 2 / 3; vis_w = extra factor for GT nodes that no camera sees (0 = not demanded); neg_w = (z1, z2, z3, z0) factor of the NEGATIVES of the
 # existence loss by the zone of the cell (the lowest tier of the GT lane points near it, z0 = no lane: the cost of a false node near the own lane); link_tier_w = (w1, w2, w3) factor of the link losses
 # by the tier of the source node (and vis_w for invisible ones)
-CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0, tier_w=None, vis_w=1.0, neg_w=None, link_tier_w=None)
+# E282 switches (defaults = the E273 loss): node_loss = "zone" is the zone-matching existence loss on the sparse target (`zone_targets`; the batch needs the maps of `qzones.zone_maps`), zone_bias = the
+# logit bonus of the cell that holds the sparse GT node when the winner of a zone is chosen (a tie-break only: 0.05)
+CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0, tier_w=None, vis_w=1.0, neg_w=None, link_tier_w=None, node_loss="e273", zone_bias=0.05)
 
 
 class QGraph(torch.nn.Module):
@@ -155,9 +157,46 @@ def pixel_loss(P, batch):
     return l1 + CFG["ev_w"] * l_ev + l_ln + l_rd, info
 
 
+def zone_targets(e_logit, batch, bias):
+    """E282 zone-matching: per zone of the sparse target (batch `zone`, (B, 50, 50) int, -1 = none) the cell with the largest `e_logit + bias * zone_gt` is the positive (an index choice WITHOUT gradient, like the
+    index choices of `qlinks.py`); exact ties go to the lowest flat cell index. -> (exists_m (B, 50, 50) float with one 1 per zone, info dict of tensors: n_zones, win_off_gt = the share of FREE zones whose winner
+    is not the cell of the sparse GT node)"""
+    dev = e_logit.device
+    zone = batch["zone"].to(dev).long()
+    gt = batch["zone_gt"].to(dev).float()
+    B, H, W = zone.shape
+    flat = zone.reshape(-1)
+    valid = flat >= 0
+    ex = torch.zeros(B * H * W, device=dev)
+    if not bool(valid.any()):
+        return ex.view(B, H, W), dict(n_zones=torch.zeros((), device=dev), win_off_gt=torch.zeros((), device=dev))
+    zmax = int(flat.max().item()) + 1
+    seg = (torch.arange(B, device=dev)[:, None, None] * zmax + zone).reshape(-1)[valid]
+    score = (e_logit.detach().float() + bias * gt).reshape(-1)[valid]
+    idx = torch.arange(B * H * W, device=dev)[valid]
+    nseg = B * zmax
+    mx = torch.full((nseg,), float("-inf"), device=dev).scatter_reduce(0, seg, score, "amax", include_self=True)
+    big = B * H * W
+    cand = torch.where(score >= mx[seg], idx, torch.full_like(idx, big))
+    win = torch.full((nseg,), big, device=dev, dtype=torch.long).scatter_reduce(0, seg, cand, "amin", include_self=True)
+    win = win[win < big]
+    ex[win] = 1.0
+    free = batch["zone_kind"].to(dev).reshape(-1)[win] == 1
+    on_gt = gt.reshape(-1)[win] > 0.5
+    off_gt = (~on_gt[free]).float().mean() if bool(free.any()) else torch.zeros((), device=dev)
+    return ex.view(B, H, W), dict(n_zones=torch.tensor(float(win.numel()), device=dev), win_off_gt=off_gt)
+
+
 def node_loss(no, batch):
     dev = no["e"].device
-    ex = batch["exists"].to(dev).float()
+    zinfo = None
+    if CFG["node_loss"] == "zone":                                                             # E282: the winners of the zones are the positives; offset and direction are those of the winner's DENSE GT node
+        assert CFG["tier_w"] is None and CFG["vis_w"] == 1.0 and CFG["neg_w"] is None, "the zone loss runs without the E276 tier switches"
+        ex, zinfo = zone_targets(no["e"], batch, CFG["zone_bias"])
+        off_key, dir_key = "offset_dense", "dirv_dense"
+    else:
+        ex = batch["exists"].to(dev).float()
+        off_key, dir_key = "offset", "dirv"
     m = ex > 0.5
     npos = ex.sum().clamp_min(1.0)
     info = {}
@@ -177,13 +216,15 @@ def node_loss(no, batch):
     l_e = focal_bce(no["e"].float(), ex, norm=npos, pos_w=wmap, neg_w=negw)
     fl = batch["flags"].to(dev).float()
     l_f = (F.binary_cross_entropy_with_logits(no["flags"].float(), fl, reduction="none", pos_weight=torch.tensor(6.0, device=dev)) * m[:, None]).sum() / npos
-    off_t = batch["offset"].to(dev).float()
+    off_t = batch[off_key].to(dev).float()
     l_o = ((no["off"].float() - off_t).abs().sum(1) * m).sum() / npos
     dr = QN.unit(no["dir_raw"].float())
-    l_d = ((1 - (dr * batch["dirv"].to(dev).float()).sum(1)) * m).sum() / npos
+    l_d = ((1 - (dr * batch[dir_key].to(dev).float()).sum(1)) * m).sum() / npos
     l_s = (F.binary_cross_entropy_with_logits(no["s"].float(), batch["sstart"].to(dev).float(), reduction="none", pos_weight=torch.tensor(3.0, device=dev)) * m).sum() / npos
     l_u = sum((F.binary_cross_entropy_with_logits(no[k].float(), batch[k].to(dev).float(), reduction="none", pos_weight=torch.tensor(8.0, device=dev)) * m).sum() / npos for k in ("uout", "uin"))
     info.update(e=float(l_e), flags=float(l_f), off=float(l_o), dir=float(l_d), s=float(l_s), u=float(l_u))
+    if zinfo is not None:
+        info.update(zones=float(zinfo["n_zones"]), win_off_gt=float(zinfo["win_off_gt"]))
     return l_e + 0.5 * l_f + l_o + 0.5 * l_d + 0.5 * l_s + 2.0 * l_u, info
 
 
