@@ -91,7 +91,9 @@ class RGBFeatures(nn.Module):
 
 
 class LaneBranch(nn.Module):
-    def __init__(self, grid, depth_centres, kind="res4", c_mid=32, c_lane=16, c_out=64, oversample=4, pretrained=DUALBEV_CKPT):
+    def __init__(self, grid, depth_centres, kind="res4", c_mid=32, c_lane=16, c_out=64, oversample=4, pretrained=DUALBEV_CKPT, use_depth=True):
+        """use_depth: True = lift PD (the stride-4 features weighted by the main branch's depth probabilities, t7 / t20); False = lift P, the same projection table
+        without the weight (t24): a ground cell takes the feature of the pixel it projects to, whatever the predicted depth there. No tensor is added or changed."""
         super().__init__()
         if kind == "res4":
             self.features = Res4Features(pretrained)
@@ -101,7 +103,8 @@ class LaneBranch(nn.Module):
             raise ValueError(f"lane branch kind {kind!r}")
         self.kind = kind
         self.reduce = nn.Sequential(*_cbr(self.features.out_channels, c_mid, 1), nn.Conv2d(c_mid, c_mid, 3, padding=1))
-        self.lift = LiftPD(grid, depth_centres, oversample=oversample)
+        self.use_depth = bool(use_depth)                          # False = lift P: pull without the depth weight (t24); the tensors are the same either way
+        self.lift = LiftPD(grid, depth_centres, use_depth=self.use_depth, oversample=oversample)
         nz = len(grid.z_levels)
         self.collapse = nn.Sequential(*_cbr(nz * c_mid, c_lane, 1))
         self.mix = nn.Conv2d(c_lane, c_out, 1)
