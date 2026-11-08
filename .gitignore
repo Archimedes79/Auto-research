@@ -180,3 +180,8 @@ status.json
 # E275: the result page in git (numbers per seed, tags, rebuild commands); the 80 pictures of the dropped nodes are not
 !/bev_fusion_lane_center/results/E275/
 /bev_fusion_lane_center/results/E275/figures/
+# E276 / E277: the result pages in git; pictures and the report page are not
+!/bev_fusion_lane_center/results/E276/
+/bev_fusion_lane_center/results/E276/figures/
+!/bev_fusion_lane_center/results/E277/
+/bev_fusion_lane_center/results/E277/figures*/
