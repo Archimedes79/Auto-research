@@ -1,14 +1,16 @@
-# HANDOVER - 2026-11-08 03:55
+# HANDOVER - 2026-11-08 06:30
 
-New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko reads little: plain terms (B = baseline only; tiers 1 / 2 / 3). **D57 + D61: this (Spurmitte lane) chat has priority.** GPU only in his windows (nights 22-07, Mon-Fri 08:30-17:30). **D60: Mirko is away, work alone, ask nothing; target = ready Sunday morning ~07:00.** No TEST, push, mail, shutdown. Do not edit `autogt/` (GT chat owns it).
+New chat: start in the repository folder, say "Read HANDOVER.md and continue". Rewrite at every milestone (<= 3 KB). Mirko reads little: plain terms (B = baseline only; tiers 1 / 2 / 3). **D57 + D61: this (Spurmitte lane) chat has priority.** GPU only in his windows (nights 22-07, Mon-Fri 08:30-17:30). **D60: Mirko is away, work alone; target = ready Sunday morning.** No TEST, push, mail, shutdown. Do not edit `autogt/` (GT chat owns it).
 
-## Results of the night (cards experiments/E275_* .. E279_*; pages results/E275 .. E277/README.md)
-- **E275 KEEP** hard close-node step (topo F1 +0.03, junction F1 +0.13, vertices per 100 m 28.9 -> 19.3; a rule step).
-- **E276** arm t (tier loss) **TIE**, not adopted; arm s (sparse nodes) **failed its gate** (probability smears). CPU analyses of the eight notes in card 7a: long links persist only 64 - 65 % between frames, precision 0.17 - 0.19, still needed (-0.12 topo F1 without them); assignment fine; link thresholds a trade.
-- **E277** the soft step trained inside the head (commit 66cc4084): reproduces the hard step (topo F1 0.621 / 0.624, junction F1 0.263 / 0.268, vertices 19) with no rule step left, but **CUT by the written guards** (seed 0: lanes found -0.039, F1@1.0 -0.015). Open for Mirko: are the hard-step guards right for a trained step.
-- **E278** (diagnostic): the joint phase 7 raises topo F1 +0.03 - 0.05, lowers junction F1 under the step; stays.
-- **E279 running** (card `experiments/E279_soft-close-node-step-r125/`): the same soft step at radius 1.25 m, same rule (`verdict277 --exp-var e279`, automatic). Jobs `E279.w_s0` (started 03:42), `w_s1` (waits for GPU memory < 8.5 GB: the BEV chat's smoke job runs), then `wq_s*` scoring; done ~06:30. BEV chat told (SendMessage) to hold its round until `temp/e276/CHAIN_DONE` exists again.
+## Results of the night (cards experiments/E275_* .. E279_*; pages results/E275 .. E279/README.md; report page results/E276.report/index.html, artifact https://claude.ai/artifact/Vdey4Vj4D6CD942ymy1qwB v7)
+- **E275 KEEP** hard close-node step (topo F1 +0.03, junction F1 +0.13, vertices 28.9 -> 19.3; a rule step).
+- **E276** arm t (tier loss) **TIE**, not adopted; arm s (sparse nodes) **failed its gate**. CPU analyses of the eight notes (card 7a): long links persist only 64 - 65 % between frames, precision 0.17 - 0.19, still needed; assignment fine; link thresholds a trade.
+- **E277** soft step trained in the head, radius 1.5 m: reproduces the hard step but **CUT by the guards** (seed 0 lanes found -0.039). **E279 radius 1.25 m: KEEP** (verdict277 06:06): topo F1 0.618 / 0.620, junction F1 0.223 / 0.218, lanes found 0.618 / 0.632, vertices 21; all guards held, thin margins on seed 0 (topo gain +0.0210 vs band 0.02). The thinning is learned by the network (D55 for this step).
+- **E278** diagnostic: joint phase 7 raises topo F1, lowers junction F1; stays.
+- **Open for Mirko (no D-id opened):** adopt the 1.25 m soft step as the delivered thinning in place of the hard read-out (changes baseline B, D58); guard values for a trained step.
 
-## The scheduler (`temp/e276/launch_chain.sh`, log `chain.log`, state `bash temp/e276/status.sh`; restart `bash temp/e276/restart_chain.sh`: keeps no state besides STARTED_* flags; edit its scripts only with it killed)
-## When E279 is done (morning)
-Verdict in `temp/e276/verdicts.log`; ledger notes (`temp/e276/ledger_notes_night3.sh` pattern), E279 card section 7, `results/E279/README.md` (+ `.gitignore` line), rebuild the report (`bash temp/e276/run_report.sh`; page `results/E276.report/index.html`), pictures `results/E277/figures/` (`temp/e276/run_views.sh`), artifact update (https://claude.ai/artifact/Vdey4Vj4D6CD942ymy1qwB: load artifact-design first), message BEV chat + GT chat (l5 merge may follow CHAIN_DONE), memory note. Nothing is pushed.
+## State of the machine
+Lane chain done: `temp/e276/CHAIN_DONE` exists (BEV chat's chain5 holds on it; told). GPU free; l4 lane GT store may be merged by the GT chat (no GT chat session was listed). Scheduler exited; memory watchdog stopped. WSL page-cache fragmentation killed two E279 runs at 04:18 / 04:32 (ENOMEM in DataLoader workers: `temp/e276/reclaim.py` frees it, resume from ckpt works).
+
+## If continuing
+Next levers (card 7a / E277 section 6): memory for long links (hold while not contradicted), matching-based node loss (sparse target), a third seed (needs phase-2 checkpoint, ~65 min). Rebuild the report: `wsl bash temp/e276/run_report.sh`; pictures: `temp/e276/run_views.sh`. Nothing is pushed; scratch tag `lcr/e276-scratch-2` (refresh with `temp/e276/tag_scratch2.sh` under a new name).
