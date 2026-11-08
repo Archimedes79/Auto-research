@@ -1,3 +1,4 @@
 release,front,lane,date,what_changed
 v10,v9,l3,2026-11-04,"the suite as one number: the standard nuScenes GT (front v9, the store c643a7539d, the same GT as v8) and the lane GT (l3: lane graph with ids, events, neighbours, roads, lines, road and intersection polygons) are made by ONE command, python -m autogt generate, into two stores of one release; the front part is unchanged"
 v11,v9,l4,2026-11-07,"the lane GT l4 (relevance tiers 1 / 2 / 3 per point, camera visibility, the driven ego path; D59 / D60 of the lane project) on the unchanged front GT v9: the geometry of the lane graph is that of l3, the new fields are labels"
+v12,v9,l5,2026-11-07,"the lane GT for both systems: l5 adds the rig bev_fusion (BEV Fusion: ego frame, the window of its BEV grid, front-camera visibility) next to the rig lane_center (Spurmitte: l4 unchanged, its store is the l4 store); the front GT v9 is unchanged"

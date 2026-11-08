@@ -347,14 +347,15 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx['commit']}"
               f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx.get('sets_complete', [])})\n"
               f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
-    lane_result = None
+    lane_result = lane_rigs = None
     if lane and stride == 1:
-        from .lane_gt import generate as generate_lane
-        lane_result = generate_lane(dataroot, out=os.path.join(out, "lane"), version=version, scenes=names, workers=workers, verbose=verbose)
+        from .lane_gt import RIGS, generate as generate_lane
+        lane_rigs = {rig: generate_lane(dataroot, out=os.path.join(out, "lane"), version=version, scenes=names, workers=workers, verbose=verbose, rig=rig) for rig in RIGS}
+        lane_result = lane_rigs["lane_center"]
     elif lane and verbose:
         print("the lane GT is made for every keyframe: skipped with stride", stride)
     return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
-            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result}
+            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result, "lane_rigs": lane_rigs}
 
 
 def _print_versions():
@@ -373,13 +374,14 @@ def _print_versions():
     here = versions.current_release()
     print("lane GT (own versions, autogt/lane_versions.csv):")
     for r in lane_gt.table():
-        print(f"  {r['version']:3s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == lane_gt.signature() else '       '}  "
-              f"{'stored    ' if os.path.isdir(os.path.join(lane_gt.DATA, r['signature'])) else 'not stored'}  {r['what_changed'][:70]}")
+        same = f" (the GT of {r['same_gt_as']})" if r["same_gt_as"] else ""
+        print(f"  {r['version']:3s} {r['rig']:11s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == lane_gt.code_signature(rig=r['rig']) else '       '}  "
+              f"{'stored    ' if os.path.isdir(os.path.join(lane_gt.DATA, lane_gt.store_of(r['signature']))) else 'not stored'}  {r['what_changed'][:60]}{same}")
     print("releases (the suite as one number, autogt/releases.csv):")
     for r in versions.releases():
         print(f"  {r['release']:5s} front {r['front']:4s} + lane {r['lane']:3s}  {r['date']}  {'CURRENT' if r['release'] == here else '       '}  {r['what_changed'][:80]}")
     if here is None:
-        print(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.signature())}) has no row in autogt/releases.csv: add one")
+        print(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.code_signature())}) has no row in autogt/releases.csv: add one")
 
 
 def _print_sets():
@@ -479,6 +481,7 @@ def _parser():
     gl.add_argument("--set", dest="set_name", default=None, help="small (the 10 sequences of mini) or full (all of trainval)")
     gl.add_argument("--scenes", nargs="*")
     gl.add_argument("--workers", type=int, default=1)
+    gl.add_argument("--rig", default="all", choices=["all", "lane_center", "bev_fusion"], help="the system the lane GT is made for (lane_gt.RIGS): Spurmitte (lane_center), BEV Fusion (bev_fusion), or both")
     lgp = sub.add_parser("lanegraph", help="picture of the lane graph of a keyframe: the six cameras and the top view")
     lgp.add_argument("out", help="the png to write")
     lgp.add_argument("pick", help="scene-0061:8 (the scene's 9th keyframe)")
@@ -587,12 +590,13 @@ def _cmd_lanegraph(a):
 
 
 def _cmd_generate_lane(a):
-    from .lane_gt import generate
+    from .lane_gt import RIGS, generate
     from .light_nusc import ensure_cache
     version = a.version or detect_version(a.dataroot)
     if "trainval" in version:
         ensure_cache(a.dataroot, version)
-    generate(a.dataroot, a.out, version, a.scenes, a.set_name, a.workers)
+    for rig in (list(RIGS) if a.rig == "all" else [a.rig]):
+        generate(a.dataroot, a.out, version, a.scenes, a.set_name, a.workers, rig=rig)
 
 
 def _cmd_masks(a):

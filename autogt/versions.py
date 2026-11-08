@@ -76,7 +76,7 @@ def current_release():
     """the release of THIS source: its front version (default options) and its lane version"""
     from . import lane_gt
     from .suite import code_signature
-    return release_of(version_of(code_signature()), lane_gt.version_of(lane_gt.signature()))      # the version of the code (v9), not of its store (v8)
+    return release_of(version_of(code_signature()), lane_gt.version_of(lane_gt.code_signature()))      # the version of the code (v9 / l5), not of its store (v8 / l4)
 
 
 def row_of(version):

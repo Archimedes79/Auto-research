@@ -18,7 +18,7 @@ default, x right, y forward), cut to the square window; a line is {"pts" (float3
 """
 import numpy as np
 
-from .lane_graph import clip_square, dirs_to_frame, to_frame
+from .lane_graph import clip_rect, dirs_to_frame, reach, to_frame, window_of
 
 DEFAULTS = dict(boundary_layers=("drivable_area",), corner_deg=30.0, corner_base=2.0, simplify=0.05)
 CHUNK = 200                                                  # vertices per chunk of a long outline (a keyframe takes the chunks near the ego)
@@ -90,22 +90,23 @@ def polygon_chunks(items, tile=100.0, min_area=0.0):
     return chunks
 
 
-def crop_areas(chunks, T_e2g, half=50.0, frame="lane", margin=25.0, merge=False, min_area=0.5):
+def crop_areas(chunks, T_e2g, half=50.0, frame="lane", margin=25.0, merge=False, min_area=0.5, window=None):
     """the polygons of `chunks` cut to the window of one keyframe: [{"id", "exterior" (n, 2) float32 counter-clockwise, "holes" [(m, 2)] clockwise, "area"}];
-    `merge`: the pieces that touch (the tiles of a big polygon) are united first"""
+    `merge`: the pieces that touch (the tiles of a big polygon) are united first; the window is the square |x|, |y| <= half or the rectangle `window` = (x0, x1, y0, y1)"""
     import shapely
     from shapely import affinity
     from shapely.geometry.polygon import orient
     t, Re = T_e2g[:2, 3], T_e2g[:2, :2]
     A = Re if frame == "ego" else Re @ np.array([[0.0, 1.0], [-1.0, 0.0]])              # frame point = (global point - t) @ A
     mat = [A[0, 0], A[1, 0], A[0, 1], A[1, 1], -(t[0] * A[0, 0] + t[1] * A[1, 0]), -(t[0] * A[0, 1] + t[1] * A[1, 1])]
-    r = half * np.sqrt(2.0) + margin
+    W = window_of(half, window)
+    r = reach(half, window, margin)
     cut = {}
     for c in chunks:
         b = c["bbox"]
         if b[2] < t[0] - r or b[0] > t[0] + r or b[3] < t[1] - r or b[1] > t[1] + r:
             continue
-        g = shapely.clip_by_rect(affinity.affine_transform(c["poly"], mat), -half, -half, half, half)
+        g = shapely.clip_by_rect(affinity.affine_transform(c["poly"], mat), W[0], W[2], W[1], W[3])           # shapely: xmin, ymin, xmax, ymax
         if not g.is_empty:
             cut.setdefault(c["id"], []).append(g)
     out = []
@@ -156,16 +157,17 @@ def find_corners(P, deg=30.0, base=2.0):
     return out
 
 
-def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=2.0, margin=25.0):
-    """the lines of one keyframe window (see the module docstring); `lg` = build_line_graph(...)"""
+def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=2.0, margin=25.0, window=None):
+    """the lines of one keyframe window (see the module docstring); `lg` = build_line_graph(...); the window is the square |x|, |y| <= half or the rectangle `window`"""
     t = T_e2g[:2, 3]
-    r = half * np.sqrt(2.0) + margin
+    W = window_of(half, window)
+    r = reach(half, window, margin)
     found = {"lane_divider": [], "road_divider": [], "boundary": []}
     for c in lg["chunks"]:
         b = c["bbox"]
         if b[2] < t[0] - r or b[0] > t[0] + r or b[3] < t[1] - r or b[1] > t[1] + r:
             continue
-        for pts, cut0, cut1, first, last in clip_square(to_frame(c["pts"], T_e2g, frame), half):
+        for pts, cut0, cut1, first, last in clip_rect(to_frame(c["pts"], T_e2g, frame), *W):
             at_start, at_end = first == 0 and not cut0, last == len(c["pts"]) - 2 and not cut1      # the part runs up to the chunk's first / last vertex
             found[c["kind"]].append(dict(line=c["line"], chunk_first=c["first"], closed=c["closed"], pts=pts, joint_start=at_start, joint_end=at_end,
                                          start_open=bool(cut0) or (at_start and not c["first"]),      # the line goes on in the chunk before / after

@@ -5,7 +5,7 @@ Every point of every lane piece of a keyframe graph gets two labels, stored next
             only, never an input of a network). Where the car stops or the sequence ends before `min_ahead` m, the path goes on along the map (the straightest successor).
         2 = the lanes directly beside a tier-1 piece (the `left` / `right` neighbours of the road graph, same direction) within `neighbour_tol` m of a tier-1 point
         3 = everything else (branches not taken, opposite lanes (`opposite_tier`), far lanes)
-  vis   True when at least one of the six cameras of the rig sees the ground point (`rig_masks`, the nominal calibration) and no observed vehicle / pedestrian / two-wheeler
+  vis   True when at least one of the cameras of the rig (`cameras`: the six of Spurmitte, CAM_FRONT for BEV Fusion, l5) sees the ground point (`rig_masks`, the nominal calibration) and no observed vehicle / pedestrian / two-wheeler
         box of the keyframe hides it (the box with its real height, `coverage` geometry; a box does not hide a point inside itself). Boxes are at the annotation time, not moved to
         the camera time (at most 0.9 m). Static things (buildings, trees) are not in the nuScenes boxes: a point behind a building counts as visible. The sensor is the CAMERA: radar
         and range are not part of it.
@@ -298,15 +298,15 @@ def _blocked(points, cam, prisms):
     return out
 
 
-def visibility(pts_ego, prisms):
-    """(vis, covered), both bool (n,): the ground point (x forward, y left) is in the image of at least one of the six cameras (covered), and a line to such a camera is free of the
-    prisms (vis). covered & ~vis = hidden by a box"""
+def visibility(pts_ego, prisms, cameras=RM.SIX):
+    """(vis, covered), both bool (n,): the ground point (x forward, y left) is in the image of at least one of the `cameras` (default the six of the rig: Spurmitte; BEV fusion
+    has the front camera only, lane_gt.RIGS) (covered), and a line to such a camera is free of the prisms (vis). covered & ~vis = hidden by a box"""
     pts_ego = np.asarray(pts_ego, float).reshape(-1, 2)
     vis, covered = np.zeros(len(pts_ego), bool), np.zeros(len(pts_ego), bool)
     if not len(pts_ego):
         return vis, covered
     P3 = np.c_[pts_ego, np.zeros(len(pts_ego))]
-    for name in RM.SIX:
+    for name in cameras:
         K, T = RM.camera_calibration(name)
         c = camera_cells(pts_ego[:, 0], pts_ego[:, 1], K, T, RM.IMAGE_SIZE)
         covered |= c
@@ -319,15 +319,15 @@ def visibility(pts_ego, prisms):
 
 
 # --------------------------------------------------------------------------------------------------------------------------- the whole step
-def add_tiers(g, nusc, sample_token, T_e2g, p):
+def add_tiers(g, nusc, sample_token, T_e2g, p, cameras=RM.SIX):
     """add the labels to the graph `g` (made by lane_graph.crop; any frame) in place; `p` = the lane GT parameters (tier_back, tier_ahead, path_tol, path_cos, neighbour_tol,
-    min_ahead, extend, opposite_tier)"""
+    min_ahead, extend, opposite_tier); `cameras` = the cameras of the rig that `vis` / `occ` refer to (lane_gt.RIGS)"""
     path = ego_path(nusc, sample_token, T_e2g, p["tier_back"], p["tier_ahead"], g["frame"])
     info = tier_pieces(g, path, p)
     prisms = box_prisms(nusc, sample_token, T_e2g)
     to_ego = (lambda a: np.c_[a[:, 1], -a[:, 0]]) if g["frame"] == "lane" else (lambda a: a)
     for q in g["pieces"]:
-        q["vis"], cov = visibility(to_ego(np.asarray(q["pts"], float)), prisms)
+        q["vis"], cov = visibility(to_ego(np.asarray(q["pts"], float)), prisms, cameras)
         q["occ"] = cov & ~q["vis"]                                                                          # in a camera's view but hidden by a box (not: outside every view)
     for e in g["events"]:
         best = (3, False, 3.0)

@@ -24,7 +24,8 @@ A stop or an exit can lie inside a joined piece (a lane followed by one connecto
 (if one is an intersection connector, all branches), "all_successors", "none". `dirs_in` / `dirs_out` are the unit directions of the pieces at the event.
 
 FRAME. frame="lane" (default): the lane project's frame, ego (rear axle) at the front-camera time, x to the RIGHT, y forward; frame="ego": the frame of
-the other autogt layers, x forward, y left. The window is the square |x|, |y| <= half (default 50 m). Polylines are cut exactly at the border; a
+the other autogt layers, x forward, y left. The window is the square |x|, |y| <= half (default 50 m), or the rectangle `window` = (x0, x1, y0, y1) of a rig
+(lane_gt.RIGS: BEV fusion x 0 .. 60 m, y -26 .. 26 m, which then carries the key `window`). Polylines are cut exactly at the border; a
 part shorter than `min_len` is dropped, but only when the window cuts it at both ends (a short part with a natural end keeps its links and its events); a piece that leaves the window and comes back is several parts (`part` 0, 1, ...; id "<piece>#<part>").
 Every part has `segments`: [{token, kind, i0, i1, in_intersection}], the index ranges of its `pts` per map piece (a connector inside an intersection can be dropped by a
 consumer that has no nodes there, a connector outside one is a plain continuation, also on a piece of kind "mixed").
@@ -75,20 +76,25 @@ def dirs_to_frame(d, T_e2g, frame):
 def clip_square(P, half):
     """cut a polyline (n, 2) to the square |x|, |y| <= half exactly at the border -> [(pts, cut_start, cut_end, seg_first, seg_last)]
     (parts in travel order; seg_first / seg_last are the indices of the first / last original segment the part uses)"""
+    return clip_rect(P, -half, half, -half, half)
+
+
+def clip_rect(P, x0, x1, y0, y1):
+    """as clip_square for the rectangle x0 <= x <= x1, y0 <= y <= y1 (the window of a rig that is not square: lane_gt.RIGS); the square is the case (-h, h, -h, h)"""
     if len(P) < 2:
         return []
     a, b = P[:-1], P[1:]
     d = b - a
     t0, t1 = np.zeros(len(d)), np.ones(len(d))
     ok = np.ones(len(d), bool)
-    for ax in (0, 1):
+    for ax, (blo, bhi) in enumerate(((x0, x1), (y0, y1))):
         da, pa = d[:, ax], a[:, ax]
         zero = np.abs(da) < 1e-12
         with np.errstate(divide="ignore", invalid="ignore"):
-            tl, th = (-half - pa) / da, (half - pa) / da
+            tl, th = (blo - pa) / da, (bhi - pa) / da
         lo, hi = np.where(da > 0, tl, th), np.where(da > 0, th, tl)
         lo, hi = np.where(zero, 0.0, lo), np.where(zero, 1.0, hi)
-        ok &= ~(zero & (np.abs(pa) > half))
+        ok &= ~(zero & ((pa < blo) | (pa > bhi)))
         t0, t1 = np.maximum(t0, lo), np.minimum(t1, hi)
     ok &= t0 < t1 - 1e-9
     parts, cur = [], None
@@ -104,8 +110,21 @@ def clip_square(P, half):
             cur = dict(pts=[entry, exit_], first=i, last=i, t0=t0[i], t1=t1[i])
     if cur is not None:
         parts.append(cur)
-    # a part is cut where the polyline goes on outside the square, also when a vertex lies exactly on the border (t0 = 0 / t1 = 1)
+    # a part is cut where the polyline goes on outside the window, also when a vertex lies exactly on the border (t0 = 0 / t1 = 1)
     return [(np.asarray(c["pts"]), c["t0"] > 1e-9 or c["first"] > 0, c["t1"] < 1.0 - 1e-9 or c["last"] < len(d) - 1, c["first"], c["last"]) for c in parts]
+
+
+def window_of(half, window=None):
+    """the window (x0, x1, y0, y1) in the frame of the graph: `window` when given, else the square |x|, |y| <= half"""
+    return (-half, half, -half, half) if window is None else tuple(float(v) for v in window)
+
+
+def reach(half, window=None, margin=25.0):
+    """the radius around the ego position that holds the window plus a margin: the pre-filter for the map pieces that can reach it (the frame is a rotation of the global frame)"""
+    if window is None:
+        return half * math.sqrt(2.0) + margin
+    x0, x1, y0, y1 = window
+    return math.hypot(max(abs(x0), abs(x1)), max(abs(y0), abs(y1))) + margin
 
 
 def project(P, p):
@@ -288,12 +307,14 @@ def _span(pieces, pid, tok):
 
 
 # ---------------------------------------------------------------------------------------------------------------- a keyframe's crop
-def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None):
+def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None, window=None):
     """the graph of one keyframe: the map graph `mg` cut to the window around the ego pose T_e2g (4 x 4, ego -> global); with `rg` =
-    road_graph.build_road_graph(mg) the neighbours, lane counts and roads are added (see autogt.road_graph)"""
+    road_graph.build_road_graph(mg) the neighbours, lane counts and roads are added (see autogt.road_graph).
+    The window is the square |x|, |y| <= half, or the rectangle `window` = (x0, x1, y0, y1) in the frame of the graph (then `half` is only the bound that is stored)"""
     t = T_e2g[:2, 3]
     pieces, short = mg["pieces"], mg["short"]
-    r = half * math.sqrt(2.0) + margin
+    W = window_of(half, window)
+    r = reach(half, window, margin)
     keep = [pid for pid, p in pieces.items()
             if p["bbox"][2] > t[0] - r and p["bbox"][0] < t[0] + r and p["bbox"][3] > t[1] - r and p["bbox"][1] < t[1] + r]
     out_parts, parts_of = [], {}
@@ -301,7 +322,7 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None):
         p = pieces[pid]
         Q = to_frame(p["pts"], T_e2g, frame)
         k = 0
-        for pts, cut0, cut1, first, last in clip_square(Q, half):
+        for pts, cut0, cut1, first, last in clip_rect(Q, *W):
             if _length(pts) < (min_len if (cut0 and cut1) else 0.05):             # a fragment cut at both ends is dropped when short; a natural end keeps its links
                 continue
             part = dict(id=short[pid] if k == 0 else f"{short[pid]}#{k}", piece=pid, part=k, kind=p["kind"], pts=pts.astype(np.float32), start_open=bool(cut0),
@@ -332,7 +353,7 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None):
     events = []
 
     def inside(p):
-        return abs(p[0]) <= half + 1e-6 and abs(p[1]) <= half + 1e-6
+        return W[0] - 1e-6 <= p[0] <= W[1] + 1e-6 and W[2] - 1e-6 <= p[1] <= W[3] + 1e-6
     def pick(ids, dirs, table, on=None, q=None):
         """the ids that exist in this window (the part of the piece through `table`; the part `q` for the piece `on` that carries the event) with their direction rows"""
         keep = [k for k, i in enumerate(ids) if (q is not None and i == on) or table.get(i) is not None]
@@ -368,6 +389,8 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", margin=25.0, rg=None):
             events.append(dict(type="window", io="out", pos=part["pts"][-1], **{"in": [part["id"]], "out": []},
                                dirs_in=_tangent(part["pts"], True)[None].astype(np.float32), dirs_out=np.zeros((0, 2), np.float32), partial=False))
     graph = dict(frame=frame, half=half, pieces=out_parts, events=events, params=dict(min_len=min_len, **mg["params"]))
+    if window is not None:
+        graph["window"] = W                                  # only a graph with a rectangular window carries the key: the square graphs (lane_center) are unchanged
     if rg is not None:
         from . import road_graph
         road_graph.attach(graph, mg, rg)
@@ -394,6 +417,9 @@ def in_frame(graph, frame):
                     out[k] = turn(v)
                 elif k == "holes":
                     out[k] = [turn(h) for h in v]
+                elif k == "window" and v is not None and len(v) == 4:                 # the rectangle of a rig (x0, x1, y0, y1): a rotation of the frame turns it too
+                    x0, x1, y0, y1 = v
+                    out[k] = (y0, y1, -x1, -x0) if frame == "ego" else (-y1, -y0, x0, x1)       # lane -> ego, ego -> lane
                 else:
                     out[k] = walk(v) if not isinstance(v, np.ndarray) else v
             return out

@@ -240,8 +240,9 @@ def run(root=None, verbose=True):
         raise AssertionError("an unknown parameter must be refused")
     except TypeError:
         pass
-    assert lane_gt.version_of(lane_gt.signature()) is not None, (f"the lane GT source has the signature {lane_gt.signature()} but no row in autogt/lane_versions.csv: "
-                                                                 "add one, commit, tag autogt/lane-l<N>")
+    for rig in lane_gt.RIGS:
+        assert lane_gt.version_of(lane_gt.code_signature(rig=rig)) is not None, (f"the lane GT source has the signature {lane_gt.code_signature(rig=rig)} for the rig {rig} but no row in "
+                                                                                  "autogt/lane_versions.csv: add one, commit, tag autogt/lane-l<N>")
     gt = AutoGT(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
     lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
     n_frames, d_graph, d_ref, f1s, divpairs, found = 0, [], [], [], 0, 0
@@ -317,9 +318,23 @@ def run(root=None, verbose=True):
     with tempfile.TemporaryDirectory() as d:
         r = lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)
         assert r["written"] == len(toks) == r["keyframes"] and r["signature"] == lane_gt.signature() and not r["release"], r
+        index_file = os.path.join(d, lane_gt.signature(), "index.json")
+        index_before = open(index_file).read()
         assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0, "a second run has nothing to do"
+        from . import versions as versions_mod
+        if versions_mod.code_state()["dirty"] is not False:                      # a clean tree may turn the index into a release, then it is written again
+            assert open(index_file).read() == index_before, "a second run leaves the index of a complete store as it is (commit, environment of the run that made it)"
+        open(index_file, "w").write("{damaged")
+        assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0 and json.load(open(index_file))["complete"], "a damaged index is written again"
         assert lane_gt.missing(toks, data=d) == [] and lane_gt.missing(toks + ["0" * 32], data=d) == ["0" * 32]
         assert digest(lane_gt.load(toks[5], data=d)) == digest(lgt.graph(toks[5])), "the stored graph is the graph made now"
+        # l4 stays l4: the graphs of the rig lane_center are pinned by digest (made from the files of the stored l4 store, data/autogt/lane/0702a065c6); a change of the code that
+        # moves one of them must be a new lane version with its own store (and a new pinned file), not a row `same_gt_as`
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lane_l4_digest.json")) as f:
+            pin = json.load(f)
+        have = {t for n_ in ("scene-0061", "scene-0103") for t in gt.keyframes(n_)}
+        moved = [t for t, want in pin["frames"].items() if t in have and digest(lgt.graph(t)) != want]
+        assert len([t for t in pin["frames"] if t in have]) >= 25 and not moved, f"lane_center is no longer the l4 GT on {len(moved)} pinned frames, e.g. {moved[:2]}: {pin['note']}"
         idx = json.load(open(os.path.join(d, lane_gt.signature(), "index.json")))
         assert idx["complete"] and idx["keyframes"] == len(toks) and idx["scenes"] == ["scene-0061"] and idx["params"]["stop_rule"] == "intersection_branch" \
             and idx["lane_version"] == lane_gt.version_of(lane_gt.signature()) and "shapely" in idx["environment"], idx
@@ -332,12 +347,147 @@ def run(root=None, verbose=True):
             raise AssertionError("a missing graph must be refused")
         except FileNotFoundError as e:
             assert lane_gt.signature() in str(e)
+    rig_msg = _rigs(root, gt, lane_gt, GridSpec())
     msg = (f"lane graph selftest ok: {n_frames} mini frames, graph points {np.median(d_graph):.3f} m (99 % {np.percentile(d_graph, 99):.3f}) from the map's "
            f"centre-lines and {np.percentile(d_ref, 99):.3f} m (99 %) the other way, junction F1 {np.mean(f1s):.3f}, "
-           f"neighbours: {found} of {divpairs} divider-token pairs found; store, load, resume, parameters ok (lane signature {lane_gt.signature()})")
+           f"neighbours: {found} of {divpairs} divider-token pairs found; store, load, resume, parameters ok (lane signature {lane_gt.signature()}); {rig_msg}")
     if verbose:
         print(msg)
     return msg
+
+
+def _rigs(root, gt, lane_gt, grid):
+    """the two rigs (l5): the rectangular window, the table of stores (same_gt_as), BEV Fusion's graphs on real mini frames against the Spurmitte rig (same map vertices, same tiers)"""
+    from . import lane_tiers as LT
+    from . import rig_masks as RM
+    # 1. clip_rect: the square is the special case, a rectangle cuts at its four sides, a polyline inside is not cut
+    P = np.array([[-10.0, 0], [10, 0], [10, 3], [-10, 3]])
+    for a, b in zip(LG.clip_rect(P, -5.0, 5.0, -5.0, 5.0), LG.clip_square(P, 5.0)):
+        assert np.array_equal(a[0], b[0]) and a[1:] == b[1:], "clip_square is clip_rect of the square"
+    win = (0.0, 60.0, -26.0, 26.0)
+    one = LG.clip_rect(np.array([[-10.0, 3], [70, 3]]), *win)
+    assert len(one) == 1 and one[0][1] and one[0][2] and np.allclose(one[0][0], [[0, 3], [60, 3]]), one
+    side = LG.clip_rect(np.array([[10.0, -40], [10, 40]]), *win)
+    assert len(side) == 1 and np.allclose(side[0][0], [[10, -26], [10, 26]]), side
+    inside = LG.clip_rect(np.array([[1.0, 0], [2, 1], [3, 1]]), *win)
+    assert len(inside) == 1 and not inside[0][1] and not inside[0][2] and len(inside[0][0]) == 3, inside
+    assert not LG.clip_rect(np.array([[-9.0, 0], [-1, 5]]), *win) and not LG.clip_rect(np.array([[10.0, 30], [20, 40]]), *win), "outside the window: nothing"
+    # 2. the rigs and the table of stores
+    assert lane_gt.RIGS["bev_fusion"]["window"] == (grid.x_min, grid.x_max, grid.y_min, grid.y_max), "the BEV Fusion window is the window of its BEV grid"
+    assert lane_gt.RIGS["lane_center"]["window"] is None and lane_gt.RIGS["bev_fusion"]["cameras"] == ("CAM_FRONT",) and lane_gt.RIGS["lane_center"]["cameras"] == RM.SIX
+    assert lane_gt.signature(rig="bev_fusion") != lane_gt.signature() and lane_gt.signature(rig="lane_center") == lane_gt.signature()
+    for bad in (dict(rig="surround"), dict(rig="bev_fusion", half=40.0)):
+        try:
+            lane_gt.signature(**bad)
+            raise AssertionError(f"{bad} must be refused")
+        except ValueError:
+            pass
+    saved = lane_gt.table
+    lane_gt.table = lambda: [dict(version="l4", signature="aaaaaaaaaa", rig="lane_center", same_gt_as=""), dict(version="l5", signature="bbbbbbbbbb", rig="lane_center", same_gt_as="l4"),
+                             dict(version="l5", signature="cccccccccc", rig="bev_fusion", same_gt_as=""), dict(version="l6", signature="dddddddddd", rig="lane_center", same_gt_as="l5")]
+    lane_gt._STORE_KEYS.clear()
+    try:
+        assert lane_gt.store_of("bbbbbbbbbb") == "aaaaaaaaaa" and lane_gt.store_of("dddddddddd") == "aaaaaaaaaa", "same_gt_as: the store of the earlier version, also through a chain"
+        assert lane_gt.store_of("cccccccccc") == "cccccccccc" and lane_gt.store_of("eeeeeeeeee") == "eeeeeeeeee", "a row without same_gt_as and a signature without a row are their own store"
+    finally:
+        lane_gt.table = saved
+        lane_gt._STORE_KEYS.clear()
+    lane_gt.check_table()                                                                          # the real table is consistent
+    for rows, why in (([dict(version="l4", signature="a", rig="lane_center", same_gt_as=""), dict(version="l5", signature="b", rig="surround", same_gt_as="")], "unknown rig"),
+                      ([dict(version="l5", signature="b", rig="lane_center", same_gt_as="l5")], "names itself"),
+                      ([dict(version="l5", signature="b", rig="bev_fusion", same_gt_as="l4"), dict(version="l4", signature="a", rig="lane_center", same_gt_as="")], "an earlier row of another rig / a later row"),
+                      ([dict(version="l4", signature="a", rig="lane_center", same_gt_as=""), dict(version="l5", signature="a", rig="lane_center", same_gt_as="l4")], "one signature twice")):
+        try:
+            lane_gt.check_table(rows)
+            raise AssertionError(f"check_table must refuse: {why}")
+        except ValueError:
+            pass
+    saved = lane_gt.table
+    lane_gt.table = lambda: [dict(version="l5", signature="x", rig="lane_center", same_gt_as="l6"), dict(version="l6", signature="y", rig="lane_center", same_gt_as="l5")]
+    lane_gt._STORE_KEYS.clear()
+    try:
+        try:
+            lane_gt.store_of("x")
+            raise AssertionError("a cycle of same_gt_as must be refused")
+        except ValueError as e:
+            assert "cycle" in str(e), e
+    finally:
+        lane_gt.table = saved
+        lane_gt._STORE_KEYS.clear()
+    # 3. BEV Fusion's graphs on real mini frames
+    bf_gt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, rig="bev_fusion")
+    big = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, half=60.0)                  # Spurmitte's rig with a bigger square, in the frame of BEV Fusion: the reference for the cut
+    spur = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
+    eps = 1e-4
+    n, share_same, share_n, vis_n, pts_n, d_len = 0, 0, 0, 0, 0, []
+    for name in ("scene-0061", "scene-0103", "scene-1077"):
+        for tok in gt.keyframes(name)[::10]:
+            g = bf_gt.graph(tok)
+            assert g["frame"] == "ego" and g["window"] == win and g["rig"] == "bev_fusion" and g["half"] == 60.0 and g["sample"] == tok, (g["frame"], g.get("window"))
+            lane_view = LG.in_frame(g, "lane")                                                   # the window turns with the frame: x right, y forward
+            assert lane_view["window"] == (-26.0, 26.0, 0.0, 60.0) and LG.in_frame(lane_view, "ego")["window"] == win, lane_view["window"]
+            PL = np.concatenate([q["pts"] for q in lane_view["pieces"]]) if lane_view["pieces"] else np.zeros((0, 2))
+            assert not len(PL) or (PL[:, 0].min() >= -26.0 - eps and PL[:, 0].max() <= 26.0 + eps and PL[:, 1].min() >= -eps and PL[:, 1].max() <= 60.0 + eps), "the points are inside the turned window"
+            try:
+                bf_gt.graph(tok, frame="lane")
+                raise AssertionError("the rig bev_fusion is defined in the ego frame only")
+            except ValueError:
+                pass
+            for q in g["pieces"]:
+                x, y = q["pts"][:, 0], q["pts"][:, 1]
+                assert x.min() >= win[0] - eps and x.max() <= win[1] + eps and y.min() >= win[2] - eps and y.max() <= win[3] + eps, "piece inside the window"
+                assert len(q["tier"]) == len(q["vis"]) == len(q["occ"]) == len(q["pts"]) and set(np.unique(q["tier"])) <= {1, 2, 3}
+            for kind, items in g["lines"].items():
+                for it in items:
+                    assert it["pts"][:, 0].min() >= win[0] - eps and it["pts"][:, 0].max() <= win[1] + eps and np.abs(it["pts"][:, 1]).max() <= win[3] + eps, f"line {kind} inside the window"
+            for kind, polys in g["areas"].items():
+                for poly in polys:
+                    assert poly["exterior"][:, 0].min() >= win[0] - eps and poly["exterior"][:, 0].max() <= win[1] + eps and np.abs(poly["exterior"][:, 1]).max() <= win[3] + eps, f"area {kind} inside the window"
+            for e in g["events"]:
+                assert win[0] - eps <= e["pos"][0] <= win[1] + eps and win[2] - eps <= e["pos"][1] <= win[3] + eps and "tier" in e and "vis" in e, "events inside the window"
+                if e["type"] == "window":
+                    p = e["pos"]
+                    assert min(abs(p[0] - win[0]), abs(p[0] - win[1]), abs(p[1] - win[2]), abs(p[1] - win[3])) < 1e-3, "a window event lies on the border"
+            # the cut against the same graph made with a bigger square: the pieces of the big graph, cut to the rectangle, have the length of the pieces of the BEV Fusion graph
+            gb = big.graph(tok, frame="ego")
+            want = {}
+            for q in gb["pieces"]:
+                for pts, *_ in LG.clip_rect(q["pts"].astype(float), *win):
+                    want[q["piece"]] = want.get(q["piece"], 0.0) + LG._length(pts)
+            have = {}
+            for q in g["pieces"]:
+                have[q["piece"]] = have.get(q["piece"], 0.0) + q["length"]
+            assert set(have) <= set(want), "a piece of the BEV Fusion graph is in the bigger graph"
+            d_len.append((sum(want.values()), sum(have.values())))
+            # the same points in the two rigs have the same tier (same map vertices, same ego path)
+            sp = LG.in_frame(spur.graph(tok), "ego")
+            ref = np.concatenate([q["pts"] for q in sp["pieces"]]) if sp["pieces"] else np.zeros((0, 2))
+            ref_tier = np.concatenate([q["tier"] for q in sp["pieces"]]) if sp["pieces"] else np.zeros(0)
+            ref_piece = np.array([q["piece"] for q in sp["pieces"] for _ in q["pts"]])
+            for q in g["pieces"]:
+                if not len(ref):
+                    break
+                d = np.linalg.norm(q["pts"][:, None, :] - ref[None, :, :], axis=2)
+                j, dm = d.argmin(1), d.min(1)
+                ok = (dm < 1e-3) & (ref_piece[j] == q["piece"])
+                share_n += int(ok.sum())
+                share_same += int((ok & (ref_tier[j] == q["tier"])).sum())
+                pts_n += len(q["pts"])
+            # the front camera: a visible point is in its image, a hidden-by-box point is in its view; the six cameras see at least what the front one sees
+            for q in g["pieces"]:
+                if q["vis"].any():
+                    K, T = RM.camera_calibration("CAM_FRONT")
+                    P = q["pts"][q["vis"]].astype(float)
+                    assert LT.camera_cells(P[:, 0], P[:, 1], K, T, RM.IMAGE_SIZE).all(), "a visible point of the BEV Fusion rig is in the image of the front camera"
+                    vis_n += int(q["vis"].sum())
+                    six, _ = LT.visibility(q["pts"].astype(float), LT.box_prisms(gt.nusc, tok, spur.pose(tok)))
+                    assert six[q["vis"]].all(), "what the front camera sees the six cameras see"
+            n += 1
+    d_len = np.array(d_len)
+    assert vis_n > 0 and n >= 9, (vis_n, n)
+    assert np.all(np.abs(d_len[:, 0] - d_len[:, 1]) <= 0.02 * np.maximum(d_len[:, 0], 1.0) + 2.0), d_len
+    assert share_n >= 0.8 * pts_n > 0 and share_same >= 0.98 * share_n, (share_same, share_n, pts_n)         # measured 0.992: the rest are tier-2 lanes whose tier-1 neighbour lies outside the smaller window
+    return f"BEV Fusion rig: {n} frames inside x {win[0]:.0f} .. {win[1]:.0f} m, y {win[2]:.0f} .. {win[3]:.0f} m, cut = the bigger graph cut, tier equal to Spurmitte's on {share_same / share_n:.3f} of {share_n} shared points"
 
 
 def _dense(P, ds=0.1):
