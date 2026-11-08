@@ -62,5 +62,7 @@ run "E275 scorer glue (toy lane, CPU: cards, kill criterion, reproduction gate, 
 run "E276 tier metrics and verdict276 (toy lane, fake cards)" test_tier_metrics.py
 run "E276 tier / vis / sparse targets (toy lane, 40 real frames)" grid/test_tiers_sparse.py
 run "E276 tier loss switches (defaults = the frozen E273 loss)" grid/test_tier_loss.py
+run "E277 soft close-node step (hard limit on 183 random frames, chain, ties, gradients, model switch, load_model)" grid/test_soft_nms.py
+run "E277 verdict rule (fake cards)" test_verdict277.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
 exit $fail

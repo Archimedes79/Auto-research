@@ -37,13 +37,28 @@ CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0, tier_w=No
 
 
 class QGraph(torch.nn.Module):
-    def __init__(self, width=48, f05=32, d=64):
+    def __init__(self, width=48, f05=32, d=64, soft_nms=None):
+        """soft_nms = None (the E273 head) or (radius m, tau m, passes) of `qnodes.soft_suppress_logit` (E277: the close-node suppression as a soft step right after the node head: the existence
+        logit `no['e']` that every later stage, the loss and the read-out see is the damped one; the head's own logit stays in `no['e_raw']`). A property of the model, not of the loss: it travels
+        with the checkpoint (`args['soft_nms']`, read by `qpredict.load_model`)."""
         super().__init__()
+        self.soft_nms = tuple(float(v) for v in soft_nms) if soft_nms else None
+        assert self.soft_nms is None or (len(self.soft_nms) == 3 and 0.0 < self.soft_nms[0] <= 2.0 and self.soft_nms[1] > 0.0 and self.soft_nms[2] >= 1 and self.soft_nms[2] == int(self.soft_nms[2])), soft_nms
         self.pyr = PyramidHead(width=width, f05=f05)
         self.nodes = QN.NodeHead(c2=3 * width, c1=width, c05=f05, d=d)
         self.links = QL.LinkHead(d=d)
         self.menc = QA.MapEncoder(d=d)
         self.asg = QA.Assigner(d=d)
+
+    def node_stage(self, P):
+        """the node head and, when `soft_nms` is set, the soft close-node step (E277: `no['e']` is then the damped logit, the head's own one stays in `no['e_raw']`); the ONE place that the forward path,
+        the gates (`qgates._node_stats`) and the timing script call, so that nothing reads the raw head by mistake (critic pass 2026-11-08)"""
+        no = self.nodes(P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
+        if self.soft_nms:
+            no = dict(no)
+            no["e_raw"] = no["e"]
+            no["e"] = QN.soft_suppress_logit(no["e"], no["pos"], self.soft_nms[0], self.soft_nms[1], int(self.soft_nms[2]))
+        return no
 
     def forward(self, batch, upto="assign", frozen=(), gt=True, rounds=2):
         dev = next(self.parameters()).device
@@ -61,7 +76,7 @@ class QGraph(torch.nn.Module):
         out["P"] = P
         if stage_i < 1:
             return out
-        no = run("nodes", self.nodes, P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
+        no = run("nodes", self.node_stage, P)
         out["no"] = no
         if stage_i < 2:
             return out
@@ -432,6 +447,16 @@ def _selftest():
         again = float(qgraph_loss(m, b, ph)[0])
         assert abs(again - base_losses[ph]) < 1e-6 * max(1.0, abs(again)), (ph, base_losses[ph], again)         # switched off again = the E273 loss
     print("E274 switches ok: weights, dual softmax, defaults give the E273 loss")
+    # E277: the soft close-node step: every phase runs with a finite loss and the gradient reaches the trainable groups (phase 3: through the damped logit into the node head)
+    ms = QGraph(width=16, f05=16, d=32, soft_nms=(1.5, 0.1, 3))
+    ms.load_state_dict(m.state_dict())
+    for phase in (3, 4, 5, 6, 7):
+        ms.zero_grad()
+        loss, info = qgraph_loss(ms, b, phase)
+        assert torch.isfinite(loss), ("soft_nms", phase, info)
+        loss.backward()
+        assert sum(float(p.grad.abs().sum()) for p in trainable_params(ms, phase) if p.grad is not None) > 0, f"soft_nms, phase {phase}: no gradient reaches the trainable parameters"
+    print("E277 soft close-node step ok: every phase finite, the gradient reaches the trainable groups")
     print("qgraph selftest ok")
 
 

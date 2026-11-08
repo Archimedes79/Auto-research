@@ -42,7 +42,7 @@ def main():
                 marks[0].record()
                 P = m.pyr(x)
                 marks[1].record()
-                no = m.nodes(P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
+                no = m.node_stage(P)                                                              # node head + the soft close-node step of E277 when the model has it
                 marks[2].record()
                 L = m.links(no, P["centre1"][:, :1].sigmoid(), gt=None)
                 marks[3].record()

@@ -102,6 +102,46 @@ class NodeHead(nn.Module):
         return dict(e=o[:, CH["e"]], flags=o[:, CH["flags"]], off=off, dir_raw=o[:, CH["dir"]], s=o[:, CH["s"]], uout=o[:, CH["uout"]], uin=o[:, CH["uin"]], tok=t2, pos=c + off)
 
 
+def soft_suppress_logit(e_logit, pos, radius=1.5, tau=0.1, iters=3):
+    """E277: the close-node suppression of E275 (`evaluation/qgraph_readout.suppress_close_nodes`) as a SOFT step of the forward path: every cell is damped by the cells around it that are more
+    probable and closer than `radius` metres, e'_i = e_i * prod_j (1 - e'_j * k_ij) over the 8 neighbour cells j with e_j > e_i (a tie: the lower cell index is the stronger), with the smooth radius
+    k_ij = sigmoid((radius - d_ij) / tau) of the predicted node positions. The order (who is stronger) is a comparison without gradient, exactly the order of the hard rule; the neighbour's damped value e'_j
+    is used from the second pass on, so a chain A > B > C (B within `radius` of A, C of B, C not of A) keeps C like the hard rule does (greedy order): `iters` passes are exact for chains of at least
+    `iters` nodes (the critic measured one more), beyond that the errors alternate between over- and under-damping (the 2 m grid and radius 1.5 m make longer chains rare). At the production setting
+    (tau 0.1, 3 passes) the kept set differs from the hard rule in about 1 % of the cells for saturated probabilities (0.85 - 0.99) and in about 7 % for probabilities of 0.5 - 0.9: the step is soft. Only the 3 x 3 neighbourhood matters: two nodes in cells two apart are at least 4 - 2 = 2 m apart (offsets are +-1 m), so for radius <= 2 m
+    nothing is missed. In the limit tau -> 0 with e in {0, 1}-like values it returns the kept set of the hard rule (tested in test_soft_nms.py); at tau > 0 the gradient reaches the stronger node's
+    probability, the weaker one's probability and both positions. e_logit (B, H, W), pos (B, 2, H, W) metres -> logit of e' (B, H, W), float32."""
+    assert iters >= 1 and iters == int(iters) and tau > 0.0 and 0.0 < radius <= 2.0, (radius, tau, iters)
+    iters = int(iters)               # tau = 0 is a NaN; a radius above 2 m would miss pairs two cells apart (offsets are +-1 m)
+    e = e_logit.float().sigmoid()
+    pos = pos.float()
+    B, H, W = e.shape
+    idx = torch.arange(H * W, device=e.device).view(1, H, W)
+    ep = F.pad(e[:, None], (1, 1, 1, 1), value=0.0)[:, 0]                                      # a missing neighbour has e 0: no damping
+    pp = F.pad(pos, (1, 1, 1, 1), value=0.0)
+    ip = F.pad(idx[:, None].float(), (1, 1, 1, 1), value=float(H * W))[:, 0]
+    shifts = [(dy, dx) for dy in (0, 1, 2) for dx in (0, 1, 2) if (dy, dx) != (1, 1)]
+    dom, kk = [], []
+    ed = e.detach()
+    for dy, dx in shifts:
+        ej = ep[:, dy:dy + H, dx:dx + W]
+        pj = pp[:, :, dy:dy + H, dx:dx + W]
+        ij = ip[:, dy:dy + H, dx:dx + W]
+        d = ((pos - pj).square().sum(1) + 1e-8).sqrt()
+        kk.append(torch.sigmoid((radius - d) / tau))
+        dom.append(((ej.detach() > ed) | ((ej.detach() == ed) & (ij < idx))) & (ij < H * W))
+    cur = e
+    for _ in range(iters):
+        s = torch.ones_like(e)
+        for t, (dy, dx) in enumerate(shifts):
+            cj = F.pad(cur[:, None], (1, 1, 1, 1), value=0.0)[:, 0, dy:dy + H, dx:dx + W]       # the neighbour's current (damped) value
+            s = s * (1.0 - cj * kk[t] * dom[t].float())
+        cur = e * s
+    # logit(e * s) without a clamp (critic pass 2026-11-08: a clamp at 1e-6 killed the gradient beyond |logit| 13.8): e * s = sigmoid(l) * s and 1 - e * s = sigmoid(-l) + e * (1 - s); for s = 1 this is l itself
+    l = e_logit.float()
+    return F.logsigmoid(l) + torch.log(s.clamp_min(1e-12)) - torch.log((torch.sigmoid(-l) + e * (1.0 - s)).clamp_min(1e-30))
+
+
 def _selftest():
     torch.manual_seed(0)
     B = 2

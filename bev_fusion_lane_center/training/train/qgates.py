@@ -89,7 +89,7 @@ def gate_pixels(model, run, n):
 def _node_stats(model, b, dev):
     x = b["x"].to(dev).float()
     P = model.pyr(x)
-    no = model.nodes(P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
+    no = model.node_stage(P)                                                                    # node head + the soft close-node step of E277 when the model has it: the gate reads what the arm delivers
     return P, no
 
 

@@ -51,6 +51,7 @@ def main():
     ap.add_argument("--neg-w", type=float, nargs=4, default=None, help="E276: factor of the negatives of the existence loss by zone: tier 1, tier 2, tier 3, no lane")
     ap.add_argument("--link-tier-w", type=float, nargs=3, default=None, help="E276: factor of the link losses by the tier of the source node")
     ap.add_argument("--sparse", type=float, nargs=2, default=None, metavar=("EPS", "CHORD"), help="E276: the sparse node target: deviation (m) and longest chord (m)")
+    ap.add_argument("--soft-nms", type=float, nargs=3, default=None, metavar=("RADIUS", "TAU", "PASSES"), help="E277: the close-node suppression as a soft step after the node head (radius m, smoothness m, passes)")
     ap.add_argument("--resume-from", default=None, help="a model.pt of an earlier phase to start from (the phases before it are skipped by listing only the later ones)")
     a = ap.parse_args()
     T.seed_all(a.seed)
@@ -61,7 +62,7 @@ def main():
     if (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0):
         from autogt import lane_gt                                                                                          # the tier switches need the l4 labels: refuse an l3 store
         assert lane_gt.version_of(lane_gt.signature()) not in (None, "l1", "l2", "l3"), "the tier switches need the lane GT l4 (this source is " + str(lane_gt.version_of(lane_gt.signature())) + ")"
-    model = QG.QGraph(width=a.width)
+    model = QG.QGraph(width=a.width, soft_nms=a.soft_nms)
     hp = a.head or os.path.join(ROOT, "runs", f"e271_a_s{a.seed}", "model.pt")
     if os.path.exists(hp):
         n = model.pyr.load_e271(hp)

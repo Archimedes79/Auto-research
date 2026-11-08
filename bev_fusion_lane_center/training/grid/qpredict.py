@@ -9,6 +9,7 @@ The model runs under no_grad with gt=False (no ground truth enters the forward p
 `make_pred_fn(run)` gives a token -> pred callable for the pictures. Run the self-test: python qpredict.py (needs a trained or smoke model: `--run runs/e273_smoke2`)
 """
 import argparse
+import json
 import os
 import sys
 
@@ -71,8 +72,9 @@ def load_model(run_dir, device="cuda"):
         a, state = sd.get("args") or {}, sd["state"]
     else:
         sd = torch.load(os.path.join(run_dir, "ckpt.pt"), map_location="cpu", weights_only=False)
-        a, state = {}, sd["model"]
-    m = QG.QGraph(width=int(a.get("width", 48)))
+        cfg = os.path.join(run_dir, "config.json")                                              # the trainer writes the run's args here: a running soft arm must not load as a plain head
+        a, state = (json.load(open(cfg)).get("args") or {}) if os.path.exists(cfg) else {}, sd["model"]
+    m = QG.QGraph(width=int(a.get("width", 48)), soft_nms=a.get("soft_nms"))                    # E277: the soft close-node step is a property of the model (args of the checkpoint)
     m.load_state_dict(state)
     return m.to(device).eval()
 

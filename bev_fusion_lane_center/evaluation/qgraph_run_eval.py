@@ -325,6 +325,38 @@ def verdict275(var, ctl, exp_var="e275", exp_ctl="e273", root=None, lanes_tol=0.
     return out
 
 
+def verdict277(var, ctl, hard, exp_var="e277", exp_ctl="e273", exp_hard="e275", root=None, trail_tol=0.01, verbose=True, frames=873):
+    """the rule of the E277 card (section 0): the head trained WITH the soft close-node step (`var`: the cards runs/<exp_var>/<run>.plain_t0.5, read out at e >= 0.5 with no further step) against the
+    baseline read out as before (`ctl`: runs/<exp_ctl>/<run>/), by the headlines and guards of verdict275 (spec plain_t0.5), and against the same baseline WITH the hard step (`hard`: the E275 cards
+    runs/<exp_hard>/<run>.close1.5_t0.5). KEEP: verdict275 says KEEP and the soft step's topo F1 is not below the hard step's by more than `trail_tol` on any seed (the soft step REPLACES the hard
+    read-out). TIE: verdict275 says KEEP but the soft step trails the hard one by more than `trail_tol` on a seed (it helps, the hard step stays the read-out). Otherwise the verdict of verdict275 (CUT / INCONCLUSIVE); a verdict275 TIE (both
+    headlines inside their bands, no effect) is reported as INCONCLUSIVE, as the card says: TIE here means "helps but trails the hard step". The three lists in the same seed order (0, 1), `frames` frames in every card."""
+    root = root or ROOT
+    v = verdict275(var, ctl, exp_var, exp_ctl, root=root, spec="plain_t0.5", verbose=False, frames=frames)
+    load = lambda exp, r: json.load(open(os.path.join(root, "runs", exp, r, "card.json")))  # noqa: E731
+    cv, ch, cc = [load(exp_var, r) for r in var], [load(exp_hard, r) for r in hard], [load(exp_ctl, r) for r in ctl]
+    assert [c["seed"] for c in cv] == [c["seed"] for c in ch] == [0, 1], f"the rule needs seeds 0 and 1 in this order, got {[c['seed'] for c in cv]} against {[c['seed'] for c in ch]}"
+    assert [c.get("run") for c in ch] == [c.get("run") for c in cc], f"the hard-step cards must be the control's models read out with the step: {[c.get('run') for c in ch]} against {[c.get('run') for c in cc]}"
+    assert all(c["frames"] == frames for c in ch), f"every card must hold {frames} frames: {[c['frames'] for c in ch]}"
+    assert all(c.get("readout", {}).get("spec") == "close1.5_t0.5" for c in ch), f"the hard-step cards must carry the read-out close1.5_t0.5: {[c.get('readout', {}).get('spec') for c in ch]}"
+    trail = [h["p"]["graph"]["topo_F1"] - u["p"]["graph"]["topo_F1"] for h, u in zip(ch, cv)]
+    replaces = all(t <= trail_tol + 1e-9 for t in trail)                                        # the tolerance itself still counts (a float difference of 0.0100000000000009 is 0.01)
+    if v["verdict"] == "KEEP":
+        final = "KEEP (the soft step replaces the hard read-out)" if replaces else "TIE (the soft step helps but trails the hard step by more than %g in topo F1: the hard step stays the read-out)" % trail_tol
+    elif v["verdict"] == "TIE":                                                                  # both headlines inside their bands: the card says "otherwise INCONCLUSIVE"; TIE is reserved for "helps but trails the hard step"
+        final = "INCONCLUSIVE (the soft step has no effect over the baseline: both headlines inside their bands; the hard step stays the read-out)"
+    else:
+        final = v["verdict"]
+    g = lambda c, k: c["p"]["graph"][k]  # noqa: E731
+    out = dict(verdict=final, verdict275=v["verdict"], topo_F1_trail_behind_hard_per_seed=trail, trail_tol=trail_tol, soft_numbers=v["variant_numbers"], topo_F1=v["topo_F1"], junction_F1=v["junction_F1"],
+               lanes_found_gain_per_seed=v["lanes_found_gain_per_seed"], F1_1_gain_per_seed=v["F1_1_gain_per_seed"], guards=v["guards"],
+               hard_step_numbers=dict(topo_F1=[g(c, "topo_F1") for c in ch], junction_F1=[g(c, "junction_F1") for c in ch], vert100_dp=[g(c, "vert100_dp") for c in ch]), variant=var, control=ctl, hard=hard,
+               note="by hand: the written rule of the E277 card (section 0); in-sample on VAL; density and system pass are reported, not judged")
+    if verbose:
+        print(json.dumps(out, indent=1))
+    return out
+
+
 def verdict276(var, ctl, exp_var="e276", exp_ctl="e276", kind="t", root=None, band=0.02, topo_tol=0.05, recall_tol=0.02, density_cut=0.25, verbose=True, frames=873):
     """the rule of the E276 card (section 0), by hand. kind 't': arm t (`var`) against the baseline B scored on GT l4 (`ctl`, cards runs/<exp_ctl>/<run>/); kind 's': arm s against arm t.
     Both lists in the same seed order (0, 1), `frames` frames in every card, the tier numbers present. Per seed: gain = t12_F1_1(var) - t12_F1_1(ctl). Guards: t1_R_1 not below the control by more
@@ -394,6 +426,13 @@ def main():
     x.add_argument("--ctl", nargs="+", required=True, help="the control cards (both seeds)")
     x.add_argument("--exp-var", default="e275")
     x.add_argument("--exp-ctl", default="e273")
+    z = sub.add_parser("verdict277")
+    z.add_argument("--var", nargs="+", required=True, help="E277: the cards of the head with the soft step, runs/<exp-var>/<run>.plain_t0.5/ (both seeds)")
+    z.add_argument("--ctl", nargs="+", required=True, help="the baseline cards read out as before (both seeds)")
+    z.add_argument("--hard", nargs="+", required=True, help="the baseline with the hard step, E275 cards <run>.close1.5_t0.5 (both seeds)")
+    z.add_argument("--exp-var", default="e277")
+    z.add_argument("--exp-ctl", default="e273")
+    z.add_argument("--exp-hard", default="e275")
     v = sub.add_parser("verdict")
     v.add_argument("--runs", nargs="+", required=True)
     w = sub.add_parser("verdict274")
@@ -421,6 +460,8 @@ def main():
         verdict275(a.var, a.ctl, a.exp_var, a.exp_ctl)
     elif a.cmd == "verdict276":
         verdict276(a.var, a.ctl, a.exp_var, a.exp_ctl, a.kind)
+    elif a.cmd == "verdict277":
+        verdict277(a.var, a.ctl, a.hard, a.exp_var, a.exp_ctl, a.exp_hard)
     else:
         verdict(a.runs)
 

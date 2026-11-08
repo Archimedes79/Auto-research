@@ -108,7 +108,35 @@ def main():
     for m in range(len(nts["pos"])):
         i, j = nts["piece"][m], nts["j"][m]
         assert nts["tier"][m] == g["pieces"][i]["tier"][j]
-    print("test_tiers_sparse (qtargets): labels in the node table and the maps, zone dilation, unlabelled graph, sparse selection (events kept, eps 0.3 m, chords <= 7.5 m, curve denser than straight): ok")
+    real_frames()
+    print("test_tiers_sparse (qtargets): labels in the node table and the maps, blind zone, zone dilation, unlabelled graph, sparse selection (events kept, eps 0.3 m, chords <= 7.5 m, curve denser than straight), "
+          "40 real frames (every piece keeps a node, section starts and long links equal, fewer nodes): ok")
+
+
+def real_frames(n=40):
+    """the sparse selection on real stored lane graphs (skipped when the store is absent): every piece that has a dense node keeps one, the section starts and the long links are those of the dense
+    table, no frame gets MORE nodes, and the sparse table has clearly fewer in total (critic pass 2026-11-07, missing test b)"""
+    try:
+        sys.path.insert(0, os.path.join(HERE, "..", "..", ".."))
+        from autogt import lane_gt
+        toks = sorted(lane_gt.held(os.path.join(lane_gt.DATA, lane_gt.signature())))
+    except Exception:                                                                             # no autogt / no store here: nothing to test
+        return
+    if not toks:
+        return
+    rng = np.random.RandomState(1)
+    tot = [0, 0]
+    for i in sorted(rng.choice(len(toks), min(n, len(toks)), replace=False)):
+        g = lane_gt.load(toks[i])
+        if not any(len(p["pts"]) for p in g["pieces"]):
+            continue
+        a, b = QT.node_table(g), QT.node_table(g, sparse=(0.3, 7.5))
+        assert set(np.unique(a["piece"])) == set(np.unique(b["piece"])), "a piece lost every node"
+        assert a["sstart"].sum() == b["sstart"].sum() and a["long"].sum() == b["long"].sum(), "section starts or long links changed"
+        assert b["stats"]["nodes"] <= a["stats"]["nodes"] and (b["flags"].sum(0) == a["flags"].sum(0)).all(), "events changed"
+        tot[0] += a["stats"]["nodes"]
+        tot[1] += b["stats"]["nodes"]
+    assert tot[1] < 0.7 * tot[0], tot
 
 
 if __name__ == "__main__":
