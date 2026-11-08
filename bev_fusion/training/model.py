@@ -134,6 +134,9 @@ class ModelConfig:
                                        # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch);
                                        # camera_features 'dualbev' or 'dual' (t20: it reads the first source = DualBEV, and adds to the merged BEV)
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
+    lane_use_depth: bool = True        # t24: the lane branch's lift: True = lift PD (weighted by the DualBEV depth probabilities, t7 / t20), False = lift P (pull without the weight,
+                                       # same table, same tensors: a checkpoint with the branch loads either way). check_config refuses False without lane_branch.
+                                       # Know: with False the lane output sends no gradient to the depth head, also not to a trainable camera_student's depth (lift PD does); no config uses it.
     camera_student: str = ""           # t22 stage B: "" = off | a key of STUDENTS (training/student_encoder.py): a small trained image encoder that replaces the cached teacher outputs of
                                        # the CURRENT frame (frame 0) of both feature sources, from batch["lane_img"] (TrainConfig.lane_images); older frames keep their cached teacher
                                        # outputs, and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the main lift uses), gradient included.
@@ -302,6 +305,10 @@ def check_config(cfg):
         errs.append(f"rad_static_vr must be positive (m/s), is {cfg.rad_static_vr}")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
+    if not isinstance(cfg.lane_use_depth, bool):                      # t24: a config value null / 0 / "false" must not silently pick a lift
+        errs.append(f"lane_use_depth must be true or false, is {cfg.lane_use_depth!r}")
+    elif not cfg.lane_use_depth and not cfg.lane_branch:
+        errs.append("lane_use_depth false does nothing without lane_branch: set lane_branch 'res4' / 'rgb' or leave it true")
     if cfg.camera_student:                                            # t22 stage B
         if cfg.camera_student not in STUDENTS:
             errs.append(f"camera_student={cfg.camera_student!r}: one of {sorted(STUDENTS)}")
@@ -371,7 +378,7 @@ class BEVFusionModel(nn.Module):
         self.cam_temporal = TEMPORALS[cfg.cam_temporal](cfg.c_cam, self.grid)
         # lane add-on (option): stride-4 branch of the current frame, added after the camera's temporal block
         self.lane = (LaneBranch(self.grid, depth_centres(), kind=cfg.lane_branch, c_out=cfg.c_cam, oversample=cfg.oversample,
-                                pretrained=cfg.lane_pretrained) if cfg.lane_branch else None)
+                                pretrained=cfg.lane_pretrained, use_depth=cfg.lane_use_depth) if cfg.lane_branch else None)
         # radar slot
         self.radar = RADARS[cfg.radar_kind](self.grid, cfg.c_rad)
         self.rad_temporal = TEMPORALS[cfg.rad_temporal](cfg.c_rad, self.grid)
