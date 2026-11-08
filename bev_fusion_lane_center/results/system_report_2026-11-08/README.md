@@ -1,0 +1,9 @@
+# system_report_2026-11-08: where the Spurmitte lane system stands (numbers, pictures, architecture)
+
+`index.html` is the report (self-contained pictures; the four videos are the WebM files in `vid/`, linked relatively). The same page is published as a private artifact: https://claude.ai/artifact/9ShDVSELV2gi6xLLcGmpVF. Binaries (html, webm) are not in git; only this README is.
+
+Layout of the whole-system report of 2026-11-05 (`../E273.report/`): status board, what happened since, quantitative results (delivered graph per variant, junctions and long links, assignment, closed levers), qualitative pictures and four videos (baseline B and the E279 head on scene-0221 and scene-0108), architecture (diagram with the remaining rule steps, literature per block), ranked weaknesses, options for the next steps (none decided), provenance.
+
+Every number is read from a result file by the builder: the scoring cards `runs/e273`, `e275`, `e276`, `e277`, `e279` (`card.json`), the phase-7 gate lines `runs/e273_p_s*_p7/log.txt` and `runs/e279_w_s*_p7/log.txt`, the timing `runs/e273/*/timing.json`, the analysis files `temp/e276/*.json`, `temp/e280/p11_s*.json`, `temp/e281/p12_s*.json`, `p13_s*.json`, `temp/e282/pilot_outcome.json`, `references.json`. The pictures are the scorer's panels (`compare_views.py`) of VAL frames 643 / 300 / 100 for B, B + hard step and the E279 head (`results/E279/figures/`); the E279 videos come from `tools/viz/qgraph_results.py --run e279_w_s0 --id E279.w_s0 --scenes 11 39 --device cpu` (`results/E279.w_s0/videos/`), the baseline videos are the ones of the report of 2026-11-05.
+
+Rebuild (scripts are scratch, kept in the git tag `lcr/system-report-scratch-1`; check them out into `temp/e283/`): `bash temp/e283/assets.sh` (pictures + videos, CPU), then `wsl env CUDA_VISIBLE_DEVICES= bash tools/env/_py14.sh temp/e283/build_system_report.py`.
