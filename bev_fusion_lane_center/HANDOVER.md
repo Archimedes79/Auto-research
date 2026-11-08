@@ -10,7 +10,7 @@ New chat: start in the repository folder, say "Read HANDOVER.md and continue". R
 - **Open for Mirko (no D-id opened):** adopt the 1.25 m soft step as the delivered thinning in place of the hard read-out (changes baseline B, D58); guard values for a trained step.
 
 ## State of the machine
-Lane chain done: `temp/e276/CHAIN_DONE` exists (BEV chat's chain5 holds on it; told). GPU free; l4 lane GT store may be merged by the GT chat (no GT chat session was listed). Scheduler exited; memory watchdog stopped. WSL page-cache fragmentation killed two E279 runs at 04:18 / 04:32 (ENOMEM in DataLoader workers: `temp/e276/reclaim.py` frees it, resume from ckpt works).
+Lane chain done: `temp/e276/CHAIN_DONE` exists (BEV chat's chain5 holds on it; told). GPU free. GT chat merged l5 into live autogt/ at ~06:40 (code signature 2464b5755f; `lane_gt` defaults still give the l4 store 0702a065c6, lane graphs byte-equal; new: `load(token, rig="bev_fusion")`); it commits + tags (`autogt/lane-l5`, `autogt/v12`) after its live checks: wait for its 'live checks done' before a new lane job. Scheduler exited; memory watchdog stopped. WSL page-cache fragmentation killed two E279 runs at 04:18 / 04:32 (ENOMEM in DataLoader workers: `temp/e276/reclaim.py` frees it, resume from ckpt works).
 
 ## If continuing
 Next levers (card 7a / E277 section 6): memory for long links (hold while not contradicted), matching-based node loss (sparse target), a third seed (needs phase-2 checkpoint, ~65 min). Rebuild the report: `wsl bash temp/e276/run_report.sh`; pictures: `temp/e276/run_views.sh`. Nothing is pushed; scratch tag `lcr/e276-scratch-2` (refresh with `temp/e276/tag_scratch2.sh` under a new name).
