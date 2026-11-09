@@ -24,22 +24,14 @@ Fields: id / card / title; kind (variant = configuration only, block = new code)
 }
 ```
 
-## 1. Card (written in P2, checked by ar-critic, mode cards)
-| | |
-|---|---|
-| lens | state of the art / foundations / training and losses / past critic / system review / free |
-| group | <problem group id> |
-| sources | <note ids, K ids, experiment ids> |
-| status | proposed / accepted / revise / rejected / scheduled / confirmed / refuted / open / closed |
+## 1. Card text (written in P2, checked by ar-critic, mode cards; one page)
+The prediction, the decision rule, the arms and controls, the budget and the kill criterion are the block above: write each once, there, and do not copy them into prose (a rule written twice drifts). Evidence and results belong in section 3.
 
 - **Statement** (falsifiable, one sentence):
 - **Mechanism** (why it should work):
-- **Prediction** (metric, split, number, against which reference):
-- **Decision rule** (result -> action; noise band; what counts as a tie):
-- **Test design** (arms; controls: null / matched reference / equal budget / seed twin; budget; fidelity rung):
-- **Cost** (GPU hours, coding days, risk) and **kill criterion**:
 - **Inputs** (ready / to build: data, code blocks, tests):
 - **Starts from** (the version or run it changes):
+- **Lens / group / sources / status** (one line: lens, problem group, note and K ids; status proposed / accepted / scheduled / confirmed / refuted / closed):
 - **Referee** (one line: the critic's verdict and a link to its report):
 
 ## 2. Detail plan (block experiments only; written by ar-planner when the loop reaches the card)
