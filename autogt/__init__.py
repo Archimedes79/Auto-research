@@ -13,7 +13,10 @@
     g = load(sample_token)                                #   (data/autogt/<current_signature()>/<token>.npz)
     autogt.scene_tokens("scene-0561", "v1.0-trainval")    # the tokens of a sequence from the json tables, no devkit
 
-Command line (from the repository root): python -m autogt {generate,sets,versions,selftest,check,view,sheets,video,report,clean,build} ...
+    key = autogt.generate_bev_gt("~/data/nuscenes_full", set_name="full")   # BEV Fusion in one call: the front GT + the lane GT of its rig + the area masks -> the GT key (data + code signature)
+    key = autogt.generate_lane_gt(root, rig="lane_center")                  # Spurmitte (rig="all": both); key.load(token) / key.lane(token) / key.mask(token, "intersection", 0.5)
+
+Command line (from the repository root): python -m autogt {generate,generate-bev,generate-lane,sets,versions,selftest,check,view,sheets,video,report,clean,build} ...
 Guide for agents: autogt/AGENTS.md; reference: autogt/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): autogt.flow.estimate_flow.
 """
@@ -22,3 +25,4 @@ from .cli import generate  # noqa: F401
 from .grid import GridSpec  # noqa: F401
 from . import sets, versions  # noqa: F401
 from .suite import AutoGT, current_signature, current_version, load, missing, scene_tokens  # noqa: F401
+from .gt_api import GtKey, generate_bev_gt, generate_lane_gt, gt_key  # noqa: F401  (one function per system and the key it returns: autogt/gt_api.py)

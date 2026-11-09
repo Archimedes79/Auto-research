@@ -28,7 +28,7 @@ RELEASES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "releases.cs
 # that is in neither list, and for a hashed module that nuscenes_gt.py does not import, so a change of the generator cannot slip past a version.
 # the lane GT (lane_gt.py, lane_graph.py, road_graph.py, lane_lines.py) has its own version (lane_versions.csv), not the front GT's signature
 NOT_GENERATOR = ("__init__.py", "__main__.py", "checks.py", "clean.py", "cli.py", "lane_gt.py", "lane_graph.py", "lane_graph_selftest.py", "lane_graph_view.py", "lane_tiers.py", "lane_tiers_selftest.py",
-                 "lane_lines.py", "light_nusc.py", "report.py", "rig_masks.py", "road_graph.py", "selftest.py", "sets.py", "suite.py", "versions.py", "video.py", "view.py")
+                 "gt_api.py", "gt_api_selftest.py", "lane_lines.py", "lane_raster.py", "light_nusc.py", "report.py", "rig_masks.py", "road_graph.py", "selftest.py", "sets.py", "suite.py", "versions.py", "video.py", "view.py")
 
 
 def table():

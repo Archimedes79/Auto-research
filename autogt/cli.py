@@ -8,6 +8,9 @@
       of the generator code, the sets held in full, release); DIR default data/autogt (where autogt.load reads); memory-light
       (groups of 60 sequences), resumable (existing files are skipped); the signature changes with every edit of the generator, so GT
       of an older generator is never mixed in
+  python -m autogt generate-bev DATAROOT [--set small|full | --scenes ...] [--out DIR] [--workers N] [--border-m 0 0.5]     (autogt.generate_bev_gt)
+      BEV Fusion in one command: the front GT + the lane GT of the rig bev_fusion + the packed intersection masks; prints the GT KEY (data + code signature, see autogt/gt_api.py)
+  python -m autogt generate-lane DATAROOT [--rig lane_center|bev_fusion|all] [--set ...]     (autogt.generate_lane_gt)      the lane GT of one system or both; prints the key
   python -m autogt data DATAROOT [--set small|full | --scenes ...]
       are the raw files the generator reads on disk (json tables, map expansion, CAM_FRONT, the five radars)? exit 1 if not
   python -m autogt have [--set small|full | --scenes ... | --scenes-file F] [--version V] [--stride N]
@@ -147,6 +150,10 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
            "ss": gen.ss, "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
            "complete": complete}
     kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
+    from .gt_api import data_identity                              # the identity of the raw nuScenes files this GT was made from (the GT key reads it back)
+    data_id = kept.get("data_identity") or data_identity()
+    if data_id != "unknown":
+        idx["data_identity"] = data_id
     # the sets this run could check are taken from its fresh list (a deleted keyframe removes `full`); a set that this nuScenes version cannot
     # check (small is in mini, full is not) keeps its old entry
     sets_complete = sorted((set(kept.get("sets_complete", [])) - set((run or {}).get("sets_checked", []))) | set((run or {}).get("sets_complete", [])))
@@ -347,15 +354,21 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
         print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx['commit']}"
               f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx.get('sets_complete', [])})\n"
               f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
-    lane_result = lane_rigs = None
+    lane_result = lane_rigs = masks_error = None
     if lane and stride == 1:
         from .lane_gt import RIGS, generate as generate_lane
         lane_rigs = {rig: generate_lane(dataroot, out=os.path.join(out, "lane"), version=version, scenes=names, workers=workers, verbose=verbose, rig=rig) for rig in RIGS}
         lane_result = lane_rigs["lane_center"]
+        from . import lane_gt, lane_raster                                  # the BEV Fusion GT is the front GT + the lane GT of its rig + the area masks derived from it (gt_api.generate_bev_gt)
+        try:
+            lane_raster.build_mask_cache(os.path.join(out, "lane", lane_gt.signature(rig="bev_fusion")), verbose=verbose)
+        except Exception as e:                                              # the GT is written: a failure of the derived masks must not lose the result below
+            masks_error = f"{type(e).__name__}: {e}"
+            print("WARNING: the mask cache was not built:", masks_error, flush=True)
     elif lane and verbose:
         print("the lane GT is made for every keyframe: skipped with stride", stride)
     return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
-            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result, "lane_rigs": lane_rigs}
+            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result, "lane_rigs": lane_rigs, "masks_error": masks_error}
 
 
 def _print_versions():
@@ -474,6 +487,14 @@ def _parser():
     v.add_argument("--total", action="store_true", help="4th panel: total apparent flow (ego motion included) instead of motion relative to the static world")
     sub.add_parser("sheets").add_argument("out")
     sub.add_parser("masks", help="the two coverage masks (BEV fusion: front; Spurmitte: surround) as one picture").add_argument("out")
+    gb = sub.add_parser("generate-bev", help="BEV Fusion in one command: the front GT + the lane GT of the rig bev_fusion + the packed area masks of a nuScenes folder (resumable); prints the GT key")
+    gb.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
+    gb.add_argument("--out", default=None, help="default data/autogt (the folder that holds the stores)")
+    gb.add_argument("--version", default=None)
+    gb.add_argument("--set", dest="set_name", default=None, help="small (the 10 sequences of mini) or full (all of trainval)")
+    gb.add_argument("--scenes", nargs="*")
+    gb.add_argument("--workers", type=int, default=1)
+    gb.add_argument("--border-m", dest="borders", type=float, nargs="*", default=[0.0, 0.5], help="the borders in metres of the intersection masks (default 0 and 0.5)")
     gl = sub.add_parser("generate-lane", help="the lane GT (lane graph, roads, lines; own version and store) of a nuScenes folder: resumable")
     gl.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
     gl.add_argument("--out", default=None, help="default data/autogt/lane; the files go to OUT/<lane signature>/")
@@ -595,8 +616,27 @@ def _cmd_generate_lane(a):
     version = a.version or detect_version(a.dataroot)
     if "trainval" in version:
         ensure_cache(a.dataroot, version)
+    from .gt_api import key_of
+    lane_dir = os.path.abspath(os.path.expanduser(a.out)) if a.out else None
+    keyed = lane_dir is None or os.path.basename(lane_dir) == "lane"        # the key is printed when the stores are where gt_api looks: data/autogt/lane or <root>/lane
+    root = None if lane_dir is None else os.path.dirname(lane_dir)
     for rig in (list(RIGS) if a.rig == "all" else [a.rig]):
         generate(a.dataroot, a.out, version, a.scenes, a.set_name, a.workers, rig=rig)
+        if keyed:
+            print(key_of(rig, version, a.set_name or ("custom" if a.scenes else None), root, parts=("lane",), dataroot=a.dataroot, scenes=a.scenes))
+        else:
+            print(f"(no GT key printed: --out {a.out} is not a folder named lane)")
+
+
+def _cmd_generate_bev(a):
+    from .gt_api import generate_bev_gt
+    from .light_nusc import ensure_cache
+    version = a.version or detect_version(a.dataroot)
+    if "trainval" in version:
+        ensure_cache(a.dataroot, version)
+    if not a.borders:
+        raise ValueError("--border-m needs at least one value (0 and 0.5 are the default)")
+    print(generate_bev_gt(a.dataroot, set_name=a.set_name, scenes=a.scenes, out=a.out, version=version, workers=a.workers, borders=tuple(a.borders)))
 
 
 def _cmd_masks(a):
@@ -632,9 +672,9 @@ def _cmd_video(a):
 
 
 COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "digest": _cmd_digest, "have": _cmd_have,
-            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets, "lanegraph": _cmd_lanegraph, "masks": _cmd_masks, "generate-lane": _cmd_generate_lane,
+            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets, "lanegraph": _cmd_lanegraph, "masks": _cmd_masks, "generate-lane": _cmd_generate_lane, "generate-bev": _cmd_generate_bev,
             "report": _cmd_report, "clean": _cmd_clean, "video": _cmd_video}
-CHECKS_ARGUMENTS = ("data", "digest", "generate", "generate-lane", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
+CHECKS_ARGUMENTS = ("data", "digest", "generate", "generate-lane", "generate-bev", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
 
 
 def main(argv=None):

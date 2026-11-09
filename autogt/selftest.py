@@ -634,6 +634,8 @@ def run(root=None, verbose=True):
     from .lane_tiers_selftest import run as lane_tiers_data_selftest
     lane_tiers_mod.selftest(verbose=False)
     lane_tiers_data_selftest(verbose=False)
+    from .gt_api_selftest import run as gt_api_selftest                              # one function per system and the key (gt_api.py), the area masks (lane_raster.py)
+    gt_api_msg = gt_api_selftest(root, verbose=False)
     # 5i one release, one command: the standard GT and the lane GT of the same sequences come out of one `generate`, into two stores of one release
     from . import lane_gt as lane_gt_mod
     from .suite import scene_tokens as tokens_of_scene
@@ -643,6 +645,7 @@ def run(root=None, verbose=True):
         toks_ = tokens_of_scene("scene-0061", "v1.0-mini", root)
         both = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False)
         assert both["written"] == len(toks_) and both["lane"] and both["lane"]["written"] == len(toks_), both
+        assert both["masks_error"] is None and os.path.exists(os.path.join(d, "lane", both["lane_rigs"]["bev_fusion"]["signature"], "masks", "intersection_b0.5.npz")), "generate builds the area masks of the BEV Fusion store too"
         assert os.path.isdir(os.path.join(d, "lane", both["lane"]["signature"])) and lane_gt_mod.missing(toks_, data=os.path.join(d, "lane")) == []
         assert set(both["lane_rigs"]) == set(lane_gt_mod.RIGS) and all(r["written"] == len(toks_) for r in both["lane_rigs"].values()), "one store per rig of the lane GT"
         assert both["lane_rigs"]["bev_fusion"]["signature"] != both["lane"]["signature"] and lane_gt_mod.missing(toks_, data=os.path.join(d, "lane"), rig="bev_fusion") == []
@@ -683,6 +686,7 @@ def run(root=None, verbose=True):
               f"{len(moving)} moving boxes in scene-0061 kf 8 (median speed difference to the devkit {np.median(diffs):.2f} m/s); "
               f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
         print(lane_graph_msg)
+        print(gt_api_msg)
         print(rig_masks_msg)
 
 

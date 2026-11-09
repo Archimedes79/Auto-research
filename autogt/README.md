@@ -5,7 +5,15 @@ static BEV layers, objects, masks, and a **velocity / flow field in m/s** - and 
 imports `training/`; `training/gt_bev.py` is only a shim for the older code. Everything is time-based (seconds), never per frame.
 **Agents: read `AGENTS.md` first** (entry points, run rules, every layer and box field, the rules for using it); this file is the reference.
 
-**The entry point - read nuScenes from a folder, write the GT of every keyframe** (memory-light, resumable, no GPU):
+**One call per system, and the key it returns** (Mirko 2026-11-10; `gt_api.py`): `key = autogt.generate_bev_gt("~/data/nuscenes_full", set_name="full")` makes everything BEV Fusion needs - the front GT, the lane GT of its rig and
+the packed intersection masks - and `key = autogt.generate_lane_gt(root, rig="lane_center")` the lane GT of Spurmitte (`rig="all"`: both, a dict); shell `python -m autogt generate-bev ROOT --set full`, `generate-lane ROOT --rig ...`.
+The GT KEY names what you got: the data (`data_identity` of `data/NuScenes/manifest.json`), per part the code (signature, git commit of `autogt/`, clean or dirty, version), the suite release; `str(key)` one line,
+`key.id` 12 characters, `key.complete`; `key.load(token)` / `key.lane(token)` / `key.mask(token, "intersection", border_m)` read through it (the token is the nuScenes sample token of a keyframe). The masks
+(`lane_raster.py`): `area_mask(g, kind, border_m)` rasterises the polygons of the lane graph into the BEV grid (a plain (120, 104) uint8, `[ix, iy]` like the GT maps; a cell is set when its centre is inside, exact:
+IoU 1.0000 with a point-in-polygon raster of the map polygons; a PIL raster at 4x supersampling differs by about 1.6 % of the cells at the edges), `build_mask_cache(store)` packs them for all keyframes
+(`<lane store>/masks/<kind>_b<border>.npz`, 1.5 KB per frame, stale when the rasteriser changes), `load_mask(token, kind, border_m)` reads one. No signature changes: the front GT stays v9.
+
+**The entry point under it - read nuScenes from a folder, write the GT of every keyframe** (memory-light, resumable, no GPU):
 ```python
 import autogt                                   # run from the repository root (or put it on PYTHONPATH)
 r = autogt.generate("~/data/nuscenes_full")     # all of trainval (5-8 h in one process); out=None -> data/autogt/<signature>/
@@ -72,6 +80,7 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
 | `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
 | `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`, `lane_tiers.py` | **the lane GT** (own version, not part of the front generator; numpy + shapely, the nuScenes map and, for the l4 labels, the ego poses and boxes): the lane graph with ids, successors and events, neighbours / lane counts / roads, dividers + road boundary with corners, tiers 1 / 2 / 3 and camera visibility per point (section Lane GT); two rigs, Spurmitte and BEV Fusion (l5); `lane_versions.csv` its versions; `lane_graph_view.py` draws it (`python -m autogt lanegraph`), `lane_graph_selftest.py` and `lane_tiers_selftest.py` test it |
+| `gt_api.py`, `lane_raster.py`, `gt_api_selftest.py` | **one function per system and its key** (`generate_bev_gt`, `generate_lane_gt`, `GtKey`, `gt_key`) and the **area masks** of the lane GT in the BEV grid with their packed cache (not hashed: no signature changes); the test generates one mini sequence |
 | `rig_masks.py` | **the two coverage masks**, one per sensor rig, static from the calibration: `bev_fusion_mask()` (front camera + 5 radars, the BEV-fusion grid) and `lane_mask()` (6 cameras + 5 radars, the Spurmitte window); `python -m autogt masks out.png` draws both |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m autogt data` |
