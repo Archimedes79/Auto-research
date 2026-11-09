@@ -77,3 +77,25 @@ Sources: `runs/t23_C_s0/eval/card.json` and `runs/t21_ctl_s0/eval/card.json` (ev
   - **INCONCLUSIVE** otherwise (the seeds disagree): report the spread; a third seed only on Mirko's word.
   - The ranking gain "reproduces" if AP >= +0.020 and roc_auc >= +0.030 in both seeds; it is reported next to the verdict and does not change it.
 - **Kill / validity.** As in section 1 (non-finite loss in more than 1 % of the steps, GT signature `0.5_4_6a7aa7864a`, a resumed run is labelled, the step-1 check of `t23.C_s1` against `t21.ctl_s1` must be equal). GPU memory: the section-3 run used about 10.2 GB, below 11 GB.
+
+## 5 Result of the second seed and verdict (2026-11-09 02:20, read by hand with the rule of section 4)
+Sources: `temp/lane_tests/t23_s1_readout.txt` and `t23_s1_compare.txt` (made by `chain7.sh` from `runs/t21_ctl_s1/eval/card.json` and `runs/t23_C_s1/eval/card.json`; paired scene bootstrap of `bev_suite.py compare`, 1000 resamples); ledger rows `t21.ctl_s1`, `t23.C_s1` (+ `.eval`). Runs: `t21.ctl_s1` 22:17 - 00:04, eval 00:18; `t23.C_s1` 00:20 - 02:02, eval 02:12; all ok, uninterrupted; step-1 check of the pair equal in every untouched term; both on the working tree (matched code).
+
+| VAL 1000, dt 0 | seed 0: control -> C | seed 1: control -> C |
+|---|---|---|
+| lane divider IoU@0.5 | 0.4341 -> 0.4287 (d0 -0.0054) | 0.4336 -> 0.4329 (**d1 -0.0007**, paired 95% [-0.0079, +0.0065]) |
+| lane divider IoU@1 | 0.5516 -> 0.5601 (+0.0086) | 0.5489 -> 0.5623 (+0.0134) |
+| lane divider AP | 0.2149 -> 0.2533 (+0.0384) | 0.2141 -> 0.2542 (+0.0401) |
+| lane divider roc_auc | 0.8385 -> 0.9281 (+0.0896) | 0.8362 -> 0.9287 (+0.0925) |
+| zero-crossing F1@0.5 | 0.1694 -> 0.1561 (-0.0132) | 0.1795 -> 0.1472 (-0.0323, excludes 0) |
+| guard walkway IoU@0 | -0.0102 (excludes 0) | -0.0065 (interval [-0.0108, -0.0021], excludes 0) |
+| guard road divider IoU@1 / drivable / crossing | -0.0065 / +0.0001 / -0.0034 | -0.0046 / +0.0018 / -0.0051 |
+| guard mAP fusion area / velocity EPE (lower better) | -0.0004 / +0.0029 | -0.0041 / +0.0061 |
+| guard lane-centre IoU@0.5 / IoU@1 / AP | -0.0015 / -0.0021 / +0.0014 | +0.0004 / +0.0004 / +0.0027 |
+| guard vehicle IoU@0 | -0.0020 | -0.0018 |
+
+- **Verdict (rule of section 4, label "by hand: composed from the table rows"): TIE on two seeds.** m1 = max(0.010, half-width 0.0072) = 0.010 and |d1| = 0.0007 <= m1; d0 was inside m as well. The BCE as set here (weight 10, positives x3, ignore 1.0 m) does not move lane divider IoU@0.5; CANDIDATE is far away (d1 would need > 0.015), CUT does not apply (d1 is not below -m1).
+- **Predictions of section 4:** (1) d1 inside +-0.010: hit; (2) AP >= +0.020 and roc_auc >= +0.030: hit in both seeds (the ranking gain reproduces: AP +0.038 / +0.040, roc_auc +0.090 / +0.093); (3) spreads <= 0.010: hit (control |ctl_s1 - ctl_s0| 0.0005, arm |C_s1 - C_s0| 0.0042).
+- **What the pair says:** the fine-tune seed spread of IoU@0.5 is small (0.0005 for the control, 0.0042 for the arm), smaller than the 0.010 band; the ranking is much better with the loss and IoU@1 is up in both seeds (+0.0086 / +0.0134, not a gating row, not adopted as a claim: seed pair, no interval beyond the first), but at the 0.5 threshold and 0.5 m tolerance nothing follows, and the zero-crossing F1 falls (thin-line extraction, precision up and recall down in both seeds). The walkway IoU@0 is lower in both seeds (-0.0102 / -0.0065); a small, repeatable cost of the loss. The night probe on the t20 predictions (`temp/overview/decode_*`) agrees: a threshold or thinning step does not turn a better ranking into a better IoU.
+- **Not shown:** nothing here says that a BCE term cannot help in other settings (weight, positive weight, ignore distance are single first values; the lines-scale control was never run). The 246-frame CPU read-out of both arms (`temp/overview/readout_compare_*`, seed 0) gives the same picture.
+- **Decision (Mirko's recorded OK is not needed, nothing is promoted):** the card is closed with TIE; no third seed, no weight step. The project has no `closed_questions.md` (only the lane project does): the closure is recorded in the ledger decision of `t23.C_s1` and here; a closed-questions file for the BEV system would be a new state file and was not created (a deviation from the card's section 1 wording, chosen to keep the state files few).

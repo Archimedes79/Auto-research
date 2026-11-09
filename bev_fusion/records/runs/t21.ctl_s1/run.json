@@ -1,0 +1,52 @@
+{
+ "id": "t21.ctl_s1",
+ "hypothesis": "t21 control, second seed (seed 1) for t23 arm C: the equal-budget 1500-step fine-tune of t20.base_s0 without line_bce, run on the current working tree; it is the matched partner of t23.C_s1 and gives the spread of the control against t21.ctl_s0",
+ "prediction": "VAL 1000, dt 0 (card experiments/t23_lane_line_loss section 4): lane divider IoU@0.5 within 0.010 of t21.ctl_s0 (0.4341), AP and roc_auc within their half-widths of it; no verdict of its own",
+ "rule": "by hand: no verdict of its own; read only as the partner of t23.C_s1 and as the spread of the control (card section 4)",
+ "split": "train",
+ "basis": "",
+ "seed": "1",
+ "command": "bash temp/train/run_ar.sh temp/compose/t21.ctl_s1.json",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 158,
+ "created": "2026-11-08T22:15:49",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-08T22:16:59",
+ "code_hash": "6757558c9e0e",
+ "commit": "e544bdf063",
+ "tag": "bf/t21.ctl_s1",
+ "git_note": "487 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 611,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion/tests/test_lane_pull.py",
+   "bev_fusion/training/lane_branch.py",
+   "bev_fusion/training/model.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 6370,
+ "attempts": 1,
+ "ended": "2026-11-09T00:03:59",
+ "last_lines": [
+  "step 1320: total 7.7177 lr 4.16e-06 grad 20.40",
+  "step 1340: total 6.9290 lr 3.32e-06 grad 19.14",
+  "step 1360: total 9.0746 lr 2.58e-06 grad 46.32",
+  "step 1380: total 8.1636 lr 1.93e-06 grad 19.35",
+  "step 1400: total 7.6230 lr 1.38e-06 grad 18.63",
+  "step 1420: total 6.4863 lr 9.23e-07 grad 28.87",
+  "step 1440: total 6.6679 lr 5.67e-07 grad 23.45",
+  "step 1460: total 7.3112 lr 3.11e-07 grad 26.18",
+  "step 1480: total 7.9876 lr 1.55e-07 grad 25.97",
+  "step 1500: total 7.0510 lr 1.00e-07 grad 16.27",
+  "step 1500: val total 8.2844",
+  "t21.ctl_s1 exit 0 00:03:09"
+ ]
+}
