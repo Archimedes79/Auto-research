@@ -3,10 +3,11 @@
     python autoresearch/tools/schedule.py show                     # all items, grouped by state
     python autoresearch/tools/schedule.py next [--resource gpu]    # ready items: planned / ready, every dependency done
     python autoresearch/tools/schedule.py set E240.sum done        # set the stored state of an item that has no run (a review, a summary); `cancelled` also drops an item with runs
+    python autoresearch/tools/schedule.py link E240.a results/experiments/E240_x   # after the run: the result directory of the item (must hold a results.md: templates/results.md); `show` lists it
     python autoresearch/tools/schedule.py add E240.b --node R1 --kind train --depends E240.code --resource gpu --budget 40m --note "seed 1" [--command "bash tools/env/_py14.sh ..."]
 
 Columns: item, node, kind, state, depends_on (';'-separated), resource (gpu / cpu / agent), budget, priority (1 = first), owner, run_ids (';'), note,
-command (the launcher command of the item, for the lead to start through run.py). Items start through run.py (a chain
+command (the launcher command of the item, for the lead to start through run.py), result (the directory with the item's results.md, set by `link` when it is done). Items start through run.py (a chain
 through --after); tick.py, which started ready items, was removed under D32 (it started 0 of 61 runs).
 
 State is derived, never synced: an item with run ids takes its state from the run records (done flag, record status, heartbeat: derived() below), the
@@ -21,7 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 
-COLS = ["item", "node", "kind", "state", "depends_on", "resource", "budget", "priority", "owner", "run_ids", "note", "command"]
+COLS = ["item", "node", "kind", "state", "depends_on", "resource", "budget", "priority", "owner", "run_ids", "note", "command", "result"]
 STATES = ("planned", "ready", "running", "done", "failed", "blocked", "cancelled")
 OF_RUN = {"done": "done", "ok": "done", "running": "running", "failed": "failed", "gpu_busy": "failed", "timeout": "failed", "stalled": "failed", "blocked": "blocked", "stopped": "blocked", "held": "blocked"}   # stopped = ended on request with a checkpoint: not failed, but waits for a resume
 
@@ -79,10 +80,27 @@ def ready(rows, resource=None):
     return sorted(out, key=lambda r: (_priority(r), rows.index(r)))
 
 
+def link(rows, item, path, root):
+    """store the result directory of an item (the `result` column): a path inside the problem folder that holds a results.md, the summary that comes back"""
+    if not any(r["item"] == item for r in rows):
+        sys.exit(f"item {item} is not in the schedule (`add` creates it)")
+    rel = (path or "").replace("\\", "/").rstrip("/")
+    if not rel or os.path.isabs(rel) or ".." in rel.split("/"):
+        sys.exit("the result directory is a path inside the problem folder (not empty, not absolute, no ..)")
+    if not os.path.isfile(os.path.join(root, rel, "results.md")):
+        sys.exit(f"no results.md in {rel}")
+    for r in rows:
+        if r["item"] == item:
+            r["result"] = rel
+    return rows
+
+
 def change(a):
-    """set / add: load, change and save as one step under the lock"""
+    """set / add / link: load, change and save as one step under the lock"""
     rows = load()
-    if a.cmd == "set":
+    if a.cmd == "link":
+        link(rows, a.item, a.state, P.root())
+    elif a.cmd == "set":
         if a.state not in STATES:
             sys.exit(f"state must be one of {STATES}")
         if not any(r["item"] == a.item for r in rows):
@@ -106,14 +124,14 @@ def change(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["show", "next", "set", "add"])
+    ap.add_argument("cmd", choices=["show", "next", "set", "add", "link"])
     ap.add_argument("item", nargs="?")
     ap.add_argument("state", nargs="?")
     ap.add_argument("--resource")
     for c in ("node", "kind", "depends", "budget", "priority", "owner", "runs", "note", "command"):
         ap.add_argument("--" + c, default="")
     a = ap.parse_args()
-    if a.cmd in ("set", "add"):
+    if a.cmd in ("set", "add", "link"):
         with P.locked(P.path("schedule")):
             return change(a)
     rows = derived(load())
@@ -122,6 +140,9 @@ def main():
             sel = [r for r in rows if r["state"] == s]
             if sel:
                 print(f"{s} ({len(sel)}): " + ", ".join(r["item"] for r in sel))
+        for r in rows:
+            if r.get("result"):
+                print(f"result: {r['item']} -> {r['result']}/results.md")
     else:
         for r in ready(rows, a.resource)[:10]:
             print(f"{r['item']:14} {r['kind']:12} {r['resource']:6} {r['budget']:6} {r['note']}")

@@ -1,0 +1,9 @@
+# <id> result - <KEEP | CUT | TIE | INCONCLUSIVE | by hand: reason>
+
+The summary of a finished experiment, in the experiment's result directory next to the card; the schedule item points here (`schedule.py link <item> <directory>`) and the lead gives it back to the person. One page: the numbers come from the metric cards and `decision.json`, never typed by hand.
+
+- **Card and runs.** The card (link to `experiment.md`), the run ids with their code tags, the result packages (`results/<run id>/`).
+- **Verdict.** What `decide.py` wrote, by the rule as written in the card (copy the rule, the effect, the interval). If the rule did not cover the case: "by hand: <reason>".
+- **Numbers.** A small table: the metric of the card and the guards, variant against control, split and frames named, ms per frame where it matters.
+- **What it says.** About the hypothesis and why; negatives stay.
+- **Next.** The next card or item, and every question for the person: options, recommendation, evidence. The person's answer is recorded here with the date and their words, so a decision lives with its evidence.

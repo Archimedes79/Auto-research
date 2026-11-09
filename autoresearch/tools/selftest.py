@@ -784,6 +784,21 @@ try:
     assert [s["node"] for s in nosp] == ["t22", "t23"] and nosp[0]["items"] == {"done": 1, "planned": 1} and nosp[0]["verdict"] == "CUT" and nosp[0]["ledger"] == {"ok": 1} and nosp[1]["verdict"] == "", nosp
     assert PL.status(None, [dict(item="a", node=" t22 ", state="done")], [])[0]["items"] == {"done": 1}, "a node with blanks around it still gets its items"
     assert PL.status("", [dict(item="a", node="t22", state="done")], []) == [], "an existing empty plan file is a plan without rows, not a reason to use the schedule"
+    # schedule.py link: the result directory of an item must hold a results.md, stay inside the problem folder and survive a save / load
+    import schedule as SCL
+    rd = f"{T}/res_link"
+    os.makedirs(rd, exist_ok=True)
+    lk = [dict(item="a", state="done")]
+    for args_, why in ((("a", "res_link"), "no results.md"), (("a", "../x"), "path inside"), (("a", "/abs"), "path inside"), (("a", ""), "path inside"), (("zz", "res_link"), "not in the schedule")):
+        try:
+            SCL.link(lk, *args_, T)
+            raise AssertionError(f"link must be refused: {args_}")
+        except SystemExit as e:
+            assert why in str(e), (args_, str(e))
+    open(f"{rd}/results.md", "w").write("# a result\n")
+    assert SCL.link(lk, "a", "res_link/", T)[0]["result"] == "res_link", "a trailing slash is dropped"
+    SCL.save(lk, f"{T}/lk.csv")
+    assert SCL.load(f"{T}/lk.csv")[0]["result"] == "res_link" and "result" in SCL.COLS, "the result column is saved and loaded"
     # evidence that cannot be compared is refused, not decided (review 2026-10-31: seeds paired by position, other splits / frame counts, infinity)
     def fc(name, q, **kw):
         return dict(full, name=name, metrics=dict(Q=q), **kw)
