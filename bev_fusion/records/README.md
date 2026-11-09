@@ -16,6 +16,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `bn_over_dt_2026-11-03.md` | open finding #5 measured on `t16.full_s0` (EMA weights, 225 val frames): the dt 0 loss and tolerant IoU with the stored BatchNorm statistics (a mixture of dt -0.5 / 0 / +0.5), with batch statistics, and with statistics re-estimated from dt 0 only; the mixture costs at most 0.9 % of a group loss and 0.001 lane divider IoU@1, a per-dt BatchNorm is not worth a card now (a diagnostic, no verdict) |
 | `open_findings_2026-11-02.md` | triage of the bug hunt's open findings (real? severity? fix size? what was checked and what is per report) for the module-iteration list after the baseline pair; nothing fixed |
 | `speed_options_2026-11-03.md` | where the host-bound step spends its ~45 thousand operators (counted on CPU per section), the sync-like operations, what `torch.compile` can take, and the ranked speed levers with the GPU measurement that would confirm each; nothing changed |
+| `night_2026-11-08.md` | the night of 2026-11-08 / 09 (Mirko away, no questions): the GPU chain (t23 seed 1 read: TIE on two seeds), the CPU diagnostics on the t20 network (L4 contribution, decoding, misses, earlier-frame probe), t24 closed as not run, what waits for Mirko; the page is the artifact named in it |
 | `BOARD.md` | the board made by `python evaluation/board.py --write`: every open arm against the base, all heads, from the stored `metrics.json` files; regenerate it, do not edit it |
 
 ## Start a training
