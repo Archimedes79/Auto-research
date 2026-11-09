@@ -16,7 +16,12 @@ store="${LS_STORE:-/mnt/d/Auto-research}"
 # link (below the repository) | target (below the store)
 table="${LS_TABLE:-bev_fusion/data/cache/cam_feats_bevfusion|NuScenes_cache/bev_fusion/cam_feats_bevfusion
 bev_fusion/data/cache/cam_feats_parts7_10|NuScenes_cache/bev_fusion/cam_feats_parts7_10
-bev_fusion/data/checkpoints|NuScenes_checkpoints/bev_fusion}"
+bev_fusion/data/checkpoints|NuScenes_checkpoints/bev_fusion
+data/autogt/c643a7539d|NuScenesAdditionalGt/c643a7539d
+data/autogt/lane|NuScenesAdditionalGt/lane
+data/autogt/cache|NuScenesAdditionalGt/cache
+data/autogt/examples|NuScenesAdditionalGt/examples
+data/autogt/reports|NuScenesAdditionalGt/reports}"
 
 state() {  # state <link> <target> -> ok | missing | wrong | dangling | real | "no target"
   local l="$1" t="$2"
