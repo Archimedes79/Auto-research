@@ -778,6 +778,12 @@ try:
     assert st[2]["ledger"] == {} and st[2]["verdict"] == "", "E26 does not take the rows of E265 / E2650 (exact id, then . or _)"
     assert st[1]["ledger"] == {"ok": 1, "running": 1} and st[1]["verdict"] == "CUT", "t10.dual takes t10.dual_s0 and t10.dual_long_s0.eval: " + str(st[1])
     assert PL.status("| N1 | E5 x |\n", [], [dict(id="E5.a", decision="")])[0]["ledger"] == {"planned": 1}, "a row without a status counts as planned"
+    # no plan file: the nodes of the schedule are the list of experiments (order of first appearance, an empty node is no experiment)
+    nosp = PL.status(None, [dict(item="a", node="t22", state="done"), dict(item="b", node="", state="planned"), dict(item="c", node="t23", state="planned"), dict(item="d", node="t22", state="planned")],
+                     [dict(id="t22.B2_s0", status="ok", decision="decide.py 2026-11-09: CUT (x)", started="1"), dict(id="t220.x", status="ok", decision="decide.py 2026-11-09: KEEP", started="2")])
+    assert [s["node"] for s in nosp] == ["t22", "t23"] and nosp[0]["items"] == {"done": 1, "planned": 1} and nosp[0]["verdict"] == "CUT" and nosp[0]["ledger"] == {"ok": 1} and nosp[1]["verdict"] == "", nosp
+    assert PL.status(None, [dict(item="a", node=" t22 ", state="done")], [])[0]["items"] == {"done": 1}, "a node with blanks around it still gets its items"
+    assert PL.status("", [dict(item="a", node="t22", state="done")], []) == [], "an existing empty plan file is a plan without rows, not a reason to use the schedule"
     # evidence that cannot be compared is refused, not decided (review 2026-10-31: seeds paired by position, other splits / frame counts, infinity)
     def fc(name, q, **kw):
         return dict(full, name=name, metrics=dict(Q=q), **kw)
@@ -1208,6 +1214,11 @@ try:
     assert r5.returncode != 0 and "whole number" in r5.stdout + r5.stderr and open(f"{T}/schedule.csv", "rb").read() == sch_before, (r5.stdout, r5.stderr)
     r5 = subprocess.run([sys.executable, f"{HERE}/schedule.py", "add", "S.prio", "--kind", "train", "--priority", "²"], capture_output=True, text=True, env=env)
     assert r5.returncode != 0 and open(f"{T}/schedule.csv", "rb").read() == sch_before, "a superscript digit is no number (int() refuses it)"
+    # plan.py status as a command: an explicit missing plan and a project with neither a plan file nor a schedule node are errors, not an empty table
+    r5 = subprocess.run([sys.executable, f"{HERE}/plan.py", "status", "--plan", f"{T}/no_such_plan.md"], capture_output=True, text=True, env=env)
+    assert r5.returncode != 0 and "no plan at" in r5.stdout + r5.stderr, (r5.returncode, r5.stdout, r5.stderr)
+    r5 = subprocess.run([sys.executable, f"{HERE}/plan.py", "status"], capture_output=True, text=True, env=env)
+    assert r5.returncode != 0 and "no schedule nodes" in r5.stdout + r5.stderr, (r5.returncode, r5.stdout, r5.stderr)
     odd = [dict(item="x", state="planned", depends_on="", priority="high", resource="cpu"), dict(item="z", state="planned", depends_on="", priority="²", resource="cpu"),
            dict(item="y", state="planned", depends_on="", priority="3", resource="cpu"), dict(item="n", state="planned", depends_on="", priority="-1", resource="cpu")]
     assert [r["item"] for r in SC.ready(odd)] == ["n", "y", "x", "z"], "an unreadable priority comes last, a negative one first"
