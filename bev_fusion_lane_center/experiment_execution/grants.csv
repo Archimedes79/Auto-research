@@ -16,3 +16,5 @@ granted,until,path,decision,note
 2026-11-01T08:58,2026-11-01T11:58,../autoresearch/tools/guard_hook.py,D33,D33 (1): fix gaps (a)-(d) with selftest cases
 2026-11-01T09:07,2026-11-01T10:07,project.json,D35,D35 (a): protect project.json by key
 2026-11-04T21:36,2026-11-04T22:36,PROBLEM.md,D55,D55: replace the words no argmax / no matching / no rule step by the end-to-end differentiable rule (line 8 only)
+2026-11-10T00:38,2026-11-10T08:38,../autoresearch/tools/guard_hook.py,D69,D69: the hook reads a folder of decision files as well as the Decided table
+2026-11-10T00:41,2026-11-10T08:41,project.json,D69,D69: the decisions entry points to the folder of decision files

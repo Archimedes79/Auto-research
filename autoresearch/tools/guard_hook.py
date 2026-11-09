@@ -12,7 +12,8 @@ files of the problem unless a grant that names a decided D<n> covers them. Stand
 Protected (project.json "protected", relative to the problem folder): whole files or folders (ending in /), and for a json file optionally only some
 top-level entries ({"models/registry.json": ["champion", "control"]}: adding or changing other entries stays free, changing the champion is a
 decision). The grant file (project.json "grants") is always protected: only `grant` writes it.
-A grant is valid while `until` lies ahead and its decision has a row in the "Decided" table of DECISIONS.md (the decision cell starts with D<n>).
+A grant is valid while `until` lies ahead and its decision is decided: its file D<n>.md in the decisions folder has a "Decided: <date> ..." line (D69), or, with the older
+file form, it has a row in the "Decided" table of DECISIONS.md (the decision cell starts with D<n>).
 Every grant is a row of the grant file (a text record in git), so every deliberate edit of a protected file is visible.
 This is a guard against accidental and stray edits (a subagent, a scout, a typo in a path), not against a determined agent: Bash can still write
 the files.
@@ -107,9 +108,32 @@ def rules(root, cfg):
 
 
 def decided(root, cfg):
-    """the D<n> ids that have a row of their own in the Decided table of DECISIONS.md (a row "| date | D8: ... |"; an id only mentioned in
-    another row's text, or listed under Open, does not count)"""
+    """the D<n> ids that count as decided. project.json "decisions" names either a FOLDER with one file D<n>.md per decision (D69, 2026-11-10: the id is
+    decided when its file has a line "Decided: <yyyy-mm-dd> ..."; a file without one is an open question) or the older file DECISIONS.md, where an id
+    is decided when it has a row of its own in the Decided table (a row "| date | D8: ... |"; an id only mentioned in another row's text, or listed
+    under Open, does not count)"""
     p = os.path.join(root, cfg.get("decisions", "experiment_execution/DECISIONS.md"))
+    if os.path.isdir(p):
+        out = set()
+        for name in os.listdir(p):
+            m = re.fullmatch(r"(D\d+)\.md", name)  # the id is written exactly (D05 is not D5)
+            f = os.path.join(p, name)
+            if not m or not os.path.isfile(f):
+                continue
+            try:
+                with open(f, encoding="utf-8") as fh:
+                    body = fh.read()
+            except (OSError, ValueError):  # an unreadable file (bad bytes, no permission) decides nothing; it must not crash the gate, which fails open
+                continue
+            body = re.sub(r"^```.*?^```[ \t]*$", "", body, flags=re.M | re.S)  # a Decided line inside a code block (an example, a template) does not count
+            d = re.search(r"^Decided:[ \t]*(\d{4}-\d{2}-\d{2})\b", body, re.M)  # the text after the date is free
+            if d:
+                try:
+                    dt.date.fromisoformat(d.group(1))
+                except ValueError:
+                    continue
+                out.add(m.group(1))
+        return out
     if not os.path.exists(p):
         return set()
     text = open(p, encoding="utf-8").read()
@@ -221,16 +245,16 @@ def verdict_path(tool, inp, path, root, cfg, now):
             what += f" (entries {', '.join(changed)})"
         if granted(path, root, cfg, now):
             return None
-        return (f"guard_hook: {what} is protected (a decision of the person, DECISIONS.md). If a decided entry covers this edit, record a grant first: "
+        return (f"guard_hook: {what} is protected (a decision of the person, the decisions record). If a decided entry covers this edit, record a grant first: "
                 f"`python3 ../autoresearch/tools/guard_hook.py grant {rel} --decision D<n> --hours 8 --note \"...\"` (from the problem folder, in the WSL); "
-                f"otherwise write the question into DECISIONS.md and wait for the answer. Do not go around this through the shell.")
+                f"otherwise write the question into the decisions record (a file D<n>.md in the decisions folder, or DECISIONS.md) and wait for the answer. Do not go around this through the shell.")
     return None
 
 
 def add_grant(path, decision, hours, note, root=None, cfg=None):
     root, cfg = root or P.root(), cfg or P.cfg()
     if decision not in decided(root, cfg):
-        sys.exit(f"{decision} has no row in the Decided table of DECISIONS.md: no grant")
+        sys.exit(f"{decision} is not decided (no 'Decided:' line in its file of the decisions folder, no row in the Decided table of DECISIONS.md): no grant")
     full = norm(os.path.join(root, path))
     hit = [rel for rel, prot, folder, _ in rules(root, cfg) if covers(prot, full) or (full != norm(root) and covers(full, prot) and not covers(full, norm(root)))]
     if not hit:
@@ -300,6 +324,28 @@ def selftest():
     cfg = dict(protected={"TEST_LOG.md": None, "tools/": None, "reg.json": ["champion"]}, grants="experiment_execution/grants.csv",
                decisions="experiment_execution/DECISIONS.md")
     assert decided(root, cfg) == {"D8"}, decided(root, cfg)
+    # D69: a folder of decision files D<n>.md; decided only by a line that STARTS with "Decided: <yyyy-mm-dd>", the file name gives the id
+    dd = os.path.join(root, "decisions")
+    os.makedirs(dd)
+    for name, body in (("D7.md", "# D7\nQuestion: x\nDecided: 2026-11-10 yes\n"), ("D9.md", "# D9\nQuestion: still open\n"),
+                       ("D5.md", "# D5\nnot Decided: 2026-11-10 in the middle of a line\n"), ("D6.md", "Decided: soon\n"),
+                       ("notes.md", "Decided: 2026-11-10 D3\n"), ("D12.txt", "Decided: 2026-11-10\n")):
+        open(os.path.join(dd, name), "w", encoding="utf-8").write(body)
+    for name, body in (("D2.md", "# D2\r\nDecided:\t2026-11-10 tab and CRLF\r\n"), ("D3.md", "# D3\n```\nDecided: 2026-11-10 inside an example\n```\n"),
+                       ("D4.md", "# D4\nDecided: 2026-99-99 no such date\n"), ("D1.md", "﻿Decided: 2026-11-10 a BOM before the first line is not read: undecided, the safe side\n"),
+                       ("D10.md", "# D10\n```\nexample\n```\nDecided: 2026-11-10 after a code block\n")):
+        open(os.path.join(dd, name), "w", encoding="utf-8", newline="").write(body)
+    open(os.path.join(dd, "D8.md"), "wb").write(b"# D8\n\xff\xfe Decided: 2026-11-10\n")  # bad bytes: skipped, the gate stays up
+    os.makedirs(os.path.join(dd, "D11.md"))  # a folder named like a decision file: skipped
+    cfg_dir = dict(cfg, decisions="decisions")
+    assert decided(root, cfg_dir) == {"D7", "D2", "D10"}, decided(root, cfg_dir)
+    for bad in ("D9", "D5", "D6", "D3", "D12", "D4", "D1", "D8", "D11"):
+        try:
+            add_grant("TEST_LOG.md", bad, 1, "open, undated, misplaced or misnamed", root, cfg_dir)
+            raise AssertionError(f"a grant needs a decided file: {bad}")
+        except SystemExit:
+            pass
+    assert decided(root, dict(cfg, decisions="no_such_folder_or_file")) == set(), "a missing record decides nothing"
     v = lambda tool, **inp: verdict(tool, inp, root, cfg)  # noqa: E731
     assert v("Write", file_path=os.path.join(root, "TEST_LOG.md"), content="x"), "a protected file must be refused"
     assert v("Edit", file_path=os.path.join(root, "tools/run.py"), old_string="a", new_string="b"), "a file in a protected folder must be refused"

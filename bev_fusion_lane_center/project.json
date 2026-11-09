@@ -26,7 +26,7 @@
   },
   "live_code": ["training", "evaluation", "tools", "reports/build"],
   "trash": "_to_delete",
-  "decisions": "experiment_execution/DECISIONS.md",
+  "decisions": "experiment_execution/decisions",
   "grants": "experiment_execution/grants.csv",
   "_protected": "guard_hook.py refuses Write / Edit of these unless a grant names a decided D<n>; a list of entries protects only those top-level keys of a json file",
   "protected": {"PROBLEM.md": null, "project.json": ["splits", "holdout_split", "test_log", "protected", "grants", "decisions", "lower_is_better"], "evaluation/TEST_USAGE_LOG.md": null, "evaluation/golden.json": null,
