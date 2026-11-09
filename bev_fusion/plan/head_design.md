@@ -1,6 +1,6 @@
 # Head design - the current state (2026-11-01)
 
-This page is the current statement of the heads. It replaces `plan.md` sections 8.2 to 8.5 as the place to read; those sections stay as the history of how the design came about (their measurements are still valid, their design text is not always). Written from the code of this date and from the decisions D26, D27, D36, D37 and D38 (`../../bev_fusion_lane_center/experiment_execution/DECISIONS.md`); checked by a fresh critic pass the same day (22 findings, all fixed here). The picture of the whole chain is `../training/architecture.md`.
+This page is the current statement of the heads. It replaces `plan.md` sections 8.2 to 8.5 as the place to read; those sections stay as the history of how the design came about (their measurements are still valid, their design text is not always). Written from the code of this date and from the decisions D26, D27, D36, D37 and D38 (`../../bev_fusion_lane_center/experiment_execution/decisions/`); checked by a fresh critic pass the same day (22 findings, all fixed here). The picture of the whole chain is `../training/architecture.md`.
 
 ## 1. The heads as built
 
@@ -79,7 +79,7 @@ Numbers in this page come from `../records/morning_2026-11-01.md`, `../results/e
 
 ## 6. D43 (2026-11-02): Mirko's directions and answers to his questions
 
-His message and my reading are recorded as D43 in `../../bev_fusion_lane_center/experiment_execution/DECISIONS.md`. What each point means for the heads:
+His message and my reading are recorded as D43 in `../../bev_fusion_lane_center/experiment_execution/decisions/`. What each point means for the heads:
 
 1. **Centre-line GT (sparse and dense with splits and merges).** The lane project already has the sparse one: `bev_fusion_lane_center/training/data/prep/make_graph_gt.py` builds per sample the lane and lane-connector polylines (0.5 m, nuScenes map arcs) with their `incoming` / `outgoing` links, the directed edges, splits (a piece with >= 2 successors) and merges (>= 2 predecessors), in its own window (x right, y forward, +-50 m); its metric is `evaluation/sparse_lanes/graph_eval.py` (split / merge F1 at 3 m). autogt has the dense side only (mask, one averaged direction, the polylines without tokens or links). To close it: port the graph builder into autogt in the BEV frame (x forward 0..60 m, y left +-26 m), keep the arc tokens and links, and derive the dense fields from the graph: distance field, direction bins with several modes per cell, split / merge heat maps. The lane project's metric then scores the same graphs.
 2. **The radar aux head.** It is a training-only side head on the radar branch's BEV (not on the trunk features S): objects on the radar cells plus a stationary-structure channel with no target. Its job (D38 (a), Mirko: "a test and debug tool"): show that the radar branch keeps the information. The final network does not need it, and no stored run compares aux on / off. In the incumbent its loss is about 5 % of the total (0.65 of 12.5 at step 1000 of `t11_vel_hurdle_acc2`, by difference from the logged groups, Kendall weights and total), but its gradient share is not logged.

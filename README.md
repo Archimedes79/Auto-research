@@ -26,7 +26,7 @@ Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (dis
 ## Where to start
 - The method and its rules: [`autoresearch/METHOD.md`](autoresearch/METHOD.md) (six hard rules, everything else is a default).
 - The picture and the detail drawing: [`autoresearch/overview.md`](autoresearch/overview.md), [`autoresearch/architecture.md`](autoresearch/architecture.md).
-- A problem: its README, `project.json` (paths), and for the lane problem `HANDOVER.md` (where we are), `PROBLEM.md` (goal) and `experiment_execution/DECISIONS.md` (the decisions of the person); `bev_fusion/` keeps its plan in `bev_fusion/plan/`.
+- A problem: its README, `project.json` (paths), and for the lane problem `HANDOVER.md` (where we are), `PROBLEM.md` (goal) and `experiment_execution/decisions/` (the decisions of the person); `bev_fusion/` keeps its plan in `bev_fusion/plan/`.
 - Rules for agents working in this checkout: [`CLAUDE.md`](CLAUDE.md).
 
 ## Reproducing a result

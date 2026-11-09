@@ -12,7 +12,7 @@ A problem is a folder. The person writes `PROBLEM.md` (goal, metric, splits, cur
 | `experiments/<id>/experiment.md` | one file per experiment: the card (question, prediction as a number, decision rule, kill criterion) as a `json card` block, later the summary | the planner or the lead |
 | `schedule.csv` (optional) | the list of experiments as work items: `node` = the experiment, `depends_on`, `resource`, `run_ids`, `command`; the state is derived from the run records, never stored; `plan.py status` lists the experiments with their runs and verdicts | the planner or the lead |
 | `LEDGER.csv` | the run log, one row per run: written by `run.py` and `decide.py`, edited by nobody | the tools |
-| `DECISIONS.md`, `HANDOVER.md` | the questions to the person and the recorded answers; where we stand (<= 3 KB) | agents write, the person answers |
+| `decisions/` (one file D<n>.md each), `HANDOVER.md` | the questions to the person and the recorded answers; where we stand (<= 3 KB) | agents write, the person answers |
 
 One experiment: write the card -> `run.py` (refuses without a complete card, tags the code, writes the run record) -> the evaluation writes the metric card -> `decide.py` applies the rule of the card (KEEP / CUT / TIE / INCONCLUSIVE) -> the summary goes into the experiment file. Six rules are hard (`METHOD.md`, "Hard rules and defaults"); everything else is a default. The rest of this page is the reference: tools, suites, drawings.
 

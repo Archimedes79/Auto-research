@@ -6,7 +6,7 @@ How loops are planned, run and logged follows `../../autoresearch/METHOD.md` (P1
 |---|---|
 | (no plan, no schedule) | the loop-22 `PLAN.md` and `schedule.csv` were stale and were removed on 2026-11-10 (git history keeps them). The experiments are the cards in `../experiments/`; what happens next is in `../HANDOVER.md`. A queue can come back as `schedule.csv` (`autoresearch/tools/schedule.py add`), then `plan.py status` lists its experiments with runs and verdicts |
 | [LEDGER.md](LEDGER.md) / `LEDGER.csv` | one row per run started with `autoresearch/tools/run.py`: hypothesis, prediction, rule, status, result, decision, commit |
-| [DECISIONS.md](DECISIONS.md) | the only channel for Mirko's decisions (champion promotion with its TEST check, problem changes, tool / gate changes, permissions): open entries with options, recommendation and evidence; decided entries with date |
+| [decisions/](decisions/) (one file D<n>.md per decision) | the only channel for Mirko's decisions (champion promotion with its TEST check, problem changes, tool / gate changes, permissions): open entries with options, recommendation and evidence; decided entries with date |
 | [closed_questions.md](closed_questions.md) | questions answered the same way twice; re-opening needs a new mechanism |
 | `runs/` | run records of the launcher: `run.json` (with commit and tag), `run.log`, `done` flag only on success |
 | [plans/](plans/) | longer design documents written before loops: loop 16 triage plan, hypothesis tree, concept, growth / link architectures, literature compatibility space, experiment table (generated), `PRACTICE_NOTES.md`, `System_Review_2026-10-25.md` |
