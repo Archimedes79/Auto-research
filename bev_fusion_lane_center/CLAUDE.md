@@ -7,11 +7,10 @@
 - This folder is one problem of the general research system `../autoresearch/` (method: `../autoresearch/METHOD.md`: P1 research -> P2 hypotheses + plan -> P3 loop -> P4 close; agent roles in `../autoresearch/agents/`; templates in `../autoresearch/templates/`). The problem itself: PROBLEM.md (goal, chain, metrics, current best, gaps, problem groups A1-A9, foundation topics F1-F3); machine-readable paths: project.json
 - Two systems: the product (the perception system, `training/`) and the improver around it (`../autoresearch/tools/`, `evaluation/`, `literature/`)
 
-## Read first: the state is five files, nothing else
+## Read first: the state is a few files, nothing else
 - HANDOVER.md (<= 3 KB): where we are, what runs, the next step, the owner of the code (the lead chat), pointers; rewrite it, do not append
 - experiment_execution/DECISIONS.md: the only channel for Mirko's decisions (champion promotion with its one TEST check, changes of PROBLEM.md, changes of the gates (the protected files, the hook), permissions); write an entry and wait for the recorded answer, never act on it before
-- experiment_execution/PLAN.md: the experiment tree of the loop with a status per node
-- experiment_execution/schedule.csv (`python3 ../autoresearch/tools/schedule.py show | next`, item states are read from the run records): what happens next; a disrupted loop resumes from it
+- the experiment list: the cards in experiments/ (one file each) are the experiments; `python3 ../autoresearch/tools/plan.py status` lists them with their runs and verdicts when a queue file exists (optional: `schedule.py add`; the loop-22 plan and queue were removed on 2026-11-10 as stale, see git history); what happens next is in HANDOVER.md
 - experiment_execution/LEDGER.md (from LEDGER.csv): one row per run with prediction, rule, result, decision, commit, and at its head the loop table of `../autoresearch/tools/metrics.py` (runs, GPU hours, verdicts, prediction hits, TEST uses); the journal of a loop goes into ledger notes, not into a new state file; for a wake-up `ledger.py tail --loop <NN>` instead of the whole file
 - when a loop starts: the start checklist and the loop prompt (`../autoresearch/prompts/loop.md`; the filled prompt is kept as experiment_execution/history/prompts/PROGRAM_loopNN.md: STOP_AT, TEST / mail / shutdown permissions; read each time, do not re-plan)
 - for reference only: README.md (folder map), evaluation/PROTOCOL.md (splits, metrics, timing), experiment_execution/closed_questions.md, literature/OVERVIEW.md before literature work (edit literature/papers.csv, then `wsl python3 tools/literature/catalogue.py all`); old state files are in experiment_execution/history/
@@ -33,7 +32,7 @@
 - metrics live in evaluation/: extend them, never write a private metric; after changes in a code folder run tools/maintenance/run_all_tests.sh
 - keep the structure: a move or a new file in a folder means updating that folder's README.md in the same step; at the end of every loop run `wsl python3 ../autoresearch/tools/check_structure.py` (root files, README per folder, dead paths in the living documents; rules in project.json) and fix what it reports; open cleanup items live in tools/maintenance/CLEANUP_LIST.md
 - evaluation/: metric libraries (sparse_lanes, lane_grid), drivers/ = general scripts, loops/loopNN/ = scripts of one loop; training/legacy/ = old modules that live code still imports; temp/ holds only the running loop's scratch
-- experiment_execution/PLAN.md = the experiment tree of the loop (written in P2 from `../autoresearch/templates/plan.md`); each experiment has one growing file experiments/E<id>_<slug>/experiment.md (card -> detail plan -> summary, from `../autoresearch/templates/experiment.md`)
+- each experiment has one growing file experiments/E<id>_<slug>/experiment.md (card -> detail plan -> summary, from `../autoresearch/templates/experiment.md`)
 - nothing untagged is deleted: move to _to_delete/ and list it there (`clean_temp.py --delete` only after it tagged the scratch); never delete raw data or checkpoints
 
 ## Names and ids
@@ -54,7 +53,7 @@
 - every block experiment: architecture drawing (no red blocks), numbers table with baselines, result images (key ones to the user with SendUserFile), ms per frame, honest negatives; a variant needs one summary line
 - every finished run gets a ledger row, also crashed and cut ones; an experiment folder (`experiments/E<id>_<slug>/experiment.md` with the card block); no separate catalogue file
 - decide with the written rule, by tool: `autoresearch/tools/decide.py --variant s0,s1 --control s0,s1 [--band 0.010] [--cost-variant ms --cost-control ms] --id <run> --write` gives KEEP / CUT / TIE / INCONCLUSIVE into the ledger; INCONCLUSIVE means add a seed, not adopt; TIE means the cheaper variant
-- every wake-up and every milestone: read the state (`schedule.py show`, `ledger.py tail`) and update the ledger (`ledger.py note <id> --result ... --decision ...`), the PLAN status and HANDOVER.md; a new chat must be able to continue from the files alone
+- every wake-up and every milestone: read the state (`schedule.py show`, `ledger.py tail`) and update the ledger (`ledger.py note <id> --result ... --decision ...`), and HANDOVER.md; a new chat must be able to continue from the files alone
 - a question answered the same way twice goes into experiment_execution/closed_questions.md; re-opening it needs a new mechanism
 - quality AND speed: ms per frame (idle GPU, batch 1, cached features); an optimisation must reproduce the reference graphs; on a tie inside the noise band take the cheaper variant
 - end-to-end differentiable forward path (D55: soft steps up to and including the assignment and the classification, no rule step, a loss on the output reaches every module; matching inside the loss is allowed, hard selection only on the output and named); better short lane graphs than false ones; say whether a head is pixel- or graph-based

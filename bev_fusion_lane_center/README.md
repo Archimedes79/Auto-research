@@ -14,7 +14,7 @@ The delivered chain of `champion`, `fast_recall` and `recall`, drawn from the co
 
 ## Folders (by role in the method)
 - research - literature/ : OVERVIEW.md (why, nine axes, findings, gaps), CATALOGUE.md (the one reference for 540 papers), papers.csv (the one table to edit), papers/ (404 notes), deep/ + code/ (extractions), register.md (K ids)
-- execution state - experiment_execution/ : PLAN.md (experiment tree of the loop), schedule.csv (what next), LEDGER.md (every run), closed_questions.md, runs/ (run records), plans/ (design documents), history/
+- execution state - experiment_execution/ : LEDGER.md (every run), closed_questions.md, runs/ (run records), plans/ (design documents), history/
 - experiment summaries - experiments/ : one folder per experiment, E<id>_<slug> (card, detail plan, summary); reports/weekly/
 - training - training/ : the product (models, data, losses, train, pipeline, search), trainer.py with checkpoint + resume
 - evaluation - evaluation/ : evaluate.py (one entry point, names in models/registry.json), metrics and protocol (sparse_lanes, lane_grid), drivers/, loops/, tests, examples
