@@ -21,17 +21,17 @@
 <text x="369.0" y="230.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">class GtGenerator: one method per command</text>
 <text x="369.0" y="244.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">api.py +3</text>
 </g>
-<g><title>key: gt_api.py; versions.py; versions.csv; lane_versions.csv; releases.csv; lane_l4_digest.json; front_digests.json</title><rect x="734" y="201.0" width="190" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
+<g><title>key: gt_api.py; versions.py; versions.csv; lane_versions.csv; releases.csv; lane_l4_digest.json; lane_l6_digest.json; front_digests.json</title><rect x="734" y="201.0" width="190" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
 <text x="829.0" y="222.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">GT key and versions</text>
 <text x="829.0" y="237.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">what did I get?</text>
-<text x="829.0" y="251.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">gt_api.py +6</text>
+<text x="829.0" y="251.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">gt_api.py +7</text>
 </g>
 <g><title>front: grid.py; layers.py; flow.py; nuscenes_adapter.py; nuscenes_gt.py; coverage.py; pipeline.py; store.py</title><rect x="44" y="305.0" width="190" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
 <text x="139.0" y="326.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Front GT: map, boxes, flow</text>
 <text x="139.0" y="341.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">-&gt; &lt;sig&gt;/&lt;token&gt;.npz</text>
 <text x="139.0" y="355.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">grid.py +7</text>
 </g>
-<g><title>lane: lane_graph.py; road_graph.py; lane_lines.py; lane_tiers.py; rig_masks.py; lane_gt.py</title><rect x="274" y="305.0" width="190" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
+<g><title>lane: lane_graph.py; road_graph.py; lane_lines.py; lane_tiers.py; rig_cameras.py; lane_gt.py</title><rect x="274" y="305.0" width="190" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/>
 <text x="369.0" y="319.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lane GT: graph, tiers</text>
 <text x="369.0" y="334.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">-&gt;</text>
 <text x="369.0" y="349.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lane/&lt;sig&gt;/&lt;token&gt;.pkl.gz</text>
@@ -42,11 +42,11 @@
 <text x="599.0" y="341.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">-&gt; lane/&lt;sig&gt;/masks/*.npz</text>
 <text x="599.0" y="355.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_raster.py</text>
 </g>
-<g><title>tools: checks.py; report.py; view.py; video.py; lane_graph_view.py; clean.py; store_audit.py</title><rect x="734" y="305.0" width="190" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<g><title>tools: checks.py; report.py; view.py; video.py; lane_graph_view.py; rig_masks.py; clean.py; store_audit.py</title><rect x="734" y="305.0" width="190" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
 <text x="829.0" y="319.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Look, check, tidy</text>
 <text x="829.0" y="334.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">view, video, report,</text>
 <text x="829.0" y="349.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clean, audit</text>
-<text x="829.0" y="363.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">checks.py +6</text>
+<text x="829.0" y="363.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">checks.py +7</text>
 </g>
 <g><title>raw: light_nusc.py; sets.py; sets</title><rect x="44" y="412.0" width="420" height="56" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
 <text x="254.0" y="430.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Raw nuScenes + reader</text>

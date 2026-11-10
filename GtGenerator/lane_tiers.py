@@ -5,7 +5,7 @@ Every point of every lane piece of a keyframe graph gets two labels, stored next
             only, never an input of a network). Where the car stops or the sequence ends before `min_ahead` m, the path goes on along the map (the straightest successor).
         2 = the lanes directly beside a tier-1 piece (the `left` / `right` neighbours of the road graph, same direction) within `neighbour_tol` m of a tier-1 point
         3 = everything else (branches not taken, opposite lanes (`opposite_tier`), far lanes)
-  vis   True when at least one of the cameras of the rig (`cameras`: the six of Spurmitte, CAM_FRONT for BEV Fusion, l5) sees the ground point (`rig_masks`, the nominal calibration) and no observed vehicle / pedestrian / two-wheeler
+  vis   True when at least one of the cameras of the rig (`cameras`: the six of Spurmitte, CAM_FRONT for BEV Fusion, l5) sees the ground point (`rig_cameras`, the nominal calibration) and no observed vehicle / pedestrian / two-wheeler
         box of the keyframe hides it (the box with its real height, `coverage` geometry; a box does not hide a point inside itself). Boxes are at the annotation time, not moved to
         the camera time (at most 0.9 m). Static things (buildings, trees) are not in the nuScenes boxes: a point behind a building counts as visible. The sensor is the CAMERA: radar
         and range are not part of it.
@@ -13,6 +13,9 @@ Every point of every lane piece of a keyframe graph gets two labels, stored next
   tier_src (per point) 0 = not tier 1, 1 = on the driven path, 2 = tier 1 by the map extension.
 Events get `tier` (the lowest tier of the pieces they belong to near the event) and `vis`. The graph gets `ego_path` = {"pts": (n, 2) in the frame of the graph, `back_m`, `ahead_m`
 (driven metres)} and `tier_info` (lengths in metres per tier and their visible share, the number of hiding boxes, the extension length).
+WINDOW (l6). The tiers are decided on the keyframe cut to a wide square (`lane_gt.TIER_HALF`, the same for every rig) and carried over to the points of the graph (`carry_tiers`): the metres of a piece that
+are on the path, the neighbours and the extension along the map see the whole pieces, not what a window leaves of them, so no window changes a tier. `extension_m` / `back_extension_m` are the metres the
+extension grew in that wide window (a cut point takes the label of the vertex of its map piece at the end of the segment it lies on).
 
     g = lane_gt.load(token)             # l4: g["pieces"][i]["tier"], ["vis"], ["tier_src"], g["events"][j]["tier"], g["ego_path"]["pts"]
     lane_tiers.selftest()               # toy lane: path, neighbours, opposite lane, crossing connector, extension, hiding box (a few seconds, numpy only)
@@ -22,7 +25,7 @@ import math
 import numpy as np
 
 from . import lane_graph as LG
-from . import rig_masks as RM
+from . import rig_cameras as RC
 
 STEP = 0.5                                                   # the point spacing of the pieces
 MIN_PATH_STEP = 0.3                                          # ego positions closer than this to the last kept one are dropped (a standing car)
@@ -30,7 +33,7 @@ MIN_PATH_STEP = 0.3                                          # ego positions clo
 
 # --------------------------------------------------------------------------------------------------------------------------- copies of the front GT's geometry
 # The four helpers below are COPIES of `nuscenes_adapter.category_group` and `coverage.camera_cells / _wedge / _clip`: those files belong to the front GT's signature, and a change there must not
-# silently change the l4 labels without changing the lane signature (the critic pass of 2026-11-07). The calibration constants come from rig_masks.py, which is hashed into the lane signature.
+# silently change the l4 labels without changing the lane signature (the critic pass of 2026-11-07). The calibration constants come from rig_cameras.py, which is hashed into the lane signature.
 def category_group(name):
     """nuScenes category -> group (None = not a hiding class)"""
     if name.startswith(("vehicle.bicycle", "vehicle.motorcycle")):
@@ -174,8 +177,19 @@ def tier_pieces(g, path, p):
         o += len(q["pts"])
     P = np.concatenate([np.asarray(q["pts"], float) for q in pieces])
     T = np.concatenate([_tangents(q["pts"]) for q in pieces])
-    d, tp, s = _to_polyline(P, Q)
-    on = (d <= p["path_tol"]) & ((T * tp).sum(1) >= p["path_cos"])
+    tol = p["path_tol"]
+    inbox = np.flatnonzero((P >= Q.min(0) - tol - 1e-6).all(1) & (P <= Q.max(0) + tol + 1e-6).all(1))      # only the points inside the box of the path (widened by the tolerance) can be within the tolerance of it
+    d, tp, _ = _to_polyline(P[inbox], Q)
+    on = np.zeros(len(P), bool)
+    on[inbox] = (d <= tol) & ((T[inbox] * tp).sum(1) >= p["path_cos"])
+    s = np.full(len(P), np.nan)
+
+    def arc(k):
+        """the arc position along the path of the points with the global indices k, computed when first asked: only the points of tier-1 pieces need it"""
+        todo = k[np.isnan(s[k])]
+        if len(todo):
+            s[todo] = _to_polyline(P[todo], Q)[2]
+        return s[k]
     # the pieces on the path: enough metres of it, and the gap-free span between the first and the last point on it
     for q, a in zip(pieces, sl):
         o_ = on[a]
@@ -185,18 +199,19 @@ def tier_pieces(g, path, p):
             idx = np.nonzero(o_)[0]
             span = slice(idx[0], idx[-1] + 1)
             q["tier"][span] = 1
-            q["tier_src"][span] = np.where(s[a][span] > real_end + p["path_tol"], 2, 1)            # 1 = on the driven path, 2 = on the straight reference beyond its end
+            q["tier_src"][span] = np.where(arc(np.arange(a.start + span.start, a.start + span.stop)) > real_end + tol, 2, 1)            # 1 = on the driven path, 2 = on the straight reference beyond its end
     # the map extension where the driven path is short (a stopped car, the end of the sequence)
     ext = 0.0
     if p["extend"] and path["ahead_m"] < p["min_ahead"]:
         want = p["tier_ahead"] - path["ahead_m"]
         best = None                                           # the tier-1 point with the largest arc position
         for q, a in zip(pieces, sl):
-            m = q["tier"] == 1
-            if m.any():
-                k = np.nonzero(m)[0][np.argmax(s[a][m])]
-                if best is None or s[a][k] > best[0]:
-                    best = (float(s[a][k]), q, int(k))
+            ks = np.nonzero(q["tier"] == 1)[0]
+            if len(ks):
+                sv = arc(a.start + ks)
+                j = int(np.argmax(sv))
+                if best is None or sv[j] > best[0]:
+                    best = (float(sv[j]), q, int(ks[j]))
         if best is not None:
             _, q, k = best
             seen = {q["id"]}
@@ -221,11 +236,12 @@ def tier_pieces(g, path, p):
         want_b = p["tier_back"] - path["back_m"]
         first = None                                          # the tier-1 point with the smallest arc position
         for q, a in zip(pieces, sl):
-            m = q["tier"] == 1
-            if m.any():
-                k = np.nonzero(m)[0][np.argmin(s[a][m])]
-                if first is None or s[a][k] < first[0]:
-                    first = (float(s[a][k]), q, int(k))
+            ks = np.nonzero(q["tier"] == 1)[0]
+            if len(ks):
+                sv = arc(a.start + ks)
+                j = int(np.argmin(sv))
+                if first is None or sv[j] < first[0]:
+                    first = (float(sv[j]), q, int(ks[j]))
         if first is not None:
             _, q, k = first
             seen = {q["id"]}
@@ -298,7 +314,7 @@ def _blocked(points, cam, prisms):
     return out
 
 
-def visibility(pts_ego, prisms, cameras=RM.SIX):
+def visibility(pts_ego, prisms, cameras=RC.SIX):
     """(vis, covered), both bool (n,): the ground point (x forward, y left) is in the image of at least one of the `cameras` (default the six of the rig: Spurmitte; BEV fusion
     has the front camera only, lane_gt.RIGS) (covered), and a line to such a camera is free of the prisms (vis). covered & ~vis = hidden by a box"""
     pts_ego = np.asarray(pts_ego, float).reshape(-1, 2)
@@ -307,8 +323,8 @@ def visibility(pts_ego, prisms, cameras=RM.SIX):
         return vis, covered
     P3 = np.c_[pts_ego, np.zeros(len(pts_ego))]
     for name in cameras:
-        K, T = RM.camera_calibration(name)
-        c = camera_cells(pts_ego[:, 0], pts_ego[:, 1], K, T, RM.IMAGE_SIZE)
+        K, T = RC.camera_calibration(name)
+        c = camera_cells(pts_ego[:, 0], pts_ego[:, 1], K, T, RC.IMAGE_SIZE)
         covered |= c
         cov = np.nonzero(c & ~vis)[0]
         if not len(cov):
@@ -318,21 +334,43 @@ def visibility(pts_ego, prisms, cameras=RM.SIX):
     return vis, covered
 
 
+def carry_tiers(wide, g):
+    """copy `tier` and `tier_src` of the points of `wide` to the points of `g`: both were cut from the same map pieces (lane_graph.crop), a point takes the label of the vertex of its map piece that
+    it stands for (`src`), so a window cut the labels did not see changes nothing"""
+    parts = {}
+    for w in wide["pieces"]:
+        parts.setdefault(w["piece"], []).append(w)
+    for q in g["pieces"]:
+        w = next((w for w in parts.get(q["piece"], []) if w["src"][0] <= q["src"][0] and q["src"][-1] <= w["src"][-1]), None)
+        if w is None:
+            raise ValueError(f"piece {q['id']} of the graph has no part of the labelled (wide) graph that covers its points: the wide window must hold the window of the graph")
+        i = np.searchsorted(w["src"], q["src"], side="right") - 1          # the vertex itself, not the cut point that stands for the same vertex
+        q["tier"], q["tier_src"] = w["tier"][i], w["tier_src"][i]
+
+
 # --------------------------------------------------------------------------------------------------------------------------- the whole step
-def add_tiers(g, nusc, sample_token, T_e2g, p, cameras=RM.SIX):
+def add_tiers(g, nusc, sample_token, T_e2g, p, cameras=RC.SIX, wide=None):
     """add the labels to the graph `g` (made by lane_graph.crop; any frame) in place; `p` = the lane GT parameters (tier_back, tier_ahead, path_tol, path_cos, neighbour_tol,
-    min_ahead, extend, opposite_tier); `cameras` = the cameras of the rig that `vis` / `occ` refer to (lane_gt.RIGS)"""
+    min_ahead, extend, opposite_tier); `cameras` = the cameras of the rig that `vis` / `occ` refer to (lane_gt.RIGS). `wide` = the same keyframe cut to a window much bigger than that of
+    `g` (the same frame): the tiers are decided on it (whole pieces, the neighbours and the extension that the window of `g` would have cut) and carried over, so that they do not depend on the window; without it
+    the tiers are decided on `g` itself (the toy tests)"""
     path = ego_path(nusc, sample_token, T_e2g, p["tier_back"], p["tier_ahead"], g["frame"])
-    info = tier_pieces(g, path, p)
+    info = tier_pieces(g if wide is None else wide, path, p)
+    if wide is not None:
+        carry_tiers(wide, g)
     prisms = box_prisms(nusc, sample_token, T_e2g)
     to_ego = (lambda a: np.c_[a[:, 1], -a[:, 0]]) if g["frame"] == "lane" else (lambda a: a)
-    for q in g["pieces"]:
-        q["vis"], cov = visibility(to_ego(np.asarray(q["pts"], float)), prisms, cameras)
-        q["occ"] = cov & ~q["vis"]                                                                          # in a camera's view but hidden by a box (not: outside every view)
+    pts = [np.asarray(q["pts"], float) for q in g["pieces"]]
+    vis, cov = visibility(to_ego(np.concatenate(pts)) if pts else np.zeros((0, 2)), prisms, cameras)             # one call for every point of the graph
+    occ, o = cov & ~vis, 0                                                                                    # occ: in a camera's view but hidden by a box (not: outside every view)
+    for q, P in zip(g["pieces"], pts):
+        q["vis"], q["occ"] = vis[o:o + len(P)].copy(), occ[o:o + len(P)].copy()
+        o += len(P)
+    by_id = {q["id"]: q for q in g["pieces"]}
     for e in g["events"]:
         best = (3, False, 3.0)
         for i in list(e["in"]) + list(e["out"]):
-            q = next((x for x in g["pieces"] if x["id"] == i), None)
+            q = by_id.get(i)
             if q is None or not len(q["pts"]):
                 continue
             dd = np.linalg.norm(np.asarray(q["pts"], float) - np.asarray(e["pos"], float), axis=1)

@@ -13,14 +13,13 @@ segments flagged is_intersection (road_graph.py gives them an id that matches th
 {"id", "exterior", "holes", "area"} (exterior counter-clockwise, holes clockwise). They are NOT dilated: a head that wants intersection pixels dilated by a few
 metres does that itself; rasterising the polygon gives the intersection pixels as they are.
 
-The result of `crop_lines` is {"lane_divider": [line, ...], "road_divider": [...], "boundary": [...]} in the frame of `autogt.lane_graph` (lane frame by
+The result of `crop_lines` is {"lane_divider": [line, ...], "road_divider": [...], "boundary": [...]} in the frame of `lane_graph.py` (lane frame by
 default, x right, y forward), cut to the square window; a line is {"pts" (float32, travel / outline order), "start_open", "end_open", "corners"}.
 """
 import numpy as np
 
-from .lane_graph import clip_rect, dirs_to_frame, reach, to_frame, window_of
+from .lane_graph import clip_rect, reach, to_frame, window_of
 
-DEFAULTS = dict(boundary_layers=("drivable_area",), corner_deg=30.0, corner_base=2.0, simplify=0.05)
 CHUNK = 200                                                  # vertices per chunk of a long outline (a keyframe takes the chunks near the ego)
 
 
@@ -64,8 +63,7 @@ def build_line_graph(nmap, boundary_layers=("drivable_area",), simplify=0.05):
                 c["line"] = ring_id
                 chunks.append(c)
             ring_id += 1
-    return dict(chunks=chunks, road=polygon_chunks([(None, union)]) if union is not None else [],
-                params=dict(boundary_layers=tuple(boundary_layers), simplify=simplify))
+    return dict(chunks=chunks, road=polygon_chunks([(None, union)]) if union is not None else [])
 
 
 def polygon_chunks(items, tile=100.0, min_area=0.0):
@@ -90,7 +88,23 @@ def polygon_chunks(items, tile=100.0, min_area=0.0):
     return chunks
 
 
-def crop_areas(chunks, T_e2g, half=50.0, frame="lane", margin=25.0, merge=False, min_area=0.5, window=None):
+def _valid_polygons(g):
+    """the polygons of a shapely geometry, each one OGC valid: `clip_by_rect` and the union of the map leave rings that touch each other (shapely.make_valid splits such a polygon)"""
+    import shapely
+    out = []
+    for part in (g.geoms if hasattr(g, "geoms") else [g]):
+        if part.is_empty:
+            continue
+        if part.geom_type == "Polygon" and part.is_valid:
+            out.append(part)
+        elif part.geom_type == "Polygon":
+            out += _valid_polygons(shapely.make_valid(part))
+        elif hasattr(part, "geoms"):
+            out += _valid_polygons(part)
+    return out
+
+
+def crop_areas(chunks, T_e2g, half=50.0, frame="lane", merge=False, min_area=0.5, window=None):
     """the polygons of `chunks` cut to the window of one keyframe: [{"id", "exterior" (n, 2) float32 counter-clockwise, "holes" [(m, 2)] clockwise, "area"}];
     `merge`: the pieces that touch (the tiles of a big polygon) are united first; the window is the square |x|, |y| <= half or the rectangle `window` = (x0, x1, y0, y1)"""
     import shapely
@@ -100,7 +114,7 @@ def crop_areas(chunks, T_e2g, half=50.0, frame="lane", margin=25.0, merge=False,
     A = Re if frame == "ego" else Re @ np.array([[0.0, 1.0], [-1.0, 0.0]])              # frame point = (global point - t) @ A
     mat = [A[0, 0], A[1, 0], A[0, 1], A[1, 1], -(t[0] * A[0, 0] + t[1] * A[1, 0]), -(t[0] * A[0, 1] + t[1] * A[1, 1])]
     W = window_of(half, window)
-    r = reach(half, window, margin)
+    r = reach(half, window)
     cut = {}
     for c in chunks:
         b = c["bbox"]
@@ -115,8 +129,8 @@ def crop_areas(chunks, T_e2g, half=50.0, frame="lane", margin=25.0, merge=False,
         if merge:
             geoms = [shapely.union_all(geoms)]
         for g in geoms:
-            for poly in (g.geoms if hasattr(g, "geoms") else [g]):
-                if poly.is_empty or poly.geom_type != "Polygon" or poly.area < min_area:
+            for poly in _valid_polygons(g):
+                if poly.area < min_area:
                     continue
                 poly = orient(poly, 1.0)
                 out.append(dict(id=ident, exterior=np.asarray(poly.exterior.coords, np.float32), holes=[np.asarray(h.coords, np.float32) for h in poly.interiors],
@@ -157,11 +171,11 @@ def find_corners(P, deg=30.0, base=2.0):
     return out
 
 
-def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=2.0, margin=25.0, window=None):
+def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=2.0, window=None):
     """the lines of one keyframe window (see the module docstring); `lg` = build_line_graph(...); the window is the square |x|, |y| <= half or the rectangle `window`"""
     t = T_e2g[:2, 3]
     W = window_of(half, window)
-    r = reach(half, window, margin)
+    r = reach(half, window)
     found = {"lane_divider": [], "road_divider": [], "boundary": []}
     for c in lg["chunks"]:
         b = c["bbox"]

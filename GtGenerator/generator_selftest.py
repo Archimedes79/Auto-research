@@ -235,8 +235,7 @@ def _signature_guard():
     from . import lane_gt
     here = os.path.dirname(os.path.abspath(__file__))
     hashed = {f[:-3] for f in lane_gt.SOURCE_FILES}
-    outside = {"nuscenes_adapter", "light_nusc", "store", "pipeline", "cli", "gt_api", "lane_raster", "versions", "sets", "suite",       # pose_matrix, the devkit loader, the storage helpers, the git stamp of the index: no label comes from them
-               "grid", "coverage"}                                                                          # the front GT's own hashed files that rig_masks reads (a change there is a new FRONT version)
+    outside = {"light_nusc", "store", "sets", "suite", "versions"}                # the devkit loader, the listing of a store, the tables of scenes, the git stamp of the index: no label comes from them
     for f in lane_gt.SOURCE_FILES:
         tree = ast.parse(open(os.path.join(here, f), encoding="utf-8").read())
         for node in ast.walk(tree):

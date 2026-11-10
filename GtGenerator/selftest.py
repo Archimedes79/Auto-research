@@ -463,7 +463,7 @@ def run(root=None, verbose=True):
         assert m["sets_complete"] == ["full", "small"] and m["release"] is True, "mini cannot check full: its entry stays"
         m = manifest({**ok, "sets_complete": [], "sets_checked": ["full", "small"]})
         assert m.get("sets_complete", []) == [] and m["release"] is False, "a hole in full takes the set out and the release with it"
-        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": store_mod._environment()})
+        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": store_mod.environment()})
         assert m["sets_complete"] == ["full", "small"] and m["release"] is True and set(m["environment"]) >= {"numpy", "shapely"}, m
         # a job that runs for hours refuses a generator that changed meanwhile (a pool worker imports the source tree afresh)
         pipe_mod._same_generator(gen5, gen5.signature())
