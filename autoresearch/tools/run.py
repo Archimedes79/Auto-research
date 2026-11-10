@@ -47,9 +47,11 @@ What it does (paths from the problem's project.json, see project.py):
   * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed, stalled or was stopped); waiting is not counted as run time
   * holdout     --split <holdout> (project.json holdout_split, default test; a name that starts with it and an underscore, `test_clean`, and the names in project.json
                 holdout_aliases count too, in --split and in the command's own `--split` / `--split=`) is refused unless the run id is named as a whole token in a TABLE
-                ROW (a line that starts with |) of the problem's holdout log (project.json test_log) and that row does not say the run is still open (pending, not approved,
-                not yet, refused, denied, withdrawn) or already used (DONE, already used: log a NEW id in a new row). A line of free text opens nothing. An id that
-                already ended ok on the holdout split is never started again, --again or not (a new id, a new row). test_log_opens(log_text, run_id) is the check
+                ROW (a line that starts with |) of the problem's holdout log (project.json test_log) and the newest row of the id carries the person's OK
+                in its note cell (it STARTS with OK and holds no condition or negation) or cites `granted by D<n>` of a decided decision that grants a TEST check, and does not say
+                the run is not approved (refused, denied, withdrawn, awaiting, no OK ...); an id with a row that says DONE / already used is closed for good (log a NEW id in a new row).
+                A line of free text opens nothing. An id that already ended ok on the holdout split is never started again, --again or not. The rule is tools/testgate.py
+                (test_log_opens(log_text, run_id, grants), the full text in its head), also loaded by the lane's evaluator
   * chains      a launcher waits for its dependencies (--wait-after, default 720 min) and then for a GPU slot (--wait-gpu, default 720 min) before it
                 gives up; give-up marks it blocked / gpu_busy and its own dependents are blocked in turn
   * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under project.json gpu_slots_dir
@@ -101,6 +103,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hold as HOLD  # noqa: E402
 import machine_lock  # noqa: E402
 import project as P  # noqa: E402
+from testgate import grant_ids, test_log_opens, test_log_refusal  # noqa: E402,F401  (the TEST gate: one small module, also loaded by the lane's evaluator)
 
 COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", "basis", "seed", "command", "result", "decision", "notes", "prediction", "rule", "code_hash", "split", "commit"]
 STATUSES = ("planned", "running", "stalled", "ok", "failed", "timeout", "stopped", "held", "blocked", "gpu_busy")   # what a ledger row says (ledger add, this launcher, ledger.py sync)
@@ -111,9 +114,6 @@ CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
 SCRATCH_MAX_BYTES = 1_000_000   # a scratch script over this size is not put into the run tag (it is data, not a script)
 SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (about 10 ms each at the snapshot, and again at the drift check)
 SCRATCH_SKIPPED = [0]           # how many scripts the last scratch_scripts() call left out
-CLOSED_ROW = re.compile(r"\b(?:not\s+approved|refused|denied|withdrawn|awaiting|waiting\s+for|(?:OK|approval|answer)\s+pending|pending\s+(?:OK|approval|answer))\b", re.I)   # a holdout log row that says the run is not approved (a bare "pending" or "not yet" in the numbers cell is ordinary wording)
-OK_ROW = re.compile(r"\bOK\b|\bD\d+\b")   # the person's recorded OK: the word OK (case matters) or the decided D<n> that grants it (the lane log cites "D28 (Mirko ...: One TEST check)")
-USED_ROW = re.compile(r"\bDONE\b|\b(?i:already\s+used)\b")                            # ... or that the run was used: the log writes DONE ("used" alone is ordinary wording)
 EXIT_STOPPED = 75   # trainsuite/control.py EXIT_STOPPED: a trainer that was asked to stop (CONTROL file) saved a checkpoint and ended on purpose: status "stopped", never retried
 POSIX = os.name == "posix"
 
@@ -917,35 +917,6 @@ def names_split(cmd, split, aliases=()):
     return any(is_holdout(v, split, aliases) for m in SPLIT_ARG.finditer(" ".join(str(t) for t in cmd)) for v in m.group(1).split(","))
 
 
-def test_log_refusal(log_text, run_id):
-    """'' when the holdout log opens the holdout split for this run id, else why not. The id must be named as a whole token in the 'who / which run' cell (the fourth) of a
-    TABLE ROW (a line that starts with |; a free-text line opens nothing, a mention as a comparison in another cell opens nothing, and the id of `T.1` is not in `T.10` or `T.1.b`;
-    a log with another layout than the lane's six columns: anywhere in the row), and that row must carry the person's OK (the word OK or a decision D<n>), must not say it is not approved
-    (CLOSED_ROW: not approved, refused, denied, withdrawn, awaiting, OK pending) and must not say it was used (USED_ROW: DONE, already used). Any one such row is enough"""
-    tok = re.compile(r"(?<![\w.-])" + re.escape(run_id) + r"(?![\w-]|\.\w)")
-    rows = []
-    for ln in log_text.splitlines():
-        if not ln.lstrip().startswith("|"):
-            continue
-        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-        if tok.search(cells[3] if len(cells) >= 6 else ln):
-            rows.append(ln)
-    if not rows:
-        return "is not named in the 'who / which run' cell of a table row of the log"
-    if any(OK_ROW.search(r) and not CLOSED_ROW.search(r) and not USED_ROW.search(r) for r in rows):
-        return ""
-    if any(CLOSED_ROW.search(r) for r in rows):
-        return "is named in the log, but its row says it is not approved (not approved / refused / denied / withdrawn / awaiting)"
-    if any(USED_ROW.search(r) for r in rows):
-        return "was already used according to its row in the log (DONE / already used): log a NEW id in a new row"
-    return "is named in the log, but its row carries no OK of the person (the word OK or a decision D<n> in the row)"
-
-
-def test_log_opens(log_text, run_id):
-    """does the holdout log open the holdout split for this run id? (test_log_refusal)"""
-    return not test_log_refusal(log_text, run_id)
-
-
 def card_fields(run_id):
     """{card_id, card_sha} of the registered experiment card of the run (experiment.card_for_run / rule_sha: the hash of its rule block), {} when there is none or
     experiment.py cannot say: a card must never be what stops a launch"""
@@ -1029,7 +1000,7 @@ def main():
         return 2
     if is_holdout(a.split, holdout, aliases):
         log = open(test_log, encoding="utf-8").read() if os.path.exists(test_log) else ""
-        why = test_log_refusal(log, a.id)
+        why = test_log_refusal(log, a.id, grant_ids(root, cfg))
         if why:
             print(f"[{a.id}] refused: split={a.split} is the holdout split but {a.id} {why} ({os.path.relpath(test_log, root)}; a table row with the person's OK opens it)")
             return 2

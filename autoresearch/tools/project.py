@@ -20,6 +20,7 @@ DEFAULTS = {
     "ledger": "LEDGER.csv",
     "ledger_md": "LEDGER.md",
     "run_records": "run_records",
+    "runs": "runs",     # the parent of the folders a run writes into (<runs>/<id>, or the id with . as _): provenance, package. NOT "cards": that is where the evaluator writes its cards
     "schedule": "schedule.csv",
     "test_log": "TEST_USAGE_LOG.md",
     "code_dirs": [],

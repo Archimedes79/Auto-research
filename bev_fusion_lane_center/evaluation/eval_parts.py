@@ -269,17 +269,26 @@ def direction(keys):
     return out
 
 
+def names_test(name):
+    """does the name of a stored input (token file, series folder, suffix) name the TEST split as a word (`tok_p18_f1pr_test_clean`, not `latest`)? A best effort on the name: a stored
+    file of TEST frames under a neutral name is not seen; the TEST split itself is gated by evaluate.test_allowed (the row of the TEST log)"""
+    return re.search(r"(?<![a-z0-9])test(?![a-z0-9])", str(name).lower()) is not None
+
+
 def run(e, reg, split, parts, build_net):
     """the numbers of the requested parts for the (effective) registry entry e: dict(metrics, better, info). parts = {route: {head, tokens, step}, failure: {perts, variant,
     series_dir, suffix, bs, workers}, timing: {n, tag}}; build_net(e) -> (net, cfg) on the GPU, called once, only when a part needs the builder"""
     m, info, held = {}, {}, {}
+    r, f = parts.get("route"), parts.get("failure")
+    stored = [x for x in ((r or {}).get("tokens"), (f or {}).get("series_dir"), (f or {}).get("suffix")) if x]
+    if split != "test" and any(names_test(x) for x in stored):
+        raise ValueError(f"a stored input that names the TEST split ({', '.join(x for x in stored if names_test(x))}) is read only under --split test, which needs the row of the TEST log")
 
     def net():
         if "net" not in held:
             held["net"], held["cfg"] = build_net(e)
         return held["net"], held["cfg"]
 
-    r, f = parts.get("route"), parts.get("failure")
     if (r and not r.get("tokens")) or (f and not f.get("series_dir")):
         if e["kind"] != "builder":
             raise ValueError("route (without --route-tokens) and failure (without --series-dir) run the builder: builder entries only")

@@ -96,17 +96,32 @@ def test_gate():
            "| 2026-11-10 | 30 | design J | T.nyr | pending, not yet run | OK (D80) |\n"
            "| 2026-11-10 | 30 | design K | T.base | vs T.cmp, T.base0 | OK |\n"
            "| 2026-11-10 | 30 | design L | T.dec | - | granted by D28 (the person: one TEST check) |\n"
-           "| 2026-11-10 | 30 | design M | T.aw | - | awaiting the OK of the person |\n")
-    for rid in ("T.ok", "T.sent", "T.two", "T.nyr", "T.base", "T.dec"):
+           "| 2026-11-10 | 30 | design M | T.aw | - | awaiting the OK of the person |\n"
+           "| 2026-11-10 | 30 | design D7 rc1 | T.d7 | - | requested, not yet answered |\n"
+           "| 2026-11-10 | 30 | design D7 | T.noOK | - | no OK yet |\n"
+           "| 2026-11-10 | 30 | design D7 | T.q | - | OK? |\n"
+           "| 2026-11-10 | 30 | design N | T.D28 | - | - |\n"
+           "| 2026-11-10 | 30 | design P | T.dec2 | - | granted by D28 (the person: one TEST check) |\n")
+    for rid in ("T.ok", "T.sent", "T.two", "T.nyr", "T.base"):
         assert RUN.test_log_opens(log, rid), rid
-    for rid in ("T.free", "T.line", "T.pend", "T.na", "T.ref", "T.den", "T.wd", "T.done", "T.used", "T.o", "T.ok2", "T.ok.b", "T", "T.none", "T.cmp", "T.base0", "T.aw"):
-        assert not RUN.test_log_opens(log, rid), rid                    # T.cmp is named in another cell (a comparison), not as the run
+    for rid in ("T.free", "T.line", "T.pend", "T.na", "T.ref", "T.den", "T.wd", "T.done", "T.used", "T.o", "T.ok2", "T.ok.b", "T", "T.none", "T.cmp", "T.base0", "T.aw", "T.dec",
+                "T.d7", "T.noOK", "T.q", "T.D28"):
+        assert not RUN.test_log_opens(log, rid), rid                    # T.cmp is named in another cell (a comparison), not as the run; T.dec needs a decided D28
+    # a decision opens a row only as a GRANT (`granted by D<n>`, `D<n> (...)`), only when it is decided and names the TEST check; the word OK needs no decision; a design called D7 is no grant
+    assert RUN.test_log_opens(log, "T.dec", {"D28"}) and not RUN.test_log_opens(log, "T.dec", set()) and not RUN.test_log_opens(log, "T.dec", {"D280", "D2"}), "a row that cites only an open D<n>"
+    assert "none of them is a decided decision" in RUN.test_log_refusal(log, "T.dec", {"D7"}) and RUN.test_log_opens(log, "T.nyr", set()) and RUN.test_log_opens(log, "T.ok", set()), "OK needs no D<n>"
+    assert not RUN.test_log_opens(log, "T.d7", {"D7", "D28"}) and not RUN.test_log_opens(log, "T.D28", {"D7", "D28"}), "D7 as a design name, D28 inside the run id: no grant"
+    assert RUN.test_log_refusal(log, "T.dec", {"D28"}) == "" and RUN.grant_ids("/no/such/root", {}) == set(), "no decisions record decides nothing"
     assert "NEW id" in RUN.test_log_refusal(log, "T.done") and "NEW id" in RUN.test_log_refusal(log, "T.used"), "a used run is logged again under a new id"
     assert "no OK" in RUN.test_log_refusal(log, "T.pend") and "not approved" in RUN.test_log_refusal(log, "T.na")
     assert "not named in the 'who / which run' cell" in RUN.test_log_refusal(log, "T.free") and "cell" in RUN.test_log_refusal(log, "T.cmp")
     if os.path.exists(LANE_LOG):                                      # the rows of the lane project's real log (read only): a past use says DONE, a fresh row opens
         lane = open(LANE_LOG, encoding="utf-8").read()
-        assert RUN.test_log_opens(lane, "E268.p") and not RUN.test_log_opens(lane, "E230.f1p") and not RUN.test_log_opens(lane, "E230.f1"), "the lane log's rows"
+        lane_root = os.path.join(HERE, "..", "..", "bev_fusion_lane_center")
+        lane_cfg = json.load(open(os.path.join(lane_root, "project.json"), encoding="utf-8"))
+        lane_dec = RUN.grant_ids(lane_root, lane_cfg)
+        assert RUN.test_log_opens(lane, "E268.p", lane_dec) and not RUN.test_log_opens(lane, "E230.f1p", lane_dec) and not RUN.test_log_opens(lane, "E230.f1", lane_dec), "the lane log's rows"
+        assert not RUN.test_log_opens(lane, "E268.p"), "the grant of E268.p is D28: without the project's decisions only the word OK opens"
     # the launcher: a free-text line opens nothing, a table row does, the same ok id is never started again, --again or not
     set_cfg()
     open(f"{T}/TEST.md", "w").write(log)
@@ -114,6 +129,18 @@ def test_gate():
         r = go(rid, ["bash", "-c", "echo x"], "--no-git", "--split", "test")
         assert r.returncode == code, (rid, r.stdout)
     assert "NEW id" in go("T.done", ["bash", "-c", "echo x"], "--no-git", "--split", "test").stdout
+    # the launcher passes the project's decided decisions: a row that is only `granted by D28` is refused without a decisions record, and opens with D28 decided (it names the TEST check)
+    r = go("T.dec", ["bash", "-c", "echo x"], "--no-git", "--split", "test")
+    assert r.returncode == 2 and "none of them is a decided decision" in r.stdout, r.stdout
+    os.makedirs(f"{T}/decisions", exist_ok=True)
+    open(f"{T}/decisions/D28.md", "w").write("# D28\nDecided: 2026-11-10\nOne TEST check\n")
+    set_cfg(decisions="decisions")
+    r = go("T.dec", ["bash", "-c", "echo x"], "--no-git", "--split", "test")
+    assert r.returncode == 0, r.stdout
+    open(f"{T}/decisions/D28.md", "w").write("# D28\nstill open, One TEST check\n")        # an open question grants nothing
+    r = go("T.dec2", ["bash", "-c", "echo x"], "--no-git", "--split", "test")
+    assert r.returncode == 2 and "none of them is a decided decision" in r.stdout, r.stdout
+    set_cfg()
     again = go("T.ok", ["bash", "-c", "echo x"], "--no-git", "--split", "test", "--again")
     assert again.returncode == 2 and "NEW id" in again.stdout and os.path.exists(f"{T}/runs/T.ok/done"), again.stdout
     # a name that starts with the holdout and an underscore is the holdout (lane drivers: test_clean), as the launcher's split and in the command

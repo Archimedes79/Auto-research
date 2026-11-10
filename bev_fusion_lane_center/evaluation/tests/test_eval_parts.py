@@ -266,6 +266,27 @@ def test_parts_refuse_subset_and_fresh():
         raise AssertionError("parts ran on a subset / fresh card")
 
 
+def test_a_stored_input_of_the_test_split_needs_split_test():
+    """review 2026-11-10: `--split val --route-tokens tok_..._test_clean` scored TEST frames without a row of the TEST log; a stored input that names the TEST split is refused
+    under any other split (the name is the best effort; `latest` and `val` names pass)"""
+    assert EP.names_test("tok_p18_f1pr_test_clean") and EP.names_test("Test") and EP.names_test("e130_test.series") and EP.names_test("x-test")
+    assert not EP.names_test("tok_p18_f1pr_val_clean") and not EP.names_test("latest") and not EP.names_test("contest_val") and not EP.names_test("")
+    for parts in ({"route": {"tokens": "tok_p18_f1pr_test_clean", "head": "h", "step": 1}}, {"failure": {"series_dir": "e130_test", "perts": [], "variant": "v"}},
+                  {"failure": {"series_dir": "e130", "suffix": "_test", "perts": [], "variant": "v"}}):
+        try:
+            EP.run({}, {}, "val", parts, None)
+        except ValueError as e:
+            assert "TEST" in str(e), e
+            continue
+        raise AssertionError(f"a stored TEST input was read under --split val: {parts}")
+    raised = None
+    try:        # under --split test the name is no reason to refuse (evaluate.test_allowed gates the split itself): it goes on and fails only because the file is not there
+        EP.run({}, {}, "test", {"route": {"tokens": "tok_no_such_test_clean", "head": "h", "step": 1}}, None)
+    except Exception as e:  # noqa: BLE001
+        raised = e
+    assert raised is not None and "names the TEST split" not in str(raised), raised
+
+
 if __name__ == "__main__":
     n = 0
     for k, f in sorted(globals().items()):

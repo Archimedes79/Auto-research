@@ -6,14 +6,36 @@ import evaluate as EV
 
 LOG = """| date | run id | ok |
 |---|---|---|
-| 2026-10-20 | E212.a0 | Mirko, in chat |
-| 2026-10-21 | `E245.b1`, E245.b2 | grant of the loop prompt |
+| 2026-10-20 | E212.a0 | OK, Mirko in chat |
+| 2026-10-21 | `E245.b1`, E245.b2 | OK, grant of the loop prompt |
+| 2026-10-22 | E250.c0 | granted by D28 (the person: one TEST check) |
+| 2026-10-22 | E255.c5 | design D28 rc1, nothing granted |
+| 2026-10-22 | E251.c1 | granted by D9999 (never decided) |
+| 2026-10-23 | E252.c2 | Mirko, in chat |
+| 2026-10-23 | E253.c3 | OK pending |
+| 2026-10-24 | E254.c4 | OK, DONE |
 """
 
 
 def test_whole_ids_pass():
     for rid in ("E212.a0", "E245.b1", "E245.b2"):
         assert EV.test_allowed(rid, LOG), rid
+
+
+def test_the_row_must_carry_an_ok_and_not_be_closed():
+    """review 2026-11-10: a mention anywhere in the log opened TEST; now the launcher's rule (run.test_log_refusal): a table row, the word OK or a DECIDED D<n>, no pending / DONE"""
+    assert EV.test_allowed("E250.c0", LOG, decided={"D28"}) and not EV.test_allowed("E250.c0", LOG, decided=set()), "a grant by a decided decision opens; an undecided one does not"
+    for rid in ("E251.c1", "E252.c2", "E253.c3", "E254.c4", "E255.c5"):
+        assert not EV.test_allowed(rid, LOG, decided={"D28"}), rid       # D9999 is cited as a grant but is not a decision that grants here; no OK; OK pending; DONE; a design called D28 is no grant
+    assert EV.test_allowed("E251.c1", LOG, decided={"D9999"}), "the cited decision is what decides: with D9999 granting, the row opens"
+    for note in ("not OK", "OK for VAL only", "needs OK", "OK missing", "OK, cancelled", "OK revoked", "OK?"):         # the OK of the person is a positive form: its note cell starts with OK and holds no condition
+        assert not EV.test_allowed("E260.x", "| d | 1 | x | E260.x | - | " + note + " |\n", decided={"D28"}), note
+    import sys
+    before = (list(sys.path), {m for m in ("hold", "project", "machine_lock") if m in sys.modules}, sys.modules.get("hold"))
+    EV.test_allowed("E212.a0", LOG)
+    assert (list(sys.path), {m for m in ("hold", "project", "machine_lock") if m in sys.modules}, sys.modules.get("hold")) == before, "the gate is loaded without touching sys.path or sys.modules (the lane has its own hold.py)"
+    free_text = "Rule: E212.a0 may run once.\n| date | run id | ok |\n|---|---|---|\n"
+    assert not EV.test_allowed("E212.a0", free_text), "a line of free text opens nothing"
 
 
 def test_prefixes_and_substrings_fail():
@@ -28,12 +50,9 @@ def test_regex_characters_are_literal():
 
 
 def test_reads_the_project_log_by_default():
-    import re
     assert EV.test_allowed("E99999.zz", None) is False          # well formed, so the real log is opened; it does not name this id
-    with open(f"{EV.R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8") as f:
-        logged = re.search(r"(?<![\w.])(E\d+[A-Za-z0-9_.-]*[A-Za-z0-9_])(?![\w.])", f.read())
-    if logged:
-        assert EV.test_allowed(logged.group(1), None) is True, "an id of the real log passes: the default log is the project's"
+    # the rows of the real log: a past use says DONE (E230.f1p); the row of E268.p is granted by D28 (decided in this project and naming the TEST check), so it opens with the project's decisions
+    assert EV.test_allowed("E230.f1p", None) is False and EV.test_allowed("E268.p", None, decided={"D28"}) is True and EV.test_allowed("E268.p", None, decided=set()) is False, "the default log is the project's"
 
 
 def test_digest_is_the_content_not_the_containers():

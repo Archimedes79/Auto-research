@@ -110,10 +110,11 @@ def entry_names(e):
     out.update(x for x in (e.get("runs") or []) if isinstance(x, str))
     out.update(x for x in (e.get("key"), e.get("name")) if isinstance(x, str))
     paths = [c.get("path", "") for c in (e.get("checkpoints") or []) if isinstance(c, dict)] + [e.get("card") or ""]
+    base = str(P.cfg_of(P.root()).get("runs", "runs")).replace("\\", "/").strip("/").split("/")       # the project's run folder (project.json "runs"), not a hard-coded `runs`
     for pa in paths:
         parts = str(pa).replace("\\", "/").split("/")
-        if len(parts) >= 2 and parts[0] == "runs":
-            out.add(parts[1])
+        if len(parts) > len(base) and parts[:len(base)] == base:
+            out.add(parts[len(base)])
     out.discard("")
     return out
 
@@ -352,7 +353,7 @@ def clean(apply=False, min_age_days=2.0, only=None, now=None):
     now = now or time.time()
     min_age_days = max(min_age_days, MIN_AGE_DAYS)
     top = top3_runs()
-    runs_root = os.path.join(P.root(), P.cfg_of(P.root()).get("cards", "runs"))
+    runs_root = os.path.join(P.root(), P.cfg_of(P.root()).get("runs", "runs"))
     out = []
     for rid in (only or run_ids()):
         r = run_record(rid)
@@ -567,9 +568,10 @@ def lane_plan(root=None, problems=None):
     return latest, plan
 
 
-def lane_clean(apply=False, root=None, problems=None):
+def lane_clean(apply=False, root=None, problems=None, planned=None):
+    """planned = the (latest, plan) a caller has already shown to the person: that plan is applied, not a new one"""
     root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
-    latest, plan = lane_plan(root, problems)
+    latest, plan = planned or lane_plan(root, problems)
     done = []
     for sig, text in plan:
         if text.startswith("delete") and apply:
@@ -618,9 +620,10 @@ def gt_plan(root=None, problems=None):
     return latest, plan
 
 
-def gt_clean(apply=False, root=None, problems=None):
+def gt_clean(apply=False, root=None, problems=None, planned=None):
+    """planned = the (latest, plan) a caller has already shown to the person: that plan is applied, not a new one"""
     root = root or os.path.join(V.repo_root(), "data", "autogt")
-    latest, plan = gt_plan(root, problems)
+    latest, plan = planned or gt_plan(root, problems)
     done = []
     for sig, text in plan:
         if text.startswith("delete") and apply:
@@ -628,6 +631,28 @@ def gt_clean(apply=False, root=None, problems=None):
             shutil.rmtree(os.path.join(root, sig))
             done.append(sig)
     return latest, plan, done
+
+
+def gt_command(apply, out=print, gt_root=None, lane_root=None, problems=None):
+    """the `gt` command: the plan for the GT stores and for the lane stores with its warnings, printed through `out` BEFORE anything is deleted (review 2026-11-10: the lane warning came
+    after --apply), then THAT plan applied when `apply`; -> the signatures that were deleted. The roots are for tests"""
+    latest, plan, _ = gt_clean(False, gt_root, problems)
+    out(f"latest GT version: {latest['version']} ({latest['signature']})")
+    for sig, text in plan:
+        out(f"  {sig:14} {text}")
+    lane_latest, lane_p, _ = lane_clean(False, lane_root, problems)
+    if lane_latest:
+        out(f"latest lane GT version: {lane_latest['version']} ({lane_latest['signature']})")
+        for sig, text in lane_p:
+            out(f"  {sig:14} {text}")
+        for note in lane_notes(lane_p):
+            out(note)
+    done, lane_done = [], []
+    if apply:
+        done = gt_clean(True, gt_root, problems, planned=(latest, plan))[2]
+        lane_done = lane_clean(True, lane_root, problems, planned=(lane_latest, lane_p))[2] if lane_latest else []
+    out(("deleted: " + ", ".join(done + lane_done)) if apply else "dry run: nothing deleted (--apply)")
+    return done + lane_done
 
 
 def selftest():
@@ -811,9 +836,17 @@ def selftest():
         n_before = len(open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read().splitlines())
         gt_clean(False, gtroot)
         assert len(open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read().splitlines()) == n_before and os.path.isdir(os.path.join(gtroot, "old1")), "a dry run changes nothing"
+        shown = gt_plan(gtroot)
+        assert gt_clean(True, gtroot, planned=(shown[0], [(s, "keep: the plan that was shown") for s, _ in shown[1]]))[2] == [] and os.path.isdir(os.path.join(gtroot, "old1")), \
+            "the plan that was shown to the person is the plan that is applied (main prints it before it deletes)"
         _, _, done = gt_clean(True, gtroot)
         assert sorted(done) == ["new", "old1"] and not os.path.exists(os.path.join(gtroot, "old1")) and os.path.isdir(os.path.join(gtroot, "old2")), done
         assert "GT store old1" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
+        pjk = open(os.path.join(proj, "project.json"), encoding="utf-8").read()        # the run folder of the best three follows project.json "runs", not a hard-coded `runs`
+        json.dump(dict(json.loads(pjk), runs="outputs"), open(os.path.join(proj, "project.json"), "w"))
+        assert entry_names({"checkpoints": [{"path": "outputs/r1/ckpt.pt"}, {"path": "runs/r2/ckpt.pt"}]}) == {"r1"}, entry_names({"checkpoints": [{"path": "outputs/r1/ckpt.pt"}]})
+        open(os.path.join(proj, "project.json"), "w", encoding="utf-8").write(pjk)
+        assert entry_names({"checkpoints": [{"path": "runs/r2/ckpt.pt"}]}) == {"r2"}
         # the second card folder (project.json experiment_dirs): a card there is found, the open one wins when both name the run
         pj0 = json.load(open(os.path.join(proj, "project.json")))
         os.makedirs(os.path.join(proj, "results", "experiments", "E5_done"))
@@ -931,6 +964,18 @@ def selftest():
         _, _, ldone = lane_clean(True, lroot)
         assert ldone == ["lold"] and not os.path.exists(os.path.join(lroot, "lold")) and os.path.isdir(os.path.join(lroot, "lneed")), ldone
         assert "lane GT store lold" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
+        # the `gt` command prints the plan and the lane warning while the store is still there, then applies that plan
+        os.makedirs(os.path.join(lroot, "lold"))
+        json.dump({"signature": "lold"}, open(os.path.join(lroot, "lold", "index.json"), "w"))
+        seen, lines = [], []
+
+        def spy(line):
+            lines.append(line)
+            if "cannot be protected by run records" in line:
+                seen.append(os.path.isdir(os.path.join(lroot, "lold")))
+        gone = gt_command(True, out=spy, gt_root=gtroot, lane_root=lroot)
+        assert seen == [True] and "lold" in gone and not os.path.exists(os.path.join(lroot, "lold")) and lines[-1].startswith("deleted:"), (seen, gone, lines)
+        assert gt_command(False, out=lambda l: None, gt_root=gtroot, lane_root=lroot) == [], "a dry run deletes nothing"
         # review 2026-11-10 (1): the package of a run that was resumed after the first package names its final checkpoint, not the one of the stored manifest
         mk("x.r_s0", status="stopped", exit_=75)
         pr0 = write("x.r_s0")
@@ -1038,18 +1083,7 @@ def main():
         print(f"{'deleted' if a.apply else 'would delete'}: {human(sum(b for _, v, b in res if v in ('delete', 'deleted')))} in {sum(1 for _, v, _ in res if v in ('delete', 'deleted'))} run(s); {sum(1 for _, v, _ in res if v.startswith('skip'))} skipped")
         print("a rebuild needs the code tag: check_git.py lists the tags that are not on origin yet")
     elif a.cmd == "gt":
-        latest, plan, done = gt_clean(a.apply)
-        print(f"latest GT version: {latest['version']} ({latest['signature']})")
-        for sig, text in plan:
-            print(f"  {sig:14} {text}")
-        lane_latest, lane_p, lane_done = lane_clean(a.apply)
-        if lane_latest:
-            print(f"latest lane GT version: {lane_latest['version']} ({lane_latest['signature']})")
-            for sig, text in lane_p:
-                print(f"  {sig:14} {text}")
-            for note in lane_notes(lane_p):
-                print(note)
-        print(("deleted: " + ", ".join(done + lane_done)) if a.apply else "dry run: nothing deleted (--apply)")
+        gt_command(a.apply)
     else:
         ap.error("package <run id> | show <run id> | clean [--apply] | gt [--apply] | --selftest")
 

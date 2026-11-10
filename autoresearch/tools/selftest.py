@@ -25,7 +25,7 @@ os.makedirs(f"{T}/code")
 open(f"{T}/code/a.py", "w").write("x = 1\n")
 json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", ledger_md="LEDGER.md", run_records="runs", schedule="schedule.csv", test_log="TEST.md",
                code_dirs=["code"], scratch="temp", live_code=["code"], lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))
-open(f"{T}/TEST.md", "w").write("| S.test.ok | logged, OK of the person |\n")
+open(f"{T}/TEST.md", "w").write("| S.test.ok | OK of the person |\n")
 env = dict(os.environ, AR_PROJECT=T, AR_MACHINE_LOCK=f"{T}/state/machine_lock.json", AR_SETTLE_S="0")  # never the real machine lock; no settle wait except in the tests of it
 env.pop("AR_LOCK_OWNER", None)  # the operator's own lock name must not let the selftest's runs pass a lock
 os.environ["AR_MACHINE_LOCK"] = env["AR_MACHINE_LOCK"]  # the in-process tests (Ticket.ahead reads the lock) too: a lock that another chat holds on this box must not change them
@@ -166,7 +166,7 @@ try:
     aft = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.afterstop", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.stop", "--wait-after", "0", "--", "bash", "-c", "echo x"],
                          capture_output=True, text=True, env=env)       # --wait-after is an integer (minutes): 0, so a missing fix fails the test instead of waiting for hours
     assert aft.returncode == 3 and "dependency S.stop held" in aft.stdout, aft.stdout
-    # hold marker (autoresearch/coordination.md): the same id is refused, the stopped record is not overwritten, a chat's own judgement does not clear it, the person's words do and
+    # hold marker (tools/hold.py): the same id is refused, the stopped record is not overwritten, a chat's own judgement does not clear it, the person's words do and
     # the ledger row keeps them; then the id resumes
     refused_ = go("S.stop", ["bash", "-c", "echo resumed"])
     assert refused_.returncode == 2 and "on HOLD" in refused_.stdout and "hold.py clear S.stop" in refused_.stdout and RUN.record(f"{T}/runs/S.stop")["status"] == "stopped", refused_.stdout
@@ -1047,6 +1047,16 @@ try:
         assert b.returncode == 0, b.stdout + b.stderr
     chk = subprocess.run([sys.executable, f"{HERE}/card.py", "check", "--all"], capture_output=True, text=True, env=env)
     assert chk.returncode == 0 and chk.stdout.count("ok   ") >= 2, chk.stdout
+    # --all reads the files that start with a split of the project; a sweep grid next to the cards is data and is skipped, not reported as a broken card
+    keep_cfg = json.load(open(f"{T}/project.json"))
+    json.dump(dict(keep_cfg, splits=["bench", "val"]), open(f"{T}/project.json", "w"))
+    json.dump({"name": "fastlib", "grid": [1, 2]}, open(f"{T}/runs/eval/fastlib/m143_grid.json", "w"))
+    chk = subprocess.run([sys.executable, f"{HERE}/card.py", "check", "--all"], capture_output=True, text=True, env=env)
+    assert chk.returncode == 0 and "skip" in chk.stdout and "m143_grid.json" in chk.stdout, chk.stdout
+    json.dump(keep_cfg, open(f"{T}/project.json", "w"))
+    chk = subprocess.run([sys.executable, f"{HERE}/card.py", "check", "--all"], capture_output=True, text=True, env=env)
+    assert chk.returncode == 1 and "BAD" in chk.stdout, "without a splits list every json of the folder is read as a card (the older rule)"
+    os.remove(f"{T}/runs/eval/fastlib/m143_grid.json")
     os.makedirs(f"{T}/experiments/E2_bench", exist_ok=True)
     json.dump(dict(id="E2", title="faster library", kind="variant", metric="ms", direction="lower", band=0.5, prediction=dict(value=-4, vs="c"), control="c", deterministic=True,
                    arms=dict(a=dict(names=["fastlib"]), c=dict(names=["baselib"])), rule=[dict(metric="ms", min_effect=1.0), dict(metric="pass_rate", max_loss=0.0)],
@@ -1062,7 +1072,7 @@ try:
     json.dump(dict(json.load(open(f"{T}/project.json")), holdout_split="final"), open(f"{T}/project.json", "w"))
     assert subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.final", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "final", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env).returncode == 2
     assert subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.test2", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", "test", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env).returncode == 0, "test is no longer the holdout here"
-    open(f"{T}/TEST.md", "a").write("| S.final.ok | logged, OK of the person |\n")
+    open(f"{T}/TEST.md", "a").write("| S.final.ok | OK of the person |\n")
     hold = lambda rid, split: subprocess.run([sys.executable, f"{HERE}/run.py", "--id", rid, "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--split", split, "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)  # noqa: E731
     assert hold("S.final.ok", "final").returncode == 0, "the renamed holdout with a logged id runs"
     assert hold("S.final2", "Final").returncode == 2 and hold("S.final3", " FINAL ").returncode == 2, "spelling does not bypass the holdout guard"
@@ -1526,7 +1536,7 @@ try:
             pass
         os.remove(lk + ".lock")
     # the selftests of the other tools and of the parts that live in their own files (the deep review of 2026-11-10: a tool change is gated by this file, so it runs them too)
-    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"]):
+    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"], ["testgate.py", "--selftest"]):
         if not os.path.exists(f"{HERE}/{extra[0]}"):
             continue
         ex = subprocess.run([sys.executable, f"{HERE}/{extra[0]}", *extra[1:]], capture_output=True, text=True)  # the real environment: these selftests build their own throw-away folders

@@ -1,4 +1,4 @@
-"""Hold marker: a run id that must not be started again until the person says so (design: autoresearch/coordination.md). Standard library only.
+"""Hold marker: a run id that must not be started again until the person says so (the hold marker; design rule 8 of ROADMAP.md). Standard library only.
 
     python3 autoresearch/tools/hold.py set ID --by "<chat>" --reason "..." [--words "<the person's words>"]
     python3 autoresearch/tools/hold.py clear ID --words "<the person's words>"       removes the marker, keeps it as HOLD.cleared.<date>, adds a ledger note

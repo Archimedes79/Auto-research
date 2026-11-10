@@ -129,8 +129,17 @@ def main():
     headline = cfg.get("headline_metrics", [])
     files = list(a.cards)
     if a.all:
-        files += [f for f in sorted(glob.glob(os.path.join(P.root(), cfg.get("cards", "runs/eval"), "*", "*.json"))) if not f.endswith(SCRATCH)]
+        found = [f for f in sorted(glob.glob(os.path.join(P.root(), cfg.get("cards", "runs/eval"), "*", "*.json"))) if not f.endswith(SCRATCH)]
+        splits = tuple(str(s).lower() for s in cfg.get("splits", []))
+        for f in found:     # a card is <name>/<split>[_<subset>][_<tag>].json: a file that starts with no split of the project (a sweep grid, a table) is data, not a card
+            if splits and not os.path.basename(f).lower().startswith(splits):
+                print(f"skip   {f}: the file name starts with none of the project's splits {list(splits)}, so it is not a card")
+            else:
+                files.append(f)
     if not files:
+        if a.all and not a.cards:
+            print("no card found: nothing under the project's card folder starts with one of its splits")      # not an error: a project may keep none (every file was skipped above)
+            return 0
         ap.error("no cards given (paths or --all)")
     rc, n_legacy = 0, 0
     for f in files:

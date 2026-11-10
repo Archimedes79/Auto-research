@@ -3,7 +3,7 @@
     tools/env/_py14.sh evaluate.py champion                       # VAL (873 frames), writes runs/eval/champion/val.json
     tools/env/_py14.sh evaluate.py fast --compare champion        # + paired scene bootstrap against another name (same frames)
     tools/env/_py14.sh evaluate.py champion --asm fork_prune=0.4  # try a setting (recorded in the card as an override)
-    tools/env/_py14.sh evaluate.py champion --split test --test-id E230.f1p   # TEST only when the id is logged in evaluation/TEST_USAGE_LOG.md
+    tools/env/_py14.sh evaluate.py champion --split test --test-id <run id>   # TEST only when a table row of evaluation/TEST_USAGE_LOG.md names the id with the person's OK (and not DONE)
     tools/env/_py14.sh evaluate.py champion --subset val250 --fresh           # the network path: 250 VAL frames re-inferred on the GPU, no cache
     tools/env/_py14.sh evaluate.py --golden check [--cached-only]            # layer 1 of the protocol: every golden number reproduced (exit 1 otherwise); golden.json holds 7 entries, not every registry name (PROTOCOL.md)
     tools/env/_py14.sh evaluate.py --golden write [names ...]                # (re)write golden entries of the names given (default: all registry names; protected file: a grant under a decided D<n> first)
@@ -76,14 +76,30 @@ def commit():
         return h + "+?"
 
 
-def test_allowed(test_id, log=None):
-    """True if test_id is a run id (E<number>...) and the TEST usage log names it as a whole id, the rule of autoresearch/tools/run.py
-    (review bug L2, D24: a substring test let `E` pass; the run-id shape keeps date parts such as `2026` or `10` and words out)"""
+def test_gate():
+    """autoresearch/tools/testgate.py, loaded by its path (no sys.path entry, no other tool imported): the ONE rule that decides whether a log row opens the TEST split, shared with the
+    launcher run.py"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ar_testgate", f"{R}/../autoresearch/tools/testgate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    return gate
+
+
+def test_allowed(test_id, log=None, decided=None):
+    """True if test_id is a run id (E<number>...) and the TEST usage log opens the split for it: the id is a whole token in the 'who / which run' cell of a table row that carries
+    the person's OK (the word OK, or `granted by D<n>` of a decision that is decided in this project's decisions folder and names the TEST check) and does not say pending / refused /
+    DONE - the launcher's rule (testgate.test_log_refusal; review bug L2, D24: a substring test let `E` pass; the run-id shape keeps date parts such as `2026` or `10` and words out).
+    `decided` = the decision ids that grant a TEST check (default: this project's, testgate.grant_ids)"""
     if not test_id or not re.fullmatch(r"E\d+[A-Za-z0-9_.-]*", test_id):
         return False
     if log is None:
         log = open(f"{R}/evaluation/TEST_USAGE_LOG.md", encoding="utf-8").read()
-    return re.search(r"(?<![\w.])" + re.escape(test_id) + r"(?![\w.])", log) is not None
+    gate = test_gate()
+    if decided is None:
+        with open(f"{R}/project.json", encoding="utf-8") as f:
+            decided = gate.grant_ids(R, json.load(f))
+    return gate.test_log_opens(log, test_id, decided)
 
 
 def s_comparable(a, b):

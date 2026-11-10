@@ -688,11 +688,12 @@ def repro_prepare(run_id, dest=None):
 
 
 def find_run_dir(run_id, root=None):
-    """the folder a run writes into: <cards folder>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists. `root` = another problem folder
-    (default: the current one). run_ar.sh names the folder of its code snapshot and log after the config file (runs/t23.C_s1/ holds only code/ and train.log) while the
+    """the folder a run writes into: <project.json "runs" (default runs)>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists. `root` = another
+    problem folder (default: the current one). The key is "runs", not "cards": the lane project keeps its evaluation cards in runs/eval and its run folders in runs/.
+    run_ar.sh names the folder of its code snapshot and log after the config file (runs/t23.C_s1/ holds only code/ and train.log) while the
     trainer writes gt.json, config.json and the checkpoints into the underscored one (runs/t23_C_s1/): when both exist the one that holds those files is the run folder"""
     root = root or P.root()
-    base = P.cfg_of(root).get("cards", "runs")
+    base = P.cfg_of(root).get("runs", "runs")
     found = [d for d in (os.path.join(root, base, n) for n in dict.fromkeys((run_id, run_id.replace(".", "_")))) if os.path.isdir(d)]
     holds = lambda d: any(os.path.isfile(os.path.join(d, f)) for f in ("config.json", "gt.json")) or final_ckpt(d)[0] is not None      # noqa: E731
     return next((d for d in found if holds(d)), found[0] if found else None)
@@ -1221,6 +1222,12 @@ def selftest():
         put(proj, "runs/r5_C_s1/config.json", '{"seed": 1}')
         assert find_run_dir("r5.C_s1") == os.path.join(proj, "runs", "r5_C_s1") == find_run_dir("r5.C_s1", root=proj), "the folder that holds gt.json / config.json, not the one named after the config"
         assert find_run_dir("r5_C_s1") == os.path.join(proj, "runs", "r5_C_s1") and find_run_dir("r5.nothing") is None
+        # the evaluation-card folder is not the run folder: the lane project sets cards = runs/eval and keeps its run folders in runs/ (review 2026-11-10: its runs got no manifest)
+        json.dump({"run_records": "rr", "cards": "runs/eval"}, open(os.path.join(proj, "project.json"), "w"))
+        assert find_run_dir("r5.C_s1") == os.path.join(proj, "runs", "r5_C_s1"), "cards: runs/eval must not move the run folders"
+        json.dump({"run_records": "rr", "cards": "runs/eval", "runs": "elsewhere"}, open(os.path.join(proj, "project.json"), "w"))
+        assert find_run_dir("r5.C_s1") is None, "a project that names its run folder is read there"
+        json.dump({"run_records": "rr"}, open(os.path.join(proj, "project.json"), "w"))
         os.makedirs(os.path.join(proj, "rr", "r5.C_s1"))
         json.dump({"id": "r5.C_s1", "status": "ok", "exit": 0, "tag": "tg/r5", "commit": "abc"}, open(os.path.join(proj, "rr", "r5.C_s1", "run.json"), "w"))
         m5 = manifest("r5.C_s1")
