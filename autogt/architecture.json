@@ -1,0 +1,71 @@
+{
+  "title": "autogt: command line, class interface, foundation data, generators, data and version key",
+  "subtitle": "The command line calls only the class AutoGT. Left to right is the way of the data: raw nuScenes, the hashed generators, stored data and the GT key. Generated from architecture.json",
+  "root": ".",
+  "colw": 200,
+  "rowh": 104,
+  "steps": [
+    {"col": 0, "label": "1 Command line"},
+    {"col": 1, "label": "2 Class interface"},
+    {"col": 2, "label": "3 Foundation data"},
+    {"col": 3, "label": "4 Generators (hashed)"},
+    {"col": 4, "label": "5 Data and version key"}
+  ],
+  "kinds": {
+    "entry": {"label": "command line", "fill": "#fce7f3", "stroke": "#db2777", "class": "other"},
+    "facade": {"label": "class interface AutoGT and what its methods call (not hashed)", "fill": "#ccfbf1", "stroke": "#0d9488", "class": "other"},
+    "found": {"label": "foundation data: raw nuScenes and its readers (not hashed)", "fill": "#fef3c7", "stroke": "#d97706", "class": "other"},
+    "gen": {"label": "generator, hashed into the GT signature", "fill": "#dbeafe", "stroke": "#2563eb", "class": "other"},
+    "derived": {"label": "derived output of a generator (not hashed)", "fill": "#e0f2fe", "stroke": "#0284c7", "class": "other"},
+    "store": {"label": "stored data and version key (not hashed)", "fill": "#fef9c3", "stroke": "#ca8a04", "class": "other"},
+    "data": {"label": "data on disk (not in git)", "fill": "#e5e7eb", "stroke": "#6b7280", "class": "other", "dashed": true},
+    "test": {"label": "tests", "fill": "#f3e8ff", "stroke": "#7c3aed", "class": "other"}
+  },
+  "nodes": [
+    {"id": "cli", "label": "python -m autogt\nCOMMAND", "kind": "entry", "col": 0, "row": 1, "code": ["cli.py", "__main__.py"], "note": "a thin map: the parser, and ONE call AutoGT.<method>(**arguments) per command; it imports nothing else of the suite (a test pins that); exit 0 done, 1 not there / incomplete, 2 wrong arguments"},
+
+    {"id": "tools", "label": "Look, check, tidy\nview, report, clean ...", "kind": "facade", "col": 1, "row": 0, "code": ["checks.py", "report.py", "view.py", "video.py", "lane_graph_view.py", "clean.py", "store_audit.py"], "note": "consistency checks, one PDF over all sequences, pictures, H.264 video, lane graph pictures, clean (never a released store), audit of a stored lane GT before its release"},
+    {"id": "api", "label": "class AutoGT\none method per command", "kind": "facade", "col": 1, "row": 1, "code": ["api.py", "suite.py", "__init__.py"], "note": "api.py = the static methods (generate, generate_bev_gt, generate_lane_gt, gt_key, have, check_data, audit_lane, area_masks, sets, versions, view, video, check, report, digest, clean, selftest ...); suite.py = the class AutoGT (also the object that makes the GT of one keyframe), load(), the signatures; __init__.py = autogt.generate, load, missing ..."},
+    {"id": "writer", "label": "Writer: generate, build\nGT per system", "kind": "facade", "col": 1, "row": 2, "code": ["pipeline.py", "gt_api.py"], "note": "pipeline.py = THE front GT writer (groups of 60 sequences, resumable, workers as spawned processes); gt_api.py = generate_bev_gt / generate_lane_gt, which run the writer, the lane generator and the masks and return the GT key"},
+
+    {"id": "raw", "label": "nuScenes raw\n(D:, 850 sequences)", "kind": "data", "col": 2, "row": 0, "note": "json tables, maps, CAM_FRONT (and the six cameras of the lane GT l4), five radars; data/NuScenes/ describes it and checks it (manifest.json); the data identity of the key is its hash"},
+    {"id": "light", "label": "Light reader\ntable cache", "kind": "found", "col": 2, "row": 1, "code": ["light_nusc.py"], "note": "the nuScenes tables of just the sequences asked for, as the devkit's interface; ensure_cache reads the big tables once (92 s) and a group of 60 sequences then loads in 4 s"},
+    {"id": "sets", "label": "Scene sets\nraw-file check", "kind": "found", "col": 2, "row": 2, "code": ["sets.py", "sets"], "note": "small = the 10 sequences of mini, full = all 850; check_raw says whether every raw file the generators read is on disk"},
+
+    {"id": "front", "label": "Front GT generator\nmap, boxes, flow, masks", "kind": "gen", "col": 3, "row": 1, "code": ["grid.py", "layers.py", "flow.py", "nuscenes_adapter.py", "nuscenes_gt.py", "coverage.py"], "note": "BEV layers, objects, velocity / flow in m/s, coverage masks per keyframe; the six files whose bytes make the front signature (6a7aa7864a, v9): editing one needs a versions.csv row, a tag and a rebuild of the BEV GT cache"},
+    {"id": "lane", "label": "Lane GT generator\ngraph, tiers, two rigs", "kind": "gen", "col": 3, "row": 2, "code": ["lane_graph.py", "road_graph.py", "lane_lines.py", "lane_tiers.py", "rig_masks.py", "lane_gt.py"], "note": "the lane graph, roads, lines, areas, tiers and camera visibility per point, for lane_center (Spurmitte) and bev_fusion; the six files of the lane signature (own versions); lane_gt.py also holds its own store code"},
+    {"id": "masks", "label": "Area masks\n(BEV grid, packed)", "kind": "derived", "col": 3, "row": 3, "code": ["lane_raster.py"], "note": "exact cell-centre raster of the lane polygons into the BEV grid, packed per frame below <lane store>/masks/; part of the BEV GT, not hashed"},
+
+    {"id": "stores", "label": "Stores on disk\ndata/autogt", "kind": "data", "col": 4, "row": 0, "note": "<signature>/<token>.npz (front), lane/<signature>/<token>.pkl.gz (+ masks/), cache/, reports/, examples/; data/autogt links to D:\\Auto-research\\NuScenesAdditionalGt"},
+    {"id": "store", "label": "Store files\nindex.json manifest", "kind": "store", "col": 4, "row": 1, "code": ["store.py"], "note": "keyframe files, the index.json of a store folder (complete, scenes, stride, resolution, commit, dirty, release, data identity), resume checks, listing by file name"},
+    {"id": "key", "label": "GT key\nGtKey, gt_key", "kind": "store", "col": 4, "row": 2, "code": ["gt_api.py::GtKey"], "note": "data identity + per part (front / lane / masks) signature, store, version, commit, dirty; id over all parts; complete is never guessed; key.load / lane / mask read through it"},
+    {"id": "versions", "label": "Versions, releases\nsignature -> v12", "kind": "store", "col": 4, "row": 3, "code": ["versions.py", "versions.csv", "lane_versions.csv", "releases.csv", "lane_l4_digest.json"], "note": "front version, lane version and release of a signature; same_gt_as aliases (new code, same GT: the old store is used); lane_l4_digest.json pins the l4 output for the l5 / l6 comparison"},
+
+    {"id": "tests", "label": "Tests: python -m autogt selftest", "kind": "test", "col": 0, "row": 4, "w": 5, "hpx": 44, "code": ["selftest.py", "cli_selftest.py", "gt_api_selftest.py", "generator_selftest.py", "lane_graph_selftest.py", "lane_tiers_selftest.py"], "note": "synthetic world with known truth, real keyframes, build + reload; every command is one method of AutoGT and one call; exact raster against the polygons; generator against the devkit, the map and the image; lane graph invariants; the signature guard; each new test is checked by a mutant"}
+  ],
+  "edges": [
+    {"from": "cli", "to": "api", "label": "AutoGT.method"},
+    {"from": "api", "to": "tools"},
+    {"from": "api", "to": "writer"},
+    {"from": "writer", "to": "sets"},
+    {"from": "writer", "to": "light"},
+    {"from": "raw", "to": "light"},
+    {"from": "light", "to": "front"},
+    {"from": "light", "to": "lane"},
+    {"from": "sets", "to": "lane"},
+    {"from": "front", "to": "store"},
+    {"from": "lane", "to": "store"},
+    {"from": "lane", "to": "masks"},
+    {"from": "store", "to": "stores", "both": true},
+    {"from": "store", "to": "key"},
+    {"from": "versions", "to": "key"}
+  ],
+  "covers": [
+    {"dir": ".", "glob": "*.py", "recursive": false},
+    {"dir": ".", "glob": "*.csv", "recursive": false},
+    {"dir": ".", "glob": "*.json", "recursive": false}
+  ],
+  "not_drawn": {
+    "architecture.json": "this drawing's own spec"
+  }
+}

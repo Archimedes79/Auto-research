@@ -6,6 +6,7 @@ import types
 
 from .store import load_keyframe
 from .grid import GridSpec
+from .api import Interface
 from .nuscenes_gt import NuScenesGT
 
 DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt")       # <repository root>/data/autogt
@@ -94,7 +95,7 @@ def scene_tokens(scene, version="v1.0-mini", dataroot=None):
     return out
 
 
-class AutoGT(NuScenesGT):
+class AutoGT(NuScenesGT, Interface):
     """AutoGT(dataroot, version, grid=GridSpec(), ss=4, **options).
 
     keyframe(token)          every layer of one keyframe: dict of float32 arrays [ix, iy] + meta (see nuscenes_gt.py)
@@ -106,6 +107,9 @@ class AutoGT(NuScenesGT):
     boxes moved to the camera time by v * dt, default; "annotation" = as annotated)
     light=True: a memory-light devkit (CAM_FRONT + radars only, autogt/light_nusc.py); scenes=[names]: only these sequences are
     loaded (v1.0-trainval: ~0.7 GB for 85 sequences instead of 8+ GB for all)
+
+    The same class is the interface of the whole suite: its STATIC methods (autogt/api.py) are what the command line calls, `AutoGT.generate_bev_gt(root)`, `AutoGT.generate_lane_gt(root)`,
+    `AutoGT.gt_key(system)`, `AutoGT.generate`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
     """
 
     def __init__(self, dataroot, version, grid=None, ss=4, light=False, scenes=None, **options):
@@ -123,24 +127,6 @@ class AutoGT(NuScenesGT):
         return super().training_sample(sample_token, grid or self.grid, ss or self.ss)
 
     # one function per system and its key (gt_api.py): the class offers them next to the single-keyframe methods
-    @staticmethod
-    def generate_bev_gt(*args, **kwargs):
-        """BEV Fusion: the front GT + the lane GT of the rig bev_fusion + the packed area masks -> GtKey (see gt_api.generate_bev_gt)"""
-        from .gt_api import generate_bev_gt
-        return generate_bev_gt(*args, **kwargs)
-
-    @staticmethod
-    def generate_lane_gt(*args, **kwargs):
-        """the lane GT of one system (rig lane_center | bev_fusion) or both (rig="all") -> GtKey (see gt_api.generate_lane_gt)"""
-        from .gt_api import generate_lane_gt
-        return generate_lane_gt(*args, **kwargs)
-
-    @staticmethod
-    def gt_key(*args, **kwargs):
-        """the key of what is stored for a system, nothing is generated (see gt_api.gt_key)"""
-        from .gt_api import gt_key
-        return gt_key(*args, **kwargs)
-
     def scenes(self):
         return [s["name"] for s in self.nusc.scene]
 

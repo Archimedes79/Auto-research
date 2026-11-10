@@ -202,10 +202,10 @@ def _mini_checks(root, AutoGT, lane_gt):
 
 def _api_checks(root, lane_gt):
     from . import gt_api
-    from .suite import scene_tokens
+    from .suite import AutoGT, scene_tokens
     with tempfile.TemporaryDirectory() as d:
         toks = scene_tokens("scene-0061", "v1.0-mini", root)
-        key = gt_api.generate_bev_gt(root, scenes=["scene-0061"], out=d, verbose=False)
+        key = AutoGT.generate_bev_gt(root, scenes=["scene-0061"], out=d, verbose=False)
         assert key.system == "bev_fusion" and [p.name for p in key.parts] == ["front", "lane", "masks"] and key.complete, str(key)
         assert key.data == gt_api.data_identity() and key.dataset == "v1.0-mini" and key.set_name == "custom" and len(key.id) == 12, (key.data, key.dataset, key.set_name)
         assert key.part("front").signature != key.part("lane").signature and key.part("lane").store == lane_gt.signature(rig="bev_fusion") and key.part("masks").store == key.part("lane").store
@@ -280,7 +280,7 @@ def _api_checks(root, lane_gt):
         assert {t for t, _ in worse["problems"]} == {"store", *damaged}, ("each damaged frame is named, no good one is", worse["problems"])
         said = dict(worse["problems"])
         assert ": tier (" in said[toks[4]] and "vis and occ" in said[toks[5]] and "outside the window" in said[toks[6]], said
-        lc = gt_api.generate_lane_gt(root, rig="lane_center", scenes=["scene-0061"], out=d, verbose=False)
+        lc = AutoGT.generate_lane_gt(root, rig="lane_center", scenes=["scene-0061"], out=d, verbose=False)
         assert lc.system == "lane_center" and [p.name for p in lc.parts] == ["lane"] and lc.complete and lc.id != key.id and lc.lane(toks[8])["frame"] == "lane"
         assert lc.part("lane").version == lane_gt.version_of(lc.part("lane").store), "the version is the one of the store"
         both = gt_api.generate_lane_gt(root, rig="all", scenes=["scene-0061"], out=d, verbose=False)

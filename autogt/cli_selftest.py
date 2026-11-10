@@ -1,5 +1,5 @@
-"""Self-test of the command line (cli.py) and the store helpers behind it: every command is ONE call of a function (a recorder stands in for the function and the test asserts the call and its
-arguments), wrong arguments give a message and exit 2 and never a traceback, "not there" gives exit 1, every --help works, the key line printed is the key of the stored GT; and the
+"""Self-test of the command line (cli.py) and the store helpers behind it: every command is ONE method of AutoGT (api.py), which makes ONE call of a function of the suite (a recorder stands in for the
+function and the test asserts the call and its arguments), wrong arguments give a message and exit 2 and never a traceback, "not there" gives exit 1, every --help works, the key line printed is the key of the stored GT; and the
 consistency of the stores (listing by file name, a rerun that writes nothing keeps the manifest, versions tables).
 
     python -m autogt.cli_selftest [--root ~/data/nuscenes]      (also run by `python -m autogt selftest`)
@@ -66,15 +66,22 @@ def _mapping_checks():
     from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store_audit, video, view
     from . import lane_gt
     from . import pipeline  # noqa: F401
-    # the map of the module doc is the map of the code: every command is listed and its function is named in the doc
-    expected = {"generate": "pipeline.generate", "generate-bev": "gt_api.generate_bev_gt", "generate-lane": "gt_api.generate_lane_gt", "area-masks": "lane_raster.build_mask_cache", "audit-lane": "store_audit.audit_lane", "build": "pipeline.build",
-                "key": "gt_api.gt_key", "have": "sets.stored_for", "data": "sets.check_raw", "area-mask": "lane_raster.load_mask", "check": "checks.run", "report": "report.report",
-                "digest": "checks.digests", "clean": "clean.clean", "selftest": "selftest.run"}
+    # the map of the module doc is the map of the code: every command is ONE method of AutoGT, named in the doc; no method is without a command, and the command line imports nothing but the class
+    from .api import Interface
+    from .suite import AutoGT
+    expected = {"generate": "generate", "generate-bev": "generate_bev_gt", "generate-lane": "generate_lane_gt", "area-masks": "area_masks", "audit-lane": "audit_lane", "build": "build",
+                "key": "gt_key", "have": "have", "data": "check_data", "sets": "sets", "versions": "versions", "area-mask": "area_mask", "view": "view", "sheets": "sheets", "masks": "masks",
+                "lanegraph": "lanegraph", "video": "video", "check": "check", "report": "report", "digest": "digest", "clean": "clean", "selftest": "selftest"}
     cmds = cli.commands()
-    assert set(expected) <= set(cmds), set(expected) - set(cmds)
-    assert all(v in cli.__doc__ for v in expected.values()), [v for v in expected.values() if v not in cli.__doc__]
-    for name in ("sets", "versions", "view", "sheets", "video", "lanegraph", "masks"):
-        assert name in cmds and name in cli.__doc__, name
+    assert cmds == expected, (set(cmds) ^ set(expected), {k: v for k, v in cmds.items() if expected.get(k) != v})
+    assert all(callable(getattr(AutoGT, m)) for m in expected.values()), "every command is a method of AutoGT"
+    assert {m for m in vars(Interface) if not m.startswith("_")} == set(expected.values()), "no method of the interface without a command, no command without a method"
+    assert all(f"AutoGT.{m}" in cli.__doc__ or m in cli.__doc__ for m in expected.values()), [m for m in expected.values() if m not in cli.__doc__]
+    import ast
+    tree = ast.parse(open(cli.__file__, encoding="utf-8").read())
+    imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level == 1}
+    assert imported <= {"pipeline", "store", "api", "suite"}, f"the command line reaches the suite only through AutoGT (pipeline / store are the old names re-exported): {imported}"
+    assert not any(isinstance(n, ast.Import) and any(x.name.startswith("autogt") for x in n.names) for n in ast.walk(tree))
     # every command has a --help that works
     for name in cmds:
         code, out, err = _run([name, "--help"])
@@ -82,30 +89,30 @@ def _mapping_checks():
 
     # generate: all options reach pipeline.generate, the keys of both systems are printed
     gen, calls = _recorder({"lane": {"x": 1}, "version": "v1.0-mini", "masks_error": None, "lane_rigs": {}})
-    with _Patch((cli, "generate", gen), (gt_api, "key_of", lambda system, *a, **k: f"key of {system}")):
+    with _Patch((pipeline, "generate", gen), (gt_api, "key_of", lambda system, *a, **k: f"key of {system}")):
         code, out, err = _run(["generate", "~/r", "--scenes", "scene-0061", "scene-0103", "--stride", "20", "--workers", "2", "--out", "o", "--no-flow", "--boxes-at", "annotation"])
-    assert code == 0 and calls == [(("~/r", "o", None, ["scene-0061", "scene-0103"], 20, 0.5), dict(workers=2, set_name=None, lane=True, use_flow=False, use_radar=True, boxes_at="annotation"))], calls
+    assert code == 0 and calls == [(("~/r", "o", None, ["scene-0061", "scene-0103"], 20, 0.5), dict(workers=2, set_name=None, lane=True, verbose=True, use_flow=False, use_radar=True, boxes_at="annotation"))], calls
     assert out.splitlines() == ["key of bev_fusion", "key of lane_center"], out
     gen, calls = _recorder({"lane": None, "version": "v1.0-mini", "masks_error": None})
-    with _Patch((cli, "generate", gen)):
+    with _Patch((pipeline, "generate", gen)):
         code, out, _ = _run(["generate", "~/r", "--set", "small", "--no-lane"])
     assert code == 0 and calls[0][0][3] is None and calls[0][1]["set_name"] == "small" and calls[0][1]["lane"] is False and out == "", (calls, out)
     gen, _ = _recorder({"lane": {}, "version": "v1.0-mini", "masks_error": "OSError: disk full"})
-    with _Patch((cli, "generate", gen), (gt_api, "key_of", lambda *a, **k: "k")):
+    with _Patch((pipeline, "generate", gen), (gt_api, "key_of", lambda *a, **k: "k")):
         assert _run(["generate", "~/r"])[0] == 1, "a failed mask cache is a failed command"
     # generate-bev / generate-lane: the key is printed, the options are passed on
     fn, calls = _recorder(_FakeKey(True))
     with _Patch((gt_api, "generate_bev_gt", fn)):
         code, out, _ = _run(["generate-bev", "~/r", "--set", "full", "--out", "o", "--workers", "3", "--border-m", "0", "0.5", "1"])
-    assert code == 0 and out.strip() == "fake key complete=True" and calls == [(("~/r",), dict(set_name="full", scenes=None, out="o", version=None, workers=3, borders=(0.0, 0.5, 1.0)))], calls
+    assert code == 0 and out.strip() == "fake key complete=True" and calls == [((), dict(dataroot="~/r", set_name="full", out="o", workers=3, borders=(0.0, 0.5, 1.0)))], calls
     fn, calls = _recorder({"lane_center": _FakeKey(True), "bev_fusion": _FakeKey(True)})
     with _Patch((gt_api, "generate_lane_gt", fn)):
         code, out, _ = _run(["generate-lane", "~/r", "--scenes", "scene-0061"])
-    assert code == 0 and len(out.splitlines()) == 2 and calls == [(("~/r", "all", None, ["scene-0061"], None, None, 1), {})], calls
+    assert code == 0 and len(out.splitlines()) == 2 and calls == [((), dict(dataroot="~/r", rig="all", scenes=["scene-0061"], workers=1))], calls
     fn, calls = _recorder(_FakeKey(True))
     with _Patch((gt_api, "generate_lane_gt", fn)):
         _run(["generate-lane", "~/r", "--rig", "lane_center", "--set", "small", "--out", "o"])
-    assert calls == [(("~/r", "lane_center", "small", None, "o", None, 1), {})], calls
+    assert calls == [((), dict(dataroot="~/r", rig="lane_center", set_name="small", out="o", workers=1))], calls
     # area-masks needs an existing store; area-mask draws one
     with tempfile.TemporaryDirectory() as d:
         code, out, err = _run(["area-masks", "--out", d])
@@ -124,14 +131,14 @@ def _mapping_checks():
             fn, calls = _recorder({"ok": ok, "problems": [], "stats": {}, "lines": []})
             with _Patch((store_audit, "audit_lane", fn)):
                 code, _, _ = _run(["audit-lane", "lane_center", "--out", d, "--dataset", "v1.0-mini", "--dataroot", "r", "--scenes", "scene-0061", "--limit", "3"])
-            assert code == code_want and calls == [((os.path.join(d, "lane", lane_gt.signature(rig="lane_center")), "lane_center", "r", "v1.0-mini", ["scene-0061"], 3), {})], (code, calls)
+            assert code == code_want and calls == [((os.path.join(d, "lane", lane_gt.signature(rig="lane_center")), "lane_center", "r", "v1.0-mini", ["scene-0061"], 3), dict(verbose=True))], (code, calls)
     # selftest --only: a part alone, an unknown part is refused
     code, out, err = _run(["selftest", "--only", "clean"])
     assert code == 0 and out.startswith("clean: ok"), (code, out, err[-200:])
     assert _run(["selftest", "--only", "nothing"])[0] == 2
     # build
     fn, calls = _recorder(0)
-    with _Patch((cli, "build", fn)):
+    with _Patch((pipeline, "build", fn)):
         assert _run(["build", "--out", "o", "--scenes", "scene-0061", "--workers", "2", "--no-radar"])[0] == 0
     assert calls == [((os.path.expanduser("~/data/nuscenes"), "v1.0-mini", "o", ["scene-0061"], 1, 2, 0.5), dict(use_flow=True, use_radar=False))], calls
     # key: the key and its exit code; --json
@@ -139,13 +146,13 @@ def _mapping_checks():
         fn, calls = _recorder(_FakeKey(complete))
         with _Patch((gt_api, "gt_key", fn)):
             code, out, _ = _run(["key", "bev_fusion", "--set", "small", "--dataset", "v1.0-mini", "--out", "o"])
-        assert code == code_want and out.strip() == f"fake key complete={complete}" and calls == [(("bev_fusion", "v1.0-mini", "small", "o", None, None), {})], (calls, out, code)
+        assert code == code_want and out.strip() == f"fake key complete={complete}" and calls == [((), dict(system="bev_fusion", dataset="v1.0-mini", set_name="small", out="o"))], (calls, out, code)
     fn, calls = _recorder(_FakeKey(True))
     with _Patch((gt_api, "gt_key", fn)):
         code, out, _ = _run(["key", "lane_center", "--json"])
-        assert code == 0 and '"id": "abc"' in out and calls[0][0] == ("lane_center", "v1.0-trainval", "full", None, None, None), calls
+        assert code == 0 and '"id": "abc"' in out and calls[0] == ((), dict(system="lane_center", dataset="v1.0-trainval")), calls
         _run(["key", "lane_center", "--scenes", "scene-0061"])
-        assert calls[1][0] == ("lane_center", "v1.0-trainval", None, None, None, ["scene-0061"]), calls[1]
+        assert calls[1] == ((), dict(system="lane_center", dataset="v1.0-trainval", scenes=["scene-0061"])), calls[1]
     # have / data: exit 1 when something is missing
     fn, calls = _recorder({"have": 3, "total": 5, "scenes": 1, "version": "v1.0-mini", "missing": ["a", "b"]})
     with _Patch((sets, "stored_for", fn)):
@@ -195,7 +202,7 @@ def _mapping_checks():
 def _error_checks(root):
     """wrong arguments: a message and exit 2, no traceback; not there: exit 1; the traceback on request"""
     cases = [(["generate", "~/r", "--workers", "0"], "workers"), (["generate", "~/r", "--res", "0"], "res"), (["generate", "~/r", "--stride", "0"], "stride"),
-             (["generate", "~/r", "--set", "tiny"], "invalid choice"), (["generate", "~/r", "--set", "small", "--scenes", "scene-0061"], "not allowed"),
+             (["generate", root, "--set", "tiny"], "no scene set"), (["generate", "~/r", "--set", "small", "--scenes", "scene-0061"], "not allowed"),
              (["have", "--set", "small", "--scenes", "x"], "not allowed"), (["generate", root, "--scenes-file", "/nonexistent/file.txt"], "nonexistent"),
              (["lanegraph", "o.png", "scene-0061"], "scene-0061:8"), (["digest"], "--compare"), (["key", "surround"], "invalid choice"),
              (["key", "lane_center", "--dataset", "v1.0-mini", "--dataroot", root, "--scenes", "scene-9999"], "scene-9999"),
@@ -334,12 +341,27 @@ def _store_checks(root):
         pass
 
 
+def _architecture_check():
+    """the architecture drawing (architecture.json -> .svg / .md) is in step with the code: every box points at real code, no file is in no box, the generated files are current (the check of
+    autoresearch/tools/archdraw.py; skipped when the tool is not there, e.g. in a copy of autogt alone)"""
+    import subprocess
+    import sys
+    here = os.path.dirname(os.path.abspath(__file__))
+    tool = os.path.join(here, "..", "autoresearch", "tools", "archdraw.py")
+    if not os.path.exists(tool):
+        return False
+    r = subprocess.run([sys.executable, tool, "check", os.path.join(here, "architecture.json")], capture_output=True, text=True)
+    assert r.returncode == 0, "the architecture drawing is out of step with the code (run `python autoresearch/tools/archdraw.py render autogt/architecture.json`): " + r.stdout[-800:] + r.stderr[-300:]
+    return True
+
+
 def run(root=None, verbose=True):
     root = os.path.expanduser(root or "~/data/nuscenes")
     _mapping_checks()
     _error_checks(root)
     _store_checks(root)
-    msg = "cli selftest ok: every command is one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables"
+    drawn = _architecture_check()
+    msg = "cli selftest ok: every command is one method of AutoGT and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables" + ("; the architecture drawing is in step with the code" if drawn else "")
     if verbose:
         print(msg)
     return msg

@@ -162,6 +162,7 @@ status.json
 # (`archdraw.py check`), embedded in the READMEs; the one exception to the image rule above
 !/autoresearch/architecture.svg
 !/autoresearch/overview.svg
+!/autogt/architecture.svg
 !/autoresearch/history/architecture_target_2026-11-01.svg
 !/bev_fusion/training/architecture.svg
 !/bev_fusion/training/architecture_target.svg

@@ -565,7 +565,6 @@ def run(root=None, verbose=True):
         assert bad_["missing"] == ok_["camera"] + ok_["radar"] and len(bad_["examples"]) == 10 and bad_["maps"], bad_
         assert "missing" in sets.report_raw(bad_) and "all on disk" in sets.report_raw(ok_)
     # 5g the digests that show two generators make the same GT (`same_gt_as`): a digest per frame, and the compare finds a changed one
-    import argparse
     from . import checks as checks_mod
     dg1 = checks_mod.digests(root, "v1.0-mini", stride=40, sweeps=("scene-0061",))
     assert len(dg1["digests"]) >= 11 and dg1["signature"] == gt.signature(), dg1["signature"]
@@ -573,17 +572,14 @@ def run(root=None, verbose=True):
         pa, pb = os.path.join(d, "a.json"), os.path.join(d, "b.json")
         json.dump(dg1, open(pa, "w"))
         json.dump(dg1, open(pb, "w"))
-        cli_mod._cmd_digest(argparse.Namespace(compare=[pa, pb], out=None, stride=2))               # identical: no exit
+        from .suite import AutoGT as AG
+        assert AG.digest(compare=[pa, pb])["ok"], "identical digests"
         json.dump({**dg1, "digests": {**dg1["digests"], next(iter(dg1["digests"])): "0" * 40}}, open(pb, "w"))
-        try:
-            cli_mod._cmd_digest(argparse.Namespace(compare=[pa, pb], out=None, stride=2))
-            raise AssertionError("a changed frame must be found")
-        except SystemExit as e_:
-            assert e_.code == 1
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        cli_mod._print_sets()
-    assert "small" in buf.getvalue() and "full" in buf.getvalue(), buf.getvalue()
+        r_ = AG.digest(compare=[pa, pb])
+        assert not r_["ok"] and len(r_["differ"]) == 1, "a changed frame must be found"
+    from .suite import AutoGT as AG
+    sets_text = AG.sets()["text"]
+    assert "small" in sets_text and "full" in sets_text, sets_text
     # the agent guide names every layer, meta entry and box field the generator produces (so it cannot drift from the code)
     guide = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "AGENTS.md"), encoding="utf-8").read()
     keys = [k for k in g2 if k != "meta"] + list(g2["meta"]) + list(g2["meta"]["boxes"][0]) + ["dt", "steps"]
