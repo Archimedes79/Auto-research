@@ -118,6 +118,8 @@ def early_checks(tmp, ok):
     assert E.ranks([5, 5, 7]) == [1.5, 1.5, 3.0] and E.spearman([1, 2, 3], [10, 20, 30]) == 1.0 and abs(E.spearman([1, 2, 3, 4], [1, 3, 2, 4]) - 0.8) < 1e-9
     assert E.spearman([1, 2, 3], [4, 4, 4]) is None and abs(E.wilson_low(8, 8) - 0.6756) < 1e-3 and E.wilson_low(0, 0) == 0.0
     H, L = dict(better="higher"), dict(better="lower")
+    rk = make(tmp, "early_keys", rows(5), total=1000, done=True, evals=[(100, {"score": 1.0, "n": 40, "n_skipped": 2, "total_last_warm": 2.0})])
+    assert E.default_keys([Run(rk)]) == ["val.score"], E.default_keys([Run(rk)])      # the validation counts of the trainer are no metric to compare
 
     fin = [0.1 * k * (-1) ** k for k in range(1, 9)]                         # 8 final gaps of both signs and different sizes
     # the early gap predicts the final one: sign agreement 8 of 8, rank correlation 1; a finished pair with another step total, an unfinished one

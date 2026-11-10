@@ -19,6 +19,7 @@ from .runs import Run
 
 FRACTIONS = (0.1, 0.25, 0.5, 0.75)
 MIN_PAIRS = 6              # fewer usable pairs: no calibration, no threshold
+COUNT_KEYS = ("val.n", "val.n_skipped")   # batches in the validation mean / left out for a non-finite loss (trainer, D73): counts, not metrics
 FINAL_FRAC = 0.9           # the final gap is taken at the last evaluation at or after this fraction of the steps
 FRAC_TOL = 0.02            # `early` matches a calibrated fraction when the eval fractions used lie within this much of the current one
 MIN_AGREE = 0.8            # `early` calls a gap a reason to consider stopping when the 95 % LOWER bound of the sign agreement is at least this
@@ -115,8 +116,8 @@ def finished(run):
 
 
 def default_keys(runs):
-    """the `val.*` keys of the runs (the `*last*` variants of the trainer are left out), sorted"""
-    ks = {k for r in runs for e in r.evals for k in e if k.startswith("val.") and "last" not in k}
+    """the `val.*` keys of the runs (the `*last*` variants of the trainer and the counts `val.n` / `val.n_skipped` of the validation are left out: they are no metric), sorted"""
+    ks = {k for r in runs for e in r.evals for k in e if k.startswith("val.") and "last" not in k and k not in COUNT_KEYS}
     return sorted(ks)
 
 
