@@ -82,7 +82,7 @@ From run.py's `state_of` (done flag first, heartbeat age, HOLD marker) on `<run_
 - no scheduler, priorities or daemon: run.py's line decides the order (`priority` is recorded only);
 - no `stop` / `hold` / `resume` wrappers yet: use `tools/hold.py` for a waiting run and the suite's own stop (`Training.stop`) for a running one;
 - no CPU gate (`needs.cpu` is recorded); `ram_gb` is applied by run.py to GPU jobs only;
-- the ground-truth suite is not in the built-in table: its folder and class are being renamed; add an entry (level 2 or 3) when its class and constructor are settled;
+- the ground-truth suite is not in the built-in table: it brings its own (level 3): `GtGenerator/jobs.py` exports `JOBS` with `GtGenerator.generate_bev_gt` and `GtGenerator.generate_lane_gt` (run through `run_nice.sh`, no card), and `bev_fusion/project.json` lists `GtGenerator` in `jobrunner.suites`. Two jobs that write the same store are found only by the reference names (`gt:lane.all@...` and `gt:lane.bev_fusion@...` do not collide);
 - run.py's own refusals that depend on its state at the moment of the start (the machine lock, a full GPU) are not predicted; they show as `failed` or `blocked` with the reason from the record;
 - the arguments are checked against the method's signature by importing the class here or, when that fails, in the interpreter of the job (a minute or two the first time for a heavy suite); if neither works a warning says so;
 - a process that imports two projects' suites keeps the first one's modules in `sys.modules`: one JobRunner process per project;
