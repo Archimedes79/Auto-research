@@ -28,6 +28,10 @@ import types
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(os.path.dirname(HERE), "tools")
 MAX_RESTARTS = 3                                   # restarts in a row without a new logged step; then the runner leaves the run alone (look at it)
+LAUNCH_RETRIES = 3                                 # a launcher that exits with 1 (not a refusal: run.py refuses with 2) is tried this many times
+WAITING_WATCH_S = 60.0                             # `hold` watches a launcher that waited for its slot this long: it may start the trainer after its last look at the hold
+HOLD_RESEND_S = 20.0                               # the runner asks a held item that runs anyway to stop at most this often
+KILL_RESEND_S = 60.0                               # ... and an item whose kill rule hit again after this long, at most 3 times
 LAUNCH_GRACE_S = 90.0                              # a launcher started this long ago that has no run record yet is still starting: not started a second time
 LAUNCHABLE = ("queued", "restart", "interrupted")
 OPEN = ("queued", "restart", "interrupted", "waiting", "running", "orphan", "held")      # the runner stays while one of these exists (held: the person's word is awaited)
@@ -348,12 +352,18 @@ def launch(c, it, wait=3.0):
     if rc is not None and rc > 0:                       # a launcher killed by a signal (rc < 0) did not refuse: its record tells
         with open(log, encoding="utf-8", errors="replace") as lf:
             tail = [x for x in lf.read().strip().splitlines()[-2:] if x]
-        it["refused"] = " | ".join(tail)[:300] or f"exit {rc}"
+        text = " | ".join(tail)[:300] or f"exit {rc}"
+        if rc == 1 and it.get("launch_failures", 0) < LAUNCH_RETRIES - 1:          # run.py refuses with 2; exit 1 is a launcher that failed (a file of tools/ being edited, a hiccup): again
+            it["launch_failures"] = it.get("launch_failures", 0) + 1
+            it["launched_t"] = time.time()                                          # tick waits LAUNCH_GRACE_S before the next try
+            return False, f"launcher failed (exit 1, try {it['launch_failures']} of {LAUNCH_RETRIES}): {text}"
+        it["refused"] = text
         return False, f"launcher refused (exit {rc}): {it['refused']}"
     write_kill(os.path.join(c.runs, folder(it["id"])), it.get("kill"))     # the launcher survived its first seconds: the job's kill rules go where `watch` and `status` read them
     _CHILDREN.append(proc)
     it["launched"], it["launched_t"], it["boot"] = now(), time.time(), boot_id()
     it.pop("retry", None)
+    it.pop("launch_failures", None)
     return True, f"started, launcher pid {proc.pid}"
 
 
@@ -410,6 +420,42 @@ def tick(c, q, wait=3.0):
     return acts
 
 
+def enforce(c, q):
+    """what the runner does besides starting items. (1) A held item that runs anyway (its launcher was past its last look at the hold when `hold` came) is asked to stop again.
+    (2) A running item whose job has kill rules: a rule that hits asks it to stop (run.py then puts its id on hold; the person's `resume` waives that rule). -> the lines to log"""
+    from .kill import Rule
+    from .runs import Run
+    acts = []
+    for it in q["items"]:
+        rid = it["id"]
+        if it.get("kind", "train") != "train" or state(c, it) not in ("running", "orphan"):
+            continue
+        if it.get("held"):
+            if time.time() - it.get("hold_stop_t", 0) > HOLD_RESEND_S:
+                err = _request_stop(c, rid, "queue hold")
+                it["hold_stop_t"] = time.time()
+                acts.append(f"{rid}: on hold but running: " + ("stop requested" if not err else f"NOT stopped: {err}"))
+            continue
+        hit = it.get("kill_hit")
+        if not it.get("kill") or (hit and (hit["sent"] >= 3 or time.time() - hit["t"] < KILL_RESEND_S)):
+            continue
+        run = Run(os.path.join(c.runs, folder(rid)), "total")
+        for text in it["kill"]:
+            if text in (it.get("kill_waived") or []):
+                continue
+            try:
+                status, value = Rule(text).evaluate(run)
+            except ValueError:                                                  # a rule that does not parse was refused when the job was read
+                continue
+            if status == "hit":
+                err = _request_stop(c, rid, f"kill rule {text!r} hit (value {value})")
+                hit = it.setdefault("kill_hit", {"rule": text, "value": value, "sent": 0})
+                hit.update(t=time.time(), sent=hit["sent"] + 1)
+                acts.append(f"{rid}: kill rule {text!r} hit (value {value}): " + ("stop requested" if not err else f"NOT stopped: {err}"))
+                break
+    return acts
+
+
 def runner_alive(c):
     """pid of the live runner of this project, else 0"""
     try:
@@ -450,7 +496,7 @@ def serve(c, every=30.0, idle_exit=600.0, once=False, out=print):
             _CHILDREN[:] = [p for p in _CHILDREN if p.poll() is None]
             try:
                 with edit(c) as q:
-                    acts = tick(c, q)
+                    acts = tick(c, q) + enforce(c, q)
                     states = [state(c, i) for i in q["items"]]
                     paused = q.get("paused")
             except QueueError as e:                                     # an unreadable list: say so, never write over it
@@ -485,7 +531,7 @@ def serve(c, every=30.0, idle_exit=600.0, once=False, out=print):
 
 
 # ---- hold and resume
-def _need_words(words, what):
+def need_words(words, what):
     if not words or not words.strip():
         raise QueueError(f"{what} needs --words: the person's own words (the order is theirs, hard rule 6)")
 
@@ -507,7 +553,7 @@ def _request_stop(c, rid, why):
 def hold(c, ids=(), all_=False, words="", reason="", wait=180.0, out=print):
     """stop what trains (a checkpoint, exit 75), keep what waits from starting; remember how each run was started. `all_` also pauses the runner. An evaluation, a data
     build or any run that is not a training is not touched. -> {id: outcome}"""
-    _need_words(words, "hold")
+    need_words(words, "hold")
     why = reason or "queue hold"
     w = words.strip()
     result, pending, stop_sent = {}, [], {}
@@ -560,14 +606,27 @@ def hold(c, ids=(), all_=False, words="", reason="", wait=180.0, out=print):
                 result[rid] = "was waiting for a slot: on hold"
             else:
                 result[rid] = f"not started ({s}): held in the queue"
+    watching = [r for r in wanted if result[r].startswith("was waiting for a slot")]
     deadline = time.time() + wait
-    while pending and time.time() < deadline:
+    watch_until = time.time() + WAITING_WATCH_S
+    while (pending or watching) and time.time() < max(deadline, watch_until if watching else 0):
+        for r in list(watching):                                        # a launcher past its last look at the hold starts the trainer anyway: stop it when its record turns running
+            status = c.R.record(os.path.join(c.records, r)).get("status")
+            if status == "running":
+                err = _request_stop(c, r, why)
+                result[r] = "stop requested" if not err else f"RUNNING and NOT stopped: {err}"
+                if not err:
+                    stop_sent[r] = time.time()
+                    pending.append(r)
+                watching.remove(r)
+            elif status != "waiting" or time.time() > watch_until:
+                watching.remove(r)
         pending = [r for r in pending if state(c, known[r]) in ("running", "waiting", "orphan")]
         for r in pending:
             if time.time() - stop_sent[r] > 20:                         # a CONTROL written before the trainer cleared stale ones is lost: ask again
                 _request_stop(c, r, why)
                 stop_sent[r] = time.time()
-        if pending:
+        if pending or watching:
             time.sleep(2)
     for rid in wanted:
         if result[rid].startswith("stop requested"):
@@ -596,7 +655,7 @@ def hold(c, ids=(), all_=False, words="", reason="", wait=180.0, out=print):
 def resume(c, ids=(), all_=False, words="", fresh_code=False, start=True, out=print):
     """clear the holds of the given runs (all = every held item and the pause), each stopped run starts again from its checkpoint on the code of its first attempt
     (`fresh_code`: on the code of now: the hot-fix loop); a run that is not in the queue is rebuilt from its record. -> {id: what will happen}"""
-    _need_words(words, "resume")
+    need_words(words, "resume")
     result = {}
     with edit(c) as q:
         known = {i["id"]: i for i in q["items"]}
@@ -615,6 +674,8 @@ def resume(c, ids=(), all_=False, words="", fresh_code=False, start=True, out=pr
                 c.H.clear(d, words)
                 c.H.note_in_ledger(rid, f"hold cleared {dt.date.today().isoformat()} on the person's words: {words.strip()!r} (hold was: {h.get('why', '?')}, set by {h.get('who', '?')} {h.get('when', '?')})")
             it["held"] = None
+            if it.get("kill_hit"):                                      # the person's words continue a run that a kill rule stopped: that rule is waived for this item
+                it.setdefault("kill_waived", []).append(it.pop("kill_hit")["rule"])
             it.pop("refused", None)
             it.pop("gave_up", None)
             it["restarts"], it["retry"] = 0, True

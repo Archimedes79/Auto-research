@@ -132,6 +132,8 @@ class Run:
         after = [x for x in text[i:].splitlines() if x.strip()]
         if self.progress and any(x.startswith(self.progress) for x in after[1:]):
             return ""
+        if any(x.startswith("=== ") for x in after[1:]):             # the launcher script writes "=== <date> run ..." at every start: a newer attempt began after this traceback
+            return ""
         exc = next((x for x in after[1:] if not x.startswith((" ", "	"))), after[-1])   # the exception line, not a launcher's later print
         return exc.strip()[:200]
 

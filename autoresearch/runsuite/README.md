@@ -1,3 +1,6 @@
+> **Commented out 2026-11-10** (Mirko: "Auskommentieren, nicht loeschen"). The runner is ONE class `Runner` in `bev_fusion/runner/` with `python -m runner` above it, parallel to `Training` and
+> `Evaluation`. The files of this folder are comments; the text below describes the job layer as it was (commits 75da8962, dd30e4ac).
+
 # runsuite - run a trained network on frames and write the data for the evaluation
 
 The interface is the one of the training (`autoresearch/README.md`, section 'The interface of the suites'): the class `RunJobs(project)` with `check(job)`, `run(job)`, `status(i)`, `queue_add(job)`; the other queue methods

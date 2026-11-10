@@ -1,8 +1,7 @@
 """Command line of the training suite (run from autoresearch/): python -m trainsuite <command> ...
 
-The commands of the interface (class Training, api.py; `methods` lists them): check, run, queue-add, queue-list, queue-get, queue-remove, queue-start,
-queue-hold, queue-resume, and Training.status / Training.stop / Training.plot / Training.compare. The older commands below keep their meaning: status, health, curves, stop, resume,
-watch, early, compose, start, queue (show / add --id / serve / hold / resume / drop), selftest."""
+The commands of the interface (class Training, api.py; `methods` lists them): check, run, list and Training.status / stop / resume / plot / compare. The older commands below keep
+their meaning: status, health, curves, stop, resume, watch, early, compose, start, queue (the queue: show / add --id / serve / hold / resume / drop; not part of the class), selftest."""
 import argparse
 import json
 import os
@@ -571,10 +570,10 @@ def cmd_start(a):
         print(f"start: run id {a.id} is ON HOLD (hold.py show); nothing started, no prepare job either")
         return 1
     if a.go:                                                     # the person's pause of the queue binds a direct start too (hard rule 6), as it does for Training.run
-        from . import api
+        from . import queue_api
         from . import trainqueue as TQ
         try:
-            blocks = api.queue_blocks(TQ.context(a.project), a.id)
+            blocks = queue_api.queue_blocks(TQ.context(a.project), a.id)
         except TQ.QueueError as e:
             print(f"start: {e}", file=sys.stderr)
             return 2

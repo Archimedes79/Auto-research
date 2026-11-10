@@ -758,6 +758,9 @@ def main():
         assert r.crash_reason() == "" and r.state() != "failed", "trainsuite.json 'progress' names the trainer's progress lines"
         r = Run(make(tmp, "tb_cuda_multiline", rows(2), text=tb + "CUDA kernel errors might be asynchronously reported\nFor debugging consider CUDA_LAUNCH_BLOCKING=1.\n"))
         assert r.state() == "failed", "a crash message over several lines is still a crash"
+        hdr = "=== 2026-11-10_10:00:00 run x commit abc config c.json\n"
+        assert Run(make(tmp, "tb_old_attempt", rows(2), text=tb + hdr)).state() != "failed", "a traceback before the header of a newer attempt belongs to the earlier attempt"
+        assert Run(make(tmp, "tb_new_attempt", rows(2), text=hdr + tb)).state() == "failed", "a crash after the header of the newest attempt is a crash"
         assert Run(make(tmp, "end", rows(150), total=3000, age=3600)).state() == "ended"
         assert Run(make(tmp, "fin", rows(150), done=True)).state() == "done"
         os.makedirs(os.path.join(tmp, "empty"))
@@ -1561,10 +1564,12 @@ def main():
             print(r.stdout, end="")
             assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
             ok("queue self-test (selftest_queue.py) passed")
-            r = subprocess.run([sys.executable, "-m", "trainsuite.selftest_api"], cwd=os.path.dirname(HERE), capture_output=True, text=True)       # the interface (api.py, runsuite): real launchers, a toy trainer and runner
-            print(r.stdout, end="")
-            assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
-            ok("interface self-test (selftest_api.py: jobs, check, run, status, stop, compare, the queue functions, the runner, the command line) passed")
+            for mod, what in (("selftest_api", "interface self-test (selftest_api.py: jobs, check, run, status, stop, resume, list, compare, the command line)"),
+                              ("selftest_queue_api", "queue interface self-test (selftest_queue_api.py: the queue mixin, its command line, kill rules, hold race)")):
+                r = subprocess.run([sys.executable, "-m", "trainsuite." + mod], cwd=os.path.dirname(HERE), capture_output=True, text=True)       # real launchers, a toy trainer
+                print(r.stdout, end="")
+                assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+                ok(what + " passed")
     print(f"trainsuite selftest: {n[0]} groups of checks passed")
     return 0
 
