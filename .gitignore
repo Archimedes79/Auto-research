@@ -20,6 +20,10 @@
 # the nuScenes ground-truth suite (code only): what it generates (stored GT, reports, videos) goes to /data/autogt/, scratch to /temp/ -
 # both stay ignored by the first rule
 !/GtGenerator/
+# autogt/__init__.py: the old name as an alias for the pinned code snapshots of runs made before D76 (remove with the folder when no stored run is needed)
+!/autogt/
+/autogt/*
+!/autogt/__init__.py
 
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/
