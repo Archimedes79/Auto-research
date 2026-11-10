@@ -28,6 +28,9 @@ run "grid metric reproduces stored numbers" lane_grid/selftest.py
 run "head: targets, nodes, links, Hermite oracle"        grid/qtargets.py
 run "head: prediction contract"                          grid/qformat.py
 run "head: map simulator"                                grid/map_sim.py
+run "head: junction ends and pairs of the lane GT (E284)" grid/qends.py
+run "head: end head, loss, counts (E284)"                grid/qendnet.py
+run "head: end read-out (connectors, rule) (E284)"       qends_eval.py selftest
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
 run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py
