@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
 
-from .suite import AutoGT  # noqa: E402
+from .suite import GtGenerator  # noqa: E402
 
 COL = {"vehicle": (0.95, 0.15, 0.15), "pedestrian": (0.9, 0.2, 0.9), "two_wheeler": (1.0, 0.6, 0.1)}
 LCOL = {"lane_divider": (1.0, 0.9, 0.1), "road_divider": (1.0, 0.5, 0.0), "centreline": (0.1, 0.9, 0.9)}
@@ -240,7 +240,7 @@ def run(out_dir, picks=None, dataroot="~/data/nuscenes", version="v1.0-mini", to
         if len(p) == 1:
             out.append(stored(p[0], out_dir, total))
         else:
-            gen = gen or AutoGT(dataroot, version)
+            gen = gen or GtGenerator(dataroot, version)
             out.append(figure(gen, p[0], int(p[1]), out_dir, total))
     return out
 

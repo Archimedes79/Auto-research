@@ -9,7 +9,7 @@
     key.mask(token, "intersection", border_m=0.5)    # ... and an area mask in the BEV grid, (120, 104) uint8
     autogt.gt_key("bev_fusion", "v1.0-trainval", "full")    # the key of what is stored now, nothing is generated
 
-The same as methods of the class: `autogt.AutoGT.generate_bev_gt(...)`, `AutoGT.generate_lane_gt(...)`, `AutoGT.gt_key(...)` (suite.py). Command line: `python -m autogt generate-bev ROOT --set full`,
+The same as methods of the class: `autogt.GtGenerator.generate_bev_gt(...)`, `GtGenerator.generate_lane_gt(...)`, `GtGenerator.gt_key(...)` (suite.py). Command line: `python -m autogt generate-bev ROOT --set full`,
 `generate-lane ROOT --rig lane_center|bev_fusion|all`, `generate ROOT` (everything), `key SYSTEM --set full` (cli.py: each command is one of these calls).
 
 THE KEY says which GT it is: the DATA (the identity of the raw nuScenes files, `data_identity` of data/NuScenes/manifest.json: the hash of its tables and files; read from the store when the store
@@ -137,7 +137,7 @@ def _complete(idx, held, want, set_name, scenes):
     """a store holds what was asked for: every token of the json tables (`want`), else what its index.json says (the sets it holds in full, the scenes of its last run, written without a stride); never a guess"""
     if want is not None:
         return bool(held) and want <= held
-    if not idx or not held or idx.get("stride", 1) != 1:
+    if not idx or not held or idx.get("stride", 1) != 1 or len(held) < idx.get("keyframes", 0):          # a thinned store (a lost or zero-byte file) is not complete whatever its index says
         return False
     if set_name in ("full", "small"):
         return set_name in idx.get("sets_complete", [])
@@ -146,9 +146,10 @@ def _complete(idx, held, want, set_name, scenes):
     return False
 
 
-def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=None, dataroot=None, scenes=None, options=None, borders=BORDERS):
+def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=None, dataroot=None, scenes=None, options=None, borders=BORDERS, deep=True):
     """the key of what is stored for `system` ("bev_fusion" | "lane_center") below `out` (default data/autogt): nothing is generated. `parts` limits the parts listed (default all of the system); the id is the
-    same either way. `options`: the generator options of the front GT (they change its signature), `borders`: the mask borders of the cache. See the module doc for what complete means"""
+    same either way. `options`: the generator options of the front GT (they change its signature), `borders`: the mask borders of the cache. `deep`: a zero-byte file does not count as a keyframe (a stat per
+    file on 16 threads: 12 - 16 s per store of 34k files; False = by name only). See the module doc for what complete means"""
     from . import lane_gt, lane_raster, versions
     from .store import front_keys, names, read_index
     from .suite import DATA, code_signature, current_signature, current_version
@@ -169,7 +170,7 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
     def lane_state(store):
         folder = os.path.join(out, "lane", store)
         if folder not in lane_held:
-            lane_held[folder] = (read_index(folder), names(folder, ".pkl.gz"))
+            lane_held[folder] = (read_index(folder), names(folder, ".pkl.gz", nonempty=deep))
         return folder, lane_held[folder]
 
     built = []
@@ -177,7 +178,7 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
         sig, store = ident[name]
         if name == "front":
             folder = os.path.join(out, store)
-            idx, held = read_index(folder), front_keys(folder)
+            idx, held = read_index(folder), front_keys(folder, nonempty=deep)
             ver = current_version(**options)
             built.append(Part("front", sig, store, None if ver == "unreleased" else ver, idx.get("commit"), idx.get("dirty"), _complete(idx, held, want, set_name, scenes), folder))
         elif name == "lane":
@@ -187,13 +188,15 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
             folder, (idx, held) = lane_state(store)
             ok = _complete(idx, held, want, set_name, scenes) and all(lane_raster.cache_complete(folder, k, b, held=held) for k in KINDS for b in borders)
             built.append(Part("masks", sig, store, lane_raster.RASTER_VERSION, idx.get("commit"), idx.get("dirty"), ok, folder))
-    # the data identity comes from the stores that recorded it, whichever parts are listed (so a partial key and the whole one agree after the manifest changed): the front index, then the mask cache
-    seen = []
+    # the data identity comes from the stores that recorded it, whichever parts are listed (so a partial key and the whole one agree after the manifest changed): the front index, the mask cache and
+    # the lane index (written by make_lane_gt). Two stores that name different identities, or one that says "mixed", make the key say "mixed"; none recorded: the manifest of today
+    seen = [str(read_index(os.path.join(out, "lane", lane_store)).get("data_identity", ""))[:12]]
     if system == "bev_fusion":
         seen.append(str(read_index(os.path.join(out, ident["front"][1])).get("data_identity", ""))[:12])
         info = lane_raster.cache_info(os.path.join(out, "lane", bf_store), KINDS[0], borders[0])
         seen.append(info["data"][:12] if info else "")
-    data = next((d for d in seen if d), None) or data_identity()
+    known = {d for d in seen if d}
+    data = "mixed" if len(known) > 1 or "mixed" in known else next(iter(known), None) or data_identity()
     h = hashlib.sha1("|".join([system, data] + [f"{n}:{ident[n][0]}:{ident[n][1]}" for n in all_parts]).encode())
     return GtKey(system, dataset, set_name if set_name else ("custom" if scenes else "all"), data, versions.current_release(), tuple(built), out, h.hexdigest()[:12])
 
@@ -206,13 +209,45 @@ def _check(options, borders=BORDERS):
         raise ValueError("borders: at least one (0.0 and 0.5 m are the usual)")
 
 
+def _lane_identity(folder):
+    """the data identity a lane store recorded (None: none, the store was made before the key recorded it)"""
+    from .store import read_index
+    return read_index(folder).get("data_identity")
+
+
+def _record_lane_identity(folder, was, written):
+    """the lane writer (a hashed file) leaves no data identity in its index.json and may write the index again (a clean tree upgrades it): this makes sure the index holds one after the run.
+    `was` = what the index said before the run; frames written under a manifest.json other than the recorded one make it "mixed"; a store without a record that gets new frames stays unrecorded
+    (the old frames have no known identity: no record rather than a wrong one); a store without a record and nothing written gets the identity of today (what the key assumed until now)"""
+    path = os.path.join(folder, "index.json")
+    now = data_identity()
+    if now == "unknown" or not os.path.exists(path) or (was is None and written):
+        return
+    ident = now if was in (None, now) else "mixed"
+    try:
+        with open(path) as f:
+            idx = json.load(f)
+    except (OSError, ValueError):
+        return
+    if idx.get("data_identity") == ident:
+        return
+    idx["data_identity"] = ident
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(idx, f, indent=1)
+    os.replace(tmp, path)
+
+
 def make_lane_gt(dataroot, out, version, scenes=None, workers=1, verbose=True, rigs=SYSTEMS, masks=False, borders=BORDERS, set_name=None, strict=True):
     """the lane GT of the `rigs` into OUT/lane/ and, with `masks`, the packed area masks of the BEV Fusion store: the one place that does it (generate_bev_gt, generate_lane_gt and `generate` call it).
     -> ({rig: the result of lane_gt.generate}, masks_error): with strict=False a failure of the derived masks is returned as a message, not raised"""
     from . import lane_gt, lane_raster
     results, error = {}, None
     for rig in rigs:
+        folder = os.path.join(out, "lane", lane_gt.signature(rig=rig))
+        was = _lane_identity(folder)
         results[rig] = lane_gt.generate(dataroot, out=os.path.join(out, "lane"), version=version, scenes=scenes, set_name=set_name, workers=workers, verbose=verbose, rig=rig)
+        _record_lane_identity(folder, was, written=results[rig].get("written", 0))
     if masks:
         try:
             lane_raster.build_mask_cache(os.path.join(out, "lane", lane_gt.signature(rig="bev_fusion")), kinds=KINDS, borders=tuple(borders), verbose=verbose, workers=workers)
@@ -260,6 +295,14 @@ def generate_lane_gt(dataroot, rig="all", set_name=None, scenes=None, out=None, 
     return keys if rig == "all" else keys[rig]
 
 
-def gt_key(system, dataset="v1.0-trainval", set_name="full", out=None, dataroot=None, scenes=None):
-    """the key of the stored GT of `system` for a set (or `scenes`), without generating anything (see key_of; complete is judged by the index.json of each store, or by the json tables with `dataroot`)"""
-    return key_of(system, dataset, None if scenes else set_name, out, dataroot=dataroot, scenes=scenes)
+DATASETS = ("v1.0-mini", "v1.0-trainval")
+
+
+def gt_key(system, dataset="v1.0-trainval", set_name="full", out=None, dataroot=None, scenes=None, deep=True, borders=BORDERS):
+    """the key of the stored GT of `system` for a set (or `scenes`), without generating anything (see key_of; complete is judged by the index.json of each store AND the files that are there, or by the json tables with `dataroot`; `deep=False`: by file name only, 30 s faster on the full set)"""
+    if dataset not in DATASETS:
+        raise ValueError(f"unknown nuScenes version {dataset!r}: {' | '.join(DATASETS)}")
+    if not scenes:
+        from . import sets
+        sets.scenes(set_name)                                           # an unknown set is a wrong argument (ValueError), not a store that is missing
+    return key_of(system, dataset, None if scenes else set_name, out, dataroot=dataroot, scenes=scenes, deep=deep, borders=tuple(borders))

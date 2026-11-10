@@ -219,7 +219,7 @@ def run(root=None, verbose=True):
     from .checks import _feed
     from .grid import GridSpec
     from .nuscenes_gt import SIGNATURE_FILES
-    from .suite import AutoGT
+    from .suite import GtGenerator
     root = os.path.expanduser(root or "~/data/nuscenes")
     mg, g = _made_up()
     _lines()
@@ -242,7 +242,7 @@ def run(root=None, verbose=True):
     for rig in lane_gt.RIGS:
         assert lane_gt.version_of(lane_gt.code_signature(rig=rig)) is not None, (f"the lane GT source has the signature {lane_gt.code_signature(rig=rig)} for the rig {rig} but no row in "
                                                                                   "autogt/lane_versions.csv: add one, commit, tag autogt/lane-l<N>")
-    gt = AutoGT(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
+    gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
     lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
     n_frames, d_graph, d_ref, f1s, divpairs, found = 0, [], [], [], 0, 0
     n_lane_pts = n_lane_on_road = n_conn = n_conn_in = 0

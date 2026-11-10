@@ -171,7 +171,7 @@ def mosaic(gt, sample_token, graph, title=None, scale=0.5):
     sample = gt.nusc.get("sample", sample_token)
     T_front = gt.ego_pose(gt.cam(sample_token))
     tiles = [camera_image(gt, sample, graph, ch, T_front, scale) for ch in CAMERAS]
-    h, w = tiles[0].shape[:2]
+    h = tiles[0].shape[0]
     grid = np.vstack([np.hstack(tiles[:3]), np.hstack(tiles[3:])])
     bev = bev_image(graph, ppm=max(1, int(round(2 * h / (2 * graph["half"])))), title=title)
     bev = cv2.resize(bev, (2 * h, 2 * h), interpolation=cv2.INTER_AREA)

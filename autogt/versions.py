@@ -1,6 +1,6 @@
 """GT versions (decision D29, 2026-11-01): every change of the generator signature is a version vN.
 
-The signature (10 hex chars over the six files grid.py, layers.py, flow.py, nuscenes_adapter.py, nuscenes_gt.py and the options) names the
+The signature (10 hex chars over the six files grid.py, layers.py, flow.py, nuscenes_adapter.py, nuscenes_gt.py, coverage.py and the options) names the
 folder of the stored GT; the version is its human key. A version is: a row in versions.csv (next to this file), a git tag `autogt/vN`
 on the commit that holds that generator, and the key `gt_version` in the index.json of the stored GT. The rule when you edit one of the
 six files: the signature changes, `python -m autogt selftest` fails until versions.csv has a row for the new signature, then commit
@@ -125,10 +125,18 @@ def row_of(version):
 
 
 _CODE_STATE = {}
+DOCS = (".md", ".svg")                                    # a change of these cannot change a GT: the text, and the picture drawn from architecture.json
+
+
+def _changes_the_code(line):
+    """one line of `git status --porcelain`: does it name a file that could change the GT (not a document, not the drawing's spec)?"""
+    path = line[3:].split(" -> ")[-1].strip().strip('"')
+    name = os.path.basename(path)
+    return not (name.endswith(DOCS) or name == "architecture.json")
 
 
 def code_state(max_age=20.0):
-    """{"commit": short hash of HEAD, "dirty": True when anything in autogt/ differs from it (edited or new files)}; both None, with a warning,
+    """{"commit": short hash of HEAD, "dirty": True when a file of autogt/ other than a document (.md, .svg, architecture.json) differs from it (edited or new files)}; both None, with a warning,
     when git cannot tell. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one. A worktree
     that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then. The answer is kept `max_age` seconds: two git processes cost 0.5 - 1.5 s
     and a run writes its index several times within seconds (an hours-long run asks again at its end)."""
@@ -152,7 +160,7 @@ def code_state(max_age=20.0):
         except (OSError, subprocess.SubprocessError):
             continue
         if not (head.returncode or status.returncode):
-            value = {"commit": head.stdout.strip(), "dirty": bool(status.stdout.strip())}
+            value = {"commit": head.stdout.strip(), "dirty": any(_changes_the_code(line) for line in status.stdout.splitlines())}
             _CODE_STATE.update(at=time.time(), value=value)
             return dict(value)
     import sys

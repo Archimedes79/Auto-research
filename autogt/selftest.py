@@ -371,11 +371,11 @@ def run(root=None, verbose=True):
         try:
             r = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
             from . import suite as suite_mod
-            real_gen, suite_mod.AutoGT = suite_mod.AutoGT, None                        # a rerun of finished groups must not load the devkit
+            real_gen, suite_mod.GtGenerator = suite_mod.GtGenerator, None                        # a rerun of finished groups must not load the devkit
             try:
                 again = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
             finally:
-                suite_mod.AutoGT = real_gen
+                suite_mod.GtGenerator = real_gen
         finally:
             pipe_mod.GROUP_SCENES = old_group
         assert r["signature"] == store_sig and r["out"] == os.path.join(d, store_sig), r
@@ -402,7 +402,7 @@ def run(root=None, verbose=True):
     import io
     from . import sets
     from .cli import write_index
-    from .suite import AutoGT as _Gen2
+    from .suite import GtGenerator as _Gen2
     assert sets.names() == ["full", "small"], sets.names()
     small, full_ = sets.scenes("small"), sets.scenes("full")
     assert len(small) == 10 and len(full_) == 850 == len(set(full_)) and set(small) <= set(full_), (len(small), len(full_))
@@ -489,11 +489,30 @@ def run(root=None, verbose=True):
         real_write = pipe_mod.write_index
         pipe_mod.write_index = lambda *a, **k: (calls.append(k.get("complete", True)), real_write(*a, **k))[1]
         sets.DIR = sets_dir
+        from . import versions as versions_mod
+        real_state = versions_mod.code_state
+        versions_mod.code_state = lambda *a, **k: {"commit": "abc1234", "dirty": True}   # a tree that is not clean: nothing to upgrade (the test must not depend on the state of the checkout)
         try:
             r2 = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
         finally:
             pipe_mod.write_index, sets.DIR = real_write, old_dir
+            versions_mod.code_state = real_state
         assert r2["written"] == 0 and calls == [] and json.load(open(os.path.join(r["out"], "index.json"))) == held, (calls, "a no-op rerun leaves index.json byte for byte as it was")
+        # ... but a CLEAN tree turns the index of an earlier, dirty run into a stamped one (the signature is the same, so is the GT; a release also needs the full set): commit and dirty are re-written, a release stays
+        versions_mod.code_state = lambda *a, **k: {"commit": "feed123", "dirty": False}
+        sets.DIR = sets_dir
+        try:
+            r3 = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+            up = json.load(open(os.path.join(r["out"], "index.json")))
+            assert r3["written"] == 0 and up["commit"] == "feed123" and up["dirty"] is False and up["scenes"] == held["scenes"] and up["complete"] is True, up
+            up["release"] = True
+            json.dump(up, open(os.path.join(r["out"], "index.json"), "w"))
+            cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+            assert json.load(open(os.path.join(r["out"], "index.json"))) == up, "a release is left alone by a clean tree"
+        finally:
+            versions_mod.code_state, sets.DIR = real_state, old_dir
+        assert versions_mod._changes_the_code(" M autogt/cli.py") and versions_mod._changes_the_code("?? autogt/new_module.py") and versions_mod._changes_the_code("R  autogt/a.py -> autogt/b.py")
+        assert not any(versions_mod._changes_the_code(x) for x in (" M autogt/README.md", "?? autogt/architecture.svg", "?? autogt/architecture.json", " M autogt/REVIEW_2026-11-10.md")), "documents do not make a tree dirty"
         r_opt = cli_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
         assert r_opt["signature"] == _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"], use_flow=False).signature() != r["signature"]
     # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts
@@ -568,16 +587,28 @@ def run(root=None, verbose=True):
     from . import checks as checks_mod
     dg1 = checks_mod.digests(root, "v1.0-mini", stride=40, sweeps=("scene-0061",))
     assert len(dg1["digests"]) >= 11 and dg1["signature"] == gt.signature(), dg1["signature"]
+    # the pinned digests (front_digests.json) are the evidence behind every `same_gt_as` of versions.csv: a row that says "this code makes the GT of that store" needs its signature in `same_as` of the
+    # pin of that store, and the generator of today must still make exactly the pinned frames (a recomputed subset: every 40th keyframe of mini and the sweeps of scene-0061)
+    from . import versions as versions_pin
+    pins = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "front_digests.json")))
+    for row in versions_pin.table():
+        if row.get("same_gt_as"):
+            store_ = versions_pin.canonical(row["signature"])
+            assert row["signature"] in pins.get(store_, {}).get("same_as", []), f"{row['version']} claims the GT of {row['same_gt_as']} (store {store_}) but no pinned proof names {row['signature']}: run `python -m autogt digest` in both source trees, compare, and add it to front_digests.json"
+    pin = pins.get(versions_pin.canonical(gt.signature()))
+    assert pin, f"the generator of today ({gt.signature()}) has no pinned digests: `python -m autogt digest OUT.json` (stride 2) and add them to front_digests.json"
+    wrong = [k for k, v in dg1["digests"].items() if pin["digests"].get(k) != v]
+    assert not wrong, f"the generator makes other frames than the pinned ones ({len(wrong)} of {len(dg1['digests'])}, e.g. {wrong[:2]}): a changed GT needs a new version row, not a changed pin"
     with tempfile.TemporaryDirectory() as d:
         pa, pb = os.path.join(d, "a.json"), os.path.join(d, "b.json")
         json.dump(dg1, open(pa, "w"))
         json.dump(dg1, open(pb, "w"))
-        from .suite import AutoGT as AG
+        from .suite import GtGenerator as AG
         assert AG.digest(compare=[pa, pb])["ok"], "identical digests"
         json.dump({**dg1, "digests": {**dg1["digests"], next(iter(dg1["digests"])): "0" * 40}}, open(pb, "w"))
         r_ = AG.digest(compare=[pa, pb])
         assert not r_["ok"] and len(r_["differ"]) == 1, "a changed frame must be found"
-    from .suite import AutoGT as AG
+    from .suite import GtGenerator as AG
     sets_text = AG.sets()["text"]
     assert "small" in sets_text and "full" in sets_text, sets_text
     # the agent guide names every layer, meta entry and box field the generator produces (so it cannot drift from the code)
@@ -595,15 +626,15 @@ def run(root=None, verbose=True):
         stored = os.listdir(os.path.join(d, "data", rep["signature"]))
         assert "index.json" in stored and rep["written"] == len([f for f in stored if f.endswith(".npz")]), rep
         from .cli import write_index                                                   # a smaller run must not shrink the folder's index
-        from .suite import AutoGT as _Gen
+        from .suite import GtGenerator as _Gen
         sd_ = os.path.join(d, "data", rep["signature"])
         write_index(sd_, _Gen(root, "v1.0-mini", ss=4, light=True), "v1.0-mini", ["scene-0061"], 20, 1, {})
         held = json.load(open(os.path.join(sd_, "index.json")))
         assert set(held["scenes"]) == {"scene-0061", "scene-1077"} and held["keyframes"] == len([f for f in stored if f.endswith(".npz")]), held
     # 7b the memory-light devkit gives the identical GT, and a parallel run of the report equals a serial one and resumes
-    from .suite import AutoGT
-    full = AutoGT(root, "v1.0-mini", ss=4)
-    light = AutoGT(root, "v1.0-mini", ss=4, light=True)
+    from .suite import GtGenerator
+    full = GtGenerator(root, "v1.0-mini", ss=4)
+    light = GtGenerator(root, "v1.0-mini", ss=4, light=True)
     tk = full.keyframes("scene-0061")[8]
     from . import scene_tokens
     assert scene_tokens("scene-0061", "v1.0-mini", root) == full.keyframes("scene-0061")        # the devkit-free list is the same

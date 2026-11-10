@@ -227,7 +227,7 @@ def check_f5():
         assert sorted(os.listdir(sig_dir)) == ["a.npz", "index.json"], os.listdir(sig_dir)             # no temporary file left
         cli.check_resume(os.path.join(d, "nothing_yet"), GridSpec(res=0.25), 4)                       # a new folder is fine
 
-    # the wiring: `build` itself (a fake generator in place of AutoGT) and `clean.collect`
+    # the wiring: `build` itself (a fake generator in place of GtGenerator) and `clean.collect`
     import autogt.suite as suite_mod
 
     class FakeGT:
@@ -250,8 +250,8 @@ def check_f5():
                 assert json.load(f)["complete"] is False, "the provisional index must exist before the first keyframe"
             FakeGT.seen += 1
             return {"drivable_area": np.zeros((self.grid.nx, self.grid.ny), np.float32), "meta": {"sample": token}}
-    real = suite_mod.AutoGT
-    suite_mod.AutoGT = FakeGT
+    real = suite_mod.GtGenerator
+    suite_mod.GtGenerator = FakeGT
     try:
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "out")
@@ -266,7 +266,7 @@ def check_f5():
             os.remove(index)                                                                       # an interrupted build of the time before the provisional index
             refused(lambda: cli.build("root", "v1.0-mini", out, res=0.25, verbose=False), "no index.json")
     finally:
-        suite_mod.AutoGT = real
+        suite_mod.GtGenerator = real
     from autogt import clean as CL
     with tempfile.TemporaryDirectory() as d:
         caches = os.path.join(d, "caches")
@@ -307,9 +307,9 @@ def check_f6():
     class Scene:
         def __init__(self, nusc, root, name):
             self.scene = {"description": "test"}
-    keep = {k: getattr(video, k) for k in ("AutoGT", "NuScenesScene", "render", "encode")}
+    keep = {k: getattr(video, k) for k in ("GtGenerator", "NuScenesScene", "render", "encode")}
     imwrite = video.cv2.imwrite
-    video.AutoGT, video.NuScenesScene, video.render = Layers, Scene, lambda *a: np.zeros((8, 8, 3), np.uint8)
+    video.GtGenerator, video.NuScenesScene, video.render = Layers, Scene, lambda *a: np.zeros((8, 8, 3), np.uint8)
     try:
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "not_there_yet", "v.mp4")

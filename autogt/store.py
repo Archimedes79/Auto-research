@@ -8,32 +8,28 @@ import os
 import numpy as np
 
 
-def names(folder, suffix):
-    """the keys of the files `<key><suffix>` in a store folder, by name only (no stat: 34k stat calls cost 80 s on the 9p mounts, a scandir 0.2 s; a file that is being written has a `.tmp` name:
-    every writer renames it into place)"""
+def names(folder, suffix, nonempty=False):
+    """the keys of the files `<key><suffix>` in a store folder, by name only (no stat: 34k stat calls cost 80 s on the 9p mounts one after the other, a scandir 0.2 s; a file that is being written has a
+    `.tmp` name: every writer renames it into place). `nonempty` also drops a zero-byte file (a full disk, a bad copy): the stats then run on 16 threads, the wait is the round trip, not the CPU
+    (12 - 16 s for a store of 34k files); a writer of this suite never leaves one, so the check is for the questions that must not guess (`generate`, the GT key)"""
     if not os.path.isdir(folder):
         return set()
     with os.scandir(folder) as it:
-        return {e.name[:-len(suffix)] for e in it if e.name.endswith(suffix) and ".tmp" not in e.name}
+        files = [e.path for e in it if e.name.endswith(suffix) and ".tmp" not in e.name]
+    if nonempty:
+        if len(files) < 64:
+            sizes = [os.path.getsize(f) for f in files]
+        else:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(16) as pool:
+                sizes = list(pool.map(os.path.getsize, files, chunksize=256))
+        files = [f for f, n in zip(files, sizes) if n > 0]
+    return {os.path.basename(f)[:-len(suffix)] for f in files}
 
 
 def front_keys(sig_dir, nonempty=False):
-    """the sample tokens with a stored front GT in the folder, by file name; `nonempty` also drops a zero-byte file (a stat per file: 80 s for 34k files on the 9p mounts one after the other, so the stats run on
-    16 threads: the wait is the round trip, not the CPU). Every writer renames a finished temporary file into place, so a zero-byte keyframe does not come from this code, but a copy or a full disk can leave one:
-    `generate` asks with nonempty=True and rewrites it"""
-    if not nonempty:
-        return names(sig_dir, ".npz")
-    if not os.path.isdir(sig_dir):
-        return set()
-    with os.scandir(sig_dir) as it:
-        files = [e.path for e in it if e.name.endswith(".npz") and ".tmp" not in e.name]
-    if len(files) < 64:
-        sizes = [os.path.getsize(f) for f in files]
-    else:
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(16) as pool:
-            sizes = list(pool.map(os.path.getsize, files, chunksize=256))
-    return {os.path.basename(f)[:-4] for f, n in zip(files, sizes) if n > 0}
+    """the sample tokens with a stored front GT in the folder (see `names`; `generate` asks with nonempty=True and rewrites a zero-byte file)"""
+    return names(sig_dir, ".npz", nonempty)
 
 
 def check_arguments(stride=1, res=0.5, ss=4, workers=1, set_name=None, scenes=None):
@@ -142,7 +138,8 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
            "complete": complete}
     kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
     from .gt_api import data_identity                              # the identity of the raw nuScenes files this GT was made from (the GT key reads it back)
-    data_id = kept.get("data_identity") or data_identity()
+    was, now = kept.get("data_identity"), data_identity()
+    data_id = now if not was or was == "unknown" else was if now in ("unknown", was) else "mixed"      # files written under another manifest.json than the first ones: the folder says so, the first never wins silently
     if data_id != "unknown":
         idx["data_identity"] = data_id
     # the sets this run could check are taken from its fresh list (a deleted keyframe removes `full`); a set that this nuScenes version cannot
@@ -162,6 +159,19 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
     with open(tmp, "w") as f:
         json.dump(idx, f, indent=1)
     os.replace(tmp, os.path.join(sig_dir, "index.json"))
+
+
+def finish_index(sig_dir, gen, version, names, stride, n_keyframes, options, written, dataroot, set_name=None, old_complete=None):
+    """the index.json at the end of a run (generate, report): written when this run wrote keyframes, when the index has no manifest yet (no commit: a `build` store, an older one) or when a clean tree can stamp
+    the index of an earlier, dirty run (same signature, same GT); a run that wrote nothing leaves a finished index as it was, whatever stride or sequences it was asked for (it must not turn stride 1 into
+    "mixed", drop the release or re-stamp the commit). -> (the index, whether it was written)"""
+    from . import versions
+    old = read_index(sig_dir)
+    can_upgrade = versions.code_state()["dirty"] is False and not old.get("release")
+    if not written and old.get("complete") and set(names) <= set(old.get("scenes", [])) and "commit" in old and not can_upgrade:
+        return old, False
+    write_index(sig_dir, gen, version, names, stride, n_keyframes, options, run=run_manifest(sig_dir, version, dataroot, set_name, options), old_complete=old_complete)
+    return read_index(sig_dir), True
 
 
 def check_resume(sig_dir, grid, ss):

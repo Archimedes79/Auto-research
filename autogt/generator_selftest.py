@@ -189,9 +189,9 @@ def _signature_guard():
 
 def run(root=None, verbose=True):
     from . import lane_gt
-    from .suite import AutoGT
+    from .suite import GtGenerator
     root = os.path.expanduser(root or "~/data/nuscenes")
-    gt = AutoGT(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-0553", "scene-0916"])
+    gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-0553", "scene-0916"])
     toks = [gt.keyframes("scene-0061")[8], gt.keyframes("scene-0103")[20]]
     msgs = [_front_checks(gt, toks), _map_checks(gt, "scene-0061", toks[:1])]
     lane_toks = []

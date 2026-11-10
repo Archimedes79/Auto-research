@@ -17,7 +17,7 @@ _SIGNATURES = {}
 
 def code_signature(**options):
     """the signature (hash of the generator files and options) of THIS source, without loading nuScenes. Computed on the first call of a
-    process and kept: like an AutoGT object it holds the key of the source it started with, so a process that reads the store (`load`,
+    process and kept: like a GtGenerator object it holds the key of the source it started with, so a process that reads the store (`load`,
     `missing`) does not change folders when a signature file is edited while it runs."""
     key = repr(sorted(options.items()))
     if key not in _SIGNATURES:
@@ -49,11 +49,17 @@ def missing(tokens, data=DATA, **options):
     before a training starts, so that nothing has to be generated in a data-loader worker"""
     sig_dir = os.path.join(data, current_signature(**options))
     tokens = list(tokens)
-    if len(tokens) > 50:                                                  # one listing of the folder instead of a stat per token (2 ms each on the 9p mounts)
+    if len(tokens) > 50:                                                  # one listing of the folder instead of a stat per token (2 ms each on the 9p mounts); a zero-byte file is no keyframe
         from .store import front_keys
-        have = front_keys(sig_dir)
+        have = front_keys(sig_dir, nonempty=True)
         return [t for t in tokens if t not in have]
-    return [t for t in tokens if not os.path.exists(os.path.join(sig_dir, t + ".npz"))]
+
+    def stored(t):
+        try:
+            return os.path.getsize(os.path.join(sig_dir, t + ".npz")) > 0
+        except OSError:
+            return False
+    return [t for t in tokens if not stored(t)]
 
 
 def load(token, data=DATA, **options):
@@ -83,7 +89,7 @@ def json_tables(dataroot, version):
 
 def scene_tokens(scene, version="v1.0-mini", dataroot=None):
     """the sample tokens of a sequence in time order, from the nuScenes json tables only: a few seconds even for trainval, no devkit
-    (`AutoGT(...).keyframes(scene)` gives the same list). dataroot default: ~/data/nuscenes (mini) / ~/data/nuscenes_full (trainval)."""
+    (`GtGenerator(...).keyframes(scene)` gives the same list). dataroot default: ~/data/nuscenes (mini) / ~/data/nuscenes_full (trainval)."""
     scenes, nxt = json_tables(os.path.expanduser(dataroot) if dataroot else default_root(version), version)
     first = next((s["first_sample_token"] for s in scenes if s["name"] == scene), None)
     if first is None:
@@ -95,8 +101,8 @@ def scene_tokens(scene, version="v1.0-mini", dataroot=None):
     return out
 
 
-class AutoGT(NuScenesGT, Interface):
-    """AutoGT(dataroot, version, grid=GridSpec(), ss=4, **options).
+class GtGenerator(NuScenesGT, Interface):
+    """GtGenerator(dataroot, version, grid=GridSpec(), ss=4, **options).
 
     keyframe(token)          every layer of one keyframe: dict of float32 arrays [ix, iy] + meta (see nuscenes_gt.py)
     training_sample(token)   {"prev", "cur", "next"} keyframes with meta["dt"] and meta["steps"] (ego v, omega per 12 Hz frame)
@@ -108,8 +114,8 @@ class AutoGT(NuScenesGT, Interface):
     light=True: a memory-light devkit (CAM_FRONT + radars only, autogt/light_nusc.py); scenes=[names]: only these sequences are
     loaded (v1.0-trainval: ~0.7 GB for 85 sequences instead of 8+ GB for all)
 
-    The same class is the interface of the whole suite: its STATIC methods (autogt/api.py) are what the command line calls, `AutoGT.generate_bev_gt(root)`, `AutoGT.generate_lane_gt(root)`,
-    `AutoGT.gt_key(system)`, `AutoGT.generate`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
+    The same class is the interface of the whole suite: its STATIC methods (autogt/api.py) are what the command line calls, `GtGenerator.generate_bev_gt(root)`, `GtGenerator.generate_lane_gt(root)`,
+    `GtGenerator.gt_key(system)`, `GtGenerator.generate`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
     """
 
     def __init__(self, dataroot, version, grid=None, ss=4, light=False, scenes=None, **options):
@@ -139,3 +145,6 @@ class AutoGT(NuScenesGT, Interface):
             out.append(tok)
             tok = self.nusc.get("sample", tok)["next"]
         return out
+
+
+AutoGT = GtGenerator        # the old name of the class: the hashed generator files and the BEV project import it (a rename of those files would change the signature)

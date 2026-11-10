@@ -1,4 +1,4 @@
-"""Self-test of the command line (cli.py) and the store helpers behind it: every command is ONE method of AutoGT (api.py), which makes ONE call of a function of the suite (a recorder stands in for the
+"""Self-test of the command line (cli.py) and the store helpers behind it: every command is ONE method of GtGenerator (api.py), which makes ONE call of a function of the suite (a recorder stands in for the
 function and the test asserts the call and its arguments), wrong arguments give a message and exit 2 and never a traceback, "not there" gives exit 1, every --help works, the key line printed is the key of the stored GT; and the
 consistency of the stores (listing by file name, a rerun that writes nothing keeps the manifest, versions tables).
 
@@ -66,21 +66,21 @@ def _mapping_checks():
     from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store_audit, video, view
     from . import lane_gt
     from . import pipeline  # noqa: F401
-    # the map of the module doc is the map of the code: every command is ONE method of AutoGT, named in the doc; no method is without a command, and the command line imports nothing but the class
+    # the map of the module doc is the map of the code: every command is ONE method of GtGenerator, named in the doc; no method is without a command, and the command line imports nothing but the class
     from .api import Interface
-    from .suite import AutoGT
+    from .suite import GtGenerator
     expected = {"generate": "generate", "generate-bev": "generate_bev_gt", "generate-lane": "generate_lane_gt", "area-masks": "area_masks", "audit-lane": "audit_lane", "build": "build",
                 "key": "gt_key", "have": "have", "data": "check_data", "sets": "sets", "versions": "versions", "area-mask": "area_mask", "view": "view", "sheets": "sheets", "masks": "masks",
                 "lanegraph": "lanegraph", "video": "video", "check": "check", "report": "report", "digest": "digest", "clean": "clean", "selftest": "selftest"}
     cmds = cli.commands()
     assert cmds == expected, (set(cmds) ^ set(expected), {k: v for k, v in cmds.items() if expected.get(k) != v})
-    assert all(callable(getattr(AutoGT, m)) for m in expected.values()), "every command is a method of AutoGT"
+    assert all(callable(getattr(GtGenerator, m)) for m in expected.values()), "every command is a method of GtGenerator"
     assert {m for m in vars(Interface) if not m.startswith("_")} == set(expected.values()), "no method of the interface without a command, no command without a method"
-    assert all(f"AutoGT.{m}" in cli.__doc__ or m in cli.__doc__ for m in expected.values()), [m for m in expected.values() if m not in cli.__doc__]
+    assert all(f"GtGenerator.{m}" in cli.__doc__ or m in cli.__doc__ for m in expected.values()), [m for m in expected.values() if m not in cli.__doc__]
     import ast
     tree = ast.parse(open(cli.__file__, encoding="utf-8").read())
     imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level == 1}
-    assert imported <= {"pipeline", "store", "api", "suite"}, f"the command line reaches the suite only through AutoGT (pipeline / store are the old names re-exported): {imported}"
+    assert imported <= {"pipeline", "store", "api", "suite"}, f"the command line reaches the suite only through GtGenerator (pipeline / store are the old names re-exported): {imported}"
     assert not any(isinstance(n, ast.Import) and any(x.name.startswith("autogt") for x in n.names) for n in ast.walk(tree))
     # every command has a --help that works
     for name in cmds:
@@ -146,13 +146,17 @@ def _mapping_checks():
         fn, calls = _recorder(_FakeKey(complete))
         with _Patch((gt_api, "gt_key", fn)):
             code, out, _ = _run(["key", "bev_fusion", "--set", "small", "--dataset", "v1.0-mini", "--out", "o"])
-        assert code == code_want and out.strip() == f"fake key complete={complete}" and calls == [((), dict(system="bev_fusion", dataset="v1.0-mini", set_name="small", out="o"))], (calls, out, code)
+        assert code == code_want and out.strip() == f"fake key complete={complete}" and calls == [((), dict(system="bev_fusion", dataset="v1.0-mini", set_name="small", out="o", deep=True, borders=(0.0, 0.5)))], (calls, out, code)
     fn, calls = _recorder(_FakeKey(True))
     with _Patch((gt_api, "gt_key", fn)):
         code, out, _ = _run(["key", "lane_center", "--json"])
-        assert code == 0 and '"id": "abc"' in out and calls[0] == ((), dict(system="lane_center", dataset="v1.0-trainval")), calls
+        assert code == 0 and '"id": "abc"' in out and calls[0] == ((), dict(system="lane_center", dataset="v1.0-trainval", deep=True, borders=(0.0, 0.5))), calls
         _run(["key", "lane_center", "--scenes", "scene-0061"])
-        assert calls[1] == ((), dict(system="lane_center", dataset="v1.0-trainval", scenes=["scene-0061"])), calls[1]
+        assert calls[1] == ((), dict(system="lane_center", dataset="v1.0-trainval", scenes=["scene-0061"], deep=True, borders=(0.0, 0.5))), calls[1]
+    fn, calls = _recorder(_FakeKey(True))
+    with _Patch((gt_api, "gt_key", fn)):
+        _run(["key", "lane_center", "--fast"])
+    assert calls == [((), dict(system="lane_center", dataset="v1.0-trainval", deep=False, borders=(0.0, 0.5)))], "--fast: by file name only"
     # have / data: exit 1 when something is missing
     fn, calls = _recorder({"have": 3, "total": 5, "scenes": 1, "version": "v1.0-mini", "missing": ["a", "b"]})
     with _Patch((sets, "stored_for", fn)):
@@ -206,11 +210,23 @@ def _error_checks(root):
              (["have", "--set", "small", "--scenes", "x"], "not allowed"), (["generate", root, "--scenes-file", "/nonexistent/file.txt"], "nonexistent"),
              (["lanegraph", "o.png", "scene-0061"], "scene-0061:8"), (["digest"], "--compare"), (["key", "surround"], "invalid choice"),
              (["key", "lane_center", "--dataset", "v1.0-mini", "--dataroot", root, "--scenes", "scene-9999"], "scene-9999"),
-             (["generate", root, "--scenes", "scene-9999"], "scene-9999"), (["build", "--out", "o", "--workers", "0"], "workers"), (["digest", "--compare", "/nonexistent/a.json", "/nonexistent/b.json"], "nonexistent")]
+             (["generate", root, "--scenes", "scene-9999"], "scene-9999"), (["build", "--out", "o", "--workers", "0"], "workers"), (["digest", "--compare", "/nonexistent/a.json", "/nonexistent/b.json"], "nonexistent"),
+             (["key", "bev_fusion", "--set", "ful"], "no scene set"), (["key", "bev_fusion", "--dataset", "v1.0-bogus"], "unknown nuScenes version"), (["report", "--stride", "0"], "stride"),
+             (["report", "--workers", "0"], "workers"), (["check", "--stride", "0"], "stride"), (["audit-lane", "lane_center", "--limit", "0"], "limit"), (["area-mask", "tok", "--border-m", "nan"], "border_m"),
+             (["view", "o.png", "scene-9999:1", "--total"], "no such sequence"), (["video", "scene-9999", "o.mp4", "--dataroot", root], "no such sequence")]
     for argv, word in cases:
         code, out, err = _run(argv)
         assert code == 2 and word in err and "Traceback" not in err, (argv, code, err[-300:])
     assert "Traceback" not in _run(["generate", "~/r", "--workers", "0"])[2]
+    # a folder of another resolution: `build` (the library call) exits with the message, the command is a wrong argument (exit 2)
+    import json
+    from .suite import current_signature
+    with tempfile.TemporaryDirectory() as d:
+        sig = current_signature()
+        os.makedirs(os.path.join(d, sig))
+        json.dump({"signature": sig, "res": 0.5, "ss": 4}, open(os.path.join(d, sig, "index.json"), "w"))
+        code, out, err = _run(["build", "--dataroot", root, "--out", d, "--res", "0.25"])
+        assert code == 2 and "holds res 0.5" in err, (code, err)
     os.environ["AUTOGT_TRACEBACK"] = "1"
     try:
         try:
@@ -276,6 +292,19 @@ def _store_checks(root):
         pipeline.generate(root, d, scenes=["scene-0103"], stride=40, verbose=False, lane=False)
         assert set(json.load(open(path))["scenes"]) == {"scene-0061", "scene-0103"}, "a rerun that writes something updates it"
         assert json.load(open(path))["complete"] is True, "a store that grew by another run is complete (the provisional index of that run must not stay)"
+        # the data identity: files written under another manifest.json than the first ones make it "mixed" (the first write does not win silently); the same identity keeps it
+        from . import gt_api as ga
+        real_ident = ga.data_identity
+        try:
+            ga.data_identity = lambda: "999999999999"
+            assert json.load(open(path))["data_identity"] == real_ident(), "the store recorded the identity of the manifest"
+            pipeline.generate(root, d, scenes=["scene-0796"], stride=40, verbose=False, lane=False)
+            assert json.load(open(path))["data_identity"] == "mixed", "another manifest identity for new frames: mixed"
+            ga.data_identity = real_ident
+            pipeline.generate(root, d, scenes=["scene-1077"], stride=40, verbose=False, lane=False)
+            assert json.load(open(path))["data_identity"] == "mixed", "mixed stays mixed"
+        finally:
+            ga.data_identity = real_ident
         # the key of a store written with a stride is never complete, and a key made with generator options reads ITS store
         from . import gt_api
         from .suite import scene_tokens
@@ -291,6 +320,37 @@ def _store_checks(root):
             raise AssertionError("a part that the key does not list must raise")
         except ValueError:
             pass
+    # a run that writes nothing leaves a finished store alone whatever stride it is asked for (it turned stride 1 into "mixed" and dropped the release); a `build` store has no manifest and gets one
+    with tempfile.TemporaryDirectory() as d:
+        from .store import read_index
+        r = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)
+        path = os.path.join(d, r["signature"], "index.json")
+        idx = json.load(open(path))
+        idx.update(commit="abc1234", release=True, dirty=False)
+        json.dump(idx, open(path, "w"))
+        r2 = pipeline.generate(root, d, scenes=["scene-0061"], stride=40, verbose=False, lane=False)
+        assert r2["written"] == 0 and json.load(open(path)) == idx, "a coarser stride that writes nothing: the index is as it was (stride, release, commit)"
+        from .suite import GtGenerator as AG_
+        with _Patch((pipeline, "generate", lambda *a, **k: {"lane": {"x": 1}, "version": "v1.0-mini", "masks_error": "OSError: disk full", "lane_rigs": {}})):
+            res = AG_.generate(root, d, scenes=["scene-0061"], verbose=False)
+        assert res["ok"] is False and res["masks_error"] == "OSError: disk full", "a failed mask cache is reported, the GT is not lost"
+    with tempfile.TemporaryDirectory() as d:
+        n = pipeline.build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, verbose=False)
+        folder = os.path.join(d, os.listdir(d)[0])
+        assert "commit" not in read_index(folder), "build writes no manifest"
+        again = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)           # was a KeyError: 'commit'
+        assert again["written"] == 0 and "commit" in read_index(folder), "generate gives a build store its manifest"
+    # make_lane_gt is asked not to raise on a failing mask cache (strict=False) by generate: checked on the call
+    seen = {}
+    from . import gt_api as ga2
+    real_make = ga2.make_lane_gt
+    try:
+        ga2.make_lane_gt = lambda *a, **k: (seen.update(k), ({"lane_center": {}}, None))[1]
+        with tempfile.TemporaryDirectory() as d:
+            pipeline.generate(root, d, scenes=["scene-0061"], verbose=False)
+    finally:
+        ga2.make_lane_gt = real_make
+    assert seen.get("strict") is False and seen.get("masks") is True, seen
     # the completeness the key claims, on synthetic manifests: never a guess
     from .gt_api import _complete
     held = {"t1", "t2"}
@@ -361,7 +421,7 @@ def run(root=None, verbose=True):
     _error_checks(root)
     _store_checks(root)
     drawn = _architecture_check()
-    msg = "cli selftest ok: every command is one method of AutoGT and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables" + ("; the architecture drawing is in step with the code" if drawn else "")
+    msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables" + ("; the architecture drawing is in step with the code" if drawn else "")
     if verbose:
         print(msg)
     return msg

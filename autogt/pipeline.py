@@ -6,7 +6,7 @@ import time
 import types
 
 from .grid import GridSpec
-from .store import _flat, canonical_of, check_arguments, check_resume, detect_version, front_keys, read_index, run_manifest, save_keyframe, write_index
+from .store import _flat, canonical_of, check_arguments, check_resume, detect_version, finish_index, front_keys, read_index, run_manifest, save_keyframe, write_index
 
 _STATE = {}
 GROUP_SCENES = 60            # sequences per devkit load: the memory-light devkit of 60 sequences needs 0.4 GB (the full trainval one 6.4 GB)
@@ -24,8 +24,8 @@ def _work(args):
 
 def _init(dataroot, version, res, ss, options, scenes=None):
     """a worker's generator; scenes = names: the memory-light devkit of just these sequences (`generate`), else the full devkit"""
-    from .suite import AutoGT
-    _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, light=scenes is not None, scenes=scenes, **options)
+    from .suite import GtGenerator
+    _STATE["gt"] = GtGenerator(dataroot, version, GridSpec(res=res), ss, light=scenes is not None, scenes=scenes, **options)
 
 
 def _group_task(args):
@@ -77,11 +77,11 @@ def _write_tokens(gt, tokens, sig_dir, workers, init_args, verbose):
 def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=4, verbose=True, **options):
     """the low-level writer (one full devkit, `out` required; `generate` is the entry point): returns the number of keyframes written
     (existing ones are skipped)."""
-    from .suite import AutoGT
+    from .suite import GtGenerator
     check_arguments(stride=stride, res=res, ss=ss, workers=workers)
-    gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
+    gt = GtGenerator(dataroot, version, GridSpec(res=res), ss, **options)
     sig_dir = os.path.join(out, canonical_of(gt.signature()))
-    check_resume(sig_dir, gt.grid, ss)
+    check_resume(sig_dir, gt.grid, ss)                                                               # raises SystemExit for a folder of another resolution (the contract of build; the class interface turns it into a ValueError)
     os.makedirs(sig_dir, exist_ok=True)
     names = gt.scenes() if scenes is None else list(dict.fromkeys(scenes))
     tokens = [t for s in names for t in gt.keyframes(s)[::stride]]
@@ -105,7 +105,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     set_name   "small" (the 10 sequences of mini: small experiments) or "full" (all 850 of trainval: releases), the files of
                autogt/sets/; instead of scenes (both given: an error)
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
-    workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see AutoGT)
+    workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see GtGenerator)
     lane       also make the lane GT (lane graph, roads, lines, polygons: autogt/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
                store of the same release (releases.csv); only with stride 1, the lane GT is made for every keyframe
     -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
@@ -119,7 +119,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
     import gc
     from . import sets
-    from .suite import AutoGT, DATA, code_signature, current_signature, json_tables, scene_tokens
+    from .suite import GtGenerator, DATA, code_signature, current_signature, json_tables, scene_tokens
     check_arguments(stride=stride, res=res, ss=ss, workers=workers, set_name=set_name, scenes=scenes)
     dataroot = os.path.expanduser(dataroot)
     version = version or detect_version(dataroot)
@@ -157,7 +157,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     done = 0
     if workers <= 1 or len(groups) <= 1:
         for label, grp, todo in groups:
-            gen = AutoGT(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
+            gen = GtGenerator(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
             _same_generator(gen, code_sig)
             done += _write_tokens(gen, todo, sig_dir, 1, None, verbose)
             del gen
@@ -169,24 +169,19 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
                 done += n
                 if verbose:
                     print(f"{label} done: {n} keyframes written in {secs:.0f} s", flush=True)
-    old = read_index(sig_dir)
-    if not done and old.get("complete") and set(names) <= set(old.get("scenes", [])) and old.get("stride", stride) == stride:
-        pass                                                           # nothing was written and the store says it is complete: its manifest keeps the commit, the release flag and the environment of the run that made it
-    else:
-        write_index(sig_dir, ident, version, names, stride, n_total, options, run=run_manifest(sig_dir, version, dataroot, set_name, options), old_complete=before)
-    idx = read_index(sig_dir)
+    idx, _ = finish_index(sig_dir, ident, version, names, stride, n_total, options, done, dataroot, set_name, old_complete=before)
     gt_version = idx.get("gt_version", "unreleased")
     if verbose:
-        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx['commit']}"
-              f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx.get('sets_complete', [])})\n"
+        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx.get('commit')}"
+              f"{', dirty' if idx.get('dirty') else ''}{', RELEASE' if idx.get('release') else ''}, sets complete: {idx.get('sets_complete', [])})\n"
               f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
     lane_result = lane_rigs = masks_error = None
     if lane and stride == 1:
         from .gt_api import make_lane_gt                                    # both systems' lane GT + the masks derived from the BEV Fusion one: the same code as generate_bev_gt / generate_lane_gt
-        lane_rigs, masks_error = make_lane_gt(dataroot, out, version, names, workers, verbose, masks=True)
+        lane_rigs, masks_error = make_lane_gt(dataroot, out, version, names, workers, verbose, masks=True, strict=False)      # a failing mask cache does not lose the GT that is written: it is reported (exit 1)
         lane_result = lane_rigs["lane_center"]
     elif lane and verbose:
         print("the lane GT is made for every keyframe: skipped with stride", stride)
     return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
-            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result, "lane_rigs": lane_rigs, "masks_error": masks_error}
+            "keyframes": n_total, "written": done, "release": idx.get("release", False), "lane": lane_result, "lane_rigs": lane_rigs, "masks_error": masks_error}
 

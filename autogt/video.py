@@ -21,7 +21,7 @@ from PIL import Image
 from . import flow as flowmod
 from .grid import GridSpec
 from .nuscenes_adapter import NuScenesScene
-from .suite import AutoGT
+from .suite import GtGenerator
 from .view import EDGES, densify, semantic_rgb
 
 # ---- frames -> a video that plays everywhere (H.264, yuv420p, mp4 with the index up front), checked by reading it back
@@ -187,7 +187,7 @@ def render(layers, scene, sd, kf_token, header, root, use_radar):
 def run(scene_name, out_path, max_s=0.0, dataroot="~/data/nuscenes", version="v1.0-mini", use_radar=True):
     root = os.path.expanduser(dataroot)
     # map layers per frame; velocities come from autogt.flow; the memory-light devkit of this one sequence (the same GT, and trainval fits)
-    layers = AutoGT(root, version, use_flow=False, light=True, scenes=[scene_name])
+    layers = GtGenerator(root, version, use_flow=False, light=True, scenes=[scene_name])
     scene = NuScenesScene(layers.nusc, root, scene_name)
     toks = layers.keyframes(scene_name)
     key_t = [layers.nusc.get("sample", t)["timestamp"] * 1e-6 for t in toks]

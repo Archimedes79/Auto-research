@@ -85,7 +85,7 @@ def stored_for(want, data=None, version=None, dataroot=None, stride=1, **options
     from .suite import DATA, current_signature, scene_tokens
     version, root = _find(list(want), version, dataroot)
     toks = [t for s in want for t in scene_tokens(s, version, root)[::stride]]
-    stored = held(os.path.join(data or DATA, current_signature(**options)))
+    stored = held(os.path.join(data or DATA, current_signature(**options)), nonempty=True)        # a zero-byte file is no keyframe: the check before a training must not pass on it
     missing = [t for t in toks if t not in stored]
     return {"version": version, "scenes": len(list(want)), "total": len(toks), "have": len(toks) - len(missing), "missing": missing}
 
