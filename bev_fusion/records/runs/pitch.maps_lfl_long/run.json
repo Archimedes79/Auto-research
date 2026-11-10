@@ -1,0 +1,22 @@
+{
+ "id": "pitch.maps_lfl_long",
+ "hypothesis": "after four times the samples the dual chain stands higher against GaussianCaR on the same 400 frames than at 3000 steps (dual s0 / s1 shares: walkway 0.57 / 0.62, carpark 0.34 / 0.31, crossing 0.26 / 0.31, lane divider 0.50 / 0.52, road divider 0.72 / 0.76, drivable 0.94 / 0.94)",
+ "prediction": "against the mean of the two 3000-step shares: walkway, carpark, crossing and lane divider rise by 0.00 - 0.12 share points, drivable and road divider by 0.00 - 0.04, drivable stays below 0.98; no share falls more than 0.02 below that mean",
+ "rule": "measurement, no decision of its own: the long run's shares stand next to the 3000-step shares wherever the case speaks of the long run; a share below the 3000-step mean by more than 0.03 (the effect of the threshold choice on the other layers) is reported as a loss, not rounded away",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/pitch/maps_gpu_long.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 301643,
+ "created": "2026-11-01T13:48:26",
+ "status": "blocked",
+ "after": "t10.dual_long_s0.eval",
+ "timeout_min": 0,
+ "ended": "2026-11-01T14:17:59",
+ "notes": "dependency t10.dual_long_s0.eval blocked"
+}

@@ -1,0 +1,33 @@
+{
+ "id": "t22.B_all",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c /home/ml/miniconda3/envs/gcar/bin/python -u evaluation/evaluate.py runs/t22_B_all --quant --curves --fusion --velocity --n 1000 --ckpt-dir runs/t22_B_s0 >> runs/t22_B_all.log 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 69905,
+ "created": "2026-11-07T22:17:25",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-07T22:24:53",
+ "code_hash": "3e53af19712d",
+ "commit": "cacee3cc9d",
+ "tag": "bf/t22.B_all",
+ "git_note": "453 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 70913,
+ "exit": 0,
+ "duration_s": 756,
+ "attempts": 1,
+ "ended": "2026-11-07T22:37:30",
+ "last_lines": [
+  "=== attempt 2026-11-07T22:24:53: bash -c /home/ml/miniconda3/envs/gcar/bin/python -u evaluation/evaluate.py runs/t22_B_all --quant --curves --fusion --velocity --n 1000 --ckpt-dir runs/t22_B_s0 >> runs/t22_B_all.log 2>&1"
+ ]
+}

@@ -1,0 +1,7 @@
+{
+ "id": "smoke.t22_B_s0",
+ "who": "run.py",
+ "when": "2026-11-05T23:20:09",
+ "why": "exit 75: the trainer was stopped on request (trainsuite), a checkpoint should have been saved",
+ "words": "(none recorded: ask the person; the stop request is in the run folder's STOPPED file)"
+}

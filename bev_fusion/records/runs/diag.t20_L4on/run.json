@@ -1,0 +1,33 @@
+{
+ "id": "diag.t20_L4on",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c /home/ml/miniconda3/envs/gcar/bin/python -u evaluation/evaluate.py runs/diag_t20_L4on --quant --curves --fusion --velocity --n 1000 --ckpt-dir runs/t20_base_s0 >> runs/diag_t20_L4on.log 2>&1",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 20092,
+ "created": "2026-11-09T05:23:10",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "started": "2026-11-09T05:24:04",
+ "code_hash": "282bb737b790",
+ "commit": "25fcb6315a",
+ "tag": "bf/diag.t20_L4on",
+ "git_note": "767 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 20417,
+ "exit": 0,
+ "duration_s": 574,
+ "attempts": 1,
+ "ended": "2026-11-09T05:33:39",
+ "last_lines": [
+  "=== attempt 2026-11-09T05:24:05: bash -c /home/ml/miniconda3/envs/gcar/bin/python -u evaluation/evaluate.py runs/diag_t20_L4on --quant --curves --fusion --velocity --n 1000 --ckpt-dir runs/t20_base_s0 >> runs/diag_t20_L4on.log 2>&1"
+ ]
+}

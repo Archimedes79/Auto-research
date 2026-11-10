@@ -1,0 +1,22 @@
+{
+ "id": "t10.dual_long_s0.eval",
+ "hypothesis": "evaluation of t10.dual_long_s0 on cold VAL 1000 (82 scenes) with the call used for t10_dual_s0 and s1, so that the card's numbers (sections 3b, 3c) can be read",
+ "prediction": "exit 0; eval/metrics.json + card.json with GT signature 0.5_4_15efbde2d1; the numbers of the card's table (lane divider 0.41 (0.36-0.46), vehicle skill 0.55 (0.35-0.70), front mAP2 0.355 (0.33-0.385))",
+ "rule": "decide.py --band 0.029 on the lane divider against 0.3352,0.3498 and the clauses of card 3c; a missing card or another GT signature = not comparable",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash temp/t10/eval_long.sh",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 304735,
+ "created": "2026-11-01T14:20:10",
+ "status": "blocked",
+ "after": "t10.dual_long_s0",
+ "timeout_min": 0,
+ "ended": "2026-11-01T14:39:57",
+ "notes": "dependency t10.dual_long_s0 failed"
+}

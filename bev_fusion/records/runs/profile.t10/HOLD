@@ -1,0 +1,7 @@
+{
+ "id": "profile.t10",
+ "who": "run.py",
+ "when": "2026-11-01T22:53:47",
+ "why": "exit 75: the trainer was stopped on request (trainsuite), a checkpoint should have been saved",
+ "words": "(none recorded: ask the person; the stop request is in the run folder's STOPPED file)"
+}

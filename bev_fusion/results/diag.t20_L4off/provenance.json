@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "made": "2026-11-09T05:43:19",
+ "gt": {
+  "key": "0.5_4_6a7aa7864a",
+  "signature": "6a7aa7864a",
+  "version": "unknown"
+ },
+ "data": {
+  "split": "val",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "unknown",
+  "manifest_hash": "f615a7387e73",
+  "scenes": null,
+  "samples": null
+ },
+ "subject": {
+  "run": "diag.t20_L4off",
+  "config_hash": "2bb8df0294cb",
+  "train_gt": {
+   "key": "0.5_4_6a7aa7864a",
+   "signature": "6a7aa7864a",
+   "version": "unknown"
+  }
+ },
+ "environment": {
+  "python": "3.10.12",
+  "torch": "unknown",
+  "cuda": "unknown",
+  "numpy": "unknown",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "run record (the trainer's interpreter was not found)"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "bf/diag.t20_L4off",
+  "commit": "2d7a99a5f6",
+  "code_hash": "282bb737b790",
+  "drift_files": [],
+  "command": "bash -c /home/ml/miniconda3/envs/gcar/bin/python -u temp/t22/lane_off/suite_lane_off.py runs/diag_t20_L4off --device cuda --workers 2 --split val --ckpt-dir runs/t20_base_s0 --curves --fusion --velocity eval --n 1000 >> runs/diag_t20_L4off.log 2>&1",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "unknown",
+  "files": [],
+  "note": "the run has no code snapshot (<run folder>/code): the live tree is not what ran, check out the tag bf/diag.t20_L4off"
+ }
+}

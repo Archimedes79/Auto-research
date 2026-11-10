@@ -1,0 +1,22 @@
+{
+ "id": "r2.raster32_s1",
+ "hypothesis": "The delta-coded slot encoder (radar_kind delta_slots, c_rad 64, reconstruction side loss radar_aux 1.0 decaying to 0.05) lifts a radar-only BEV system above the width-matched raster block (c_rad 64) and the shipped one (c_rad 32), because it keeps the detections (unit test: 93 % kept with the side loss against 52 % with the task alone)",
+ "prediction": "radar-only, cold VAL 1000, slots64 minus raster64, paired bootstrap: vehicle seg iou@0 +0.02, front mAP2 +0.02, vehicle velocity skill (ave_skill_moving) +0.05, drivable iou@0.5 within +-0.01; radar_kept at the last validation >= 0.8",
+ "rule": "per seed pair (s0 vs s0, s1 vs s1) the paired scene bootstrap of bev_suite compare: KEEP (build delta_slots into the default radar slot, propose the dual-chain check) if at least two of {vehicle iou@0, front mAP2, velocity skill} improve with the interval excluding 0 on BOTH seeds and drivable iou@0.5 is not worse by more than 0.01; TIE (keep raster, simpler) if inside the interval; CUT if two or more are worse with the interval excluding 0. raster64 - raster32 shows the effect of width alone",
+ "split": "val",
+ "basis": "t3_radar_only",
+ "seed": "1",
+ "command": "bash temp/radar/_scratch_patches/wait_ram_then.sh bash temp/train/run_ar.sh temp/radar/r2_cfg/r2_rad_raster32_s1.json 32ab9be24b16e1ab4eaea2e701c2c93099c1c607",
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 409455,
+ "created": "2026-11-01T17:29:09",
+ "status": "blocked",
+ "after": "r2.raster32_s0",
+ "timeout_min": 400.0,
+ "ended": "2026-11-01T22:48:50",
+ "notes": "dependency r2.raster32_s0 blocked"
+}
