@@ -173,6 +173,7 @@ __pycache__/
 *.tmp.*
 heartbeat
 .gpu_slots/
+.jobs/
 ledger_row.json
 *_golden_check.json
 
