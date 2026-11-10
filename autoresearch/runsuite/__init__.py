@@ -12,7 +12,7 @@ The queue methods of Training (queue_list, queue_get, queue_remove, queue_start,
 also a command: `python -m runsuite run job.json` (the method name with hyphens: `queue-add`, `queue-list`). The project names its runner in project.json: "runsuite": {"command": "...{args}...", "runs": "runs"}; {args} is where the mode
 and the flags go: `<mode> <target> [--split S] [--n N | --scene X [--first N]] [--out DIR] [--dts a b] [--device D] [--config C] [--cold] [--code DIR]` (bev_fusion/runner/bev_runner.py).
 The modes: check (builds the input, writes nothing), precompute (layer 1 alone), network (layers 2-5 on a precompute folder), full (both, in one process, frame by frame; it writes
-objects.json and maps.npz, the data the evaluation reads). The convention is autoresearch/INTERFACE.md. The same methods are also functions of a default object: `runsuite.check(job)`.
+objects.json and maps.npz, the data the evaluation reads). The convention is autoresearch/README.md.
 """
 from trainsuite.api import TrainingError as RunJobsError  # noqa: F401
-from .api import (RunJobs, check, queue_add, queue_get, queue_hold, queue_list, queue_remove, queue_resume, queue_start, run, status)  # noqa: F401
+from .api import CLI, RunJobs  # noqa: F401

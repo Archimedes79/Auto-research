@@ -1,7 +1,7 @@
 # jobs - the job files of the training system, and where the other two suites are called from
 
 One job file is one small json that says what to do and with what; the same file goes to `check` (looks, starts nothing), `run` (now) or `queue_add` (the queue starts it). The convention for all
-suites is `../../../autoresearch/INTERFACE.md`; each suite's own README is the reference for the fields.
+suites is `../../../autoresearch/README.md`; each suite's own README is the reference for the fields.
 
 | folder | suite (class) | how it is called | state |
 |---|---|---|---|

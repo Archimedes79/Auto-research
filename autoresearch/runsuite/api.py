@@ -3,6 +3,7 @@ one of Training (one queue for trainings and runner jobs). Jobs are the jobs of 
 import os
 import shlex
 
+import suitecli
 from trainsuite import api as T
 from trainsuite import compose as C
 from trainsuite import trainqueue as TQ
@@ -173,6 +174,7 @@ class RunJobs(T.Training):
         rid, it, n = T.resolve(c, i, "run")
         if rid is None:
             return dict(id=None, state="idle")
+        T.must_exist(c, rid, it)
         d = os.path.join(c.records, rid)
         rec = c.R.record(d)
         job = (it or {}).get("job") or {}
@@ -188,5 +190,4 @@ class RunJobs(T.Training):
                     started=rec.get("started"), ended=rec.get("ended"), out=out, files=files, log_tail=(rec.get("last_lines") or [])[-6:])
 
 
-for _n in RunJobs.METHODS:                     # the same methods as functions of a default object: `runsuite.check(job)` = `RunJobs().check(job)`
-    globals()[_n] = T.delegate(RunJobs, _n)
+CLI = suitecli.Cli(RunJobs, "runsuite", T.TrainingError, "TRAINSUITE_TRACEBACK", positional=T.CLI.positional, option_names=T.CLI.option_names, need_all=T.CLI.need_all, text=T.CLI.text)

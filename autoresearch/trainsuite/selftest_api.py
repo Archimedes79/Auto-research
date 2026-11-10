@@ -1,4 +1,4 @@
-"""Self-test of the interface (api.py, apicli.py): jobs, check, run, status, stop, compare, plot and the queue functions against a toy project with real run.py launchers and a toy trainer
+"""Self-test of the interface (api.py): jobs, check, run, status, stop, compare, plot and the queue functions against a toy project with real run.py launchers and a toy trainer
 (selftest_queue.py builds it), about a minute. It checks what the interface promises: a job is validated (a typo shows), `check` starts nothing, `run` starts and `status` reads it,
 a queue number, an id and a run folder name address the same item, the order follows the priority, hold and resume refuse without the person's words, the command line says the
 same as the functions (--json prints what they return)."""
@@ -54,6 +54,7 @@ def api_checks(tmp, ok):
     os.environ.update(env)
     jobs = os.path.join(tmp, "jobs")
     os.makedirs(jobs)
+    T = api.Training()                                                 # the project of AR_PROJECT
 
     def job(name, **kw):
         d = dict(id=name, config="base.json", set={"steps": 20, "sleep": 0.02}, no_card=True)
@@ -76,77 +77,77 @@ def api_checks(tmp, ok):
         ok("jobs: normalised (a text list, a set dict, a priority), a typo / a missing id / a bad type / a bad kind is an error, _comments are allowed")
 
         # 2 check starts nothing and says what run would do
-        r = api.check(job("c.one"))
+        r = T.check(job("c.one"))
         assert r["ok"] and r["id"] == "c.one" and any("steps" in x for x in r["changes"]) and "run.py" in r["command"] and "--id c.one" in r["command"], r
         assert not os.path.exists(os.path.join(proj, "records", "runs", "c.one")) and not os.path.exists(os.path.join(proj, "runs", "c_one")), "check starts nothing"
-        raises(api.check, "needs its card", dict(id="c.two", config="base.json"))
+        raises(T.check, "needs its card", dict(id="c.two", config="base.json"))
         ok("check: ok / changes / the exact command; nothing started, no run record; a run without a card is refused")
 
         # 3 the queue: numbers follow the priority, an id and a folder name are the same item, remove, the older words still work
-        assert api.queue_list()["items"] == [] and api.status()["state"] == "idle"
-        api.queue_add(job("q.b"), start=False)
-        item = api.queue_add(job("q.a", priority=1, note="first"), start=False)
+        assert T.queue_list()["items"] == [] and T.status()["state"] == "idle"
+        T.queue_add(job("q.b"), start=False)
+        item = T.queue_add(job("q.a", priority=1, note="first"), start=False)
         assert item["number"] == 1 and item["id"] == "q.a" and item["state"] == "queued" and item["note"] == "first" and "run.py" in item["command"] and item["job"]["priority"] == 1, item
-        lst = api.queue_list()
+        lst = T.queue_list()
         assert [x["id"] for x in lst["items"]] == ["q.a", "q.b"] and [x["number"] for x in lst["items"]] == [1, 2] and lst["running"] is None and lst["runner"] == 0, lst
         assert {"slots", "lock", "ram", "gpu", "holds"} <= set(lst), sorted(lst)
-        assert api.queue_get(2)["id"] == api.queue_get("q.b")["id"] == api.queue_get("q_b")["id"] == "q.b"
-        raises(api.queue_get, "number 3", 3)
-        raises(api.queue_get, "not in the queue", "nothing")
-        raises(api.queue_add, "already in the queue", job("q.b"), start=False)
-        assert api.queue_remove(2) == {"removed": "q.b"} and [x["id"] for x in api.queue_list()["items"]] == ["q.a"]
-        assert api.queue_remove("q_a") == {"removed": "q.a"} and api.queue_list()["items"] == []
+        assert T.queue_get(2)["id"] == T.queue_get("q.b")["id"] == T.queue_get("q_b")["id"] == "q.b"
+        raises(T.queue_get, "number 3", 3)
+        raises(T.queue_get, "not in the queue", "nothing")
+        raises(T.queue_add, "already in the queue", job("q.b"), start=False)
+        assert T.queue_remove(2) == {"removed": "q.b"} and [x["id"] for x in T.queue_list()["items"]] == ["q.a"]
+        assert T.queue_remove("q_a") == {"removed": "q.a"} and T.queue_list()["items"] == []
         ok("queue: priority gives the numbers, a number / an id / a folder name address one item, a double id and a bad number are refused, remove")
 
         # 4 the person's words are required
-        raises(api.queue_hold, "words", "")
-        raises(api.queue_resume, "words", "  ")
-        assert api.queue_hold("Mirko: test") == {} and api.queue_list()["paused"] is True
-        assert api.queue_resume("Mirko: test", fresh_code=False) == {} and api.queue_list()["paused"] is False
+        raises(T.queue_hold, "words", "")
+        raises(T.queue_resume, "words", "  ")
+        assert T.queue_hold("Mirko: test") == {} and T.queue_list()["paused"] is True
+        assert T.queue_resume("Mirko: test", fresh_code=False) == {} and T.queue_list()["paused"] is False
         ok("hold / resume: refused without the person's words; with them they pause and release the runner (nothing running: nothing to stop)")
 
         # 5 run: start now, status reads it, the kill rules land in the run folder, a second run, compare
-        r = api.run(job("r.one", kill=["total@5 > 99"]))
+        r = T.run(job("r.one", kill=["total@5 > 99"]))
         assert r["id"] == "r.one" and r["started"][-1]["id"] == "r.one" and "--id r.one" in r["command"], r
         assert open(os.path.join(proj, "runs", "r_one", "kill.txt")).read().strip() == "total@5 > 99", "the job's kill rule is where watch / status read it"
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "r.one", "done")), 60, what="r.one done")
-        s = api.status("r.one")
+        s = T.status("r.one")
         assert s["id"] == "r.one" and s["state"] == "done" and s["step"] == 20 and s["total"] == 20 and s["queue"] is None and s["speed"]["s_step"] and isinstance(s["findings"], list), s
         assert [k["rule"] for k in s["kill"]] == ["total@5 > 99"] and s["kill"][0]["status"] == "ok", s["kill"]
-        assert api.status("r_one")["id"] == "r.one" and api.status("r.one")["grad"]["rows"] == 20 and api.status("r.one")["grad"]["peak_step"] == 20, "the gradient line"
-        api.run(job("r.two", set={"steps": 20, "sleep": 0.04}))
+        assert T.status("r_one")["id"] == "r.one" and T.status("r.one")["grad"]["rows"] == 20 and T.status("r.one")["grad"]["peak_step"] == 20, "the gradient line"
+        T.run(job("r.two", set={"steps": 20, "sleep": 0.04}))
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "r.two", "done")), 60, what="r.two done")
-        cmpd = api.compare("r.one", "r.two")
+        cmpd = T.compare("r.one", "r.two")
         assert cmpd["common_step"] == 20 and [x["id"] for x in cmpd["rows"]] == ["r.one", "r.two"] and cmpd["rows"][0]["speedup"] == 1.0 and cmpd["rows"][1]["s_step"] > cmpd["rows"][0]["s_step"], cmpd
         try:
             import matplotlib  # noqa: F401
-            assert api.plot("r.one", out=os.path.join(tmp, "c.png"))["png"] and os.path.getsize(os.path.join(tmp, "c.png")) > 1000
+            assert T.plot("r.one", out=os.path.join(tmp, "c.png"))["png"] and os.path.getsize(os.path.join(tmp, "c.png")) > 1000
         except ImportError:
             pass
-        raises(api.status, "no queue item number", 9)
+        raises(T.status, "no queue item number", 9)
         ok("run: started with its kill rules, status (also by folder name) reads state / step / speed / kill rules, compare puts two runs side by side, plot")
 
         # 6 stop one training: a long run, the queue says it runs, stop writes the request, the run ends with a checkpoint and goes on hold
-        api.run(job("s.one", set={"steps": 600, "sleep": 0.05}))
-        until(lambda: api.status("s.one")["step"] >= 3, 60, what="s.one running")
-        assert api.status("s.one")["state"] == "running"
-        r = api.stop("s.one", "selftest")
+        T.run(job("s.one", set={"steps": 600, "sleep": 0.05}))
+        until(lambda: T.status("s.one")["step"] >= 3, 60, what="s.one running")
+        assert T.status("s.one")["state"] == "running"
+        r = T.stop("s.one", "selftest")
         assert r["id"] == "s.one" and r["requested"] is True and os.path.exists(r["file"]), r
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "s.one", "HOLD")), 60, what="s.one stopped and held")
-        assert api.status("s.one")["state"] == "stopped", api.status("s.one")["state"]
-        assert any(h["id"] == "s.one" for h in api.queue_list()["holds"]), "the hold shows in the view"
-        raises(api.stop, "nothing is running", None)
+        assert T.status("s.one")["state"] == "stopped", T.status("s.one")["state"]
+        assert any(h["id"] == "s.one" for h in T.queue_list()["holds"]), "the hold shows in the view"
+        raises(T.stop, "nothing is running", None)
         ok("stop: the request is written, the run saves a checkpoint, ends with 75 and its id is on hold (the view lists it); status() says idle when nothing runs")
 
         # 7 the runner: add with start, the item runs by itself, the view names it while it runs, the runner ends when nothing is left
-        api.queue_add(job("w.one", set={"steps": 60, "sleep": 0.05}))
-        until(lambda: api.queue_list()["running"] == "w.one", 60, what="w.one running through the queue")
-        s = api.status()
+        T.queue_add(job("w.one", set={"steps": 60, "sleep": 0.05}))
+        until(lambda: T.queue_list()["running"] == "w.one", 60, what="w.one running through the queue")
+        s = T.status()
         assert s["id"] == "w.one" and s["number"] == 1 and s["queue"] == "running", s
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "w.one", "done")), 90, what="w.one done")
-        assert api.queue_list()["items"][0]["state"] == "done" and api.queue_get(1)["step"] == 60
+        assert T.queue_list()["items"][0]["state"] == "done" and T.queue_get(1)["step"] == 60
         until(lambda: TQ.runner_alive(TQ.context(proj)) == 0, 30, what="the runner ends by itself")
-        assert api.queue_start()["runner"] > 0, "queue_start brings the runner back"
+        assert T.queue_start()["runner"] > 0, "queue_start brings the runner back"
         ok("queue + runner: an added job runs by itself, status() without an argument is the running one, the item is done afterwards, queue_start starts the runner")
 
         # 8 the command line says the same words
@@ -177,33 +178,34 @@ def api_checks(tmp, ok):
 
         # 9 the runner has the same interface and the same queue
         import runsuite
+        RJ = runsuite.RunJobs(proj)
         def rj(name, **kw):                                             # a runner job file: exactly these keys, no training defaults
             d = dict(id=name, kind="run", mode="full", run="r.one", n=4, dts=[0, 0.5], out="runs/out_" + name.replace(".", "_"))
             d.update(kw)
             path = os.path.join(jobs, name.replace(".", "_") + ".json")
             json.dump(d, open(path, "w"))
             return path
-        r = runsuite.check(rj("rs.one"))
+        r = RJ.check(rj("rs.one"))
         assert r["ok"] and "code/runner.py full runs/r_one --n 4 --out runs/out_rs_one --dts 0 0.5" in r["command"] and "--no-card" in r["command"], r
-        assert not runsuite.check(dict(id="rs.x", kind="run", mode="full", run="nothing"))["ok"] and "does not exist" in runsuite.check(dict(id="rs.x", kind="run", mode="full", run="nothing"))["problems"][0]
-        assert "needs" in runsuite.check(dict(id="rs.x", kind="run", mode="full"))["problems"][0] and "does not take" in runsuite.check(dict(id="rs.x", kind="run", mode="check", config="base.json", out="o"))["problems"][0]
-        raises(runsuite.check, "mode", dict(id="rs.x", kind="run", mode="dance"))
-        raises(runsuite.check, "not both", dict(id="rs.x", kind="run", mode="full", run="r.one", n=3, scene="scene-1"))
-        raises(runsuite.check, 'kind "train"', job("rs.train"))
-        raises(api.check, 'kind "run"', dict(id="rs.x", kind="run", mode="full", run="r.one"))
-        r = runsuite.run(rj("rs.one"))
+        assert not RJ.check(dict(id="rs.x", kind="run", mode="full", run="nothing"))["ok"] and "does not exist" in RJ.check(dict(id="rs.x", kind="run", mode="full", run="nothing"))["problems"][0]
+        assert "needs" in RJ.check(dict(id="rs.x", kind="run", mode="full"))["problems"][0] and "does not take" in RJ.check(dict(id="rs.x", kind="run", mode="check", config="base.json", out="o"))["problems"][0]
+        raises(RJ.check, "mode", dict(id="rs.x", kind="run", mode="dance"))
+        raises(RJ.check, "not both", dict(id="rs.x", kind="run", mode="full", run="r.one", n=3, scene="scene-1"))
+        raises(RJ.check, 'kind "train"', job("rs.train"))
+        raises(T.check, 'kind "run"', dict(id="rs.x", kind="run", mode="full", run="r.one"))
+        r = RJ.run(rj("rs.one"))
         assert r["id"] == "rs.one" and r["started"][0]["finished"] is True, r                      # the toy runner ends within the wait
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "rs.one", "done")), 60, what="rs.one done")
-        st = runsuite.status("rs.one")
-        assert st["state"] == "done" and st["exit"] == 0 and runsuite.status()["state"] == "idle", st
+        st = RJ.status("rs.one")
+        assert st["state"] == "done" and st["exit"] == 0 and RJ.status()["state"] == "idle", st
         assert json.load(open(os.path.join(proj, "runs", "out_rs_one", "objects.json")))["args"] == ["--n", "4", "--out", "runs/out_rs_one", "--dts", "0", "0.5"]
-        item = runsuite.queue_add(rj("rs.two"), start=False)
+        item = RJ.queue_add(rj("rs.two"), start=False)
         assert item["kind"] == "run" and item["state"] == "queued" and "code/runner.py full runs/r_one" in item["command"], item
-        assert "rs.two" in [x["id"] for x in runsuite.queue_list()["items"]] and runsuite.queue_get("rs.two")["job"]["mode"] == "full"
-        runsuite.queue_start()
+        assert "rs.two" in [x["id"] for x in RJ.queue_list()["items"]] and RJ.queue_get("rs.two")["job"]["mode"] == "full"
+        RJ.queue_start()
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "rs.two", "done")), 60, what="rs.two done through the queue")
-        assert runsuite.status("rs.two")["files"] == ["objects.json"] and runsuite.queue_get("rs.two")["state"] == "done"
-        assert runsuite.queue_remove("rs.two") == {"removed": "rs.two"}
+        assert RJ.status("rs.two")["files"] == ["objects.json"] and RJ.queue_get("rs.two")["state"] == "done"
+        assert RJ.queue_remove("rs.two") == {"removed": "rs.two"}
         rc, out, err = cli("queue-list", "--json")
         assert rc == 0 and "rs.two" not in [x["id"] for x in json.loads(out)["items"]] and "w.one" in [x["id"] for x in json.loads(out)["items"]], "one queue: the runner job went, the training item is still there"
         from runsuite.__main__ import main as run_main
@@ -216,7 +218,7 @@ def api_checks(tmp, ok):
         # 10 the class and the generic command line: every method is a command, `Training.queue_hold --words ...`
         t = api.Training(proj)
         assert [m["name"] for m in api.Training.methods()] == list(api.Training.METHODS) and all(m["summary"] for m in api.Training.methods()), "every method is listed with a summary"
-        assert t.queue_list()["items"] == api.queue_list()["items"] and t.status("r.one")["state"] == "done", "an object and the default object see the same project"
+        assert t.queue_list()["items"] == T.queue_list()["items"] and t.status("r.one")["state"] == "done", "an object and the default object see the same project"
         raises(t.check, 'kind "run"', dict(id="rs.x", kind="run", mode="full", run="r.one"))
         assert [m["name"] for m in runsuite.RunJobs.methods()] == list(runsuite.RunJobs.METHODS) and "stop" not in runsuite.RunJobs.METHODS, "the runner lists its own methods"
         rc, out, err = cli("methods")
@@ -349,7 +351,7 @@ def api_checks(tmp, ok):
         finally:
             open(pj_path, "w").write(pj0)
         # the rest: errors have one type, a project is an argument, the delegates keep their signature
-        assert "words" in inspect.signature(api.queue_hold).parameters and "job" in inspect.signature(api.queue_add).parameters
+        assert "words" in inspect.signature(T.queue_hold).parameters and "job" in inspect.signature(T.queue_add).parameters
         old_env = os.environ.pop("AR_PROJECT")
         try:
             assert isinstance(api.Training(proj).queue_list()["items"], list) and "AR_PROJECT" not in os.environ, "Training(project) does not set the project of the process"
@@ -398,7 +400,7 @@ def api_checks(tmp, ok):
         assert TQ.is_training(c, "tr.x", {"command": "python3 code/trainer.py composed/tr_x.json"}) is True
         for k in ("no_card", "prepare", "no_check"):
             raises(api.load_job, "true or false", dict(id="x", config="b.json", **{k: "false"}))
-        raises(runsuite.check, "true or false", dict(id="rs.x", kind="run", mode="full", run="r.one", cold="no"))
+        raises(RJ.check, "true or false", dict(id="rs.x", kind="run", mode="full", run="r.one", cold="no"))
         p_bom = os.path.join(jobs, "bom.json")
         open(p_bom, "w", encoding="utf-8-sig").write(json.dumps(dict(id="b.om", config="base.json", no_card=True)))
         assert api.load_job(p_bom)["id"] == "b.om", "a job file with a BOM (PowerShell 5.1) is read"
@@ -421,10 +423,12 @@ def api_checks(tmp, ok):
         # 13 what the third review found: --json has no NaN, a damaged item is a message with exit 2, two threads on two projects do not mix, the old words are pinned, the help is honest
         import inspect as _inspect
         import threading
-        from . import apicli
-        from .cli import LEGACY
-        assert apicli._clean({"loss": float("nan"), "xs": [1.0, float("inf")]}) == {"loss": None, "xs": [1.0, None]}
-        json.loads(json.dumps(apicli._clean({"loss": float("nan")}), allow_nan=False))
+        import suitecli
+        from .api import LEGACY
+        assert suitecli.clean({"loss": float("nan"), "xs": [1.0, float("inf")]}) == {"loss": None, "xs": [1.0, None]}
+        raises(T.status, "no queue item", "nope-xyz")                                  # a typo in an id is an error here as in the other suites, not "unknown"
+        raises(RJ.status, "no queue item", "nope-xyz")
+        json.loads(json.dumps(suitecli.clean({"loss": float("nan")}), allow_nan=False))
         qpath = TQ.context(proj).qpath
         open(qpath, "w").write(json.dumps({"items": [{"id": "x.broken"}]}))        # an item without its fields (a hand-made file)
         rc, out_, err_ = cli("queue-list")
@@ -438,7 +442,7 @@ def api_checks(tmp, ok):
             except SystemExit as e:
                 assert e.code == 0, word
         assert all(not m["summary"].endswith(("e.g.", "i.e.")) for m in api.Training.methods() + runsuite.RunJobs.methods()), "a summary is a whole sentence"
-        assert str(_inspect.signature(runsuite.check)) == "(job)" and str(_inspect.signature(api.queue_hold)).startswith("(words"), "the functions of the default object keep their arguments"
+        assert str(_inspect.signature(RJ.check)) == "(job)" and str(_inspect.signature(T.queue_hold)).startswith("(words"), "the decorated methods keep their arguments"
         api.Training(second).queue_add(job("x.cross", project=second), start=False)
         seen = {"proj": set(), "second": set()}
 

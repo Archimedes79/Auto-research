@@ -9,12 +9,10 @@
 The suite never imports project code and never touches a training process: it reads the run directory (contract: README.md) and, to
 stop, writes a CONTROL file that the trainer reads. The project's model, losses and data stay in the project.
 
-The interface of the training system is the class Training of api.py (see its head and autoresearch/INTERFACE.md); its methods are also functions of a default object: check, run, status, stop, plot, compare, queue_add,
-queue_list, queue_get, queue_remove, queue_start, queue_hold, queue_resume. (`curves` and `selftest` are modules here, so the plot is `plot` and the self-test is the command.)
+The interface of the training system is the class Training of api.py (its head and the README, section 0); every method is also a command (`python -m trainsuite methods`).
 """
 from .control import EXIT_STOPPED, clear_stale, honours_stop, mark_stopped, request_stop, stop_requested  # noqa: F401
 from .health import Finding  # noqa: F401   (health.check(run) is the health check of a run; the package-level `check` is the one of a job)
 from .kill import Rule, load_rules  # noqa: F401
 from .runs import Run, read_log  # noqa: F401
-from .api import (JOB_FIELDS, Training, TrainingError, check, compare, load_job, plot, queue_add, queue_get, queue_hold, queue_list, queue_remove, queue_resume, queue_start,  # noqa: F401,E402
-                  run, status, stop)
+from .api import JOB_FIELDS, Training, TrainingError, load_job  # noqa: F401,E402

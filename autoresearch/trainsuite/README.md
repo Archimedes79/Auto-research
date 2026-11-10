@@ -15,7 +15,7 @@ export AR_PROJECT=../bev_fusion; R=../bev_fusion/runs
 ```
 
 ## 0. The interface (start here)
-One class, `Training(project)`, with plain dicts in and out; every method is also a command (the pattern of all suites: [../INTERFACE.md](../INTERFACE.md); the code: `api.py`, `apicli.py`).
+One class, `Training(project)`, with plain dicts in and out; every method is also a command (the pattern of all suites: [../README.md](../README.md); the code: `api.py`).
 `from trainsuite import Training` in Python, `python -m trainsuite Training.queue_add job.json` on the command line (short forms: `queue_add`, `queue-add`; `Training.` is always needed for `status`, `stop`, `plot`, `compare`, which are older commands;
 `python -m trainsuite methods` lists the methods with their arguments; `--json` prints exactly what the method returns).
 A **job** is a json file (or the same dict) that says what to run:

@@ -1,6 +1,6 @@
 """Command line of the training suite (run from autoresearch/): python -m trainsuite <command> ...
 
-The commands of the interface (class Training, api.py; the map is in apicli.py, `methods` lists them): check, run, queue-add, queue-list, queue-get, queue-remove, queue-start,
+The commands of the interface (class Training, api.py; `methods` lists them): check, run, queue-add, queue-list, queue-get, queue-remove, queue-start,
 queue-hold, queue-resume, and Training.status / Training.stop / Training.plot / Training.compare. The older commands below keep their meaning: status, health, curves, stop, resume,
 watch, early, compose, start, queue (show / add --id / serve / hold / resume / drop), selftest."""
 import argparse
@@ -17,7 +17,6 @@ from .kill import load_rules
 from .runs import Run, fmt_dur
 
 TERMINAL = ("done", "failed", "stopped", "ended")
-LEGACY = ("status", "health", "curves", "speed", "queue", "stop", "resume", "watch", "early", "compose", "start", "selftest", "plot", "compare")      # the older commands: their words keep their meaning
 RETRY_GRACE_S = 300       # watch: a run that fails while watched may be restarted by the launcher (a CUDA retry after 15 s): wait this long
 LATCH_POLLS = 5          # watch: a finding that went away must stay away this many looks before it can be reported again
 
@@ -682,8 +681,8 @@ def cmd_start(a):
 
 
 def main(argv=None):
-    from . import api, apicli                                    # every method of the class Training is a command: `queue-add job.json`, `methods` lists them
-    rc = apicli.dispatch(api.Training, sys.argv[1:] if argv is None else list(argv), "trainsuite", LEGACY)
+    from . import api                                            # every method of the class Training is a command: `queue-add job.json`, `methods` lists them
+    rc = api.CLI.dispatch(sys.argv[1:] if argv is None else list(argv))
     if rc is not None:
         return rc
     ap = argparse.ArgumentParser(prog="trainsuite", description=__doc__, epilog="The commands of the interface (check, run, queue-add, queue-list, ...): `python -m trainsuite methods`. "

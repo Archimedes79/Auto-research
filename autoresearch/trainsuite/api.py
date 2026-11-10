@@ -1,4 +1,4 @@
-"""The interface of the training system: the class `Training`, plain dicts in and out. The convention for all suites is autoresearch/INTERFACE.md.
+"""The interface of the training system: the class `Training`, plain dicts in and out. The convention for all suites is the section "The interface of the suites" of autoresearch/README.md.
 
     from trainsuite import Training
     t = Training("../bev_fusion")                          # the project folder (default: AR_PROJECT)
@@ -19,13 +19,12 @@
     t.compare("t20.base_s0", "speed3.fast")                # s/step, data wait, GPU busy, peak memory, loss at the last shared step     -> {rows}
 
 Every method is also a command with the class name in front: `python -m trainsuite Training.queue_add job.json`, `Training.queue_hold --all --words "..."`, `Training.status 3` (`python -m
-trainsuite methods` lists them with their arguments; apicli.py has the map). Short forms where no older command has the word: `queue_add` and `queue-add`; `status`, `stop`, `plot` and
+trainsuite methods` lists them with their arguments; the map is in the README of trainsuite). Short forms where no older command has the word: `queue_add` and `queue-add`; `status`, `stop`, `plot` and
 `compare` are older commands with their own meaning, so they always need the class name. The command prints a short text, or with `--json` exactly what the method returns. `i` is an id
 (`t23.C_s1`), a run folder name (`t23_C_s1`) or the number shown by queue_list (1 = first). Hold and resume need the person's own words: a rule, not a convenience (autoresearch/METHOD.md,
 hard rule 6). One process works on one project at a time: the project is passed to the modules through the environment, so the methods take a lock (two threads with two projects wait for each other).
 """
 import functools
-import inspect
 import json
 import os
 import re
@@ -33,6 +32,8 @@ import shlex
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
+
+import suitecli
 
 from . import compose as C
 from . import control, health, modules
@@ -336,6 +337,14 @@ def get_item(c, i):
                 command=shell(TQ.with_gate(c, TQ.pinned_argv(it))))
 
 
+def must_exist(c, rid, it):
+    """a typo in an id is an error, as in the other suites: the id is a queue item, a run record, a run folder or a row of the ledger (a run that is only planned is a real state)"""
+    if it is None and not os.path.isdir(os.path.join(c.records, rid)) and not os.path.isdir(_run_dir(c, rid)):
+        import ledger
+        if not any(r.get("id") == rid for r in ledger.load()):
+            raise TrainingError(f"no queue item, run record or ledger row named {rid!r}")
+
+
 def _item_info(c, it, n, states):
     rid = it["id"]
     rd = _run_dir(c, rid)
@@ -403,12 +412,7 @@ class Training:
     @classmethod
     def methods(cls):
         """[{name, arguments, summary}] of the methods that are also commands: what `python -m trainsuite methods` prints"""
-        out = []
-        for name in cls.METHODS:
-            fn = getattr(cls, name)
-            args = ", ".join(str(p) for k, p in inspect.signature(fn).parameters.items() if k != "self")
-            out.append(dict(name=name, arguments=args, summary=" ".join((inspect.getdoc(fn) or "").split()).split(". ")[0].rstrip(".") + "."))
-        return out
+        return suitecli.method_list(cls)
 
     # ---- one training
     @errors
@@ -468,6 +472,7 @@ class Training:
         rid, it, n = resolve(c, i)
         if rid is None:
             return dict(id=None, state="idle", queue=None, number=None)
+        must_exist(c, rid, it)
         rd = _run_dir(c, rid)
         qstate = TQ.state(c, it) if it else None
         rules = list(kill)                                           # the job's own rules are in <run>/kill.txt, which `summary` reads itself
@@ -593,15 +598,53 @@ class Training:
         return TQ.resume(c, ids, i is None, words, fresh_code, True, out=lambda *a, **k: None)
 
 
-def delegate(cls, name):
-    """the method `name` of `cls` as a function of a default object: `trainsuite.check(job)` is `Training().check(job)`"""
-    def f(*a, **kw):
-        return getattr(cls(), name)(*a, **kw)
-    f.__name__, f.__doc__ = name, getattr(cls, name).__doc__
-    sig = inspect.signature(getattr(cls, name))
-    f.__signature__ = sig.replace(parameters=list(sig.parameters.values())[1:])        # help(trainsuite.queue_hold) shows the arguments, not (*a, **kw)
-    return f
+# ---- the command line: the same methods as commands (suitecli.py generates it from the signatures)
+LEGACY = ("status", "health", "curves", "speed", "queue", "stop", "resume", "watch", "early", "compose", "start", "selftest", "plot", "compare")      # older commands: their words keep their meaning
 
 
-for _n in Training.METHODS:
-    globals()[_n] = delegate(Training, _n)
+def _check_text(r):
+    print(f"{r['id']}" + (f" ({r['mode']})" if "mode" in r else "") + ": " + ("OK, nothing is started by a check" if r["ok"] else "PROBLEMS"))
+    for p in r["problems"]:
+        print(f"  problem: {p}")
+    for n in r.get("notes", []):
+        print(f"  note: {n}")
+    if "changes" in r:
+        print(f"  {len(r['changes'])} change(s) against the config:")
+        for x in r["changes"]:
+            print("    " + x)
+    for n in r.get("will_prepare", []):
+        print(f"  will build first: {n}")
+    print(f"  command: {r['command']}")
+
+
+def _run_text(r):
+    for s in r["started"]:
+        print(f"started {s['id']}, pid {s['pid']}, launcher log {s['log']}" + (" (finished within the wait)" if s.get("finished") else ""))
+    print(f"  command: {r['command']}")
+
+
+def _list_text(r):
+    print(f"{'#':>2}  {'id':<24}{'state':<12}{'step/total':<13}{'grad':>9}  {'skip':>4}  flags / notes")
+    for x in r["items"]:
+        g = x["grad"]
+        grad = "-" if not g else "non-finite" if g["now"] is None else "%.3g" % g["now"]
+        more = ", ".join(filter(None, [",".join(x["flags"]), ("after " + ",".join(x["after"])) if x["after"] else "", "held" if x["held"] else "", x["refused"], x["note"]]))
+        print(f"{x['number']:>2}  {x['id']:<24}{x['state']:<12}{'%d/%s' % (x['step'], x['total'] or '?'):<13}{grad:>9}  {x['skipped'] or '-':>4}  {more}")
+    if not r["items"]:
+        print("  the queue is empty")
+    print(f"running: {r['running'] or '-'}   runner: {('pid %s' % r['runner']) if r['runner'] else 'not running'}   {'PAUSED' if r['paused'] else ''}")
+    print("slots: " + "; ".join(f"{s['slot']}: {s['id'] or 'free'}" + (f" (loading {s['loading_s']} s)" if s.get("loading_s") is not None else "") for s in r["slots"]))
+    lk = r["lock"]
+    print("machine lock: " + (f"{lk['owner']} until {lk['end']} ({'exclusive' if lk.get('exclusive') is True else 'reservation'})" if lk else "free"))
+    ram, gpu = r["ram"], r["gpu"]
+    print(f"RAM: {ram['available_mb']} MB available (gate {ram['need_mb']} MB)   GPU memory: {gpu['used_mb']} MB in use (gate {gpu['gate_mb']})")
+    if r["holds"]:
+        print("on hold (the person's words clear a hold): " + ", ".join(h["id"] for h in r["holds"]))
+
+
+_TEXT = {"check": _check_text, "run": _run_text, "queue_list": _list_text,
+        "queue_remove": lambda r: print(f"removed {r['removed']} from the queue"), "queue_start": lambda r: print(f"the runner runs (pid {r['runner']})")}
+
+
+CLI = suitecli.Cli(Training, "trainsuite", TrainingError, "TRAINSUITE_TRACEBACK", legacy=LEGACY, positional=("job", "i", "a", "b"), option_names=("words",), need_all=("queue_hold", "queue_resume"),
+                   text=_TEXT)
