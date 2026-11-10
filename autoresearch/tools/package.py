@@ -5,6 +5,7 @@
     python autoresearch/tools/package.py clean [--apply] [--min-age-days 2] [--runs a,b]
                                                                             derived data of runs outside the best three: dry run lists and sizes it, --apply deletes
     python autoresearch/tools/package.py gt [--apply]                      GT stores of versions older than the latest: dry run, --apply deletes
+    python autoresearch/tools/package.py gt --drop SIG[,SIG] --decision D<n> [--apply]    delete ONLY these DRAFT lane stores (in no lane_versions.csv row, no tag: the plan keeps them) that a decided D<n> names
     python autoresearch/tools/package.py --selftest
 
 A project whose project.json has "package": {"split_record": "<command>"} (the placeholders {run_dir} and {out_dir} are paths relative to the problem folder, which is also the
@@ -520,15 +521,19 @@ LANE_GAP = ("WARNING: lane stores cannot be protected by run records: no trainer
             "store is safe only as the latest version of its rig; a job that reads an older one (a running lane training, a best-three network) is not seen. Check the jobs first")
 
 
+DRAFT_VERDICT = "delete: a draft"                      # the verdict of a lane store that `gt --drop` may delete (the only one it may)
+
+
 def lane_notes(plan):
     """the warnings that belong to a lane plan: LANE_GAP whenever it would delete a store"""
     return [LANE_GAP] if any(text.startswith("delete") for _, text in plan) else []
 
 
-def lane_plan(root=None, problems=None):
+def lane_plan(root=None, problems=None, drop=()):
     """-> (latest lane row or None, [(signature, verdict text)]) for data/autogt/lane/: the latest lane version stays, for each rig (lane_center = Spurmitte, bev_fusion = BEV Fusion;
     a row without `rig` is lane_center), and when its code makes the GT of an older version (`same_gt_as`) that version's store is the one that stays; so does a store that a
-    run which is not final names (`lane_signature` in its gt.json, in any problem folder: written by no trainer today, see LANE_GAP); an older one goes when its tag exists"""
+    run which is not final names (`lane_signature` in its gt.json, in any problem folder: written by no trainer today, see LANE_GAP); an older one goes when its tag exists. `drop`: the signatures of
+    DRAFT stores (in no row of the table) that the person named in a decided D<n> (`gt --drop`): those go too, unless they are the latest of a rig or needed by an unfinished run"""
     root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
     rows = lane_versions()
     if not rows:
@@ -557,10 +562,12 @@ def lane_plan(root=None, problems=None):
             plan.append((sig, f"keep: the latest lane version ({last['version']}, {rig(last)})" + (f", its code makes the GT of {shared['version']}, the version of this store" if shared is not last else "")))
         elif sig in needed:
             plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(needed[sig][:4])}"))
-        elif row is None:
-            plan.append((sig, "keep: not in GtGenerator/lane_versions.csv, it cannot be regenerated from a tag"))
         elif os.path.islink(path) or not inside(path, root):
             plan.append((sig, "keep: a link, not a store folder of this data/autogt/lane"))
+        elif row is None and sig in drop:
+            plan.append((sig, DRAFT_VERDICT + " the person named (in no lane_versions.csv row, no tag: it cannot be regenerated)"))
+        elif row is None:
+            plan.append((sig, "keep: not in GtGenerator/lane_versions.csv, it cannot be regenerated from a tag"))
         elif not tag_exists(row["tag"]):
             plan.append((sig, f"keep: the tag {row['tag']} does not exist here"))
         else:
@@ -568,14 +575,17 @@ def lane_plan(root=None, problems=None):
     return latest, plan
 
 
-def lane_clean(apply=False, root=None, problems=None, planned=None):
+def lane_clean(apply=False, root=None, problems=None, planned=None, drop=(), decision=None):
     """planned = the (latest, plan) a caller has already shown to the person: that plan is applied, not a new one"""
     root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
-    latest, plan = planned or lane_plan(root, problems)
+    latest, plan = planned or lane_plan(root, problems, drop)
     done = []
     for sig, text in plan:
         if text.startswith("delete") and apply:
-            log_line(f"lane GT store {sig} ({text.split(':')[1].split(',')[0].strip()}) is being deleted; regenerate from its tag autogt/lane-lN with `python -m autogt generate-lane`")
+            if text.startswith(DRAFT_VERDICT):
+                log_line(f"lane GT store {sig} (a draft: in no lane_versions.csv row, no tag; {len(os.listdir(os.path.join(root, sig)))} files) is being deleted at the word of the person ({decision or 'no decision given'}); it cannot be regenerated")
+            else:
+                log_line(f"lane GT store {sig} ({text.split(':')[1].split(',')[0].strip()}) is being deleted; regenerate from its tag autogt/lane-lN with `python -m autogt generate-lane` in a worktree of it (GtGenerator/ since 2026-11-10)")
             shutil.rmtree(os.path.join(root, sig))
             done.append(sig)
     return latest, plan, done
@@ -633,14 +643,52 @@ def gt_clean(apply=False, root=None, problems=None, planned=None):
     return latest, plan, done
 
 
-def gt_command(apply, out=print, gt_root=None, lane_root=None, problems=None):
+def decision_text(decision):
+    """the text of the file D<n>.md of a DECIDED decision (guard_hook.decided: its file has a 'Decided:' line), looked up in every problem folder; None when `decision` is not decided anywhere"""
+    import guard_hook as GH
+    for root in problem_roots():
+        try:
+            with open(os.path.join(root, "project.json"), encoding="utf-8") as f:
+                cfg = json.load(f)
+            if decision and decision in GH.decided(root, cfg):
+                p = os.path.join(root, cfg.get("grant_decisions") or cfg.get("decisions", "experiment_execution/DECISIONS.md"), decision + ".md")
+                return open(p, encoding="utf-8").read() if os.path.isfile(p) else ""
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def drop_names(drop_arg, decision):
+    """the signatures of `--drop A,B` (a comma list): at least one, and the decision that names them; an empty --drop (or --decision without --drop) is an error, never a plain `gt --apply`"""
+    names = tuple(x for x in (drop_arg or "").split(",") if x)
+    if (drop_arg is not None or decision) and not names:
+        raise SystemExit("gt --drop needs the signatures of the draft stores (a comma list) and --decision D<n>; --decision alone or an empty --drop is refused")
+    return names
+
+
+def gt_command(apply, out=print, gt_root=None, lane_root=None, problems=None, drop=(), decision=None):
     """the `gt` command: the plan for the GT stores and for the lane stores with its warnings, printed through `out` BEFORE anything is deleted (review 2026-11-10: the lane warning came
-    after --apply), then THAT plan applied when `apply`; -> the signatures that were deleted. The roots are for tests"""
+    after --apply), then THAT plan applied when `apply`; -> the signatures that were deleted. The roots are for tests. `drop` (with a `decision` that is decided AND names each of them):
+    DRAFT lane stores (in no row of lane_versions.csv, no tag) that the person named; with `drop`, `apply` deletes ONLY those, not the other planned deletions"""
+    drop = tuple(x for x in drop if x)
+    if drop:
+        text = decision_text(decision)
+        if text is None:
+            raise SystemExit(f"--drop needs --decision D<n> with a D<n> that is decided (its file has a 'Decided:' line); {decision or 'none'} is not")
+        unnamed = [s for s in drop if not re.search(r"(?<![0-9A-Za-z])" + re.escape(s) + r"(?![0-9A-Za-z])", text)]
+        if unnamed:
+            raise SystemExit(f"--drop: the decision {decision} does not name {', '.join(unnamed)}: the person names the store in the decision")
     latest, plan, _ = gt_clean(False, gt_root, problems)
     out(f"latest GT version: {latest['version']} ({latest['signature']})")
     for sig, text in plan:
         out(f"  {sig:14} {text}")
-    lane_latest, lane_p, _ = lane_clean(False, lane_root, problems)
+    lane_latest, lane_p, _ = lane_clean(False, lane_root, problems, drop=drop, decision=decision)
+    unknown = [s for s in drop if s not in {x for x, _ in lane_p}]
+    if unknown:
+        raise SystemExit(f"--drop: no lane store {', '.join(unknown)} in data/autogt/lane")
+    kept = [s for s in drop if not dict(lane_p)[s].startswith(DRAFT_VERDICT)]
+    if kept:
+        raise SystemExit("--drop: the plan keeps " + ", ".join(f"{s} ({dict(lane_p)[s]})" for s in kept) + ": only a draft (no lane_versions.csv row) that is not the latest of a rig, not a link and not needed by an unfinished run can be dropped")
     if lane_latest:
         out(f"latest lane GT version: {lane_latest['version']} ({lane_latest['signature']})")
         for sig, text in lane_p:
@@ -648,7 +696,11 @@ def gt_command(apply, out=print, gt_root=None, lane_root=None, problems=None):
         for note in lane_notes(lane_p):
             out(note)
     done, lane_done = [], []
-    if apply:
+    if drop:
+        out("with --drop only the named drafts are deleted; the other planned deletions need a plain `gt --apply`")
+    if apply and drop:                                   # naming drafts deletes THOSE and nothing else
+        lane_done = lane_clean(True, lane_root, problems, planned=(lane_latest, [(s, t) for s, t in lane_p if s in drop]), decision=decision)[2]
+    elif apply:
         done = gt_clean(True, gt_root, problems, planned=(latest, plan))[2]
         lane_done = lane_clean(True, lane_root, problems, planned=(lane_latest, lane_p))[2] if lane_latest else []
     out(("deleted: " + ", ".join(done + lane_done)) if apply else "dry run: nothing deleted (--apply)")
@@ -658,7 +710,7 @@ def gt_command(apply, out=print, gt_root=None, lane_root=None, problems=None):
 def selftest():
     tmp = tempfile.mkdtemp()
     old_env = os.environ.get("AR_PROJECT")
-    global tag_exists, versions, lane_versions, problem_roots
+    global tag_exists, versions, lane_versions, problem_roots, decision_text
     real_tag, real_versions, real_lane, real_problems = tag_exists, versions, lane_versions, problem_roots
     try:
         proj = os.path.join(tmp, "proj")
@@ -964,6 +1016,66 @@ def selftest():
         _, _, ldone = lane_clean(True, lroot)
         assert ldone == ["lold"] and not os.path.exists(os.path.join(lroot, "lold")) and os.path.isdir(os.path.join(lroot, "lneed")), ldone
         assert "lane GT store lold" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
+        # a DRAFT store that a decided D<n> names (`gt --drop`): the plan keeps it, with --drop it goes - and nothing else; never a store with a row, a rig's latest, a link or one an unfinished run needs
+        def drop_refused(**kw):
+            try:
+                gt_command(True, out=lambda l: None, gt_root=gt_empty, lane_root=lroot, **kw)
+            except SystemExit as e:
+                return str(e)
+            raise AssertionError("must be refused: " + str(kw))
+        gt_empty = os.path.join(tmp, "gt_empty")
+        os.makedirs(gt_empty)
+        for sig in ("ldraft", "lold"):
+            os.makedirs(os.path.join(lroot, sig))
+            json.dump({"signature": sig}, open(os.path.join(lroot, sig, "index.json"), "w"))
+        outside = os.path.join(tmp, "outside_store")
+        os.makedirs(outside)
+        open(os.path.join(outside, "keep.txt"), "w").write("x")
+        try:
+            os.symlink(outside, os.path.join(lroot, "llink"))
+        except (OSError, NotImplementedError):
+            outside = None
+        assert dict(lane_plan(lroot)[1])["ldraft"].startswith("keep: not in") and dict(lane_plan(lroot, drop=("ldraft",))[1])["ldraft"].startswith(DRAFT_VERDICT)
+        assert dict(lane_plan(lroot, drop=("lneed",))[1])["lneed"].startswith("keep: needed by"), "naming a store that an unfinished run needs changes nothing"
+        saved_text = decision_text
+        try:
+            decision_text = lambda d: "D78: the person drops the draft ldraft" if d == "D78" else None          # noqa: E731
+            assert "decided" in drop_refused(drop=("ldraft",), decision="D79") and "decided" in drop_refused(drop=("ldraft",), decision=None), "an undecided or missing decision"
+            decision_text = lambda d: "D78: nothing is named here" if d == "D78" else None                      # noqa: E731
+            assert "does not name ldraft" in drop_refused(drop=("ldraft",), decision="D78"), "a decided D<n> that does not name the store authorises nothing"
+            decision_text = lambda d: "D78: the person drops ldraft, lold, lneed, llink, nosuch and lbf" if d == "D78" else None      # noqa: E731
+            assert "no lane store nosuch" in drop_refused(drop=("nosuch",), decision="D78")
+            assert "the plan keeps lneed" in drop_refused(drop=("lneed",), decision="D78")
+            assert "the plan keeps lold" in drop_refused(drop=("lold",), decision="D78"), "a store with a row and a tag is a version, not a draft"
+            tags.discard("tg/ok")
+            assert "the plan keeps lold" in drop_refused(drop=("lold",), decision="D78"), "a store with a row but no tag is not a draft either"
+            tags.add("tg/ok")
+            if outside:
+                msg_link = drop_refused(drop=("llink",), decision="D78")
+                assert ("the plan keeps llink" in msg_link or "no lane store llink" in msg_link) and os.path.isfile(os.path.join(outside, "keep.txt")), "a link is never deleted: " + msg_link
+            saved_rows = lane_versions
+            lane_versions = lambda: [r for r in saved_rows() if r["signature"] != "lneed"]                       # noqa: E731 - the store of an unfinished run, without a row: a draft, still needed
+            assert "the plan keeps lneed" in drop_refused(drop=("lneed",), decision="D78"), "a draft that an unfinished run names stays"
+            lane_versions = saved_rows
+            assert os.path.isdir(os.path.join(lroot, "ldraft")) and os.path.isdir(os.path.join(lroot, "lneed")) and os.path.isdir(os.path.join(lroot, "lold")), "a refused --drop deletes nothing"
+            assert gt_command(False, out=lambda l: None, gt_root=gt_empty, lane_root=lroot, drop=("ldraft",), decision="D78") == [] and os.path.isdir(os.path.join(lroot, "ldraft")), "a dry run deletes nothing"
+            gone_draft = gt_command(True, out=lambda l: None, gt_root=gt_empty, lane_root=lroot, drop=("ldraft", "ldraft"), decision="D78")
+            assert gone_draft == ["ldraft"] and not os.path.exists(os.path.join(lroot, "ldraft")) and os.path.isdir(os.path.join(lroot, "lneed")), gone_draft
+            assert os.path.isdir(os.path.join(lroot, "lold")), "--drop deletes only what it names, not the other planned deletions"
+            log = open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read()
+            assert "lane GT store ldraft (a draft" in log and "(D78)" in log, "logged with the decision"
+        finally:
+            decision_text = saved_text
+        for bad in (("", None), ("", "D78"), (None, "D78"), (",", "D78")):
+            try:
+                drop_names(*bad)
+                raise AssertionError(f"drop_names{bad} must be refused: an empty --drop would become a plain `gt --apply`")
+            except SystemExit:
+                pass
+        assert drop_names(None, None) == () and drop_names("a,b,,a", "D78") == ("a", "b", "a")
+        shutil.rmtree(os.path.join(lroot, "lold"))
+        if os.path.islink(os.path.join(lroot, "llink")):
+            os.remove(os.path.join(lroot, "llink"))
         # the `gt` command prints the plan and the lane warning while the store is still there, then applies that plan
         os.makedirs(os.path.join(lroot, "lold"))
         json.dump({"signature": "lold"}, open(os.path.join(lroot, "lold", "index.json"), "w"))
@@ -1066,6 +1178,8 @@ def main():
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--min-age-days", type=float, default=2.0)
     ap.add_argument("--runs", help="comma list of run ids (clean)")
+    ap.add_argument("--drop", help="gt: comma list of DRAFT lane store signatures (in no lane_versions.csv row) to delete - and nothing else; needs --decision")
+    ap.add_argument("--decision", help="gt --drop: the decided D<n> whose file names the draft stores")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -1083,9 +1197,9 @@ def main():
         print(f"{'deleted' if a.apply else 'would delete'}: {human(sum(b for _, v, b in res if v in ('delete', 'deleted')))} in {sum(1 for _, v, _ in res if v in ('delete', 'deleted'))} run(s); {sum(1 for _, v, _ in res if v.startswith('skip'))} skipped")
         print("a rebuild needs the code tag: check_git.py lists the tags that are not on origin yet")
     elif a.cmd == "gt":
-        gt_command(a.apply)
+        gt_command(a.apply, drop=drop_names(a.drop, a.decision), decision=a.decision)
     else:
-        ap.error("package <run id> | show <run id> | clean [--apply] | gt [--apply] | --selftest")
+        ap.error("package <run id> | show <run id> | clean [--apply] | gt [--apply] [--drop SIG --decision D<n>] | --selftest")
 
 
 if __name__ == "__main__":
