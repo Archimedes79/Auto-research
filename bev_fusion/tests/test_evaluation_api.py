@@ -98,6 +98,15 @@ def quick():
         raise AssertionError("an unknown run was resolved")
     except FileNotFoundError as e:
         assert "no run folder" in str(e)
+    with tempfile.TemporaryDirectory() as tmp:                                                                # a run id with a dot is the folder with an underscore (run.py and jobrunner fold it)
+        os.makedirs(os.path.join(tmp, "runs", "chain2_t20"))
+        open(os.path.join(tmp, "runs", "chain2_t20", "config.json"), "w").write("{}")
+        old_root, bev_eval.ROOT = bev_eval.ROOT, tmp
+        try:
+            for n in ("chain2_t20", "chain2.t20", "runs/chain2_t20"):
+                assert bev_eval.resolve(n) == os.path.join("runs", "chain2_t20"), n
+        finally:
+            bev_eval.ROOT = old_root
     for bad in ("test", "small.test", "large.test"):                                                          # TEST is refused before anything is built
         try:
             bev_eval.source("runs/none", bad)

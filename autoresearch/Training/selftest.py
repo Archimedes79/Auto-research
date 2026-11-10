@@ -951,7 +951,9 @@ def main():
         ok("watch keeps a run that failed while watched for the launcher's retry")
         out = status_of(tmp, "retry")[1]                                          # the events `watch` wrote are shown by the detail of one run
         assert "last events of `watch`" in out and "failed at step" in out, out
-        ok("status of one run shows the last events written by watch")
+        os.replace(os.path.join(d, "training_events.jsonl"), os.path.join(d, "trainsuite_events.jsonl"))       # a run watched before the rename of 2026-11-11
+        assert "failed at step" in status_of(tmp, "retry")[1], "the events of an old run are read under their old name"
+        ok("status of one run shows the last events written by watch (also from the old trainsuite_events.jsonl)")
 
         # 10c a restart from an earlier checkpoint: the watch looked at step 5000 last, the resumed run is at step 4560 and its first rows (a spike at 4520) are new
         d = make(tmp, "stepback", rows(250, every=20, mean=10.0, t0=now - 9000))

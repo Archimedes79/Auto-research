@@ -284,7 +284,7 @@ def cmd_queue_add(a):
     from . import compose as C
     TQ, c = _queue(a)
     if a.id is None:
-        raise TQ.QueueError('--id is required; a job file is put in the queue with `queue-add JOB.json` (api.py)')
+        raise TQ.QueueError('--id is required; a job file is started with `python -m Training run JOB.json` (api.py; run.py waits for its `after` and the GPU)')
     if not c.block:
         raise TQ.QueueError('project.json has no "training" block')
     try:
@@ -363,11 +363,11 @@ def cmd_compose(a):
 
 
 def main(argv=None):
-    from . import api                                            # every method of the class Training is a command: `queue-add job.json`, `methods` lists them
+    from . import api                                            # every method of the class Training is a command: `run job.json`, `methods` lists them
     rc = api.CLI.dispatch(sys.argv[1:] if argv is None else list(argv))
     if rc is not None:
         return rc
-    ap = argparse.ArgumentParser(prog="Training", description=__doc__, epilog="The commands of the interface (check, run, queue-add, queue-list, ...): `python -m Training methods`. "
+    ap = argparse.ArgumentParser(prog="Training", description=__doc__, epilog="The commands of the interface (check, run, status, stop, resume, ...): `python -m Training methods`. "
                                  "They take --project and --json after the command; --root and --loss belong to the older commands above.")
     ap.add_argument("--root", default="runs", help="folder of the run directories (default: ./runs; from autoresearch/ use ../<problem>/runs)")
     ap.add_argument("--loss", default="total", help="key of the optimised loss in the metrics stream (default: total)")
@@ -391,7 +391,7 @@ def main(argv=None):
         s.add_argument("--project", default=argparse.SUPPRESS, help="project folder (default: AR_PROJECT)")
         s.set_defaults(fn=fn)
         return s
-    s = qsub("add", cmd_queue_add, help="put a config with --id and options (like `compose`) in the queue; the runner starts it when its turn comes (a job file: `queue-add JOB.json`)")
+    s = qsub("add", cmd_queue_add, help="put a config with --id and options (like `compose`) in the queue; the runner starts it when its turn comes (a job file: `python -m Training run JOB.json`)")
     s.add_argument("base", help="the network config")
     s.add_argument("--id", default=None, help="run id (required; the run folder is the id with . as _)")
     s.add_argument("--preset", action="append", default=[])

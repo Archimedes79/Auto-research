@@ -61,14 +61,23 @@ def git(proj, *args):
     return subprocess.run(["git", "-C", proj, *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
+FROM_COMMIT = '''# toy launcher: trains the code of AR_COMMIT (as tools/run_ar.sh does), the working tree when run.py made no snapshot
+[ -n "$AR_COMMIT" ] || exec python3 code/trainer.py "$1"
+d="composed/src_${AR_RUN_ID:-x}"
+mkdir -p "$d" && git archive "$AR_COMMIT" code | tar -x -C "$d" || exit 1
+exec python3 "$d/code/trainer.py" "$1"
+'''
+
+
 def make_project(tmp):
     proj = os.path.join(tmp, "qproj")
     os.makedirs(os.path.join(proj, "code"))
     os.makedirs(os.path.join(proj, "records", "runs"))
     open(os.path.join(proj, "code", "trainer.py"), "w").write(TRAINER)
+    open(os.path.join(proj, "code", "from_commit.sh"), "w").write(FROM_COMMIT)
     json.dump({"steps": 20, "name": "x", "sleep": 0.05, "fail": False}, open(os.path.join(proj, "base.json"), "w"))
-    json.dump({"tag_prefix": "q", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "code_dirs": ["code"], "scratch": "",
-               "training": {"out": "composed", "train": "python3 code/trainer.py {config}", "runs": "runs"}}, open(os.path.join(proj, "project.json"), "w"))
+    json.dump({"tag_prefix": "q", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "code_dirs": ["code"], "scratch": "", "runs_from_commit": True,
+               "training": {"out": "composed", "train": "bash code/from_commit.sh {config}", "runs": "runs"}}, open(os.path.join(proj, "project.json"), "w"))
     open(os.path.join(proj, ".gitignore"), "w").write("runs/\ncomposed/\nrecords/\n")
     git(proj, "init", "-q")
     git(proj, "config", "user.name", "t")
@@ -207,6 +216,17 @@ def queue_checks(tmp, ok):
         s3 = starts(proj, "h3")
         assert len(s3) == 2 and s3[1]["from"] > 0 and s3[1]["commit"] and s3[1]["commit"] != first3, s3
         ok("resume --fresh-code continues from the checkpoint on a new snapshot of the code (the hot-fix loop); hold of a name that is not there is refused")
+
+        # 3b Training.resume of a held queue item clears the item's `held` too: the runner does not stop the resumed run again
+        from .api import Training
+        add(proj, "hq", 150)
+        until(lambda: logged(proj, "hq") >= 8, 60, what="hq under way")
+        assert cli(proj, "hold", "hq", "--words", "w", "--wait", "40")[0] == 0 and item("hq").get("held")
+        r = Training(proj).resume("hq", "Mirko: selftest, go on")
+        assert not item("hq").get("held") and "starts again from its last checkpoint" in r["queue"] and "--pin" in r["command"], (r, item("hq"))
+        until(lambda: is_done(proj, "hq"), 90, what="hq done after Training.resume")
+        assert len(starts(proj, "hq")) == 2, starts(proj, "hq")
+        ok("Training.resume of a held queue item clears the item's hold as `queue resume` does: the runner starts it and does not stop it again")
 
         # 4 a launcher that was killed: its trainer still runs in a session of its own (an orphan: never started a second time); when the trainer is gone too (WSL shutdown)
         # the runner restarts the run from its checkpoint

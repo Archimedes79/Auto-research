@@ -79,7 +79,7 @@ class Toy:
 
     def fire_job(self, job):
         """like Training.run: takes a job dict that has its own `after`, and starts a run of its own."""
-        return self.fire(job["id"])
+        return dict(self.fire(job["id"]), after=job.get("after"))
 
     def picky(self, n):
         """fails for a negative n (a job that is corrected and submitted again)."""
@@ -534,6 +534,25 @@ def test_submit(T):
         ok(sl._state("sl1")[0] == "queued" and c["ok"] and c["after"] == ["sl1"], (sl._state("sl1"), c))
         th.join()
         ok(sl._state("sl1")[0] == "done")
+        # a launch job gets the `after` that check worked out (here: it reads the live job fjs) in its own job's after; the stored arguments stay as submitted
+        os.makedirs(f"{T}/runs/x1", exist_ok=True)
+        busy = subprocess.Popen(["sleep", "30"])
+        try:
+            JobRunner(T, launcher=lambda *a: busy.pid).submit(job("fjs"))
+            sl.submit({"call": "Toy.fire_job", "args": {"job": {"id": "fja", "after": ["x1"]}}, "reads": ["run:fjs"]})
+            ok(json.load(open(f"{T}/runs/.jobs/fja/result.json"))["after"] == ["x1", "fjs"] and json.load(open(f"{T}/runs/.jobs/fja/args.json"))["job"]["after"] == ["x1"],
+               json.load(open(f"{T}/runs/.jobs/fja/result.json")))
+            ok(any("names no after_from" in p for p in sl.check({"call": "Toy.fire", "args": {"tag": "fjb"}, "reads": ["run:fjs"]})["problems"]), "a launch call that cannot pass a wait on is refused")
+        finally:
+            busy.kill()
+            busy.wait()
+        # a process job is started with the command of the catalogue of now, not the one stored at submit (a suite renamed since)
+        jr.submit(job("rn1"), start=False)
+        stored = json.load(open(f"{T}/runs/.jobs/rn1/job.json"))
+        stored["command"] = [x.replace("toysuite", "oldsuite") for x in stored["command"]]
+        json.dump(stored, open(f"{T}/runs/.jobs/rn1/job.json", "w"))
+        jr.start("rn1")
+        ok(calls[-1][0][calls[-1][0].index("--suite") + 1] == "toysuite", calls[-1][0])
         # a launch job started again: the record of the attempt before is not the news
         now = time.strftime("%Y-%m-%dT%H:%M:%S")
         os.makedirs(f"{T}/runs/.jobs/lc1", exist_ok=True)

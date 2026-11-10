@@ -23,7 +23,9 @@ What it does (paths from the problem's project.json, see project.py):
                 on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
                 user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger.
                 --pin REF runs on the code of that commit or tag instead (a resume that continues on the code of attempt 1: `Training queue resume`): no new
-                commit or tag, no drift check, a note in the record. Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
+                commit or tag, no drift check, a note in the record. Only a command that builds its code from AR_COMMIT (project.json "runs_from_commit": true)
+                runs that commit; without the key the command runs the working tree, so a --pin run is refused (at the call and again right before the start)
+                when the working tree's code_hash differs from attempt 1's. Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
                 fixed by the metric card, which names the registry entry and the commit). Guaranteed: the commit names the code at LAUNCH. That the
                 command ran it is the command's job (it runs `git archive $AR_COMMIT`); every other command runs from the working tree. So when the
                 run ends the code files on disk (.py / .sh of the code folders and of autoresearch/, fingerprint_extra) are looked at again: a
@@ -302,8 +304,9 @@ def git_snapshot(root, cfg, prefix, run_id, msg, cmd=()):
         return "git-error", "", repr(e)[:120]
 
 
-def pin_snapshot(root, ref, prev):
-    """(commit, tag, note) of a --pin run: the commit that `ref` names (the tag of attempt 1, or any commit), nothing new is committed or tagged; the tag stays attempt 1's"""
+def pin_snapshot(root, ref, prev, from_commit):
+    """(commit, tag, note) of a --pin run: the commit that `ref` names (the tag of attempt 1, or any commit), nothing new is committed or tagged; the tag stays attempt 1's.
+    from_commit: the command builds its code from AR_COMMIT (project.json runs_from_commit); else it runs the working tree, which pin_refusal found equal to attempt 1's code"""
     try:
         r = git(root, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}")
     except Exception as e:
@@ -311,7 +314,29 @@ def pin_snapshot(root, ref, prev):
     commit = r.stdout.strip()
     if r.returncode != 0 or not commit:
         return "git-error", "", f"--pin {ref}: not a commit of this repository"
-    return commit[:10], prev.get("tag", ""), f"pinned: this attempt ran the code of {ref} ({commit[:10]}), not a snapshot of the working tree"
+    if from_commit:
+        return commit[:10], prev.get("tag", ""), f"pinned: this attempt ran the code of {ref} ({commit[:10]}), not a snapshot of the working tree"
+    return commit[:10], prev.get("tag", ""), f"pinned on {ref} ({commit[:10]}): the command runs the working tree, which equals the code of attempt 1 (code_hash {prev.get('code_hash')})"
+
+
+def pin_refusal(root, cfg, prev, ch, ref):
+    """why a --pin run may not start: its command runs the working tree (no project.json runs_from_commit), so the pin holds only when the working tree IS attempt 1's
+    code: the pinned ref must be the commit of attempt 1's tag, and the code hash of now must equal attempt 1's (code_hash_first; older records: the last code_hash,
+    which a resume on fresh code may have changed: then the check refuses rather than trusts); '' = it may start"""
+    if cfg.get("runs_from_commit"):
+        return ""
+    def rev(r):
+        p = subprocess.run(["git", "-C", root, "rev-parse", "--verify", "-q", f"{r}^{{commit}}"], capture_output=True, text=True)
+        return p.stdout.strip() if p.returncode == 0 else ""
+    tag = prev.get("tag", "")
+    if not tag or not rev(ref) or rev(ref) != rev(f"refs/tags/{tag}"):
+        return (f"--pin {ref}: this problem's command runs the working tree, not AR_COMMIT (project.json has no runs_from_commit), and the working tree can only be "
+                f"checked against the commit of attempt 1 (tag {tag or 'none'}): pin that tag, or start without --pin")
+    first = prev.get("code_hash_first") or prev.get("code_hash")
+    if first == ch:
+        return ""
+    return (f"--pin: this problem's command runs the working tree, not AR_COMMIT (project.json has no runs_from_commit), and the code is not attempt 1's "
+            f"({first} -> {ch}): resume without --pin to run today's code, or restore the code of attempt 1 first")
 
 
 def drift_hash(root, cfg):
@@ -963,7 +988,8 @@ def main():
     ap.add_argument("--result", default="", help="json file the command writes its metrics to; embedded in the ledger when it exists")
     ap.add_argument("--no-git", action="store_true", help="do not snapshot and tag the code")
     ap.add_argument("--pin", metavar="REF", help="run on the code of this commit or tag (a resume that must continue on the code of attempt 1) instead of a snapshot of the working tree: "
-                    "AR_COMMIT is that commit, no new commit or tag, no drift check; the record says so")
+                    "AR_COMMIT is that commit, no new commit or tag, no drift check; the record says so. Only a command that builds its code from AR_COMMIT "
+                    "(project.json runs_from_commit: true) runs it; any other command runs the working tree, so the run is refused when that differs from attempt 1's code")
     ap.add_argument("--no-drift-check", action="store_true", help="do not look at the end of the run whether the code on disk changed since the snapshot")
     ap.add_argument("--cwd", default=root, help="working directory of the command (default: problem folder)")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
@@ -1050,6 +1076,10 @@ def main():
             notes.append(f"attempt after {st}")
         if a.pin and not prev.get("tag"):
             print(f"[{a.id}] refused: --pin continues an earlier attempt of this id (the tag of attempt 1); this id has none: start it without --pin")
+            return 2
+        why = pin_refusal(root, cfg, prev, code_hash(root, cfg), a.pin) if a.pin else ""
+        if why:
+            print(f"[{a.id}] refused: {why}")
             return 2
         if os.path.exists(os.path.join(d, "done")):
             os.remove(os.path.join(d, "done"))
@@ -1152,13 +1182,20 @@ def main():
         ch = code_hash(root, cfg)
         if prev.get("code_hash") and prev["code_hash"] != ch and not a.pin:
             notes.append(f"code changed since attempt 1 ({prev['code_hash']} -> {ch})")
+        why = pin_refusal(root, cfg, prev, ch, a.pin) if a.pin else ""
+        if why:                              # the code changed while the launcher waited (--after, GPU queue): looked at again right before the start
+            rec.update(status="failed", ended=now(), notes=f"the command was not started: {why}"[:300])
+            save_rec(os.path.join(d, "run.json"), rec)
+            ledger_safe(ledger, dict(rec, exit=2, duration_s=0), clear)
+            print(f"[{a.id}] refused: {why}")
+            return 2
         try:
             before = drift_hash(root, cfg)  # before the snapshot: a change while the snapshot is made counts, the precise check at the end tells
         except OSError:  # a scratch file that vanished during the walk must not stop the launch: no hash, no drift check
             before = None
         for tries in range(1, SNAPSHOT_TRIES + 1):
             if a.pin:
-                commit, tag, gnote = pin_snapshot(root, a.pin, prev)
+                commit, tag, gnote = pin_snapshot(root, a.pin, prev, cfg.get("runs_from_commit"))
             else:
                 commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd), cmd)
             if commit != "git-error" or tries == SNAPSHOT_TRIES:
@@ -1194,6 +1231,7 @@ def main():
                 save_rec(os.path.join(d, "run.json"), rec)
             except Exception as e:  # noqa: BLE001  the command runs already: a record that cannot be written must not make this a failed start
                 print(f"[{a.id}] warning: command pid not recorded ({e!r})", flush=True)
+        rec.update(code_hash_first=prev.get("code_hash_first") or (prev.get("code_hash") if prev.get("tag") else "") or ch)   # attempt 1's code, kept over every later attempt (the --pin check)
         rec.update(status="running", started=now(), code_hash=(prev.get("code_hash") or ch) if a.pin else ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
         save_rec(os.path.join(d, "run.json"), rec)
         t1 = time.time()

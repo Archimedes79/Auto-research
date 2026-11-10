@@ -472,7 +472,64 @@ def t_sources():
     assert rc == 0 and not os.path.exists(f"{topic}/table.md"), out
 
 
-SECTIONS = [t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources]
+def t_verdict_review():
+    """the six verdict bugs of the review of 2026-11-11, each with its known answer (decide_experiment directly, no --write)"""
+    fresh()
+
+    def card(q, split="val", f=0.9, **kw):
+        return dict(name=f"n{q}{split}", frames=100, metrics=dict(Q=q, F=f), schema=1, split=split, commit="c", date="d", **kw)
+
+    def verdict(cards, **changes):
+        json.dump(cards, open(f"{T}/cards.json", "w"))
+        exp = dict(json.loads(json.dumps(BASE)), **changes)
+        try:
+            d = DC.decide_experiment(exp, T)
+            return d["verdict"], d
+        except ValueError as e:
+            return "refused", str(e)
+    two = dict(a=["cards.json#a", "cards.json#b"], c=["cards.json#ca", "cards.json#cb"])
+    arms = dict(a=dict(cards=two["a"]), c=dict(cards=two["c"]))
+    # 1 a card that does not say its split is not taken for the experiment's split (VAL and TEST must not mix)
+    nosplit = dict(card(0.70), split=None)
+    v, why = verdict(dict(a=card(0.80, "test"), b=card(0.81, "test"), ca=nosplit, cb=nosplit), arms=arms, evaluate=dict(split="test"))
+    assert v == "refused" and "does not say" in why, (v, why)
+    # 2 a clause band on the headline widens the noise band, never narrows it: +0.006 inside the experiment's 0.010 is a TIE
+    v, d = verdict(dict(a=card(0.706), b=card(0.7062), ca=card(0.700), cb=card(0.7002)), arms=arms, rule=[dict(metric="Q", min_effect=0.005, band=0.004)])
+    assert v == "TIE", (v, d)
+    # 3 subset-only cards of ONE training seed and only a guard on the headline: the subsets are not seeds
+    sub = dict(a=dict(cards={"day": "cards.json#a", "night": "cards.json#b"}), c=dict(cards={"day": "cards.json#ca", "night": "cards.json#cb"}))
+    v, d = verdict(dict(a=card(0.80), b=card(0.78), ca=card(0.70), cb=card(0.71)), arms=sub, rule=[dict(metric="Q", max_loss=0.01)], pairing=None)
+    assert v == "INCONCLUSIVE" and "one seed" in d["why"], (v, d)
+    # 4 a headline clause against ANOTHER arm is no evidence over the control: the variant 0.03 below the control is a CUT, never a KEEP
+    arms_r = dict(arms, r=dict(cards=["cards.json#r0", "cards.json#r1"]))
+    v, d = verdict(dict(a=card(0.70), b=card(0.701), ca=card(0.73), cb=card(0.731), r0=card(0.60), r1=card(0.601)), arms=arms_r, rule=[dict(metric="Q", min_effect=0.01, vs="r")])
+    assert v == "CUT", (v, d)
+    # 5 a clause missed in the better direction on disagreeing seeds is INCONCLUSIVE (CUT needs agreeing seeds); on agreeing seeds it stays CUT
+    v, d = verdict(dict(a=card(0.75, f=0.95), b=card(0.76, f=0.88), ca=card(0.70), cb=card(0.71)), arms=arms, rule=[dict(metric="Q", min_effect=0.01), dict(metric="F", min_effect=0.02)])
+    assert v == "INCONCLUSIVE", (v, d)
+    v, d = verdict(dict(a=card(0.75, f=0.915), b=card(0.76, f=0.914), ca=card(0.70), cb=card(0.71)), arms=arms, rule=[dict(metric="Q", min_effect=0.01), dict(metric="F", min_effect=0.02)])
+    assert v == "CUT", (v, d)
+    one = dict(a=dict(cards=["cards.json#a"]), c=dict(cards=["cards.json#ca"]))
+    v, d = verdict(dict(a=card(0.72), ca=card(0.70)), arms=one, rule=[dict(metric="Q", min_effect=0.03)])
+    assert v == "INCONCLUSIVE" and "weak evidence" in d["why"], (v, d)
+    # 6 the prediction error of a lower-is-better metric is measured raw (variant - control): predicted -5, measured -6 -> error -1
+    v, d = verdict(dict(a=dict(card(0.7), metrics=dict(ms=4.0)), b=dict(card(0.7), metrics=dict(ms=4.0)), ca=dict(card(0.7), metrics=dict(ms=10.0)), cb=dict(card(0.7), metrics=dict(ms=10.0))),
+                   arms=arms, metric="ms", direction="lower", band=0.5, rule=[dict(metric="ms", min_effect=1.0)], prediction=dict(value=-5.0, vs="c"))
+    assert "measured -6.0000 (error -1.0000)" in d["prediction"], (v, d)
+    # critic pass of the fixes: a widened headline band also decides the TIE; a missed clause INSIDE its band stays CUT (weak evidence matters only beyond the band);
+    # a headline clause by subsets on one seed each is INCONCLUSIVE; without evaluate.split the cards must agree with each other
+    v, d = verdict(dict(a=card(0.715), b=card(0.7152), ca=card(0.700), cb=card(0.7002)), arms=arms, rule=[dict(metric="Q", min_effect=0.01, band=0.02)])
+    assert v == "TIE", (v, d)
+    v, d = verdict(dict(a=card(0.75, f=0.902), b=card(0.76, f=0.899), ca=card(0.70), cb=card(0.71)), arms=arms, rule=[dict(metric="Q", min_effect=0.01), dict(metric="F", min_effect=0.02)])
+    assert v == "CUT", (v, d)
+    v, d = verdict(dict(a=card(0.75), b=card(0.715), ca=card(0.70), cb=card(0.70)), arms=sub, rule=[dict(metric="Q", min_effect=0.02)], pairing=None)
+    assert v == "INCONCLUSIVE" and "weak evidence" in d["why"], (v, d)
+    v, d = verdict(dict(a=card(0.80, "test"), b=card(0.81, "test"), ca=card(0.70), cb=card(0.71)), arms=arms, evaluate={})
+    assert v == "refused" and "differ in split" in d, (v, d)
+    fresh()
+
+
+SECTIONS = [t_verdict_review, t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources]
 
 
 def main():

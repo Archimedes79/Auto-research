@@ -9,7 +9,7 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
     ran or a duplicate is refused); else the experiment-level `seeds` list declares one common order of the lists (= position); else two or more
     seeds are refused. The decision records how (pairing: seed | position | single | unpaired). The typed interface pairs by position. Values
     must be finite numbers
-  * the cards of the arms the rule uses must be measurements of the same thing (`incompatible`: split = evaluate.split, subset, denominator,
+  * the cards of the arms the rule uses must be measurements of the same thing (`incompatible`: split = evaluate.split (a card that does not say its split is refused), subset, denominator,
     protocol, a field missing on one card counts as different; evaluate.allow lists a known difference), else nothing is decided. Cards with a
     `provenance` block (tools/provenance.py) are compared in GT version, GT signature, evaluator code hash, frame hash and raw-data manifest hash, and a card whose evaluator
     differs from its commit is not used (`provenance_check`; allow "provenance"); a value a card does not know is named in the verdict as 'cannot tell'
@@ -19,15 +19,18 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
     (compare block of the card, when the card was made with evaluate.py --compare <control>) contains 0 -> INCONCLUSIVE: add a seed, do not adopt
   * beyond the band in the better direction with agreeing seeds (and interval) -> KEEP, if every clause of the rule holds:
       min_effect clause: variant - vs >= min_effect (with agreeing seeds); max_loss clause (a guard): variant - vs >= -max_loss;
-      a clause with subsets passes when at_least (default: all) of its subsets pass. A violated guard -> CUT; a missed min_effect -> CUT ("rule not met")
+      a clause with subsets passes when at_least (default: all) of its subsets pass. A violated guard -> CUT; a missed min_effect -> CUT ("rule not met"), but
+      INCONCLUSIVE when it is missed in the better direction on one seed or on seeds that disagree. The headline clause is the min_effect clause on the headline
+      metric AGAINST THE CONTROL; a clause against another arm is an extra condition, never the evidence for a KEEP over the control
   * deterministic: true (the arms share the checkpoint, e.g. a post-processing change): no training seed exists, so a single pair with an
     interval that excludes 0 counts as agreeing seeds
-  * bands: the experiment's band for its headline metric, a clause's own band, else 0.010; lower-is-better: the experiment's direction for its
+  * bands: the experiment's band for its headline metric (a clause's own band may widen it there, never narrow it), a clause's own band for another metric, else 0.010; lower-is-better: the experiment's direction for its
     headline metric, else the cards' own "better" map (the evaluator declares every metric it writes; cards that disagree are refused), else
     for older cards the generic cost names (LOWER) plus the problem's project.json "lower_is_better" list (a path-like card key such as
     'det/dt+0.00/vehicle/all/ate' is matched by its last part)
   * the headline is judged for its evidence (one seed, a disagreeing seed, an interval containing 0) also when its clause is a guard (max_loss)
-    or it has no min_effect clause: a better headline on one seed is INCONCLUSIVE, not KEEP
+    or it has no min_effect clause: a better headline on one seed is INCONCLUSIVE, not KEEP (with subset-only cards the seeds are counted within each subset)
+  * the prediction error is measured in the raw direction of the card (variant - control), also for a lower-is-better metric
   * the gate (hard rule 4: the rule is written before the run): every run id the variant and the control arm list needs a ledger row with status ok, and a run whose
     record carries the `card_sha` that run.py stored at launch must still match experiment.rule_sha(card); else nothing is decided ("the rule changed after run X was
     launched"). No run with a card_sha: decided, labelled "rule not registered at launch". --by-hand "reason" bypasses the gate and labels the verdict "by hand: reason"
@@ -259,8 +262,10 @@ def incompatible(exp, cards):
             for _, card, ref in lst:
                 if not card:
                     continue
-                if card.get("split") is not None and "split" not in allow and card["split"] != ev.get("split"):
-                    out.append(f"{ref}: split {card['split']!r}, the experiment evaluates {ev.get('split')!r}")
+                if "split" not in allow and ev.get("split") is not None and card.get("split") != ev.get("split"):   # a card that does not say its split is not known to be on it
+                    out.append(f"{ref}: split {card.get('split')!r}" + (" (the card does not say)" if card.get("split") is None else "") + f", the experiment evaluates {ev.get('split')!r}")
+                elif "split" not in allow and ev.get("split") is None:   # no split named by the experiment: the cards must at least agree with each other
+                    seen.setdefault((s, "split"), {}).setdefault(json.dumps(card.get("split")), []).append(str(ref))
                 if s == "" and "subset" in card and "subset" not in allow and (card["subset"] or "") != ev.get("subset", ""):
                     out.append(f"{ref}: subset {card['subset']!r}, the experiment evaluates {ev.get('subset', '')!r}")
                 for field, value in (("denominator", card.get("frames", card.get("n"))), ("protocol", card.get("protocol"))):
@@ -344,7 +349,7 @@ def judge_clause(clause, exp, cards, root=None):
     metric = clause["metric"]
     vs = clause.get("vs", exp["control"])
     variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
-    band = clause.get("band", exp["band"] if metric == exp["metric"] else DEFAULT_BAND)
+    band = max(clause.get("band", 0), exp["band"]) if metric == exp["metric"] else clause.get("band", DEFAULT_BAND)   # on the headline a clause may widen the noise band, never narrow it
     subsets = clause.get("subsets") or ([""] if "" in cards[variant] else sorted(cards[variant]))  # a plain clause on subset-only arms: every subset
     parts = []
     for s in subsets:
@@ -356,9 +361,10 @@ def judge_clause(clause, exp, cards, root=None):
         if "min_effect" in clause:
             thr = max(clause["min_effect"], band) if metric == exp["metric"] else clause["min_effect"]  # inside the band it is a tie, whatever the clause says
             ok = effect >= thr and (metric != exp["metric"] or effect > band)   # |effect| <= band is a tie, also when the clause asks for no more than the band
-            if ok and len(diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
+            # the evidence flags are set whether the clause passes or not: a missed clause on one seed or on disagreeing seeds is INCONCLUSIVE, not CUT
+            if len(diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
                 flags.append("one seed")  # a deterministic change (no training seed) is judged by the paired scene-bootstrap interval instead
-            if ok and len(diffs) >= 2 and not all(d > 0 for d in diffs):
+            if len(diffs) >= 2 and not all(d > 0 for d in diffs) and not all(d < 0 for d in diffs):
                 flags.append("a seed disagrees")
             if ok and interval is not None and interval[0] <= 0:
                 flags.append(f"interval [{interval[0]:+.3f}, {interval[1]:+.3f}] contains 0")
@@ -366,7 +372,7 @@ def judge_clause(clause, exp, cards, root=None):
         else:
             ok = effect >= -clause["max_loss"]
             want = f">= {-clause['max_loss']:+.3f}"
-        parts.append(dict(subset=s, ok=ok, effect=effect, diffs=diffs, interval=interval, flags=flags, how=how, text=f"{metric}{' ' + s if s else ''} {variant}-{vs} {effect:+.4f} (want {want}{', band ' + str(band) if metric == exp['metric'] else ''})"))
+        parts.append(dict(subset=s, ok=ok, effect=effect, diffs=diffs, interval=interval, flags=flags, how=how, band=band, text=f"{metric}{' ' + s if s else ''} {variant}-{vs} {effect:+.4f} (want {want}{', band ' + str(band) if metric == exp['metric'] else ''})"))
     need = clause.get("at_least", len(parts))
     ok = sum(p["ok"] for p in parts) >= need
     flags = sorted({f for p in parts if p["ok"] for f in p["flags"]})
@@ -404,29 +410,42 @@ def decide_experiment(exp, root):
     hows = {how} | {p["how"] for c in clauses for p in c["parts"]}  # the pairing recorded is the weakest used anywhere: a clause against another arm may pair by order
     how = next((h for h in ("unpaired", "position", "seed", "subset") if h in hows), "single")
     guards = [c for c in clauses if c["kind"] == "max_loss" and not c["ok"]]
-    hc = next(c for c in clauses if c["metric"] == head_metric and c["kind"] == "min_effect") if any(c["metric"] == head_metric and c["kind"] == "min_effect" for c in clauses) else None
+    # the headline clause is the min_effect clause on the headline AGAINST THE CONTROL: a clause against another arm says nothing about variant vs control
+    hc = next((c for c in clauses if c["metric"] == head_metric and c["kind"] == "min_effect" and c["vs"] == exp["control"]), None)
     missed = [c for c in clauses if c["kind"] == "min_effect" and not c["ok"] and c is not hc]
     flags = sorted({f for c in clauses if c["ok"] for f in c["flags"]})
-    if hc is None and effect > band and cards[variant].get(""):  # no min_effect clause on the headline (e.g. only a guard): its evidence is judged here
-        # (review 2026-10-31, T1); only for whole-split cards: with subset-only cards the "seeds" of head() are subsets, which a guard's at_least judges
-        if len(diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
+    if hc is None and effect > band:  # no min_effect clause on the headline against the control (e.g. only a guard): its evidence is judged here (review 2026-10-31, T1)
+        if cards[variant].get("") or cards[exp["control"]].get(""):
+            seed_diffs = [diffs]
+        else:  # subset-only cards: the seeds are the cards WITHIN a subset, not the subsets (a day and a night card of one training seed are one seed)
+            seed_diffs = []
+            for s in sorted(cards[variant]):
+                vc, cc, _ = pair_arms(exp, variant, exp["control"], cards[variant][s], cards[exp["control"]][s], s)
+                seed_diffs.append(paired_effect(head_metric, vc, cc, is_lower(head_metric, exp, root))[1])
+        if min(len(d) for d in seed_diffs) < 2 and not (exp.get("deterministic") and interval is not None and interval[0] > 0):
             flags.append("one seed")
-        if len(diffs) >= 2 and not all(d > 0 for d in diffs):
+        if len(seed_diffs) == 1 and len(diffs) >= 2 and not all(x > 0 for x in diffs):
             flags.append("a seed disagrees")
+        elif len(seed_diffs) > 1 and any(len(d) >= 2 and any(x > 0 for x in d) and any(x <= 0 for x in d) for d in seed_diffs):
+            flags.append("a seed disagrees")   # subsets: the seeds of one subset point different ways (a subset that is worse on every seed is the guard's business)
         if interval is not None and interval[0] <= 0:
             flags.append(f"interval [{interval[0]:+.3f}, {interval[1]:+.3f}] contains 0")
         flags = sorted(set(flags))
     if guards:
         verdict, why = "CUT", "guard violated: " + "; ".join(c["text"] for c in guards)
     elif hc is not None and not hc["ok"]:
-        if len(hc["parts"]) > 1 and all(abs(p["effect"]) <= band for p in hc["parts"]):
-            verdict, why = "TIE", f"headline {head_metric}: every subset inside the band {band}: take the cheaper arm"
+        hb = hc["parts"][0]["band"]   # the headline clause's band: the experiment's, or wider when the clause says so
+        weak = [p for p in hc["parts"] if not p["ok"] and p["flags"] and p["effect"] > p["band"]]   # better than the band, short of the threshold, on weak evidence
+        if len(hc["parts"]) > 1 and all(abs(p["effect"]) <= hb for p in hc["parts"]):
+            verdict, why = "TIE", f"headline {head_metric}: every subset inside the band {hb}: take the cheaper arm"
         elif len(hc["parts"]) > 1:
-            verdict, why = "CUT", "rule not met: " + hc["text"]
-        elif abs(effect) <= band:
-            verdict, why = "TIE", f"headline {head_metric} {variant}-{exp['control']} {effect:+.4f} inside the band {band}: take the cheaper arm"
-        elif effect < -band:
-            verdict, why = "CUT", f"headline {head_metric} {variant}-{exp['control']} {effect:+.4f} beyond the band {band} in the worse direction"
+            verdict, why = ("INCONCLUSIVE", "rule not met on weak evidence: " + hc["text"] + ": add a seed, do not adopt") if weak else ("CUT", "rule not met: " + hc["text"])
+        elif abs(effect) <= hb:
+            verdict, why = "TIE", f"headline {head_metric} {variant}-{exp['control']} {effect:+.4f} inside the band {hb}: take the cheaper arm"
+        elif effect < -hb:
+            verdict, why = "CUT", f"headline {head_metric} {variant}-{exp['control']} {effect:+.4f} beyond the band {hb} in the worse direction"
+        elif weak:  # more seeds can still tell
+            verdict, why = "INCONCLUSIVE", "rule not met on weak evidence (" + ", ".join(hc["parts"][0]["flags"]) + "): " + hc["text"] + ": add a seed, do not adopt"
         else:
             verdict, why = "CUT", "rule not met: " + hc["text"]
     elif hc is None and abs(effect) <= band and not missed:
@@ -434,7 +453,7 @@ def decide_experiment(exp, root):
     elif hc is None and effect < -band:
         verdict, why = "CUT", f"headline {head_metric} {variant}-{exp['control']} {effect:+.4f} beyond the band {band} in the worse direction"
     elif missed:
-        pending = [c for c in missed if any(p["flags"] for p in c["parts"])]
+        pending = [c for c in missed if any(p["flags"] and not p["ok"] and p["effect"] > p["band"] for p in c["parts"])]   # beyond the band in the better direction, short of the threshold, on weak evidence
         verdict, why = ("INCONCLUSIVE" if pending else "CUT"), "rule not met: " + "; ".join(c["text"] for c in missed)
     elif flags:
         verdict, why = "INCONCLUSIVE", f"headline {head_metric} {effect:+.4f} beyond the band but " + ", ".join(flags) + ": add a seed, do not adopt"
@@ -445,7 +464,8 @@ def decide_experiment(exp, root):
     pred = exp.get("prediction", {})
     pred_txt = ""
     if isinstance(pred.get("value"), (int, float)) and pred.get("vs") == exp["control"]:
-        pred_txt = f"prediction {pred['value']:+.3f}, measured {effect:+.4f} (error {effect - pred['value']:+.4f})"
+        raw = -effect if is_lower(head_metric, exp, root) else effect     # the prediction is the raw variant - control (schema); `effect` is turned so that higher is better
+        pred_txt = f"prediction {pred['value']:+.3f}, measured {raw:+.4f} (error {raw - pred['value']:+.4f})"
     subset_effects = {p["subset"]: round(p["effect"], 5) for p in hc["parts"]} if hc is not None and len(hc["parts"]) > 1 else None
     waived, unknown = provenance_check(exp, cards)               # differences exist here only when evaluate.allow named "provenance" (else the decision was refused above)
     if waived:

@@ -324,6 +324,11 @@ class JobRunner:
         inferred, more = self._inputs(jid, reads, live)
         problems += more
         after += [x for x in inferred if x not in after and x != jid]
+        if launch and after and not entry.get("after_from"):
+            problems.append(f"must wait for {', '.join(after)}, but {call} starts its own run and its catalogue entry names no after_from to pass that on")
+        elif launch and after and C.with_ids(entry["after_from"], args, after) == args and not all(x in C.ids_from(entry["after_from"], args) for x in after):
+            problems.append(f"must wait for {', '.join(after)}, but {entry['after_from']} is not inside an object of the arguments (a job given as a file path?): "
+                            "give the job as an object, or write the ids into its own after")
         problems += [f"writes {w}: job {live[w]} is writing that now" for w in writes if w in live]
         split = d.get("split", "") if isinstance(d.get("split", ""), str) else ""
         problems += self._gates(jid, args, split, card, launch, entry or {})
@@ -595,9 +600,12 @@ class JobRunner:
         try:
             if how == "process":
                 env = dict(os.environ, AR_PROJECT=self.root, PYTHONPATH=os.pathsep.join(filter(None, [AR, os.environ.get("PYTHONPATH", "")])))
+                rec["command"] = self._argv(s, entry)                      # from the catalogue of now: a job stored before a suite was renamed still runs
                 rec["launcher_pid"] = self.launcher(rec["command"], self.root, env, self._jd(i, "launch.log"))
             else:
                 args = C.resolve_refs(s["args"], self.jobs)                # the results of the jobs this one waited for
+                if entry.get("after_from") and s["after"]:                # what check worked out (reads of a live run, $result, live writes) goes to the method's own run.py start
+                    args = C.with_ids(entry["after_from"], args, s["after"])
                 with C.import_paths(*self.dirs):
                     inst = getattr(importlib.import_module(entry["suite"]), entry["cls"])(self.root)
                     out = getattr(inst, entry["method"])(**args)

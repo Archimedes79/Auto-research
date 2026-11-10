@@ -52,8 +52,11 @@ def _claim_code(net: str) -> str:
 
 
 def resolve(text: str) -> str:
-    """a run name (`t23_C_s1`), a path relative to bev_fusion (`runs/t23_C_s1`) or an absolute one -> the run folder, as a path relative to bev_fusion when it lies inside it"""
+    """a run name (`t23_C_s1`, or the run id `t23.C_s1`: run.py and the job runner fold . to _ in the folder name), a path relative to bev_fusion (`runs/t23_C_s1`) or an absolute
+    one -> the run folder, as a path relative to bev_fusion when it lies inside it"""
     tried = [os.path.abspath(text if os.path.isabs(text) else os.path.join(ROOT, text)), os.path.abspath(os.path.join(ROOT, "runs", text))]
+    if "/" not in text and os.sep not in text and "." in text:
+        tried.append(os.path.abspath(os.path.join(ROOT, "runs", text.replace(".", "_"))))
     for p in tried:
         if os.path.isfile(os.path.join(p, "config.json")):
             return os.path.relpath(p, ROOT) if p.startswith(ROOT + os.sep) else p

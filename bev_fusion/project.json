@@ -26,6 +26,8 @@
                       "bev_dt0_refined_boxes_median", "camera_heads_median"],
   "code_dirs": ["training", "evaluation", "../GtGenerator", "../autoresearch/trainkit", "tests"],
   "fingerprint_extra": ["tools/run_ar.sh"],
+  "_runs_from_commit": "the training command (tools/run_ar.sh) builds its code from `git archive $AR_COMMIT`, so run.py --pin runs the pinned commit: training/ and autoresearch/trainkit only; GtGenerator/ and evaluation/ are read live and a pinned run is not drift-checked; without this key a --pin run whose working tree differs from attempt 1 is refused",
+  "runs_from_commit": true,
   "scratch": "temp",
   "live_code": ["training", "evaluation", "../GtGenerator", "../autoresearch/trainkit"],
   "trash": "_to_delete",

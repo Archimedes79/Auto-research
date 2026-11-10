@@ -24,7 +24,7 @@ T = tempfile.mkdtemp(prefix="ar_selftest_")
 os.makedirs(f"{T}/code")
 open(f"{T}/code/a.py", "w").write("x = 1\n")
 json.dump(dict(tag_prefix="t", ledger="LEDGER.csv", ledger_md="LEDGER.md", run_records="runs", schedule="schedule.csv", test_log="TEST.md",
-               code_dirs=["code"], scratch="temp", live_code=["code"], lower_is_better=["vert100"]), open(f"{T}/project.json", "w"))
+               code_dirs=["code"], scratch="temp", live_code=["code"], lower_is_better=["vert100"], runs_from_commit=True), open(f"{T}/project.json", "w"))   # the --pin check's command uses AR_COMMIT
 open(f"{T}/TEST.md", "w").write("| S.test.ok | OK of the person |\n")
 env = dict(os.environ, AR_PROJECT=T, AR_MACHINE_LOCK=f"{T}/state/machine_lock.json", AR_SETTLE_S="0")  # never the real machine lock; no settle wait except in the tests of it
 env.pop("AR_LOCK_OWNER", None)  # the operator's own lock name must not let the selftest's runs pass a lock
@@ -631,10 +631,14 @@ try:
     json.dump(dict(a=dict(Q=0.80, F=0.9), b=dict(Q=0.69, F=0.9), ca=dict(Q=0.70, F=0.9), cb=dict(Q=0.70, F=0.9)), open(f"{T}/cards.json", "w"))
     assert verdict(arms=two, rule=guard) == "INCONCLUSIVE", "guard-only headline, seeds disagree"
     assert DC.decide([0.80, 0.69], [0.70, 0.70])[0] == "INCONCLUSIVE", "the typed interface agrees"
-    # ... but a guard-only headline on subset-only cards is judged by the guard's subsets, not flagged as disagreeing seeds (reviewer finding)
+    # ... a guard-only headline on subset-only cards: the seeds are the cards WITHIN a subset (review 2026-11-11): one card per subset is ONE seed (INCONCLUSIVE),
+    # and a subset that is worse is not a disagreeing seed (reviewer finding of 2026-10-31): two agreeing seeds per subset give a KEEP although subset x is worse
     json.dump(dict(n=dict(a=dict(Q=0.80), c=dict(Q=0.70)), b=dict(a=dict(Q=0.80), c=dict(Q=0.70)), x=dict(a=dict(Q=0.69), c=dict(Q=0.70))), open(f"{T}/subq.json", "w"))
     subq = dict(a=dict(cards={k: f"subq.json#{k}/a" for k in "nbx"}), c=dict(cards={k: f"subq.json#{k}/c" for k in "nbx"}))
-    assert verdict(arms=subq, rule=[dict(metric="Q", max_loss=0.05, subsets=["n", "b", "x"], at_least=2)]) == "KEEP", "subset-only guard: no seed flags"
+    assert verdict(arms=subq, rule=[dict(metric="Q", max_loss=0.05, subsets=["n", "b", "x"], at_least=2)]) == "INCONCLUSIVE", "subset-only guard, one seed per subset"
+    json.dump({f"{k}{s}": dict(a=dict(Q=q + s / 1000), c=dict(Q=0.70)) for k, q in (("n", 0.80), ("b", 0.80), ("x", 0.695)) for s in (0, 1)}, open(f"{T}/subq.json", "w"))
+    subq2 = dict(a=dict(cards={k: [f"subq.json#{k}0/a", f"subq.json#{k}1/a"] for k in "nbx"}), c=dict(cards={k: [f"subq.json#{k}0/c", f"subq.json#{k}1/c"] for k in "nbx"}))
+    assert verdict(arms=subq2, rule=[dict(metric="Q", max_loss=0.05, subsets=["n", "b", "x"], at_least=2)]) == "KEEP", "subset-only guard, two seeds per subset: a worse subset is no disagreeing seed"
     # lower-is-better names (the fallback for undeclared metrics): project.json "lower_is_better" plus the generic LOWER, no built-in problem list
     assert "vert100" in DC.lower_names(T)
     assert DC.named_lower("det/dt+0.00/vehicle/all/vert100", T) and not DC.named_lower("vert100/x", T) and not DC.named_lower("vert1000", T), \

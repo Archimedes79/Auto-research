@@ -522,7 +522,8 @@ class Training:
     @errors
     def resume(self, i, words, fresh_code=False, wait=3.0):
         """the person's own words clear the hold of a stopped training (`stop` puts its id on hold) and it continues from its last checkpoint on the code of its first attempt (fresh_code:
-        on the code of now, the hot-fix loop). -> {id, cleared, started, command}"""
+        on the code of now, the hot-fix loop). An id that is a queue item is resumed through the queue (its `held` flag is cleared too, its runner starts it: started is empty,
+        queue says what happens). -> {id, cleared, started, command[, queue]}"""
         TQ.need_words(words, "resume")
         c = self._c()
         rid = resolve(c, i)[0]
@@ -539,6 +540,11 @@ class Training:
             raise TrainingError(f"{rid}: its run record names no commit of the first attempt, so there is no code to pin it to and the working tree of now would be trained on. "
                                 "fresh_code=True continues on the code of now (nothing is changed yet, the hold stays)")
         h = c.H.read(d)
+        if any(x["id"] == rid for x in TQ.load(c)["items"]):     # a queue item: the queue's own resume clears its `held` flag too (else its runner stops the run again) and the runner starts it
+            said = []
+            text = TQ.resume(c, [rid], False, words, fresh_code, True, out=said.append)[rid]
+            it = next(x for x in TQ.load(c)["items"] if x["id"] == rid)
+            return dict(id=rid, cleared=h is not None, started=[], queue=" ".join([text] + [s for s in said if s.startswith("note:")]), command=shell(TQ.with_gate(c, TQ.pinned_argv(it))))
         if h is not None:
             c.H.clear(d, words)
             c.H.note_in_ledger(rid, f"hold cleared {dt.date.today().isoformat()} on the person's words: {words.strip()!r} (hold was: {h.get('why', '?')}, set by {h.get('who', '?')} {h.get('when', '?')})")

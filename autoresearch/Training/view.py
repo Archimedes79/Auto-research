@@ -1,6 +1,7 @@
 """What one run looks like, for every reader of a run (the commands in cli.py, the class in api.py): the summary (state, step, ETA, loss, gradient, health findings, kill rules), the
 detail text of one training and the speed row. They read the run directory through runs.Run and nothing else."""
 import json
+import os
 import re
 import statistics
 import time
@@ -58,10 +59,13 @@ def clock(t):
 
 
 def events_of(run, n=5):
-    """the last n events that `watch` wrote for this run (training_events.jsonl; a damaged line is skipped)"""
+    """the last n events that `watch` wrote for this run (training_events.jsonl, trainsuite_events.jsonl in runs from before 2026-11-11; a damaged line is skipped)"""
     out = []
+    path = run.p("training_events.jsonl")
+    if not os.path.exists(path):
+        path = run.p("trainsuite_events.jsonl")
     try:
-        with open(run.p("training_events.jsonl"), encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 try:
                     e = json.loads(line)

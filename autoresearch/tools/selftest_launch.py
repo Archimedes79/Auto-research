@@ -1,5 +1,5 @@
 """Self-test of the launcher and ledger rules of the deep review of 2026-11-10 (run.py, ledger.py, hold.py): the TEST gate, the command pid of a run whose launcher
-was killed, the ledger freeze, id twins, the scratch scripts of a snapshot, notes that stay, the card hash, a hold that arrives before the start, the settle wait, and the whole chain (run -> decide -> result) with the real tools.
+was killed, the ledger freeze, id twins, the scratch scripts of a snapshot, notes that stay, the card hash, a hold that arrives before the start, the settle wait, the whole chain (run -> decide -> result) with the real tools, and a pinned resume (--pin).
 
     python autoresearch/tools/selftest_launch.py        (needs git and bash, e.g. in the WSL; selftest.py runs it at its end)
 
@@ -421,7 +421,39 @@ def test_frozen_card():
         os.remove(f"{T}/code/broken.py")
 
 
-TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle", "test_chain", "test_frozen_card")
+def test_pin():
+    """14: --pin on a command that runs the working tree (no project.json runs_from_commit) is refused when the code changed since attempt 1, runs when it is equal;
+    with runs_from_commit the command builds the pinned commit itself and runs as before"""
+    set_cfg()
+    ran = f"{T}/ran_pin"
+    assert go("P.a", ["bash", "-c", "exit 1"], "--no-drift-check").returncode == 1 and rec_of("P.a").get("tag") == "t/P.a"
+    open(f"{T}/code/a.py", "w").write("x = 2\n")
+    try:
+        r = go("P.a", ["bash", "-c", f"echo ran > {ran}"], "--pin", "t/P.a")
+        assert r.returncode == 2 and "the code is not attempt 1's" in r.stdout and not os.path.exists(ran) and rec_of("P.a")["status"] == "failed", r.stdout
+        set_cfg(runs_from_commit=True)
+        r = go("P.a", ["bash", "-c", "exit 1"], "--pin", "t/P.a")
+        assert r.returncode == 1 and "pinned: this attempt ran the code of t/P.a" in rows()["P.a"]["notes"], (r.stdout, rows()["P.a"]["notes"])
+        set_cfg()
+    finally:
+        open(f"{T}/code/a.py", "w").write("x = 1\n")
+    r = go("P.a", ["bash", "-c", f"echo ran > {ran}"], "--pin", "t/P.a")
+    assert r.returncode == 0 and os.path.exists(ran) and "equals the code of attempt 1" in rows()["P.a"]["notes"], (r.stdout, rows()["P.a"]["notes"])
+    # review 2026-11-11: a hot fix (an attempt without --pin on changed code) must not become the code a later pin checks against; a ref other than attempt 1's tag is refused
+    assert go("P.b", ["bash", "-c", "exit 1"], "--no-drift-check").returncode == 1
+    open(f"{T}/code/a.py", "w").write("x = 2\n")
+    try:
+        assert go("P.b", ["bash", "-c", "exit 1"], "--no-drift-check").returncode == 1     # attempt 2 on the hot fix, not pinned
+        r = go("P.b", ["bash", "-c", f"echo ran > {ran}b"], "--pin", "t/P.b")
+        assert r.returncode == 2 and "the code is not attempt 1's" in r.stdout and not os.path.exists(f"{ran}b"), r.stdout
+        r = go("P.b", ["bash", "-c", f"echo ran > {ran}b"], "--pin", "t/P.a")
+        assert r.returncode == 2 and "can only be checked against the commit of attempt 1" in r.stdout and not os.path.exists(f"{ran}b"), r.stdout
+    finally:
+        open(f"{T}/code/a.py", "w").write("x = 1\n")
+
+
+TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle", "test_chain", "test_frozen_card",
+         "test_pin")
 try:
     set_cfg()
     for name in sys.argv[1:] or TESTS:                  # one test by name: python selftest_launch.py test_settle

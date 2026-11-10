@@ -262,3 +262,14 @@ def ids_from(path: str, args: Dict[str, Any]) -> List[str]:
     """'job.after' -> args['job']['after'] as a list of texts (one text is a list of one; anything else is empty)"""
     cur = _walk(path, args)
     return [cur] if isinstance(cur, str) and cur else [x for x in cur if isinstance(x, str)] if isinstance(cur, list) else []
+
+
+def with_ids(path: str, args: Dict[str, Any], ids: List[str]) -> Dict[str, Any]:
+    """a copy of args whose list at 'job.after' also holds `ids` (no duplicates, its own ids first); unchanged when that place is not inside a dict"""
+    out = copy.deepcopy(args)
+    head, _, last = path.rpartition(".")
+    parent = _walk(head, out) if head else out
+    if isinstance(parent, dict):
+        have = ids_from(path, out)
+        parent[last] = have + [x for x in ids if x not in have]
+    return out
