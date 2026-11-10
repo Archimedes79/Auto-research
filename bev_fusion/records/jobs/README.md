@@ -6,12 +6,12 @@ suites is `../../../autoresearch/INTERFACE.md`; each suite's own README is the r
 | folder | suite (class) | how it is called | state |
 |---|---|---|---|
 | `training/` | `trainsuite` (`Training`) | job files of kind `train` | built (work of the Training chat, 2026-11-10, not yet committed) |
-| `running/` | `runsuite` (`Runner`) | job files of kind `run`: the planner-facing runner `runner/bev_runner.py` (boxes and dt-0 maps, no ground truth) in the same queue | built (same) |
+| `running/` | `runsuite` (`RunJobs`) | job files of kind `run`: the planner-facing runner `runner/bev_runner.py` (boxes and dt-0 maps, no ground truth) in the same queue | built (same) |
 | `evaluation/` | `evalsuite` (`Evaluation`) | no job files: `Evaluation.predict` runs the network over whole scenes (always warm, D70) and stores the predictions, `score` scores them against a ground truth, `run` does both | built (work of the Evaluation chat, 2026-11-10, not yet committed) |
 
 ```
 training/*.json   --Training.run / queue_add-->   runs/<name>/ (checkpoint, config, code snapshot)
-running/*.json    --Runner.run / queue_add---->   objects.json + maps.npz of chosen frames (the planner's data)
+running/*.json    --RunJobs.run / queue_add---->   objects.json + maps.npz of chosen frames (the planner's data)
 Evaluation.predict(network, frames) -->  runs/<name>/eval/results/<id>   (the stored predictions: a ResultSet, evalsuite/results.py)
 Evaluation.score(results, frames, gt_key) --> the numbers, curves, worst cases, comparisons, pages
 ```

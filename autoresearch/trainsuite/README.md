@@ -46,7 +46,7 @@ Mirko's sketch in these words: `Training.run(network.json)` = `run`, `queueAdd` 
 the running one; `queue_list()['running']` is its id), `QueueLogSpeed` = `compare` and the speed part of `status`.
 
 The older words (`start`, `queue add ... --id`, `queue serve`, `queue drop`, `curves`, `speed`, and the old `status` / `stop` tables) work as before. The runner of a trained network has the same
-interface in `autoresearch/runsuite` (`Runner`: `check`, `run`, `status`, `queue_add`; one queue for both). `python -m trainsuite.selftest_api` tests it (it also runs inside `selftest`).
+interface in `autoresearch/runsuite` (`RunJobs`: `check`, `run`, `status`, `queue_add`; one queue for both). `python -m trainsuite.selftest_api` tests it (it also runs inside `selftest`).
 
 ## 1. What a config and a manifest look like
 A training is one JSON file with a value for every choice: `bev_fusion/training/configs/t20_base.json` (an unknown key is an error). The keys that matter:

@@ -218,7 +218,7 @@ def api_checks(tmp, ok):
         assert [m["name"] for m in api.Training.methods()] == list(api.Training.METHODS) and all(m["summary"] for m in api.Training.methods()), "every method is listed with a summary"
         assert t.queue_list()["items"] == api.queue_list()["items"] and t.status("r.one")["state"] == "done", "an object and the default object see the same project"
         raises(t.check, 'kind "run"', dict(id="rs.x", kind="run", mode="full", run="r.one"))
-        assert [m["name"] for m in runsuite.Runner.methods()] == list(runsuite.Runner.METHODS) and "stop" not in runsuite.Runner.METHODS, "the runner lists its own methods"
+        assert [m["name"] for m in runsuite.RunJobs.methods()] == list(runsuite.RunJobs.METHODS) and "stop" not in runsuite.RunJobs.METHODS, "the runner lists its own methods"
         rc, out, err = cli("methods")
         assert rc == 0 and "Training.queue_add(job, start=True)" in out and "Training.queue_hold(words, i=None, reason=''" in out, out
         rc, out, err = cli("Training.check", job("g.one"), "--json")
@@ -259,7 +259,7 @@ def api_checks(tmp, ok):
         from runsuite.__main__ import main as run_main2
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            assert run_main2(["Runner.check", rj("rs.cli2"), "--json"]) == 0 and run_main2(["run", rj("rs.cli3")]) == 0
+            assert run_main2(["RunJobs.check", rj("rs.cli2"), "--json"]) == 0 and run_main2(["run", rj("rs.cli3")]) == 0
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "rs.cli3", "done")), 60, what="rs.cli3 done")
         ok("class + command line: Training(project) sees the same project, the methods are listed with their arguments, `Training.<method>` runs each one (a number or an id for i, --words is required, "
            "--no-start, --json), a method without the class name works when no older command has the word, the runner has the same")
@@ -271,7 +271,7 @@ def api_checks(tmp, ok):
         t.queue_hold("Mirko: selftest")                                             # an idle queue: it is paused
         raises(t.run, "PAUSED", job("p.one"))
         assert t.check(job("p.one"))["ok"] is False and "PAUSED" in t.check(job("p.one"))["problems"][0], "check says what run would be refused for"
-        raises(runsuite.Runner(proj).run, "PAUSED", rj("rs.p"))
+        raises(runsuite.RunJobs(proj).run, "PAUSED", rj("rs.p"))
         assert t.queue_add(job("p.q"), start=False)["state"] == "queued", "the queue may be filled while it is paused"
         t.queue_resume("Mirko: selftest")
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "p.q", "done")), 60, what="p.q done after the resume")
@@ -303,7 +303,7 @@ def api_checks(tmp, ok):
         assert t.queue_get("12")["id"] == "12" and t.queue_get("12")["number"] == n_before + 3, "a digit-only id is added and found as an id"
         for x in ("1", "2", "12"):
             t.queue_remove(x)
-        runsuite.Runner(proj).queue_add(rj("rs.hold"), start=False)
+        runsuite.RunJobs(proj).queue_add(rj("rs.hold"), start=False)
         assert "not touched" in t.queue_hold("Mirko: selftest")["rs.hold"] and t.queue_get("rs.hold")["held"] is False, "a runner job is no training: hold leaves it alone"
         t.queue_resume("Mirko: selftest")
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "rs.hold", "done")), 60, what="rs.hold done")
@@ -335,7 +335,7 @@ def api_checks(tmp, ok):
         pj["runsuite"] = {"command": 'bash -c "python3 code/runner.py {args}"', "runs": "runs"}
         json.dump(pj, open(pj_path, "w"))
         try:
-            r = runsuite.Runner(proj)
+            r = runsuite.RunJobs(proj)
             cmd = r.check(rj("rs.g", out=""))["command"]
             assert "--gpu --gpu-max-mb 4000" in cmd, cmd
             assert "--gpu" not in r.check(rj("rs.c", device="cpu"))["command"].split(" -- ")[0], "a job on the CPU takes no GPU slot"
@@ -414,7 +414,7 @@ def api_checks(tmp, ok):
         assert rc == 1 and "PAUSED" in out_ and not os.path.isdir(os.path.join(proj, "records", "runs", "z.paused")), (rc, out_)
         t.queue_resume("Mirko: selftest")
         open(TQ.context(proj).qpath, "w").write("{ not json")
-        raises(runsuite.Runner(proj).check, "could not be read", rj("rs.dmg"))      # the runner's check too turns the queue's error into the one error type
+        raises(runsuite.RunJobs(proj).check, "could not be read", rj("rs.dmg"))      # the runner's check too turns the queue's error into the one error type
         ok("second review: the note of a cleared hold goes to the object's project, a job of another project is read back from there, a slot of another project is not ours, a runner job is no "
            "training for hold, true / false are checked, a BOM is read, no project and a damaged queue are errors with exit 2, a job file refuses the older options, a pause binds `start --go`")
 
@@ -437,7 +437,7 @@ def api_checks(tmp, ok):
                 raise AssertionError(word)
             except SystemExit as e:
                 assert e.code == 0, word
-        assert all(not m["summary"].endswith(("e.g.", "i.e.")) for m in api.Training.methods() + runsuite.Runner.methods()), "a summary is a whole sentence"
+        assert all(not m["summary"].endswith(("e.g.", "i.e.")) for m in api.Training.methods() + runsuite.RunJobs.methods()), "a summary is a whole sentence"
         assert str(_inspect.signature(runsuite.check)) == "(job)" and str(_inspect.signature(api.queue_hold)).startswith("(words"), "the functions of the default object keep their arguments"
         api.Training(second).queue_add(job("x.cross", project=second), start=False)
         seen = {"proj": set(), "second": set()}

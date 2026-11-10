@@ -7,15 +7,15 @@ command line. This page is the pattern; each suite's own README is the reference
 |---|---|---|
 | `autogt` | the ground truth of the keyframes | `import autogt` / `python -m autogt` |
 | `trainsuite` | train a network, the queue of trainings and runner jobs, watch, stop, hold | `from trainsuite import Training` / `python -m trainsuite` (from `autoresearch/`) |
-| `runsuite` | run a trained network on frames, write the data the evaluation reads | `from runsuite import Runner` / `python -m runsuite` |
+| `runsuite` | run a trained network on frames, write the data the evaluation reads | `from runsuite import RunJobs` / `python -m runsuite` |
 | `evalsuite` | pictures, numbers and cost of what a network does | `python -m evalsuite` (adapters) |
 
 ## The rules
-1. **One class per suite, its methods are the interface.** `Training(project)`, `Runner(project)`; the project folder is the only state (default `AR_PROJECT`). Method names are snake_case,
+1. **One class per suite, its methods are the interface.** `Training(project)`, `RunJobs(project)`; the project folder is the only state (default `AR_PROJECT`). Method names are snake_case,
    verb first (`check`, `run`, `status`); a family has a noun prefix (`queue_add`, `queue_list`). The same methods are also functions of a default object for short scripts:
    `trainsuite.check(job)` is `Training().check(job)`. (autogt has the class `AutoGT` and the same calls as module functions: `autogt.generate_bev_gt`, `autogt.gt_key`.)
 2. **Plain data in and out.** A function takes paths, ids and dicts and returns a dict or a list (json-serialisable: numbers, text, lists, dicts). It never prints. The command line prints.
-3. **One error per suite** (`TrainingError`, `RunnerError` = the same class) whose message says what to fix; every method turns the queue's own error into it. The command line prints it to
+3. **One error per suite** (`TrainingError`, `RunJobsError` = the same class) whose message says what to fix; every method turns the queue's own error into it. The command line prints it to
    stderr and exits with 2.
 4. **A job is a json file or the same dict.** It says what to do and with what: `id`, `kind`, `config`, `preset`, `set`, `card`, `after`, `priority`, `kill` ... An unknown key is an error
    (a typo shows). Keys that start with `_` are comments.
@@ -28,7 +28,7 @@ command line. This page is the pattern; each suite's own README is the reference
    in Python; on the command line that needs `--all`, so a forgotten id does not hold everything.
 6. **The same verbs everywhere.** The core every suite has: `check` looks and changes nothing (a preview file at most), `run` / `generate` / `predict` does the work now, `status` reads
    one thing, `stop` asks one run to checkpoint and stop, `selftest` checks the suite on synthetic data. The `queue_*` family (`add`, `list`, `get`, `remove`, `start`, `hold`, `resume`)
-   belongs to `Training` and `Runner` only: the other suites have no queue.
+   belongs to `Training` and `RunJobs` only: the other suites have no queue.
 7. **`i` addresses an item.** The id (`t23.C_s1`) or the run folder name (`t23_C_s1`) first; the number shown by `queue_list` (1 = first) when the text is no id or `i` is an int (an id
    made of digits stays an id). Without `i`, `status` and `stop` mean the running training, also one that was started outside the queue (it holds a GPU slot of this project). The numbers
    shift when another chat adds an item with a higher priority: a script uses the id, the number is for a person who has just read the list. `queue_hold` and `queue_resume` without `i` mean all (the command line wants `--all`).
@@ -38,7 +38,7 @@ command line. This page is the pattern; each suite's own README is the reference
 ## Where the methods are listed
 The rules above are the convention; each suite's README is the reference for its methods, its job file and its commands (one place each, `python -m <suite> methods` lists them):
 - Training: `trainsuite/README.md` section 0 (the methods next to Mirko's sketch, the job file, the commands).
-- Runner: `runsuite/README.md`.
+- RunJobs: `runsuite/README.md`.
 - Evaluation: `evalsuite/README.md`.
 
 ## Where the other suites stand

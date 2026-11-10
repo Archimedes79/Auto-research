@@ -397,7 +397,7 @@ class Training:
     def _job(self, job):
         j = load_job(job)
         if j["kind"] != self.KIND:
-            raise TrainingError(f'this is a job of kind "{j["kind"]}": use {"Runner" if self.KIND == "train" else "Training"} for it')
+            raise TrainingError(f'this is a job of kind "{j["kind"]}": use {"RunJobs" if self.KIND == "train" else "Training"} for it')
         return j
 
     @classmethod

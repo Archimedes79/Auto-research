@@ -1,4 +1,4 @@
-"""The interface of the runner (see __init__.py): the class `Runner`, a Training whose jobs are of kind "run". check, run, status and queue_add are its own; the rest of the queue is the
+"""The interface of the runner (see __init__.py): the class `RunJobs`, a Training whose jobs are of kind "run". check, run, status and queue_add are its own; the rest of the queue is the
 one of Training (one queue for trainings and runner jobs). Jobs are the jobs of trainsuite.api.load_job with kind "run"."""
 import os
 import shlex
@@ -101,9 +101,9 @@ def _plan(c, j):
     return cmd, run_argv, problems, out
 
 
-class Runner(T.Training):
-    """The runner as one object, like Training: `Runner(project)`. Its jobs have "kind": "run" and a "mode" (check, precompute, network, full). Every method is also a command:
-    `python -m runsuite Runner.run job.json`."""
+class RunJobs(T.Training):
+    """The runner as one object, like Training: `RunJobs(project)`. Its jobs have "kind": "run" and a "mode" (check, precompute, network, full). Every method is also a command:
+    `python -m runsuite RunJobs.run job.json`."""
 
     METHODS = ("check", "run", "status", "queue_add", "queue_list", "queue_get", "queue_remove", "queue_start", "queue_hold", "queue_resume")
     KIND = "run"
@@ -188,5 +188,5 @@ class Runner(T.Training):
                     started=rec.get("started"), ended=rec.get("ended"), out=out, files=files, log_tail=(rec.get("last_lines") or [])[-6:])
 
 
-for _n in Runner.METHODS:                     # the same methods as functions of a default object: `runsuite.check(job)` = `Runner().check(job)`
-    globals()[_n] = T.delegate(Runner, _n)
+for _n in RunJobs.METHODS:                     # the same methods as functions of a default object: `runsuite.check(job)` = `RunJobs().check(job)`
+    globals()[_n] = T.delegate(RunJobs, _n)

@@ -1,12 +1,12 @@
-# jobs/running - job files of kind `run` (suite: `autoresearch/runsuite`, class `Runner`)
+# jobs/running - job files of kind `run` (suite: `autoresearch/runsuite`, class `RunJobs`)
 
 The trained network on frames, from the run's own code snapshot; writes `objects.json` (boxes at every dt, planner records) and `maps.npz` (probability maps of dt 0), no ground truth read. It is the
 planner-facing runner (`runner/bev_runner.py`, frozen). The predictions that the evaluation scores are made by `Evaluation.predict` instead (see `../evaluation/README.md`).
 
 ```
 cd autoresearch                                                  # from the workspace root, inside wsl
-AR_PROJECT=../bev_fusion python3 -m runsuite Runner.check ../bev_fusion/records/jobs/running/t20_val8.json
-AR_PROJECT=../bev_fusion python3 -m runsuite Runner.run   ../bev_fusion/records/jobs/running/t20_val8.json
+AR_PROJECT=../bev_fusion python3 -m runsuite RunJobs.check ../bev_fusion/records/jobs/running/t20_val8.json
+AR_PROJECT=../bev_fusion python3 -m runsuite RunJobs.run   ../bev_fusion/records/jobs/running/t20_val8.json
 ```
 
 | file | what |
