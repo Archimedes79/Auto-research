@@ -17,6 +17,7 @@ import torch.nn.functional as F
 
 import losses as GL
 import qassign as QA
+import qendnet as QEN
 import qlinks as QL
 import qnodes as QN
 import sections as SE
@@ -26,6 +27,9 @@ STAGES = ("pyr", "nodes", "links", "sections", "assign")
 PHASE_UPTO = {2: "pyr", 3: "nodes", 4: "links", 5: "sections", 6: "assign", 7: "assign"}
 PHASE_TRAIN = {2: ("pyr",), 3: ("nodes",), 4: ("links",), 5: ("nodes_s",), 6: ("menc", "asg"), 7: ("pyr", "nodes", "links", "menc", "asg")}
 PHASE_FROZEN = {2: (), 3: ("pyr",), 4: ("pyr", "nodes"), 5: ("pyr", "links"), 6: ("pyr", "nodes", "links"), 7: ()}
+# E284: phase 8 trains the junction END head (`qendnet`) on the frozen pixel and node stages; the model must be built with ends=True. It is a side stage: B's checkpoint, forward path and numbers are untouched.
+PHASE_TRAIN[8] = ("ends",)
+PHASE_FROZEN[8] = ("pyr", "nodes")
 W = dict(pix=1.0, node=1.0, link=1.0, sec=1.0, asg=1.0)
 # E274 switches (the defaults are the E273 loss): ev_w = weight of the 1 m event heat-map loss in the pixel stage; node_w_evt / node_w_inter = extra weight of the POSITIVES of the existence loss
 # at event cells / at cells inside the (grown) intersection mask (weight 1 + w_evt * event + w_inter * inter); long_match = weight of the dual-softmax loss over the long-link candidates (E274)
@@ -39,7 +43,7 @@ CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0, tier_w=No
 
 
 class QGraph(torch.nn.Module):
-    def __init__(self, width=48, f05=32, d=64, soft_nms=None):
+    def __init__(self, width=48, f05=32, d=64, soft_nms=None, ends=False):
         """soft_nms = None (the E273 head) or (radius m, tau m, passes) of `qnodes.soft_suppress_logit` (E277: the close-node suppression as a soft step right after the node head: the existence
         logit `no['e']` that every later stage, the loss and the read-out see is the damped one; the head's own logit stays in `no['e_raw']`). A property of the model, not of the loss: it travels
         with the checkpoint (`args['soft_nms']`, read by `qpredict.load_model`)."""
@@ -51,6 +55,17 @@ class QGraph(torch.nn.Module):
         self.links = QL.LinkHead(d=d)
         self.menc = QA.MapEncoder(d=d)
         self.asg = QA.Assigner(d=d)
+        self.ends = QEN.EndHead(d=d) if ends else None                                          # E284: the junction end head (phase 8); None = the E273 head, whose checkpoints have no `ends.*` tensors
+
+    def ends_forward(self, batch, gt=True):
+        """E284: the pixel and node stages under no_grad, then the end head on the node tokens; gt = the batch's GT ends are added to the keypoint candidates (training)"""
+        assert self.ends is not None, "the model was built without the end head (QGraph(ends=True))"
+        dev = next(self.parameters()).device
+        x = batch["x"].to(dev, non_blocking=True).float()
+        with torch.no_grad():
+            no = self.node_stage(self.pyr(x))
+        g = {k: batch[k].to(dev) for k in ("ent", "ext", "ent_m", "ext_m")} if gt else None
+        return self.ends(no, gt=g)
 
     def node_stage(self, P):
         """the node head and, when `soft_nms` is set, the soft close-node step (E277: `no['e']` is then the damped logit, the head's own one stays in `no['e_raw']`); the ONE place that the forward path,
@@ -356,6 +371,8 @@ def assign_loss(A, L, batch):
 
 
 def qgraph_loss(model, batch, phase):
+    if phase == 8:                                                                               # E284: the end head
+        return QEN.ends_loss(model.ends_forward(batch, gt=True), batch)
     out = model(batch, upto=PHASE_UPTO[phase], frozen=PHASE_FROZEN[phase])
     loss, info = 0.0, {}
     if phase in (2, 7):
@@ -378,6 +395,8 @@ def qgraph_loss(model, batch, phase):
 
 def trainable_params(model, phase):
     groups = dict(pyr=model.pyr, nodes=model.nodes, links=model.links, menc=model.menc, asg=model.asg)
+    if model.ends is not None:
+        groups["ends"] = model.ends
     names = PHASE_TRAIN[phase]
     ps = []
     for n in names:
