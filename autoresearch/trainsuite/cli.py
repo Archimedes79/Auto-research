@@ -1,4 +1,8 @@
-"""Command line of the training suite: python -m trainsuite <status|health|curves|stop|resume|watch|early|compose|start|selftest> ... (run from autoresearch/)."""
+"""Command line of the training suite (run from autoresearch/): python -m trainsuite <command> ...
+
+The commands of the interface (class Training, api.py; the map is in apicli.py, `methods` lists them): check, run, queue-add, queue-list, queue-get, queue-remove, queue-start,
+queue-hold, queue-resume, and Training.status / Training.stop / Training.plot / Training.compare. The older commands below keep their meaning: status, health, curves, stop, resume,
+watch, early, compose, start, queue (show / add --id / serve / hold / resume / drop), selftest."""
 import argparse
 import json
 import os
@@ -13,6 +17,7 @@ from .kill import load_rules
 from .runs import Run, fmt_dur
 
 TERMINAL = ("done", "failed", "stopped", "ended")
+LEGACY = ("status", "health", "curves", "speed", "queue", "stop", "resume", "watch", "early", "compose", "start", "selftest", "plot", "compare")      # the older commands: their words keep their meaning
 RETRY_GRACE_S = 300       # watch: a run that fails while watched may be restarted by the launcher (a CUDA retry after 15 s): wait this long
 LATCH_POLLS = 5          # watch: a finding that went away must stay away this many looks before it can be reported again
 
@@ -498,16 +503,8 @@ def cmd_queue_add(a):
     import subprocess
     from . import compose as C
     TQ, c = _queue(a)
-    if a.id is None:                                             # a job file ({"id": ..., "config": ...}) is the simple way (api.py); the options below are the older one
-        from . import apicli
-        if apicli.is_job_file(a.base):
-            older = [n for n, v, d in (("--preset", a.preset, []), ("--set", a.set, []), ("--hyp", a.hyp, None), ("--pred", a.pred, None), ("--rule", a.rule, None), ("--no-card", a.no_card, False),
-                                       ("--no-check", a.no_check, False), ("--after", a.after, ""), ("--priority", a.priority, 5), ("--note", a.note, ""), ("--run-arg", a.run_arg, [])) if v != d]
-            if older:
-                keys = ", ".join('"' + x.lstrip("-").replace("-", "_") + '"' for x in older)
-                raise TQ.QueueError(f"{' '.join(older)} cannot be combined with a job file (they would be ignored): put them in the job file ({keys})")
-            return apicli.cmd_queue_add_job(a)
-        raise TQ.QueueError('--id is required (or give a job file: {"id": "...", "config": "..."}, see api.py)')
+    if a.id is None:
+        raise TQ.QueueError('--id is required; a job file is put in the queue with `queue-add JOB.json` (api.py)')
     if not c.block:
         raise TQ.QueueError('project.json has no "trainsuite" block')
     try:
@@ -685,12 +682,12 @@ def cmd_start(a):
 
 
 def main(argv=None):
-    from . import api, apicli                                    # every method of the class Training is a command: `Training.queue_add job.json`, `methods` lists them
-    legacy = {"status", "health", "curves", "speed", "queue", "stop", "resume", "watch", "early", "compose", "start", "selftest", "plot", "compare"}      # the older words keep their meaning
-    rc = apicli.dispatch(api.Training, sys.argv[1:] if argv is None else list(argv), "trainsuite", legacy)
+    from . import api, apicli                                    # every method of the class Training is a command: `queue-add job.json`, `methods` lists them
+    rc = apicli.dispatch(api.Training, sys.argv[1:] if argv is None else list(argv), "trainsuite", LEGACY)
     if rc is not None:
         return rc
-    ap = argparse.ArgumentParser(prog="trainsuite", description=__doc__)
+    ap = argparse.ArgumentParser(prog="trainsuite", description=__doc__, epilog="The commands of the interface (check, run, queue-add, queue-list, ...): `python -m trainsuite methods`. "
+                                 "They take --project and --json after the command; --root and --loss belong to the older commands above.")
     ap.add_argument("--root", default="runs", help="folder of the run directories (default: ./runs; from autoresearch/ use ../<problem>/runs)")
     ap.add_argument("--loss", default="total", help="key of the optimised loss in the metrics stream (default: total)")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -724,10 +721,9 @@ def main(argv=None):
         s.add_argument("--project", default=argparse.SUPPRESS, help="project folder (default: AR_PROJECT)")
         s.set_defaults(fn=fn)
         return s
-    s = qsub("add", cmd_queue_add, help="put a job file (or a config with --id and options, like `start`) in the queue (the runner starts it when its turn comes)")
-    s.add_argument("base", help="a job file, or the network config of the older form")
-    s.add_argument("--json", action="store_true", help="with a job file: print the item as json")
-    s.add_argument("--id", default=None, help="not for a job file (its id is in the file)")
+    s = qsub("add", cmd_queue_add, help="put a config with --id and options (like `start`) in the queue; the runner starts it when its turn comes (a job file: `queue-add JOB.json`)")
+    s.add_argument("base", help="the network config")
+    s.add_argument("--id", default=None, help="run id (required; the run folder is the id with . as _)")
     s.add_argument("--preset", action="append", default=[])
     s.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     s.add_argument("--hyp"), s.add_argument("--pred"), s.add_argument("--rule")
@@ -756,21 +752,6 @@ def main(argv=None):
     s.add_argument("--no-runner", action="store_true", help="do not start the runner")
     s = qsub("drop", cmd_queue_drop, help="remove an item that is not running (the older name of `remove`)")
     s.add_argument("id")
-    from . import apicli as AC                                   # the words of the interface (api.py): check, run, queue list / get / remove / start / status
-    ji = lambda s_: s_.add_argument("--json", action="store_true", help="print what the function returns")                                       # noqa: E731
-    ji(qsub("list", AC.cmd_queue_list, help="the queue in its order, the running training, slots, machine lock, RAM, GPU memory, holds"))
-    s = qsub("get", AC.cmd_queue_get, help="one item: its job, config, command and state")
-    s.add_argument("i", help="queue number (1 = first), id or run folder name")
-    ji(s)
-    s = qsub("remove", AC.cmd_queue_remove, help="take an item out that has not started")
-    s.add_argument("i", help="queue number, id or run folder name")
-    ji(s)
-    ji(qsub("start", AC.cmd_queue_start, help="make sure the runner runs"))
-    s = qsub("status", AC.cmd_queue_status, help="one training in full: state, ETA, loss, gradient, skipped steps, data, health, kill rules, speed (default: the running one)")
-    s.add_argument("i", nargs="?", default=None, help="queue number, id or run folder name")
-    s.add_argument("--kill", action="append", default=[], help='kill rule, e.g. "group.lines@1000 > 1.48" (repeatable)')
-    s.add_argument("--vs", help="reference run to compare the loss with at the same step")
-    ji(s)
     p = add("stop", cmd_stop, 1, help="ask the trainer to checkpoint and stop (refused when its code snapshot has no stop check)")
     p.add_argument("--reason", default="stopped by hand")
     add("resume", cmd_resume, 1, help="move CONTROL / STOPPED of an earlier stop aside (the trainer does it itself at its start)")

@@ -16,26 +16,34 @@ export AR_PROJECT=../bev_fusion; R=../bev_fusion/runs
 
 ## 0. The interface (start here)
 One class, `Training(project)`, with plain dicts in and out; every method is also a command (the pattern of all suites: [../INTERFACE.md](../INTERFACE.md); the code: `api.py`, `apicli.py`).
-`from trainsuite import Training` in Python, `python -m trainsuite Training.queue_add job.json` on the command line (`Training.` can be left out unless an older command has the word;
+`from trainsuite import Training` in Python, `python -m trainsuite Training.queue_add job.json` on the command line (short forms: `queue_add`, `queue-add`; `Training.` is always needed for `status`, `stop`, `plot`, `compare`, which are older commands;
 `python -m trainsuite methods` lists the methods with their arguments; `--json` prints exactly what the method returns).
 A **job** is a json file (or the same dict) that says what to run:
 ```json
 {"id": "t23.C_s1", "config": "training/configs/t23_lane_bce.json", "preset": ["fast"], "set": {"seed": 1}, "card": {"hyp": "...", "pred": "...", "rule": "..."},
  "after": [], "priority": 5, "kill": ["group.lines@1000 > 1.48"], "note": ""}
 ```
-`no_card: true` instead of `card` is a diagnostic run. An unknown key is an error. `i` below is the number shown by `queue list`, an id or a run folder name.
+`no_card: true` instead of `card` is a diagnostic run (it never feeds a verdict). An unknown key is an error (a typo shows), keys starting with `_` are comments, `true` / `false` must be booleans.
+`kill` rules are checked when the job is read and appended to the run's `kill.txt` once the launcher has survived its first seconds (where `watch --enforce` and `status` read them). `run`
+honours `after` (run.py waits for those runs) and ignores `priority` and `note`, which belong to the queue. `run_args` are arguments for `run.py` itself, `no_check` skips the project's static
+check, `prepare` builds a missing data store first, `project` names another project folder (default `AR_PROJECT`); a key of a runner job (`n`, `out`, ...) is an error in a training.
+`i` below is an id, a run folder name or the number shown by `queue-list` (numbers shift when another chat adds an item: a script uses the id).
 
 | method | command line | what it does |
 |---|---|---|
-| `check(job)` | `check job.json` | compose the config, the static check, the data check; starts nothing |
-| `run(job)` | `run job.json` | start now, outside the queue; the same call again resumes |
-| `queue_add(job)` | `queue_add job.json` | check, put it in the queue; the runner starts it when its turn comes |
-| `queue_list()` | `queue_list` | the items in order, the running one, slots, machine lock, RAM, GPU memory, holds |
-| `queue_get(i)` / `queue_remove(i)` | `queue_get I` / `queue_remove I` | one item in full / take out one that has not started |
-| `queue_start()` | `queue_start` | make sure the runner runs |
-| `queue_hold(words)` / `queue_resume(words)` | `queue_hold --words ...` / `queue_resume --words ...` | all trainings stop with a checkpoint / continue from it (`i` for one); the person's words are required |
+| `check(job)` | `check JOB` | compose the config, the static check, the data check; starts nothing |
+| `run(job)` | `run JOB` | start now, outside the queue; the same call again resumes |
+| `queue_add(job)` | `queue-add JOB` | check, put it in the queue; the runner starts it when its turn comes |
+| `queue_list()` | `queue-list` | the items in order, the running one, slots, machine lock, RAM, GPU memory, holds |
+| `queue_get(i)` / `queue_remove(i)` | `queue-get I` / `queue-remove I` | one item in full / take out one that has not started |
+| `queue_start()` | `queue-start` | make sure the runner runs |
+| `queue_hold(words)` / `queue_resume(words)` | `queue-hold --all --words ...` / `queue-resume --all --words ...` | all trainings stop with a checkpoint / continue from it (`i` for one); the person's words are required |
 | `status(i=None)` | `Training.status [I]` | state, ETA, loss, gradient, skipped steps, data, health, kill rules, speed; no `i` = the running one |
 | `stop(i)` / `plot(i)` / `compare(a, b)` | `Training.stop RUN` / `Training.plot RUN` / `Training.compare A B` | checkpoint and stop one run / loss curves as png / speed side by side |
+
+Mirko's sketch in these words: `Training.run(network.json)` = `run`, `queueAdd` = `queue_add`, `queueGetListOverview` = `queue_list`, `queueGet(i)` = `queue_get`, `queueRemove(i)` = `queue_remove`,
+`queueStart` = `queue_start`, `queueHold` / `queueResume` = `queue_hold` / `queue_resume`, `queueGetStatus(i)`, `queueRunningTrainingId` and `queueRunningTrainingStatus` = `status(i)` (no `i`:
+the running one; `queue_list()['running']` is its id), `QueueLogSpeed` = `compare` and the speed part of `status`.
 
 The older words (`start`, `queue add ... --id`, `queue serve`, `queue drop`, `curves`, `speed`, and the old `status` / `stop` tables) work as before. The runner of a trained network has the same
 interface in `autoresearch/runsuite` (`Runner`: `check`, `run`, `status`, `queue_add`; one queue for both). `python -m trainsuite.selftest_api` tests it (it also runs inside `selftest`).

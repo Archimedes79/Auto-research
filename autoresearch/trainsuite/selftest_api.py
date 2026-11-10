@@ -154,26 +154,26 @@ def api_checks(tmp, ok):
         assert rc == 0 and json.loads(out)["ok"] is True and json.loads(out)["id"] == "k.one", (rc, out, err)
         rc, out, err = cli("check", job("k.bad", config="no_such_config.json"))
         assert rc == 2 and "error:" in err, (rc, out, err)
-        rc, out, err = cli("queue", "add", job("k.two", priority=2), "--no-runner", "--json")
+        rc, out, err = cli("queue-add", job("k.two", priority=2), "--no-start", "--json")
         assert rc == 0 and json.loads(out)["id"] == "k.two", (rc, out, err)
         rc, out, err = cli("queue", "add", "base.json")
-        assert rc == 2 and "--id is required" in err, "a network config without --id is not a job file: the older form needs its id"
-        rc, out, err = cli("queue", "list", "--json")
+        assert rc == 2 and "--id is required" in err and "queue-add" in err, "the older `queue add` needs its --id and says where a job file goes"
+        rc, out, err = cli("queue-list", "--json")
         data = json.loads(out)
         assert rc == 0 and "k.two" in [x["id"] for x in data["items"]], data
-        rc, out, err = cli("queue", "list")
+        rc, out, err = cli("queue-list")
         assert rc == 0 and "k.two" in out and "machine lock:" in out and "slots:" in out, out
-        rc, out, err = cli("queue", "get", "k.two", "--json")
+        rc, out, err = cli("queue-get", "k.two", "--json")
         assert rc == 0 and json.loads(out)["job"]["priority"] == 2, out
-        rc, out, err = cli("queue", "status", "w.one", "--json")
+        rc, out, err = cli("Training.status", "w.one", "--json")
         assert rc == 0 and json.loads(out)["state"] == "done", out
-        rc, out, err = cli("queue", "remove", "k.two")
+        rc, out, err = cli("queue-remove", "k.two")
         assert rc == 0 and "removed k.two" in out
-        rc, out, err = cli("queue", "get", "k.two")
+        rc, out, err = cli("queue-get", "k.two")
         assert rc == 2 and "not in the queue" in err, (rc, err)
         rc, out, err = cli("queue", "hold")
         assert rc == 2 and "name the runs" in err, (rc, out, err)
-        ok("command line: check / queue add job.json / list / get / status / remove say what the functions return (--json is the same dict), errors go to stderr with exit 2")
+        ok("command line: check / queue-add / queue-list / queue-get / Training.status / queue-remove say what the functions return (--json is the same dict), errors go to stderr with exit 2")
 
         # 9 the runner has the same interface and the same queue
         import runsuite
@@ -204,7 +204,7 @@ def api_checks(tmp, ok):
         until(lambda: os.path.exists(os.path.join(proj, "records", "runs", "rs.two", "done")), 60, what="rs.two done through the queue")
         assert runsuite.status("rs.two")["files"] == ["objects.json"] and runsuite.queue_get("rs.two")["state"] == "done"
         assert runsuite.queue_remove("rs.two") == {"removed": "rs.two"}
-        rc, out, err = cli("queue", "list", "--json")
+        rc, out, err = cli("queue-list", "--json")
         assert rc == 0 and "rs.two" not in [x["id"] for x in json.loads(out)["items"]] and "w.one" in [x["id"] for x in json.loads(out)["items"]], "one queue: the runner job went, the training item is still there"
         from runsuite.__main__ import main as run_main
         buf = io.StringIO()
@@ -229,6 +229,9 @@ def api_checks(tmp, ok):
         assert rc == 0 and json.loads(out)["id"] == "g.q" and json.loads(out)["state"] == "queued", (rc, out, err)
         rc, out, err = cli("queue_list")                                            # without the class name: not an older command
         assert rc == 0 and "g.q" in out, out
+        rc, out, err = cli("queue-list", "--json")                                  # the command is the method name with hyphens
+        items = json.loads(out)["items"]
+        assert rc == 0 and "g.q" in [x["id"] for x in items] and [x["number"] for x in items] == list(range(1, len(items) + 1)), "the items keep their order when they are read on several threads"
         rc, out, err = cli("Training.queue_get", "g_q", "--json")
         assert rc == 0 and json.loads(out)["id"] == "g.q", (rc, out, err)
         rc, out, err = cli("Training.status", "1", "--json")                        # a number: the item
@@ -238,10 +241,16 @@ def api_checks(tmp, ok):
             raise AssertionError("queue_hold without --words must be refused by the command line too")
         except SystemExit as e:
             assert e.code == 2
-        rc, out, err = cli("Training.queue_hold", "--words", "Mirko: selftest")
+        try:
+            cli("Training.queue_hold", "--words", "Mirko: selftest")                # no item and no --all: the command line does not hold everything by accident
+            raise AssertionError("queue_hold without an item and without --all must be refused by the command line")
+        except SystemExit as e:
+            assert e.code == 2
+        assert json.loads(cli("queue_list", "--json")[1])["paused"] is False
+        rc, out, err = cli("Training.queue_hold", "--all", "--words", "Mirko: selftest")
         assert rc == 0, (rc, out, err)
         assert json.loads(cli("queue_list", "--json")[1])["paused"] is True
-        rc, out, err = cli("Training.queue_resume", "--words", "Mirko: selftest")
+        rc, out, err = cli("Training.queue_resume", "--all", "--words", "Mirko: selftest")
         assert rc == 0 and json.loads(cli("queue_list", "--json")[1])["paused"] is False
         rc, out, err = cli("Training.queue_remove", "g.q")
         assert rc == 0 and "removed g.q" in out
@@ -398,8 +407,8 @@ def api_checks(tmp, ok):
         rc, out_, err_ = cli("Training.queue_list", "--project", "/nonexistent/project")
         assert rc == 2 and "no project" in err_, (rc, err_)
         jf = job("o.opt")
-        rc, out_, err_ = cli("queue", "add", jf, "--priority", "1", "--no-runner")
-        assert rc == 2 and "cannot be combined" in err_ and "o.opt" not in [x["id"] for x in t.queue_list()["items"]], (rc, err_)
+        rc, out_, err_ = cli("queue", "add", jf, "--priority", "1", "--no-runner")      # the older form is for a config with --id: a job file is refused and the right command is named
+        assert rc == 2 and "queue-add" in err_ and "o.opt" not in [x["id"] for x in t.queue_list()["items"]], (rc, err_)
         t.queue_hold("Mirko: selftest")
         rc, out_, err_ = cli("start", "base.json", "--id", "z.paused", "--no-card", "--go")
         assert rc == 1 and "PAUSED" in out_ and not os.path.isdir(os.path.join(proj, "records", "runs", "z.paused")), (rc, out_)
@@ -408,6 +417,46 @@ def api_checks(tmp, ok):
         raises(runsuite.Runner(proj).check, "could not be read", rj("rs.dmg"))      # the runner's check too turns the queue's error into the one error type
         ok("second review: the note of a cleared hold goes to the object's project, a job of another project is read back from there, a slot of another project is not ours, a runner job is no "
            "training for hold, true / false are checked, a BOM is read, no project and a damaged queue are errors with exit 2, a job file refuses the older options, a pause binds `start --go`")
+
+        # 13 what the third review found: --json has no NaN, a damaged item is a message with exit 2, two threads on two projects do not mix, the old words are pinned, the help is honest
+        import inspect as _inspect
+        import threading
+        from . import apicli
+        from .cli import LEGACY
+        assert apicli._clean({"loss": float("nan"), "xs": [1.0, float("inf")]}) == {"loss": None, "xs": [1.0, None]}
+        json.loads(json.dumps(apicli._clean({"loss": float("nan")}), allow_nan=False))
+        qpath = TQ.context(proj).qpath
+        open(qpath, "w").write(json.dumps({"items": [{"id": "x.broken"}]}))        # an item without its fields (a hand-made file)
+        rc, out_, err_ = cli("queue-list")
+        assert rc == 2 and err_.startswith("error:") and "Traceback" not in err_, (rc, err_)
+        os.remove(qpath)
+        assert set(LEGACY) & set(api.Training.METHODS) == {"status", "stop", "plot", "compare"}, "the older words that a method also has: they need the class name"
+        for word in LEGACY:                                                          # every older word is a real command (a word that is not would hide a method behind it)
+            try:
+                cli(word, "--help")
+                raise AssertionError(word)
+            except SystemExit as e:
+                assert e.code == 0, word
+        assert all(not m["summary"].endswith(("e.g.", "i.e.")) for m in api.Training.methods() + runsuite.Runner.methods()), "a summary is a whole sentence"
+        assert str(_inspect.signature(runsuite.check)) == "(job)" and str(_inspect.signature(api.queue_hold)).startswith("(words"), "the functions of the default object keep their arguments"
+        api.Training(second).queue_add(job("x.cross", project=second), start=False)
+        seen = {"proj": set(), "second": set()}
+
+        def look(label, path):
+            for _ in range(15):
+                seen[label] |= {x["id"] for x in api.Training(path).queue_list()["items"]}
+        threads = [threading.Thread(target=look, args=("proj", proj)), threading.Thread(target=look, args=("second", second))]
+        [th.start() for th in threads]
+        [th.join() for th in threads]
+        assert "x.cross" in seen["second"] and "x.cross" not in seen["proj"], seen
+        api.Training(second).queue_remove("x.cross")
+        from runsuite.__main__ import main as run_main3
+        errbuf = io.StringIO()
+        with contextlib.redirect_stderr(errbuf), contextlib.redirect_stdout(io.StringIO()):
+            assert run_main3(["bogus"]) == 2 and run_main3([]) == 2 and run_main3(["--help"]) == 0
+        assert "unknown command 'bogus'" in errbuf.getvalue(), errbuf.getvalue()
+        ok("third review: --json has no NaN, a damaged queue item is a message with exit 2, two threads on two projects do not mix, the older words are pinned, the runner's help and unknown "
+           "command are honest")
     finally:
         rp = TQ.runner_alive(TQ.context(proj))
         if rp:

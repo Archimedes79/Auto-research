@@ -2,7 +2,7 @@
 
 The interface is the one of the training (`autoresearch/INTERFACE.md`): the class `Runner(project)` with `check(job)`, `run(job)`, `status(i)`, `queue_add(job)`; the other queue methods
 (`queue_list`, `queue_get`, `queue_remove`, `queue_start`, `queue_hold`, `queue_resume`) are the ones of `Training` (one queue for trainings and runner jobs). The head of `__init__.py` has the
-example and the modes. Every method is a command: `python -m runsuite Runner.run job.json` (from `autoresearch/`), `python -m runsuite methods`.
+example and the modes. Every method is a command: `python -m runsuite run job.json` (from `autoresearch/`), `python -m runsuite methods`.
 
 | file | what |
 |---|---|

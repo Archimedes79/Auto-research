@@ -125,19 +125,19 @@ class Runner(T.Training):
         dts = j.get("dts") or []
         if not isinstance(dts, (list, tuple)) or any(isinstance(x, bool) or not isinstance(x, (int, float)) for x in dts):
             raise T.TrainingError('job "dts": a list of seconds, e.g. [0, 0.5]')
-        j["dts"], j["cold"] = list(dts), T._bool(j, "cold")
+        j["dts"], j["cold"] = list(dts), T.as_bool(j, "cold")
         return j
 
-    @T._errors
+    @T.errors
     def check(self, job):
         """are the fields and paths of the job right, and which command would run? Starts nothing. -> {ok, id, mode, problems, command, out}"""
         j = self._job(job)
         c = self._c(j)
         cmd, run_argv, problems, out = _plan(c, j)
         problems = T.queue_blocks(c, j["id"]) + problems
-        return dict(ok=not problems, id=j["id"], mode=j["mode"], problems=problems, command=T._shell(run_argv), out=out or "(the runner's default)")
+        return dict(ok=not problems, id=j["id"], mode=j["mode"], problems=problems, command=T.shell(run_argv), out=out or "(the runner's default)")
 
-    @T._errors
+    @T.errors
     def run(self, job, wait=3.0):
         """start the job now (detached, through run.py: record, ledger row without card, GPU slot). -> {id, started, out, command}"""
         j = self._job(job)
@@ -150,9 +150,9 @@ class Runner(T.Training):
             i = run_argv.index("--")
             run_argv = run_argv[:i] + ["--after", ",".join(j["after"])] + run_argv[i:]
         log = os.path.join(c.runs, TQ.folder(j["id"]) + ".launcher.log")
-        return dict(id=j["id"], started=T._launch(c, [(run_argv, log, j["id"])], j["id"], wait), out=out, command=T._shell(run_argv))
+        return dict(id=j["id"], started=T.launch(c, [(run_argv, log, j["id"])], wait), out=out, command=T.shell(run_argv))
 
-    @T._errors
+    @T.errors
     def queue_add(self, job, start=True):
         """put the job in the queue of the trainings (kind "run"): it runs when its turn comes, `after` and `priority` work as for a training. -> the item as queue_get shows it"""
         j = self._job(job)
@@ -164,13 +164,13 @@ class Runner(T.Training):
         TQ.add(c, {"argv": run_argv}, j["id"], j["after"], j["priority"], j["note"], extra=dict(kind="run", job={k: v for k, v in j.items() if k != "project"}))
         if start:
             TQ.ensure_runner(c)
-        return T._get(c, j["id"])                               # the context of the job (its "project" may differ from this object's)
+        return T.get_item(c, j["id"])                               # the context of the job (its "project" may differ from this object's)
 
-    @T._errors
+    @T.errors
     def status(self, i=None):
         """one runner job: the state from its run record, the exit code, the duration, the files in its output folder and the tail of its log. i=None is the running job"""
         c = self._c()
-        rid, it, n = T._resolve(c, i, "run")
+        rid, it, n = T.resolve(c, i, "run")
         if rid is None:
             return dict(id=None, state="idle")
         d = os.path.join(c.records, rid)
@@ -188,12 +188,5 @@ class Runner(T.Training):
                     started=rec.get("started"), ended=rec.get("ended"), out=out, files=files, log_tail=(rec.get("last_lines") or [])[-6:])
 
 
-def _delegate(name):
-    def f(*a, **kw):
-        return getattr(Runner(), name)(*a, **kw)
-    f.__name__, f.__doc__ = name, getattr(Runner, name).__doc__
-    return f
-
-
 for _n in Runner.METHODS:                     # the same methods as functions of a default object: `runsuite.check(job)` = `Runner().check(job)`
-    globals()[_n] = _delegate(_n)
+    globals()[_n] = T.delegate(Runner, _n)

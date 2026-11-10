@@ -18,17 +18,21 @@
     t.plot("t23.C_s1")                                     # loss curves as a png                                                      -> {png}
     t.compare("t20.base_s0", "speed3.fast")                # s/step, data wait, GPU busy, peak memory, loss at the last shared step     -> {rows}
 
-Every method is also a command: `python -m trainsuite Training.queue_add job.json`, `Training.queue_hold --words "..."`, `Training.status 3`, `Training.compare A B` (`python -m trainsuite
-methods` lists them with their arguments; a method without a clash with an older command also works without the class name: `queue_add job.json`). The command prints a short text, or
-with `--json` exactly what the method returns. `i` is the number shown by queue_list (1 = first), an id (`t23.C_s1`) or a run folder name (`t23_C_s1`). The older commands (`start`,
-`queue add ...`, `queue serve`, `queue drop`) stay as they were. Hold and resume need the person's own words: a rule, not a convenience (autoresearch/METHOD.md, hard rule 6).
+Every method is also a command with the class name in front: `python -m trainsuite Training.queue_add job.json`, `Training.queue_hold --all --words "..."`, `Training.status 3` (`python -m
+trainsuite methods` lists them with their arguments; apicli.py has the map). Short forms where no older command has the word: `queue_add` and `queue-add`; `status`, `stop`, `plot` and
+`compare` are older commands with their own meaning, so they always need the class name. The command prints a short text, or with `--json` exactly what the method returns. `i` is an id
+(`t23.C_s1`), a run folder name (`t23_C_s1`) or the number shown by queue_list (1 = first). Hold and resume need the person's own words: a rule, not a convenience (autoresearch/METHOD.md,
+hard rule 6). One process works on one project at a time: the project is passed to the modules through the environment, so the methods take a lock (two threads with two projects wait for each other).
 """
+import functools
 import inspect
 import json
 import os
 import re
 import shlex
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from . import compose as C
 from . import control, health, modules
@@ -44,8 +48,20 @@ TRAIN_ONLY = ("preset", "set", "card", "no_card", "kill", "run_args", "prepare",
 RUN_ONLY = ("run", "mode", "split", "n", "scene", "first", "out", "dts", "device", "cold", "frames", "code")     # keys that mean something for a runner job only
 
 
+READERS = 4                    # the run folders lie on a slow drive (about 3 ms per file access under WSL): reading many of them waits for the drive, so a few threads read at once
+
+
 class TrainingError(Exception):
     """what the person has to fix; the message says what and where"""
+
+
+def _map(fn, items):
+    """[fn(x) for x in items], the calls on a few threads: for functions that read files of many run folders"""
+    items = list(items)
+    if len(items) < 2:
+        return [fn(x) for x in items]
+    with ThreadPoolExecutor(min(READERS, len(items))) as pool:
+        return list(pool.map(fn, items))
 
 
 # ---- jobs
@@ -59,7 +75,7 @@ def _list(v, what):
     raise TrainingError(f'job "{what}": a text or a list of texts, not {v!r}')
 
 
-def _bool(d, key):
+def as_bool(d, key):
     """true or false (a text like "false" is an error: it would be true)"""
     v = d.get(key)
     if v is None:
@@ -111,7 +127,7 @@ def load_job(job):
     if not isinstance(card, dict) or set(card) - {"hyp", "pred", "rule"}:
         raise TrainingError('job "card": {"hyp": "...", "pred": "...", "rule": "..."}')
     j["card"] = dict(card)
-    j["no_card"] = _bool(d, "no_card")
+    j["no_card"] = as_bool(d, "no_card")
     j["after"] = _list(d.get("after"), "after")
     try:
         j["priority"] = int(d.get("priority", 5))
@@ -127,7 +143,7 @@ def load_job(job):
         except ValueError as e:
             raise TrainingError(f'job "kill": {e}')
     j["run_args"] = _list(d.get("run_args"), "run_args")
-    j["prepare"], j["no_check"] = _bool(d, "prepare"), _bool(d, "no_check")
+    j["prepare"], j["no_check"] = as_bool(d, "prepare"), as_bool(d, "no_check")
     j["project"] = str(d.get("project") or "")
     if j["kind"] == "train" and not d.get("config"):
         raise TrainingError('a training job needs "config" (the network file, e.g. training/configs/t20_base.json)')
@@ -137,7 +153,7 @@ def load_job(job):
 
 def _ctx(project=None):
     """the project's context. TQ.context sets AR_PROJECT, and the modules it loads read it at call time (the ledger note of a hold, the paths), so it stays set while the method runs;
-    `_errors` gives the old value back when the method ends"""
+    `errors` gives the old value back when the method ends"""
     try:
         return TQ.context(project or None)
     except (Exception, SystemExit) as e:  # noqa: BLE001  a missing project.json is the person's to fix (project.py ends the process with a message)
@@ -145,26 +161,30 @@ def _ctx(project=None):
         raise TrainingError(f"no project: {what} (give the project folder, set AR_PROJECT or the job's \"project\")")
 
 
-def _errors(fn):
+_LOCK = threading.RLock()      # the project reaches the modules through the environment: one method at a time per process
+
+
+def errors(fn):
+    """a method of the interface: one project at a time (the lock), the environment given back, the queue's own error and a process exit of project.py become a TrainingError"""
+    @functools.wraps(fn)
     def wrapped(*a, **kw):
-        old = os.environ.get("AR_PROJECT")
-        try:
-            return fn(*a, **kw)
-        except TQ.QueueError as e:
-            raise TrainingError(str(e))
-        except SystemExit as e:                                   # project.py ends the process with a message when it finds no project
-            raise TrainingError(str(e.code) if isinstance(e.code, str) else f"the process was asked to end (exit {e.code})")
-        finally:
-            if old is None:
-                os.environ.pop("AR_PROJECT", None)
-            else:
-                os.environ["AR_PROJECT"] = old
-    wrapped.__name__, wrapped.__doc__ = fn.__name__, fn.__doc__
-    wrapped.__signature__ = inspect.signature(fn)
+        with _LOCK:
+            old = os.environ.get("AR_PROJECT")
+            try:
+                return fn(*a, **kw)
+            except TQ.QueueError as e:
+                raise TrainingError(str(e))
+            except SystemExit as e:                               # project.py ends the process with a message when it finds no project
+                raise TrainingError(str(e.code) if isinstance(e.code, str) else f"the process was asked to end (exit {e.code})")
+            finally:
+                if old is None:
+                    os.environ.pop("AR_PROJECT", None)
+                else:
+                    os.environ["AR_PROJECT"] = old
     return wrapped
 
 
-def _shell(argv):
+def shell(argv):
     return " ".join(shlex.quote(x) for x in argv)
 
 
@@ -218,7 +238,7 @@ def _checked_plan(c, j, final, direct=True):
     return plan, problems, missing
 
 
-def _launch(c, jobs, last_id, wait):
+def launch(c, jobs, wait):
     """start the launchers detached (builds first, the training last); a launcher that refuses within `wait` seconds (held, running, finished, no card) is an error"""
     started = []
     os.makedirs(os.path.dirname(jobs[-1][1]), exist_ok=True)
@@ -260,24 +280,29 @@ def _slot_ids(c):
     return out
 
 
-def _running(c, kind="train"):
-    """[(id, queue item or None, number or None)] of what runs now and is of this kind: the items of the queue first, then what holds a GPU slot without being in the queue (a run
-    started by `run`, `start --go` or by hand; it is a training when it has a run folder)"""
-    items = _ordered(TQ.load(c))
-    out = [(it["id"], it, n) for n, it in enumerate(items, 1) if TQ.state(c, it) in ("running", "orphan") and it.get("kind", "train") == kind]
+def _states(c, items):
+    """{id: state} of the items: state() reads files, so a call looks once"""
+    return {it["id"]: TQ.state(c, it) for it in items}
+
+
+def _running(c, items, states, kind=None):
+    """[(id, queue item or None, number or None)] of what runs now and is of this kind (None: of any kind): the items of the queue first, then what holds a GPU slot without being in
+    the queue (a run started by `run`, `start --go` or by hand; it is a training when it has a run folder)"""
+    out = [(it["id"], it, n) for n, it in enumerate(items, 1) if states[it["id"]] in ("running", "orphan") and kind in (None, it.get("kind", "train"))]
     queued = {it["id"] for it in items}
     for rid in _slot_ids(c):
-        if rid not in queued and ("train" if os.path.isdir(_run_dir(c, rid)) else "run") == kind:
+        if rid not in queued and kind in (None, "train" if os.path.isdir(_run_dir(c, rid)) else "run"):
             out.append((rid, None, None))
     return out
 
 
-def _resolve(c, i, kind="train"):
+def resolve(c, i, kind="train"):
     """-> (id, queue item or None, number or None). i=None is the running one of this kind. A text is an id or a run folder name first; a number (an int, or a text of digits that is no
     id) is the place in `queue_list`; what is neither in the queue is a run of the records (no item, no number)"""
     items = _ordered(TQ.load(c))
     if i is None:
-        return _running(c, kind)[0] if _running(c, kind) else (None, None, None)
+        running = _running(c, items, _states(c, items), kind)
+        return running[0] if running else (None, None, None)
     if isinstance(i, bool):
         raise TrainingError("i is a queue number, an id or a run folder name")
     if isinstance(i, str):
@@ -301,15 +326,14 @@ def _run_dir(c, rid):
     return os.path.join(c.runs, TQ.folder(rid))
 
 
-def _get(c, i):
+def get_item(c, i):
     """one item of the queue of the project c, in full (queue_get)"""
-    rid, it, n = _resolve(c, i)
+    rid, it, n = resolve(c, i)
     if it is None:
         raise TrainingError(f"{i!r} is not in the queue")
-    states = {x["id"]: TQ.state(c, x) for x in TQ.load(c)["items"]}
-    info = _item_info(c, it, n, states)
+    info = _item_info(c, it, n, _states(c, [it]))
     return dict(info, job=it.get("job"), kill=it.get("kill") or [], config=it.get("config"), composed=it.get("composed", ""), added=it.get("added"), by=it.get("by", ""),
-                command=_shell(TQ.with_gate(c, TQ.pinned_argv(it))))
+                command=shell(TQ.with_gate(c, TQ.pinned_argv(it))))
 
 
 def _item_info(c, it, n, states):
@@ -351,11 +375,9 @@ def _machine(c):
     except C.ComposeError as e:
         gate = f"error: {e}"
     used = c.R.gpu_used_mb()
-    holds = []
-    for rid in sorted(os.listdir(c.records)) if os.path.isdir(c.records) else []:
-        h = c.H.read(os.path.join(c.records, rid))
-        if h is not None:
-            holds.append(dict(id=rid, since=h.get("when", "?"), why=h.get("why", "")))
+    names = sorted(os.listdir(c.records)) if os.path.isdir(c.records) else []
+    found = _map(lambda rid: c.H.read(os.path.join(c.records, rid)), names)
+    holds = [dict(id=rid, since=h.get("when", "?"), why=h.get("why", "")) for rid, h in zip(names, found) if h is not None]
     return dict(slots=slots, lock=lock, ram=dict(available_mb=c.R.mem_available_mb(), need_mb=int(c.cfg.get("ram_mb", 0))), gpu=dict(used_mb=used, gate_mb=gate), holds=holds)
 
 
@@ -385,11 +407,11 @@ class Training:
         for name in cls.METHODS:
             fn = getattr(cls, name)
             args = ", ".join(str(p) for k, p in inspect.signature(fn).parameters.items() if k != "self")
-            out.append(dict(name=name, arguments=args, summary=(inspect.getdoc(fn) or "").split("\n")[0].strip()))
+            out.append(dict(name=name, arguments=args, summary=" ".join((inspect.getdoc(fn) or "").split()).split(". ")[0].rstrip(".") + "."))
         return out
 
     # ---- one training
-    @_errors
+    @errors
     def check(self, job):
         """what `run` would do, without doing it: compose the config (every change listed), the project's static check, the check of the data the run needs. Writes only a preview
         file. -> {ok, id, changes, notes, problems, will_prepare, command}"""
@@ -399,9 +421,9 @@ class Training:
         if missing and not j["prepare"]:
             problems.append("missing data: " + ", ".join(m["name"] for m in missing) + ' (build it first, or set "prepare": true: the build becomes a run of its own that the training waits for)')
         return dict(ok=not problems, id=j["id"], changes=C.describe(plan["changes"], plan["base_keys"]), notes=list(plan["notes"]), problems=problems,
-                    will_prepare=[m["name"] for m in missing] if j["prepare"] else [], command=_shell(plan["argv"]))
+                    will_prepare=[m["name"] for m in missing] if j["prepare"] else [], command=shell(plan["argv"]))
 
-    @_errors
+    @errors
     def run(self, job, wait=3.0):
         """start the training now (detached), outside the queue. The same call again resumes a stopped or crashed run from its last checkpoint. -> {id, started: [{id, pid, log}], command}"""
         j = self._job(job)
@@ -418,16 +440,16 @@ class Training:
             argv = argv[:i] + ["--after", ",".join(waits)] + (["--wait-after", str(max(m["wait_min"] for m in missing))] if missing else []) + argv[i:]
         log_dir = os.path.dirname(plan["log"])
         jobs = [(m["argv"], os.path.join(log_dir, m["id"].replace(".", "_") + ".launcher.log"), m["id"]) for m in missing] + [(argv, plan["log"], j["id"])]
-        started = _launch(c, jobs, j["id"], wait)
+        started = launch(c, jobs, wait)
         TQ.write_kill(os.path.join(c.runs, TQ.folder(j["id"])), j["kill"])     # only now: a launcher that refused (held, running, finished) leaves no folder behind
-        return dict(id=j["id"], started=started, command=_shell(argv))
+        return dict(id=j["id"], started=started, command=shell(argv))
 
-    @_errors
+    @errors
     def stop(self, i=None, reason=""):
         """ask one training to save a checkpoint and stop (it exits with 75; run.py then puts its id on hold); i=None is the running one. Refused for a code snapshot without the stop
         check. -> {id, requested, file, verified}"""
         c = self._c()
-        rid, _, _ = _resolve(c, i)
+        rid, _, _ = resolve(c, i)
         if rid is None:
             raise TrainingError("nothing is running")
         rd = _run_dir(c, rid)
@@ -438,12 +460,12 @@ class Training:
             raise TrainingError(f"NOT requested: the code snapshot of {rid} (code/train.py) has no stop check, it would ignore CONTROL. Stopping it is a decision about the process, not a file")
         return dict(id=rid, requested=True, file=control.request_stop(rd, reason), verified=bool(ok))
 
-    @_errors
+    @errors
     def status(self, i=None, kill=(), ref=None, skip=10):
         """one training in full: state and phase, step, ETA, loss, the gradient norm (first / now / peak), the non-finite steps skipped, the data it trained on, the health findings,
         the kill rules (the job's and `kill`), the speed (s/step, data wait, GPU busy, peak GB) and its place in the queue. i=None is the running training (state "idle" if none)."""
         c = self._c()
-        rid, it, n = _resolve(c, i)
+        rid, it, n = resolve(c, i)
         if rid is None:
             return dict(id=None, state="idle", queue=None, number=None)
         rd = _run_dir(c, rid)
@@ -452,10 +474,12 @@ class Training:
         if not os.path.isdir(rd):
             return dict(id=rid, number=n, queue=qstate, state=qstate or "unknown", phase="not started", step=0, total=0, pct=None, eta_s=None, ready_at=None, s_per_step=None, loss=None,
                         grad=None, skipped=0, data="", restarts=0, findings=[], kill=[], speed=None, note="no run folder yet")
-        run_ = Run(rd, "total")
-        if ref and not os.path.isdir(_run_dir(c, _resolve(c, ref)[0])):
-            raise TrainingError(f"the reference run {ref!r} has no run folder")
-        refrun = Run(_run_dir(c, _resolve(c, ref)[0]), "total") if ref else None
+        run_, refrun = Run(rd, "total"), None
+        if ref:
+            ref_dir = _run_dir(c, resolve(c, ref)[0])
+            if not os.path.isdir(ref_dir):
+                raise TrainingError(f"the reference run {ref!r} has no run folder")
+            refrun = Run(ref_dir, "total")
         s, findings, kills = summary(run_, refrun, rules)
         if c.R.state_of(os.path.join(c.records, rid)) in ("done", "ok") and s["state"] != "done":     # the launcher's record is the authority: the done flag exists only for exit 0
             s.update(state="done", phase="done", ready_pct=100.0, pct=100.0, eta_s=None)
@@ -463,7 +487,7 @@ class Training:
                     s_per_step=s["s_per_step"], loss=s["loss"], grad=s["grad"], skipped=s["skipped"], data=s["data"], restarts=s["restarts"],
                     findings=[f._asdict() for f in findings], kill=[dict(rule=r.text, status=st, value=v) for r, st, v in kills], speed=speed_row(run_, skip))
 
-    @_errors
+    @errors
     def plot(self, i, out=None, keys=None, smooth=10):
         """the loss curves of one run as a png (needs matplotlib); `keys`: a comma list of log keys (default: the loss and its groups). -> {png}"""
         from .curves import default_keys, plot as draw
@@ -471,7 +495,7 @@ class Training:
         ids = [i] if not isinstance(i, (list, tuple)) else list(i)
         dirs = []
         for x in ids:
-            rid = _resolve(c, x)[0]
+            rid = resolve(c, x)[0]
             if rid is None or not os.path.isdir(_run_dir(c, rid)):
                 raise TrainingError(f"no run folder for {x!r}")
             dirs.append(Run(_run_dir(c, rid), "total"))
@@ -482,14 +506,14 @@ class Training:
         except ImportError as e:
             raise TrainingError(f"plot needs matplotlib: {e}")
 
-    @_errors
+    @errors
     def compare(self, a, b, skip=10):
         """two runs side by side, a is the baseline: s/step and the speed-up, the share of a step that waits for the data, the GPU busy share, the peak GPU memory, and the loss at
         the last step both have reached (an optimisation that changes the loss curve is not a free speed-up). -> {common_step, rows: [{id, ...}]}"""
         c = self._c()
         runs = []
         for x in (a, b):
-            rid = _resolve(c, x)[0]
+            rid = resolve(c, x)[0]
             if rid is None or not os.path.isdir(_run_dir(c, rid)):
                 raise TrainingError(f"no run folder for {x!r}")
             runs.append((rid, Run(_run_dir(c, rid), "total")))
@@ -504,24 +528,24 @@ class Training:
         return dict(common_step=common, rows=out)
 
     # ---- the queue (trainings and runner jobs share it)
-    @_errors
+    @errors
     def queue_list(self):
         """the queue in the order it runs, with what the box looks like. -> {items: [{number, id, kind, state, step, total, after, priority, held, grad, skipped, flags, ...}], running,
         runner (pid or 0), paused, slots, lock, ram, gpu, holds}"""
         c = self._c()
         q = TQ.load(c)
         items = _ordered(q)
-        states = {i["id"]: TQ.state(c, i) for i in items}
-        infos = [_item_info(c, it, n, states) for n, it in enumerate(items, 1)]
-        running = next(iter(_running(c, "train") + _running(c, "run")), (None,))[0]
+        states = _states(c, items)
+        infos = _map(lambda nx: _item_info(c, nx[1], nx[0], states), enumerate(items, 1))
+        running = next(iter(_running(c, items, states)), (None,))[0]
         return dict(items=infos, running=running, runner=TQ.runner_alive(c), paused=bool(q.get("paused")), **_machine(c))
 
-    @_errors
+    @errors
     def queue_get(self, i):
         """one item: its place and state, the job it was made from, the composed config, and the exact command (the memory gate and the code pin included). -> dict"""
-        return _get(self._c(), i)
+        return get_item(self._c(), i)
 
-    @_errors
+    @errors
     def queue_add(self, job, start=True):
         """check the job like `check`, put it in the queue and make sure the runner runs (start=False: not). A missing data build is refused here (a queued run would only fail when its
         turn comes). -> the item as queue_get shows it"""
@@ -535,48 +559,49 @@ class Training:
         TQ.add(c, plan, j["id"], j["after"], j["priority"], j["note"], extra=dict(kind="train", job={k: v for k, v in j.items() if k != "project"}, kill=j["kill"]))
         if start:
             TQ.ensure_runner(c)
-        return _get(c, j["id"])                                        # the context of the job (its "project" may differ from this object's)
+        return get_item(c, j["id"])                                        # the context of the job (its "project" may differ from this object's)
 
-    @_errors
+    @errors
     def queue_remove(self, i):
-        """take an item out of the queue that has not started (or has ended); a running one is stopped first (queue_hold / stop). -> {removed}"""
+        """take an item out of the queue that has not started (or has ended); a running one is refused (it has to be stopped first). -> {removed}"""
         c = self._c()
-        rid, it, _ = _resolve(c, i)
+        rid, it, _ = resolve(c, i)
         if it is None:
             raise TrainingError(f"{i!r} is not in the queue")
         TQ.drop(c, rid)
         return dict(removed=rid)
 
-    @_errors
+    @errors
     def queue_start(self):
         """make sure the runner runs: it starts the first startable item every 30 s, restarts a run whose launcher died with the machine, and ends after 10 idle minutes. -> {runner: pid}"""
         return dict(runner=TQ.ensure_runner(self._c()))
 
-    @_errors
+    @errors
     def queue_hold(self, words, i=None, reason="", wait=180.0):
-        """stop the trainings (a checkpoint each, exit 75) and keep what waits from starting; i=None holds ALL and pauses the runner, i holds one. `words` are the person's own words
-        that ordered it (required). -> {id: outcome}"""
+        """stop the trainings (a checkpoint each, exit 75) and keep what waits from starting; i=None holds ALL and pauses the runner, i holds one (the command line wants `--all` for
+        all). `words` are the person's own words that ordered it (required). -> {id: outcome}"""
         c = self._c()
-        ids = () if i is None else (_resolve(c, i)[0],)
+        ids = () if i is None else (resolve(c, i)[0],)
         return TQ.hold(c, ids, i is None, words, reason, wait, out=lambda *a, **k: None)
 
-    @_errors
+    @errors
     def queue_resume(self, words, i=None, fresh_code=False):
         """the person's words clear the holds: every held training (i=None) or one continues from its last checkpoint on the code of its first attempt (fresh_code: on the code of now,
         the hot-fix loop). -> {id: what happens}"""
         c = self._c()
-        ids = () if i is None else (_resolve(c, i)[0],)
+        ids = () if i is None else (resolve(c, i)[0],)
         return TQ.resume(c, ids, i is None, words, fresh_code, True, out=lambda *a, **k: None)
 
 
-def _delegate(name):
+def delegate(cls, name):
+    """the method `name` of `cls` as a function of a default object: `trainsuite.check(job)` is `Training().check(job)`"""
     def f(*a, **kw):
-        return getattr(Training(), name)(*a, **kw)
-    f.__name__, f.__doc__ = name, getattr(Training, name).__doc__
-    sig = inspect.signature(getattr(Training, name))
+        return getattr(cls(), name)(*a, **kw)
+    f.__name__, f.__doc__ = name, getattr(cls, name).__doc__
+    sig = inspect.signature(getattr(cls, name))
     f.__signature__ = sig.replace(parameters=list(sig.parameters.values())[1:])        # help(trainsuite.queue_hold) shows the arguments, not (*a, **kw)
     return f
 
 
-for _n in Training.METHODS:                    # the same methods as functions of a default object: `trainsuite.check(job)` = `Training().check(job)`
-    globals()[_n] = _delegate(_n)
+for _n in Training.METHODS:
+    globals()[_n] = delegate(Training, _n)
