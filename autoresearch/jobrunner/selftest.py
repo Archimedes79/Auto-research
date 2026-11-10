@@ -72,6 +72,10 @@ class Toy:
     def card_work(self, n):
         """a call that may feed a verdict, without a GPU."""
         return {"ok": True, "n": n}
+
+    def which(self):
+        """says which environment it runs in (the wrapper interpreter of the selftest sets JR_ALLOW)."""
+        return {"ok": True, "allow": os.environ.get("JR_ALLOW")}
 '''
 
 TOY2 = '''
@@ -113,6 +117,7 @@ TOYS = {
     "Toy.fire": dict(suite="toysuite", cls="Toy", method="fire", how="launch", id_from="tag"),
     "Toy.fire_slow": dict(suite="toysuite", cls="Toy", method="fire_slow", how="launch", id_from="tag"),
     "Toy.card_work": dict(suite="toysuite", cls="Toy", method="card_work", how="process", may_feed_verdict=True),
+    "Toy.which": dict(suite="toysuite", cls="Toy", method="which", how="process"),
 }
 N = 0
 DEAD = 2 ** 22 + 12345                                              # a pid no process has (above pid_max)
@@ -520,6 +525,23 @@ def test_real(T):
     row = ledger_line(T, "e.card")
     tags = subprocess.run(["git", "-c", "safe.directory=*", "-C", T, "tag"], capture_output=True, text=True).stdout.split()
     ok("keep if n >= 1" in row and "no card" not in row and "t/e.card" in tags, "a card job through the real run.py: the rule is in the ledger and the code is tagged: " + row[:200])
+    # the interpreter of the child is an option: nothing is set in project.json
+    plain = jr.run({"id": "e.py0", "call": "Toy.which", "args": {}}, wait=90)
+    opt = JobRunner(T, python=f"{T}/py").run({"id": "e.py1", "call": "Toy.which", "args": {}}, wait=90)
+    ok(plain["result"] == {"ok": True, "allow": None} and opt["result"] == {"ok": True, "allow": "1"}, "the child runs in the interpreter of the option: " + str((plain["result"], opt["result"])))
+    wrapper = f"{T}/py2"
+    open(wrapper, "w").write(f'#!/bin/bash\nexec env JR_ALLOW=job {sys.executable} "$@"\n')
+    os.chmod(wrapper, 0o755)
+    both = JobRunner(T, python=f"{T}/py").run({"id": "e.py2", "call": "Toy.which", "args": {}, "python": wrapper}, wait=90)
+    ok(both["result"]["allow"] == "job", "the interpreter named in the job wins over the option")
+    os.environ["JOBRUNNER_PYTHON"] = f"{T}/py"
+    try:
+        ok(JobRunner(T)._python("", {}) == f"{T}/py" and JobRunner(T, python=wrapper)._python("", {}) == wrapper, "the environment variable is the lowest option, the argument wins over it")
+    finally:
+        del os.environ["JOBRUNNER_PYTHON"]
+    json.dump({"id": "e.py3", "call": "Toy.which", "args": {}}, open(f"{T}/py_job.json", "w"))
+    cmd = subprocess.run([sys.executable, "-m", "jobrunner", "JobRunner.check", f"{T}/py_job.json", "--python", f"{T}/py", "--json", "--project", T], capture_output=True, text=True, cwd=AR)
+    ok(cmd.returncode == 0 and f"{T}/py" in json.loads(cmd.stdout)["command"], "the command line has --python: " + cmd.stdout[-200:] + cmd.stderr[-200:])
     r = jr.run({"id": "e.run", "call": "Toy.work", "args": {"n": 2, "name": "erun"}}, wait=90)
     ok(r["state"] == "done" and r["ok"] is True)
     ok(jr.run({"id": "e.run2", "call": "Toy.boom", "args": {}}, wait=90)["ok"] is False, "run() says ok=False for a job that failed")
