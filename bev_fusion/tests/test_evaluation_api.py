@@ -28,7 +28,8 @@ sys.path[:0] = [ROOT, os.path.join(ROOT, "..", "autoresearch")]
 
 def quick():
     from evalsuite.selftest_api import run_all
-    r = run_all()
+    from evalsuite.api import Evaluation as _Evaluation
+    r = run_all(type(_Evaluation(project=ROOT).runner))                                                    # the Evaluation together with THE Runner (bev_fusion/runner) on the toy adapter
     assert r["ok"], r
     os.chdir(ROOT)
     from evaluation import bev_eval
@@ -40,7 +41,7 @@ def quick():
     assert len(bev_eval.evaluator_extra()) == 12, "the adapter's own code is part of the evaluation id"
     ev_ = Evaluation(project=ROOT)                                                                      # the project names its Runner: bev_fusion/runner/runner.py, built with (project, adapter)
     assert type(ev_.runner).__module__ == "runner.runner", type(ev_.runner)
-    assert type(Evaluation(adapter="evaluation.bev_eval").runner).__module__ == "evalsuite.runner_api", "an adapter handed in gets the generic Runner, not the project's"
+    assert type(Evaluation(adapter="evaluation.bev_eval").runner).__module__ == "runner.runner", "the Evaluation always includes the project's Runner, whichever way the adapter is named"
     cfg = json.load(open(os.path.join(ROOT, "evaluation", "evalsuite.json")))
     assert cfg == {"adapter": "evaluation.bev_eval", "runner": "runner.runner:Runner"}, cfg
     s = bev_eval.sets()

@@ -14,13 +14,15 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .contracts import Source, Subject, Task
 
 
 class EvalSuite:
-    def __init__(self, source: Source, subject: Subject, task: Task, out: str = "eval_out", state: str = "carry"):
+    """the engine's workbench: a Source, a Subject (None when nothing is run: scoring stored predictions, reading counts) and a Task, with the qualitative and the quantitative part on them.
+    The class interface (api.py, `Evaluation`) builds one per call and is what a person uses; `EvalSuite` itself is the older entry point of bev_suite.py, the lane project and the selftests."""
+    def __init__(self, source: Source, subject: Optional[Subject], task: Task, out: str = "eval_out", state: str = "carry"):
         if state not in ("carry", "reset", "warmup"):
             raise ValueError("state must be 'carry', 'reset' or 'warmup'")
         self.source, self.subject, self.task = source, subject, task
@@ -46,4 +48,5 @@ class EvalSuite:
         return check_adapter(self)
 
     def close(self) -> None:
-        self.subject.close()
+        if self.subject is not None:
+            self.subject.close()

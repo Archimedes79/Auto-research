@@ -27,8 +27,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from .adapters import minimal
-from .api import ADAPTER_FUNCTIONS, Evaluation, EvaluationError, Frames, load_adapter
-from .runner_api import Runner
+from .api import ADAPTER_FUNCTIONS, Evaluation, EvaluationError, Frames, load_adapter, load_runner
 from .contracts import FrameRef, Prediction, Sample, TapSpec
 from . import results as results_mod
 from .results import Locked, ResultSet, decode, encode, result_id, writer_lock
@@ -128,11 +127,28 @@ def card(info, store, quant, rs):
     return {"name": info["id"], "metrics": quant.table(store)}
 
 
+RUNNER = {"cls": None}
+
+
+def runner_class():
+    """THE Runner class (there is one: the project's, named in its evalsuite.json): handed in by the caller (the BEV gate, `Evaluation.selftest`), else the class AR_PROJECT names. evalsuite has no
+    Runner of its own, so this selftest runs the Evaluation together with the real one on the toy adapter"""
+    if RUNNER["cls"] is None:
+        try:
+            RUNNER["cls"] = type(load_runner(os.environ.get("AR_PROJECT"), ME))
+        except EvaluationError as e:
+            raise EvaluationError(f"this selftest runs the Evaluation together with the project's Runner (evalsuite has none): set AR_PROJECT to a project that names one (AR_PROJECT=../bev_fusion), "
+                                  f"or call run_all(runner_cls); {e}") from None
+    return RUNNER["cls"]
+
+
+def toy_eval(adapter=None):
+    """an Evaluation of the toy project with the project's Runner class injected (built with the toy adapter)"""
+    adapter = adapter or ME
+    return Evaluation(adapter=adapter, runner=runner_class()(None, adapter))
+
+
 def evaluator_now(): return STATE.ev                                                # the evaluator code as it is now (what show_numbers compares a stored evaluation with)
-
-
-class ToyRunner(Runner):
-    """a project's own Runner, named in its evalsuite.json"""
 
 
 ME = sys.modules[__name__]
@@ -306,7 +322,7 @@ def check_results():
 
 def check_run():
     STATE.root, STATE.gt, STATE.shift, STATE.calls, STATE.loads, STATE.free_loads, STATE.fail_at = tempfile.mkdtemp(), "g1", 0, 0, 0, 0, None
-    ev = Evaluation(adapter=ME)
+    ev = toy_eval()
     net = "runs/thr0.5"
     # the engine's own run is the reference: same numbers on the kept frames (the kept frame of one scene in the middle runs with the scene's history)
     for spec in ("val", "frames:demo-1/4", "scenes:demo-2:val", "spread:7"):
@@ -361,17 +377,19 @@ def check_run():
         with writer_lock(os.path.join(out(net4), "results", rid)):
             _raises(EvaluationError, "being written by pid", ev.run, net4, "val", progress=0)
         assert ev.run(net4, "val", progress=0)["id"], "the lock is free again"
-    # the project names its Runner (evalsuite.json "runner"); an adapter handed in gets the generic one; a bad key is a message
+    # the project names its Runner (evalsuite.json "runner"): the Evaluation always includes it, whichever way the adapter comes; no key and a bad key are messages
     proj = tempfile.mkdtemp()
     os.makedirs(os.path.join(proj, "evaluation"))
 
     def config(runner):
         with open(os.path.join(proj, "evaluation", "evalsuite.json"), "w") as f:
             json.dump({"adapter": __name__, **({"runner": runner} if runner else {})}, f)
-    config(f"{__name__}:ToyRunner")
-    assert type(Evaluation(project=proj).runner) is ToyRunner and type(Evaluation(project=proj, adapter=ME).runner) is Runner, "the key is read when the adapter is the project's too"
+    cls = runner_class()
+    config(f"{cls.__module__}:{cls.__name__}")
+    assert type(Evaluation(project=proj).runner) is cls and type(Evaluation(project=proj, adapter=ME).runner) is cls, "the project's Runner, whichever way the adapter comes"
+    assert type(Evaluation(project=proj, runner=cls(None, ME)).runner) is cls and type(toy_eval().runner) is cls, "an injected Runner is used"
     config(None)
-    assert type(Evaluation(project=proj).runner) is Runner, "no key: the generic Runner"
+    _raises(EvaluationError, "names no runner", Evaluation, proj)                       # no fallback: evalsuite has no Runner of its own
     for bad, text in (("nonsense", "module:Class"), (f"{__name__}:Nothing", "cannot be built"), ("no_such_module_here:Runner", "cannot be built")):
         config(bad)
         _raises(EvaluationError, text, Evaluation, proj)
@@ -414,8 +432,8 @@ def check_run():
         assert ev.score(allr["results"], "val", None, ("maps",))["id"].endswith(eid)
     # an adapter without the label-free pair: the Runner reads the labelled source and subject (more data than it needs, the same numbers)
     plain_ad = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, reference=reference, card=card)
-    fb = Evaluation(adapter=plain_ad).run("runs/thr0.45", "val", progress=0)
-    _same(Evaluation(adapter=plain_ad).show_numbers(fb["id"])["numbers"], _engine("runs/thr0.45", Frames.parse("val")), "the fallback path")
+    fb = toy_eval(plain_ad).run("runs/thr0.45", "val", progress=0)
+    _same(toy_eval(plain_ad).show_numbers(fb["id"])["numbers"], _engine("runs/thr0.45", Frames.parse("val")), "the fallback path")
     # the adapter: free_source and free_subject go together
     half = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, free_source=free_source)
     _raises(EvaluationError, "go together", load_adapter, half, None)
@@ -452,7 +470,7 @@ def check_run():
     # the health at its boundaries (D70): 3 frames are too few to judge the filling; a start of exactly 0.05 and a growth of exactly 0.02 are healthy
     def health(fill):
         rs_ = SimpleNamespace(manifest={})
-        Runner._memory_health(rs_, "s", fill)
+        runner_class()._memory_health(rs_, "s", fill)
         return rs_.manifest["health"]
     assert health([0.0, 0.0, 0.0]) == {} and health([0.05, 0.1, 0.2, 0.3]) == {} and health([0.0, 0.02, 0.0, 0.0]) == {} and health([]) == {}
     assert "not empty" in health([0.06, 0.2, 0.4, 0.6])["s"] and "does not fill" in health([0.0, 0.01, 0.0, 0.01])["s"]
@@ -489,7 +507,7 @@ def check_reading(ev, net, allr, low):
     assert ev.list_sets() == {"val": 3, "small": 1}
     _raises(EvaluationError, "not an evaluation id", ev.show_numbers, allr["results"])
     _raises(EvaluationError, "no evaluation", ev.show_numbers, "thr0.5@edeadbeef0000")
-    assert Evaluation(adapter=ME).show_numbers(allr["id"])["numbers"] == ev.show_numbers(allr["id"])["numbers"], "a new object finds the evaluation by its id"
+    assert toy_eval().show_numbers(allr["id"])["numbers"] == ev.show_numbers(allr["id"])["numbers"], "a new object finds the evaluation by its id"
     pic = ev.draw_frame(allr["id"], "demo-1/4")
     assert os.path.isfile(pic["images"]["overview"]) and "iou.iou" in pic["scores"]
     gone = os.path.join(out(net), "results", allr["results"].partition("@")[2], "manifest.json")
@@ -505,6 +523,9 @@ def check_cli():
     from . import cli
     from .apicli import LEGACY, _clean, dispatch
     base = ["--adapter", __name__, "--project", STATE.root]
+    os.makedirs(os.path.join(STATE.root, "evaluation"), exist_ok=True)                 # the toy project names its Runner like a real one
+    with open(os.path.join(STATE.root, "evaluation", "evalsuite.json"), "w") as f:
+        json.dump({"adapter": __name__, "runner": f"{runner_class().__module__}:{runner_class().__name__}"}, f)
 
     def call(*argv):
         buf, err = io.StringIO(), io.StringIO()
@@ -515,7 +536,7 @@ def check_cli():
     info = json.loads(text)                                                                   # stdout is the json and nothing else
     assert code == 0 and info["frames"] == "val" and info["predictions_reused"] is True and info["id"].startswith("thr0.5@e"), (code, text[:200])
     code, text, _ = call("Evaluation.show_numbers", info["id"], "--match", "iou", "--json", *base)
-    assert code == 0 and json.loads(text)["numbers"]["iou.iou"] == Evaluation(adapter=ME).show_numbers(info["id"])["numbers"]["iou.iou"]
+    assert code == 0 and json.loads(text)["numbers"]["iou.iou"] == toy_eval().show_numbers(info["id"])["numbers"]["iou.iou"]
     assert call("quant", info["id"], *base)[0] is None and call("probe", "x", *base)[0] is None and call("list", "x", *base)[0] is None, "older command words are not taken over"
     code, text, _ = call("check", "runs/thr0.5", "val", *base)
     assert code == 0 and "ok: True" in text and "frames_stored: 18" in text, text
@@ -537,7 +558,7 @@ def check_cli():
     old = {c for a in cli.build_parser()._actions if isinstance(a, __import__("argparse")._SubParsersAction) for c in a.choices}
     assert {m for m in Evaluation.METHODS if m in old} <= set(LEGACY), (old, Evaluation.METHODS)
     # the layers: the command line offers the Evaluation only; what executes the network (tap, time, probe) is passed to the Runner
-    assert call("Runner.run", "runs/thr0.5", "val", *base)[0] is None, "the Runner is not on this command line (runsuite has it)"
+    assert call("Runner.predict", "runs/thr0.5", "val", *base)[0] is None, "the Runner is not on this command line (the project's own has it)"
     code, text, _ = call("tap", info["results"], "demo-0/2", *base)
     assert code == 0 and "taps" in text, text
     for word, what in (("time", "no timing"), ("probe", "no probe")):
@@ -547,7 +568,9 @@ def check_cli():
     assert code == 0 and "predictions" in text
 
 
-def run_all():
+def run_all(runner_cls=None):
+    """the checks; `runner_cls` = the project's Runner class (default: the one AR_PROJECT names in its evalsuite.json)"""
+    RUNNER["cls"] = runner_cls or RUNNER["cls"]
     check_frames()
     check_codec()
     check_results()

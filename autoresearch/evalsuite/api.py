@@ -11,9 +11,9 @@ One network per process: a project's network code (its modules) is imported once
 refuse it). Run each network in its own process and compare the two evaluations by their ids, which only reads what was stored.
 
 Layers: command line / caller -> Evaluation -> Runner. `Evaluation.run` is `Runner.predict` + `score`. The class that executes a network is the Runner (D72: it reads no ground truth); the
-Evaluation is the one front door and calls it; `tap`, `time` and `probe` are the Runner's, passed through. Which Runner: the class a project names in `evaluation/evalsuite.json` ("runner":
-"module:Class", BEV: runner.runner:Runner, whose command line is `python -m runner`), else the generic one of runner_api.py; `Evaluation(runner=...)` injects another. Everything else here reads
-what was stored (only `draw_frame`, which draws a frame, runs the network on it again). D70: a network with a memory always
+Evaluation is the one front door and ALWAYS includes the Runner of its project: the class it names in `evaluation/evalsuite.json` ("runner": "module:Class", BEV: runner.runner:Runner, whose
+command line is `python -m runner`), built with (project, adapter); evalsuite has none of its own (a project that names none is an error; `Evaluation(runner=...)` injects one, the toy selftest does).
+`tap`, `time` and `probe` are the Runner's, passed through. Everything else here reads what was stored (only `draw_frame`, which draws a frame, runs the network on it again). D70: a network with a memory always
 runs warm: whole scenes in time order from the network's own start; the frames you ask for decide which results are kept and scored, a frame already stored is not predicted again (a subset
 of an earlier selection costs no network). What was predicted is a ResultSet (results.py), one per identity of the question "this network on this data"; scoring it again with another
 ground truth or metric needs the Source (for the ground truth) but not the network. Ids: `<network>@r<hash>` (predictions), `<network>@e<hash>` (a scored evaluation of chosen frames, a ground
@@ -30,7 +30,7 @@ The adapter (a module of the project, named in `<project>/evaluation/evalsuite.j
   optional: resolve(text) -> network path (a run name, a relative path), release(source), reference(source, ref) -> the ground truth of a frame without loading the inputs,
   inputs(source) -> what the source was fed, COMPARE_IGNORE, card(...), time(network, n), probe(network, frames, device); free_source(network, of, workers, control) and
   free_subject(network, source, device): a Source without ground truth and a Subject that only predicts, which the Runner uses (else it uses source / subject; the two go together);
-  MEMORY_TAP = the name of a tap whose mean is the fill of the network's memory (the health check, runner_api.py).
+  MEMORY_TAP = the name of a tap whose mean is the fill of the network's memory (the health check of the Runner).
 Intermediate results: `run(..., taps=("fused", ...))` stores the named taps of the Subject (its `taps()`) with the predictions; a frame stored without a tap is predicted again when the
 tap is asked for.
 Numpy and the standard library only here."""
@@ -41,11 +41,10 @@ import json
 import os
 import sys
 import time
-from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .contracts import FrameRef, Source
-from .quantitative import Quantitative
+from .suite import EvalSuite
 from .results import Locked, ResultSet, digest, writer_lock
 from .sampling import Sampler
 
@@ -164,21 +163,18 @@ def load_adapter(spec: Any, project: Optional[str]):
     return mod
 
 
-def load_runner(project: Optional[str], adapter: Any, use_config: bool = True):
+def load_runner(project: Optional[str], adapter: Any):
     """the Runner of a project: the class named by the key "runner" ("module:Class", the module relative to the project root like the adapter) in <project>/evaluation/evalsuite.json,
-    built with (project, adapter); the generic Runner of evalsuite (runner_api.py) when the project names none, or when the adapter was handed in (`use_config` False: a test's adapter
-    must not get the Runner of whatever AR_PROJECT is)"""
+    built with (project, adapter). The Evaluation always includes it: evalsuite has no Runner of its own, a project that names none is an error (`Evaluation(runner=...)` injects one)"""
     root = os.path.abspath(project or os.environ.get("AR_PROJECT") or ".")
-    spec = None
-    if use_config:
-        try:
-            with open(os.path.join(root, "evaluation", "evalsuite.json"), encoding="utf-8") as f:
-                spec = json.load(f).get("runner")
-        except (OSError, ValueError, AttributeError):
-            spec = None
+    try:
+        with open(os.path.join(root, "evaluation", "evalsuite.json"), encoding="utf-8") as f:
+            spec = json.load(f).get("runner")
+    except (OSError, ValueError, AttributeError):
+        spec = None
     if not spec:
-        from .runner_api import Runner
-        return Runner(root, adapter)
+        raise EvaluationError(f'the project names no runner: write "runner": "module:Class" in {root}/evaluation/evalsuite.json (the Evaluation always includes the project\'s Runner class), '
+                              "or inject one: Evaluation(runner=...)")
     module, sep, cls = str(spec).partition(":")
     if not sep or not module or not cls:
         raise EvaluationError(f'"runner" in {root}/evaluation/evalsuite.json is "module:Class", got {spec!r}')
@@ -197,7 +193,7 @@ def names(x: "str | Sequence[str]") -> Tuple[str, ...]:
 
 # ------------------------------------------------------------------------------------------------ the class
 class Helpers:
-    """what the Runner (runner_api.py) and the Evaluation both need: the adapter, the names of networks, the identity of predictions, the stored sets. Not commands."""
+    """what the Runner (the project's class) and the Evaluation both need: the adapter, the names of networks, the identity of predictions, the stored sets. Not commands."""
 
     def __init__(self, project: Optional[str] = None, adapter: Any = None):
         self.ad = load_adapter(adapter, project)
@@ -253,8 +249,8 @@ class Helpers:
 class Evaluation(Helpers):
     def __init__(self, project: Optional[str] = None, adapter: Any = None, runner: Any = None):
         super().__init__(project, adapter)
-        if runner is None:                                    # the class that executes the network (D72): the project's own (evalsuite.json "runner"), else the generic one; any object with
-            runner = load_runner(project, self.ad, use_config=adapter is None)     # predict / plan / list_results / tap / time / probe can be injected
+        if runner is None:                                    # the class that executes the network (D72): always the project's own (evalsuite.json "runner"); any object with
+            runner = load_runner(project, self.ad)             # predict / plan / list_results / tap / time / probe can be injected
         self.runner = runner
         self._tasks: Dict[Tuple[str, Tuple[str, ...]], Any] = {}
 
@@ -350,7 +346,7 @@ class Evaluation(Helpers):
         eid = self._eval_id(rs.id, keep, desc, metrics)
         task = self._task(net, metrics)
         ref_of = (lambda ref: self.ad.reference(source, ref)) if hasattr(self.ad, "reference") else None
-        quant = Quantitative(SimpleNamespace(out=os.path.join(out, "suite"), source=source, subject=None, task=task, state=CARRY))
+        quant = EvalSuite(source, None, task, out=os.path.join(out, "suite"), state=CARRY).quant
         t1 = time.time()
         try:
             with writer_lock(os.path.join(out, "suite", "quant", eid)):
@@ -429,7 +425,7 @@ class Evaluation(Helpers):
         """(info, store, quantitative) of a stored evaluation"""
         info, store = self._open_store(eval_id)
         task = self._task(info["network"], tuple(info["metrics"]))
-        return info, store, Quantitative(SimpleNamespace(out=os.path.join(self.ad.out(info["network"]), "suite"), source=None, subject=None, task=task, state=CARRY))
+        return info, store, EvalSuite(None, None, task, out=os.path.join(self.ad.out(info["network"]), "suite"), state=CARRY).quant
 
     def _predictions(self, info: Dict[str, Any]) -> Optional[ResultSet]:
         return self.stored(info["network"], info["results"].partition("@")[2])
@@ -518,7 +514,6 @@ class Evaluation(Helpers):
         from the stored ones when the evaluation ran on another device): the one place besides the Runner that executes the network. Returns the picture paths and the frame's scores"""
         info, store, q = self._open(id)
         self._same_network(info, self._predictions(info))
-        from .suite import EvalSuite
         fr = Frames.parse(info["frames"])
         source = self._source(info["network"], fr.of, workers, info.get("control", ""), True)
         suite = EvalSuite(source, self.ad.subject(info["network"], source, device), self._task(info["network"], tuple(info["metrics"])),
@@ -546,7 +541,7 @@ class Evaluation(Helpers):
     def selftest(self) -> Dict[str, Any]:
         """the checks of this interface on a toy project (a few seconds; no data, no network)"""
         from .selftest_api import run_all
-        return run_all()
+        return run_all(type(self.runner))
 
 
 Evaluation.METHODS = tuple(n for n, f in vars(Evaluation).items() if callable(f) and not n.startswith("_"))      # the methods are the commands: no second list

@@ -14,7 +14,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
    make_card  draw_frame  list  list_sets  |  tap  time  probe (passed to the Runner)      v
         |  calls the layer below                                                    engine EvalSuite: Quantitative.run(results=...)
         v                                                                             -> RunStore  <net>/eval/suite/quant/<e-id>
- Runner (the project's class; generic: runner_api.py)  -- the only class that executes the network   (additive counts per frame: small)
+ Runner (the project's class, BEV: runner/runner.py)  -- the only class that executes the network   (additive counts per frame: small)
    predict  plan  list_results  tap  time  probe     no ground truth, no loss, always warm (D70)
         |  writes / reads
         v
@@ -27,10 +27,10 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
    BEV: bev_adapter (frozen), bev_free (the network without labels), bev_suite, bev_sets (the sets = the training's splits/)
 ```
 A caller (a person, a script, the command line) talks to the Evaluation only. The Runner is the layer below: the only class that runs a network (D72: it reads no ground truth and computes no loss) and stores what
-it predicts. Which class: the one a project names in `<project>/evaluation/evalsuite.json` as `"runner": "module:Class"` (module relative to the project root, like the adapter; built with
-`(project, adapter)`; BEV: `runner.runner:Runner`, whose command line is `python -m runner` from `bev_fusion/`, for frames without labels), else the generic Runner of `runner_api.py`; an adapter
-handed to `Evaluation(adapter=...)` gets the generic one, and `Evaluation(runner=...)` injects any object with `predict`, `plan`, `list_results`, `tap`, `time`, `probe`. evalsuite never imports a project's Runner
-by name.
+it predicts. There is one Runner and the Evaluation always includes it: the class a project names in `<project>/evaluation/evalsuite.json` as `"runner": "module:Class"` (module relative to the
+project root, like the adapter; built with `(project, adapter)`; BEV: `runner.runner:Runner`, whose command line is `python -m runner` from `bev_fusion/`, for frames without labels). evalsuite has no
+Runner of its own and never imports a project's by name; a project that names none is an error, and `Evaluation(runner=...)` injects any object with `predict`, `plan`, `list_results`, `tap`, `time`,
+`probe`. The toy selftest of this interface (`AR_PROJECT=../bev_fusion python -m evalsuite.selftest_api`) therefore runs the Evaluation together with the BEV Runner on a toy adapter.
 
 Data flow of one `Evaluation.run`: frames (a text) -> the Runner runs the scenes up to their last kept frame, whole and warm, stores the kept frames as a ResultSet (the temporary data: only what the
 network predicted) and releases the network -> the Evaluation opens the labelled data, scores the frames against the ground truth (`reference`, no inputs) into a RunStore (the counts) ->
@@ -89,7 +89,8 @@ Every Evaluation method is a command (`python -m evalsuite <method>` or `Evaluat
 `run` here is not `autoresearch/tools/run.py`: it books no ledger row and takes no GPU slot; a number that feeds a verdict is launched with `run.py ... -- python -m evalsuite run ...`.
 
 ## Underneath: the engine `EvalSuite`
-The Evaluation counts and draws with this engine; it also works alone for a network that has no project adapter. You write three small classes for your network; the suite then gives you pictures, numbers and cost.
+The Evaluation counts and draws with this engine and builds its workbench (`EvalSuite`: a Source, a Subject or none, a Task, with `.quant` and `.qual`) for each call; a person does not construct one. `EvalSuite`
+is the older entry point of `bev_suite.py`, the lane project and the engine's selftests, and it works alone for a network that has no project adapter. You write three small classes for your network; the suite then gives you pictures, numbers and cost.
 
 ### Try it
 The whole adapter is `adapters/minimal.py` (about 70 lines): a moving disc in noise, a thresholding "network", one metric.
