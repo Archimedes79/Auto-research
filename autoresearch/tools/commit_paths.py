@@ -6,6 +6,8 @@ Standard library only.
     python autoresearch/tools/commit_paths.py -F msg.txt PATH ... --blob autoresearch/README.md=/tmp/readme_mine.md
                                                          a file that other chats also edit: commit YOUR version (the committed file + only your hunks, built beforehand)
     python autoresearch/tools/commit_paths.py ... --dry-run                                  print what would be committed, change nothing
+    python autoresearch/tools/commit_paths.py ... --allow-delete PATH                        a deletion that the tool otherwise refuses (see below); a folder covers its files
+    python autoresearch/tools/commit_paths.py ... --decision D75                             the decision behind a change of a protected path: must be decided, goes into the message
     python autoresearch/tools/commit_paths.py --selftest
 
 Paths are relative to the folder you run it in (or absolute); they are literal names, no globs. How it works (the method of the git rule, "own paths only"):
@@ -16,11 +18,16 @@ content stays staged (the tool says so; their next commit would revert your part
 Refused (exit 1, nothing committed): `.` or the top folder, a path outside the repository, a path that does not exist and is not in HEAD, an ignored path,
 an embedded repository (a gitlink: temp/gt_v8 is a worktree), scratch or forbidden files (`check_git.py` classes: temp/, _to_delete/, data, binaries,
 over 1 MB, measured on the committed content; --allow-scratch lifts the temp/ rule only, for a record that must have it: a checkpoint or a file over 1 MB
-in temp/ is still refused), an empty result (the tree would not
-change), a missing git identity. The author is the repository's git identity; the message ends with the --trailer lines you give (the session's attribution).
+in temp/ is still refused), a forbidden TYPE that no `!` rule of the .gitignore names (a 400 kB .onnx too), the deletion of a protected path, of a result package file
+(package.json, provenance.json) or of a checkpoint-like file unless --allow-delete names it, an --decision that is not decided, an empty result (the tree would not
+change), a missing git identity. A changed or deleted path that the protected list of a problem folder covers (`<repo>/*/project.json`, the rules of guard_hook.py;
+a json file with named entries only when one of them changes) is committed with a WARNING line "protected path <p>: cite the decision"; with --decision D<n>
+the id must be decided in that problem's decisions record and the message gets the line "Decision: D<n>".
+The author is the repository's git identity; the message ends with the --trailer lines you give (the session's attribution).
 Hooks are not run (plumbing commit): run the checks yourself (`check_git.py --paths`, the folder's tests).
 """
 import argparse
+import json
 import os
 import re
 import shutil
@@ -32,6 +39,15 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import check_git as CG  # noqa: E402
+try:                                                                    # read only: guard_hook gives the protected rules and the decided ids
+    import guard_hook as GH  # noqa: E402
+    import project as P  # noqa: E402
+except Exception as _e:  # noqa: BLE001  (a syntax error that another chat has mid-edit in either file must not stop every commit: the protected-path warnings are then off)
+    GH = P = None
+    print(f"WARNING: guard_hook / project could not be imported ({_e}): protected paths are not checked in this commit", file=sys.stderr)
+
+KEPT_NAMES = {"package.json", "provenance.json"}                        # the files of a result package (package.py)
+KEPT_EXT = {".pt", ".pth", ".ckpt", ".safetensors", ".onnx", ".bin", ".npz", ".npy", ".h5", ".pkl", ".pickle", ".parquet"}      # checkpoint-like types
 
 
 def run(top, *args, env=None, inp=None, check=True, literal=True):
@@ -105,10 +121,88 @@ def sync_shared_index(top, rows):
     return len(todo), left
 
 
-def commit_paths(top, paths, message, blobs=None, allow_scratch=False, dry_run=False):
-    """-> (commit id or None or "dry-run", [changed files], [files left staged by others]); RuntimeError with the reason when it refuses"""
+def head_cfg(top, d):
+    """the project.json of the problem folder d as HEAD has it, with the defaults; None when HEAD has none or it is not a json object"""
+    r = run(top, "show", f"HEAD:{d}/project.json", check=False)
+    if r.returncode != 0:
+        return None
+    try:
+        raw = json.loads(r.stdout)
+    except ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    cfg = dict(P.DEFAULTS)
+    cfg.update({k: v for k, v in raw.items() if not k.startswith("_")})
+    return cfg
+
+
+def protected_rules(top):
+    """[(problem folder, its project.json with the defaults, guard_hook rules)] of every problem folder of the repository (<top>/*/project.json). The rules in force are
+    those of HEAD: a commit that empties the protected list or deletes the folder is judged by the list it removes; the working-tree file counts only for a problem HEAD
+    does not have yet"""
+    if GH is None or P is None:
+        return []
+    names = {d for d in os.listdir(top) if os.path.isfile(os.path.join(top, d, "project.json"))}
+    names |= {d for d in run(top, "ls-tree", "--name-only", "HEAD", check=False).stdout.split("\n") if d and head_cfg(top, d) is not None}
+    out = []
+    for d in sorted(names):
+        try:
+            cfg = head_cfg(top, d) or P.cfg_of(os.path.join(top, d))
+            out.append((os.path.join(top, d), cfg, GH.rules(os.path.join(top, d), cfg)))
+        except (OSError, ValueError, TypeError, AttributeError) as e:
+            print(f"WARNING: {d}/project.json unreadable ({e}): its protected list is not checked", file=sys.stderr)
+    return out
+
+
+def entries_changed(top, osha, nsha, entries):
+    """the protected top-level entries of a json file that differ between two blobs (all of them when a blob is missing or not a json object)"""
+    def load(sha):
+        try:
+            v = json.loads(run(top, "cat-file", "-p", sha).stdout) if sha.strip("0") else None
+        except (RuntimeError, ValueError):
+            return None
+        return v if isinstance(v, dict) else None
+    before, after = load(osha), load(nsha)
+    return list(entries) if before is None or after is None else [k for k in entries if before.get(k) != after.get(k)]
+
+
+def protected_hits(top, rows):
+    """{changed or deleted path: [(problem folder, project.json)]} for the paths that a protected rule of a problem covers"""
+    probs, hits = protected_rules(top), {}
+    for om, nm, osha, nsha, st, path in rows:
+        full = GH.norm(os.path.join(top, path))
+        for root, cfg, rules in probs:
+            try:
+                hit = any((GH.covers(prot, full) if folder else full == prot) and (not entries or entries_changed(top, osha, nsha, entries)) for rel, prot, folder, entries in rules)
+            except (TypeError, AttributeError):                          # a malformed protected entry (e.g. {"x.json": 5}) is the hook's business, not a reason to stop the commit
+                continue
+            if hit:
+                hits.setdefault(path, []).append((root, cfg))
+    return hits
+
+
+def decided_ids(top, hits):
+    """the decided D<n> ids of the problems whose protected paths the commit changes (of every problem when it changes none)"""
+    probs = {r: c for ps in hits.values() for r, c in ps} or {r: c for r, c, _ in protected_rules(top)}
+    return set().union(*(GH.decided(r, c) for r, c in probs.items())) if probs else set()
+
+
+def with_trailer(message, line):
+    """the message with one more trailer line: in the trailer block at its end when it has one, else after a blank line"""
+    paras = message.rstrip("\n").split("\n\n")
+    block = len(paras) > 1 and all(re.match(r"[A-Za-z][\w-]*: \S", x) for x in paras[-1].split("\n"))
+    return message.rstrip("\n") + ("\n" if block else "\n\n") + line + "\n"
+
+
+def commit_paths(top, paths, message, blobs=None, allow_scratch=False, dry_run=False, allow_delete=(), decision=None):
+    """-> (commit id or None or "dry-run", [changed files], [files left staged by others]); RuntimeError with the reason when it refuses. allow_delete: paths (or
+    folders) whose deletion is meant although it is protected / a result package / a checkpoint; decision: the D<n> behind a change of a protected path"""
     blobs = {rel_to_top(top, k): os.path.abspath(v) for k, v in (blobs or {}).items()}
     rels = [rel_to_top(top, p) for p in paths]
+    allow = [rel_to_top(top, p) for p in allow_delete]
+    if decision is not None and not re.fullmatch(r"D\d+", decision):
+        raise RuntimeError(f"--decision {decision!r}: write the id as D<n>, e.g. D75")
     clash = sorted(set(rels) & set(blobs))
     if clash:
         raise RuntimeError(f"named as a path and as a blob: {clash[0]} (give it once)")
@@ -144,9 +238,13 @@ def commit_paths(top, paths, message, blobs=None, allow_scratch=False, dry_run=F
         links = [r[5] for r in rows if r[1] == "160000"]
         if links:
             raise RuntimeError(f"refused, nothing committed: {links[0]} is an embedded repository (a gitlink): commit the files inside it from there")
-        errors = []
+        errors, hits = [], protected_hits(top, rows)
         for om, nm, osha, nsha, st, path in rows:
             if st == "D":
+                what = ("a protected path" if path in hits else "a result package file" if os.path.basename(path) in KEPT_NAMES
+                        else "a checkpoint-like file" if os.path.splitext(path)[1].lower() in KEPT_EXT else None)
+                if what and not any(path == a or path.startswith(a + "/") for a in allow):
+                    errors.append(f"deletion of {what}: {path} - name it with --allow-delete {path} if it is meant")
                 continue
             size = int(run(top, "cat-file", "-s", nsha).stdout.strip())      # the committed content, not the working file
             kind = CG.verdict(top, path, size)
@@ -157,9 +255,16 @@ def commit_paths(top, paths, message, blobs=None, allow_scratch=False, dry_run=F
                                                        else f"a data / binary / log type or over 1 MB ({size // 1000} kB)"))
         if errors:
             raise RuntimeError("refused, nothing committed:\n  " + "\n  ".join(errors[:12]))
+        if decision and decision not in decided_ids(top, hits):
+            raise RuntimeError(f"refused, nothing committed: {decision} is not decided (no 'Decided:' line in its file of the decisions folder of "
+                               + (", ".join(sorted({os.path.basename(r) for ps in hits.values() for r, _ in ps})) or "any problem folder") + ")")
+        for p in list(hits)[:12]:
+            print(f"protected path {p}: decision {decision}" if decision else f"WARNING: protected path {p}: cite the decision", file=sys.stderr)
+        if len(hits) > 12:
+            print(f"... and {len(hits) - 12} more protected paths", file=sys.stderr)
         if dry_run:
             return "dry-run", changed, []
-        new = run(top, "commit-tree", tree, "-p", old, inp=message).stdout.strip()
+        new = run(top, "commit-tree", tree, "-p", old, inp=with_trailer(message, f"Decision: {decision}") if decision else message).stdout.strip()
         r = run(top, "update-ref", "-m", "commit_paths", "HEAD", new, old, check=False)      # compare-and-swap: fails when HEAD moved meanwhile
         if r.returncode != 0:
             raise RuntimeError("HEAD moved or the ref is locked (another chat committed): run it again" + (f" [{r.stderr.strip()}]" if r.stderr.strip() else ""))
@@ -311,6 +416,70 @@ def selftest():
         os.environ.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         if home:
             os.environ["HOME"] = home
+        # deep review 2026-11-10: a forbidden TYPE that no .gitignore rule names (the repository's first rule was "not ignored = fine"), protected paths and their decision,
+        # deletions of protected / package / checkpoint-like files
+        import contextlib
+        import io
+        w("head.onnx", "x" * 400_000)
+        try:
+            commit_paths(top, ["head.onnx"], "m\n")
+            raise AssertionError("a 400 kB .onnx that no ignore rule names must be refused")
+        except RuntimeError as e:
+            assert "forbidden: head.onnx" in str(e), e
+        w("prob/project.json", json.dumps({"protected": {"golden.json": None, "registry.json": ["champion"], "locked/": None}, "decisions": "decisions"}))
+        for rel, text in (("golden.json", "{}\n"), ("registry.json", json.dumps({"champion": "a", "other": 1})), ("locked/x.txt", "x\n"), ("results/E1/package.json", "{}\n"),
+                          ("decisions/D7.md", "# D7\nDecided: 2026-11-10 yes\n"), ("decisions/D8.md", "# D8\nstill open\n"), ("old.pt", "weights")):
+            w("prob/" + rel, text)
+        g("add", "-f", "prob/old.pt")
+        g("commit", "-q", "-m", "a tracked checkpoint (legacy)", "--", "prob/old.pt")      # plumbing: the tool refuses this type; other.py stays staged for its owner
+
+        def quiet(*a, **kw):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                return commit_paths(top, *a, **kw), err.getvalue()
+        (fx, _, _), warn = quiet(["prob/project.json", "prob/golden.json", "prob/registry.json", "prob/locked", "prob/results", "prob/decisions"], "fixture\n")
+        assert fx and all(f"WARNING: protected path prob/{p}: cite the decision" in warn for p in ("golden.json", "registry.json", "locked/x.txt")), warn
+        assert "prob/project.json" not in warn and "prob/results" not in warn and "prob/decisions" not in warn, "a file of a problem folder that no rule names is free"
+        w("prob/registry.json", json.dumps({"champion": "a", "other": 2}))
+        assert quiet(["prob/registry.json"], "m\n")[1] == "", "a free entry of a json file with named entries: no warning"
+        w("prob/registry.json", json.dumps({"champion": "b", "other": 2}))
+        assert "WARNING: protected path prob/registry.json" in quiet(["prob/registry.json"], "m\n", dry_run=True)[1], "the champion entry"
+        for bad, word in (("D8", "not decided"), ("D99", "not decided"), ("7", "write the id as D<n>")):
+            try:
+                quiet(["prob/registry.json"], "m\n", decision=bad)
+                raise AssertionError(f"decision {bad} must be refused")
+            except RuntimeError as e:
+                assert word in str(e), (bad, e)
+        (cid, _, _), warn = quiet(["prob/registry.json"], "subject\n\nCo-Authored-By: x <x@x>\n", decision="D7")
+        assert g("show", "-s", "--format=%B", cid).strip().endswith("Co-Authored-By: x <x@x>\nDecision: D7") and "WARNING" not in warn and "decision D7" in warn, warn
+        try:
+            quiet(["c.py"], "m\n", dry_run=True, decision="D8")
+            raise AssertionError("a decision that is not decided is refused also where no protected path changes")
+        except RuntimeError as e:
+            assert "not decided" in str(e), e
+        for victim, word in (("prob/golden.json", "a protected path"), ("prob/results/E1/package.json", "a result package file"), ("prob/old.pt", "a checkpoint-like file")):
+            os.remove(os.path.join(top, victim))
+            try:
+                quiet([victim], "m\n", dry_run=True)
+                raise AssertionError(f"the deletion of {victim} must be refused")
+            except RuntimeError as e:
+                assert f"deletion of {word}: {victim}" in str(e) and "--allow-delete" in str(e), e
+        try:
+            quiet(["prob/old.pt"], "m\n", allow_delete=["prob/old"])
+            raise AssertionError("a path that only starts like the allowed one is not covered")
+        except RuntimeError:
+            pass
+        assert quiet(["prob/golden.json", "prob/old.pt"], "m\n", allow_delete=["prob/golden.json", "prob/old.pt"])[0][0], "named deletions go through"
+        assert quiet(["prob/results"], "m\n", allow_delete=["prob/results"])[0][0], "a folder covers its files"
+        w("prob/golden.json", "{}\n")
+        quiet(["prob/golden.json"], "m\n")
+        os.remove(os.path.join(top, "prob", "golden.json"))
+        script = os.path.abspath(__file__)
+        cli = subprocess.run([sys.executable, script, "-m", "gone", "prob/golden.json"], cwd=top, capture_output=True, text=True)
+        assert cli.returncode == 1 and "--allow-delete prob/golden.json" in cli.stderr, (cli.returncode, cli.stderr)
+        cli = subprocess.run([sys.executable, script, "-m", "gone", "--trailer", "Co-Authored-By: y <y@y>", "--allow-delete", "prob/golden.json", "--decision", "D7", "prob/golden.json"],
+                             cwd=top, capture_output=True, text=True)
+        assert cli.returncode == 0 and "WARNING" not in cli.stderr and g("show", "-s", "--format=%B", "HEAD").strip().endswith("Co-Authored-By: y <y@y>\nDecision: D7"), (cli.stdout, cli.stderr)
         # the compare-and-swap, and a locked index after the commit
         real = run
         calls = {"n": 0}
@@ -361,6 +530,8 @@ def main():
     ap.add_argument("--trailer", action="append", default=[], help="a line appended to the message (repeatable), e.g. the Co-Authored-By of the session")
     ap.add_argument("--blob", action="append", default=[], metavar="PATH=SOURCE", help="commit SOURCE's content as PATH (a file other chats also edit)")
     ap.add_argument("--allow-scratch", action="store_true")
+    ap.add_argument("--allow-delete", action="append", default=[], metavar="PATH", help="a deletion of a protected path, result package file or checkpoint that is meant (repeatable; a folder covers its files)")
+    ap.add_argument("--decision", metavar="D<n>", help="the decided D<n> behind a change of a protected path (checked, added to the message as 'Decision: D<n>')")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -373,7 +544,7 @@ def main():
     top = CG.toplevel(".")
     blobs = dict(b.split("=", 1) for b in a.blob)
     try:
-        new, changed, left = commit_paths(top, a.paths, msg, blobs, a.allow_scratch, a.dry_run)
+        new, changed, left = commit_paths(top, a.paths, msg, blobs, a.allow_scratch, a.dry_run, a.allow_delete, a.decision)
     except RuntimeError as e:
         sys.exit(str(e))
     if new is None:

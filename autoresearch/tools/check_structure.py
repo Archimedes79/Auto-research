@@ -1,7 +1,8 @@
 """Check that the problem folder's structure and its documents are still in step (gate G4). Rules come from project.json "structure".
 
-    python autoresearch/tools/check_structure.py            # report, exit 1 if anything is found
+    python autoresearch/tools/check_structure.py            # report, exit 1 if anything is found; the last line counts the documents scanned
     python autoresearch/tools/check_structure.py --selftest
+(a problem whose `living` list is empty gets a WARNING "no document was checked": only checks 1 and 2 decide its exit code)
 
 Checks
   1. root of the problem folder: only the allowed files (root_files) and folders (root_dirs)
@@ -9,6 +10,7 @@ Checks
   3. paths named in backticks or links of the living documents (living, minus skip_parts) exist: as a path from the problem folder, from the
      document's folder, from one of extra_bases, or as a file / folder name found in index_dirs
 """
+import json
 import os
 import re
 import shutil
@@ -111,7 +113,8 @@ def resolves(tok, md, names, root, R):
     return t.startswith(("~/", "out/", "runs/e"))
 
 
-def check(root=None):
+def check(root=None, stats=None):
+    """the list of problems; stats (a dict) gets "documents": how many living documents were scanned"""
     root = root or P.root()
     R = rules()
     problems = []
@@ -127,7 +130,11 @@ def check(root=None):
     names = code_index(root, R)
     R["tag_paths"], tag_names = scratch_tag_files(root, P.cfg().get("tag_prefix", ""))
     names = names | tag_names
-    for md in living_files(root, R):
+    docs = living_files(root, R)
+    if stats is not None:
+        stats["documents"] = len(docs)
+        stats["living"] = len(R["living"])
+    for md in docs:
         rel = os.path.relpath(md, root).replace("\\", "/")
         text = open(md, encoding="utf-8", errors="ignore").read()
         seen = set()
@@ -186,14 +193,54 @@ def selftest():
         assert not resolves("temp/loop5/x.py", md2, set(), proj, R), "without the tag files the path is dead"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    # deep review 2026-11-10: "in step" is claimed only for documents that were scanned; an empty `living` list is said out loud
+    import contextlib
+    import io
+    tmp, old_env = tempfile.mkdtemp(), os.environ.get("AR_PROJECT")
+    try:
+        proj = os.path.join(tmp, "proj")
+        os.makedirs(proj)
+        for name, living in (("empty", []), ("readme", ["README.md"])):
+            open(os.path.join(proj, "project.json"), "w").write(json.dumps({"structure": {"root_files": ["project.json", "README.md"], "living": living}}))
+            open(os.path.join(proj, "README.md"), "w").write("see `nowhere/gone.py`\n" if name == "readme" else "x\n")
+            os.environ["AR_PROJECT"] = proj
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = main([])
+            text = out.getvalue()
+            if name == "empty":
+                assert code == 0 and "WARNING: living is empty, no document was checked" in text and "0 document(s) scanned" in text and "documents are in step" not in text, (code, text)
+                open(os.path.join(proj, "stray.txt"), "w").write("x\n")           # the root checks still decide the exit code
+                with contextlib.redirect_stdout(io.StringIO()) as o2:
+                    assert main([]) == 1 and "root: unexpected file stray.txt" in o2.getvalue()
+                os.remove(os.path.join(proj, "stray.txt"))
+            else:
+                assert code == 1 and "dead path `nowhere/gone.py`" in text and "1 document(s) scanned" in text and "WARNING" not in text, (code, text)
+                open(os.path.join(proj, "README.md"), "w").write("fine\n")
+                with contextlib.redirect_stdout(io.StringIO()) as o3:
+                    assert main([]) == 0 and "structure and documents are in step" in o3.getvalue() and "1 document(s) scanned" in o3.getvalue()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+        if old_env is None:
+            os.environ.pop("AR_PROJECT", None)
+        else:
+            os.environ["AR_PROJECT"] = old_env
     print("check_structure selftest passed")
 
 
-if __name__ == "__main__":
-    if "--selftest" in sys.argv:
+def main(argv=None):
+    if "--selftest" in (argv if argv is not None else sys.argv[1:]):
         selftest()
-        sys.exit(0)
-    probs = check()
-    print("\n".join(probs) if probs else "structure and documents are in step")
-    print(f"{len(probs)} problem(s)")
-    sys.exit(1 if probs else 0)
+        return 0
+    stats = {}
+    probs = check(stats=stats)
+    n = stats["documents"]
+    print("\n".join(probs) if probs else "structure and documents are in step" if n else "root folder and READMEs are in step")
+    if not n:
+        print("WARNING: living is empty, no document was checked" if not stats["living"] else "WARNING: no path of living holds a document, no document was checked")
+    print(f"{len(probs)} problem(s), {n} document(s) scanned")
+    return 1 if probs else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

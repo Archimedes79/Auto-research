@@ -12,9 +12,11 @@ What it checks
      of its commits (a file added and deleted again is still published by a push), or add / change a file over 1 MB
      and the run tags: those that exist here but not on the remote are listed with the push command (`git push origin --tags`; `git push origin main` does
      not send tags, and a tag is where a run's code and scratch scripts are kept); a forbidden-type or over-1-MB file that a tag's own commits add is an error
-  2. pending changes: the staged files (and, with --paths, the named ones) must be fit for git; deletions are never an error. Scratch = a file inside a
-     `temp/` or `_to_delete/` folder (any case; except its README.md): it is not committed by hand, a run's tag keeps what ran. Forbidden = data,
-     checkpoints, caches, binaries, logs and anything over 1 MB. Untracked scratch is only counted: `git add -A` would sweep it in.
+  2. pending changes: the staged files (measured on the STAGED content) and the untracked files that no rule ignores (`git add -A` takes them), and, with
+     --paths, the named ones, must be fit for git; deletions are never an error. Scratch = a file inside a `temp/` or `_to_delete/` folder (any case; except
+     its README.md): it is not committed by hand, a run's tag keeps what ran. Forbidden = data, checkpoints, caches, binaries, logs and anything over 1 MB; a
+     forbidden TYPE is refused even where no .gitignore rule ignores it, unless an explicit `!` rule names the file (the architecture drawings). Untracked
+     scratch is only counted: `git add -A` would sweep it in; an untracked forbidden file is an error.
   3. scratch that is used: a file in a `temp/` folder named by a living file (code, launcher, run record, experiment card) or a folder of scratch put on
      `sys.path` by living code. Such a file is not temporary any more; it belongs in a code folder (training/, evaluation/, tools/ ...) with a test, or the
      card should carry the command instead. Listed, never an error: it is the work list for promoting them. "run or imported" means the referrer is code, a
@@ -34,7 +36,8 @@ import time
 MAX_BYTES = 1_000_000
 SCRATCH_DIRS = ("temp", "_to_delete")
 FORBIDDEN_EXT = {".pt", ".pth", ".ckpt", ".npy", ".npz", ".pkl", ".pickle", ".h5", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".gif", ".pdf", ".pptx", ".docx", ".xlsx",
-                 ".html", ".zip", ".tgz", ".gz", ".tar", ".7z", ".log", ".tmp", ".lock", ".done", ".bin", ".onnx", ".safetensors", ".parquet"}   # the "never" block of .gitignore, and more
+                 ".html", ".zip", ".tgz", ".gz", ".tar", ".7z", ".log", ".tmp", ".lock", ".done", ".bin", ".onnx", ".safetensors", ".parquet",
+                 ".sqlite", ".so", ".exe", ".tif", ".tiff", ".webp", ".avi", ".zst", ".mat"}   # the "never" block of .gitignore (keep the two in step)
 ALLOWED_NAMES = {"architecture.svg"}                                                    # the generated architecture drawings are text
 TEXT_EXT = {".md", ".py", ".sh", ".json", ".csv", ".txt", ".ps1", ".yml", ".yaml"}
 # a path through a temp/ folder with a file extension, optionally after $VAR/ or ${VAR}/; not followed by more name (temp/x.pyc, temp/a.json.gz), a sentence dot is fine
@@ -69,19 +72,37 @@ def classify(path, size=None):
     return "forbidden" if size is not None and size > MAX_BYTES else "ok"
 
 
+def reincluded(top, path):
+    """True when a `!` rule of a .gitignore names the path: `check-ignore -v` prints the last matching rule, a negated one too (-z needs --stdin)"""
+    r = subprocess.run(["git", "-C", top, "check-ignore", "--no-index", "-v", "-z", "--stdin"], input=(path + "\0").encode("utf-8"), capture_output=True)
+    f = r.stdout.decode("utf-8", errors="replace").split("\0")                 # source, line, pattern, path
+    return len(f) >= 4 and f[2].startswith("!")
+
+
 def verdict(top, path, size=None):
-    """classify() for a path in this repository: a file of a forbidden TYPE that the repository's .gitignore whitelists on purpose (`!/autoresearch/architecture.svg`)
-    is fine, because git would take it without `-f`; the size limit and scratch folders have no exception"""
+    """classify() for a path in this repository. A file of a forbidden TYPE is refused unless a `!` rule of the repository's .gitignore names it on purpose
+    (`!/autoresearch/architecture.svg`): a type that no rule ignores is not fit for git either, git would only take it silently. The size limit,
+    __pycache__ and scratch folders have no exception"""
     kind = classify(path, size)
-    if kind == "forbidden" and not (size or 0) > MAX_BYTES and "__pycache__" not in path:
-        if subprocess.run(["git", "-C", top, "check-ignore", "--no-index", "-q", "--", path], capture_output=True).returncode == 1:      # 1 = not ignored
-            return "ok"
+    if kind == "forbidden" and not (size or 0) > MAX_BYTES and "__pycache__" not in path and reincluded(top, path):
+        return "ok"
     return kind
 
 
 def names(top, *args):
     """a git listing command as a list of paths (-z: names with spaces or non-ASCII letters arrive intact; `-z` goes first, after a `--` it would be a path)"""
     return [x for x in git(top, args[0], "-z", *args[1:]).split("\0") if x]
+
+
+def blob_sizes(top, shas):
+    """{blob id: size in bytes} for the blobs among the ids (one `cat-file --batch-check`; a gitlink is no blob)"""
+    sizes = {}
+    if shas:
+        for line in git(top, "cat-file", "--batch-check", inp="\n".join(sorted(set(shas))) + "\n").splitlines():
+            f = line.split()
+            if len(f) == 3 and f[1] == "blob":
+                sizes[f[0]] = int(f[2])
+    return sizes
 
 
 def pushed_commits(top):
@@ -117,12 +138,7 @@ def commit_errors(top, rng, lead, allow_scratch=False):
     for c in git(top, "rev-list", "--no-merges", *rng).split():
         tok = git(top, "diff-tree", "--root", "--no-commit-id", "-r", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-filter=AM", c).split("\0")
         entries += [(tok[i].split()[-1], tok[i].split()[3], tok[i + 1], c[:8]) for i in range(0, len(tok) - 1, 2)]
-    sizes = {}
-    if entries:
-        for line in git(top, "cat-file", "--batch-check", inp="\n".join(sorted({e[1] for e in entries})) + "\n").splitlines():
-            f = line.split()
-            if len(f) == 3 and f[1] == "blob":
-                sizes[f[0]] = int(f[2])
+    sizes = blob_sizes(top, [e[1] for e in entries])
     errors = []
     for status, blob, path, c in entries:
         kind = verdict(top, path, sizes.get(blob)) if status == "A" else ("forbidden" if sizes.get(blob, 0) > MAX_BYTES else "ok")      # a change of an old scratch file is legacy
@@ -194,22 +210,31 @@ def tag_check(top, remote_on=True, timeout=15):
 
 
 def pending(top):
-    """(staged paths without deletions, untracked paths): what the index would commit now and what `git add -A` would add on top"""
-    return names(top, "diff", "--cached", "--name-only", "--diff-filter=d"), names(top, "ls-files", "--others", "--exclude-standard")
+    """({staged path: size of the STAGED content or None} without deletions, [untracked paths]): what the index would commit now and what `git add -A` would add on top"""
+    tok = git(top, "diff", "--cached", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-filter=d").split("\0")
+    rows = [(tok[i].split()[3], tok[i + 1]) for i in range(0, len(tok) - 1, 2)]               # (blob id, path)
+    sizes = blob_sizes(top, [sha for sha, _ in rows])
+    return {p: sizes.get(sha) for sha, p in rows}, names(top, "ls-files", "--others", "--exclude-standard")
 
 
-def path_errors(top, paths):
+def path_errors(top, paths, sizes=None, scratch_ok=False, lead=""):
+    """errors for the paths as a commit would hold them. sizes: {path: size} of staged content, which is what a commit takes (the working file may have changed or
+    gone since); a path without one is measured on disk, and a path that is not on disk is a deletion. scratch_ok: scratch is no error (untracked scratch is counted)"""
     errors = []
     for p in paths:
-        try:
-            size = os.path.getsize(os.path.join(top, p))
-        except OSError:
-            continue                                                 # deleted: nothing to commit
+        size = (sizes or {}).get(p)
+        if size is None:
+            try:
+                size = os.path.getsize(os.path.join(top, p))
+            except OSError:
+                continue                                             # deleted: nothing to commit
         kind = verdict(top, p, size)
+        if kind == "scratch" and scratch_ok:
+            continue
         if kind != "ok":
             why = "inside a temp/ or _to_delete/ folder (scratch is not committed; promote it to a code folder or put the command in the card)" if kind == "scratch" \
                 else f"a data / binary / log type or over 1 MB ({size // 1000} kB)"
-            errors.append(f"{kind}: {p} - {why}")
+            errors.append(f"{lead}{kind}: {p} - {why}")
     return errors
 
 
@@ -259,10 +284,11 @@ def report(top, show_all=False, remote_on=True):
     errors += te
     lines += [""] + tinfo + ["  " + x for x in te]
     staged, untracked = pending(top)
-    se = path_errors(top, staged)
+    se = path_errors(top, list(staged), staged) + path_errors(top, untracked, scratch_ok=True, lead="untracked ")        # `git add -A` takes an untracked file that no rule ignores
     errors += se
     scr = [p for p in untracked if classify(p) == "scratch"]
-    lines += ["", f"pending: {len(staged)} staged file(s), {len(untracked)} untracked ({len(scr)} of them scratch that `git add -A` would sweep in)"]
+    lines += ["", f"pending: {len(staged)} staged file(s), {len(untracked)} untracked ({len(scr)} of them scratch that `git add -A` would sweep in, "
+                  f"{sum(x.startswith('untracked ') for x in se)} forbidden or over 1 MB)"]
     lines += ["  " + x for x in se] + [f"  untracked scratch: {p}" for p in scr[:10]] + ([f"  ... and {len(scr) - 10} more"] if len(scr) > 10 else [])
     tracked_scratch = [p for p in names(top, "ls-files") if classify(p) == "scratch"]
     used, imports = used_scratch(top)
@@ -370,6 +396,36 @@ def _selftest():
                 assert code == 2, (bad, code)
         finally:
             os.chdir(here)
+    with tempfile.TemporaryDirectory() as top:                   # deep review 2026-11-10: types no rule ignores, untracked files, the size of what is STAGED
+        def sh(*a):
+            subprocess.run(["git", "-C", top, "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True)
+
+        def put(rel, n=0, text="x"):
+            with open(os.path.join(top, rel), "wb") as f:
+                f.write(b"0" * n if n else text.encode("utf-8"))
+        sh("init", "-q", "-b", "main")
+        put(".gitignore", text="*.npz\n*.svg\n!/keep.svg\n")
+        put("grown.json", text="{}")
+        sh("add", "-A")
+        sh("commit", "-qm", "base")
+        for ext in (".safetensors", ".onnx", ".bin", ".parquet", ".tar", ".7z", ".sqlite", ".so", ".exe", ".tif", ".webp", ".avi", ".zst", ".mat"):      # no rule here ignores them
+            assert verdict(top, "m/w" + ext, 10) == "forbidden", ext
+        put("keep.svg", text="<svg/>")
+        put("other.svg", text="<svg/>")
+        assert verdict(top, "keep.svg", 10) == "ok" and verdict(top, "other.svg", 10) == "forbidden" and verdict(top, "keep.svg", 2_000_000) == "forbidden"      # `!` names it; the size rule has no exception
+        put("head.safetensors", n=9_000_000)                     # untracked, ignored by no rule: `git add -A` takes it
+        put("notes.json", text="{}")
+        errors, text = report(top, remote_on=False)
+        assert errors == ["untracked forbidden: head.safetensors - a data / binary / log type or over 1 MB (9000 kB)"], errors
+        assert "pending: 0 staged file(s), 3 untracked (0 of them scratch that `git add -A` would sweep in, 1 forbidden or over 1 MB)" in text, text
+        put("grown.json", n=1_500_000)                           # staged big, then the working file is cut back: the commit takes the index
+        sh("add", "grown.json")
+        put("grown.json", text="{}")
+        put("ghost.onnx", n=400_000)                             # staged, then the working file is gone: it is still committed
+        sh("add", "ghost.onnx")
+        os.remove(os.path.join(top, "ghost.onnx"))
+        errors, _ = report(top, remote_on=False)
+        assert any(e.startswith("forbidden: grown.json") and "1500 kB" in e for e in errors) and any(e.startswith("forbidden: ghost.onnx") and "400 kB" in e for e in errors), errors
     with tempfile.TemporaryDirectory() as lone:                  # no remote at all, and a remote without an upstream branch
         subprocess.run(["git", "-C", lone, "init", "-q", "-b", "main"], check=True)
         open(os.path.join(lone, "a.py"), "w").write("x")
@@ -443,7 +499,8 @@ def _selftest():
             else:
                 os.environ["GIT_SSH_COMMAND"] = old_ssh
     print("check_git selftest ok: classes (separators, case, substrings, extensions, size), the reference regex, references resolved ($VAR, project folder, missing target, "
-          "history/), sys.path folders, staged scratch refused and a staged deletion not, pushes that add scratch / big / deleted-again files refused, no remote / no upstream, exit codes, run tags not on the remote listed (scratch in a tag fine, a forbidden file not)")
+          "history/), sys.path folders, staged scratch refused and a staged deletion not, pushes that add scratch / big / deleted-again files refused, no remote / no upstream, exit codes, run tags not on the remote listed (scratch in a tag fine, a forbidden file not), "
+          "forbidden types refused without an ignore rule (only a `!` rule lets one in), untracked forbidden files an error, staged files measured on the index")
     return 0
 
 
