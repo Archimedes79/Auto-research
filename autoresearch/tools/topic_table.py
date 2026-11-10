@@ -32,8 +32,8 @@ last column `known` (yes / -). Without it the table has no such column.
 normalised link) under <research folder>/topics/*/ and the table of each touched topic is made again. Without --all only the named note changes.
 --check: the done state of the procedure, nothing is written, every reason is printed, exit 1 if there is one: the notes are valid (as in a normal run); table.md
 and table.csv exist and are not older than the newest note.md or candidates*.md; every relative link of overview.md and table.md resolves; check.md exists and no
-line of it says contradicted or unreadable (so write those words only for a claim that failed); every id of the tables of candidates*.md has a folder or lies
-under _rejected/; no note sits in a folder that starts with _ or . (the table tool skips those; _rejected itself is allowed). --all-topics adds a warning (no
+line of it says contradicted or unreadable (so write those words only for a claim that failed); every id of the merged list candidates.md (the candidates_<subtopic>.md
+files only while there is no merge) has a folder or lies under _rejected/, except the rows whose `known?` column says yes; no note sits in a folder that starts with _ or . (the table tool skips those; _rejected itself is allowed). --all-topics adds a warning (no
 error) for a paper that is a note in more than one topic of the problem.
 """
 import argparse
@@ -330,26 +330,36 @@ def check_md_problems(folder):
             if re.search(r"\b(contradicted|unreadable)\b", ln, re.I)]
 
 
-def candidate_ids(path):
-    """the ids (first column) of the data rows of every markdown table in a candidates file"""
+def candidate_ids(path, skip_known=False):
+    """the ids (first column) of the data rows of every markdown table in a candidates file; skip_known: not the rows whose column `known?` (the header cell starts with
+    'known') says yes - the paper is already a note of the problem's corpus and needs no folder here"""
     lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
     sep = lambda s: s.lstrip().startswith("|") and "-" in s and not set(s) - set("|-: \t")  # noqa: E731
-    ids = []
+    ids, known_col = [], None
     for i, ln in enumerate(lines):
-        if ln.lstrip().startswith("|") and not sep(ln) and not (i + 1 < len(lines) and sep(lines[i + 1])):  # not a separator row and not a header row
-            first = re.split(r"(?<!\\)\|", ln.strip()[1:])[0].strip()
-            first = re.sub(r"^\[([^\]]*)\]\([^)]*\)$", r"\1", first).strip("`* ")
-            ids.append(first)
+        if not ln.lstrip().startswith("|") or sep(ln):
+            continue
+        cells = [c.strip() for c in re.split(r"(?<!\\)\|", ln.strip()[1:])]
+        if i + 1 < len(lines) and sep(lines[i + 1]):                       # a header row
+            known_col = next((k for k, c in enumerate(cells) if c.lower().startswith("known")), None)
+            continue
+        if skip_known and known_col is not None and known_col < len(cells) and cells[known_col].lower().startswith("yes"):
+            continue
+        ids.append(re.sub(r"^\[([^\]]*)\]\([^)]*\)$", r"\1", cells[0]).strip("`* "))
     return ids
 
 
 def candidate_gaps(folder):
-    """ids in candidates*.md that have no folder and are not under _rejected/: [reasons]"""
+    """ids of the candidate list that have no folder and are not under _rejected/: [reasons]. The list is candidates.md (the merge); candidates_<subtopic>.md files are the
+    inputs of the merge and count only while there is no candidates.md. Rows marked known (column `known?`) need no folder"""
     rej = os.path.join(folder, "_rejected")
     gone = os.listdir(rej) if os.path.isdir(rej) else []
     out = []
-    for n in sorted(n for n in os.listdir(folder) if re.fullmatch(r"candidates.*\.md", n)):
-        for i in candidate_ids(os.path.join(folder, n)):
+    names = sorted(n for n in os.listdir(folder) if re.fullmatch(r"candidates.*\.md", n))
+    if "candidates.md" in names:
+        names = ["candidates.md"]
+    for n in names:
+        for i in candidate_ids(os.path.join(folder, n), skip_known=True):
             if not FOLDER.match(i):
                 out.append(f"{n}: the id {i!r} is not folder-safe (letters, digits, . _ -, a letter or digit first)")
             elif not os.path.isdir(os.path.join(folder, i)) and not any(g == i or g.startswith(i + ".") for g in gone):
@@ -488,7 +498,15 @@ def _st_check(ok, tmp):
     variant("no_check", lambda c: os.remove(os.path.join(c, "check.md")), "check.md is missing")
     variant("contradicted", write("check.md", "| yy2 | claim | Contradicted | https://x.org |\n"), "check.md line 6")
     variant("unreadable", write("check.md", "| yy2 | claim | unreadable | https://x.org |\n"), "check.md line 6")
-    variant("candidate_gone", write("candidates_sub.md", "| gone9 | Gone | https://x.org/gone9 |\n"), "candidates_sub.md: the id gone9 has no folder")
+    variant("candidate_gone", write("candidates.md", "| gone9 | Gone | https://x.org/gone9 |\n"), "candidates.md: the id gone9 has no folder")
+    c = os.path.join(tmp, "v_known")                                            # a row marked known needs no folder; candidates_<sub>.md is an input of the merge, not checked once candidates.md exists
+    shutil.copytree(good, c)
+    open(os.path.join(c, "candidates.md"), "a").write("\n| id | title | paper | known? |\n|---|---|---|---|\n| zz9 | Z | https://x.org/zz9 | yes |\n| zy8 | Y | https://x.org/zy8 | no |\n")
+    open(os.path.join(c, "candidates_sub.md"), "a").write("| gone8 | Gone | https://x.org/gone8 |\n")
+    run(c)
+    code, msgs = check(c)
+    assert code == 1 and any("candidates.md: the id zy8 has no folder" in m for m in msgs) and not any("zz9" in m or "gone8" in m for m in msgs), msgs
+    shutil.rmtree(c)
     variant("candidate_unsafe", write("candidates.md", "| bad id | Bad | https://x.org/bad |\n"), "not folder-safe")
     variant("no_note_md", lambda c: os.makedirs(os.path.join(c, "empty1")), "empty1: no note.md")
     variant("bad_header", write("yy2/note.md", "# x\n- title: only\n", "w"), "header must be exactly")
