@@ -43,7 +43,7 @@ From this folder, in the WSL (env `gcar`, `~/miniconda3/envs/gcar/bin/python`); 
 | `literature/code/front_bev_code_sources.md` | repository, licence and module per block (read on the repository pages) |
 | `literature/scout_tables/` | the raw tables of the scouts (inputs of `literature/papers.csv` and of the notes that cite them) |
 | `tools/` | the launchers: `run_ar.sh` trains one config under `autoresearch/tools/run.py` from the run's snapshot commit (`tools/README.md`, test `tests/test_run_ar.py`) |
-| `temp/` | scratch, not in git: the output and caches of the scripts; only its README and `train/run_ar.sh` (the redirect that old run commands name) are tracked - see `temp/README.md`. The scripts that used to live here are in `studies/recipes/` (among them `train/run_cfg.sh`, the superseded launcher of the first runs) |
+| `temp/` | scratch, not in git: the output and caches of the scripts; only its README and `temp/train/run_ar.sh` (the redirect that old run commands name) are tracked - see `temp/README.md`. The scripts that used to live here are in `studies/recipes/` (among them `studies/recipes/train/run_cfg.sh`, the superseded launcher of the first runs) |
 | `data/` | derived data, not in git: the caches of the frozen image heads (`cache/cam_feats*`, big ones on D: behind links), the GT and radar caches of the trainer, the small-set links - see `data/README.md` |
 | `runs/` | one folder per training run (not in git) - see `runs/README.md` |
 | `results/` | the result package of each run (`results/<run id>/`: `package.json`, `provenance.json`, `split.json`; D40) and the finished experiments (`results/experiments/<folder>/`: card, summary, result files; D48) - see `results/README.md` |

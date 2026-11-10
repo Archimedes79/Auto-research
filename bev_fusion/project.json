@@ -50,7 +50,7 @@
     "root_files": ["README.md", "project.json"],
     "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "tools", "training"],
     "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "training"],
-    "living": [],
+    "living": ["README.md", "data/README.md", "records/README.md", "runner/README.md", "splits/README.md", "studies/README.md", "temp/README.md"],
     "skip_parts": [],
     "index_dirs": ["training", "evaluation", "../GtGenerator", "tests", "temp"],
     "extra_bases": []
