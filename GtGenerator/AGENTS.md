@@ -62,7 +62,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `lane_divider` `road_divider` | (nx, ny) | 1-cell line masks |
 | `lane_divider_dist` `road_divider_dist` | (nx, ny) | distance to the nearest line in m, truncated at 2 |
 | `centreline` | (nx, ny) | mask of the lane / lane-connector centre-lines |
-| `centreline_dir` | (2, nx, ny) | direction of travel (cos, sin of the heading) on `centreline` cells |
+| `centreline_dir` | (2, nx, ny) | direction of travel (cos, sin of the heading) on `centreline` cells: the MEAN of the lines in the cell, so shorter than 1 where lines cross (down to 0.04): normalise it if you need a unit vector |
 | `vehicle` `pedestrian` `two_wheeler` | (nx, ny) | footprint coverage of **observed** boxes (at least one lidar or radar point) |
 | `instance` | (nx, ny) int32 | index into `meta["boxes"]` of the box that covers the cell, -1 = none |
 | `ignore` | (nx, ny) | boxes WITHOUT any lidar / radar point: neither object nor free space - leave out of every loss |
@@ -70,7 +70,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `flow_ego` | (2, nx, ny) | apparent velocity of a static world point caused by the ego motion, -(v + omega x r) |
 | `flow` | (2, nx, ny) | `flow_ego + velocity`: the apparent motion in the camera frame; displacement over any dt = `flow * dt` |
 | `flow_weight` | (nx, ny) | 1 = velocity known, 0 = unknown (ignored boxes, unknown velocity): the supervision mask |
-| `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s |
+| `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s (0.1 in free space; 0 on the cells of an observed box of unknown velocity, where `flow_weight` is 0: never use 1 / sigma without the weight) |
 | `camera` | (nx, ny) | ground cells that project into the CAM_FRONT image |
 | `occluded` | (nx, ny) | ground cells a box hides from the camera, by the box's real height (v7: no longer an infinitely high box; section 3a) |
 | `radar` | (nx, ny) | cells inside the +-60 deg fan of one of the five radars |
@@ -80,13 +80,13 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 `T_e2g` (4x4 ego -> global at the camera time), `res`, `cam_file` (image path relative to the dataroot), `K` (3x3 intrinsics),
 `T_c2e` (4x4 camera -> ego), `image_size` (width, height of the camera image), `radar_poses` (the five radar -> ego 4x4 matrices),
 `vectors` (exact polylines in the ego frame per `lane_divider` / `road_divider` / `centreline`),
-`boxes` (list, one dict per annotated box in range, below). `training_sample` adds to the "prev" / "next" metas `dt`
+`boxes` (list, one dict per annotated box of the three classes of the keyframe, also those outside the grid (59 - 65 % of them): filter by `instance` or the corners; below). `training_sample` adds to the "prev" / "next" metas `dt`
 (s, signed: negative for prev) and `steps` (list of (dt, ego speed m/s, yaw rate rad/s) per 12 Hz camera frame).
 
 One box of `meta["boxes"]`: `group` ("vehicle" / "pedestrian" / "two_wheeler"), `corners` (4x2 footprint, ego x, y), `center` (3, ego
-frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, ego frame), `vel` (2, world velocity m/s in ego axes),
+frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, ego frame; NOT wrapped: 25 - 30 % of the boxes lie outside [-pi, pi], use sin / cos or wrap it), `vel` (2, world velocity m/s in ego axes),
 `vel_source` ("stationary" / "track" / "track+radar" / "radar" / "unknown"), `vel_flag` ("ok", "unobserved", "short_track",
-"stationary_but_moving", "radar_override", "radar_conflict"), `vel_sigma` (m/s), `vel_known` (bool), `visibility` (nuScenes
+"stationary_but_moving", "radar_override", "radar_conflict"), `vel_sigma` (m/s; NaN when unknown), `vel_known` (bool; False = unknown: `vel` is (0, 0), never use it without this flag), `visibility` (nuScenes
 annotator bin "1".."4" = 0-40 / 40-60 / 60-80 / 80-100 %), `token` (annotation), `instance` (instance token), `stationary` (bool:
 one fixed world pose, velocity 0), `observed` (bool: has lidar / radar points), `world` (3, global position at the camera time),
 `world_ann` (global position at the annotation time), `shift` (2, ego axes, m: what moved the box from annotation to camera time),
