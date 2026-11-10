@@ -10,7 +10,7 @@ New chat: start in the repository folder, say "Read HANDOVER.md and continue". R
 - **Scorer oracle (section 7, rule written before, NOT PASSED):** clean GT ends + true pairs: junction F1 +0.029 / +0.049 (needed +0.03 on both seeds) but topo F1 +0.10, lanes found +0.22, Q +0.07; with classifier pairs Q +0.04, topo F1 +0.04, junction F1 -0.01 / +0.01. By hand the other headlines move a lot, junction precision does not.
 
 ## Open for Mirko (wait with the experiments)
-1. By which numbers is an end keypoint head judged: topo F1 / lanes found / Q (my recommendation; junction F1 as a guard) or junction F1? 2. Soft step 1.25 m instead of the hard read-out. 3. New lane version l6 of the GT chat (its findings: `GtGenerator/REVIEW_2026-11-10.md`; nothing starts before he says so). Then: CPU oracle with the measured end error, map point vs stop line, card for the head.
+1. **Decided (D79, delegated to me):** an end keypoint head is judged by `topo_F1` (KEEP > +0.02, both seeds), guards F1@1.0, dup_frac, vertices, junction F1, assignment gain; `lanes_found` / Q reported only. 2. Soft step 1.25 m instead of the hard read-out. 3. New lane version l6: D78 = code is prepared in scratch, NOT merged, no store rebuilt until he says so (findings: `GtGenerator/REVIEW_2026-11-10.md`). Next: CPU oracle with the measured end error (rule first), map point vs stop line, then the card for the head (tolerant targets 2 - 4 m along the lane + heading, pair decision, one Hermite curve per pair).
 
 ## State of the machine
 Nothing of mine runs. GT stores on D: (links), default store `0702a065c6` (l4). WSL page-cache ENOMEM: `temp/e276/reclaim.py`. Scratch: `temp/e284/` (tags `lcr/e284-scratch-1`, `-2`, `-3`). Nothing pushed.
