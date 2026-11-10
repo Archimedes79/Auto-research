@@ -24,4 +24,15 @@ run "start check of a training config (startable)" startable.py
 run "config -> trainer command line (run_config)" run_config.py --selftest
 run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "grid metric reproduces stored numbers" lane_grid/selftest.py
+# the lane head of E273 and later (CPU, synthetic frames; the tests on stored lane GT frames are in run_all_tests.sh)
+run "head: targets, nodes, links, Hermite oracle"        grid/qtargets.py
+run "head: prediction contract"                          grid/qformat.py
+run "head: map simulator"                                grid/map_sim.py
+run "head: all phases, gradients, E274 switches"         grid/qgraph.py
+run "head: pixel targets"                                grid/qraster.py
+run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py
+run "head: close-node read-out (rule cases, 300 frames)" test_qgraph_readout.py
+run "head: scorer glue (toy lane)"                       test_qgraph_score_glue.py
+run "head: tier metrics"                                 test_tier_metrics.py
+run "head: pictures selftest"                            viz/qgraph_view.py --selftest
 exit $fail

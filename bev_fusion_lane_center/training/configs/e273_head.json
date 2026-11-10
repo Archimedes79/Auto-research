@@ -1,0 +1,7 @@
+{
+ "_about": "The lane head of E273 = baseline B (D58): pixel maps, grid nodes, Hermite links, soft sections, map assignment; phases 2 - 7 in one command, a gate after every phase (card experiments/E273_*). The run name is set by the start (--id); seed 1 = preset seed1 (its pixel stage starts from runs/e271_a_s1). Later arms add the flags of their card (key = flag, `node_w_evt` = `--node-w-evt`).",
+ "name": "e273_p_s0",
+ "design": "qgraph_head",
+ "seed": 0,
+ "workers": 3
+}

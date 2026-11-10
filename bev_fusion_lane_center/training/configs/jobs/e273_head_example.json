@@ -1,0 +1,9 @@
+{
+ "_comment": "A job file of the trainsuite (Training.run): the lane head of E273 as a diagnostic (no_card = feeds no verdict). `run_args` is needed because the trainsuite adds --split train and this project's splits are val / test / confirm. A run that feeds a verdict: replace no_card by card {hyp, pred, rule} or list the arm's run id in the run_ids of its card BEFORE the start. Start: from autoresearch/, `AR_PROJECT=../bev_fusion_lane_center python3 -m trainsuite Training.run ../bev_fusion_lane_center/training/configs/jobs/e273_head_example.json --project ../bev_fusion_lane_center`.",
+ "id": "E285.demo",
+ "config": "training/configs/e273_head.json",
+ "preset": ["smoke_qgraph"],
+ "run_args": ["--split", "val", "--gpu"],
+ "no_card": true,
+ "note": "smoke of the E273 head through the Training class (a few steps per phase)"
+}

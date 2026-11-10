@@ -40,9 +40,62 @@ DESIGNS = {
         "smoke": (bool, None, "40 steps, 24 evaluation frames"),
         "_about": (str, None, "free text"),
     },
+    # the lane head of E273 and later (training/train/qgraph_train.py): one command runs the phases in order; a key is the flag of the same name (`node_w_evt` = `--node-w-evt`)
+    "qgraph_head": {
+        "name": (str, lambda v: None if v and "/" not in v and "." not in v else "a folder name without . and /", "run folder runs/<name> (the phases write runs/<name>_p<k>)"),
+        "design": (str, None, "this table"),
+        "seed": (int, lambda v: None if v >= 0 else "must be >= 0", "seed of the run; also picks the E271 head runs/e271_a_s<seed> the pixel stage starts from"),
+        "phases": (list, lambda v: None if v and all(isinstance(x, int) and 2 <= x <= 7 for x in v) else "a non-empty list of phases 2..7", "phases to run in order (default 2 3 4 5 6 7)"),
+        "steps": (list, lambda v: None if v and all(isinstance(x, int) and x > 0 for x in v) else "a list of steps > 0, one per phase", "steps per phase, in the order of phases (default: the trainer's)"),
+        "bs": (int, _pos, "batch size"),
+        "workers": (int, lambda v: None if v >= 0 else "must be >= 0", "data loader workers (2 - 3 while another chat trains)"),
+        "width": (int, lambda v: None if v >= 8 and v % 8 == 0 else "must be a multiple of 8 (GroupNorm with 8 groups)", "channel width"),
+        "head": (str, None, "the E271 head to start from (default runs/e271_a_s<seed>/model.pt)"),
+        "resume_from": (str, None, "a model.pt of an earlier phase to start from (list only the later phases)"),
+        "smoke": (bool, None, "a few steps per phase"),
+        "no_gates": (bool, None, "do not stop at a failed gate of a phase (a run by hand, name it in the ledger note)"),
+        "gate_phases": (list, None, "only a failed gate of these phases stops the run"),
+        "ev_w": ((int, float), _pos, "E274: weight of the 1 m event heat-map loss"),
+        "node_w_evt": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E274: extra weight of the existence positives at event cells"),
+        "node_w_inter": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E274: extra weight of the existence positives inside the intersection mask"),
+        "long_match": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E274: weight of the dual-softmax loss over the long-link candidates"),
+        "tier_w": (list, lambda v: None if len(v) == 3 else "three factors", "E276: factor of the positive node terms by GT tier 1 / 2 / 3 (needs the lane GT l4)"),
+        "vis_w": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E276: factor for GT nodes that no camera sees"),
+        "neg_w": (list, lambda v: None if len(v) == 4 else "four factors", "E276: factor of the negatives by zone"),
+        "link_tier_w": (list, lambda v: None if len(v) == 3 else "three factors", "E276: factor of the link losses by the tier of the source node"),
+        "sparse": (list, lambda v: None if len(v) == 2 else "two values: deviation (m), longest chord (m)", "E276: the sparse node target"),
+        "node_loss": (str, lambda v: None if v in ("e273", "zone") else "e273 or zone", "E282: the node loss"),
+        "zone_bias": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E282: the tie-break bonus of the zone loss"),
+        "soft_nms": (list, lambda v: None if len(v) == 3 else "three values: radius m, smoothness m, passes", "E277: the close-node suppression as a soft step"),
+        "_about": (str, None, "free text"),
+    },
 }
-INPUTS = {"grid_head": [f"{HOME}/exp_gcar_b123/feats/{p}_{g}.npy" for p in ("train", "val") for g in ("dec32", "logit7")] + ["data/splits.json"]}
+REQUIRED = {"grid_head": ("name", "steps"), "qgraph_head": ("name",)}
+FEATS = [f"{HOME}/exp_gcar_b123/feats/{p}_{g}.npy" for p in ("train", "val") for g in ("dec32", "logit7")]
+INPUTS = {"grid_head": FEATS + ["data/splits.json"], "qgraph_head": FEATS + ["data/splits.json"]}
 SMOKE = dict(steps=40, smoke=True)
+SMOKE_OF = {"qgraph_head": dict(smoke=True)}                       # the steps of a qgraph run are a list per phase: the trainer's own smoke values apply
+
+
+def inputs_of(cfg):
+    """the files and folders the trainer of cfg's design reads (relative paths are relative to the problem folder)"""
+    design = cfg.get("design")
+    out = list(INPUTS.get(design, []))
+    if design == "qgraph_head" and not (cfg.get("head") or cfg.get("resume_from")):
+        out.append(f"runs/e271_a_s{cfg.get('seed', 0)}/model.pt")      # the pixel stage starts from the E271 head of the same seed
+    return out
+
+
+def lane_store_note(root=ROOT):
+    """a note (not a problem: the GT chat owns the store) when the lane GT store of this checkout is missing or empty; None when it is there or cannot be asked"""
+    try:
+        sys.path.insert(0, os.path.dirname(root))
+        from GtGenerator import lane_gt
+        sig_dir = os.path.join(lane_gt.DATA, lane_gt.signature())
+        n = len(lane_gt.held(sig_dir)) if os.path.isdir(sig_dir) else 0
+    except Exception as e:  # noqa: BLE001
+        return f"the lane GT store was not checked ({type(e).__name__})"
+    return None if n else f"the lane GT store {os.path.basename(sig_dir)} of this GtGenerator is missing or empty (`python -m GtGenerator key lane_center --set full`)"
 
 
 def check(cfg, require_clean=False, root=ROOT, inputs=None):
@@ -62,10 +115,14 @@ def check(cfg, require_clean=False, root=ROOT, inputs=None):
             problems.append(f"{k}: {v!r} is not {typ if isinstance(typ, type) else '/'.join(t.__name__ for t in typ)}")
         elif fn is not None and fn(v):
             problems.append(f"{k}: {v!r} {fn(v)}")
-    for k in ("name", "steps"):
+    for k in REQUIRED[design]:
         if k not in cfg:
             problems.append(f"missing key {k!r}")
-    for p in (inputs if inputs is not None else INPUTS[design]):
+    if inputs is None and design == "qgraph_head":
+        n = lane_store_note(root)
+        if n:
+            notes.append(n)
+    for p in (inputs if inputs is not None else inputs_of(cfg)):
         full = p if os.path.isabs(p) else os.path.join(root, p)
         if not os.path.exists(full):
             problems.append(f"input missing: {p}")
@@ -102,7 +159,9 @@ def check(cfg, require_clean=False, root=ROOT, inputs=None):
 
 def smoke_of(cfg):
     out = dict(cfg)
-    out.update(SMOKE)
+    out.update(SMOKE_OF.get(cfg.get("design"), SMOKE))
+    if cfg.get("design") == "qgraph_head":
+        out.pop("steps", None)
     out["name"] = "smoke_" + cfg["name"]
     return out
 
@@ -126,6 +185,14 @@ def selftest():
     assert any("missing key" in x for x in p)
     p, _ = check(good, root=tmp0, inputs=["no/such/input.npy"])
     assert any("input missing" in x for x in p)
+    q = dict(name="e273_p_s0", design="qgraph_head", seed=0, workers=3, node_w_evt=3.0, sparse=[0.3, 7.5])
+    assert not check(q, root=tmp0, inputs=[])[0]
+    for bad, frag in (({"phases": [1]}, "phases 2..7"), ({"tier_w": [1, 2]}, "three factors"), ({"node_loss": "x"}, "e273 or zone"), ({"steps": [0]}, "steps > 0"), ({"stepz": 1}, "unknown key")):
+        p, _ = check(dict(q, **bad), root=tmp0, inputs=[])
+        assert any(frag in x for x in p), (bad, p)
+    assert "runs/e271_a_s1/model.pt" in inputs_of(dict(q, seed=1)) and "runs/e271_a_s0/model.pt" not in inputs_of(dict(q, head="x.pt"))
+    qs = smoke_of(q)
+    assert qs["smoke"] and "steps" not in qs and qs["name"] == "smoke_e273_p_s0" and not check(qs, root=tmp0, inputs=[])[0]
     s = smoke_of(good)
     assert s["steps"] == 40 and s["smoke"] and s["name"] == "smoke_e271_a_s0" and not check(s, root=tmp0, inputs=[])[0]
     tmp = tempfile.mkdtemp()
