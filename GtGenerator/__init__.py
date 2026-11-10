@@ -21,21 +21,29 @@ report, view, sheets, masks, lanegraph, video, clean, build, selftest: `python -
 Guide for agents: GtGenerator/AGENTS.md; reference: GtGenerator/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): GtGenerator.flow.estimate_flow.
 """
-from .flow import Config, FlowGT, ObjectFlow, Track, estimate_flow  # noqa: F401
-from .pipeline import generate  # noqa: F401
-from .grid import GridSpec  # noqa: F401
-from . import sets, versions  # noqa: F401
-from .suite import AutoGT, GtGenerator, current_signature, current_version, load, missing, scene_tokens  # noqa: F401
-from .gt_api import GtKey, generate_bev_gt, generate_lane_gt, gt_key, key_of  # noqa: F401  (one function per system and the key it returns: GtGenerator/gt_api.py)
-
-
-_LAZY = ("lane_gt", "lane_raster", "lane_graph", "rig_masks", "gt_api", "store", "pipeline", "cli", "clean", "checks", "coverage")
+# Nothing below is imported at `import GtGenerator` (PEP 562): a name or a submodule is imported when it is first asked for (`GtGenerator.generate`, `GtGenerator.versions`, `from GtGenerator import GtKey`),
+# so the package imports without numpy. The job runner reads `GtGenerator.JOBS` in its own interpreter (plain python3), and `import GtGenerator` costs nothing for the tools that only need a name.
+_NAMES = {"flow": ("Config", "FlowGT", "ObjectFlow", "Track", "estimate_flow"), "pipeline": ("generate",), "grid": ("GridSpec",),
+          "suite": ("AutoGT", "GtGenerator", "current_signature", "current_version", "load", "missing", "scene_tokens"),
+          "gt_api": ("GtKey", "generate_bev_gt", "generate_lane_gt", "gt_key", "key_of"),      # one function per system and the key it returns: GtGenerator/gt_api.py
+          "jobs": ("JOBS",)}                                                                  # the calls a job file can name (GtGenerator/jobs.py)
+_OWNER = {name: module for module, names in _NAMES.items() for name in names}
 
 
 def __getattr__(name):
-    """`GtGenerator.lane_gt`, `GtGenerator.rig_masks`, ... without importing them at `import GtGenerator` (PEP 562): the documented `GtGenerator.lane_gt.load(token)` works"""
-    if name in _LAZY:
-        import importlib
+    """`GtGenerator.generate`, `GtGenerator.versions`, `GtGenerator.lane_gt.load(token)` ... imported on first use and kept as plain attributes (a name of a module of this folder is that module)"""
+    import importlib
+    import os
+    if name in _OWNER:
+        value = getattr(importlib.import_module(f".{_OWNER[name]}", __name__), name)
+        globals()[name] = value
+        return value
+    if name.isidentifier() and os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")):
         return importlib.import_module(f".{name}", __name__)
     raise AttributeError(f"module 'GtGenerator' has no attribute {name!r}")
 
+
+def __dir__():
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    return sorted(set(globals()) | set(_OWNER) | {f[:-3] for f in os.listdir(here) if f.endswith(".py") and f[:-3].isidentifier()})
