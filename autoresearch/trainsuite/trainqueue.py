@@ -187,8 +187,9 @@ def state(c, it):
 
 
 def restartable(it):
-    """may the runner start an interrupted item by itself? Only when its launcher died in an earlier boot (the machine went down), or the person asked (`resume`)"""
-    return bool(it.get("retry")) or (bool(it.get("boot")) and it["boot"] != boot_id())
+    """may the runner start an interrupted item by itself? Only when its launcher died in an earlier boot (the machine went down) and nobody saw it die in the boot it was started in
+    (`person_stopped`: killed by hand), or the person asked (`resume`)"""
+    return bool(it.get("retry")) or (bool(it.get("boot")) and it["boot"] != boot_id() and not it.get("person_stopped"))
 
 
 def last_step(run_dir):
@@ -428,6 +429,11 @@ def enforce(c, q):
     acts = []
     for it in q["items"]:
         rid = it["id"]
+        if state(c, it) == "interrupted" and it.get("boot") == boot_id() and not it.get("person_stopped"):
+            # a launcher whose heartbeat is 5 minutes old in the boot it was started in: the machine going down takes this runner with it, so somebody killed it. A reboot later must not
+            # restart it against that decision (only `resume` does)
+            it["person_stopped"] = now()
+            acts.append(f"{rid}: its launcher died in this boot (killed by hand): it is not restarted by the runner, not even after a reboot; `resume {rid} --words ...` continues it")
         if it.get("kind", "train") != "train" or state(c, it) not in ("running", "orphan"):
             continue
         if it.get("held"):
@@ -674,6 +680,7 @@ def resume(c, ids=(), all_=False, words="", fresh_code=False, start=True, out=pr
                 c.H.clear(d, words)
                 c.H.note_in_ledger(rid, f"hold cleared {dt.date.today().isoformat()} on the person's words: {words.strip()!r} (hold was: {h.get('why', '?')}, set by {h.get('who', '?')} {h.get('when', '?')})")
             it["held"] = None
+            it.pop("person_stopped", None)
             if it.get("kill_hit"):                                      # the person's words continue a run that a kill rule stopped: that rule is waived for this item
                 it.setdefault("kill_waived", []).append(it.pop("kill_hit")["rule"])
             it.pop("refused", None)

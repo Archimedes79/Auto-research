@@ -117,6 +117,13 @@ def _list_text(r):
 QUEUE_TEXT = {"queue_list": _list_text, "queue_remove": lambda r: print(f"removed {r['removed']} from the queue"), "queue_start": lambda r: print(f"the runner runs (pid {r['runner']})")}
 
 
+def _one_or_all(i, all_):
+    if all_ and i not in (None, ""):
+        raise TrainingError("an item or all=True, not both")
+    if not all_ and i in (None, ""):
+        raise TrainingError("name the item (i) or give all=True: without either nothing is held or resumed")
+
+
 class QueueMixin:
     QUEUE_METHODS = ("queue_add", "queue_list", "queue_get", "queue_remove", "queue_start", "queue_hold", "queue_resume")
 
@@ -169,20 +176,22 @@ class QueueMixin:
         return dict(runner=TQ.ensure_runner(self._c()))
 
     @errors
-    def queue_hold(self, words, i=None, reason="", wait=180.0):
-        """stop the trainings (a checkpoint each, exit 75) and keep what waits from starting; i=None holds ALL and pauses the runner, i holds one (the command line wants `--all` for
-        all). `words` are the person's own words that ordered it (required). -> {id: outcome}"""
+    def queue_hold(self, words, i=None, all=False, reason="", wait=180.0):
+        """stop the trainings (a checkpoint each, exit 75) and keep what waits from starting: `i` holds one, `all=True` holds ALL and pauses the runner (neither is an error, so a missing id
+        never holds everything). `words` are the person's own words that ordered it (required). -> {id: outcome}"""
         c = self._c()
-        ids = () if i is None else (resolve_item(c, i)[0],)
-        return TQ.hold(c, ids, i is None, words, reason, wait, out=lambda *a, **k: None)
+        _one_or_all(i, all)
+        ids = () if all else (resolve_item(c, i)[0],)
+        return TQ.hold(c, ids, all, words, reason, wait, out=lambda *a, **k: None)
 
     @errors
-    def queue_resume(self, words, i=None, fresh_code=False):
-        """the person's words clear the holds: every held training (i=None) or one continues from its last checkpoint on the code of its first attempt (fresh_code: on the code of now,
-        the hot-fix loop). -> {id: what happens}"""
+    def queue_resume(self, words, i=None, all=False, fresh_code=False):
+        """the person's words clear the holds: `i` or `all=True` (every held training); each continues from its last checkpoint on the code of its first attempt (fresh_code: on the code of
+        now, the hot-fix loop). -> {id: what happens}"""
         c = self._c()
-        ids = () if i is None else (resolve_item(c, i)[0],)
-        return TQ.resume(c, ids, i is None, words, fresh_code, True, out=lambda *a, **k: None)
+        _one_or_all(i, all)
+        ids = () if all else (resolve_item(c, i)[0],)
+        return TQ.resume(c, ids, all, words, fresh_code, True, out=lambda *a, **k: None)
 
     # ---- with a queue a pause and a held item also bind a direct start, and a training has a place in the line
     @errors

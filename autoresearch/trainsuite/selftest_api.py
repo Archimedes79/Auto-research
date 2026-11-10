@@ -13,6 +13,7 @@ import time
 import suitecli
 
 from . import api
+from . import trainqueue as TQ
 from .api import LEGACY
 from .cli import main as cli_main
 from .selftest_queue import make_project, until
@@ -136,12 +137,27 @@ def api_checks(tmp, ok):
         lst = T.list()
         assert lst["running"] == ["s.one"] and {"slots", "lock", "ram", "gpu", "holds"} <= set(lst) and "s.one" in [x["id"] for x in lst["runs"]], lst
         r = T.stop(None, "selftest")
-        assert r["id"] == "s.one" and r["requested"] is True and os.path.exists(r["file"]), r
+        assert r["id"] == "s.one" and r["requested"] is True and r["verified"] is not None and r["stopped"] is True, r
+        assert os.path.exists(os.path.join(proj, "runs", "s_one", "STOPPED")), "stop waited until the trainer had stopped"
         until(lambda: os.path.exists(rec("s.one", "HOLD")), 60, what="s.one stopped and held")
         assert T.status("s.one")["state"] == "stopped"
         lst = T.list()
         assert any(h["id"] == "s.one" for h in lst["holds"]) and next(x for x in lst["runs"] if x["id"] == "s.one")["held"] is True and lst["running"] == [], lst
         raises(T.stop, "nothing is running", None)
+        # the request is written again while the trainer has not stopped: a fake run that never reads CONTROL, the sends are counted
+        from . import control
+        fake = os.path.join(proj, "runs", "fake_run")
+        os.makedirs(fake)
+        os.makedirs(os.path.join(proj, "records", "runs", "fake.run"))
+        json.dump({"status": "running"}, open(os.path.join(proj, "records", "runs", "fake.run", "run.json"), "w"))
+        sent, real_send, real_resend = [], control.request_stop, api.RESEND_S
+        control.request_stop = lambda rd, why="": sent.append(why) or real_send(rd, why)
+        api.RESEND_S = 0.5
+        try:
+            assert api._wait_stopped(TQ.context(proj), "fake.run", fake, "again", 2.5) is False
+        finally:
+            control.request_stop, api.RESEND_S = real_send, real_resend
+        assert len(sent) >= 2, sent                                                 # written again at about 1 s and 2 s
         raises(T.run, "ON HOLD", job("s.one", set={"steps": 600, "sleep": 0.05}))
         raises(T.resume, "words", "s.one", "")
         raises(T.resume, "words", "s.one", "  ")

@@ -46,6 +46,7 @@ TRAIN_ONLY = ("preset", "set", "card", "no_card", "kill", "run_args", "prepare",
 RUN_ONLY = ("run", "mode", "split", "n", "scene", "first", "out", "dts", "device", "cold", "frames", "code")     # keys that mean something for a runner job only
 
 
+RESEND_S = 20.0                # `stop` writes the request again this often while the trainer has not stopped: one written before the trainer cleared old markers is moved aside as stale
 READERS = 4                    # the run folders lie on a slow drive (about 3 ms per file access under WSL): reading many of them waits for the drive, so a few threads read at once
 
 
@@ -290,6 +291,20 @@ def must_exist(c, rid, it=None):
             raise TrainingError(f"no run record or ledger row named {rid!r}")
 
 
+def _wait_stopped(c, rid, rd, reason, wait):
+    """True when the run has stopped within `wait` seconds (STOPPED written, or its launcher's record is not running any more), else False. The request is written again every RESEND_S"""
+    t0 = last = time.time()
+    while True:
+        if Run(rd, "total").stopped() is not None or c.R.record(os.path.join(c.records, rid)).get("status") not in ("running", "waiting"):
+            return True
+        if time.time() - t0 >= wait:
+            return False
+        if time.time() - last >= RESEND_S:
+            control.request_stop(rd, reason)
+            last = time.time()
+        time.sleep(1.0)
+
+
 def _run_info(c, rid):
     """one training for `list`: its state from the launcher's record, its step, the gradient, the skipped steps and the health flags"""
     d = os.path.join(c.records, rid)
@@ -393,9 +408,9 @@ class Training:
         return dict(id=j["id"], started=started, command=shell(argv))
 
     @errors
-    def stop(self, i=None, reason=""):
-        """ask one training to save a checkpoint and stop (it exits with 75; run.py then puts its id on hold); i=None is the running one. Refused for a code snapshot without the stop
-        check. -> {id, requested, file, verified}"""
+    def stop(self, i=None, reason="", wait=60.0):
+        """ask one training to save a checkpoint and stop (it exits with 75; run.py then puts its id on hold); i=None is the running one. The request is written again every 20 s until the
+        trainer has stopped or `wait` seconds are over (0: do not wait). Refused for a code snapshot without the stop check. -> {id, requested, file, verified, stopped (None: not waited)}"""
         c = self._c()
         rid, _, _ = resolve(c, i)
         if rid is None:
@@ -406,7 +421,8 @@ class Training:
         ok = control.honours_stop(rd)
         if ok is False:
             raise TrainingError(f"NOT requested: the code snapshot of {rid} (code/train.py) has no stop check, it would ignore CONTROL. Stopping it is a decision about the process, not a file")
-        return dict(id=rid, requested=True, file=control.request_stop(rd, reason), verified=bool(ok))
+        file = control.request_stop(rd, reason)
+        return dict(id=rid, requested=True, file=file, verified=bool(ok), stopped=_wait_stopped(c, rid, rd, reason, wait) if wait > 0 else None)
 
     @errors
     def status(self, i=None, kill=(), ref=None, skip=10):

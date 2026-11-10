@@ -222,14 +222,20 @@ def queue_checks(tmp, ok):
         until(lambda: TQ.state(c, item("k")) == "interrupted", 30, what="k is interrupted: launcher and trainer are gone")
         time.sleep(3)
         assert len(starts(proj, "k")) == 1 and "killed in this boot" in cli(proj)[1], "killed by hand in this boot: the runner leaves it to the person (resume)"
-        with TQ.edit(c) as q:                                                     # the machine went down: the launcher died in an earlier boot
+        assert item("k").get("person_stopped"), "the runner saw it die in the boot it was started in: killed by hand, marked"
+        with TQ.edit(c) as q:                                                     # a reboot later: the mark keeps the boot rule from restarting what the person killed
             next(i for i in q["items"] if i["id"] == "k")["boot"] = "an-earlier-boot"
+        time.sleep(3)
+        assert len(starts(proj, "k")) == 1, "a launcher killed by hand is not restarted after a reboot"
+        with TQ.edit(c) as q:                                                     # a launcher that died with the machine was never seen dying in a boot: no mark
+            next(i for i in q["items"] if i["id"] == "k").pop("person_stopped", None)
+        TQ.ensure_runner(c)                                                       # the runner ended after its idle time; the first queue command after a reboot brings it back
         until(lambda: len(starts(proj, "k")) == 2, 60, what="the runner restarted k")
         until(lambda: is_done(proj, "k"), 90, what="k done")
         sk = starts(proj, "k")
         assert sk[1]["from"] >= 10 and logged(proj, "k") == 300 and item("k")["restarts"] == 1 and sk[1]["commit"] == sk[0]["commit"] and sk[0]["commit"], (sk, item("k"))
-        ok("a run whose launcher died: its surviving trainer (orphan) is not started a second time; a launcher killed by hand in this boot is left to the person; after a machine "
-           "restart (another boot) the runner restarts the run from its last checkpoint on the code of its first attempt")
+        ok("a run whose launcher died: its surviving trainer (orphan) is not started a second time; a launcher killed by hand in this boot is left to the person, also after a reboot; "
+           "after a machine restart (another boot, never seen dying) the runner restarts the run from its last checkpoint on the code of its first attempt")
 
         # 4b hold stops an orphan too (no launcher to write the hold: the item's own mark keeps it from being restarted); resume continues it
         add(proj, "o", 300)

@@ -22,7 +22,7 @@ class Q(QueueMixin, api.Training):
 
 
 QCLI = suitecli.Cli(Q, "trainsuite", api.TrainingError, "TRAINSUITE_TRACEBACK", legacy=api.LEGACY, positional=("job", "i", "a", "b"), option_names=("words",),
-                    need_all=("queue_hold", "queue_resume"), text={**api.TEXT, **QUEUE_TEXT})
+                    text={**api.TEXT, **QUEUE_TEXT})
 
 
 def qcli(*args):
@@ -57,13 +57,16 @@ def queue_checks(tmp, ok):
         assert T.queue_get(1)["id"] == "1" and T.queue_get("2")["id"] == "2" and T.queue_get("2")["number"] == 2 and T.queue_get(2)["id"] == "2"
         T.queue_remove("1")
         T.queue_remove("2")
-        raises(T.queue_hold, "words", "")
-        raises(T.queue_resume, "words", "  ")
-        assert T.queue_hold("Mirko: test") == {} and T.queue_list()["paused"] is True
+        raises(T.queue_hold, "words", "", all=True)
+        raises(T.queue_resume, "words", "  ", all=True)
+        raises(T.queue_hold, "name the item", "Mirko: test")                          # neither an item nor all: an error, a missing id never holds everything
+        raises(T.queue_hold, "not both", "Mirko: test", i="q.a", all=True)
+        raises(T.queue_resume, "name the item", "Mirko: test", i="")
+        assert T.queue_hold("Mirko: test", all=True) == {} and T.queue_list()["paused"] is True
         raises(T.run, "PAUSED", job("p.one"))
         assert "PAUSED" in T.check(job("p.one"))["problems"][0] and T.check(job("p.one"))["ok"] is False, "check says what run would be refused for"
         assert T.queue_add(job("p.q"), start=False)["state"] == "queued", "the queue may be filled while it is paused"
-        assert T.queue_resume("Mirko: test") == {} and T.queue_list()["paused"] is False
+        assert T.queue_resume("Mirko: test", all=True) == {} and T.queue_list()["paused"] is False
         T.queue_remove("p.q")
         T.queue_add(job("h.a"), start=False)
         T.queue_add(job("h.b"), start=False)
@@ -98,11 +101,8 @@ def queue_checks(tmp, ok):
         assert rc == 0 and "k.two" in out and "machine lock:" in out and "slots:" in out, out
         rc, out, err = qcli("queue-get", "k.two", "--json")
         assert rc == 0 and json.loads(out)["job"]["priority"] == 2, out
-        try:
-            qcli("queue-hold", "--words", "Mirko: selftest")                       # no item and no --all
-            raise AssertionError("queue-hold without an item and without --all must be refused")
-        except SystemExit as e:
-            assert e.code == 2
+        rc, out, err = qcli("queue-hold", "--words", "Mirko: selftest")            # no item and no --all: the method says so (exit 2)
+        assert rc == 2 and "name the item" in err, (rc, err)
         rc, out, err = qcli("queue-hold", "--all", "--words", "Mirko: selftest")
         assert rc == 0 and json.loads(qcli("queue-list", "--json")[1])["paused"] is True, (rc, out, err)
         rc, out, err = qcli("queue-resume", "--all", "--words", "Mirko: selftest")
