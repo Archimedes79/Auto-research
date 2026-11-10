@@ -105,7 +105,7 @@ with tempfile.TemporaryDirectory() as tmp:
 from Training import compose as C  # noqa: E402
 with tempfile.TemporaryDirectory() as tmp:
     block = json.load(open("project.json"))["training"]
-    check(block.get("resolve") == "python3 training/splits.py resolve", "project.json: Training.resolve is the splits.py command (the hook is live)")
+    check(block.get("resolve") == "python3 training/splits.py resolve", "project.json: training.resolve is the splits.py command (the hook is live)")
     check(json.load(open("project.json")).get("package", {}).get("split_record") == "python3 training/splits.py split-json {run_dir} {out_dir}", "project.json: package.split_record is the splits.py command (package.py writes results/<id>/split.json with it)")
     base = os.path.join(tmp, "base.json")
     json.dump(dict(inline, split="small"), open(base, "w"))

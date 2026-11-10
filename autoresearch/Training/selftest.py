@@ -305,7 +305,7 @@ def early_checks(tmp, ok):
 
 
 def _start_project(tmp, name):
-    """a throw-away project for the plan of a start (compose.plan_start): records/runs, a base config and a Training block without prepare items; -> project folder"""
+    """a throw-away project for the plan of a start (compose.plan_start): records/runs, a base config and a training block without prepare items; -> project folder"""
     proj = os.path.join(tmp, name)
     os.makedirs(os.path.join(proj, "records", "runs"))
     json.dump({"steps": 3000, "name": "x"}, open(os.path.join(proj, "base.json"), "w"))

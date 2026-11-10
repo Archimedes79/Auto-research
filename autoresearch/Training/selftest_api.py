@@ -414,7 +414,7 @@ def seam_checks(tmp, ok):
         assert T.check(job("z.pause"))["ok"], "the pause is cleared: the same check is fine"
         ok("a pause of the queue binds a direct start: check says it, run refuses it, nothing is started")
 
-        # 11 a launcher that dies inside the wait is an error that says so; a static check that fails, and a project without the Training block, are problems of the check
+        # 11 a launcher that dies inside the wait is an error that says so; a static check that fails, and a project without the training block, are problems of the check
         real_popen = api.subprocess.Popen
 
         class Dead:
@@ -437,7 +437,7 @@ def seam_checks(tmp, ok):
         project(training=None)
         raises(T.check, '"training" block', job("z.nob"))
         project(training=blk)
-        ok("run: a launcher that ends inside the wait is 'nothing runs'; check: a failing static check is a problem (no_check skips it), no Training block is an error")
+        ok("run: a launcher that ends inside the wait is 'nothing runs'; check: a failing static check is a problem (no_check skips it), no training block is an error")
 
         # 12 stop of a run that has no launcher record (started by hand) does not claim that it stopped: only its STOPPED file says so
         hand = os.path.join(proj, "runs", "by_hand")

@@ -68,7 +68,7 @@ What it does (paths from the problem's project.json, see project.py):
                 Settle time (--settle-s, project.json gpu_settle_s, 0 = off; bev_fusion 180; AR_SETTLE_S overrides): a launcher waits while another one took its slot less
                 than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet and the RAM / memory gates would read the box too early
                 (two trainings that started in the same second slowed each other 13 times); it delays only the launchers of a project that sets it. The clock is the
-                ceiling: the wait ends sooner when that run has logged its first step (its run folder <Training.runs>/<id with . as _>, named in the slot's owner file: a
+                ceiling: the wait ends sooner when that run has logged its first step (its run folder <training.runs>/<id with . as _>, named in the slot's owner file: a
                 log.jsonl row newer than the slot, or a `step N:` line of train.log after its last `=== ` line). A ticket whose launcher the machine lock holds back
                 does not hold up the line
   * machine lock (D19) every run, GPU or not, waits (max --wait-gpu minutes, then gpu_busy) while another owner holds a live exclusive lock of
@@ -845,7 +845,7 @@ class GpuSlot:
 
 
 def train_dir(root, cfg, run_id):
-    """the trainer's run folder of an id (Training/compose.py: project.json Training.runs, default runs, then the id with . as _); '' for a project without a Training"""
+    """the trainer's run folder of an id (Training/compose.py: project.json training.runs, default runs, then the id with . as _); '' for a project without a training block"""
     ts = cfg.get("training")
     return os.path.join(root, ts.get("runs", "runs"), run_folder(run_id)) if isinstance(ts, dict) else ""
 

@@ -119,7 +119,7 @@ def compose(base, presets=(), sets=(), presets_dir=None):
     cfg, changes = copy.deepcopy(base), []
     for name in presets:
         if not presets_dir:
-            raise ComposeError("--preset needs a presets folder (--presets-dir, or the Training block of project.json)")
+            raise ComposeError("--preset needs a presets folder (--presets-dir, or the training block of project.json)")
         path = os.path.join(presets_dir, name + ".json")
         if not os.path.isfile(path):
             have = sorted(f[:-5] for f in os.listdir(presets_dir) if f.endswith(".json")) if os.path.isdir(presets_dir) else []
@@ -189,13 +189,13 @@ def same_folder_ids(records, run_id):
 
 
 def gpu_gate(block):
-    """`gpu_max_mb` of the project's Training block: a training starts only when less than this many MB of the GPU are in use (run.py --gpu-max-mb). 0 when the key is absent or
+    """`gpu_max_mb` of the project's training block: a training starts only when less than this many MB of the GPU are in use (run.py --gpu-max-mb). 0 when the key is absent or
     0; a value that is no whole positive number (true, "3000", -1, 2.5) is refused: a gate of `true` would be 1 MB and no training would ever start"""
     v = block.get("gpu_max_mb")
     if v is None or (not isinstance(v, bool) and v == 0):
         return 0
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 or v != int(v):
-        raise ComposeError(f'"gpu_max_mb" of the Training block must be a whole number of MB (3000), not {v!r}')
+        raise ComposeError(f'"gpu_max_mb" of the training block must be a whole number of MB (3000), not {v!r}')
     return int(v)
 
 
@@ -264,7 +264,7 @@ def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=
     for item in block.get("prepare") or []:
         name = str(item.get("name") or "")
         if not name or not all(c.isalnum() or c in "_-" for c in name) or not item.get("check") or not item.get("build"):
-            raise ComposeError(f'"prepare" entries of the Training block need a name (letters, digits, _ -), a check and a build command: {item!r}')
+            raise ComposeError(f'"prepare" entries of the training block need a name (letters, digits, _ -), a check and a build command: {item!r}')
         pid = f"{run_id}.prep_{name}"
         prepare.append(dict(name=name, id=pid, check=sub(item["check"], composed), check_preview=sub(item["check"], preview), wait_min=int(item.get("wait_min", 1440)),
                             argv=["python3", run_py, "--id", pid, "--no-card", "--"] + sub(item["build"], composed)))

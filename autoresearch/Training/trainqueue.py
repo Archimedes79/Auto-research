@@ -249,7 +249,7 @@ def pinned_argv(it):
 
 
 def with_gate(c, argv):
-    """the run.py command with the project's memory gate (`gpu_max_mb` of the Training block) before the `--`, unless it has one or asks for no GPU: an item queued before the gate
+    """the run.py command with the project's memory gate (`gpu_max_mb` of the training block) before the `--`, unless it has one or asks for no GPU: an item queued before the gate
     existed, one rebuilt from its run record and one added by hand start under the same rule as `run` and `add`"""
     from . import compose as C
     try:
