@@ -63,7 +63,8 @@ def _source_class():
 
 
 def free_source(built):
-    """a FreeSource from a Source that bev_adapter.build made (the dataset, the set, the controls are its)"""
+    """a FreeSource from a Source that bev_adapter.build made (the dataset, the set, the controls are its). The built Source is consumed: it shares the dataset, which now makes its items
+    without `gt`, so read the labelled frames first if you want both"""
     return _source_class()(built)
 
 

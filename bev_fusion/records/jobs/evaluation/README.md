@@ -18,7 +18,9 @@ AR_PROJECT=../bev_fusion python -m evalsuite Evaluation.score   <results id> sma
 A network with a memory always runs warm (D70): whole scenes in time order from the network's own start; `frames` only decides which results are kept and scored. There is no cold mode.
 
 Intermediate results (taps) and the memory check are built (Evaluation chat). The run without ground truth is decided (D72: a separate `Runner` class that the Evaluation class calls, always warm, the
-same stored format) and being built; until then `runner/bev_runner.py` is the ground-truth-free runner (planner data only).
+same stored format): the BEV side is built (`evaluation/bev_free.py`, `FreeSource` / `FreeSubject`, outputs bit-equal to the live subject on real frames, 2026-11-10), the class `evalsuite.Runner` and the delegation
+of `predict` / `run` to it are being built by the Evaluation chat. What the user loses: a run without the ground truth has no validation loss, so `loss.*` / `val_loss/*` are not in the numbers of `Evaluation`
+(`bev_suite.py eval` keeps them). Until the class is in, `runner/bev_runner.py` is the ground-truth-free runner (planner data only).
 
 **To check when the `Runner` is finished** (measured numbers of the reference run for comparison: `runs/t20_base_s0/eval/timing_modules.json`, idle GPU, dts -0.5 / 0 / +0.5: inference 102 ms per frame,
 forward with loss 153 ms; the whole `numbers` step of the old live path took 962 s for 1000 frames = 0.96 s per frame, i.e. the network is about a seventh of it):
