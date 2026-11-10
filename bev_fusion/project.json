@@ -44,6 +44,8 @@
     "prepare": [{"name": "gt", "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} check\"",
                  "build": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} build\"", "wait_min": 600}]
   },
+  "_jobrunner": "python -m jobrunner (autoresearch/jobrunner): one call of a suite as a job under run.py, the data named in the job. python = the interpreter of the child processes; suites = the modules whose JOBS table adds calls (GtGenerator/jobs.py: the two generation commands).",
+  "jobrunner": {"python": "~/miniconda3/envs/gcar/bin/python", "suites": ["GtGenerator"]},
   "structure": {
     "root_files": ["README.md", "project.json"],
     "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "tools", "training"],

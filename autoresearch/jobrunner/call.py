@@ -33,7 +33,7 @@ def main(argv):
     for flag in ("--suite", "--cls", "--method", "--args-file", "--out", "--project"):
         ap.add_argument(flag, required=True)
     a = ap.parse_args(argv)
-    for d in (AR, a.project):
+    for d in (os.path.dirname(AR), AR, a.project):                      # sys.path: the project, autoresearch/, the repository root (GtGenerator)
         if d not in sys.path:
             sys.path.insert(0, d)
     result = None

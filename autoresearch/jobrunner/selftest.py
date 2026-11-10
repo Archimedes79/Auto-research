@@ -199,6 +199,7 @@ def test_catalogue(T):
     ok({"Training.run", "Evaluation.run", "Evaluation.score", "Runner.predict", "Toy.work", "Toy.fire"} <= names, names)
     ok("Toy3.x" in names, "a suite named in project.json jobrunner.suites brings its own table (JOBS); a suite that exits on import does not stop the catalogue")
     ok(not any(C.check_entry(k, e) for k, e in C.BUILTIN.items()), "the built-in entries are well formed")
+    ok(jr.dirs == (T, AR, os.path.dirname(AR)), "the suites are imported with the project, autoresearch/ and the repository root (GtGenerator lives there) on the path: " + str(jr.dirs))
     ok(C.check_entry("Toy.work", dict(TOYS["Toy.work"], speed=1)) and C.check_entry("Toy.work", dict(TOYS["Toy.work"], how="fork")) and C.check_entry("X.y", TOYS["Toy.work"]), "bad entries are named")
     row = [r for r in jr.catalogue() if r["call"] == "Toy.work"][0]
     ok(row["parameters"] == "n, name=, flag=, items=, src=", row["parameters"])
