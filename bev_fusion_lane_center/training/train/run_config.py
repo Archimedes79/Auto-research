@@ -1,4 +1,4 @@
-"""Start a training from a config file (the BEV system's `train.py <config.json>`, adapted): the one command that `python -m Training start <config> --id <id>` wraps in `run.py`.
+"""Start a training from a config file (the BEV system's `train.py <config.json>`, adapted): the one command that `python -m Training run job.json` wraps in `run.py`.
 
     wsl bash tools/env/_py14.sh run_config.py <config.json>        (the keys of the design: `training/startable.py`, `training/configs/README.md`)
     wsl bash tools/env/_py14.sh run_config.py --selftest

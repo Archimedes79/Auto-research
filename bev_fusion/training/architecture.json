@@ -494,7 +494,7 @@
     "training/splits.py",
     "splits/"
    ],
-   "note": "scene names only (small 60 / 10, large 428 / 82, xl 700 / 82), each with the GtGenerator version its caches were checked against; a config says \"split\": \"large\", Training start resolves it into train_scenes / val_scenes (the run's config.json holds the exact lists); training/splits.py also writes runs/<id>/manifest.json (split, GT, code commit, card) and the results/<id>/split.json of a result package; gt_scenes.py turns the lists into the GT a run needs"
+   "note": "scene names only (small 60 / 10, large 428 / 82, xl 700 / 82), each with the GtGenerator version its caches were checked against; a config says \"split\": \"large\", Training check / run resolves it into train_scenes / val_scenes (the run's config.json holds the exact lists); training/splits.py also writes runs/<id>/manifest.json (split, GT, code commit, card) and the results/<id>/split.json of a result package; gt_scenes.py turns the lists into the GT a run needs"
   }
  ],
  "edges": [

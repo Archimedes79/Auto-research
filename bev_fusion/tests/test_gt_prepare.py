@@ -5,7 +5,7 @@
   2. the names file lies next to the config, one name per line, and GtGenerator reads it (`GtGenerator.cli` accepts it: one name per line, # comments)
   3. check = `python -m GtGenerator have --scenes-file F --version V --dataroot D`, build = `bash GtGenerator/run_nice.sh -m GtGenerator generate D --version V --scenes-file F --workers N`,
      both run from the repository top; the exit code of the check is passed on; a wrong command is a usage error (exit 2)
-  4. the whole chain with a real config of the project (t10_dual_s0): names for the whole trainval, a project.json "prepare" entry that `python -m Training start` can use
+  4. the whole chain with a real config of the project (t10_dual_s0): names for the whole trainval, a project.json "prepare" entry that a job with `"prepare": true` (`python -m Training run`) can use
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_gt_prepare.py
 """
 import contextlib

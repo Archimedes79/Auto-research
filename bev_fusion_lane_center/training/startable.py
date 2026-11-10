@@ -8,7 +8,7 @@ A config is the JSON of one run of a design in `DESIGNS` (a table of the keys th
 a value out of range is an error; the cached inputs the trainer reads must exist (the frozen foundation features `~/exp_gcar_b123/feats`, the split file, the run folder's earlier
 state: a finished run is refused, a run with a stored config that differs from this one cannot be resumed), the disk has room, and the uncommitted files of `training/` and
 `evaluation/` are listed (the launcher's snapshot is a copy of the working tree, so the arms of a matched control can differ in code); `--require-clean` makes them a problem.
-Findings are problems (exit 1) or notes (exit 0). The command `python -m Training start <config> --id <id> ...` (project.json "training") runs this check first.
+Findings are problems (exit 1) or notes (exit 0). The commands `python -m Training check job.json` and `run job.json` (project.json "training") run this check first.
 Run from the problem folder: `wsl bash tools/env/_py14.sh startable.py <config.json>`.
 """
 import argparse
@@ -167,7 +167,7 @@ def smoke_of(cfg):
 
 
 def resolve(path):
-    """a config path as given, else relative to the problem folder (`_py14.sh` runs a script in its own folder, `Training start` names the config relative to the problem folder)"""
+    """a config path as given, else relative to the problem folder (`_py14.sh` runs a script in its own folder, `Training check` / `run` name the config relative to the problem folder)"""
     return path if os.path.isfile(path) else os.path.join(ROOT, path)
 
 

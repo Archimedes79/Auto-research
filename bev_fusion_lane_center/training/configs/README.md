@@ -1,16 +1,19 @@
 # configs - one run = one json file (the BEV system's way, adapted)
 
 A config is the JSON of one run of a *design* (`training/startable.py` holds the table of the keys of each design: an unknown key, a wrong type or a value out of range is an error before a GPU is touched).
-Start it with the shared tools, from `autoresearch/` (the project's `project.json` block `Training` says how):
+Start it with the shared tools, from `autoresearch/` (the project's `project.json` block `training` says how). A run is a job file:
 
 ```
-AR_PROJECT=../bev_fusion_lane_center python -m Training start training/configs/e271_grid.json --id e271_a_s1 --preset seed1 --run-arg=--split --run-arg=val --hyp "..." --pred "..." --rule "..." [--go]
-python -m Training --root ../bev_fusion_lane_center/runs status        # also health, curves, stop, watch, queue
+{"id": "e271_a_s1", "config": "training/configs/e271_grid.json", "preset": ["seed1"], "run_args": ["--split", "val"], "card": {"hyp": "...", "pred": "...", "rule": "..."}}
+
+AR_PROJECT=../bev_fusion_lane_center python -m Training check job.json     # the preview: composed config, the check, the run.py command; starts nothing
+AR_PROJECT=../bev_fusion_lane_center python -m Training run job.json       # starts it detached
+AR_PROJECT=../bev_fusion_lane_center python -m Training status e271_a_s1   # also list, plot, stop, compare; health, watch and queue read the run folders under --root ../bev_fusion_lane_center/runs
 ```
 
-**Split argument:** `Training start` always passes `--split train` to `run.py`, and this project's `splits` (protected, `project.json`) are val / test / confirm, so the launcher refuses it. Add `--run-arg=--split --run-arg=val` (the later `--split` wins; a training run that scores VAL at its end is a val run; it was tried end to end with the smoke `e271_cfg_smoke`, 2026-11-03). Adding `train` to `splits` would need a grant under a decided D-entry.
+**Split argument:** `Training run` passes `--split train` to `run.py`, and this project's `splits` (protected, `project.json`) are val / test / confirm, so the launcher refuses it. Add `"run_args": ["--split", "val"]` to the job (the later `--split` wins; a training run that scores VAL at its end is a val run; it was tried end to end with the smoke `e271_cfg_smoke`, 2026-11-03, with the older `start` command's `--run-arg`). Adding `train` to `splits` would need a grant under a decided D-entry.
 
-`start` composes the base with the presets (`presets/<name>.json`, deep-merged overrides) and `--set key=value`, runs the check (`training/startable.py`), prints the exact `run.py` command and with `--go` starts it; the same command again resumes the run.
+`check` and `run` compose the base with the presets (`presets/<name>.json`, deep-merged overrides) and the job's `set` values (`"set": {"key": value}`), run the check (`training/startable.py`) and build the exact `run.py` command; `run` starts it; the same job again resumes the run.
 Without the tools: `wsl bash tools/env/_py14.sh startable.py <config>` (the check, `--write-smoke DIR` writes the smoke twin) and `wsl bash tools/env/_py14.sh run_config.py <config>` (the training; the trainer's own command line stays as it is).
 An arm is the base config with the fields changed (a new file or a preset, never an edit of a base that a finished run used).
 

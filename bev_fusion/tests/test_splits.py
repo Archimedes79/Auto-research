@@ -5,8 +5,8 @@
   2. resolve: `"split": "large"` gives the lists of the inline t16_full.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it; the
      trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false, [] and a number
      are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
-  3. through `Training start`'s code (`plan_start` with the real block of project.json, whose resolve command is checked): the lists arrive in the config, a note says so;
-     the commands of splits/README.md (move a stored config to a split) work, the plain `--set split=NAME` on a config with lists is refused
+  3. through the code of `Training check` / `run` (`plan_start` with the real block of project.json, whose resolve command is checked): the lists arrive in the config, a note says so;
+     the jobs of splits/README.md (move a stored config to a split) work, the plain `"set": {"split": NAME}` on a config with lists is refused
   4. manifest and split.json of a run folder (built here with known content; the real run t16_full_s0 when it is on disk: split large, commit 40e7ff5b3c)
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_splits.py
 """
