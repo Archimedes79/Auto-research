@@ -62,12 +62,11 @@ def tokens(name, version=None, dataroot=None):
     return [t for s in scenes(name) for t in scene_tokens(s, version, root)]
 
 
-def held(sig_dir):
-    """the sample tokens that have a stored keyframe in the folder (a leftover temporary file or an empty file does not count)"""
-    if not os.path.isdir(sig_dir):
-        return set()
-    with os.scandir(sig_dir) as it:
-        return {e.name[:-4] for e in it if e.name.endswith(".npz") and ".tmp" not in e.name and e.stat().st_size > 0}
+def held(sig_dir, nonempty=False):
+    """the sample tokens that have a stored keyframe in the folder, by file name (a file that is being written has a .tmp name; no stat per file: 34k of them cost 80 s on the 9p mounts, the listing 0.2 s);
+    `nonempty` = a stat per file, a zero-byte file does not count (used where it is asked once, at the end of a run)"""
+    from .store import front_keys
+    return front_keys(sig_dir, nonempty)
 
 
 def status(name, data=None, version=None, dataroot=None, **options):
@@ -106,7 +105,7 @@ def checkable(version, dataroot):
 def complete_in(sig_dir, version, dataroot):
     """the sets (by name) whose every keyframe has a file in the store folder sig_dir; a set with scenes that `version` does not have
     is skipped (small can be complete in a trainval store, full cannot be in a mini store)"""
-    have = held(sig_dir)
+    have = held(sig_dir, nonempty=True)                                # once per run: a zero-byte file does not complete a set
     out = []
     for name in names():
         try:
@@ -125,7 +124,7 @@ def complete_in(sig_dir, version, dataroot):
 
 
 def check_raw(dataroot, version=None, set_name=None, scenes=None, examples=10):
-    from .cli import detect_version
+    from .store import detect_version
     from .light_nusc import _KEEP, _records, _value
     import json
     root = os.path.expanduser(dataroot)

@@ -1,379 +1,43 @@
-"""Command line of the autoGT suite (from the repository root):
+"""Command line of the autoGT suite (from the repository root: `python -m autogt COMMAND ...`; in WSL: `wsl bash autogt/run_nice.sh -m autogt COMMAND ...`).
 
-  python -m autogt selftest
-  python -m autogt generate DATAROOT [--out DIR] [--version V] [--set small|full | --scenes scene-0061 ...] [--stride 1] [--res 0.5]
-                          [--workers 1] [--no-flow] [--no-radar] [--boxes-at camera|annotation]
-      THE entry point: reads nuScenes from DATAROOT (e.g. ~/data/nuscenes_full) and writes one compressed file per keyframe to
-      DIR/<signature>/<sample token>.npz (float16 layers + meta) and an index.json (the manifest: gt_version, commit and dirty flag
-      of the generator code, the sets held in full, release); DIR default data/autogt (where autogt.load reads); memory-light
-      (groups of 60 sequences), resumable (existing files are skipped); the signature changes with every edit of the generator, so GT
-      of an older generator is never mixed in
-  python -m autogt generate-bev DATAROOT [--set small|full | --scenes ...] [--out DIR] [--workers N] [--border-m 0 0.5]     (autogt.generate_bev_gt)
-      BEV Fusion in one command: the front GT + the lane GT of the rig bev_fusion + the packed intersection masks; prints the GT KEY (data + code signature, see autogt/gt_api.py)
-  python -m autogt generate-lane DATAROOT [--rig lane_center|bev_fusion|all] [--set ...]     (autogt.generate_lane_gt)      the lane GT of one system or both; prints the key
-  python -m autogt data DATAROOT [--set small|full | --scenes ...]
-      are the raw files the generator reads on disk (json tables, map expansion, CAM_FRONT, the five radars)? exit 1 if not
-  python -m autogt have [--set small|full | --scenes ... | --scenes-file F] [--version V] [--stride N]
-      is the stored GT of the current generator there for these sequences? exit 0 (all) or 1 (prints how many are missing): the check before
-      a training; `generate ... --scenes-file F` fills what is missing (resumable)
-  python -m autogt sets       the scene sets small (mini, small experiments) and full (trainval, releases) and how much of each is stored
-  python -m autogt versions   the GT versions (versions.csv), the current one marked
-  python -m autogt build  --version v1.0-mini --out DIR [--dataroot ~/data/nuscenes] ...   the low-level writer behind it (full devkit)
-  python -m autogt check  [--version v1.0-mini] [--scenes ...] [--stride 1] [--holdout]
-      automatic consistency checks of the GT over keyframes (see autogt/checks.py); --holdout adds the leave-one-radar-out test
-  python -m autogt view   OUT_DIR [scene:keyframe | TOKEN ...] [--total]   sample pictures (camera, semantic BEV, objects + velocity,
-      motion relative to the static world; --total shows the total apparent flow instead); scene:keyframe = nuScenes mini,
-      generated now; TOKEN = a stored keyframe of mini or trainval (needs the stored GT of the current generator)
-  python -m autogt sheets OUT_DIR                            overview sheets of the sample pictures
-  python -m autogt video  SCENE OUT.mp4 [seconds] [--version v1.0-trainval] [--dataroot DIR]   driving through the GT at 12 Hz
-  python -m autogt report [--version v1.0-mini|v1.0-trainval] [--out REPORT.pdf] [--data DIR | --no-data] [--scenes ..] [--stride N]
-                          [--samples N] [--holdout] [--workers N] [--light]
-      GT evaluation of all sequences in one pass: store the GT (as `build`), run every check, write ONE PDF report (summary, table
-      per sequence, legend, sample pictures drawn straight into the PDF - no picture files exist, nothing to clean up but the report)
-  python -m autogt clean  [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released]
-                          [--older-than DAYS] [--move | --delete]
-      dry run by default; --move puts the items into _to_delete/, --delete removes them; the caches of released GT versions are left
-      alone unless --include-released, and are then moved, never deleted (see autogt/clean.py)
+Every command is ONE call of a function of the suite (the map below; `python -m autogt COMMAND --help` has the options), so what the command line does is what Python does:
+
+  make GT (all resumable; --out is always the ROOT that holds the stores, default data/autogt; the lane stores are below ROOT/lane; they print the GT key, see autogt/gt_api.py)
+    generate DATAROOT      pipeline.generate      the front GT + both lane GTs + the area masks of the BEV Fusion store (everything)
+    generate-bev DATAROOT  gt_api.generate_bev_gt   BEV Fusion: the front GT + the lane GT of its rig + the packed intersection masks
+    generate-lane DATAROOT gt_api.generate_lane_gt  the lane GT of one system (--rig lane_center | bev_fusion | all)
+    area-masks             lane_raster.build_mask_cache  only the packed masks of an existing BEV Fusion lane store
+    audit-lane SYSTEM      store_audit.audit_lane   the audit of a stored lane GT before its release (exit 1 on a problem)
+    build                  pipeline.build           the low-level writer behind `report` (one full devkit, --out required)
+  look at GT
+    key SYSTEM             gt_api.gt_key            the key of what is stored (exit 1 when incomplete), --json for the dict
+    have                   sets.stored_for          is the front GT of this generator there for these sequences? (exit 1 when not: the check before a training)
+    data DATAROOT          sets.check_raw           are the raw nuScenes files on disk? (exit 1 when not)
+    sets / versions        sets.status / versions   the scene sets and how much is stored / the GT versions, lane versions and releases
+    area-mask TOKEN        lane_raster.load_mask    one area mask: the number of cells, --png to draw it
+    view / sheets / video / lanegraph / masks     pictures of keyframes, of the lane graph, of the coverage masks; videos
+  check and clean
+    check                  checks.run               consistency checks of the GT of mini        report   report.report   the checks over all sequences, one PDF
+    digest                 checks.digests           a digest per frame of mini (two generators that make the same GT give the same file)
+    clean                  clean.clean              list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
+    selftest               selftest.run             all tests of the suite (about 5 min)
+
+Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, digest --compare), 2 wrong arguments (a message, no traceback; AUTOGT_TRACEBACK=1 shows it).
 """
 import argparse
 import json
-import multiprocessing as mp
 import os
 import sys
-import time
-import types
 
-import numpy as np
-
-from .grid import GridSpec
-
-_STATE = {}
+# the storage and the writer moved to store.py / pipeline.py; the old names stay importable from here (bev_fusion tests and other projects use them)
+from .pipeline import GROUP_SCENES, _group_task, _init, _same_generator, _work, _write_tokens, build, generate  # noqa: F401
+from .store import _environment, _flat, canonical_of, check_resume, detect_version, load_keyframe, run_manifest, save_keyframe, write_index  # noqa: F401
 
 
-def _flat(g):
-    """GT dict -> npz arrays (float16 for float32 layers) + meta as an object array."""
-    arrs = {k: (v.astype(np.float16) if v.dtype == np.float32 else v) for k, v in g.items() if isinstance(v, np.ndarray)}
-    arrs["meta"] = np.array(g["meta"], dtype=object)
-    return arrs
-
-
-def load_keyframe(sig_dir, token):
-    """a keyframe written by `build` -> the GT dict (float32 layers + meta)."""
-    out = {}
-    with np.load(os.path.join(sig_dir, token + ".npz"), allow_pickle=True) as z:
-        for k in z.files:
-            a = z[k]                                                    # each member is decompressed once
-            out[k] = a.item() if k == "meta" else a.astype(np.float32) if a.dtype == np.float16 else a
-    return out
-
-
-def save_keyframe(path, flat):
-    """write one keyframe file atomically; the temporary name holds the process id, so two writers on one folder do not trip over each
-    other (".tmp" in the name keeps it out of every listing of stored keyframes)"""
-    tmp = f"{path}.{os.getpid()}.tmp.npz"
-    np.savez_compressed(tmp, **flat)
-    os.replace(tmp, path)
-
-
-def _work(args):
-    token, sig_dir = args
-    gt = _STATE["gt"]
-    path = os.path.join(sig_dir, token + ".npz")
-    if os.path.exists(path) and os.path.getsize(path) > 0:                  # an empty file (a full disk) is not a keyframe
-        return 0
-    save_keyframe(path, _flat(gt.keyframe(token)))
-    return 1
-
-
-def _init(dataroot, version, res, ss, options, scenes=None):
-    """a worker's generator; scenes = names: the memory-light devkit of just these sequences (`generate`), else the full devkit"""
-    from .suite import AutoGT
-    _STATE["gt"] = AutoGT(dataroot, version, GridSpec(res=res), ss, light=scenes is not None, scenes=scenes, **options)
-
-
-def run_manifest(sig_dir, version, dataroot, set_name=None):
-    """what a finished run records about itself in index.json: the set asked for, the commit and dirty flag of autogt/, and the
-    sets that the folder now holds in full (see sets.py)"""
-    from . import sets, versions
-    from .suite import code_signature
-    return {"set": set_name, **versions.code_state(), "generator": code_signature(), "environment": _environment(),
-            "sets_complete": sets.complete_in(sig_dir, version, dataroot), "sets_checked": sets.checkable(version, dataroot),
-            "suite_release": versions.current_release()}
-
-
-def _environment():
-    """the versions of the libraries whose behaviour shapes the stored bytes (the generator signature hashes our files, not these)"""
-    from importlib import metadata
-    out = {}
-    for pkg in ("numpy", "shapely", "opencv-python", "matplotlib", "nuscenes-devkit", "pyquaternion"):
-        try:
-            out[pkg] = metadata.version(pkg)
-        except metadata.PackageNotFoundError:
-            out[pkg] = "?"
-    return out
-
-
-def canonical_of(signature):
-    from .versions import canonical
-    return canonical(signature)
-
-
-def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True, run=None):
-    """index.json of a cache folder (marks it as an autogt cache for `clean`, records what it holds). `build` writes it with
-    complete=False before the first keyframe (so an interrupted build still says which resolution it holds) and again at the end.
-    run = run_manifest(...) of a finished run adds the manifest keys set, commit, dirty, sets_complete and release (a complete folder
-    whose signature is a released GT version, made from a clean tree, holding the set `full`); without it the keys of an earlier run
-    on this folder stay."""
-    names = list(names)
-    try:
-        with open(os.path.join(sig_dir, "index.json")) as f:
-            old = json.load(f)
-    except (OSError, ValueError):
-        old = {}
-    same = old.get("signature") == canonical_of(gen.signature()) and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
-    if same and not set(old.get("scenes", [])) <= set(names):
-        # mini is a subset of trainval and both share the folder of their signature: a smaller run (the mini report after the trainval
-        # one) must not shrink the record of what the folder holds, nor mark an interrupted bigger run as complete
-        if set(old["scenes"]) >= set(names):
-            version = old["version"]
-        names = sorted(set(old["scenes"]) | set(names))
-        complete = complete and old.get("complete", True)
-    if same and old.get("stride", stride) != stride:
-        stride = "mixed"                                           # runs with different strides wrote into this folder
-    if complete and os.path.isdir(sig_dir):
-        from .sets import held
-        n_keyframes = len(held(sig_dir))                           # what the folder holds, whatever this run wanted
-    from .versions import canonical, version_of
-    store_sig = canonical(gen.signature())                         # the folder of the GT this code makes (see `same_gt_as` in versions.csv)
-    gt_version = version_of(store_sig)                             # None: a signature without a row in versions.csv (unreleased): no key
-    idx = {"signature": store_sig, **({"gt_version": gt_version} if gt_version else {}), "version": version, "res": gen.grid.res,
-           "ss": gen.ss, "options": {k: repr(v) for k, v in options.items()}, "scenes": names, "stride": stride, "keyframes": n_keyframes,
-           "complete": complete}
-    kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
-    from .gt_api import data_identity                              # the identity of the raw nuScenes files this GT was made from (the GT key reads it back)
-    data_id = kept.get("data_identity") or data_identity()
-    if data_id != "unknown":
-        idx["data_identity"] = data_id
-    # the sets this run could check are taken from its fresh list (a deleted keyframe removes `full`); a set that this nuScenes version cannot
-    # check (small is in mini, full is not) keeps its old entry
-    sets_complete = sorted((set(kept.get("sets_complete", [])) - set((run or {}).get("sets_checked", []))) | set((run or {}).get("sets_complete", [])))
-    if run is None:
-        idx.update({k: kept[k] for k in ("set", "generator", "environment", "commit", "dirty", "release", "suite_release") if k in kept})
-        if "release" in idx and not complete:
-            idx["release"] = False                                 # a run in progress (its provisional index) is not a release
-    else:
-        idx.update(set=run.get("set"), generator=run.get("generator"), environment=run.get("environment"), commit=run.get("commit"), dirty=run.get("dirty"),
-                   suite_release=run.get("suite_release"),
-                   release=bool(complete and gt_version and run.get("dirty") is False and "full" in sets_complete))
-    if sets_complete:
-        idx["sets_complete"] = sets_complete
-    tmp = os.path.join(sig_dir, f"index.json.{os.getpid()}.tmp")
-    with open(tmp, "w") as f:
-        json.dump(idx, f, indent=1)
-    os.replace(tmp, os.path.join(sig_dir, "index.json"))
-
-
-def _group_task(args):
-    """one worker, one group of sequences: its memory-light devkit is loaded once (that takes minutes on a busy box), then its missing
-    keyframes are written one after the other -> (label, keyframes written, seconds)"""
-    code_sig, label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose = args
-    t0 = time.time()
-    _init(dataroot, version, res, ss, options, grp)
-    _same_generator(_STATE["gt"], code_sig)
-    done = 0
-    for i, t in enumerate(todo):
-        done += _work((t, sig_dir))
-        if verbose and i % 500 == 0:
-            print(f"[{label}] {i}/{len(todo)} keyframes, {time.time() - t0:.0f} s", flush=True)
-    return label, done, time.time() - t0
-
-
-def _same_generator(gen, code_sig):
-    """a job that runs for hours must not mix two generators: a worker imports the source tree afresh, so a hashed file edited meanwhile
-    would write the later groups with new code into the folder of the old signature"""
-    if gen.signature() != code_sig:
-        raise RuntimeError(f"a generator file changed while this job runs (signature {code_sig} at the start, {gen.signature()} now): "
-                           "stop and start it again from a clean tree (a worktree of the tag)")
-
-
-def check_resume(sig_dir, grid, ss):
-    """The folder is named by the generator signature, which contains neither the resolution nor the supersampling: continuing a
-    build of another one would reuse its keyframes silently. The index says what the folder holds. A folder of an interrupted build
-    from before the provisional index has none: one stored keyframe is compared with the grid instead."""
-    idx_path = os.path.join(sig_dir, "index.json")
-    if os.path.exists(idx_path):
-        with open(idx_path) as f:
-            held = json.load(f)
-        if abs(held.get("res", grid.res) - grid.res) > 1e-9 or held.get("ss", ss) != ss:
-            raise SystemExit(f"{sig_dir} holds res {held.get('res')} / ss {held.get('ss')} (asked: res {grid.res} / ss {ss}): "
-                             "build into another output folder")
-        return
-    stored = [f for f in os.listdir(sig_dir) if f.endswith(".npz") and ".tmp" not in f] if os.path.isdir(sig_dir) else []
-    if stored:
-        with np.load(os.path.join(sig_dir, stored[0]), allow_pickle=True) as z:
-            shape = tuple(z["drivable_area"].shape) if "drivable_area" in z.files else None
-        if shape is not None and shape != (grid.nx, grid.ny):
-            raise SystemExit(f"{sig_dir} has no index.json (an interrupted build) and its keyframes have the cell grid {shape}, not "
-                             f"{(grid.nx, grid.ny)} (res {grid.res}): build into another output folder")
-
-
-def _write_tokens(gt, tokens, sig_dir, workers, init_args, verbose):
-    """write the keyframes `tokens` of the generator `gt` into sig_dir (existing files are skipped); -> the number written.
-    workers > 1: a pool of spawned processes, each builds its own generator from init_args (see _init)."""
-    t0 = time.time()
-    done = 0
-    if workers <= 1:
-        _STATE["gt"] = gt
-        for i, t in enumerate(tokens):
-            done += _work((t, sig_dir))
-            if verbose and i % 50 == 0:
-                print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
-    else:
-        with mp.get_context("spawn").Pool(workers, _init, init_args) as pool:
-            for i, r in enumerate(pool.imap_unordered(_work, [(t, sig_dir) for t in tokens], chunksize=4)):
-                done += r
-                if verbose and i % 200 == 0:
-                    print(f"{i}/{len(tokens)} keyframes, {time.time() - t0:.0f} s", flush=True)
-    return done
-
-
-def build(dataroot, version, out, scenes=None, stride=1, workers=1, res=0.5, ss=4, verbose=True, **options):
-    """the low-level writer (one full devkit, `out` required; `generate` is the entry point): returns the number of keyframes written
-    (existing ones are skipped)."""
-    from .suite import AutoGT
-    if stride < 1:
-        raise ValueError(f"stride must be 1 or more, got {stride}")
-    gt = AutoGT(dataroot, version, GridSpec(res=res), ss, **options)
-    sig_dir = os.path.join(out, canonical_of(gt.signature()))
-    check_resume(sig_dir, gt.grid, ss)
-    os.makedirs(sig_dir, exist_ok=True)
-    names = gt.scenes() if scenes is None else list(dict.fromkeys(scenes))
-    tokens = [t for s in names for t in gt.keyframes(s)[::stride]]
-    write_index(sig_dir, gt, version, names, stride, len(tokens), options, complete=False)       # before the first keyframe, also on a resume
-    done = _write_tokens(gt, tokens, sig_dir, workers, (dataroot, version, res, ss, options), verbose)
-    write_index(sig_dir, gt, version, names, stride, len(tokens), options)
-    if verbose:
-        print(f"{done} written, {len(tokens) - done} already there: {sig_dir}")
-    return done
-
-
-GROUP_SCENES = 60            # sequences per devkit load: the memory-light devkit of 60 sequences needs 0.4 GB (the full trainval one 6.4 GB)
-
-
-def detect_version(dataroot):
-    """the nuScenes version inside `dataroot`: the one `v1.0-*` folder that holds a scene.json"""
-    root = os.path.expanduser(dataroot)
-    found = sorted(d for d in os.listdir(root) if d.startswith("v1.0-") and os.path.exists(os.path.join(root, d, "scene.json"))) \
-        if os.path.isdir(root) else []
-    if len(found) != 1:
-        raise ValueError(f"{root}: " + (f"several nuScenes versions {found}, pass version=" if found else "no v1.0-*/scene.json: not a nuScenes folder"))
-    return found[0]
-
-
-def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, set_name=None, lane=True, **options):
-    """THE entry point of the suite: read nuScenes from `dataroot` and write the GT of every keyframe.
-
-    dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
-    out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default data/autogt, the
-               place `autogt.load(token)` reads from (not in git)
-    version    v1.0-mini / v1.0-trainval; default: the one found in dataroot (an error if there are several)
-    scenes     names such as ["scene-0061"]; default all sequences of the version
-    set_name   "small" (the 10 sequences of mini: small experiments) or "full" (all 850 of trainval: releases), the files of
-               autogt/sets/; instead of scenes (both given: an error)
-    stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
-    workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see AutoGT)
-    lane       also make the lane GT (lane graph, roads, lines, polygons: autogt/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
-               store of the same release (releases.csv); only with stride 1, the lane GT is made for every keyframe
-    -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
-        "written": new files, "release": the folder is a release (see write_index)}
-    The index.json of the folder is the manifest: gt_version, commit and dirty flag of the generator code, the sets it holds in full.
-
-    Memory-light and resumable: the sequences are read in groups of GROUP_SCENES (fewer with several workers: every worker takes a group
-    of its own, so the devkit of a group is loaded once) with the light devkit (the GT is identical to the
-    full devkit's), files that exist are skipped, so an interrupted run continues where it stopped. A folder of another resolution
-    or supersampling is never continued. The signature changes with every edit of the generator, so GT of an older generator is
-    never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
-    import gc
-    from . import sets
-    from .suite import AutoGT, DATA, code_signature, current_signature, json_tables, scene_tokens
-    if set_name and scenes is not None:
-        raise ValueError(f"pass either scenes= or set_name= ({set_name!r}), not both")
-    if stride < 1:
-        raise ValueError(f"stride must be 1 or more, got {stride}")
-    dataroot = os.path.expanduser(dataroot)
-    version = version or detect_version(dataroot)
-    out = os.path.expanduser(out) if out else DATA
-    known = [s["name"] for s in json_tables(dataroot, version)[0]]
-    names = sets.scenes(set_name) if set_name else known if scenes is None else list(dict.fromkeys(scenes))      # no duplicates
-    if not names or [n for n in names if n not in known]:
-        raise ValueError(f"unknown scene(s) {[n for n in names if n not in known] or 'none given'} in {version} of {dataroot}")
-    tokens = {n: scene_tokens(n, version, dataroot)[::stride] for n in names}                       # json tables only, no devkit
-    n_total = sum(len(t) for t in tokens.values())
-    sig = current_signature(**options)                                                              # the folder name, without the devkit
-    sig_dir = os.path.join(out, sig)
-    ident = types.SimpleNamespace(signature=lambda: sig, grid=GridSpec(res=res), ss=ss)             # what write_index needs, without the devkit
-    try:
-        check_resume(sig_dir, ident.grid, ss)
-    except SystemExit as e:                                                                          # a library call raises, it does not exit
-        raise ValueError(str(e)) from None
-    os.makedirs(sig_dir, exist_ok=True)
-    stored = sets.held(sig_dir)
-    size = min(GROUP_SCENES, max(1, -(-len(names) // workers)))           # with several workers every worker gets a group of its own
-    groups = []
-    for g0 in range(0, len(names), size):
-        grp = names[g0:g0 + size]
-        todo = [t for n in grp for t in tokens[n] if t not in stored]
-        if todo:                                                          # a finished group needs no devkit load
-            groups.append((f"group {g0 // size + 1}/{-(-len(names) // size)}", grp, todo))
-    code_sig = code_signature(**options)
-    if groups and "trainval" in version:                                  # the big tables once, not once per group (31 s each, light_nusc.py)
-        from .light_nusc import ensure_cache
-        ensure_cache(dataroot, version, verbose=verbose)
-    if groups:                                                        # a finished store is not flagged incomplete by a rerun that has nothing to do
-        write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)       # before the first keyframe, also on a resume
-    done = 0
-    if workers <= 1 or len(groups) <= 1:
-        for label, grp, todo in groups:
-            gen = AutoGT(dataroot, version, ident.grid, ss, light=True, scenes=grp, **options)
-            _same_generator(gen, code_sig)
-            done += _write_tokens(gen, todo, sig_dir, 1, None, verbose)
-            del gen
-            gc.collect()
-    else:                       # one group per worker: the devkit of a group is loaded once, by the worker that writes it, not once per worker
-        jobs = [(code_sig, label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose) for label, grp, todo in groups]
-        with mp.get_context("spawn").Pool(min(workers, len(jobs)), maxtasksperchild=1) as pool:
-            for label, n, secs in pool.imap_unordered(_group_task, jobs):
-                done += n
-                if verbose:
-                    print(f"{label} done: {n} keyframes written in {secs:.0f} s", flush=True)
-    write_index(sig_dir, ident, version, names, stride, n_total, options, run=run_manifest(sig_dir, version, dataroot, set_name))
-    with open(os.path.join(sig_dir, "index.json")) as f:
-        idx = json.load(f)
-    gt_version = idx.get("gt_version", "unreleased")
-    if verbose:
-        print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx['commit']}"
-              f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx.get('sets_complete', [])})\n"
-              f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
-    lane_result = lane_rigs = masks_error = None
-    if lane and stride == 1:
-        from .lane_gt import RIGS, generate as generate_lane
-        lane_rigs = {rig: generate_lane(dataroot, out=os.path.join(out, "lane"), version=version, scenes=names, workers=workers, verbose=verbose, rig=rig) for rig in RIGS}
-        lane_result = lane_rigs["lane_center"]
-        from . import lane_gt, lane_raster                                  # the BEV Fusion GT is the front GT + the lane GT of its rig + the area masks derived from it (gt_api.generate_bev_gt)
-        try:
-            lane_raster.build_mask_cache(os.path.join(out, "lane", lane_gt.signature(rig="bev_fusion")), verbose=verbose)
-        except Exception as e:                                              # the GT is written: a failure of the derived masks must not lose the result below
-            masks_error = f"{type(e).__name__}: {e}"
-            print("WARNING: the mask cache was not built:", masks_error, flush=True)
-    elif lane and verbose:
-        print("the lane GT is made for every keyframe: skipped with stride", stride)
-    return {"out": sig_dir, "signature": ident.signature(), "gt_version": gt_version, "version": version, "scenes": len(names),
-            "keyframes": n_total, "written": done, "release": idx["release"], "lane": lane_result, "lane_rigs": lane_rigs, "masks_error": masks_error}
-
-
+# ---------------------------------------------------------------------------------------------------------------- the tables the commands print
 def _print_versions():
     """the table of versions.csv: key, signature, date, CURRENT for this source, stored when its folder exists in data/autogt"""
-    from . import versions
+    from . import lane_gt, versions
     from .suite import DATA, code_signature
     cur, rows = code_signature(), versions.table()
     for r in rows:
@@ -383,7 +47,6 @@ def _print_versions():
               f"{r['what_changed'][:70]}{same}")
     if cur not in {r["signature"] for r in rows}:
         print(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased); add a row, commit, tag autogt/v<N>")
-    from . import lane_gt
     here = versions.current_release()
     print("lane GT (own versions, autogt/lane_versions.csv):")
     for r in lane_gt.table():
@@ -410,14 +73,13 @@ def _print_sets():
               f"{s['have']}/{s['total']}{'  COMPLETE' if s['complete'] else ''}")
 
 
+# ---------------------------------------------------------------------------------------------------------------- argument helpers
 def _scene_names(a):
     """the sequence names asked for on the command line: --scenes, --scenes-file (one name per line, # comments) or None (--set / all)"""
     if getattr(a, "scenes_file", None):
-        if a.scenes:
-            raise ValueError("pass either --scenes or --scenes-file, not both")
         with open(a.scenes_file, encoding="utf-8") as f:
             return [x for x in (ln.split("#")[0].strip() for ln in f) if x]
-    return a.scenes
+    return getattr(a, "scenes", None)
 
 
 def _options(a):
@@ -425,147 +87,251 @@ def _options(a):
     return {"use_flow": not a.no_flow, "use_radar": not a.no_radar, **({} if a.boxes_at == "camera" else {"boxes_at": a.boxes_at})}
 
 
-def _generator_args():
-    """the options that `generate`, `build` and `report` share (a parent parser)"""
-    g = argparse.ArgumentParser(add_help=False)
-    g.add_argument("--res", type=float, default=0.5)
-    g.add_argument("--stride", type=int, default=1, help="every n-th keyframe")
-    g.add_argument("--workers", type=int, default=1, help="processes")
-    g.add_argument("--no-flow", action="store_true")
-    g.add_argument("--no-radar", action="store_true")
-    g.add_argument("--boxes-at", choices=("camera", "annotation"), default="camera",
-                   help="time of the moving boxes: the camera time (default) or the annotation time")
-    return g
+SELFTESTS = {"cli": "cli_selftest", "gt_api": "gt_api_selftest", "generator": "generator_selftest", "lane_graph": "lane_graph_selftest", "lane_tiers": "lane_tiers_selftest",
+             "clean": "clean", "rig_masks": "rig_masks"}           # the parts that can run alone: module names
+
+
+def _sets():
+    from . import sets
+    return sets.names()
+
+
+def _which_scenes(p, set_flag=True):
+    """--set | --scenes | --scenes-file: one of them (argparse refuses two)"""
+    g = p.add_mutually_exclusive_group()
+    if set_flag:
+        g.add_argument("--set", dest="set_name", default=None, choices=_sets(), help="a scene set: small (the 10 sequences of mini) or full (all 850 of trainval)")
+    g.add_argument("--scenes", nargs="+", help="names such as scene-0061 (default: all)")
+    g.add_argument("--scenes-file", help="a file of sequence names, one per line")
+
+
+def _generator_options(p):
+    """the options of the generator that `generate`, `build` and `report` share"""
+    p.add_argument("--no-flow", action="store_true")
+    p.add_argument("--no-radar", action="store_true")
+    p.add_argument("--boxes-at", choices=("camera", "annotation"), default="camera", help="time of the moving boxes: the camera time (default) or the annotation time")
 
 
 def _parser():
     p = argparse.ArgumentParser(prog="python -m autogt", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = p.add_subparsers(dest="cmd", required=True)
-    gen = _generator_args()
-    sub.add_parser("selftest")
-    sub.add_parser("versions", help="the GT versions (autogt/versions.csv, D29): the current one marked, which GT is stored")
-    sub.add_parser("sets", help="the scene sets small / full (autogt/sets/): sequences, keyframes, how much of each is stored")
-    da = sub.add_parser("data", help="check that the raw nuScenes files the generator reads are on disk (tables, maps, CAM_FRONT, radars)")
-    da.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
-    da.add_argument("--version", default=None)
-    da.add_argument("--set", dest="set_name", default=None, help="check only the sequences of a set: small | full")
-    da.add_argument("--scenes", nargs="*")
-    ge = sub.add_parser("generate", parents=[gen], help="read nuScenes from DATAROOT and write the GT of every keyframe (the entry point)")
-    ge.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
-    ge.add_argument("--out", default=None, help="folder of the stored GT (default data/autogt); the files go to OUT/<signature>/")
-    ge.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the one found in DATAROOT)")
-    ge.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all of trainval)")
-    ge.add_argument("--scenes", nargs="*", help="names such as scene-0061 (default: all)")
-    ge.add_argument("--scenes-file", help="a file of sequence names, one per line (instead of --scenes)")
-    ge.add_argument("--no-lane", action="store_true", help="only the standard GT, not the lane GT of the same sequences")
-    dg = sub.add_parser("digest", help="a digest per frame of nuScenes mini: two generators that make the same GT give the same file (same_gt_as)")
-    dg.add_argument("out", nargs="?", help="write the digests to this json file")
-    dg.add_argument("--compare", nargs=2, metavar=("A", "B"), help="compare two digest files: exit 1 when any frame differs")
-    dg.add_argument("--stride", type=int, default=2)
-    hv = sub.add_parser("have", help="is the stored GT of the current generator there for these sequences? exit 0 or 1 (the check before a training)")
-    hv.add_argument("--set", dest="set_name", default=None, help="small | full")
-    hv.add_argument("--scenes", nargs="*")
-    hv.add_argument("--scenes-file", help="a file of sequence names, one per line")
-    hv.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the first that holds all the sequences)")
-    hv.add_argument("--dataroot", default=None)
-    hv.add_argument("--stride", type=int, default=1)
-    hv.add_argument("--data", default=None, help="the store folder (default data/autogt)")
-    b = sub.add_parser("build", parents=[gen], help="the low-level writer of generate (one full devkit, --out required)")
-    b.add_argument("--dataroot", default="~/data/nuscenes")
-    b.add_argument("--version", default="v1.0-mini")
-    b.add_argument("--out", required=True)
-    b.add_argument("--scenes", nargs="*")
-    c = sub.add_parser("check")
-    c.add_argument("--dataroot", default="~/data/nuscenes")
-    c.add_argument("--version", default="v1.0-mini")
-    c.add_argument("--scenes", nargs="*")
-    c.add_argument("--stride", type=int, default=1)
-    c.add_argument("--holdout", action="store_true")
-    v = sub.add_parser("view")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
+
+    registry = {}
+
+    def command(name, func, help, **kw):
+        sp = sub.add_parser(name, help=help, description=help, **kw)
+        sp.set_defaults(func=func)
+        registry[name] = func
+        return sp
+
+    def dataroot(sp):
+        sp.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full (it holds v1.0-trainval/, maps/, samples/, sweeps/)")
+
+    # ---- make GT
+    g = command("generate", _cmd_generate, "everything: the front GT, the lane GT of both systems and the area masks (pipeline.generate)")
+    dataroot(g)
+    g.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt): the front GT goes to OUT/<signature>/, the lane GT to OUT/lane/")
+    g.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the one found in DATAROOT)")
+    _which_scenes(g)
+    g.add_argument("--stride", type=int, default=1, help="every n-th keyframe (the lane GT is made for every keyframe: with a stride only the front GT)")
+    g.add_argument("--res", type=float, default=0.5)
+    g.add_argument("--workers", type=int, default=1, help="processes")
+    g.add_argument("--no-lane", action="store_true", help="only the front GT")
+    _generator_options(g)
+    b = command("generate-bev", _cmd_generate_bev, "BEV Fusion: the front GT + the lane GT of the rig bev_fusion + the packed intersection masks; prints the GT key (gt_api.generate_bev_gt)")
+    dataroot(b)
+    b.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt)")
+    b.add_argument("--version", default=None)
+    _which_scenes(b)
+    b.add_argument("--workers", type=int, default=1)
+    b.add_argument("--border-m", dest="borders", type=float, nargs="+", default=[0.0, 0.5], help="the borders in metres of the intersection masks (default 0 and 0.5)")
+    ln = command("generate-lane", _cmd_generate_lane, "the lane GT of one system or both; prints the key(s) (gt_api.generate_lane_gt)")
+    dataroot(ln)
+    ln.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt): the lane GT goes to OUT/lane/")
+    ln.add_argument("--version", default=None)
+    _which_scenes(ln)
+    ln.add_argument("--workers", type=int, default=1)
+    ln.add_argument("--rig", default="all", choices=["all", "lane_center", "bev_fusion"], help="the system: Spurmitte (lane_center), BEV Fusion (bev_fusion), or both")
+    au = command("audit-lane", _cmd_audit_lane, "audit a stored lane GT before it is released: every keyframe there, every file loads and holds what the version promises; exit 1 on a problem (store_audit.audit_lane)")
+    au.add_argument("system", choices=["bev_fusion", "lane_center"])
+    au.add_argument("--dataset", default="v1.0-trainval", help="v1.0-mini | v1.0-trainval")
+    au.add_argument("--dataroot", default=None, help="a nuScenes folder (default ~/data/nuscenes_full or ~/data/nuscenes)")
+    au.add_argument("--scenes", nargs="+", help="only the keyframes of these sequences")
+    au.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt)")
+    au.add_argument("--limit", type=int, default=None, help="check only the first N files")
+    am = command("area-masks", _cmd_area_masks, "the packed area masks of an existing BEV Fusion lane store (lane_raster.build_mask_cache)")
+    am.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt)")
+    am.add_argument("--border-m", dest="borders", type=float, nargs="+", default=[0.0, 0.5])
+    am.add_argument("--workers", type=int, default=1, help="processes (34k frames: about 11 min in one)")
+    am.add_argument("--force", action="store_true", help="make them again although they are complete")
+    bu = command("build", _cmd_build, "the low-level writer of generate (one full devkit, --out required; pipeline.build)")
+    bu.add_argument("--dataroot", default="~/data/nuscenes")
+    bu.add_argument("--version", default="v1.0-mini")
+    bu.add_argument("--out", required=True)
+    bu.add_argument("--scenes", nargs="+")
+    bu.add_argument("--stride", type=int, default=1)
+    bu.add_argument("--res", type=float, default=0.5)
+    bu.add_argument("--workers", type=int, default=1)
+    _generator_options(bu)
+    # ---- look at GT
+    k = command("key", _cmd_key, "the GT key of what is stored for a system: data + code signature of every part; exit 1 when incomplete (gt_api.gt_key)")
+    k.add_argument("system", choices=["bev_fusion", "lane_center"])
+    k.add_argument("--dataset", default="v1.0-trainval", help="v1.0-mini | v1.0-trainval")
+    _which_scenes(k)
+    k.add_argument("--dataroot", default=None, help="a nuScenes folder: complete is then judged by every keyframe of its json tables")
+    k.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt)")
+    k.add_argument("--json", action="store_true", help="print the key as json")
+    h = command("have", _cmd_have, "is the stored front GT of the current generator there for these sequences? exit 1 when not (the check before a training; sets.stored_for)")
+    _which_scenes(h)
+    h.add_argument("--version", default=None, help="v1.0-mini | v1.0-trainval (default: the first that holds all the sequences)")
+    h.add_argument("--dataroot", default=None)
+    h.add_argument("--stride", type=int, default=1)
+    h.add_argument("--data", default=None, help="the ROOT of the stores (default data/autogt)")
+    d = command("data", _cmd_data, "are the raw nuScenes files the generator reads on disk (tables, maps, CAM_FRONT, radars)? exit 1 when not (sets.check_raw)")
+    dataroot(d)
+    d.add_argument("--version", default=None)
+    _which_scenes(d)
+    command("sets", lambda a: _print_sets(), "the scene sets small / full and how much of each is stored")
+    command("versions", lambda a: _print_versions(), "the GT versions, the lane versions and the releases; the current one marked, which is stored")
+    mk = command("area-mask", _cmd_area_mask, "one area mask of a keyframe of the BEV Fusion lane store: its size, --png to draw it (lane_raster.load_mask / area_mask)")
+    mk.add_argument("token", help="the nuScenes sample token of a keyframe")
+    mk.add_argument("--kind", default="intersection", choices=["intersection", "road"])
+    mk.add_argument("--border-m", type=float, default=0.0)
+    mk.add_argument("--png", default=None, help="write the mask as a picture (x forward = up, y left = left)")
+    v = command("view", _cmd_view, "sample pictures of keyframes (camera, semantic BEV, objects + velocity, motion)")
     v.add_argument("out")
     v.add_argument("picks", nargs="*", help="scene-0061:8 (mini, generated now) or a sample token (stored GT, mini or trainval)")
     v.add_argument("--total", action="store_true", help="4th panel: total apparent flow (ego motion included) instead of motion relative to the static world")
-    sub.add_parser("sheets").add_argument("out")
-    sub.add_parser("masks", help="the two coverage masks (BEV fusion: front; Spurmitte: surround) as one picture").add_argument("out")
-    gb = sub.add_parser("generate-bev", help="BEV Fusion in one command: the front GT + the lane GT of the rig bev_fusion + the packed area masks of a nuScenes folder (resumable); prints the GT key")
-    gb.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
-    gb.add_argument("--out", default=None, help="default data/autogt (the folder that holds the stores)")
-    gb.add_argument("--version", default=None)
-    gb.add_argument("--set", dest="set_name", default=None, help="small (the 10 sequences of mini) or full (all of trainval)")
-    gb.add_argument("--scenes", nargs="*")
-    gb.add_argument("--workers", type=int, default=1)
-    gb.add_argument("--border-m", dest="borders", type=float, nargs="*", default=[0.0, 0.5], help="the borders in metres of the intersection masks (default 0 and 0.5)")
-    gl = sub.add_parser("generate-lane", help="the lane GT (lane graph, roads, lines; own version and store) of a nuScenes folder: resumable")
-    gl.add_argument("dataroot", help="a nuScenes folder, e.g. ~/data/nuscenes_full")
-    gl.add_argument("--out", default=None, help="default data/autogt/lane; the files go to OUT/<lane signature>/")
-    gl.add_argument("--version", default=None)
-    gl.add_argument("--set", dest="set_name", default=None, help="small (the 10 sequences of mini) or full (all of trainval)")
-    gl.add_argument("--scenes", nargs="*")
-    gl.add_argument("--workers", type=int, default=1)
-    gl.add_argument("--rig", default="all", choices=["all", "lane_center", "bev_fusion"], help="the system the lane GT is made for (lane_gt.RIGS): Spurmitte (lane_center), BEV Fusion (bev_fusion), or both")
-    lgp = sub.add_parser("lanegraph", help="picture of the lane graph of a keyframe: the six cameras and the top view")
-    lgp.add_argument("out", help="the png to write")
-    lgp.add_argument("pick", help="scene-0061:8 (the scene's 9th keyframe)")
-    lgp.add_argument("--version", default="v1.0-mini")
-    lgp.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
-    r = sub.add_parser("report", parents=[gen], help="evaluate the GT of all sequences, store it, write one PDF report with samples")
-    r.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
+    command("sheets", lambda a: _cmd_sheets(a), "overview sheets of the sample pictures").add_argument("out")
+    command("masks", lambda a: _cmd_masks(a), "the two coverage masks (BEV fusion: front; Spurmitte: surround) as one picture").add_argument("out")
+    lg = command("lanegraph", _cmd_lanegraph, "picture of the lane graph of a keyframe: the six cameras and the top view")
+    lg.add_argument("out", help="the png to write")
+    lg.add_argument("pick", help="scene-0061:8 (the scene's 9th keyframe)")
+    lg.add_argument("--version", default="v1.0-mini")
+    lg.add_argument("--dataroot", default=None)
+    vd = command("video", _cmd_video, "drive through the GT of one sequence at 12 Hz (H.264); mini by default, any trainval sequence with --version")
+    vd.add_argument("scene")
+    vd.add_argument("mp4")
+    vd.add_argument("seconds", nargs="?", type=float, default=0.0)
+    vd.add_argument("--version", default="v1.0-mini", help="v1.0-mini | v1.0-trainval")
+    vd.add_argument("--dataroot", default=None)
+    # ---- check and clean
+    c = command("check", _cmd_check, "automatic consistency checks of the GT over keyframes (checks.run)")
+    c.add_argument("--dataroot", default="~/data/nuscenes")
+    c.add_argument("--version", default="v1.0-mini")
+    c.add_argument("--scenes", nargs="+")
+    c.add_argument("--stride", type=int, default=1)
+    c.add_argument("--holdout", action="store_true", help="add the leave-one-radar-out test of the radar correction")
+    r = command("report", _cmd_report, "evaluate the GT of all sequences, store it, write ONE PDF report with samples (report.report; made at 0.5 m)")
+    r.add_argument("--dataroot", default=None)
     r.add_argument("--version", default="v1.0-mini")
     r.add_argument("--light", action="store_true", help="memory-light devkit (automatic for trainval)")
     r.add_argument("--out", default=None, help="report PDF (default data/autogt/reports/autogt_report_<version>_<date>.pdf)")
-    r.add_argument("--data", default=None, help="cache directory (default data/autogt); --no-data: do not store")
+    r.add_argument("--data", default=None, help="the ROOT of the stores (default data/autogt); --no-data: do not store")
     r.add_argument("--no-data", action="store_true")
-    r.add_argument("--scenes", nargs="*")
+    r.add_argument("--scenes", nargs="+")
+    r.add_argument("--stride", type=int, default=1)
+    r.add_argument("--workers", type=int, default=1)
     r.add_argument("--samples", type=int, default=10, help="sample pictures in the report (evenly spread over the sequences)")
-    r.add_argument("--holdout", action="store_true", help="add the leave-one-radar-out test of the radar correction")
-    cl = sub.add_parser("clean", help="list / move / delete generated videos, pictures, old outputs, stale caches")
-    for flag in ("--videos", "--pictures", "--reports", "--old-outputs", "--move", "--delete"):
+    r.add_argument("--holdout", action="store_true", help="add the leave-one-radar-out test (not with the light devkit of trainval)")
+    _generator_options(r)
+    dg = command("digest", _cmd_digest, "a digest per frame of nuScenes mini: two generators that make the same GT give the same file (checks.digests)")
+    dg.add_argument("out", nargs="?", help="write the digests to this json file")
+    dg.add_argument("--compare", nargs=2, metavar=("A", "B"), help="compare two digest files: exit 1 when any frame differs")
+    dg.add_argument("--stride", type=int, default=2)
+    cl = command("clean", _cmd_clean, "list / move generated videos, pictures, reports, old outputs and caches; --delete only for what one command rebuilds (clean.clean)")
+    for flag in ("--videos", "--pictures", "--reports", "--old-outputs"):
         cl.add_argument(flag, action="store_true")
+    act = cl.add_mutually_exclusive_group()
+    act.add_argument("--move", action="store_true")
+    act.add_argument("--delete", action="store_true")
     cl.add_argument("--all-caches", metavar="DIR")
     cl.add_argument("--stale-caches", metavar="DIR")
-    cl.add_argument("--include-released", action="store_true", help="also list the caches of released GT versions (versions.csv): --move only")
+    cl.add_argument("--include-released", action="store_true", help="also list the released stores: --move only")
     cl.add_argument("--older-than", type=float, metavar="DAYS")
-    d = sub.add_parser("video", help="drive through the GT of one sequence at 12 Hz (H.264); mini by default, any trainval sequence with --version")
-    d.add_argument("scene")
-    d.add_argument("mp4")
-    d.add_argument("seconds", nargs="?", type=float, default=0.0)
-    d.add_argument("--version", default="v1.0-mini", help="v1.0-mini | v1.0-trainval")
-    d.add_argument("--dataroot", default=None, help="default ~/data/nuscenes (mini) or ~/data/nuscenes_full (trainval)")
+    st = command("selftest", _cmd_selftest, "all tests of the suite (about 10 min), or only some of the file-level ones with --only")
+    st.add_argument("--only", nargs="+", choices=sorted(SELFTESTS), help="run only these parts (each prints its time): " + ", ".join(sorted(SELFTESTS)))
+    p.registry = registry
     return p
 
 
+def commands():
+    """{command name: the function that runs it} (a test pins that every command is documented in the module doc and maps onto a function)"""
+    return _parser().registry
+
+
+# ---------------------------------------------------------------------------------------------------------------- the commands: each is one call
 def _cmd_selftest(a):
-    from .selftest import run
-    run()
-
-
-def _cmd_data(a):
-    from . import sets
-    r = sets.check_raw(a.dataroot, a.version, a.set_name, a.scenes)
-    print(sets.report_raw(r))
-    if r["missing"] or r["maps"]:
-        raise SystemExit(1)
+    if not a.only:
+        from .selftest import run
+        return run()
+    import importlib
+    import time
+    for name in dict.fromkeys(a.only):                                 # no duplicates, the order asked for
+        t0 = time.time()
+        mod = importlib.import_module(f".{SELFTESTS[name]}", __package__)
+        fn = getattr(mod, "run", None) or mod.selftest
+        msg = fn(verbose=False) if "verbose" in fn.__code__.co_varnames[:fn.__code__.co_argcount] else fn()
+        print(f"{name}: ok ({time.time() - t0:.0f} s)" + (f" {str(msg)[:150]}" if msg else ""))
 
 
 def _cmd_generate(a):
-    generate(a.dataroot, a.out, a.version, _scene_names(a), a.stride, a.res, workers=a.workers, set_name=a.set_name, lane=not a.no_lane, **_options(a))
+    r = generate(a.dataroot, a.out, a.version, _scene_names(a), a.stride, a.res, workers=a.workers, set_name=a.set_name, lane=not a.no_lane, **_options(a))
+    if r["lane"] is not None:
+        from .gt_api import key_of
+        name = a.set_name or ("custom" if _scene_names(a) else None)
+        for system in ("bev_fusion", "lane_center"):
+            print(key_of(system, r["version"], name, a.out, dataroot=a.dataroot, scenes=_scene_names(a), options=_options(a)))
+    if r["masks_error"]:
+        raise SystemExit(1)
 
 
-def _cmd_digest(a):
-    import json
-    if a.compare:
-        x, y = (json.load(open(p)) for p in a.compare)
-        bad = [k for k in x["digests"] if x["digests"][k] != y["digests"].get(k)] + [k for k in y["digests"] if k not in x["digests"]]
-        print(f"{len(x['digests'])} frames, signatures {x['signature']} and {y['signature']}: {len(bad)} differ {bad[:3]}")
-        if bad:
-            raise SystemExit(1)
-        return
-    if not a.out:
-        raise ValueError("give the file to write, or --compare A B")
-    from .checks import digests
-    r = digests("~/data/nuscenes", "v1.0-mini", a.stride)
-    json.dump(r, open(a.out, "w"))
-    print(f"{len(r['digests'])} digests of signature {r['signature']} -> {a.out}")
+def _cmd_generate_bev(a):
+    from .gt_api import generate_bev_gt
+    print(generate_bev_gt(a.dataroot, set_name=a.set_name, scenes=_scene_names(a), out=a.out, version=a.version, workers=a.workers, borders=tuple(a.borders)))
+
+
+def _cmd_generate_lane(a):
+    from .gt_api import generate_lane_gt
+    keys = generate_lane_gt(a.dataroot, a.rig, a.set_name, _scene_names(a), a.out, a.version, a.workers)
+    for key in (keys.values() if isinstance(keys, dict) else [keys]):
+        print(key)
+
+
+def _cmd_audit_lane(a):
+    from . import lane_gt
+    from .store_audit import audit_lane
+    from .suite import DATA, default_root
+    store = os.path.join(os.path.expanduser(a.out) if a.out else DATA, "lane", lane_gt.signature(rig=a.system))
+    if not os.path.isdir(store):
+        raise ValueError(f"no lane store {store}")
+    r = audit_lane(store, a.system, a.dataroot or default_root(a.dataset), a.dataset, a.scenes, a.limit)
+    if not r["ok"]:
+        raise SystemExit(1)
+
+
+def _cmd_area_masks(a):
+    from . import lane_gt, lane_raster
+    from .suite import DATA
+    root = os.path.expanduser(a.out) if a.out else DATA
+    store = os.path.join(root, "lane", lane_gt.signature(rig="bev_fusion"))
+    if not os.path.isdir(store):
+        raise ValueError(f"no BEV Fusion lane store {store}: make it with `generate-bev` or `generate-lane --rig bev_fusion`")
+    r = lane_raster.build_mask_cache(store, borders=tuple(a.borders), force=a.force, workers=a.workers)
+    print(f"{r['frames']} frames, {len(r['made'])} file(s) made, {len(r['files']) - len(r['made'])} already complete: {os.path.join(store, 'masks')}")
+
+
+def _cmd_build(a):
+    build(os.path.expanduser(a.dataroot), a.version, os.path.expanduser(a.out), _scene_names(a), a.stride, a.workers, a.res, **_options(a))
+
+
+def _cmd_key(a):
+    from .gt_api import gt_key
+    scenes = _scene_names(a)
+    key = gt_key(a.system, a.dataset, a.set_name or (None if scenes else "full"), a.out, a.dataroot, scenes)
+    print(json.dumps(key.as_dict(), indent=1) if a.json else key)
+    if not key.complete:
+        raise SystemExit(1)
 
 
 def _cmd_have(a):
@@ -580,13 +346,26 @@ def _cmd_have(a):
         raise SystemExit(1)
 
 
-def _cmd_build(a):
-    build(os.path.expanduser(a.dataroot), a.version, a.out, a.scenes, a.stride, a.workers, a.res, **_options(a))
+def _cmd_data(a):
+    from . import sets
+    r = sets.check_raw(a.dataroot, a.version, a.set_name, _scene_names(a))
+    print(sets.report_raw(r))
+    if r["missing"] or r["maps"]:
+        raise SystemExit(1)
 
 
-def _cmd_check(a):
-    from .checks import run
-    run(os.path.expanduser(a.dataroot), a.version, a.scenes, a.stride, a.holdout)
+def _cmd_area_mask(a):
+    import numpy as np
+    from . import lane_gt, lane_raster
+    g = lane_gt.load(a.token, rig="bev_fusion")
+    m = lane_raster.area_mask(g, a.kind, a.border_m)
+    print(f"{a.kind} mask of {a.token}, border {a.border_m:g} m: {int(m.sum())} of {m.size} cells ({m.shape[0]} x {m.shape[1]}, x forward 0 .. 60 m, y left -26 .. 26 m)")
+    if a.png:
+        import cv2
+        img = np.flip(m, (0, 1)).astype(np.uint8) * 255                                  # x forward = up, y left = left, like the pictures of the GT
+        if not cv2.imwrite(a.png, cv2.resize(img, None, fx=6, fy=6, interpolation=cv2.INTER_NEAREST)):
+            raise ValueError(f"could not write {a.png}")
+        print("->", a.png)
 
 
 def _cmd_view(a):
@@ -594,14 +373,26 @@ def _cmd_view(a):
     run(a.out, [x.split(":") for x in a.picks] or None, total=a.total)
 
 
+def _cmd_sheets(a):
+    from .view import sheets
+    sheets(a.out)
+
+
+def _cmd_masks(a):
+    from .rig_masks import picture
+    print(picture(a.out))
+
+
 def _cmd_lanegraph(a):
     import cv2
     from . import lane_graph_view as V
+    from .lane_gt import LaneGT
     from .light_nusc import light_nuscenes
     from .suite import AutoGT, default_root
     root = os.path.expanduser(a.dataroot or default_root(a.version))
-    name, k = a.pick.split(":")
-    from .lane_gt import LaneGT
+    name, sep, k = a.pick.partition(":")
+    if not sep or not k.isdigit():
+        raise ValueError(f"pick: scene-0061:8 (the scene and the number of the keyframe), got {a.pick!r}")
     nusc = light_nuscenes(root, a.version, [name], cameras=V.CAMERAS, radars=False)
     gt = AutoGT(root, a.version, nusc=nusc)
     tok = gt.keyframes(name)[int(k)]
@@ -610,43 +401,15 @@ def _cmd_lanegraph(a):
     print(f"{a.out}: {V.legend_text(g)}")
 
 
-def _cmd_generate_lane(a):
-    from .lane_gt import RIGS, generate
-    from .light_nusc import ensure_cache
-    version = a.version or detect_version(a.dataroot)
-    if "trainval" in version:
-        ensure_cache(a.dataroot, version)
-    from .gt_api import key_of
-    lane_dir = os.path.abspath(os.path.expanduser(a.out)) if a.out else None
-    keyed = lane_dir is None or os.path.basename(lane_dir) == "lane"        # the key is printed when the stores are where gt_api looks: data/autogt/lane or <root>/lane
-    root = None if lane_dir is None else os.path.dirname(lane_dir)
-    for rig in (list(RIGS) if a.rig == "all" else [a.rig]):
-        generate(a.dataroot, a.out, version, a.scenes, a.set_name, a.workers, rig=rig)
-        if keyed:
-            print(key_of(rig, version, a.set_name or ("custom" if a.scenes else None), root, parts=("lane",), dataroot=a.dataroot, scenes=a.scenes))
-        else:
-            print(f"(no GT key printed: --out {a.out} is not a folder named lane)")
+def _cmd_video(a):
+    from .suite import default_root
+    from .video import run
+    run(a.scene, a.mp4, a.seconds, dataroot=a.dataroot or default_root(a.version), version=a.version)
 
 
-def _cmd_generate_bev(a):
-    from .gt_api import generate_bev_gt
-    from .light_nusc import ensure_cache
-    version = a.version or detect_version(a.dataroot)
-    if "trainval" in version:
-        ensure_cache(a.dataroot, version)
-    if not a.borders:
-        raise ValueError("--border-m needs at least one value (0 and 0.5 are the default)")
-    print(generate_bev_gt(a.dataroot, set_name=a.set_name, scenes=a.scenes, out=a.out, version=version, workers=a.workers, borders=tuple(a.borders)))
-
-
-def _cmd_masks(a):
-    from .rig_masks import picture
-    print(picture(a.out))
-
-
-def _cmd_sheets(a):
-    from .view import sheets
-    sheets(a.out)
+def _cmd_check(a):
+    from .checks import run
+    run(os.path.expanduser(a.dataroot), a.version, a.scenes, a.stride, a.holdout)
 
 
 def _cmd_report(a):
@@ -654,9 +417,28 @@ def _cmd_report(a):
     from .report import report
     from .suite import DATA, default_root
     out = a.out or os.path.join(DATA, "reports", f"autogt_report_{a.version}_{datetime.date.today().isoformat()}.pdf")
-    data = None if a.no_data else (a.data or DATA)
-    report(os.path.expanduser(a.dataroot or default_root(a.version)), a.version, out, data, a.scenes, a.stride, a.holdout, a.samples,
-           a.workers, a.light or "trainval" in a.version, **_options(a))
+    light = a.light or "trainval" in a.version
+    if a.holdout and light:
+        print("note: the leave-one-radar-out test needs the full devkit: skipped with the light devkit (trainval)")
+    report(os.path.expanduser(a.dataroot or default_root(a.version)), a.version, out, None if a.no_data else os.path.expanduser(a.data or DATA), a.scenes, a.stride, a.holdout, a.samples,
+           a.workers, light, **_options(a))
+
+
+def _cmd_digest(a):
+    if a.compare:
+        x, y = (json.load(open(p)) for p in a.compare)
+        bad = [k for k in x["digests"] if x["digests"][k] != y["digests"].get(k)] + [k for k in y["digests"] if k not in x["digests"]]
+        print(f"{len(x['digests'])} frames, signatures {x['signature']} and {y['signature']}: {len(bad)} differ {bad[:3]}")
+        if bad:
+            raise SystemExit(1)
+        return
+    if not a.out:
+        raise ValueError("give the file to write, or --compare A B")
+    from .checks import digests
+    r = digests("~/data/nuscenes", "v1.0-mini", a.stride)
+    with open(a.out, "w") as f:
+        json.dump(r, f)
+    print(f"{len(r['digests'])} digests of signature {r['signature']} -> {a.out}")
 
 
 def _cmd_clean(a):
@@ -665,26 +447,15 @@ def _cmd_clean(a):
           stale_caches=a.stale_caches, all_caches=a.all_caches, older_than=a.older_than, include_released=a.include_released)
 
 
-def _cmd_video(a):
-    from .suite import default_root
-    from .video import run
-    run(a.scene, a.mp4, a.seconds, dataroot=a.dataroot or default_root(a.version), version=a.version)
-
-
-COMMANDS = {"selftest": _cmd_selftest, "versions": lambda a: _print_versions(), "sets": lambda a: _print_sets(), "data": _cmd_data, "digest": _cmd_digest, "have": _cmd_have,
-            "generate": _cmd_generate, "build": _cmd_build, "check": _cmd_check, "view": _cmd_view, "sheets": _cmd_sheets, "lanegraph": _cmd_lanegraph, "masks": _cmd_masks, "generate-lane": _cmd_generate_lane, "generate-bev": _cmd_generate_bev,
-            "report": _cmd_report, "clean": _cmd_clean, "video": _cmd_video}
-CHECKS_ARGUMENTS = ("data", "digest", "generate", "generate-lane", "generate-bev", "have", "clean")           # these commands raise ValueError for a wrong argument: the message, no traceback
-
-
 def main(argv=None):
     a = _parser().parse_args(argv)
     try:
-        COMMANDS[a.cmd](a)
-    except ValueError as e:
-        if a.cmd not in CHECKS_ARGUMENTS:
+        a.func(a)
+    except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (AUTOGT_TRACEBACK=1 shows the traceback)
+        if os.environ.get("AUTOGT_TRACEBACK"):
             raise
-        raise SystemExit(f"error: {e}") from None
+        print(f"error: {e}", file=sys.stderr)
+        raise SystemExit(2) from None
 
 
 if __name__ == "__main__":

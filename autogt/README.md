@@ -66,7 +66,7 @@ python -m autogt check [--holdout]                          # automatic consiste
 python -m autogt view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
 python -m autogt report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (data/autogt/<signature>/), run every check, write ONE PDF
                                                             # (data/autogt/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
-python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move|--delete]
+python -m autogt clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move | --delete: only for pictures, videos, reports]
                                                             # removes only what autogt generated; dry run by default, --move puts it into _to_delete/
 python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # driving through the GT at 12 Hz (H.264, read back; any sequence, the light devkit of just that one); examples in data/autogt/examples/
 ```
@@ -84,6 +84,10 @@ python -m autogt video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # dri
 | `rig_masks.py` | **the two coverage masks**, one per sensor rig, static from the calibration: `bev_fusion_mask()` (front camera + 5 radars, the BEV-fusion grid) and `lane_mask()` (6 cameras + 5 radars, the Spurmitte window); `python -m autogt masks out.png` draws both |
 | `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
 | `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m autogt sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m autogt data` |
+| `store.py`, `pipeline.py` | **the front GT writer**: `store.py` = the keyframe files, the index.json manifest, the resume checks, `detect_version`, the listing of a store by file name (`names`, no stat per file); `pipeline.py` = `generate` (THE entry point) and `build`; `cli.py` re-exports the old names |
+| `store_audit.py` | **the audit of a stored lane GT** (`python -m autogt audit-lane SYSTEM`, `store_audit.audit_lane`): every keyframe of the version there, every file loads and holds what the version promises (keys, frame, window, per-point arrays, tier / visibility rules, tier_info against the pieces); used before a store is released (l4, l5: 34,149 files, 4 - 8 min); tested in `gt_api_selftest.py` with a damaged copy |
+| `cli_selftest.py`, `generator_selftest.py` | tests: every command is one call, exit codes, stores and tables; the generator against the devkit, the map, the image and a file round trip, lane graph invariants |
+| `REVIEW_2026-11-10.md` | the deep review: what was fixed, and the findings that need a NEW front / lane version (hashed files) |
 | `suite.py`, `cli.py`, `__main__.py` | `AutoGT` facade, `load`, `current_signature`, **`generate`** (cli.py: the entry point, groups of 60 sequences with the light devkit, `detect_version`); commands `selftest`, `build` (parallel, resumable cache), `check`, `view`, `sheets`, `video`, `report`, `clean` |
 | `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import autogt` working: `wsl bash autogt/run_nice.sh -m autogt selftest` |
 | `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |

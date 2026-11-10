@@ -8,7 +8,9 @@ from pyquaternion import Quaternion
 
 from . import lane_tiers as LT
 
-P = dict(tier_back=25.0, tier_ahead=55.0, path_tol=1.5, path_cos=0.7, neighbour_tol=10.0, min_ahead=40.0, min_back=20.0, extend=True, opposite_tier=3)
+from . import lane_gt  # noqa: E402
+
+P = {k: lane_gt.DEFAULTS[k] for k in ("tier_back", "tier_ahead", "path_tol", "path_cos", "neighbour_tol", "min_ahead", "min_back", "extend", "opposite_tier")}      # the defaults, not a copy that drifts
 
 
 class FakeNusc:

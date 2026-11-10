@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .cli import _flat, canonical_of, check_resume, run_manifest, save_keyframe, write_index  # noqa: E402
+from .store import _flat, canonical_of, check_resume, run_manifest, save_keyframe, write_index  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
 from .suite import AutoGT  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402

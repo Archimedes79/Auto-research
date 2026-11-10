@@ -115,9 +115,11 @@ def motion_arrows(ax, fl):
     data coordinates are (y, x) and its y axis is drawn inverted (left = +y), so the arrow takes (vy, vx) as it is: a car that drives
     forward-left points up-left on the screen, like the cyan arrow of the objects panel (a minus sign here made them point right)."""
     nx, ny = fl.shape[1:]
-    gx = 0.25 + 0.5 * np.arange(nx)[:, None] + 0 * np.arange(ny)[None, :]
-    gy = -26 + 0.25 + 0.5 * np.arange(ny)[None, :] + 0 * np.arange(nx)[:, None]
-    sel = (np.arange(nx)[:, None] % 6 == 3) & (np.arange(ny)[None, :] % 6 == 3) & (np.hypot(*fl) > 0.3)
+    res = 60.0 / nx                                                   # 0.5 m or 0.25 m cells: the grid is x 0 .. 60 m, y -26 .. 26 m
+    k = max(1, round(3.0 / res))                                      # one cell in k = every 3 m
+    gx = res / 2 + res * np.arange(nx)[:, None] + 0 * np.arange(ny)[None, :]
+    gy = -26 + res / 2 + res * np.arange(ny)[None, :] + 0 * np.arange(nx)[:, None]
+    sel = (np.arange(nx)[:, None] % k == k // 2) & (np.arange(ny)[None, :] % k == k // 2) & (np.hypot(*fl) > 0.3)
     return ax.quiver(gy[sel], gx[sel], fl[1][sel], fl[0][sel], color="white", angles="xy", scale_units="xy", scale=6, width=0.003)
 
 

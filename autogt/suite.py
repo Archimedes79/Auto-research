@@ -4,7 +4,7 @@ import json
 import os
 import types
 
-from .cli import load_keyframe
+from .store import load_keyframe
 from .grid import GridSpec
 from .nuscenes_gt import NuScenesGT
 
@@ -47,6 +47,11 @@ def missing(tokens, data=DATA, **options):
     """the sample tokens of `tokens` without a stored GT for the current source and options ([] = the store covers them): the check
     before a training starts, so that nothing has to be generated in a data-loader worker"""
     sig_dir = os.path.join(data, current_signature(**options))
+    tokens = list(tokens)
+    if len(tokens) > 50:                                                  # one listing of the folder instead of a stat per token (2 ms each on the 9p mounts)
+        from .store import front_keys
+        have = front_keys(sig_dir)
+        return [t for t in tokens if t not in have]
     return [t for t in tokens if not os.path.exists(os.path.join(sig_dir, t + ".npz"))]
 
 
@@ -54,12 +59,13 @@ def load(token, data=DATA, **options):
     """the stored GT of one keyframe (written by `python -m autogt report` / `build`) for the current source and options:
     dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""
     sig_dir = os.path.join(data, current_signature(**options))
-    if not os.path.exists(os.path.join(sig_dir, token + ".npz")):
-        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "examples", "lane")) if os.path.isdir(data) else []
+    try:
+        return load_keyframe(sig_dir, token)
+    except FileNotFoundError:
+        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "examples", "lane", "cache")) if os.path.isdir(data) else []
         raise FileNotFoundError(f"no stored GT for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
                                 "`autogt.generate(<nuScenes folder>)` (shell: `python -m autogt generate`), or the generator source changed "
-                                "since it was stored")
-    return load_keyframe(sig_dir, token)
+                                "since it was stored") from None
 
 
 def default_root(version):
@@ -78,7 +84,10 @@ def scene_tokens(scene, version="v1.0-mini", dataroot=None):
     """the sample tokens of a sequence in time order, from the nuScenes json tables only: a few seconds even for trainval, no devkit
     (`AutoGT(...).keyframes(scene)` gives the same list). dataroot default: ~/data/nuscenes (mini) / ~/data/nuscenes_full (trainval)."""
     scenes, nxt = json_tables(os.path.expanduser(dataroot) if dataroot else default_root(version), version)
-    out, tok = [], next(s["first_sample_token"] for s in scenes if s["name"] == scene)
+    first = next((s["first_sample_token"] for s in scenes if s["name"] == scene), None)
+    if first is None:
+        raise ValueError(f"unknown scene {scene!r} in {version}")
+    out, tok = [], first
     while tok:
         out.append(tok)
         tok = nxt[tok]
@@ -113,11 +122,32 @@ class AutoGT(NuScenesGT):
     def training_sample(self, sample_token, grid=None, ss=None):
         return super().training_sample(sample_token, grid or self.grid, ss or self.ss)
 
+    # one function per system and its key (gt_api.py): the class offers them next to the single-keyframe methods
+    @staticmethod
+    def generate_bev_gt(*args, **kwargs):
+        """BEV Fusion: the front GT + the lane GT of the rig bev_fusion + the packed area masks -> GtKey (see gt_api.generate_bev_gt)"""
+        from .gt_api import generate_bev_gt
+        return generate_bev_gt(*args, **kwargs)
+
+    @staticmethod
+    def generate_lane_gt(*args, **kwargs):
+        """the lane GT of one system (rig lane_center | bev_fusion) or both (rig="all") -> GtKey (see gt_api.generate_lane_gt)"""
+        from .gt_api import generate_lane_gt
+        return generate_lane_gt(*args, **kwargs)
+
+    @staticmethod
+    def gt_key(*args, **kwargs):
+        """the key of what is stored for a system, nothing is generated (see gt_api.gt_key)"""
+        from .gt_api import gt_key
+        return gt_key(*args, **kwargs)
+
     def scenes(self):
         return [s["name"] for s in self.nusc.scene]
 
     def keyframes(self, scene_name):
-        sc = next(s for s in self.nusc.scene if s["name"] == scene_name)
+        sc = next((s for s in self.nusc.scene if s["name"] == scene_name), None)
+        if sc is None:
+            raise ValueError(f"unknown scene {scene_name!r} (this devkit holds {len(self.nusc.scene)} sequences)")
         out, tok = [], sc["first_sample_token"]
         while tok:
             out.append(tok)

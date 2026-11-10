@@ -244,6 +244,42 @@ def _api_checks(root, lane_gt):
         flip = lambda a: a[:, ::-1]                                                                   # noqa: E731
         assert (road & drv).sum() / (road | drv).sum() > 0.9 and (flip(road) & drv).sum() / (flip(road) | drv).sum() < 0.8, "the mask lies where the front GT's drivable area lies, not mirrored"
         assert os.path.isdir(os.path.join(d, "lane", key.part("lane").store, "masks"))
+        # the audit of a store: a good one is ok, a missing file and a damaged graph are problems
+        import gzip
+        import pickle
+        import shutil
+        from . import store_audit
+        audit = store_audit.audit_lane(key.part("lane").path, "bev_fusion", root, "v1.0-mini", ["scene-0061"], verbose=False)
+        assert audit["ok"] and audit["stats"]["frames"] == len(toks) and audit["stats"]["tier1_mean_m"] > 0, audit["lines"]
+        bad = os.path.join(d, "audited_copy")
+        shutil.copytree(key.part("lane").path, bad)
+        os.remove(os.path.join(bad, toks[3] + ".pkl.gz"))
+        def damage(tok, how):
+            fn = os.path.join(bad, tok + ".pkl.gz")
+            with gzip.open(fn, "rb") as f:
+                g = pickle.load(f)
+            how(g)
+            with gzip.open(fn, "wb") as f:
+                pickle.dump(g, f)
+
+        def tier_zero(g):                                                       # a point with a tier that is none of 1, 2, 3 (tier_src stays consistent: it is no tier-1 point)
+            q = next(q for q in g["pieces"] if (q["tier"] > 1).any())
+            q["tier"][int(np.argmax(q["tier"] > 1))] = 0
+
+        def vis_and_occ(g):                                                     # a point that is visible and occluded at once
+            q = g["pieces"][0]
+            q["vis"][0] = q["occ"][0] = True
+
+        def outside(g):                                                         # a point far outside the window
+            g["pieces"][0]["pts"][0] = (999.0, 999.0)
+        damaged = {toks[4]: tier_zero, toks[5]: vis_and_occ, toks[6]: outside}
+        for tok, how in damaged.items():
+            damage(tok, how)
+        worse = store_audit.audit_lane(bad, "bev_fusion", root, "v1.0-mini", ["scene-0061"], verbose=False)
+        assert not worse["ok"] and any(t == "store" for t, _ in worse["problems"]), worse["problems"]
+        assert {t for t, _ in worse["problems"]} == {"store", *damaged}, ("each damaged frame is named, no good one is", worse["problems"])
+        said = dict(worse["problems"])
+        assert ": tier (" in said[toks[4]] and "vis and occ" in said[toks[5]] and "outside the window" in said[toks[6]], said
         lc = gt_api.generate_lane_gt(root, rig="lane_center", scenes=["scene-0061"], out=d, verbose=False)
         assert lc.system == "lane_center" and [p.name for p in lc.parts] == ["lane"] and lc.complete and lc.id != key.id and lc.lane(toks[8])["frame"] == "lane"
         assert lc.part("lane").version == lane_gt.version_of(lc.part("lane").store), "the version is the one of the store"
@@ -271,7 +307,7 @@ def run(root=None, verbose=True):
     _cache_checks()
     msg_mini = _mini_checks(root, AutoGT, lane_gt)
     msg_key = _api_checks(root, lane_gt)
-    msg = f"gt_api / lane_raster selftest ok: toy raster (orientation, exact edges, hole, nested areas, exact border, empty areas, refused windows), packed cache (round trip, resume, growth, rasteriser, empty frame); {msg_mini}; generate_bev_gt / generate_lane_gt on scene-0061, {msg_key}"
+    msg = f"gt_api / lane_raster selftest ok: toy raster (orientation, exact edges, hole, nested areas, exact border, empty areas, refused windows), packed cache (round trip, resume, growth, rasteriser, empty frame); {msg_mini}; generate_bev_gt / generate_lane_gt on scene-0061, {msg_key}; the store audit finds a missing file, a tier that is none, vis and occ at one point and a point outside the window"
     if verbose:
         print(msg)
     return msg

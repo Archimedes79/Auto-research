@@ -27,14 +27,26 @@ RELEASES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "releases.cs
 # this table). Every other module is hashed into the signature (nuscenes_gt.SIGNATURE_FILES); `python -m autogt selftest` fails for a module
 # that is in neither list, and for a hashed module that nuscenes_gt.py does not import, so a change of the generator cannot slip past a version.
 # the lane GT (lane_gt.py, lane_graph.py, road_graph.py, lane_lines.py) has its own version (lane_versions.csv), not the front GT's signature
-NOT_GENERATOR = ("__init__.py", "__main__.py", "checks.py", "clean.py", "cli.py", "lane_gt.py", "lane_graph.py", "lane_graph_selftest.py", "lane_graph_view.py", "lane_tiers.py", "lane_tiers_selftest.py",
-                 "gt_api.py", "gt_api_selftest.py", "lane_lines.py", "lane_raster.py", "light_nusc.py", "report.py", "rig_masks.py", "road_graph.py", "selftest.py", "sets.py", "suite.py", "versions.py", "video.py", "view.py")
+NOT_GENERATOR = ("__init__.py", "__main__.py", "checks.py", "clean.py", "cli.py", "pipeline.py", "store.py", "lane_gt.py", "lane_graph.py", "lane_graph_selftest.py", "lane_graph_view.py", "lane_tiers.py", "lane_tiers_selftest.py",
+                 "cli_selftest.py", "generator_selftest.py", "gt_api.py", "gt_api_selftest.py", "lane_lines.py", "lane_raster.py", "store_audit.py", "light_nusc.py", "report.py", "rig_masks.py", "road_graph.py", "selftest.py", "sets.py", "suite.py", "versions.py", "video.py", "view.py")
+
+
+_TABLES = {}
+
+
+def _rows(path):
+    """the rows of a csv table, read again only when the file changed (a signature lookup needs the table twice: 6 - 16 ms per autogt.load otherwise)"""
+    st = os.stat(path)
+    key = (st.st_mtime_ns, st.st_size)
+    if _TABLES.get(path, (None,))[0] != key:
+        with open(path, newline="", encoding="utf-8") as f:
+            _TABLES[path] = (key, list(csv.DictReader(f)))
+    return _TABLES[path][1]
 
 
 def table():
     """the rows of versions.csv, oldest first"""
-    with open(FILE, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    return [dict(r) for r in _rows(FILE)]
 
 
 def version_of(signature):
@@ -45,10 +57,40 @@ def version_of(signature):
 def canonical(signature):
     """the signature of the stored GT that the code of `signature` makes: a version whose code makes the same GT byte for byte as an older one
     (faster or tidier code, column `same_gt_as` of versions.csv) shares that version's store; any other signature is its own"""
-    row = next((r for r in table() if r["signature"] == signature), None)
+    row, seen = next((r for r in table() if r["signature"] == signature), None), set()
     while row and row.get("same_gt_as"):
-        row = row_of(row["same_gt_as"])
+        if row["version"] in seen:
+            raise ValueError(f"versions.csv: the rows with same_gt_as form a cycle at {row['version']}")
+        seen.add(row["version"])
+        nxt = row_of(row["same_gt_as"])
+        if nxt is None:
+            raise ValueError(f"versions.csv: {row['version']} is the same GT as {row['same_gt_as']}, which has no row")
+        row = nxt
     return row["signature"] if row else signature
+
+
+def check_table(rows=None, release_rows=None, lane_versions=None):
+    """versions.csv and releases.csv are consistent: signatures are unique, every same_gt_as names an EARLIER row (no cycle, no dangling name), every release names a front version of
+    versions.csv and a lane version of lane_versions.csv; raises ValueError (`autogt selftest` calls it)"""
+    rows = table() if rows is None else rows
+    seen = []
+    for r in rows:
+        if r["signature"] in {x["signature"] for x in seen}:
+            raise ValueError(f"versions.csv: the signature {r['signature']} is in more than one row")
+        if r.get("same_gt_as") and r["same_gt_as"] not in {x["version"] for x in seen}:
+            raise ValueError(f"versions.csv: {r['version']} says same_gt_as {r['same_gt_as']}, which is no EARLIER row")
+        seen.append(r)
+    if release_rows is None:
+        release_rows = releases()
+    if lane_versions is None:
+        from . import lane_gt
+        lane_versions = {x["version"] for x in lane_gt.table()}
+    front = {r["version"] for r in rows}
+    for r in release_rows:
+        if r["front"] not in front or r["lane"] not in lane_versions:
+            raise ValueError(f"releases.csv: {r['release']} names front {r['front']} / lane {r['lane']}, which is not a row of versions.csv / lane_versions.csv")
+    if len({r["release"] for r in release_rows}) != len(release_rows):
+        raise ValueError("releases.csv: a release number is used twice")
 
 
 def version_of_key(key):
@@ -63,8 +105,7 @@ def releases():
     A release is the suite as one: `python -m autogt generate` makes the standard nuScenes GT (front) and the lane GT together, and the pair carries one
     number. The numbers are one running sequence with the front versions (v10 = front v9 + lane l3): every later change of the front GT or of the lane GT is the
     next number (v11, ...), so the next front row of versions.csv is v11, not v10."""
-    with open(RELEASES, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    return [dict(r) for r in _rows(RELEASES)]
 
 
 def release_of(front, lane):
@@ -83,16 +124,26 @@ def row_of(version):
     return next((r for r in table() if r["version"] == version), None)
 
 
-def code_state():
+_CODE_STATE = {}
+
+
+def code_state(max_age=20.0):
     """{"commit": short hash of HEAD, "dirty": True when anything in autogt/ differs from it (edited or new files)}; both None, with a warning,
     when git cannot tell. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one. A worktree
-    that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then."""
+    that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then. The answer is kept `max_age` seconds: two git processes cost 0.5 - 1.5 s
+    and a run writes its index several times within seconds (an hours-long run asks again at its end)."""
     import shutil
     import subprocess
+    import time
+    if _CODE_STATE and time.time() - _CODE_STATE["at"] < max_age:
+        return dict(_CODE_STATE["value"])
     here = os.path.dirname(os.path.abspath(__file__))
     attempts = [("git", here)]
     if shutil.which("git.exe"):
-        win = subprocess.run(["wslpath", "-w", here], capture_output=True, text=True).stdout.strip()
+        try:
+            win = subprocess.run(["wslpath", "-w", here], capture_output=True, text=True).stdout.strip()
+        except OSError:                                                          # native Windows python: no wslpath
+            win = ""
         attempts.append(("git.exe", win or here))
     for exe, where in attempts:
         try:
@@ -101,7 +152,9 @@ def code_state():
         except (OSError, subprocess.SubprocessError):
             continue
         if not (head.returncode or status.returncode):
-            return {"commit": head.stdout.strip(), "dirty": bool(status.stdout.strip())}
+            value = {"commit": head.stdout.strip(), "dirty": bool(status.stdout.strip())}
+            _CODE_STATE.update(at=time.time(), value=value)
+            return dict(value)
     import sys
     print("WARNING: git cannot tell the commit and the state of autogt/ here: the manifest gets no commit and the store is no release; "
           "run `python -m autogt generate` again from a clean checkout to stamp it", file=sys.stderr, flush=True)

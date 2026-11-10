@@ -128,6 +128,8 @@ class Checks:
         st = self.st
         rate = lambda v: f"{np.mean(v):.1%} of {len(v)}"  # noqa: E731
         dt = np.array(st["dt_ms"])
+        if not len(dt):
+            return ["no keyframe was checked (every sequence failed or none was asked for)"]
         z, sh, ur = np.array(st["O1_z"]), np.array(st["O6_shift_cm"]), np.array(st["O4_unobs_range"])
         out = [f"keyframes {len(dt)} in {len(self.per_scene)} sequences; camera minus annotation time: median {np.median(dt):+.1f} ms, "
                f"range {dt.min():+.1f}..{dt.max():+.1f}",
@@ -269,6 +271,8 @@ def leave_one_radar_out(gen, scenes=None, stride=1):
     for k in ("zero", "track", "radar-corrected"):
         e = np.abs(np.array(res[k]))
         lines.append(f"{k:15s} | {np.sqrt((e ** 2).mean()):.3f} | {np.median(e):.3f} | {np.mean(e < 0.5):.1%} | {np.mean(e > 2):.1%}")
+    if not len(per_pair):
+        return lines + ["per box-radar pair: none in this selection"]
     pp = np.array(per_pair)
     diff = pp[:, 1] - pp[:, 0]
     rng = np.random.default_rng(0)

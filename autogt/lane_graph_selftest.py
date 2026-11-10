@@ -169,7 +169,6 @@ def _lines():
 def _areas():
     """polygons: cut to the window, holes kept, orientation fixed, tiles of a big polygon give the same area, frames"""
     from shapely.geometry import Polygon, box
-    from shapely.geometry.polygon import orient
     T = _pose(10, 10, math.pi / 2)
     out = LL.crop_areas(LL.polygon_chunks([("a", box(0, 0, 20, 20))]), T, half=5.0)
     assert len(out) == 1 and out[0]["id"] == "a" and abs(out[0]["area"] - 100.0) < 1e-3 and np.abs(out[0]["exterior"]).max() <= 5.0 + 1e-5, out
@@ -457,7 +456,7 @@ def _rigs(root, gt, lane_gt, grid):
             have = {}
             for q in g["pieces"]:
                 have[q["piece"]] = have.get(q["piece"], 0.0) + q["length"]
-            assert set(have) <= set(want), "a piece of the BEV Fusion graph is in the bigger graph"
+            assert set(have) == set(want) and all(abs(have[k] - want[k]) < 1e-3 for k in have), "the BEV Fusion graph holds the pieces of the bigger graph cut to the rectangle, piece by piece"
             d_len.append((sum(want.values()), sum(have.values())))
             # the same points in the two rigs have the same tier (same map vertices, same ego path)
             sp = LG.in_frame(spur.graph(tok), "ego")
@@ -485,7 +484,7 @@ def _rigs(root, gt, lane_gt, grid):
             n += 1
     d_len = np.array(d_len)
     assert vis_n > 0 and n >= 9, (vis_n, n)
-    assert np.all(np.abs(d_len[:, 0] - d_len[:, 1]) <= 0.02 * np.maximum(d_len[:, 0], 1.0) + 2.0), d_len
+    assert np.all(np.abs(d_len[:, 0] - d_len[:, 1]) < 1e-2), d_len                                    # measured 0.0 on every frame: the cut is the cut
     assert share_n >= 0.8 * pts_n > 0 and share_same >= 0.98 * share_n, (share_same, share_n, pts_n)         # measured 0.992: the rest are tier-2 lanes whose tier-1 neighbour lies outside the smaller window
     return f"BEV Fusion rig: {n} frames inside x {win[0]:.0f} .. {win[1]:.0f} m, y {win[2]:.0f} .. {win[3]:.0f} m, cut = the bigger graph cut, tier equal to Spurmitte's on {share_same / share_n:.3f} of {share_n} shared points"
 

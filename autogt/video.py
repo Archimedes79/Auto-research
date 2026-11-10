@@ -116,7 +116,7 @@ def _bev_image(rgb):
                       (int(52 * PXM), int(60 * PXM)), interpolation=cv2.INTER_NEAREST)
 
 
-def _corners(o, z, yaw_e_xy):
+def _corners(o, z):
     """3D corners of an ObjectFlow in the world frame."""
     c, s = math.cos(o.yaw), math.sin(o.yaw)
     w, l, h = o.size
@@ -146,7 +146,7 @@ def render(layers, scene, sd, kf_token, header, root, use_radar):
     for o in fg.objects:
         tr = by_id[o.id]
         z = float(np.interp(t, tr.t, tr.extra["trans"][:, 2])) if "trans" in tr.extra else 0.0
-        cw = _corners(o, z, None)
+        cw = _corners(o, z)
         ce = (np.c_[cw, np.ones(8)] @ T_g2e.T)[:, :3]
         foot.append((o, ce))
         if ce[:, 0].max() < 1 or ce[:, 0].min() > 80:

@@ -13,7 +13,6 @@
   top-level API; AGENTS.md names every layer, meta entry and box field of a real keyframe
 """
 import json
-import math
 import os
 import tempfile
 
@@ -85,7 +84,8 @@ def run(root=None, verbose=True):
     fine = gt.keyframe_gt(s1, GridSpec(res=0.25))
     for layer in ("drivable_area", "walkway", "vehicle"):
         pooled = fine[layer].reshape(g.nx, 2, g.ny, 2).mean((1, 3))
-        assert np.abs(pooled - cur[layer]).mean() < 0.01, layer
+        diff = np.abs(pooled - cur[layer])                              # 0.25 m pooled to 0.5 m against 0.5 m: measured 0.0006 for the vehicle layer (mean 0.017), so the bound is relative to the layer
+        assert diff.mean() < 0.002 + 0.05 * cur[layer].mean() and diff.sum() < 0.1 * cur[layer].sum() + 1.0, (layer, diff.mean())
     T = np.linalg.inv(cur["meta"]["T_e2g"]) @ nxt["meta"]["T_e2g"]
     P = np.stack([gx.ravel(), gy.ravel(), np.zeros(gx.size), np.ones(gx.size)], 1) @ T.T
     gxn = (P[:, 1] - g.y_min) / (g.y_max - g.y_min) * 2 - 1
@@ -117,7 +117,7 @@ def run(root=None, verbose=True):
     moving = [i for i, b_ in enumerate(bx) if b_["observed"] and b_["vel_known"] and not b_["stationary"] and np.hypot(*b_["vel"]) > 1.0]
     assert moving and all(b_["vel"][0] == 0 and b_["vel"][1] == 0 for b_ in bx if b_["stationary"])
     diffs = [abs(np.hypot(*bx[i]["vel"]) - np.hypot(*np.nan_to_num(gt.nusc.box_velocity(bx[i]["token"]))[:2])) for i in moving]
-    assert np.median(diffs) < 0.5, np.median(diffs)                                      # close to the devkit's speeds
+    assert np.median(diffs) < 0.1, np.median(diffs)                                    # measured 0.02                                      # close to the devkit's speeds
     cells = (k["instance"] == moving[0]) & (k[bx[moving[0]]["group"]] > 0)
     assert cells.any() and np.allclose(k["velocity"][:, cells], bx[moving[0]]["vel"][:, None], atol=1e-3)   # edge cells too
     # v6: a cell with a velocity names its box; the sigma of an edge cell is the box's sigma, not a coverage-scaled one
@@ -206,7 +206,7 @@ def run(root=None, verbose=True):
     fan_ = C.radar_cells(np.array([10.0, 10.0, 80.0, -5.0]), np.array([0.0, 20.0, 0.0, 0.0]), [np.eye(4)])
     assert fan_.tolist() == [True, False, False, False], fan_                          # in the fan, 63 deg off axis, beyond 70 m, behind
     rig_ = C.radar_cells(gx, gy, C.rig_radar_poses())                                  # the table of the rig = the fans of a real keyframe
-    assert (rig_ != (k["radar"] > 0)).mean() < 0.01 and len(C.rig_radar_poses()) == 5, (rig_ != (k["radar"] > 0)).mean()
+    assert (rig_ != (k["radar"] > 0)).mean() < 0.002 and len(C.rig_radar_poses()) == 5, (rig_ != (k["radar"] > 0)).mean()
     for b_ in bx:                                                                      # one rule for ground truth and detections: the stored
         assert C.shares_in(k, b_["corners"], b_["size"][2])["fusion"] == b_["share_fusion"], b_["token"]   # share is what a detection of that footprint gets
     assert C.shares_in(k, bx[0]["corners"], group="pedestrian")["fusion"] >= 0.0 and set(k["meta"]) >= {"image_size", "radar_poses"}
@@ -364,9 +364,10 @@ def run(root=None, verbose=True):
     # 5b generate, the entry point: version found in the folder, groups of sequences with the light devkit give the same GT as the full
     #    devkit, a rerun writes nothing, a wrong scene or a wrong folder is refused with a message
     from . import cli as cli_mod
+    from . import pipeline as pipe_mod                                                  # the writer: its module globals are what the tests below patch
     assert cli_mod.detect_version(root) == "v1.0-mini"
     with tempfile.TemporaryDirectory() as d:
-        old_group, cli_mod.GROUP_SCENES = cli_mod.GROUP_SCENES, 1                      # two groups: the loop over devkit loads is exercised
+        old_group, pipe_mod.GROUP_SCENES = pipe_mod.GROUP_SCENES, 1                      # two groups: the loop over devkit loads is exercised
         try:
             r = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
             from . import suite as suite_mod
@@ -376,7 +377,7 @@ def run(root=None, verbose=True):
             finally:
                 suite_mod.AutoGT = real_gen
         finally:
-            cli_mod.GROUP_SCENES = old_group
+            pipe_mod.GROUP_SCENES = old_group
         assert r["signature"] == store_sig and r["out"] == os.path.join(d, store_sig), r
         assert r["version"] == "v1.0-mini" and r["scenes"] == 2 and r["keyframes"] == r["written"] == 4 and again["written"] == 0, (r, again)
         held = json.load(open(os.path.join(r["out"], "index.json")))
@@ -484,15 +485,15 @@ def run(root=None, verbose=True):
         held = json.load(open(os.path.join(r["out"], "index.json")))
         assert held["set"] == "tiny" and held["scenes"] == ["scene-0061", "scene-0103"] and r["keyframes"] == 4, (held, r)
         assert held["complete"] is True and held["release"] is False and r["release"] is False and "commit" in held and "dirty" in held, held
-        calls = []                                                                       # a rerun with nothing to do does not flag the store incomplete
-        real_write = cli_mod.write_index
-        cli_mod.write_index = lambda *a, **k: (calls.append(k.get("complete", True)), real_write(*a, **k))[1]
+        calls = []                                                                       # a rerun with nothing to do writes no index at all: it neither flags the store incomplete nor re-stamps its manifest
+        real_write = pipe_mod.write_index
+        pipe_mod.write_index = lambda *a, **k: (calls.append(k.get("complete", True)), real_write(*a, **k))[1]
         sets.DIR = sets_dir
         try:
             r2 = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
         finally:
-            cli_mod.write_index, sets.DIR = real_write, old_dir
-        assert r2["written"] == 0 and calls == [True], calls
+            pipe_mod.write_index, sets.DIR = real_write, old_dir
+        assert r2["written"] == 0 and calls == [] and json.load(open(os.path.join(r["out"], "index.json"))) == held, (calls, "a no-op rerun leaves index.json byte for byte as it was")
         r_opt = cli_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
         assert r_opt["signature"] == _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"], use_flow=False).signature() != r["signature"]
     # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts
@@ -636,6 +637,10 @@ def run(root=None, verbose=True):
     lane_tiers_data_selftest(verbose=False)
     from .gt_api_selftest import run as gt_api_selftest                              # one function per system and the key (gt_api.py), the area masks (lane_raster.py)
     gt_api_msg = gt_api_selftest(root, verbose=False)
+    from .generator_selftest import run as generator_selftest                          # the generator against independent references: the devkit, the map, the image, a file round trip
+    generator_msg = generator_selftest(root, verbose=False)
+    from .cli_selftest import run as cli_selftest                                      # the command line: one call per command, exit codes, the stores
+    cli_msg = cli_selftest(root, verbose=False)
     # 5i one release, one command: the standard GT and the lane GT of the same sequences come out of one `generate`, into two stores of one release
     from . import lane_gt as lane_gt_mod
     from .suite import scene_tokens as tokens_of_scene
@@ -687,6 +692,8 @@ def run(root=None, verbose=True):
               f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
         print(lane_graph_msg)
         print(gt_api_msg)
+        print(cli_msg)
+        print(generator_msg)
         print(rig_masks_msg)
 
 

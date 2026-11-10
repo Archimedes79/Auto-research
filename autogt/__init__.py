@@ -21,8 +21,20 @@ Guide for agents: autogt/AGENTS.md; reference: autogt/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): autogt.flow.estimate_flow.
 """
 from .flow import Config, FlowGT, ObjectFlow, Track, estimate_flow  # noqa: F401
-from .cli import generate  # noqa: F401
+from .pipeline import generate  # noqa: F401
 from .grid import GridSpec  # noqa: F401
 from . import sets, versions  # noqa: F401
 from .suite import AutoGT, current_signature, current_version, load, missing, scene_tokens  # noqa: F401
-from .gt_api import GtKey, generate_bev_gt, generate_lane_gt, gt_key  # noqa: F401  (one function per system and the key it returns: autogt/gt_api.py)
+from .gt_api import GtKey, generate_bev_gt, generate_lane_gt, gt_key, key_of  # noqa: F401  (one function per system and the key it returns: autogt/gt_api.py)
+
+
+_LAZY = ("lane_gt", "lane_raster", "lane_graph", "rig_masks", "gt_api", "store", "pipeline", "cli", "clean", "checks", "coverage")
+
+
+def __getattr__(name):
+    """`autogt.lane_gt`, `autogt.rig_masks`, ... without importing them at `import autogt` (PEP 562): the documented `autogt.lane_gt.load(token)` works"""
+    if name in _LAZY:
+        import importlib
+        return importlib.import_module(f".{name}", __name__)
+    raise AttributeError(f"module 'autogt' has no attribute {name!r}")
+

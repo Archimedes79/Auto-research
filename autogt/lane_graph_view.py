@@ -1,6 +1,6 @@
 """Pictures of a lane graph (`autogt.lane_graph`): a top view and the graph projected into the six cameras (the review picture of the lane GT).
 
-    python -m autogt lanegraph SAMPLE_TOKEN [--version v1.0-mini] [--dataroot DIR] [--out lane_graph.png]
+    python -m autogt lanegraph OUT.png scene-0061:8 [--version v1.0-mini] [--dataroot DIR]       (the scene and the number of the keyframe)
 
 The pieces are drawn in one colour per piece id, the events as markers (split orange up-triangle, merge blue down-triangle, stop red square, exit yellow square, start green
 circle, end grey circle, window edge white tick). Points lie on the ground plane of the ego frame (z = 0), as the other autogt layers do; every camera
@@ -42,13 +42,15 @@ def _marker(img, uv, kind, size, label=None):
         cv2.circle(img, (u, v), s, colour, -1)
     else:
         cv2.line(img, (u - s, v), (u + s, v), colour, 2)
-    cv2.rectangle(img, (u - s - 1, v - s - 1), (u + s + 1, v + s + 1), (0, 0, 0), 1) if shape != "|" else None
+    if shape != "|":
+        cv2.rectangle(img, (u - s - 1, v - s - 1), (u + s + 1, v + s + 1), (0, 0, 0), 1)
     if label:
         cv2.putText(img, label, (u + s + 2, v - s), cv2.FONT_HERSHEY_SIMPLEX, max(0.35, s / 14), (255, 255, 255), 1, cv2.LINE_AA)
 
 
 def bev_image(graph, ppm=8, title=None, labels=True):
-    """the top view of a graph in the lane frame (x right, y forward), window |x|, |y| <= half; ego at the centre"""
+    """the top view of a graph (any frame: it is turned into the lane frame, x right, y forward), the square window |x|, |y| <= half of the rig lane_center; ego at the centre"""
+    graph = LG.in_frame(graph, "lane")
     half = graph["half"]
     n = int(2 * half * ppm)
     img = np.full((n, n, 3), 28, np.uint8)
@@ -100,8 +102,9 @@ def _lane_to_ego(p):
     return np.c_[p[..., 1], -p[..., 0]]
 
 
-def camera_image(gt, sample, graph, channel, T_e2g_front, scale=0.5, step=0.5):
-    """the camera image of `channel` with the graph projected on the ground plane"""
+def camera_image(gt, sample, graph, channel, T_e2g_front, scale=0.5):
+    """the camera image of `channel` with the graph projected on the ground plane (any frame: it is turned into the lane frame first)"""
+    graph = LG.in_frame(graph, "lane")
     sd = gt.nusc.get("sample_data", sample["data"][channel])
     cs = gt.nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
     K = np.asarray(cs["camera_intrinsic"], float)
@@ -161,11 +164,6 @@ def camera_image(gt, sample, graph, channel, T_e2g_front, scale=0.5, step=0.5):
     cv2.putText(img, channel, (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
     return img
 
-
-def has_cameras(gt, sample_token):
-    """True when all six camera images of the keyframe are on disk"""
-    sample = gt.nusc.get("sample", sample_token)
-    return all(os.path.exists(os.path.join(gt.dataroot, gt.nusc.get("sample_data", sample["data"][ch])["filename"])) for ch in CAMERAS)
 
 
 def mosaic(gt, sample_token, graph, title=None, scale=0.5):

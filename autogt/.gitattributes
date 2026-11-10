@@ -1,0 +1,5 @@
+# the generator signatures are hashes of these files byte for byte: the same bytes in every checkout (a Windows checkout with autocrlf would give another GT key)
+*.py text eol=lf
+*.csv text eol=lf
+*.sh text eol=lf
+sets/*.txt text eol=lf

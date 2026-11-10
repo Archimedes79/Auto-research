@@ -212,7 +212,7 @@ def check_f5():
         refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.25), 4), "(240, 208)")
         # the provisional index of a running build says what the folder holds
         cli.write_index(sig_dir, Gen(), "v1.0-mini", ["scene-0061"], 1, 40, {}, complete=False)
-        assert json.load(open(os.path.join(sig_dir, "index.json"))) == {
+        assert {k: v for k, v in json.load(open(os.path.join(sig_dir, "index.json"))).items() if k != "data_identity"} == {     # data_identity: the raw files the GT key names (autogt 2026-11-10)
             "signature": "testsig000", "version": "v1.0-mini", "res": 0.5, "ss": 4, "options": {}, "scenes": ["scene-0061"],
             "stride": 1, "keyframes": 40, "complete": False}
         cli.check_resume(sig_dir, GridSpec(res=0.5), 4)
