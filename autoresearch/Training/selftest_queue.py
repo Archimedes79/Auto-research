@@ -271,7 +271,8 @@ def queue_checks(tmp, ok):
         time.sleep(2.5)
         assert not rec(proj, "f2"), "f2 did not start behind a failed f1"
         assert "blocked by f1 (failed)" in cli(proj)[1]
-        assert cli(proj, "drop", "f2")[0] == 0 and "f2" not in cli(proj)[1]
+        assert cli(proj, "drop", "f2")[0] == 0
+        assert not [ln for ln in cli(proj)[1].splitlines() if ln.split()[:1] == ["f2"]], "no row of f2 is left (a test for the text f2 would meet the pin 'pinned to f2463fc7f4' of another item)"
         add(proj, "r", 300)
         until(lambda: logged(proj, "r") >= 5, 60, what="r under way")
         assert cli(proj, "drop", "r")[0] == 2, "a running item is held first, not dropped"
