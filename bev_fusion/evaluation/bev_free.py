@@ -12,6 +12,7 @@ the same functions as BEVSubject.predict builds them (`predictions`, `prediction
 tests/test_bev_free.py checks them bit for bit against the live subject on real frames. The five lines of output building are copied from bev_adapter.BEVSubject.predict (frozen):
 keep them in step with it (that test fails when they drift). One network per process, like bev_adapter.build.
 """
+import inspect
 import os
 import sys
 from typing import Any, Dict, Sequence
@@ -76,6 +77,8 @@ class FreeSubject(Subject):
         if missing:
             raise ValueError(f"the code of this run ({bev.ns.code}) has no train.{', train.'.join(missing)}: it is too old for the run without ground truth; use bev_adapter's subject")
         self.b, self.dts = bev, tuple(float(d) for d in dts)
+        takes_strict = "strict" in inspect.signature(bev.ns.T.batch_ego).parameters      # LossConfig.hygiene_2026_11_02: a snapshot from before it calls batch_ego without `strict`, so do we
+        self._strict = {"strict": bool(getattr(getattr(bev.loss, "cfg", None), "hygiene_2026_11_02", False))} if takes_strict else {}
         self.model, self.warmup = bev.model, bev.warmup
         self.state, self.prev, self._checked = None, None, False
 
@@ -125,8 +128,7 @@ class FreeSubject(Subject):
         from interface import check_inputs, check_outputs
         b, ns = self.b, self.b.ns
         T, model, cfg, device = ns.T, b.model, b.cfg, b.device
-        strict = bool(getattr(getattr(b.loss, "cfg", None), "hygiene_2026_11_02", False))
-        ego = T.batch_ego(batch["gap_steps"], self.dts, device, strict=strict) if cfg.gap_ego and T.supports_ego(model) else None
+        ego = T.batch_ego(batch["gap_steps"], self.dts, device, **self._strict) if cfg.gap_ego and T.supports_ego(model) else None
         host = T.host_side(batch) if hasattr(T, "host_side") else None             # (a snapshot from before D54 has neither the host copies nor pin_memory: its forward_loss does neither)
         dev = T.to_device(batch, device, non_blocking=bool(getattr(cfg, "pin_memory", False)))
         if host:

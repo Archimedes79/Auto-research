@@ -100,7 +100,7 @@ def main():
     broken = dict(s.inputs)
     broken.pop("radar", None)
     e = raises(lambda: fresh.predict(type(s)(ref=s.ref, inputs=broken, reference=None), taps=()), (ValueError, KeyError, AssertionError, TypeError))
-    n_arrays = sum(1 for o in free1[0].outputs["dt"].values() for g in ("prob", "dist", "dir") for _ in o[g]) + len(free1[0].taps)
+    n_arrays = sum(1 for o in free1[0].outputs["dt"].values() for g in ("prob", "dist", "dir") for _ in o.get(g, {})) + len(free1[0].taps)       # (a snapshot without the 1 m head has no `dir`)
     print(f"test_bev_free passed: {N} frames of {SCENE} through {os.path.basename(RUN)}: FreeSource / FreeSubject outputs bit-equal to the live ones for dts {dts} "
           f"({n_arrays} arrays in frame 0 and the detections), taps {sorted(free1[0].taps)}, second pass after reset equal, memory confidence {[round(c, 3) for c in conf]}, "
           f"a wrong dataset item and a broken input refused ({type(e).__name__})")
