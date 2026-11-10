@@ -9,7 +9,7 @@ autoresearch/evalsuite (its Runner drives a Subject over a Source and stores the
 What differs from the live pair, and nothing else: `FreeSource.load` returns `Sample(reference=None)` (the dataset item is made without `gt`); `FreeSubject.predict` calls the model the way
 train.forward_loss does before the loss (same ego gap, host copies, autocast, state and step) and stops there, so `info` has no `loss`; `describe()` names no ground truth. The outputs are built by
 the same functions as BEVSubject.predict builds them (`predictions`, `predictions_1m`, `object_head.decode`, `model.boxes`) and have the same structure and dtypes:
-tests/test_bev_free.py checks them bit for bit against the live subject on real frames. The five lines of output building are copied from bev_adapter.BEVSubject.predict (frozen):
+tests/test_bev_free.py checks them bit for bit against the live subject on real frames. The five lines of output building are copied from bev_adapter.BEVSubject.predict:
 keep them in step with it (that test fails when they drift). One network per process, like bev_adapter.build.
 """
 import inspect

@@ -57,8 +57,8 @@ as a warning. The network is run by the `Runner` class (the layer below the Eval
 validation loss: it works alone on frames without labels (the BEV side: `bev_free.py`, `free_source` / `free_subject` of the adapter), `Evaluation.run` calls it and scores its predictions; so an Evaluation has no `loss.*` / `val_loss/*`
 (`bev_suite.py eval` keeps them). `run` here books no ledger row and takes no GPU
 slot: a number that feeds a verdict is launched with `run.py ... -- python -m evalsuite Evaluation.run ...`. Checks: `../tests/test_evaluation_api.py` (without option: the interface on a toy project,
-the adapter's identity, TEST refused; `--real`: on `t20_base_s0`, CPU, needs 18 GB of free RAM, the interface equals the engine's own run score for score). `evaluate.py` and `bev_suite.py` stay the front doors of the
-frozen frame; `bev_eval.py` adds no logic to them (it calls `bev_adapter.build`, `bev_suite._task_only`, `bev_suite.contract_card`).
+the adapter's identity, TEST refused; `--real`: on `t20_base_s0`, CPU, needs 18 GB of free RAM, the interface equals the engine's own run score for score). `evaluate.py` and `bev_suite.py` stay the older front doors
+(nothing is frozen since D73); `bev_eval.py` adds no logic to them (it calls `bev_adapter.build`, `bev_suite._task_only`, `bev_suite.contract_card`).
 
 ## Use
 

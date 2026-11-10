@@ -236,10 +236,10 @@ def probe(net: str, frames: int = 3, device: str = "cpu") -> Dict[str, Any]:
 
 
 def evaluator_extra() -> str:
-    """the code that shapes the numbers outside the source's evaluator hash (bev_adapter.NUMBER_PATHS): this adapter (the reference, the metrics without the loss), the label-free path and
-    bev_views.py / bev_annotation_pts.py (the masks that are every map's denominator, the boxes and the layer index: imported by the metrics but not in NUMBER_PATHS, a frozen file);
-    it goes into the id of an evaluation, so an edit of any of them scores the stored predictions again instead of serving old numbers"""
-    files = ("bev_eval.py", "bev_free.py", "bev_views.py", "bev_annotation_pts.py")
+    """the code that shapes the numbers outside the source's evaluator hash (bev_adapter.NUMBER_PATHS, which holds bev_views.py and bev_annotation_pts.py since D73): this adapter
+    (the reference, the metrics without the loss) and the label-free path; it goes into the id of an evaluation, so an edit of either scores the stored predictions again
+    instead of serving old numbers"""
+    files = ("bev_eval.py", "bev_free.py")
     return hashlib.sha1("".join(_file_hash(os.path.join(ROOT, "evaluation", f)) for f in files).encode()).hexdigest()[:12]
 
 

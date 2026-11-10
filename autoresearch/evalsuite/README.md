@@ -24,7 +24,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
  project adapter  <project>/evaluation/evalsuite.json -> bev_eval.py     (both classes call it; the core imports no torch / nuScenes)
    required: name out network sets identity source subject task
    optional: free_source + free_subject (together) reference card time probe resolve release inputs evaluator_extra evaluator_now MEMORY_TAP COMPARE_IGNORE
-   BEV: bev_adapter (frozen), bev_free (the network without labels), bev_suite, bev_sets (the sets = the training's splits/)
+   BEV: bev_adapter, bev_free (the network without labels), bev_suite, bev_sets (the sets = the training's splits/)
 ```
 A caller (a person, a script, the command line) talks to the Evaluation only. The Runner is the layer below: the only class that runs a network (D72: it reads no ground truth and computes no loss) and stores what
 it predicts. There is one Runner and the Evaluation always includes it: the class a project names in `<project>/evaluation/evalsuite.json` as `"runner": "module:Class"` (module relative to the
