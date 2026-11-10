@@ -109,7 +109,7 @@ python3 tools/commit_paths.py -m "subject" PATH [PATH ...]    # commit exactly t
 python3 tools/check_git.py [--used]                         # what may go into git and be pushed; --used lists the scratch that living files point at
 python3 tools/hold.py show | set ID --by ... --reason ... | clear ID --words "..."   # the hold marker of a run: only the person's words clear it
 python3 tools/keep3.py show   |   lineage.py verify --all   |   provenance.py repro RUN   |   package.py package RUN   # the best three, the chain of a network, a result package
-python3 -m trainsuite start|queue|status|health|watch|stop ...   # from autoresearch/, AR_PROJECT=<problem>: start, supervise and stop a training (trainsuite/README.md)
+python3 -m trainsuite check|run|status|list|stop|resume|plot|compare ...   # from autoresearch/, AR_PROJECT=<problem>: the methods of the class Training (trainsuite/README.md); not methods: health|watch|early|compose|queue
 python3 tools/check_numbers.py <report> <sources ...> [--strict]   # --strict: exit 1 when a number is missing from the sources
 python3 tools/check_structure.py
 python3 tools/install_agents.py [--check]
