@@ -118,7 +118,7 @@ def _n_arrays(tree: Any) -> int:
     return 0
 
 
-def _write_atomic(path: str, data: bytes) -> None:
+def write_atomic(path: str, data: bytes) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)              # (package.py clean removes the emptied frames / taps folders of a set it keeps the manifest of)
     tmp = f"{path}.tmp.{os.getpid()}"
     try:
@@ -249,12 +249,12 @@ class ResultSet:
                 for i, a in enumerate(arrays):
                     with z.open(f"a{i}.npy", "w", force_zip64=True) as f:
                         np.lib.format.write_array(f, a, allow_pickle=False)
-            _write_atomic(self._file(ref), buf.getvalue())
+            write_atomic(self._file(ref), buf.getvalue())
             self._listing().add(os.path.basename(self._file(ref)))
         for name, arr in pred.taps.items():
             buf = io.BytesIO()
             np.save(buf, np.asarray(arr))
-            _write_atomic(self.tap_path(ref, name), buf.getvalue())
+            write_atomic(self.tap_path(ref, name), buf.getvalue())
 
     def close(self, wall_s: float = 0.0, cost: Optional[Dict[str, Any]] = None) -> None:
         """record the seconds this writer took and the cost of its predictions (kept per session: the last one that ran frames)"""
@@ -267,7 +267,7 @@ class ResultSet:
 
     def save(self) -> None:
         """write the manifest now (close does it too; a long run saves it after each scene, so a killed writer keeps what it recorded)"""
-        _write_atomic(os.path.join(self.path, "manifest.json"), json.dumps(self.manifest, indent=1, default=str).encode("utf-8"))
+        write_atomic(os.path.join(self.path, "manifest.json"), json.dumps(self.manifest, indent=1, default=str).encode("utf-8"))
 
     def size_mb(self) -> float:
         folder = os.path.join(self.path, "frames")

@@ -35,6 +35,11 @@ def _abs(net: str) -> str:
     return net if os.path.isabs(net) else os.path.join(ROOT, net)
 
 
+_PREDICTION_FILES = (os.path.join(ROOT, "evaluation", "bev_adapter.py"), os.path.join(ROOT, "evaluation", "bev_free.py"),
+                     os.path.join(ROOT, "..", "autoresearch", "evalsuite", "runner.py"), os.path.join(ROOT, "..", "autoresearch", "evalsuite", "torch_taps.py"))       # the code that makes a prediction: the output
+# decoding of both paths, the frame loop (memory carry / reset) and the taps; part of the identity of the predictions, so an edit of any of them predicts again
+
+
 def _claim_code(net: str) -> str:
     """the code of this run (its snapshot, else the live training/) is imported into this process once and for all: any later network with other code is refused, whatever it is asked for
     (a task, a timing, a probe, a source). -> the code folder"""
@@ -109,7 +114,7 @@ def identity(net: str) -> Dict[str, Any]:
             code = f.read().strip()
     except OSError:
         code = "live training/ " + _tree_hash(os.path.join(ROOT, "training"))
-    adapter = hashlib.sha1("".join(_file_hash(os.path.join(ROOT, "evaluation", f)) for f in ("bev_adapter.py", "bev_free.py")).encode()).hexdigest()[:12]
+    adapter = hashlib.sha1("".join(_file_hash(p) for p in _PREDICTION_FILES).encode()).hexdigest()[:12]
     return {"run": name(net), "checkpoint": os.path.basename(last), "sha1": _file_hash(last), "config": _file_hash(os.path.join(net, "config.json")), "code": code, "adapter": adapter}
 
 
@@ -192,9 +197,10 @@ def card(info: Dict[str, Any], store, quant, rs):
     from evaluation import bev_adapter
     from evaluation.bev_suite import better_of, contract_card, provenance_block, to_legacy
     from evalsuite.api import EvaluationError, Frames
-    if info.get("evaluator") and info["evaluator"] != bev_adapter.evaluator_hash():
-        raise EvaluationError(f"{info['id']} was scored with other evaluator code than the one now ({info['evaluator']} / {bev_adapter.evaluator_hash()}): score the predictions again "
-                              f"(`score {info['results']}`, no network is run), then make the card of the new evaluation")
+    now = bev_adapter.evaluator_hash()
+    if info.get("evaluator") != now or not now:                                  # a hash that cannot be computed is not "unchanged"
+        raise EvaluationError(f"{info['id']} was scored with other evaluator code than the one now ({info.get('evaluator')} / {now}; None = a file that shapes the numbers is missing or renamed): "
+                              f"score the predictions again (`score {info['results']}`, no network is run), then make the card of the new evaluation")
     tab = quant.table(store)
     flat, better = to_legacy(tab), better_of(tab, quant.s.task.metrics())
     ident = rs.manifest["identity"]["network"] if rs else {}

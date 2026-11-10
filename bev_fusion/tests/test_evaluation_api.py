@@ -39,6 +39,19 @@ def quick():
     assert hasattr(bev_eval, "reference") and hasattr(bev_eval, "card") and hasattr(bev_eval, "time") and hasattr(bev_eval, "probe")
     assert hasattr(bev_eval, "free_source") and hasattr(bev_eval, "free_subject"), "the Runner's pair: both or none"
     assert len(bev_eval.evaluator_extra()) == 12, "the adapter's own code is part of the evaluation id"
+    from evalsuite.api import EvaluationError
+    from evaluation import bev_adapter                                                                   # an evaluator that cannot be hashed fails closed (a renamed file of NUMBER_PATHS)
+    saved_paths = bev_adapter.NUMBER_PATHS
+    bev_adapter.NUMBER_PATHS = saved_paths + (os.path.join(ROOT, "evaluation", "no_such_file_renamed.py"),)
+    try:
+        assert bev_eval.evaluator_now() is None
+        try:
+            bev_eval.card({"id": "x@e1", "evaluator": "abc123", "results": "x@r1"}, None, None, None)
+            raise AssertionError("a card was made without a comparable evaluator hash")
+        except EvaluationError as e:
+            assert "other evaluator code" in str(e) and "None" in str(e), e
+    finally:
+        bev_adapter.NUMBER_PATHS = saved_paths
     ev_ = Evaluation(project=ROOT)                                                                      # the project names its Runner: bev_fusion/runner/runner.py, built with (project, adapter)
     assert type(ev_.runner).__module__ == "runner.runner", type(ev_.runner)
     assert type(Evaluation(adapter="evaluation.bev_eval").runner).__module__ == "runner.runner", "the Evaluation always includes the project's Runner, whichever way the adapter is named"
@@ -56,11 +69,12 @@ def quick():
         a = bev_eval.identity(run)
         assert a["checkpoint"] == "ckpt_00000010.pt" and a["adapter"] and a == bev_eval.identity(run), a
         file_hash = bev_eval._file_hash
-        bev_eval._file_hash = lambda p: file_hash(p) + ("x" if p.endswith("bev_free.py") else "")           # an edit of bev_free.py (the Runner's path) is another identity
-        try:
-            assert bev_eval.identity(run)["adapter"] != a["adapter"], "bev_free.py is part of the identity"
-        finally:
-            bev_eval._file_hash = file_hash
+        for edited in ("bev_free.py", "runner.py", "torch_taps.py"):                                       # an edit of the label-free path or of the frame loop / taps is another identity
+            bev_eval._file_hash = lambda p, edited=edited: file_hash(p) + ("x" if p.endswith(edited) else "")
+            try:
+                assert bev_eval.identity(run)["adapter"] != a["adapter"], f"{edited} is part of the identity"
+            finally:
+                bev_eval._file_hash = file_hash
         assert a["code"].startswith("live training/ "), "a run without a code snapshot is identified by the live training/ code it will be imported from"
         data = bytearray(open(ck, "rb").read())
         data[25_000] ^= 1                                                                                 # a byte in the MIDDLE of the file
@@ -205,7 +219,10 @@ def real(run, scene, index):
         print(f"  2 ok: the stored predictions were reused; the fusion numbers added: {len(q3) - len(q2)} more, {len(shared)} shared numbers equal")
         # 3 card, check, list
         os.chdir(os.path.join(ROOT, "..", "autoresearch"))                                                 # the documented working folder: the card must not depend on being in bev_fusion
-        c = ev.make_card(r["id"])
+        made = ev.make_card(r["id"])
+        c = made["card"]
+        chk_card = subprocess.run([sys.executable, os.path.join(ROOT, "..", "autoresearch", "tools", "card.py"), "check", made["path"]], capture_output=True, text=True, timeout=120)
+        assert chk_card.returncode == 0, (made["path"], chk_card.stdout[-300:], chk_card.stderr[-300:])      # the written file is a valid card of the contract
         os.chdir(ROOT)
         snap = open(os.path.join(src_run, "code", "SNAPSHOT.txt")).read().split()
         assert c["commit"] == snap[snap.index("commit") + 1] and "seed" in c, (c.get("commit"), c.get("seed"))

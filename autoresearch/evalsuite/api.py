@@ -31,6 +31,7 @@ The adapter (a module of the project, named in `<project>/evaluation/evalsuite.j
   inputs(source) -> what the source was fed, COMPARE_IGNORE, card(...), time(network, n), probe(network, frames, device); free_source(network, of, workers, control) and
   free_subject(network, source, device): a Source without ground truth and a Subject that only predicts, which the Runner uses (else it uses source / subject; the two go together);
   MEMORY_TAP = the name of a tap whose mean is the fill of the network's memory (the health check of the Runner).
+What a source's `describe()` must give: `gt_signature` and `evaluator_hash` (the hash of the files that shape the numbers); without either the Evaluation refuses (a hash that cannot be computed is not "unchanged").
 Intermediate results: `run(..., taps=("fused", ...))` stores the named taps of the Subject (its `taps()`) with the predictions; a frame stored without a tap is predicted again when the
 tap is asked for.
 Numpy and the standard library only here."""
@@ -45,12 +46,14 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .contracts import FrameRef, Source
 from .suite import EvalSuite
-from .results import Locked, ResultSet, digest, writer_lock
+from .results import Locked, ResultSet, digest, write_atomic, writer_lock
 from .sampling import Sampler
 
 CARRY = "carry"                                                               # the memory is always carried along a scene (D70)
 MEMORY_START_MAX, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES = 0.05, 0.02, 4        # the health of a carried memory (D70): empty at the first frame of a scene, filling over its frames
 MIN_SCENES_FOR_INTERVAL = 30                                                  # the percentile scene bootstrap is anti-conservative below this (the review chat simulated it: 12.1 % false at 10 scenes, 7.4 % at 30)
+NO_EVALUATOR_HASH = ("the data adapter gives no evaluator hash (the files that shape the numbers could not be hashed: one is missing or renamed): an old evaluation would be reused across edits of the metric "
+                     "code; fix the adapter")
 RESULT_DROP = ("class", "gt_signature", "gt_version", "evaluator_hash", "set_hash", "scenes", "frames", "split")      # what a source says about the GT and the set: not what the network was fed
 
 
@@ -297,6 +300,8 @@ class Evaluation(Helpers):
             res["id"] = f"{self.ad.name(net)}@{self._eval_id(res['results'].partition('@')[2], keep, desc, metrics)}"
             if not desc.get("gt_signature"):
                 problems.append("the data has no ground-truth signature: the numbers could not be told from another GT's")
+            if not desc.get("evaluator_hash"):
+                problems.append(NO_EVALUATOR_HASH)
             self._probe_reference(source, keep, problems)
         except (EvaluationError, ValueError, KeyError, OSError) as e:
             problems.append(str(e))
@@ -385,6 +390,8 @@ class Evaluation(Helpers):
     def _need_gt(desc: Dict[str, Any], gt_key: Optional[str]) -> None:
         if not desc.get("gt_signature"):
             raise EvaluationError("the data has no ground-truth signature: numbers could not be told from those of another GT; fix the data adapter")
+        if not desc.get("evaluator_hash"):
+            raise EvaluationError(NO_EVALUATOR_HASH)
         if gt_key and gt_key not in (desc.get("gt_version"), desc.get("gt_signature")):
             raise EvaluationError(f"the data has ground truth {desc.get('gt_version') or desc.get('gt_signature')} ({desc.get('gt_signature')}), not {gt_key}")
 
@@ -437,8 +444,10 @@ class Evaluation(Helpers):
         better = {f"{m.name}.{k}": m.direction(k) for m in q._metrics().values() for k in m.headline}
         keep = (lambda k: match in k) if match else (lambda k: True)
         warn = self._warnings(self._predictions(info), {fr["scene"] for fr in store.frames}, store)
-        now = self.ad.evaluator_now() if hasattr(self.ad, "evaluator_now") else None
-        if now and info.get("evaluator") and now != info["evaluator"]:
+        now = self.ad.evaluator_now() if hasattr(self.ad, "evaluator_now") else info.get("evaluator")
+        if info.get("evaluator") and not now:
+            warn.append("the evaluator code cannot be hashed now (a file that shapes the numbers is missing or renamed): whether it changed since this evaluation cannot be told")
+        elif now and info.get("evaluator") and now != info["evaluator"]:
             warn.append(f"scored with evaluator code {info['evaluator']}, the code is now {now}: the counts are the old ones but they are reduced with today's metrics; score again (`run`) for a clean number")
         return {"id": id, "n_frames": info["n_frames"], "gt": info["gt"], "numbers": {k: v for k, v in tab.items() if keep(k)}, "better": {k: v for k, v in better.items() if keep(k)},
                 "warnings": warn}
@@ -492,14 +501,22 @@ class Evaluation(Helpers):
         info, store, q = self._open(id)
         return q.report(store, render=0)
 
-    def make_card(self, id: str) -> Dict[str, Any]:
-        """the metric card in the project's contract (what its decision tool reads); refused when the checkpoint changed since the predictions"""
+    def make_card(self, id: str, out: str = "") -> Dict[str, Any]:
+        """the metric card in the project's contract, WRITTEN as a file (what the decision tool reads: name it in the experiment card's `arm.cards`; `python autoresearch/tools/card.py check FILE`
+        checks it): `out` = the file (a folder: the file `card_<e-id>.json` in it), default `<the network's eval folder>/card_<e-id>.json`, atomic. -> {"path", "card"}. Refused when the
+        checkpoint changed since the predictions"""
         if not hasattr(self.ad, "card"):
             raise EvaluationError("this project's adapter defines no card")
         info, store, q = self._open(id)
         rs = self._predictions(info)
         self._same_network(info, rs)
-        return self.ad.card(info, store, q, rs)
+        card = self.ad.card(info, store, q, rs)
+        fname = f"card_{str(id).partition('@')[2]}.json"
+        path = os.path.abspath(out) if out else os.path.join(self.ad.out(info["network"]), fname)
+        if os.path.isdir(path):
+            path = os.path.join(path, fname)
+        write_atomic(path, json.dumps(card, indent=1, default=str).encode("utf-8"))
+        return {"path": path, "card": card}
 
     def _same_network(self, info: Dict[str, Any], rs: Optional[ResultSet]) -> None:
         if rs is None:

@@ -46,7 +46,7 @@ python -m evalsuite tap t23_C_s1@r3f9a2c1d4b0 scene-0061/12 --name fused       #
 from evalsuite import Evaluation
 ev = Evaluation()                              # AR_PROJECT=../bev_fusion
 r = ev.run("runs/t23_C_s1", "spread:200:large.val", gt_key="v8", metrics=("maps", "boxes", "fusion"))
-ev.show_numbers(r["id"]), ev.split_numbers(r["id"], "scene"), ev.find_worst(r["id"], "seg"), ev.make_card(r["id"])
+ev.show_numbers(r["id"]), ev.split_numbers(r["id"], "scene"), ev.find_worst(r["id"], "seg"), ev.make_card(r["id"])   # make_card writes runs/<name>/eval/card_<e-id>.json (a verdict reads it: arm.cards in the experiment card)
 ```
 One network per process: the code of a run (its snapshot) stays imported, `bev_eval.source` refuses a second snapshot in the same process. What differs from `bev_suite.py eval`: a network with a memory runs warm, whole scenes in time order from its own start (the frames you ask for decide which results are kept and scored; `eval` without
 `--warm` starts every frame cold, so the numbers of the two are not comparable); what the network predicted is stored once per network and checkpoint under `RUN/eval/results/<id>/` (about 1 - 2 MB per

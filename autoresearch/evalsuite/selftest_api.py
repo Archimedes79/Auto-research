@@ -424,6 +424,15 @@ def check_run():
     sub_c = ev.compare(allr["id"], sub["id"])
     assert sub_c["n_scenes"] == 1 and sub_c["only_a"] == 12 and sub_c["n_common_frames"] == 6, sub_c
     assert any("share 6 frames only" in w for w in sub_c["warnings"]) and any("only 1 scenes" in w for w in sub_c["warnings"]), "an interval on a subset and on few scenes says so"
+    # an adapter that gives no evaluator hash (a file that shapes the numbers is missing or renamed) fails closed: nothing is reused across metric edits that nobody can see
+    STATE.ev = None
+    try:
+        _raises(EvaluationError, "no evaluator hash", ev.run, net, "val", progress=0)
+        chk_ev = ev.check(net, "val")
+        assert not chk_ev["ok"] and any("no evaluator hash" in p for p in chk_ev["problems"]), chk_ev
+        assert any("cannot be hashed now" in w for w in ev.show_numbers(allr["id"])["warnings"]), "an evaluation made earlier says its code can no longer be compared"
+    finally:
+        STATE.ev = "x"
     # the evaluation of an id that is being written is refused with the holder's name
     if results_mod.fcntl is not None:
         eid = ev.check(net, "val", metrics=("maps",))["id"].partition("@")[2]
@@ -500,7 +509,15 @@ def check_reading(ev, net, allr, low):
     _raises(EvaluationError, "axis", ev.split_numbers, allr["id"], "range")
     assert set(ev.find_worst(allr["id"], n=2)) == {"scenes", "frames", "flags"}
     assert ev.get_cost(allr["id"])["predict"]["n"] == 18 and ev.get_cost(allr["id"])["devices"] == ["cuda"]
-    assert os.path.isfile(ev.report(allr["id"])) and ev.make_card(allr["id"])["name"] == allr["id"]
+    assert os.path.isfile(ev.report(allr["id"]))
+    # the card is a FILE a decision can read: default next to the network's eval folder, or where `out` says (a file, or a folder), atomic; the dict is returned with its path
+    m = ev.make_card(allr["id"])
+    eid = allr["id"].partition("@")[2]
+    assert m["card"]["name"] == allr["id"] and m["path"] == os.path.join(out(net), f"card_{eid}.json") and json.load(open(m["path"])) == json.loads(json.dumps(m["card"], default=str))
+    to_file = ev.make_card(allr["id"], out=os.path.join(STATE.root, "cards", "mine.json"))
+    to_dir = ev.make_card(allr["id"], out=os.path.join(STATE.root, "cards"))
+    assert os.path.isfile(to_file["path"]) and to_dir["path"] == os.path.join(STATE.root, "cards", f"card_{eid}.json") and os.path.isfile(to_dir["path"])
+    assert not [f for f in os.listdir(os.path.join(STATE.root, "cards")) if ".tmp" in f], "atomic: no half-written file stays"
     rows = ev.list(net)
     assert {r["kind"] for r in rows} == {"predictions", "evaluation"} and allr["id"] in {r["id"] for r in rows} and allr["results"] in {r["id"] for r in rows}
     assert all(r["megabytes"] >= 0 for r in rows if r["kind"] == "predictions")
