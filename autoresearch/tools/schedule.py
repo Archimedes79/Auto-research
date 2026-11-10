@@ -95,6 +95,16 @@ def link(rows, item, path, root):
     return rows
 
 
+def result_lines(rows, root):
+    """one line per linked item; a link whose results.md is gone (the folder was moved or deleted) says so"""
+    out = []
+    for r in rows:
+        if r.get("result"):
+            ok = os.path.isfile(os.path.join(root, r["result"], "results.md"))
+            out.append(f"result: {r['item']} -> {r['result']}/results.md" + ("" if ok else "  [MISSING: moved or deleted]"))
+    return out
+
+
 def change(a):
     """set / add / link: load, change and save as one step under the lock"""
     rows = load()
@@ -140,9 +150,8 @@ def main():
             sel = [r for r in rows if r["state"] == s]
             if sel:
                 print(f"{s} ({len(sel)}): " + ", ".join(r["item"] for r in sel))
-        for r in rows:
-            if r.get("result"):
-                print(f"result: {r['item']} -> {r['result']}/results.md")
+        for line in result_lines(rows, P.root()):
+            print(line)
     else:
         for r in ready(rows, a.resource)[:10]:
             print(f"{r['item']:14} {r['kind']:12} {r['resource']:6} {r['budget']:6} {r['note']}")

@@ -684,6 +684,8 @@ try:
     assert any("no metric" in b for b in X.check(dict(exp, rule=[dict(metric="Q", min_effect=0.01), dict(metric="nope", max_loss=0.1)]), f"{T}/experiments/E1_x/experiment.json"))
     assert subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write"], capture_output=True, text=True, env=env).returncode == 0
     assert os.path.exists(f"{T}/experiments/E1_x/decision.json")
+    rtext = open(f"{T}/experiments/E1_x/results.md", encoding="utf-8").read()
+    assert rtext.startswith("# ") and " result - " in rtext.split("\n")[0] and "<!-- decide.py:begin" in rtext and "<!-- decide.py:end -->" in rtext and "## What it says" in rtext, "decide --write also writes results.md next to the card"
     # the card as a block of experiment.md (fewer files, 2026-11-01): migrate, read, check, decide, and two truths are refused
     bd = f"{T}/experiments/E9_blk"
     os.makedirs(bd, exist_ok=True)
@@ -696,6 +698,45 @@ try:
     assert X.check(exp, f"{bd}/experiment.md") == [], X.check(exp, f"{bd}/experiment.md")
     r = subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", bd, "--write"], capture_output=True, text=True, env=env)
     assert r.returncode == 0 and os.path.exists(f"{bd}/decision.json") and not os.path.exists(f"{bd}/decision.md"), r.stdout + r.stderr
+    assert os.path.exists(f"{bd}/results.md") and "results.md: created" in r.stdout and "schedule:" in r.stdout, r.stdout
+    # results.md and the schedule link as functions: created, the block replaced with the author's text kept, a page without markers untouched, the heading follows the verdict
+    d1 = dict(id="E7", verdict="KEEP", metric="Q", variant="a", control="c", effect=0.0213, diffs=[0.02, 0.0226], pairing="seed", interval=[0.011, 0.031], why="headline Q a-c +0.0213 beyond the band",
+              prediction="prediction +0.020, measured +0.0213", clauses=[dict(text="Q a-c +0.0213 (want >= +0.010)", ok=True, flags=[]), dict(text="ms a-c", ok=False, flags=["one seed"])], cannot_tell=[], date="2026-11-10 12:00")
+    exr = dict(id="E7", arms=dict(a=dict(run_ids=["E7.a_s0", "E7.a_s1"]), c=dict(run_ids=["E7.c_s0"])))
+    rdir = f"{T}/res_unit"
+    os.makedirs(rdir, exist_ok=True)
+    p, note = DC.write_results_md(rdir, d1, exr)
+    t1 = open(p, encoding="utf-8").read()
+    assert note == "created" and t1.startswith("# E7 result - KEEP\n") and "+0.0213, interval [+0.0110, +0.0310], pairing seed, 2 paired seed(s)" in t1 and "a: E7.a_s0, E7.a_s1; c: E7.c_s0" in t1 \
+        and "MISS: ms a-c (flags: one seed)" in t1 and "prediction +0.020, measured +0.0213" in t1 and "## What it says" in t1 and "## Next" in t1, t1
+    open(p, "a", encoding="utf-8").write("\nThe lead wrote this below the markers.\n")
+    p, note = DC.write_results_md(rdir, dict(d1, verdict="CUT", effect=-0.0123, why="beyond the band in the worse direction"), exr)
+    t2 = open(p, encoding="utf-8").read()
+    assert note == "block replaced" and t2.startswith("# E7 result - CUT\n") and "- **Effect:** -0.0123" in t2 and "- **Effect:** +0.0213" not in t2 and "The lead wrote this below the markers." in t2 \
+        and t2.count("<!-- decide.py:end -->") == 1 and t2.count("<!-- decide.py:begin") == 1, t2
+    own = f"{rdir}/own"
+    os.makedirs(own, exist_ok=True)
+    open(f"{own}/results.md", "w").write("# my own page\n")
+    assert DC.write_results_md(own, d1, exr)[1].startswith("exists without the markers") and open(f"{own}/results.md").read() == "# my own page\n", "a page without the markers is not touched"
+    crl = f"{rdir}/crlf"
+    os.makedirs(crl, exist_ok=True)
+    open(f"{crl}/results.md", "w", newline="").write(t1.replace("\n", "\r\n"))
+    DC.write_results_md(crl, dict(d1, verdict="TIE"), exr)
+    raw = open(f"{crl}/results.md", "rb").read()
+    assert raw.count(b"\n") == raw.count(b"\r\n") and b"result - TIE" in raw, "CRLF stays CRLF"
+    import schedule as SCX
+    sp = f"{T}/sched_res.csv"
+    SCX.save([dict(item="E7.train", node="E7", kind="train", state="done"), dict(item="E7.more", node="E7", kind="train", state="planned"),
+              dict(item="E8.x", node="E8", kind="train", state="done"), dict(item="E7.sum", node="E7", kind="decide", state="done")], sp)
+    got, msg = DC.link_schedule("E7", rdir, T, sp, f"{T}/no_records")
+    rows_ = {r["item"]: r for r in SCX.load(sp)}
+    assert got == ["E7.train", "E7.sum"] and rows_["E7.train"]["result"] == "res_unit" and not rows_["E7.more"]["result"] and not rows_["E8.x"]["result"], (got, rows_, msg)
+    assert DC.link_schedule("E7", rdir, T, sp, f"{T}/no_records")[0] == [], "a second run links nothing new"
+    assert DC.link_schedule("E7", f"{T}/nofolder", T, sp, f"{T}/no_records")[0] == [] and DC.link_schedule("E9", rdir, T, sp, f"{T}/no_records")[0] == [], "no folder, or no done item with this node: no link"
+    assert DC.link_schedule("E7", rdir, T, f"{T}/no_such_schedule.csv")[1] == "no schedule: no link"
+    assert SCX.result_lines(list(rows_.values()), T) == ["result: E7.train -> res_unit/results.md", "result: E7.sum -> res_unit/results.md"], SCX.result_lines(list(rows_.values()), T)
+    os.remove(f"{rdir}/results.md")
+    assert all("[MISSING" in ln for ln in SCX.result_lines(list(rows_.values()), T)), "a link whose results.md is gone says so"
     json.dump(dict(exp, band=0.5), open(f"{bd}/experiment.json", "w"))  # a second, different truth next to the block
     assert any("differ" in b for b in X.check(exp, f"{bd}/experiment.md")) and "differ" in X.migrate(bd, T), "two truths are refused, not merged"
     assert os.path.isfile(f"{bd}/experiment.json"), "a refused migrate leaves the json where it is"
