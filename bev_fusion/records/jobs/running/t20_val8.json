@@ -1,0 +1,9 @@
+{
+  "id": "run.t20_base_s0.val8",
+  "kind": "run",
+  "mode": "full",
+  "run": "t20_base_s0",
+  "split": "val",
+  "n": 8,
+  "dts": [0, 0.5]
+}
