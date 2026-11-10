@@ -1,4 +1,4 @@
-"""evaluation/bev_free.py on REAL frames (CPU, minutes, about 6 GB: nuScenes and the run; not in run_gates.sh). The first 4 frames of val scene-0003 go through the live pair (bev_adapter's
+"""evaluation/bev_free.py on REAL frames (CPU, minutes, about 6 GB: nuScenes and the run; not in run_gates.sh). The first 4 frames of val scene-0016 go through the live pair (bev_adapter's
 Source and BEVSubject.predict: ground truth read, loss computed) and through FreeSource / FreeSubject (no ground truth, no loss). Checks: (1) the outputs of every dt (maps, distance fields,
 mass, detections, refined boxes, velocity fields, 1 m direction) and the taps are bit-equal to the live ones; (2) the sample has no reference and no `gt`, the info has no loss, describe() names no
 ground truth, the scenes and frames (with their dataset keys) are the live ones; (3) the memory is carried over the 4 frames and a second pass after reset() gives the same, the memory
@@ -15,8 +15,8 @@ os.chdir(ROOT)
 from evaluation import bev_adapter as A  # noqa: E402
 from evaluation import bev_free as F  # noqa: E402
 
-RUN = sys.argv[1] if len(sys.argv) > 1 else "runs/t20_base_s0"
-SCENE, N, TAPS = "scene-0003", 4, ("fused", "memory_conf")
+RUN = sys.argv[1] if len(sys.argv) > 1 else "runs/chain2_t20"       # a run made after D76 (D81: the pinned code of older runs imports `autogt` and is not run any more)
+SCENE, N, TAPS = "scene-0016", 4, ("fused", "memory_conf")
 
 
 def same(a, b, path=""):

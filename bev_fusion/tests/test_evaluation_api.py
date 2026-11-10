@@ -2,15 +2,15 @@
 
 Without option (CPU, seconds, no data): the checks of the interface on its toy project (`Evaluation/selftest_api.py`), `bev_sets` / adapter contract (every function the interface needs is there),
 and the command line lists its methods.
-With --real [RUN] (a finished run with a checkpoint, default runs/t20_base_s0; CPU, 4 frames, about 5 minutes; skips with a message without a checkpoint): the proof that the interface
+With --real [RUN] (a finished run with a checkpoint made after D76, default runs/chain2_t20; D81: older runs are not run any more; CPU, 4 frames, about 5 minutes; skips with a message without a checkpoint): the proof that the interface
 changes no number. On a copy of the run folder (config, GT identity, code snapshot, the checkpoint linked):
-  1  `Evaluation.run(RUN, "frames:scene-0103/3:val")` = the engine's own run of the same objects (`bev_adapter.build`, `quant.run(scenes, max_frames=4, state="carry")`): every score of that
+  1  `Evaluation.run(RUN, "frames:scene-0106/3:val")` = the engine's own run of the same objects (`bev_adapter.build`, `quant.run(scenes, max_frames=4, state="carry")`): every score of that
      frame equal, number for number; the scene ran whole and warm up to the frame asked for, the other three frames are not stored
   2  a second `run` takes the stored predictions (reused, same ids); the same predictions scored with the fusion metrics added give a new evaluation id and the same numbers for the
      families both have
   3  `card` gives the contract card (split, subset, protocol carry, a provenance block), `check` (the dry run, with the id it would give) and `list` name what is stored
 Without option it also tests the adapter's identity of a network (a retrained checkpoint of the same name is another identity), the run resolution, the refusal of TEST and of unknown metrics.
-Usage (from the bev_fusion folder): python tests/test_evaluation_api.py [--real [RUN]] [--scene scene-0103] [--index 3]
+Usage (from the bev_fusion folder): python tests/test_evaluation_api.py [--real [RUN]] [--scene scene-0106] [--index 3]
 """
 import argparse
 import glob
@@ -237,8 +237,8 @@ def real(run, scene, index):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--real", nargs="?", const="runs/t20_base_s0", default=None, metavar="RUN")
-    ap.add_argument("--scene", default="scene-0103")
+    ap.add_argument("--real", nargs="?", const="runs/chain2_t20", default=None, metavar="RUN")
+    ap.add_argument("--scene", default="scene-0106")
     ap.add_argument("--index", type=int, default=3)
     a = ap.parse_args()
     quick()

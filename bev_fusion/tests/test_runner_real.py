@@ -1,4 +1,4 @@
-"""The Runner end to end on a REAL run (default runs/t20_base_s0), CPU, the first 3 frames of val scene-0003, about 10 minutes and 6 GB (nuScenes, the checkpoint), not in run_gates.sh. Everything
+"""The Runner end to end on a REAL run (a run made after D76, default runs/chain2_t20; D81: older runs are not run any more), CPU, the first 3 frames of val scene-0016, about 10 minutes and 6 GB (nuScenes, the checkpoint), not in run_gates.sh. Everything
 goes through the command lines in subprocesses (one network per process), on a copy of the run folder (its config, code snapshot, the checkpoint linked), so no real run folder is written:
   1  `python -m runner Runner.plan`: ok, 3 frames to run, none stored
   2  `Runner.predict --taps fused`: 3 frames predicted, no warning, the id <network>@r<hash>; the stored frames hold every dt, the detections, the fused tap, the memory fill 0.00 at the first frame and
@@ -21,8 +21,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 AR = os.path.abspath(os.path.join(ROOT, "..", "autoresearch"))
 sys.path[:0] = [AR, ROOT]
 os.chdir(ROOT)
-RUN = sys.argv[1] if len(sys.argv) > 1 else "runs/t20_base_s0"
-SCENE, N = "scene-0003", 3
+RUN = sys.argv[1] if len(sys.argv) > 1 else "runs/chain2_t20"
+SCENE, N = "scene-0016", 3
 FRAMES = "frames:" + ",".join(f"{SCENE}/{k}" for k in range(N)) + ":val"
 ENV = {**os.environ, "OMP_NUM_THREADS": "3", "MKL_NUM_THREADS": "3"}
 

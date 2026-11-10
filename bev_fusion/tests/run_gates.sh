@@ -106,12 +106,12 @@ if [ "${1:-}" = "--all" ]; then
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
   run "autoGT"          "$PY" -m GtGenerator selftest
   run "projection (R-GEO)" "$PY" tests/test_projection_general.py
-  if ls runs/t16_full_s0/ckpt_*.pt > /dev/null 2>&1; then          # the front door of the evaluation against bev_suite.py eval on a copy of the real run
+  if ls runs/chain2_t20/ckpt_*.pt > /dev/null 2>&1; then           # the front door of the evaluation against bev_suite.py eval on a copy of the real run (made after D76: D81, older runs are not run any more)
     run "evaluate door, golden" "$PY" tests/test_evaluate_door.py --real   # 4 val frames on the CPU, number for number; about 3 min, 2 x 6 GB
     run "evaluation api, real" "$PY" tests/test_evaluation_api.py --real   # the class interface equals the engine on a real frame (CPU, 4 frames, about 5 min)
-    run "evaluate door, sets"   "$PY" tests/test_evaluate_door.py --sets   # large.val / large.train against val / train, small.val's own scenes; 4 frames on the CPU; about 6 min, 2 x 6 GB
   else
-    echo "SKIP  evaluate door, golden  | no checkpoint in runs/t16_full_s0"
+    echo "SKIP  evaluate door, golden  | no checkpoint in runs/chain2_t20"
   fi
+  echo "SKIP  evaluate door, sets    | needs a run trained on the split large after D76 (runs/t16_full_s0, the only one, is not run any more: D81); tests/test_evaluate_door.py --sets RUN when there is one"
 fi
 exit $fail

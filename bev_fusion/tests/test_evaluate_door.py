@@ -5,7 +5,7 @@ Without option (CPU, seconds, no data): the door only translates options into `b
    option gives the command its table says (eval --n N, qual random / frame, qual videos N / --scenes, timing + time); the TEST split is not offered; a bad value is refused
 2  the executor: a failed fatal step ends the call (exit 1), a failed soft step of `--all` is listed and the chain goes on (exit 0), generalisation gets a second try
    and its half-made store is moved out of quant/ (never deleted), `RUN/eval/door.json` holds every call with the commands and their exit codes
-With --real (a finished run, default runs/t16_full_s0, CPU, 4 frames, about 2 minutes: two bev_suite processes load nuScenes and the model): the golden check, the
+With --real (a finished run made after D76, default runs/chain2_t20; D81: older runs are not run any more; CPU, 4 frames, about 2 minutes: two bev_suite processes load nuScenes and the model): the golden check, the
 proof that the door changes nothing: `evaluate.py RUN --quant --n N` and `bev_suite.py RUN eval --n N` on two copies of the run (config, gt.json, code snapshot; the
 checkpoint through --ckpt-dir, the stored eval/ of the run is never written) give the same metrics.json, card.json (metrics, directions, protocol, frames) and table.txt,
 number for number. CPU, because a GPU is not bit-reproducible: two runs of the same bev_suite command differ in about 800 of 5200 numbers (median 1e-5 relative, a
@@ -378,8 +378,8 @@ def check_sets_real(run, n, device):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--real", nargs="?", const="runs/t16_full_s0", default=None, metavar="RUN", help="also the golden check on this run")
-    p.add_argument("--sets", nargs="?", const="runs/t16_full_s0", default=None, metavar="RUN", help="also the named-set check on this run (trained on a split of splits/)")
+    p.add_argument("--real", nargs="?", const="runs/chain2_t20", default=None, metavar="RUN", help="also the golden check on this run")
+    p.add_argument("--sets", nargs="?", const="runs/t16_full_s0", default=None, metavar="RUN", help="also the named-set check on this run (trained on a split of splits/: `large`; t16_full_s0 is the only such run and its pinned code is not run any more (D81), so this check is not run until a run on `large` is made after D76)")
     p.add_argument("--n", type=int, default=4)
     p.add_argument("--device", default="cpu")
     a = p.parse_args()
