@@ -145,9 +145,8 @@ class ModelConfig:
                                        # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of every key frame of a clip stay in memory: measured 16.3 GB at batch 3 x clips of 3 (paging on a 12 GB card), 9.1 GB with the encoder and the lift recomputed in the backward (checkpoint_encode, camera_bevs; +2.6 s per step)
     student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
     student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the checkpoints (loaded from student_init)
-    student_frames: str = "current"    # the frames the student replaces: "current" (frame 0 only; the older frames of a pair / window keep their cached teacher outputs) | "all" (the older frames too, from their
-                                       # images in <lane_images>/sweeps (lane_branch.py build-cache-older), under no_grad: the older frames enter as constants (values, not gradients: in training mode the
-                                       # BatchNorm statistics behind the lift still couple the frames); train and stream then see one source; a one-frame (stream) batch needs no older images)
+    student_frames: str = "current"    # only "current" exists: the student replaces frame 0 (the only frame with a JPEG), the older frames of a pair / window keep their cached teacher outputs.
+                                       # The key stays because the stored configs and runs of stage B carry it; the variant "all" (t22 stage B2, CUT) was removed, its code is in the tag bf/t22.B2_s0
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     centreline_1m: bool = False        # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer
@@ -321,8 +320,8 @@ def check_config(cfg):
             errs.append("a frozen student (student_trainable False) needs student_init: a random frozen encoder stands in for nothing")
     elif cfg.student_init or cfg.student_trainable:
         errs.append("student_init / student_trainable do nothing without camera_student")
-    if cfg.student_frames not in ("current", "all"):
-        errs.append(f"student_frames={cfg.student_frames!r}: one of ['all', 'current']")
+    if cfg.student_frames != "current":
+        errs.append(f"student_frames={cfg.student_frames!r}: only 'current' exists ('all', t22 stage B2, was cut: tag bf/t22.B2_s0)")
     if cfg.motion_block and (cfg.camera_off or cfg.radar_kind == "off"):
         errs.append("motion_block reads two camera frames and the radar Doppler: it needs the camera and a radar")
     if cfg.box_vel_from_field and not cfg.motion_block:
@@ -339,8 +338,6 @@ def check_config(cfg):
             errs.append(f"centreline_1m pools the grid by {LEVELS['1m']}: {g.nx} x {g.ny} must be even")
     if errs:
         raise ValueError("; ".join(errs))
-    if cfg.student_frames == "all" and not cfg.camera_student:
-        raise ValueError("student_frames='all' does nothing without camera_student")
 
 
 class BEVFusionModel(nn.Module):
