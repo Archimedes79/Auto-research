@@ -61,7 +61,7 @@
 </g>
 <g><title>a_research: agents/ar-researcher.md; prompts/research_steps.md</title><rect x="224" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
 <text x="294.0" y="248.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Researcher</text>
-<text x="294.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scouts, summaries</text>
+<text x="294.0" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scan, deep, check</text>
 <text x="294.0" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">ar-researcher.md +1</text>
 </g>
 <g><title>a_branch: agents/ar-planner.md; agents/ar-critic.md</title><rect x="404" y="227.0" width="140" height="62" rx="7" fill="#fef3c7" stroke="#d97706" stroke-width="1.4"/>
@@ -96,9 +96,10 @@
 <text x="114.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">problem.md</text>
 </g>
 <g><title>f_research: templates/paper_note.md; templates/group_summary.md</title><rect x="224" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
-<text x="294.0" y="448.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">notes, summaries</text>
-<text x="294.0" y="463.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">K register</text>
-<text x="294.0" y="477.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">paper_note.md +1</text>
+<text x="294.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">topic notes, table</text>
+<text x="294.0" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">overview, K</text>
+<text x="294.0" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">register</text>
+<text x="294.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">paper_note.md +1</text>
 </g>
 <g><title>f_branch: templates/experiment.md; templates/plan.md; schemas/experiment.schema.json</title><rect x="404" y="427.0" width="140" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
 <text x="474.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">experiments/E&lt;id&gt;/</text>
@@ -142,10 +143,10 @@
 <text x="114.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">install_agents.py</text>
 <text x="114.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">project.py +2</text>
 </g>
-<g><title>k_research: ../bev_fusion_lane_center/tools/literature/catalogue.py</title><rect x="224" y="627.0" width="140" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
-<text x="294.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the problem&#x27;s</text>
-<text x="294.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">literature tools</text>
-<text x="294.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">catalogue.py</text>
+<g><title>k_research: tools/topic_table.py; ../bev_fusion_lane_center/tools/literature/catalogue.py</title><rect x="224" y="627.0" width="140" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<text x="294.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">topic_table.py</text>
+<text x="294.0" y="663.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ lane catalogue</text>
+<text x="294.0" y="677.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">topic_table.py +1</text>
 </g>
 <g><title>k_branch: tools/experiment.py; tools/card.py; schemas/</title><rect x="404" y="627.0" width="140" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
 <text x="474.0" y="648.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">experiment.py</text>

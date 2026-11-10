@@ -4,7 +4,7 @@
 
 - title: <the title of the paper>
 - relevance: <0-3; 3 = take it into the plan now>
-- summary: <about three sentences: what it does and why it matters for us>
+- summary: <ONE line, about three sentences and at most 700 characters: what it does and why it matters for us>
 - status: <checked (page or full text read, with the URL in the body) / digest (from a summary) / memory>
 - paper: <https link to the paper or its project page>
 - code: <https link to the repository, or ->

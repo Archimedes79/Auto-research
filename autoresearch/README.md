@@ -1,6 +1,6 @@
 # autoresearch - a research system around a product
 
-General and problem-independent: the method (`METHOD.md`), four agent roles (`agents/`), five templates (`templates/`), two prompts (`prompts/`) and the tools that make the method hold (`tools/`). A problem plugs in through its own folder. It is kept small on purpose: a new template, agent or tool only when the same thing has been done twice by hand (`METHOD.md`, "Code, git, size"), and only a few rules are hard (`METHOD.md`, "Hard rules and defaults").
+General and problem-independent: the method (`METHOD.md`), four agent roles (`agents/`), six templates (`templates/`), three prompts (`prompts/`) and the tools that make the method hold (`tools/`). A problem plugs in through its own folder. It is kept small on purpose: a new template, agent or tool only when the same thing has been done twice by hand (`METHOD.md`, "Code, git, size"), and only a few rules are hard (`METHOD.md`, "Hard rules and defaults").
 
 ## Start here: the whole system on one page
 

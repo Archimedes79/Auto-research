@@ -75,6 +75,10 @@
 /bev_fusion_lane_center/literature/code/*
 !/bev_fusion_lane_center/literature/code/README.md
 !/bev_fusion_lane_center/literature/code/_TEMPLATE.md
+# research topics (one folder per topic: candidates, one subfolder per paper with note.md and extras, overview): the records are in git; the table made by tools/topic_table.py is generated and is not
+!/bev_fusion_lane_center/literature/topics/
+**/literature/topics/*/table*.md
+**/literature/topics/*/table*.csv
 # scratch: never in an ordinary commit (`git add -A` does not sweep it in; autoresearch/tools/check_git.py refuses it before a push); a run's tag and clean_temp.py keep the scripts,
 # because the launcher's snapshot adds the .py / .sh files of the scratch folder by force (run.py scratch_scripts)
 !/bev_fusion_lane_center/temp/
