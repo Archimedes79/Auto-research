@@ -6,7 +6,6 @@ import io
 import json
 import math
 import os
-import re
 import sys
 import random
 import tempfile
@@ -17,6 +16,7 @@ from .cli import main as cli_main
 from .kill import Rule, load_rules
 from . import modules
 from .runs import Run, read_log
+from .view import detail_text, speed_row, summary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRAIN_PY = os.path.join(HERE, "..", "..", "bev_fusion", "training", "train.py")       # the BEV trainer: its snapshot check looks for the name _stop_requested
@@ -84,6 +84,13 @@ def run_cli_err(*args):
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = cli_main(list(args))
     return rc, out.getvalue(), err.getvalue()
+
+
+def status_of(tmp, name, ref=None):
+    """what Training.status shows of one run folder under tmp: (its summary dict, its detail text); `ref` is the folder of a reference run"""
+    run = Run(os.path.join(tmp, name))
+    row = summary(run, Run(os.path.join(tmp, ref)) if ref else None)
+    return row[0], detail_text(run, row)
 
 
 def early_pairs(tmp, name, early, final, total=1000, steps=(100, 250, 500, 750, 1000), skip=()):
@@ -297,52 +304,14 @@ def early_checks(tmp, ok):
     ok("early: --as-rule prints a kill.txt line only for 'consider stopping' (it hits the laggard, not the control, both directions); the CLI exits 0, usage errors 2, nothing is written")
 
 
-def _start_project(tmp, name, prepare=True):
-    """a throw-away project for `start`: records/runs, a base config, and (prepare) a prepare check that always says MISSING; -> project folder"""
+def _start_project(tmp, name):
+    """a throw-away project for the plan of a start (compose.plan_start): records/runs, a base config and a trainsuite block without prepare items; -> project folder"""
     proj = os.path.join(tmp, name)
     os.makedirs(os.path.join(proj, "records", "runs"))
     json.dump({"steps": 3000, "name": "x"}, open(os.path.join(proj, "base.json"), "w"))
-    open(os.path.join(proj, "chkgt.py"), "w").write("import sys\nsys.exit(1)\n")
     block = {"out": "composed", "train": "bash train.sh {config}", "runs": "runs"}
-    if prepare:
-        block["prepare"] = [{"name": "gt", "check": "python3 chkgt.py {config}", "build": "bash build.sh {config}"}]
     json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "trainsuite": block}, open(os.path.join(proj, "project.json"), "w"))
     return proj
-
-
-def _start_go(proj, finished, *args):
-    """`start base.json <args> --go --wait 0.1` with only run.py's launcher faked: a job whose id is in `finished` ends at once with exit 0, the others keep
-    running; -> (exit code, output, the ids of the launched jobs in order)"""
-    import subprocess as sp
-    launched, real = [], sp.Popen
-
-    class Fake:
-        pid = 4242
-
-        def __init__(self, rid):
-            self.rid = rid
-
-        def wait(self, timeout=None):
-            if self.rid in finished:
-                return 0
-            raise sp.TimeoutExpired("run.py", timeout)
-
-    def fake(argv, **kw):                                           # the prepare check and the check command run for real
-        if len(argv) > 1 and str(argv[1]).endswith("run.py"):
-            launched.append(argv[argv.index("--id") + 1])
-            return Fake(launched[-1])
-        return real(argv, **kw)
-    old = os.environ.get("AR_PROJECT")
-    os.environ["AR_PROJECT"], sp.Popen = proj, fake
-    try:
-        rc, out = run_cli("start", "base.json", *args, "--go", "--wait", "0.1")
-    finally:
-        sp.Popen = real
-        if old is None:
-            os.environ.pop("AR_PROJECT", None)
-        else:
-            os.environ["AR_PROJECT"] = old
-    return rc, out, launched
 
 
 def check_bad_steps(tmp):
@@ -356,8 +325,9 @@ def check_bad_steps(tmp):
     d = make(root, "f_opt", rows(5), total=3000)
     json.dump({"steps": "abc"}, open(os.path.join(d, "trainsuite.json"), "w"))
     assert Run(d).total == 0 and Run(d).config_problems
-    rc, out = run_cli("--root", root, "status", "--all")
-    assert rc == 0 and all(x in out for x in ("a_good", "b_str", "c_list", "d_nan", "e_inf", "f_opt")) and "bad_config" in out, out
+    for nm in ("a_good", "b_str", "c_list", "d_nan", "e_inf", "f_opt"):                      # no odd total breaks the summary or the detail of any run
+        s_, out_ = status_of(root, nm)
+        assert s_["run"] == nm and "phase" in out_, (nm, s_, out_)
     s, f, _ = cli_mod.summary(Run(os.path.join(root, "b_str")))
     assert [x.code for x in f if x.level == "warn"] == ["bad_config"] and s["total"] == 0, f
     assert Run(os.path.join(root, "a_good")).config_problems == []
@@ -410,7 +380,7 @@ def check_compose_values(tmp):
 def check_folder_twins(tmp):
     """t1.a and t1_a are one run folder (runs/t1_a): the second id is refused when the first has a run record, and the first one is not"""
     from . import compose as C
-    proj = _start_project(tmp, "twins", prepare=False)
+    proj = _start_project(tmp, "twins")
     block = json.load(open(os.path.join(proj, "project.json")))["trainsuite"]
     recs = os.path.join(proj, "records", "runs")
     os.makedirs(os.path.join(recs, "t17.a"))
@@ -432,35 +402,11 @@ def check_folder_twins(tmp):
     assert C.same_folder_ids(None, "t17.a") == []
 
 
-def check_start_hold(tmp):
-    """a held training id (or the id that shares its run folder) stops `start --go` before any job: no prepare build (hours) that the held training then waits for"""
-    proj = _start_project(tmp, "hold_start")
-    recs = os.path.join(proj, "records", "runs")
-    os.makedirs(os.path.join(recs, "t16.h"))
-    open(os.path.join(recs, "t16.h", "HOLD"), "w").write("{}")
-    rc, out, launched = _start_go(proj, (), "--id", "t16.h", "--no-card", "--no-check", "--prepare")
-    assert rc == 1 and launched == [] and "ON HOLD" in out and "no prepare job" in out, (rc, out, launched)
-    assert not os.path.exists(os.path.join(proj, "composed", "t16_h.json")) and not os.path.exists(os.path.join(proj, "runs")), "nothing is written for a held id"
-    rc, out, launched = _start_go(proj, (), "--id", "t16_h", "--no-card", "--no-check", "--prepare")
-    assert rc == 2 and launched == [], (rc, out, launched)                  # the twin id: the same run folder
-    rc, out, launched = _start_go(proj, (), "--id", "t16.free", "--no-card", "--no-check", "--prepare")
-    assert rc == 0 and launched == ["t16.free.prep_gt", "t16.free"], (rc, out, launched)
-
-
-def check_start_prepare_done(tmp):
-    """a prepare job that ends with exit 0 inside the wait is a success (the training goes on); an exit 0 of the training itself is still 'nothing runs'"""
-    proj = _start_project(tmp, "prep_done")
-    rc, out, launched = _start_go(proj, {"t16.p.prep_gt"}, "--id", "t16.p", "--no-card", "--no-check", "--prepare")
-    assert rc == 0 and launched == ["t16.p.prep_gt", "t16.p"] and "started t16.p, pid 4242" in out, (rc, out, launched)
-    rc, out, launched = _start_go(proj, {"t16.q"}, "--id", "t16.q", "--no-card", "--no-check", "--prepare")
-    assert rc == 1 and "launcher of t16.q ended" in out, (rc, out)
-
-
 def check_resolve(tmp):
     """the project's resolve command (json in, json out) fills in names before the config is written, checked and compared with a run's earlier one: what it sets is in the
     config and named in a note, a refusal or output that is no json object refuses the start, a project without the key is untouched"""
     from . import compose as C
-    proj = _start_project(tmp, "resolve", prepare=False)
+    proj = _start_project(tmp, "resolve")
     prog = "import json, sys; d = json.load(sys.stdin); n = d.pop('split'); d['lists'] = [n] * 3; json.dump(d, sys.stdout)"
     block = dict(json.load(open(os.path.join(proj, "project.json")))["trainsuite"], resolve=f"{sys.executable} -c \"{prog}\"")
     json.dump({"steps": 3000, "name": "x", "split": "big"}, open(os.path.join(proj, "base.json"), "w"))
@@ -504,9 +450,7 @@ def check_status_views(tmp):
     assert modules.data_of(Run(d)).startswith("nuscenes_full train 798"), modules.data_of(Run(d))
     s, f, _ = cli_mod.summary(Run(d))
     assert s["grad"]["peak"] == 900.0 and s["skipped"] == 3 and s["data"].startswith("nuscenes_full"), s
-    rc, out = run_cli("--root", root, "status", "g")
-    assert rc == 0 and "grad" in out.splitlines()[0] and "skip" in out.splitlines()[0], out
-    assert re.search(r"g\s+running\s+2000/3000.*\s3\s", out), out                                      # the row of the table: the skipped count
+    out = status_of(root, "g")[1]
     assert "gradient norm: first 10 rows" in out and "peak 900" in out and "step 820" in out, out
     assert "non-finite: 3 step(s) skipped at 300, 320, 900 (up to 2 in a row)" in out, out
     assert "data: nuscenes_full train 798 / val 202 scenes, gt v2 abc123" in out, out
@@ -546,8 +490,8 @@ def check_status_views(tmp):
     bad_tail = [{**r, "grad_norm": 5.0 if i < 40 else float("nan")} for i, r in enumerate(rows(60))]
     t = modules.grad_trend(Run(make(root, "gnan", bad_tail)))
     assert t["now"] is None and t["nonfinite_recent"] == 20 and t["peak"] == 5.0 and t["ratio"] is None, t         # the last 20 rows say nothing finite: no calm 'now' from older rows
-    rc, out = run_cli("--root", root, "status", "gnan")
-    assert "non-finite" in out.splitlines()[1] and "20 of those rows are NOT finite" in out, out
+    out = status_of(root, "gnan")[1]
+    assert "20 of those rows are NOT finite" in out, out
     short = modules.grad_trend(Run(make(root, "gshort", [{**r, "grad_norm": 3.0} for r in rows(8)])))
     assert short["now"] == 3.0 and short["base"] is None and short["ratio"] is None and short["first"] == 3.0, short
     zero = modules.grad_trend(Run(make(root, "gzero", [{**r, "grad_norm": 0.0 if i < 40 else 2.0} for i, r in enumerate(rows(60))])))
@@ -672,7 +616,7 @@ def check_queue_view(tmp):
         pass
 
 
-REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_start_hold, check_start_prepare_done, check_resolve, check_status_views, check_queue_view)       # review of 2026-11-02 (+ the resolve hook), then the views of 2026-11-04, one rule each
+REVIEW_CHECKS = (check_bad_steps, check_compose_values, check_folder_twins, check_resolve, check_status_views, check_queue_view)       # review of 2026-11-02 (+ the resolve hook), then the views of 2026-11-04, one rule each
 
 
 def main():
@@ -843,8 +787,8 @@ def main():
             f.write("# card kill criterion\ngroup.lines@1000 > 0.9   # inline\nthis line is no rule\n")
         rules, problems = load_rules(r, ["total@100 > 1", "nonsense"])
         assert len(rules) == 2 and len(problems) == 2 and "line 3" in problems[0], (rules, problems)
-        rc, out = run_cli("--root", tmp, "status", "good")                      # a bad rule does not kill the status
-        assert "kill_rule" in out and "good" in out
+        s_, out = status_of(tmp, "good")                                        # a bad rule does not kill the status
+        assert "kill_rule" in out and s_["run"] == "good"
         ok("kill rules: ok / hit / pending / unknown key / NaN = hit, inline comments, a bad line is reported and the rest still works")
 
         # 7b the encodings of kill.txt: UTF-8, UTF-8 with BOM, UTF-16 with BOM (PowerShell 5.1 `>`) all work; bytes that are no text are ONE problem, no exception,
@@ -867,9 +811,9 @@ def main():
             f.write(b"\xff\xfe\xfd group.lines@1000 > 0.9\n\x80\x81")
         rs, pr = load_rules(Run(bd))
         assert rs == [] and len(pr) == 1 and "not text" in pr[0], (rs, pr)
-        rc, out = run_cli("--root", tmp, "status")
-        assert "enc_garbage" in out and "enc_utf-16_le_bom" in out and "good" in out, out
-        ok("kill.txt: UTF-8 / BOM / UTF-16 with BOM are read, bytes that are no text are one problem and status still lists all runs")
+        for nm in ("enc_garbage", "enc_utf-16_le_bom", "good"):
+            status_of(tmp, nm)                                                    # the status of each of them still works
+        ok("kill.txt: UTF-8 / BOM / UTF-16 with BOM are read, bytes that are no text are one problem and the status of each still works")
 
         # 8 control: stale files are moved aside, not compared by time; the copy in train.py agrees
         d = os.path.join(tmp, "good")
@@ -898,8 +842,7 @@ def main():
             fh.write('{"step": NaN, "total": 1.0}\n{"step": Infinity, "total": 1.0}\n{"step": 420, "total": 1.0, "huge": ' + "9" * 400 + "}\n")      # a 400-digit integer: no float
         rn = Run(nd)
         assert rn.step == 420 and len(rn.train) == 21 and "huge" not in rn.train[-1], (rn.step, len(rn.train))
-        rc, out = run_cli("--root", tmp, "status")
-        assert rc is not None and "nanstep" in out, out
+        assert status_of(tmp, "nanstep")[0]["step"] == 420
         assert control.honours_stop(os.path.join(tmp, "good")) is None
         assert control.honours_stop(make(tmp, "snap_old", rows(5), honours=False)) is False
         assert control.honours_stop(make(tmp, "snap_new", rows(5), honours=True)) is True
@@ -931,8 +874,6 @@ def main():
         make(tmp, "noenf", rows(100, t0=now - 2000), honours=True)
         run_cli("--root", tmp, "watch", "noenf", "--kill", "group.lines@1000 > 0.9", "--once")
         assert not os.path.exists(os.path.join(tmp, "noenf", "CONTROL"))
-        rc, out = run_cli("--root", tmp, "stop", "enf_old")
-        assert rc == 2 and "NOT requested" in out
         real_sleep, calls = cli.time.sleep, [0]
 
         def stop_after(_):
@@ -1008,7 +949,7 @@ def main():
             cli.time.sleep = real_sleep
         assert calls[0] >= 3 and "failed at step" in buf.getvalue() and "running at step" in buf.getvalue().split("failed at step")[1], buf.getvalue()
         ok("watch keeps a run that failed while watched for the launcher's retry")
-        rc, out = run_cli("--root", tmp, "status", "retry")                       # the events `watch` wrote are shown by the detail of one run
+        out = status_of(tmp, "retry")[1]                                          # the events `watch` wrote are shown by the detail of one run
         assert "last events of `watch`" in out and "failed at step" in out, out
         ok("status of one run shows the last events written by watch")
 
@@ -1092,31 +1033,20 @@ def main():
         assert r.step == 50 and r.total == 100 and r.loss_key == "loss" and r.state() == "running"
         os.makedirs(os.path.join(tmp, "empty_log"))
         open(os.path.join(tmp, "empty_log", "log.jsonl"), "w").close()
-        rc, out = run_cli("--root", tmp, "status", "--json")
-        names = {x["run"] for x in json.loads(out)}
-        assert "empty_log" not in names and "good" in names
-        rc, out = run_cli("--root", tmp, "status", "--all", "--json")
-        assert {x["run"] for x in json.loads(out)} >= {"good", "other", "ref", "empty_log"}
-        rc, out = run_cli("--root", tmp, "status", "worse:ref")
-        assert "vs_ref" in out, out
-        rc, out = run_cli("--root", tmp, "status", "good")
-        assert "running" in out and "2000/3000" in out, out
-        ok("another layout through trainsuite.json; status as table / json, without empty logs by default, with a reference per run")
+        s_ref = status_of(tmp, "worse", ref="ref")[0]
+        assert any(f["code"] == "vs_ref" for f in s_ref["findings"]), s_ref["findings"]
+        s_good = status_of(tmp, "good")[0]
+        assert s_good["state"] == "running" and s_good["step"] == 2000 and s_good["total"] == 3000, s_good
+        ok("another layout through trainsuite.json; the summary with a reference per run")
 
         # 11b a run that died before its first row (import error: a traceback in the text log, no metrics stream) is listed as failed; an old text-only folder is not
         c0 = make(tmp, "crash_start", [], text="Traceback (most recent call last):\n  File x\nImportError: no module named torchvision\n")
         os.remove(os.path.join(c0, "log.jsonl"))
         o0 = make(tmp, "old_text_only", [], text="loading\n", age=3 * 86400)
         os.remove(os.path.join(o0, "log.jsonl"))
-        rc, out = run_cli("--root", tmp, "status", "--json")
-        got = {x["run"]: x for x in json.loads(out)}
-        assert got["crash_start"]["state"] == "failed" and "torchvision" in str(got["crash_start"]["findings"]), got.get("crash_start")
-        assert "old_text_only" not in got and "empty_log" not in got and "good" in got
-        rc, out = run_cli("--root", tmp, "status")
-        assert "crash_start" in out and "failed" in out, out
-        rc, out = run_cli("--root", tmp, "status", "--all", "--json")
-        assert {"crash_start", "old_text_only", "empty_log"} <= {x["run"] for x in json.loads(out)}
-        ok("status lists a run that crashed before its first row, not an old folder with a text log only")
+        s_c = status_of(tmp, "crash_start")[0]
+        assert s_c["state"] == "failed" and "torchvision" in str(s_c["findings"]), s_c
+        ok("a run that crashed before its first row is a failed run with the traceback as its finding")
 
         # 13 readiness: phase and percentage
         d = make(tmp, "rdy", rows(75, t0=now - 1500), total=3000)                                   # step 1500 of 3000
@@ -1134,12 +1064,8 @@ def main():
         assert Run(d_old).phase() == "stalled" and Run(d_old).ready_pct() == 20.0 and Run(d_old).ready_at() is None, "a stalled run keeps its share and has no ready time"
         d_fail = make(tmp, "rdy_failed", rows(30), total=3000, text="step 600: total 1.0\nTraceback (most recent call last):\n  File x\nRuntimeError: boom\n")
         assert Run(d_fail).phase() == "failed" and Run(d_fail).ready_pct() == 20.0
-        rc, out = run_cli("--root", tmp, "status", "rdy", "rdy_end")
-        assert "ready" in out and "50%" in out and "100%" in out and "last step" in out, out
-        rc, out = run_cli("--root", tmp, "status", "rdy", "--json")
-        j = json.loads(out)[0]
+        j, out = status_of(tmp, "rdy")
         assert j["phase"] == "training" and j["ready_pct"] == 50.0 and j["pct"] == 50.0 and j["ready_at"] > now, j
-        rc, out = run_cli("--root", tmp, "status", "rdy")
         assert "phase training, ready 50 %, ETA" in out, out
         # watch prints a line for every 10 % of readiness, not for the first look
         d = make(tmp, "rdy_watch", rows(75, t0=now - 1500), total=3000)
@@ -1192,10 +1118,10 @@ def main():
         for st in (1000, 90, 300):
             json.dump({"step": st, "kind": "spike"}, open(os.path.join(d2, f"incident_{st}.json"), "w"))
         assert [i["step"] for i in modules.incidents(Run(d2))] == [90, 300, 1000], "by step, not by file name"
-        rc, out = run_cli("--root", tmp, "status", "mod_inc")
+        out = status_of(tmp, "mod_inc")[1]
         assert "modules (median of the last 20 rows" in out and "fusion" in out and "time: 1.00 s per step, 0.10 s of it waiting" in out and "incidents (2" in out \
             and "step 400: nonfinite" in out and "loss groups" in out, out
-        rc, out = run_cli("--root", tmp, "status", "good")
+        out = status_of(tmp, "good")[1]
         assert "modules (median" not in out and "incidents (" not in out, "a trainer without a probe loses nothing"
         ok("observability: dead / exploding / not-moving modules (frozen ones exempt), data-bound steps, incident dumps, and the detail view of all of it")
 
@@ -1206,7 +1132,7 @@ def main():
             json.dump(dict(steps=3000, **cfg_val), open(os.path.join(d, "config.json"), "w"))
             got = "dead_module" in codes(Run(d), "warn")                                                                # also: a freeze: true must not crash status / health
             assert got == (not exempt), (cfg_val, got)
-            run_cli("--root", tmp, "status", "mod_cfg")
+            status_of(tmp, "mod_cfg")
         pause = lambda n: keyed(n, lambda r: dict(good(r), **{"grad.head": 0.0 if r["step"] > 1500 else 2.0}))          # noqa: E731
         rs = pause(100)
         for r in rs[-5:]:
@@ -1223,9 +1149,9 @@ def main():
         assert Run(make(tmp, "mod_ended", rows(150, t0=now - 9000), total=3000, age=4000)).phase() == "ended" and Run(os.path.join(tmp, "mod_ended")).ready_pct() == 99.0
         assert Run(make(tmp, "rdy_neg", rows(5), total=-100)).ready_pct() is None
         d = make(tmp, "rdy_huge", rows(30, t0=now - 600), total=10 ** 30)
-        rc, out = run_cli("--root", tmp, "status", "rdy_huge")
-        assert rc == 0 and "phase training" in out, out
-        assert cli_main is not None and __import__("trainsuite.cli", fromlist=["x"]).clock(1e30) == "-" and __import__("trainsuite.cli", fromlist=["x"]).clock(None) == "-"
+        out = status_of(tmp, "rdy_huge")[1]
+        assert "phase training" in out, out
+        assert __import__("trainsuite.view", fromlist=["x"]).clock(1e30) == "-" and __import__("trainsuite.view", fromlist=["x"]).clock(None) == "-"
         d = make(tmp, "br[1]_run", keyed(100, good))
         json.dump({"step": 50, "kind": "spike"}, open(os.path.join(d, "incident_50.json"), "w"))
         assert [i["step"] for i in modules.incidents(Run(d))] == [50], "a run folder name with [ is no glob pattern"
@@ -1294,7 +1220,7 @@ def main():
         assert rc == 0 and "steps: 3000 -> 200  (preset small)" in so and "steps: 200 -> 500  (--set)" in so and json.load(open(os.path.join(cdir, "o2.json")))["steps"] == 500, so
         rc, so, se = run_cli_err("compose", os.path.join(cdir, "base.json"), "--set", "oops")
         assert rc == 2 and "key=value" in se, (rc, se)
-        # start: the plan, the check, the command; nothing is started without --go
+        # the plan of a start (compose.plan_start): the check, the command
         proj = os.path.join(tmp, "proj")
         os.makedirs(os.path.join(proj, "presets"))
         os.makedirs(os.path.join(proj, "records", "runs"))
@@ -1369,132 +1295,13 @@ def main():
                 pass
         assert C.compose(gb, [], ["model={}"])[0] == gb and C.compose(gb, [], ['model={"x": 9}'])[0]["model"] == {"x": 9, "y": 2}, "an object sets its keys; an empty one changes nothing"
         assert "unchanged" not in "\n".join(C.describe(C.compose(gb, [], ["flag=true"])[1])) and "unchanged" in "\n".join(C.describe(C.compose(gb, [], ["flag=1"])[1])), "1 -> true is a change"
-        old_env = os.environ.get("AR_PROJECT")
-        os.environ["AR_PROJECT"] = proj
-        try:
-            args = ["start", "base.json", "--id", "t15.h", "--preset", "small", "--hyp", "h", "--pred", "p", "--rule", "r"]
-            rc, so = run_cli(*args)
-            assert rc == 0 and "steps: 3000 -> 50  (preset small)" in so and "check: python3 chk.py composed/t15_h.preview.json -> exit 0" in so and "config ok" in so \
-                and "(nothing started: add --go)" in so and "--id t15.h --gpu --split train" in so and "composed/t15_h.json" in so, so
-            assert json.load(open(os.path.join(proj, "composed", "t15_h.preview.json")))["name"] == "t15_h" and not os.path.exists(os.path.join(proj, "composed", "t15_h.json")), \
-                "a preview writes the preview file and leaves the real config alone"
-            rc, so = run_cli(*args, "--set", "bogus=1")
-            assert rc == 1 and "unknown key bogus" in so and "nothing started" in so and "add --go" not in so, so
-            rc, so = run_cli(*args, "--set", "bogus=1", "--no-check")
-            assert rc == 0 and "check:" not in so, "--no-check skips the check"
-            rc, so, se = run_cli_err("start", "base.json", "--id", "t15.i", "--hyp", "h")
-            assert rc == 2 and "--pred" in se and "--rule" in se, se
-            rc, so = run_cli("start", "base.json", "--id", "t15.j", "--no-card", "--run-arg=--seed", "--run-arg=1", "--no-check")
-            assert rc == 0 and "--no-card --seed 1 --" in so, so
-            os.makedirs(os.path.join(proj, "records", "runs", "t15.k"))
-            open(os.path.join(proj, "records", "runs", "t15.k", "HOLD"), "w").write("{}")
-            rc, so = run_cli("start", "base.json", "--id", "t15.k", "--no-card", "--no-check")
-            assert rc == 0 and "ON HOLD" in so, "the hold note comes from the project's run records"
-            import subprocess as sp
-            calls, real_popen = [], sp.Popen
-
-            class FakeProc:
-                pid = 4242
-                returncode = None
-
-                def wait(self, timeout=None):
-                    raise sp.TimeoutExpired("run.py", timeout)
-
-            class DeadProc(FakeProc):
-                returncode = 2
-
-                def wait(self, timeout=None):
-                    return 2
-
-            def fake_popen_of(cls):
-                def fake(argv, **kw):                                  # only the launcher is faked, the check runs for real
-                    if len(argv) > 1 and str(argv[1]).endswith("run.py"):
-                        calls.append((argv, kw))
-                        return cls()
-                    return real_popen(argv, **kw)
-                return fake
-            sp.Popen = fake_popen_of(FakeProc)
-            try:
-                rc, so = run_cli(*args, "--go")
-            finally:
-                sp.Popen = real_popen
-            assert rc == 0 and "started t15.h, pid 4242" in so and "watch t15_h" in so and len(calls) == 1, so
-            (argv_, kw_), = calls
-            assert argv_[2:4] == ["--id", "t15.h"] and kw_["cwd"] == proj and kw_["env"]["AR_PROJECT"] == proj and kw_["start_new_session"] is True and os.path.exists(os.path.join(proj, "runs", "t15_h.launcher.log"))
-            assert json.load(open(os.path.join(proj, "composed", "t15_h.json")))["name"] == "t15_h" and "composed/t15_h.json" in argv_, "--go writes the real config"
-            calls.clear()
-            sp.Popen = fake_popen_of(DeadProc)
-            try:
-                rc, so = run_cli(*args, "--go", "--wait", "0.1")
-            finally:
-                sp.Popen = real_popen
-            assert rc == 1 and "ended after 0.1 s with exit 2: nothing runs" in so and "started, pid" not in so, so
-            os.environ["AR_PROJECT"] = os.path.relpath(proj, sys.modules["project"].AR)           # a relative AR_PROJECT: the launcher runs in the project folder, so it gets the absolute one
-            calls.clear()
-            sp.Popen = fake_popen_of(FakeProc)
-            try:
-                rc, so = run_cli(*args, "--go")
-            finally:
-                sp.Popen = real_popen
-            assert rc == 0 and len(calls) == 1 and calls[0][1]["env"]["AR_PROJECT"] == proj, (so, calls)
-            os.environ.pop("AR_PROJECT")
-            rc, so = run_cli("start", "base.json", "--id", "t15.l", "--no-card", "--no-check", "--project", proj)
-            assert rc == 0 and "--id t15.l" in so, "--project replaces AR_PROJECT"
-            # the prepare step: data a run needs (the GT store) is checked, built as a run of its own when missing, and the training waits for it
-            os.environ["AR_PROJECT"] = proj
-            open(os.path.join(proj, "chkgt.py"), "w").write("import json, os, sys\njson.load(open(sys.argv[1]))\nok = os.path.exists('gt_present')\nprint('GT store present' if ok else 'GT store of the run missing')\nsys.exit(0 if ok else 1)\n")
-            pblock = dict(block, prepare=[{"name": "gt", "check": "python3 chkgt.py {config}", "build": "bash build.sh {config}", "wait_min": 600}])
-            json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "trainsuite": pblock}, open(os.path.join(proj, "project.json"), "w"))
-            pargs = ["start", "base.json", "--id", "t15.p", "--no-card", "--no-check"]
-            rc, so = run_cli(*pargs)
-            assert rc == 1 and "prepare gt:" in so and "MISSING" in so and "GT store of the run missing" in so and "--prepare" in so \
-                and "--id t15.p.prep_gt --no-card -- bash build.sh composed/t15_p.json" in so and "--after" not in so and "nothing started" not in so, so
-            rc, so = run_cli(*pargs, "--prepare")
-            assert rc == 0 and "(nothing started: add --go)" in so, so
-            lines = [ln for ln in so.splitlines() if ln.startswith("cd ")]
-            assert len(lines) == 2 and "--id t15.p.prep_gt" in lines[0] and "--gpu" not in lines[0] and "--id t15.p --gpu" in lines[1] \
-                and "--after t15.p.prep_gt --wait-after 600 -- bash train.sh" in lines[1], lines
-            open(os.path.join(proj, "gt_present"), "w").close()
-            rc, so = run_cli(*pargs)
-            assert rc == 0 and "(present)" in so and "--after" not in so and "prep_gt --no-card" not in so, so
-            os.remove(os.path.join(proj, "gt_present"))
-            rc, so = run_cli(*pargs, "--skip-prepare")
-            assert rc == 0 and "prepare gt" not in so, "--skip-prepare does not look"
-            calls.clear()
-            sp.Popen = fake_popen_of(FakeProc)
-            try:
-                rc, so = run_cli(*pargs, "--prepare", "--go")
-            finally:
-                sp.Popen = real_popen
-            assert rc == 0 and [c[0][3] for c in calls] == ["t15.p.prep_gt", "t15.p"] and "started t15.p.prep_gt, pid 4242" in so and "started t15.p, pid 4242" in so, (so, [c[0][:4] for c in calls])
-            assert "--after" in calls[1][0] and "--gpu" not in calls[0][0] and os.path.exists(os.path.join(proj, "runs", "t15_p_prep_gt.launcher.log")), calls
-            calls.clear()
-            sp.Popen = fake_popen_of(DeadProc)
-            try:
-                rc, so = run_cli(*pargs, "--prepare", "--go", "--wait", "0.1")
-            finally:
-                sp.Popen = real_popen
-            assert rc == 1 and len(calls) == 1 and "launcher of t15.p.prep_gt ended" in so and "later runs are not started" in so, (so, len(calls))
-            json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs", "trainsuite": dict(block, prepare=[{"name": "bad name", "check": "x", "build": "y"}])},
-                      open(os.path.join(proj, "project.json"), "w"))
-            rc, so, se = run_cli_err(*pargs)
-            assert rc == 2 and "need a name" in se, se
-            os.environ["AR_PROJECT"] = proj
-            json.dump({"tag_prefix": "t", "ledger": "LEDGER.csv", "ledger_md": "LEDGER.md", "run_records": "records/runs"}, open(os.path.join(proj, "project.json"), "w"))
-            rc, so, se = run_cli_err(*args)
-            assert rc == 2 and '"trainsuite" block' in se, se
-        finally:
-            if old_env is None:
-                os.environ.pop("AR_PROJECT", None)
-            else:
-                os.environ["AR_PROJECT"] = old_env
-        ok("compose: presets in order, --set as json or string, the base untouched, every change listed (NEW keys and typos marked), errors refused; start: the check, the exact run.py command, resume / hold notes, nothing started without --go")
+        ok("compose: presets in order, --set as json or string, the base untouched, every change listed (NEW keys and typos marked), errors refused")
 
         # 15b the review of 2026-11-02: a bad step total, NaN / 1e3 in --set, ids that share a folder, a held id, a prepare job that is done at once
         for check in REVIEW_CHECKS:
             check(tmp)
         ok("review fixes: a non-numeric steps is a finding (status goes on), --set / presets refuse NaN and read 1e3 as 1000, t1.a and t1_a do not share a run folder, "
-           "start --go refuses a held id before any job, a prepare job that finishes inside --wait does not stop the training, the project's resolve command fills in names (a split) before the config is written")
+           "the project's resolve command fills in names (a split) before the config is written")
 
         # 16 the view of run.py's queue
         qp =os.path.join(tmp, "qproj")
@@ -1531,32 +1338,25 @@ def main():
         assert "slot 0: free  (a stale owner" not in so and "slot 0: free" in so, "an empty slot is free"
         ok("queue: the slots with their holders, the line in order without a dead launcher's ticket, the RAM gate against /proc/meminfo, the runs on hold")
 
-        # 17 the speed table: runs side by side against the first one
+        # 17 the speed row (Training.compare puts two of them side by side)
         sb = make(tmp, "sp_base", rows(40, sec=2.0, t0=now - 5000), total=800)                      # 2.0 s per step
         fr = rows(40, sec=1.0, t0=now - 5000)
         for r_ in fr:
             r_.update({"t_data": 0.2, "t_step": 1.0, "gpu_gb": 6.5})
         sf = make(tmp, "sp_fast", fr, total=800)
         open(os.path.join(sf, "profile.txt"), "w").write("window: 30 optimiser steps, 30.00 s wall = 1.000 s per step\nGPU kernels busy: 21.00 s of 30.00 s = 70 % (the rest is the GPU waiting)\n")
-        rc, so = run_cli("--root", tmp, "speed", "sp_base", "sp_fast", "--skip", "5")
-        lines_ = {ln.split()[0]: ln for ln in so.splitlines() if ln.startswith("sp_")}
-        assert rc == 0 and "x1.00" in lines_["sp_base"] and "x2.00" in lines_["sp_fast"] and "2.00" in lines_["sp_base"] and "1.00" in lines_["sp_fast"], so
-        assert "20 %" in lines_["sp_fast"] and "70 %" in lines_["sp_fast"] and "6.5" in lines_["sp_fast"] and "7.1" in lines_["sp_base"], so
-        assert " - " in lines_["sp_base"] or "-" in lines_["sp_base"].split()[4:6], "no probe, no profile: dashes"
-        short = make(tmp, "sp_short", rows(10, sec=1.0, t0=now - 5000), total=800)                   # shorter than the others: compared at the last step they share
-        rc, so = run_cli("--root", tmp, "speed", "sp_base", "sp_short", "--skip", "2")
-        assert "loss@200" in so and rc == 0, so
-        try:
-            run_cli_err("--root", tmp, "speed", "no_such_run")
-            raise AssertionError("an unknown run must be refused")
-        except SystemExit as e:
-            assert "no run directory" in str(e), e
-        ok("speed: s/step and the speed-up against the first run, data wait (probe), GPU busy (profile.txt), peak memory, the loss at the last shared step")
+        xb, xf = speed_row(Run(sb), 5), speed_row(Run(sf), 5)
+        assert abs(xb["s_step"] - 2.0) < 0.01 and abs(xf["s_step"] - 1.0) < 0.01, (xb, xf)                 # the speed-up is 2.0
+        assert abs(xf["data_share"] - 0.2) < 0.01 and xf["gpu_busy"] == 70 and abs(xf["gpu_gb"] - 6.5) < 0.01 and abs(xb["gpu_gb"] - 7.1) < 0.01, xf
+        assert xb["data_share"] is None and xb["gpu_busy"] is None, "no probe, no profile: nothing"
+        ok("speed row: s/step, the data wait (probe), the GPU busy share (profile.txt), the peak memory")
 
         # 12 curves
         try:
             import matplotlib  # noqa: F401
-            run_cli("--root", tmp, "curves", "good", "worse", "--out", os.path.join(tmp, "c.png"))
+            from .curves import default_keys, plot as draw_curves
+            runs_ = [Run(os.path.join(tmp, "good")), Run(os.path.join(tmp, "worse"))]
+            draw_curves(runs_, default_keys(runs_[0]), os.path.join(tmp, "c.png"), 10)
             assert os.path.getsize(os.path.join(tmp, "c.png")) > 5000
             ok("curves png of two runs")
         except ImportError:

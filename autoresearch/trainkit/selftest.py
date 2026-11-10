@@ -316,6 +316,22 @@ def main():
         check(resolve_device("cuda") == "cuda", "resolve_device: cuda with CUDA is cuda")
     finally:
         torch.cuda.is_available = real_available
+    # the engine of a trainer script: a pinned copy next to it that is not the imported trainkit is refused, no pinned copy says which one runs, the pinned copy imported says so
+    from trainkit.util import check_engine
+    with tempfile.TemporaryDirectory() as td:
+        live, script, pin = os.path.join(td, "live"), os.path.join(td, "script"), os.path.join(td, "script", "trainkit")
+        os.makedirs(live)
+        os.makedirs(pin)
+        line = check_engine(os.path.join(td, "nowhere"), live)
+        check("live copy" in line and live in line and "no pinned copy" in line, "check_engine: no pinned copy -> one line that names the trainkit in use")
+        try:
+            check_engine(script, live)
+            raise AssertionError("a pinned copy next to the script and another trainkit imported must be refused")
+        except SystemExit as e:
+            check(pin in str(e) and live in str(e), "check_engine: a pinned copy next to the script that is not the imported trainkit is refused, naming both")
+        check("pinned copy" in check_engine(script, pin), "check_engine: the pinned copy imported -> the line says so")
+        named = check_engine(td).split("the live copy ")[1].split(" (no pinned")[0]                  # td has no trainkit folder: the line names the imported one
+        check(os.path.realpath(named) == os.path.dirname(os.path.realpath(sys.modules["trainkit.util"].__file__)), "check_engine: the default engine is the imported trainkit")
     print("trainkit selftest passed")
 
 

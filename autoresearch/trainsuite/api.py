@@ -13,9 +13,8 @@
     t.plot("t23.C_s1")                                     # loss curves as a png                                                      -> {png}
     t.compare("t20.base_s0", "speed3.fast")                # s/step, data wait, GPU busy, peak memory, loss at the last shared step     -> {rows}
 
-Every method is also a command with the class name in front: `python -m trainsuite Training.run job.json`, `Training.status t23_C_s1`, `Training.resume t23_C_s1 --words "..."` (`python -m trainsuite
-methods` lists them with their arguments; the map is in the README of trainsuite). Short forms where no older command has the word: `run`, `check`, `list`; `status`, `stop`, `plot`, `compare` and
-`resume` are older commands with their own meaning, so they always need the class name. The command prints a short text, or with `--json` exactly what the method returns. `i` is an id (`t23.C_s1`)
+Every method is also a command by its name: `python -m trainsuite run job.json`, `status t23_C_s1`, `resume t23_C_s1 --words "..."` (the class name in front, `Training.run`, is always valid;
+`python -m trainsuite methods` lists them with their arguments; the map is in the README of trainsuite). Only `health`, `watch`, `early`, `compose` and `queue ...` are older commands that are no methods. The command prints a short text, or with `--json` exactly what the method returns. `i` is an id (`t23.C_s1`)
 or a run folder name (`t23_C_s1`). Resume needs the person's own words: a rule, not a convenience (autoresearch/METHOD.md, hard rule 6). A queue is NOT part of the class (queue_api.py has it as a mixin
 for whoever needs one). One process works on one project at a time: the project is passed to the modules through the environment, so the methods take a lock (two threads with two projects wait).
 """
@@ -35,7 +34,7 @@ import suitecli
 from . import compose as C
 from . import control, health, modules
 from . import trainqueue as TQ
-from .view import speed_row, summary
+from .view import detail_text, speed_row, summary
 from .kill import Rule
 from .runs import Run
 
@@ -290,11 +289,20 @@ def must_exist(c, rid):
             raise TrainingError(f"no run record or ledger row named {rid!r}")
 
 
+def _detail(run, row):
+    """the detail text of a run; what is shown must never break the data of `status`"""
+    try:
+        return detail_text(run, row)
+    except Exception as e:  # noqa: BLE001
+        return f"(the detail view failed: {type(e).__name__}: {e})"
+
+
 def _wait_stopped(c, rid, rd, reason, wait):
-    """True when the run has stopped within `wait` seconds (STOPPED written, or its launcher's record is not running any more), else False. The request is written again every RESEND_S"""
+    """True when the run has stopped within `wait` seconds (STOPPED written, or its launcher's record is there and not running any more), else False. The request is written again every RESEND_S"""
     t0 = last = time.time()
     while True:
-        if Run(rd, "total").stopped() is not None or c.R.record(os.path.join(c.records, rid)).get("status") not in ("running", "waiting"):
+        rec = c.R.record(os.path.join(c.records, rid))
+        if Run(rd, "total").stopped() is not None or (rec and rec.get("status") not in ("running", "waiting")):          # a run that has no launcher record (started by hand) is stopped when it says so
             return True
         if time.time() - t0 >= wait:
             return False
@@ -376,6 +384,7 @@ class Training:
         j = self._job(job)
         c = self._c(j)
         plan, problems, missing = _checked_plan(c, j, final=False)
+        problems = TQ.start_blocks(c, j["id"]) + problems                 # the person's pause of the queue (or a held item of it) binds a direct start (a queued one may be added)
         if missing and not j["prepare"]:
             problems.append("missing data: " + ", ".join(m["name"] for m in missing) + ' (build it first, or set "prepare": true: the build becomes a run of its own that the training waits for)')
         return dict(ok=not problems, id=j["id"], changes=C.describe(plan["changes"], plan["base_keys"]), notes=list(plan["notes"]), problems=problems,
@@ -387,6 +396,7 @@ class Training:
         j = self._job(job)
         c = self._c(j)
         plan, problems, missing = _checked_plan(c, j, final=True)
+        problems = TQ.start_blocks(c, j["id"]) + problems
         if missing and not j["prepare"]:
             problems.append("missing data: " + ", ".join(m["name"] for m in missing) + ' (build it first, or set "prepare": true)')
         if problems:
@@ -422,7 +432,8 @@ class Training:
     @errors
     def status(self, i=None, kill=(), ref=None, skip=10):
         """one training in full: state and phase, step, ETA, loss, the gradient norm (first / now / peak), the non-finite steps skipped, the data it trained on, the health findings,
-        the kill rules (the job's and `kill`), the speed (s/step, data wait, GPU busy, peak GB). i=None is the running training (state "idle" if none)."""
+        the kill rules (the job's and `kill`), the speed (s/step, data wait, GPU busy, peak GB). `text` is the detail a person reads (phase and ETA, findings, last evaluation, loss groups,
+        modules, time split, incident dumps). i=None is the running training (state "idle" if none)."""
         c = self._c()
         rid = resolve(c, i)[0]
         if rid is None:
@@ -442,22 +453,23 @@ class Training:
         s, findings, kills = summary(run_, refrun, rules)
         rstate = c.R.state_of(os.path.join(c.records, rid))
         if rstate in ("done", "ok") and s["state"] != "done":     # the launcher's record is the authority: the done flag exists only for exit 0
-            s.update(state="done", phase="done", ready_pct=100.0, pct=100.0, eta_s=None)
+            s.update(state="done", phase="done", ready_pct=100.0, pct=100.0, eta_s=None, ready_at=None)
         elif rstate in BAD_ENDS and s["state"] in ("running", "new", "stalled"):      # the trainer was killed (out of memory, SIGKILL): no traceback, the heartbeat is fresh for minutes
             code = c.R.record(os.path.join(c.records, rid)).get("exit")
-            s.update(state=rstate, phase=rstate, eta_s=None)
+            s.update(state=rstate, phase=rstate, eta_s=None, ready_at=None)
             findings.append(health.Finding("alert", "launcher_" + rstate, f"the launcher's record says {rstate}" + (f" (exit {code})" if code is not None else "")
                                            + " while the run folder still looks alive: the trainer is gone (killed? out of memory?)"))
         return dict(id=rid, state=s["state"], phase=s["phase"], step=s["step"], total=s["total"], pct=s["ready_pct"], eta_s=s["eta_s"], ready_at=s["ready_at"],
                     s_per_step=s["s_per_step"], loss=s["loss"], grad=s["grad"], skipped=s["skipped"], data=s["data"], restarts=s["restarts"],
-                    findings=[f._asdict() for f in findings], kill=[dict(rule=r.text, status=st, value=v) for r, st, v in kills], speed=speed_row(run_, skip))
+                    findings=[f._asdict() for f in findings], kill=[dict(rule=r.text, status=st, value=v) for r, st, v in kills], speed=speed_row(run_, skip),
+                    text=_detail(run_, (s, findings, kills)))
 
     @errors
     def plot(self, i, out=None, keys=None, smooth=10):
-        """the loss curves of one run as a png (needs matplotlib); `keys`: a comma list of log keys (default: the loss and its groups). -> {png}"""
+        """the loss curves of one run (or several: `a,b`) as a png (needs matplotlib); `keys`: a comma list of log keys (default: the loss and its groups). -> {png}"""
         from .curves import default_keys, plot as draw
         c = self._c()
-        ids = [i] if not isinstance(i, (list, tuple)) else list(i)
+        ids = list(i) if isinstance(i, (list, tuple)) else [x for x in str(i).split(",") if x]            # `a,b` overlays two runs
         dirs = []
         for x in ids:
             rid = resolve(c, x)[0]
@@ -484,10 +496,10 @@ class Training:
             runs.append((rid, Run(_run_dir(c, rid), "total")))
         rows = [(rid, r, speed_row(r, skip)) for rid, r in runs]
         common = min(r.step for _, r, _ in rows)
-        base_s, base_loss = rows[0][2]["s_step"], rows[0][1].window_mean("total", common)
+        base_s, base_loss = rows[0][2]["s_step"], rows[0][1].window_mean(rows[0][1].loss_key, common)
         out = []
         for rid, r, x in rows:
-            loss = r.window_mean("total", common)
+            loss = r.window_mean(r.loss_key, common)
             out.append(dict(id=rid, steps=x["step"], s_step=x["s_step"], speedup=(base_s / x["s_step"]) if (base_s and x["s_step"]) else None, data_share=x["data_share"],
                             gpu_busy=x["gpu_busy"], gpu_gb=x["gpu_gb"], loss_at_common=loss, loss_vs_base_pct=(100 * (loss - base_loss) / abs(base_loss)) if (loss is not None and base_loss) else None))
         return dict(common_step=common, rows=out)
@@ -536,7 +548,7 @@ class Training:
 
 
 # ---- the command line: the same methods as commands (suitecli.py generates it from the signatures)
-LEGACY = ("status", "health", "curves", "speed", "queue", "stop", "resume", "watch", "early", "compose", "start", "selftest", "plot", "compare")      # older commands: their words keep their meaning
+LEGACY = ("health", "queue", "watch", "early", "compose", "selftest")      # older commands: their words keep their meaning
 
 
 def _check_text(r):
@@ -579,7 +591,18 @@ def _list_text(r):
         print("on hold (the person's words clear a hold): " + ", ".join(h["id"] for h in r["holds"]))
 
 
-TEXT = {"check": _check_text, "run": _run_text, "list": _list_text}
+def _status_text(r):
+    if r.get("id") is None:
+        print("no training is running")
+        return
+    print(f"{r['id']}: {r['state']}, step {r['step']}/{r['total'] or '?'}" + ("" if r["loss"] is None else f", loss {r['loss']:.4g}"))
+    if r.get("note"):
+        print("  " + r["note"])
+    if r.get("text"):
+        print(r["text"])
+
+
+TEXT = {"check": _check_text, "run": _run_text, "list": _list_text, "status": _status_text}
 
 
 CLI = suitecli.Cli(Training, "trainsuite", TrainingError, "TRAINSUITE_TRACEBACK", legacy=LEGACY, positional=("job", "i", "a", "b"), option_names=("words",), text=TEXT)

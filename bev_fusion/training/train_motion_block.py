@@ -34,6 +34,7 @@ from losses import _gather, build_layer_targets, motion_term, object_head_terms,
 from motion_block import MotionBlock, backward_warp, block_inputs  # noqa: E402
 from train import build, forward_loss, make_datasets, make_loader, read_config, val_subset  # noqa: E402
 from trainkit.checkpoint import warm_start  # noqa: E402  (importing train put autoresearch/ on sys.path)
+from trainkit.util import check_engine  # noqa: E402
 
 
 class Hook(torch.nn.Module):
@@ -164,6 +165,7 @@ def evaluate(model, loss, loader, cfg, device, arm, hook, orig_motion, ctx):
 
 
 def main():
+    print(check_engine(os.path.dirname(os.path.abspath(__file__))), flush=True)       # which trainkit runs (a pinned copy next to the script that is not the imported one: refused)
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True)
     ap.add_argument("--ckpt", required=True)

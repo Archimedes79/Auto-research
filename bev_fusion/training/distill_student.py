@@ -46,7 +46,7 @@ if os.path.join(_REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(_REPO, "autoresearch"))
 from trainkit.config import Config  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
-from trainkit.util import prepare_run_dir, seed_all  # noqa: E402
+from trainkit.util import check_engine, prepare_run_dir, seed_all  # noqa: E402
 
 import splits  # noqa: E402
 from feature_cache import FeatureStore  # noqa: E402
@@ -407,6 +407,7 @@ def eval_only(cfg):
 
 def main(argv=None, stop_check=None):
     a = parse(argv)
+    print(check_engine(os.path.dirname(os.path.abspath(__file__))), flush=True)       # which trainkit runs (a pinned copy next to the script that is not the imported one: refused)
     if a.device.startswith("cuda") and not torch.cuda.is_available():
         print("refused to start: cuda is asked for (the default) and not available; --device cpu runs on the CPU on purpose", flush=True)
         return 3

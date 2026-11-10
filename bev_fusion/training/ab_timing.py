@@ -15,7 +15,7 @@ the same flips: compare them with a longer --warm (at least prefetch_factor x wo
     --arm NAME[:ITEM,ITEM,...]   ITEM is @preset (training/configs/presets/<preset>.json, flattened) or key=value (a JSON value: true / false / 2, not True); the first arm is
                                  the reference. An arm may only set what can be switched between two blocks of one process (SWITCHES): model.share_mover, model.splat_fused,
                                  model.sync_free, loss.sync_free, pin_memory, prefetch_factor, workers, cudnn_benchmark, tf32. Anything built into the network (lane_branch,
-                                 camera_student ...) is a different model: time it with run.py and `python -m trainsuite speed`.
+                                 camera_student ...) is a different model: time it with run.py and `python -m trainsuite compare`.
     --rounds N                   rounds of all arms, at least 2, default 4; use an EVEN number (an odd one leaves a part of a linear drift in the difference)
     --check                      print the plan and the time it needs, build nothing
 
@@ -23,8 +23,8 @@ Is a difference real? The per-round differences against the reference are a pair
 if the interval excludes zero. With few rounds only large differences can be resolved (3 rounds: about 3x the scatter of the per-round differences): run an A/A first (two arms
 with the same settings, e.g. --arm a --arm b) to see what the noise of this box is.
 
-The config is a composed one (`python -m trainsuite start training/configs/t20_base.json --id ab --preset timing --set split=small --no-card` prints the path of the composed
-file under temp/compose/ and stops without --go; this tool reads the trainer config, not the plan). It is built the way train() builds it (speed flags, freeze, warm start from
+The config is a composed one (`python -m trainsuite check job.json` for a job file with config t20_base.json, id ab, preset timing, set split=small and no_card prints the path of the
+composed file under temp/compose/ and starts nothing; this tool reads the trainer config, not the plan). It is built the way train() builds it (speed flags, freeze, warm start from
 init_from, EMA without the frozen keys); the learning rate is constant (a tenth of the config's: no warm-up to run through, no divergence of a model that is trained for a few
 steps), nothing is saved. The model trains while it is timed: the numbers are step times, not results. Start it like a timing run, alone on the GPU, under a machine lock
 (`tools/machine_lock.py take ... --exclusive`) and run.py's slots (`python3 ../autoresearch/tools/run.py --id ab.x --gpu --no-card -- ~/miniconda3/envs/gcar/bin/python
@@ -327,7 +327,7 @@ def build_bench(cfg, warm, steps):
 
 def main(argv=None, builder=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("config", help="a composed config (trainsuite start ... writes it under temp/compose/)")
+    ap.add_argument("config", help="a composed config (trainsuite check writes it under temp/compose/)")
     ap.add_argument("--arm", action="append", required=True, help="NAME[:@preset,key=value,...]; the first is the reference; at least two")
     ap.add_argument("--rounds", type=int, default=4, help="rounds of all arms (the order alternates), at least 2, an even number; default 4")
     ap.add_argument("--steps", type=int, default=8, help="counted steps per block; default 8")

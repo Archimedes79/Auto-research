@@ -1,7 +1,7 @@
 """The training queue that outlives its launchers: a persistent list of runs, a runner that starts the next one, hold and resume that continue where a run stopped.
 Standard library only; the launcher's own files (tools/run.py, hold.py, project.py) are imported when a command needs them.
 
-  add      compose a run like `start` and put it in the list (the config is stored with the item: what is queued is what runs)
+  add      compose a run like `compose` and put it in the list (the config is stored with the item: what is queued is what runs)
   serve    the runner: every `every` seconds start the first startable item (its --after runs are done, nothing else waits for a slot); a run whose launcher died
            because the machine went down (WSL shutdown) is restarted from its last checkpoint; a held, failed, killed or finished item is never started; it ends when
            nothing is left to do
@@ -250,7 +250,7 @@ def pinned_argv(it):
 
 def with_gate(c, argv):
     """the run.py command with the project's memory gate (`gpu_max_mb` of the trainsuite block) before the `--`, unless it has one or asks for no GPU: an item queued before the gate
-    existed, one rebuilt from its run record and one added by hand start under the same rule as `start` and `add`"""
+    existed, one rebuilt from its run record and one added by hand start under the same rule as `run` and `add`"""
     from . import compose as C
     try:
         gate = C.gpu_gate(c.block)
@@ -301,7 +301,7 @@ def new_item(q, rid, argv, **kw):
 
 # ---- add
 def add(c, plan, rid, after=(), priority=5, note="", extra=None):
-    """put a composed `start` plan in the list; -> the item. `extra`: more fields of the item (the job, its kill rules). A plan without a config of its own (only `argv`) is stored without one"""
+    """put a composed plan in the list; -> the item. `extra`: more fields of the item (the job, its kill rules). A plan without a config of its own (only `argv`) is stored without one"""
     with edit(c) as q:
         twin = next((i["id"] for i in q["items"] if folder(i["id"]) == folder(rid)), None)
         if twin == rid:
@@ -733,6 +733,18 @@ def resume(c, ids=(), all_=False, words="", fresh_code=False, start=True, out=pr
         pid = ensure_runner(c)
         out(f"the runner is running (pid {pid}); `queue` shows the line")
     return result
+
+
+def start_blocks(c, rid):
+    """why the person's pause or hold forbids a start NOW of this id (also one that does not go through the queue): [] when nothing does. hold(all) pauses the runner and `held` marks the
+    items: both mean "nothing new starts" (hard rule 6). Reads the queue file only"""
+    q = load(c)
+    out = []
+    if q.get("paused"):
+        out.append("the queue is PAUSED by a hold (the person's words): queue_resume clears it")
+    if any(x["id"] == rid and x.get("held") for x in q["items"]):
+        out.append(f"the queue item {rid} is held (the person's words): queue_resume clears it")
+    return out
 
 
 def drop(c, rid):

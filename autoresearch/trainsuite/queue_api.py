@@ -1,24 +1,12 @@
 """The queue of the training system, NOT part of the class `Training` (Mirko 2026-11-10: "Nimm die Queue hier erstmal raus"). `QueueMixin` adds the queue methods to a class that has the
 methods of Training: `class Q(QueueMixin, Training)` with `METHODS = Training.METHODS + QueueMixin.QUEUE_METHODS`. Nothing in trainsuite uses it; the engine is trainqueue.py (the line, the runner,
-holds, restarts). With the queue a pause and a held item also forbid a direct `run`, and `i` can be the number `queue_list` shows."""
+holds, restarts). A pause and a held item forbid a direct `run` too, with or without this mixin (trainqueue.start_blocks, asked by Training.check / run); with the mixin `i` can be the number `queue_list` shows."""
 import os
 
 from . import health, modules
 from . import trainqueue as TQ
 from .api import TrainingError, _checked_plan, _machine, _map, _run_dir, _slot_ids, errors, shell
 from .runs import Run
-
-
-def queue_blocks(c, rid):
-    """why the person's pause or hold forbids a start NOW of this id, outside the queue: [] when nothing does. hold(all) pauses the runner and `held` marks the items: both mean "nothing
-    new starts" (hard rule 6)"""
-    q = TQ.load(c)
-    out = []
-    if q.get("paused"):
-        out.append("the queue is PAUSED by a hold (the person's words): queue_resume clears it")
-    if any(x["id"] == rid and x.get("held") for x in q["items"]):
-        out.append(f"the queue item {rid} is held (the person's words): queue_resume clears it")
-    return out
 
 
 def _ordered(q):
@@ -32,7 +20,7 @@ def _states(c, items):
 
 def _running(c, items, states, only_trainings=False):
     """[(id, queue item or None, number or None)] of what runs now: the items of the queue first, then what holds a GPU slot without being in the queue (a run started by `run`,
-    `start --go` or by hand). only_trainings leaves out the GPU jobs that have no run folder of their own (an evaluation, a prediction)"""
+    `run` or by hand). only_trainings leaves out the GPU jobs that have no run folder of their own (an evaluation, a prediction)"""
     out = [(it["id"], it, n) for n, it in enumerate(items, 1) if states[it["id"]] in ("running", "orphan")]
     queued = {it["id"] for it in items}
     for rid in _slot_ids(c):
@@ -193,26 +181,7 @@ class QueueMixin:
         ids = () if all else (resolve_item(c, i)[0],)
         return TQ.resume(c, ids, all, words, fresh_code, True, out=lambda *a, **k: None)
 
-    # ---- with a queue a pause and a held item also bind a direct start, and a training has a place in the line
-    @errors
-    def check(self, job):
-        """Training.check; a pause of the queue or a held item is a problem too. -> as Training.check"""
-        j = self._job(job)
-        result = super().check(job)
-        blocks = queue_blocks(self._c(j), j["id"])
-        if blocks:
-            result["problems"], result["ok"] = blocks + result["problems"], False
-        return result
-
-    @errors
-    def run(self, job, wait=3.0):
-        """Training.run, refused while the queue is paused or the item is held (the person's words, hard rule 6). -> as Training.run"""
-        j = self._job(job)
-        blocks = queue_blocks(self._c(j), j["id"])
-        if blocks:
-            raise TrainingError("nothing started: " + "; ".join(blocks))
-        return super().run(job, wait)
-
+    # ---- a training has a place in the line (a pause or a held item binds a direct start too: Training.run / check ask the queue file, trainqueue.start_blocks)
     @errors
     def status(self, i=None, kill=(), ref=None, skip=10):
         """Training.status with the place in the queue: `number` and `queue` (the state of the item). -> as Training.status"""

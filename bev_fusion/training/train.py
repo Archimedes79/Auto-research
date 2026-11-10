@@ -57,7 +57,7 @@ from trainkit.control import EXIT_STOPPED  # noqa: E402
 from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
 from trainkit.optim import clip_groups, lr_group_params  # noqa: E402
-from trainkit.util import detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
+from trainkit.util import check_engine as engine_line, detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
 # engine names that are also read as train.X (startable.py, ab_timing.py, evaluation/, runner/ and the tests); anything else of the engine is imported from trainkit
 from trainkit.amp import amp_context  # noqa: E402,F401
 from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume  # noqa: E402,F401
@@ -707,18 +707,9 @@ class ProbeHooks(Hooks):
 
 
 def check_engine(here=None, engine=None):
-    """-> the log line that says which trainkit this process runs; SystemExit when a pinned copy lies next to this file but another trainkit was imported (the run would not train on its
-    code snapshot). run_ar.sh puts the copy next to train.py; a snapshot made before D48 or another launcher has none, and then the live autoresearch/trainkit is what runs.
-    here / engine: the folder of this file and of the imported trainkit (the arguments are for the test)."""
-    here = here or os.path.dirname(os.path.abspath(__file__))
-    engine = engine or os.path.dirname(os.path.abspath(trainkit.__file__))
-    pinned = os.path.join(here, "trainkit")
-    if not os.path.isdir(pinned):
-        return f"trainkit: the live copy {engine} (no pinned copy next to train.py)"
-    if os.path.realpath(pinned) != os.path.realpath(engine):
-        raise SystemExit(f"train.py: a pinned trainkit lies next to it ({pinned}) but {engine} was imported: the run would not train on its code snapshot "
-                         "(look at sys.path and PYTHONPATH)")
-    return f"trainkit: the pinned copy {pinned}"
+    """trainkit.util.check_engine for this file's folder: the log line that says which trainkit this process runs, SystemExit when a pinned copy lies next to train.py and another
+    trainkit was imported. here / engine: the folder of this file and of the imported trainkit (the arguments are for the test)"""
+    return engine_line(here or os.path.dirname(os.path.abspath(__file__)), engine or os.path.dirname(os.path.abspath(trainkit.__file__)))
 
 
 def train(cfg, eval_fn=None, datasets=None):

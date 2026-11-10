@@ -1,16 +1,16 @@
 """Compose a training config from a base file, presets and `--set` overrides, and plan its start (standard library only).
 
     python -m trainsuite compose BASE.json --preset small --set steps=500 --set model.camera_features=dual --out OUT.json
-    python -m trainsuite start BASE.json --id t15_a --preset small --hyp "..." --pred "..." --rule "..."          # prints the check and the exact run.py command
-    python -m trainsuite start BASE.json --id t15_a --preset small --hyp ... --go                                    # also starts it (the same command again resumes)
+    python -m trainsuite check job.json    # job.json: {"id": "t15_a", "config": "BASE.json", "preset": ["small"], "card": {"hyp": ..., "pred": ..., "rule": ...}}: the check and the exact run.py command
+    python -m trainsuite run job.json      # also starts it (the same call again continues)
 
 The modes of a training are values in the config, not code paths: a preset is a small json file of overrides (`<presets dir>/<name>.json`, deep-merged in the order
 given), `--set a.b=c` overrides one value (c is read as json when it parses: `steps=500`, `flip_aug=0.5`, `train_only=["fusion."]`, else it is a string), the base
 file stays as it is, the composed file is written to a scratch path. Every change is printed with its old value and its source, a key that the base file did not
-have is marked NEW (a typo shows there; the project's check command refuses an unknown key before a GPU is touched). `start` needs a `trainsuite` block in the
+have is marked NEW (a typo shows there; the project's check command refuses an unknown key before a GPU is touched). `check` / `run` need a `trainsuite` block in the
 project's project.json: {"presets": dir, "out": dir for the composed files, "check": command with {config}, "train": command with {config}, "runs": run folder,
 "prepare": [{"name": "gt", "check": command with {config} (exit 0 = present, 1 = missing, any other exit = the check itself failed), "build": command with {config} (resumable), "wait_min": minutes the training may wait for it}]}.
-`start` runs the prepare checks; a missing item stops it unless `--prepare`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)
+`check` / `run` run the prepare checks; a missing item stops it unless the job says `"prepare": true`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)
 and the training is started with `--after` it, so a failed build blocks the training instead of letting it start without its data.
 `"resolve"` (optional): a command (cwd = the project folder) that reads the composed config as json on stdin and writes the resolved one on stdout, for names that the project turns into values
 (bev_fusion: `"split": "large"` becomes its scene lists, `training/splits.py`); a non-zero exit refuses the start. The resolved config is what is written, checked, compared with a run's earlier
@@ -200,7 +200,7 @@ def gpu_gate(block):
 
 
 def plan_start(project_root, block, base_path, run_id, presets=(), sets=(), hyp=None, pred=None, rule=None, no_card=False, extra=(), ar_tools=None, records=None):
-    """everything `start` will do, without doing it: {config, held (the id is ON HOLD), composed, changes, check (argv list or None), argv (the run.py command), notes, log}.
+    """everything `run` will do, without doing it: {config, held (the id is ON HOLD), composed, changes, check (argv list or None), argv (the run.py command), notes, log}.
     Raises ComposeError for what must be fixed first (unknown preset, a missing card field, no train command, another run id with the same run folder)"""
     if not run_id or not run_id[0].isalnum() or not all(c.isalnum() or c in "._-" for c in run_id):
         raise ComposeError(f"--id {run_id!r}: starts with a letter or digit; letters, digits, . _ - only")

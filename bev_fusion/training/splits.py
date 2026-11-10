@@ -1,7 +1,7 @@
 """The scene lists of the training splits (`../splits/<name>.json`) and what a run records of them. Standard library only.
 
     python training/splits.py resolve                  stdin: a config (json) -> stdout: the config with the lists of its "split" filled in
-                                                       (`trainsuite start` calls it: project.json "trainsuite" -> "resolve")
+                                                       (`trainsuite check` / `run` call it: project.json "trainsuite" -> "resolve")
     python training/splits.py names NAME               the scene names of a split, one per line (train, then val)
     python training/splits.py manifest RUN_DIR [--card records/runs/<id>/run.json]
                                                        writes RUN_DIR/manifest.json: the split, GT, code and card of a run, read from the files it wrote

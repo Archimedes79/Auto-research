@@ -212,7 +212,7 @@ def api_checks(tmp, ok):
         raises(api.Training("/nonexistent/project").list, "no project")
         rc, out, err = cli("list", "--project", "/nonexistent/project")
         assert rc == 2 and "no project" in err, (rc, err)
-        assert set(LEGACY) & set(api.Training.METHODS) == {"status", "stop", "plot", "compare", "resume"}, "the older words that a method also has: they need the class name"
+        assert not set(LEGACY) & set(api.Training.METHODS), "no older command has the word of a method: every method is a command by its short name"
         for word in LEGACY:                                                          # every older word is a real command (a word that is not would hide a method behind it)
             try:
                 cli(word, "--help")
@@ -308,6 +308,9 @@ def seam_checks(tmp, ok):
         project(splits=["val", "train"])
         assert T.check(job("s.train"))["ok"]
         ok("check: the split of the start is checked against the project's splits")
+        r = T.check(job("a.ra", no_card=True, run_args=["--seed", "1"], set={"steps": 20, "sleep": 0.02}))                  # arguments for run.py itself go into the command, after --no-card
+        assert r["ok"] and "--no-card --seed 1 --" in r["command"], r
+        ok("check: run_args reach the run.py command")
 
         # 5 a queue item without a seq is numbered; a runner that fails the same way again and again ends instead of repeating it forever
         os.makedirs(c.slots, exist_ok=True)
@@ -345,20 +348,27 @@ def seam_checks(tmp, ok):
             assert not started and it2.get(key), (code, started, text, it2)
         ok("launch: a trainer that fails within the wait is a started and failed run; a launcher that exits 1 is tried again, exit 2 is a refusal")
 
-        # 7 `trainsuite curves` without matplotlib is a message and exit 2, as Training.plot says
+        # 7 `Training.plot` without matplotlib is an error that says so (the command: exit 2, no traceback)
         T.run(job("c.run", set={"steps": 10, "sleep": 0.01}))
         until(lambda: os.path.exists(rec("c.run", "done")), 60, what="c.run done")
         saved = sys.modules.get("matplotlib", "absent")
         sys.modules["matplotlib"] = None                                    # an import of it raises ImportError, installed or not
         try:
-            rc, o, e = cli("--root", os.path.join(proj, "runs"), "curves", "c_run")
+            rc, o, e = cli("plot", "c_run", "--project", proj)
         finally:
             if saved == "absent":
                 sys.modules.pop("matplotlib", None)
             else:
                 sys.modules["matplotlib"] = saved
         assert rc == 2 and "plot needs matplotlib" in e and "Traceback" not in e, (rc, o, e)
-        ok("curves: without matplotlib the legacy command says so and ends with 2")
+        ok("plot: without matplotlib the command says so and ends with 2")
+        old_snap = os.path.join(proj, "runs", "old_snap")                    # a run whose code snapshot has no stop check would ignore CONTROL: the stop is refused
+        os.makedirs(os.path.join(old_snap, "code"))
+        open(os.path.join(old_snap, "code", "train.py"), "w").write("print(1)\n")
+        open(os.path.join(old_snap, "log.jsonl"), "w").close()
+        raises(T.stop, "NOT requested", "old_snap")
+        ok("stop: refused for a code snapshot without the stop check"
+           )
 
         # 8 a job of this suite is a training: the keys of a runner job are refused, a runner command is no training
         for bad in (dict(kind="run"), dict(mode="full")):
@@ -390,6 +400,65 @@ def seam_checks(tmp, ok):
         T.stop("n.pin", "selftest cleanup")
         until(lambda: os.path.exists(rec("n.pin", "HOLD")), 60, what="n.pin stopped again")
         ok("resume: without a commit of the first attempt it is refused (the hold stays); fresh_code continues on the code of now")
+
+        # 10 the person's pause (or a held item) of the queue binds a direct start (hard rule 6): check says it, run refuses it, nothing is started
+        c10 = TQ.context(proj)
+        with TQ.edit(c10) as q10:
+            q10["paused"] = True
+        r = T.check(job("z.pause"))
+        assert not r["ok"] and any("PAUSED" in x for x in r["problems"]), r
+        raises(T.run, "PAUSED", job("z.pause"))
+        assert not os.path.exists(rec("z.pause", "run.json")), "nothing was started"
+        with TQ.edit(c10) as q10:
+            q10["paused"] = False
+        assert T.check(job("z.pause"))["ok"], "the pause is cleared: the same check is fine"
+        ok("a pause of the queue binds a direct start: check says it, run refuses it, nothing is started")
+
+        # 11 a launcher that dies inside the wait is an error that says so; a static check that fails, and a project without the trainsuite block, are problems of the check
+        real_popen = api.subprocess.Popen
+
+        class Dead:
+            pid = 1
+
+            def wait(self, timeout=None):
+                return 2
+        api.subprocess.Popen = lambda argv, **kw: Dead() if len(argv) > 1 and str(argv[1]).endswith("run.py") else real_popen(argv, **kw)
+        try:
+            raises(T.run, "ended after", job("z.dead"), wait=0.2)
+        finally:
+            api.subprocess.Popen = real_popen
+        blk = json.load(open(pj))["trainsuite"]
+        d11 = json.load(open(pj))
+        d11["trainsuite"] = dict(blk, check="python3 -c 'import sys; sys.exit(1)'")
+        json.dump(d11, open(pj, "w"))
+        r = T.check(job("z.chk"))
+        assert not r["ok"] and any(x.startswith("check:") for x in r["problems"]), r
+        assert T.check(job("z.chk", no_check=True))["ok"], "no_check skips the project's static check"
+        project(trainsuite=None)
+        raises(T.check, '"trainsuite" block', job("z.nob"))
+        project(trainsuite=blk)
+        ok("run: a launcher that ends inside the wait is 'nothing runs'; check: a failing static check is a problem (no_check skips it), no trainsuite block is an error")
+
+        # 12 stop of a run that has no launcher record (started by hand) does not claim that it stopped: only its STOPPED file says so
+        hand = os.path.join(proj, "runs", "by_hand")
+        os.makedirs(os.path.join(hand, "code"))
+        open(os.path.join(hand, "code", "train.py"), "w").write("def _stop_requested(d):\n    return None\n")
+        open(os.path.join(hand, "log.jsonl"), "w").close()
+        r = T.stop("by_hand", "selftest", wait=1.5)
+        assert r["requested"] is True and r["stopped"] is False, r
+        open(os.path.join(hand, "STOPPED"), "w").write("{}")                                  # the trainer says it stopped
+        assert T.stop("by_hand", "selftest", wait=1.5)["stopped"] is True
+        ok("stop: a run without a launcher record is stopped when its STOPPED file says so, not at once")
+
+        # 13 the short forms are the methods: status as text and as json with its text field, stop / resume / compare dispatch (an unknown run is an error with exit 2)
+        rc, out, err = cli("status", "k.kill", "--project", proj)
+        assert rc == 0 and out.startswith("k.kill: failed") and "phase failed" in out, (rc, out, err)
+        rc, out, err = cli("status", "k.kill", "--project", proj, "--json")
+        assert rc == 0 and "phase failed" in json.loads(out)["text"], out
+        for word, extra in (("stop", ()), ("resume", ("--words", "w")), ("compare", ("nope2",))):
+            rc, out, err = cli(word, "nope1", *extra, "--project", proj)
+            assert rc == 2 and "error:" in err, (word, rc, err)
+        ok("command line: status (text and json with its detail text), stop, resume and compare are commands by their short names")
     finally:
         restore()
 

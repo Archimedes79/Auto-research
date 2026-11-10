@@ -59,7 +59,7 @@ Not in the loop: a roll-back to an earlier checkpoint on divergence (a run that 
 | `data.py` | `EpochLoader` (a DataLoader with `iter_from(epoch, pos)`), `EpochSampler` (pass order = numpy permutation seeded by (seed, epoch)) |
 | `runlog.py` | `supersede_log`, `val_logged` (the `log.jsonl` rules) |
 | `control.py` | the stop protocol, standard library only (`trainsuite/control.py` re-exports it) |
-| `util.py` | `seed_all`, `resolve_device`, `prepare_run_dir`, `detach_tree` |
+| `util.py` | `seed_all`, `resolve_device`, `prepare_run_dir`, `detach_tree`, `check_engine` (a pinned copy next to the script that is not the imported trainkit is refused; every trainer script calls it first) |
 | `selftest.py` | known answers for the schedule, the EMA, the clip and step rules, the stop protocol, the CUDA random state (stubbed), `EpochLoader`, a stop + resume that equals the uninterrupted run, and the example above; `python -m trainkit.selftest` from `autoresearch/` (needs torch) |
 
 ## A run trains from a code snapshot

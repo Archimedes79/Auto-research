@@ -20,6 +20,20 @@ def resolve_device(device):
     return device
 
 
+def check_engine(here, engine=None):
+    """-> the log line that says which trainkit this process runs; SystemExit when a pinned copy lies next to the script (`here` = its folder) but another trainkit was imported (the run
+    would not train on its code snapshot). run_ar.sh puts the copy next to train.py; a snapshot made before D48 or a script started by hand has none, and then the live
+    autoresearch/trainkit is what runs. `engine`: the folder of the imported trainkit (the default: this one; the argument is for the test)"""
+    engine = engine or os.path.dirname(os.path.abspath(__file__))
+    pinned = os.path.join(here, "trainkit")
+    if not os.path.isdir(pinned):
+        return f"trainkit: the live copy {engine} (no pinned copy next to the script)"
+    if os.path.realpath(pinned) != os.path.realpath(engine):
+        raise SystemExit(f"a pinned trainkit lies next to the script ({pinned}) but {engine} was imported: the run would not train on its code snapshot "
+                         "(look at sys.path and PYTHONPATH)")
+    return f"trainkit: the pinned copy {pinned}"
+
+
 def prepare_run_dir(cfg):
     """<out_root>/<name>, created; the CONTROL / STOPPED files of an earlier stop are moved aside (control.clear_stale) -> the path"""
     out_dir = os.path.join(cfg.out_root, cfg.name)
