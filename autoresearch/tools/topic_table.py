@@ -1,10 +1,13 @@
 """The table of a research topic, made from its notes (never typed by an agent).
 
-    python autoresearch/tools/topic_table.py <topic folder> [--min-relevance N]    # writes table.md and table.csv, exit 1 on a bad note
+    python autoresearch/tools/topic_table.py <topic folder or slug> [--min-relevance N]    # writes table.md and table.csv, exit 1 on a bad note
+    python autoresearch/tools/topic_table.py <topic folder or slug> --set-result <note id> "E283: CUT lane IoU -0.005"   # fill the result line of a note, then the table
     python autoresearch/tools/topic_table.py --selftest
 
+One tool for every problem: a slug is looked for in `<problem>/<research folder>/topics/<slug>/` of the problem named by AR_PROJECT (project.json "research",
+default "literature"); the notes and tables are that problem's own data, the procedure and the tool are shared.
 A topic folder holds one subfolder per paper (with its code), each with a `note.md` written by one agent. Right after the `# ` line of a note come exactly
-these seven lines, in this order, one per line, nothing between them (blank lines and one-line <!-- comments --> before the first are fine):
+these eight lines, in this order, one per line, nothing between them (blank lines and one-line <!-- comments --> before the first are fine):
 
     - title: the title of the paper
     - relevance: 0-3 (3 = take it into the plan now)
@@ -13,8 +16,9 @@ these seven lines, in this order, one per line, nothing between them (blank line
     - paper: https://... (a plain link: no spaces, quotes, brackets, parentheses, pipes or backslashes; percent-encode them)
     - code: https://... or -
     - verdict: use / watch / context / not relevant
+    - result: - (no experiment yet), or "<experiment id>: KEEP / CUT / TIE / INCONCLUSIVE / planned / running" and a few words (the number); filled with --set-result when a card that cites the paper is decided
 
-The table has one row per note, best relevance first: title (a link to the note), summary, relevance, status, paper, code. A note that breaks a rule,
+The table has one row per note, best relevance first: title (a link to the note), summary, relevance, status, paper, code, experiment result. A note that breaks a rule,
 a subfolder without `note.md`, an empty topic folder or two notes on the same paper make the tool print the reasons, REMOVE any older table.md /
 table.csv (so a stale table never looks current) and exit 1. With --min-relevance N the files are table_min<N>.md / .csv and table.md stays the table of all notes.
 """
@@ -25,7 +29,8 @@ import os
 import re
 import sys
 
-KEYS = ("title", "relevance", "summary", "status", "paper", "code", "verdict")
+KEYS = ("title", "relevance", "summary", "status", "paper", "code", "verdict", "result")
+RESULT = re.compile(r"(-|[A-Za-z0-9][A-Za-z0-9._-]*: (KEEP|CUT|TIE|INCONCLUSIVE|planned|running)( [^\n]{1,160})?)$")
 VERDICTS = ("use", "watch", "context", "not relevant")
 STATUS = ("checked", "digest", "memory")
 MAX_SUMMARY = 700  # characters; about three sentences
@@ -81,6 +86,8 @@ def problems(h):
         bad.append("verdict is not one of " + " / ".join(VERDICTS))
     if h.get("status") not in STATUS:
         bad.append("status is not one of " + " / ".join(STATUS))
+    if not RESULT.match(h.get("result", "")):
+        bad.append("result is not '-' or '<experiment id>: KEEP / CUT / TIE / INCONCLUSIVE / planned / running [words]'")
     if len(h.get("summary", "")) > MAX_SUMMARY:
         bad.append(f"summary is longer than {MAX_SUMMARY} characters")
     return bad
@@ -139,15 +146,15 @@ def render(rows, min_relevance=0):
     rows.sort(key=lambda r: (-int(r["relevance"]), r["title"].lower(), r["id"]))
     md = ["# Table of the topic" + (f" (relevance >= {min_relevance})" if min_relevance else ""), "",
           "Made by `autoresearch/tools/topic_table.py` from the notes; do not edit.", "",
-          "| title | summary | relevance | status | paper | code |", "|---|---|---|---|---|---|"]
+          "| title | summary | relevance | status | paper | code | experiment result |", "|---|---|---|---|---|---|---|"]
     for r in rows:
         code = f"[code]({r['code']})" if r["code"] != "-" else "-"
-        md.append(f"| [{md_text(r['title'])}]({r['link']}) | {md_text(r['summary'])} | {r['relevance']} | {r['status']} | [paper]({r['paper']}) | {code} |")
+        md.append(f"| [{md_text(r['title'])}]({r['link']}) | {md_text(r['summary'])} | {r['relevance']} | {r['status']} | [paper]({r['paper']}) | {code} | {md_text(r['result'])} |")
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
-    w.writerow(["id", "title", "summary", "relevance", "status", "verdict", "paper", "code", "note"])
+    w.writerow(["id", "title", "summary", "relevance", "status", "verdict", "paper", "code", "result", "note"])
     for r in rows:
-        w.writerow([r["id"], csv_cell(r["title"]), csv_cell(r["summary"]), r["relevance"], r["status"], r["verdict"], r["paper"], r["code"], r["link"]])
+        w.writerow([r["id"], csv_cell(r["title"]), csv_cell(r["summary"]), r["relevance"], r["status"], r["verdict"], r["paper"], r["code"], csv_cell(r["result"]), r["link"]])
     return "\n".join(md) + "\n", buf.getvalue()
 
 
@@ -171,6 +178,38 @@ def run(folder, min_relevance=0):
     return 0, [f"{len(rows)} notes -> {os.path.join(folder, stem + '.md')} and .csv"]
 
 
+def set_result(folder, note_id, text):
+    """write the `- result:` line of one note's header; (exit code, message). The table is made again by the caller."""
+    text = (text or "").strip()
+    note = os.path.join(folder, note_id, "note.md")
+    if not FOLDER.match(note_id) or os.path.islink(os.path.join(folder, note_id)) or not os.path.isfile(note):
+        return 1, f"no note.md for {note_id!r} in {folder}"
+    if not RESULT.match(text):
+        return 1, "result is not '-' or '<experiment id>: KEEP / CUT / TIE / INCONCLUSIVE / planned / running [words]'"
+    raw = open(note, encoding="utf-8", newline="").read()
+    head, bad = header(raw)
+    if bad:
+        return 1, f"{note_id}: the header is not valid ({'; '.join(bad)}): fix the note first"
+    new, n = re.subn(r"(?m)^- result:[ \t]*[^\r\n]*", lambda m: "- result: " + text, raw, count=1)
+    if n != 1:
+        return 1, f"{note_id}: no '- result:' line found"
+    open(note, "w", encoding="utf-8", newline="").write(new)
+    return 0, f"{note_id}: result = {text}"
+
+
+def resolve(arg):
+    """a topic folder, or a slug looked for in <problem>/<research folder>/topics/ of the problem named by AR_PROJECT"""
+    if os.path.isdir(arg):
+        return arg
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import project as P
+        cand = os.path.join(P.root(), P.cfg().get("research", "literature"), "topics", arg)
+    except Exception:  # noqa: BLE001  (no project: the argument stays as it is and is reported as no folder)
+        return arg
+    return cand if os.path.isdir(cand) else arg
+
+
 def selftest():
     import shutil
     import tempfile
@@ -181,7 +220,7 @@ def selftest():
             open(os.path.join(d, name, "note.md"), "w", encoding="utf-8", newline="").write(body)
 
         ok = ("# {n} t\n\n<!-- a comment line is fine -->\n- title: {t}\n- relevance: {r}\n- summary: It does a. It matters because b.\n- status: checked\n"
-              "- paper: https://x.org/{n}\n- code: {c}\n- verdict: use\n\n## More\n- code: https://body.example/ignored\n")
+              "- paper: https://x.org/{n}\n- code: {c}\n- verdict: use\n- result: -\n\n## More\n- code: https://body.example/ignored\n")
         note("zz1", ok.format(n="zz1", t="Alpha | [pipe] <b>", r="1", c="-"))
         note("yy2", ok.format(n="yy2", t="Beta", r="3", c="https://github.com/b/b"))
         note("xx3", ok.format(n="xx3", t="Aardvark", r="3", c="-"))
@@ -200,9 +239,9 @@ def selftest():
         # every kind of bad note is named with its reason
         base = ok.format(n="q", t="Q", r="1", c="-")
         cases = {
-            "badval": ("# d\n- title: D\n- relevance: 5\n- summary: s\n- status: guess\n- paper: ftp://x\n- code: nowhere\n- verdict: maybe\n", ["relevance is not 0-3", "paper is not", "code is not", "verdict is not", "status is not"]),
+            "badval": ("# d\n- title: D\n- relevance: 5\n- summary: s\n- status: guess\n- paper: ftp://x\n- code: nowhere\n- verdict: maybe\n- result: KEEP\n", ["result is not", "relevance is not 0-3", "paper is not", "code is not", "verdict is not", "status is not"]),
             "short": ("# e\n- title: Eps\n", ["header must be exactly"]),
-            "order": ("# o\n- relevance: 1\n- title: T\n- summary: s\n- status: checked\n- paper: https://x.org/o\n- code: -\n- verdict: use\n", ["header must be exactly"]),
+            "order": ("# o\n- relevance: 1\n- title: T\n- summary: s\n- status: checked\n- paper: https://x.org/o\n- code: -\n- verdict: use\n- result: -\n", ["header must be exactly"]),
             "dupkey": (base.replace("- code: -\n", "- code: -\n- title: again\n", 1), ["header must be exactly"]),
             "indent": (base.replace("- summary:", "  - summary:", 1), ["header must be exactly"]),
             "aftertable": ("# t\n\n| a | b |\n|---|---|\n\n" + base.split("\n", 1)[1], ["header must be exactly"]),
@@ -240,6 +279,22 @@ def selftest():
         code, msgs = run(d, 2)
         assert code == 0 and os.path.isfile(os.path.join(d, "table_min2.md")) and "Aardvark" in open(os.path.join(d, "table.md")).read() and "Alpha" in open(os.path.join(d, "table.md")).read() \
             and "Alpha" not in open(os.path.join(d, "table_min2.md")).read(), "a filtered table has its own file and table.md stays complete"
+        # the result line: set in place (CRLF kept), shown in the table, refused for a bad text, a bad id or an invalid note
+        note("crlf1", ok.format(n="crlf1", t="Crlf", r="1", c="-").replace("\n", "\r\n"))
+        before = open(os.path.join(d, "crlf1", "note.md"), "rb").read()
+        assert set_result(d, "crlf1", "E283: CUT lane IoU -0.005")[0] == 0 and set_result(d, "xx3", "T24: running")[0] == 0
+        after = open(os.path.join(d, "crlf1", "note.md"), "rb").read()
+        assert after.count(b"\r\n") == before.count(b"\r\n") and b"- result: E283: CUT lane IoU -0.005\r\n" in after and after.count(b"- result:") == 1, after
+        assert run(d)[0] == 0 and "E283: CUT lane IoU -0.005" in open(os.path.join(d, "table.md")).read() and "| T24: running |" in open(os.path.join(d, "table.md")).read()
+        assert "result" in open(os.path.join(d, "table.csv")).read().splitlines()[0]
+        for bad_id, bad_text in (("xx3", "KEEP"), ("xx3", "E1: MAYBE"), ("nope", "-"), ("../x", "-"), ("xx3", "E1: KEEP " + "x" * 200)):
+            assert set_result(d, bad_id, bad_text)[0] == 1, (bad_id, bad_text)
+        assert set_result(d, "xx3", "-")[0] == 0 and "- result: -" in open(os.path.join(d, "xx3", "note.md")).read(), "back to empty"
+        open(os.path.join(d, "yy2", "note.md"), "a").write("")  # untouched; now break one note: set_result refuses to write into an invalid header
+        note("hdr", "# h\n- title: only\n")
+        assert set_result(d, "hdr", "-")[0] == 1
+        shutil.rmtree(os.path.join(d, "hdr"))
+        shutil.rmtree(os.path.join(d, "crlf1"))
         # a spreadsheet formula is made harmless, the plain code value stays
         assert csv_cell("=HYPERLINK(1)") == "'=HYPERLINK(1)" and csv_cell("-") == "-" and csv_cell("@x") == "'@x" and csv_cell("plain") == "plain"
         # an empty folder and a note that is not UTF-8
@@ -272,12 +327,19 @@ def main(argv):
     if argv[:1] == ["--selftest"]:
         return selftest()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("folder")
+    ap.add_argument("folder", help="the topic folder, or a slug in <problem>/<research folder>/topics/")
     ap.add_argument("--min-relevance", type=int, default=0, choices=[0, 1, 2, 3])
+    ap.add_argument("--set-result", nargs=2, metavar=("NOTE_ID", "TEXT"), help="fill the result line of one note, then make the table again")
     a = ap.parse_args(argv)
-    if not os.path.isdir(a.folder):
-        sys.exit(f"{a.folder} is not a folder")
-    code, msgs = run(a.folder, a.min_relevance)
+    folder = resolve(a.folder)
+    if not os.path.isdir(folder):
+        sys.exit(f"{a.folder} is not a folder or a topic of this problem")
+    if a.set_result:
+        code, msg = set_result(folder, *a.set_result)
+        print(msg)
+        if code:
+            sys.exit(code)
+    code, msgs = run(folder, a.min_relevance)
     print("\n".join(msgs))
     sys.exit(code)
 

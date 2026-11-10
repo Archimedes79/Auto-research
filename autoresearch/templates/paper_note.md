@@ -1,6 +1,6 @@
 # <paper id> <short title>
 
-<!-- One note per paper, with its code, in its own subfolder of the topic (topics/<slug>/<paper id>/note.md), written by one agent. The seven lines below are the header that tools/topic_table.py turns into the table of the topic: exactly these keys, in this order, one per line, directly after the title line, nothing between them; delete this comment. Links are plain (no spaces, quotes, brackets, parentheses, pipes: percent-encode them). -->
+<!-- One note per paper, with its code, in its own subfolder of the topic (topics/<slug>/<paper id>/note.md), written by one agent. The eight lines below are the header that tools/topic_table.py turns into the table of the topic: exactly these keys, in this order, one per line, directly after the title line, nothing between them; delete this comment. Links are plain (no spaces, quotes, brackets, parentheses, pipes: percent-encode them). -->
 
 - title: <the title of the paper>
 - relevance: <0-3; 3 = take it into the plan now>
@@ -9,6 +9,7 @@
 - paper: <https link to the paper or its project page>
 - code: <https link to the repository, or ->
 - verdict: <use / watch / context / not relevant>
+- result: -
 
 | | |
 |---|---|
