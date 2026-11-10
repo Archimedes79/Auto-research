@@ -30,23 +30,23 @@ def _states(c, items):
     return {it["id"]: TQ.state(c, it) for it in items}
 
 
-def _running(c, items, states, kind=None):
-    """[(id, queue item or None, number or None)] of what runs now and is of this kind (None: of any kind): the items of the queue first, then what holds a GPU slot without being in
-    the queue (a run started by `run`, `start --go` or by hand; it is a training when it has a run folder)"""
-    out = [(it["id"], it, n) for n, it in enumerate(items, 1) if states[it["id"]] in ("running", "orphan") and kind in (None, it.get("kind", "train"))]
+def _running(c, items, states, only_trainings=False):
+    """[(id, queue item or None, number or None)] of what runs now: the items of the queue first, then what holds a GPU slot without being in the queue (a run started by `run`,
+    `start --go` or by hand). only_trainings leaves out the GPU jobs that have no run folder of their own (an evaluation, a prediction)"""
+    out = [(it["id"], it, n) for n, it in enumerate(items, 1) if states[it["id"]] in ("running", "orphan")]
     queued = {it["id"] for it in items}
     for rid in _slot_ids(c):
-        if rid not in queued and kind in (None, "train" if os.path.isdir(_run_dir(c, rid)) else "run"):
+        if rid not in queued and (not only_trainings or os.path.isdir(_run_dir(c, rid))):
             out.append((rid, None, None))
     return out
 
 
-def resolve_item(c, i, kind="train"):
-    """-> (id, queue item or None, number or None). i=None is the running one of this kind. A text is an id or a run folder name first; a number (an int, or a text of digits that is no
+def resolve_item(c, i):
+    """-> (id, queue item or None, number or None). i=None is the running training. A text is an id or a run folder name first; a number (an int, or a text of digits that is no
     id) is the place in `queue_list`; what is neither in the queue is a run of the records (no item, no number)"""
     items = _ordered(TQ.load(c))
     if i is None:
-        running = _running(c, items, _states(c, items), kind)
+        running = _running(c, items, _states(c, items), only_trainings=True)
         return running[0] if running else (None, None, None)
     if isinstance(i, bool):
         raise TrainingError("i is a queue number, an id or a run folder name")
@@ -81,7 +81,7 @@ def _item_info(c, it, n, states):
     rid = it["id"]
     rd = _run_dir(c, rid)
     step, total = TQ.last_step(rd)
-    info = dict(number=n, id=rid, kind=it.get("kind", "train"), state=states[rid], step=step, total=total, after=list(it.get("after") or []), priority=it.get("priority", 5),
+    info = dict(number=n, id=rid, state=states[rid], step=step, total=total, after=list(it.get("after") or []), priority=it.get("priority", 5),
                 note=it.get("note", ""), held=bool(it.get("held")), pin=(it.get("pin") or "")[:10], refused=it.get("refused", ""), gave_up=bool(it.get("gave_up")),
                 grad=None, skipped=0, flags=[])
     if os.path.isdir(rd):
@@ -129,7 +129,7 @@ class QueueMixin:
 
     @errors
     def queue_list(self):
-        """the queue in the order it runs, with what the box looks like. -> {items: [{number, id, kind, state, step, total, after, priority, held, grad, skipped, flags, ...}], running,
+        """the queue in the order it runs, with what the box looks like. -> {items: [{number, id, state, step, total, after, priority, held, grad, skipped, flags, ...}], running,
         runner (pid or 0), paused, slots, lock, ram, gpu, holds}"""
         c = self._c()
         q = TQ.load(c)
@@ -155,7 +155,7 @@ class QueueMixin:
             problems.append("missing data: " + ", ".join(m["name"] for m in missing) + " (build it first)")
         if problems:
             raise TrainingError("nothing queued: " + "; ".join(problems))
-        TQ.add(c, plan, j["id"], j["after"], j["priority"], j["note"], extra=dict(kind="train", job={k: v for k, v in j.items() if k != "project"}, kill=j["kill"]))
+        TQ.add(c, plan, j["id"], j["after"], j["priority"], j["note"], extra=dict(job={k: v for k, v in j.items() if k != "project"}, kill=j["kill"]))
         if start:
             TQ.ensure_runner(c)
         return get_item(c, j["id"])                                        # the context of the job (its "project" may differ from this object's)

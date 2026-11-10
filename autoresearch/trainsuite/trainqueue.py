@@ -153,7 +153,7 @@ def is_training(c, rid, rec):
     return os.path.isdir(os.path.join(c.runs, folder(rid))) or folder(rid) in cmd
 
 
-def orphans(c, it):
+def orphans(it):
     """pids of a trainer of this item that outlived its launcher (the launcher was killed, the trainer runs in a session of its own): they carry the command's last
     argument (the config path) in their command line. [] where /proc does not exist or the command has no such argument"""
     argv = it["argv"]
@@ -183,7 +183,7 @@ def state(c, it):
     if s == "stalled":
         if launcher_alive(c, it["id"], rec):                # a suspended machine: the heartbeat is old, the launcher is not dead
             return "waiting" if rec.get("status") == "waiting" else "running"
-        if orphans(c, it):
+        if orphans(it):
             return "orphan"
         return "held" if held else "interrupted"
     if held:
@@ -301,8 +301,7 @@ def new_item(q, rid, argv, **kw):
 
 # ---- add
 def add(c, plan, rid, after=(), priority=5, note="", extra=None):
-    """put a composed `start` plan in the list; -> the item. `extra`: more fields of the item (the job, its kind, its kill rules). A plan of a job that has no config of its own
-    (a runner job: the plan holds only `argv`) is stored without one"""
+    """put a composed `start` plan in the list; -> the item. `extra`: more fields of the item (the job, its kill rules). A plan without a config of its own (only `argv`) is stored without one"""
     with edit(c) as q:
         twin = next((i["id"] for i in q["items"] if folder(i["id"]) == folder(rid)), None)
         if twin == rid:
@@ -463,7 +462,7 @@ def enforce(c, q):
             # restart it against that decision (only `resume` does)
             it["person_stopped"] = now()
             acts.append(f"{rid}: its launcher died in this boot (killed by hand): it is not restarted by the runner, not even after a reboot; `resume {rid} --words ...` continues it")
-        if it.get("kind", "train") != "train" or state(c, it) not in ("running", "orphan"):
+        if state(c, it) not in ("running", "orphan"):
             continue
         if it.get("held"):
             if time.time() - it.get("hold_stop_t", 0) > HOLD_RESEND_S:
@@ -612,9 +611,6 @@ def hold(c, ids=(), all_=False, words="", reason="", wait=180.0, out=print):
                 if all_ or rid in ids:
                     result[rid] = "not touched: not a training (no run folder of its own, its command does not name one)"
                 del active[rid]
-        for rid, it in known.items():                                   # a runner job (kind "run") is no training: its run is not asked to stop, no hold is written for it
-            if it.get("kind", "train") != "train" and (all_ or rid in ids):
-                result[rid] = "not touched: not a training (a runner job)"
         wanted = sorted((set(active) | live) if all_ else set(ids))
         for rid in ids:
             if rid not in active and rid not in known and rid not in result:
@@ -636,7 +632,7 @@ def hold(c, ids=(), all_=False, words="", reason="", wait=180.0, out=print):
             it, s = known[rid], state(c, known[rid])
             rec = c.R.record(os.path.join(c.records, rid))
             if rec.get("status") == "running" and (rid in active or s in ("orphan", "running")):
-                if s == "running" and rid not in active and not orphans(c, it):
+                if s == "running" and rid not in active and not orphans(it):
                     result[rid] = "its launcher is gone and no trainer is running: held in the queue"
                     continue
                 err = _request_stop(c, rid, why)

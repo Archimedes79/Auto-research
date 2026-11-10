@@ -1,7 +1,6 @@
 {
   "_comment": "example job, checked only: the fine-tune arm of t23 (lane-line BCE) with a new seed",
   "id": "example.t23_lane_bce_s2",
-  "kind": "train",
   "config": "training/configs/t23_lane_bce.json",
   "preset": ["fast"],
   "set": {"seed": 2, "steps": 1500},

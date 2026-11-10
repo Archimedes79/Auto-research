@@ -73,7 +73,7 @@ folder (default `AR_PROJECT`); `priority` and `note` belong to a queue and are i
 | did a kill rule hit? | `kill` of `status`, `watch RUN --enforce` | per rule `pending` (step not reached), `ok`, `hit` or `unknown` (the key was never logged); `--enforce` requests a stop on a hit |
 | what do the curves look like? | `Training.plot I` | a png: loss, its groups, gradient norm |
 | is a change faster, and is the loss the same? | `Training.compare BASE CHANGED` | s per step, speed-up, data wait, GPU busy, peak memory, loss at the last shared step |
-| should a run be stopped early? | `early RUN --vs CONTROL` | advice from the gap to a control run; it stops nothing |
+| should a run be stopped early? | `early RUN --vs CONTROL --better lower --band <noise of the key>` (direction and seed noise are not guessed) | advice from the gap to a control run; it stops nothing |
 | watch a run until it ends (an agent's Monitor) | `watch RUN --enforce` | one line per change |
 | which batch broke a step? | `runs/<id>/incident_<step>.json` | step, kind, sample ids of the batch, losses (with `probe: true`, section 6) |
 ```
@@ -167,7 +167,7 @@ The views as methods and commands of the interface are in section 0.4; the older
 | `watch RUNS [--enforce]` | one line per change until all are finished, made for an agent's Monitor; `--enforce` stops a run on a kill hit |
 | `curves RUN [RUN]` | a png of the loss, its groups and the gradient norm; needs matplotlib (the `gcar` python) |
 | `speed BASE FAST` | s per step, speed-up, data wait, GPU busy, peak memory, loss at the last shared step |
-| `early RUN --vs CONTROL` | advice from the gap to a control run, calibrated on finished pairs; stops nothing |
+| `early RUN --vs CONTROL --better lower --band <noise of the key>` | advice from the gap to a control run, calibrated on finished pairs; stops nothing |
 | the **module table** (in `status RUN`) | per module the gradient norm and the update size per step; gradient 0.0 = that module learns nothing (needs `probe`) |
 | **kill rules** | the card's kill criterion as a line: `--kill "group.lines@1000 > 1.48"` or `<run>/kill.txt` |
 ```
@@ -235,7 +235,7 @@ Where the launches come from (counted on CPU for the t20 chain, 2026-11-03, `bev
 
 | rank | lever | evidence | not measured |
 |---|---|---|---|
-| 1 | fewer launches: one mover call per dt for both heads (-9 % ops), one `index_add` instead of the 4-corner loop in `splat` (-13 %), the ~35 sync-like ops per keyframe that can go bit for bit (`motion_term` masks, `radar_encoder`, `lift_pd` `.tolist()`, `w_obj` copies), one host-to-device copy of the GT per key instead of per sample (-1,300 copies per step) | operators counted per section (CPU), sync sites from a dispatch trace; module code is open under FROZEN.md, the `flip` / `isfinite` syncs are frozen | the seconds: `profile_steps` + `speed` on a quiet GPU. The old cut (one read-back per clip, multi-tensor EMA) stayed inside the spread (`speed.b`). **Built behind default-off flags (D53, preset `fast`) and measured on the t20 chain: all four together 3.51 s per step against 3.86 / 3.69 s for two plain runs (-5 to -9 %, -1.2 GB peak); one lever alone is inside the 4 % noise** (`records/speed_options_2026-11-03.md` section 7) |
+| 1 | fewer launches: one mover call per dt for both heads (-9 % ops), one `index_add` instead of the 4-corner loop in `splat` (-13 %), the ~35 sync-like ops per keyframe that can go bit for bit (`motion_term` masks, `radar_encoder`, `lift_pd` `.tolist()`, `w_obj` copies), one host-to-device copy of the GT per key instead of per sample (-1,300 copies per step) | operators counted per section (CPU), sync sites from a dispatch trace; module code was open under the freeze of D44, the `flip` / `isfinite` syncs were not (nothing is frozen since D73) | the seconds: `profile_steps` + `speed` on a quiet GPU. The old cut (one read-back per clip, multi-tensor EMA) stayed inside the spread (`speed.b`). **Built behind default-off flags (D53, preset `fast`) and measured on the t20 chain: all four together 3.51 s per step against 3.86 / 3.69 s for two plain runs (-5 to -9 %, -1.2 GB peak); one lever alone is inside the 4 % noise** (`records/speed_options_2026-11-03.md` section 7) |
 | 2 | `torch.compile` of the parts that trace without a break: trunk + fusion, `map_terms`, the motion-block net, `splat_bev` | `dynamo.explain`: forward 34 breaks, loss 39 (per-box `float()`, `.tolist()`, dynamic shapes); the listed parts have none; trunk + fusion is only 5 % of the operators | compile time, the pinned code snapshot, whether the GPU time falls |
 | 3 | the 3 dts as one batch of 3B (-40 % ops) | counted | **changes the training**: BatchNorm statistics over dt (open finding #5), so a new baseline and Mirko's word |
 | 4 | larger micro-batch, fewer accumulation steps | t1 chain, effective batch 16, idle GPU: 4 x 4 = 2.5 s per step (4.4 GB), 8 x 2 = 2.1 s (8.6 GB), 2 x 8 = 5.3 s (`training/configs/README.md`) | the current chain peaks at 8.8 - 9.3 GB of 11 GB; BatchNorm sees other batches |
@@ -243,5 +243,21 @@ Where the launches come from (counted on CPU for the t20 chain, 2026-11-03, `bev
 | no gain | fused AdamW (< 1 % of the launches), `cudnn_benchmark`, TF32 (risky for coordinates) while the step is host-bound; bf16 + `cudnn_benchmark` (`speed.c2`): 2.71 against 2.66 s, peak memory -40 %, gradient norm median 865 against 34, loss +8 % | | fp16 with a loss scale is built (`speed.e` waits as a held run) |
 
 Measure a change on a short run with a quiet GPU (the same config on a busy box ran at 7.7 s per step, `speed.a`, against 2.66 s on a calm one, `speed.a3`): `python -m trainsuite --root $R speed <base run> <changed run> --skip 10` puts them side by side. Three of the levers wait as held runs (`speed.d/e/f`). To compare two settings of the SAME model (the switches of D53 / D54, `pin_memory`, workers), the in-process A/B timer `bev_fusion/training/ab_timing.py` needs about 7 minutes for two arms (4 rounds) and sees less drift than two runs (blocks of steps in the order A B / B A in one process, no checkpoints); a different model (a built-in option) still goes through a run and `speed`.
+
+## 9. The files of this folder
+| file | what |
+|---|---|
+| `api.py` | the class `Training` and, at its end, the command line generated from it (`CLI`) |
+| `cli.py` | the older commands (`start`, `status`, `health`, `watch`, `curves`, `speed`, `early`, `compose`, `stop`, `resume`, `queue ...`): they read a run folder under `--root` |
+| `compose.py` | a config from a base file, presets, `set` and a split; the plan of a start |
+| `control.py` | the stop request (`CONTROL` / `STOPPED`) as the suite names it, on top of `trainkit/control.py`; `honours_stop` |
+| `runs.py` | `Run`: reads one run directory (the contract of section 2) |
+| `view.py` | what one run looks like for every reader: the summary row, the speed row |
+| `health.py`, `kill.py`, `early.py` | the health checks, the kill rules of a card, the early advice from the gap to a control |
+| `modules.py` | the per-module gradient / update table, the incidents, what a run trained on |
+| `curves.py` | loss curves as a png |
+| `trainqueue.py` | the queue engine: the line, the runner, hold, resume, restarts (section 7) |
+| `queue_api.py` | `QueueMixin`: the queue methods for a class that has the methods of `Training` (the queue is not part of the class) |
+| `selftest.py`, `selftest_api.py`, `selftest_queue.py`, `selftest_queue_api.py` | `python -m trainsuite selftest` runs all of them (the older commands and checks; the class; the queue engine; the queue mixin) |
 
 More: [EXTENSIONS.md](EXTENSIONS.md) (the run directory contract, all checks, kill rules, early advice, `compose`, `prepare`, what is not built), the engine contract [../trainkit/README.md](../trainkit/README.md).

@@ -39,8 +39,7 @@ from .view import speed_row, summary
 from .kill import Rule
 from .runs import Run
 
-JOB_FIELDS = ("id", "kind", "config", "preset", "set", "card", "no_card", "after", "priority", "note", "kill", "run_args", "prepare", "no_check", "project")
-KINDS = ("train",)                                                 # a job of this suite is a training; the Runner of a trained network is `python -m runner` (bev_fusion/runner)
+JOB_FIELDS = ("id", "config", "preset", "set", "card", "no_card", "after", "priority", "note", "kill", "run_args", "prepare", "no_check", "project")
 BAD_ENDS = ("failed", "timeout", "blocked", "gpu_busy", "stopped", "held")     # what the launcher's record can say while the run folder still looks alive
 
 
@@ -100,16 +99,14 @@ def load_job(job):
     d = {k: v for k, v in d.items() if not str(k).startswith("_")}
     unknown = sorted(set(d) - set(JOB_FIELDS))
     if unknown:
-        raise TrainingError(f"unknown job key(s) {unknown}; the keys are: {', '.join(JOB_FIELDS)}")
+        hint = " (a job of this suite is a training and has no kind; a trained network on frames is run with `python -m runner`)" if "kind" in unknown else ""
+        raise TrainingError(f"unknown job key(s) {unknown}; the keys are: {', '.join(JOB_FIELDS)}{hint}")
     j = dict(d)
     j["id"] = str(d.get("id") or "")
     if not j["id"]:
         raise TrainingError('a job needs an "id" (the ledger id; the run folder is the id with . as _)')
     if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", j["id"]):
         raise TrainingError(f'job "id" {j["id"]!r}: starts with a letter or digit; letters, digits, . _ - only')
-    j["kind"] = d.get("kind", "train")
-    if j["kind"] not in KINDS:
-        raise TrainingError(f'job "kind": {KINDS[0]!r} (this suite starts trainings; the Runner of a trained network is `python -m runner`), not {j["kind"]!r}')
     j["preset"] = _list(d.get("preset"), "preset")
     s = d.get("set") or {}
     if isinstance(s, dict):
@@ -139,7 +136,7 @@ def load_job(job):
     j["run_args"] = _list(d.get("run_args"), "run_args")
     j["prepare"], j["no_check"] = as_bool(d, "prepare"), as_bool(d, "no_check")
     j["project"] = str(d.get("project") or "")
-    if j["kind"] == "train" and not d.get("config"):
+    if not d.get("config"):
         raise TrainingError('a training job needs "config" (the network file, e.g. training/configs/t20_base.json)')
     j["config"] = str(d.get("config") or "")
     return j
@@ -268,16 +265,16 @@ def _slot_ids(c):
     return out
 
 
-def running(c, kind="train"):
-    """[id] of what holds a GPU slot now and is of this kind (a run is a training when it has a run folder of its own)"""
-    return [rid for rid in _slot_ids(c) if ("train" if os.path.isdir(_run_dir(c, rid)) else "run") == kind]
+def running(c):
+    """[id] of the trainings that hold a GPU slot now (a GPU job is a training when it has a run folder of its own: an evaluation or a prediction has not)"""
+    return [rid for rid in _slot_ids(c) if os.path.isdir(_run_dir(c, rid))]
 
 
-def resolve(c, i, kind="train"):
-    """-> (id, None, None). i=None is the running one of this kind. A text is an id or a run folder name (the id of the run record whose folder name it is). The triple keeps the shape
+def resolve(c, i):
+    """-> (id, None, None). i=None is the running training. A text is an id or a run folder name (the id of the run record whose folder name it is). The triple keeps the shape
     of queue_api.resolve_item, so a subclass with a queue can reuse the methods"""
     if i is None:
-        r = running(c, kind)
+        r = running(c)
         return (r[0], None, None) if r else (None, None, None)
     if not isinstance(i, str) or not i:
         raise TrainingError("i is an id or a run folder name")
@@ -285,9 +282,9 @@ def resolve(c, i, kind="train"):
     return (known or i), None, None
 
 
-def must_exist(c, rid, it=None):
-    """a typo in an id is an error, as in the other suites: the id is a queue item (`it`), a run record, a run folder or a row of the ledger (a run that is only planned is a real state)"""
-    if it is None and not os.path.isdir(os.path.join(c.records, rid)) and not os.path.isdir(_run_dir(c, rid)):
+def must_exist(c, rid):
+    """a typo in an id is an error, as in the other suites: the id is a run record, a run folder or a row of the ledger (a run that is only planned is a real state)"""
+    if not os.path.isdir(os.path.join(c.records, rid)) and not os.path.isdir(_run_dir(c, rid)):
         import ledger
         if not any(r.get("id") == rid for r in ledger.load()):
             raise TrainingError(f"no run record or ledger row named {rid!r}")

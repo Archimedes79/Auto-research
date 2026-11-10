@@ -217,7 +217,7 @@ def queue_checks(tmp, ok):
         n0 = logged(proj, "k")
         time.sleep(3)
         assert len(starts(proj, "k")) == 1 and logged(proj, "k") > n0, "the orphan goes on and is not started a second time"
-        for pid in TQ.orphans(c, item("k")):
+        for pid in TQ.orphans(item("k")):
             os.kill(pid, signal.SIGKILL)                                          # now nothing trains
         until(lambda: TQ.state(c, item("k")) == "interrupted", 30, what="k is interrupted: launcher and trainer are gone")
         time.sleep(3)
@@ -246,7 +246,7 @@ def queue_checks(tmp, ok):
         assert rc == 0 and "o: stopped at step" in out, (out, err)
         so = logged(proj, "o")
         time.sleep(3)
-        assert TQ.state(c, item("o")) == "held" and len(starts(proj, "o")) == 1 and not TQ.orphans(c, item("o")), "stopped, held, not restarted by the runner"
+        assert TQ.state(c, item("o")) == "held" and len(starts(proj, "o")) == 1 and not TQ.orphans(item("o")), "stopped, held, not restarted by the runner"
         assert cli(proj, "resume", "o", "--words", "w")[0] == 0
         until(lambda: is_done(proj, "o"), 90, what="o done")
         assert [x["from"] for x in starts(proj, "o")] == [0, so], starts(proj, "o")

@@ -8,7 +8,6 @@ import json
 import os
 import tempfile
 import threading
-import time
 
 import suitecli
 
@@ -81,13 +80,13 @@ def api_checks(tmp, ok):
     try:
         # 1 a job is validated: every key present afterwards, a typo shows, the types are checked
         j = api.load_job(job("j.one", after="a, b", priority="3", kill="group.lines@1000 > 1.48"))
-        assert j["after"] == ["a", "b"] and j["priority"] == 3 and j["kill"] == ["group.lines@1000 > 1.48"] and j["set"] == ["steps=20", "sleep=0.02"] and j["kind"] == "train", j
+        assert j["after"] == ["a", "b"] and j["priority"] == 3 and j["kill"] == ["group.lines@1000 > 1.48"] and j["set"] == ["steps=20", "sleep=0.02"], j
         raises(api.load_job, "unknown job key", dict(id="x", config="b.json", stepz=1))
         raises(api.load_job, '"id"', dict(config="b.json"))
         raises(api.load_job, '"config"', dict(id="x"))
         raises(api.load_job, "priority", dict(id="x", config="b.json", priority="soon"))
         raises(api.load_job, '"card"', dict(id="x", config="b.json", card={"hypothesis": "h"}))
-        raises(api.load_job, "kind", dict(id="x", config="b.json", kind="dance"))
+        raises(api.load_job, "unknown job key", dict(id="x", config="b.json", kind="train"))             # no job kinds: a training is the only job of this suite
         raises(api.load_job, "job file", os.path.join(tmp, "no_such.json"))
         raises(api.load_job, "starts with a letter", dict(id="../x", config="b.json"))
         raises(api.load_job, "unknown job key", dict(id="x", config="b.json", n=3))               # the keys of a runner job are not a training's
@@ -98,7 +97,7 @@ def api_checks(tmp, ok):
         p_bom = os.path.join(tmp, "bom.json")
         open(p_bom, "w", encoding="utf-8-sig").write(json.dumps(dict(id="b.om", config="base.json", no_card=True)))
         assert api.load_job(p_bom)["id"] == "b.om", "a job file with a BOM (PowerShell 5.1) is read"
-        ok("jobs: normalised, a typo / a missing id / a bad type / a bad kind / true-false as text is an error, _comments are allowed, a BOM is read")
+        ok("jobs: normalised, a typo / a missing id / a bad type / true-false as text is an error, _comments are allowed, a BOM is read")
 
         # 2 check starts nothing and says what run would do
         r = T.check(job("c.one"))
@@ -361,18 +360,19 @@ def seam_checks(tmp, ok):
         assert rc == 2 and "plot needs matplotlib" in e and "Traceback" not in e, (rc, o, e)
         ok("curves: without matplotlib the legacy command says so and ends with 2")
 
-        # 8 no wiring to the commented-out runsuite: a job of kind run is refused with the way to the Runner, a runner command is no training
+        # 8 a job of this suite is a training: the keys of a runner job are refused, a runner command is no training
         for bad in (dict(kind="run"), dict(mode="full")):
             try:
                 api.load_job(dict(id="r.x", config="base.json", **bad))
                 raise AssertionError(f"{bad} must be refused")
             except api.TrainingError as e:
-                assert ("python -m runner" in str(e)) if "kind" in bad else ("unknown job key" in str(e)), str(e)
-        assert not hasattr(api, "RUN_ONLY") and api.KINDS == ("train",)
+                assert "unknown job key" in str(e) and (("python -m runner" in str(e)) if "kind" in bad else True), str(e)
         runner_cmd = "bash -c $HOME/miniconda3/envs/gcar/bin/python -m runner predict runs/t20_base_s0 --out runs/t20_base_s0/preds"
         assert TQ.is_training(c, "t20.base.s0", {"command": runner_cmd}) is False, "a runner job whose id is the network's folder name is no training"
         assert TQ.is_training(c, "t20.base.s0", {"command": "python3 code/trainer.py composed/t20_base_s0.json"}) is True
-        ok("jobs: kind run points to `python -m runner`; a runner command is recognised by what it starts")
+        import trainsuite
+        assert sorted(n for n, v in vars(trainsuite).items() if not n.startswith("_") and not isinstance(v, type(os))) == ["Training", "TrainingError"], "the package exports the class and its error, nothing else"
+        ok("jobs: the keys of a runner job are refused (a kind points to `python -m runner`); a runner command is recognised by what it starts; the package exports Training and TrainingError")
 
         # 9 a resume without a first commit stops (and leaves the hold) instead of training on the working tree of now
         T.run(job("n.pin", set={"steps": 600, "sleep": 0.05}))

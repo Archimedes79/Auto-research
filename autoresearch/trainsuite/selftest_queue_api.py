@@ -57,6 +57,20 @@ def queue_checks(tmp, ok):
         assert T.queue_get(1)["id"] == "1" and T.queue_get("2")["id"] == "2" and T.queue_get("2")["number"] == 2 and T.queue_get(2)["id"] == "2"
         T.queue_remove("1")
         T.queue_remove("2")
+        # an item from before the job kinds went still carries "kind": "train" and is read like any other; a GPU-slot holder without a run folder of its own (an evaluation, a prediction)
+        # is no running training
+        T.queue_add(job("k.old"), start=False)
+        c0 = TQ.context(proj)
+        with TQ.edit(c0) as q0:
+            q0["items"][0]["kind"] = "train"
+        assert T.queue_get("k.old")["state"] == "queued" and "kind" not in T.queue_list()["items"][0]
+        T.queue_remove("k.old")
+        from . import queue_api
+        real_slots, queue_api._slot_ids = queue_api._slot_ids, lambda c: ["ghost.eval"]
+        try:
+            assert queue_api._running(c0, [], {}) == [("ghost.eval", None, None)] and queue_api.resolve_item(c0, None) == (None, None, None), "only a training counts as the running one"
+        finally:
+            queue_api._slot_ids = real_slots
         raises(T.queue_hold, "words", "", all=True)
         raises(T.queue_resume, "words", "  ", all=True)
         raises(T.queue_hold, "name the item", "Mirko: test")                          # neither an item nor all: an error, a missing id never holds everything
@@ -116,13 +130,13 @@ def queue_checks(tmp, ok):
         # 4 the deep review of the training stack: a launcher that failed (exit 1) is tried again and a refusal (exit 2) is final; the runner stops a run whose job-kill rule hits and the
         # person's resume waives that rule; `hold` stops a launcher that starts the trainer after it answered "on hold"
         c14 = TQ.context(proj)
-        it14 = {"id": "x.fail", "kind": "run", "argv": ["bash", "-c", "echo boom; exit 1"]}
+        it14 = {"id": "x.fail", "argv": ["bash", "-c", "echo boom; exit 1"]}
         for k in (1, 2):
             started, text14 = TQ.launch(c14, it14, 5.0)
             assert not started and f"try {k} of {TQ.LAUNCH_RETRIES}" in text14 and not it14.get("refused"), text14
         started, text14 = TQ.launch(c14, it14, 5.0)
         assert not started and "boom" in it14.get("refused", ""), (text14, it14)
-        it14b = {"id": "x.two", "kind": "run", "argv": ["bash", "-c", "echo no card; exit 2"]}
+        it14b = {"id": "x.two", "argv": ["bash", "-c", "echo no card; exit 2"]}
         assert not TQ.launch(c14, it14b, 5.0)[0] and "no card" in it14b.get("refused", "") and "launch_failures" not in it14b, "exit 2 is a refusal: final at once"
         T.queue_add(job("k.enf", set={"steps": 600, "sleep": 0.05}, kill=["total@5 > 0.5"]))                 # the toy trainer logs total 1.0
         until(lambda: os.path.exists(rec("k.enf", "HOLD")), 90, what="the runner stopped k.enf on its kill rule")
