@@ -19,7 +19,7 @@ sequences / 404 keyframes, trainval = 850 / 34,149).
 | prev / cur / next keyframe + the ego motion between them | `AutoGT(...).training_sample(token)` (section 5) |
 | GT of ALL sequences stored + every check + one PDF | `python -m autogt report --version v1.0-mini` (trainval: `--version v1.0-trainval`, 5-8 h, resumable) |
 | to look at a keyframe / drive through a sequence | `python -m autogt view OUT_DIR <token>` (any STORED keyframe, mini or trainval) or `... view OUT_DIR scene-0061:8` (mini, generated now) / `python -m autogt video scene-0061 out.mp4 [seconds]` (mini; a trainval sequence: `python -m autogt video scene-0441 out.mp4 20 --version v1.0-trainval`) |
-| to be sure after editing the generator | `python -m autogt selftest` (about 5 min; also checks that this file lists every key) |
+| to be sure after editing the generator | `python -m autogt selftest` (5 - 10 min; also checks that this file lists every key) |
 | to remove what autogt generated | `python -m autogt clean --stale-caches data/autogt` (dry run; `--move` to act, `--delete` only for pictures, videos and reports: a store is deleted by `autoresearch/tools/package.py gt`; a link to D: and a store whose index says `release` are never listed; the caches of released GT versions are left alone, `--include-released` lists them and they can only be moved) |
 
 Python (all of it): `from autogt import generate, AutoGT, load, scene_tokens, current_signature, GridSpec`.

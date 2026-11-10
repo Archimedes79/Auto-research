@@ -20,7 +20,7 @@ Every command is ONE call of a function of the suite (the map below; `python -m 
     check                  checks.run               consistency checks of the GT of mini        report   report.report   the checks over all sequences, one PDF
     digest                 checks.digests           a digest per frame of mini (two generators that make the same GT give the same file)
     clean                  clean.clean              list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
-    selftest               selftest.run             all tests of the suite (about 5 min)
+    selftest               selftest.run             all tests of the suite (5 - 10 min)
 
 Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, digest --compare), 2 wrong arguments (a message, no traceback; AUTOGT_TRACEBACK=1 shows it).
 """
@@ -249,7 +249,7 @@ def _parser():
     cl.add_argument("--stale-caches", metavar="DIR")
     cl.add_argument("--include-released", action="store_true", help="also list the released stores: --move only")
     cl.add_argument("--older-than", type=float, metavar="DAYS")
-    st = command("selftest", _cmd_selftest, "all tests of the suite (about 10 min), or only some of the file-level ones with --only")
+    st = command("selftest", _cmd_selftest, "all tests of the suite (5 - 10 min), or only some of the file-level ones with --only")
     st.add_argument("--only", nargs="+", choices=sorted(SELFTESTS), help="run only these parts (each prints its time): " + ", ".join(sorted(SELFTESTS)))
     p.registry = registry
     return p
