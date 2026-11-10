@@ -1,6 +1,6 @@
 # temp - scratch of the running loop
 
-One-off scripts and temporary files of the loop that is running now. **Convention: `temp/loopNN/`** (subfolders such as `analysis/`, `launchers/` inside it are fine). When the loop is filed (the experiment files have their summaries, the report is built, ledger and state written) run, from the problem folder,
+One-off scripts and temporary files of the loop that is running now. **Convention: `temp/loopNN/`** (subfolders such as `temp/loopNN/analysis/` or `temp/loopNN/launchers/` are fine). When the loop is filed (the experiment files have their summaries, the report is built, ledger and state written) run, from the problem folder,
 
 ```
 wsl python3 ../autoresearch/tools/clean_temp.py loopNN            # dry run

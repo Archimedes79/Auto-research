@@ -169,6 +169,7 @@ status.json
 # E273 (lane head) result folders: the experiment index and the packages (package.json) in git, pictures / videos / frames not
 !/bev_fusion_lane_center/results/
 /bev_fusion_lane_center/results/*
+!/bev_fusion_lane_center/results/README.md
 !/bev_fusion_lane_center/results/E273/
 !/bev_fusion_lane_center/results/E273.*/
 /bev_fusion_lane_center/results/E273.*/*

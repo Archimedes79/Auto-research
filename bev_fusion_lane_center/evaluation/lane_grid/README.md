@@ -12,7 +12,7 @@ Dense heads output a 200 x 200 raster (0.5 m cells, ego frame, row = x, column =
 | `load_gt_points(split, part, idx)` | dense exact ground-truth points `~/exp_crn_<split>/feats/<part>_gt_pts_exact.npy` |
 | `selftest.py` | spec of `skeletons` with hysteresis and range threshold together (CPU, review bug L3 fixed 2026-10-31: far seeds survive), then re-scores the full validation maps of the dense head `e37_final` and must reproduce the numbers stored in `runs/e37_final/metrics.json` (deviation 0.0 on 873 rows, 2026-10-24) |
 
-The functions are unchanged copies of the code that produced all grid numbers of loops 2-17 (`training/train/dense_head.py`, `field_tools.py`, `heat_align.py`, `centerline_estimator.py`); `dense_head.py` and `field_tools.py` now import them from here.
+The functions are unchanged copies of the code that produced all grid numbers of loops 2-17 (the former `dense_head.py`, `field_tools.py`, `heat_align.py` and `centerline_estimator.py` of the old training tree, removed since); the code that is left imports them from here.
 
 ## Review notes (2026-10-24)
 

@@ -18,11 +18,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 
-GENERIC = {"log.txt", "status.json", "metrics.json", "model.pt", "run.json", "run.log", "card.md", "results", "figures", "eval.json", "README.md", "card.json"}
+GENERIC = {"log.txt", "status.json", "metrics.json", "model.pt", "run.json", "run.log", "card.md", "results", "figures", "eval.json", "README.md", "card.json",
+           # files that live once per experiment, run or topic folder, not at one fixed path (a document names them in prose): the older card file (still read), the
+           # per-run gt record, the result page and packages, the research files, and the optional queue file
+           "experiment.json", "gt.json", "results.md", "package.json", "provenance.json", "split.json", "decision.json", "note.md", "table.md", "table.csv", "candidates.md", "overview.md", "schedule.csv"}
 TOKEN = re.compile(r"`([^`\n]+)`|\]\(([^)\s]+)\)")
 PATHLIKE = re.compile(r"^[A-Za-z0-9_.\-/\\{}\[\]<>*~$:]+$")
 EXT = r"\.(py|sh|ps1|md|csv|json|txt|yml|pdf|pptx|png)$"
-PLACEHOLDER = re.compile(r"loopNN|(?<![A-Za-z])NN(?![A-Za-z])|\d/\d+(?:/|$)")   # `temp/loopNN/`, `E<NN>`-style NN, `e37_fold0/1/2/model.pt`: a spelling of many paths, not one (NN inside a word is a typo)
+PLACEHOLDER = re.compile(r"loopNN|(?<![A-Za-z])NN(?![A-Za-z])|(?<=[a-z])N(?![A-Za-z])|\d/\d+(?:/|$)")   # `temp/loopNN/`, `E<NN>`-style NN, `weekN/`, `e37_fold0/1/2/model.pt`: a spelling of many paths, not one (NN inside a word is a typo)
+GONE = re.compile(r"\b(removed|deleted|moved to|replaced by|no longer|archived)\b", re.I)   # a line that says the file is gone names a dead path on purpose
 
 
 def rules():
@@ -131,8 +135,8 @@ def check(root=None):
             tok = m.group(1) or m.group(2)
             e = text.find("\n", m.end())
             line = text[text.rfind("\n", 0, m.start()) + 1:e if e >= 0 else len(text)]
-            if "_to_delete" in line or "cleanup_20" in line or tok in seen:
-                continue  # a line that says where something was moved to
+            if "_to_delete" in line or "cleanup_20" in line or GONE.search(line) or tok in seen:
+                continue  # a line that says where something was moved to, or that it was removed
             seen.add(tok)
             if PATHLIKE.match(tok.strip()) and not resolves(tok, md, names, root, R):
                 problems.append(f"{rel}: dead path `{tok}`")
@@ -152,6 +156,8 @@ def selftest():
     # review 2026-11-02: only the placeholder spellings of the repository skip the lookup, not any token that contains NN or a digit-slash-digit
     assert resolves("temp/loopNN/x.py", md, set(), root, R) and resolves("history/prompts/PROGRAM_loopNN.md", md, set(), root, R) and resolves("e37_fold0/1/2/model.pt", md, set(), root, R)
     assert not resolves("tools/NNnot_there.py", md, set(), root, R) and not resolves("tools/foo2/3bar.py", md, set(), root, R), "NN inside a word and digit/digit inside names are no placeholders"
+    assert resolves("results/weekN/", md, set(), root, R) and resolves("reports/WeekN_Results.md", md, set(), root, R), "weekN is a placeholder like loopNN"
+    assert GONE.search("the `INDEX.csv` copy was removed on 2026-11-02") and GONE.search("moved to `elsewhere/x.py`") and not GONE.search("see `INDEX.csv` for the table"), "a line that says a file is gone names a dead path on purpose"
     import tempfile
     tmp = tempfile.mkdtemp()
     os.makedirs(os.path.join(tmp, "runs", "proj", "docs", "history"))                   # a checkout below a folder called runs
