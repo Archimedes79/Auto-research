@@ -37,6 +37,8 @@ FAILED = ("failed", "timeout", "stalled", "gpu_busy", "blocked")
 VERDICTS = ("KEEP", "CUT", "TIE", "INCONCLUSIVE")
 
 
+TOKEN_VERDICT = re.compile(r"decide\.py [\d-]+: (KEEP|CUT|TIE|INCONCLUSIVE)\b")      # the token that decide.py writes into the decision cell
+
 def number(eid):
     m = re.match(r"E(\d+)", eid or "")
     return int(m.group(1)) if m else None
@@ -85,6 +87,7 @@ def collect(root=None, cfg=None):
     test_rows = open(test_log, encoding="utf-8").read().splitlines() if os.path.isfile(test_log) else []
     out = {name: dict(loop=name, runs=0, failed=0, gpu_s=0.0, exps=set(), KEEP=0, CUT=0, TIE=0, INCONCLUSIVE=0, other=0, keep2=0,
                       pred_met=0, pred_n=0, errs=[], errs_by={}, test=0, detail=[]) for name in loops}
+    with_file = {number(str(d.get("id"))) for d in decisions}
     for d in decisions:
         L = out.get(loop_of(number(str(d.get("id"))), loops))
         if L is None:
@@ -112,8 +115,11 @@ def collect(root=None, cfg=None):
         L["exps"].add(n)
         dec = r.get("decision") or ""
         v, pr = written(split_decision(dec)[0])        # the prose, whether the decide.py token stands before or behind it
-        if "decide.py" in dec:
-            v = None  # the verdict of this arm is counted through its decision file
+        if "decide.py" in dec and n in with_file:
+            v = None  # the verdict of this arm is counted through its decision file (a typed verdict has none: its token is counted here)
+        elif "decide.py" in dec:
+            m_tok = TOKEN_VERDICT.search(dec)
+            v = m_tok.group(1) if m_tok else v
         if v in VERDICTS + ("other",):
             L[v] += 1
         if pr:

@@ -132,7 +132,11 @@ def code_hash(root, cfg):
                 if f.endswith((".py", ".sh")):
                     p = os.path.join(dp, f)
                     h.update(os.path.relpath(p, root).encode())
-                    h.update(open(p, "rb").read())
+                    try:
+                        with open(p, "rb") as fh:
+                            h.update(fh.read())
+                    except OSError:                                  # a dangling link, a file removed between the walk and the open: its name is in the hash, its content cannot be
+                        h.update(b"<unreadable>")
     for extra in cfg["fingerprint_extra"]:
         p = os.path.join(root, extra)
         if os.path.isfile(p):
@@ -979,6 +983,7 @@ def main():
     ap.add_argument("--timeout", type=float, default=0, help="minutes after which the command is killed (0 = none)")
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--again", action="store_true", help="repeat an id that finished with exit 0 (otherwise refused)")
+    ap.add_argument("--change-card", action="store_true", help="a repeat of an id that ran before may carry another --hyp / --pred / --rule than its ledger row (otherwise refused: the rule is written before the run); the old text goes into the notes")
     ap.add_argument("--result", default="", help="json file the command writes its metrics to; embedded in the ledger when it exists")
     ap.add_argument("--no-git", action="store_true", help="do not snapshot and tag the code")
     ap.add_argument("--pin", metavar="REF", help="run on the code of this commit or tag (a resume that must continue on the code of attempt 1) instead of a snapshot of the working tree: "
@@ -993,6 +998,18 @@ def main():
     if not cmd:
         ap.error("no command (put it after --)")
     planned = ledger_row(ledger, a.id)  # a row written before the run (ledger.py add) carries the card
+    card_note = ""
+    if planned.get("started"):          # the id ran before: its card is frozen (ledger.py refuses to change it as well); a repeat reads the card from the row
+        old_card = dict(hyp=planned.get("hypothesis", ""), pred=planned.get("prediction", ""), rule=planned.get("rule", ""))
+        given = dict(hyp=a.hyp, pred=a.pred, rule=a.rule)
+        same = lambda x, y: " ".join(x.split()) == " ".join(y.split())  # noqa: E731
+        diff = [k for k in given if given[k] and old_card[k] and not same(given[k], old_card[k])]
+        if diff and not a.change_card:
+            print(f"[{a.id}] refused: this id ran before and its card is frozen, but {' and '.join('--' + k for k in diff)} differs from its ledger row (hard rule 4: the rule is written "
+                  "before the run); use a new id, or --change-card to change it on purpose (the old text goes into the notes)")
+            return 2
+        if diff:
+            card_note = "card changed on purpose (--change-card): " + "; ".join(f"{k} was {old_card[k][:120]!r}" for k in diff)
     a.hyp, a.pred, a.rule = a.hyp or planned.get("hypothesis", ""), a.pred or planned.get("prediction", ""), a.rule or planned.get("rule", "")
     missing = [n for n, v in (("--hyp", a.hyp), ("--pred", a.pred), ("--rule", a.rule)) if not v]
     if missing:
@@ -1040,7 +1057,7 @@ def main():
     if claim is None:
         print(f"[{a.id}] refused: another launcher is starting this id right now")
         return 2
-    notes = []
+    notes = [card_note] if card_note else []
     try:
         prev = record(d)
         if prev:
@@ -1070,7 +1087,7 @@ def main():
         beat(hb, "created")
         again = bool(prev) or bool(ledger_row(ledger, a.id).get("started"))  # the id ran before (run record or ledger row)
         clear = ("result", "decision") if again else ()  # a new attempt starts without the earlier attempt's judgement
-        rec = dict(id=a.id, hypothesis=a.hyp, prediction=a.pred, rule=a.rule, split=a.split, basis=a.basis, seed=a.seed, command=" ".join(cmd), cwd=a.cwd,
+        rec = dict(id=a.id, hypothesis=a.hyp, prediction=a.pred, rule=a.rule, split=a.split, basis=a.basis, seed=a.seed, command=" ".join(cmd), argv=list(cmd), cwd=a.cwd,
                    host=platform.node(), python=sys.version.split()[0], conda_env=os.environ.get("CONDA_DEFAULT_ENV", ""), gpu=gpu_info(), launcher_pid=os.getpid(),
                    created=now(), status="waiting", after=a.after, timeout_min=a.timeout)
         if prev.get("code_hash"):
@@ -1086,7 +1103,7 @@ def main():
         except OSError:
             pass
     if again and ledger_row(ledger, a.id):
-        ledger_safe(ledger, dict(id=a.id), clear)  # the old judgement goes now, not only at the end: a re-run that dies must not keep the old KEEP beside it
+        ledger_safe(ledger, dict(id=a.id, status="running"), clear)  # the old judgement goes now, not only at the end: a re-run that dies must not keep the old KEEP beside it, and the row must not say ok while the repeat runs
 
     def refuse_held():
         """a hold set while this launcher waits (--after, machine lock, GPU queue) is read again every round: the run does not start; status held, a ledger row, exit 2 like the first check"""

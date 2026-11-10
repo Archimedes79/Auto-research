@@ -476,35 +476,48 @@ def status_problem(rid, status):
 
 
 def run_gate(exp, rows, records):
-    """(refusals, registered): the runs behind a verdict. Each run id of the variant and the control arm needs a ledger row with status ok. A run record may carry the
-    `card_sha` of the rule at launch (run.py): it must equal experiment.rule_sha(card) now. registered: at least one listed run carries a card_sha"""
+    """(refusals, registered, listed): the runs behind a verdict. Each run id of the variant and the control arm needs a ledger row with status ok, no repeat of it under way
+    (the run record says done / ok), and a card (a --no-card run never feeds a verdict: its ledger notes say 'no card' or its rule cell is empty). A run record may carry the
+    `card_sha` of the rule at launch (run.py): it must equal experiment.rule_sha(card) now. registered: how many listed runs carry such a card_sha, as (n, of m)"""
     import experiment as X
     import run as RUN
-    now, status, bad, registered = X.rule_sha(exp), {r["id"]: r.get("status") or "" for r in rows}, [], False
-    for rid in listed_runs(exp):
+    now, status, bad, n_reg = X.rule_sha(exp), {r["id"]: r.get("status") or "" for r in rows}, [], 0
+    by_id = {r["id"]: r for r in rows}
+    listed = listed_runs(exp)
+    for rid in listed:
         if why := status_problem(rid, status):
             bad.append(why)
             continue
-        rec = RUN.record(os.path.join(records, rid))
+        folder = os.path.join(records, rid)
+        rec = RUN.record(folder)
+        if rec and RUN.state_of(folder) not in ("done", "ok"):          # the ledger row still says ok while a repeat (--again) runs
+            bad.append(f"run {rid} is {RUN.state_of(folder)} now (a repeat under way): nothing to decide yet")
+            continue
+        row = by_id.get(rid, {})
+        if "no card" in (row.get("notes") or "") or not (row.get("rule") or "").strip():
+            bad.append(f"run {rid} was started without a card (--no-card: no rule written before it): it cannot feed a verdict (--by-hand \"<reason>\" decides anyway)")
+            continue
         sha = rec.get("card_sha")
         if isinstance(sha, str) and sha and rec.get("card_id") in (None, "", exp.get("id")):    # a run that several cards list (E266.b0 in E266 and E267) is registered for the card that was found first
-            registered = True
+            n_reg += 1
             if sha != now:
                 bad.append(f"the rule changed after run {rid} was launched (card_sha {sha}, the card now {now})")
-    return bad, registered
+    return bad, (n_reg, len(listed))
 
 
 def gated_decision(exp, root, rows, records, by_hand=""):
-    """decide_experiment behind the gate; ValueError with the reasons when a listed run is not ok or the rule changed after its launch (by_hand bypasses both). The decision
-    carries rule_sha, registered (a run record held the card_sha of this rule) and by_hand (the reason)"""
+    """decide_experiment behind the gate; ValueError with the reasons when a listed run is not ok, is a --no-card run, is being repeated, or the rule changed after its launch
+    (by_hand bypasses all of it). The decision carries rule_sha, registered (every listed run held the card_sha of this rule), registered_runs ("n of m"), and by_hand (the reason)"""
     import experiment as X
-    bad, registered = ([], False) if by_hand else run_gate(exp, rows, records)
+    bad, (n_reg, n_all) = ([], (0, 0)) if by_hand else run_gate(exp, rows, records)
     if bad:
         raise ValueError("; ".join(bad))
     d = decide_experiment(exp, root)
-    d.update(rule_sha=X.rule_sha(exp), registered=registered, by_hand=by_hand)
+    registered = bool(n_all) and n_reg == n_all
+    d.update(rule_sha=X.rule_sha(exp), registered=registered, registered_runs=f"{n_reg} of {n_all}", by_hand=by_hand)
     if not by_hand and not registered:
-        d["why"] += "; rule not registered at launch (no card_sha in the run records)"
+        d["why"] += ("; no run id is listed in the card (run_ids): the gate checked no run and the rule was not registered at launch" if not n_all else
+                     f"; rule not registered at launch (card_sha in {n_reg} of {n_all} listed run records)")
     return d
 
 
@@ -538,7 +551,8 @@ def write_records(path, exp, d, root):
     import project as P
     here = os.path.dirname(os.path.abspath(__file__))
     out, folder = decision_path(path), os.path.dirname(path)
-    token = decision_token(d["verdict"], d["date"][:10], d["effect"], [f"by hand: {d['by_hand']}"] if d.get("by_hand") else [])
+    marks = [f"by hand: {d['by_hand']}"] if d.get("by_hand") else ["rule not registered at launch"] if d.get("registered") is False else []
+    token = decision_token(d["verdict"], d["date"][:10], d["effect"], marks)
     old = {r["id"]: r.get("decision", "") for r in L.load()}
     for rid in exp["arms"][d["variant"]].get("run_ids", []):
         if rid not in old:  # ledger.py note would create an empty 'planned' row for an id that never ran
@@ -619,6 +633,8 @@ def main():
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--by-hand", default=None, metavar="REASON", help="--experiment: decide without the gate (finished runs, rule fixed before them) and label the verdict 'by hand: REASON'")
     a = ap.parse_args()
+    if a.experiment and (a.variant or a.control or a.id or a.lower_better or a.cost_variant is not None or a.cost_control is not None or a.band != 0.010):
+        ap.error("--experiment takes its band, direction and arms from the card: --variant, --control, --id, --band, --lower-better and --cost-* belong to the typed form")
     if a.by_hand is not None and (not a.experiment or not a.by_hand.strip()):
         ap.error("--by-hand REASON belongs to --experiment and needs a reason (a typed verdict is always labelled by hand)")
     return decide_card(a) if a.experiment else decide_typed(a, ap)

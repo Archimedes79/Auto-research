@@ -1143,7 +1143,8 @@ try:
     assert nb.returncode == 127 and rows()["S.nobin"]["status"] == "failed" and RUN.record(f"{T}/runs/S.nobin")["status"] == "failed", (nb.stdout, nb.stderr[-300:])
     # a re-run of an id that has a ledger row starts a new judgement: result and decision of the earlier attempt are gone at its end
     RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.old", status="ok", started="2026-10-24T10:00:00", result="old result", decision="KEEP", exit="0", duration_s="5", hypothesis="o"))
-    assert go("S.old", ["bash", "-c", "echo x"]).returncode == 0
+    assert go("S.old", ["bash", "-c", "echo x"]).returncode == 2, "another hypothesis than the ledger row's: the card of an id that ran before is frozen"
+    assert go("S.old", ["bash", "-c", "echo x"], "--hyp", "o").returncode == 0
     assert rows()["S.old"]["status"] == "ok" and rows()["S.old"]["result"] == "" and rows()["S.old"]["decision"] == "", rows()["S.old"]
     # a busy schedule file does not matter to a launcher: run.py never touches it
     open(f"{T}/schedule.csv.lock", "w").write("held")
@@ -1219,7 +1220,7 @@ try:
     assert sorted(p.wait() for p in dup) == [0, 2], "exactly one launcher of an id runs"
     # a re-run drops the old judgement when it starts, not only when it ends (a re-run that dies must not keep the old KEEP)
     RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.old2", status="ok", started="2026-10-24T10:00:00", result="old", decision="KEEP", exit="0", duration_s="5", hypothesis="o"))
-    rr = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.old2", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 3; echo x"], env=env, stdout=subprocess.DEVNULL)
+    rr = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.old2", "--hyp", "o", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 3; echo x"], env=env, stdout=subprocess.DEVNULL)
     for _ in range(100):
         if RUN.record(f"{T}/runs/S.old2").get("status") == "running":
             break

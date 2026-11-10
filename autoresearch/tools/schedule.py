@@ -51,6 +51,19 @@ def save(rows, path=None, lock=True):
         P.atomic_write(path, buf.getvalue())
 
 
+def live_state(RUN, folder):
+    """run.state_of(folder), except that a stalled record whose command still runs (the launcher was killed, the command goes on) is running: nothing may restart it and
+    nothing may call it failed"""
+    st = RUN.state_of(folder)
+    if st == "stalled":
+        try:
+            if RUN.command_alive(RUN.record(folder)):
+                return "running"
+        except Exception:  # noqa: BLE001  (a record that cannot be read stays stalled)
+            pass
+    return st
+
+
 def derived(rows, records=None):
     """copies of the rows with the state taken from the run records wherever an item has run ids with a record; the input rows are not changed"""
     import run as RUN  # state_of: done flag, record status, heartbeat (stalled)
@@ -59,7 +72,7 @@ def derived(rows, records=None):
     for r in rows:
         r = dict(r)
         ids = [x for x in (r.get("run_ids") or r["item"]).split(";") if x]  # the run id of an item without run_ids is its name
-        st = [OF_RUN.get(RUN.state_of(os.path.join(records, i)), "") for i in ids]
+        st = [OF_RUN.get(live_state(RUN, os.path.join(records, i)), "") for i in ids]
         if any(st) and r["state"] != "cancelled":  # a cancelled item stays cancelled whatever its run records say
             r["state"] = "done" if all(s == "done" for s in st) else "failed" if "failed" in st else "blocked" if "blocked" in st else "running" if "running" in st else r["state"]
         out.append(r)

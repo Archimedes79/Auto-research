@@ -46,7 +46,7 @@ def ledger(rows):
     with open(f"{T}/LEDGER.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=COLS, lineterminator="\n")
         w.writeheader()
-        w.writerows([{c: r.get(c, "") for c in COLS} for r in rows])
+        w.writerows([{c: r.get(c, "r" if c == "rule" else "") for c in COLS} for r in rows])         # a run has its rule (a row without one was started without a card)
 
 
 def rows():
@@ -198,7 +198,7 @@ def t_gate():
     fresh(sha=None)
     rc, out = decide("--experiment", CARD_MD, "--write")
     d = decision()
-    assert rc == 0 and d["registered"] is False and d["why"].endswith("rule not registered at launch (no card_sha in the run records)"), (out, d["why"])
+    assert rc == 0 and d["registered"] is False and d["why"].endswith("rule not registered at launch (card_sha in 0 of 4 listed run records)"), (out, d["why"])
     says(open(f"{T}/experiments/E1_x/results.md", encoding="utf-8").read(), "**Verdict (rule not registered at launch):** KEEP")
     # one record with another rule is enough, also the control's
     fresh(sha=None)
@@ -261,13 +261,18 @@ def t_decision_cell():
     ns = lambda ledger_id: type("A", (), dict(by_hand="", ledger=ledger_id))()  # noqa: E731
     assert keep3.evidence(ns("E5"), cand) == "ledger E5 KEEP" and keep3.evidence(ns("E6"), cand) == "ledger E6 KEEP"
     raises(lambda: keep3.evidence(ns("E7"), cand), "holds the verdict KEEP")
-    # metrics counts a decide.py row through its decision file only, and reads the prose without the token (the token's by-hand reason is no part of the prediction)
+    # metrics counts a decide.py row through its decision file when the experiment has one (not twice), by its token when it has none (a typed verdict), and reads the prose
+    # without the token (the token's by-hand reason is no part of the prediction)
     ledger([dict(id="E1.a", status="ok", decision="rule met; prediction met | decide.py 2026-11-10: KEEP (effect +0.0200)"),
             dict(id="E2.a", status="ok", decision="decide.py 2026-11-10: KEEP (effect +0.0200, by hand: prediction missed here) | rule met; prediction met"),
             dict(id="E3.a", status="ok", decision="rule not met; prediction missed")])
     cfg = dict(P.DEFAULTS, ledger="LEDGER.csv", loops={"1": [1, 9]})
     L = metrics.collect(T, cfg)["1"]
-    assert (L["pred_met"], L["pred_n"], L["KEEP"], L["CUT"], L["other"]) == (2, 3, 0, 1, 0), L
+    assert (L["pred_met"], L["pred_n"], L["KEEP"], L["CUT"], L["other"]) == (2, 3, 2, 1, 0), L           # E1 and E2 by their tokens, E3 by its prose
+    os.makedirs(f"{T}/experiments/E1_x", exist_ok=True)
+    json.dump(dict(id="E1", verdict="KEEP", diffs=[0.02]), open(f"{T}/experiments/E1_x/decision.json", "w"))
+    L = metrics.collect(T, cfg)["1"]
+    assert (L["pred_met"], L["pred_n"], L["KEEP"], L["CUT"], L["other"]) == (2, 3, 2, 1, 0), L           # E1 through its file (not counted twice), E2 by its token
 
 
 # ------------------------------------------------------------------ 3. the checks of a card
@@ -346,6 +351,66 @@ def t_write_failures():
     assert not [f for f in os.listdir(f"{T}/experiments/E1_x") if ".tmp." in f], os.listdir(f"{T}/experiments/E1_x")
 
 
+def t_gate_more():
+    """the gate also refuses: a --no-card run (notes 'no card' or no rule), a repeat under way (the ledger row still says ok), and it says it when the rule was not registered
+    (in the ledger token, with the count of registered runs)"""
+    sha = X.rule_sha(BASE)
+    fresh(sha=sha)
+    ledger([dict(id="V.a0", status="ok"), dict(id="V.a1", status="ok", rule="", notes="no card"), dict(id="V.c0", status="ok"), dict(id="V.c1", status="ok")])
+    rc, out = decide("--experiment", CARD_MD, "--write")
+    says(out, "run V.a1 was started without a card")
+    assert rc == 1 and not os.path.exists(f"{T}/experiments/E1_x/decision.json"), out
+    rc, out = decide("--experiment", CARD_MD, "--by-hand", "the no-card run is meant")
+    assert rc == 0 and "KEEP" in out, out
+    ledger([dict(id=r, status="ok") for r in RUNS])
+    record("V.c1", sha)
+    r = json.load(open(f"{T}/runs/V.c1/run.json"))
+    r["status"] = "running"
+    json.dump(r, open(f"{T}/runs/V.c1/run.json", "w"))
+    rc, out = decide("--experiment", CARD_MD)
+    says(out, "run V.c1 is", "a repeat under way")
+    assert rc == 1, out
+    record("V.c1", sha)
+    # three of four runs registered: the verdict says so and the token carries the mark
+    record("V.a0", None)
+    rc, out = decide("--experiment", CARD_MD, "--write")
+    d = decision()
+    assert rc == 0 and d["registered"] is False and d["registered_runs"] == "3 of 4" and "card_sha in 3 of 4" in d["why"], (out, d)
+    assert "rule not registered at launch" in rows()["V.a0"]["decision"], rows()["V.a0"]["decision"]
+    # no run ids listed at all: the gate checked no run, and the decision says so
+    exp = mutated()
+    for arm in exp["arms"].values():
+        arm.pop("run_ids")
+    fresh(exp)
+    rc, out = decide("--experiment", CARD_MD)
+    says(out, "no run id is listed in the card")
+    assert rc == 0, out
+
+
+def t_ledger_comment():
+    """ledger.py note --decision with a comment keeps the decide.py token in front; an 'n/a' duration does not break the table"""
+    fresh()
+    rc, out = decide("--experiment", CARD_MD, "--write")
+    assert rc == 0 and DC.TOKEN.search(rows()["V.a0"]["decision"]), out
+    tok = DC.TOKEN.search(rows()["V.a0"]["decision"]).group(0)
+    r = subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "V.a0", "--decision", "a remark by hand"], capture_output=True, text=True, env=ENV, cwd=T)
+    assert r.returncode == 0 and rows()["V.a0"]["decision"].startswith(tok) and rows()["V.a0"]["decision"].endswith("a remark by hand"), (r.stdout + r.stderr, rows()["V.a0"]["decision"])
+    ledger([dict(id="V.a0", status="ok", duration_s="n/a")])
+    r = subprocess.run([sys.executable, f"{HERE}/ledger.py", "note", "V.a0", "--notes", "x"], capture_output=True, text=True, env=ENV, cwd=T)
+    assert r.returncode == 0 and "Traceback" not in r.stdout + r.stderr, r.stdout + r.stderr
+    import experiment as XX
+    assert XX.spent_gpu_h("V", T)[1] == 1                                # no ValueError on 'n/a'
+
+
+def t_typed_counted():
+    """a typed verdict has no decision file: metrics counts its token"""
+    fresh()
+    ledger([dict(id="V.a0", status="ok", decision=DC.decision_token("KEEP", "2026-11-10", 0.03, ["by hand: typed scores"]))])
+    r = subprocess.run([sys.executable, f"{HERE}/metrics.py", "-v"], capture_output=True, text=True, env=ENV, cwd=T)
+    out = r.stdout + r.stderr
+    assert "KEEP" in out and "Traceback" not in out, out
+
+
 def t_no_cards():
     """an arm that lists no cards (a recipe text only, as the first lane cards of 2026-11): 'not decided' with the reason, no traceback, nothing written"""
     exp = mutated()
@@ -407,7 +472,7 @@ def t_sources():
     assert rc == 0 and not os.path.exists(f"{topic}/table.md"), out
 
 
-SECTIONS = [t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_no_cards, t_typed, t_sources]
+SECTIONS = [t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources]
 
 
 def main():

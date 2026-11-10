@@ -194,6 +194,13 @@ def decide(st, cand):
     return "out", f"{cand['name']} ({cand['value']:.4f}) does not beat the weakest, {weak['name']} ({weak['value']:.4f}), by more than the band {band}"
 
 
+def names_any(text, words):
+    """does `text` (lower case) name one of the words as a whole name (not a piece of a word); a run folder `t3_b_s0` is the ledger id `t3.b_s0` (its first underscore is a dot
+    there), so both spellings count"""
+    forms = {w.lower() for w in words} | {w.lower().replace("_", ".", 1) for w in words}
+    return any(re.search(r"(?<![\w.])" + re.escape(f) + r"(?!\w)", text) for f in forms)
+
+
 def evidence(a, cand):
     """the evidence text for --apply, or exit: a ledger KEEP that names the candidate, or a reason written by hand"""
     if a.by_hand and a.ledger:
@@ -207,7 +214,7 @@ def evidence(a, cand):
     if not keep:
         sys.exit(f"ledger id {a.ledger}: no row (or row of {a.ledger}.*) whose decision holds the verdict KEEP ({len(rows)} rows found); run decide.py first, or use --by-hand \"reason\"")
     text = " ".join(" ".join(str(v) for v in r.values()) for r in keep).lower()
-    if not any(re.search(r"(?<![\w.])" + re.escape(w.lower()) + r"(?!\w)", text) for w in [cand["name"], *cand["runs"]]):  # a whole name, not a piece of a word
+    if not names_any(text, [cand["name"], *cand["runs"]]):
         sys.exit(f"ledger id {a.ledger}: its KEEP rows name neither {cand['name']} nor {cand['runs']}: that experiment decided something else; name the right one, or use --by-hand \"reason\"")
     return f"ledger {a.ledger} KEEP"
 
@@ -350,6 +357,7 @@ def cmd_show(a, root):
 
 
 def selftest():
+    assert names_any("e1 keep (t3.b_s0 vs t3.c_s0)", ["T3_b", "T3_b_s0"]) and names_any("evaluate.py t12_mb_s0.json", ["t12_mb_s0"]) and not names_any("t3.b_s01", ["T3_b_s0"]), "dotted ledger ids"
     T = tempfile.mkdtemp(prefix="ar_keep3_")
     old = os.environ.get("AR_PROJECT")
     try:

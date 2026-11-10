@@ -720,7 +720,7 @@ PROBE = ("import json, platform\nfrom importlib import metadata\n"
 
 def trainer_python(r):
     """the interpreter a run was started with: project.json "trainer_python", else the .../bin/python that the script named in the run's command calls
-    (bev_fusion: temp/train/run_ar.sh -> ~/miniconda3/envs/gcar/bin/python); None when it is not found on this machine"""
+    (bev_fusion: tools/run_ar.sh, or the redirect temp/train/run_ar.sh of old commands -> ~/miniconda3/envs/gcar/bin/python); None when it is not found on this machine"""
     cands = [P.cfg_of(P.root()).get("trainer_python")]
     cwd = r.get("cwd") or P.root()
     for tok in (r.get("command") or "").split():
@@ -1318,6 +1318,7 @@ def main():
     ap.add_argument("--run-dir")
     ap.add_argument("--card")
     ap.add_argument("--force", action="store_true", help="manifest: rebuild an existing provenance.json")
+    ap.add_argument("--with-gt-key", action="store_true", help="manifest: also record the autogt GtKey of the GT store (imports autogt: 25-33 s under the conda python)")
     ap.add_argument("--repeat", action="store_true", help="repro: check the tag out in a worktree and print the repeat command")
     ap.add_argument("--dir", help="repro --run: where to put the worktree (default temp/repro/<id>)")
     a = ap.parse_args()
@@ -1332,6 +1333,8 @@ def main():
             wt, cmd = repro_prepare(a.args[0], a.dir)
             print(f"\nworktree (the tag checked out, the current checkout untouched): {wt}\nstart the repetition (check the GT store above first):\n  {cmd}\nremove it afterwards: git worktree remove --force {wt}")
     elif a.cmd == "manifest" and a.args:
+        if a.with_gt_key:
+            os.environ["AR_GT_KEY"] = "1"
         b = manifest(a.args[0], a.run_dir, force=a.force)
         print(f"written: {os.path.join(results_dir(a.args[0]), 'provenance.json')} (GT {_get(b, ('gt', 'version'))}, checkpoint {_get(b, ('subject', 'ckpt'))}, code {_get(b, ('code', 'tag'))})")
     elif a.cmd == "compare" and len(a.args) == 2:
@@ -1339,7 +1342,7 @@ def main():
         print(text)
         sys.exit(code)
     else:
-        ap.error("collect | repro <run id> | manifest <run id> [--run-dir d] | compare a.json b.json | --selftest")
+        ap.error("collect | repro <run id> | manifest <run id> [--run-dir d] [--with-gt-key] | compare a.json b.json | --selftest")
 
 
 if __name__ == "__main__":

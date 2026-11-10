@@ -76,9 +76,12 @@ def main():
     if a.plan and not os.path.isfile(plan):
         sys.exit(f"no plan at {plan}")
     text = open(plan, encoding="utf-8").read() if plan else None  # no plan file: the nodes are the nodes of the schedule (the list of experiments)
+    if text is not None and not a.plan and not any(exp for _, exp, _ in nodes(text)):    # a plan file whose rows name no experiment (a design plan, S0..S5) tells nothing about the experiments
+        print(f"note: {plan} names no experiment id in its rows: the nodes are those of the schedule", file=sys.stderr)
+        text = None
     rows = status(text, S.derived(S.load()), L.load())
     if not rows and text is None:
-        sys.exit(f"no plan (looked in {', '.join(where)}) and no schedule nodes (pass --plan)")
+        sys.exit(f"no plan (looked in {', '.join(where)}) and no schedule nodes (pass --plan); without them `experiment.py check --all` and `ledger.py tail` show the state")
     for s in rows:
         print(line(s))
     return 0

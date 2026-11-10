@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 from run import COLS, STATUSES  # noqa: E402
 
+DECIDE_TOKEN = re.compile(r"decide\.py [\d-]+: (?:KEEP|CUT|TIE|INCONCLUSIVE)\b[^|]*")      # what decide.py writes into the decision cell (decide.TOKEN)
 VERDICT = re.compile(r"^\s*(?:KEEP|CUT|TIE|INCONCLUSIVE)\b")    # a decision in the form of decide.py's verdicts ("KEEP (rule met)", "KEEP: effect +0.01 ...")
 BY_HAND = re.compile(r"by hand", re.I)                           # METHOD hard rule 4: a verdict without a rule is labelled "by hand: <reason>"
 
@@ -63,7 +64,10 @@ def render():
               loops, "", "## Runs", ""]
     lines += ["| id | status | hypothesis | prediction | rule | basis | seed | result | decision | started | min | commit |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: r.get("started") or "~"):
-        mins = f"{float(r['duration_s']) / 60:.0f}" if r.get("duration_s") not in ("", None) else ""
+        try:
+            mins = f"{float(r['duration_s']) / 60:.0f}" if r.get("duration_s") not in ("", None) else ""
+        except ValueError:                                               # a hand-typed 'n/a': the table is still made
+            mins = ""
         c = lambda s: (s or "").replace("|", "/").replace("\n", " ")  # noqa: E731
         lines.append(f"| {c(r['id'])} | {c(r.get('status'))} | {c(r.get('hypothesis'))} | {c(r.get('prediction'))} | {c(r.get('rule'))} | {c(r.get('basis'))} | {c(r.get('seed'))} | "
                      f"{c(r.get('result'))[:120]} | {c(r.get('decision'))} | {c(r.get('started'))[:16]} | {mins} | {c(r.get('commit'))} |")
@@ -131,7 +135,8 @@ def sync(dry=False):
         row = {c: rec.get(c, "") for c in COLS}
         # `held` is derived (a HOLD marker lies on the run): the row says what the run itself wrote, as run.py's own row does
         row.update(id=rid, status="ok" if st == "done" else (rec.get("status") or st) if st == "held" else st, notes="row added by ledger.py sync from the run record"
-                   + (f" (launcher gone, heartbeat {RUN.heartbeat_age(d) / 3600:.1f} h old)" if st == "stalled" else ""))
+                   + (f" (launcher gone, heartbeat {RUN.heartbeat_age(d) / 3600:.1f} h old" + (f"; its command pid {rec.get('pid')} still runs" if RUN.command_alive(rec) else "") + ")"
+                      if st == "stalled" else ""))
         if dry or RUN.ledger_write(P.path("ledger"), row, fill=True):  # the check is made again under the lock: a launcher that finished meanwhile wins
             print(f"{'would add' if dry else 'added'} {rid} ({row['status']})")
             n += 1
@@ -184,6 +189,10 @@ def main():
             sys.exit(f"{a.id}: the row has no rule, so a verdict ({new['decision'].split()[0]}) has nothing to come from (hard rule 4): write the rule first (ledger.py note --rule), "
                      "or label the decision 'by hand: <reason>'")
         old_texts = {c: row.get(c) or "(empty)" for c in frozen}
+        if new.get("decision") and not DECIDE_TOKEN.search(new["decision"]):     # a comment does not wipe the verdict that decide.py wrote: the token stays in front of it
+            kept = DECIDE_TOKEN.search(row.get("decision") or "")
+            if kept:
+                new["decision"] = kept.group(0).strip() + " | " + new["decision"]
         row.update(new)
         for c, txt in old_texts.items():
             row["notes"] = ((row.get("notes") or "") + f" | {c} before the change: {txt}").strip(" |")

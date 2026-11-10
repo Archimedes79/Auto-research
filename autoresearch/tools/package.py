@@ -14,7 +14,7 @@ its dry run) refuse, and leave results/ as it was, when the command fails, leave
 
 The result folder <problem>/results/<run id>/ holds the package: package.json, provenance.json and the copy of the model bundle (bundle/, not in git:
 the code is in the tag). The package is the one place that says how a run was made and what came out: the code tag and commit, the GT version and
-signature, the model bundle hash (provenance.py manifest), the numbers (top-level numbers of eval/metrics.json and latency.json, with the hash of the
+signature, the model bundle hash (provenance.py manifest), the numbers (the numbers of eval/metrics.json and latency.json: top level and the metrics / latency dicts, with the hash of the
 file), the tier (best three or normal) and the list of DERIVED files (name, size) that a deeper look would use: pictures, videos, pickles, per-scene
 folders. The package stays in git; clean removes the derived files and the package then lists them under `deleted` (date, size, files, how to rebuild).
 Derived = rebuilt by evaluating the checkpoint again with the code of the tag: files with the suffix .pkl .npz .npy .png .jpg .jpeg .gif .mp4 .avi
@@ -161,14 +161,20 @@ def inside(path, root):
 
 
 def numbers(path, cap=80):
-    """top-level numbers of a json file (bool excluded), at most cap keys; {} when it is not readable"""
+    """the numbers of a json file (bool excluded), at most cap keys, sorted; {} when it is not readable. Top-level numbers, and the numbers of the dicts `metrics` and
+    `latency` as 'metrics.<key>' / 'latency.<key>' (that is where bev_suite writes them: eval/metrics.json holds {"metrics": {...}, "better": {...}} and eval/latency.json
+    {"latency": {...}})"""
     try:
         d = json.load(open(path, encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     if not isinstance(d, dict):
         return {}
-    flat = {k: v for k, v in d.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)  # noqa: E731
+    flat = {k: v for k, v in d.items() if num(v)}
+    for key in ("metrics", "latency"):
+        if isinstance(d.get(key), dict):
+            flat.update({f"{key}.{k}": v for k, v in d[key].items() if num(v)})
     return dict(sorted(flat.items())[:cap])
 
 
@@ -646,7 +652,7 @@ def selftest():
             os.makedirs(os.path.join(d, "code"), exist_ok=True)
             json.dump({"gt_signature": "0.5_4_aaa"}, open(os.path.join(d, "gt.json"), "w"))
             json.dump({"seed": 0}, open(os.path.join(d, "config.json"), "w"))
-            json.dump({"mAP": 0.5, "n": 3, "nested": {"x": 1}, "flag": True}, open(os.path.join(d, "eval", "metrics.json"), "w"))
+            json.dump({"mAP": 0.5, "n": 3, "nested": {"x": 1}, "flag": True, "metrics": {"seg/iou": 0.4, "txt": "a"}, "better": {"seg/iou": "higher"}}, open(os.path.join(d, "eval", "metrics.json"), "w"))
             for rel in ("eval/scene_records.pkl", "eval/suite/sub/a.json", "eval/suite/frames.jsonl", "eval/pic.png", "code/keep.png", "autogt/ex/x.png", "eval_legacy_2026/old.png",
                         "eval/scene_records_legacy_x.pkl", "eval/scene_records_ctl_a.pkl", "eval/empty_marker/.keep", *extra):
                 os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
@@ -659,7 +665,7 @@ def selftest():
             return d
         a = mk("x.a_s0")
         pk = write("x.a_s0")
-        assert pk["tier"] == V.UNKNOWN and pk["metrics"]["eval/metrics.json"] == {"mAP": 0.5, "n": 3}, "numbers only, no nested dict, no bool: " + str(pk["metrics"])
+        assert pk["tier"] == V.UNKNOWN and pk["metrics"]["eval/metrics.json"] == {"mAP": 0.5, "n": 3, "metrics.seg/iou": 0.4}, "numbers only (top level and the metrics / latency dicts), no other nested dict, no bool: " + str(pk["metrics"])
         want = ["eval/pic.png", "eval/scene_records.pkl", "eval/suite/frames.jsonl", "eval/suite/sub/a.json"]
         assert [x["path"] for x in pk["deep"]["files"]] == want and pk["deep"]["bytes"] == 400, pk["deep"]
         for rel, yes in (("x/y.MP4", False), ("eval/y.MP4", True), ("code/a.png", False), ("bundle/a.png", False), ("autogt/e/a.png", False), ("log.jsonl", False), ("ckpt_1.pt", False),

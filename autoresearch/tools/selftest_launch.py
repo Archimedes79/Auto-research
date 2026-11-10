@@ -149,6 +149,8 @@ def test_command_pid():
         RUN.STALE_S = 1.0
         try:
             assert RUN.state_of(f"{T}/runs/L.pid") == "stalled" and RUN.command_alive(rec_of("L.pid"))
+            import schedule as SCH
+            assert SCH.live_state(RUN, f"{T}/runs/L.pid") == "running", "a stalled record whose command lives is running, not failed (schedule / plan)"
             if RUN.proc_stat(pid):                                                                # Linux: the start time tells a reused pid from our command
                 assert rec["pid_start"] and not RUN.command_alive(dict(rec_of("L.pid"), pid_start=rec["pid_start"] + 1)), "a reused pid is not our command"
             assert not RUN.command_alive(dict(rec_of("L.pid"), status="failed")) and not RUN.command_alive({})
@@ -372,7 +374,27 @@ def test_chain():
     set_cfg()
 
 
-TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle", "test_chain")
+def test_frozen_card():
+    """13: the card of an id that ran before is frozen (a repeat with another --rule is refused; --change-card changes it on purpose and keeps the old text in the notes); the
+    command is kept as a list (argv); a code file that cannot be read does not stop the launch"""
+    set_cfg()
+    r = go("F.a", ["bash", "-c", "echo 'a  b'"], "--no-git")
+    assert r.returncode == 0 and rec_of("F.a").get("argv") == ["bash", "-c", "echo 'a  b'"], (r.stdout, rec_of("F.a"))
+    r = go("F.a", ["bash", "-c", "echo hi"], "--no-git", "--again", "--rule", "a different rule")
+    assert r.returncode == 2 and "frozen" in r.stdout and rows()["F.a"]["rule"] == "r", (r.stdout, rows()["F.a"])
+    r = go("F.a", ["bash", "-c", "echo hi"], "--no-git", "--again", "--rule", "r")
+    assert r.returncode == 0, r.stdout                                  # the same text is no change
+    r = go("F.a", ["bash", "-c", "echo hi"], "--no-git", "--again", "--rule", "a different rule", "--change-card")
+    assert r.returncode == 0 and rows()["F.a"]["rule"] == "a different rule" and "card changed on purpose" in rows()["F.a"]["notes"] and "'r'" in rows()["F.a"]["notes"], rows()["F.a"]
+    os.symlink("/nonexistent/broken.py", f"{T}/code/broken.py")
+    try:
+        r = go("F.b", ["bash", "-c", "echo x"], "--no-git")
+        assert r.returncode == 0 and "Traceback" not in r.stderr, (r.stdout, r.stderr[-300:])
+    finally:
+        os.remove(f"{T}/code/broken.py")
+
+
+TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle", "test_chain", "test_frozen_card")
 try:
     set_cfg()
     for name in sys.argv[1:] or TESTS:                  # one test by name: python selftest_launch.py test_settle

@@ -116,7 +116,7 @@ def update_topics(exp, d, root):
     import experiment as X
     import project as P
     import topic_table as TT
-    text = f"{d['id']}: {d['verdict']} effect {d['effect']:+.4f}"
+    text = f"{d['id']}: {d['verdict']} effect {d['effect']:+.4f}" + (" (by hand)" if d.get("by_hand") else " (rule not registered)" if d.get("registered") is False else "")
     topics = os.path.join(root, P.cfg_of(root).get("research", "literature"), "topics")
     msgs, folders = [], []
     for src in dict.fromkeys(exp.get("sources") or []):

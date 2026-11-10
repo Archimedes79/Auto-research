@@ -452,7 +452,12 @@ def spent_gpu_h(exp_id, root=None):
         return 0.0, 0
     with open(path, newline="", encoding="utf-8") as f:
         rows = [r for r in csv.DictReader(f) if re.fullmatch(re.escape(exp_id) + r"(\..*)?", r.get("id", ""))]
-    return sum(float(r.get("duration_s") or 0) for r in rows) / 3600.0, len(rows)
+    def secs(v):
+        try:
+            return float(v or 0)
+        except ValueError:                                              # a hand-typed 'n/a'
+            return 0.0
+    return sum(secs(r.get("duration_s")) for r in rows) / 3600.0, len(rows)
 
 
 def main():
