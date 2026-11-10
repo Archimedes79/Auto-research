@@ -18,6 +18,8 @@ An entry (every key but `suite`, `cls`, `method` and `how` is optional):
     after_from  where the run ids it waits for stand in the arguments ("job.after": args["job"]["after"], a list or one id): for a `launch` call, whose own run.py
             start takes them, they are checked and shown by `check` (a typo is found before the start)
     splits  the arguments that name a split or a set of frames (default: split, frames, set, sets, subset): only their values are scanned for the holdout (TEST) split, never free text
+    dry_run  the method of the same class that looks at the same arguments and starts nothing (`Evaluation.check`, `Runner.plan`): `check --deep` runs it in the interpreter of the job
+            (the suite's own rules: that a network name is a run folder, that the data and the checkpoint open) with the arguments it knows, and reports its problems
 Standard library only."""
 from __future__ import annotations
 
@@ -32,18 +34,18 @@ from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
 NEEDS_KEYS = ("gpu", "gpu_max_used_mb", "ram_gb", "cpu", "est_hours")
-ENTRY_KEYS = ("suite", "cls", "method", "how", "may_feed_verdict", "needs", "reads", "writes", "python", "id_from", "after_from", "splits")
+ENTRY_KEYS = ("suite", "cls", "method", "how", "may_feed_verdict", "needs", "reads", "writes", "python", "id_from", "after_from", "splits", "dry_run")
 HOW = ("process", "launch")
 
 BUILTIN: Dict[str, Dict[str, Any]] = {
     "Training.run": dict(suite="trainsuite", cls="Training", method="run", how="launch", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=3000, ram_gb=10),
-                         reads=["path:{job[config]}"], writes=["run:{job[id]}"], id_from="job.id", after_from="job.after"),
+                         reads=["path:{job[config]}"], writes=["run:{job[id]}"], id_from="job.id", after_from="job.after", dry_run="check"),
     "Evaluation.run": dict(suite="evalsuite", cls="Evaluation", method="run", how="process", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=8000, ram_gb=6),
-                           reads=["run:{network}", "set:{frames}"], writes=["eval:{network}@{frames}"], splits=["frames"]),
+                           reads=["run:{network}", "set:{frames}"], writes=["eval:{network}@{frames}"], splits=["frames"], dry_run="check"),
     "Evaluation.score": dict(suite="evalsuite", cls="Evaluation", method="score", how="process", may_feed_verdict=True, needs=dict(cpu=2, ram_gb=4),
                              reads=["results:{results}", "set:{frames}"], writes=["scores:{results}@{frames}"], splits=["frames"]),
     "Runner.predict": dict(suite="runner", cls="Runner", method="predict", how="process", needs=dict(gpu=True, gpu_max_used_mb=8000, ram_gb=6),
-                           reads=["run:{network}", "set:{frames}"], writes=["predictions:{network}@{frames}"], splits=["frames"]),
+                           reads=["run:{network}", "set:{frames}"], writes=["predictions:{network}@{frames}"], splits=["frames"], dry_run="plan"),
 }
 
 
@@ -65,6 +67,8 @@ def check_entry(call: str, e: Any) -> List[str]:
             bad.append(f"{call}: {k} must be a list of 'kind:template' texts")
     if "splits" in e and not (isinstance(e["splits"], list) and all(isinstance(x, str) for x in e["splits"])):
         bad.append(f"{call}: splits must be a list of argument names")
+    if "dry_run" in e and not (isinstance(e["dry_run"], str) and e["dry_run"] and e["dry_run"] != e.get("method")):
+        bad.append(f"{call}: dry_run must be the name of another method of the class")
     return bad
 
 
@@ -159,15 +163,69 @@ def signature(entry: Dict[str, Any], dirs: Tuple[str, ...] = (), python: str = "
     return None, why
 
 
-def check_args(params: List[Dict[str, Any]], args: Dict[str, Any]) -> List[str]:
-    """the problems of `args` against the parameters of the method: unknown names, missing required ones, a wrong basic type of a default that is a bool / int / float / list"""
+def is_ref(v: Any) -> bool:
+    """an argument that is the result of another job: {"$result": "<job id>:<path in its result.json>"}, e.g. {"$result": "chain.predict:results"}; it is filled in when the call is made"""
+    return isinstance(v, dict) and set(v) == {"$result"}
+
+
+def refs_in(obj: Any) -> List[str]:
+    """every "<job id>:<path>" of a {"$result": ...} anywhere inside the arguments"""
+    if is_ref(obj):
+        return [obj["$result"]]
+    if isinstance(obj, dict):
+        return [r for v in obj.values() for r in refs_in(v)]
+    if isinstance(obj, (list, tuple)):
+        return [r for v in obj for r in refs_in(v)]
+    return []
+
+
+def split_ref(ref: Any) -> Tuple[str, str]:
+    """'chain.predict:results' -> ('chain.predict', 'results'); anything that is not 'id:path' -> ('', '')"""
+    if isinstance(ref, str) and ":" in ref:
+        jid, _, path = ref.partition(":")
+        if jid and path:
+            return jid, path
+    return "", ""
+
+
+def resolve_refs(obj: Any, jobs_dir: str) -> Any:
+    """the arguments with every {"$result": "id:path"} replaced by that value of `<jobs_dir>/<id>/result.json` (a dotted path; list items by number). A missing job, result or
+    path is a ValueError that says which"""
+    if is_ref(obj):
+        jid, path = split_ref(obj["$result"])
+        if not jid:
+            raise ValueError(f"{obj['$result']!r} is not '<job id>:<path>'")
+        f = os.path.join(jobs_dir, jid, "result.json")
+        try:
+            with open(f, encoding="utf-8") as fh:
+                cur = json.load(fh)
+        except (OSError, ValueError):
+            raise ValueError(f"the result of job {jid} is not there ({f}): the job has not finished, or it returned nothing") from None
+        for part in path.split("."):
+            if isinstance(cur, dict) and part in cur:
+                cur = cur[part]
+            elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+                cur = cur[int(part)]
+            else:
+                raise ValueError(f"the result of job {jid} has no {path!r} (stopped at {part!r})")
+        return cur
+    if isinstance(obj, dict):
+        return {k: resolve_refs(v, jobs_dir) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [resolve_refs(v, jobs_dir) for v in obj]
+    return obj
+
+
+def check_args(params: List[Dict[str, Any]], args: Dict[str, Any], skip: Any = ()) -> List[str]:
+    """the problems of `args` against the parameters of the method: unknown names, missing required ones, a wrong basic type of a default that is a bool / int / float / list.
+    The names in `skip` (arguments that are the result of another job: known only later) count as given and are not type-checked"""
     out = []
     names = {p["name"] for p in params}
     if not any(p["var"] for p in params):
         out += [f"args: {k!r} is not a parameter of the method (parameters: {', '.join(sorted(names))})" for k in args if k not in names]
-    out += [f"args: {p['name']!r} is required" for p in params if p["required"] and p["name"] not in args]
+    out += [f"args: {p['name']!r} is required" for p in params if p["required"] and p["name"] not in args and p["name"] not in skip]
     for p in params:
-        if p["name"] not in args or p["default"] is None or p["var"]:
+        if p["name"] not in args or p["name"] in skip or p["default"] is None or p["var"]:
             continue
         v, d = args[p["name"]], p["default"]
         if isinstance(d, bool) and not isinstance(v, bool):

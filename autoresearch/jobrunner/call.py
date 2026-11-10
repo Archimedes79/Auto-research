@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib
+import inspect
 import json
 import math
 import os
@@ -32,17 +33,26 @@ def main(argv):
     ap = argparse.ArgumentParser(prog="python -m jobrunner call")
     for flag in ("--suite", "--cls", "--method", "--args-file", "--out", "--project"):
         ap.add_argument(flag, required=True)
+    ap.add_argument("--jobs-dir", default="", help="the .jobs folder: where {\"$result\": \"<job>:<path>\"} arguments are read from")
+    ap.add_argument("--only-known", action="store_true", help="hand the method only the arguments it has (a dry run has fewer parameters than the call it looks at)")
     a = ap.parse_args(argv)
     for d in (os.path.dirname(AR), AR, a.project):                      # sys.path: the project, autoresearch/, the repository root (GtGenerator)
         if d not in sys.path:
             sys.path.insert(0, d)
+    from .catalogue import resolve_refs
     result = None
     try:
         with open(a.args_file, encoding="utf-8") as f:
             args = json.load(f)
+        args = resolve_refs(args, a.jobs_dir)                           # the results of the jobs it was waiting for
         inst = getattr(importlib.import_module(a.suite), a.cls)(a.project)
+        fn = getattr(inst, a.method)
+        if a.only_known:
+            params = inspect.signature(fn).parameters
+            if not any(p.kind == p.VAR_KEYWORD for p in params.values()):
+                args = {k: v for k, v in args.items() if k in params}
         with contextlib.redirect_stdout(sys.stderr):
-            result = getattr(inst, a.method)(**args)
+            result = fn(**args)
         doc = clean(result)
     except (Exception, SystemExit) as ex:                                  # noqa: BLE001
         if isinstance(ex, SystemExit) and ex.code in (None, 0):

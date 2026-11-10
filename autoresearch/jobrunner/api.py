@@ -16,8 +16,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from contextlib import contextmanager
@@ -38,6 +40,7 @@ RESERVED_RUN_ARGS = ("--", "--id", "--after", "--gpu", "--gpu-max-mb", "--ram-mb
 RUN_NAMES = ("state_of", "record", "command_alive", "pid_alive", "twin_refusal", "is_holdout", "run_folder", "HOLD", "ledger_row", "test_log_refusal")   # what jobrunner uses of run.py
 SPLIT_PARAMS = ("split", "frames", "set", "sets", "subset")                # the arguments scanned for the holdout split unless the catalogue entry names its own (`splits`)
 LOCK_WAIT_S = float(os.environ.get("JOBRUNNER_LOCK_WAIT_S", "10"))
+DRY_TIMEOUT_S = float(os.environ.get("JOBRUNNER_DRY_TIMEOUT_S", "600"))      # the suite's own dry run (check --deep)
 _MODULES: Dict[str, Any] = {}
 
 
@@ -114,7 +117,9 @@ def _tail(path: str, n: int = 15) -> List[str]:
 
 
 def _strings(obj: Any):
-    """every text inside args (values, not keys)"""
+    """every text inside args (values, not keys; the {"$result": ...} of another job is no text of the job)"""
+    if C.is_ref(obj):
+        return
     if isinstance(obj, str):
         yield obj
     elif isinstance(obj, dict):
@@ -228,6 +233,18 @@ class JobRunner:
             jid = jid if isinstance(jid, str) else ""
         if entry and entry.get("id_from") and C.id_from(entry["id_from"], args) not in ("", jid):
             problems.append(f"id {jid!r} differs from {entry['id_from']} of the arguments")
+        ref_after: List[str] = []
+        for r in C.refs_in(args):                                          # {"$result": "<job>:<path>"}: the argument is a result of another job, filled in when the call is made
+            rid, _path = C.split_ref(r)
+            found = self._find_run(rid) if rid and ID_RE.match(rid) else None
+            if not rid or not ID_RE.match(rid):
+                problems.append(f"$result {r!r} is not '<job id>:<path>'")
+            elif rid == jid:
+                problems.append("$result names the job itself")
+            elif found is None:
+                problems.append(f"$result {r}: no such job (submit the job whose result it takes first)")
+            elif found not in ref_after:
+                ref_after.append(found)
         launch = bool(entry) and entry["how"] == "launch"
         if launch:
             problems += [f"{k} has no effect on a `launch` call ({call} starts its own run; give it in the arguments of the method)" for k in LAUNCH_REFUSES if d.get(k) not in (None, False, [], "", 0)]
@@ -268,8 +285,8 @@ class JobRunner:
             if params is None:
                 warnings.append(f"the arguments were not checked against the method: {why}")
             else:
-                problems += C.check_args(params, args)
-        values = dict(args, id=jid)
+                problems += C.check_args(params, args, {k for k, v in args.items() if C.refs_in(v)})
+        values = dict({k: (f"<result of {C.refs_in(v)[0]}>" if C.refs_in(v) else v) for k, v in args.items()}, id=jid)
         reads, writes = d.get("reads"), d.get("writes")
         for name, given in (("reads", reads), ("writes", writes)):
             if given is None and entry:
@@ -302,6 +319,7 @@ class JobRunner:
                 problems.append(f"{entry['after_from']} {x}: no such run and no job with that id (submit the job it waits for first)")
             elif x not in after:
                 after.append(x)
+        after += [x for x in ref_after if x not in after and x != jid]
         live = self._live_writes(exclude=jid)
         inferred, more = self._inputs(jid, reads, live)
         problems += more
@@ -312,7 +330,11 @@ class JobRunner:
         existing = _read(self._jd(jid, "job.json")) if jid else None
         same = bool(existing) and existing["spec"].get("call") == call and existing["spec"].get("args") == args
         if existing and not same:
-            problems.append(f"the id {jid!r} was submitted with another call or other arguments; use a new id")
+            st = self._state(jid)[0]
+            if st in ("failed", "blocked", "stopped", "planned", "unknown") or (st == "stalled" and not self._stalled_alive(jid)):
+                warnings.append(f"the earlier attempt ({st}) had another call or other arguments: it is kept (job.1.json, args.1.json, ...) and this is a new attempt")
+            else:
+                problems.append(f"the id {jid!r} was submitted with another call or other arguments and is {st}; use a new id (a failed, blocked or stopped job may be submitted again with changed arguments)")
         if jid and not existing:
             problems += self._collisions(jid)
         spec = dict(id=jid, call=call, args=args, needs=needs, reads=reads or [], writes=writes or [], after=after, priority=d.get("priority", 0), card=card, no_card=(no_card or card is None) and not launch,
@@ -444,28 +466,69 @@ class JobRunner:
         if spec["card"]:
             argv += [f"--hyp={spec['card']['hyp']}", f"--pred={spec['card']['pred']}", f"--rule={spec['card']['rule']}", f"--basis={summary}", "--require-card"]
         else:
-            argv += ["--no-card", "--no-git", f"--hyp={spec['note'] or summary}"]          # a diagnostic: no card, no code tag, never a verdict; the ledger says what was called
+            argv += ["--no-card", "--no-git", f"--hyp={spec['note'] or spec['call']}", f"--basis={summary}"]      # a diagnostic: no card, no code tag, never a verdict; the ledger says what was called
+                                                                                                              # (--hyp stays the same for a new attempt with other arguments: run.py freezes it, --basis carries them)
         argv += ["--retries", str(spec["retries"])] if spec["retries"] is not None else []
         argv += ["--timeout", str(spec["timeout"])] if spec["timeout"] else []
         argv += ["--split", spec["split"]] if spec["split"] else []
         py = self._python(spec["python"], entry)
         return argv + spec["run_args"] + ["--", py, "-m", "jobrunner", "call", "--suite", entry["suite"], "--cls", entry["cls"], "--method", entry["method"],
-                                         "--args-file", self._jd(spec["id"], "args.json"), "--out", self._jd(spec["id"], "result.json"), "--project", self.root]
+                                         "--args-file", self._jd(spec["id"], "args.json"), "--out", self._jd(spec["id"], "result.json"), "--project", self.root, "--jobs-dir", self.jobs]
+
+    def _deep(self, p: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+        """the suite's own dry run (the entry's `dry_run`, e.g. Evaluation.check, Runner.plan) in the interpreter of the job, with the arguments it knows: -> (problems, warnings).
+        It opens the data and the checkpoint (the Runner builds a BEV network on the CPU): seconds to a minute, no GPU, no run.py record, no ledger row."""
+        entry, s = p["entry"], p["spec"]
+        dry = entry.get("dry_run")
+        if not dry:
+            return [], [f"no dry run is known for {s['call']}: the suite's own rules were not applied"]
+        if C.refs_in(s["args"]):
+            return [], ["the dry run was skipped: an argument is the result of another job, known only when that job has finished"]
+        tmp = tempfile.mkdtemp(prefix="jobrunner_dry_")
+        label = f"dry run {entry['cls']}.{dry}"
+        try:
+            af, out = os.path.join(tmp, "args.json"), os.path.join(tmp, "out.json")
+            _write(af, s["args"])
+            env = dict(os.environ, AR_PROJECT=self.root, PYTHONPATH=os.pathsep.join(filter(None, [AR, os.environ.get("PYTHONPATH", "")])))
+            argv = [self._python(s["python"], entry), "-m", "jobrunner", "call", "--suite", entry["suite"], "--cls", entry["cls"], "--method", dry, "--args-file", af, "--out", out,
+                    "--project", self.root, "--jobs-dir", self.jobs, "--only-known"]
+            try:
+                r = subprocess.run(argv, cwd=self.root, env=env, capture_output=True, text=True, timeout=DRY_TIMEOUT_S, stdin=subprocess.DEVNULL)
+            except subprocess.TimeoutExpired:
+                return [f"{label} did not finish in {DRY_TIMEOUT_S:g} s"], []
+            except OSError as ex:
+                return [f"{label} could not be started: {ex}"], []
+            doc = _read(out)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        if doc is None:
+            return [f"{label} wrote no result: " + ((r.stderr.strip().splitlines() or ["exit " + str(r.returncode)])[-1])], []
+        if isinstance(doc, dict) and set(doc) == {"error"}:
+            return [f"{label} failed: {doc['error']}"], []
+        if isinstance(doc, dict) and doc.get("ok") is False:
+            return [f"{label}: {x}" for x in (doc.get("problems") or [json.dumps(doc, default=str)[:300]])], []
+        return [], []
 
     # ------------------------------------------------------------------------------------------------------------ the interface
-    def check(self, job: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
-        """Look at a job and start nothing: its problems, what it takes from the machine, the data it reads and writes, what it waits for, and the run.py command it would be."""
+    def check(self, job: Union[str, Dict[str, Any]], deep: bool = False) -> Dict[str, Any]:
+        """Look at a job and start nothing: its problems, what it takes from the machine, the data it reads and writes, what it waits for, and the run.py command it would be.
+        deep: also run the suite's own dry run (Evaluation.check, Runner.plan, Training.check) in the interpreter of the job: it finds what only the suite knows (a network name that is not
+        a run folder, data that does not open); it takes seconds to a minute of CPU and RAM, outside run.py's gates."""
         p = self._plan(job)
         s = p["spec"]
         state = self._state(s["id"])[0] if p["existing"] else "new"
         launch = bool(p["entry"]) and p["entry"]["how"] == "launch"
+        if deep and p["entry"] and not p["problems"]:
+            more, warn = self._deep(p)
+            p["problems"] += more
+            p["warnings"] += warn
         return dict(ok=not p["problems"], id=s["id"], call=s["call"], how=(p["entry"] or {}).get("how", ""), state=state, problems=p["problems"], warnings=p["warnings"], needs=s["needs"],
                     reads=s["reads"], writes=s["writes"], after=s["after"], diagnostic=None if launch else s["no_card"], command=p["argv"],
                     in_process=f"{p['entry']['cls']}(project).{p['entry']['method']}(**args)" if launch else None)         # a `launch` call has no run.py command of ours: the method makes its own
 
-    def submit(self, job: Union[str, Dict[str, Any]], start: bool = True) -> Dict[str, Any]:
+    def submit(self, job: Union[str, Dict[str, Any]], start: bool = True, deep: bool = False) -> Dict[str, Any]:
         """Put a job in: check it, write the job and (start) run it under run.py, which waits for its turn. The same job again is not started twice; a failed, blocked,
-        stopped or dead one is started anew."""
+        stopped or dead one is started anew, also with changed arguments (the earlier attempt is kept). deep: run the suite's own dry run first, as `check --deep`."""
         p = self._plan(job)
         s = p["spec"]
         skip = lambda: self._skip(s["id"])                                 # noqa: E731
@@ -473,11 +536,23 @@ class JobRunner:
             if p["existing"] and skip():                                   # the same job that is already in progress or done: what has changed around it is no news
                 return skip()
             raise JobError(f"job {s['id'] or '?'}: " + "; ".join(p["problems"]))
+        if deep and not skip():
+            more, _ = self._deep(p)
+            if more:
+                raise JobError(f"job {s['id']}: " + "; ".join(more))
         with self._lock(s["id"]):
             cur = _read(self._jd(s["id"], "job.json"))                     # read again under the lock: another submit may have finished while this one waited
             if cur and "spec" in cur and (cur["spec"].get("call") != s["call"] or cur["spec"].get("args") != s["args"]):
-                raise JobError(f"job {s['id']}: the id was submitted with another call or other arguments while this one waited; use a new id")
-            if cur and skip():
+                if skip():
+                    raise JobError(f"job {s['id']}: the id was submitted with another call or other arguments while this one waited and is in progress or done; use a new id")
+                for name in ("job", "args"):                               # a new attempt with other arguments: the earlier one stays as job.1.json, args.1.json ...
+                    k = 1
+                    while os.path.exists(self._jd(s["id"], f"{name}.{k}.json")):
+                        k += 1
+                    if os.path.exists(self._jd(s["id"], f"{name}.json")):
+                        os.replace(self._jd(s["id"], f"{name}.json"), self._jd(s["id"], f"{name}.{k}.json"))
+                cur = None
+            elif cur and skip():
                 return skip()
             _write(self._jd(s["id"], "args.json"), s["args"])
             _write(self._jd(s["id"], "job.json"), dict(spec=s, how=p["entry"]["how"], submitted=(cur or {}).get("submitted") or time.strftime("%Y-%m-%dT%H:%M:%S"), started=False,
@@ -522,9 +597,10 @@ class JobRunner:
                 env = dict(os.environ, AR_PROJECT=self.root, PYTHONPATH=os.pathsep.join(filter(None, [AR, os.environ.get("PYTHONPATH", "")])))
                 rec["launcher_pid"] = self.launcher(rec["command"], self.root, env, self._jd(i, "launch.log"))
             else:
+                args = C.resolve_refs(s["args"], self.jobs)                # the results of the jobs this one waited for
                 with C.import_paths(*self.dirs):
                     inst = getattr(importlib.import_module(entry["suite"]), entry["cls"])(self.root)
-                    out = getattr(inst, entry["method"])(**s["args"])
+                    out = getattr(inst, entry["method"])(**args)
                 _write(result, out)
                 rec["launcher_pid"] = None
         except (Exception, SystemExit) as ex:                              # noqa: BLE001
@@ -648,7 +724,13 @@ class JobRunner:
             if st in ("done", "ok"):
                 return "done", ""
             if st == "running":
-                return ("queued", "") if rec.get("status") == "waiting" else ("running", "")
+                if rec.get("status") != "waiting":
+                    return "running", ""
+                try:                                                       # run.py writes what it waits for into the heartbeat ("<time> waiting for chain.gt"): so a queued job does not look stuck
+                    beat = open(os.path.join(rd, "heartbeat"), encoding="utf-8").read().strip().split(" ", 1)
+                except OSError:
+                    beat = []
+                return "queued", beat[1] if len(beat) > 1 else ""
             if st == "stalled":
                 return "stalled", ("late heartbeat, but its process lives" if self._stalled_alive(i) else "no heartbeat and no process: it may be started again")
             if st in ("held", "blocked", "stopped"):

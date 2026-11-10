@@ -80,6 +80,32 @@ class Toy:
     def fire_job(self, job):
         """like Training.run: takes a job dict that has its own `after`, and starts a run of its own."""
         return self.fire(job["id"])
+
+    def picky(self, n):
+        """fails for a negative n (a job that is corrected and submitted again)."""
+        if n < 0:
+            raise ValueError("n must not be negative")
+        return {"ok": True, "n": n}
+
+    def gen(self):
+        """a result with an id and a nested value, which another job takes as its argument."""
+        return {"ok": True, "results": "made@r1", "nested": {"list": [1, 2]}}
+
+    def echo(self, value):
+        """gives back what it was handed."""
+        return {"ok": True, "value": value}
+
+    def dry(self, n, extra=""):
+        """a call with a dry run that knows fewer parameters."""
+        return {"ok": True, "n": n}
+
+    def check_dry(self, n):
+        """the suite's own dry run: its rules are not the ones of the signature."""
+        if n == 99:
+            raise ValueError("the dry run itself broke")
+        if n == 42:
+            time.sleep(3)
+        return {"ok": n >= 0, "problems": ["n must not be negative"] if n < 0 else []}
 '''
 
 TOY2 = '''
@@ -123,6 +149,10 @@ TOYS = {
     "Toy.card_work": dict(suite="toysuite", cls="Toy", method="card_work", how="process", may_feed_verdict=True),
     "Toy.which": dict(suite="toysuite", cls="Toy", method="which", how="process"),
     "Toy.fire_job": dict(suite="toysuite", cls="Toy", method="fire_job", how="launch", id_from="job.id", after_from="job.after"),
+    "Toy.picky": dict(suite="toysuite", cls="Toy", method="picky", how="process"),
+    "Toy.gen": dict(suite="toysuite", cls="Toy", method="gen", how="process"),
+    "Toy.echo": dict(suite="toysuite", cls="Toy", method="echo", how="process"),
+    "Toy.dry": dict(suite="toysuite", cls="Toy", method="dry", how="process", dry_run="check_dry"),
 }
 N = 0
 DEAD = 2 ** 22 + 12345                                              # a pid no process has (above pid_max)
@@ -160,8 +190,8 @@ def project(T):
         subprocess.run(G + ["config", k, v], check=True)
 
 
-def record(T, rid, status, age=0.0, launcher=DEAD, **more):
-    """a run record as run.py writes it (created, status, launcher_pid, exit, notes), with a heartbeat that is `age` seconds old"""
+def record(T, rid, status, age=0.0, launcher=DEAD, beat="", **more):
+    """a run record as run.py writes it (created, status, launcher_pid, exit, notes), with a heartbeat that is `age` seconds old (and says `beat`)"""
     d = f"{T}/runs/{rid}"
     os.makedirs(d, exist_ok=True)
     rec = dict(id=rid, created="2026-11-06T02:54:08", status=status, launcher_pid=str(launcher), **more)
@@ -169,7 +199,7 @@ def record(T, rid, status, age=0.0, launcher=DEAD, **more):
     if status == "ok":
         open(f"{d}/done", "w").close()
     hb = f"{d}/heartbeat"
-    open(hb, "w").close()
+    open(hb, "w").write(beat)
     if age:
         os.utime(hb, (time.time() - age, time.time() - age))
 
@@ -234,7 +264,8 @@ def test_check(T):
     ok(r["ok"] and r["how"] == "process" and r["state"] == "new" and r["diagnostic"], r)
     cmd = r["command"]
     ok("--no-card" in cmd and "--no-git" in cmd and "--retries" not in cmd and "--gpu" not in cmd and "--after" not in cmd, cmd)
-    ok(any(c.startswith("--hyp=Toy.work {") and '"n": 3' in c for c in cmd), "the ledger hypothesis of a diagnostic says what was called, with which arguments")
+    ok("--hyp=Toy.work" in cmd and any(c.startswith("--basis=Toy.work {") and '"n": 3' in c for c in cmd),
+       "the ledger of a diagnostic says what was called (hypothesis: the call, which run.py freezes) and with which arguments (basis, which may change in a new attempt)")
     tail = cmd[cmd.index("--") + 1:]
     ok(tail[1:4] == ["-m", "jobrunner", "call"] and tail[tail.index("--suite") + 1] == "toysuite" and tail[tail.index("--method") + 1] == "work", tail)
     ok(tail[tail.index("--args-file") + 1].endswith("/.jobs/a1/args.json") and tail[tail.index("--out") + 1].endswith("/.jobs/a1/result.json"))
@@ -283,6 +314,24 @@ def test_check(T):
     ok(any("job.after ghost: no such run" in p for p in probs({"call": "Toy.fire_job", "args": {"job": {"id": "fj2", "after": ["ghost"]}}})), "a typo in the after of a launch call is found before the start")
     ok(any("job.after names the job itself" in p for p in probs({"call": "Toy.fire_job", "args": {"job": {"id": "fj3", "after": "fj3"}}})))
     raises(lambda: jr.check("no/such/job.json"), "a relative path is read from the current folder")
+    # deep: the suite's own dry run, in the interpreter of the job, with the arguments it knows
+    d_ok = jr.check({"id": "dp1", "call": "Toy.dry", "args": {"n": 1, "extra": "x"}}, deep=True)
+    ok(d_ok["ok"] and not d_ok["warnings"], "the dry run gets the arguments it has (n), not the ones of the call (extra): " + str(d_ok))
+    d_bad = jr.check({"id": "dp2", "call": "Toy.dry", "args": {"n": -5}}, deep=True)
+    ok(not d_bad["ok"] and any("dry run Toy.check_dry: n must not be negative" in p for p in d_bad["problems"]), d_bad)
+    ok(jr.check({"id": "dp3", "call": "Toy.dry", "args": {"n": -5}})["ok"], "without deep the dry run is not asked (it costs seconds to a minute)")
+    ok(any("dry run Toy.check_dry failed: ValueError: the dry run itself broke" in p for p in jr.check({"id": "dp4", "call": "Toy.dry", "args": {"n": 99}}, deep=True)["problems"]))
+    A.DRY_TIMEOUT_S = 1.0
+    try:
+        ok(any("did not finish in 1 s" in p for p in jr.check({"id": "dp7", "call": "Toy.dry", "args": {"n": 42}}, deep=True)["problems"]), "a dry run that hangs is a problem, not a hang")
+    finally:
+        A.DRY_TIMEOUT_S = 600.0
+    ok(any("no dry run is known" in w for w in jr.check({"id": "dp5", "call": "Toy.work", "args": {"n": 1}}, deep=True)["warnings"]))
+    raises(lambda: jr.submit({"id": "dp6", "call": "Toy.dry", "args": {"n": -5}}, deep=True), "dry run Toy.check_dry")
+    ok(not os.path.exists(f"{T}/runs/.jobs/dp6"), "a refused deep submit writes nothing")
+    probs2 = lambda a: jr.check({"id": "rf0", "call": "Toy.echo", "args": a})["problems"]                    # noqa: E731
+    ok(any("no such job" in p for p in probs2({"value": {"$result": "ghost:x"}})) and any("not '<job id>:<path>'" in p for p in probs2({"value": {"$result": "nocolon"}}))
+       and any("names the job itself" in p for p in probs2({"value": {"$result": "rf0:x"}})), "a result of another job as an argument is checked")
 
 
 def test_gates(T):
@@ -360,6 +409,23 @@ def test_submit(T):
         ok(calls[-1][0][calls[-1][0].index("--after") + 1] == "fo.a", "and in other case")
         jr.submit(job("pd1"), start=False)
         ok(jr.check(dict(job("pd2"), reads=["run:pd1"]))["after"] == ["pd1"], "a planned job is waited for too")
+        jr.submit({"id": "rg.gen", "call": "Toy.gen", "args": {}})
+        c = jr.check({"id": "rg.echo", "call": "Toy.echo", "args": {"value": {"$result": "rg.gen:results"}}})
+        ok(c["ok"] and c["after"] == ["rg.gen"], "the result of another job as an argument makes the job wait for it: " + str(c))
+        c2 = jr.check({"id": "rg.work", "call": "Toy.work", "args": {"n": {"$result": "rg.gen:nested.list.0"}}})
+        ok(c2["ok"] and c2["after"] == ["rg.gen"], "a required argument that is a result of another job counts as given and is not type-checked: " + str(c2))
+        c3 = jr.check({"id": "rg.work2", "call": "Toy.work", "args": {"n": 1, "flag": {"$result": "rg.gen:nested.list.0"}, "items": {"$result": "rg.gen:nested.list"}}})
+        ok(c3["ok"], "an argument with a default that is a bool or a list is not type-checked when it is the result of another job: " + str(c3["problems"]))
+        jr.submit(job("qw"), start=False)
+        record(T, "qw", "waiting", beat="2026-11-10T10:00:00 waiting for chain.gt")
+        ok(jr._state("qw") == ("queued", "waiting for chain.gt"), "a queued job says what it waits for (run.py writes it into the heartbeat): " + str(jr._state("qw")))
+        mode[0] = "dead"
+        jr.submit(dict(job("ca"), args={"n": 1, "name": "ca1"}))
+        mode[0] = "live"
+        r = jr.submit(dict(job("ca"), args={"n": 2, "name": "ca2"}))
+        ok(r["started"] and json.load(open(f"{T}/runs/.jobs/ca/args.1.json"))["n"] == 1 and json.load(open(f"{T}/runs/.jobs/ca/args.json"))["n"] == 2 and os.path.exists(f"{T}/runs/.jobs/ca/job.1.json"),
+           "a failed job may be submitted again with other arguments; the earlier attempt is kept: " + str(r))
+        raises(lambda: jr.submit(dict(job("ca"), args={"n": 3, "name": "ca3"})), "is queued; use a new id")
         p = jr.submit({"id": "s4", "call": "Toy.work", "args": {"n": 1, "name": "s4n"}}, start=False)
         ok(p["state"] == "planned" and jr.status("s4")["state"] == "planned", p)
         n = len(calls)
@@ -554,6 +620,25 @@ def test_real(T):
     json.dump({"id": "e.py3", "call": "Toy.which", "args": {}}, open(f"{T}/py_job.json", "w"))
     cmd = subprocess.run([sys.executable, "-m", "jobrunner", "JobRunner.check", f"{T}/py_job.json", "--python", f"{T}/py", "--json", "--project", T], capture_output=True, text=True, cwd=AR)
     ok(cmd.returncode == 0 and f"{T}/py" in json.loads(cmd.stdout)["command"], "the command line has --python: " + cmd.stdout[-200:] + cmd.stderr[-200:])
+    # a failed job is corrected and submitted again under the same id
+    jr.submit({"id": "e.pk", "call": "Toy.picky", "args": {"n": -1}})
+    ok(waitfor(jr, "e.pk", ("done", "failed")) == "failed")
+    c = jr.check({"id": "e.pk", "call": "Toy.picky", "args": {"n": 1}})
+    ok(c["ok"] and any("new attempt" in w for w in c["warnings"]), c)
+    jr.submit({"id": "e.pk", "call": "Toy.picky", "args": {"n": 1}})
+    ok(waitfor(jr, "e.pk", ("done", "failed")) == "done" and jr.status("e.pk")["result"] == {"ok": True, "n": 1}, jr.status("e.pk"))
+    ok(json.load(open(f"{T}/runs/.jobs/e.pk/args.1.json")) == {"n": -1} and os.path.exists(f"{T}/runs/.jobs/e.pk/result.1.json"), "the failed attempt, its arguments and its result are kept")
+    raises(lambda: jr.submit({"id": "e.pk", "call": "Toy.picky", "args": {"n": 5}}), "is done; use a new id")
+    # the results of one job as the arguments of the next: a chain that is written down in advance
+    jr.submit({"id": "e.gen", "call": "Toy.gen", "args": {}})
+    jr.submit({"id": "e.echo", "call": "Toy.echo", "args": {"value": {"$result": "e.gen:results"}}})
+    jr.submit({"id": "e.echo2", "call": "Toy.echo", "args": {"value": {"$result": "e.gen:nested.list.1"}}})
+    jr.submit({"id": "e.echo3", "call": "Toy.echo", "args": {"value": {"$result": "e.gen:nested.nope"}}})
+    for k in ("e.echo", "e.echo2", "e.echo3"):
+        waitfor(jr, k, ("done", "failed"), 120)
+    ok(jr.status("e.echo")["result"] == {"ok": True, "value": "made@r1"} and jr.status("e.echo2")["result"] == {"ok": True, "value": 2}, "the argument was filled with the result of the job it waited for")
+    ok(jr._state("e.echo3")[0] == "failed" and "has no 'nested.nope'" in json.dumps(jr.status("e.echo3")["result"]), "a path that is not in the result is an error that says which: " + json.dumps(jr.status("e.echo3")["result"]))
+    ok(jr.submit({"id": "e.dp", "call": "Toy.dry", "args": {"n": 3}}, deep=True)["started"] and waitfor(jr, "e.dp", ("done", "failed")) == "done", "a deep submit starts the job after the dry run")
     r = jr.run({"id": "e.run", "call": "Toy.work", "args": {"n": 2, "name": "erun"}}, wait=90)
     ok(r["state"] == "done" and r["ok"] is True)
     ok(jr.run({"id": "e.run2", "call": "Toy.boom", "args": {}}, wait=90)["ok"] is False, "run() says ok=False for a job that failed")
@@ -570,7 +655,7 @@ def test_real(T):
     chk = subprocess.run([sys.executable, "-m", "jobrunner", "JobRunner.check", f"{T}/nojob.json", "--project", T], capture_output=True, text=True, cwd=AR)
     ok(chk.returncode == 2 and "cannot read the job file" in chk.stderr, chk.stderr)
     m = subprocess.run([sys.executable, "-m", "jobrunner", "methods"], capture_output=True, text=True, cwd=AR)
-    ok(m.returncode == 0 and "submit  (JobRunner.submit(job, start=True))" in m.stdout, m.stdout)
+    ok(m.returncode == 0 and "submit  (JobRunner.submit(job, start=True, deep=False))" in m.stdout and "check  (JobRunner.check(job, deep=False))" in m.stdout, m.stdout)
 
 
 def main():
