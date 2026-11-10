@@ -15,9 +15,52 @@ export AR_PROJECT=../bev_fusion; R=../bev_fusion/runs
 ```
 
 ## 0. The interface (start here)
-One class, `Training(project)`, with plain dicts in and out; every method is also a command (the pattern of all suites: [../README.md](../README.md); the code: `api.py`).
-`from trainsuite import Training` in Python, `python -m trainsuite Training.queue_add job.json` on the command line (short forms: `queue_add`, `queue-add`; `Training.` is always needed for `status`, `stop`, `plot`, `compare`, which are older commands;
-`python -m trainsuite methods` lists the methods with their arguments; `--json` prints exactly what the method returns).
+Two layers and nothing else: the **class** `Training` (`api.py`) and above it the **command line API**, `python -m trainsuite`, which is generated from the class (`autoresearch/suitecli.py`, the
+same generator for every suite; the rules all suites share are in [../README.md](../README.md), section "The interface of the suites"). Below the class are the engine and the launcher
+(`trainqueue.py`, `compose.py`, `view.py`, `runs.py`, `health.py`, `kill.py`, `tools/run.py`); a caller never touches them. The runner of a trained network has the same interface in
+`autoresearch/runsuite` and puts its jobs in the same queue.
+
+### 0.1 The class
+```python
+from trainsuite import Training
+t = Training("../bev_fusion")        # the project folder (default: AR_PROJECT); plain dicts in and out, nothing is printed, one error type: TrainingError
+```
+| method | does | returns |
+|---|---|---|
+| `check(job)` | compose the config, run the static check and the data check, start nothing | `{ok, id, changes, notes, problems, will_prepare, command}` |
+| `run(job, wait=3.0)` | start now, outside the queue; the same call again resumes a stopped or crashed run | `{id, started: [{id, pid, log}], command}` |
+| `status(i=None, kill=(), ref=None, skip=10)` | one training in full (section 0.4); no `i` = the running one | `{id, number, queue, state, phase, step, total, pct, eta_s, s_per_step, loss, grad, skipped, data, restarts, findings, kill, speed}`; nothing running: `{id: None, state: "idle"}` |
+| `stop(i=None, reason="")` | ask a training to save a checkpoint and stop (exit 75; its id goes on hold) | `{id, requested, file, verified}` |
+| `plot(i, out=None, keys=None, smooth=10)` | loss, its groups and the gradient norm as a png (needs matplotlib) | `{png}` |
+| `compare(a, b, skip=10)` | two runs side by side, `a` is the baseline | `{common_step, rows: [{id, steps, s_step, speedup, data_share, gpu_busy, gpu_gb, loss_at_common, loss_vs_base_pct}]}` |
+| `queue_add(job, start=True)` | check, put it in the queue, make sure the runner runs | the item, as `queue_get` shows it |
+| `queue_list()` | the whole line and the box | `{items: [{number, id, kind, state, step, total, after, priority, held, grad, skipped, flags, ...}], running, runner, paused, slots, lock, ram, gpu, holds}` |
+| `queue_get(i)` | one item in full | the item plus `job, config, composed, command, added, by` |
+| `queue_remove(i)` | take out an item that has not started (a running one is refused) | `{removed}` |
+| `queue_start()` | make sure the runner runs | `{runner: pid}` |
+| `queue_hold(words, i=None, reason="", wait=180.0)` | stop the trainings (a checkpoint each), nothing new starts; `i=None` = all and the runner pauses | `{id: outcome}` |
+| `queue_resume(words, i=None, fresh_code=False)` | the holds are cleared, every stopped run continues from its checkpoint | `{id: what happens}` |
+
+`i` is an id (`t23.C_s1`), a run folder name (`t23_C_s1`) or the number shown by `queue_list` (1 = first; numbers shift when another chat adds an item, a script uses the id). A typo in an id is an
+error. Rules of the project that the methods keep: `words` of hold and resume are the person's own words (required); a pause or a held item also forbids a direct `run`; a run that may feed a
+verdict needs its card; the TEST split needs its logged row (`run.py` refuses).
+
+### 0.2 The command line API
+```
+python -m trainsuite Training.queue_add job.json            # the class name in front: always valid
+python -m trainsuite queue-add job.json                     # short form: the method name with hyphens (queue_add works too) where no older command has the word
+python -m trainsuite Training.status t23_C_s1 --json        # status, stop, plot, compare are older commands too: they always need "Training."
+python -m trainsuite methods                                # every command with the arguments of its method
+```
+- **One method, one command, the same call as in Python.** The arguments of the command are the arguments of the method: a parameter without a default is positional (`job`, `i`, `a`, `b`; `words` is an
+  option), every other one an option; a switch that is on by default is `--no-start`; a list is repeatable or comma separated (`--kill R1 --kill R2`); numbers keep their type.
+- **Every command takes** `--project DIR` (default `AR_PROJECT`) and `--json`: exactly what the method returns, one document on stdout, nothing else (NaN and Infinity become null); without it a short text.
+- **Hold and resume** need an item or `--all` on the command line (`queue-hold --all --words "..."`), so a forgotten id does not hold everything.
+- **Exit codes** as in every suite: 0 done, 1 the result says `ok: false` (`check`), 2 an error: a message `error: ...` on stderr, no traceback (`TRAINSUITE_TRACEBACK=1` shows it).
+- **The older commands stay as they were** (`start`, `status`, `health`, `watch`, `curves`, `speed`, `early`, `compose`, `stop`, `resume`, `queue`, `queue add ... --id`, `queue serve`, `queue drop`):
+  they read a run folder under `--root` and are the way for a Monitor (`watch`) and for a script that wants an exit code (`health`).
+
+### 0.3 The job file
 A **job** is a json file (or the same dict) that says what to run:
 ```json
 {"id": "t23.C_s1", "config": "training/configs/t23_lane_bce.json", "preset": ["fast"], "set": {"seed": 1}, "card": {"hyp": "...", "pred": "...", "rule": "..."},
@@ -26,27 +69,32 @@ A **job** is a json file (or the same dict) that says what to run:
 `no_card: true` instead of `card` is a diagnostic run (it never feeds a verdict). An unknown key is an error (a typo shows), keys starting with `_` are comments, `true` / `false` must be booleans.
 `kill` rules are checked when the job is read and appended to the run's `kill.txt` once the launcher has survived its first seconds (where `watch --enforce` and `status` read them). `run`
 honours `after` (run.py waits for those runs) and ignores `priority` and `note`, which belong to the queue. `run_args` are arguments for `run.py` itself, `no_check` skips the project's static
-check, `prepare` builds a missing data store first, `project` names another project folder (default `AR_PROJECT`); a key of a runner job (`n`, `out`, ...) is an error in a training.
-`i` below is an id, a run folder name or the number shown by `queue-list` (numbers shift when another chat adds an item: a script uses the id).
+check, `prepare` builds a missing data store first, `project` names another project folder (default `AR_PROJECT`).
 
-| method | command line | what it does |
+### 0.4 Monitoring a training
+| question | method / command | what you get |
 |---|---|---|
-| `check(job)` | `check JOB` | compose the config, the static check, the data check; starts nothing |
-| `run(job)` | `run JOB` | start now, outside the queue; the same call again resumes |
-| `queue_add(job)` | `queue-add JOB` | check, put it in the queue; the runner starts it when its turn comes |
-| `queue_list()` | `queue-list` | the items in order, the running one, slots, machine lock, RAM, GPU memory, holds |
-| `queue_get(i)` / `queue_remove(i)` | `queue-get I` / `queue-remove I` | one item in full / take out one that has not started |
-| `queue_start()` | `queue-start` | make sure the runner runs |
-| `queue_hold(words)` / `queue_resume(words)` | `queue-hold --all --words ...` / `queue-resume --all --words ...` | all trainings stop with a checkpoint / continue from it (`i` for one); the person's words are required |
-| `status(i=None)` | `Training.status [I]` | state, ETA, loss, gradient, skipped steps, data, health, kill rules, speed; no `i` = the running one |
-| `stop(i)` / `plot(i)` / `compare(a, b)` | `Training.stop RUN` / `Training.plot RUN` / `Training.compare A B` | checkpoint and stop one run / loss curves as png / speed side by side |
+| what is running, what waits, is the box free? | `queue-list` | one line per item (state, step, gradient now, skipped steps, health flags, `after`, held) and the slots, the machine lock, RAM, GPU memory against the gate, the holds |
+| how is this one training? | `Training.status I` | state and phase, step, ETA, loss; **gradient development** `grad: {first, now, base, ratio, peak, peak_step}`; **NaN / inf**: `skipped` non-finite steps and the `nonfinite` finding; the **data** it trained on; the health findings (below); the kill rules with their value; the **speed** `{s_step, data_share, gpu_busy, gpu_gb}` |
+| is it healthy? | `findings` of `status`, or `health RUN [--vs REF]` (exit 1 on an alert, for scripts) | `failed`, `stalled`, `nonfinite`, `skipped`, `spike`, `grad_norm` (exploding), `grad_module` / `dead_module` (a module learns nothing), `update_ratio`, `data_bound`, `data_differs`, `overfit`, `slow`, `gpu`, `incident` |
+| did a kill rule hit? | `kill` of `status`, `watch RUN --enforce` | per rule `pending` (step not reached), `ok`, `hit` or `unknown` (the key was never logged); `--enforce` requests a stop on a hit |
+| what do the curves look like? | `Training.plot I` | a png: loss, its groups, gradient norm |
+| is a change faster, and is the loss the same? | `Training.compare BASE CHANGED` | s per step, speed-up, data wait, GPU busy, peak memory, loss at the last shared step |
+| should a run be stopped early? | `early RUN --vs CONTROL` | advice from the gap to a control run; it stops nothing |
+| watch a run until it ends (an agent's Monitor) | `watch RUN --enforce` | one line per change |
+| which batch broke a step? | `runs/<id>/incident_<step>.json` | step, kind, sample ids of the batch, losses (with `probe: true`, section 6) |
+```
+python -m trainsuite queue-list
+python -m trainsuite Training.status t23_C_s1 --kill "group.lines@1000 > 1.48"
+python -m trainsuite Training.compare t20.base_s0 speed3.fast --skip 10
+python -m trainsuite --root ../bev_fusion/runs watch t23_C_s1 --enforce      # older command, for a Monitor
+```
+In Python the same views are dicts: `t.queue_list()["items"]`, `t.status("t23.C_s1")["grad"]`, `t.status()["findings"]`. A healthy run is not a good network: these checks say the training is sound, the evaluation says whether the
+result is good. All checks, their thresholds, the kill-rule syntax and the stop details: [EXTENSIONS.md](EXTENSIONS.md) chapters 2, 3, 8, 9, 10. More logging for deep debugging: section 6.
 
 Mirko's sketch in these words: `Training.run(network.json)` = `run`, `queueAdd` = `queue_add`, `queueGetListOverview` = `queue_list`, `queueGet(i)` = `queue_get`, `queueRemove(i)` = `queue_remove`,
 `queueStart` = `queue_start`, `queueHold` / `queueResume` = `queue_hold` / `queue_resume`, `queueGetStatus(i)`, `queueRunningTrainingId` and `queueRunningTrainingStatus` = `status(i)` (no `i`:
-the running one; `queue_list()['running']` is its id), `QueueLogSpeed` = `compare` and the speed part of `status`.
-
-The older words (`start`, `queue add ... --id`, `queue serve`, `queue drop`, `curves`, `speed`, and the old `status` / `stop` tables) work as before. The runner of a trained network has the same
-interface in `autoresearch/runsuite` (`RunJobs`: `check`, `run`, `status`, `queue_add`; one queue for both). `python -m trainsuite.selftest_api` tests it (it also runs inside `selftest`).
+the running one; `queue_list()['running']` is its id), `QueueLogSpeed` = `compare` and the speed part of `status`. `python -m trainsuite.selftest_api` tests the interface (it also runs inside `selftest`).
 
 ## 1. What a config and a manifest look like
 A training is one JSON file with a value for every choice: `bev_fusion/training/configs/t20_base.json` (an unknown key is an error). The keys that matter:
@@ -118,6 +166,8 @@ python -m trainsuite --root $R stop t20_demo --reason "why"
 - **The whole line in one command** (section 7): `queue hold --all --words "<their words>"` stops what runs (a checkpoint each), keeps what waits from starting and pauses the runner. `queue resume --all --words "<their words>"` clears those holds and every stopped run **continues from its checkpoint on the code of its first attempt** (`run.py --pin`: a changed working tree does not leak into a resumed run), in its old place of the line. `--fresh-code` is the hot-fix loop above. Both commands refuse without the person's words.
 
 ## 5. How to supervise
+The views as methods and commands of the interface are in section 0.4; the older commands below stay (`watch` and `health` have no method: they are for a Monitor and for scripts).
+
 | command | answers |
 |---|---|
 | `status [RUN]` | where is every run (state, step, ETA, loss, the gradient norm now and against before, how many non-finite steps were skipped); for one run also the data it trained on, the gradient norm (first rows, now, peak and its step), the steps that were skipped, the loss groups, the module table, the time split, the last eval |
