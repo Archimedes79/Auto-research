@@ -1,1 +1,1 @@
-{"adapter": "evaluation.bev_eval"}
+{"adapter": "evaluation.bev_eval", "runner": "runner.runner:Runner"}

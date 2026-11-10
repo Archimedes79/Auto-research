@@ -1,5 +1,6 @@
-"""Runner: the class that executes a network and stores what it predicts (D70, D72). The layer below the Evaluation (api.py), which is the front door and calls it (`tap`, `time`, `probe` are passed through); it also works alone in Python, to try a network on frames that
-have no labels. It has no command line here: the commands of the Runner are runsuite's.
+"""Runner: the generic class that executes a network and stores what it predicts (D70, D72), used when a project names none of its own (`"runner": "module:Class"` in its evalsuite.json; BEV has
+runner.runner:Runner with `python -m runner`). The layer below the Evaluation (api.py), which is the front door and calls it (`tap`, `time`, `probe` are passed through); it also works alone in
+Python, to try a network on frames that have no labels. It has no command line here.
 
     rn = Runner()                                                  # the project is AR_PROJECT (default), its adapter says what a network and its data are (api.py)
     rn.plan("runs/t23_C_s1", "large.val")                          # the dry run: scenes, frames, what is stored, what would run, the problems

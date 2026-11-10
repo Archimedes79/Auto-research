@@ -10,9 +10,10 @@ the rules at the end of autoresearch/README.md).
 One network per process: a project's network code (its modules) is imported once per process, so a second network of another code snapshot cannot be run in the same one (the adapter may
 refuse it). Run each network in its own process and compare the two evaluations by their ids, which only reads what was stored.
 
-Layers: command line / caller -> Evaluation -> Runner. `Evaluation.run` is `Runner.predict` + `score`. The class that executes a network is the Runner (runner_api.py, D72: it reads no ground
-truth); the Evaluation is the one front door and calls it (`Evaluation(runner=...)` injects another); `tap`, `time` and `probe` are the Runner's, passed through. Everything else here reads what
-was stored (only `draw_frame`, which draws a frame, runs the network on it again). The Runner has its own command line (runsuite) for predictions of frames that have no labels. D70: a network with a memory always
+Layers: command line / caller -> Evaluation -> Runner. `Evaluation.run` is `Runner.predict` + `score`. The class that executes a network is the Runner (D72: it reads no ground truth); the
+Evaluation is the one front door and calls it; `tap`, `time` and `probe` are the Runner's, passed through. Which Runner: the class a project names in `evaluation/evalsuite.json` ("runner":
+"module:Class", BEV: runner.runner:Runner, whose command line is `python -m runner`), else the generic one of runner_api.py; `Evaluation(runner=...)` injects another. Everything else here reads
+what was stored (only `draw_frame`, which draws a frame, runs the network on it again). D70: a network with a memory always
 runs warm: whole scenes in time order from the network's own start; the frames you ask for decide which results are kept and scored, a frame already stored is not predicted again (a subset
 of an earlier selection costs no network). What was predicted is a ResultSet (results.py), one per identity of the question "this network on this data"; scoring it again with another
 ground truth or metric needs the Source (for the ground truth) but not the network. Ids: `<network>@r<hash>` (predictions), `<network>@e<hash>` (a scored evaluation of chosen frames, a ground
@@ -50,6 +51,7 @@ from .sampling import Sampler
 
 CARRY = "carry"                                                               # the memory is always carried along a scene (D70)
 MEMORY_START_MAX, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES = 0.05, 0.02, 4        # the health of a carried memory (D70): empty at the first frame of a scene, filling over its frames
+MIN_SCENES_FOR_INTERVAL = 30                                                  # the percentile scene bootstrap is anti-conservative below this (the review chat simulated it: 12.1 % false at 10 scenes, 7.4 % at 30)
 RESULT_DROP = ("class", "gt_signature", "gt_version", "evaluator_hash", "set_hash", "scenes", "frames", "split")      # what a source says about the GT and the set: not what the network was fed
 
 
@@ -162,6 +164,32 @@ def load_adapter(spec: Any, project: Optional[str]):
     return mod
 
 
+def load_runner(project: Optional[str], adapter: Any, use_config: bool = True):
+    """the Runner of a project: the class named by the key "runner" ("module:Class", the module relative to the project root like the adapter) in <project>/evaluation/evalsuite.json,
+    built with (project, adapter); the generic Runner of evalsuite (runner_api.py) when the project names none, or when the adapter was handed in (`use_config` False: a test's adapter
+    must not get the Runner of whatever AR_PROJECT is)"""
+    root = os.path.abspath(project or os.environ.get("AR_PROJECT") or ".")
+    spec = None
+    if use_config:
+        try:
+            with open(os.path.join(root, "evaluation", "evalsuite.json"), encoding="utf-8") as f:
+                spec = json.load(f).get("runner")
+        except (OSError, ValueError, AttributeError):
+            spec = None
+    if not spec:
+        from .runner_api import Runner
+        return Runner(root, adapter)
+    module, sep, cls = str(spec).partition(":")
+    if not sep or not module or not cls:
+        raise EvaluationError(f'"runner" in {root}/evaluation/evalsuite.json is "module:Class", got {spec!r}')
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    try:
+        return getattr(importlib.import_module(module), cls)(root, adapter)
+    except (ImportError, AttributeError) as e:
+        raise EvaluationError(f"the runner {spec!r} named in {root}/evaluation/evalsuite.json cannot be built: {e}") from None
+
+
 def names(x: "str | Sequence[str]") -> Tuple[str, ...]:
     """a list of names from a name or a list (a bare string is one name, not its letters)"""
     return (x,) if isinstance(x, str) else tuple(x)
@@ -225,9 +253,8 @@ class Helpers:
 class Evaluation(Helpers):
     def __init__(self, project: Optional[str] = None, adapter: Any = None, runner: Any = None):
         super().__init__(project, adapter)
-        if runner is None:
-            from .runner_api import Runner
-            runner = Runner(adapter=self.ad)                  # the class that executes the network (D72): any object with its predict / plan / list_results / tap / time / probe can be injected
+        if runner is None:                                    # the class that executes the network (D72): the project's own (evalsuite.json "runner"), else the generic one; any object with
+            runner = load_runner(project, self.ad, use_config=adapter is None)     # predict / plan / list_results / tap / time / probe can be injected
         self.runner = runner
         self._tasks: Dict[Tuple[str, Tuple[str, ...]], Any] = {}
 
@@ -413,8 +440,12 @@ class Evaluation(Helpers):
         tab = q.table(store)
         better = {f"{m.name}.{k}": m.direction(k) for m in q._metrics().values() for k in m.headline}
         keep = (lambda k: match in k) if match else (lambda k: True)
+        warn = self._warnings(self._predictions(info), {fr["scene"] for fr in store.frames}, store)
+        now = self.ad.evaluator_now() if hasattr(self.ad, "evaluator_now") else None
+        if now and info.get("evaluator") and now != info["evaluator"]:
+            warn.append(f"scored with evaluator code {info['evaluator']}, the code is now {now}: the counts are the old ones but they are reduced with today's metrics; score again (`run`) for a clean number")
         return {"id": id, "n_frames": info["n_frames"], "gt": info["gt"], "numbers": {k: v for k, v in tab.items() if keep(k)}, "better": {k: v for k, v in better.items() if keep(k)},
-                "warnings": self._warnings(self._predictions(info), {fr["scene"] for fr in store.frames}, store)}
+                "warnings": warn}
 
     def split_numbers(self, id: str, axis: str = "scene") -> Dict[str, Any]:
         """the headline numbers per scene (axis 'scene') or the scores of every frame (axis 'frame')"""
@@ -435,16 +466,24 @@ class Evaluation(Helpers):
         return res
 
     def compare(self, a: str, b: str, boot: int = 1000, seed: int = 0) -> Dict[str, Any]:
-        """paired scene bootstrap of the headline numbers, b - a (a = the control, b = the variant); refused when the two do not answer the same question (other GT, other frames)"""
+        """paired scene bootstrap of the headline numbers, b - a (a = the control, b = the variant); refused when the two do not answer the same question (other source, task or GT, or a frame
+        that is another frame in the two); `warnings` say what the interval needs a reader to know (frames in only one of the two, fewer than 30 scenes, other evaluator code)"""
         ia, sa, qa = self._open(a)
         ib, sb = self._open_store(b)                                          # only the control's metric definitions are used; the variant may come from other code
         try:
             res = qa.compare(sa, sb, boot, seed, ignore=getattr(self.ad, "COMPARE_IGNORE", None))
         except ValueError as e:
             raise EvaluationError(str(e)) from None
+        both = {fr["label"] for fr in sa.frames} & {fr["label"] for fr in sb.frames}
+        n_scenes = len({fr["scene"] for fr in sa.frames if fr["label"] in both})
+        warn = []
         if ia.get("evaluator") != ib.get("evaluator"):
-            res = {**res, "warnings": [f"the two were scored with different evaluator code ({ia.get('evaluator')} / {ib.get('evaluator')}): the difference may come from the evaluator"]}
-        return res
+            warn.append(f"the two were scored with different evaluator code ({ia.get('evaluator')} / {ib.get('evaluator')}): the difference may come from the evaluator")
+        if res.get("only_a") or res.get("only_b"):
+            warn.append(f"the two share {res['n_common_frames']} frames only ({res.get('only_a', 0)} only in the control, {res.get('only_b', 0)} only in the variant): the interval is on the shared frames")
+        if n_scenes < MIN_SCENES_FOR_INTERVAL:
+            warn.append(f"only {n_scenes} scenes: the scene bootstrap is too narrow below about {MIN_SCENES_FOR_INTERVAL} scenes (simulated: 12 % false 'excludes 0' with 10 scenes, 5 % nominal)")
+        return {**res, "n_scenes": n_scenes, "warnings": warn}
 
     def get_cost(self, id: str) -> Dict[str, Any]:
         """ms per frame of the network as it ran (the median over the frames of the last session that ran frames, on that day's machine)"""

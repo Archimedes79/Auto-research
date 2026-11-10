@@ -14,7 +14,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
    make_card  draw_frame  list  list_sets  |  tap  time  probe (passed to the Runner)      v
         |  calls the layer below                                                    engine EvalSuite: Quantitative.run(results=...)
         v                                                                             -> RunStore  <net>/eval/suite/quant/<e-id>
- Runner (runner_api.py)  -- the only class that executes the network                   (additive counts per frame: small)
+ Runner (the project's class; generic: runner_api.py)  -- the only class that executes the network   (additive counts per frame: small)
    predict  plan  list_results  tap  time  probe     no ground truth, no loss, always warm (D70)
         |  writes / reads
         v
@@ -23,12 +23,14 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
 
  project adapter  <project>/evaluation/evalsuite.json -> bev_eval.py     (both classes call it; the core imports no torch / nuScenes)
    required: name out network sets identity source subject task
-   optional: free_source + free_subject (together) reference card time probe resolve release inputs evaluator_extra MEMORY_TAP COMPARE_IGNORE
+   optional: free_source + free_subject (together) reference card time probe resolve release inputs evaluator_extra evaluator_now MEMORY_TAP COMPARE_IGNORE
    BEV: bev_adapter (frozen), bev_free (the network without labels), bev_suite, bev_sets (the sets = the training's splits/)
 ```
 A caller (a person, a script, the command line) talks to the Evaluation only. The Runner is the layer below: the only class that runs a network (D72: it reads no ground truth and computes no loss) and stores what
-it predicts; it has no command line here (runsuite's Runner offers `plan` / `predict` for frames without labels; its `Engine` has the same methods as this Runner, so one can stand for the other:
-`Evaluation(runner=...)`).
+it predicts. Which class: the one a project names in `<project>/evaluation/evalsuite.json` as `"runner": "module:Class"` (module relative to the project root, like the adapter; built with
+`(project, adapter)`; BEV: `runner.runner:Runner`, whose command line is `python -m runner` from `bev_fusion/`, for frames without labels), else the generic Runner of `runner_api.py`; an adapter
+handed to `Evaluation(adapter=...)` gets the generic one, and `Evaluation(runner=...)` injects any object with `predict`, `plan`, `list_results`, `tap`, `time`, `probe`. evalsuite never imports a project's Runner
+by name.
 
 Data flow of one `Evaluation.run`: frames (a text) -> the Runner runs the scenes up to their last kept frame, whole and warm, stores the kept frames as a ResultSet (the temporary data: only what the
 network predicted) and releases the network -> the Evaluation opens the labelled data, scores the frames against the ground truth (`reference`, no inputs) into a RunStore (the counts) ->
@@ -51,8 +53,8 @@ ev.tap(r["results"], "scene-0061/12", "fused")                      # an interme
 | `check(network, frames, metrics, taps, workers, control)` | the dry run: the Runner's plan (scenes, frames, what is stored, how many frames would run) plus the ground truth and the metrics, the id it would give, `problems` (exit 1 when there are) |
 | `run(network, frames, gt_key, metrics, taps, device, workers, control, progress)` | `Runner.predict` (the network, then released), then `score` on the labelled data: a plain dict (the id, what was done, the warnings of the memory's health) |
 | `score(results, frames, gt_key, metrics)` | score stored predictions against the ground truth; no network |
-| `show_numbers(id, match)`, `split_numbers(id, axis)`, `find_worst(id, match, n)` | the numbers, the numbers per scene or frame, where they come from |
-| `compare(a, b)` | paired bootstrap, b - a (a = the control); refused on another GT or other frames; `warnings` when the two were scored with different evaluator code |
+| `show_numbers(id, match)`, `split_numbers(id, axis)`, `find_worst(id, match, n)` | the numbers (with `warnings`: devices, the memory's health, evaluator code changed since), the numbers per scene or frame, where they come from |
+| `compare(a, b)` | paired bootstrap, b - a (a = the control); refused on another source, task or GT; `n_scenes` and `warnings`: frames in only one of the two, fewer than 30 scenes (the interval is too narrow then), other evaluator code |
 | `get_cost(id)`, `report(id)`, `make_card(id)` | ms per frame, the html page, the metric card in the project's contract (refused when the checkpoint or the evaluator code changed since, or the predictions are gone: score again) |
 | `draw_frame(id, frame, view)` | one picture (the network runs on that frame with its scene's history; refused like `make_card`) |
 | `list_sets()`, `list(network)` | the sets a project defines, what is stored for a network (predictions and evaluations) |

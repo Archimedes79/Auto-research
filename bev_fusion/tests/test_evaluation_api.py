@@ -32,14 +32,17 @@ def quick():
     assert r["ok"], r
     os.chdir(ROOT)
     from evaluation import bev_eval
-    from evalsuite.api import ADAPTER_FUNCTIONS
+    from evalsuite.api import ADAPTER_FUNCTIONS, Evaluation
     missing = [f for f in ADAPTER_FUNCTIONS if not hasattr(bev_eval, f)]
     assert not missing, f"bev_eval lacks {missing}"
     assert hasattr(bev_eval, "reference") and hasattr(bev_eval, "card") and hasattr(bev_eval, "time") and hasattr(bev_eval, "probe")
     assert hasattr(bev_eval, "free_source") and hasattr(bev_eval, "free_subject"), "the Runner's pair: both or none"
     assert len(bev_eval.evaluator_extra()) == 12, "the adapter's own code is part of the evaluation id"
+    ev_ = Evaluation(project=ROOT)                                                                      # the project names its Runner: bev_fusion/runner/runner.py, built with (project, adapter)
+    assert type(ev_.runner).__module__ == "runner.runner", type(ev_.runner)
+    assert type(Evaluation(adapter="evaluation.bev_eval").runner).__module__ == "evalsuite.runner_api", "an adapter handed in gets the generic Runner, not the project's"
     cfg = json.load(open(os.path.join(ROOT, "evaluation", "evalsuite.json")))
-    assert cfg == {"adapter": "evaluation.bev_eval"}, cfg
+    assert cfg == {"adapter": "evaluation.bev_eval", "runner": "runner.runner:Runner"}, cfg
     s = bev_eval.sets()
     assert s["small.val"] == 10 and s["large.val"] == 82 and s["val"] is None and s["train"] is None, s
     # the identity of a network: its checkpoint (name, fingerprint), config, code and the adapter (bev_adapter.py and bev_free.py); a retrained checkpoint of the same name is another identity
@@ -167,7 +170,8 @@ def real(run, scene, index):
         ck = sorted(glob.glob(os.path.join(src_run, "ckpt_*.pt")))[-1]
         os.symlink(ck, os.path.join(net, os.path.basename(ck)))
         frames = f"frames:{scene}/{index}:val"
-        ev = Evaluation(adapter="evaluation.bev_eval")
+        ev = Evaluation(project=ROOT)                                                                     # the project's own Runner (runner/runner.py) predicts, the Evaluation scores
+        assert type(ev.runner).__module__ == "runner.runner", type(ev.runner)
         # 1 the interface against the engine's own run of the same objects
         r = ev.run(net, frames, gt_key=None, device="cpu", workers=0, progress=0)
         assert r["n_frames"] == 1 and r["frames_predicted"] == 1 and r["predictions_reused"] is False and r["warnings"] == [], r
