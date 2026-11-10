@@ -39,11 +39,9 @@ from .view import speed_row, summary
 from .kill import Rule
 from .runs import Run
 
-JOB_FIELDS = ("id", "kind", "config", "preset", "set", "card", "no_card", "after", "priority", "note", "kill", "run_args", "prepare", "no_check", "project",
-              "run", "mode", "split", "n", "scene", "first", "out", "dts", "device", "cold", "frames", "code")     # the second line: the keys of a runner job (kind "run"), see runsuite
-KINDS = ("train", "run")
-TRAIN_ONLY = ("preset", "set", "card", "no_card", "kill", "run_args", "prepare", "no_check")     # keys that mean something for a training only
-RUN_ONLY = ("run", "mode", "split", "n", "scene", "first", "out", "dts", "device", "cold", "frames", "code")     # keys that mean something for a runner job only
+JOB_FIELDS = ("id", "kind", "config", "preset", "set", "card", "no_card", "after", "priority", "note", "kill", "run_args", "prepare", "no_check", "project")
+KINDS = ("train",)                                                 # a job of this suite is a training; the Runner of a trained network is `python -m runner` (bev_fusion/runner)
+BAD_ENDS = ("failed", "timeout", "blocked", "gpu_busy", "stopped", "held")     # what the launcher's record can say while the run folder still looks alive
 
 
 RESEND_S = 20.0                # `stop` writes the request again this often while the trainer has not stopped: one written before the trainer cleared old markers is moved aside as stale
@@ -111,10 +109,7 @@ def load_job(job):
         raise TrainingError(f'job "id" {j["id"]!r}: starts with a letter or digit; letters, digits, . _ - only')
     j["kind"] = d.get("kind", "train")
     if j["kind"] not in KINDS:
-        raise TrainingError(f'job "kind": one of {KINDS}, not {j["kind"]!r}')
-    foreign = [k for k in (RUN_ONLY if j["kind"] == "train" else TRAIN_ONLY) if d.get(k) not in (None, "", [], {}, False)]
-    if foreign:
-        raise TrainingError(f'job key(s) {foreign} belong to a {"runner job (kind run)" if j["kind"] == "train" else "training"}, not to a job of kind "{j["kind"]}" (a typo, or the wrong kind)')
+        raise TrainingError(f'job "kind": {KINDS[0]!r} (this suite starts trainings; the Runner of a trained network is `python -m runner`), not {j["kind"]!r}')
     j["preset"] = _list(d.get("preset"), "preset")
     s = d.get("set") or {}
     if isinstance(s, dict):
@@ -204,6 +199,11 @@ def _checked_plan(c, j, final):
     except C.ComposeError as e:
         raise TrainingError(str(e))
     problems, missing = [], []
+    splits = c.cfg.get("splits")
+    head = plan["argv"][:plan["argv"].index("--")] if "--" in plan["argv"] else plan["argv"]
+    used = next((head[k + 1] for k in range(len(head) - 2, -1, -1) if head[k] == "--split"), None)           # the last one wins, as in run.py
+    if splits and used and used not in splits:
+        problems.append(f"split {used!r} is not one of this project's splits {list(splits)}: run.py would refuse the start (set run_args [\"--split\", \"<one of them>\"])")
     if plan["held"]:
         problems.append(f"run id {j['id']} is ON HOLD (hold.py show): only the person's words clear it (Training.resume)")
     if final and problems:
@@ -219,8 +219,10 @@ def _checked_plan(c, j, final):
             problems.append("check: " + _tail(r))
     for pr in plan["prepare"]:
         r = subprocess.run(pr["check"] if final else pr["check_preview"], cwd=c.root, capture_output=True, text=True)
-        if r.returncode:
+        if r.returncode == 1:                                           # the check's word for "not there": 0 present, 1 missing (gt_scenes.py check -> autogt have), anything else is the check failing
             missing.append(pr)
+        elif r.returncode:
+            problems.append(f"prepare check {pr['name']} failed (exit {r.returncode}, not 'missing': nothing is built on that): " + _tail(r))
     return plan, problems, missing
 
 
@@ -354,7 +356,6 @@ class Training:
     a json file or a dict (JOB_FIELDS). Every method is also a command: `python -m trainsuite Training.<method> ...`."""
 
     METHODS = ("check", "run", "status", "stop", "plot", "compare", "list", "resume")
-    KIND = "train"
 
     def __init__(self, project=None):
         self.project = os.path.abspath(str(project)) if project else ""          # once: a later chdir must not move it
@@ -363,10 +364,7 @@ class Training:
         return _ctx(((j or {}).get("project") or self.project) or None)
 
     def _job(self, job):
-        j = load_job(job)
-        if j["kind"] != self.KIND:
-            raise TrainingError(f'this is a job of kind "{j["kind"]}": use {"RunJobs" if self.KIND == "train" else "Training"} for it')
-        return j
+        return load_job(job)
 
     @classmethod
     def methods(cls):
@@ -445,8 +443,14 @@ class Training:
                 raise TrainingError(f"the reference run {ref!r} has no run folder")
             refrun = Run(ref_dir, "total")
         s, findings, kills = summary(run_, refrun, rules)
-        if c.R.state_of(os.path.join(c.records, rid)) in ("done", "ok") and s["state"] != "done":     # the launcher's record is the authority: the done flag exists only for exit 0
+        rstate = c.R.state_of(os.path.join(c.records, rid))
+        if rstate in ("done", "ok") and s["state"] != "done":     # the launcher's record is the authority: the done flag exists only for exit 0
             s.update(state="done", phase="done", ready_pct=100.0, pct=100.0, eta_s=None)
+        elif rstate in BAD_ENDS and s["state"] in ("running", "new", "stalled"):      # the trainer was killed (out of memory, SIGKILL): no traceback, the heartbeat is fresh for minutes
+            code = c.R.record(os.path.join(c.records, rid)).get("exit")
+            s.update(state=rstate, phase=rstate, eta_s=None)
+            findings.append(health.Finding("alert", "launcher_" + rstate, f"the launcher's record says {rstate}" + (f" (exit {code})" if code is not None else "")
+                                           + " while the run folder still looks alive: the trainer is gone (killed? out of memory?)"))
         return dict(id=rid, state=s["state"], phase=s["phase"], step=s["step"], total=s["total"], pct=s["ready_pct"], eta_s=s["eta_s"], ready_at=s["ready_at"],
                     s_per_step=s["s_per_step"], loss=s["loss"], grad=s["grad"], skipped=s["skipped"], data=s["data"], restarts=s["restarts"],
                     findings=[f._asdict() for f in findings], kill=[dict(rule=r.text, status=st, value=v) for r, st, v in kills], speed=speed_row(run_, skip))
@@ -521,11 +525,14 @@ class Training:
             raise TrainingError(f"{rid}: no run record, nothing to continue")
         if c.R.state_of(d) in ("running", "waiting"):
             raise TrainingError(f"{rid} is {c.R.state_of(d)}: stop it first")
+        pin = None if fresh_code else (TQ.first_commit(c, rec) or None)         # a continued run trains on the code of its first attempt: the working tree of now does not leak in
+        if pin is None and not fresh_code:
+            raise TrainingError(f"{rid}: its run record names no commit of the first attempt, so there is no code to pin it to and the working tree of now would be trained on. "
+                                "fresh_code=True continues on the code of now (nothing is changed yet, the hold stays)")
         h = c.H.read(d)
         if h is not None:
             c.H.clear(d, words)
             c.H.note_in_ledger(rid, f"hold cleared {dt.date.today().isoformat()} on the person's words: {words.strip()!r} (hold was: {h.get('why', '?')}, set by {h.get('who', '?')} {h.get('when', '?')})")
-        pin = None if fresh_code else (TQ.first_commit(c, rec) or None)         # a continued run trains on the code of its first attempt: the working tree of now does not leak in
         argv = TQ.with_gate(c, TQ.pinned_argv({"argv": TQ.argv_from_record(c, rid, rec), "pin": pin}))
         started = launch(c, [(argv, os.path.join(c.runs, TQ.folder(rid) + ".launcher.log"), rid)], wait)
         return dict(id=rid, cleared=h is not None, started=started, command=shell(argv))

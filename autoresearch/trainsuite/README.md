@@ -27,12 +27,12 @@ t = Training("../bev_fusion")        # the project folder (default: AR_PROJECT);
 ```
 | method | does | returns |
 |---|---|---|
-| `check(job)` | compose the config, run the static check and the data check, start nothing | `{ok, id, changes, notes, problems, will_prepare, command}` |
+| `check(job)` | compose the config, run the static check and the data check (a prepare check ends 0 present, 1 missing, anything else = it failed), check the `--split` against the project's `splits`, start nothing | `{ok, id, changes, notes, problems, will_prepare, command}` |
 | `run(job, wait=3.0)` | start now (detached); the same call again continues a crashed run from its last checkpoint | `{id, started: [{id, pid, log}], command}` |
 | `status(i=None, kill=(), ref=None, skip=10)` | one training in full (section 0.4); no `i` = the running one | `{id, state, phase, step, total, pct, eta_s, s_per_step, loss, grad, skipped, data, restarts, findings, kill, speed}`; nothing running: `{id: None, state: "idle"}` |
 | `list(hours=24.0)` | the trainings that were active in the last `hours` hours and the box | `{runs: [{id, state, step, total, held, grad, skipped, flags}], running: [id], slots, lock, ram, gpu, holds}` |
 | `stop(i=None, reason="", wait=60.0)` | ask a training to save a checkpoint and stop (exit 75; its id goes on hold); the request is written again every 20 s until the trainer has stopped or `wait` seconds are over (0: do not wait) | `{id, requested, file, verified, stopped}` |
-| `resume(i, words, fresh_code=False, wait=3.0)` | the person's own words clear the hold of a stopped training and it continues from its last checkpoint on the code of its first attempt (`fresh_code`: on the code of now, the hot-fix loop) | `{id, cleared, started, command}` |
+| `resume(i, words, fresh_code=False, wait=3.0)` | the person's own words clear the hold of a stopped training and it continues from its last checkpoint on the code of its first attempt (`fresh_code`: on the code of now, the hot-fix loop; a run record without a commit of its first attempt is refused without `fresh_code`, the hold stays) | `{id, cleared, started, command}` |
 | `plot(i, out=None, keys=None, smooth=10)` | loss, its groups and the gradient norm as a png (needs matplotlib) | `{png}` |
 | `compare(a, b, skip=10)` | two runs side by side, `a` is the baseline | `{common_step, rows: [{id, steps, s_step, speedup, data_share, gpu_busy, gpu_gb, loss_at_common, loss_vs_base_pct}]}` |
 
@@ -137,7 +137,7 @@ Without `--go` this is a preview: nothing starts, the composed config goes to `b
 t20_base.json -> temp/compose/t20_demo.json: 10 change(s)
   steps: 6000 -> 400  (preset small)  ...  split: "large" -> "small"  (--set)   steps: 400 -> 600  (--set)   name: "t20_base" -> "t20_demo"  (--id)
   note: resolve: train_scenes = 60 entries     note: resolve: val_scenes = 10 entries
-cd <bev_fusion> && AR_PROJECT=<bev_fusion> python3 .../tools/run.py --id t20.demo --gpu --split train --no-card -- bash temp/train/run_ar.sh temp/compose/t20_demo.json
+cd <bev_fusion> && AR_PROJECT=<bev_fusion> python3 .../tools/run.py --id t20.demo --gpu --split train --no-card -- bash tools/run_ar.sh temp/compose/t20_demo.json
 (nothing started: add --go)
 ```
 - **`--go`** starts it detached and waits 3 s to see whether `run.py` refused the id (held, running, finished, no card). **The same command again resumes** a stopped or crashed run from its last checkpoint.
@@ -212,7 +212,7 @@ python -m trainsuite queue                                            # (output 
 **It exists** (since 2026-11-01). The view shows the **machine lock** (`machine_lock.py`: a measurement that needs the box alone; an exclusive lock holds every other launcher back, and its ticket in the line does not hold up the lock owner's own launches), and a slot that is still **loading** (see below). Every `run.py --gpu` is a launcher process that waits in one first-come-first-served line, takes one of the 2 GPU slots (the lane project counts against the same two) and starts only when the RAM gate lets it (`ram_mb` 10000 in `project.json`: two jobs run in parallel only when the box has RAM for both; with the memory gate below, two big trainings never overlap). A held id is refused. **Settle time** (`gpu_settle_s` in `project.json`, `--settle-s`, 0 = off, `AR_SETTLE_S` overrides; bev_fusion sets 180): a launcher waits while another one took its slot less than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet, so the RAM and memory gates would read the box too early (on 2026-11-04 two trainings started in the same second on the 12 GB card and slowed each other 13 times). It delays only launchers of a project that sets it, evaluations of that project included (a run that ends within the time frees its slot and delays nobody). **Memory gate:** the `trainsuite` block of `project.json` may set `"gpu_max_mb": 3000`; `start`, `queue add` and the queue runner then pass `--gpu-max-mb 3000` to `run.py`, so a training starts only when the card has less than that in use, i.e. when no other big job holds it (a hand-typed `run.py` line without the flag is not gated; the view shows the memory in use against the gate, and a waiting launcher says in its heartbeat what it waits for).
 ```
 python -m trainsuite start training/configs/t20_base.json --id t20.demo3 --preset small --set split=small --no-card --run-arg=--after --run-arg=t20.demo2
-#   ... run.py --id t20.demo3 --gpu --split train --no-card --after t20.demo2 -- bash temp/train/run_ar.sh temp/compose/t20_demo3.json
+#   ... run.py --id t20.demo3 --gpu --split train --no-card --after t20.demo2 -- bash tools/run_ar.sh temp/compose/t20_demo3.json
 ```
 **The queue that outlives its launchers** (since 2026-11-03). A launcher waits as a process: a WSL shutdown, a kill or `--wait-after` running out ended every chain behind it (the chain behind `t17.data` went "blocked" on 2026-11-02). The queue is a persistent list plus one small runner:
 ```

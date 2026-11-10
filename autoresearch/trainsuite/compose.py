@@ -9,7 +9,7 @@ given), `--set a.b=c` overrides one value (c is read as json when it parses: `st
 file stays as it is, the composed file is written to a scratch path. Every change is printed with its old value and its source, a key that the base file did not
 have is marked NEW (a typo shows there; the project's check command refuses an unknown key before a GPU is touched). `start` needs a `trainsuite` block in the
 project's project.json: {"presets": dir, "out": dir for the composed files, "check": command with {config}, "train": command with {config}, "runs": run folder,
-"prepare": [{"name": "gt", "check": command with {config} (exit 0 = present), "build": command with {config} (resumable), "wait_min": minutes the training may wait for it}]}.
+"prepare": [{"name": "gt", "check": command with {config} (exit 0 = present, 1 = missing, any other exit = the check itself failed), "build": command with {config} (resumable), "wait_min": minutes the training may wait for it}]}.
 `start` runs the prepare checks; a missing item stops it unless `--prepare`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)
 and the training is started with `--after` it, so a failed build blocks the training instead of letting it start without its data.
 `"resolve"` (optional): a command (cwd = the project folder) that reads the composed config as json on stdin and writes the resolved one on stdout, for names that the project turns into values

@@ -1,6 +1,8 @@
 # COMMENTED OUT 2026-11-10 (Mirko: "Auskommentieren, nicht loeschen"): the runner is not a runsuite. It is ONE class `Runner` in bev_fusion/runner/ with `python -m runner` above it,
 # parallel to Training and Evaluation. This job layer (a tracked start through run.py and a queue item of kind run around a runner command) stays here as comments, in git history
 # at commit 75da8962 and dd30e4ac, and can be taken back when a job layer is wanted.
+# The `runsuite` block of bev_fusion/project.json ({"command": "bash -c \"$HOME/.../python runner/bev_runner.py {args}\"", "runs": "runs"}) was removed on 2026-11-10 (nothing read it any more);
+# trainsuite recognises a runner job by `python -m runner` in its command (trainqueue.RUNNER_COMMAND).
 # """runsuite - run a trained network on frames and produce the data for the evaluation, with the same interface as the training (trainsuite) and the same queue.
 #
 #     from runsuite import RunJobs

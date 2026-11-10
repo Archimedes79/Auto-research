@@ -90,7 +90,7 @@ def api_checks(tmp, ok):
         raises(api.load_job, "kind", dict(id="x", config="b.json", kind="dance"))
         raises(api.load_job, "job file", os.path.join(tmp, "no_such.json"))
         raises(api.load_job, "starts with a letter", dict(id="../x", config="b.json"))
-        raises(api.load_job, "belong to a runner job", dict(id="x", config="b.json", n=3))
+        raises(api.load_job, "unknown job key", dict(id="x", config="b.json", n=3))               # the keys of a runner job are not a training's
         raises(api.load_job, "kill", dict(id="x", config="b.json", kill=["total at 5 bigger 99"]))
         for k in ("no_card", "prepare", "no_check"):
             raises(api.load_job, "true or false", dict(id="x", config="b.json", **{k: "false"}))
@@ -241,6 +241,159 @@ def api_checks(tmp, ok):
         restore()
 
 
+def seam_checks(tmp, ok):
+    """the nine defects of the seam review of 2026-11-10: each check fails on the code before the fix"""
+    import signal
+    import sys
+    from . import compose as C
+    sub = os.path.join(tmp, "seam")
+    os.makedirs(sub)
+    proj, job, restore = toy(sub)
+    T = api.Training()
+    rec = lambda rid, name: os.path.join(proj, "records", "runs", rid, name)          # noqa: E731
+    pj = os.path.join(proj, "project.json")
+
+    def project(**kw):                                                  # change the project.json of the toy (the context is read on every call)
+        d = json.load(open(pj))
+        for k, v in kw.items():
+            if k == "prepare":
+                d["trainsuite"]["prepare"] = v
+            else:
+                d[k] = v
+        json.dump(d, open(pj, "w"))
+    try:
+        # 1 a trainer that was killed (no traceback, no stop file): the launcher's record says failed, so does status; the fresh heartbeat of the run folder does not say running
+        T.run(job("k.kill", set={"steps": 400, "sleep": 0.05}))
+        until(lambda: T.status("k.kill")["step"] >= 15, 60, what="k.kill trains")
+        os.kill(json.load(open(rec("k.kill", "run.json")))["pid"], signal.SIGKILL)
+        until(lambda: json.load(open(rec("k.kill", "run.json"))).get("status") == "failed", 60, what="the launcher notes the end of k.kill")
+        s = T.status("k.kill")
+        assert s["state"] == "failed" and s["phase"] == "failed" and any(f["code"] == "launcher_failed" and f["level"] == "alert" for f in s["findings"]), s
+        assert [x["state"] for x in T.list()["runs"] if x["id"] == "k.kill"] == ["failed"], "list says the same"
+        ok("status: a trainer killed without a traceback reads failed (the launcher's record), with an alert finding, as list does")
+
+        # 2 a prepare check ends 0 present / 1 missing; any other exit is the check failing, and nothing is built on it
+        probe = lambda code: [dict(name="gt", check=f"python3 -c 'import sys; sys.exit({code})'", build="python3 -c 'pass'", wait_min=1)]          # noqa: E731
+        project(prepare=probe(0))
+        r = T.check(job("p.zero"))
+        assert r["ok"] and not r.get("will_prepare"), r
+        project(prepare=probe(1))
+        r = T.check(job("p.one"))
+        assert not r["ok"] and any("missing data: gt" in x for x in r["problems"]), r
+        r = T.check(job("p.one", prepare=True))
+        assert r["ok"] and r["will_prepare"] == ["gt"], r
+        project(prepare=probe(2))
+        for prepare in (False, True):
+            r = T.check(job("p.two", prepare=prepare))
+            assert not r["ok"] and any("prepare check gt failed (exit 2" in x for x in r["problems"]) and not any("missing data" in x for x in r["problems"]) and not r.get("will_prepare"), r
+        raises(T.run, "prepare check gt failed", job("p.two", prepare=True))
+        assert not os.path.exists(rec("p.two.prep_gt", "run.json")) and not os.path.exists(rec("p.two", "run.json")), "no build was started on a failing check"
+        project(prepare=[])
+        ok("check: only exit 1 of a prepare check is 'missing data'; exit 2 is a problem that carries the output, and no build is started on it")
+
+        # 3 a command with a quote, a $ or a space comes back from the run record as it was
+        c = TQ.context(proj)
+        cmd = ["bash", "-c", "$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py x.json build"]
+        r_ = dict(command=" ".join(cmd), argv=cmd, split="train", after="a.b,c.d", timeout_min=30, cwd=c.root)
+        back = TQ.argv_from_record(c, "x.prep_gt", r_)
+        assert back[back.index("--") + 1:] == cmd and back[back.index("--after") + 1] == "a.b,c.d" and back[back.index("--timeout") + 1] == "30" and "--cwd" not in back, back
+        old = TQ.argv_from_record(c, "x.old", dict(command="python3 code/trainer.py composed/x.json", split="train"))
+        assert old[old.index("--") + 1:] == ["python3", "code/trainer.py", "composed/x.json"], "a record from before `argv` is split as before"
+        ok("argv_from_record: the stored argv list comes back word for word (a bash -c line with a $), with its --after / --timeout; an old record is split as before")
+
+        # 4 a split that the project does not know is a problem of the check, not of the launcher three seconds later
+        project(splits=["val", "test"])
+        r = T.check(job("s.bad"))
+        assert not r["ok"] and any("split 'train' is not one of this project's splits" in x for x in r["problems"]), r
+        assert T.check(job("s.good", run_args=["--split", "val"]))["ok"], "the last --split of the run arguments is the one that counts"
+        project(splits=["val", "train"])
+        assert T.check(job("s.train"))["ok"]
+        ok("check: the split of the start is checked against the project's splits")
+
+        # 5 a queue item without a seq is numbered; a runner that fails the same way again and again ends instead of repeating it forever
+        os.makedirs(c.slots, exist_ok=True)
+        json.dump({"paused": None, "seq": 1, "items": [{"id": "n.seq", "argv": ["python3", "x"], "priority": 5}]}, open(c.qpath, "w"))
+        q = TQ.load(c)
+        assert q["items"][0]["seq"] == 2 and q["seq"] == 2, q
+        lines = []
+        TQ.show(c, out=lines.append)
+        assert any("n.seq" in x for x in lines), lines
+        json.dump({"paused": None, "seq": 5, "items": [{"id": "no.argv", "seq": 5}]}, open(c.qpath, "w"))          # an item the runner cannot start: the same KeyError at every look
+        limit, TQ.ERROR_LIMIT = TQ.ERROR_LIMIT, 3
+        out = []
+        result = []
+        th = threading.Thread(target=lambda: result.append(TQ.serve(c, every=0.05, idle_exit=60, out=out.append)), daemon=True)
+        try:
+            th.start()
+            th.join(20)
+        finally:
+            TQ.ERROR_LIMIT = limit
+        assert not th.is_alive() and result == [2], (th.is_alive(), result, out[-2:])
+        assert sum("runner error" in x for x in out) == 3 and "the same error 3 times in a row" in out[-1], out
+        assert not os.path.exists(c.runner), "the runner file is gone"
+        json.dump({"paused": None, "seq": 0, "items": []}, open(c.qpath, "w"))
+        ok("queue: an item without seq is numbered (runner, show); the runner ends after the same error ERROR_LIMIT times in a row, with exit 2 and its pid file removed")
+
+        # 6 the exit code of a launcher that ran the command is the command's: a trainer that fails within the wait is a failed run, not a launcher to try again or a refusal
+        plan = C.plan_start(c.root, c.block, "base.json", "q.fail", [], ["steps=5", "sleep=0.01", "fail=true"], no_card=True, ar_tools=TQ.TOOLS, records=c.records)
+        it = dict(id="q.fail", argv=plan["argv"], composed=os.path.relpath(plan["composed"], c.root), config=plan["config"], seq=1)
+        started, text = TQ.launch(c, it, wait=20)
+        assert started and "the run failed" in text and not it.get("refused") and not it.get("launch_failures"), (started, text, it)
+        assert json.load(open(rec("q.fail", "run.json")))["status"] == "failed" and TQ.state(c, it) == "failed", "the run is a failed one"
+        for code, key in ((1, "launch_failures"), (2, "refused")):                    # the launcher itself failing / refusing stays what it was
+            it2 = dict(id=f"q.l{code}", argv=["python3", "-c", f"import sys; sys.exit({code})", "--", "x"], seq=2)
+            started, text = TQ.launch(c, it2, wait=20)
+            assert not started and it2.get(key), (code, started, text, it2)
+        ok("launch: a trainer that fails within the wait is a started and failed run; a launcher that exits 1 is tried again, exit 2 is a refusal")
+
+        # 7 `trainsuite curves` without matplotlib is a message and exit 2, as Training.plot says
+        T.run(job("c.run", set={"steps": 10, "sleep": 0.01}))
+        until(lambda: os.path.exists(rec("c.run", "done")), 60, what="c.run done")
+        saved = sys.modules.get("matplotlib", "absent")
+        sys.modules["matplotlib"] = None                                    # an import of it raises ImportError, installed or not
+        try:
+            rc, o, e = cli("--root", os.path.join(proj, "runs"), "curves", "c_run")
+        finally:
+            if saved == "absent":
+                sys.modules.pop("matplotlib", None)
+            else:
+                sys.modules["matplotlib"] = saved
+        assert rc == 2 and "plot needs matplotlib" in e and "Traceback" not in e, (rc, o, e)
+        ok("curves: without matplotlib the legacy command says so and ends with 2")
+
+        # 8 no wiring to the commented-out runsuite: a job of kind run is refused with the way to the Runner, a runner command is no training
+        for bad in (dict(kind="run"), dict(mode="full")):
+            try:
+                api.load_job(dict(id="r.x", config="base.json", **bad))
+                raise AssertionError(f"{bad} must be refused")
+            except api.TrainingError as e:
+                assert ("python -m runner" in str(e)) if "kind" in bad else ("unknown job key" in str(e)), str(e)
+        assert not hasattr(api, "RUN_ONLY") and api.KINDS == ("train",)
+        runner_cmd = "bash -c $HOME/miniconda3/envs/gcar/bin/python -m runner predict runs/t20_base_s0 --out runs/t20_base_s0/preds"
+        assert TQ.is_training(c, "t20.base.s0", {"command": runner_cmd}) is False, "a runner job whose id is the network's folder name is no training"
+        assert TQ.is_training(c, "t20.base.s0", {"command": "python3 code/trainer.py composed/t20_base_s0.json"}) is True
+        ok("jobs: kind run points to `python -m runner`; a runner command is recognised by what it starts")
+
+        # 9 a resume without a first commit stops (and leaves the hold) instead of training on the working tree of now
+        T.run(job("n.pin", set={"steps": 600, "sleep": 0.05}))
+        until(lambda: T.status("n.pin")["step"] >= 10, 60, what="n.pin trains")
+        T.stop("n.pin", "selftest")
+        until(lambda: os.path.exists(rec("n.pin", "HOLD")) and json.load(open(rec("n.pin", "run.json"))).get("status") != "running", 60, what="n.pin stopped")
+        r_ = json.load(open(rec("n.pin", "run.json")))
+        r_.pop("tag", None)
+        json.dump(r_, open(rec("n.pin", "run.json"), "w"))
+        raises(T.resume, "names no commit of the first attempt", "n.pin", "Mirko: selftest")
+        assert os.path.exists(rec("n.pin", "HOLD")), "the refusal changed nothing: the hold stays"
+        res = T.resume("n.pin", "Mirko: selftest, on the code of now", fresh_code=True)
+        assert res["cleared"] is True and "--pin" not in res["command"], res
+        until(lambda: T.status("n.pin")["state"] == "running", 60, what="n.pin goes on")
+        T.stop("n.pin", "selftest cleanup")
+        until(lambda: os.path.exists(rec("n.pin", "HOLD")), 60, what="n.pin stopped again")
+        ok("resume: without a commit of the first attempt it is refused (the hold stays); fresh_code continues on the code of now")
+    finally:
+        restore()
+
+
 def main():
     n = [0]
 
@@ -249,6 +402,7 @@ def main():
         print(f"  ok  {msg}")
     with tempfile.TemporaryDirectory() as tmp:
         api_checks(tmp, ok)
+        seam_checks(tmp, ok)
     print(f"interface selftest: {n[0]} groups of checks passed")
     return 0
 

@@ -188,7 +188,11 @@ def cmd_curves(a):
     runs = [open_run(x, a.root, a.loss) for x in a.runs]
     keys = a.keys or default_keys(runs[0])
     out = a.out or os.path.join(runs[0].dir, "curves.png")
-    print(plot(runs, keys, out, a.smooth))
+    try:
+        print(plot(runs, keys, out, a.smooth))
+    except ImportError as e:
+        print(f"curves: plot needs matplotlib: {e}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -599,10 +603,13 @@ def cmd_start(a):
     for pr in ([] if a.skip_prepare else plan["prepare"]):         # the data the run needs (the GT store of its version): present, or built first
         chk = pr["check"] if a.go else pr["check_preview"]
         r = subprocess.run(chk, cwd=root, capture_output=True, text=True)
-        print(f"prepare {pr['name']}: {' '.join(chk)} -> exit {r.returncode} ({'present' if r.returncode == 0 else 'MISSING'})")
+        print(f"prepare {pr['name']}: {' '.join(chk)} -> exit {r.returncode} ({'present' if r.returncode == 0 else 'MISSING' if r.returncode == 1 else 'THE CHECK FAILED'})")
         print("\n".join("  " + x for x in (r.stdout + r.stderr).strip().splitlines()[-8:]))
-        if r.returncode:
+        if r.returncode == 1:                                    # 0 present, 1 missing; anything else is the check failing: nothing is built on that
             missing.append(pr)
+        elif r.returncode:
+            print(f"start: the prepare check {pr['name']} failed (exit {r.returncode}, not 'missing'); nothing started")
+            return 1
     cmd = lambda argv: f"cd {root} && AR_PROJECT={root} " + " ".join(shlex.quote(x) for x in argv)           # noqa: E731
     if missing and not a.prepare:
         print(f"start: {', '.join(m['name'] for m in missing)} missing. A build takes hours and belongs in the schedule: start with --prepare (the build becomes a run of its own and "

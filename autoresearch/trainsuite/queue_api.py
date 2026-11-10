@@ -22,7 +22,7 @@ def queue_blocks(c, rid):
 
 
 def _ordered(q):
-    return sorted(q["items"], key=lambda i: (i.get("priority", 5), i["seq"]))
+    return sorted(q["items"], key=TQ.order)
 
 
 def _states(c, items):

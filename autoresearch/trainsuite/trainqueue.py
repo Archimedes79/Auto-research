@@ -19,6 +19,7 @@ import contextlib
 import datetime as dt
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -28,6 +29,7 @@ import types
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.join(os.path.dirname(HERE), "tools")
 MAX_RESTARTS = 3                                   # restarts in a row without a new logged step; then the runner leaves the run alone (look at it)
+ERROR_LIMIT = 10                                   # the runner ends after this many identical errors of its look in a row (it would only repeat them)
 LAUNCH_RETRIES = 3                                 # a launcher that exits with 1 (not a refusal: run.py refuses with 2) is tried this many times
 WAITING_WATCH_S = 60.0                             # `hold` watches a launcher that waited for its slot this long: it may start the trainer after its last look at the hold
 HOLD_RESEND_S = 20.0                               # the runner asks a held item that runs anyway to stop at most this often
@@ -93,6 +95,12 @@ def load(c):
     q.setdefault("paused", None)
     q.setdefault("seq", 0)
     q.setdefault("items", [])
+    for it in q["items"]:
+        if not isinstance(it, dict) or not it.get("id"):
+            raise QueueError(f"{os.path.basename(c.qpath)} holds an item without an id ({str(it)[:80]}): fix or remove it first (the file is left as it is)")
+        if not isinstance(it.get("seq"), int):                  # a hand edit or an older writer: the place in the line is the next free number
+            q["seq"] += 1
+            it["seq"] = q["seq"]
     return q
 
 
@@ -104,6 +112,11 @@ def edit(c):
         q = load(c)
         yield q
         c.P.atomic_write(c.qpath, json.dumps(q, indent=1, ensure_ascii=False) + "\n")
+
+
+def order(it):
+    """the place of an item in the line: priority first (1 goes first), then the order it was added in"""
+    return (it.get("priority", 5), it.get("seq", 0))
 
 
 # ---- reading a run
@@ -128,18 +141,14 @@ def launcher_alive(c, rid, rec):
     return True if argv is None else (any(x.endswith("run.py") for x in argv) and rid in argv)
 
 
-def runner_script(c):
-    """the file the project's runner starts (the last word before {args} in project.json runsuite.command, e.g. runner/bev_runner.py); "" when there is none"""
-    words = ((c.cfg.get("runsuite") or {}).get("command") or "").split("{args}")[0].replace('"', " ").replace("'", " ").split()
-    return words[-1] if words and ("/" in words[-1] or "." in words[-1]) else ""
+RUNNER_COMMAND = re.compile(r"(^|\s)-m\s+runner(\s|$)")        # `python -m runner ...`: the Runner of a trained network (bev_fusion/runner), no training
 
 
 def is_training(c, rid, rec):
     """a run of this project that trains: its run folder exists, or its command names its own folder (the config is named after the id). An evaluation, a data build, a runner job
     (its command starts the runner; its output folder may carry the id) or a timing job is not one: hold leaves it alone"""
     cmd = rec.get("command") or ""
-    script = runner_script(c)
-    if script and script in cmd:
+    if RUNNER_COMMAND.search(cmd):
         return False
     return os.path.isdir(os.path.join(c.runs, folder(rid))) or folder(rid) in cmd
 
@@ -258,6 +267,13 @@ def argv_from_record(c, rid, rec):
     if not rec.get("command"):
         raise QueueError(f"{rid}: its run record has no command: cannot rebuild how it was started")
     argv = ["python3", os.path.join(TOOLS, "run.py"), "--id", rid, "--gpu", "--split", rec.get("split") or "train"]
+    after = rec.get("after")
+    if after:                                                   # the runs it waited for (they were done when it started: the wait is over at once)
+        argv += ["--after", ",".join(after) if isinstance(after, (list, tuple)) else str(after)]
+    if rec.get("timeout_min"):
+        argv += ["--timeout", str(rec["timeout_min"])]
+    if rec.get("cwd") and os.path.realpath(rec["cwd"]) != os.path.realpath(c.root):
+        argv += ["--cwd", rec["cwd"]]
     card = [(f, rec.get(k)) for f, k in (("--hyp", "hypothesis"), ("--pred", "prediction"), ("--rule", "rule")) if rec.get(k)]
     if len(card) == 3:
         argv += [x for f, v in card for x in (f, v)]
@@ -266,7 +282,10 @@ def argv_from_record(c, rid, rec):
     for flag, key in (("--basis", "basis"), ("--seed", "seed")):
         if rec.get(key) not in (None, ""):
             argv += [flag, str(rec[key])]
-    try:
+    words = rec.get("argv")                                     # run.py stores the list it ran: a word with a space, a quote or a $ survives; `command` is only that list joined with spaces
+    if isinstance(words, list) and words and all(isinstance(x, str) for x in words):
+        return argv + ["--"] + list(words)
+    try:                                                        # a record from before `argv`: the joined text, split as well as it can be
         return argv + ["--"] + shlex.split(rec["command"])
     except ValueError as e:
         raise QueueError(f"{rid}: the command in its run record cannot be split back into words ({e})")
@@ -335,6 +354,13 @@ def write_kill(run_dir, rules):
 
 
 # ---- the runner
+def ran_command(c, it, pid):
+    """True when the launcher with this pid ran the command and wrote its end to the run record (status ok / failed / timeout / stopped, launcher_pid = pid): its exit code is then the
+    command's. run.py also exits non-zero for itself (refused, a hold, a card missing, a lock): nothing is recorded by that launcher then"""
+    rec = c.R.record(os.path.join(c.records, it["id"]))
+    return rec.get("launcher_pid") == pid and rec.get("status") in ("ok", "failed", "timeout", "stopped")
+
+
 def launch(c, it, wait=3.0):
     """start the item's run.py detached; a launcher that refuses within `wait` seconds (held id, finished, no card ...) marks the item `refused`"""
     write_config(c, it)
@@ -350,7 +376,8 @@ def launch(c, it, wait=3.0):
         rc = proc.wait(timeout=wait)
     except subprocess.TimeoutExpired:
         rc = None
-    if rc is not None and rc > 0:                       # a launcher killed by a signal (rc < 0) did not refuse: its record tells
+    ran = rc is not None and rc > 0 and ran_command(c, it, proc.pid)
+    if rc is not None and rc > 0 and not ran:           # a launcher killed by a signal (rc < 0) did not refuse: its record tells
         with open(log, encoding="utf-8", errors="replace") as lf:
             tail = [x for x in lf.read().strip().splitlines()[-2:] if x]
         text = " | ".join(tail)[:300] or f"exit {rc}"
@@ -365,6 +392,8 @@ def launch(c, it, wait=3.0):
     it["launched"], it["launched_t"], it["boot"] = now(), time.time(), boot_id()
     it.pop("retry", None)
     it.pop("launch_failures", None)
+    if ran:                                             # the trainer failed within the wait (a bad config, an import): a failed run with its record, not a launcher to try again
+        return True, f"started, launcher pid {proc.pid}; the command ended with exit {rc} within {wait:g} s: the run failed (its log tells why)"
     return True, f"started, launcher pid {proc.pid}"
 
 
@@ -387,7 +416,7 @@ def tick(c, q, wait=3.0):
     acts = []
     if q.get("paused"):
         return acts
-    items = sorted(q["items"], key=lambda i: (i.get("priority", 5), i["seq"]))
+    items = sorted(q["items"], key=order)
     states = {i["id"]: state(c, i) for i in items}
     if any(s == "waiting" for s in states.values()):                   # one item stands in the line for its slot at a time: the order stays
         return acts
@@ -497,6 +526,7 @@ def serve(c, every=30.0, idle_exit=600.0, once=False, out=print):
         c.P.atomic_write(c.runner, me)
     idle_since = None
     try:
+        same_error = ("", 0)                                        # the last error of a look and how often in a row
         while True:
             c.P.atomic_write(c.runner, me)
             _CHILDREN[:] = [p for p in _CHILDREN if p.poll() is None]
@@ -505,6 +535,7 @@ def serve(c, every=30.0, idle_exit=600.0, once=False, out=print):
                     acts = tick(c, q) + enforce(c, q)
                     states = [state(c, i) for i in q["items"]]
                     paused = q.get("paused")
+                same_error = ("", 0)
             except QueueError as e:                                     # an unreadable list: say so, never write over it
                 out(f"[{now()}] {e}")
                 if once:
@@ -512,8 +543,13 @@ def serve(c, every=30.0, idle_exit=600.0, once=False, out=print):
                 time.sleep(every)
                 continue
             except Exception as e:                                      # noqa: BLE001  one bad item must not end the runner
-                out(f"[{now()}] runner error ({type(e).__name__}: {e}); looking again in {every:g} s")
+                text = f"{type(e).__name__}: {e}"
+                same_error = (text, same_error[1] + 1 if same_error[0] == text else 1)
+                out(f"[{now()}] runner error ({text}); looking again in {every:g} s")
                 if once:
+                    return 2
+                if same_error[1] >= ERROR_LIMIT:
+                    out(f"[{now()}] the same error {same_error[1]} times in a row: the runner ends (look at the queue, then `queue add` / `queue resume` start it again)")
                     return 2
                 time.sleep(every)
                 continue
@@ -752,7 +788,7 @@ def show(c, out=print):
         return
     out("queue items (the runner starts the first startable one when its --after runs are done and nothing else waits for a slot):")
     states = {i["id"]: state(c, i) for i in q["items"]}
-    for it in sorted(q["items"], key=lambda i: (i.get("priority", 5), i["seq"])):
+    for it in sorted(q["items"], key=order):
         s = states[it["id"]]
         step, total = last_step(os.path.join(c.runs, folder(it["id"])))
         extra = [f"step {step}/{total}"] if step or total else []
