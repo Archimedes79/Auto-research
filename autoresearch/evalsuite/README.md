@@ -45,6 +45,24 @@ run = suite.quant.run(name="a");  suite.quant.table(run);  suite.quant.outliers(
 suite.quant.timing(run="a");  suite.quant.pareto(["a", "b", "c"])
 ```
 
+## The class interface: `Evaluation(project)`
+For a project with an adapter module (`<project>/evaluation/evalsuite.json`, for BEV `evaluation/bev_eval.py`) the whole suite is one class, the pattern of `../INTERFACE.md`: plain data in and out, every method also a command.
+```python
+from evalsuite import Evaluation
+ev = Evaluation()                                                   # the project is AR_PROJECT
+ev.check("runs/t23_C_s1", "small.val")                              # the dry run: what would run, what is stored, the problems
+r = ev.run("runs/t23_C_s1", "small.val", gt_key="v8")               # predict what is not stored yet (warm, D70), score it: a Result
+r.quant();  r.by("scene");  r.worst("seg", n=5);  r.cost();  r.report();  r.card()
+ev.compare(control_id, r["id"])                                     # b - a, paired bootstrap; one network per process: the control was run in another one, compare by ids
+```
+```
+python -m evalsuite Evaluation.run runs/t23_C_s1 small.val --gt-key v8 --json        # from autoresearch/, AR_PROJECT names the project
+python -m evalsuite methods                                                           # the methods and their arguments
+```
+Only `predict` / `run` (and `time`, `probe`, `qual_frame`) execute the network; what it predicted is stored once per identity (network, checkpoint, inputs) and every later question, a subset,
+another ground truth, another metric, is scored from the store (`evalsuite/results.py`). The frames are a text (`val`, `spread:1000:large.val`, `scenes:a,b:val`, ...). Details and the adapter's
+functions: the head of `evalsuite/api.py`; the methods: `../INTERFACE.md`; test: `python -m evalsuite.selftest_api`.
+
 ## Where the comparison happens
 Every comparison of a prediction with the ground truth lives in `comparison/` (read `comparison/README.md`): `maps.py` compares two pixel maps, `boxes.py` two lists of boxes, both on plain numpy arrays and dicts, with counts that add up over frames. `comparison/metrics.py` turns them into ready-made `Metric`s (`MapMetric`, `BoxMetric`): you only write the function that hands over the two things to compare.
 

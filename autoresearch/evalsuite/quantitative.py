@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
-from .contracts import FrameRef, Metric
+from .contracts import FrameRef, Metric, Sample
 from .render import report as html
 from .runner import Runner
 from .sampling import Sampler
@@ -61,21 +61,25 @@ class Quantitative:
     def run(self, scenes: Optional[Sequence[str]] = None, n_scenes: Optional[int] = None, seed: int = 0,
             max_frames: Optional[int] = None, frames: Optional[Sequence[FrameRef]] = None, state: Optional[str] = None,
             name: Optional[str] = None, resume: bool = True, progress: int = 25, on_frame=None,
-            ignore: Optional[Dict[str, Sequence[str]]] = None) -> RunStore:
+            ignore: Optional[Dict[str, Sequence[str]]] = None, results=None, reference=None) -> RunStore:
         """Run the chosen scenes (default: all; n_scenes: that many random scenes; max_frames: the first frames of each scene)
         or the given frames (grouped by scene, in time order) through the Subject and store the counts of every Metric.
         state 'carry' (default of the suite) | 'reset' (every frame independent) | 'warmup'. on_frame(sample, prediction): optional callback
         for EVERY frame run (also frames a resumed run already has stored: the Subject runs them anyway). ignore: description keys of a
         resumed store that may differ ({"source": ("evaluator_hash",)}: the person accepts a store finished with other evaluator code).
+        results: a ResultSet (results.py): score ITS stored predictions instead of running the Subject (the frames are its frames, or `frames` out of them; no network, no state to
+        carry, no plausibility flags or probe: they need the inputs). reference(ref) -> the ground truth of a frame (default: `source.load(ref).reference`, which loads everything).
         -> the closed RunStore."""
         src, subj, task = self.s.source, self.s.subject, self.s.task
         state = state or self.s.state
+        if results is not None and frames is None:
+            frames = results.refs()
         if frames is not None:
             by: Dict[str, List[FrameRef]] = {}
             for f in sorted(frames):
                 by.setdefault(f.scene, []).append(f)
             plan = by
-            if state == "carry":
+            if state == "carry" and results is None:
                 for sc, fr in plan.items():
                     if [f.index for f in fr] != list(range(fr[0].index, fr[0].index + len(fr))):
                         raise ValueError(f"{sc}: state='carry' needs consecutive frames; use state='reset' for a spread subset")
@@ -85,7 +89,7 @@ class Quantitative:
         if not any(plan.values()):
             raise ValueError("no frames to run (an empty frame list, unknown scenes or max_frames that leaves nothing)")
         metrics = self._metrics()
-        desc = subj.describe()
+        desc = subj.describe() if subj is not None else dict(results.manifest["identity"].get("network", {}))     # a stored result set: the network as it was described then
         run_name = name or _slug(f"{desc.get('name', type(subj).__name__)}_{state}_{time.strftime('%Y%m%d_%H%M%S')}")
         manifest = {"name": run_name, "state": state, "source": src.describe(), "subject": desc, "task": task.name,
                     "metrics": {m.name: {"headline": list(m.headline), "better": {k: m.direction(k) for k in m.headline}} for m in metrics.values()},
@@ -98,12 +102,13 @@ class Quantitative:
         done = store.done()
         n_before = len(store.frames)
         cost = store.manifest.setdefault("cost", {})
-        if "ops" not in cost:
+        if "ops" not in cost and results is None:
             ops = self._ops(next((r for refs in plan.values() for r in refs), None), run_name)
             if ops:
                 cost["ops"] = ops
         load0 = machine_load()                                # before the first frame: what else was running while we started
-        runner = Runner(src, subj, state)
+        runner = Runner(src, subj, state) if results is None else None
+        ref_of = reference or (lambda ref: src.load(ref).reference)
         t0, n = time.perf_counter(), 0
         total = manifest["selection"]["n_frames_planned"]
         finished = False
@@ -111,7 +116,9 @@ class Quantitative:
             for sc, refs in plan.items():
                 if all(r.label in done for r in refs):
                     continue
-                for sample, pred in runner.iter_scene(sc, refs):
+                stream = runner.iter_scene(sc, refs) if results is None else (
+                    (Sample(ref, None, ref_of(ref), meta={"token": ref.key}), results.load(ref)) for ref in refs if ref.label not in done)
+                for sample, pred in stream:
                     n += 1
                     if on_frame is not None:
                         on_frame(sample, pred)
@@ -124,9 +131,9 @@ class Quantitative:
                         scores.update({f"{m.name}.{k}": float(v) for k, v in m.score(c).items()})
                         support.update({f"{m.name}.{k}": float(v) for k, v in m.support(c).items()})
                     flags = [dict(name=f.name, status=f.status, value=_plain(f.value), note=f.note)
-                             for f in task.checks(sample, pred) if f.status != "ok"]
+                             for f in task.checks(sample, pred) if f.status != "ok"] if results is None else []
                     info = {k: v for k, v in pred.info.items() if isinstance(v, (int, float, str, bool))}
-                    pr = task.probe(sample, pred)
+                    pr = task.probe(sample, pred) if results is None else None
                     if pr:                                                       # descriptors and error causes for the probing
                         info["probe"] = {k: round(float(v), 4) for k, v in pr.items()}
                     store.add(sample.ref, counts, scores, support, flags, info)
@@ -138,7 +145,7 @@ class Quantitative:
         finally:                                              # an interrupted run keeps a consistent prefix and can be resumed
             store.flush()                                     # the frames of this session are safe before anything slow (nvidia-smi) happens
             ms = [float(fr["info"]["predict_ms"]) for fr in store.frames if "predict_ms" in fr.get("info", {})]
-            if ms and len(store.frames) > n_before:           # every stored frame, also those of earlier sessions of a resumed run
+            if ms and len(store.frames) > n_before and results is None:       # every stored frame, also those of earlier sessions of a resumed run (a stored result set has the load of its own day)
                 a = np.sort(np.asarray(ms))
                 cost["run_ms"] = {"median_ms": float(np.median(a)), "p90_ms": float(a[int(0.9 * (len(a) - 1))]),
                                   "mean_ms": float(a.mean()), "n": len(a), "load": load0, "load_end": machine_load()}

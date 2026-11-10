@@ -1,5 +1,6 @@
 """Command line of the suite.
 
+    python -m evalsuite Evaluation.<method> ... | methods                 the class interface of a project (api.py, apicli.py): run, check, quant, compare, ...
     python -m evalsuite --adapter pkg.module:build [--arg key=value ...] [--out DIR] [--state carry|reset|warmup] <command>
 
     list [SCENE]                                         scenes (and the frames of one scene)
@@ -177,6 +178,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    from .apicli import dispatch                                       # `Evaluation.run ...`, `methods`: the class interface (api.py)
+    code = dispatch(sys.argv[1:] if argv is None else list(argv))
+    if code is not None:
+        return code
     a = build_parser().parse_args(argv)
     if a.cmd == "selftest":
         from .selftest import main as selftest

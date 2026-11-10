@@ -5,6 +5,7 @@
     suite.qual.frame("scene-0061/12", views=("overview", "debug"));  suite.qual.random(6);  suite.qual.videos(2)
     run = suite.quant.run(n_scenes=20);  suite.quant.report(run)
 Command line: python -m evalsuite --adapter pkg.module:build [--arg key=value] <qual|quant|selftest|selftest-adapter> ...
+The class interface of a project (api.py, the pattern of ../INTERFACE.md):  from evalsuite import Evaluation;  python -m evalsuite Evaluation.run NETWORK FRAMES --gt-key v8
 See README.md (use, one page) and EXTENSIONS.md (memory, taps, probing, files; the lane Task lives in the lane project).
 """
 from .contracts import (Counts, Flag, FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, TapSpec, Task,
@@ -12,5 +13,14 @@ from .contracts import (Counts, Flag, FrameRef, Metric, Page, Panel, Prediction,
 from .suite import EvalSuite
 
 __all__ = ["EvalSuite", "Source", "Subject", "Task", "Metric", "View", "FrameRef", "Sample", "Prediction", "Page", "Panel", "Shape",
-           "TapSpec", "Flag", "ViewContext", "Counts"]
+           "TapSpec", "Flag", "ViewContext", "Counts", "Evaluation", "Frames", "EvaluationError"]
+
+
+def __getattr__(name):                                  # the class interface is loaded when it is used: the core stays small
+    if name in ("Evaluation", "Frames", "EvaluationError"):
+        from . import api
+        return getattr(api, name)
+    raise AttributeError(f"module 'evalsuite' has no attribute {name!r}")
+
+
 __version__ = "1.0"
