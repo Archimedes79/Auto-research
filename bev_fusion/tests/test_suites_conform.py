@@ -3,9 +3,10 @@
 of a read-only call prints exactly one json document and nothing else; (3) a bad argument is exit code 2 with `error: ...` on stderr and no traceback, an id that does not exist is the same error in
 every one, a `check` / `plan` that finds problems is exit 1; (4) every method name starts with a verb; (5) layering: evalsuite's core imports no torch / nuScenes and not the runner, suitecli.py only
 the standard library, bev_free.py only evalsuite / evaluation / torch / the run's `interface` module / the standard library (nothing of the trainer), runner/runner.py only the standard library,
-numpy, suitecli and evalsuite, runner/__main__.py only the runner and suitecli, and importing the Runner loads neither torch nor trainsuite. Printed: the commands per class.
+numpy and evalsuite, runner/__main__.py only the runner and suitecli, and importing the Runner loads neither torch nor trainsuite. Printed: the commands per class.
 Run (from the bev_fusion folder): ~/miniconda3/envs/gcar/bin/python tests/test_suites_conform.py"""
 import ast
+import glob
 import json
 import os
 import re
@@ -56,7 +57,7 @@ def main():
     for suite in SUITES:
         cmds = commands(suite)
         assert cmds, f"{suite} lists no commands"
-        for (cls, method), (word, doc) in cmds.items():
+        for (cls, method), (_, doc) in cmds.items():
             assert doc.strip(), f"{suite} {cls}.{method} has no description"
         table[suite] = cmds
         for (cls, method) in cmds:
@@ -66,8 +67,13 @@ def main():
     assert not nouns, f"method names that do not start with a verb: {nouns}"
 
     # (2) --json prints one document and nothing else
-    for argv, cwd in ((["-m", "trainsuite", "Training.list", "--json"], AR), (["-m", "evalsuite", "Evaluation.list_sets", "--json"], AR),
-                      (["-m", "runner", "Runner.list_results", "runs/t20_base_s0", "--json"], ROOT)):
+    probes = [(["-m", "trainsuite", "Training.list", "--json"], AR), (["-m", "evalsuite", "Evaluation.list_sets", "--json"], AR)]
+    runs = sorted(glob.glob(os.path.join(ROOT, "runs", "*", "config.json")))
+    if runs:                                                                # the Runner's read-only call needs one run folder (an export of the code has none)
+        probes.append((["-m", "runner", "Runner.list_results", os.path.relpath(os.path.dirname(runs[0]), ROOT), "--json"], ROOT))
+    else:
+        print("SKIP: the --json probe of Runner.list_results needs a run folder with a config.json under runs/ (there is none here)")
+    for argv, cwd in probes:
         rc, out, err = call(*argv, cwd=cwd)
         assert rc == 0, (argv, rc, err[-300:])
         json.loads(out)                                                     # raises when there is anything else than one json document
@@ -88,8 +94,8 @@ def main():
     assert imports_of(os.path.join(AR, "suitecli.py")) <= std, imports_of(os.path.join(AR, "suitecli.py")) - std
     free = imports_of(os.path.join(ROOT, "evaluation", "bev_free.py"))             # the BEV side: torch and the run's own `interface` module (the contract of the network), nothing of the trainer
     assert free <= std | {"evalsuite", "evaluation", "torch", "interface"}, free - std
-    runner = imports_of(os.path.join(ROOT, "runner", "runner.py"))                 # the class: the evaluation's pieces and numpy, no training, no torch
-    assert runner <= std | {"numpy", "suitecli", "evalsuite"}, runner - std
+    runner = imports_of(os.path.join(ROOT, "runner", "runner.py"))                 # the class: the evaluation's pieces and numpy, no training, no torch, not even the command-line generator
+    assert runner <= std | {"numpy", "evalsuite"}, runner - std
     command_line = imports_of(os.path.join(ROOT, "runner", "__main__.py"))        # the command line above it: the class and the generator
     assert command_line <= std | {"runner", "suitecli"}, command_line - std
     rc, out, err = call("-c", f"import sys; sys.path.insert(0, {ROOT!r}); import runner.runner; print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'trainsuite', 'nuscenes', 'cv2')))", cwd=ROOT)

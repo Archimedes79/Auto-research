@@ -4,7 +4,7 @@ goes through the command lines in subprocesses (one network per process), on a c
   2  `Runner.predict --taps fused`: 3 frames predicted, no warning, the id <network>@r<hash>; the stored frames hold every dt, the detections, the fused tap, the memory fill 0.00 at the first frame and
      growing, the device, and NO loss and no ground-truth signature (D72)
   3  `Runner.list_results` lists it, `Runner.tap` gives the shape of the fused tap
-  4  the predictions are scored LATER: `Evaluation.score <id> <frames>` gives finite headline numbers (the run reads no ground truth, the scoring does)
+  4  the predictions are scored LATER: `Evaluation.score <id> <frames>` gives at least ten finite numbers and no loss (the run reads no ground truth, the scoring does)
 Run (from the bev_fusion folder): ~/miniconda3/envs/gcar/bin/python tests/test_runner_real.py [runs/<name>]"""
 import glob
 import json
@@ -20,6 +20,7 @@ import numpy as np
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 AR = os.path.abspath(os.path.join(ROOT, "..", "autoresearch"))
 sys.path[:0] = [AR, ROOT]
+os.chdir(ROOT)
 RUN = sys.argv[1] if len(sys.argv) > 1 else "runs/t20_base_s0"
 SCENE, N = "scene-0003", 3
 FRAMES = "frames:" + ",".join(f"{SCENE}/{k}" for k in range(N)) + ":val"
@@ -53,9 +54,13 @@ def main():
         for f in ("config.json", "gt.json"):
             if os.path.isfile(os.path.join(src_run, f)):
                 shutil.copy(os.path.join(src_run, f), os.path.join(ROOT, net))
-        shutil.copytree(os.path.join(src_run, "code"), os.path.join(ROOT, net, "code"))
+        if os.path.isdir(os.path.join(src_run, "code")):                    # a run without a code snapshot is run by the live code
+            shutil.copytree(os.path.join(src_run, "code"), os.path.join(ROOT, net, "code"))
         ck = sorted(glob.glob(os.path.join(src_run, "ckpt_*.pt")))[-1]
         os.symlink(ck, os.path.join(ROOT, net, os.path.basename(ck)))
+
+        from evaluation import bev_eval                                    # the identity of the predictions: it hashes the code that makes them, which other work may edit while this runs
+        code_before = bev_eval.identity(net)
 
         # 1 the dry run
         rc, out, err = call("Runner.plan", net, FRAMES, "--taps", "fused", "--workers", "0", "--json")
@@ -68,7 +73,12 @@ def main():
         rc, out, err = call("Runner.predict", net, FRAMES, "--taps", "fused", "--device", "cpu", "--workers", "0", "--progress", "0", "--json")
         assert rc == 0, (rc, err[-600:])
         res = json.loads(out)
-        assert res["results"] == plan["results"] and res["frames_predicted"] == N and res["predictions_reused"] is False and res["warnings"] == [], res
+        assert res["frames_predicted"] == N and res["predictions_reused"] is False and res["warnings"] == [], res
+        if bev_eval.identity(net) == code_before:
+            assert res["results"] == plan["results"], (res["results"], plan["results"])
+        else:
+            print("  note: the code that makes a prediction was edited while this test ran, so the ids of plan and predict may differ (not checked)")
+            plan["results"] = res["results"]
         from evalsuite.results import ResultSet
         rid = res["results"].partition("@")[2]
         rs = ResultSet.open(os.path.join(ROOT, net, "eval", "results", rid))
@@ -92,7 +102,7 @@ def main():
         print(f"  3 ok: list_results, tap {tap['shape']} {tap['dtype']}")
 
         # 4 scored later against the ground truth
-        nums = api(f"ev = Evaluation(); ev.resolve({net!r}); s = ev.score({res['results']!r}, {FRAMES!r}, workers=0, progress=0); "
+        nums = api(f"ev = Evaluation({ROOT!r}); ev.resolve({net!r}); s = ev.score({res['results']!r}, {FRAMES!r}, workers=0, progress=0); "
                    f"print(json.dumps(ev.show_numbers(s['id'])['numbers'], default=float))")
         finite = {k: v for k, v in nums.items() if isinstance(v, (int, float)) and math.isfinite(v)}
         assert len(finite) >= 10 and not any(k.startswith(("loss.", "val_loss/")) for k in nums), (len(finite), [k for k in nums if "loss" in k][:3])
