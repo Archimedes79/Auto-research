@@ -129,7 +129,8 @@ class JobRunner:
     """see the module docstring; every method is also a command (`python -m jobrunner JobRunner.submit job.json`)"""
     METHODS = ("catalogue", "check", "submit", "start", "run", "list", "status")
 
-    def __init__(self, project: Optional[str] = None, launcher: Optional[Callable[[List[str], str, Dict[str, str], str], int]] = None):
+    def __init__(self, project: Optional[str] = None, launcher: Optional[Callable[[List[str], str, Dict[str, str], str], int]] = None, python: Optional[str] = None):
+        self.python = python or os.environ.get("JOBRUNNER_PYTHON", "")          # the interpreter of the child processes, as an option; nothing needs to be set in project.json
         try:
             tool = _tool("project")
             if project:
@@ -413,9 +414,10 @@ class JobRunner:
         return out
 
     def _python(self, given: Any, entry: Dict[str, Any]) -> str:
-        """the interpreter of the child process: the job's `python`, the entry's, project.json jobrunner.python, else the one of this process"""
+        """the interpreter of the child process: the job's `python`, the entry's, the option (`JobRunner(python=...)`, `--python`, the environment variable JOBRUNNER_PYTHON), project.json
+        jobrunner.python, else the one of this process"""
         py = given if isinstance(given, str) else ""
-        return os.path.expanduser(py or entry.get("python") or (self.cfg.get("jobrunner") or {}).get("python") or sys.executable)
+        return os.path.expanduser(py or entry.get("python") or self.python or (self.cfg.get("jobrunner") or {}).get("python") or sys.executable)
 
     def _argv(self, spec: Dict[str, Any], entry: Dict[str, Any]) -> Optional[List[str]]:
         """the run.py command line of a `process` job (None for `launch`, which calls the method itself)"""

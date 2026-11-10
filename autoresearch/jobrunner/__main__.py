@@ -5,7 +5,9 @@ import suitecli
 from . import call
 from .api import JobError, JobRunner
 
-CLI = suitecli.Cli(JobRunner, "jobrunner", JobError, "JOBRUNNER_TRACEBACK", positional=("job", "i"))
+CLI = suitecli.Cli(JobRunner, "jobrunner", JobError, "JOBRUNNER_TRACEBACK", positional=("job", "i"),
+                   extra=(("--python", "interpreter of the child processes (also JOBRUNNER_PYTHON; default: project.json jobrunner.python, else this one)"),),
+                   make=lambda cls, a: cls(a.project, python=a.python))
 
 
 def main(argv=None):
