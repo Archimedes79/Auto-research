@@ -667,6 +667,8 @@ def run(root=None, verbose=True):
     generator_msg = generator_selftest(root, verbose=False)
     from .cli_selftest import run as cli_selftest                                      # the command line: one call per command, exit codes, the stores
     cli_msg = cli_selftest(root, verbose=False)
+    from .jobs_selftest import run as jobs_selftest                                    # the jobs of the job runner: the table, its class, JobRunner.check (nothing is generated)
+    jobs_msg = jobs_selftest(verbose=False)
     # 5i one release, one command: the standard GT and the lane GT of the same sequences come out of one `generate`, into two stores of one release
     from . import lane_gt as lane_gt_mod
     from .suite import scene_tokens as tokens_of_scene
@@ -719,6 +721,7 @@ def run(root=None, verbose=True):
         print(lane_graph_msg)
         print(gt_api_msg)
         print(cli_msg)
+        print(jobs_msg)
         print(generator_msg)
         print(rig_masks_msg)
 
