@@ -110,6 +110,7 @@ try:
     assert nocard.returncode == 2 and "refused: a run needs its card" in nocard.stdout, nocard.stdout
     smoke = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.smoke", "--no-card", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)
     assert smoke.returncode == 0 and rows()["S.smoke"]["notes"] == "no card", (smoke.stdout, rows().get("S.smoke"))
+    assert "card incomplete" not in smoke.stdout, "a diagnostic (--no-card) has no card to complete: run.py says nothing about it: " + smoke.stdout
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.planned", "--hyp", "planned", "--pred", "y >= 2", "--rule", "keep if y >= 2"], check=True, env=env, capture_output=True)
     pl = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.planned", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)
     assert pl.returncode == 0 and rows()["S.planned"]["prediction"] == "y >= 2" and rows()["S.planned"]["hypothesis"] == "planned", pl.stdout
@@ -311,7 +312,7 @@ try:
     ram_env = {"AR_MEMINFO": mi, "AR_RAM_CHECKS": "1"}
     meminfo(1000)
     low = go_env("S.ramlow", ram_env, "--gpu", "--ram-mb", "5000", "--wait-gpu", "0")
-    assert low.returncode == 1 and rows()["S.ramlow"]["status"] == "gpu_busy" and "RAM 1000 of 5000 MB available" in rows()["S.ramlow"]["notes"], (low.stdout, rows()["S.ramlow"])
+    assert low.returncode == 1 and rows()["S.ramlow"]["status"] == "gpu_busy" and "RAM 1000 of 5000 MB available (it must be enough on 1 look in a row, 0 so far)" in rows()["S.ramlow"]["notes"], (low.stdout, rows()["S.ramlow"])
     assert go_env("S.ramnogpu", ram_env, "--ram-mb", "5000", "--wait-gpu", "0").returncode == 0, "a job that asks for no GPU is not gated"
     meminfo(8000)
     assert go_env("S.ramok", ram_env, "--gpu", "--ram-mb", "5000", "--wait-gpu", "0").returncode == 0, "enough RAM: it starts"

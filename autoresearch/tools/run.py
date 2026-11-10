@@ -110,6 +110,11 @@ STATUSES = ("planned", "running", "stalled", "ok", "failed", "timeout", "stopped
 STALE_S = float(os.environ.get("AR_STALE_S", "300"))
 HEARTBEAT_S = float(os.environ.get("AR_HEARTBEAT_S", "15"))
 RAM_CHECKS = int(os.environ.get("AR_RAM_CHECKS", "3"))     # looks in a row (one per wait round) with enough free RAM before a run starts
+
+
+def ram_looks():
+    """the RAM gate's streak in words: '3 looks' / '1 look'"""
+    return f"{RAM_CHECKS} look{'' if RAM_CHECKS == 1 else 's'}"
 CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
 SCRATCH_MAX_BYTES = 1_000_000   # a scratch script over this size is not put into the run tag (it is data, not a script)
 SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (about 10 ms each at the snapshot, and again at the drift check)
@@ -983,11 +988,10 @@ def main():
             card_note = "card changed on purpose (--change-card): " + "; ".join(f"{k} was {old_card[k][:120]!r}" for k in diff)
     a.hyp, a.pred, a.rule = a.hyp or planned.get("hypothesis", ""), a.pred or planned.get("prediction", ""), a.rule or planned.get("rule", "")
     missing = [n for n, v in (("--hyp", a.hyp), ("--pred", a.pred), ("--rule", a.rule)) if not v]
-    if missing:
+    if missing and not a.no_card:                         # a diagnostic (--no-card) has no card to complete: nothing is said
         print(f"[{a.id}] card incomplete, missing {', '.join(missing)} (hypothesis, prediction and decision rule are written before the run: on the command line or in the planned ledger row)")
-        if not a.no_card:
-            print(f"[{a.id}] refused: a run needs its card (--no-card for a smoke test or data preparation)")
-            return 2
+        print(f"[{a.id}] refused: a run needs its card (--no-card for a smoke test or data preparation)")
+        return 2
     a.split = a.split.strip().lower()
     if cfg.get("splits") and a.split not in [s.lower() for s in cfg["splits"]]:
         print(f"[{a.id}] refused: split {a.split} is not one of the project's splits {cfg['splits']}")
@@ -1121,7 +1125,7 @@ def main():
                  f"waiting in the queue behind {', '.join(ahead[:3])}" if ahead else
                  f"waiting for {loading[0][0]} to load ({loading[0][1]} of {a.settle_s:g} s)" if loading else
                  f"waiting for GPU memory ({'unreadable' if u is None else str(u) + ' MB in use'}, the gate wants less than {a.gpu_max_mb} MB)" if mem_wait else
-                 f"waiting for RAM ({ram.last} of {a.ram_mb} MB available)" if (ram and ram.n < RAM_CHECKS and ram.last is not None) else "waiting for the GPU")
+                 f"waiting for RAM ({ram.last} of {a.ram_mb} MB available now; it must be enough on {ram_looks()} in a row, {ram.n} so far)" if (ram and ram.n < RAM_CHECKS and ram.last is not None) else "waiting for the GPU")
             if not lk and not ahead and not loading and mem_ok(u, a.gpu_max_mb):
                 if (ram is None or ram.passed()) and slot.try_take():
                     break
@@ -1134,7 +1138,7 @@ def main():
                 if mem_wait:
                     reasons.append("nvidia-smi unreadable" if u is None else f"GPU memory {u} MB in use (the gate wants less than {a.gpu_max_mb} MB)")
                 if ram and ram.last is not None and ram.n < RAM_CHECKS:
-                    reasons.append(f"RAM {ram.last} of {a.ram_mb} MB available")
+                    reasons.append(f"RAM {ram.last} of {a.ram_mb} MB available (it must be enough on {ram_looks()} in a row, {ram.n} so far)")
                 taken = sum(os.path.isdir(os.path.join(slot.base, str(i))) for i in range(a.gpu_slots)) if slot else 0     # a run without --gpu waits only for a lock: no slots
                 why = (f"machine lock of {lk['owner']} until {lk['end']}" if lk else ", ".join(reasons + [f"{taken} of {a.gpu_slots} GPU slots taken"]))
                 rec.update(status="gpu_busy", ended=now(), notes=why + f" for {a.wait_gpu} min")
