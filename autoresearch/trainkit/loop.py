@@ -168,11 +168,11 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
             gn, status = None, "nonfinite"
             opt.zero_grad(set_to_none=True)
         skipped = status != "ok"
-        if status == "nonfinite" and gn is None and scaler is not None:      # a non-finite LOSS under fp16: the forward may have overflowed and written inf / nan into the batch-norm statistics
+        if status == "nonfinite" and gn is None:                              # a non-finite LOSS (any amp mode): the forward may have written inf / nan into the batch-norm statistics (a NaN input, an fp16 overflow)
             poisoned = optim.poisoned_buffers(model)
-            if poisoned:
-                raise RuntimeError(f"step {step}: the forward pass left non-finite batch-norm statistics ({len(poisoned)} buffers, e.g. {poisoned[:3]}): an fp16 overflow of the activations "
-                                   "(above 65504), which no loss scale cures; resume from the last checkpoint with amp bf16 or off")
+            if poisoned:                                                      # later losses look finite again (train mode uses batch statistics) while the EMA and every checkpoint carry NaN
+                raise RuntimeError(f"step {step}: the forward pass left non-finite batch-norm statistics ({len(poisoned)} buffers, e.g. {poisoned[:3]}): a non-finite input or, under fp16, an overflow "
+                                   "of the activations (above 65504), which no loss scale cures; resume from the last checkpoint (under fp16 with amp bf16 or off)")
         was_bad, bad = bad, optim.bad_steps_after(status, bad, scaler)
         n_overflow = _skip_report(step, status, gn, bad, was_bad, n_overflow, scaler)
         if skipped and status != "overflow":

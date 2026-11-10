@@ -175,6 +175,40 @@ def main():
             raise AssertionError("must abort")
         except RuntimeError as e:
             check("too many non-finite" in str(e), "fit: max_bad_steps skipped steps in a row abort the run")
+    # a NaN input writes NaN into the batch-norm statistics: the step is skipped, but the run must not go on with a poisoned model (EMA and checkpoints would carry NaN)
+    with tempfile.TemporaryDirectory() as tmp:
+        class BNNet(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.fc, self.bn = nn.Linear(4, 4), nn.BatchNorm1d(4)
+        bn_batches = toy_data(4)
+        bn_batches[2] = {"x": torch.full((8, 4), float("nan")), "y": bn_batches[2]["y"]}
+        bn_model, bn_loss = BNNet(), Loss()
+
+        def bn_step(batch, info: StepInfo):
+            l = bn_loss(bn_model.bn(bn_model.fc(batch["x"])).sum(1, keepdim=True), batch["y"])
+            info.backward(l)
+            return {"total": float(l.detach())}, bool(torch.isfinite(l)), None
+        cfg_bn = Config(name="bnpoison", out_root=tmp, steps=6, accum=2, warmup=1, lr=0.05, device="cpu", log_every=1, save_every=100, eval_every=0)
+        try:
+            fit(cfg_bn, bn_model, bn_loss, bn_batches, bn_step, prepare_run_dir(cfg_bn), "cpu")
+            raise AssertionError("a NaN forward must not leave NaN batch-norm statistics unnoticed")
+        except RuntimeError as e:
+            check("batch-norm" in str(e) and not torch.isfinite(bn_model.bn.running_mean).all(), "fit: a non-finite loss that poisoned the batch-norm statistics ends the run (fp32 too), it does not skip on")
+    # CUDA asked for and not there: an error with the text run.py retries, never a silent CPU run
+    from trainkit.util import resolve_device
+    real_available = torch.cuda.is_available
+    try:
+        torch.cuda.is_available = lambda: False
+        try:
+            resolve_device("cuda")
+            raise AssertionError("cuda without CUDA must raise")
+        except RuntimeError as e:
+            check("CUDA error: unknown error" in str(e) and resolve_device("cpu") == "cpu", "resolve_device: cuda without CUDA raises (with the retry text of run.py), cpu stays cpu")
+        torch.cuda.is_available = lambda: True
+        check(resolve_device("cuda") == "cuda", "resolve_device: cuda with CUDA is cuda")
+    finally:
+        torch.cuda.is_available = real_available
     print("trainkit selftest passed")
 
 
