@@ -1003,7 +1003,7 @@
  "generator": {
   "folder_scanner": "powershell",
   "tool": "data/NuScenes/tools/make_manifest.py",
-  "tool_sha256": "fd8e98004164be07a397a52bb9497fc198eb6facbd97c3265780de99c8ee5db4"
+  "tool_sha256": "e55869fddf3f3f4d6841afcf4549bf51ff4b5253738de653ab08367576d188e1"
  },
  "licence": "nuScenes is for non-commercial use (the LICENSE of the data is under files); downloads only with Mirko's OK",
  "links": {
