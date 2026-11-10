@@ -14,7 +14,7 @@ Columns
   decisions       decide.py verdicts (one per decision*.json file) and the written decisions of the other rows: KEEP / CUT / TIE /
                   INC(onclusive) / other; a written "rule met" counts as KEEP, "rule not met" as CUT, everything else written ("confirmed",
                   "fixed", ...) as other; "reference" rows are controls and not counted; a row whose decision carries "decide.py" is counted
-                  through its decision file only
+                  through its decision file only (its token stands before or behind the prose; the prose is read without it)
   pred hit        written predictions met / judged ("prediction ... met"; any "missed" or "not met" after the word counts as missed): the
                   person or lead who wrote it knew the prediction's own tolerance, the decision files do not, so they give only the error
   mean err        mean absolute prediction error of the decision files, in the metric most of them are about (its name in brackets)
@@ -31,6 +31,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
+from decide import split_decision  # noqa: E402  (the decision cell: decide.py writes it and says how to split it)
 
 FAILED = ("failed", "timeout", "stalled", "gpu_busy", "blocked")
 VERDICTS = ("KEEP", "CUT", "TIE", "INCONCLUSIVE")
@@ -110,7 +111,7 @@ def collect(root=None, cfg=None):
             pass
         L["exps"].add(n)
         dec = r.get("decision") or ""
-        v, pr = written(dec.split(" | decide.py")[0] if "decide.py" in dec else dec)
+        v, pr = written(split_decision(dec)[0])        # the prose, whether the decide.py token stands before or behind it
         if "decide.py" in dec:
             v = None  # the verdict of this arm is counted through its decision file
         if v in VERDICTS + ("other",):

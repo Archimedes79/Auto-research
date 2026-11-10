@@ -1,6 +1,6 @@
 """Decision rule as code: KEEP / CUT / TIE / INCONCLUSIVE, from an experiment file and its metric cards, or from typed per-seed scores.
 
-    python decide.py --experiment E240 [--write]                     the rule clauses of the card of experiments/E240_*/experiment.md (an old experiment.json also works) applied to the cards
+    python decide.py --experiment E240 [--write] [--by-hand "reason"]   the rule clauses of the card of experiments/E240_*/experiment.md (an old experiment.json also works) applied to the cards
     python decide.py --variant 0.746,0.741 --control 0.725,0.722 [--band 0.010] [--lower-better] [--cost-variant 31 --cost-control 628] [--id E123.D7 --write]
 
 Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.schema.json):
@@ -28,15 +28,22 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
     'det/dt+0.00/vehicle/all/ate' is matched by its last part)
   * the headline is judged for its evidence (one seed, a disagreeing seed, an interval containing 0) also when its clause is a guard (max_loss)
     or it has no min_effect clause: a better headline on one seed is INCONCLUSIVE, not KEEP
-  * --write writes decision.json next to the experiment file and appends "decide.py <date>: VERDICT (effect)" to the decision column of the
-    variant arm's ledger rows (run_ids); a prose decision already there is kept in front of it. It also writes results.md next to the card (the
-    generated block between its markers: verdict, why, effect and interval, prediction, runs, clauses; the author's text below the end marker is
-    kept, a results.md without the markers is not touched) and sets the `result` column of the done schedule items whose node is the experiment
+  * the gate (hard rule 4: the rule is written before the run): every run id the variant and the control arm list needs a ledger row with status ok, and a run whose
+    record carries the `card_sha` that run.py stored at launch must still match experiment.rule_sha(card); else nothing is decided ("the rule changed after run X was
+    launched"). No run with a card_sha: decided, labelled "rule not registered at launch". --by-hand "reason" bypasses the gate and labels the verdict "by hand: reason"
+    (decision.json, the ledger token, results.md). The typed form needs the ledger row of --id with status ok and is always "by hand: typed scores"
+  * --write records, in this order: the decision column of the variant arm's ledger rows (run_ids), TOKEN FIRST: "decide.py <date>: VERDICT (effect ...)", then " | " and the
+    prose that was there (cut to 400 characters in all; the token is never cut; an earlier token is replaced); decision.json next to the card (written atomically; the earlier
+    verdicts stay in its `previous` list, 10 at most; it carries rule_sha); results.md next to the card (the generated block between its markers: verdict, why, effect and
+    interval, prediction, runs, clauses; the author's text below the end marker is kept, a results.md without the markers is not touched); the `result` column of the done
+    schedule items whose node is the experiment; the result line of every research note in the card's `sources` ("<topic slug>/<note id>", topic_table.py), then the table.
+    A ledger or decision.json failure stops with exit 1; the other records are side records: a failure is a printed warning, the exit code stays 0
 This is the pre-registered decision, not a significance test: intervals come from the problem's evaluation (paired scene bootstrap).
 """
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -47,6 +54,9 @@ from card import is_number  # noqa: E402  (a finite number: NaN, infinity and te
 LOWER = {"ms", "ms_per_frame"}  # generic cost names; problem metrics are listed in project.json "lower_is_better"
 DEFAULT_BAND = 0.010
 DECIMALS = 9   # an effect is rounded to this many decimals before it meets a band or a threshold: 0.746 - 0.736 is 0.010000000000000009 in floats, and the rule says |effect| <= band is a tie
+VERDICTS = "KEEP|CUT|TIE|INCONCLUSIVE"
+TOKEN = re.compile(rf"decide\.py [\d-]+: ({VERDICTS})\b[^|]*")  # what this tool writes into the decision cell of a ledger row; it ends at the next ' | '
+DECISION_CAP = 400   # characters of the decision cell: the token is never cut, the prose behind it is
 
 
 def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, cost_control=None):
@@ -72,6 +82,40 @@ def decide(variant, control, band=0.010, lower_better=False, cost_variant=None, 
     if len(diffs) < 2 or not same:
         return "INCONCLUSIVE", effect, "beyond the band but " + ("only one seed" if len(diffs) < 2 else "a seed disagrees") + ": add a seed, do not adopt yet"
     return "KEEP", effect, f"beyond the band {band} on all {len(diffs)} paired seeds"
+
+
+# ------------------------------------------------------------------ the decision cell of a ledger row: written here, read by keep3.py, metrics.py and plan.py
+
+
+def decision_token(verdict, date, effect, notes=()):
+    """the token for the decision cell: `decide.py <date>: KEEP (effect +0.0123, <note>, ...)`; TOKEN finds it wherever it stands in the cell"""
+    notes = [" ".join(str(n).replace("|", "/").split())[:120] for n in notes]
+    return f"decide.py {date}: {verdict} (effect {effect:+.4f}" + "".join(f", {n}" for n in notes) + ")"
+
+
+def split_decision(text):
+    """(prose, token) of a decision cell: the decide.py token wherever it stands, and what was written by hand around it. A cell without a dated token (older rows,
+    'decide.py: ...' typed by hand) is all prose up to a ' | decide.py'"""
+    text = text or ""
+    m = TOKEN.search(text)
+    if not m:
+        return text.split(" | decide.py")[0].strip(), ""
+    return (text[:m.start()].rstrip(" |") + " " + text[m.end():].lstrip(" |")).strip(), m.group(0).strip()
+
+
+def verdict_of(text):
+    """the verdict of a decision cell: that of the (last) decide.py token, in either order with the prose; a cell without a token is read by its last verdict word"""
+    found = [m.group(1) for m in TOKEN.finditer(text or "")]
+    return found[-1] if found else (re.findall(rf"\b({VERDICTS})\b", text or "") or [""])[-1]
+
+
+def ledger_decision(old, token, cap=DECISION_CAP):
+    """the new decision cell: the token FIRST, then ' | ' and the prose of the old cell (an earlier token goes); only the prose is cut to fit the cap, never the token"""
+    prose = split_decision(old)[0]
+    if prose.startswith("decide.py"):  # an older verdict typed by hand without the dated token: replaced, not kept as prose
+        prose = ""
+    room = cap - len(token) - 3
+    return token + (" | " + prose[:room].rstrip() if prose and room > 0 else "")
 
 
 # ------------------------------------------------------------------ experiment file + cards
@@ -335,6 +379,9 @@ def decide_experiment(exp, root):
     """verdict from the experiment file and its cards: dict(verdict, effect, why, clauses)"""
     import experiment as X
     cards = {a: X.arm_cards(exp, a, root) for a in exp["arms"]}
+    dup = X.duplicate_cards(cards, root, bool(exp.get("deterministic")))
+    if dup:
+        raise ValueError("a card is listed twice: " + "; ".join(dup))
     bad = incompatible(exp, cards)
     if bad:
         raise ValueError("the arms were not evaluated on the same thing: " + "; ".join(bad) + " (a known difference goes into evaluate.allow)")
@@ -407,6 +454,56 @@ def decide_experiment(exp, root):
                 date=time.strftime("%Y-%m-%d %H:%M"))
 
 
+# ------------------------------------------------------------------ the gate: a verdict needs finished runs and a rule that was fixed before them
+
+
+def listed_runs(exp):
+    """the run ids the variant and the control arm list"""
+    variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
+    return [r for a in (variant, exp["control"]) for r in (exp["arms"][a].get("run_ids") or [])]
+
+
+def status_problem(rid, status):
+    """why the run rid cannot carry a verdict yet ('' when its ledger row has status ok); status: {run id: ledger status}"""
+    if status.get(rid) == "ok":
+        return ""
+    s = status.get(rid)
+    return f"run {rid} has status {'missing' if s is None else s or 'empty'}: nothing to decide yet" + (f" (no ledger row {rid})" if s is None else "")
+
+
+def run_gate(exp, rows, records):
+    """(refusals, registered): the runs behind a verdict. Each run id of the variant and the control arm needs a ledger row with status ok. A run record may carry the
+    `card_sha` of the rule at launch (run.py): it must equal experiment.rule_sha(card) now. registered: at least one listed run carries a card_sha"""
+    import experiment as X
+    import run as RUN
+    now, status, bad, registered = X.rule_sha(exp), {r["id"]: r.get("status") or "" for r in rows}, [], False
+    for rid in listed_runs(exp):
+        if why := status_problem(rid, status):
+            bad.append(why)
+            continue
+        rec = RUN.record(os.path.join(records, rid))
+        sha = rec.get("card_sha")
+        if isinstance(sha, str) and sha and rec.get("card_id") in (None, "", exp.get("id")):    # a run that several cards list (E266.b0 in E266 and E267) is registered for the card that was found first
+            registered = True
+            if sha != now:
+                bad.append(f"the rule changed after run {rid} was launched (card_sha {sha}, the card now {now})")
+    return bad, registered
+
+
+def gated_decision(exp, root, rows, records, by_hand=""):
+    """decide_experiment behind the gate; ValueError with the reasons when a listed run is not ok or the rule changed after its launch (by_hand bypasses both). The decision
+    carries rule_sha, registered (a run record held the card_sha of this rule) and by_hand (the reason)"""
+    import experiment as X
+    bad, registered = ([], False) if by_hand else run_gate(exp, rows, records)
+    if bad:
+        raise ValueError("; ".join(bad))
+    d = decide_experiment(exp, root)
+    d.update(rule_sha=X.rule_sha(exp), registered=registered, by_hand=by_hand)
+    if not by_hand and not registered:
+        d["why"] += "; rule not registered at launch (no card_sha in the run records)"
+    return d
+
+
 GEN_BEGIN = "<!-- decide.py:begin (generated by decide.py --write; the text between the markers is replaced on every run: write below the end marker) -->"
 GEN_END = "<!-- decide.py:end -->"
 
@@ -416,11 +513,14 @@ def results_block(d, exp):
     one = lambda s: " ".join(str(s).split())  # noqa: E731  (one line, no stray markup of a line break)
     var, ctl = d["variant"], d["control"]
     eff = f"{d['effect']:+.4f}" + (f", interval [{d['interval'][0]:+.4f}, {d['interval'][1]:+.4f}]" if d.get("interval") else "") + f", pairing {d['pairing']}, {len(d['diffs'])} paired seed(s)"
+    how = f"(by hand: {one(d['by_hand'])})" if d.get("by_hand") else "(rule not registered at launch)" if d.get("registered") is False else "by the rule as written"
     lines = [GEN_BEGIN,
-             f"- **Card:** `experiment.md` (arm {var} against control {ctl}, headline `{d['metric']}`)",
-             f"- **Verdict by the rule as written:** {d['verdict']} ({d['date']})",
-             f"- **Why:** {one(d['why'])}",
-             f"- **Effect:** {eff}"]
+             f"- **Card:** `experiment.md` (arm {var} against control {ctl}, headline `{d['metric']}`)"]
+    if d.get("rule_sha"):
+        lines.append(f"- **Rule sha:** `{d['rule_sha']}`")
+    lines += [f"- **Verdict {how}:** {d['verdict']} ({d['date']})",
+              f"- **Why:** {one(d['why'])}",
+              f"- **Effect:** {eff}"]
     if d.get("prediction"):
         lines.append(f"- **Prediction:** {one(d['prediction'])}")
     rv, rc = exp["arms"][var].get("run_ids", []), exp["arms"][ctl].get("run_ids", [])
@@ -437,14 +537,13 @@ def results_block(d, exp):
 def write_results_md(folder, d, exp):
     """results.md next to the card: created with the generated block and two headings for the author, or the block replaced when the file has the
     markers (the author's text below the end marker is kept), or left alone when it has none. Returns (path, what was done)."""
-    import re
+    import project as P
     path = os.path.join(folder, "results.md")
     block = results_block(d, exp)
     if not os.path.exists(path):
         text = (f"# {d['id']} result - {d['verdict']}\n\n{block}\n\n## What it says\n\n(the hypothesis, why, the negatives: written by the lead; numbers only from the block above or the metric cards)\n\n"
                 "## Next\n\n(the next card or item; every question for the person with options, recommendation and evidence; his answer is recorded here with the date and his words)\n")
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
+        P.atomic_write(path, text)
         return path, "created"
     old = open(path, encoding="utf-8", newline="").read()
     i, j = old.find("<!-- decide.py:begin"), old.find(GEN_END)
@@ -453,8 +552,7 @@ def write_results_md(folder, d, exp):
     nl = "\r\n" if "\r\n" in old else "\n"
     new = old[:i] + block.replace("\n", nl) + old[j + len(GEN_END):]
     new = re.sub(r"^# " + re.escape(str(d["id"])) + r" result - [^\r\n]*", f"# {d['id']} result - {d['verdict']}", new, count=1, flags=re.M)  # [^\r\n]: a CRLF stays CRLF
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        f.write(new)
+    P.atomic_write(path, new)
     return path, "block replaced"
 
 
@@ -482,6 +580,157 @@ def link_schedule(exp_id, folder, root, sched_path, records=None):
     return linked, ("linked: " + ", ".join(linked)) if linked else f"no done schedule item with node {exp_id}: no link"
 
 
+def decision_path(card_path):
+    """decision.json next to the card file (experiment.md -> decision.json; experiment_x.json -> decision_x.json)"""
+    return os.path.join(os.path.dirname(card_path), "decision.json" if card_path.endswith(".md") else os.path.basename(card_path).replace("experiment", "decision", 1))
+
+
+def previous_verdicts(out):
+    """the verdicts an earlier decision.json at `out` holds (its own `previous` list, then itself), the newest last, at most 10: a new decision does not erase the old one"""
+    try:
+        with open(out, encoding="utf-8") as f:
+            old = json.load(f)
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError) as e:
+        print(f"  warning: the earlier {os.path.basename(out)} cannot be read ({e}): its verdict is not kept")
+        return []
+    if not isinstance(old, dict) or not old.get("verdict"):
+        return []
+    prev = [p for p in (old["previous"] if isinstance(old.get("previous"), list) else []) if isinstance(p, dict)]
+    prev.append({k: old.get(k) for k in ("verdict", "effect", "date", "rule_sha", "by_hand")})
+    return prev[-10:]
+
+
+def warn_on(what, fn, *args):
+    """fn(*args), or None after a printed warning: what is written after the ledger and decision.json is a side record, a lock timeout or an unreadable file must not undo the verdict"""
+    try:
+        return fn(*args)
+    except (Exception, SystemExit) as e:  # noqa: BLE001
+        print(f"  warning: {what} not written ({type(e).__name__}: {e})")
+        return None
+
+
+def update_topics(exp, d, root):
+    """the result line of every research note the card cites (`sources`: '<topic slug>/<note id>'), then the table of each topic again (topic_table.py); the text comes
+    only from the decision. Returns the messages: a failure is a warning message, never an exception"""
+    import experiment as X
+    import project as P
+    import topic_table as TT
+    text = f"{d['id']}: {d['verdict']} effect {d['effect']:+.4f}"
+    topics = os.path.join(root, P.cfg_of(root).get("research", "literature"), "topics")
+    msgs, folders = [], []
+    for src in dict.fromkeys(exp.get("sources") or []):
+        if not isinstance(src, str) or not X.SOURCE.fullmatch(src):
+            msgs.append(f"warning: source {src!r} is not '<topic slug>/<note id>': not updated")
+            continue
+        slug, _, note = src.partition("/")
+        folder = os.path.join(topics, slug)
+        if not os.path.isdir(folder):
+            msgs.append(f"warning: topic folder {folder} does not exist: {src} not updated")
+            continue
+        try:
+            code, msg = TT.set_result(folder, note, text)
+        except Exception as e:  # noqa: BLE001
+            code, msg = 1, f"{type(e).__name__}: {e}"
+        msgs.append(msg if not code else f"warning: {src}: {msg}")
+        if not code and folder not in folders:
+            folders.append(folder)
+    for folder in folders:
+        try:
+            code, out = TT.run(folder)
+        except Exception as e:  # noqa: BLE001
+            code, out = 1, [f"{type(e).__name__}: {e}"]
+        msgs += out if not code else [f"warning: table of {os.path.basename(folder)} not made: " + "; ".join(out)]
+    return msgs
+
+
+def write_records(path, exp, d, root):
+    """the records of a verdict, in this order: the decision cell of the variant arm's ledger rows (a failure stops here, exit 1: no record that the ledger does not know),
+    decision.json (atomic; the earlier verdicts in `previous`), results.md (atomic), the schedule link, the result line of the cited research notes. The last three are
+    side records: a failure is a printed warning. Returns the exit code"""
+    import ledger as L
+    import project as P
+    here = os.path.dirname(os.path.abspath(__file__))
+    out, folder = decision_path(path), os.path.dirname(path)
+    token = decision_token(d["verdict"], d["date"][:10], d["effect"], [f"by hand: {d['by_hand']}"] if d.get("by_hand") else [])
+    old = {r["id"]: r.get("decision", "") for r in L.load()}
+    for rid in exp["arms"][d["variant"]].get("run_ids", []):
+        if rid not in old:  # ledger.py note would create an empty 'planned' row for an id that never ran
+            print(f"  warning: no ledger row {rid}: the verdict is only in {out} (fix run_ids of the variant arm in the experiment file)")
+            continue
+        r = subprocess.run([sys.executable, os.path.join(here, "ledger.py"), "note", rid, "--decision", ledger_decision(old[rid], token)])
+        if r.returncode:
+            print(f"error: the ledger note of {rid} failed (exit {r.returncode}): nothing else written, run decide.py again")
+            return 1
+    d["previous"] = previous_verdicts(out)
+    try:
+        P.atomic_write(out, json.dumps(d, indent=1) + "\n")
+    except OSError as e:
+        print(f"error: {out} not written ({e})")
+        return 1
+    print("  written:", out)
+    res = warn_on("results.md", write_results_md, folder, d, exp)
+    if res:
+        print(f"  results.md: {res[1]} ({res[0]})")
+    if os.path.isfile(os.path.join(folder, "results.md")):
+        if os.path.normcase(os.path.realpath(P.root())) == os.path.normcase(os.path.realpath(root)):
+            link = warn_on("schedule link", lambda: link_schedule(exp["id"], folder, root, P.path("schedule"), P.path("run_records")))
+            if link:
+                print("  schedule: " + link[1])
+        else:
+            print("  schedule: another problem than AR_PROJECT: no link")
+    for m in warn_on("research notes", update_topics, exp, d, root) or []:
+        print("  " + m)
+    return 0
+
+
+def decide_card(a):
+    """--experiment: check the card, the gate, the rule; --write records the verdict. Returns the exit code"""
+    import experiment as X
+    import ledger as L
+    import project as P
+    exp, path = X.load(a.experiment)
+    bad = X.check(exp, path)
+    if bad:
+        sys.exit(f"{exp.get('id')}: experiment file not ready: " + "; ".join(bad))
+    root, by_hand = X.problem_of(path), " ".join((a.by_hand or "").split())
+    try:
+        d = gated_decision(exp, root, L.load(), P.path("run_records"), by_hand)
+    except ValueError as e:  # a run that is not ok, a rule that changed after its launch, cards that disagree about a metric's direction
+        sys.exit(f"{exp.get('id')}: not decided: {e}")
+    print(f"{d['id']}: {d['verdict']}: {d['why']}")
+    for c in d["clauses"]:
+        print(f"  {'ok  ' if c['ok'] else 'MISS'} {c['text']}" + (f"  flags: {', '.join(c['flags'])}" if c["flags"] else ""))
+    if d["prediction"]:
+        print("  " + d["prediction"])
+    if by_hand:
+        print(f"  by hand: {by_hand} (the gate was not applied)")
+    return write_records(path, exp, d, root) if a.write else 0
+
+
+def decide_typed(a, ap):
+    """--variant / --control: typed scores; --write puts the token on the ledger row of --id, which must exist with status ok. Returns the exit code"""
+    if not (a.variant and a.control):
+        ap.error("--experiment, or --variant and --control")
+    v = [float(x) for x in a.variant.split(",")]
+    c = [float(x) for x in a.control.split(",")]
+    verdict, effect, why = decide(v, c, a.band, a.lower_better, a.cost_variant, a.cost_control)
+    print(f"{verdict}: effect {effect:+.4f} ({why})")
+    if a.write and a.id:
+        import ledger as L
+        rows = L.load()
+        problem = status_problem(a.id, {r["id"]: r.get("status") or "" for r in rows})  # ledger.py note would create an empty 'planned' row for an id that never ran
+        if problem:
+            print(f"refused: {problem}: the verdict is only printed")
+            return 1
+        band = f"{a.band:.3f}" if round(a.band, 3) == a.band else f"{a.band:g}"
+        token = decision_token(verdict, time.strftime("%Y-%m-%d"), effect, ["typed scores", f"band {band}", "by hand: typed scores"])
+        old = next(r.get("decision", "") for r in rows if r["id"] == a.id)
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "ledger.py"), "note", a.id, "--decision", ledger_decision(old, token)], check=True)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--experiment", help="experiment id (E240), folder, experiment.md or experiment.json")
@@ -493,61 +742,11 @@ def main():
     ap.add_argument("--cost-control", type=float)
     ap.add_argument("--id", default="")
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--by-hand", default=None, metavar="REASON", help="--experiment: decide without the gate (finished runs, rule fixed before them) and label the verdict 'by hand: REASON'")
     a = ap.parse_args()
-    here = os.path.dirname(os.path.abspath(__file__))
-    if a.experiment:
-        import experiment as X
-        exp, path = X.load(a.experiment)
-        bad = X.check(exp, path)
-        if bad:
-            sys.exit(f"{exp.get('id')}: experiment file not ready: " + "; ".join(bad))
-        root = X.problem_of(path)
-        try:
-            d = decide_experiment(exp, root)
-        except ValueError as e:  # e.g. cards that disagree about a metric's direction
-            sys.exit(f"{exp.get('id')}: not decided: {e}")
-        print(f"{d['id']}: {d['verdict']}: {d['why']}")
-        for c in d["clauses"]:
-            print(f"  {'ok  ' if c['ok'] else 'MISS'} {c['text']}" + (f"  flags: {', '.join(c['flags'])}" if c["flags"] else ""))
-        if d["prediction"]:
-            print("  " + d["prediction"])
-        if a.write:
-            out = os.path.join(os.path.dirname(path), "decision.json" if path.endswith(".md") else os.path.basename(path).replace("experiment", "decision", 1))  # experiment.md -> decision.json; experiment_x.json -> decision_x.json
-            json.dump(d, open(out, "w", encoding="utf-8"), indent=1)
-            print("  written:", out)
-            rpath, rnote = write_results_md(os.path.dirname(path), d, exp)
-            print(f"  results.md: {rnote} ({rpath})")
-            if os.path.isfile(rpath):
-                import project as P
-                if os.path.normcase(os.path.realpath(P.root())) == os.path.normcase(os.path.realpath(root)):
-                    print("  schedule: " + link_schedule(exp["id"], os.path.dirname(path), root, P.path("schedule"), P.path("run_records"))[1])
-                else:
-                    print("  schedule: another problem than AR_PROJECT: no link")
-            import ledger as L
-            old = {r["id"]: r.get("decision", "") for r in L.load()}
-            for rid in exp["arms"][d["variant"]].get("run_ids", []):
-                if rid not in old:  # ledger.py note would create an empty 'planned' row for an id that never ran
-                    print(f"  warning: no ledger row {rid}: the verdict is only in {out} (fix run_ids of the variant arm in the experiment file)")
-                    continue
-                line = f"decide.py {d['date'][:10]}: {d['verdict']} (effect {d['effect']:+.4f})"
-                prose = old.get(rid, "").split(" | decide.py")[0].strip()  # a written prose decision is kept, an earlier decide.py verdict is replaced
-                text = (prose + " | " + line) if prose and not prose.startswith("decide.py") else line
-                subprocess.run([sys.executable, os.path.join(here, "ledger.py"), "note", rid, "--decision", text[:400]], check=True)
-        return 0
-    if not (a.variant and a.control):
-        ap.error("--experiment, or --variant and --control")
-    v = [float(x) for x in a.variant.split(",")]
-    c = [float(x) for x in a.control.split(",")]
-    verdict, effect, why = decide(v, c, a.band, a.lower_better, a.cost_variant, a.cost_control)
-    line = f"{verdict}: effect {effect:+.4f} ({why})"
-    print(line)
-    if a.write and a.id:
-        import ledger as L
-        if a.id not in {r["id"] for r in L.load()}:  # ledger.py note would create an empty 'planned' row for an id that never ran
-            print(f"warning: no ledger row {a.id}: the verdict is only printed")
-            return 0
-        subprocess.run([sys.executable, os.path.join(here, "ledger.py"), "note", a.id, "--decision", line], check=True)
-    return 0
+    if a.by_hand is not None and (not a.experiment or not a.by_hand.strip()):
+        ap.error("--by-hand REASON belongs to --experiment and needs a reason (a typed verdict is always labelled by hand)")
+    return decide_card(a) if a.experiment else decide_typed(a, ap)
 
 
 if __name__ == "__main__":

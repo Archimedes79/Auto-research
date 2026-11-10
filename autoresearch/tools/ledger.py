@@ -3,7 +3,11 @@
     python ledger.py render                                   rewrite the markdown from the csv
     python ledger.py add E240.a --hyp "..." --pred "..." --rule "..." [--status planned]     a row before the run (planned)
     python ledger.py note E240.a --result "Q 0.741" --decision "KEEP" [--notes "..." [--replace-notes]]   the judgement columns after the run; --notes is APPENDED
-                                                              to the notes of the row (hold words, attempts, code change), --replace-notes overwrites them
+                                                              to the notes of the row (hold words, attempts, code change), --replace-notes overwrites them.
+                                                              Once a row has started, its hypothesis / prediction / rule are frozen: changing OR filling one needs
+                                                              --force (the old text, or "(empty)", goes into the notes); --status must be one run.py writes and a
+                                                              started row does not go back to planned; a decision that begins with a verdict (KEEP / CUT / TIE /
+                                                              INCONCLUSIVE) on a row without a rule is refused unless it says "by hand: <reason>" (METHOD hard rule 4)
     python ledger.py tail [--loop 19] [-n 15]                 the last rows (of one loop) in short form, then the runs in progress, for a wake-up
     python ledger.py sync [--dry-run]                         add the row of every ended run that has none, also a run whose launcher died (stalled); facts from its run record.
                                                               Also replaces the finished row of an EARLIER attempt of an id by the record of a later one (a re-run whose own
@@ -16,11 +20,15 @@ import argparse
 import csv
 import glob
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-from run import COLS  # noqa: E402
+from run import COLS, STATUSES  # noqa: E402
+
+VERDICT = re.compile(r"^\s*(?:KEEP|CUT|TIE|INCONCLUSIVE)\b")    # a decision in the form of decide.py's verdicts ("KEEP (rule met)", "KEEP: effect +0.01 ...")
+BY_HAND = re.compile(r"by hand", re.I)                           # METHOD hard rule 4: a verdict without a rule is labelled "by hand: <reason>"
 
 
 def load():
@@ -93,7 +101,8 @@ def tail(loop=None, n=15):
         for rid, d in live:
             rec, st = RUN.record(d), RUN.state_of(d)
             what = "stalled" if st == "stalled" else ("running" if rec.get("status") == "running" else "waiting")
-            print(f"{rid:12} {what:8} {(rec.get('started') or rec.get('created') or '')[5:16]:11} | heartbeat {RUN.heartbeat_age(d):.0f} s | {(rec.get('command') or '')[:70]}")
+            alone = f" | launcher gone, command pid {rec.get('pid')} still runs" if st == "stalled" and RUN.command_alive(rec) else ""
+            print(f"{rid:12} {what:8} {(rec.get('started') or rec.get('created') or '')[5:16]:11} | heartbeat {RUN.heartbeat_age(d):.0f} s{alone} | {(rec.get('command') or '')[:70]}")
 
 
 def missing(inside=lambda rid: True):
@@ -139,7 +148,7 @@ def main():
         ap.add_argument("--" + c, default=None)
     ap.add_argument("-n", type=int, default=15)
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--force", action="store_true", help="change the hypothesis / prediction / rule of a row that has started (the old text goes into the notes)")
+    ap.add_argument("--force", action="store_true", help="change or fill the hypothesis / prediction / rule of a row that has started (the old text goes into the notes)")
     ap.add_argument("--replace-notes", action="store_true", help="--notes replaces the notes cell (default: the text is appended after ' | ')")
     a = ap.parse_args()
     if a.cmd in ("note", "add") and not a.id:
@@ -162,11 +171,19 @@ def main():
                                                  ("notes", "notes"), ("status", "status"), ("pred", "prediction"), ("rule", "rule")) if getattr(a, k) is not None}
         if "notes" in new and row.get("notes") and not a.replace_notes:   # the cell holds the hold words, the attempt counts, the code-change note: a new note is added to them
             new["notes"] = row["notes"] + " | " + new["notes"]
-        started = row.get("status") not in (None, "", "planned")
-        frozen = [c for c in ("hypothesis", "prediction", "rule") if started and row.get(c) and c in new and row[c] != new[c]]
+        if "status" in new and new["status"] not in STATUSES:
+            sys.exit(f"{a.id}: status {new['status']!r} is not one that run.py writes ({', '.join(STATUSES)})")
+        started = bool(row.get("started")) or (row.get("status") or "planned") != "planned"       # the run began (a final status counts when the started cell is empty): its card is written before the run and stays
+        if started and new.get("status") == "planned":
+            sys.exit(f"{a.id}: a row that has started ({row['started']}) does not go back to planned")
+        frozen = [c for c in ("hypothesis", "prediction", "rule") if started and c in new and (row.get(c) or "") != new[c]]    # also a column that is still empty: no rule written after the run
         if frozen and not a.force:    # hard rule 4: the rule is written before the run; a started row keeps it (nothing is saved)
-            sys.exit(f"{a.id}: the {', '.join(frozen)} of a row with status {row.get('status')} is written before the run and stays; --force changes it (the old text goes into the notes)")
-        old_texts = {c: row[c] for c in frozen}
+            sys.exit(f"{a.id}: the {', '.join(frozen)} of a row that has started is written before the run and stays (changed or filled afterwards, the number would not come from a rule written before); "
+                     "--force changes it (the old text, or its absence, goes into the notes)")
+        if VERDICT.match(new.get("decision") or "") and not BY_HAND.search(new["decision"]) and not (new["rule"] if "rule" in new else row.get("rule") or "").strip():
+            sys.exit(f"{a.id}: the row has no rule, so a verdict ({new['decision'].split()[0]}) has nothing to come from (hard rule 4): write the rule first (ledger.py note --rule), "
+                     "or label the decision 'by hand: <reason>'")
+        old_texts = {c: row.get(c) or "(empty)" for c in frozen}
         row.update(new)
         for c, txt in old_texts.items():
             row["notes"] = ((row.get("notes") or "") + f" | {c} before the change: {txt}").strip(" |")

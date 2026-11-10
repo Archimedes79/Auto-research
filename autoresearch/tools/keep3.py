@@ -18,8 +18,8 @@ entry (`pin`, with a reason; keep the protected champion pinned, a better newcom
 a union of other networks) or whose file is missing is no candidate. Ranking is by the one metric only: the vertex budget (the card's vert100 is shown,
 it is not the budget count of D25) and the cost (ms) are not gates here, so look at them in `candidates` before you take one in; a metric where lower is
 better (project.json lower_is_better) is refused.
-`consider` is a dry run. `--apply` needs the evidence: `--ledger ID` (the ledger rows ID or ID.* hold a decide.py verdict KEEP as the last verdict word of
-the decision, and their text names the candidate or its run) or `--by-hand "reason"` (recorded as "by hand: ..."); the change is made under the lock of
+`consider` is a dry run. `--apply` needs the evidence: `--ledger ID` (the ledger rows ID or ID.* hold a decide.py verdict KEEP: the `decide.py <date>: KEEP` token of the
+decision cell wherever it stands, a cell without the token by its last verdict word; and their text names the candidate or its run) or `--by-hand "reason"` (recorded as "by hand: ..."); the change is made under the lock of
 the record, so two chats cannot lose each other's entry. Whenever the list changes, push (after `git fetch` and check_git.py): the printout names the
 files to commit and the checkpoints that left (archive candidates; this tool moves nothing and commits nothing).
 Ranking cards: <card pattern> with {name} and {split}; the card is a json with "metrics" {metric: value}, "split", "frames", "subset" and "commit"
@@ -46,8 +46,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
-
-VERDICT = re.compile(r"\b(KEEP|CUT|TIE|INCONCLUSIVE)\b")
+from decide import verdict_of  # noqa: E402  (the decision cell: decide.py writes it and says how to read it)
 
 
 def state_path():
@@ -204,9 +203,9 @@ def evidence(a, cand):
     if not a.ledger:
         sys.exit("--apply needs the evidence: --ledger ID (a KEEP verdict of decide.py that names the network) or --by-hand \"reason\"")
     rows = [r for r in csv.DictReader(open(P.path("ledger"), newline="", encoding="utf-8")) if r["id"] == a.ledger or r["id"].startswith(a.ledger + ".")]
-    keep = [r for r in rows if (VERDICT.findall(r.get("decision") or "") or [""])[-1] == "KEEP"]
+    keep = [r for r in rows if verdict_of(r.get("decision") or "") == "KEEP"]
     if not keep:
-        sys.exit(f"ledger id {a.ledger}: no row (or row of {a.ledger}.*) whose decision ends in the verdict KEEP ({len(rows)} rows found); run decide.py first, or use --by-hand \"reason\"")
+        sys.exit(f"ledger id {a.ledger}: no row (or row of {a.ledger}.*) whose decision holds the verdict KEEP ({len(rows)} rows found); run decide.py first, or use --by-hand \"reason\"")
     text = " ".join(" ".join(str(v) for v in r.values()) for r in keep).lower()
     if not any(re.search(r"(?<![\w.])" + re.escape(w.lower()) + r"(?!\w)", text) for w in [cand["name"], *cand["runs"]]):  # a whole name, not a piece of a word
         sys.exit(f"ledger id {a.ledger}: its KEEP rows name neither {cand['name']} nor {cand['runs']}: that experiment decided something else; name the right one, or use --by-hand \"reason\"")

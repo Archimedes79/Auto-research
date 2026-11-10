@@ -29,16 +29,27 @@ What it does (paths from the problem's project.json, see project.py):
                 run ends the code files on disk (.py / .sh of the code folders and of autoresearch/, fingerprint_extra) are looked at again: a
                 hash like the launch one (about a second) says whether anything changed; only then are they compared with the snapshot (the paths
                 of the launch, a temporary index): a difference is written into the run record (code_drift: n, paths = the first 10) and as a note
-                into the ledger row; no difference leaves no key, a check that itself fails leaves code_drift_check = "failed: <reason>" and never
-                fails the run; --no-drift-check skips it. Not seen: an edit made between the first hash and the snapshot and undone before the end
+                into the ledger row (the paths of the code folders first, with their count: code_drift n, n_code, paths); no difference leaves no key, a check that
+                itself fails leaves code_drift_check = "failed: <reason>" and never
+                fails the run; --no-drift-check skips it. Not seen: an edit made between the first hash and the snapshot and undone before the end. The scratch
+                scripts in the snapshot are at most SCRATCH_MAX_FILES: the ones the command names come first, then the newest by modification time
+                (the drift check takes the same ones)
   * id reuse    an id that is still running (fresh heartbeat) or finished with exit 0 is refused (a new id, or --again for a deliberate repeat);
                 a failed / blocked / stalled / stopped id is resumed: the previous log is kept as run.<n>.log, the first tag stays, the new attempt's commit
                 and a note "code changed since attempt 1" (when the fingerprint differs) go into the record; result and decision of the earlier
                 attempt are cleared in the ledger row when the new attempt starts; two launchers of one id starting at once: the second is refused
-                (an atomic claim directory in the run directory)
+                (an atomic claim directory in the run directory). The same holds for an id that names the same run folder (`X.a` / `X_a`, as for a hold):
+                refused while the twin runs, and after it finished with exit 0 unless --again
+  * command pid the command's pid and process group are written into the run record (pid, pgid, pid_start) right after it started. A killed launcher leaves the
+                command running (its own process group): such a record is `stalled`, but the id is refused (with the pid) while the command lives, and the GPU slot of
+                the run stays taken (GpuSlot.stale); once the command is gone the record counts as stalled and the id may be started again
+  * card id     a run with a registered experiment card (experiment.card_for_run) records card_id and card_sha (experiment.rule_sha: the hash of the rule block) in its record
   * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed, stalled or was stopped); waiting is not counted as run time
-  * holdout     --split <holdout> (project.json holdout_split, default test) is refused unless the run id appears in the problem's holdout log
-                (project.json test_log)
+  * holdout     --split <holdout> (project.json holdout_split, default test; a name that starts with it and an underscore, `test_clean`, and the names in project.json
+                holdout_aliases count too, in --split and in the command's own `--split` / `--split=`) is refused unless the run id is named as a whole token in a TABLE
+                ROW (a line that starts with |) of the problem's holdout log (project.json test_log) and that row does not say the run is still open (pending, not approved,
+                not yet, refused, denied, withdrawn) or already used (DONE, already used: log a NEW id in a new row). A line of free text opens nothing. An id that
+                already ended ok on the holdout split is never started again, --again or not (a new id, a new row). test_log_opens(log_text, run_id) is the check
   * chains      a launcher waits for its dependencies (--wait-after, default 720 min) and then for a GPU slot (--wait-gpu, default 720 min) before it
                 gives up; give-up marks it blocked / gpu_busy and its own dependents are blocked in turn
   * GPU         --gpu: waits for a free GPU slot (project.json gpu_slots, default 2; slots are directories under project.json gpu_slots_dir
@@ -54,8 +65,10 @@ What it does (paths from the problem's project.json, see project.py):
                 there for both and the box does not swap (a training with 6 loader workers wants about 10 GB of the 24); the heartbeat says what it waits for.
                 Settle time (--settle-s, project.json gpu_settle_s, 0 = off; bev_fusion 180; AR_SETTLE_S overrides): a launcher waits while another one took its slot less
                 than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet and the RAM / memory gates would read the box too early
-                (two trainings that started in the same second slowed each other 13 times); it delays only the launchers of a project that sets it. A ticket whose
-                launcher the machine lock holds back does not hold up the line
+                (two trainings that started in the same second slowed each other 13 times); it delays only the launchers of a project that sets it. The clock is the
+                ceiling: the wait ends sooner when that run has logged its first step (its run folder <trainsuite.runs>/<id with . as _>, named in the slot's owner file: a
+                log.jsonl row newer than the slot, or a `step N:` line of train.log after its last `=== ` line). A ticket whose launcher the machine lock holds back
+                does not hold up the line
   * machine lock (D19) every run, GPU or not, waits (max --wait-gpu minutes, then gpu_busy) while another owner holds a live exclusive lock of
                 machine_lock.py; the launcher's own owner name is AR_LOCK_OWNER from its environment (the lock owner's own runs pass, also when a launcher
                 that the lock holds back stands earlier in the line)
@@ -90,6 +103,7 @@ import machine_lock  # noqa: E402
 import project as P  # noqa: E402
 
 COLS = ["id", "started", "ended", "status", "exit", "duration_s", "hypothesis", "basis", "seed", "command", "result", "decision", "notes", "prediction", "rule", "code_hash", "split", "commit"]
+STATUSES = ("planned", "running", "stalled", "ok", "failed", "timeout", "stopped", "held", "blocked", "gpu_busy")   # what a ledger row says (ledger add, this launcher, ledger.py sync)
 STALE_S = float(os.environ.get("AR_STALE_S", "300"))
 HEARTBEAT_S = float(os.environ.get("AR_HEARTBEAT_S", "15"))
 RAM_CHECKS = int(os.environ.get("AR_RAM_CHECKS", "3"))     # looks in a row (one per wait round) with enough free RAM before a run starts
@@ -97,6 +111,9 @@ CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
 SCRATCH_MAX_BYTES = 1_000_000   # a scratch script over this size is not put into the run tag (it is data, not a script)
 SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (about 10 ms each at the snapshot, and again at the drift check)
 SCRATCH_SKIPPED = [0]           # how many scripts the last scratch_scripts() call left out
+CLOSED_ROW = re.compile(r"\b(?:not\s+approved|refused|denied|withdrawn|awaiting|waiting\s+for|(?:OK|approval|answer)\s+pending|pending\s+(?:OK|approval|answer))\b", re.I)   # a holdout log row that says the run is not approved (a bare "pending" or "not yet" in the numbers cell is ordinary wording)
+OK_ROW = re.compile(r"\bOK\b|\bD\d+\b")   # the person's recorded OK: the word OK (case matters) or the decided D<n> that grants it (the lane log cites "D28 (Mirko ...: One TEST check)")
+USED_ROW = re.compile(r"\bDONE\b|\b(?i:already\s+used)\b")                            # ... or that the run was used: the log writes DONE ("used" alone is ordinary wording)
 EXIT_STOPPED = 75   # trainsuite/control.py EXIT_STOPPED: a trainer that was asked to stop (CONTROL file) saved a checkpoint and ended on purpose: status "stopped", never retried
 POSIX = os.name == "posix"
 
@@ -135,13 +152,18 @@ def git_identity_error(root):
     return "" if r.returncode == 0 else (r.stderr.strip() or "git var GIT_COMMITTER_IDENT failed")[:160]
 
 
+def repo_paths(top, root, names):
+    """names relative to the problem folder as paths relative to the repository top; normalised: a code folder outside the problem folder (code_dirs "../autogt")
+    becomes the repository path "autogt" """
+    rel = os.path.relpath(root, top).replace("\\", "/")
+    rel = "" if rel == "." else rel + "/"
+    return [posixpath.normpath(rel + n) for n in names]
+
+
 def snapshot_spec(root, cfg):
     """(repository top, the paths a snapshot covers relative to it, HEAD or ''): code_dirs, fingerprint_extra and the research system itself"""
     top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
-    rel = os.path.relpath(root, top).replace("\\", "/")
-    rel = "" if rel == "." else rel + "/"
-    # normalised: a code folder outside the problem folder (code_dirs "../autogt") becomes the repository path "autogt"
-    spec = [posixpath.normpath(rel + d) for d in cfg["code_dirs"]] + [posixpath.normpath(rel + x) for x in cfg["fingerprint_extra"]]
+    spec = repo_paths(top, root, cfg["code_dirs"]) + repo_paths(top, root, cfg["fingerprint_extra"])
     ar = os.path.relpath(P.AR, top).replace("\\", "/")
     if not ar.startswith(".."):  # the research system itself, when it lives in the same repository
         spec.append(ar)
@@ -151,37 +173,46 @@ def snapshot_spec(root, cfg):
     return top, spec, head
 
 
-def scratch_scripts(top, root, cfg):
-    """the .py / .sh files below the scratch folder (project.json scratch, default "temp"), relative to the repository top; [] when the project sets it empty. The
-    .gitignore keeps scratch out of ordinary commits (check_git.py), so the snapshot adds these by force: a run's tag (and `clean_temp.py --move`, which tags
+def command_names(cmd):
+    """the words of a command line that can name a file, as normalised paths ('./temp/a.sh' -> 'temp/a.sh')"""
+    words = re.findall(r"[^\s'\"`;&|<>()=,]+", " ".join(str(t) for t in cmd))
+    return {posixpath.normpath(w.replace("\\", "/")) for w in words}
+
+
+def scratch_scripts(top, root, cfg, cmd=()):
+    """the .py / .sh files below the scratch folder (project.json scratch, default "temp"), relative to the repository top, sorted by path; [] when the project sets it
+    empty. The .gitignore keeps scratch out of ordinary commits (check_git.py), so the snapshot adds these by force: a run's tag (and `clean_temp.py --move`, which tags
     the same way) still holds the scripts of a loop. This holds also when the scratch folder lies OUTSIDE the code folders (bev_fusion: code_dirs training /
     evaluation / autogt / tests, scratch temp): its scripts are in the tag but not in the drift check, which watches the code folders only, so another chat's new
-    scratch script is no 'code drift' of a run. A script over SCRATCH_MAX_BYTES and everything beyond the first SCRATCH_MAX_FILES (sorted by path) is left out;
-    the number is in SCRATCH_SKIPPED[0] and git_snapshot names it in the note of the run"""
+    scratch script is no 'code drift' of a run. A script over SCRATCH_MAX_BYTES is left out, and so is everything beyond SCRATCH_MAX_FILES; of the rest the scripts
+    the command line `cmd` names (by path from the repository or the problem folder, absolute, or by file name) stay first, then the newest by modification time.
+    The number left out is in SCRATCH_SKIPPED[0] and git_snapshot names it in the note of the run"""
     norm = lambda x: posixpath.normpath(x.replace("\\", "/")).strip("/")
     s = norm(cfg.get("scratch") or "")
     if not s or s == ".":
         return []
-    out, skipped = [], 0
+    names = command_names(cmd)
+    out, skipped = [], 0                              # (path from top, mtime, named in the command)
     for dp, dn, fns in os.walk(os.path.join(root, s)):
         dn[:] = [d for d in dn if d != "__pycache__" and not d.startswith("literature_backup_")]  # never in git (the old .gitignore rule)
         for fn in fns:
             if fn.endswith((".py", ".sh")):
                 p = os.path.join(dp, fn)
                 try:
-                    big = os.path.getsize(p) > SCRATCH_MAX_BYTES
+                    st = os.stat(p)
                 except OSError:                       # gone while walking
                     continue
-                if big:
+                if st.st_size > SCRATCH_MAX_BYTES:
                     skipped += 1
                 else:
-                    out.append(os.path.relpath(p, top).replace("\\", "/"))
-    out.sort()
+                    rel = os.path.relpath(p, top).replace("\\", "/")
+                    named = bool(names & {rel, norm(os.path.relpath(p, root)), fn, posixpath.normpath(p.replace("\\", "/"))})
+                    out.append((rel, st.st_mtime, named))
     if len(out) > SCRATCH_MAX_FILES:                  # a cloned repository or a site-packages copy in the scratch folder must not slow every launch and fill every tag
         skipped += len(out) - SCRATCH_MAX_FILES
-        out = out[:SCRATCH_MAX_FILES]
+        out = sorted(out, key=lambda x: (not x[2], -x[1], x[0]))[:SCRATCH_MAX_FILES]
     SCRATCH_SKIPPED[0] = skipped
-    return out
+    return sorted(x[0] for x in out)
 
 
 def write_tree(top, spec, head, force=None):
@@ -223,15 +254,16 @@ def write_tree(top, spec, head, force=None):
             os.remove(idx)
 
 
-def git_snapshot(root, cfg, prefix, run_id, msg):
-    """commit the code through a temporary index (shared index and branches untouched) and tag it prefix/run_id; returns (commit, tag, note)"""
+def git_snapshot(root, cfg, prefix, run_id, msg, cmd=()):
+    """commit the code through a temporary index (shared index and branches untouched) and tag it prefix/run_id; returns (commit, tag, note). `cmd` = the run's
+    command line: the scratch scripts it names are the last to fall off the cap (scratch_scripts)"""
     try:
         if git(root, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
             return "no-git", "", ""
         tag = f"{prefix}/{run_id}"
         top, spec, head = snapshot_spec(root, cfg)
         SCRATCH_SKIPPED[0] = 0
-        tree, err = write_tree(top, spec, head, lambda: scratch_scripts(top, root, cfg))
+        tree, err = write_tree(top, spec, head, lambda: scratch_scripts(top, root, cfg, cmd))
         if err:
             return "git-error", "", err
         if head and tree == git(top, "rev-parse", "HEAD^{tree}").stdout.strip():
@@ -278,25 +310,30 @@ def drift_hash(root, cfg):
     return code_hash(root, dict(cfg, code_dirs=[*cfg["code_dirs"], os.path.relpath(P.AR, root)]))
 
 
-def code_drift(root, cfg, commit, before, spec):
+def code_drift(root, cfg, commit, before, spec, cmd=()):
     """did the code files on disk change while the run went? before = drift_hash and spec = the snapshot's paths, both taken at launch; commit = the
-    snapshot. The same hash now -> ({}, '') at once. Else the working tree (temporary index) is compared with the snapshot over the LAUNCH paths (HEAD
-    may have moved on, a folder may be gone), keeping the code files (.py / .sh, fingerprint_extra): ({'n': differing files, 'paths': the first 10}, '')
-    or ({}, '') without one; a check that fails gives ({}, 'failed: <reason>'), it never raises"""
+    snapshot; cmd = the run's command line (the same scratch scripts as in the snapshot). The same hash now -> ({}, '') at once. Else the working tree (temporary
+    index) is compared with the snapshot over the LAUNCH paths (HEAD may have moved on, a folder may be gone), keeping the code files (.py / .sh,
+    fingerprint_extra): ({'n': differing files, 'paths': the first 10, the files of the project's code folders (code_dirs) before the others, 'n_other': how many
+    are not in a code folder (only when there are any)}, '') or ({}, '') without one; a check that fails gives ({}, 'failed: <reason>'), it never raises"""
     try:
         if spec is None or before is None:
             return {}, "failed: no launch state (snapshot paths or hash)"
         if drift_hash(root, cfg) == before:
             return {}, ""
         top, spec_now, head = snapshot_spec(root, cfg)
-        live, err = write_tree(top, spec_now, head, lambda: scratch_scripts(top, root, cfg))
+        live, err = write_tree(top, spec_now, head, lambda: scratch_scripts(top, root, cfg, cmd))
         if err:
             return {}, "failed: " + err
         r = git(top, "diff-tree", "-r", "--name-only", commit, live, "--", *spec)
         if r.returncode != 0:
             return {}, "failed: diff-tree: " + r.stderr.strip()[:100]
         paths = [p for p in r.stdout.splitlines() if p.endswith((".py", ".sh")) or any(p.endswith(x) for x in cfg["fingerprint_extra"])]
-        return ({"n": len(paths), "paths": paths[:10]} if paths else {}), ""
+        code = repo_paths(top, root, cfg["code_dirs"])
+        in_code = lambda p: any(p == c or p.startswith(c + "/") for c in code)  # noqa: E731
+        paths.sort(key=lambda p: not in_code(p))                                                  # stable: the code folders' files first, each group by path
+        other = sum(not in_code(p) for p in paths)
+        return ({"n": len(paths), "paths": paths[:10], **({"n_other": other} if other else {})} if paths else {}), ""
     except Exception as e:
         return {}, "failed: " + repr(e)[:100]
 
@@ -446,6 +483,26 @@ def pid_alive(pid):
         return False
 
 
+def proc_stat(pid):
+    """(state letter, start time in clock ticks since boot) of a process from /proc/<pid>/stat; None where there is no /proc (Windows) or no such process"""
+    try:
+        with open(f"/proc/{int(pid)}/stat", encoding="utf-8", errors="replace") as f:
+            rest = f.read().rsplit(")", 1)[1].split()          # after "pid (comm)": the state is field 3, the start time field 22
+        return rest[0], int(rest[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def command_alive(rec):
+    """does the command of a run record in state `running` still live? Its pid is written right after it started (run_once on_start). A killed launcher leaves the
+    command (its own process group) running; a zombie is gone, and a pid that a later process holds now (another start time than the recorded one) is not our command"""
+    pid = rec.get("pid")
+    if rec.get("status") != "running" or not isinstance(pid, int) or pid <= 0 or not pid_alive(pid):
+        return False
+    st = proc_stat(pid)
+    return st is None or (st[0] != "Z" and rec.get("pid_start") in (None, st[1]))
+
+
 def heartbeat_age(d):
     try:
         return time.time() - os.path.getmtime(os.path.join(d, "heartbeat"))
@@ -529,7 +586,8 @@ def later_attempt(rec, row):
 
 
 def ledger_write(ledger, row, clear=(), fill=False):
-    """merge one row into the ledger under the lock (a planned row keeps what was written before the run; `clear` names columns of the old row to drop).
+    """merge one row into the ledger under the lock (a planned row keeps what was written before the run; `clear` names columns of the old row to drop; the notes
+    of the old row stay and the new notes are appended to them).
     fill=True (ledger.py sync): a missing row or a planned / running / stalled one is filled in; a finished row is replaced only by the row of a LATER
     attempt (later_attempt: the re-run whose own final write failed): only the card columns of the old row stay, its result and decision are kept as
     a note of the new row; the same attempt's row is never replaced; returns whether it wrote"""
@@ -546,8 +604,9 @@ def ledger_write(ledger, row, clear=(), fill=False):
             old = {k: v for k, v in old.items() if k in ("id", "hypothesis", "basis", "seed", "prediction", "rule")}  # the card, not the earlier attempt's facts
             if gone:
                 row = dict(row, notes=(row["notes"] + "; " if row.get("notes") else "") + f"replaced the row of the earlier attempt ({gone[:200]})")
-        if fill and old.get("notes"):
-            row = dict(row, notes=old["notes"] + "; " + row.get("notes", ""))
+        new_notes = row.get("notes") or ""
+        if old.get("notes") and new_notes and new_notes not in old["notes"]:    # the notes of the row (hold words, earlier attempts) stay: a new write adds to them, it does not replace them
+            row = dict(row, notes=old["notes"] + "; " + new_notes)
         old = {k: v for k, v in old.items() if k not in clear}
         row = {**old, **{k: v for k, v in row.items() if v not in ("", None)}}
         rows = [r for r in rows if r["id"] != row["id"]] + [row]
@@ -585,14 +644,38 @@ def write_manifest(run_id):
         print(f"[{run_id}] warning: provenance manifest not written ({type(e).__name__}: {str(e)[:160]})", flush=True)
 
 
+def run_folder(run_id):
+    """the run folder an id names (trainsuite/compose.py: the id with . as _, so `t1.a` and `t1_a` share one folder and one checkpoint, but have two run records)"""
+    return run_id.replace(".", "_")
+
+
 def hold_refusal(records, run_id):
-    """'' when the run id may start, else why not: it has a HOLD marker, or another id has one and names the same run folder (trainsuite/compose.py: the
-    folder is the id with . as _, so `t1.a` and `t1_a` share one folder and one checkpoint, but have two run records)"""
-    folder = run_id.replace(".", "_")
+    """'' when the run id may start, else why not: it has a HOLD marker, or another id has one and names the same run folder (run_folder)"""
+    folder = run_folder(run_id)
     for name, h in HOLD.holds(records):
-        if name.replace(".", "_") == folder:
+        if run_folder(name) == folder:
             return (f"this run id is on HOLD ({HOLD.line(name, h)})" if name == run_id else
                     f"{name} is on HOLD and names the same run folder ({folder}) ({HOLD.line(name, h)})") + f". It starts again after the person's words: hold.py clear {name} --words \"<their words>\""
+    return ""
+
+
+def twin_refusal(records, run_id, again=False):
+    """'' when the run id may start, else why not: another id that names the same run folder (run_folder: `X.a` and `X_a`) is running (fresh heartbeat, or its launcher
+    died and its command lives) or finished with exit 0 (unless `again`, a deliberate repeat). Two records on one folder would train into one checkpoint"""
+    folder = run_folder(run_id)
+    try:
+        names = sorted(os.listdir(records))
+    except OSError:
+        return ""
+    for name in names:
+        d = os.path.join(records, name)
+        if name == run_id or run_folder(name) != folder or not os.path.isdir(d):
+            continue
+        st = state_of(d)
+        if st == "running" or (st == "stalled" and command_alive(record(d))):
+            return f"{name} is running and names the same run folder ({folder}); wait for it, or use another folder name"
+        if st in ("done", "ok") and not again:
+            return f"{name} finished with exit 0 and names the same run folder ({folder}); use another folder name (or --again for a deliberate repeat)"
     return ""
 
 
@@ -634,14 +717,48 @@ def take_claim(d):
     return c
 
 
+def first_step_logged(out_dir, since):
+    """has the trainer in this run folder logged a step since `since` (epoch seconds)? log.jsonl: its newest row with a time `t` is later (trainkit writes `t` in every
+    step row). train.log (touched since): a `step N:` line after the last `=== ` line that the launcher script writes at every start (a resumed run keeps the steps of its
+    earlier attempt above it). False without a folder or a log: the settle clock decides then"""
+    def tail(name, nbytes):
+        try:
+            with open(os.path.join(out_dir, name), "rb") as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - nbytes))
+                return f.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            return []
+    if not out_dir:
+        return False
+    for ln in reversed(tail("log.jsonl", 16384)):               # the first line of the tail may be cut: it does not parse and is skipped
+        try:
+            t = json.loads(ln).get("t")
+        except (ValueError, AttributeError):
+            continue
+        if isinstance(t, (int, float)):
+            return t > since
+    try:
+        fresh = os.path.getmtime(os.path.join(out_dir, "train.log")) > since
+    except OSError:
+        return False
+    for ln in reversed(tail("train.log", 20000) if fresh else []):
+        if ln.startswith("=== "):
+            break
+        if re.match(r"step \d+", ln):
+            return True
+    return False
+
+
 class GpuSlot:
     """one of n GPU slots: a directory taken with an atomic mkdir; a slot whose owner is dead, whose run is over, or that has no owner file is reclaimed
     (under a lock, so two launchers that judge the same slot stale do not both take it); the owner file carries a token and release() removes only
-    the slot that still carries it"""
+    the slot that still carries it. A slot stays taken while the owner's launcher is gone but its command still runs (command_alive). `out_dir` = the trainer's
+    run folder, named in the owner file: the others read from it whether the run has logged its first step (settling)"""
 
-    def __init__(self, records, n, run_id, run_dir, base=None):
+    def __init__(self, records, n, run_id, run_dir, base=None, out_dir=""):
         self.base, self.n, self.id, self.run_dir, self.held = base or os.path.join(records, ".gpu_slots"), n, run_id, run_dir, None
-        self.token = uuid.uuid4().hex
+        self.token, self.out_dir = uuid.uuid4().hex, out_dir
 
     def stale(self, s):
         if not os.path.exists(os.path.join(s, "run.json")):
@@ -656,11 +773,13 @@ class GpuSlot:
             except OSError:
                 return False
         owner = o.get("run_dir", "")
+        if owner and command_alive(record(owner)):       # the launcher was killed, the command it started still uses the GPU
+            return False
         return not pid_alive(o.get("pid")) or (owner and os.path.isdir(owner) and state_of(owner) != "running")
 
     def own(self, s):
         """write the owner file of slot s"""
-        save_rec(os.path.join(s, "run.json"), dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, taken=now(), token=self.token), indent=None)
+        save_rec(os.path.join(s, "run.json"), dict(id=self.id, pid=os.getpid(), run_dir=self.run_dir, out_dir=self.out_dir, taken=now(), token=self.token), indent=None)
         self.held = s
 
     def reclaim(self, s):
@@ -693,7 +812,8 @@ class GpuSlot:
     def settling(self, settle_s):
         """[(id, seconds since it took the slot)] of the other live launchers that took their slot less than settle_s ago. Their run has not loaded its data or allocated
         its GPU memory yet, so the RAM gate and the memory gate would read the box too early and start a second job next to it (two trainings that started in the same
-        second on a 12 GB card slowed each other 13 times). A slot record without a time (an older launcher), a dead owner and a time in the future count for nothing"""
+        second on a 12 GB card slowed each other 13 times). A slot record without a time (an older launcher), a dead owner and a time in the future count for nothing.
+        settle_s is the ceiling: a run that has logged its first step since it took the slot (first_step_logged in the run folder the owner file names) has loaded"""
         out = []
         for i in range(self.n if settle_s > 0 else 0):
             s = os.path.join(self.base, str(i))
@@ -701,10 +821,11 @@ class GpuSlot:
             if not o or o.get("token") == self.token or o.get("id") == self.id or not pid_alive(o.get("pid")):
                 continue
             try:
-                age = (dt.datetime.now() - dt.datetime.fromisoformat(o["taken"])).total_seconds()
+                taken = dt.datetime.fromisoformat(o["taken"])
+                age = (dt.datetime.now() - taken).total_seconds()
             except (KeyError, TypeError, ValueError):
                 continue
-            if 0 <= age < settle_s:
+            if 0 <= age < settle_s and not first_step_logged(o.get("out_dir"), taken.timestamp()):
                 out.append((o.get("id", "?"), int(age)))
         return out
 
@@ -712,6 +833,12 @@ class GpuSlot:
         if self.held and record(self.held).get("token") == self.token:  # a slot that was reclaimed belongs to its new owner
             shutil.rmtree(self.held, ignore_errors=True)
         self.held = None
+
+
+def train_dir(root, cfg, run_id):
+    """the trainer's run folder of an id (trainsuite/compose.py: project.json trainsuite.runs, default runs, then the id with . as _); '' for a project without a trainsuite"""
+    ts = cfg.get("trainsuite")
+    return os.path.join(root, ts.get("runs", "runs"), run_folder(run_id)) if isinstance(ts, dict) else ""
 
 
 def slot_dir(root, cfg, records):
@@ -736,13 +863,16 @@ def kill_tree(p):
     p.wait()
 
 
-def run_once(cmd, cwd, log_path, hb_path, timeout_s, env=None):
-    """one attempt: returns (exit code, text the attempt wrote, pid, killed by the timeout); the heartbeat is touched while the command runs"""
+def run_once(cmd, cwd, log_path, hb_path, timeout_s, env=None, on_start=None):
+    """one attempt: returns (exit code, text the attempt wrote, pid, killed by the timeout); the heartbeat is touched while the command runs. `on_start(p)` is
+    called with the Popen right after the command started (main writes its pid into the run record); it must not raise"""
     start = os.path.getsize(log_path) if os.path.exists(log_path) else 0
     with open(log_path, "a", encoding="utf-8", errors="replace") as lg:
         lg.write(f"=== attempt {now()}: {' '.join(cmd)}\n")
         lg.flush()
         p = subprocess.Popen(cmd, cwd=cwd, stdout=lg, stderr=subprocess.STDOUT, start_new_session=POSIX, env=env)
+        if on_start:
+            on_start(p)
         t0, last = time.time(), 0
         rc, timed_out = None, False
         while rc is None:
@@ -768,12 +898,59 @@ SPLIT_ARG = re.compile(r"--split(?:\s+|\s*=\s*)[\"']?([\w,.-]+)", re.I)
 SNAPSHOT_TRIES, SNAPSHOT_RETRY_S = 3, 2         # a snapshot that fails (a locked file on the Windows side, a busy index) is tried again before the run is refused
 
 
-def names_split(cmd, split):
-    """does the command line itself ask for this split (`--split test`, `--split=test`, `--split=val,test`, also inside `bash -c '... --split test'`)? The gate
-    looks at --split of the launcher, which a command can contradict. Looked for in the joined command line, so a script string is read too. Best effort: the
-    launcher's --split is the gate; an argparse prefix (`--spl test`), a split passed by environment variable or config file is not seen, and a quoted
-    `--split test` inside an echo counts as a hit"""
-    return any(split.lower() in m.group(1).lower().split(",") for m in SPLIT_ARG.finditer(" ".join(str(t) for t in cmd)))
+def is_holdout(name, holdout, aliases=()):
+    """is this split name the holdout split? The name itself, a variant that starts with it and an underscore (`test_clean`, the lane drivers' clean TEST set) or
+    one of project.json holdout_aliases"""
+    n = str(name).strip().lower()
+    return n == holdout.lower() or n.startswith(holdout.lower() + "_") or n in aliases
+
+
+def names_split(cmd, split, aliases=()):
+    """does the command line itself ask for the holdout split `split` (`--split test`, `--split=test`, `--split=val,test`, `--split test_clean`, also inside
+    `bash -c '... --split test'`; is_holdout decides which names count)? The gate looks at --split of the launcher, which a command can contradict. Looked for in
+    the joined command line, so a script string is read too. Best effort: the launcher's --split is the gate; an argparse prefix (`--spl test`), a split passed by
+    environment variable or config file is not seen, and a quoted `--split test` inside an echo counts as a hit"""
+    return any(is_holdout(v, split, aliases) for m in SPLIT_ARG.finditer(" ".join(str(t) for t in cmd)) for v in m.group(1).split(","))
+
+
+def test_log_refusal(log_text, run_id):
+    """'' when the holdout log opens the holdout split for this run id, else why not. The id must be named as a whole token in the 'who / which run' cell (the fourth) of a
+    TABLE ROW (a line that starts with |; a free-text line opens nothing, a mention as a comparison in another cell opens nothing, and the id of `T.1` is not in `T.10` or `T.1.b`;
+    a log with another layout than the lane's six columns: anywhere in the row), and that row must carry the person's OK (the word OK or a decision D<n>), must not say it is not approved
+    (CLOSED_ROW: not approved, refused, denied, withdrawn, awaiting, OK pending) and must not say it was used (USED_ROW: DONE, already used). Any one such row is enough"""
+    tok = re.compile(r"(?<![\w.-])" + re.escape(run_id) + r"(?![\w-]|\.\w)")
+    rows = []
+    for ln in log_text.splitlines():
+        if not ln.lstrip().startswith("|"):
+            continue
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        if tok.search(cells[3] if len(cells) >= 6 else ln):
+            rows.append(ln)
+    if not rows:
+        return "is not named in the 'who / which run' cell of a table row of the log"
+    if any(OK_ROW.search(r) and not CLOSED_ROW.search(r) and not USED_ROW.search(r) for r in rows):
+        return ""
+    if any(CLOSED_ROW.search(r) for r in rows):
+        return "is named in the log, but its row says it is not approved (not approved / refused / denied / withdrawn / awaiting)"
+    if any(USED_ROW.search(r) for r in rows):
+        return "was already used according to its row in the log (DONE / already used): log a NEW id in a new row"
+    return "is named in the log, but its row carries no OK of the person (the word OK or a decision D<n> in the row)"
+
+
+def test_log_opens(log_text, run_id):
+    """does the holdout log open the holdout split for this run id? (test_log_refusal)"""
+    return not test_log_refusal(log_text, run_id)
+
+
+def card_fields(run_id):
+    """{card_id, card_sha} of the registered experiment card of the run (experiment.card_for_run / rule_sha: the hash of its rule block), {} when there is none or
+    experiment.py cannot say: a card must never be what stops a launch"""
+    try:
+        import experiment
+        exp = experiment.card_for_run(run_id)
+        return dict(card_id=exp.get("id", ""), card_sha=experiment.rule_sha(exp)) if exp else {}
+    except (Exception, SystemExit):             # ImportError, AttributeError (an experiment.py without the two functions), a broken card
+        return {}
 
 
 def main():
@@ -826,14 +1003,20 @@ def main():
     if cfg.get("splits") and a.split not in [s.lower() for s in cfg["splits"]]:
         print(f"[{a.id}] refused: split {a.split} is not one of the project's splits {cfg['splits']}")
         return 2
+    d = os.path.join(records, a.id)
     holdout = str(cfg.get("holdout_split", "test")).lower()
-    if a.split != holdout and names_split(cmd, holdout):
-        print(f"[{a.id}] refused: the command asks for the holdout split ({holdout}) but --split is {a.split}; start it with --split {holdout} (the TEST log is checked then)")
+    aliases = tuple(str(x).strip().lower() for x in cfg.get("holdout_aliases", []))
+    if not is_holdout(a.split, holdout, aliases) and names_split(cmd, holdout, aliases):
+        print(f"[{a.id}] refused: the command asks for the holdout split ({holdout}, or a name that starts with it or is in holdout_aliases) but --split is {a.split}; start it with --split {holdout} (the TEST log is checked then)")
         return 2
-    if a.split == holdout:
+    if is_holdout(a.split, holdout, aliases):
         log = open(test_log, encoding="utf-8").read() if os.path.exists(test_log) else ""
-        if not re.search(r"(?<![\w.])" + re.escape(a.id) + r"(?![\w.])", log):  # the whole id, not a prefix of a longer id
-            print(f"[{a.id}] refused: split={a.split} is the holdout split but {a.id} is not named in {os.path.relpath(test_log, root)} (log it first, with the person's OK)")
+        why = test_log_refusal(log, a.id)
+        if why:
+            print(f"[{a.id}] refused: split={a.split} is the holdout split but {a.id} {why} ({os.path.relpath(test_log, root)}; a table row with the person's OK opens it)")
+            return 2
+        if state_of(d) in ("done", "ok") or planned.get("status") == "ok":     # the log row opens one run; --again is no exception for the holdout
+            print(f"[{a.id}] refused: this id already ended ok on the holdout split; it is looked at once per logged row, so log a NEW id in a new row of {os.path.relpath(test_log, root)} (--again does not apply)")
             return 2
     if a.pin and a.no_git:
         print(f"[{a.id}] refused: --pin names a commit, --no-git has none")
@@ -843,10 +1026,13 @@ def main():
         if err:
             print(f"[{a.id}] refused: git cannot commit the snapshot here ({err}); set user.name / user.email in the repository, or --no-git")
             return 2
-    d = os.path.join(records, a.id)
     held = hold_refusal(records, a.id)
     if held:       # the person's decisions are acted on only when recorded (hard rule 6): a stopped run waits for their words, not for a chat's judgement
         print(f"[{a.id}] refused: {held}")
+        return 2
+    twin = twin_refusal(records, a.id, a.again)
+    if twin:       # `X.a` and `X_a` are one run folder: never two records on it at once
+        print(f"[{a.id}] refused: {twin}")
         return 2
     os.makedirs(d, exist_ok=True)
     claim = take_claim(d)  # two launchers of one id (two ticks, two chats) must not both start: the first to make the directory goes on
@@ -860,6 +1046,10 @@ def main():
             st = state_of(d)
             if st == "running":
                 print(f"[{a.id}] refused: this id is still running (launcher pid {prev.get('launcher_pid')}, heartbeat {heartbeat_age(d):.0f} s old); use a new id")
+                return 2
+            if st == "stalled" and command_alive(prev):      # the launcher was killed, the command goes on: a second one would run next to it on the same folder and GPU slot
+                print(f"[{a.id}] refused: the launcher of this id is gone (pid {prev.get('launcher_pid')}) but its command still runs (pid {prev.get('pid')}, process group {prev.get('pgid')}); "
+                      f"stop it (kill -- -{prev.get('pgid')}) or wait for it, then start the id again")
                 return 2
             if st in ("done", "ok") and not a.again:
                 print(f"[{a.id}] refused: this id finished with exit 0 on {prev.get('ended')}; use a new id (the record would be overwritten) or --again")
@@ -884,6 +1074,10 @@ def main():
                    created=now(), status="waiting", after=a.after, timeout_min=a.timeout)
         if prev.get("code_hash"):
             rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
+        fields = card_fields(a.id)          # the registered experiment card and the hash of its rule block, as they were when the run started
+        if prev.get("card_sha") and fields.get("card_id", prev.get("card_id")) == prev.get("card_id"):
+            fields = {"card_id": prev.get("card_id", ""), "card_sha": prev["card_sha"]}    # a resume / --again keeps the first registration: a rule edited since is found by decide.py
+        rec.update(fields)
         save_rec(os.path.join(d, "run.json"), rec)
     finally:
         try:
@@ -913,7 +1107,7 @@ def main():
             ledger_safe(ledger, dict(rec, exit=3, duration_s=0), clear)
             print(f"[{a.id}] blocked: {why}")
             return 3
-    slot = GpuSlot(records, a.gpu_slots, a.id, d, base=slot_dir(root, cfg, records)) if (a.gpu or a.gpu_max_mb) else None
+    slot = GpuSlot(records, a.gpu_slots, a.id, d, base=slot_dir(root, cfg, records), out_dir=train_dir(root, cfg, a.id)) if (a.gpu or a.gpu_max_mb) else None
     ticket = Ticket(slot.base, a.id) if slot else None           # first come, first served among the waiters for the GPU
     ram = RamGate(a.ram_mb) if (slot and a.ram_mb) else None
     owner = os.environ.get("AR_LOCK_OWNER", "")
@@ -973,7 +1167,7 @@ def main():
             if a.pin:
                 commit, tag, gnote = pin_snapshot(root, a.pin, prev)
             else:
-                commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd))
+                commit, tag, gnote = ("skipped", "", "") if a.no_git else git_snapshot(root, cfg, cfg["tag_prefix"], a.id, a.hyp or " ".join(cmd), cmd)
             if commit != "git-error" or tries == SNAPSHOT_TRIES:
                 break
             time.sleep(SNAPSHOT_RETRY_S)
@@ -985,10 +1179,6 @@ def main():
             return 1
         if gnote:
             notes.append(gnote)
-        rec.update(status="running", started=now(), code_hash=(prev.get("code_hash") or ch) if a.pin else ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
-        save_rec(os.path.join(d, "run.json"), rec)
-        t1 = time.time()
-        rc, attempt, tail, timed_out = 1, 0, "", False
         # the command learns which code snapshot it is (a launcher that trains from `git archive $AR_COMMIT` runs exactly the recorded code,
         # also on a resumed id whose tag still names attempt 1; any other command runs from the working tree: see code_drift below)
         snapshotted = commit not in ("skipped", "no-git", "git-error")
@@ -997,10 +1187,28 @@ def main():
         except Exception:
             launch_spec = None
         cmd_env = dict(os.environ, AR_RUN_ID=a.id, **({"AR_COMMIT": commit, "AR_TAG": tag or prev.get("tag", "")} if snapshotted else {}))
+        if refuse_held():                   # the gates, the code hash and the snapshot took seconds: a hold (the queue's, a person's) that arrived meanwhile still stops the run
+            return 2
+
+        def command_started(p):
+            """right after the command started: its pid, process group and start time go into the run record (atomic write), so a run whose launcher is killed is still known"""
+            try:
+                try:
+                    pgid = os.getpgid(p.pid) if POSIX else None
+                except OSError:
+                    pgid = p.pid
+                rec.update(pid=p.pid, pgid=pgid, pid_start=(proc_stat(p.pid) or (None, None))[1])
+                save_rec(os.path.join(d, "run.json"), rec)
+            except Exception as e:  # noqa: BLE001  the command runs already: a record that cannot be written must not make this a failed start
+                print(f"[{a.id}] warning: command pid not recorded ({e!r})", flush=True)
+        rec.update(status="running", started=now(), code_hash=(prev.get("code_hash") or ch) if a.pin else ch, commit=commit, tag=tag or prev.get("tag", ""), git_note=gnote)
+        save_rec(os.path.join(d, "run.json"), rec)
+        t1 = time.time()
+        rc, attempt, tail, timed_out = 1, 0, "", False
         while attempt <= a.retries:
             attempt += 1
             try:
-                rc, out, pid, timed_out = run_once(cmd, a.cwd, os.path.join(d, "run.log"), hb, a.timeout * 60, cmd_env)
+                rc, out, pid, timed_out = run_once(cmd, a.cwd, os.path.join(d, "run.log"), hb, a.timeout * 60, cmd_env, command_started)
             except Exception as e:  # the command could not even be started (not found, bad cwd): a failed run, not a dead launcher
                 rc, pid = 127, None
                 out = f"launcher could not start the command: {type(e).__name__}: {e}"
@@ -1025,10 +1233,11 @@ def main():
         except Exception:
             res = "(result file unreadable)"
     if snapshotted and not a.no_drift_check and not a.pin:  # the commit names the code at launch; did the code on disk change while the command ran? (not for --pin: it ran another commit)
-        drift, drift_err = code_drift(root, cfg, commit, before, launch_spec)
+        drift, drift_err = code_drift(root, cfg, commit, before, launch_spec, cmd)
         if drift:
             rec["code_drift"] = drift
-            notes.append(f"code on disk changed while the run was going ({drift['n']} files, e.g. {', '.join(drift['paths'][:3])}): the commit/tag names the code at launch, "
+            other = f", {drift['n_other']} of them outside the code folders" if drift.get("n_other") else ""
+            notes.append(f"code on disk changed while the run was going ({drift['n']} files{other}, e.g. {', '.join(drift['paths'][:3])}): the commit/tag names the code at launch, "
                          "which a command that does not execute AR_COMMIT may not have run")
         if drift_err:
             rec["code_drift_check"] = drift_err
