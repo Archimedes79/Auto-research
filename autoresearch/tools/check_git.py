@@ -208,6 +208,12 @@ def tag_check(top, remote_on=True, timeout=15):
     errors = commit_errors(top, [*missing, "--not", "--remotes", "HEAD", "--"], "pushing the tags would publish", allow_scratch=True)      # `--`: a tag named like a folder
     if errors:                                                      # some tag holds a forbidden file: not `--tags`, the clean tags one by one
         info[0] = info[0].replace(f"`git push {name} --tags` ", f"NOT `git push {name} --tags` (see the errors: some tags hold forbidden files); push the clean ones one by one, `git push {name} refs/tags/<tag>` ")
+        bad_commits = set(re.findall(r"\(commit ([0-9a-f]{7,40})\)", "\n".join(errors)))
+        clean, held = [], []
+        for t in missing:
+            sha = git(top, "rev-parse", "--short=8", f"refs/tags/{t}^{{commit}}").strip()
+            (held if any(sha.startswith(b[:8]) or b.startswith(sha) for b in bad_commits) else clean).append(t)
+        info.append(f"tags without a forbidden file ({len(clean)}): " + (" ".join(clean) or "-") + f" | held back ({len(held)}): " + (" ".join(held) or "-"))
     return errors, info
 
 
@@ -473,6 +479,7 @@ def _selftest():
         g("tag", "docs/v1")
         errors, info = tag_check(work)
         assert info[0].startswith("tags: 5 of 5 local tags are not on origin (docs 1, run 4): NOT `git push origin --tags`") and "refs/tags/<tag>" in info[0], info    # a forbidden file in a tag: one by one
+        assert info[1].startswith("tags without a forbidden file (") and "| held back (" in info[1] and "held back (0)" not in info[1], info        # the clean tags and the held back ones are named
         assert len(errors) == 2 and any("forbidden file weights.npz" in e for e in errors) and any("forbidden file temp/data.npz" in e for e in errors) \
             and not any("temp/s.py" in e for e in errors), errors
         errors, text = report(work)
