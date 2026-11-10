@@ -88,6 +88,8 @@ run "stream tools"     "$PY" tests/test_stream_tools.py              # the promo
 run "student encoder"  "$PY" tests/test_student_encoder.py          # t22 stage A: the student's contract, H8 geometry, gradients, distillation loss, CLI stop / resume on a synthetic tree; CPU, about 12 s, no data
 run "student chain"    "$PY" tests/test_student_chain.py            # t22 stage B: camera_student in the chain: off = old code, frame-0 splice, student_side, trainable / frozen student, anchor, refusals; CPU, about 30 s, no data
 run "evaluation api"    "$PY" tests/test_evaluation_api.py          # the class interface (toy project, the adapter's identity, TEST refused); no data, seconds
+run "runner class"      "$PY" tests/test_runner_class.py          # the class Runner and python -m runner on a toy network: no ground truth read, plan, reuse, taps, exit codes; no data, seconds
+run "suites conform"    "$PY" tests/test_suites_conform.py        # Training, Evaluation, Runner: one convention (methods, --json, exit codes 0/1/2, verbs first, layering); about 40 s
 run "evaluate door"     "$PY" tests/test_evaluate_door.py           # evaluation/evaluate.py translates options into bev_suite commands (--real: the golden check, by hand); no data, 1 s
 run "report build"      "$PY" tests/test_report_build.py            # results/build: a fixture report (every number in a source file, every cell in place), missing / wrong inputs stop the build, 23 mutants; CPU, 8 s, no data
 run "trainkit selftest" bash -c "cd ../autoresearch && $PY -m trainkit.selftest"    # the engine of the trainer on a toy network; CPU
