@@ -80,7 +80,7 @@ The ready-made lane-centre-line `Task` (`LaneTask`: metrics `img` / `geo` / `top
 
 **Files** (from `autoresearch/evalsuite/`):
 - *core* (about 2,400 lines, numpy + matplotlib): `contracts.py` boxes and data, `suite.py`, `runner.py` order of calls and state, `sampling.py` video-then-frame draws, `store.py` run store, `stats.py` robust z, leave-one-out, the one paired scene bootstrap of the repository (the lane project uses it too), `qualitative.py`, `quantitative.py`, `cli.py`, `render/figure.py` `report.py` `taps.py` (pictures of tapped tensors) `video.py` (H.264 with libx264, read back and checked; an animated GIF without ffmpeg).
-- *the class interface* (`README.md`, `../INTERFACE.md`): `api.py` (`Frames`, `Evaluation`, `Result`), `results.py` (the stored predictions, the writer lock), `apicli.py` (every method a command), `selftest_api.py`.
+- *the class interface* (`README.md`, `../README.md`): `api.py` (`Frames`, `Evaluation`, `Result`), `results.py` (the stored predictions, the writer lock), `apicli.py` (every method a command), `selftest_api.py`.
 - *small modules loaded when used*: `cost.py` (chapter 5), `probing.py` (chapter 6), `check.py` (contract checker), `torch_taps.py` (hooks and `count_ops`).
 - *the comparison core, to be read and reviewed as one piece*: `comparison/` (`README.md` first): `maps.py` two pixel maps, `boxes.py` two lists of boxes, `metrics.py` the join to the suite (`MapMetric`, `BoxMetric`). `render/figure.error_counts`, the toy adapter and the BEV system's `bev_fusion/evaluation/metrics.py` use it (the former BEV copies are frozen as `_REF` in `selftest_comparison.py`).
 - *libraries the core never imports*: `adapters/` (the lane Task moved to the lane project, chapter 7).
@@ -88,4 +88,4 @@ The ready-made lane-centre-line `Task` (`LaneTask`: metrics `img` / `geo` / `top
 
 **Rules**: the core imports only numpy (matplotlib and PIL are imported lazily where a picture is drawn, cv2 only to read a video back); an adapter may import anything. One `Subject` per process when the network code is pinned per run (module cache). Every number is a function of additive counts, so outliers, comparison and probing work on stored runs without the network.
 
-**Design history** (the plan, the data flow, the proof plan, the migration of the old scripts): `../history/evalsuite_architecture_2026-10-30.md`.
+**Design history** (the plan, the data flow, the proof plan, the migration of the old scripts): git history, `git log -- autoresearch/history/evalsuite_architecture_2026-10-30.md` (the file was removed on 2026-11-10: the README and this page are the description).

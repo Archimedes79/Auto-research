@@ -45,23 +45,84 @@ run = suite.quant.run(name="a");  suite.quant.table(run);  suite.quant.outliers(
 suite.quant.timing(run="a");  suite.quant.pareto(["a", "b", "c"])
 ```
 
-## The class interface: `Evaluation(project)`
-For a project with an adapter module (`<project>/evaluation/evalsuite.json`, for BEV `evaluation/bev_eval.py`) the whole suite is one class, the pattern of `../INTERFACE.md`: plain data in and out, every method also a command.
+## The class interface: `Evaluation` and `Runner`
+For a project with an adapter module (`<project>/evaluation/evalsuite.json`, for BEV `evaluation/bev_eval.py`) the suite is two classes, the pattern of `../README.md`: plain data in and out, every method also a command.
+The **Runner** (`runner_api.py`) is the only class that executes the network (D72: it reads no ground truth and computes no loss) and stores what it predicts; the **Evaluation** (`api.py`) calls it,
+scores the stored predictions against the ground truth and reads the result (only `draw_frame`, which draws a frame, runs the network again).
 ```python
-from evalsuite import Evaluation
+from evalsuite import Evaluation, Runner
 ev = Evaluation()                                                   # the project is AR_PROJECT
 ev.check("runs/t23_C_s1", "small.val")                              # the dry run: what would run, what is stored, the problems
-r = ev.run("runs/t23_C_s1", "small.val", gt_key="v8")               # predict what is not stored yet (warm, D70), score it: a Result
-r.quant();  r.by("scene");  r.worst("seg", n=5);  r.cost();  r.report();  r.card()
+r = ev.run("runs/t23_C_s1", "small.val", gt_key="v8")               # predict what is not stored yet (warm, D70), score it: a dict with the id
+ev.show_numbers(r["id"]);  ev.split_numbers(r["id"], "scene");  ev.find_worst(r["id"], "seg", n=5);  ev.get_cost(r["id"]);  ev.report(r["id"]);  ev.make_card(r["id"])
 ev.compare(control_id, r["id"])                                     # b - a, paired bootstrap; one network per process: the control was run in another one, compare by ids
+p = Runner().run("runs/t23_C_s1", "small.val", taps=("fused",))    # predictions only (frames without labels work too); ev.score(p["results"], "small.val") scores them later
 ```
 ```
-python -m evalsuite Evaluation.run runs/t23_C_s1 small.val --gt-key v8 --json        # from autoresearch/, AR_PROJECT names the project
-python -m evalsuite methods                                                           # the methods and their arguments
+python -m evalsuite run runs/t23_C_s1 small.val --gt-key v8 --json        # from autoresearch/, AR_PROJECT names the project
+python -m evalsuite methods                                               # the methods and their arguments
 ```
-Only `predict` / `run` (and `time`, `probe`, `qual_frame`) execute the network; what it predicted is stored once per identity (network, checkpoint, inputs) and every later question, a subset,
-another ground truth, another metric, is scored from the store (`evalsuite/results.py`). The frames are a text (`val`, `spread:1000:large.val`, `scenes:a,b:val`, ...). Details and the adapter's
-functions: the head of `evalsuite/api.py`; the methods: `../INTERFACE.md`; test: `python -m evalsuite.selftest_api`.
+A network with a memory always runs warm (D70): whole scenes in time order from the network's own start; the frames you ask for decide which results are kept and scored. What was predicted is stored once
+per identity (network, checkpoint, inputs; `evalsuite/results.py`), so a subset, another ground truth or another metric is scored from the store without the network. The numbers of an Evaluation have no
+`loss.*` (a prediction carries no validation loss, D72; `bev_suite.py eval` keeps them). Ids: `<network>@r<hash>` the predictions, `<network>@e<hash>` a scored evaluation; the same question gives the
+same id. One network per process (a project's code modules are imported once): run each network in its own process and compare the evaluations by their ids. Frames are a text: `val`, `small.val`,
+`spread:1000:large.val`, `random:3[:SEED]:val`, `scenes:a,b:val`, `frames:scene-0061/12:val` (the set is last, and one the project defines). The head of `api.py` has the adapter's functions;
+test: `python -m evalsuite.selftest_api` (a toy project, seconds) and, for BEV, `tests/test_evaluation_api.py [--real RUN]`.
+
+### Methods
+| method | command line | what it does |
+|---|---|---|
+| `Runner.check(network, frames, taps)` | `Runner.check NETWORK [FRAMES]` | the dry run of the network: scenes and frames, what is stored, how many frames would run, `problems` |
+| `Runner.run(network, frames, taps, ...)` | `Runner.run NETWORK [FRAMES] --taps a,b` | run the network on what is not stored yet and store it (no ground truth), with the intermediate results `taps` when asked (a frame stored without a tap is predicted again to get it); warnings of the memory's health (D70: empty at the scene start, filling after) |
+| `Runner.tap(results, frame, name)`, `Runner.list(network)` | `Runner.tap RESULTS FRAME [--name N]`, `Runner.list NETWORK` | which taps a stored frame has, or the file, shape and dtype of one; the stored predictions of a network |
+| `Runner.time(network)`, `Runner.probe(network)` | `Runner.time NETWORK`, `Runner.probe NETWORK` | ms per module on an idle GPU, the module probe |
+| `Evaluation.check(network, frames, metrics)` | `check NETWORK [FRAMES]` | the dry run of an evaluation: the Runner's plan plus the ground truth and the metrics, the id it would give, `problems` (exit 1 when there are) |
+| `score(results, frames, gt_key, metrics)` | `score RESULTS [FRAMES]` | score stored predictions against the ground truth; no network |
+| `run(network, frames, gt_key, metrics, ...)` | `run NETWORK [FRAMES] --gt-key v8` | `Runner.run` (the network, then released), then `score` (the labelled data is opened after it): a plain dict (the id, what was done, the warnings) |
+| `show_numbers(id, match)`, `split_numbers(id, axis)`, `find_worst(id, match, n)` | `show-numbers ID`, `split-numbers ID`, `find-worst ID` | the numbers, the numbers per scene or frame, where they come from |
+| `compare(a, b)` | `compare A B` | paired bootstrap, b - a (a = the control); refused on another GT or other frames |
+| `get_cost(id)`, `report(id)`, `make_card(id)` | `get-cost ID`, `report ID`, `make-card ID` | ms per frame, the html page, the metric card in the project's contract (refused when the checkpoint or the evaluator code changed since: score again) |
+| `draw_frame(id, frame, view)` | `draw-frame ID FRAME` | one picture (the network runs on that frame with its scene's history) |
+| `list_sets()`, `list(network)` | `list-sets`, `Evaluation.list NETWORK` | the sets a project defines, what is stored for a network (predictions and evaluations) |
+
+### Architecture
+```
+ command line   python -m evalsuite <Class.method> ...        (suitecli.py: every method = one command, --json, exit 0 / 1 / 2)
+      |
+      v
+ Evaluation (api.py)   scores and reads
+   run  score  check  show_numbers  split_numbers  find_worst  compare  get_cost  report  make_card  draw_frame  list  list_sets
+      |  calls the Runner (injectable: Evaluation(runner=...))                        |  scores through
+      v                                                                                v
+ Runner (runner_api.py)   the only class that executes the network          engine: Quantitative.run(results=...)
+   run  check  tap  list  time  probe          no ground truth, no loss,      -> RunStore  <net>/eval/suite/quant/<e-id>
+   always warm (D70)                                                            (additive counts per frame: small)
+      |  writes / reads
+      v
+ ResultSet (results.py)   <net>/eval/results/<r-id>/   frames/<scene>_<i>.npz   taps/<scene>_<i>/<tap>.npy   manifest.json
+   one per identity (network, checkpoint, inputs); any question reuses its frames; derived data
+
+ project adapter  <project>/evaluation/evalsuite.json -> bev_eval.py
+   required: name out network sets identity source subject task
+   optional: free_source + free_subject (together) reference card time probe resolve release inputs MEMORY_TAP COMPARE_IGNORE
+   BEV: bev_adapter (frozen), bev_free (the network without labels), bev_suite, bev_sets (the sets = the training's splits/)
+```
+Data flow of one `Evaluation.run`: frames (a text) -> the Runner runs the scenes up to their last kept frame, whole and warm, stores the kept frames as a ResultSet (the temporary data: only what the
+network predicted) and releases the network -> the Evaluation opens the labelled data, scores the frames against the ground truth (`reference`, no inputs) into a RunStore (the counts) ->
+`show_numbers` / `compare` / `find_worst` read the counts. The ResultSet is only needed to score again (another ground truth, metric or subset) and to draw; it is derived data (deletable through
+`autoresearch/tools/package.py`, D40). A wrong `gt_key` or an unreadable ground truth shows only after the network ran: the predictions are kept, and the message names them (`score` them again).
+
+### Command line
+| what | command (from `autoresearch/`, `AR_PROJECT=../bev_fusion`) |
+|---|---|
+| the dry run | `python -m evalsuite check runs/t23_C_s1 small.val` (the Evaluation's; `Runner.check` is the network's alone) |
+| run and score | `python -m evalsuite run runs/t23_C_s1 small.val --gt-key v8 [--metrics maps,boxes,fusion] [--taps fused] [--device cpu]` |
+| predict only, no labels | `python -m evalsuite Runner.run runs/t23_C_s1 small.val --taps fused` |
+| read | `show-numbers ID [--match M]`, `split-numbers ID [--axis scene]`, `find-worst ID`, `compare A B`, `get-cost ID`, `report ID`, `make-card ID`, `draw-frame ID FRAME` |
+| what exists | `list-sets`, `Evaluation.list NETWORK`, `Runner.tap RESULTS FRAME [--name N]`, `methods` |
+| every command | a bare word is the Evaluation's method (`Evaluation.list`, `probe` and `selftest` need the class name; every word of the Runner needs `Runner.`); `--json` (nothing else on stdout), `--project`, `--adapter`; exit 0 ok, 1 `check` found problems, 2 any error (`EVALSUITE_TRACEBACK=1` shows the traceback) |
+
+`run` here is not `autoresearch/tools/run.py`: it books no ledger row and takes no GPU slot; a number that feeds a verdict is launched with `run.py ... -- python -m evalsuite run ...`.
 
 ## Where the comparison happens
 Every comparison of a prediction with the ground truth lives in `comparison/` (read `comparison/README.md`): `maps.py` compares two pixel maps, `boxes.py` two lists of boxes, both on plain numpy arrays and dicts, with counts that add up over frames. `comparison/metrics.py` turns them into ready-made `Metric`s (`MapMetric`, `BoxMetric`): you only write the function that hands over the two things to compare.
@@ -74,4 +135,4 @@ Every comparison of a prediction with the ground truth lives in `comparison/` (r
 5. `python -m evalsuite --adapter path/to/my_adapter.py:build selftest-adapter` checks the contracts and says what is wrong. Then `qual random 5` and `quant run`.
 
 ## More
-`EXTENSIONS.md` covers what a bigger project needs: a network with memory, looking inside the network (taps, torch), outlier details, stored runs, cost and the Pareto front, probing the causes of errors, where the lane-centre-line task went (the lane project), the real adapters and a map of the files. The design notes of the first build are in `../history/evalsuite_architecture_2026-10-30.md`.
+`EXTENSIONS.md` covers what a bigger project needs: a network with memory, looking inside the network (taps, torch), outlier details, stored runs, cost and the Pareto front, probing the causes of errors, where the lane-centre-line task went (the lane project), the real adapters and a map of the files. The design notes of the first build are in git history (`autoresearch/history/evalsuite_architecture_2026-10-30.md`, removed 2026-11-10).

@@ -1,11 +1,11 @@
 """Known-answer checks of the class interface (api.py, results.py, apicli.py) on a toy project: 3 scenes of 6 frames, a "network" with a memory (its threshold drifts with the frames it
-has seen since the scene started), an IoU metric and a metric that reads a number the network computes itself (a loss, which depends on the ground truth of the moment). No data, no GPU,
+has seen since the scene started) and an IoU metric; its Runner side (free_source / free_subject) reads no ground truth. No data, no GPU,
 seconds:  `python -m evalsuite.selftest_api`  or  `python -m evalsuite Evaluation.selftest`.
 
 What it proves: Frames round-trips and resolves; a ResultSet returns exactly what was stored and belongs to an identity, two writers exclude each other, a dead writer's lock is taken over;
 `run` equals the engine's own run (same numbers, carry state) on the kept frames, also for one frame in the middle of a scene (the scene runs whole and warm: D70); a second `run`, and a
 subset of an earlier one, take the stored predictions (the network is not called); a new ground truth is scored from them without the network and the self-computed number is flagged; a run
-that was killed half-way resumes with the right memory; predict + score = run; `check` finds the problems before anything runs; the reading methods agree with the engine; the command
+that was killed half-way resumes with the right memory; Runner.run + score = Evaluation.run; `check` finds the problems before anything runs; the reading methods agree with the engine; the command
 line prints what the methods return (clean json), maps errors to exit 2, and its words do not collide with the older commands."""
 from __future__ import annotations
 
@@ -16,21 +16,25 @@ import json
 import os
 import pickle
 import shutil
-import socket
+import struct
+import subprocess
 import sys
 import tempfile
+import zipfile
 from types import SimpleNamespace
 
 import numpy as np
 
 from .adapters import minimal
-from .api import Evaluation, EvaluationError, Frames
-from .contracts import FrameRef, Metric, Prediction, TapSpec
-from .results import Locked, ResultSet, result_id, writer_lock
+from .api import ADAPTER_FUNCTIONS, Evaluation, EvaluationError, Frames, load_adapter
+from .runner_api import Runner
+from .contracts import FrameRef, Prediction, Sample, TapSpec
+from . import results as results_mod
+from .results import Locked, ResultSet, decode, encode, result_id, writer_lock
 from .suite import EvalSuite
 
 # ------------------------------------------------------------------------------------------------ the toy project (this module is its own adapter)
-STATE = SimpleNamespace(root="", gt="g1", shift=0, calls=0, loads=0, fail_at=None, memory="ok")
+STATE = SimpleNamespace(root="", gt="g1", shift=0, calls=0, loads=0, free_loads=0, fail_at=None, memory="ok", bump=0, change=False)
 MEMORY_TAP = "memory_conf"
 
 
@@ -38,7 +42,7 @@ def name(network): return os.path.basename(network)
 def network(nm): return nm
 def out(net): return os.path.join(STATE.root, name(net))
 def sets(): return {"val": 3, "small": 1}
-def identity(net): return {"network": net}
+def identity(net): return {"network": net, "checkpoint": STATE.bump}
 
 
 class Source(minimal.MinSource):
@@ -57,7 +61,7 @@ class Source(minimal.MinSource):
 
 
 class Subject(minimal.MinSubject):
-    """a network with a memory: the threshold falls by 0.04 for every frame seen since reset(); it also computes a 'loss' of its own, which depends on the ground truth of the moment"""
+    """a network with a memory: the threshold falls by 0.04 for every frame seen since reset()"""
     def __init__(self, base):
         super().__init__(base)
         self.seen = 0
@@ -76,39 +80,41 @@ class Subject(minimal.MinSubject):
         fill = {"ok": 0.1 * self.seen, "stuck": 0.3, "flat": 0.0}[STATE.memory]      # empty at the start of a scene and growing / full from the start / never filling
         self.seen += 1
         tapped = {"memory_conf": np.full((2, 2), fill), "feat": np.asarray(sample.inputs, np.float32)}
-        return Prediction(outputs=sample.inputs > thr, taps={k: v for k, v in tapped.items() if k in taps}, info={"predict_ms": 1.0, "loss": 1.0 if STATE.gt == "g1" else 5.0})
+        return Prediction(outputs=sample.inputs > thr, taps={k: v for k, v in tapped.items() if k in taps}, info={"predict_ms": 1.0})
 
     def describe(self):
         return {"class": "ToySubject", "threshold": self.threshold}
 
 
-class Loss(Metric):
-    name, headline = "loss", ("total",)
+class FreeSource(minimal.MinSource):
+    """the data the Runner reads: no ground truth (reference None), its own load counter; it describes what the network is fed like the labelled source does"""
+    def __init__(self, of):
+        self.of = of
 
-    def frame(self, sample, pred):
-        return {"v": np.array([float(pred.info["loss"]), 1.0])}
+    def scenes(self):
+        return ["demo-0"] if self.of == "small" else super().scenes()
 
-    def reduce(self, counts, keys=None):
-        s = sum((c["v"] for c in counts), np.zeros(2))
-        return {"total": float(s[0] / max(s[1], 1.0))}
+    def load(self, ref):
+        STATE.free_loads += 1
+        s = super().load(ref)
+        return Sample(s.ref, inputs=s.inputs, reference=None, meta={"token": ref.key})
 
-    def direction(self, key):
-        return "low"
-
-
-class Task(minimal.MinTask):
-    def metrics(self):
-        return [minimal.IoU(), Loss()]
+    def describe(self):
+        return {"class": "FreeSource", "dataset": "toy", "split": self.of, "scenes": len(self.scenes())}
 
 
-def source(net, of, workers=0, control=""): return Source(of)
+def source(net, of, workers=0, control=""): return Source(of)                       # with ground truth: what the Evaluation scores with
+def free_source(net, of, workers=0, control=""): return FreeSource(of)               # without: what the Runner runs on
 def subject(net, src, device): return Subject(float(net.split("thr")[-1]))
+def free_subject(net, src, device):                                                  # (the toy network never reads a ground truth)
+    STATE.bump += 1 if STATE.change else 0                                           # "a training wrote a new checkpoint while the network was loaded"
+    return subject(net, src, device)
 
 
 def task(net, metrics):
     if set(metrics) - {"maps", "boxes"}:
         raise ValueError(f"unknown metrics {sorted(set(metrics) - {'maps', 'boxes'})}")
-    return Task()
+    return minimal.MinTask()
 
 
 def reference(src, ref):
@@ -136,7 +142,7 @@ def _raises(exc, text, fn, *a, **k):
 def _engine(net, frames_spec):
     """the numbers of the engine's own run: the scenes whole, state carry, scored on the kept frames only"""
     src, subj = minimal.MinSource(), Subject(float(net.split("thr")[-1]))
-    suite = EvalSuite(src, subj, Task(), out=tempfile.mkdtemp(), state="carry")
+    suite = EvalSuite(src, subj, minimal.MinTask(), out=tempfile.mkdtemp(), state="carry")
     keep = frames_spec.resolve(src)[1]
     store = suite.quant.run(scenes=sorted({r.scene for r in keep}), name="eng", progress=0)
     return suite.quant.table(store, [r.label for r in keep])
@@ -150,24 +156,45 @@ def check_frames():
     src = Source("val")
     for text in ("val", "small.val", "spread:5:val", "random:2:7:small.val", "scenes:demo-0,demo-1:val", "frames:demo-0/1,demo-2/5:val"):
         assert str(Frames.parse(text)) == text, text
-    assert Frames.parse("random:3:small.val") == Frames.random(3, 0, "small.val") and Frames.parse("random:3") == Frames.random(3, 0) and Frames.parse("random:3:7") == Frames.random(3, 7)
+    assert Frames.parse("random:3:small.val").args == (3, 0) and Frames.parse("random:3").args == (3, 0) and Frames.parse("random:3:7").args == (3, 7)
     assert Frames.parse("random:3:7:small.val").args == (3, 7) and str(Frames.parse("random:3")) == "random:3:0:val", "the seed is optional and shown when it is not"
     assert Frames.parse("spread:9:small.val").of == "small.val" and Frames.parse("scenes:a,b").args == (("a", "b"),)
-    assert Frames.parse("spread:5") == Frames.spread(5) and str(Frames.parse("spread:5")) == "spread:5:val" and str(Frames.parse(Frames.all("x"))) == "x"
-    scenes, keep = Frames.all().resolve(src)
+    assert str(Frames.parse("spread:5")) == "spread:5:val" and str(Frames.parse(Frames.parse("x"))) == "x"
+    P = Frames.parse
+    scenes, keep = P("val").resolve(src)
     assert scenes == ["demo-0", "demo-1", "demo-2"] and len(keep) == 18
-    s5, k5 = Frames.spread(5).resolve(src)
+    s5, k5 = P("spread:5").resolve(src)
     assert len(k5) == 5 and k5 == sorted(k5) and s5 == sorted({r.scene for r in k5})
-    a, b = Frames.random(2, 1).resolve(src)[0], Frames.random(2, 1).resolve(src)[0]
-    assert a == b and len(a) == 2 and any(Frames.random(2, s).resolve(src)[0] != a for s in range(2, 8)), "random: reproducible with its seed, another seed another scenes"
-    assert Frames.random(2, 1).resolve(src)[1] == [r for s in a for r in src.frames(s)], "random scenes keep all their frames"
-    assert [r.label for r in Frames.pick(["demo-2/5", "demo-0/1"]).resolve(src)[1]] == ["demo-0/001", "demo-2/005"]
+    a, b = P("random:2:1").resolve(src)[0], P("random:2:1").resolve(src)[0]
+    assert a == b and len(a) == 2 and any(P(f"random:2:{s}").resolve(src)[0] != a for s in range(2, 8)), "random: reproducible with its seed, another seed another scenes"
+    assert P("random:2:1").resolve(src)[1] == [r for s in a for r in src.frames(s)], "random scenes keep all their frames"
+    assert [r.label for r in P("frames:demo-2/5,demo-0/1").resolve(src)[1]] == ["demo-0/001", "demo-2/005"]
     for bad in ("spread:x", "random", "random:x", "scenes", "frames:a:b:c:d", "spread:1:2:3", "random:3:7:small.val:x"):
         _raises(EvaluationError, "", Frames.parse, bad)
-    _raises(EvaluationError, "not in val", Frames.scenes(["demo-9"]).resolve, src)
-    _raises(EvaluationError, "not a frame", Frames.pick(["demo-0/99"]).resolve, src)
-    _raises(EvaluationError, "not a frame", Frames.pick(["junk"]).resolve, src)
+    _raises(EvaluationError, "not in val", P("scenes:demo-9").resolve, src)
+    _raises(EvaluationError, "not a frame", P("frames:demo-0/99").resolve, src)
+    _raises(EvaluationError, "not a frame", P("frames:junk").resolve, src)
     _raises(EvaluationError, "takes", Frames, "spread", ())
+
+
+def check_codec():
+    """encode / decode: everything a prediction holds comes back with its types; nothing that needs pickle is stored"""
+    obj = {"dt": {-0.5: {"prob": {"a": np.arange(6, dtype=np.float32).reshape(2, 3)}, "dets": [{"x": np.float32(1.5), "n": 3, "c": "car", "ok": True, "box": (1.0, 2.0)}], "none": None},
+                  0.0: {"vhat": np.zeros((2, 2), np.float16)}, 1: {"i": np.int64(7), "m": np.array([True, False])}},
+           "nan": float("nan"), "inf": float("-inf"), "scalar": np.array(2.5), "empty": np.zeros((0, 3), np.float32), "ints": [1, 2, [3]]}
+    tree, arrays = encode(obj)
+    json.dumps(tree, allow_nan=False)                                          # strict json: no bare NaN
+    back = decode(json.loads(json.dumps(tree)), arrays)
+    assert list(back["dt"]) == [-0.5, 0.0, 1] and [type(k) for k in back["dt"]] == [float, float, int], "keys keep their type and order"
+    p = back["dt"][-0.5]
+    assert np.array_equal(p["prob"]["a"], obj["dt"][-0.5]["prob"]["a"]) and p["prob"]["a"].dtype == np.float32 and p["none"] is None
+    d = p["dets"][0]
+    assert d == {"x": np.float32(1.5), "n": 3, "c": "car", "ok": True, "box": (1.0, 2.0)} and type(d["x"]) is np.float32 and type(d["box"]) is tuple and d["ok"] is True
+    assert back["dt"][0.0]["vhat"].dtype == np.float16 and back["dt"][1]["m"].dtype == bool and type(back["dt"][1]["i"]) is np.int64
+    assert back["nan"] != back["nan"] and back["inf"] == float("-inf") and back["scalar"].shape == () and back["empty"].shape == (0, 3) and back["ints"] == [1, 2, [3]]
+    _raises(TypeError, "object array", encode, {"a": np.array([None, 1], dtype=object)})
+    _raises(TypeError, "cannot store", encode, {"a": {1, 2}})
+    _raises(TypeError, "cannot store", encode, {"a": object()})
 
 
 def check_results():
@@ -191,8 +218,12 @@ def check_results():
         rs.add(r, pred)
     rs.close(wall_s=1.0, cost={"median_ms": 2.5})
     again = ResultSet.open(os.path.join(tmp, rid))
-    assert [r.label for r in again.refs()] == [r.label for r in refs] and again.manifest["format"] == 1 and again.n_frames() == 3
+    assert [r.label for r in again.refs()] == [r.label for r in refs] and again.manifest["format"] == 2 and again.n_frames() == 3
     assert ResultSet.create(os.path.join(tmp, rid), ident).has(refs[2]), "the stored set of the same identity is found again"
+    # the frame file is a plain npz that any numpy reads (no pickle): the arrays and tree.json
+    with np.load(os.path.join(tmp, rid, "frames", f"{refs[1].slug}.npz"), allow_pickle=False) as z:
+        assert "tree.json" in z.files and "a0" in z.files and np.array_equal(z["a0"], np.arange(6, dtype=np.float32).reshape(2, 3))
+        assert "$d" in json.loads(bytes(z["tree.json"]).decode("utf-8"))
     # taps are stored next to the frame; a frame without a tap does not have it, adding a tap keeps the outputs
     assert not again.has(refs[1], ("feat",)) and again.tap_names(refs[1]) == ["t"]
     rw = ResultSet.open(os.path.join(tmp, rid), "a")
@@ -215,62 +246,83 @@ def check_results():
     _raises(KeyError, "with the taps", rw.load, refs[2], ("feat",))
     _raises(IOError, "read-only", again.add, refs[0], pred)
     assert not [f for f in os.listdir(os.path.join(tmp, rid, "frames")) if ".tmp" in f], "no half-written file stays"
-    with open(os.path.join(tmp, rid, "frames", f"{refs[0].slug}.pkl"), "wb") as f:
+    with open(os.path.join(tmp, rid, "frames", f"{refs[0].slug}.npz"), "wb") as f:
         f.write(b"not a frame")
     _raises(IOError, "is unreadable", ResultSet.open(os.path.join(tmp, rid)).load, refs[0])
-    # two writers: the second is refused while the first holds the lock; a dead writer's lock is taken over; the lock goes away with its holder
+    good = open(os.path.join(tmp, rid, "frames", f"{refs[1].slug}.npz"), "rb").read()
+    mid = bytearray(good)
+    with zipfile.ZipFile(io.BytesIO(good)) as z:
+        off = z.getinfo("tree.json").header_offset
+    nlen, elen = struct.unpack("<HH", good[off + 26: off + 30])
+    mid[off + 30 + nlen + elen + 1] ^= 0xFF                                             # a byte inside the compressed json: a zlib / CRC error, not a traceback
+    with open(os.path.join(tmp, rid, "frames", f"{refs[1].slug}.npz"), "wb") as f:
+        f.write(bytes(mid))
+    _raises(IOError, "is unreadable", ResultSet.open(os.path.join(tmp, rid)).load, refs[1])
+    with open(os.path.join(tmp, rid, "frames", "notes.npz"), "wb") as f:                # a file that is not named <scene>_<index>.npz is not a frame
+        f.write(b"x")
+    listed = ResultSet.open(os.path.join(tmp, rid))
+    assert {r.label for r in listed.refs()} == {r.label for r in refs} | {"demo-9/000"} and listed.n_frames() == 4, "notes.npz is not a frame"
+    # package.py clean removes the emptied frames / taps folders and keeps the manifest: the set takes frames again
+    shutil.rmtree(os.path.join(tmp, rid, "frames"))
+    shutil.rmtree(os.path.join(tmp, rid, "taps"))
+    empty = ResultSet.open(os.path.join(tmp, rid), "a")
+    assert empty.n_frames() == 0 and not empty.has(refs[0])
+    empty.add(refs[0], Prediction(outputs="o", taps={"t": np.ones(1)}, info={}))
+    assert empty.has(refs[0], ("t",)) and empty.load(refs[0], ("t",)).outputs == "o"
+    # two writers: the second is refused while the first holds the (flock) lock, and says who holds it; the kernel drops the lock with its holder, so a dead writer's file does not block
     target = os.path.join(tmp, "folder")
+    if results_mod.fcntl is None:
+        print("  (no fcntl here: the writer lock is not tested)")
+        return
     with writer_lock(target):
         _raises(Locked, "being written by pid", writer_lock(target).__enter__)
-    assert not os.path.exists(target + ".lock")
-    with open(target + ".lock", "w") as f:
-        f.write(f"4194301 {socket.gethostname()} deadbeef")
+    with writer_lock(target):                                                   # released: the next writer gets it; the lock file stays, its content is only the message
+        pass
+    with open(target + ".lock", "w") as f:                                      # a lock file left by a dead writer does not block
+        f.write("pid 4194301 on another-host")
     with writer_lock(target):
         pass
-    assert not os.path.exists(target + ".lock")
-    with open(target + ".lock", "w") as f:
-        f.write("4194301 another-host deadbeef")
-    _raises(Locked, "another-host", writer_lock(target).__enter__)
-    os.remove(target + ".lock")
-    with open(target + ".lock", "w") as f:                                      # an empty lock: a writer that is just creating it is waited for, a damaged one (old) is taken over
+    code = ("import sys; sys.path.insert(0, %r); from evalsuite.results import writer_lock; import time\n"
+            "with writer_lock(%r):\n    print('held', flush=True); time.sleep(30)\n") % (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), target)
+    other = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)   # a second PROCESS holds it: this one is refused with the holder's pid
+    try:
+        assert other.stdout.readline().strip() == "held"
+        _raises(Locked, f"pid {other.pid}", writer_lock(target).__enter__)
+    finally:
+        other.kill()
+        other.wait()
+    with writer_lock(target):                                                   # killed holder: free at once
         pass
-    os.utime(target + ".lock", (1, 1))
-    with writer_lock(target):
-        pass
-    with writer_lock(target):                                                   # a holder removes only a lock that carries its own token
-        with open(target + ".lock", "w") as f:
-            f.write(f"{os.getpid()} {socket.gethostname()} someone-else")
-    assert os.path.exists(target + ".lock") and "someone-else" in open(target + ".lock").read()
-    os.remove(target + ".lock")
 
 
 def check_run():
-    STATE.root, STATE.gt, STATE.shift, STATE.calls, STATE.loads, STATE.fail_at = tempfile.mkdtemp(), "g1", 0, 0, 0, None
+    STATE.root, STATE.gt, STATE.shift, STATE.calls, STATE.loads, STATE.free_loads, STATE.fail_at = tempfile.mkdtemp(), "g1", 0, 0, 0, 0, None
     ev = Evaluation(adapter=ME)
     net = "runs/thr0.5"
     # the engine's own run is the reference: same numbers on the kept frames (the kept frame of one scene in the middle runs with the scene's history)
     for spec in ("val", "frames:demo-1/4", "scenes:demo-2:val", "spread:7"):
         fr = Frames.parse(spec)
         r = ev.run(net, spec, gt_key="g1", progress=0)
-        _same(r.quant()["numbers"], _engine(net, fr), spec)
+        _same(ev.show_numbers(r["id"])["numbers"], _engine(net, fr), spec)
         assert r["n_frames"] == len(fr.resolve(Source("val"))[1]) and r["warnings"] == []
+    assert STATE.free_loads > 0 and STATE.loads == 0, "the Runner reads the frames through free_source; the labelled Source.load is never called (no ground truth, no inputs of the labelled data)"
     one, allr = ev.run(net, "frames:demo-1/4", progress=0), ev.run(net, "val", progress=0)
-    assert one.by("frame")["demo-1/004"]["iou.iou"] == allr.by("frame")["demo-1/004"]["iou.iou"], "a kept frame in the middle of a scene: the scene ran whole and warm"
+    assert ev.split_numbers(one["id"], "frame")["demo-1/004"]["iou.iou"] == ev.split_numbers(allr["id"], "frame")["demo-1/004"]["iou.iou"], "a kept frame in the middle of a scene: the scene ran whole and warm"
     # stored predictions are reused: the same question, and a SUBSET of an earlier one (spread:7 and frames:demo-1/4 are inside val), call the network not at all
     STATE.calls = 0
     r2, sub = ev.run(net, "val", progress=0), ev.run(net, "scenes:demo-0:val", progress=0)
-    assert STATE.calls == 0 and r2["predictions_reused"] and r2["id"] == allr["id"] and r2.quant() == allr.quant(), "the same question"
+    assert STATE.calls == 0 and r2["predictions_reused"] and r2["id"] == allr["id"] and ev.show_numbers(r2["id"]) == ev.show_numbers(allr["id"]), "the same question"
     assert sub["predictions_reused"] and sub["results"] == allr["results"] and sub["id"] != allr["id"] and sub["n_frames"] == 6, "a subset costs no network"
-    # predict + score = run
-    pr = ev.predict(net, "val")
+    # Runner.run + score = Evaluation.run
+    pr = ev.runner.run(net, "val")
     assert pr["results"] == allr["results"] and pr["frames_predicted"] == 0 and ev.score(pr["results"], "val")["id"] == allr["id"]
     _raises(EvaluationError, "not in", ev.score, pr["results"], "scenes:demo-9")
-    # a new ground truth: another evaluation id, scored from the stored predictions, no network and no input loaded; the loss the network computed itself is flagged
+    # a new ground truth: another evaluation id, scored from the stored predictions, no network and no input loaded
     STATE.gt, STATE.shift, STATE.calls, STATE.loads = "g2", 3, 0, 0
     r3 = ev.run(net, "val", gt_key="g2", progress=0)
     assert STATE.calls == 0 and STATE.loads == 0 and r3["predictions_reused"] and r3["results"] == allr["results"] and r3["id"] != allr["id"], "rescored without the network"
-    assert r3.quant()["numbers"]["iou.iou"] != allr.quant()["numbers"]["iou.iou"], "the other ground truth gives other numbers"
-    assert len(r3["warnings"]) == 1 and "ground truth" in r3["warnings"][0] and r3.quant()["numbers"]["loss.total"] == allr.quant()["numbers"]["loss.total"] == 1.0, "the stale loss is said"
+    assert ev.show_numbers(r3["id"])["numbers"]["iou.iou"] != ev.show_numbers(allr["id"])["numbers"]["iou.iou"], "the other ground truth gives other numbers"
+    assert r3["warnings"] == [] and "loss.total" not in ev.show_numbers(r3["id"])["numbers"], "the predictions carry no loss: nothing computed against an earlier ground truth"
     STATE.gt, STATE.shift = "g1", 0
     _raises(EvaluationError, "has ground truth g1", ev.run, net, "val", gt_key="g9")
     STATE.gt = None
@@ -281,8 +333,8 @@ def check_run():
     # another network = other predictions and another id; the sign of compare is variant - control
     low = ev.run("runs/thr0.1", "val", progress=0)
     assert low["results"] != allr["results"] and low["id"] != allr["id"]
-    c = low.compare(allr)
-    assert c["metrics"]["iou.iou"]["diff"] == low.quant()["numbers"]["iou.iou"] - allr.quant()["numbers"]["iou.iou"], "compare is variant - control"
+    c = ev.compare(allr["id"], low["id"])
+    assert c["metrics"]["iou.iou"]["diff"] == ev.show_numbers(low["id"])["numbers"]["iou.iou"] - ev.show_numbers(allr["id"])["numbers"]["iou.iou"], "compare is variant - control"
     assert ev.compare(allr["id"], low["id"])["metrics"]["iou.iou"]["diff"] == c["metrics"]["iou.iou"]["diff"]
     # a run killed half-way resumes from the start of its scene, so the memory is right: the numbers are the engine's
     net3, STATE.calls, STATE.fail_at = "runs/thr0.3", 0, 9
@@ -291,28 +343,40 @@ def check_run():
     assert len(stored) == 1 and stored[0]["frames"] == 8, stored
     STATE.fail_at = None
     done = ev.run(net3, "val", progress=0)
-    _same(done.quant()["numbers"], _engine(net3, Frames.all()), "resumed run")
+    _same(ev.show_numbers(done["id"])["numbers"], _engine(net3, Frames.parse("val")), "resumed run")
     # a lock held by a live writer refuses the second one with a message
     net4 = "runs/thr0.7"
     rid = ev.check(net4, "val")["results"].partition("@")[2]
     os.makedirs(os.path.join(out(net4), "results"), exist_ok=True)
-    with open(os.path.join(out(net4), "results", rid + ".lock"), "w") as f:
-        f.write(f"{os.getpid()} {socket.gethostname()} tok")
-    _raises(EvaluationError, "being written by pid", ev.run, net4, "val", progress=0)
-    os.remove(os.path.join(out(net4), "results", rid + ".lock"))
+    if results_mod.fcntl is not None:
+        with writer_lock(os.path.join(out(net4), "results", rid)):
+            _raises(EvaluationError, "being written by pid", ev.run, net4, "val", progress=0)
+        assert ev.run(net4, "val", progress=0)["id"], "the lock is free again"
+    # the adapter: free_source and free_subject go together
+    half = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, free_source=free_source)
+    _raises(EvaluationError, "go together", load_adapter, half, None)
+    _raises(EvaluationError, "go together", Evaluation, None, half)
+    # the identity of the network changes while it is loaded (a training wrote a checkpoint): nothing is stored, the message says why
+    STATE.change = True
+    try:
+        _raises(EvaluationError, "changed while it was loaded", ev.runner.run, "runs/thr0.8", "scenes:demo-0:val")
+    finally:
+        STATE.change, STATE.bump = False, 0
+    assert all(x["frames"] == 0 for x in ev.list("runs/thr0.8")), "no frame was stored"
     # intermediate results: asked for with the predictions; a frame stored without them is predicted again, one with them is reused; unknown taps are refused before the network runs
     net5, STATE.calls = "runs/thr0.6", 0
-    plain = ev.predict(net5, "scenes:demo-0:val")
+    plain = ev.runner.run(net5, "scenes:demo-0:val")
     assert plain["frames_predicted"] == 6
-    with_tap = ev.predict(net5, "scenes:demo-0:val", taps=("feat",))
+    with_tap = ev.runner.run(net5, "scenes:demo-0:val", taps=("feat",))
     assert with_tap["frames_predicted"] == 6 and with_tap["results"] == plain["results"], "stored without the tap: predicted again to get it"
     STATE.calls = 0
-    assert ev.predict(net5, "scenes:demo-0:val", taps=("feat",))["frames_predicted"] == 0 and STATE.calls == 0 and ev.predict(net5, "scenes:demo-0:val")["frames_predicted"] == 0, "and reused"
-    assert ev.tap(plain["results"], "demo-0/2")["taps"] == ["feat"]
-    t = ev.tap(plain["results"], "demo-0/2", "feat")
+    assert ev.runner.run(net5, "scenes:demo-0:val", taps=("feat",))["frames_predicted"] == 0 and STATE.calls == 0 and ev.runner.run(net5, "scenes:demo-0:val")["frames_predicted"] == 0, "and reused"
+    assert ev.runner.tap(plain["results"], "demo-0/2")["taps"] == ["feat"]
+    t = ev.runner.tap(plain["results"], "demo-0/2", "feat")
     assert t["shape"] == [32, 32] and np.load(t["path"]).shape == (32, 32)
-    _raises(EvaluationError, "has no tap", ev.tap, plain["results"], "demo-0/2", "memory_conf")
-    _raises(EvaluationError, "unknown taps", ev.predict, net5, "val", taps=("nothing",))
+    _raises(EvaluationError, "has no tap", ev.runner.tap, plain["results"], "demo-0/2", "memory_conf")
+    _raises(EvaluationError, "unknown taps", ev.runner.run, net5, "val", taps=("nothing",))
+    assert ev.runner.run(net5, "scenes:demo-0:val", taps="feat")["frames_predicted"] == 0 and ev.runner.check(net5, "scenes:demo-0:val", taps="feat")["frames_stored"] == 6, "a bare string is one tap, not its letters"
     # the health of the memory (D70): healthy = no warning; full from the start, or never filling = a warning in the predictions' result
     assert plain["warnings"] == [] and ev.run(net5, "scenes:demo-0:val", progress=0)["warnings"] == []
     for mode, text in (("stuck", "not empty at the first frame"), ("flat", "does not fill")):
@@ -320,6 +384,13 @@ def check_run():
         r = ev.run(f"runs/thr0.{4 if mode == 'stuck' else 2}", "scenes:demo-1:val", progress=0)
         assert len(r["warnings"]) == 1 and text in r["warnings"][0] and "demo-1" in r["warnings"][0], (mode, r["warnings"])
     STATE.memory = "ok"
+    # the health at its boundaries (D70): 3 frames are too few to judge the filling; a start of exactly 0.05 and a growth of exactly 0.02 are healthy
+    def health(fill):
+        rs_ = SimpleNamespace(manifest={})
+        Runner._memory_health(rs_, "s", fill)
+        return rs_.manifest["health"]
+    assert health([0.0, 0.0, 0.0]) == {} and health([0.05, 0.1, 0.2, 0.3]) == {} and health([0.0, 0.02, 0.0, 0.0]) == {} and health([]) == {}
+    assert "not empty" in health([0.06, 0.2, 0.4, 0.6])["s"] and "does not fill" in health([0.0, 0.01, 0.0, 0.01])["s"]
     # the dry run: what would happen, and the problems before anything is run
     chk = ev.check(net, "frames:demo-1/4")
     assert chk["ok"] and chk["scenes_run"] == 1 and chk["frames_kept"] == 1 and chk["frames_stored"] == 1 and chk["network_runs"] is False and chk["id"].startswith("thr0.5@e")
@@ -335,27 +406,26 @@ def check_run():
     STATE.gt = None
     assert not ev.check(net, "val")["ok"]
     STATE.gt = "g1"
-    # the result is a plain dict when copied or pickled
-    assert type(copy.deepcopy(allr)) is dict and pickle.loads(pickle.dumps(allr)) == dict(allr)
+    assert type(copy.deepcopy(allr)) is dict and pickle.loads(pickle.dumps(allr)) == allr, "the result of run is plain data"
     return ev, net, allr, low
 
 
 def check_reading(ev, net, allr, low):
-    q = allr.quant("iou")
+    q = ev.show_numbers(allr["id"], "iou")
     assert q["n_frames"] == 18 and set(q["numbers"]) >= {"iou.iou"} and q["better"]["iou.iou"] == "high" and all("iou" in k for k in q["numbers"])
-    assert set(allr.by("scene")) == {"demo-0", "demo-1", "demo-2"} and len(allr.by("frame")) == 18
-    _raises(EvaluationError, "axis", allr.by, "range")
-    assert set(allr.worst(n=2)) == {"scenes", "frames", "flags"}
-    assert allr.cost()["predict"]["n"] == 18 and allr.cost()["devices"] == ["cuda"]
-    assert os.path.isfile(allr.report()) and allr.card()["name"] == allr["id"]
+    assert set(ev.split_numbers(allr["id"], "scene")) == {"demo-0", "demo-1", "demo-2"} and len(ev.split_numbers(allr["id"], "frame")) == 18
+    _raises(EvaluationError, "axis", ev.split_numbers, allr["id"], "range")
+    assert set(ev.find_worst(allr["id"], n=2)) == {"scenes", "frames", "flags"}
+    assert ev.get_cost(allr["id"])["predict"]["n"] == 18 and ev.get_cost(allr["id"])["devices"] == ["cuda"]
+    assert os.path.isfile(ev.report(allr["id"])) and ev.make_card(allr["id"])["name"] == allr["id"]
     rows = ev.list(net)
     assert {r["kind"] for r in rows} == {"predictions", "evaluation"} and allr["id"] in {r["id"] for r in rows} and allr["results"] in {r["id"] for r in rows}
     assert all(r["megabytes"] >= 0 for r in rows if r["kind"] == "predictions")
-    assert ev.sets() == {"val": 3, "small": 1}
-    _raises(EvaluationError, "not an evaluation id", ev.quant, allr["results"])
-    _raises(EvaluationError, "no evaluation", ev.quant, "thr0.5@edeadbeef0000")
-    assert Evaluation(adapter=ME).quant(allr["id"])["numbers"] == allr.quant()["numbers"], "a new object finds the evaluation by its id"
-    pic = ev.qual_frame(allr["id"], "demo-1/4")
+    assert ev.list_sets() == {"val": 3, "small": 1}
+    _raises(EvaluationError, "not an evaluation id", ev.show_numbers, allr["results"])
+    _raises(EvaluationError, "no evaluation", ev.show_numbers, "thr0.5@edeadbeef0000")
+    assert Evaluation(adapter=ME).show_numbers(allr["id"])["numbers"] == ev.show_numbers(allr["id"])["numbers"], "a new object finds the evaluation by its id"
+    pic = ev.draw_frame(allr["id"], "demo-1/4")
     assert os.path.isfile(pic["images"]["overview"]) and "iou.iou" in pic["scores"]
 
 
@@ -372,16 +442,16 @@ def check_cli():
     code, text, _ = call("Evaluation.run", "runs/thr0.5", "val", "--json", "--workers", "0", "--progress", "0", *base)
     info = json.loads(text)                                                                   # stdout is the json and nothing else
     assert code == 0 and info["frames"] == "val" and info["predictions_reused"] is True and info["id"].startswith("thr0.5@e"), (code, text[:200])
-    code, text, _ = call("Evaluation.quant", info["id"], "--match", "iou", "--json", *base)
-    assert code == 0 and json.loads(text)["numbers"]["iou.iou"] == Evaluation(adapter=ME).quant(info["id"])["numbers"]["iou.iou"]
+    code, text, _ = call("Evaluation.show_numbers", info["id"], "--match", "iou", "--json", *base)
+    assert code == 0 and json.loads(text)["numbers"]["iou.iou"] == Evaluation(adapter=ME).show_numbers(info["id"])["numbers"]["iou.iou"]
     assert call("quant", info["id"], *base)[0] is None and call("probe", "x", *base)[0] is None and call("list", "x", *base)[0] is None, "older command words are not taken over"
     code, text, _ = call("check", "runs/thr0.5", "val", *base)
     assert code == 0 and "ok: True" in text and "frames_stored: 18" in text, text
-    code, text, _ = call("qual-frame", info["id"], "demo-0/2", *base)                         # the hyphen form of qual_frame
+    code, text, _ = call("draw-frame", info["id"], "demo-0/2", *base)                         # the hyphen form of draw_frame
     assert code == 0 and ".png" in text, text
     code, text, _ = call("methods")
-    assert code == 0 and "Evaluation.run(" in text and "Evaluation.compare(" in text and "gt_key=None" in text
-    code, _, err = call("Evaluation.quant", "thr0.5@e0000", *base)
+    assert code == 0 and "Evaluation.run(" in text and "Evaluation.compare(" in text and "Runner.run(" in text and "Runner.tap(" in text and "gt_key=None" in text
+    code, _, err = call("Evaluation.show_numbers", "thr0.5@e0000", *base)
     assert code == 2 and "no evaluation" in err
     code, _, err = call("run", "runs/thr0.5", "scenes:demo-9", *base)                         # a data error is a message and exit 2, not a traceback
     assert code == 2 and "not in val" in err and "Traceback" not in err, err
@@ -393,11 +463,19 @@ def check_cli():
     assert _clean({"a": float("nan"), "b": [np.float32(1.5), float("inf")], "c": (1, 2)}) == {"a": None, "b": [1.5, None], "c": [1, 2]}
     # the words of the older command line stay theirs: a method with the name of an old command must be listed in LEGACY
     old = {c for a in cli.build_parser()._actions if isinstance(a, __import__("argparse")._SubParsersAction) for c in a.choices}
-    assert {m for m in Evaluation.METHODS if m in old} <= set(LEGACY), (old, Evaluation.METHODS)
+    assert {m for m in Evaluation.METHODS + Runner.METHODS if m in old} <= set(LEGACY), (old, Evaluation.METHODS, Runner.METHODS)
+    code, text, _ = call("Runner.run", "runs/thr0.5", "val", "--json", "--workers", "0", "--progress", "0", *base)                 # the Runner alone: predictions without a ground truth
+    ran = json.loads(text)
+    assert code == 0 and ran["results"] == info["results"] and ran["frames_predicted"] == 0 and ran["predictions_reused"] is True, (code, text[:200])
+    assert call("tap", info["results"], "demo-0/2", *base)[0] is None, "a bare word is the Evaluation's: the Runner's words need the class name"
+    code, text, _ = call("Runner.tap", info["results"], "demo-0/2", *base)
+    assert code == 0 and "taps" in text, text
+    assert call("Runner.list", "runs/thr0.5", *base)[0] == 0 and call("Runner.check", "runs/thr0.5", "val", *base)[0] == 0
 
 
 def run_all():
     check_frames()
+    check_codec()
     check_results()
     ev, net, allr, low = check_run()
     check_reading(ev, net, allr, low)
