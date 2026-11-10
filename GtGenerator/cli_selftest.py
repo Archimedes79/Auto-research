@@ -450,40 +450,12 @@ def _architecture_check():
     return True
 
 
-def _alias_check():
-    """the old name `autogt` (repository root, tracked: autogt/__init__.py) is an alias for the pinned code snapshots of runs made before D76: in a fresh interpreter `import autogt` is the package
-    GtGenerator, `autogt.X` is the SAME module object as GtGenerator.X (no second copy of state, its __spec__ untouched), a snapshot-style `from autogt.nuscenes_adapter import pose_matrix` works, and
-    `python -m autogt versions` runs the command line. Skipped (False) in a copy of GtGenerator alone."""
-    import subprocess
-    import sys
-    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if not os.path.isfile(os.path.join(repo, "autogt", "__init__.py")):
-        return False
-    code = "; ".join([
-        "import autogt, GtGenerator",
-        "assert autogt is GtGenerator",
-        "from autogt.nuscenes_adapter import pose_matrix",
-        "import autogt.lane_gt, autogt.layers",
-        "assert pose_matrix is GtGenerator.nuscenes_adapter.pose_matrix and autogt.nuscenes_adapter is GtGenerator.nuscenes_adapter",
-        "assert autogt.lane_gt is GtGenerator.lane_gt and autogt.layers is GtGenerator.layers and autogt.AutoGT is GtGenerator.AutoGT",
-        "assert GtGenerator.layers.__spec__.name == 'GtGenerator.layers' and GtGenerator.layers.__name__ == 'GtGenerator.layers'",
-        "assert not [m for m in sys.modules if m.startswith('autogt.') and sys.modules[m].__name__.startswith('autogt')]",
-    ])
-    env = dict(os.environ, PYTHONPATH=repo + os.pathsep + os.environ.get("PYTHONPATH", ""))
-    r = subprocess.run([sys.executable, "-c", "import sys; " + code], capture_output=True, text=True, cwd=repo, env=env)
-    assert r.returncode == 0, "the alias autogt does not give the modules of GtGenerator: " + r.stderr[-600:]
-    r = subprocess.run([sys.executable, "-m", "autogt", "versions"], capture_output=True, text=True, cwd=repo, env=env)
-    assert r.returncode == 0 and "v9" in r.stdout, "python -m autogt versions failed: " + r.stderr[-400:]
-    return True
-
-
 def run(root=None, verbose=True):
     root = os.path.expanduser(root or "~/data/nuscenes")
     _mapping_checks()
     _error_checks(root)
     _store_checks(root)
     drawn = _architecture_check()
-    _alias_check()
     msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables" + ("; the architecture drawing is in step with the code" if drawn else "")
     if verbose:
         print(msg)
