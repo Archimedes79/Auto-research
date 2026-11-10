@@ -865,7 +865,8 @@ def _():
     # the hash itself: 12 hex over the files of the evaluator paths; any edit changes it, the same files give the same value; build() takes it once
     assert len(A.evaluator_hash()) == 12 and A.evaluator_hash() == A.evaluator_tree_hash(paths=A.NUMBER_PATHS) and A.evaluator_hash() != A.evaluator_tree_hash()
     assert all(os.path.exists(p) for p in A.NUMBER_PATHS)
-    assert not {"bev_selftest.py", "bev_mutants.py", "board.py", "bev_suite.py", "bev_views.py"} & {os.path.basename(p) for p in A.NUMBER_PATHS}, "an edit of a test or a view changes no number"
+    assert not {"bev_selftest.py", "bev_mutants.py", "board.py", "bev_suite.py"} & {os.path.basename(p) for p in A.NUMBER_PATHS}, "an edit of a test changes no number"
+    assert {"bev_views.py", "bev_annotation_pts.py"} <= {os.path.basename(p) for p in A.NUMBER_PATHS}, "the views make every map's denominator: an edit of them changes the evaluator hash (D73)"
     with tempfile.TemporaryDirectory() as t:
         keep, A.NUMBER_PATHS = A.NUMBER_PATHS, (os.path.join(t, "ev"),)
         try:

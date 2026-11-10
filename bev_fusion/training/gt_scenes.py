@@ -2,7 +2,7 @@
 
     python training/gt_scenes.py CONFIG names     # the sequence names the config trains and validates on, one per line
     python training/gt_scenes.py CONFIG check     # exit 0 when the autogt store holds every keyframe of them for the CURRENT generator, else 1 and how many are missing
-    python training/gt_scenes.py CONFIG build     # generate what is missing: resumable, nice 15, light devkit (hours for the whole trainval: it is a run of its own)
+    python training/gt_scenes.py CONFIG build     # generate what is missing (the front GT only: --no-lane): resumable, nice 15, light devkit (hours for the whole trainval: a run of its own)
 
 autogt does not read training configs (it must not): this wrapper turns the config into a file of sequence names (`<config>.scenes.txt`, next to the config, one name per
 line) and calls `python -m autogt have|generate --scenes-file` from the repository top, as autogt's guide asks. Scenes: the official split of the config (`train_split`,
@@ -54,7 +54,7 @@ def have_argv(cfg, names_file, py=None):
 
 def build_argv(cfg, names_file, workers=2):
     return ["bash", "autogt/run_nice.sh", "-m", "autogt", "generate", os.path.expanduser(cfg.data_root), "--version", cfg.version, "--scenes-file", names_file,
-            "--workers", str(workers)]
+            "--workers", str(workers), "--no-lane"]                       # the front GT only: the lane stores belong to the lane GT (a BEV prepare must not write them)
 
 
 def main(argv=None, runner=subprocess.call):

@@ -287,7 +287,7 @@ def start_lines(path, name, smoke=False):
     rid = ("smoke." + name[len("smoke_"):]) if smoke else name.replace("_", ".", 1)    # t10_dual_long_s0 -> t10.dual_long_s0
     card = "--no-card" if smoke else "--hyp <hypothesis of the card> --pred <prediction> --rule <decision rule>"
     return (f"AR_PROJECT=../bev_fusion nohup python3 ../autoresearch/tools/run.py --id {rid} --gpu --split train {card} "
-            f"-- bash temp/train/run_ar.sh {rel} > runs/{rid}.launcher.log 2>&1 &")
+            f"-- bash tools/run_ar.sh {rel} > runs/{rid}.launcher.log 2>&1 &")
 
 
 def _selftest():

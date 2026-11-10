@@ -76,6 +76,7 @@ run "camera features"   "$PY" tests/test_camera_features.py         # the CAMERA
 run "dual camera geometry" "$PY" tests/test_dual_camera_geometry.py   # both branches put an image pixel at the same BEV cell (< 0.5 px); CPU, 5 s
 run "freeze, probe"     "$PY" tests/test_freeze_probe.py            # freeze.py / probe.py / debug.py on a toy network; CPU, 4 s
 run "GT prepare"        "$PY" tests/test_gt_prepare.py              # scene lists, autogt command lines; no data, 5 s
+run "run_ar launcher"   "$PY" tests/test_run_ar.py                  # D73: tools/run_ar.sh unpacks training/ and trainkit of the commit, the trainer imports the pinned copy, exit code, .done; a toy repo, 5 s
 run "radar memory ghost" "$PY" tests/test_radar_memory_ghost.py     # the Doppler write mask keeps a radial mover out of the radar memory; 3 s
 run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 motion block through the trainer's path; CPU, 7 s
 run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, training/splits.py, the trainsuite hook; no data, 7 s
@@ -93,6 +94,7 @@ run "suites conform"    "$PY" tests/test_suites_conform.py        # Training, Ev
 run "evaluate door"     "$PY" tests/test_evaluate_door.py           # evaluation/evaluate.py translates options into bev_suite commands (--real: the golden check, by hand); no data, 1 s
 run "report build"      "$PY" tests/test_report_build.py            # results/build: a fixture report (every number in a source file, every cell in place), missing / wrong inputs stop the build, 23 mutants; CPU, 8 s, no data
 run "trainkit selftest" bash -c "cd ../autoresearch && $PY -m trainkit.selftest"    # the engine of the trainer on a toy network; CPU
+run "train guards"     "$PY" tests/test_train_guards.py                 # D73: stop + resume of the real train() = the uninterrupted run (EpochLoader), evaluate with non-finite batches, check_engine; CPU, toy, 13 s
 run "trainkit equivalence" "$PY" tests/test_trainkit_equivalence.py # train() of commit df9d437 against the live one (trainkit): rows, weights, EMA, optimiser, RNG, files, exit codes; CPU, toy network
 if [ "${1:-}" = "--all" ]; then
   run "whole chain"    "$PY" training/model.py                     # nuScenes mini, CPU; minutes

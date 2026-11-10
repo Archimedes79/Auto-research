@@ -65,7 +65,7 @@ check(rc == 1 and cmd[1:4] == ["-m", "autogt", "have"] and cmd[cmd.index("--scen
 check(os.path.isdir(os.path.join(G.REPO, "autogt")) and os.path.isfile(os.path.join(G.REPO, "autogt", "run_nice.sh")), "the repository top holds autogt/run_nice.sh")
 rc = G.main([cfg_path, "build", "--workers", "3"], runner=fake(0))
 cmd, cwd = calls[-1]
-check(rc == 0 and cmd[:5] == ["bash", "autogt/run_nice.sh", "-m", "autogt", "generate"] and cmd[cmd.index("--workers") + 1] == "3" and "--scenes-file" in cmd and cwd == G.REPO, f"build: {cmd[1:]}")
+check(rc == 0 and cmd[:5] == ["bash", "autogt/run_nice.sh", "-m", "autogt", "generate"] and cmd[cmd.index("--workers") + 1] == "3" and "--scenes-file" in cmd and "--no-lane" in cmd and cwd == G.REPO, f"build: {cmd[1:]} (the front GT only: no lane stores)")
 rc = G.main([cfg_path, "build"], runner=fake(0))
 check(calls[-1][0][calls[-1][0].index("--workers") + 1] == "2", "two workers by default")
 n_before = len(calls)

@@ -7,7 +7,7 @@ Rule of the repository: scratch goes here, a reusable tool is promoted to a prop
 
 | folder | what | class |
 |---|---|---|
-| `train/` | `run_cfg.sh` (train one config from a `git archive` snapshot of `training/` at a pinned commit, `.done` only on exit 0), report builders (`plot_curves`, `build_tables`, `stack_images*`, `draw_architecture*`), cache fill scripts | **used** (the launcher of every run) |
+| `train/` | `run_cfg.sh` (train one config from a `git archive` snapshot of `training/` at a pinned commit, `.done` only on exit 0), report builders (`plot_curves`, `build_tables`, `stack_images*`, `draw_architecture*`), cache fill scripts | **used** (`run_cfg.sh`; the launcher of the runs under `run.py` is `../tools/run_ar.sh` since D73, the `run_ar.sh` here is only its redirect for the recorded commands of old and held runs) |
 | `study/` | the queue drivers `lane.sh` / `lane2.sh` / `lane3.sh` (run a list of configs one after another), `queue*.txt`, result collectors (`collect*.py`, cited by the t3 report) | **used** (a queue is running there) |
 | `setup/` | cache builders, `get_dualbev_ckpt.sh`, one-time table merges | **used** (`data/README.md`, `models/README.md` name the build / download scripts) |
 | `data/` | download scripts of the nuScenes parts 7-10 | **used** (`data/README.md`) |

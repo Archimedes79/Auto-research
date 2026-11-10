@@ -20,7 +20,7 @@
                       "ave_slow_moving", "fp_hi", "field_mae", "angle_mae", "total", "group.areas", "group.lines", "group.motion", "group.objects","median_ms", "p90_ms", "mean_ms", "bev_dt0_median", "bev_3dt_median",
                       "bev_dt0_refined_boxes_median", "camera_heads_median"],
   "code_dirs": ["training", "evaluation", "../autogt", "../autoresearch/trainkit", "tests"],
-  "fingerprint_extra": ["temp/train/run_ar.sh", "temp/train/run_cfg.sh"],
+  "fingerprint_extra": ["tools/run_ar.sh"],
   "scratch": "temp",
   "live_code": ["training", "evaluation", "../autogt", "../autoresearch/trainkit"],
   "trash": "_to_delete",
@@ -37,21 +37,16 @@
     "out": "temp/compose",
     "runs": "runs",
     "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/startable.py {config}\"",
-    "train": "bash temp/train/run_ar.sh {config}",
+    "train": "bash tools/run_ar.sh {config}",
     "resolve": "python3 training/splits.py resolve",
     "_gpu_max_mb": "a training starts only when the card has less than this in use (run.py --gpu-max-mb, passed by start / queue add): a t20-sized run holds 8-9 GB of the 12, a second one next to it pages the GPU memory and both ran 13 times slower (2026-11-04); desktop apps hold about 1.3 GB",
     "gpu_max_mb": 3000,
     "prepare": [{"name": "gt", "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} check\"",
                  "build": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} build\"", "wait_min": 600}]
   },
-  "_runsuite": "python -m runsuite check JOB | run JOB | status | queue-add JOB (autoresearch/runsuite): the runner of the trained network, jobs of kind run in the same queue as the trainings; {args} is where the mode and the flags go (runner/bev_runner.py documents them)",
-  "runsuite": {
-    "command": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python runner/bev_runner.py {args}\"",
-    "runs": "runs"
-  },
   "structure": {
     "root_files": ["README.md", "project.json", "FROZEN.md", "frozen.json"],
-    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "training"],
+    "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "tools", "training"],
     "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "training"],
     "living": [],
     "skip_parts": [],

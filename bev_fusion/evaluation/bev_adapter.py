@@ -135,9 +135,11 @@ def gt_signature(ds) -> Optional[str]:
 PROVENANCE_DIR = os.path.join(ROOT, "..", "autoresearch", "tools")
 EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "evalsuite"))        # everything the evaluator is made of (the card's provenance block)
 # the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the evalsuite's frame loop,
-# counts, sampling and comparison core. Not the selftests, mutants, views, board, report or README: an edit there changes no number and must not orphan a
-# store that took 30 minutes while other chats work in the same folders
-NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py")) + \
+# counts, sampling and comparison core, and the views (D73: `bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`; `bev_annotation_pts.py`
+# builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too, as it did in
+# `bev_eval.evaluator_extra()` before). Not the selftests, mutants, board, report or README: an edit there changes no number and must not orphan a store that took 30 minutes
+# while other chats work in the same folders
+NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py", "bev_views.py", "bev_annotation_pts.py")) + \
     tuple(os.path.join(ROOT, "..", "autoresearch", "evalsuite", f) for f in ("comparison", "quantitative.py", "store.py", "runner.py", "contracts.py", "sampling.py"))
 
 

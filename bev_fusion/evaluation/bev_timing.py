@@ -446,7 +446,7 @@ def selftest():
                        ("python runner/bev_runner.py full runs/x --device cpu", False), ("python evaluation/bev_timing.py runs/x", True), ("python evaluation/bev_modules.py runs/x", False),
                        ("python evaluation/bev_modules.py runs/x --device cuda", True), ("python evaluation/bev_prototype.py runs/x", True),
                        ("python -c train.py", False), ("python -m json.tool train.py", False), ("python3 tools/run.py --id x --gpu -- python train.py", False),
-                       ("bash temp/train/run_ar.sh cfg train.py", False), ("python other.py train.py", False)):
+                       ("bash temp/train/run_ar.sh cfg train.py", False), ("bash tools/run_ar.sh cfg train.py", False), ("python other.py train.py", False)):
         assert holds_gpu(line) == want, (line, want)
     print("bev_timing selftest ok: per call / per frame / exclusive milliseconds of toy modules with known sleeps, hooks removed and output unchanged, training split, idle rule")
 

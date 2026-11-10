@@ -43,6 +43,7 @@ From this folder, in the WSL (env `gcar`, `~/miniconda3/envs/gcar/bin/python`); 
 | `literature/papers.csv`, `literature/papers/` | the papers of the scans of 2026-10-25 and later (lift, radar, temporal, heads, SDF, polar radar; about 216 notes), partly moved here from `../bev_fusion_lane_center/literature/` - see `literature/README.md` |
 | `literature/code/front_bev_code_sources.md` | repository, licence and module per block (read on the repository pages) |
 | `temp/scout_tables/` | the raw tables of the scouts |
+| `tools/` | the launchers: `run_ar.sh` trains one config under `autoresearch/tools/run.py` from the run's snapshot commit (`tools/README.md`, test `tests/test_run_ar.py`) |
 | `temp/` | scripts of the studies and of the setup; some of them are used as launchers and recipes (`temp/train/run_cfg.sh`, the cache builders of `temp/setup/`) - see `temp/README.md` |
 | `data/` | derived data, not in git: the caches of the frozen image heads (`cache/cam_feats*`, big ones on D: behind links), the GT and radar caches of the trainer, the small-set links - see `data/README.md` |
 | `runs/` | one folder per training run (not in git) - see `runs/README.md` |
