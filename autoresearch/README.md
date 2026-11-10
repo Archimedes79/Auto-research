@@ -16,6 +16,10 @@ A problem is a folder. The person writes `PROBLEM.md` (goal, metric, splits, cur
 
 One experiment: write the card -> `run.py` (refuses a run without hypothesis, prediction and rule, tags the code, writes the run record; the `run_ids` of the arms in the card register its rule) -> the evaluation writes the metric card -> `decide.py` applies the rule of the card (KEEP / CUT / TIE / INCONCLUSIVE) -> `result.py`, called by `decide.py --write`, writes `results.md`; the summary goes into the experiment file or below the markers of that page. Six rules are hard (`METHOD.md`, "Hard rules and defaults"); everything else is a default. The rest of this page is the reference: tools, suites, drawings.
 
+![The whole system at work: the person orders in chat, agents write plain files, tools refuse and run the suites, the numbers come back as a verdict](system.svg)
+
+The whole system at work, one level above the method ([each box with its files](system.md)): how you give an order, what the chats and subagents do, which files and tools they touch, and how the tools call the suites.
+
 ![autoresearch overview: you, one lead agent, a notebook of plain files, experiment agents, code that measures and refuses](overview.svg)
 
 The overview above is generated from `overview.json`; the detail with every box and every tool is [architecture.md](architecture.md) (the picture below, 27 boxes).

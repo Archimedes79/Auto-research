@@ -1,0 +1,514 @@
+{
+ "title": "The whole system at work: who gives an order, what the agents do, which files and tools they touch, how the tools call each other",
+ "subtitle": "Left to right: you speak only in chat; agents write plain files; tools read them, refuse what breaks a rule and run the suites; numbers come back as a verdict. Red borders refuse.",
+ "root": "..",
+ "colw": 240,
+ "steps": [
+  {
+   "col": 0,
+   "label": "1 The person orders"
+  },
+  {
+   "col": 1,
+   "label": "2 Agents (chats) work"
+  },
+  {
+   "col": 2,
+   "label": "3 Plain files"
+  },
+  {
+   "col": 3,
+   "label": "4 Tools and gates"
+  },
+  {
+   "col": 4,
+   "label": "5 Suites do the work"
+  },
+  {
+   "col": 5,
+   "label": "6 Data and numbers"
+  }
+ ],
+ "kinds": {
+  "person": {
+   "label": "the person",
+   "fill": "#fce7f3",
+   "stroke": "#db2777",
+   "class": "other"
+  },
+  "agent": {
+   "label": "agent (a chat or a subagent)",
+   "fill": "#fef3c7",
+   "stroke": "#d97706",
+   "class": "other"
+  },
+  "file": {
+   "label": "plain file in git",
+   "fill": "#fef9c3",
+   "stroke": "#ca8a04",
+   "class": "other"
+  },
+  "tool": {
+   "label": "tool (autoresearch/tools, jobrunner)",
+   "fill": "#e0e7ff",
+   "stroke": "#4f46e5",
+   "class": "other"
+  },
+  "gate": {
+   "label": "tool that refuses",
+   "fill": "#ffffff",
+   "stroke": "#be123c",
+   "class": "other"
+  },
+  "suite": {
+   "label": "suite: one class, every method a command",
+   "fill": "#ccfbf1",
+   "stroke": "#0d9488",
+   "class": "other"
+  },
+  "data": {
+   "label": "data and outputs (not in git)",
+   "fill": "#f1f5f9",
+   "stroke": "#64748b",
+   "class": "other"
+  }
+ },
+ "nodes": [
+  {
+   "id": "you",
+   "label": "You (Mirko)\norders in chat,\nanswers, TEST OK",
+   "kind": "person",
+   "col": 0,
+   "row": 0,
+   "h": 2,
+   "code": [
+    "CLAUDE.md",
+    "autoresearch/METHOD.md"
+   ],
+   "note": "an order is a chat message to one chat; nothing is a decision until it is written as a D<n> with your words"
+  },
+  {
+   "id": "lead",
+   "label": "Lead chat\nplans, cards, jobs",
+   "kind": "agent",
+   "col": 1,
+   "row": 0,
+   "code": [
+    "bev_fusion_lane_center/CLAUDE.md",
+    "autoresearch/prompts/loop.md",
+    "autoresearch/prompts/research_steps.md"
+   ],
+   "note": "one per problem (BEV system, Spurmitte); it owns the code of its loop and hands areas to worker chats"
+  },
+  {
+   "id": "workers",
+   "label": "Worker chats\none per area",
+   "kind": "agent",
+   "col": 1,
+   "row": 1,
+   "code": [
+    "GtGenerator/AGENTS.md",
+    "autoresearch/Training/README.md",
+    "autoresearch/Evaluation/README.md",
+    "bev_fusion/runner/README.md",
+    "autoresearch/README.md"
+   ],
+   "note": "a fork of the lead with its own area; peers talk by cross-session messages, never edit each other's uncommitted files"
+  },
+  {
+   "id": "subagents",
+   "label": "Subagents\nplanner, researcher,\ncoder, critic",
+   "kind": "agent",
+   "col": 1,
+   "row": 2,
+   "code": [
+    "autoresearch/agents/",
+    "autoresearch/tools/install_agents.py"
+   ],
+   "note": "fresh eyes: the critic reviews code and numbers it did not write"
+  },
+  {
+   "id": "decisions",
+   "label": "decisions/D<n>.md\nquestion + your words",
+   "kind": "file",
+   "col": 2,
+   "row": 0,
+   "code": [
+    "bev_fusion_lane_center/experiment_execution/decisions/"
+   ],
+   "note": "a line 'Decided: <date>' makes D<n> decided; only a decided D<n> opens a protected file"
+  },
+  {
+   "id": "handover",
+   "label": "HANDOVER.md\nwhere we stand",
+   "kind": "file",
+   "col": 2,
+   "row": 1,
+   "code": [
+    "bev_fusion_lane_center/HANDOVER.md",
+    "bev_fusion/records/README.md"
+   ]
+  },
+  {
+   "id": "card",
+   "label": "experiment.md\ncard: prediction\n+ decision rule",
+   "kind": "file",
+   "col": 2,
+   "row": 2,
+   "code": [
+    "autoresearch/templates/experiment.md",
+    "autoresearch/schemas/experiment.schema.json",
+    "autoresearch/tools/experiment.py"
+   ],
+   "note": "written BEFORE the run: its rule hash is stored at launch"
+  },
+  {
+   "id": "job",
+   "label": "job file\nClass.method + args",
+   "kind": "file",
+   "col": 2,
+   "row": 3,
+   "code": [
+    "bev_fusion/records/jobs/",
+    "autoresearch/jobrunner/catalogue.py"
+   ]
+  },
+  {
+   "id": "project",
+   "label": "project.json\npaths, splits,\nprotected list",
+   "kind": "file",
+   "col": 2,
+   "row": 4,
+   "code": [
+    "bev_fusion/project.json",
+    "bev_fusion_lane_center/project.json",
+    "autoresearch/tools/project.py"
+   ]
+  },
+  {
+   "id": "ledger",
+   "label": "LEDGER.csv\n+ run records",
+   "kind": "file",
+   "col": 2,
+   "row": 5,
+   "code": [
+    "autoresearch/tools/ledger.py",
+    "bev_fusion/records/LEDGER.csv"
+   ],
+   "note": "written by the tools only"
+  },
+  {
+   "id": "results",
+   "label": "decision.json,\nresults.md, keep3",
+   "kind": "file",
+   "col": 2,
+   "row": 6,
+   "code": [
+    "autoresearch/tools/result.py",
+    "autoresearch/tools/keep3.py",
+    "bev_fusion/records/keep3.json"
+   ]
+  },
+  {
+   "id": "hook",
+   "label": "WRITE GATE\nguard_hook.py",
+   "kind": "gate",
+   "col": 3,
+   "row": 0,
+   "code": [
+    "autoresearch/tools/guard_hook.py",
+    ".claude/settings.json"
+   ],
+   "note": "refuses a protected file without a grant under a decided D<n>"
+  },
+  {
+   "id": "git",
+   "label": "commit_paths\ncheck_git",
+   "kind": "gate",
+   "col": 3,
+   "row": 1,
+   "code": [
+    "autoresearch/tools/commit_paths.py",
+    "autoresearch/tools/check_git.py"
+   ]
+  },
+  {
+   "id": "decide",
+   "label": "RULE GATE\ndecide.py\nKEEP / CUT /\nTIE / INCONCLUSIVE",
+   "kind": "gate",
+   "col": 3,
+   "row": 2,
+   "h": 2,
+   "code": [
+    "autoresearch/tools/decide.py",
+    "autoresearch/tools/card.py",
+    "autoresearch/tools/provenance.py"
+   ]
+  },
+  {
+   "id": "jobrunner",
+   "label": "jobrunner\njob -> one run",
+   "kind": "tool",
+   "col": 3,
+   "row": 4,
+   "code": [
+    "autoresearch/jobrunner/api.py"
+   ]
+  },
+  {
+   "id": "run",
+   "label": "START GATE run.py\ncard, TEST row,\nhold, GPU slot, tag",
+   "kind": "gate",
+   "col": 3,
+   "row": 5,
+   "h": 2,
+   "code": [
+    "autoresearch/tools/run.py",
+    "autoresearch/tools/testgate.py",
+    "autoresearch/tools/hold.py",
+    "autoresearch/tools/machine_lock.py"
+   ]
+  },
+  {
+   "id": "gt",
+   "label": "GtGenerator\nground truth",
+   "kind": "suite",
+   "col": 4,
+   "row": 1,
+   "code": [
+    "GtGenerator/suite.py",
+    "GtGenerator/gt_api.py"
+   ]
+  },
+  {
+   "id": "training",
+   "label": "Training\n+ trainkit",
+   "kind": "suite",
+   "col": 4,
+   "row": 2,
+   "code": [
+    "autoresearch/Training/api.py",
+    "autoresearch/trainkit/loop.py",
+    "bev_fusion/tools/run_ar.sh",
+    "bev_fusion/training/train.py"
+   ]
+  },
+  {
+   "id": "runner",
+   "label": "Runner\nnetwork on frames",
+   "kind": "suite",
+   "col": 4,
+   "row": 3,
+   "code": [
+    "bev_fusion/runner/runner.py"
+   ]
+  },
+  {
+   "id": "evaluation",
+   "label": "Evaluation\nscore + draw",
+   "kind": "suite",
+   "col": 4,
+   "row": 4,
+   "code": [
+    "autoresearch/Evaluation/api.py",
+    "bev_fusion/evaluation/bev_eval.py"
+   ]
+  },
+  {
+   "id": "raw",
+   "label": "raw nuScenes\nmanifest by hash",
+   "kind": "data",
+   "col": 5,
+   "row": 0,
+   "code": [
+    "data/NuScenes/manifest.json",
+    "data/NuScenes/README.md"
+   ]
+  },
+  {
+   "id": "store",
+   "label": "GT store\ndata/autogt",
+   "kind": "data",
+   "col": 5,
+   "row": 1,
+   "code": [
+    "GtGenerator/versions.csv"
+   ]
+  },
+  {
+   "id": "runs",
+   "label": "run folder\ncheckpoints",
+   "kind": "data",
+   "col": 5,
+   "row": 2,
+   "code": [
+    "bev_fusion/runs/README.md"
+   ]
+  },
+  {
+   "id": "preds",
+   "label": "predictions\nResultSet",
+   "kind": "data",
+   "col": 5,
+   "row": 3,
+   "code": [
+    "autoresearch/Evaluation/results.py"
+   ]
+  },
+  {
+   "id": "cards",
+   "label": "metric cards",
+   "kind": "data",
+   "col": 5,
+   "row": 4,
+   "code": [
+    "autoresearch/schemas/card.schema.json",
+    "bev_fusion/results/"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "you",
+   "to": "lead",
+   "label": "order"
+  },
+  {
+   "from": "you",
+   "to": "decisions"
+  },
+  {
+   "from": "lead",
+   "to": "decisions",
+   "label": "asks"
+  },
+  {
+   "from": "lead",
+   "to": "workers"
+  },
+  {
+   "from": "lead",
+   "to": "subagents"
+  },
+  {
+   "from": "lead",
+   "to": "handover"
+  },
+  {
+   "from": "lead",
+   "to": "card"
+  },
+  {
+   "from": "workers",
+   "to": "hook"
+  },
+  {
+   "from": "workers",
+   "to": "git"
+  },
+  {
+   "from": "lead",
+   "to": "job"
+  },
+  {
+   "from": "job",
+   "to": "jobrunner",
+   "label": "submit"
+  },
+  {
+   "from": "jobrunner",
+   "to": "run"
+  },
+  {
+   "from": "card",
+   "to": "run",
+   "label": "hyp, pred, rule"
+  },
+  {
+   "from": "project",
+   "to": "run"
+  },
+  {
+   "from": "run",
+   "to": "ledger"
+  },
+  {
+   "from": "run",
+   "to": "gt"
+  },
+  {
+   "from": "run",
+   "to": "training",
+   "label": "starts"
+  },
+  {
+   "from": "run",
+   "to": "runner"
+  },
+  {
+   "from": "run",
+   "to": "evaluation"
+  },
+  {
+   "from": "raw",
+   "to": "gt"
+  },
+  {
+   "from": "gt",
+   "to": "store",
+   "label": "writes"
+  },
+  {
+   "from": "store",
+   "to": "training",
+   "label": "reads"
+  },
+  {
+   "from": "training",
+   "to": "runs",
+   "label": "writes"
+  },
+  {
+   "from": "runs",
+   "to": "runner"
+  },
+  {
+   "from": "runner",
+   "to": "preds",
+   "label": "writes"
+  },
+  {
+   "from": "preds",
+   "to": "evaluation"
+  },
+  {
+   "from": "evaluation",
+   "to": "cards",
+   "label": "writes"
+  },
+  {
+   "from": "cards",
+   "to": "decide",
+   "label": "numbers"
+  },
+  {
+   "from": "card",
+   "to": "decide",
+   "label": "the rule"
+  },
+  {
+   "from": "decide",
+   "to": "results",
+   "label": "verdict"
+  },
+  {
+   "from": "decide",
+   "to": "ledger"
+  },
+  {
+   "from": "results",
+   "to": "you",
+   "label": "KEEP -> promotion"
+  }
+ ]
+}
