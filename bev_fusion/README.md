@@ -25,7 +25,7 @@ From this folder, in the WSL (env `gcar`, `~/miniconda3/envs/gcar/bin/python`); 
 | the scenes of a run | `python training/splits.py names small` (a split's scenes), `python training/splits.py manifest runs/<run>` (split, GT, code commit and card of a run in one file) |
 | evaluate a run | the front door: `python evaluation/evaluate.py runs/<run> --quant` (numbers), `--qual 8` or `--qual scene-0061/12` (pictures), `--videos 3`, `--time` (idle GPU), `--all` (what the t16 chain did); it calls `bev_suite.py`, whose sub-commands (`eval`, `modules`, `timing`, `qual`, `generalisation`, `report`, `compare` = paired bootstrap) are in `evaluation/README.md` |
 | the ground truth | `python -m GtGenerator sets` (what the store holds), `python -m GtGenerator generate ...`: `../GtGenerator/README.md` |
-| the whole way on a data set | GT, training, predictions, numbers as four jobs (`autoresearch/jobrunner`, the data named in the arguments): `records/jobs/chain/README.md` |
+| the whole way on a data set | GT, training, predictions, numbers as four jobs (`autoresearch/jobrunner`, the data named in the arguments; the commands run from `autoresearch/`, not from this folder): `records/jobs/chain/README.md` |
 | the trained network on frames, no GT | `python -m runner Runner.predict runs/<name> small.val --taps fused` (the class `Runner`); the planner-facing `python runner/bev_runner.py precompute / network / full ...`: `runner/README.md` |
 
 ## Folders
@@ -48,7 +48,7 @@ From this folder, in the WSL (env `gcar`, `~/miniconda3/envs/gcar/bin/python`); 
 | `data/` | derived data, not in git: the caches of the frozen image heads (`cache/cam_feats*`, big ones on D: behind links), the GT and radar caches of the trainer, the small-set links - see `data/README.md` |
 | `runs/` | one folder per training run (not in git) - see `runs/README.md` |
 | `results/` | the result package of each run (`results/<run id>/`: `package.json`, `provenance.json`, `split.json`; D40) and the finished experiments (`results/experiments/<folder>/`: card, summary, result files; D48) - see `results/README.md` |
-| `project.json`, `records/` | since D23 (2026-10-31) a problem of `../autoresearch/`: trainings start through `run.py` (card, ledger row, code tag `bf/<id>`, GPU slot shared with the lane problem); the ledger and the launcher's run records are in `records/`, the start line in `records/README.md` |
+| `project.json`, `records/` | since D23 (2026-10-31) a problem of `../autoresearch/`: trainings start through `run.py` (card, ledger row, code tag `bf/<id>`, GPU slot shared with the lane problem); the ledger and the launcher's run records are in `records/`, the start line in `records/README.md`, the job files of the suites (the chain GT -> training -> predictions -> numbers) in `records/jobs/` |
 | `_to_delete/` | what was taken out of the live tree, listed in `_to_delete/README.md` |
 | `experiments/` | the open cards (not run, draft, proposed, running): one folder per experiment (card, detail plan, summary); a finished experiment moves to `results/experiments/` - see `experiments/README.md` |
 
