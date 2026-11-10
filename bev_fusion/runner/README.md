@@ -21,7 +21,7 @@ python -m runner methods                                                        
 ```
 
 ```python
-from runner.runner import Runner                       # bev_fusion on sys.path
+from runner import Runner                              # bev_fusion on sys.path: the working folder, or PYTHONPATH=bev_fusion; the interpreter of the project (gcar)
 r = Runner()                                           # the project: bev_fusion
 r.predict("runs/t23_C_s1", "small.val", taps=["fused"])      # -> {results, frames_predicted, predictions_reused, warnings, ...}
 ```
@@ -41,6 +41,7 @@ text (`small.val`, `scenes:a,b:val`, `random:3:7:val`, `spread:1000:large.val`, 
 | file | what it is | self-test |
 |---|---|---|
 | `runner.py` | the class `Runner`: the six commands above, built on the pieces of `autoresearch/evalsuite` (frames, `ResultSet`, the frame iterator) and the project's adapter `../evaluation/bev_eval.py` with its ground-truth-free pair `../evaluation/bev_free.py` | `../tests/test_runner_class.py` (toy network, seconds), `../tests/test_runner_real.py` (a real run, minutes), `../tests/test_suites_conform.py` (the three classes against one convention) |
+| `__init__.py` | makes `from runner import Runner` work (the class lives in `runner.py`) | the same |
 | `__main__.py` | the command line: `python -m runner`, nothing but the generator pointed at the class | the same |
 | `bev_runner.py` | the planner-facing runner (frozen): `check`: the same input built and checked, nothing written (and the radar fan compared with the ground truth's own radar layer); `precompute`: layer 1 alone (the network input of chosen frames, no ground truth, one `.pt` per frame + `index.json`); `network`: layers 2 - 5 alone (a frames folder through the run's EMA network in time order, the memory carried between consecutive keyframes of a scene); `full`: both, frame by frame. Writes `objects.json` (boxes at every dt in the ego frame, planner records) and `maps.npz` (probability maps of dt 0). Guide: `python runner/bev_runner.py` | `../tests/test_runner.py` (a real run against its stored prototype) |
 

@@ -17,7 +17,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path.insert(0, ROOT)
 os.chdir(ROOT)
 from runner import __main__ as command_line  # noqa: E402
-from runner.runner import Runner  # noqa: E402
+from runner import Runner  # noqa: E402
 
 from evalsuite import selftest_api as TOY  # noqa: E402
 
