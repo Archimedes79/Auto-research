@@ -747,6 +747,8 @@
  "not_drawn": {
   "training/train_motion_block.py": "t12 experiment trainer of the motion block on a frozen, trained base model (the block itself is in the chain since t15, box Motion block M); not the main training",
   "training/startable.py": "tool: static checks, smoke config and start lines of a training config; no GPU, not part of the network",
+  "training/ab_timing.py": "tool: in-process A/B step timer (two speed settings in one process, blocks A B | B A, paired interval); not part of the network",
+  "training/launch_saving.py": "speed variants of the forward (D53 / D54: fused splat, one shared mover, sync-free forms, host copies), same arithmetic as the plain code and off by default; drawn as the plain boxes",
   "training/student_encoder.py": "t22 student image encoder (stage A: reproduces the cached DualBEV / BEVFusion outputs from the key-frame JPEG); in the chain only as the optional module `student` (ModelConfig.camera_student, off by default; model.STUDENTS, stage B), not drawn",
   "training/distill_student.py": "t22 stage A trainer of the student encoder (offline, against the cached teacher outputs); not part of the network",
   "training/gt_bev.py": "compatibility shim that re-exports GtGenerator",
