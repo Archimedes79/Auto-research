@@ -4,7 +4,9 @@ The OLD trainer is `training/train.py` of commit OLD_COMMIT (taken from git at t
 `autoresearch/trainkit`. Both run the REAL `train()` on the CPU on a toy network (a frozen part, a batch norm, a Kendall-like loss parameter; the toy loss depends on step_frac
 and draws once from torch's and numpy's global RNG per forward) with the same seed and the same batches, and must agree on everything a run leaves behind: the printed lines, every
 row of log.jsonl (all but the wall-clock fields), the step_frac every forward saw, the weights, EMA, optimiser state, RNG state and scaler of every checkpoint (bitwise), the files in
-the run folder, config.json, incident dumps, STOPPED, and the exception text of a refused or aborted start.
+the run folder, config.json, incident dumps, STOPPED, and the exception text of a refused or aborted start. Declared differences (ADDED, ADDED_VAL): the config fields added after the old
+commit and the keys n / n_skipped of a validation row. The loader of the toy is a plain re-iterable (no `iter_from`), so the data position of a resume (trainkit.data) is not part of
+this comparison: it is pinned by `python -m trainkit.selftest` and tests/test_train_guards.py.
 
   plain / frozen / bad / badfp16 / abort   probe, lr_groups, split clip, evaluation, pruning; train_only + fp16; non-finite steps, incidents; abort after max_bad_steps in a row
   crash, evalcrash                         a crash in the middle (log rows above the checkpoint are superseded, both RNG streams restored), a crash inside an evaluation
@@ -36,6 +38,7 @@ sys.path.insert(0, os.path.join(ROOT, "training"))
 OLD_COMMIT = "df9d4370723116462e879a335da9d3ec83841229"            # the last commit of training/train.py before the engine moved out (hygiene flag, lr_groups)
 WALL = ("t", "s_per_step", "t_data", "t_step")                   # wall-clock fields of a log row
 ADDED = ("student_anchor", "student_anchor_floor", "student_anchor_until")      # TrainConfig fields added after OLD_COMMIT (t22 stage B, default off): the old trainer has none, so they are left out of every config compared
+ADDED_VAL = ("n", "n_skipped")                                   # the keys a validation row has since 2026-11-10 (D73, review finding 2: the batches in the mean and the ones left out as non-finite); the old trainer has none, every value that it has stays compared
 if os.path.isdir("/dev/shm"):
     tempfile.tempdir = "/dev/shm"                               # the run folders of the toy are small and written with fsync: keep them off the disk
 
@@ -186,6 +189,8 @@ def snapshot(root, name):
         out = []
         for ln in open(p):
             r = json.loads(ln) if ln.strip().endswith("}") else {"cut": ln}
+            if isinstance(r.get("val"), dict):
+                r["val"] = {k: v for k, v in r["val"].items() if k not in ADDED_VAL}
             out.append(json.dumps({k: v for k, v in r.items() if k not in WALL}, sort_keys=True))
         return out
     here = lambda x: {k: v for k, v in json.loads(json.dumps(x, default=str).replace(root.replace("\\", "\\\\"), "<root>")).items() if k not in ADDED}      # noqa: E731 - the two roots differ: compare the rest of every path

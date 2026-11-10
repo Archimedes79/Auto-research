@@ -1,6 +1,7 @@
 """Checkpoints of a run: atomic save, load, resume from the newest readable one, warm start from another run, pruning, and the rules that refuse a resume.
 
-A checkpoint is {"state": model.* and loss.* tensors, "opt", "ema", "step", "cfg" (the config as a dict), "rng", "extra"}. `external` = state-key prefixes that are NOT saved
+A checkpoint is {"state": model.* and loss.* tensors, "opt", "ema", "step", "cfg" (the config as a dict), "rng" (torch, numpy and, when CUDA was up, "cuda": one state per device),
+"extra" ("scaler"; "data" = the position in the data, written when the data can be positioned: loop.py, data.py)}. `external` = state-key prefixes that are NOT saved
 because they come from elsewhere (a frozen pre-trained part of the model): they may be missing on a load, nothing else may."""
 import dataclasses
 import json
@@ -22,10 +23,28 @@ def model_state(model, loss, external=()):
     return sd
 
 
+def capture_rng():
+    """the random streams a resume must go on with: torch (CPU), numpy and, when CUDA is up in this process, the generator of every CUDA device (a random op on the GPU, e.g. the BEV
+    modality dropout, draws from it). Not initialising CUDA here keeps a CPU run off the GPU"""
+    rng = {"torch": torch.get_rng_state(), "numpy": np.random.get_state()}
+    if torch.cuda.is_initialized():
+        rng["cuda"] = torch.cuda.get_rng_state_all()
+    return rng
+
+
+def restore_rng(rng):
+    """the inverse of capture_rng; a checkpoint from before the CUDA key, or a process without CUDA, leaves the CUDA generators alone"""
+    torch.set_rng_state(rng["torch"])
+    np.random.set_state(rng["numpy"])
+    if "cuda" in rng and torch.cuda.is_initialized():
+        for i, state in enumerate(rng["cuda"][:torch.cuda.device_count()]):
+            torch.cuda.set_rng_state(state, i)
+
+
 def save_checkpoint(path, model, loss, opt, ema, step, cfg, extra=None, slim=False, external=()):
     ck = {"state": model_state(model, loss, external), "opt": opt.state_dict(),
           "ema": {k: v.cpu() for k, v in ema.shadow.items()}, "step": step, "cfg": dataclasses.asdict(cfg),
-          "rng": {"torch": torch.get_rng_state(), "numpy": np.random.get_state()}, "extra": extra or {}}
+          "rng": capture_rng(), "extra": extra or {}}
     if slim:                                                    # weights only (finished run): no optimiser state, no RNG
         del ck["opt"], ck["rng"]
         ck["slim"] = True
@@ -53,8 +72,7 @@ def load_checkpoint(path, model, loss, opt, ema, ck=None, external=()):
         opt.load_state_dict(ck["opt"])
     ema.shadow = {k: v.to(next(model.parameters()).device) for k, v in ck["ema"].items()}
     if "rng" in ck:
-        torch.set_rng_state(ck["rng"]["torch"])
-        np.random.set_state(ck["rng"]["numpy"])
+        restore_rng(ck["rng"])
     return ck["step"], ck.get("extra", {})
 
 
@@ -114,8 +132,9 @@ def refuse_slim_resume(ck, step, cfg, name):
 
 
 def resume(out_dir, model, loss, opt, ema, scaler, cfg, external=()):
-    """continue from the newest READABLE checkpoint of out_dir -> (step, was_slim), or None when the folder has none. A damaged one is kept as <name>.damaged and the one before is
-    tried; when none is readable the run stops (a restart at step 0 would mix two runs in one folder). The configuration must be the checkpoint's (check_resume)."""
+    """continue from the newest READABLE checkpoint of out_dir -> (step, was_slim, the saved position in the data: {"epoch", "pos"} or {}), or None when the folder has none. A damaged
+    one is kept as <name>.damaged and the one before is tried; when none is readable the run stops (a restart at step 0 would mix two runs in one folder). The configuration must
+    be the checkpoint's (check_resume)."""
     damaged = []
     ckpts = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
     for name in reversed(ckpts):
@@ -135,7 +154,7 @@ def resume(out_dir, model, loss, opt, ema, scaler, cfg, external=()):
             scaler.load_state_dict(ck_extra["scaler"])
         refuse_slim_resume(ck, step, cfg, name)
         print(f"resumed from {name} at step {step}", flush=True)
-        return step, bool(ck.get("slim"))
+        return step, bool(ck.get("slim")), ck_extra.get("data", {})
     if damaged:
         raise SystemExit(f"no readable checkpoint in {out_dir} (damaged: {damaged}): a restart at step 0 would mix two runs in "
                          f"one folder")

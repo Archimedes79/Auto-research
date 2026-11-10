@@ -3,8 +3,9 @@
     fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=..., hooks=...)
 
 The four parts of the contract (README.md): the MODEL and the LOSS are `torch.nn.Module`s (the loss module holds learnable loss weights; an empty `nn.Module()` if there are none),
-the DATA is any re-iterable of batches (a DataLoader, a list), the CONFIG is a `trainkit.config.Config`. The project supplies how one micro-batch is computed (`step_fn`), how a
-validation is made (`evaluate`) and, if it wants, probes (`Hooks`). `fit` guarantees, in this order, for every optimiser step:
+the DATA is any re-iterable of batches (a DataLoader, a list; with `iter_from(epoch, pos)`, as `trainkit.data.EpochLoader` has, a resume continues the pass it was in), the CONFIG is a
+`trainkit.config.Config`. The project supplies how one micro-batch is computed (`step_fn`), how a validation is made (`evaluate`) and, if it wants, probes (`Hooks`). `fit`
+guarantees, in this order, for every optimiser step:
   - the stop request (CONTROL file) is looked at first: checkpoint, STOPPED file, exit code 75
   - the learning rate of every group follows the schedule (warm-up, cosine, the own rate of an lr_groups prefix)
   - `accum` micro-batches are computed by `step_fn` (forward and backward inside it); a micro-batch with a non-finite loss skips the step
@@ -98,7 +99,7 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     scaler = make_scaler(cfg, device)                           # amp "fp16" only
     ema = EMA(model, cfg.ema, skip=frozen)
     resumed = checkpoint.resume(out_dir, model, loss, opt, ema, scaler, cfg, external)
-    step, was_slim = resumed or (0, False)
+    step, was_slim, data_pos = resumed or (0, False, {})
     if resumed is None and cfg.init_from:                       # a new run warm-started from another run's checkpoint
         fresh = checkpoint.warm_start(cfg.init_from, model, loss, reset=cfg.init_reset)
         lost = sorted(set(fresh) & set(frozen))
@@ -111,9 +112,21 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     with open(os.path.join(out_dir, "config.json"), "w") as f:
         json.dump(dataclasses.asdict(cfg), f, indent=1)
     log = open(os.path.join(out_dir, "log.jsonl"), "a")
+    positioned = hasattr(batches, "iter_from")                  # data that can open a pass at (epoch, pos): trainkit.data.EpochLoader; a resume then continues the pass it was in
+    ident = batches.position_id() if positioned else {}         # what the position is valid for (the number of samples, the batch size)
+    epoch, pos = data_pos.get("epoch", 0), data_pos.get("pos", 0)       # the pass over the data and the micro-batches taken from it
+    if resumed is not None:                                     # a position that does not fit is said, never used silently
+        if positioned and not data_pos:
+            print("no data position in the checkpoint (it is from before the loader could resume a pass): pass 0 of the order of this seed starts again", flush=True)
+        elif positioned and any(data_pos.get(k) != v for k, v in ident.items()):
+            print(f"the data position of the checkpoint {data_pos} does not fit these data {ident}: pass {epoch} starts again at its beginning", flush=True)
+            pos = 0
+        elif data_pos and not positioned:
+            print(f"the checkpoint holds a data position {data_pos}, but these data cannot continue a pass: a pass starts again at its beginning", flush=True)
 
     def save(n, slim=False):
-        checkpoint.save_checkpoint(os.path.join(out_dir, f"ckpt_{n:08d}.pt"), model, loss, opt, ema, n, cfg, extra=scaler_extra(scaler), slim=slim, external=external)
+        extra = {**scaler_extra(scaler), **({"data": {"epoch": epoch, "pos": pos, **ident}} if positioned else {})}
+        checkpoint.save_checkpoint(os.path.join(out_dir, f"ckpt_{n:08d}.pt"), model, loss, opt, ema, n, cfg, extra=extra, slim=slim, external=external)
 
     def validate(n, note=""):
         ev = evaluate(ema)
@@ -124,15 +137,21 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     if evaluate is not None and step and cfg.eval_every and step % cfg.eval_every == 0 and not runlog.val_logged(out_dir, step):   # the run died inside the evaluation
         validate(step, " (the evaluation a crash had cut)")                                                                        # of this step (the checkpoint is saved before it)
     model.train()
-    it = iter(batches)
+
+    def open_pass():                                            # any other re-iterable starts a pass afresh (its order is not ours to restore)
+        return batches.iter_from(epoch, pos) if positioned else iter(batches)
+    it = open_pass()
 
     def next_batch():
-        nonlocal it
+        nonlocal it, epoch, pos
         try:
-            return next(it)
+            item = next(it)
         except StopIteration:
-            it = iter(batches)
-            return next(it)
+            epoch, pos = epoch + 1, 0
+            it = open_pass()
+            item = next(it)
+        pos += 1
+        return item
     params = [p for g in opt.param_groups for p in g["params"]]
     bad, n_overflow, t0, step0, last = 0, 0, time.time(), step, {}
     while step < cfg.steps:

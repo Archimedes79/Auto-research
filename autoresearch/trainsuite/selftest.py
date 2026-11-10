@@ -120,6 +120,12 @@ def early_checks(tmp, ok):
     H, L = dict(better="higher"), dict(better="lower")
     rk = make(tmp, "early_keys", rows(5), total=1000, done=True, evals=[(100, {"score": 1.0, "n": 40, "n_skipped": 2, "total_last_warm": 2.0})])
     assert E.default_keys([Run(rk)]) == ["val.score"], E.default_keys([Run(rk)])      # the validation counts of the trainer are no metric to compare
+    nv = make(tmp, "nan_v", rows(5), total=1000, done=True, evals=[(100, {"score": 1.0, "total": 1.0}), (500, {"score": float("nan"), "total": float("nan"), "n": 0, "n_skipped": 3})])
+    nc = make(tmp, "nan_c", rows(5), total=1000, done=True, evals=[(100, {"score": 0.5, "total": 2.0}), (500, {"score": 0.7, "total": 1.5})])
+    assert E.gap_at(Run(nv), Run(nc), "val.score", 1000, 1) is None, "a NaN validation (no finite batch) is no gap, and not the gap of the evaluation before it"
+    assert E.gap_at(Run(nc), Run(nc), "val.score", 1000, 1) is not None and E.gap_at(Run(nv), Run(nc), "val.score", 200, 1) is not None, "a finite pair, and an early step before the NaN, still give a gap"
+    codes_ = lambda run: {f.code: f.level for f in health.check(run)}                                         # noqa: E731
+    assert codes_(Run(nv)).get("val_nonfinite") == "alert" and codes_(Run(rk)).get("val_skipped") == "warn" and "val_skipped" not in codes_(Run(nc)) and "val_nonfinite" not in codes_(Run(nc)),         (codes_(Run(nv)), codes_(Run(rk)))                                                                  # a diverged or partly skipped validation is a finding, a clean one is not
 
     fin = [0.1 * k * (-1) ** k for k in range(1, 9)]                         # 8 final gaps of both signs and different sizes
     # the early gap predicts the final one: sign agreement 8 of 8, rank correlation 1; a finished pair with another step total, an unfinished one

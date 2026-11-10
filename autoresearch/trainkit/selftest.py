@@ -1,7 +1,9 @@
 """Self-test of the engine on a toy (CPU, a few seconds): known answers for the schedule, the EMA, the clip and step rules, the resume rules and the stop protocol, and the
 example of README.md end to end (gradient reaches every parameter, accumulation, checkpoints, resume, stop, hooks).
 Run: python -m trainkit.selftest    (from autoresearch/)"""
+import contextlib
 import dataclasses
+import io
 import json
 import math
 import os
@@ -15,9 +17,10 @@ from torch import nn
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from trainkit import checkpoint, control, optim, schedule  # noqa: E402
 from trainkit.config import Config  # noqa: E402
+from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.ema import EMA  # noqa: E402
 from trainkit.loop import Hooks, StepInfo, fit  # noqa: E402
-from trainkit.util import prepare_run_dir  # noqa: E402
+from trainkit.util import prepare_run_dir, seed_all  # noqa: E402
 
 
 class Net(nn.Module):                                    # the MODEL
@@ -62,6 +65,36 @@ def run(tmp, name="toy", batches=None, stop_check=None, hooks=None, step_fn=None
         return {"total": float(l.detach())}, bool(torch.isfinite(l)), None
     out = fit(cfg, model, loss, toy_data() if batches is None else batches, step_fn or default_step, prepare_run_dir(cfg), "cpu", stop_check=stop_check, hooks=hooks)
     return cfg, model, loss, out
+
+
+def resume_toy(tmp, name, plain=False, stop=None, n=40, batch_size=4):
+    """24 steps (accum 2) on shuffled data, whose step draws a random mask from the global stream; stopped after `stop` steps -> None, else (model, loss, EMA, the logged totals).
+    The data order of `plain` is the global stream's (a plain DataLoader), the other one's is a function of (seed, epoch) (trainkit.data)"""
+    cfg = Config(name=name, out_root=tmp, steps=24, accum=2, warmup=2, lr=0.05, device="cpu", log_every=4, save_every=6, eval_every=0)
+    seed_all(cfg.seed)                                   # as train.py: the seed first, then the model, then the loaders
+    model, loss = Net(), Loss()
+    g = torch.Generator().manual_seed(1)
+    data = torch.utils.data.TensorDataset(torch.randn(n, 4, generator=g), torch.randn(n, 1, generator=g))
+    batches = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=True, drop_last=True) if plain else EpochLoader(data, batch_size, cfg.seed, drop_last=True)
+
+    def step_fn(batch, info):
+        x, y = batch
+        l = loss(model.fc(x * (torch.rand(x.shape[0], 1) > 0.2).float()), y)       # like the BEV modality dropout: a random op on the training path
+        info.backward(l)
+        return {"total": float(l.detach())}, bool(torch.isfinite(l)), None
+    try:
+        _, _, ema, _ = fit(cfg, model, loss, batches, step_fn, prepare_run_dir(cfg), "cpu", stop_check=stop_after(stop) if stop else None)
+    except SystemExit as e:
+        assert e.code == control.EXIT_STOPPED
+        return None
+    rows = [json.loads(ln) for ln in open(os.path.join(tmp, name, "log.jsonl"))]
+    return model, loss, ema, [r["total"] for r in rows]
+
+
+def same_run(a, b):
+    """two toy runs end in the same weights, EMA and logged totals, bit for bit"""
+    return all(torch.equal(p, q) for p, q in zip(list(a[0].parameters()) + list(a[1].parameters()), list(b[0].parameters()) + list(b[1].parameters()))) \
+        and all(torch.equal(a[2].shadow[k], b[2].shadow[k]) for k in a[2].shadow) and a[3] == b[3]
 
 
 def check(cond, msg):
@@ -128,6 +161,36 @@ def main():
         want = (torch.rand(()).item(), np.random.rand())
         checkpoint.load_checkpoint(os.path.join(tmp, "rng.pt"), model, loss, o, e_rng)
         check((torch.rand(()).item(), np.random.rand()) == want, "checkpoint: the torch and numpy random streams go on where they were saved")
+        cuda = {a: getattr(torch.cuda, a) for a in ("is_available", "is_initialized", "device_count", "get_rng_state_all", "set_rng_state")}       # the CUDA generators, stubbed: no GPU is started here
+        gpu_state, seen, asked = torch.arange(16, dtype=torch.uint8), [], []
+        try:
+            torch.cuda.is_available, torch.cuda.is_initialized = (lambda: True), (lambda: False)                # a GPU is there, this process has not started CUDA
+            torch.cuda.get_rng_state_all = lambda: asked.append(1) or [gpu_state]
+            checkpoint.save_checkpoint(os.path.join(tmp, "nocuda.pt"), model, loss, o, e_rng, 1, cfg)
+            check("cuda" not in torch.load(os.path.join(tmp, "nocuda.pt"), weights_only=False)["rng"] and not asked, "checkpoint: a process that has not started CUDA saves no CUDA state and does not start it (the generators are not asked)")
+            torch.cuda.is_initialized, torch.cuda.device_count = (lambda: True), (lambda: 1)
+            torch.cuda.set_rng_state = lambda state, device: seen.append((device, state))
+            checkpoint.save_checkpoint(os.path.join(tmp, "cuda.pt"), model, loss, o, e_rng, 1, cfg)
+            checkpoint.load_checkpoint(os.path.join(tmp, "cuda.pt"), model, loss, o, e_rng)
+            check(len(seen) == 1 and seen[0][0] == 0 and torch.equal(seen[0][1], gpu_state), "checkpoint: the CUDA generator of every device is saved and restored (a random op on the GPU goes on where it was)")
+            two = [gpu_state, gpu_state + 1]
+            torch.cuda.get_rng_state_all, torch.cuda.device_count = (lambda: two), (lambda: 2)
+            checkpoint.save_checkpoint(os.path.join(tmp, "cuda2.pt"), model, loss, o, e_rng, 1, cfg)
+            seen.clear()
+            checkpoint.load_checkpoint(os.path.join(tmp, "cuda2.pt"), model, loss, o, e_rng)
+            check([d for d, _ in seen] == [0, 1] and torch.equal(seen[0][1], two[0]) and torch.equal(seen[1][1], two[1]), "checkpoint: two devices, each generator goes back to its own device")
+            torch.cuda.device_count = lambda: 1
+            seen.clear()
+            checkpoint.load_checkpoint(os.path.join(tmp, "cuda2.pt"), model, loss, o, e_rng)
+            check([d for d, _ in seen] == [0], "checkpoint: a machine with fewer devices than the checkpoint restores the ones it has")
+            seen.clear()
+            checkpoint.load_checkpoint(os.path.join(tmp, "nocuda.pt"), model, loss, o, e_rng)
+            torch.cuda.is_initialized = lambda: False
+            checkpoint.load_checkpoint(os.path.join(tmp, "cuda.pt"), model, loss, o, e_rng)                   # a process without CUDA
+            check(seen == [], "checkpoint: one without the CUDA key loads, and one with it loads in a process without CUDA, without touching a generator")
+        finally:
+            for a, v in cuda.items():
+                setattr(torch.cuda, a, v)
         # accumulation: backward of two micro-batches (accum 2) = the gradient of their mean
         a, b = toy_data(2)
         m1, l1 = Net(), Loss()
@@ -175,6 +238,50 @@ def main():
             raise AssertionError("must abort")
         except RuntimeError as e:
             check("too many non-finite" in str(e), "fit: max_bad_steps skipped steps in a row abort the run")
+    # EpochLoader: pass e is the same whenever and wherever it is built; iter_from(e, p) is that pass without its first p batches (also through persistent workers); no global stream is drawn
+    data = torch.utils.data.TensorDataset(torch.arange(10.0))
+    flat = lambda it: [b[0].tolist() for b in it]                                                           # noqa: E731
+    loader = EpochLoader(data, 3, 7, drop_last=True)
+    pass0, pass1 = flat(loader), flat(loader)
+    check(pass0 != pass1 and len(pass0) == len(pass1) == 3, "EpochLoader: every pass is another order of the data (10 samples in batches of 3, drop_last: 3 batches)")
+    check(flat(EpochLoader(data, 3, 7, drop_last=True).iter_from(1, 0)) == pass1 and flat(EpochLoader(data, 3, 8, drop_last=True).iter_from(1, 0)) != pass1, "EpochLoader: pass 1 is a function of (seed, epoch), the same in a new loader, another with another seed")
+    check(flat(EpochLoader(data, 3, 7, drop_last=True).iter_from(1, 0)) != flat(EpochLoader(data, 3, 8, drop_last=True).iter_from(0, 0)),
+          "EpochLoader: pass 1 of seed 7 is not pass 0 of seed 8 (seeds are not shifted copies of one order)")
+    state = torch.get_rng_state()
+    skipped = flat(loader.iter_from(1, 1))
+    check(skipped == pass1[1:] and torch.equal(state, torch.get_rng_state()), "EpochLoader.iter_from(1, 1): pass 1 without its first batch; the global random stream was not drawn")
+    workers = EpochLoader(data, 3, 7, drop_last=True, num_workers=2, persistent_workers=True)
+    check(flat(workers.iter_from(1, 1)) == pass1[1:] and flat(workers.iter_from(0, 0)) == pass0 and flat(workers.iter_from(0, 3)) == [], "EpochLoader: the same through persistent workers, also from the end of a pass (nothing left)")
+    # a stop at step 12 + the resume is the uninterrupted run, bit for bit: the data order (a function of seed and epoch, the position saved), the random op of the step (the global stream)
+    with tempfile.TemporaryDirectory() as tmp:
+        ref = resume_toy(tmp, "ref")
+        check(resume_toy(tmp, "stp", stop=12) is None, "resume: the toy is stopped after step 12 (two and a half passes over its 10 batches)")
+        d = os.path.join(tmp, "stp")
+        check(torch.load(os.path.join(d, "ckpt_00000012.pt"), weights_only=False)["extra"]["data"] == {"epoch": 2, "pos": 4, "n": 40, "batch_size": 4}, "checkpoint: the position in the data (pass 2, 4 batches taken) and what it is valid for (40 samples, batch size 4)")
+        check(same_run(ref, resume_toy(tmp, "stp")), "resume: stop + resume gives the uninterrupted run's weights, EMA and logged losses, bit for bit")
+        plain_ref = resume_toy(tmp, "plain_ref", plain=True)
+        resume_toy(tmp, "plain_stp", plain=True, stop=12)
+        check(not same_run(plain_ref, resume_toy(tmp, "plain_stp", plain=True)), "resume: control, a plain shuffling DataLoader (global random stream, no position) is not the uninterrupted run")
+        resume_toy(tmp, "old", stop=12)
+        path = os.path.join(tmp, "old", "ckpt_00000012.pt")
+        ck = torch.load(path, weights_only=False)
+        del ck["extra"]["data"]                                                                              # a checkpoint from before the position was saved
+        torch.save(ck, path)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            done = resume_toy(tmp, "old")
+        check(done is not None and "no data position in the checkpoint" in buf.getvalue(), "resume: a checkpoint without the position still resumes (from the start of pass 0) and says so")
+        for what, kw in (("a dataset of another length", dict(n=36)), ("another batch size", dict(batch_size=2))):
+            resume_toy(tmp, "fit_" + what[:7], stop=12)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                done = resume_toy(tmp, "fit_" + what[:7], **kw)
+            check(done is not None and "does not fit these data" in buf.getvalue() and "pass 2 starts again at its beginning" in buf.getvalue(), f"resume: {what} than the checkpoint's position was made for: said, the pass starts again")
+        resume_toy(tmp, "xpl", stop=12)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            done = resume_toy(tmp, "xpl", plain=True)
+        check(done is not None and "these data cannot continue a pass" in buf.getvalue(), "resume: a plain loader meets a checkpoint with a position: said, not silently ignored")
     # a NaN input writes NaN into the batch-norm statistics: the step is skipped, but the run must not go on with a poisoned model (EMA and checkpoints would carry NaN)
     with tempfile.TemporaryDirectory() as tmp:
         class BNNet(nn.Module):

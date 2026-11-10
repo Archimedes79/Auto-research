@@ -76,6 +76,11 @@ def check(run, ref=None, since_step=None):
     n_skip, in_row = run.skipped_steps()
     if n_skip:
         add("alert" if in_row >= 3 else "warn", "skipped", f"{n_skip} non-finite step(s) skipped by the trainer (up to {in_row} in a row)")
+    last_val = run.evals[-1] if run.evals else {}
+    if "val.total" in last_val and not math.isfinite(last_val["val.total"]):
+        add("alert", "val_nonfinite", "the last validation has no finite batch (val.total is NaN): the model diverged or the validation data is broken")
+    elif last_val.get("val.n_skipped", 0) > 0:
+        add("warn", "val_skipped", f"the last validation left out {int(last_val['val.n_skipped'])} of {int(last_val['val.n_skipped'] + last_val.get('val.n', 0))} batches with a non-finite loss")
     if not rows:
         return out or [Finding("info", "no_metrics", "no metrics logged yet")]
     bad = [int(r["step"]) for r in rows if any(not math.isfinite(v) for v in r.values())]

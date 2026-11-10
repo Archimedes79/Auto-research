@@ -102,6 +102,8 @@ def gap_at(var, ctl, key, limit, sgn, min_step=0.0):
         if not common:
             return None
         s = common[-1]
+        if not (math.isfinite(a[s]) and math.isfinite(b[s])):                    # a diverged validation (the trainer writes NaN when no batch was finite) is no gap: not the one before it either
+            return None
         return advantage(a[s], b[s], sgn), s, sum(1 for x in a if x <= s)
     if min(var.step, ctl.step) < limit:
         return None

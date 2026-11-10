@@ -49,10 +49,12 @@ while not os.path.isdir(os.path.join(_REPO, "autoresearch", "trainkit")) and os.
     _REPO = os.path.dirname(_REPO)
 if os.path.join(_REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(_REPO, "autoresearch"))
+import trainkit  # noqa: E402
 from trainkit import checkpoint as tk_ckpt  # noqa: E402
 from trainkit import control  # noqa: E402
 from trainkit.config import Config  # noqa: E402
 from trainkit.control import EXIT_STOPPED  # noqa: E402
+from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
 from trainkit.optim import clip_groups, lr_group_params  # noqa: E402
 from trainkit.util import detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
@@ -268,7 +270,9 @@ def collate_clips(clips, fn):
 def make_loader(ds, cfg, train, workers=None, generator=None):
     """workers: default cfg.workers. The validation loader of train() gets at most 2 workers that are not kept alive between evaluations,
     and its own generator: a worker that builds a missing GT loads the map files, and t7_rgb_s1 died of ENOMEM in validation worker 4 at
-    its first evaluation (2026-10-31); with the generator an evaluation no longer draws from the training's random stream."""
+    its first evaluation (2026-10-31); with the generator an evaluation no longer draws from the training's random stream.
+    The training loader (train, no generator given) is a trainkit EpochLoader: the order of a pass is a function of (cfg.seed, epoch), so a resumed run
+    sees the pass it was in from the batch it stopped at (and the order of a new run is no longer drawn from the global random stream)."""
     fn = collate_cached if cfg.feature_cache else collate
     if cfg.seq_len > 1:
         fn = functools.partial(collate_clips, fn=fn)
@@ -278,8 +282,10 @@ def make_loader(ds, cfg, train, workers=None, generator=None):
         extra["pin_memory"] = True
     if cfg.prefetch_factor > 0 and n > 0:
         extra["prefetch_factor"] = cfg.prefetch_factor
-    return torch.utils.data.DataLoader(ds, batch_size=cfg.batch_size, shuffle=train, num_workers=n, collate_fn=fn, drop_last=train,
-                                       persistent_workers=train and n > 0, generator=generator, **extra)
+    common = dict(batch_size=cfg.batch_size, num_workers=n, collate_fn=fn, drop_last=train, persistent_workers=train and n > 0, **extra)
+    if train and generator is None:
+        return EpochLoader(ds, seed=cfg.seed, **common)
+    return torch.utils.data.DataLoader(ds, shuffle=train, generator=generator, **common)
 
 
 def to_device(batch, device, non_blocking=False):
@@ -569,8 +575,9 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
     """Validation loss (and groups) under the EMA weights, decoded like in training (cfg.gap_ego), without the train-only
     terms; eval_fn(model, loader) -> dict is an optional metrics hook. With clips (seq_len > 1) the state is carried through
     the clip, and the LAST keyframe is also run cold (no memory): total_last_warm / total_last_cold are the same frames with
-    and without the carried memory (paired)."""
-    tot, n = {}, 0
+    and without the carried memory (paired). A batch with a non-finite loss is left out of the mean and counted: the result carries `n` (batches in the mean) and `n_skipped`
+    (logged as val.n, val.n_skipped); when none is finite the loss totals are NaN (never 0 or missing: a diverged model must not read as a good one)."""
+    tot, n, skipped = {}, 0, 0
     with ema.applied(model):
         with torch.no_grad():
             for i, item in enumerate(loader):
@@ -579,6 +586,7 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
                 clip = item if isinstance(item, list) else [item]
                 out, ok, _, totals = run_clip(model, loss, clip, 1.0, device, amp, cfg, train_terms=False)
                 if not ok:
+                    skipped += 1
                     continue
                 for k, v in out.items():
                     if k == "total" or k.startswith("group.") or k in LOGGED_TERMS:
@@ -588,7 +596,10 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
                     tot["total_last_warm"] = tot.get("total_last_warm", 0.0) + totals[-1]
                     tot["total_last_cold"] = tot.get("total_last_cold", 0.0) + _f(cold["total"])
                 n += 1
-        res = {k: v / max(1, n) for k, v in tot.items()}
+        res = {k: v / n for k, v in tot.items()} if n else {"total": float("nan")}
+        res.update(n=n, n_skipped=skipped)
+        if skipped:
+            print(f"WARNING: validation left out {skipped} of {n + skipped} batches with a non-finite loss", flush=True)
         if eval_fn is not None:
             res.update(eval_fn(model, loader))
     return res
@@ -696,6 +707,21 @@ class ProbeHooks(Hooks):
     def close(self):
         if self.prof is not None:
             self.prof.close()
+
+
+def check_engine(here=None, engine=None):
+    """-> the log line that says which trainkit this process runs; SystemExit when a pinned copy lies next to this file but another trainkit was imported (the run would not train on its
+    code snapshot). run_ar.sh puts the copy next to train.py; a snapshot made before D48 or another launcher has none, and then the live autoresearch/trainkit is what runs.
+    here / engine: the folder of this file and of the imported trainkit (the arguments are for the test)."""
+    here = here or os.path.dirname(os.path.abspath(__file__))
+    engine = engine or os.path.dirname(os.path.abspath(trainkit.__file__))
+    pinned = os.path.join(here, "trainkit")
+    if not os.path.isdir(pinned):
+        return f"trainkit: the live copy {engine} (no pinned copy next to train.py)"
+    if os.path.realpath(pinned) != os.path.realpath(engine):
+        raise SystemExit(f"train.py: a pinned trainkit lies next to it ({pinned}) but {engine} was imported: the run would not train on its code snapshot "
+                         "(look at sys.path and PYTHONPATH)")
+    return f"trainkit: the pinned copy {pinned}"
 
 
 def train(cfg, eval_fn=None, datasets=None):
@@ -1082,6 +1108,7 @@ def read_config(path):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
+        print(check_engine(), flush=True)
         train(read_config(sys.argv[1]))
     else:
         _selftest()
