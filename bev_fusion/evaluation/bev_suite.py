@@ -35,7 +35,7 @@
     front REF SYSTEM [SYSTEM ...] [--x-max 50] [--n 1000] [--boot 1000] [--out FILE.md]   front-sector detection table of several evaluated
                                                 runs (or LABEL=FILE.pkl records): AP at 0.5 / 1 / 2 / 4 m, mAP2, per range bin, difference to REF with the
                                                 paired scene bootstrap; same GT / frame checks as compare (evaluation/front_compare.py)
-Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train  --ckpt-dir DIR (moved checkpoints)
+Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train|<split>.<part>  --ckpt-dir DIR (moved checkpoints)
                 --control shuffle_radar|zero_radar|shuffle_cam|zero_cam  --out DIR (default RUN/eval/suite)  --state carry|reset
 Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/EXTENSIONS.md chapter 5 for what each command writes.
 """
@@ -55,6 +55,7 @@ sys.path.insert(0, os.path.join(ROOT, ".."))                       # so that `au
 sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 sys.path.insert(0, ROOT)
 from evaluation import bev_adapter as A  # noqa: E402  (numpy only at import: the chain's code is imported later, after setup_paths)
+from evaluation import bev_sets  # noqa: E402
 
 HEADLINE_LAYERS = (("drivable_area", "iou@0"), ("drivable_area", "iou@0.5"), ("ped_crossing", "iou@0"), ("walkway", "iou@0"),
                    ("carpark_area", "iou@0"), ("lane_divider", "iou@0.5"), ("lane_divider", "iou@1"), ("road_divider", "iou@1"),
@@ -62,8 +63,9 @@ HEADLINE_LAYERS = (("drivable_area", "iou@0"), ("drivable_area", "iou@0.5"), ("p
                    ("centreline", "iou@0.5"), ("centreline", "iou@1"), ("centreline:dir", "angle_mae"))        # the 1 m centre-line head's rows (headline_table lists only the keys a run has)
 
 
-def tag_of(warm: bool, on_train: bool, control: str) -> str:
-    return ("_warm" if warm else "") + ("_train" if on_train else "") + (f"_ctl_{control}" if control else "")
+def tag_of(warm: bool, split: str, control: str) -> str:
+    """the suffix of the outputs: warm, the set (bev_sets.tag: '' for val, '_train', '_small_val') and the control"""
+    return ("_warm" if warm else "") + bev_sets.tag(split) + (f"_ctl_{control}" if control else "")
 
 
 def _flat_name(m: str, rest: str, prefix_seg: str):
@@ -159,11 +161,11 @@ def data_use(split: str, store, avail=None) -> dict:
     this evaluation came from (their names, so another person can look them up); the test split of nuScenes has no public ground truth and is not used"""
     try:
         from nuscenes.utils.splits import create_splits_scenes
-        official = set(create_splits_scenes().get(split, []))
+        official = set(create_splits_scenes().get(bev_sets.part_of(split), []))      # a set small.val is checked against the official val scenes
     except Exception:                                    # no devkit: the counts stay unknown, the names stay
         official = set()
     used = sorted(store.scene_names())
-    return {"split_rule": f"nuScenes official split '{split}' (nuscenes.utils.splits.create_splits_scenes), restricted to the scenes with cached features; "
+    return {"set": split, "split_rule": f"nuScenes official split '{bev_sets.part_of(split)}' (nuscenes.utils.splits.create_splits_scenes), restricted to the scenes with cached features; "
                           "the nuScenes test split has no public ground truth and is not used",
             "scenes_official": len(official) or None, "scenes_available": len(avail) if avail is not None else None, "scenes_evaluated": len(used),
             "frames_evaluated": len(store.frames), "scenes_not_in_official_split": [s for s in used if official and s not in official],
@@ -331,7 +333,7 @@ def cmd_eval(a, rest) -> int:
                    help="resume a stored run made before the GT signature was recorded (labelled 'mixed'), or finish a store that was started with other evaluator code; "
                         "another recorded GT is always refused")
     e = p.parse_args(rest)
-    tag = tag_of(e.warm, a.split == "train", a.control)
+    tag = tag_of(e.warm, a.split, a.control)
     state = "carry" if e.warm else "reset"
     suite = make_suite(a, state=state)
     prov0 = provenance_start(suite)                                         # the evaluator's and the checkpoint's hash NOW, before any frame is scored
@@ -341,7 +343,8 @@ def cmd_eval(a, rest) -> int:
     desc = suite.source.describe()
     gt_now = desc.get("gt_signature")                                    # the GT scored against (autogt is read live, not pinned)
     quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
-    stores = [os.path.join(quant_dir, name)] + ([os.path.join(quant_dir, f"prior{e.prior}_n{e.n or 'all'}")] if e.prior else [])    # the prior baseline's stored run as well
+    ptag = bev_sets.tag(a.split) if bev_sets.parse(a.split)[0] is not None else ""     # the prior baseline of another set is another store (its train frames are the set's)
+    stores = [os.path.join(quant_dir, name)] + ([os.path.join(quant_dir, f"prior{ptag}{e.prior}_n{e.n or 'all'}")] if e.prior else [])    # the prior baseline's stored run as well
     refusal, gt_sig = gt_conflict(stores[0], gt_now, e.force_resume)
     for st_dir in stores[1:]:
         refusal = refusal or gt_conflict(st_dir, gt_now, e.force_resume)[0]
@@ -376,7 +379,7 @@ def cmd_eval(a, rest) -> int:
     if e.prior:
         psuite = make_suite(a, prior=e.prior, state="reset", evaluator=desc.get("evaluator_hash"))       # the main suite's hash: both stores were checked against it above
         pstore = quant_run(psuite, force_evaluator=e.force_resume, frames=frames or [f for s in suite.source.scenes() for f in suite.source.frames(s)], state="reset",
-                                  name=f"prior{e.prior}_n{e.n or 'all'}", progress=50)
+                                  name=f"prior{ptag}{e.prior}_n{e.n or 'all'}", progress=50)
         pflat, pbetter = prior_numbers(psuite.quant.table(pstore), psuite.task.metrics())
         flat.update(pflat)
         better.update(pbetter)
@@ -604,6 +607,7 @@ def cmd_compare(argv) -> int:
     p.add_argument("run_a")
     p.add_argument("run_b")
     p.add_argument("--tag", default="")
+    p.add_argument("--split", default="val", help="the set both runs were evaluated on (val, train or <split>.<part>, evaluation/bev_sets.py --list); it adds its suffix to --tag")
     p.add_argument("--n", default="all", help="the n of the evaluations (as in the store name evalTAG_nN)")
     p.add_argument("--boot", type=int, default=1000)
     p.add_argument("--seed", type=int, default=0)
@@ -615,6 +619,10 @@ def cmd_compare(argv) -> int:
     p.add_argument("--fusion", action="store_true", help="compare the stores made with `eval --fusion` (detf / detfp / cov)")
     p.add_argument("--velocity", action="store_true", help="compare the stores made with `eval --velocity` (vel)")
     c = p.parse_args(argv)
+    try:
+        c.tag += bev_sets.tag(c.split)
+    except ValueError as ex:
+        p.error(str(ex))
     from evalsuite.quantitative import Quantitative
     name = f"eval{c.tag}{'_curves' if c.curves else ''}{'_fusion' if c.fusion else ''}{'_vel' if c.velocity else ''}_n{c.n}"
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
@@ -645,7 +653,7 @@ def cmd_compare(argv) -> int:
     q = Quantitative(SimpleNamespace(out=os.path.join(c.run_a, "eval", "suite"), task=task))
     res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed,
                     force=c.force, ignore=COMPARE_IGNORE)
-    print(f"paired scene bootstrap ({c.boot} resamples), b - a; a = {c.run_a}, b = {c.run_b}; val; {res['n_common_frames']} common frames")
+    print(f"paired scene bootstrap ({c.boot} resamples), b - a; a = {c.run_a}, b = {c.run_b}; {c.split}; {res['n_common_frames']} common frames")
     for k, v in res["metrics"].items():
         print(f"{k:62s} a {v['a']:.4f}  b {v['b']:.4f}  b-a {v['diff']:+.4f}  {interval_text(v)}")
     return 0
@@ -721,6 +729,9 @@ def cmd_generalisation(a, rest) -> int:
     return cmd_report(a, ["--no-pictures", "--val-table", paths["val"], "--train-table", paths["train"]])
 
 
+OWN_COMMANDS = ("memory", "report", "generalisation", "time", "timing")       # write the run's plain files (memory.json, report/, latency.json, ...): not on a named set
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "compare":
@@ -732,7 +743,7 @@ def main(argv=None) -> int:
     p.add_argument("run")
     p.add_argument("--device", default="cuda")
     p.add_argument("--workers", type=int, default=2)
-    p.add_argument("--split", default="val", choices=["val", "train"])
+    p.add_argument("--split", default="val", help="the set to run on: val | train (the run's own lists) or <split>.<part> of splits/ (small.val, large.train, ...; evaluation/bev_sets.py --list)")
     p.add_argument("--ckpt-dir", default=None)
     p.add_argument("--curves", action="store_true", help="also PR / ROC / calibration per layer and velocity regression (evaluation/bev_curves.py)")
     p.add_argument("--fusion", action="store_true", help="also boxes scored on the fusion area (detf: care boxes, detfp: + partial) and the coverage split of the complete GT set (cov), D37 / D38 (evaluation/bev_fusion_area.py)")
@@ -741,7 +752,15 @@ def main(argv=None) -> int:
     p.add_argument("--out", default=None)
     p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])
     a, command = p.parse_known_args(argv)                      # the global options anywhere; the rest is the command
+    try:
+        named = bev_sets.parse(a.split)[0] is not None
+    except ValueError as ex:
+        p.error(str(ex))
     a.command = command
+    if named and a.command and a.command[0] in OWN_COMMANDS:
+        p.error(f"`{a.command[0]}` is about the run's own evaluation (--split val | train), not about the set {a.split}")
+    if named and a.out is None and a.command and a.command[0] != "eval":     # pictures, videos, stores, the module probe: a folder of the set's own, never the run's plain ones
+        a.out = os.path.join(a.run, "eval", ("modules" if a.command[0] == "modules" else "suite") + bev_sets.tag(a.split))
     a.run = a.run.rstrip("/")
     if not a.command:
         p.error("a command is required (qual, quant, list, eval, compare, selftest-adapter)")

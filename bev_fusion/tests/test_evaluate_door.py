@@ -11,7 +11,12 @@ checkpoint through --ckpt-dir, the stored eval/ of the run is never written) giv
 number for number. CPU, because a GPU is not bit-reproducible: two runs of the same bev_suite command differ in about 800 of 5200 numbers (median 1e-5 relative, a
 detection at the score threshold in or out: n_det +-1), so on the GPU the door is only inside that noise. It skips with a message when the run has no checkpoint here.
 
-Usage (from the bev_fusion folder): python tests/test_evaluate_door.py [--real [RUN] [--n 4] [--device cpu|cuda]]
+With --sets (a run trained on a split of splits/, default runs/t16_full_s0 = large, CPU, 4 frames, about 6 minutes): the sets of evaluation/bev_sets.py against the run's own lists:
+`--split large.val` and `--split large.train` give the numbers of `--split val` / `--split train` number for number, into files named by the set (card_large_val.json, the store
+eval_large_val_n4), and the card says `"split": "large.val"` with the set in its provenance; and a set that is not the run's own (`small.val`, 10 of its 82 val scenes) evaluates
+exactly those scenes, under its own name.
+
+Usage (from the bev_fusion folder): python tests/test_evaluate_door.py [--real [RUN]] [--sets [RUN]] [--n 4] [--device cpu|cuda]
 """
 import argparse
 import contextlib
@@ -94,6 +99,12 @@ def check_plan():
     assert g[:-3] == ["--device", "cpu", "--workers", "0", "--split", "train", "--ckpt-dir", "d", "--out", "o"], g
     # refusals: no TEST split, no --all on train, malformed names
     assert refused("--quant", "--split", "test") and refused("--all", "--split", "train")
+    # sets (evaluation/bev_sets.py): a named set goes to bev_suite as it is; a malformed name and TEST are refused, --all is the run's own lists
+    assert steps_of("--quant", "--split", "small.val")[0]["argv"][:6] == ["--device", "cuda", "--workers", "2", "--split", "small.val"]
+    assert steps_of("--qual", "3", "--split", "large.train")[0]["argv"][4:6] == ["--split", "large.train"]
+    assert all(refused("--quant", "--split", x) for x in ("small.test", "small", "Small.val", "small.val.x", ".val", "")) and refused("--all", "--split", "small.val")
+    assert refused("--time", "--split", "small.val") and refused("--time", "--split", "train") and not refused("--time"), "--time is the run's"
+    assert all(refused("--quant", "--split", x) for x in ("test.val", "val.train", "warm_x.val", "ctl_x.train")), "reserved split names"
     assert refused("--qual", "scene-0061") and refused("--videos", "scene-0061/12") and refused("--qual", "0") and refused("--videos", ",")
     assert refused("--quant", "--n", "0") and refused("--all", "--n", "0") and refused("--quant", "--n", "-5") and refused("--quant", "--n", "x")
     with contextlib.redirect_stdout(io.StringIO()) as out:                           # no option: the help, exit 2
@@ -182,12 +193,15 @@ def check_refusals():
         open(os.path.join(moved, "ckpt_00000001.pt"), "w").write("x")
         assert E.refusal(ns("--quant", "--ckpt-dir", moved), lister) is None, "a moved checkpoint is found"
         open(os.path.join(run, "ckpt_00000001.pt"), "w").write("x")
-        for opts in (["--quant"], ["--time"], ["--all"], ["--videos", "2"], ["--qual", "3"], ["--quant", "--split", "train"]):
+        assert "no split 'nosuch'" in E.refusal(ns("--quant", "--split", "nosuch.val"), lister), "a set whose split file does not exist"
+        for opts in (["--quant"], ["--time"], ["--all"], ["--videos", "2"], ["--qual", "3"], ["--quant", "--split", "train"], ["--quant", "--split", "small.val"]):
             assert E.refusal(ns(*opts), lister) is None, opts                       # a run without outputs: go on
         ev = os.path.join(run, "eval")
         # outputs that exist are not rewritten without --replace; the message names the file; what the option does not write does not block it
         for exists, opts, blocked in (("card.json", ["--quant"], True), ("card.json", ["--all"], True), ("card.json", ["--time"], False), ("card.json", ["--quant", "--split", "train"], False),
                                       ("card_train.json", ["--quant", "--split", "train"], True), ("card.json", ["--videos", "2"], False),
+                                      ("card_small_val.json", ["--quant", "--split", "small.val"], True), ("card.json", ["--quant", "--split", "small.val"], False),
+                                      ("card_small_val.json", ["--quant"], False), ("card_train.json", ["--quant", "--split", "small.train"], False),
                                       ("timing_modules.json", ["--time"], True), ("timing_modules.json", ["--all"], True), ("timing_modules.json", ["--quant"], False),
                                       ("latency.json", ["--time"], True), ("latency.json", ["--all"], False), ("latency.json", ["--quant"], False)):
             path = os.path.join(ev, exists)
@@ -283,9 +297,89 @@ def check_golden(run, n, device):
     return True
 
 
+def check_sets_real(run, n, device):
+    """a named set against the run's own lists, on a run trained on the split of that name (runs/t16_full_s0: split large): `--split large.val` and `--split large.train` give the
+    numbers of `--split val` and `--split train` number for number (the same scenes, the same frames), under files of their own name, and the card says which set it is; and a
+    set that is not the run's own (small.val inside large.val) evaluates exactly its scenes"""
+    assert glob.glob(os.path.join(run, "ckpt_*.pt")) and os.path.isfile(os.path.join(run, "config.json")), f"{run} has no checkpoint here: the check was asked for and cannot run"
+    sys.path.insert(0, os.path.join(ROOT, "training"))
+    cfg = json.load(open(os.path.join(run, "config.json")))
+    import bev_sets  # noqa: E402  (evaluation/ is on the path)
+    sp = bev_sets.names()
+    split = next((x.split(".")[0] for x in sp if x.endswith(".val") and sorted(bev_sets.lists(x, [], [])[1]) == sorted(cfg.get("val_scenes") or [])
+                  and sorted(bev_sets.lists(x, [], [])[0]) == sorted(cfg.get("train_scenes") or [])), None)
+    assert split is not None, f"{run} was not trained on a split of splits/ (its lists are inline and equal none of {sp}): pick another run"
+    py, env = sys.executable, dict(os.environ, OMP_NUM_THREADS="4")
+    with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, "temp")) as tmp:
+        jobs = {}
+        for who, sset in (("val", "val"), ("named_val", f"{split}.val"), ("train", "train"), ("named_train", f"{split}.train")):
+            folder = os.path.relpath(os.path.join(tmp, who, os.path.basename(run)), ROOT)
+            os.makedirs(folder)
+            for f in ("config.json", "gt.json"):
+                if os.path.isfile(os.path.join(run, f)):
+                    shutil.copy(os.path.join(run, f), folder)
+            shutil.copytree(os.path.join(run, "code"), os.path.join(folder, "code"))
+            jobs[who] = (folder, sset)
+        for pair in (("val", "named_val"), ("train", "named_train")):                 # two at a time: each loads nuScenes and the model
+            procs = []
+            for who in pair:
+                folder, sset = jobs[who]
+                log = open(os.path.join(tmp, who + ".log"), "w")
+                procs.append((who, log, subprocess.Popen([py, "evaluation/evaluate.py", folder, "--quant", "--n", str(n), "--device", device, "--workers", "0", "--ckpt-dir", run,
+                                                          "--split", sset, "--out", os.path.join(folder, "suite")], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)))
+            codes = [(w, pr.wait()) for w, _, pr in procs]
+            for _, log, _ in procs:
+                log.close()
+            for w, c in codes:
+                if c:
+                    print(f"--- {w}.log (tail)\n" + "".join(open(os.path.join(tmp, w + ".log")).readlines()[-15:]))
+            assert all(c == 0 for _, c in codes), f"exit codes {codes}"
+        for plain, named, tag in (("val", "named_val", f"_{split}_val"), ("train", "named_train", f"_{split}_train")):
+            pe, ne = (os.path.join(ROOT, jobs[w][0], "eval") for w in (plain, named))
+            ptag = "" if plain == "val" else "_train"
+            assert os.path.isfile(os.path.join(ne, f"card{tag}.json")) and not os.path.exists(os.path.join(ne, f"card{ptag}.json")), f"the set {split}.{plain[:5]} writes card{tag}.json and not the plain card"
+            assert os.path.isdir(os.path.join(ROOT, jobs[named][0], "suite", "quant", f"eval{tag}_n{n}")), "the store carries the set's name"
+            mp, mn = (json.load(open(os.path.join(e, f"metrics{t}.json"))) for e, t in ((pe, ptag), (ne, tag)))
+            assert mn["split"] == f"{split}.{plain}" and mp["split"] == plain, (mn["split"], mp["split"])
+            for m in (mp, mn):
+                for k in ("run", "code", "split", "suite_run"):
+                    m.pop(k)
+            assert len(mp["metrics"]) > 500, len(mp["metrics"])
+            same(mp, mn, f"metrics.json of {split}.{plain} against {plain}")
+            card = json.load(open(os.path.join(ne, f"card{tag}.json")))
+            use = card["provenance"]["data"]["use"]
+            assert card["split"] == f"{split}.{plain}" and use["set"] == f"{split}.{plain}" and card["provenance"]["data"]["split"] == f"{split}.{plain}", (card["split"], use.get("set"))
+            assert f"official split '{plain}'" in use["split_rule"], use["split_rule"]
+        other = "small.val"                                                           # a set the run was not trained on: its scenes, and only its scenes
+        extra = ""
+        if other in sp and split != "small":
+            folder = os.path.relpath(os.path.join(tmp, "other", os.path.basename(run)), ROOT)
+            os.makedirs(folder)
+            for f in ("config.json", "gt.json"):
+                if os.path.isfile(os.path.join(run, f)):
+                    shutil.copy(os.path.join(run, f), folder)
+            shutil.copytree(os.path.join(run, "code"), os.path.join(folder, "code"))
+            code = subprocess.call([py, "evaluation/evaluate.py", folder, "--quant", "--n", "10", "--device", device, "--workers", "0", "--ckpt-dir", run, "--split", other,
+                                    "--out", os.path.join(folder, "suite")], cwd=ROOT, env=env, stdout=open(os.path.join(tmp, "other.log"), "w"), stderr=subprocess.STDOUT)
+            if code:
+                print("--- other.log (tail)\n" + "".join(open(os.path.join(tmp, "other.log")).readlines()[-15:]))
+            assert code == 0, f"exit code {code}"
+            card = json.load(open(os.path.join(ROOT, folder, "eval", "card_small_val.json")))
+            used = set(card["provenance"]["data"]["use"]["scene_names"])
+            want = set(bev_sets.lists(other, [], [])[1])
+            assert used and used <= want and card["split"] == other, (sorted(used), card["split"])
+            assert card["provenance"]["data"]["use"]["set"] == other and json.load(open(os.path.join(ROOT, folder, "suite", "quant", "eval_small_val_n10", "manifest.json")))["source"]["set_hash"] == bev_sets.set_hash(other), "the set's hash is in the store identity"
+            assert os.path.isdir(os.path.join(ROOT, jobs["named_val"][0], "suite", "quant")) and not os.path.exists(os.path.join(ROOT, jobs["val"][0], "eval", "card_small_val.json"))
+            assert card["provenance"]["data"]["frame_hash"] != json.load(open(os.path.join(ROOT, jobs["named_val"][0], "eval", f"card_{split}_val.json")))["provenance"]["data"]["frame_hash"], "another set, other frames"
+            extra = f"; {other} evaluated {len(used)} of its {len(want)} scenes, all of them its own"
+        print(f"sets: {split}.val / {split}.train equal val / train number for number ({n} frames each, {device}), files and card named by the set{extra}")
+    return True
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--real", nargs="?", const="runs/t16_full_s0", default=None, metavar="RUN", help="also the golden check on this run")
+    p.add_argument("--sets", nargs="?", const="runs/t16_full_s0", default=None, metavar="RUN", help="also the named-set check on this run (trained on a split of splits/)")
     p.add_argument("--n", type=int, default=4)
     p.add_argument("--device", default="cpu")
     a = p.parse_args()
@@ -296,6 +390,8 @@ def main():
     done = "plan, executor and refusals ok"
     if a.real:
         done += "; " + ("golden check ok" if check_golden(a.real, a.n, a.device) else "golden check skipped")
+    if a.sets:
+        done += "; " + ("sets check ok" if check_sets_real(a.sets, a.n, a.device) else "sets check skipped")
     print(f"evaluate door: {done}")
 
 

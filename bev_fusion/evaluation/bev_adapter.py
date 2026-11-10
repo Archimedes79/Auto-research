@@ -228,8 +228,9 @@ def _make_source_class():
     from evalsuite import FrameRef, Sample, Source
 
     class _BEVSource(Source):
-        def __init__(self, cfg, ds, ns, workers: int = 2, control: str = "", split: str = "val", evaluator: Optional[str] = None):
+        def __init__(self, cfg, ds, ns, workers: int = 2, control: str = "", split: str = "val", evaluator: Optional[str] = None, set_hash: Optional[str] = None):
             self.cfg, self.ds, self.ns, self.workers, self.control, self.split = cfg, ds, ns, workers, control, split
+            self.set_hash = set_hash                                      # a named set (small.val): the hash of its scene list, part of the store identity (val / train: None, nothing new)
             self.evaluator = evaluator                                    # evaluator_hash(), taken once at build: a resumed store must come from the same evaluator code
             self.nusc = ds.nusc
             self.fn = ns.T.collate_cached if cfg.feature_cache else ns.T.collate
@@ -255,7 +256,8 @@ def _make_source_class():
             sig = gt_signature(self.ds)
             return {"class": "BEVSource", "dataset": "nuScenes " + self.cfg.version, "split": self.split, "scenes": len(self._frames),
                     "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None,
-                    "gt_signature": sig, "gt_version": gt_version(sig), "evaluator_hash": self.evaluator}
+                    "gt_signature": sig, "gt_version": gt_version(sig), "evaluator_hash": self.evaluator,
+                    **({"set_hash": self.set_hash} if self.set_hash else {})}
 
         # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
         def prefetch(self, refs: Sequence[FrameRef]) -> None:
@@ -539,7 +541,8 @@ def prior_maps(train_ds, n: int, spec):
 # ------------------------------------------------------------------------------------------------ entry
 def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, ckpt_dir: Optional[str] = None, control: str = "",
           prior: int = 0, evaluator: Optional[str] = None):
-    """(Source, Subject, Task) of a training run. split: 'val' | 'train' (overfitting check). prior > 0: the Subject is the prior-map
+    """(Source, Subject, Task) of a training run. split: the set to evaluate on (evaluation/bev_sets.py): 'val' | 'train' = the run's own lists (the train one is the
+    overfitting check), '<split>.<part>' (small.val) = the lists of that file of splits/ put into the config before the data is made. prior > 0: the Subject is the prior-map
     baseline built from that many train keyframes (no network is loaded). evaluator: the evaluator hash of the Source (default: taken now; the prior
     suite of an `eval` gets the main suite's, so both stores are checked against the same value)."""
     os.chdir(ROOT)
@@ -553,13 +556,22 @@ def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, 
     with open(os.path.join(run, "config.json")) as f:
         cfg = ns.T.TrainConfig(**json.load(f))
     freeze_scenes(cfg)
+    from evaluation import bev_sets
+    cfg.train_scenes, cfg.val_scenes = bev_sets.lists(split, cfg.train_scenes, cfg.val_scenes)       # the run's own lists for val / train, the file's for small.val
     cfg.workers, cfg.seq_len, cfg.batch_size = 0, 1, 1
     if not cfg.radar_cache and os.path.isdir(os.path.join(ROOT, "data", "cache", "radar")):
         cfg.radar_cache = "data/cache/radar"                       # exact (feature_cache radar-selftest): only faster
     train_ds, val_ds = ns.T.make_datasets(cfg)
-    ds = train_ds if split == "train" else val_ds
+    ds = train_ds if bev_sets.part_of(split) == "train" else val_ds
+    named = bev_sets.parse(split)[0] is not None
     source = _make_source_class()(cfg, ds, ns, workers=workers, control=control, split=split,
-                                      evaluator=evaluator or evaluator_hash())
+                                      evaluator=evaluator or evaluator_hash(), set_hash=bev_sets.set_hash(split) if named else None)
+    if named:                                                      # make_datasets drops scenes that are not in the official part or have no front-camera files, silently: not for a set
+        want = bev_sets.lists(split, [], [])[0 if bev_sets.part_of(split) == "train" else 1]
+        gone = sorted(set(want) - set(source.scenes()))
+        if gone:
+            raise SystemExit(f"set {split}: {len(gone)} of its {len(want)} scenes cannot be read by this run's data ({', '.join(gone[:5])}{', ...' if len(gone) > 5 else ''}): "
+                             f"not in the official {bev_sets.part_of(split)} split of nuScenes, or no front-camera files; its features / GT caches may still be missing too")
     if prior:
         model, loss, _ = ns.T.build(cfg)
         spec, grid = model.spec, model.grid

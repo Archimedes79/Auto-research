@@ -11,7 +11,12 @@ puts it. What the door adds is `RUN/eval/door.json`: the options and the command
                          generalisation (train against val), the module probe, 3 videos, 6 showcase videos, and the report page last (with the train-against-val
                          table and the videos; the chain made it inside generalisation, before the videos). Only the numbers are fatal there, a failed step is
                          listed and the chain goes on; generalisation gets a second try
-Global options as in bev_suite: --device cuda|cpu  --workers N  --split val|train  --ckpt-dir DIR  --out DIR. The TEST split is not offered.
+    --sets               the sets that exist (evaluation/bev_sets.py: the splits of splits/, the same definition the training reads); needs no run
+Global options as in bev_suite: --device cuda|cpu  --workers N  --split SET  --ckpt-dir DIR  --out DIR. SET = val (the default) or train: the lists the run itself was trained
+and validated on; or <split>.<part> of splits/: small.val, small.train, large.val, large.train, xl.val, ... (`--sets` lists them): the same run, the same checkpoint and
+caches, other scenes. A named set writes its own files (eval/card_small_val.json, quant/eval_small_val_n80), so the run's plain evaluation is never touched; `--all` (the
+chain of a finished run: generalisation, the report page) is for the run's own lists; a named set takes --quant (with --curves / --fusion / --velocity), --qual and --videos (pictures and videos into eval/suite_<split>_<part>/, the numbers' stores into eval/suite/quant/
+under the set's name); --time is the run's. The TEST split is not offered.
 Nothing asked for (no option): this help, exit 2.
 
 Refused before any step (exit 2, the message says why): a bad value (--n < 1, a name that is not in the val list: `bev_suite.py RUN list` is read for it, about a minute),
@@ -32,6 +37,8 @@ import time
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 SUITE = os.path.join(ROOT, "evaluation", "bev_suite.py")
+sys.path.insert(0, ROOT)
+from evaluation import bev_sets  # noqa: E402                                      the one definition of the sets (the splits of the training)
 TIMING_N, ALL_PRIOR, ALL_IMAGES, ALL_VIDEOS, SHOWCASE_VIDEOS, SHOWCASE_SEED = 30, 500, 8, 3, 6, 21      # the constants of the t16 chain
 
 
@@ -57,7 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--velocity", action="store_true", help="with --quant: also the velocity field (bev_suite --velocity)")
     p.add_argument("--device", default="cuda", help="cuda | cpu (default cuda)")
     p.add_argument("--workers", type=int, default=2, help="read-ahead processes (default 2)")
-    p.add_argument("--split", default="val", choices=["val", "train"])
+    p.add_argument("--split", default="val", metavar="SET", help="val | train (the run's own lists) or <split>.<part> of splits/ (small.val, large.train, ...); --sets lists them")
+    p.add_argument("--sets", action="store_true", help="list the sets and stop (no run needed)")
     p.add_argument("--ckpt-dir", default=None, help="the checkpoints of a run folder that has none")
     p.add_argument("--out", default=None, help="the suite folder (default RUN/eval/suite); timing_modules.json goes into it too")
     p.add_argument("--replace", action="store_true", help="rewrite outputs of RUN/eval that exist already (card.json, timing_modules.json, latency.json)")
@@ -89,8 +97,14 @@ def global_options(a, out=None) -> list:
 
 def plan(a) -> list:
     """the options -> the ordered steps (timing first: it needs an idle GPU). Pure: nothing is run here"""
-    if a.all and a.split == "train":
-        raise SystemExit("--all with --split train: generalisation already evaluates train; use --quant --split train")
+    try:
+        bev_sets.parse(a.split)                                                     # a set that does not exist, or TEST: refused before any step
+    except ValueError as ex:
+        raise SystemExit(str(ex))
+    if a.time and a.split != "val":
+        raise SystemExit(f"--time measures the run, not a set of scenes: leave out --split {a.split}")
+    if a.all and a.split != "val":
+        raise SystemExit(f"--all is the chain of the run's own lists (val; generalisation evaluates train itself): with --split {a.split} use --quant / --qual / --videos")
     G, soft = global_options(a, a.out), a.all                                       # soft: in the chain only the numbers are fatal
     steps = []
     if a.time or a.all:                                                             # first, and before `time`: it refuses a GPU that is not idle, `time` only records the load
@@ -122,7 +136,7 @@ def plan(a) -> list:
 
 def outputs_at_risk(a) -> list:
     """[(file, what a step would rewrite)] of the outputs a step writes IN PLACE under RUN/eval and that exist already (the delivered run must not be overwritten by accident)"""
-    ev, tag = os.path.join(a.run, "eval"), "_train" if a.split == "train" else ""
+    ev, tag = os.path.join(a.run, "eval"), bev_sets.tag(a.split)
     timing = os.path.join(a.out, "timing_modules.json") if a.out else os.path.join(ev, "timing_modules.json")
     checks = []
     if a.quant or a.all:
@@ -144,7 +158,7 @@ def list_scenes(a) -> dict:
 
 def name_refusal(a, lister) -> str:
     """why a named scene (--videos) or frame (--qual) is refused: not in the val list (None: all there, or none named)"""
-    named = {w: count_or_list(t, w) for w, t in (("qual", a.qual), ("videos", a.videos)) if t}
+    named = {w: count_or_list(t, w) for w, t in (("qual", a.qual), ("videos", a.videos)) if t}       # the lists below are those of the set --split names
     frames, scenes = (v if isinstance(v, list) else [] for v in (named.get("qual"), named.get("videos")))
     if not (frames or scenes):
         return None
@@ -167,6 +181,10 @@ def refusal(a, lister=list_scenes) -> str:
     """why the call is refused before any step (None: go on); cheap checks first, the scene list (a minute) last"""
     if not os.path.isfile(os.path.join(a.run, "config.json")):
         return f"{a.run} is not a run folder (no config.json); run from the bev_fusion folder"
+    try:
+        bev_sets.lists(a.split, [], [])                                             # the file of a named set exists (val / train need none)
+    except ValueError as ex:
+        return str(ex)
     ckpt = a.ckpt_dir or a.run
     if a.ckpt_dir and not os.path.isdir(a.ckpt_dir):
         return f"--ckpt-dir {a.ckpt_dir} is not a folder"
@@ -188,7 +206,8 @@ def run_frames(a, specs) -> int:
     try:
         from evaluation import bev_suite
         from evalsuite.cli import _qual_print
-        suite = bev_suite.make_suite(argparse.Namespace(run=a.run, device=a.device, workers=a.workers, split=a.split, ckpt_dir=a.ckpt_dir, control="", out=a.out, state="carry"))
+        out = a.out or (os.path.join(a.run, "eval", "suite" + bev_sets.tag(a.split)) if bev_sets.parse(a.split)[0] is not None else None)      # a named set: a folder of its own
+        suite = bev_suite.make_suite(argparse.Namespace(run=a.run, device=a.device, workers=a.workers, split=a.split, ckpt_dir=a.ckpt_dir, control="", out=out, state="carry"))
         try:
             for spec in specs:
                 _qual_print(suite.qual.frame(spec, ("overview",)))
@@ -266,6 +285,9 @@ def execute(a, steps, runner=run_step) -> int:
 def main(argv=None) -> int:
     p = build_parser()
     a = p.parse_args(argv)
+    if a.sets:
+        print(bev_sets.table())
+        return 0
     if not (a.run and (a.quant or a.qual or a.videos or a.time or a.all)):
         p.print_help()
         return 2

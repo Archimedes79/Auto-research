@@ -329,7 +329,37 @@ def _():
     assert "det/dt+0.00/vehicle/all/ap@2" in leg and "detr/dt+0.00/mean/all/mAP" in leg and "val_loss/total" in leg
     assert not any(k.startswith(("seg.", "loss.")) for k in leg)
     assert "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0" in bev_suite.headline_table(leg)
-    assert bev_suite.tag_of(True, True, "zero_radar") == "_warm_train_ctl_zero_radar" and bev_suite.tag_of(False, False, "") == ""
+    assert bev_suite.tag_of(True, "train", "zero_radar") == "_warm_train_ctl_zero_radar" and bev_suite.tag_of(False, "val", "") == "" and bev_suite.tag_of(False, "small.val", "") == "_small_val"
+    tags = {bev_suite.tag_of(w, s, c) for w in (False, True) for s in ("val", "train", "small.val", "small.train", "large.train", "xl.val") for c in ("", "zero_radar")}
+    assert len(tags) == 2 * 6 * 2, "warm / set / control never collide"
+    import contextlib
+    import io
+    from evaluation import bev_sets
+    for cmd in bev_suite.OWN_COMMANDS:                                  # the commands that write the run's plain files refuse a named set, before anything is built
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                bev_suite.main(["runs/none", "--split", "small.val", cmd])
+            raise AssertionError(cmd)
+        except SystemExit as ex:
+            assert ex.code == 2, (cmd, ex.code)
+    for bad in ("small.test", "test", "val.train"):
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                bev_suite.main(["runs/none", "--split", bad, "list"])
+            raise AssertionError(bad)
+        except SystemExit as ex:
+            assert ex.code == 2, (bad, ex.code)
+    try:                                                                # compare --split names the store of the set (no runs here: the message says which store it looked for)
+        bev_suite.cmd_compare(["runs/none_a", "runs/none_b", "--split", "small.val", "--n", "80"])
+        raise AssertionError("compare found a store that does not exist")
+    except SystemExit as ex:
+        assert "eval_small_val_n80" in str(ex), ex
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            bev_suite.cmd_compare(["runs/none_a", "runs/none_b", "--split", "small.test"])
+        raise AssertionError("compare accepted TEST")
+    except SystemExit as ex:
+        assert ex.code == 2, ex.code
     # the card's "better" map (read by autoresearch/tools/decide.py): every number but the counts, each by its metric's own direction
     bt = bev_suite.better_of(tab, suite.task.metrics())
     assert set(bt) <= set(leg) and all(v in ("lower", "higher") for v in bt.values())

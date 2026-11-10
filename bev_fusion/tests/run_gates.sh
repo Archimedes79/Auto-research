@@ -52,6 +52,7 @@ run "fusion area"       "$PY" evaluation/bev_fusion_area.py --selftest   # footp
 run "curve metrics"     "$PY" evaluation/bev_curves.py --selftest      # AP / AUC / Brier against the exact curves of sorted scores, additivity, one-class / NaN / float16
 run "module probe"      "$PY" evaluation/bev_modules.py --selftest      # tensor numbers, dead channels, planted velocity offsets, each response perturbation changes only what it names; no data
 run "module timing"     "$PY" evaluation/bev_timing.py --selftest       # toy modules with known sleeps: per call / per frame, calls, hooks removed, training split, idle rule; CPU
+run "eval sets"         "$PY" evaluation/bev_sets.py --selftest         # the sets of the evaluation = the splits of splits/ (grammar, TEST refused, tags, lists, a toy folder); no data
 run "error search"       "$PY" evaluation/bev_errors.py --selftest       # FP / FN kinds, counts equal the metric's matching, frame trace through the files; no data
 run "view helpers"       "$PY" evaluation/bev_selftest.py --only "bev_views helpers"   # error colours of boxes, faded history, radar layer, velocity hue, moving layer, loss heat; seconds
 if ls data/cache/gt/*_15efbde2d1.npz > /dev/null 2>&1; then    # the evaluation on real cached GT: GT as the prediction must reach every ceiling, degraded copies fall, the GT frames agree with their poses
@@ -99,6 +100,7 @@ if [ "${1:-}" = "--all" ]; then
   run "projection (R-GEO)" "$PY" tests/test_projection_general.py
   if ls runs/t16_full_s0/ckpt_*.pt > /dev/null 2>&1; then          # the front door of the evaluation against bev_suite.py eval on a copy of the real run
     run "evaluate door, golden" "$PY" tests/test_evaluate_door.py --real   # 4 val frames on the CPU, number for number; about 3 min, 2 x 6 GB
+    run "evaluate door, sets"   "$PY" tests/test_evaluate_door.py --sets   # large.val / large.train against val / train, small.val's own scenes; 4 frames on the CPU; about 6 min, 2 x 6 GB
   else
     echo "SKIP  evaluate door, golden  | no checkpoint in runs/t16_full_s0"
   fi
