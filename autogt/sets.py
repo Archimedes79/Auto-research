@@ -36,6 +36,12 @@ def scenes(name):
     return [x for x in lines if x]
 
 
+def set_id(scene_names):
+    """12 hex characters naming a list of sequences by its content (the sorted names): a scene list that comes from a file is identified by what it holds, not by a name that two projects may use for two lists"""
+    import hashlib
+    return hashlib.sha1("\n".join(sorted(set(scene_names))).encode()).hexdigest()[:12]
+
+
 _set_scenes = scenes                 # check_raw has a parameter `scenes` that hides the function
 
 

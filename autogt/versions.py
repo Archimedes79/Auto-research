@@ -124,6 +124,62 @@ def row_of(version):
     return next((r for r in table() if r["version"] == version), None)
 
 
+# ---------------------------------------------------------------------------------------------------------------- new rows, derived from git: nobody types the tables
+def _number(key):
+    """"v12" -> 12 (the front versions and the releases are one running sequence)"""
+    return int(key[1:])
+
+
+def last_change(files, cwd=None):
+    """{"date", "subject"} of the last commit that touched `files` (git log), "(uncommitted: describe the change)" as the subject while they differ from HEAD; the date is today's then"""
+    import datetime
+    import subprocess
+    here = cwd or os.path.dirname(os.path.abspath(__file__))
+    today = datetime.date.today().isoformat()
+    try:
+        dirty = subprocess.run(["git", "-C", here, "status", "--porcelain", "--"] + list(files), capture_output=True, text=True, timeout=60).stdout.strip()
+        log = subprocess.run(["git", "-C", here, "log", "-1", "--format=%cs%n%s", "--"] + list(files), capture_output=True, text=True, timeout=60).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        return {"date": today, "subject": "(describe the change)"}
+    if dirty or len(log) < 2:
+        return {"date": today, "subject": "(uncommitted: describe the change)"}
+    return {"date": log[0], "subject": log[1]}
+
+
+def propose(signature, lane_version, change, versions_rows=None, release_rows=None):
+    """the rows that a source with this front `signature` and this `lane_version` still needs: {"front": a row of versions.csv or None, "release": a row of releases.csv or None}. The number is the next of the
+    running sequence (front versions and releases together), the text and the date are those of the last commit that touched the hashed files (`change`, see last_change). What stays by hand: `same_gt_as`
+    (it needs the pinned digests, front_digests.json) and the lane versions (lane_versions.csv belongs to the lane chat)."""
+    vrows = table() if versions_rows is None else versions_rows
+    rrows = releases() if release_rows is None else release_rows
+    nxt = max([_number(r["version"]) for r in vrows] + [_number(r["release"]) for r in rrows]) + 1
+    out = {"front": None, "release": None}
+    front = next((r["version"] for r in vrows if r["signature"] == signature), None)
+    if front is None:
+        front = f"v{nxt}"
+        out["front"] = {"version": front, "signature": signature, "tag": f"autogt/{front}", "date": change["date"], "generator": f"autogt/ (tag autogt/{front})",
+                        "what_changed": change["subject"], "same_gt_as": ""}
+        nxt += 1
+    if lane_version and not any(r["front"] == front and r["lane"] == lane_version for r in rrows):
+        out["release"] = {"release": f"v{nxt}", "front": front, "lane": lane_version, "date": change["date"], "what_changed": change["subject"]}
+    return out
+
+
+def write_rows(proposal, versions_file=None, releases_file=None):
+    """append the proposed rows to the csv tables (the header of each file names the columns; the files are in git: review the diff, commit, tag)"""
+    for key, path in (("front", versions_file or FILE), ("release", releases_file or RELEASES)):
+        row = proposal.get(key)
+        if not row:
+            continue
+        with open(path, newline="", encoding="utf-8") as f:
+            text = f.read()
+        fields = next(csv.reader([text.splitlines()[0]]))
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            if not text.endswith("\n"):
+                f.write("\n")
+            csv.DictWriter(f, fieldnames=fields, lineterminator="\n").writerow(row)
+
+
 _CODE_STATE = {}
 DOCS = (".md", ".svg")                                    # a change of these cannot change a GT: the text, and the picture drawn from architecture.json
 

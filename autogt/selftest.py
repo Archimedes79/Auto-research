@@ -293,7 +293,7 @@ def run(root=None, verbose=True):
         "(then it is hashed and a change needs a new version row) or not (then list it)")
     rows_ = V.table()
     assert [r["version"] for r in rows_] == [f"v{i + 1}" for i in range(len(rows_))] and len({r["signature"] for r in rows_}) == len(rows_)
-    assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: add one, "
+    assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: `python -m autogt versions --update` derives one from git, "
                                                       "commit, tag autogt/v<N> (decision D29)")
     store_sig = V.canonical(gt.signature())                       # the folder of the stored GT: the signature itself, or the older one whose GT this code makes
     assert current_version() == V.version_of(store_sig) and current_version(boxes_at="annotation").startswith(current_version() + "+")

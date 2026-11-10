@@ -44,7 +44,7 @@ def _versions_text():
                    f"{'stored    ' if os.path.isdir(os.path.join(DATA, versions.canonical(r['signature']))) else 'not stored'}  {r['tag']:11s} "
                    f"{r['what_changed'][:70]}{same}")
     if cur not in {r["signature"] for r in rows}:
-        out.append(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased); add a row, commit, tag autogt/v<N>")
+        out.append(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased): `python -m autogt versions --update` derives it from git")
     here = versions.current_release()
     out.append("lane GT (own versions, autogt/lane_versions.csv):")
     for r in lane_gt.table():
@@ -55,7 +55,7 @@ def _versions_text():
     for r in versions.releases():
         out.append(f"  {r['release']:5s} front {r['front']:4s} + lane {r['lane']:3s}  {r['date']}  {'CURRENT' if r['release'] == here else '       '}  {r['what_changed'][:80]}")
     if here is None:
-        out.append(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.code_signature())}) has no row in autogt/releases.csv: add one")
+        out.append(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.code_signature())}) has no row in autogt/releases.csv: `python -m autogt versions --update` derives it")
     return "\n".join(out)
 
 
@@ -92,7 +92,7 @@ class Interface:
         r = pipeline.generate(dataroot, out, version, scenes, stride, res, workers=workers, set_name=set_name, lane=lane, verbose=verbose, **opts)
         keys = {}
         if r["lane"] is not None:
-            name = set_name or ("custom" if scenes else None)
+            name = set_name or None
             keys = {system: gt_api.key_of(system, r["version"], name, out, dataroot=dataroot, scenes=scenes, options=opts) for system in ("bev_fusion", "lane_center")}
         return {**r, "keys": keys, "ok": not r["masks_error"]}
 
@@ -161,9 +161,26 @@ class Interface:
         return {"text": _sets_text()}
 
     @staticmethod
-    def versions():
-        """the GT versions, the lane versions and the releases; the current one marked, which is stored -> {text}"""
-        return {"text": _versions_text()}
+    def versions(update=False):
+        """the GT versions, the lane versions and the releases; the current one marked, which is stored. A source whose signature has no row yet gets the rows derived from git (the next number, the text and the
+        date of the last commit that touched the hashed files); `update` writes them to versions.csv / releases.csv -> {text, proposal}"""
+        from . import lane_gt
+        from . import versions as V
+        from .nuscenes_gt import SIGNATURE_FILES
+        from .suite import code_signature
+        prop = V.propose(code_signature(), lane_gt.version_of(lane_gt.code_signature()), V.last_change(SIGNATURE_FILES))
+        text = _versions_text()
+        if prop["front"] or prop["release"]:
+            rows = [f"front {prop['front']['version']} = signature {prop['front']['signature']}: {prop['front']['what_changed']}"] if prop["front"] else []
+            rows += [f"release {prop['release']['release']} = front {prop['release']['front']} + lane {prop['release']['lane']}"] if prop["release"] else []
+            text += "\nrows this source needs (derived from git): " + "; ".join(rows)
+            if update:
+                V.write_rows(prop)
+                tag = (prop["front"] or {}).get("tag")
+                text += "\nadded to autogt/versions.csv / releases.csv: review the rows (same_gt_as stays by hand, with a pinned proof), commit" + (f", then git tag -a {tag} -m '...'" if tag else "")
+            else:
+                text += "\n(`versions --update` adds them)"
+        return {"text": text, "proposal": prop}
 
     @staticmethod
     def area_mask(token, kind="intersection", border_m=0.0, png=None, out=None):

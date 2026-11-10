@@ -202,12 +202,13 @@ def _mini_checks(root, GtGenerator, lane_gt):
 
 def _api_checks(root, lane_gt):
     from . import gt_api
+    from . import sets as sets_mod
     from .suite import GtGenerator, scene_tokens
     with tempfile.TemporaryDirectory() as d:
         toks = scene_tokens("scene-0061", "v1.0-mini", root)
         key = GtGenerator.generate_bev_gt(root, scenes=["scene-0061"], out=d, verbose=False)
         assert key.system == "bev_fusion" and [p.name for p in key.parts] == ["front", "lane", "masks"] and key.complete, str(key)
-        assert key.data == gt_api.data_identity() and key.dataset == "v1.0-mini" and key.set_name == "custom" and len(key.id) == 12, (key.data, key.dataset, key.set_name)
+        assert key.data == gt_api.data_identity() and key.dataset == "v1.0-mini" and key.set_name == "scenes:" + sets_mod.set_id(["scene-0061"]) and len(key.id) == 12, (key.data, key.dataset, key.set_name)
         assert key.part("front").signature != key.part("lane").signature and key.part("lane").store == lane_gt.signature(rig="bev_fusion") and key.part("masks").store == key.part("lane").store
         assert "bev_fusion" in str(key) and key.part("front").signature in str(key) and "complete" in str(key) and key.as_dict()["id"] == key.id
         # the key is read from the stores: the same id without generating, whatever function made it, a partial key has the id of the whole
@@ -256,6 +257,7 @@ def _api_checks(root, lane_gt):
                 raise AssertionError(f"{pick} must be refused")
             except ValueError:
                 pass
+        assert sets_mod.set_id(["scene-0002", "scene-0001"]) == sets_mod.set_id(["scene-0001", "scene-0002", "scene-0001"]) != sets_mod.set_id(["scene-0001"]), "a scene list is named by its content: order and repeats do not matter"
         # the data identity: the stores that recorded one must agree, else the key says "mixed"; a lane store records it after a run (its writer is a hashed file that does not)
         lane_idx = os.path.join(key.part("lane").path, "index.json")
         import json

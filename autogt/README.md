@@ -82,24 +82,27 @@ interface, the writer, the stores, the tools, the tests) can change without a ne
 `architecture.json` (`python autoresearch/tools/archdraw.py render autogt/architecture.json`), a new command is a new method of `api.py` and a row above.
 
 ## Architecture
-![autogt architecture](architecture.svg)
+![GtGenerator architecture](architecture.svg)
 
-Five layers, drawn from `architecture.json` (the file map of every box is in `architecture.md`; the drawing is checked against the code by the tests):
-1. **Command line** (`cli.py`): the parser and one call `GtGenerator.<method>(**arguments)` per command; the only module of the suite it imports is the class.
-2. **Class interface `GtGenerator`** (`api.py`, `suite.py`): one method per command, plain data in and out; the same class is the object that makes the GT of one keyframe. Behind it: the writer (`pipeline.py`, `gt_api.py`) and the tools
-   (`checks`, `report`, `view`, `video`, `clean`, `store_audit`).
-3. **Foundation data**: the raw nuScenes files and their readers - the light devkit with its table cache (`light_nusc.py`) and the scene sets with the raw-file check (`sets.py`).
-4. **Generators**, which output the GT: the front GT generator (map layers, boxes, velocity / flow, coverage; 6 hashed files) and the lane GT generator (lane graph, tiers, visibility, two rigs; 6 hashed files); the area masks
-   (`lane_raster.py`) are derived from the lane GT and not hashed.
-5. **Data and version key**: the stored files with their `index.json` (`store.py`), the versions and releases (`versions.py` and its tables), and the GT key that names data + code of what you hold (`gt_api.GtKey`).
+Kept simple on purpose: **one class, one block of code per problem, one output per problem.** Drawn from `architecture.json` (the file map of every box is in `architecture.md`; the tests fail when the drawing and the code differ).
+- **Command line** (`cli.py`) and **class** (`GtGenerator`: `api.py`, `suite.py`): the parser makes one call `GtGenerator.<method>(...)` per command and imports nothing else; the class calls the code of the problem that was asked for.
+- **Three problems, each with its own code and its own output**, the difficult code stays inside it: the *front GT* (BEV layers, boxes, velocity / flow: 6 hashed generator files, `pipeline.py` writes, `store.py` keeps the files and the manifest; output
+  `<sig>/<token>.npz`), the *lane GT* (lane graph, tiers, visibility for the two systems: 6 hashed files that also hold their own writer and store; output `lane/<sig>/<token>.pkl.gz`), the *area masks* (`lane_raster.py`, derived from the lane GT;
+  output `lane/<sig>/masks/*.npz`).
+- **Shared:** the raw nuScenes data with its reader and the scene lists (`light_nusc.py`, `sets.py`), and the **GT key and versions** (`gt_api.py`, `versions.py`): what did I get - the data identity, the code signature and the git commit of each part, its version.
+  A list of sequences comes from outside, as a file (`--scenes-file`; BEV writes its split into one), and a key names it by the id of its content (`scenes:<id>`); `--set small|full` are two shipped lists (the 10 sequences of mini, all 850).
+- **Tools** (`checks`, `report`, `view`, `video`, `clean`, `store_audit`) read the output and change nothing of the GT.
+
+**Versions are derived from git, nobody types them.** The signature is a hash of the bytes of the hashed files (the code that makes the GT); the key records the git commit next to it. The commit cannot be the version: it changes with every edit anywhere (docs, tests, tools) while the GT stays
+the same (five commits, one signature on 2026-11-10), and a commit-derived version would rename and invalidate 34k frames without a content change. `python -m autogt versions` shows the tables; for a new signature `versions --update` derives the rows from git (the next number of the
+running sequence, the date and the text of the last commit that touched the hashed files) and adds them to `versions.csv` / `releases.csv`: review, commit, tag. By hand stay `same_gt_as` (new code that makes the same GT as an old version needs its pinned digests in
+`front_digests.json`: the selftest checks it) and the lane versions (`lane_versions.csv` belongs to the lane project).
 
 **Why an `index.json` per store folder (the manifest), and what is `store.py`?** A store is a folder of 34,149 keyframe files, and the files cannot say four things about themselves: whether the run that wrote them
 finished and which sequences and stride they cover (`complete`, `scenes`, `stride`: otherwise "complete" needs the nuScenes json tables, i.e. the raw data), with which resolution and supersampling (a resume must refuse to mix them),
 which commit of `autogt/` made them, whether the tree was clean and whether the folder is a release (`commit`, `dirty`, `release`: not reconstructable afterwards), and from which raw data (`data_identity`: the GT key reads it back).
-It is a provenance record, not a cache, and its writing is the most intricate part of the package (runs that add sequences, a different stride, a provisional index while a run is going; it held the one real bug of the review of 2026-11-10).
-`store.py` is not a concept of its own: it is the module where the code for these files lives (keyframe files, the manifest, the resume checks, the listing of a folder by file name), split out of the old `cli.py` so the
-command line, the writer and the files are three things. Known seam: the lane store (`.pkl.gz` and its own index code) lives in the hashed `lane_gt.py`, so the two kinds of store are two implementations; they can be joined
-only with the next lane version.
+It is a provenance record, not a cache, and its writing is the most intricate part of the front code (runs that add sequences, a different stride, a provisional index while a run is going); that is why it is kept in one place, `store.py`, next to the writer
+`pipeline.py`. Known seam: the lane store (`.pkl.gz` and its own index code) lives in the hashed `lane_gt.py`, so the two kinds of store are two implementations; they can be joined only with the next lane version.
 
 ## Reference: the front GT entry point and the older commands
 **The entry point under it - read nuScenes from a folder, write the GT of every keyframe** (memory-light, resumable, no GPU):

@@ -116,6 +116,12 @@ def data_identity():
         return "unknown"
 
 
+def _scenes_label(scenes):
+    """what a key calls a scene list that is not a named set: `scenes:<id>`, the id of the list (sets.set_id)"""
+    from . import sets
+    return f"scenes:{sets.set_id(scenes)}"
+
+
 def _tokens(dataroot, version, set_name, scenes):
     """the keyframe tokens asked for, from the json tables (None without a dataroot: then the index of the store says what it holds)"""
     if dataroot is None:
@@ -198,7 +204,7 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
     known = {d for d in seen if d}
     data = "mixed" if len(known) > 1 or "mixed" in known else next(iter(known), None) or data_identity()
     h = hashlib.sha1("|".join([system, data] + [f"{n}:{ident[n][0]}:{ident[n][1]}" for n in all_parts]).encode())
-    return GtKey(system, dataset, set_name if set_name else ("custom" if scenes else "all"), data, versions.current_release(), tuple(built), out, h.hexdigest()[:12])
+    return GtKey(system, dataset, set_name if set_name else (_scenes_label(scenes) if scenes else "all"), data, versions.current_release(), tuple(built), out, h.hexdigest()[:12])
 
 
 def _check(options, borders=BORDERS):
@@ -277,7 +283,7 @@ def generate_bev_gt(dataroot, set_name=None, scenes=None, out=None, version=None
     if "trainval" in version:
         ensure_cache(dataroot_, version, verbose=verbose)
     make_lane_gt(dataroot_, out_, version, scenes, workers, verbose, rigs=("bev_fusion",), masks=True, borders=tuple(borders), set_name=set_name)
-    return key_of("bev_fusion", version, set_name or ("custom" if scenes else None), out_, dataroot=dataroot_, scenes=scenes, options=options, borders=tuple(borders))
+    return key_of("bev_fusion", version, set_name or None, out_, dataroot=dataroot_, scenes=scenes, options=options, borders=tuple(borders))
 
 
 def generate_lane_gt(dataroot, rig="all", set_name=None, scenes=None, out=None, version=None, workers=1, verbose=True):
@@ -291,7 +297,7 @@ def generate_lane_gt(dataroot, rig="all", set_name=None, scenes=None, out=None, 
         ensure_cache(dataroot_, version, verbose=verbose)
     rigs = SYSTEMS if rig == "all" else (rig,)
     make_lane_gt(dataroot_, out_, version, scenes, workers, verbose, rigs=rigs, set_name=set_name)
-    keys = {r: key_of(r, version, set_name or ("custom" if scenes else None), out_, parts=("lane",), dataroot=dataroot_, scenes=scenes) for r in rigs}
+    keys = {r: key_of(r, version, set_name or None, out_, parts=("lane",), dataroot=dataroot_, scenes=scenes) for r in rigs}
     return keys if rig == "all" else keys[rig]
 
 

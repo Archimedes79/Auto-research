@@ -250,6 +250,7 @@ def _error_checks(root):
 def _store_checks(root):
     """the store helpers: listing by name, a rerun that writes nothing keeps the manifest, an unknown scene is a ValueError, the versions tables"""
     import json
+    from . import lane_gt as lane_gt_mod
     from . import pipeline, sets, suite, versions
     from .store import check_arguments, front_keys, names, read_index
     with tempfile.TemporaryDirectory() as d:
@@ -362,6 +363,35 @@ def _store_checks(root):
     assert _complete({}, {"t1", "t2", "t3"}, {"t1", "t2"}, "full", None) and not _complete({}, {"t1"}, {"t1", "t2"}, "full", None), "against the json tables: every keyframe, whatever the index says"
     # the versions tables: consistent, a cycle or a dangling same_gt_as is an error, not a hang
     versions.check_table()
+    # new rows are derived from git, nobody types them: the next number of the running sequence (front versions and releases together), the date and the text of the last commit, same_gt_as stays by hand
+    change = {"date": "2026-11-11", "subject": "a front change"}
+    vrows, rrows = versions.table(), versions.releases()
+    top = max([int(r["version"][1:]) for r in vrows] + [int(r["release"][1:]) for r in rrows])
+    none = versions.propose(vrows[-1]["signature"], "l5", change, vrows, rrows)
+    assert none == {"front": None, "release": None}, "a known signature with a known release: nothing to add"
+    new_front = versions.propose("ffffffffff", "l5", change, vrows, rrows)
+    assert new_front["front"]["version"] == f"v{top + 1}" and new_front["front"]["tag"] == f"autogt/v{top + 1}" and new_front["front"]["same_gt_as"] == "" and new_front["front"]["what_changed"] == "a front change"
+    assert new_front["release"]["release"] == f"v{top + 2}" and new_front["release"]["front"] == f"v{top + 1}" and new_front["release"]["lane"] == "l5", new_front
+    new_lane = versions.propose(vrows[-1]["signature"], "l6", change, vrows, rrows)
+    assert new_lane["front"] is None and new_lane["release"]["release"] == f"v{top + 1}" and new_lane["release"]["front"] == vrows[-1]["version"], new_lane
+    with tempfile.TemporaryDirectory() as t_:
+        vf, rf = os.path.join(t_, "versions.csv"), os.path.join(t_, "releases.csv")
+        import shutil
+        shutil.copy(versions.FILE, vf)
+        shutil.copy(versions.RELEASES, rf)
+        open(rf, "a").write("")                                                         # a table without a final newline is completed, not glued
+        versions.write_rows(new_front, vf, rf)
+        import csv
+        got_v, got_r = list(csv.DictReader(open(vf, newline=""))), list(csv.DictReader(open(rf, newline="")))
+        assert got_v[-1]["version"] == f"v{top + 1}" and got_v[-1]["signature"] == "ffffffffff" and len(got_v) == len(vrows) + 1 and got_v[:-1] == [dict(r) for r in vrows], "one row appended, the others untouched"
+        assert got_r[-1]["release"] == f"v{top + 2}" and len(got_r) == len(rrows) + 1
+        versions.check_table(got_v, got_r, {r["version"] for r in lane_gt_mod.table()})
+        text_ = open(vf).read().rstrip(chr(10))
+        open(vf, "w").write(text_)                                                        # no final newline now
+        versions.write_rows({"front": {**new_front["front"], "version": f"v{top + 3}", "signature": "eeeeeeeeee"}}, vf, rf)
+        assert len(list(csv.DictReader(open(vf, newline="")))) == len(vrows) + 2, "an appended row starts on its own line"
+    lc = versions.last_change(("grid.py", "layers.py"))
+    assert len(lc["date"]) == 10 and lc["subject"], lc
     real = versions.table
     try:
         versions.table = lambda: [dict(version="v1", signature="a", same_gt_as="v2", tag="", date="", what_changed=""), dict(version="v2", signature="b", same_gt_as="v1", tag="", date="", what_changed="")]
