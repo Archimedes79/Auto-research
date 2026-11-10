@@ -15,6 +15,8 @@ An entry (every key but `suite`, `cls`, `method` and `how` is optional):
     reads, writes  data references as templates over the arguments (`run:{network}`, `set:{frames}`, `eval:{network}@{frames}`): what the job needs and leaves
     python  the interpreter of the child process (default: project.json jobrunner.python, else the one of the runner)
     id_from  where a missing job id comes from ("job.id": args["job"]["id"])
+    after_from  where the run ids it waits for stand in the arguments ("job.after": args["job"]["after"], a list or one id): for a `launch` call, whose own run.py
+            start takes them, they are checked and shown by `check` (a typo is found before the start)
     splits  the arguments that name a split or a set of frames (default: split, frames, set, sets, subset): only their values are scanned for the holdout (TEST) split, never free text
 Standard library only."""
 from __future__ import annotations
@@ -30,12 +32,12 @@ from contextlib import contextmanager
 from typing import Any, Dict, List, Optional, Tuple
 
 NEEDS_KEYS = ("gpu", "gpu_max_used_mb", "ram_gb", "cpu", "est_hours")
-ENTRY_KEYS = ("suite", "cls", "method", "how", "may_feed_verdict", "needs", "reads", "writes", "python", "id_from", "splits")
+ENTRY_KEYS = ("suite", "cls", "method", "how", "may_feed_verdict", "needs", "reads", "writes", "python", "id_from", "after_from", "splits")
 HOW = ("process", "launch")
 
 BUILTIN: Dict[str, Dict[str, Any]] = {
     "Training.run": dict(suite="trainsuite", cls="Training", method="run", how="launch", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=3000, ram_gb=10),
-                         reads=["path:{job[config]}"], writes=["run:{job[id]}"], id_from="job.id"),
+                         reads=["path:{job[config]}"], writes=["run:{job[id]}"], id_from="job.id", after_from="job.after"),
     "Evaluation.run": dict(suite="evalsuite", cls="Evaluation", method="run", how="process", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=8000, ram_gb=6),
                            reads=["run:{network}", "set:{frames}"], writes=["eval:{network}@{frames}"], splits=["frames"]),
     "Evaluation.score": dict(suite="evalsuite", cls="Evaluation", method="score", how="process", may_feed_verdict=True, needs=dict(cpu=2, ram_gb=4),
@@ -185,9 +187,20 @@ def fill(template: str, values: Dict[str, Any]) -> Optional[str]:
         return None
 
 
-def id_from(path: str, args: Dict[str, Any]) -> str:
-    """'job.id' -> args['job']['id'] (a text, else '')"""
+def _walk(path: str, args: Dict[str, Any]) -> Any:
     cur: Any = args
     for part in path.split("."):
         cur = cur.get(part) if isinstance(cur, dict) else None
+    return cur
+
+
+def id_from(path: str, args: Dict[str, Any]) -> str:
+    """'job.id' -> args['job']['id'] (a text, else '')"""
+    cur = _walk(path, args)
     return cur if isinstance(cur, str) else ""
+
+
+def ids_from(path: str, args: Dict[str, Any]) -> List[str]:
+    """'job.after' -> args['job']['after'] as a list of texts (one text is a list of one; anything else is empty)"""
+    cur = _walk(path, args)
+    return [cur] if isinstance(cur, str) and cur else [x for x in cur if isinstance(x, str)] if isinstance(cur, list) else []

@@ -76,6 +76,10 @@ class Toy:
     def which(self):
         """says which environment it runs in (the wrapper interpreter of the selftest sets JR_ALLOW)."""
         return {"ok": True, "allow": os.environ.get("JR_ALLOW")}
+
+    def fire_job(self, job):
+        """like Training.run: takes a job dict that has its own `after`, and starts a run of its own."""
+        return self.fire(job["id"])
 '''
 
 TOY2 = '''
@@ -118,6 +122,7 @@ TOYS = {
     "Toy.fire_slow": dict(suite="toysuite", cls="Toy", method="fire_slow", how="launch", id_from="tag"),
     "Toy.card_work": dict(suite="toysuite", cls="Toy", method="card_work", how="process", may_feed_verdict=True),
     "Toy.which": dict(suite="toysuite", cls="Toy", method="which", how="process"),
+    "Toy.fire_job": dict(suite="toysuite", cls="Toy", method="fire_job", how="launch", id_from="job.id", after_from="job.after"),
 }
 N = 0
 DEAD = 2 ** 22 + 12345                                              # a pid no process has (above pid_max)
@@ -272,6 +277,12 @@ def test_check(T):
     launch = probs({"id": "f1", "call": "Toy.fire", "args": {"tag": "f1"}, "after": ["x"], "timeout": 5, "split": "val", "card": {"hyp": "h", "pred": "p", "rule": "r"}})
     ok(all(any(k + " has no effect on a `launch` call" in p for p in launch) for k in ("after", "timeout", "split", "card")), launch)
     ok(jr.check({"id": "f2", "call": "Toy.fire", "args": {"tag": "f2"}})["ok"] and jr.check({"call": "Toy.fire", "args": {"tag": "f3"}})["id"] == "f3", "id_from takes the id of the arguments")
+    fj = jr.check({"call": "Toy.fire_job", "args": {"job": {"id": "fj1", "after": ["x1"]}}})
+    ok(fj["ok"] and fj["id"] == "fj1" and fj["after"] == ["x1"] and fj["command"] is None and fj["in_process"] == "Toy(project).fire_job(**args)",
+       "a launch call shows the run ids its own start waits for (after_from) and says it is a call, not a run.py command: " + str(fj))
+    ok(any("job.after ghost: no such run" in p for p in probs({"call": "Toy.fire_job", "args": {"job": {"id": "fj2", "after": ["ghost"]}}})), "a typo in the after of a launch call is found before the start")
+    ok(any("job.after names the job itself" in p for p in probs({"call": "Toy.fire_job", "args": {"job": {"id": "fj3", "after": "fj3"}}})))
+    raises(lambda: jr.check("no/such/job.json"), "a relative path is read from the current folder")
 
 
 def test_gates(T):

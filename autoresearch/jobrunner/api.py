@@ -191,9 +191,10 @@ class JobRunner:
 
     def _load(self, job: Union[str, Dict[str, Any]]) -> Dict[str, Any]:
         if isinstance(job, (str, os.PathLike)):
-            doc = _read(os.fspath(job))
+            path = os.fspath(job)
+            doc = _read(path)
             if doc is None:
-                raise JobError(f"cannot read the job file {job}")
+                raise JobError(f"cannot read the job file {path}" + ("" if os.path.isabs(path) else f" (a relative path is read from the current folder, {os.getcwd()})"))
         elif isinstance(job, dict):
             doc = dict(job)
         else:
@@ -291,6 +292,15 @@ class JobRunner:
             elif self._find_run(x) is None:
                 problems.append(f"after {x}: no such run and no job with that id (run.py would wait for it and then block)")
             else:
+                after.append(x)
+        for x in (C.ids_from(entry["after_from"], args) if entry and entry.get("after_from") else []):          # the run ids a `launch` call's own run.py start will wait for
+            if not ID_RE.match(x):
+                problems.append(f"{entry['after_from']} {x!r} is not a plain run or job id")
+            elif x == jid:
+                problems.append(f"{entry['after_from']} names the job itself")
+            elif self._find_run(x) is None:
+                problems.append(f"{entry['after_from']} {x}: no such run and no job with that id (submit the job it waits for first)")
+            elif x not in after:
                 after.append(x)
         live = self._live_writes(exclude=jid)
         inferred, more = self._inputs(jid, reads, live)
@@ -450,7 +460,8 @@ class JobRunner:
         state = self._state(s["id"])[0] if p["existing"] else "new"
         launch = bool(p["entry"]) and p["entry"]["how"] == "launch"
         return dict(ok=not p["problems"], id=s["id"], call=s["call"], how=(p["entry"] or {}).get("how", ""), state=state, problems=p["problems"], warnings=p["warnings"], needs=s["needs"],
-                    reads=s["reads"], writes=s["writes"], after=s["after"], diagnostic=None if launch else s["no_card"], command=p["argv"])
+                    reads=s["reads"], writes=s["writes"], after=s["after"], diagnostic=None if launch else s["no_card"], command=p["argv"],
+                    in_process=f"{p['entry']['cls']}(project).{p['entry']['method']}(**args)" if launch else None)         # a `launch` call has no run.py command of ours: the method makes its own
 
     def submit(self, job: Union[str, Dict[str, Any]], start: bool = True) -> Dict[str, Any]:
         """Put a job in: check it, write the job and (start) run it under run.py, which waits for its turn. The same job again is not started twice; a failed, blocked,
