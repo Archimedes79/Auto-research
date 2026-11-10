@@ -80,7 +80,7 @@ def derived(rows, records=None):
 
 
 def _priority(r):
-    """the priority of a row as a number (1 = first); an empty or hand-written value ('high') comes last instead of stopping `next` and the tick"""
+    """the priority of a row as a number (1 = first); an empty or hand-written value ('high') comes last instead of stopping `next`"""
     p = (r.get("priority") or "").strip()
     return int(p) if re.fullmatch(r"[+-]?[0-9]+", p) else 9
 
