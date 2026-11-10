@@ -30,6 +30,50 @@ def _same_corners(a, b, tol):
     return all(np.linalg.norm(b - p, axis=1).min() < tol for p in a) and all(np.linalg.norm(a - p, axis=1).min() < tol for p in b)
 
 
+def _contract_checks():
+    """the pieces of the corrections without any data: the angle wrap, the flag of a stationary box, flow_sigma on a cell of a box of unknown velocity (finite, weight 0), the even supersampling"""
+    import types
+    from .flow import ObjectFlow
+    from .layers import Raster
+    from .nuscenes_gt import FLOW_SIGMA_UNKNOWN, NuScenesGT, _BoxCanvas, _wrap
+    for a, want in ((0.0, 0.0), (math.pi + 0.1, -math.pi + 0.1), (-math.pi - 0.1, math.pi - 0.1), (2 * math.pi + 0.3, 0.3), (-7.0, -7.0 + 2 * math.pi)):
+        assert abs(_wrap(a) - want) < 1e-9 and abs(_wrap(a)) <= math.pi, (a, _wrap(a), want)
+    me = types.SimpleNamespace(use_flow=True, nusc=None)
+    o = ObjectFlow("i", "vehicle", np.zeros(2), 0.0, np.ones(3), np.zeros(2), np.eye(2), "stationary", flag="stationary_but_moving", stationary=True)
+    assert NuScenesGT._box_velocity(me, "a", True, o)[3] == "stationary_but_moving", "the flag of the flow box stays on a stationary box"
+    assert NuScenesGT._box_velocity(me, "a", True, None)[3] == "ok"
+    grid = GridSpec()
+    R = Raster(grid, 4)
+    cv = _BoxCanvas(R)
+    sq = lambda x0, y0: R.fill(R.canvas(), [(np.array([[x0, y0], [x0 + 4, y0], [x0 + 4, y0 + 4], [x0, y0 + 4]], float), [])])          # noqa: E731
+    cv.paint("vehicle", sq(10, 0), True, False, np.zeros(2), float("nan"))                       # observed, velocity unknown
+    cv.paint("vehicle", sq(20, 0), True, True, np.array([3.0, 0.0]), 0.4)                       # observed, velocity known
+    out = cv.layers(R, grid, 4)
+    unk, kn = (out["instance"] == 0), (out["instance"] == 1)
+    assert unk.any() and kn.any() and (out["flow_weight"][unk] == 0).all() and (out["flow_weight"][kn] == 1).all()
+    assert (out["flow_sigma"][unk] == FLOW_SIGMA_UNKNOWN).all() and np.allclose(out["flow_sigma"][kn], 0.4) and (out["flow_sigma"][~(unk | kn)] == 0.1).all(), "sigma: unknown / known / free space"
+    assert np.isfinite(out["flow_sigma"]).all()
+    for bad_ss in (1, 3):
+        try:
+            Raster(grid, bad_ss)
+            raise AssertionError("an odd supersampling must be refused")
+        except ValueError as e:
+            assert "even" in str(e)
+    # coverage.blocked_at_heights (one clip for k heights) equals `blocked` per height, with several prisms, points inside prisms and a camera behind a box
+    from . import coverage as cvg
+    for seed in range(6):
+        rng = np.random.default_rng(seed)
+        prisms = [(np.array([[x, y - 1], [x, y + 1], [x + 4, y + 1], [x + 4, y - 1]], float), 0.0, h)
+                  for x, y, h in ((8, 0, 1.6), (14, 3, 3.0), (22, -4, 0.8), (30 + seed, 1, 2.5))]
+        cam = np.array([-3.0 if seed < 5 else 12.0, 0.2, 1.5])                                         # the last one: a camera inside the scene, boxes behind it
+        pts = np.c_[rng.uniform(0, 45, 3000), rng.uniform(-12, 12, 3000)]
+        zs = rng.uniform(0.0, 3.0, (3, 3000))
+        got = cvg.blocked_at_heights(pts, zs, cam, prisms)
+        for h in range(3):
+            assert np.array_equal(got[h], cvg.blocked(np.c_[pts, zs[h]], cam, prisms)), (seed, h)
+        assert got.any() and not got.all(), "the test must contain blocked and free points"
+
+
 def _front_checks(gt, toks):
     """footprints against the devkit, handedness against the image, centre-line direction, divider width, stored file against live"""
     from scipy.spatial import cKDTree
@@ -69,6 +113,13 @@ def _front_checks(gt, toks):
         if ahead.sum() >= 10:
             assert np.median(g["centreline_dir"][0][ahead]) > 0.5, "the centre-line ahead of the car points forward"
             n_dir += 1
+        # 3b. the contract of the angles and flags (v13): box yaw wrapped to [-pi, pi], centre-line direction a unit vector or (0, 0), flow_sigma finite and positive, the flag of a
+        #     stationary box that no sensor sees is `unobserved` (before it was always `ok`)
+        assert all(abs(b["yaw"]) <= math.pi + 1e-9 for b in m["boxes"]), "box yaw is wrapped to [-pi, pi]"
+        nrm = np.hypot(g["centreline_dir"][0], g["centreline_dir"][1])[cl]
+        assert np.all((np.abs(nrm - 1) < 1e-3) | (nrm == 0)), "centreline_dir is a unit vector, or (0, 0) where the directions cancel"
+        assert np.isfinite(g["flow_sigma"]).all() and (g["flow_sigma"] > 0).all(), "flow_sigma is finite and positive everywhere"
+        assert all(b["vel_flag"] == "unobserved" for b in m["boxes"] if b["stationary"] and not b["observed"]), "an unobserved stationary box says so"
         # 4. the divider mask lies on its vectors (within a cell and a half) and every vector sample is within a cell of a set cell
         divs = [np.asarray(v, float) for v in m["vectors"]["lane_divider"] if len(v) >= 2]
         if divs:
@@ -105,6 +156,14 @@ def _map_checks(gt, name, toks):
     xs, ys = grid.centres()
     scene = next(s for s in gt.nusc.scene if s["name"] == name)
     nmap = gt.map_for(scene["token"])
+    # records_in_patch (the devkit's scan with a prefilter by bounds, also for lane_connector, which has no devkit bounds) gives the devkit's own records on a few patches
+    pose = np.asarray(gt.keyframe(toks[0])["meta"]["T_e2g"], float)[:2, 3]
+    for dx, dy, half in ((0, 0, 40), (25, -10, 30), (-60, 40, 55)):
+        box = (pose[0] + dx - half, pose[1] + dy - half, pose[0] + dx + half, pose[1] + dy + half)
+        layers = ["lane", "lane_connector", "drivable_area", "ped_crossing", "road_divider", "lane_divider"]
+        mine = gt.records_in_patch(nmap, box, layers)
+        for layer in layers:
+            assert mine[layer] == nmap.get_records_in_patch(box, [layer], mode="intersect")[layer], (layer, box)
     res = {}
     for tok in toks:
         g = gt.keyframe(tok)
@@ -193,6 +252,7 @@ def run(root=None, verbose=True):
     root = os.path.expanduser(root or "~/data/nuscenes")
     gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-0553", "scene-0916"])
     toks = [gt.keyframes("scene-0061")[8], gt.keyframes("scene-0103")[20]]
+    _contract_checks()
     msgs = [_front_checks(gt, toks), _map_checks(gt, "scene-0061", toks[:1])]
     lane_toks = []
     for name in ("scene-0061", "scene-0103", "scene-0553", "scene-0916"):

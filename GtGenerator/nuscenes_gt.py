@@ -1,26 +1,29 @@
-"""nuScenes GT generator of the autoGT suite: per keyframe the static BEV layers, the objects, the masks and the velocity /
+"""nuScenes GT generator of GtGenerator: per keyframe the static BEV layers, the objects, the masks and the velocity /
 flow field - and training samples (previous, current, next keyframe with the ego steps between them).
 
 Layers on a grid (`GridSpec`: x forward 0..60 m, y left -26..26 m, 0.5 m or 0.25 m), arrays [ix, iy], ego frame at the
 keyframe's front-camera time:
 - areas: drivable_area, ped_crossing, walkway, stop_line, carpark_area - coverage fraction (4 x 4 supersampling)
 - lines: lane_divider, road_divider - 1-cell mask (`<name>`) and a truncated distance field (`<name>_dist`, metres, up to 2 m)
-- centre-lines: lane and lane_connector arcs - mask `centreline` and direction `centreline_dir` (cos, sin of the heading)
+- centre-lines: lane and lane_connector arcs - mask `centreline` and direction `centreline_dir` (cos, sin of the heading, a UNIT vector: the mean of the
+  directions of the lines that cross a cell, scaled to length 1; (0, 0) where they cancel out, mean length < 0.05)
 - objects: vehicle, pedestrian, two_wheeler - coverage fraction; `instance` (index into meta["boxes"], -1 = none); only boxes
   with at least one lidar or radar point; the others go into `ignore` (neither object nor free space)
-- velocity / flow (autogt/flow.py, all in m/s, never per frame): `velocity` (2, nx, ny) world velocity of the covering box in
+- velocity / flow (flow.py, all in m/s, never per frame): `velocity` (2, nx, ny) world velocity of the covering box in
   ego axes (radar-corrected, 0 elsewhere), `flow_ego` (2, nx, ny) apparent velocity of a static world point caused by the ego
   motion at the camera time, `flow` = flow_ego + velocity, `flow_weight` (nx, ny) 1 known / 0 unknown (ignored boxes, unknown
-  velocity), `flow_sigma` (nx, ny) std of the speed estimate. Per box in meta: vel, vel_source, vel_flag, vel_sigma, vel_known
-- masks (autogt/coverage.py, v7): camera (ground cells that project into the CAM_FRONT image), occluded (ground cells a box hides from the
+  velocity), `flow_sigma` (nx, ny) std of the speed estimate (0.1 m/s in free space, FLOW_SIGMA_UNKNOWN = 10 m/s on every cell whose `flow_weight` is 0: a box of unknown velocity or without a sensor point;
+  always finite, also for the devkit velocity of use_flow=False). Per box in meta: vel, vel_source, vel_flag, vel_sigma, vel_known (a box of unknown velocity has vel (0, 0), vel_known False,
+  vel_sigma NaN: check vel_known before you use vel)
+- masks (coverage.py): camera (ground cells that project into the CAM_FRONT image), occluded (ground cells a box hides from the
   camera, boxes standing on the ground plane with their real height), radar (inside the fan of one of the five radars: +-60 deg, measured:
   99.9 % of all detections of nuScenes mini lie inside it), undefined (neither), ignore (see objects). Per box in meta: num_lidar_pts,
   num_radar_pts (nuScenes counts), share_camera / share_radar / share_fusion (the share of the footprint the sensors observe, D38 b)
-- meta: sample, scene, timestamp, T_e2g, boxes, res, cam_file, K, T_c2e, image_size, radar_poses, vectors (exact dividers / centre-lines
-  as ego polylines)
-Rules (Mirko, 2026-10-26): stationary GT is temporally stable. Map layers come from the fixed world geometry in every frame;
-a correction is allowed only per map element in WORLD coordinates (`map_offsets`: element token -> (dx, dy) m, the same in
-every frame), never per frame. Stationary objects (autogt.flow.is_stationary: all speeds < 0.5 m/s, all positions < 1 m from
+- meta: sample, scene, timestamp, T_e2g, boxes (EVERY annotated box of the three classes of the keyframe, also those outside the grid: filter by `instance`
+  or by the corners), res, cam_file, K, T_c2e, image_size, radar_poses, vectors (exact dividers / centre-lines as ego polylines). A box's `yaw` is
+  relative to the ego heading, wrapped to [-pi, pi]
+Rules (Mirko, 2026-10-26): stationary GT is temporally stable. Map layers come from the fixed world geometry in every frame, never
+corrected per frame. Stationary objects (flow.is_stationary: all speeds < 0.5 m/s, all positions < 1 m from
 the median) get ONE world pose for all their keyframes and velocity 0.
 Boxes are at the CAMERA time (decided by Mirko 2026-10-31, the way Waymo's camera_synced_box works): the keyframe is annotated
 at the lidar time, the front camera took its image about 36 ms earlier, so a box of known velocity is moved by v * (t_camera -
@@ -46,6 +49,13 @@ from .layers import AREAS, DIST_MAX, LINES, OBJECTS, SHIFT, Raster, cell_centres
 from .nuscenes_adapter import NuScenesScene, category_group, pose_matrix
 
 SIGNATURE_FILES = ("grid.py", "layers.py", "flow.py", "nuscenes_adapter.py", "nuscenes_gt.py", "coverage.py")
+FLOW_SIGMA_UNKNOWN = 10.0        # m/s, flow_sigma on the cells of a box whose velocity is unknown (flow_weight is 0 there): finite, worse than any estimate
+MIN_DIR_NORM = 0.05              # centreline_dir: a cell whose line directions cancel out (mean length below this) gets (0, 0)
+
+
+def _wrap(angle):
+    """an angle in rad wrapped to [-pi, pi]"""
+    return math.remainder(angle, 2 * math.pi)
 
 
 def _to_ego(xy, T_g2e):
@@ -76,7 +86,7 @@ class _BoxCanvas:
             self.inst[m] = self.n
             if known:
                 self.vel[0][m], self.vel[1][m] = ve[0], ve[1]
-                self.sig[m] = vsig
+                self.sig[m] = vsig if np.isfinite(vsig) else FLOW_SIGMA_UNKNOWN          # the devkit velocity (use_flow=False) has no sigma
                 self.pres |= one
             else:
                 self.unknown |= one
@@ -95,25 +105,24 @@ class _BoxCanvas:
         # that a cell with a velocity always names its box (meta["boxes"][instance])
         c = ss // 2
         a = self.inst.reshape(grid.nx, ss, grid.ny, ss)
-        out["instance"] = (a[:, c - 1:c + 1, :, c - 1:c + 1] if ss % 2 == 0 else a[:, c:c + 1, :, c:c + 1]).max((1, 3))
+        out["instance"] = a[:, c - 1:c + 1, :, c - 1:c + 1].max((1, 3))
         out["flow_weight"] = ((R.at_centres(self.ignore) == 0) & (R.at_centres(self.unknown) == 0)).astype(np.float32)
-        out["flow_sigma"] = np.where(out["instance"] >= 0, R.at_centres(self.sig) / np.maximum(pc, 1e-6), 0.1).astype(np.float32)   # mean over the covered sub-pixels, like velocity
+        known = R.at_centres(self.sig) / np.maximum(pc, 1e-6)                                  # mean over the covered sub-pixels, like velocity
+        sigma = np.where(out["instance"] >= 0, np.where(pc > 0, known, FLOW_SIGMA_UNKNOWN), 0.1)
+        out["flow_sigma"] = np.where(out["flow_weight"] == 0, FLOW_SIGMA_UNKNOWN, sigma).astype(np.float32)        # weight 0 (unknown velocity, no sensor point) <=> the unknown sigma
         return out
 
 
 class NuScenesGT:
     """GT per keyframe and training samples from a nuScenes copy (the WSL views ~/data/nuscenes, ~/data/nuscenes_full)."""
 
-    def __init__(self, dataroot, version, nusc=None, stationary_fix=True, map_offsets=None, use_flow=True, use_radar=True,
-                 flow_config=None, boxes_at="camera"):
+    def __init__(self, dataroot, version, nusc=None, *, use_flow=True, use_radar=True, flow_config=None, boxes_at="camera"):
         from nuscenes.nuscenes import NuScenes
         assert boxes_at in ("camera", "annotation"), boxes_at
         self.nusc = nusc or NuScenes(version=version, dataroot=dataroot, verbose=False)
         self.dataroot = dataroot
         self._maps = {}
         self.boxes_at = boxes_at                       # time of the moving boxes: "camera" (default) or "annotation"
-        self.stationary_fix = stationary_fix
-        self.map_offsets = map_offsets or {}
         self.use_flow, self.use_radar, self.flow_config = use_flow, use_radar, flow_config
         self._scenes = collections.OrderedDict()
         self._stationary = {}
@@ -140,16 +149,13 @@ class NuScenesGT:
         for layer in layers:
             key = (nmap.map_name, layer)
             if key not in self._bounds:
+                toks = [r["token"] for r in getattr(nmap, layer)]
                 try:
-                    toks = [r["token"] for r in getattr(nmap, layer)]
-                    self._bounds[key] = (toks, np.array([nmap.get_bounds(layer, t) for t in toks], float).reshape(-1, 4))
-                except Exception:                                  # a layer without bounds: devkit path
-                    self._bounds[key] = None
-            b = self._bounds[key]
-            if b is None:
-                out[layer] = nmap.get_records_in_patch(box, [layer], mode="intersect")[layer]
-                continue
-            toks, bb = b
+                    bb = np.array([nmap.get_bounds(layer, t) for t in toks], float)
+                except ValueError:                                 # lane_connector: the devkit has no bounds for it (it fell back to the devkit's own scan of every record, every keyframe)
+                    bb = np.array([nmap.extract_polygon(nmap.get(layer, t)["polygon_token"]).bounds for t in toks], float)        # a polygon's bounds are the same prefilter
+                self._bounds[key] = (toks, bb.reshape(-1, 4))
+            toks, bb = self._bounds[key]
             hit = (bb[:, 0] <= x1) & (bb[:, 2] >= x0) & (bb[:, 1] <= y1) & (bb[:, 3] >= y0)
             out[layer] = [toks[i] for i in np.nonzero(hit)[0] if self._record_in_patch(nmap, layer, toks[i], box, patch)]
         return out
@@ -176,7 +182,7 @@ class NuScenesGT:
 
     def signature(self):
         """10 hex chars identifying this generator: the source of every file that shapes the GT (SIGNATURE_FILES) plus the
-        flags (stationary_fix, map_offsets, use_flow, use_radar, flow config). Part of every cache key of derived GT, so a
+        flags (use_flow, use_radar, flow config, boxes_at). Part of every cache key of derived GT, so a
         changed generator can never be mixed with GT cached by an older one."""
         sig = getattr(self, "_signature", None)
         if sig is None:                  # computed ONCE (at construction): a process that runs while the source is edited keeps
@@ -184,14 +190,13 @@ class NuScenesGT:
             here = os.path.dirname(__file__)                 # write its cache under a key no other process reads
             for name in SIGNATURE_FILES:
                 h.update(open(os.path.join(here, name), "rb").read())
-            h.update(repr((self.stationary_fix, sorted((k, tuple(v)) for k, v in self.map_offsets.items()), self.use_flow,
-                           self.use_radar, self.flow_config, self.boxes_at)).encode())
+            h.update(repr((self.use_flow, self.use_radar, self.flow_config, self.boxes_at)).encode())
             sig = self._signature = h.hexdigest()[:10]
         return sig
 
     def stationary_instances(self, scene_token):
         """instance token -> fixed world pose (translation (3,), yaw, size (3,)) of the scene's stationary instances
-        (rule: autogt.flow.is_stationary on the 2 Hz tracks)."""
+        (rule: flow.is_stationary on the 2 Hz tracks)."""
         if scene_token in self._stationary:
             return self._stationary[scene_token]
         cfg = self.flow_config or flowmod.Config()
@@ -276,8 +281,7 @@ class NuScenesGT:
             for tok in recs[layer]:
                 line = nmap.extract_line(nmap.get(layer, tok)["line_token"])
                 if not line.is_empty:
-                    g = np.asarray(line.coords)[:, :2] + np.asarray(self.map_offsets.get(tok, (0.0, 0.0)))  # world-fixed
-                    pls.append(_to_ego(g, T_g2e))
+                    pls.append(_to_ego(np.asarray(line.coords)[:, :2], T_g2e))
             vectors[layer] = pls                                  # exact geometry, ego frame (no grid)
             R.lines(img, pls)
             dist = cv2.distanceTransform((img == 0).astype(np.uint8), cv2.DIST_L2, 5) * R.s
@@ -303,14 +307,16 @@ class NuScenesGT:
                 cv2.polylines(csin, [pp[i:i + 2]], False, float(math.sin(hd[i])), 1, cv2.LINE_8, SHIFT)
         out["centreline"] = (R.coverage(cmask) > 0).astype(np.float32)
         nz = np.maximum(R.coverage(cmask.astype(np.float32)), 1e-6)
-        out["centreline_dir"] = np.stack([R.coverage(ccos) / nz, R.coverage(csin) / nz]) * out["centreline"]
+        d = np.stack([R.coverage(ccos) / nz, R.coverage(csin) / nz])                       # the mean of the unit directions painted in the cell
+        n = np.hypot(d[0], d[1])
+        out["centreline_dir"] = (d / np.maximum(n, 1e-6) * (n > MIN_DIR_NORM)) * out["centreline"]      # ... as a unit vector (0, 0) where they cancel out
         return out, vectors
 
     def _box_velocity(self, atok, stationary, o):
         """(v, known, source, flag, sigma) of one annotated box: stationary (v = 0), the flow box's estimate `o`, the devkit's velocity
         (flow off), or unknown (a short track): never a silent zero"""
-        if stationary:
-            return np.zeros(2), True, "stationary", "ok", 0.05
+        if stationary:                                       # v = 0, but the flag of the flow box stays (unobserved, stationary_but_moving)
+            return np.zeros(2), True, "stationary", o.flag if o is not None else "ok", 0.05
         if o is not None and np.isfinite(o.v).all():
             return o.v, True, o.source, o.flag, math.sqrt(float(np.trace(o.cov)) / 2)
         if not self.use_flow and np.isfinite(self.nusc.box_velocity(atok)[:2]).all():
@@ -324,10 +330,10 @@ class NuScenesGT:
         Rg2e = T_g2e[:3, :3]
         yaw_e = math.atan2(T_e2g[1, 0], T_e2g[0, 0])
         canvas, boxes = _BoxCanvas(R), []
-        fixed = self.stationary_instances(sample["scene_token"]) if self.stationary_fix else {}
+        fixed = self.stationary_instances(sample["scene_token"])
         fobj = {}
         if self.use_flow:
-            fobj = {o.id: o for o in self.scene(sample["scene_token"]).flow(sample["token"], None, at="annotation",
+            fobj = {o.id: o for o in self.scene(sample["scene_token"]).flow(sample["token"], at="annotation",
                                                                               use_radar=self.use_radar).objects}
         # the GT time of the boxes: the annotations are at the keyframe (lidar) time, the ego frame is that of `sd`
         t_cam = (sd["timestamp"] - sample["timestamp"]) * 1e-6 if self.boxes_at == "camera" else 0.0
@@ -356,7 +362,7 @@ class NuScenesGT:
             observed = a["num_lidar_pts"] + a["num_radar_pts"] > 0
             canvas.paint(grp, R.fill(R.canvas(), [(ce, [])]), observed, known, ve, vsig)
             boxes.append({"group": grp, "corners": ce, "center": (Rg2e @ (np.asarray(trans) - T_e2g[:3, 3])),
-                          "size": list(size), "yaw": yaw - yaw_e, "vel": ve, "vel_source": source, "vel_flag": vflag,
+                          "size": list(size), "yaw": _wrap(yaw - yaw_e), "vel": ve, "vel_source": source, "vel_flag": vflag,
                           "vel_sigma": vsig, "vel_known": known, "visibility": a["visibility_token"], "token": atok,
                           "instance": a["instance_token"], "stationary": stationary, "observed": observed,
                           "world": np.asarray(trans), "world_ann": trans_ann, "shift": Rg2e[:2, :2] @ shift,
@@ -372,7 +378,7 @@ class NuScenesGT:
         return flowmod.ego_flow_field(grid, flowmod.ego_velocity(ego, sd["timestamp"] * 1e-6, (self.flow_config or flowmod.Config()).ego_half_window))
 
     def _coverage(self, sample, sd, boxes, grid):
-        """the masks camera / occluded / radar / undefined (autogt/coverage.py: camera cells = ground points in the image, what boxes hide
+        """the masks camera / occluded / radar / undefined (coverage.py: camera cells = ground points in the image, what boxes hide
         from the camera by their height, the radar fans) and the observed shares of every box (set on it) -> (masks, the rig for meta)"""
         cs = self.nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
         K = np.array(cs["camera_intrinsic"])

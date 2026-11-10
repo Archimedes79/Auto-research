@@ -1,15 +1,14 @@
-"""nuScenes adapter of the autoGT flow box (autogt/flow.py): turns devkit records into Track / Ego / RadarFrame.
+"""nuScenes adapter of the flow box (flow.py): turns devkit records into Track / Ego / RadarFrame.
 
     scene = NuScenesScene(nusc, dataroot, "scene-0061")
-    fg = scene.flow(sample_token, GridSpec())                  # FlowGT at the camera time of that keyframe
-    fg = scene.flow(sample_token, None, at="annotation")       # object list only, at the annotation time
+    fg = scene.flow(sample_token)                              # FlowGT (ego motion + objects) at the camera time of that keyframe
+    fg = scene.flow(sample_token, at="annotation")             # the same at the annotation time
 
 All inputs are rebuilt from time stamps: tracks from the 2 Hz annotations (box centre, yaw, size, observed = at least one
 lidar or radar point), the ego from the 12 Hz CAM_FRONT poses of the whole scene, radar from the five radars' samples and
 sweeps within +-`radar_window` s of the frame time (position and ego-compensated radial Doppler in the world frame).
 Needs only the metadata and the radar files - no lidar, no maps.
 """
-import collections
 import os
 from concurrent.futures import ThreadPoolExecutor
 
@@ -22,7 +21,7 @@ RADARS = ("RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LE
 
 
 def category_group(name):
-    """nuScenes category -> autogt group (None = not a GT class)."""
+    """nuScenes category -> GtGenerator group (None = not a GT class)."""
     if name.startswith(("vehicle.bicycle", "vehicle.motorcycle")):
         return "two_wheeler"
     if name.startswith("vehicle."):
@@ -40,13 +39,11 @@ def pose_matrix(rec):
 
 
 class NuScenesScene:
-    def __init__(self, nusc, dataroot, scene_token_or_name, radar_window=0.1, config=None, max_radar_cache=400):
+    def __init__(self, nusc, dataroot, scene_token_or_name, radar_window=0.1, config=None):
         self.nusc, self.root, self.radar_window, self.config = nusc, dataroot, radar_window, config
         self.scene = next(s for s in nusc.scene if scene_token_or_name in (s["name"], s["token"]))
         self.tracks = self._tracks()
         self.ego = self._ego()
-        self._radar_cache = collections.OrderedDict()
-        self._max_cache = max_radar_cache
         self._points = {}                                  # radar files read ahead by `_prefetch`, taken by `_radar_frame`
         self._sample_times = None
 
@@ -90,13 +87,13 @@ class NuScenesScene:
         return Ego(t, x, y, yaw)
 
     # ---- radar
-    def radar(self, t, only=None):
-        """RadarFrames of the five radars (or of `only`, a list of channel names) within +-radar_window s of t."""
+    def radar(self, t):
+        """RadarFrames of the five radars within +-radar_window s of t."""
         from nuscenes.utils.data_classes import RadarPointCloud
         nusc = self.nusc
         sample = self._nearest_sample(t)
         want = []
-        for ch in (only or RADARS):
+        for ch in RADARS:
             sd0 = nusc.get("sample_data", sample["data"][ch])
             cands = [sd0]
             for direction in ("prev", "next"):
@@ -116,9 +113,9 @@ class NuScenesScene:
         return frames
 
     def _prefetch(self, sds, RadarPointCloud):
-        """read the radar files that are not cached yet in parallel: opening a file on the raw-data disk takes about 50 ms, a keyframe needs
+        """read the radar files of a frame in parallel: opening a file on the raw-data disk takes about 50 ms, a keyframe needs
         10 - 15 of them, and the frames are made from the points in the same order as before (the result does not change)"""
-        todo = [sd for sd in sds if sd["token"] not in self._radar_cache and sd["token"] not in self._points]
+        todo = [sd for sd in sds if sd["token"] not in self._points]
         if len(todo) < 2:
             return
         with ThreadPoolExecutor(max_workers=min(8, len(todo))) as ex:
@@ -127,8 +124,6 @@ class NuScenesScene:
 
     def _radar_frame(self, sd, ch, RadarPointCloud):
         key = sd["token"]
-        if key in self._radar_cache:
-            return self._radar_cache[key]
         nusc = self.nusc
         cs = nusc.get("calibrated_sensor", sd["calibrated_sensor_token"])
         Tg = pose_matrix(nusc.get("ego_pose", sd["ego_pose_token"])) @ pose_matrix(cs)       # world <- sensor
@@ -143,9 +138,6 @@ class NuScenesScene:
             r = P[:, :2] - Tg[:2, 3]
             d = np.einsum("ij,ij->i", V[:, :2], r / np.maximum(np.linalg.norm(r, axis=1, keepdims=True), 1e-6))
             fr = RadarFrame(sd["timestamp"] * 1e-6, ch, Tg[:2, 3].copy(), P[:, :2], d)
-        self._radar_cache[key] = fr
-        while len(self._radar_cache) > self._max_cache:
-            self._radar_cache.popitem(last=False)
         return fr
 
     def _nearest_sample(self, t):
@@ -163,8 +155,8 @@ class NuScenesScene:
         s = self.nusc.get("sample", sample_token)
         return (self.nusc.get("sample_data", s["data"]["CAM_FRONT"])["timestamp"] if at == "camera" else s["timestamp"]) * 1e-6
 
-    def flow(self, sample_token, grid=None, at="camera", use_radar=True, config=None):
+    def flow(self, sample_token, at="camera", use_radar=True, config=None):
         """FlowGT for a keyframe. at = "camera" (the CAM_FRONT time of the keyframe: the ego frame of the GT) or
         "annotation" (the annotation / lidar time)."""
         t = self.time_of(sample_token, at)
-        return estimate_flow(self.tracks, self.ego, t, grid, self.radar(t) if use_radar else (), config or self.config)
+        return estimate_flow(self.tracks, self.ego, t, self.radar(t) if use_radar else (), config or self.config)

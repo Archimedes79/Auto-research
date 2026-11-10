@@ -1,5 +1,5 @@
 """Rasterising helpers of the static GT layers (dataset independent): an exact supersampled raster, cell centres, a 2D
-occlusion mask. Arrays are [ix, iy] (x forward, y left) as everywhere in autogt; coordinates are the ego frame at the frame
+occlusion mask. Arrays are [ix, iy] (x forward, y left) as everywhere in GtGenerator; coordinates are the ego frame at the frame
 time. Used by nuscenes_gt.py."""
 import cv2
 import numpy as np
@@ -15,6 +15,8 @@ class Raster:
     """Supersampled canvas of a grid; draws ego-frame (x, y) geometry in our [ix, iy] convention."""
 
     def __init__(self, grid, ss=4):
+        if ss < 2 or ss % 2:
+            raise ValueError(f"the supersampling must be even (a cell centre lies between sub-pixels), got {ss}")
         self.g, self.ss = grid, ss
         self.s = grid.res / ss
         self.shape = (grid.nx * ss, grid.ny * ss)            # rows = x, cols = y
@@ -99,17 +101,15 @@ class Raster:
         return img.astype(np.float32).reshape(g.nx, ss, g.ny, ss).mean((1, 3))
 
     def at_centres(self, img):
-        """value at the cell centres (mean of the central 2 x 2 sub-pixels for an even ss)."""
+        """value at the cell centres (mean of the central 2 x 2 sub-pixels)."""
         g, ss = self.g, self.ss
         a = img.reshape(g.nx, ss, g.ny, ss)
         c = ss // 2
-        return a[:, c - 1:c + 1, :, c - 1:c + 1].mean((1, 3)) if ss % 2 == 0 else a[:, c, :, c]
+        return a[:, c - 1:c + 1, :, c - 1:c + 1].mean((1, 3))
 
 
 def cell_centres(grid):
-    xs = grid.x_min + (np.arange(grid.nx) + 0.5) * grid.res
-    ys = grid.y_min + (np.arange(grid.ny) + 0.5) * grid.res
-    return np.meshgrid(xs, ys, indexing="ij")
+    return grid.centres()
 
 
 def inside_quad(P, poly):

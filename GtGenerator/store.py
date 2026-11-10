@@ -36,8 +36,8 @@ def check_arguments(stride=1, res=0.5, ss=4, workers=1, set_name=None, scenes=No
     """the arguments of generate / build / report that would otherwise end in a ZeroDivisionError or a silent wrong run -> ValueError with the message"""
     if stride < 1:
         raise ValueError(f"stride must be 1 or more, got {stride}")
-    if res <= 0 or ss < 1:
-        raise ValueError(f"res must be positive and ss 1 or more, got res {res}, ss {ss}")
+    if res <= 0 or ss < 2 or ss % 2:
+        raise ValueError(f"res must be positive and ss even (2, 4, ...), got res {res}, ss {ss}")
     if workers < 1:
         raise ValueError(f"workers must be 1 or more, got {workers}")
     if set_name and scenes is not None:

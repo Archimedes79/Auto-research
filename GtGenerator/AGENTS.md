@@ -62,7 +62,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `lane_divider` `road_divider` | (nx, ny) | 1-cell line masks |
 | `lane_divider_dist` `road_divider_dist` | (nx, ny) | distance to the nearest line in m, truncated at 2 |
 | `centreline` | (nx, ny) | mask of the lane / lane-connector centre-lines |
-| `centreline_dir` | (2, nx, ny) | direction of travel (cos, sin of the heading) on `centreline` cells: the MEAN of the lines in the cell, so shorter than 1 where lines cross (down to 0.04): normalise it if you need a unit vector |
+| `centreline_dir` | (2, nx, ny) | direction of travel (cos, sin of the heading) on `centreline` cells: a unit vector (the mean over the lines in the cell, scaled to length 1), (0, 0) where they cancel out |
 | `vehicle` `pedestrian` `two_wheeler` | (nx, ny) | footprint coverage of **observed** boxes (at least one lidar or radar point) |
 | `instance` | (nx, ny) int32 | index into `meta["boxes"]` of the box that covers the cell, -1 = none |
 | `ignore` | (nx, ny) | boxes WITHOUT any lidar / radar point: neither object nor free space - leave out of every loss |
@@ -70,7 +70,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `flow_ego` | (2, nx, ny) | apparent velocity of a static world point caused by the ego motion, -(v + omega x r) |
 | `flow` | (2, nx, ny) | `flow_ego + velocity`: the apparent motion in the camera frame; displacement over any dt = `flow * dt` |
 | `flow_weight` | (nx, ny) | 1 = velocity known, 0 = unknown (ignored boxes, unknown velocity): the supervision mask |
-| `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s (0.1 in free space; 0 on the cells of an observed box of unknown velocity, where `flow_weight` is 0: never use 1 / sigma without the weight) |
+| `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s: 0.1 in free space, 10 on EVERY cell whose `flow_weight` is 0 (a box of unknown velocity or without a sensor point), always finite |
 | `camera` | (nx, ny) | ground cells that project into the CAM_FRONT image |
 | `occluded` | (nx, ny) | ground cells a box hides from the camera, by the box's real height (v7: no longer an infinitely high box; section 3a) |
 | `radar` | (nx, ny) | cells inside the +-60 deg fan of one of the five radars |
@@ -84,7 +84,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 (s, signed: negative for prev) and `steps` (list of (dt, ego speed m/s, yaw rate rad/s) per 12 Hz camera frame).
 
 One box of `meta["boxes"]`: `group` ("vehicle" / "pedestrian" / "two_wheeler"), `corners` (4x2 footprint, ego x, y), `center` (3, ego
-frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, ego frame; NOT wrapped: 25 - 30 % of the boxes lie outside [-pi, pi], use sin / cos or wrap it), `vel` (2, world velocity m/s in ego axes),
+frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, relative to the ego heading, wrapped to [-pi, pi]), `vel` (2, world velocity m/s in ego axes),
 `vel_source` ("stationary" / "track" / "track+radar" / "radar" / "unknown"), `vel_flag` ("ok", "unobserved", "short_track",
 "stationary_but_moving", "radar_override", "radar_conflict"), `vel_sigma` (m/s; NaN when unknown), `vel_known` (bool; False = unknown: `vel` is (0, 0), never use it without this flag), `visibility` (nuScenes
 annotator bin "1".."4" = 0-40 / 40-60 / 60-80 / 80-100 %), `token` (annotation), `instance` (instance token), `stationary` (bool:
@@ -209,7 +209,7 @@ Open with Mirko, kept as parameters (another value = another lane signature): `b
   unknown velocity are not moved. `GtGenerator(..., boxes_at="annotation")` / `--boxes-at annotation` restores the annotation positions
   (nuScenes-style evaluation; another signature). A time `dt` is a decoder input only to predict to ANOTHER time (the +-0.5 s keyframes).
 - **Stationary means stationary**: a parked car has ONE world pose and velocity 0 in all keyframes; map corrections are allowed per
-  map element in world coordinates (`map_offsets`), never per frame.
+  map element, never per frame.
 - **Where a loss or a score counts** (D36 - D38): the coverage of section 3a (`coverage_for`), not the old per-layer habits.
 - **Supervision masks**: objects only where `observed`; leave `ignore` out; velocity only where `flow_weight > 0`; `camera` /
   `occluded` / `radar` / `undefined` say what the sensors can see. **"Moving" has one definition**: known velocity and speed above
@@ -255,7 +255,7 @@ cur["flow"] * dt                         # first-order displacement of every cel
   (O1-O8 objects, M1-M3 map, V1-V3 velocity; `checks.py` documents each) and the leave-one-radar-out test of the radar correction.
 - Change the generator: edit, `python -m GtGenerator selftest`, `report` on mini, tell the trainer the new signature, then
   `python -m GtGenerator clean --stale-caches data/autogt` (dry run first). A new layer must also be added to the table above (selftest fails otherwise).
-- Another dataset: write an adapter that builds `Track`, `Ego`, `RadarFrame`, `GridSpec` for `GtGenerator.flow.estimate_flow`
+- Another dataset: write an adapter that builds `Track`, `Ego`, `RadarFrame` for `GtGenerator.flow.estimate_flow`
   (numpy only) and a generator for the static layers (`layers.py` is reusable).
 
 ## 6. Files

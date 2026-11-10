@@ -1,4 +1,4 @@
-"""The BEV grid every autoGT layer is defined on: x forward, y left, the ego frame at the frame time; arrays are [ix, iy]."""
+"""The BEV grid every GtGenerator layer is defined on: x forward, y left, the ego frame at the frame time; arrays are [ix, iy]."""
 from dataclasses import dataclass
 
 import numpy as np

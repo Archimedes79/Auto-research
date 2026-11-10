@@ -272,7 +272,7 @@ def _store_checks(root):
         open(os.path.join(d, sig, "a" * 32 + ".npz"), "wb").write(b"x")
         few, many = ["a" * 32, "z" * 32], ["a" * 32] + ["z%031d" % i for i in range(60)]
         assert suite.missing(few, data=d) == ["z" * 32] and suite.missing(many, data=d) == many[1:]
-    for kw in (dict(stride=0), dict(res=0), dict(ss=0), dict(workers=0), dict(set_name="small", scenes=["scene-0061"])):
+    for kw in (dict(stride=0), dict(res=0), dict(ss=0), dict(ss=3), dict(workers=0), dict(set_name="small", scenes=["scene-0061"])):
         try:
             check_arguments(**kw)
             raise AssertionError(f"{kw} must be refused")

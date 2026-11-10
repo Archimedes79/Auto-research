@@ -246,13 +246,13 @@ def leave_one_radar_out(gen, scenes=None, stride=1):
                 continue
             t = sc.time_of(tok, "annotation")
             frames = sc.radar(t)
-            prior = {o.id: o for o in flowmod.estimate_flow(sc.tracks, sc.ego, t, None).objects}
+            prior = {o.id: o for o in flowmod.estimate_flow(sc.tracks, sc.ego, t).objects}
             for R in RADARS:
                 held = [f for f in frames if f.sensor == R]
                 rest = [f for f in frames if f.sensor != R]
                 if not held:
                     continue
-                fused = {o.id: o for o in flowmod.estimate_flow(sc.tracks, sc.ego, t, None, rest).objects}
+                fused = {o.id: o for o in flowmod.estimate_flow(sc.tracks, sc.ego, t, rest).objects}
                 for i, op in prior.items():
                     if op.stationary or not op.observed or not np.isfinite(op.v).all():
                         continue
