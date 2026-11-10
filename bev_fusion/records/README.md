@@ -6,6 +6,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 |---|---|
 | `LEDGER.csv` / `LEDGER.md` | one row per run (`ledger.py`); made by the first run |
 | `runs/<run id>/` | run record of the launcher: `run.json` (command, commit, tag, status, duration), `run.log`, `heartbeat`, `done` |
+| `frame_changes.md` | the changes of the frame (trainer, data path, interfaces, evaluation, runner) that can move a number, with the evidence, and how to compare runs across them (it replaces the former `FROZEN.md`; nothing is frozen since D73) |
 | `schedule.csv` | the open work of the BEV system as one list for `schedule.py` (rewritten 2026-11-07; the old list of 2 November is in the tag `archive/docs-before-cleanup-2026-11-07`): what waits for the GPU, for the owner chat or for Mirko's words |
 | `champion.json` | the base chain every card is compared against (`base` = a run name with its seeds, `open` = the arms on the board, `options` = adopted options, `promoted` = null until Mirko's OK); read by `../evaluation/board.py` |
 | `jobs/` | the job files of the training system and how the other two suites are called, one folder each: `training/` (`trainsuite`, kind `train`), `running/` (`runsuite`, kind `run`), `evaluation/` (`evalsuite`: no job files, the calls and the mapping from Mirko's sketch); small json recipes kept in git, an example per kind checked by the suite's own `check` |
