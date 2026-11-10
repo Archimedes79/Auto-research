@@ -1,4 +1,4 @@
-"""The lane suite of this project: the general evaluation suite (../../autoresearch/evalsuite) on the lane-centre-line data of VAL.
+"""The lane suite of this project: the general evaluation suite (../../autoresearch/Evaluation) on the lane-centre-line data of VAL.
 
     tools/env/_py14.sh lane_suite.py <system> <command ...>
     tools/env/_py14.sh lane_suite.py dense:e37_final qual random 6 --seed 1          # 6 random frames: a video first, then a frame
@@ -13,7 +13,7 @@ systems
                      graph read from the thinned picture (geo.*, topo.*)
   graphs:<registry>  a model of models/registry.json: its cached network outputs assembled to graphs on the CPU (evaluate.graphs_of): scored as GRAPHS
                      (geo.*, topo.*, and lcr.* = the numbers of evaluate.py: S, Q, J, vertices per 100 m ...) and drawn as a picture (img.*)
-commands: everything of the evalsuite (list, qual frame | debug | random | videos, quant run | table | per-scene | outliers | report | trace | compare,
+commands: everything of the Evaluation (list, qual frame | debug | random | videos, quant run | table | per-scene | outliers | report | trace | compare,
 probe budget | situations | sample | scan); global options --out DIR (default runs/suite/<system>) --state. VAL only: the TEST split is used through
 evaluate.py / run.py with its log entry.
 
@@ -32,7 +32,7 @@ from typing import Any, Dict, List
 import numpy as np
 
 sys.path.insert(0, os.path.join(BP.REPO, "autoresearch"))
-from evalsuite.contracts import FrameRef, Metric, Prediction, Sample, Source, Subject  # noqa: E402
+from Evaluation.contracts import FrameRef, Metric, Prediction, Sample, Source, Subject  # noqa: E402
 from lane_task import Grid, LaneConfig, LaneGraph, LaneTask, rasterize  # noqa: E402  (the lane Task, evaluation/lane_task/)
 
 HOME = os.path.expanduser("~")
@@ -239,7 +239,7 @@ def main(argv=None) -> int:
     if system == "selftest":
         import test_lane_suite as ST
         return ST.main(argv)
-    from evalsuite.cli import main as cli
+    from Evaluation.cli import main as cli
     out = f"{BP.ROOT}/runs/suite/{system.replace(':', '_')}"
     return cli(["--adapter", "lane_suite:build", "--arg", f"system={system}", "--out", out] + argv)
 

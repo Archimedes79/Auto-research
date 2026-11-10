@@ -1,11 +1,11 @@
-"""The split lists (`splits/*.json`), `training/splits.py` (resolve, manifest, split.json) and the trainsuite hook that calls it. Known answers, no data, no GPU.
+"""The split lists (`splits/*.json`), `training/splits.py` (resolve, manifest, split.json) and the Training hook that calls it. Known answers, no data, no GPU.
 
   1. the files: `large` = exactly the lists of the stored config t16_full.json (428 / 82 scenes), `xl` = those of t17_data.json (700 / 82, large inside it), `small` a
      subset of `large` (60 / 10); train and val never share a scene; every file names a GtGenerator version of GtGenerator/versions.csv; train scenes are official nuScenes train scenes, val scenes official val scenes
   2. resolve: `"split": "large"` gives the lists of the inline t16_full.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it; the
      trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false, [] and a number
      are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
-  3. through `trainsuite start`'s code (`plan_start` with the real block of project.json, whose resolve command is checked): the lists arrive in the config, a note says so;
+  3. through `Training start`'s code (`plan_start` with the real block of project.json, whose resolve command is checked): the lists arrive in the config, a note says so;
      the commands of splits/README.md (move a stored config to a split) work, the plain `--set split=NAME` on a config with lists is refused
   4. manifest and split.json of a run folder (built here with known content; the real run t16_full_s0 when it is on disk: split large, commit 40e7ff5b3c)
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_splits.py
@@ -101,11 +101,11 @@ with tempfile.TemporaryDirectory() as tmp:
     p = subprocess.run([sys.executable, "training/splits.py", "resolve"], input=json.dumps(dict(inline, split="nope")), capture_output=True, text=True)
     check(p.returncode == 1 and "no split 'nope'" in p.stderr and "large" in p.stderr, "an unknown split on the command line: exit 1, the message names the splits that exist")
 
-# 3 the trainsuite hook
-from trainsuite import compose as C  # noqa: E402
+# 3 the Training hook
+from Training import compose as C  # noqa: E402
 with tempfile.TemporaryDirectory() as tmp:
-    block = json.load(open("project.json"))["trainsuite"]
-    check(block.get("resolve") == "python3 training/splits.py resolve", "project.json: trainsuite.resolve is the splits.py command (the hook is live)")
+    block = json.load(open("project.json"))["training"]
+    check(block.get("resolve") == "python3 training/splits.py resolve", "project.json: Training.resolve is the splits.py command (the hook is live)")
     check(json.load(open("project.json")).get("package", {}).get("split_record") == "python3 training/splits.py split-json {run_dir} {out_dir}", "project.json: package.split_record is the splits.py command (package.py writes results/<id>/split.json with it)")
     base = os.path.join(tmp, "base.json")
     json.dump(dict(inline, split="small"), open(base, "w"))

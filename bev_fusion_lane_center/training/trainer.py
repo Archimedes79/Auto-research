@@ -13,7 +13,7 @@ What it adds to a plain loop (each of these was missing in a run that was lost):
   * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of optimizer steps made
   * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
-  * the run-directory contract of `autoresearch/trainsuite` (`python -m trainsuite status / health / curves / stop / watch RUN`): `config.json` ({"steps": N, ...}), `log.jsonl` (one row per
+  * the run-directory contract of `autoresearch/Training` (`python -m Training status / health / curves / stop / watch RUN`): `config.json` ({"steps": N, ...}), `log.jsonl` (one row per
     logged step: step, t, total, lr, grad_norm, s_per_step, gpu_gb, the scalars of the loss's info dict, and with `probe=True` the keys grad.<module> / upd.<module> / t_data / t_step; an eval
     row {"step", "val": {...}}), `train.log` (the text output, also `log.txt`), a stop request: the file CONTROL = {"cmd": "stop"} is looked at before every step, then the trainer saves a
     checkpoint, writes STOPPED and exits with code 75 (never 0, so no `.done` and nobody evaluates a half-trained model); the files of an earlier stop are moved aside at the start;
@@ -54,12 +54,12 @@ class Run:
     def log(self, *a):
         line = time.strftime("%H:%M:%S ") + " ".join(str(x) for x in a)
         print(line, flush=True)
-        for name in ("log.txt", "train.log"):                              # log.txt: the name of every older run, train.log: the trainsuite contract
+        for name in ("log.txt", "train.log"):                              # log.txt: the name of every older run, train.log: the Training contract
             with open(os.path.join(self.dir, name), "a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
     def jsonl(self, row):
-        """one row of log.jsonl (the metrics stream the trainsuite reads); a reader on the Windows side may hold the file open: a failed write is printed, not raised"""
+        """one row of log.jsonl (the metrics stream the Training reads); a reader on the Windows side may hold the file open: a failed write is printed, not raised"""
         try:
             with open(os.path.join(self.dir, "log.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, default=float) + "\n")
@@ -67,7 +67,7 @@ class Run:
             print(f"WARNING: log.jsonl row not written ({e})", flush=True)
 
     def stop_requested(self):
-        """the reason (a string) when the file CONTROL says {"cmd": "stop"}, else None (same reading as autoresearch/trainsuite/control.py)"""
+        """the reason (a string) when the file CONTROL says {"cmd": "stop"}, else None (same reading as autoresearch/Training/control.py)"""
         try:
             with open(self.path("CONTROL"), encoding="utf-8") as fh:
                 d = json.load(fh)
@@ -159,7 +159,7 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
     it = None if batch_fn else _endless(loader)
     bad = 0                                                              # non-finite steps in a row
     run.clear_control()
-    with open(run.path("config.json"), "w", encoding="utf-8") as fh:        # the trainsuite reads `steps` from it (percent, ETA)
+    with open(run.path("config.json"), "w", encoding="utf-8") as fh:        # the Training reads `steps` from it (percent, ETA)
         json.dump(dict(config or {}, steps=steps, lr=lr, amp=amp, clip=clip, seed=seed, args=args), fh, indent=1, default=str)
     mprobe, timer = (PR.ModuleProbe(model, every=log_every, depth=probe_depth), PR.StepTimer()) if probe else (None, None)
     last_info, gn_last, prow = {}, float("nan"), {}
@@ -185,7 +185,7 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
     model.train()
     try:
         while step < steps:
-            reason = run.stop_requested()                                # `python -m trainsuite stop <run>`
+            reason = run.stop_requested()                                # `python -m Training stop <run>`
             if reason is not None:
                 save_ckpt()
                 with open(run.path("STOPPED"), "w", encoding="utf-8") as fh:

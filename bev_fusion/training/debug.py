@@ -8,7 +8,7 @@
     samples = replay_ids(read_incident("runs/x/incident_800.json"), lookup)    # the samples of a failure, rebuilt from their tokens by the dataset's own lookup (token -> sample);
                                                                                     # run them on the checkpoint BEFORE that step: the dump holds no weights and no random state
 
-The hot-fix loop of a run is: `trainsuite stop RUN`, fix the code, start the same command again (it resumes from the last checkpoint on a new snapshot).
+The hot-fix loop of a run is: `Training stop RUN`, fix the code, start the same command again (it resumes from the last checkpoint on a new snapshot).
 """
 import copy
 from contextlib import contextmanager

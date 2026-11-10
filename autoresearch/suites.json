@@ -74,13 +74,13 @@
     },
     {
       "id": "c_tr",
-      "label": "python -m trainsuite\nTraining.run job.json",
+      "label": "python -m Training\nTraining.run job.json",
       "kind": "cli",
       "col": 1,
       "row": 0,
       "code": [
-        "trainsuite/__main__.py",
-        "trainsuite/cli.py",
+        "Training/__main__.py",
+        "Training/cli.py",
         "suitecli.py"
       ],
       "note": "suitecli.py generates the commands from the methods of the class; the older words (status, health, watch, queue, ...) keep their own output"
@@ -99,14 +99,14 @@
     },
     {
       "id": "c_ev",
-      "label": "python -m evalsuite\nEvaluation.run ...",
+      "label": "python -m Evaluation\nEvaluation.run ...",
       "kind": "cli",
       "col": 3,
       "row": 0,
       "code": [
-        "evalsuite/__main__.py",
-        "evalsuite/apicli.py",
-        "evalsuite/cli.py",
+        "Evaluation/__main__.py",
+        "Evaluation/apicli.py",
+        "Evaluation/cli.py",
         "suitecli.py"
       ],
       "note": "the methods of Evaluation are generated; the adapter commands (qual, quant, list, probe, selftest) keep their words"
@@ -131,7 +131,7 @@
       "col": 1,
       "row": 1,
       "code": [
-        "trainsuite/api.py::Training"
+        "Training/api.py::Training"
       ],
       "note": "a job is a json file or the same dict; the rules of the project stay rules (a run that feeds a verdict needs its card, the TEST split its logged row, a resume the person's words)"
     },
@@ -153,7 +153,7 @@
       "col": 3,
       "row": 1,
       "code": [
-        "evalsuite/api.py::Evaluation"
+        "Evaluation/api.py::Evaluation"
       ],
       "note": "the front door: scores stored predictions against the ground truth, reads the numbers (worst frames, paired comparison, cost), draws frames; asks the Runner for predictions it does not have"
     },
@@ -180,11 +180,11 @@
       "row": 2,
       "code": [
         "trainkit/loop.py",
-        "trainsuite/health.py",
-        "trainsuite/kill.py",
-        "trainsuite/early.py",
-        "trainsuite/compose.py",
-        "trainsuite/queue_api.py::QueueMixin"
+        "Training/health.py",
+        "Training/kill.py",
+        "Training/early.py",
+        "Training/compose.py",
+        "Training/queue_api.py::QueueMixin"
       ],
       "note": "trainkit is the project-independent loop (accumulation, EMA, schedule per module, clipping, AMP, atomic checkpoints, resume, the stop request); the suite watches the files it writes and never imports the project's network"
     },
@@ -207,12 +207,12 @@
       "col": 3,
       "row": 2,
       "code": [
-        "evalsuite/quantitative.py",
-        "evalsuite/qualitative.py",
-        "evalsuite/cost.py",
-        "evalsuite/stats.py",
-        "evalsuite/comparison/",
-        "evalsuite/results.py",
+        "Evaluation/quantitative.py",
+        "Evaluation/qualitative.py",
+        "Evaluation/cost.py",
+        "Evaluation/stats.py",
+        "Evaluation/comparison/",
+        "Evaluation/results.py",
         "../bev_fusion/evaluation/bev_eval.py",
         "../bev_fusion_lane_center/evaluation/lane_suite.py"
       ],
@@ -236,7 +236,7 @@
       "col": 1,
       "row": 3,
       "code": [
-        "trainsuite/runs.py"
+        "Training/runs.py"
       ],
       "note": "the only contract between the training and everything that watches or evaluates it: log.jsonl, train.log, .done only for exit 0, CONTROL / STOPPED with exit code 75"
     },
@@ -247,7 +247,7 @@
       "col": 2,
       "row": 3,
       "code": [
-        "evalsuite/store.py"
+        "Evaluation/store.py"
       ],
       "note": "one per identity (network, checkpoint, inputs); any question reuses its frames"
     },
@@ -261,7 +261,7 @@
         "schemas/card.schema.json",
         "tools/card.py"
       ],
-      "note": "what decide.py reads; the BEV evaluator writes a provenance block into the card (GT version, evaluator code hash, frames, model: reproducibility.md), the lane evaluator and evalsuite write none yet"
+      "note": "what decide.py reads; the BEV evaluator writes a provenance block into the card (GT version, evaluator code hash, frames, model: reproducibility.md), the lane evaluator and Evaluation write none yet"
     },
     {
       "id": "g_core",

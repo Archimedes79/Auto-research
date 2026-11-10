@@ -7,7 +7,7 @@
   3. the probe: grad.<module> and upd.<module> equal an independent computation around a real optimiser step, a frozen module has no keys, nothing is copied on
      steps that are not logged; the timer separates the data wait from the step; the incident dump is atomic, capped and never raises
   4. debug: one batch can be overfitted (and a broken loss cannot), the frozen part stays bit-equal over real steps while the trained part moves
-  5. the keys are the ones the trainsuite reads: a toy training that logs them is read back by autoresearch/trainsuite (module table, no finding on a healthy run,
+  5. the keys are the ones the Training reads: a toy training that logs them is read back by autoresearch/Training (module table, no finding on a healthy run,
      dead_module when a module is detached)
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_freeze_probe.py
 """
@@ -261,9 +261,9 @@ check(len(pq.before) == len(list(mm_.parameters())), "the weight copy is taken i
 check(probe.batch_tokens({"tokens": ["a", "b"]}) == ["a", "b"] and probe.batch_tokens([{"tokens": ["a"]}, {"tokens": ["b"]}]) == ["a", "b"] and probe.batch_tokens(5) == []
       and probe.batch_tokens({"tokens": 7}) == [] and probe.batch_tokens(None) == [], "batch_tokens: a batch, a list of clips, and anything odd gives []")
 
-# 5 the keys are the ones the trainsuite reads
-from trainsuite import health, modules as ts_modules  # noqa: E402
-from trainsuite.runs import Run  # noqa: E402
+# 5 the keys are the ones the Training reads
+from Training import health, modules as ts_modules  # noqa: E402
+from Training.runs import Run  # noqa: E402
 
 
 def toy_run(detach_lane):
@@ -298,10 +298,10 @@ def toy_run(detach_lane):
 
 healthy = toy_run(False)
 tab = {t["module"]: t for t in ts_modules.module_table(healthy)}
-check(sorted(tab) == ["fusion", "head", "lane"] and all(t["grad"] > 0 and t["upd"] > 0 for t in tab.values()), "the trainsuite reads grad. / upd. of the toy training: a module table with three live modules")
+check(sorted(tab) == ["fusion", "head", "lane"] and all(t["grad"] > 0 and t["upd"] > 0 for t in tab.values()), "the Training reads grad. / upd. of the toy training: a module table with three live modules")
 check(not {f.code for f in health.check(healthy)} & {"dead_module", "grad_module", "update_ratio", "data_bound", "incident"}, "a healthy toy run raises no module finding")
 dead = toy_run(True)
-check("dead_module" in {f.code for f in health.check(dead)}, "a detached module is a dead_module for the trainsuite")
+check("dead_module" in {f.code for f in health.check(dead)}, "a detached module is a dead_module for the Training")
 
 print("FREEZE / PROBE GATE: " + ("PASS" if not fails else f"FAIL ({len(fails)})"))
 sys.exit(1 if fails else 0)

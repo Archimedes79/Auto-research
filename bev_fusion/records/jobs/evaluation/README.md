@@ -1,14 +1,14 @@
-# jobs/evaluation - how the evaluation is called (class `Evaluation`, `autoresearch/evalsuite`; BEV adapter `evaluation/bev_eval.py`)
+# jobs/evaluation - how the evaluation is called (class `Evaluation`, `autoresearch/Evaluation`; BEV adapter `evaluation/bev_eval.py`)
 
 The evaluation takes arguments, not job files. It scores what the network predicted; the network itself runs in the project's `Runner` (`bev_fusion/runner`, see `../running/README.md`), which the
-`Evaluation` always includes (`evaluation/evalsuite.json`: `"runner": "runner.runner:Runner"`). The docstring of `autoresearch/evalsuite/api.py` is the reference; `python -m evalsuite methods` lists every command.
+`Evaluation` always includes (`evaluation/evaluation.json`: `"runner": "runner.runner:Runner"`). The docstring of `autoresearch/Evaluation/api.py` is the reference; `python -m Evaluation methods` lists every command.
 
 ```
 cd autoresearch                                                  # from the workspace root, inside wsl; `python` = ~/miniconda3/envs/gcar/bin/python
-AR_PROJECT=../bev_fusion python -m evalsuite Evaluation.check runs/t23_C_s1 small.val                   # the dry run: what would run, what is wrong with the ground truth and the metrics
-AR_PROJECT=../bev_fusion python -m evalsuite Evaluation.run   runs/t23_C_s1 small.val --gt-key v8     # run the network (what is not stored yet), store the predictions, score them
-AR_PROJECT=../bev_fusion python -m evalsuite Evaluation.score <results id> small.val --gt-key v8      # only score what was stored (another GT or metric needs no network)
-AR_PROJECT=../bev_fusion python -m evalsuite Evaluation.show-numbers <evaluation id>                    # the numbers of a stored evaluation
+AR_PROJECT=../bev_fusion python -m Evaluation Evaluation.check runs/t23_C_s1 small.val                   # the dry run: what would run, what is wrong with the ground truth and the metrics
+AR_PROJECT=../bev_fusion python -m Evaluation Evaluation.run   runs/t23_C_s1 small.val --gt-key v8     # run the network (what is not stored yet), store the predictions, score them
+AR_PROJECT=../bev_fusion python -m Evaluation Evaluation.score <results id> small.val --gt-key v8      # only score what was stored (another GT or metric needs no network)
+AR_PROJECT=../bev_fusion python -m Evaluation Evaluation.show-numbers <evaluation id>                    # the numbers of a stored evaluation
 ```
 
 | Mirko's sketch | here |

@@ -36,7 +36,7 @@ def call(*argv):
 def api(code):
     """run python code in a process of its own with Runner and Evaluation imported; its last print is a json document -> the document. An id carries only the name of a network, so a call that
     reads stored results of the COPY of the run folder first tells the object where the network is (`resolve`): the real folder of the same name is not the one that holds them"""
-    p = subprocess.run([sys.executable, "-c", f"import json, sys\nsys.path[:0] = [{ROOT!r}]\nfrom runner.runner import Runner\nfrom evalsuite.api import Evaluation\n{code}"], cwd=ROOT, env=ENV,
+    p = subprocess.run([sys.executable, "-c", f"import json, sys\nsys.path[:0] = [{ROOT!r}]\nfrom runner.runner import Runner\nfrom Evaluation.api import Evaluation\n{code}"], cwd=ROOT, env=ENV,
                        capture_output=True, text=True, timeout=3000)
     assert p.returncode == 0, p.stderr[-600:]
     return json.loads(p.stdout.strip().splitlines()[-1])
@@ -79,7 +79,7 @@ def main():
         else:
             print("  note: the code that makes a prediction was edited while this test ran, so the ids of plan and predict may differ (not checked)")
             plan["results"] = res["results"]
-        from evalsuite.results import ResultSet
+        from Evaluation.results import ResultSet
         rid = res["results"].partition("@")[2]
         rs = ResultSet.open(os.path.join(ROOT, net, "eval", "results", rid))
         refs = rs.refs()

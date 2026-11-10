@@ -81,7 +81,7 @@ def run_frame(model, loss, cfg, ds, i, device, cold):
     """(batch of the target frame, model result, GTs, tap arrays {name: array of sample 0}, camera visibility (X, Y) or None, number
     of frames run) of val sample i, through its clip (the previous keyframes first) unless cold"""
     import torch
-    from evalsuite.torch_taps import TapRecorder
+    from Evaluation.torch_taps import TapRecorder
     ns = chain()
     T = ns.T
     toks, pos = [ds.samples[i]], {t: k for k, t in enumerate(ds.samples)}

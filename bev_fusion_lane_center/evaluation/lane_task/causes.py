@@ -46,7 +46,7 @@ FP = [k for k in CAUSES if k.startswith("fp.")]
 
 def target_of(fix: str) -> str:
     """where to work on a cause: 'model' | 'code' | 'evaluation' (or 'model/evaluation' when the fix text names both), read from the lane
-    words of its fix text (moved here from evalsuite/probing.py: the core takes the place from Task.causes(), see LaneTask.causes)"""
+    words of its fix text (moved here from Evaluation/probing.py: the core takes the place from Task.causes(), see LaneTask.causes)"""
     f = fix.lower()
     found = [t for t, keys in (("evaluation", ("evaluation", "gt ", "ground truth")), ("code", ("assembly", "code", "pruning", "linking")),
                                ("model", ("model", "calibration"))) if any(k in f for k in keys)]

@@ -5,7 +5,7 @@ A suite needs NO code change to be a job: the built-in table below names the fou
 - that is the whole interface a suite has to the job runner.
 
 An entry (every key but `suite`, `cls`, `method` and `how` is optional):
-    suite   the module that holds the class (`evalsuite`; found on sys.path, the problem folder is on it too)
+    suite   the module that holds the class (`Evaluation`; found on sys.path, the problem folder is on it too)
     cls     the class (built as `cls(project_folder)`, the convention of all suites), method  the method that does the work
     how     "process"  the runner starts `python -m jobrunner call ...` under run.py (slots, RAM gate, lock, ledger row): for long or GPU methods
             "launch"   the method itself starts a run.py run and returns (Training.run): the runner calls it in its own process
@@ -38,11 +38,11 @@ ENTRY_KEYS = ("suite", "cls", "method", "how", "may_feed_verdict", "needs", "rea
 HOW = ("process", "launch")
 
 BUILTIN: Dict[str, Dict[str, Any]] = {
-    "Training.run": dict(suite="trainsuite", cls="Training", method="run", how="launch", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=3000, ram_gb=10),
+    "Training.run": dict(suite="Training", cls="Training", method="run", how="launch", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=3000, ram_gb=10),
                          reads=["path:{job[config]}"], writes=["run:{job[id]}"], id_from="job.id", after_from="job.after", dry_run="check"),
-    "Evaluation.run": dict(suite="evalsuite", cls="Evaluation", method="run", how="process", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=8000, ram_gb=6),
+    "Evaluation.run": dict(suite="Evaluation", cls="Evaluation", method="run", how="process", may_feed_verdict=True, needs=dict(gpu=True, gpu_max_used_mb=8000, ram_gb=6),
                            reads=["run:{network}", "set:{frames}"], writes=["eval:{network}@{frames}"], splits=["frames"], dry_run="check"),
-    "Evaluation.score": dict(suite="evalsuite", cls="Evaluation", method="score", how="process", may_feed_verdict=True, needs=dict(cpu=2, ram_gb=4),
+    "Evaluation.score": dict(suite="Evaluation", cls="Evaluation", method="score", how="process", may_feed_verdict=True, needs=dict(cpu=2, ram_gb=4),
                              reads=["results:{results}", "set:{frames}"], writes=["scores:{results}@{frames}"], splits=["frames"]),
     "Runner.predict": dict(suite="runner", cls="Runner", method="predict", how="process", needs=dict(gpu=True, gpu_max_used_mb=8000, ram_gb=6),
                            reads=["run:{network}", "set:{frames}"], writes=["predictions:{network}@{frames}"], splits=["frames"], dry_run="plan"),

@@ -27,7 +27,7 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
-from evalsuite import Metric, Prediction, Sample  # noqa: E402
+from Evaluation import Metric, Prediction, Sample  # noqa: E402
 from evaluation.bev_views import masks  # noqa: E402
 from evaluation.metrics import dt_key  # noqa: E402
 
@@ -193,7 +193,7 @@ def selftest():
     assert abs(r["epe"] - 0.5) < 1e-12 and abs(r["bias"] - 0.5) < 1e-12 and abs(r["rmse"] - 0.5) < 1e-12
     # the cells of the velocity numbers (frame()): a car of unknown velocity (GT 0 m/s, flow_weight 0) is no static ground truth. 8 x 8 world: a moving car (4 cells, 3 m/s),
     # a parked one (1 cell), a car of unknown velocity (1 cell), the field = GT + (0.3, 0.4) m/s -> obj = 5 cells (not 6), moving = 4, EPE 0.5 on both
-    from evalsuite.contracts import FrameRef
+    from Evaluation.contracts import FrameRef
     z = np.zeros((8, 8), np.float32)
     veh, gv, fw = z.copy(), np.zeros((2, 8, 8), np.float32), np.ones((8, 8), np.float32)
     veh[2:4, 2:4], veh[6, 6], veh[1, 7] = 1, 1, 1

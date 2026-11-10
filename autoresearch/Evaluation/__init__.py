@@ -1,0 +1,26 @@
+"""Evaluation - a qualitative and a quantitative evaluation suite for any network, behind three small interface boxes.
+
+    from Evaluation import EvalSuite, Source, Subject, Task          # implement the three for your network (adapters/minimal.py shows how)
+    suite = EvalSuite(source, subject, task, out="eval_out")
+    suite.qual.frame("scene-0061/12", views=("overview", "debug"));  suite.qual.random(6);  suite.qual.videos(2)
+    run = suite.quant.run(n_scenes=20);  suite.quant.report(run)
+Command line: python -m Evaluation --adapter pkg.module:build [--arg key=value] <qual|quant|selftest|selftest-adapter> ...
+The class interface of a project (api.py, the pattern of ../README.md):  from Evaluation import Evaluation;  python -m Evaluation run NETWORK FRAMES --gt-key v8  (the Runner is the project's)
+See README.md (use, one page) and EXTENSIONS.md (memory, taps, probing, files; the lane Task lives in the lane project).
+"""
+from .contracts import (Counts, Flag, FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, TapSpec, Task,
+                        View, ViewContext)
+from .suite import EvalSuite
+
+__all__ = ["EvalSuite", "Source", "Subject", "Task", "Metric", "View", "FrameRef", "Sample", "Prediction", "Page", "Panel", "Shape",
+           "TapSpec", "Flag", "ViewContext", "Counts", "Evaluation", "Frames", "EvaluationError"]
+
+
+def __getattr__(name):                                  # the class interface is loaded when it is used: the core stays small
+    if name in ("Evaluation", "Frames", "EvaluationError"):
+        from . import api
+        return getattr(api, name)
+    raise AttributeError(f"module 'Evaluation' has no attribute {name!r}")
+
+
+__version__ = "1.0"

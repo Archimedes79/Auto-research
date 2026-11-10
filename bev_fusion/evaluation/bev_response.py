@@ -45,8 +45,8 @@ CLASS = "vehicle"
 
 
 def det_numbers(samples, dets, task, name="det"):
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     metric = next(m for m in task.metrics() if m.name == name)
     counts = []
     for i, ((name, s), d) in enumerate(zip(samples, dets)):
@@ -366,8 +366,8 @@ def fusion_rows(samples, task):
 
 def coverage_rows(samples, task, ann, everything, kept):
     """the `cov` split of the complete GT set: classes are counted straight from the annotated boxes, the recall ceiling follows from the detections removed"""
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     metric = next(m for m in task.metrics() if m.name == "cov")
 
     def run(dets):
@@ -414,8 +414,8 @@ def coverage_rows(samples, task, ann, everything, kept):
 
 
 def maps_rows(samples, task):
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     rng = np.random.RandomState(2)
     seg = next(m for m in task.metrics() if m.name == "seg")
     cur = next(m for m in task.metrics() if m.name == "curve")
@@ -478,8 +478,8 @@ def _object_cells(g, task):
 
 
 def velocity_rows(samples, task):
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     cur = next(m for m in task.metrics() if m.name == "curve")
     rows = []
     for label, fn in (("velocity field + (0.3, 0.4) m/s", lambda v: v + np.array([0.3, 0.4], np.float32)[:, None, None]), ("velocity field x 0.8", lambda v: 0.8 * v)):
@@ -619,8 +619,8 @@ def swap_boxes_rows(samples, task):
 
 def swap_maps_rows(samples, task):
     """ROLES SWAPPED for the maps: the damaged binary map is the GT, the original GT is the prediction (p in {0, 1})"""
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     rng = np.random.RandomState(4)
     seg = next(m for m in task.metrics() if m.name == "seg")
     cur = next(m for m in task.metrics() if m.name == "curve")
@@ -664,8 +664,8 @@ def swap_maps_rows(samples, task):
 
 def swap_velocity_rows(samples, task):
     """ROLES SWAPPED for the velocity field: the damaged field is the GT, the original GT velocity is the prediction; numpy straight from the arrays"""
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     cur = next(m for m in task.metrics() if m.name == "curve")
     rows = []
     for label, fn in (("GT velocity + (0.36, 0.48) m/s", lambda v: v + np.array([0.36, 0.48], np.float32)[:, None, None]), ("GT velocity x 0.8", lambda v: 0.8 * v)):
@@ -694,8 +694,8 @@ def swap_velocity_rows(samples, task):
 
 
 def _vel_numbers(task, samples, outs):
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     vm = next(m for m in task.metrics() if m.name == "vel")
     cs = [vm.frame(Sample(ref=FrameRef("gt", i, name), inputs=None, reference={0.0: s[0.0]}), Prediction(outputs={"dt": {0.0: o}}))
           for i, ((name, s), o) in enumerate(zip(samples, outs))]

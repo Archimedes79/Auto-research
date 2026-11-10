@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from evalsuite.contracts import FrameRef, Prediction, Sample, Source, Subject, TapSpec
+from Evaluation.contracts import FrameRef, Prediction, Sample, Source, Subject, TapSpec
 from . import Grid, LaneConfig, LaneGraph, LaneTask, rasterize
 
 GRID = Grid(u0=-25.0, v0=-5.0, res=0.5, nu=100, nv=130)

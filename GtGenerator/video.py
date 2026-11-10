@@ -29,7 +29,7 @@ from .view import EDGES, densify, semantic_rgb
 # did not play). H.264 needs an ffmpeg with libx264: looked up in $FFMPEG, the PATH and the ffmpeg.exe builds installed on the Windows
 # side (called through WSL interop). Without one an animated GIF is written and the result says so. The file is decoded again after
 # encoding (frame count, first frame not black); a video that does not play is never reported as done. (Same method as
-# autoresearch/evalsuite/render/video.py, kept here so that GtGenerator stays standalone.)
+# autoresearch/Evaluation/render/video.py, kept here so that GtGenerator stays standalone.)
 CANDIDATES = ("/mnt/c/Program Files/DownloadHelper CoApp/ffmpeg.exe",
               "/mnt/c/Program Files (x86)/Digiarty/VideoProc Converter AI/ffmpeg.exe")
 

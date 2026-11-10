@@ -45,7 +45,7 @@ Every method is also a command (the convention of the suites, `../README.md`); a
 
 **The result of one job as the argument of the next:** an argument may be `{"$result": "<job id>:<path>"}`, e.g. `{"results": {"$result": "chain.predict:results"}}` (the path is dotted into the other job's `result.json`, list items by number: `nested.list.1`). The job waits for that job (`after` is added), the value is filled in when the call is made, and a path that is not in the result is an error that says where it stopped. Such an argument counts as given and is not type-checked (it is known only later); the dry run of `check --deep` is skipped for it. This is how a chain is written down in advance: GT, training, `Runner.predict`, `Evaluation.score`.
 
-Keys starting with `_` are comments, an unknown key is an error. A `launch` call (`Training.run`) starts a run of its own and takes `after`, `timeout`, `split`, `retries`, `run_args`, `python` and a card in its arguments: giving them here is an error, not silently ignored. A training job file of `trainsuite` (it has `config`, no `call`) is accepted as it is: it becomes `Training.run` with that file as `args.job`.
+Keys starting with `_` are comments, an unknown key is an error. A `launch` call (`Training.run`) starts a run of its own and takes `after`, `timeout`, `split`, `retries`, `run_args`, `python` and a card in its arguments: giving them here is an error, not silently ignored. A training job file of `Training` (it has `config`, no `call`) is accepted as it is: it becomes `Training.run` with that file as `args.job`.
 
 **Data references** are typed `kind:name`, built from the arguments by the entry (`run:{network}`, `set:{frames}`, `eval:{network}@{frames}`):
 | kind | checked | effect |

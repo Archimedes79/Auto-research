@@ -7,7 +7,7 @@ is, and how to look at it.
 Only boxes inside the scored window of the metric (x < 60 m, +-32.3 deg of the front axis) are counted, as the numbers do.
 Input: the boxes of every frame that `bev_suite.py RUN eval` stored (RUN/eval/scene_records<tag>_n<N>.pkl: detections and ground-truth boxes per scene and frame) and the
 frame list of its suite store (RUN/eval/suite/quant/eval<tag>_n<N>/frames.jsonl: scene, index, token). Nothing is re-run, no GPU. The matching is the metric's own
-(`evalsuite.comparison.boxes.match`: best score first, nearest free box of the class within `thr` metres), applied to the detections with score >= `min-score` (what the
+(`Evaluation.comparison.boxes.match`: best score first, nearest free box of the class within `thr` metres), applied to the detections with score >= `min-score` (what the
 pictures draw), so a row here is a box the picture shows in the error colour.
 
 Kinds (the reason an error is what it is; the first that applies wins, in the order listed):
@@ -38,7 +38,7 @@ from collections import Counter, defaultdict
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
-from evalsuite.comparison import boxes as BX  # noqa: E402
+from Evaluation.comparison import boxes as BX  # noqa: E402
 from evaluation.metrics import RANGE_BINS, in_front  # noqa: E402
 
 SCORE_BINS = ((0.3, 0.5), (0.5, 0.7), (0.7, 0.9), (0.9, 1.01))

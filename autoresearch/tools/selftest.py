@@ -121,12 +121,12 @@ try:
     assert oom.returncode == 1 and "1 attempt" in oom.stdout, oom.stdout
     to = go("S.timeout", ["bash", "-c", "sleep 30"], "--timeout", "0.03")
     assert to.returncode == 124 and rows()["S.timeout"]["status"] == "timeout", (to.returncode, rows().get("S.timeout"))
-    # exit 75 = a trainer stopped on request (trainsuite): status "stopped", ONE attempt even with an old CUDA error in the log tail (a retry would let the
+    # exit 75 = a trainer stopped on request (Training): status "stopped", ONE attempt even with an old CUDA error in the log tail (a retry would let the
     # trainer erase the stop request), no done flag, not a failure for metrics, the schedule shows the item blocked, a dependent is blocked, the same id resumes
     import run as RUN
     sys.path.insert(0, os.path.dirname(HERE))
-    from trainsuite import control as TS_CONTROL
-    assert RUN.EXIT_STOPPED == TS_CONTROL.EXIT_STOPPED == 75, "the launcher and the trainsuite must agree on the stop code"
+    from Training import control as TS_CONTROL
+    assert RUN.EXIT_STOPPED == TS_CONTROL.EXIT_STOPPED == 75, "the launcher and the Training must agree on the stop code"
     stp = go("S.stop", ["bash", "-c", "echo 'CUDA error: unknown error'; exit 75"])
     assert stp.returncode == 75 and "1 attempt" in stp.stdout and " stopped (exit 75" in stp.stdout and not os.path.exists(f"{T}/runs/S.stop/done"), stp.stdout
     assert rows()["S.stop"]["status"] == "stopped" and "stopped on request" in rows()["S.stop"]["notes"], rows()["S.stop"]
@@ -554,7 +554,7 @@ try:
     # decide from an experiment file and cards: KEEP, TIE, CUT (guard / rule), INCONCLUSIVE (one seed), subsets with at_least, deterministic + interval
     import decide as DC
     import result as RS
-    # the kill criterion of a card is a list of trainsuite kill rules (prose is refused), written once into kill.txt; the budget is shown against the ledger rows E<n> / E<n>.*
+    # the kill criterion of a card is a list of Training kill rules (prose is refused), written once into kill.txt; the budget is shown against the ledger rows E<n> / E<n>.*
     import experiment as X
     rules_, bad_ = X.kill_rules({"kill": "group.lines@1000 > 1.48; total@500 < 3 window 5\nobjhead.vel@+0.0@800 > 1  # why\nthe loss must not blow up"})
     assert rules_ == ["group.lines@1000 > 1.48", "total@500 < 3 window 5", "objhead.vel@+0.0@800 > 1"] and len(bad_) == 1 and "not understood" in bad_[0], (rules_, bad_)

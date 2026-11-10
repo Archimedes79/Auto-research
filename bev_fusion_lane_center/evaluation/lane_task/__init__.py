@@ -1,6 +1,6 @@
-"""The lane-centre-line Task of the evalsuite (`../../../autoresearch/evalsuite`): evaluate a dense head's picture first, then the lane graph
+"""The lane-centre-line Task of the Evaluation (`../../../autoresearch/Evaluation`): evaluate a dense head's picture first, then the lane graph
 read from it (or a graph head's output), with the common metrics, and say where the errors come from. numpy + scipy (+ matplotlib for the
-views); no torch. Lane-specific, so it lives in the lane project (moved out of `autoresearch/evalsuite/lanes/` on 2026-10-31, decision D24).
+views); no torch. Lane-specific, so it lives in the lane project (moved out of `autoresearch/Evaluation/lanes/` on 2026-10-31, decision D24).
 
     from lane_task import LaneConfig, Grid, LaneTask, LaneGraph
     cfg = LaneConfig(Grid(u0=-50, v0=-50, res=0.5, nu=200, nv=200))
@@ -14,7 +14,7 @@ import os as _os
 import sys as _sys
 
 _AR = _os.path.normpath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), _os.pardir, _os.pardir, _os.pardir, "autoresearch"))
-if _AR not in _sys.path:                       # the evalsuite core (problem-independent) sits in the repository's autoresearch/
+if _AR not in _sys.path:                       # the Evaluation core (problem-independent) sits in the repository's autoresearch/
     _sys.path.append(_AR)
 
 from .geometry import LaneGraph, resample, simplify  # noqa: E402

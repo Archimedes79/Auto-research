@@ -12,7 +12,7 @@ run() {
   last=$(echo "$out" | tail -1 | cut -c1-110)
   if [ $rc -eq 0 ]; then echo "PASS  $name  | $last"; else echo "FAIL  $name  | $last"; fail=1; fi
 }
-run "trainer: crash + resume, NaN, rollback, trainsuite contract (log.jsonl, stop = exit 75)" trainer_selftest.py
+run "trainer: crash + resume, NaN, rollback, Training contract (log.jsonl, stop = exit 75)" trainer_selftest.py
 run "builder spec tests"                    test_p16_spec.py
 run "output stage simplify_dp"              test_dp_simplify.py
 run "TEST guard + cache key of evaluate.py" test_evaluate_guard.py

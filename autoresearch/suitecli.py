@@ -1,7 +1,7 @@
 """The one command-line generator of the suites (the convention: autoresearch/README.md, section 'The interface of the suites'): every method of a suite's class is ONE command, the same call
-as in Python. The command line of trainsuite is configured at the end of its api.py, evalsuite/apicli.py and the Runner of bev_fusion/runner are the same few lines, on top of this module.
+as in Python. The command line of Training is configured at the end of its api.py, Evaluation/apicli.py and the Runner of bev_fusion/runner are the same few lines, on top of this module.
 
-    cli = suitecli.Cli(Training, "trainsuite", TrainingError, "TRAINSUITE_TRACEBACK", legacy=LEGACY, positional=("job", "i", "a", "b"), text={"check": ...})
+    cli = suitecli.Cli(Training, "Training", TrainingError, "TRAINING_TRACEBACK", legacy=LEGACY, positional=("job", "i", "a", "b"), text={"check": ...})
     rc = cli.dispatch(argv)          # None when argv names no method of the class (the older argparse commands take over), else the exit code
 
 What the generator does with a method `Class.queue_add(job, start=True)`:

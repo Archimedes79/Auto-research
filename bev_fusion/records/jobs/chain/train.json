@@ -1,5 +1,5 @@
 {
-  "_comment": "step 2 of the example chain: a training job file of the trainsuite (it becomes Training.run). `split` names the training data (splits/<split>.json), `preset` the length; 30 steps is a smoke test, not a result",
+  "_comment": "step 2 of the example chain: a training job file of the Training (it becomes Training.run). `split` names the training data (splits/<split>.json), `preset` the length; 30 steps is a smoke test, not a result",
   "id": "demo.t20",
   "config": "training/configs/t20_base.json",
   "preset": ["small"],

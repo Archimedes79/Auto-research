@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from evalsuite.contracts import Flag, Metric, Prediction, Sample, Task
+from Evaluation.contracts import Flag, Metric, Prediction, Sample, Task
 from . import causes as C
 from . import measures as M
 from .geometry import LaneGraph

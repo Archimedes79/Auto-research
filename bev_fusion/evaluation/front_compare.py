@@ -5,7 +5,7 @@
 A system is a run folder (`runs/<name>`, read from its `eval/scene_records*.pkl`, the file `bev_suite.py eval` writes) or `LABEL=FILE.pkl` (the same
 record of something that is no run of ours, e.g. a front-camera-only reference network). The first system is the reference. Per system: AP at
 0.5 / 1 / 2 / 4 m for vehicle and pedestrian, mAP2 = their mean, mAP2 per range bin, and for every other system the difference to the reference with
-the paired scene bootstrap (`evalsuite.stats.scene_picks`, the one random stream of the research system). Why a sector: a camera-only reference sees
+the paired scene bootstrap (`Evaluation.stats.scene_picks`, the one random stream of the research system). Why a sector: a camera-only reference sees
 only the front camera, so every system is scored on the boxes in that sector (a front-area comparison of 2026-10-31 had been made by a script in
 temp/t4, which this replaces). X_MAX may not exceed the last range bin (60 m).
 
@@ -68,7 +68,7 @@ def compare(systems, x_max=50.0, n_boot=1000, seed=0, classes=CLASSES, strict_gt
     the same number of ground-truth boxes in the sector. -> {'scenes', 'frames', 'x_max', 'n_boot', 'seed', 'n_gt' (reference), 'warnings',
     'systems': [{'label', 'map2', 'ap' {class: {threshold: AP}}, 'bins' {label: mAP2 over the classes with ground truth}, 'partial' [bin labels with
     only some classes], 'draws' (mAP2 of every resample), 'diff', 'lo', 'hi', 'n_valid'} ...]}; diff / lo / hi: system - reference, None for the reference"""
-    from evalsuite.stats import percentile_interval, scene_picks
+    from Evaluation.stats import percentile_interval, scene_picks
     if x_max > RANGE_BINS[-1][1]:
         raise ValueError(f"x_max {x_max:g} m is beyond the last range bin ({RANGE_BINS[-1][1]:g} m): the boxes behind it are in no bin")
     labels = [lab for lab, _ in systems]
@@ -248,7 +248,7 @@ def _world(shift=0.0, ped_shift=None, score_seed=None, round_scores=False, frame
 def _selftest():
     import tempfile
 
-    from evalsuite.stats import percentile_interval, scene_picks
+    from Evaluation.stats import percentile_interval, scene_picks
 
     def direct(world, ix, names, x_max=50.0):
         mm = DetMeter(classes=list(CLASSES), x_max=x_max)

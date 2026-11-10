@@ -9,7 +9,7 @@ The product code stays in `../training/` (precompute, interfaces, network slots,
  class Runner (runner.py)    predict  plan  list_results  tap  time  probe          one class, no queue, no launcher; the work is in its methods
 ```
 
-Like `Training` (`autoresearch/trainsuite`) and `Evaluation` (`autoresearch/evalsuite`): one class, a command line above it, the same generator (`autoresearch/suitecli.py`). The `Runner` runs the network on the
+Like `Training` (`autoresearch/Training`) and `Evaluation` (`autoresearch/Evaluation`): one class, a command line above it, the same generator (`autoresearch/suitecli.py`). The `Runner` runs the network on the
 frames that are not stored yet and stores what it predicts, with no ground truth and no validation loss (D72); `Evaluation.score` scores the stored predictions later. A network with a memory always runs warm
 (D70): whole scenes in time order from the scene's own start, the frames asked for only decide which results are kept. A network with a memory is initialised by its own cold start at the start of every scene
 and then carries its state from keyframe to keyframe; `bev_runner.py --cold` and frames spread over the split (no `--scene`) break that chain and are for the planner's smoke tests only, never for a number that is
@@ -44,11 +44,11 @@ r.predict("runs/t23_C_s1", "small.val", taps=["fused"])      # -> {results, fram
 | `probe(network, frames, device)` | statistics and dead channels per module, the response when the camera or the radar is removed |
 
 `predict` called directly is a diagnostic: it books no ledger row and takes no GPU slot. A run that feeds a verdict goes through `autoresearch/tools/run.py` with this command as its command. The frames
-text (`small.val`, `scenes:a,b:val`, `random:3:7:val`, `spread:1000:large.val`, `frames:scene-0003/0,scene-0003/1:val`) and the stored format (a `ResultSet`) are those of `autoresearch/evalsuite`.
+text (`small.val`, `scenes:a,b:val`, `random:3:7:val`, `spread:1000:large.val`, `frames:scene-0003/0,scene-0003/1:val`) and the stored format (a `ResultSet`) are those of `autoresearch/Evaluation`.
 
 | file | what it is | self-test |
 |---|---|---|
-| `runner.py` | the class `Runner`: the six commands above, built on the pieces of `autoresearch/evalsuite` (frames, `ResultSet`, the frame iterator) and the project's adapter `../evaluation/bev_eval.py` with its ground-truth-free pair `../evaluation/bev_free.py` | `../tests/test_runner_class.py` (toy network, seconds), `../tests/test_runner_real.py` (a real run, minutes), `../tests/test_suites_conform.py` (the three classes against one convention) |
+| `runner.py` | the class `Runner`: the six commands above, built on the pieces of `autoresearch/Evaluation` (frames, `ResultSet`, the frame iterator) and the project's adapter `../evaluation/bev_eval.py` with its ground-truth-free pair `../evaluation/bev_free.py` | `../tests/test_runner_class.py` (toy network, seconds), `../tests/test_runner_real.py` (a real run, minutes), `../tests/test_suites_conform.py` (the three classes against one convention) |
 | `__init__.py` | makes `from runner import Runner` work (the class lives in `runner.py`) | the same |
 | `__main__.py` | the command line: `python -m runner`, nothing but the generator pointed at the class | the same |
 | `bev_runner.py` | the planner-facing runner: `check`: the same input built and checked, nothing written (and the radar fan compared with the ground truth's own radar layer); `precompute`: layer 1 alone (the network input of chosen frames, no ground truth, one `.pt` per frame + `index.json`); `network`: layers 2 - 5 alone (a frames folder through the run's EMA network in time order, the memory carried between consecutive keyframes of a scene); `full`: both, frame by frame. Writes `objects.json` (boxes at every dt in the ego frame, planner records) and `maps.npz` (probability maps of dt 0). Guide: `python runner/bev_runner.py` | `../tests/test_runner.py` (a real run against its stored prototype) |

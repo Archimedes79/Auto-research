@@ -1,4 +1,4 @@
-"""The BEV Task of the evaluation suite (evalsuite): what the outputs of the chain mean.
+"""The BEV Task of the evaluation suite (Evaluation): what the outputs of the chain mean.
 
     BevSegMetric   maps: tolerant IoU per layer / range bin / dt / subset and line zero-crossing F1 (metrics.SegMeter); a model with the 1 m centre-line
                    head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad)
@@ -21,8 +21,8 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from evalsuite import Flag, Metric, Prediction, Sample, Task, View
-from evalsuite.qualitative import DebugView
+from Evaluation import Flag, Metric, Prediction, Sample, Task, View
+from Evaluation.qualitative import DebugView
 from evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
 from evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
 

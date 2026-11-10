@@ -321,7 +321,7 @@ RUN = f"{BP.ROOT}/runs/suite/graphs_recall_sp0_dp/quant/graphs_recall_sp0_dp_car
 
 def test_reproduce_lane_suite_run():
     sys.path.insert(0, BP.REPO + "/autoresearch")
-    from evalsuite.store import RunStore
+    from Evaluation.store import RunStore
     from lane_task import LaneTopoMetric
     st = RunStore.open(RUN)
     sub = LS.GraphSubject("recall_sp0_dp")                                 # the stored graphs of d, assembled on the CPU as the suite does

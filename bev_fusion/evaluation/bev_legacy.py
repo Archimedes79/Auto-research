@@ -86,13 +86,13 @@ def ap_from_flags(flags, scenes):
 
 
 def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0, tag=""):
-    """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval (draws: evalsuite.stats.scene_picks, the same stream for
+    """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval (draws: Evaluation.stats.scene_picks, the same stream for
     every number; since 2026-10-31, D24 - intervals of earlier compares used numpy default_rng draws and differ in the random part only). det_a / det_b: the box set of each run
     ('det' = plain decode, 'detr' = refined by S5c); dt: the target time of the detection numbers (the map numbers are at dt 0).
     -> ({name: (b - a, lo, hi, a, b)}, text)"""
     ra = pickle.load(open(os.path.join(run_a, "eval", f"scene_records{tag}.pkl"), "rb"))    # tag: "" cold, "_warm" ...
     rb = pickle.load(open(os.path.join(run_b, "eval", f"scene_records{tag}.pkl"), "rb"))
-    from evalsuite.stats import percentile_interval, scene_picks    # the one scene bootstrap of the research system (D24)
+    from Evaluation.stats import percentile_interval, scene_picks    # the one scene bootstrap of the research system (D24)
     lines = [f"paired scene bootstrap ({n_boot} resamples), b - a; a = {run_a} ({det_a}), b = {run_b} ({det_b}); val; "
              f"maps at dt 0, boxes at dt {dt:+.1f}"]
     res = {}

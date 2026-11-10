@@ -9,7 +9,7 @@ from the ledger row), loss curves, the headline numbers next to the reference ru
 cost, every picture and video found under <run>/eval/suite, and a review panel: per picture ok / wrong / unsure + a comment, an overall remark,
 saved in the browser and exported with one button as review_<run>.json. --ingest copies such a file into <run>/report/review.json and prints
 the counts and the ledger note to write. Pictures and videos are not made here: `bev_suite.py RUN report` (BEV) makes them first, or any
-adapter of the evalsuite (`qual random`, `qual videos`). Standard library; matplotlib only for the curves (skipped without it).
+adapter of the Evaluation (`qual random`, `qual videos`). Standard library; matplotlib only for the curves (skipped without it).
 The problem comes from AR_PROJECT as for every tool (ledger, run records)."""
 import argparse
 import csv
@@ -84,7 +84,7 @@ def attempts(run_id, rundir):
 
 def curves(run, out_png):
     try:
-        from trainsuite import curves as C
+        from Training import curves as C
         C.plot([run], C.default_keys(run), out_png)
         return True
     except Exception as e:  # matplotlib missing or a run without a log: the page says so
@@ -202,7 +202,7 @@ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.st
 
 
 def build(rundir, vs, run_id, note, max_pic, out_dir):
-    from trainsuite.runs import Run
+    from Training.runs import Run
     run = Run(rundir)
     os.makedirs(out_dir, exist_ok=True)
     rel = lambda p: os.path.relpath(p, out_dir).replace(os.sep, "/")  # noqa: E731
@@ -273,7 +273,7 @@ def build(rundir, vs, run_id, note, max_pic, out_dir):
     h.append("<h2>Pictures and videos, with a review field each</h2>")
     if not pics:
         h.append("<p class='note'>none stored under eval/suite. Make some: BEV <code>wsl python3 evaluation/bev_suite.py RUN report</code>, "
-                 "any evalsuite adapter <code>qual random 6</code> and <code>qual videos 1</code>.</p>")
+                 "any Evaluation adapter <code>qual random 6</code> and <code>qual videos 1</code>.</p>")
     for p in pics:
         r = rel(p)
         media = f"<video src='{r}' controls preload='none'></video>" if p.endswith(".mp4") else f"<a href='{r}'><img src='{r}'></a>"

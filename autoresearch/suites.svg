@@ -31,8 +31,8 @@
 <text x="161.5" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">generate-bev, key, have</text>
 <text x="161.5" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">__main__.py +1</text>
 </g>
-<g><title>c_tr: trainsuite/__main__.py; trainsuite/cli.py; suitecli.py</title><rect x="319" y="127.0" width="235" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="436.5" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">python -m trainsuite</text>
+<g><title>c_tr: Training/__main__.py; Training/cli.py; suitecli.py</title><rect x="319" y="127.0" width="235" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
+<text x="436.5" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">python -m Training</text>
 <text x="436.5" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Training.run job.json</text>
 <text x="436.5" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">__main__.py +2</text>
 </g>
@@ -41,8 +41,8 @@
 <text x="711.5" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Runner.predict net frames</text>
 <text x="711.5" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">__main__.py +1</text>
 </g>
-<g><title>c_ev: evalsuite/__main__.py; evalsuite/apicli.py; evalsuite/cli.py; suitecli.py</title><rect x="869" y="127.0" width="235" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
-<text x="986.5" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">python -m evalsuite</text>
+<g><title>c_ev: Evaluation/__main__.py; Evaluation/apicli.py; Evaluation/cli.py; suitecli.py</title><rect x="869" y="127.0" width="235" height="62" rx="7" fill="#e0e7ff" stroke="#4f46e5" stroke-width="1.4"/>
+<text x="986.5" y="148.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">python -m Evaluation</text>
 <text x="986.5" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Evaluation.run ...</text>
 <text x="986.5" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">__main__.py +3</text>
 </g>
@@ -51,7 +51,7 @@
 <text x="161.5" y="263.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">generate_bev_gt, gt_key</text>
 <text x="161.5" y="277.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">suite.py::GtGenerator +2</text>
 </g>
-<g><title>k_tr: trainsuite/api.py::Training</title><rect x="319" y="227.0" width="235" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
+<g><title>k_tr: Training/api.py::Training</title><rect x="319" y="227.0" width="235" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
 <text x="436.5" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">class Training</text>
 <text x="436.5" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">check run status stop</text>
 <text x="436.5" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">resume compare</text>
@@ -63,7 +63,7 @@
 <text x="711.5" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">time probe</text>
 <text x="711.5" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">runner.py::Runner</text>
 </g>
-<g><title>k_ev: evalsuite/api.py::Evaluation</title><rect x="869" y="227.0" width="235" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
+<g><title>k_ev: Evaluation/api.py::Evaluation</title><rect x="869" y="227.0" width="235" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/>
 <text x="986.5" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">class Evaluation</text>
 <text x="986.5" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run score compare</text>
 <text x="986.5" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">report draw_frame</text>
@@ -74,7 +74,7 @@
 <text x="161.5" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lane GT, checks</text>
 <text x="161.5" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">pipeline.py +4</text>
 </g>
-<g><title>e_tr: trainkit/loop.py; trainsuite/health.py; trainsuite/kill.py; trainsuite/early.py; trainsuite/compose.py; trainsuite/queue_api.py::QueueMixin</title><rect x="319" y="327.0" width="235" height="62" rx="7" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<g><title>e_tr: trainkit/loop.py; Training/health.py; Training/kill.py; Training/early.py; Training/compose.py; Training/queue_api.py::QueueMixin</title><rect x="319" y="327.0" width="235" height="62" rx="7" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
 <text x="436.5" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">trainkit fit loop;</text>
 <text x="436.5" y="356.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">health, kill rules,</text>
 <text x="436.5" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">early, compose, queue</text>
@@ -86,7 +86,7 @@
 <text x="711.5" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the run</text>
 <text x="711.5" y="385.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_runner.py +1</text>
 </g>
-<g><title>e_ev: evalsuite/quantitative.py; evalsuite/qualitative.py; evalsuite/cost.py; evalsuite/stats.py; evalsuite/comparison/; evalsuite/results.py; ../bev_fusion/evaluation/bev_eval.py; ../bev_fusion_lane_center/evaluation/lane_suite.py</title><rect x="869" y="327.0" width="235" height="62" rx="7" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
+<g><title>e_ev: Evaluation/quantitative.py; Evaluation/qualitative.py; Evaluation/cost.py; Evaluation/stats.py; Evaluation/comparison/; Evaluation/results.py; ../bev_fusion/evaluation/bev_eval.py; ../bev_fusion_lane_center/evaluation/lane_suite.py</title><rect x="869" y="327.0" width="235" height="62" rx="7" fill="#f1f5f9" stroke="#64748b" stroke-width="1.4"/>
 <text x="986.5" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">quantitative, qualitative,</text>
 <text x="986.5" y="356.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">cost, stats, comparison,</text>
 <text x="986.5" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResultSet</text>
@@ -98,13 +98,13 @@
 <text x="161.5" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">one npz per frame</text>
 <text x="161.5" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">versions.csv</text>
 </g>
-<g><title>f_tr: trainsuite/runs.py</title><rect x="319" y="427.0" width="235" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<g><title>f_tr: Training/runs.py</title><rect x="319" y="427.0" width="235" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
 <text x="436.5" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">run folder: run.json,</text>
 <text x="436.5" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">log.jsonl, config.json,</text>
 <text x="436.5" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">checkpoints</text>
 <text x="436.5" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">runs.py</text>
 </g>
-<g><title>f_ru: evalsuite/store.py</title><rect x="594" y="427.0" width="235" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<g><title>f_ru: Evaluation/store.py</title><rect x="594" y="427.0" width="235" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
 <text x="711.5" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResultSet</text>
 <text x="711.5" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">&lt;net&gt;/eval/results/&lt;id&gt;/</text>
 <text x="711.5" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">frames, taps, manifest</text>

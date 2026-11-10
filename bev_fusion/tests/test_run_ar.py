@@ -111,7 +111,7 @@ def main():
         # 5 the project's entries name the launcher that exists: project.json (train, fingerprint) and the launch line that startable prints
         import json
         proj = json.load(open(os.path.join(os.path.dirname(HERE), "project.json"), encoding="utf-8"))
-        assert proj["trainsuite"]["train"] == "bash tools/run_ar.sh {config}" and proj["fingerprint_extra"] == ["tools/run_ar.sh"], "project.json names tools/run_ar.sh"
+        assert proj["training"]["train"] == "bash tools/run_ar.sh {config}" and proj["fingerprint_extra"] == ["tools/run_ar.sh"], "project.json names tools/run_ar.sh"
         assert "tools" in proj["structure"]["root_dirs"] and os.path.isfile(SCRIPT)
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "training"))
         import startable

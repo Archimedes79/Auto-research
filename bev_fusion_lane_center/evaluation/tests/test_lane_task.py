@@ -1,5 +1,5 @@
-"""Known-answer tests of the lane Task of the evalsuite (`../lane_task/`: geometry, raster, measures, causes, task, views, the synthetic
-world `synth.py`) and of the core probing on it. Moved out of `autoresearch/evalsuite/selftest_lanes.py` on 2026-10-31 (D24); the evalsuite
+"""Known-answer tests of the lane Task of the Evaluation (`../lane_task/`: geometry, raster, measures, causes, task, views, the synthetic
+world `synth.py`) and of the core probing on it. Moved out of `autoresearch/Evaluation/selftest_lanes.py` on 2026-10-31 (D24); the Evaluation
 selftest no longer runs lane checks.   tools/env/_py14.sh test_lane_task.py [name filter ...]
 Every number is compared with a hand calculation or an independent brute-force computation, and the
 planted causes of the synthetic world must be found where they were planted."""
@@ -15,15 +15,15 @@ from typing import Callable, List, Tuple
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))   # evaluation/: the lane_task package
-from lane_task import Grid, LaneGraph, LaneTask, rasterize, resample, simplify, skeleton_graph, thin  # noqa: E402  (puts the evalsuite on the path)
+from lane_task import Grid, LaneGraph, LaneTask, rasterize, resample, simplify, skeleton_graph, thin  # noqa: E402  (puts the Evaluation on the path)
 from lane_task import causes as C  # noqa: E402
 from lane_task import measures as M  # noqa: E402
 from lane_task import synth as LS  # noqa: E402
 from lane_task import task as T  # noqa: E402
 from lane_task.raster import edt  # noqa: E402
 
-from evalsuite import EvalSuite  # noqa: E402
-from evalsuite.render import report  # noqa: E402
+from Evaluation import EvalSuite  # noqa: E402
+from Evaluation.render import report  # noqa: E402
 
 CHECKS: List[Tuple[str, Callable]] = []
 
@@ -362,7 +362,7 @@ def t_lane_suite():
         except KeyError:
             pass
         # the same through the command line
-        from evalsuite.cli import main
+        from Evaluation.cli import main
         out = os.path.join(d, "cli")
         base = ["--adapter", "lane_task.synth:build", "--arg", "n_frames=4", "--out", out]
         assert main(base + ["quant", "run", "--name", "c"]) == 0
@@ -373,8 +373,8 @@ def t_lane_suite():
 
 @check("lane views: the overview has the six panels; blue = ground truth without prediction, red = prediction without ground truth at the planted places")
 def t_lane_views():
-    from evalsuite.contracts import ViewContext
-    from evalsuite.render.figure import FN_COLOR, FP_COLOR, render_page
+    from Evaluation.contracts import ViewContext
+    from Evaluation.render.figure import FN_COLOR, FP_COLOR, render_page
     src, subj, task = LS.build(n_frames=3)
     v = task.views()["overview"]
     sm = src.load(src.frames("road-06")[0])                                                    # short: lanes end at 30 m
@@ -392,7 +392,7 @@ def t_lane_views():
 
 @check("lane probe of a constant prediction (S1): a Subject that hands out ONE LaneGraph (or one Prediction) for every frame gets each frame's own tags and error budget")
 def t_constant_prediction():
-    from evalsuite.contracts import Prediction, Subject
+    from Evaluation.contracts import Prediction, Subject
 
     class Const(Subject):                                    # a null baseline / a prior: the same object for every frame
         def __init__(self, g, same_prediction=False):

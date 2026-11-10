@@ -8,7 +8,7 @@ drawer draw them and measures where they land on the screen:
 
   GtGenerator/view.py       raster (show), motion arrows, colour key (colour_wheel) against flow_rgb
   GtGenerator/video.py      the video's bird's-eye image against the pixel mapping of its overlays (_px)
-  evaluation/bev_views.py   the evalsuite BEV panel and the box heading line
+  evaluation/bev_views.py   the Evaluation BEV panel and the box heading line
   tests/support/flow_viz.py    the flow pictures of the temporal tests and their key
 
     python tests/test_orientation.py
@@ -121,7 +121,7 @@ def test_autogt_video():
 
 
 def test_evaluation_panels():
-    from evalsuite.render import figure
+    from Evaluation.render import figure
     from GtGenerator.grid import GridSpec
     from evaluation import bev_views as V
     grid = GridSpec()

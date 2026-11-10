@@ -75,7 +75,7 @@ def grid_of(grid) -> dict:
 
 def export_scene(suite, scene: str, n_frames, out: str):
     """run one scene with the memory carried; write maps_<scene>.npz; -> (objects of each frame, predict ms of each frame)"""
-    from evalsuite.runner import Runner
+    from Evaluation.runner import Runner
     refs = suite.source.frames(scene)[: n_frames or None]
     frames, maps, ms = [], {}, []
     for sample, pred in Runner(suite.source, suite.subject, "carry").iter_scene(scene, refs):
@@ -184,7 +184,7 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     run = a.run.rstrip("/")
     out = os.path.abspath(a.out or os.path.join(run, "prototype"))
-    from evalsuite import EvalSuite
+    from Evaluation import EvalSuite
     from evaluation.bev_adapter import build
     source, subject, task = build(run, device=a.device, workers=0)        # build() moves to the bev_fusion folder
     suite = EvalSuite(source, subject, task, out=out, state="carry")

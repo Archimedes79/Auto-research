@@ -1,7 +1,7 @@
 """See inside a training step: per-module gradient and update sizes, data wait against compute time, a dump of the batch when a step goes wrong.
 
-The numbers go into the same log row as the loss (keys the trainsuite reads: `grad.<module>`, `upd.<module>`, `t_data`, `t_step`) and the dump is a file next
-to the log (`incident_<step>.json`); `python -m trainsuite status RUN` shows them and `health` warns (dead module, a module that blows up, weights that do not
+The numbers go into the same log row as the loss (keys the Training reads: `grad.<module>`, `upd.<module>`, `t_data`, `t_step`) and the dump is a file next
+to the log (`incident_<step>.json`); `python -m Training status RUN` shows them and `health` warns (dead module, a module that blows up, weights that do not
 move or move too fast, a data loader that starves the GPU). Nothing here imports the trainer: it takes the model, the step number and plain values.
 
     probe = ModuleProbe(model, every=cfg.log_every)                 # once, after the model is frozen / built

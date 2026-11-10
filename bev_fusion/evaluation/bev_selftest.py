@@ -30,14 +30,14 @@ from evaluation import bev_adapter as A  # noqa: E402
 
 import torch  # noqa: E402
 
-from evalsuite import EvalSuite, FrameRef, Prediction, Sample, Source, Subject  # noqa: E402
-from evalsuite.render import figure  # noqa: E402
+from Evaluation import EvalSuite, FrameRef, Prediction, Sample, Source, Subject  # noqa: E402
+from Evaluation.render import figure  # noqa: E402
 from evaluation import bev_legacy, bev_suite  # noqa: E402
 from evaluation.bev_task import BEVTask, BevDetMetric, BevSegMetric, MASKS, add_sample  # noqa: E402
 from evaluation.bev_views import gt_boxes  # noqa: E402
 from evaluation.metrics import DetMeter, SegMeter, ap_nuscenes, dt_key, flatten, in_front  # noqa: E402
 from evaluation.metrics import match as metrics_match  # noqa: E402
-from evalsuite.comparison import boxes as BX  # noqa: E402
+from Evaluation.comparison import boxes as BX  # noqa: E402
 
 AREAS = ("drivable_area", "ped_crossing", "walkway", "stop_line", "carpark_area")
 LINES = ("lane_divider", "road_divider")
@@ -444,7 +444,7 @@ def _():
     assert use["scene_names"] == ["scene-0001"] and use["scenes_evaluated"] == 1 and use["frames_evaluated"] == 2 and "nuScenes official split 'val'" in use["split_rule"], use
     assert pv["data"]["frame_hash"] == hashlib.sha256("\n".join(sorted(keys)).encode()).hexdigest()[:12], "the frame hash is over the sorted keys"
     assert pv["gt"]["signature"] == "15efbde2d1" and pv["gt"]["key"] == "0.5_4_15efbde2d1"
-    assert pv["evaluator"]["paths"] == ["bev_fusion/evaluation", "autoresearch/evalsuite"] and pv["evaluator"]["code_hash"] not in (None, "unknown"), pv["evaluator"]
+    assert pv["evaluator"]["paths"] == ["bev_fusion/evaluation", "autoresearch/Evaluation"] and pv["evaluator"]["code_hash"] not in (None, "unknown"), pv["evaluator"]
     assert pv["evaluator"]["settings"]["n"] == 2 and pv["evaluator"]["settings"]["weights"] == "EMA" and pv["seed"] == 3
     name = "seg_fov/seg/dt+0.00/drivable_area/all/all/iou@0"
     card = bev_suite.contract_card(run, "val", "", {name: 0.5}, {name: "higher"}, 2, "0.5_4_15efbde2d1", "reset", "")
@@ -606,7 +606,7 @@ def bev_task_head():
 
 
 def RunStoreOpen(path):
-    from evalsuite.store import RunStore
+    from Evaluation.store import RunStore
     return RunStore.open(path)
 
 
@@ -721,7 +721,7 @@ def _():
        "last, any number of levels); a plain radar tensor gives no state (and is not mistaken for a pair)")
 def _():
     import torch.nn as nn
-    from evalsuite.torch_taps import TapRecorder
+    from Evaluation.torch_taps import TapRecorder
 
     class Radar(nn.Module):
         def __init__(self, pair):
@@ -857,7 +857,7 @@ def _():
     import io
     from types import SimpleNamespace as NS
     from evaluation import bev_suite as S
-    from evalsuite.store import RunStore
+    from Evaluation.store import RunStore
     # the adapter's Source: a stub dataset (2 keyframes of one scene), the real class and describe()
     class Nusc:
         def get(self, table, tok):

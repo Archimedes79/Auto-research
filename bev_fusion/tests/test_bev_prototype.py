@@ -31,8 +31,8 @@ def check_box(rec, d):
 
 def main(run="runs/t10_dual_s0"):
     os.chdir(ROOT)
-    from evalsuite import EvalSuite
-    from evalsuite.runner import Runner
+    from Evaluation import EvalSuite
+    from Evaluation.runner import Runner
     from evaluation import bev_prototype as P
     from evaluation.bev_adapter import build
     source, subject, task = build(run, device="cpu", workers=0)

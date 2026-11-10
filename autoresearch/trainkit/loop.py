@@ -73,7 +73,7 @@ class Hooks:
 
 
 def _skip_report(step, status, gn, bad, was_bad, n_overflow, scaler):
-    """the lines the trainsuite's health check counts (`non-finite ... skipped (k in a row)`); -> the number of fp16 overflows so far"""
+    """the lines the Training's health check counts (`non-finite ... skipped (k in a row)`); -> the number of fp16 overflows so far"""
     if status == "overflow" and bad == was_bad:             # fp16: expected now and then, the scaler halved its scale
         n_overflow += 1
         print(f"step {step}: fp16 gradient overflow, skipped, loss scale -> {scaler.get_scale():g} ({n_overflow} since this start)", flush=True)
@@ -155,7 +155,7 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     params = [p for g in opt.param_groups for p in g["params"]]
     bad, n_overflow, t0, step0, last = 0, 0, time.time(), step, {}
     while step < cfg.steps:
-        reason = stop_check(out_dir)                    # `python -m trainsuite stop <run>` (autoresearch/trainsuite)
+        reason = stop_check(out_dir)                    # `python -m Training stop <run>` (autoresearch/Training)
         if reason is not None:
             save(step)
             checkpoint.prune_checkpoints(out_dir, cfg.keep)

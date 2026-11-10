@@ -316,7 +316,7 @@ def test_hold_before_start():
 
 def test_settle():
     """11: the settle wait ends when the slot's run logged its first step (log.jsonl row newer than the slot, train.log `step N:` after the last `=== `), the clock stays the ceiling"""
-    assert RUN.train_dir(T, {"trainsuite": {"runs": "rr"}}, "a.b") == os.path.join(T, "rr", "a_b") and RUN.train_dir(T, {"trainsuite": {}}, "a.b") == os.path.join(T, "runs", "a_b")
+    assert RUN.train_dir(T, {"training": {"runs": "rr"}}, "a.b") == os.path.join(T, "rr", "a_b") and RUN.train_dir(T, {"training": {}}, "a.b") == os.path.join(T, "runs", "a_b")
     assert RUN.train_dir(T, {}, "a.b") == ""
     slots, out = f"{T}/slots", f"{T}/trainrun"
     os.makedirs(f"{slots}/0")
@@ -348,7 +348,7 @@ def test_settle():
         f.write(json.dumps({"step": 501, "t": time.time() + 1, "total": 0.9, "gpu_gb": 7.0}) + "\n")
     assert loading() == [], "a log.jsonl row newer than the slot"
     json.dump(dict(owner, out_dir=""), open(f"{slots}/0/run.json", "w"))
-    assert loading() == ["loader"], "a slot without a run folder (an older launcher, a project without a trainsuite): the clock only"
+    assert loading() == ["loader"], "a slot without a run folder (an older launcher, a project without a Training): the clock only"
     json.dump(dict(owner, taken=time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - 600))), open(f"{slots}/0/run.json", "w"))
     assert loading() == [], "the clock is the ceiling"
     shutil.rmtree(slots)

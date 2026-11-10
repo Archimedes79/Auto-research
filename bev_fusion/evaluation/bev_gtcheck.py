@@ -124,8 +124,8 @@ def variants(samples, spec, groups, seed=0):
 
 
 def run(samples, outputs, task):
-    from evalsuite import Prediction, Sample
-    from evalsuite.contracts import FrameRef
+    from Evaluation import Prediction, Sample
+    from Evaluation.contracts import FrameRef
     metrics = [m for m in task.metrics() if m.name != "loss"]
     counts = {m.name: [] for m in metrics}
     for i, ((name, s), out) in enumerate(zip(samples, outputs)):

@@ -74,10 +74,10 @@ def lint(path, ar_root=None):
     for ref in set(re.findall(r"`(autoresearch/[\w./-]+)`", text)):
         if not os.path.exists(os.path.join(repo, ref)):
             problems.append(f"names {ref}, which does not exist")
-    scripts = {d: set(os.listdir(os.path.join(ar_root, d))) for d in ("tools", "evalsuite", "trainsuite") if os.path.isdir(os.path.join(ar_root, d))}
+    scripts = {d: set(os.listdir(os.path.join(ar_root, d))) for d in ("tools", "Evaluation", "Training") if os.path.isdir(os.path.join(ar_root, d))}
     for py in set(re.findall(r"`([\w]+\.py)", text)):
         if not any(py in files for files in scripts.values()):
-            problems.append(f"names the script {py}, which is in none of tools/, evalsuite/, trainsuite/")
+            problems.append(f"names the script {py}, which is in none of tools/, Evaluation/, Training/")
     return problems
 
 

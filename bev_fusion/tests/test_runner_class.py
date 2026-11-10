@@ -1,5 +1,5 @@
-"""runner/ (the class Runner and the command line `python -m runner` above it) on the toy network of autoresearch/evalsuite/selftest_api.py: a few seconds, no data, no GPU, no nuScenes.
-Checked: (1) layering: `runner.runner` loads neither torch nor any suite besides evalsuite (the runner imports the evaluation's pieces; the evaluation reaches the runner only by the name in evalsuite.json); (2) the methods of
+"""runner/ (the class Runner and the command line `python -m runner` above it) on the toy network of autoresearch/Evaluation/selftest_api.py: a few seconds, no data, no GPU, no nuScenes.
+Checked: (1) layering: `runner.runner` loads neither torch nor any suite besides Evaluation (the runner imports the evaluation's pieces; the evaluation reaches the runner only by the name in evaluation.json); (2) the methods of
 Runner are the commands (no second list), each with a whole-sentence summary, `resolve` / `stored` are helpers and no commands; (3) `plan` finds the problems and runs nothing, `predict` stores
 without reading a ground truth (the labelled Source.load is never called) and a second `predict` takes the stored frames; (4) `tap` reads an intermediate result back, an unknown tap is refused
 before the network runs and plan says so too, a refused run stores nothing, the health of the memory (a warning that a shorter look keeps), `time` / `probe` say when the project has none; (5) the command line prints what the methods return: `--json` is the method's dict, a plan with problems exits 1, an
@@ -21,7 +21,7 @@ from runner import __main__ as command_line  # noqa: E402
 from runner import Runner  # noqa: E402
 
 import suitecli  # noqa: E402
-from evalsuite import selftest_api as TOY  # noqa: E402
+from Evaluation import selftest_api as TOY  # noqa: E402
 
 
 def raises(fn, text, *a, **kw):
@@ -44,7 +44,7 @@ def cli(*argv):
 def main():
     # (1) layering, in a process of its own
     code = ("import sys; sys.path.insert(0, %r); import runner.runner; "
-            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'trainsuite', 'suitecli', 'nuscenes', 'cv2')))" % ROOT)
+            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'Training', 'suitecli', 'nuscenes', 'cv2')))" % ROOT)
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=os.path.dirname(ROOT))
     assert p.returncode == 0 and p.stdout.strip() == "[]", (p.stdout, p.stderr[-300:])
 
@@ -101,9 +101,9 @@ def main():
         TOY.STATE.memory = "ok"
     print("  ok  memory health: predict returns the warning of a memory that never fills; a shorter look at the scene keeps it; memory_checked says whether it could be judged")
 
-    # (5) the command line (the project names its adapter in evaluation/evalsuite.json)
+    # (5) the command line (the project names its adapter in evaluation/evaluation.json)
     os.makedirs(os.path.join(tmp, "evaluation"))
-    json.dump({"adapter": "evalsuite.selftest_api"}, open(os.path.join(tmp, "evaluation", "evalsuite.json"), "w"))
+    json.dump({"adapter": "Evaluation.selftest_api"}, open(os.path.join(tmp, "evaluation", "evaluation.json"), "w"))
     rc, out, err = cli("Runner.plan", net, "val", "--project", tmp, "--json")
     assert rc == 0 and json.loads(out)["frames_stored"] == 18 and not err.strip(), (rc, out, err)
     rc, out, err = cli("list-results", net, "--project", tmp, "--json")

@@ -1,4 +1,4 @@
-"""The ground truth a config needs: its scene names, the check and the build - the `prepare` step of `python -m trainsuite check` / `run`.
+"""The ground truth a config needs: its scene names, the check and the build - the `prepare` step of `python -m Training check` / `run`.
 
     python training/gt_scenes.py CONFIG names     # the sequence names the config trains and validates on, one per line
     python training/gt_scenes.py CONFIG check     # exit 0 when the GtGenerator store holds every keyframe of them for the CURRENT generator, else 1 and how many are missing

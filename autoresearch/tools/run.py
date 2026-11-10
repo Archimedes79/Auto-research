@@ -12,7 +12,7 @@ What it does (paths from the problem's project.json, see project.py):
                 record. Runs in progress are not in the ledger: `ledger.py tail` and `schedule.py show` read them from the run records (state is
                 derived from the records, never synced between files)
   * done flag   <run_records>/<id>/done      ONLY when the command exits with 0 (a crashed training never leaves a done flag)
-  * stop        exit code 75 (trainsuite: the trainer was asked to stop and saved a checkpoint) is status "stopped": no done flag, no retry (not even when the log tail
+  * stop        exit code 75 (Training: the trainer was asked to stop and saved a checkpoint) is status "stopped": no done flag, no retry (not even when the log tail
                 holds a CUDA error of an earlier attempt), not counted as a failure in metrics.py; the id is put ON HOLD (a HOLD file in its run record, hold.py): it is
                 refused ("held") and starts again only after the person's words (hold.py clear ID --words ...); --after dependents are blocked. The hold is read
                 again every round while the launcher waits (--after, machine lock, GPU queue): a hold set meanwhile ends the wait (status held, exit 2); an id whose run
@@ -22,7 +22,7 @@ What it does (paths from the problem's project.json, see project.py):
   * code        snapshots the code folders (project.json code_dirs + fingerprint_extra + autoresearch/) through a TEMPORARY git index: a commit
                 on top of HEAD that moves no branch and touches nobody's staging area, tagged <tag_prefix>/<id>. Refuses to start when git has no
                 user identity (the snapshot would fail silently). --no-git skips this. The commit is written into the run record and the ledger.
-                --pin REF runs on the code of that commit or tag instead (a resume that continues on the code of attempt 1: `trainsuite queue resume`): no new
+                --pin REF runs on the code of that commit or tag instead (a resume that continues on the code of attempt 1: `Training queue resume`): no new
                 commit or tag, no drift check, a note in the record. Not in the snapshot: data, checkpoints and the model registry unless listed in fingerprint_extra (the evaluated configuration is
                 fixed by the metric card, which names the registry entry and the commit). Guaranteed: the commit names the code at LAUNCH. That the
                 command ran it is the command's job (it runs `git archive $AR_COMMIT`); every other command runs from the working tree. So when the
@@ -68,7 +68,7 @@ What it does (paths from the problem's project.json, see project.py):
                 Settle time (--settle-s, project.json gpu_settle_s, 0 = off; bev_fusion 180; AR_SETTLE_S overrides): a launcher waits while another one took its slot less
                 than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet and the RAM / memory gates would read the box too early
                 (two trainings that started in the same second slowed each other 13 times); it delays only the launchers of a project that sets it. The clock is the
-                ceiling: the wait ends sooner when that run has logged its first step (its run folder <trainsuite.runs>/<id with . as _>, named in the slot's owner file: a
+                ceiling: the wait ends sooner when that run has logged its first step (its run folder <Training.runs>/<id with . as _>, named in the slot's owner file: a
                 log.jsonl row newer than the slot, or a `step N:` line of train.log after its last `=== ` line). A ticket whose launcher the machine lock holds back
                 does not hold up the line
   * machine lock (D19) every run, GPU or not, waits (max --wait-gpu minutes, then gpu_busy) while another owner holds a live exclusive lock of
@@ -119,7 +119,7 @@ CUDA_RETRY = re.compile(r"CUDA (error: )?unknown error", re.I)
 SCRATCH_MAX_BYTES = 1_000_000   # a scratch script over this size is not put into the run tag (it is data, not a script)
 SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (about 10 ms each at the snapshot, and again at the drift check)
 SCRATCH_SKIPPED = [0]           # how many scripts the last scratch_scripts() call left out
-EXIT_STOPPED = 75   # trainsuite/control.py EXIT_STOPPED: a trainer that was asked to stop (CONTROL file) saved a checkpoint and ended on purpose: status "stopped", never retried
+EXIT_STOPPED = 75   # Training/control.py EXIT_STOPPED: a trainer that was asked to stop (CONTROL file) saved a checkpoint and ended on purpose: status "stopped", never retried
 POSIX = os.name == "posix"
 
 
@@ -654,7 +654,7 @@ def write_manifest(run_id):
 
 
 def run_folder(run_id):
-    """the run folder an id names (trainsuite/compose.py: the id with . as _, so `t1.a` and `t1_a` share one folder and one checkpoint, but have two run records)"""
+    """the run folder an id names (Training/compose.py: the id with . as _, so `t1.a` and `t1_a` share one folder and one checkpoint, but have two run records)"""
     return run_id.replace(".", "_")
 
 
@@ -845,8 +845,8 @@ class GpuSlot:
 
 
 def train_dir(root, cfg, run_id):
-    """the trainer's run folder of an id (trainsuite/compose.py: project.json trainsuite.runs, default runs, then the id with . as _); '' for a project without a trainsuite"""
-    ts = cfg.get("trainsuite")
+    """the trainer's run folder of an id (Training/compose.py: project.json Training.runs, default runs, then the id with . as _); '' for a project without a Training"""
+    ts = cfg.get("training")
     return os.path.join(root, ts.get("runs", "runs"), run_folder(run_id)) if isinstance(ts, dict) else ""
 
 
@@ -1236,8 +1236,8 @@ def main():
             rec["code_drift_check"] = drift_err
     status = "ok" if rc == 0 else "timeout" if timed_out else "stopped" if rc == EXIT_STOPPED else "failed"  # a command's own exit 124 is a failure, not the launcher's timeout
     if status == "stopped":
-        HOLD.write(d, "run.py", "exit 75: the trainer was stopped on request (trainsuite), a checkpoint should have been saved", "(none recorded: ask the person; the stop request is in the run folder's STOPPED file)")
-        notes.append("stopped on request (exit 75 = the trainsuite stop code, a checkpoint should have been saved) and ON HOLD: the same id starts again only after the person's words "
+        HOLD.write(d, "run.py", "exit 75: the trainer was stopped on request (Training), a checkpoint should have been saved", "(none recorded: ask the person; the stop request is in the run folder's STOPPED file)")
+        notes.append("stopped on request (exit 75 = the Training stop code, a checkpoint should have been saved) and ON HOLD: the same id starts again only after the person's words "
                      "(hold.py clear); its dependents are blocked meanwhile")
     rec.update(status=status, exit=rc, duration_s=dur, attempts=attempt, ended=now(), last_lines=tail.strip().splitlines()[-12:])
     try:

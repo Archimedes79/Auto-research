@@ -32,7 +32,7 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
-from evalsuite import Metric, Prediction, Sample  # noqa: E402
+from Evaluation import Metric, Prediction, Sample  # noqa: E402
 from evaluation.bev_task import BevDetMetric  # noqa: E402
 from evaluation.metrics import dt_key, gt_boxes_from_meta, in_front  # noqa: E402
 
@@ -167,7 +167,7 @@ def coverage_classes(f_fusion: float, f_cam: float, radar_pts: Optional[int]):
 
 
 class BevCoverageMetric(Metric):
-    """see the module text; a Metric of the evalsuite (frame / reduce / score / support), counts are additive per frame"""
+    """see the module text; a Metric of the Evaluation (frame / reduce / score / support), counts are additive per frame"""
     name = "cov"
     headline = ()
     better: Dict[str, str] = {}
@@ -280,7 +280,7 @@ def selftest():
 def coverage_table(n: int = 300, sig: Optional[str] = None, seed: int = 0, pts=None):
     """how the COMPLETE GT set (every annotated box in the scored window) of `n` cached frames splits by what the rig can observe: counts per class and share of the class's total"""
     from evaluation import bev_gtcheck as G
-    from evalsuite.contracts import FrameRef
+    from Evaluation.contracts import FrameRef
     task = G.build_task()
     metric = BevCoverageMetric(task.groups, pts if pts is not None else task._pts())
     counts, sig = [], G.resolve_sig(sig)

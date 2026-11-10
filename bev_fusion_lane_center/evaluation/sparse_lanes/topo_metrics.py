@@ -30,7 +30,7 @@ import graph_eval as GE
 
 if os.path.join(BP.REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(BP.REPO, "autoresearch"))
-from evalsuite import stats as ST  # noqa: E402  (the shared scene bootstrap)
+from Evaluation import stats as ST  # noqa: E402  (the shared scene bootstrap)
 
 CLIP = 48.0
 BINS = (("near", 0.0, 20.0), ("mid", 20.0, 40.0), ("far", 40.0, 1e9))
@@ -196,7 +196,7 @@ def extra(preds, gts):
 
 def paired(recs_a, recs_b, scenes, B=1000, seed=0, keys=("topo_F1", "topo_R", "topo_P", "dup_frac", "R@1_far", "R@1_mid", "R@1_near", "R@1_far_inner", "R@1_far_ring")):
     """a - b (a = variant, b = control) with a 95 % interval over resampled scenes (same draw for both systems), like bootstrap.paired for the
-    card metrics and with the same draws (the shared evalsuite.stats bootstrap). Draws without a number (a range bin with no point: NaN) are
+    card metrics and with the same draws (the shared Evaluation.stats bootstrap). Draws without a number (a range bin with no point: NaN) are
     dropped; then the key carries n_valid. p_a_better = share of the valid draws with a - b > 0 (for dup_frac, lower is better)."""
     res = ST.paired_draws(lambda idx: pooled(recs_a if idx is None else [recs_a[i] for i in idx]),
                           lambda idx: pooled(recs_b if idx is None else [recs_b[i] for i in idx]), ST.scene_draws(scenes, B, seed), keys)

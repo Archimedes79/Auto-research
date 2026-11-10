@@ -20,7 +20,7 @@ its mid / far numbers are single rows; H8: far row 10, mid rows 11 - 14, near 15
 Null baseline: the per-cell mean depth distribution and mean context vector of the first --null-frames (512) training key frames in sorted-token order (a floor of 1e-6 per depth bin so
 that no bin has probability 0), scored on the same validation frames and bands; metrics.json holds it as null.* (null.kl16, null.kl16.near, null.cos16, ...) and the skill of each head's
 depth, skill<k> = 1 - kl<k> / null.kl<k> (also per band). A student that has learned only where depth and context usually are has skill 0.
-Stop: the CONTROL file of the trainkit protocol (`python -m trainsuite stop <run>`) -> checkpoint, STOPPED, exit 75.
+Stop: the CONTROL file of the trainkit protocol (`python -m Training stop <run>`) -> checkpoint, STOPPED, exit 75.
 Exit codes: 3 = a resource is short (free host RAM < 3 GB or more than 6 GB of the GPU in use by others; --force overrides) or cuda was asked for and is not there, 2 = the run folder has
 checkpoints and --resume is missing (eval-only: has none).
 Test: tests/test_student_encoder.py

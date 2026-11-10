@@ -1,6 +1,6 @@
 """runner - a trained BEV network run on frames, as ONE class. The command line above it is `python -m runner` (__main__.py): every method of `Runner` is a command.
 
-    r = Runner()                                                     # the project: this one (bev_fusion); its evaluation adapter (evaluation/evalsuite.json) says what a network and its data are
+    r = Runner()                                                     # the project: this one (bev_fusion); its evaluation adapter (evaluation/evaluation.json) says what a network and its data are
     r.plan("runs/t23_C_s1", "small.val")                             # the dry run: scenes, frames, what is stored, what would run, the problems
     r.predict("runs/t23_C_s1", "small.val", taps=["fused"])          # the network on the frames that are not stored yet, no ground truth; -> {results: "<net>@r<hash>", ...}
     r.list_results("runs/t23_C_s1");  r.tap(id, "scene-0061/12", "fused");  r.time("runs/t23_C_s1");  r.probe("runs/t23_C_s1")
@@ -8,10 +8,10 @@
 No queue, no launcher, no ledger row: a call runs in this process (a run that feeds a verdict is started through autoresearch/tools/run.py with this command as its command). A network with a
 memory always runs warm (D70): whole scenes in time order from the scene's own start, the frames asked for only decide which results are kept. The run reads no ground truth and computes no
 validation loss (D72): the adapter's `free_source` / `free_subject` (evaluation/bev_free.py) give a Source whose frames have no reference and a Subject that only predicts. What is stored is
-the ResultSet of autoresearch/evalsuite/results.py, the same whoever asks (the identity rules of evalsuite/api.py); `Evaluation.score` scores it later when a ground truth exists.
+the ResultSet of autoresearch/Evaluation/results.py, the same whoever asks (the identity rules of Evaluation/api.py); `Evaluation.score` scores it later when a ground truth exists.
 The health of a carried memory (the adapter's MEMORY_TAP, the mean of that tap per frame): empty at the first frame of a scene, filling over its frames; a scene where it is not is a warning in
 the result, never an error. `time` and `probe` are here because they execute the network. The pieces (Frames, ResultSet, the frame iterator, the Source / Subject contracts, the constants of
-the memory check) are evalsuite's and imported here; evalsuite reaches this class only by the name in evaluation/evalsuite.json (key "runner")."""
+the memory check) are Evaluation's and imported here; Evaluation reaches this class only by the name in evaluation/evaluation.json (key "runner")."""
 from __future__ import annotations
 
 import math
@@ -28,10 +28,10 @@ for _p in (ROOT, AUTORESEARCH):                                     # the helper
     if _p not in sys.path:
         sys.path.append(_p)
 
-from evalsuite.api import CARRY, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES, MEMORY_START_MAX, EvaluationError, Frames, Helpers, names  # noqa: E402
-from evalsuite.contracts import FrameRef, Prediction  # noqa: E402
-from evalsuite.results import Locked, ResultSet, result_id, writer_lock  # noqa: E402
-from evalsuite.runner import Runner as FrameRunner  # noqa: E402     # the frame iterator of the engine (a Subject over a Source, scene by scene)
+from Evaluation.api import CARRY, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES, MEMORY_START_MAX, EvaluationError, Frames, Helpers, names  # noqa: E402
+from Evaluation.contracts import FrameRef, Prediction  # noqa: E402
+from Evaluation.results import Locked, ResultSet, result_id, writer_lock  # noqa: E402
+from Evaluation.runner import Runner as FrameRunner  # noqa: E402     # the frame iterator of the engine (a Subject over a Source, scene by scene)
 
 RunnerError = EvaluationError                                       # the data, the checkpoint, the memory: the errors are the evaluation's, one class for both
 

@@ -310,7 +310,7 @@ try:
     check(any(DIAGS), "(control) amp off with grad_diag_every 3 does ask for the diag")
     calls = {"n": 0}
     keep_stop = T._stop_requested
-    T._stop_requested = lambda d: "test" if (calls.__setitem__("n", calls["n"] + 1) or calls["n"]) > 6 else None          # a stop request at the 7th step (the trainsuite stop protocol)
+    T._stop_requested = lambda d: "test" if (calls.__setitem__("n", calls["n"] + 1) or calls["n"]) > 6 else None          # a stop request at the 7th step (the Training stop protocol)
     stopped = run_train(root, "stopped", {3: "inf_grad"}, amp="fp16", steps=40, save_every=0)
     T._stop_requested = keep_stop
     check(stopped["exc"] and "SystemExit: 75" in stopped["exc"] and stopped["ck"]["extra"]["scaler"]["scale"] == 512.0, "a stop request (exit 75) saves the checkpoint with the scaler state")

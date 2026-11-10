@@ -2,7 +2,7 @@
 
 Improving a technical system by research: agents do most of the work, a person sets the direction and decides. A problem plugs in through one folder with `PROBLEM.md` + `project.json` (`README.md`). The picture of the system and why it looks like this: `architecture.md`. The bev_fusion problem keeps `README.md`, `plan/` and `records/` instead of `PROBLEM.md` / `HANDOVER.md` and has no protected list until D75.
 
-**Four layers.** The **person** gives the prompt and decides. **Agents** (four roles, below) read files and write files. **Files** in the problem folder are the only contract between agents and code: problem, research notes, experiment cards, plan, run records, metric cards, ledger, decisions, handover. **Code** (`tools/`, `trainsuite/`, `evalsuite/`) runs, measures, refuses and applies rules written before the run; judgment stays with agents and the person. A phase reads only the summaries of the phase before it and opens details only for the ids it uses.
+**Four layers.** The **person** gives the prompt and decides. **Agents** (four roles, below) read files and write files. **Files** in the problem folder are the only contract between agents and code: problem, research notes, experiment cards, plan, run records, metric cards, ledger, decisions, handover. **Code** (`tools/`, `Training/`, `Evaluation/`) runs, measures, refuses and applies rules written before the run; judgment stays with agents and the person. A phase reads only the summaries of the phase before it and opens details only for the ids it uses.
 
 ## Outer loop: one round per prompt
 | phase | what happens | it ends when (gate) |
@@ -20,7 +20,7 @@ Rounds run one after another: a round ends with decisions the next one needs. Se
 ## Inner loop: one per card, several at a time
 - **Variant** (existing code, other settings): each arm and seed has a planned ledger row with the card's hypothesis, prediction and rule; the lead starts it through `run.py` (a chain with `--after`; commit + tag per run) -> the evaluation writes a metric card per run -> `decide.py` applies the rule of the card (the block in `experiment.md`) (KEEP / CUT / TIE / INCONCLUSIVE; INCONCLUSIVE adds a seed) -> one summary line. No agent judges, unless `decide.py` refuses a case its rule does not cover (then hard rule 4).
 - **Block** (new code): the planner (mode detail) writes the detail plan, naming the boxes of the system drawing it changes -> the coder implements it with its spec test -> the critic (mode code) reviews shared code -> then as a variant.
-- Trainings are watched by code where the trainer follows the `trainsuite` contract (today bev_fusion): the lead writes the card's kill criterion as a rule into the trainer's run folder (`<run>/kill.txt`, or `--kill`) and starts `trainsuite watch <runs> --enforce` as a Monitor, which stops a run that hits it; an alarm wakes the lead, no agent watches. For other trainers (the lane problem today) the lead applies the kill criterion.
+- Trainings are watched by code where the trainer follows the `Training` contract (today bev_fusion): the lead writes the card's kill criterion as a rule into the trainer's run folder (`<run>/kill.txt`, or `--kill`) and starts `Training watch <runs> --enforce` as a Monitor, which stops a run that hits it; an alarm wakes the lead, no agent watches. For other trainers (the lane problem today) the lead applies the kill criterion.
 
 ## Hard rules and defaults
 Hard - they protect what is costly to get wrong, so most refuse in code:

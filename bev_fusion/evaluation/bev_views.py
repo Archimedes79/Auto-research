@@ -1,4 +1,4 @@
-"""The pictures of the BEV system for the evaluation suite (evalsuite): every view returns a `Page` of panels (pure data).
+"""The pictures of the BEV system for the evaluation suite (Evaluation): every view returns a `Page` of panels (pure data).
 
 Views (names as in `BEVTask.views()`):
     overview    camera with the projected ground truth | GT bird's-eye view | prediction (+ boxes) | three error maps
@@ -20,9 +20,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from evalsuite import Page, Panel, Prediction, Sample, Shape, View, ViewContext
-from evalsuite.render.figure import error_counts
-from evalsuite.render.taps import energy, pca_rgb
+from Evaluation import Page, Panel, Prediction, Sample, Shape, View, ViewContext
+from Evaluation.render.figure import error_counts
+from Evaluation.render.taps import energy, pca_rgb
 from evaluation.metrics import FRONT_HALF_FOV, MOVING_SPEED, angle_error, dilate, gt_boxes_from_meta, in_front, line_cells
 
 # The colour scheme of the bird's-eye pictures (Mirko's proposal of 2026-11-03): black plot background, dark-grey road with a black boundary, white lane markings, light-grey
@@ -445,7 +445,7 @@ class OverviewView(BevView):
 
 
 def _err(P, G, valid, cls: str = "drivable_area"):
-    from evalsuite.render.figure import error_rgb
+    from Evaluation.render.figure import error_rgb
     return error_rgb(P, G, valid, colors=ERR[cls])
 
 
@@ -556,7 +556,7 @@ class OutputsView(BevView):
 
 
 def _layer_err(P, G, valid, color):
-    from evalsuite.render.figure import error_rgb
+    from Evaluation.render.figure import error_rgb
     return error_rgb(P, G, valid, colors=class_colors(color))
 
 

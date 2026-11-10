@@ -5,7 +5,7 @@ Four job files, one call each (the interface of every suite is the same: a class
 | step | file | call | data it names | waits for |
 |---|---|---|---|---|
 | 1 | `gt.json` | `GtGenerator.generate_bev_gt` | `dataroot` (the nuScenes folder), `set_name` (a GtGenerator set: `full` or `small`; `$PY -m GtGenerator sets` from the workspace root). A complete store is not rebuilt | - |
-| 2 | `train.json` | `Training.run` (a trainsuite job file) | `config`, `set.split` (a BEV split: `small`, `large`, `xl`; `splits/*.json`), `preset` (length) | `demo.gt` |
+| 2 | `train.json` | `Training.run` (a Training job file) | `config`, `set.split` (a BEV split: `small`, `large`, `xl`; `splits/*.json`), `preset` (length) | `demo.gt` |
 | 3 | `predict.json` | `Runner.predict` | `network` (the run folder of step 2: run id `demo.t20` = `runs/demo_t20`), `frames` | `demo.t20` |
 | 4 | `score.json` | `Evaluation.score` | `results` (`{"$result": "demo.predict:results"}`: the id step 3 returned), `frames` (the same as step 3), `gt_key` (default: the GT version of the store) | `demo.predict` |
 
@@ -25,7 +25,7 @@ python3 -m jobrunner JobRunner.status demo.score --project ../bev_fusion     # s
 - **A new id for a new run.** A job that is done or in progress is not started twice. Copy the folder for another run (`chain_large/`, then the submit loop names it) and change, in all four files, the id and every reference to an id: `after` in steps 2 - 4, `network` in step 3 (the run folder: the dots of the run id become underscores, `lg1.t20` = `lg1_t20`) and `$result` in step 4 (`lg1.predict:results`). The ids are `demo.*` here, a real run gets a name that says what it is (`t24.A_s0`).
 - **Name the run folder, not the run id.** `network` is `demo_t20` (the folder `runs/demo_t20`): `Runner.predict` with the dotted id `demo.t20` ends `failed: no run folder with a config.json` (that is how the first attempt `chain.predict` ended; `chain.predict2` with the folder name worked).
 - `JobRunner.check` of the gt job prints `est_hours: 6`: that is the cost of a store that is NOT complete; a complete store ends in seconds (chain2: skipped).
-- The numbers: `$PY -m evalsuite Evaluation.show-numbers <evaluation id>` from `autoresearch/` (`$PY` as above; the system `python3` has no numpy). The result of step 4 (`JobRunner.status demo.score`) holds two ids: `id` (`<network>@e<hash>`, the evaluation: this one goes to `show-numbers`) and `results` (`<network>@r<hash>`, the stored predictions of step 3: `show-numbers` refuses it); the predictions of step 3 lie in `runs/demo_t20/eval/results/<id>` (not in git); the records of the jobs in `records/runs/.jobs/<id>/` (`job.json`, `args.json`, `result.json`, `launch.log`).
+- The numbers: `$PY -m Evaluation Evaluation.show-numbers <evaluation id>` from `autoresearch/` (`$PY` as above; the system `python3` has no numpy). The result of step 4 (`JobRunner.status demo.score`) holds two ids: `id` (`<network>@e<hash>`, the evaluation: this one goes to `show-numbers`) and `results` (`<network>@r<hash>`, the stored predictions of step 3: `show-numbers` refuses it); the predictions of step 3 lie in `runs/demo_t20/eval/results/<id>` (not in git); the records of the jobs in `records/runs/.jobs/<id>/` (`job.json`, `args.json`, `result.json`, `launch.log`).
 
 ## Another data set: what changes
 The data are named in the arguments and nowhere else. To run the chain on `large`:

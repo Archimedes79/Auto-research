@@ -1,6 +1,6 @@
-"""Gate of the class interface of the evaluation on the BEV system (`autoresearch/evalsuite/api.py`, adapter `evaluation/bev_eval.py`, command line `python -m evalsuite`).
+"""Gate of the class interface of the evaluation on the BEV system (`autoresearch/Evaluation/api.py`, adapter `evaluation/bev_eval.py`, command line `python -m Evaluation`).
 
-Without option (CPU, seconds, no data): the checks of the interface on its toy project (`evalsuite/selftest_api.py`), `bev_sets` / adapter contract (every function the interface needs is there),
+Without option (CPU, seconds, no data): the checks of the interface on its toy project (`Evaluation/selftest_api.py`), `bev_sets` / adapter contract (every function the interface needs is there),
 and the command line lists its methods.
 With --real [RUN] (a finished run with a checkpoint, default runs/t20_base_s0; CPU, 4 frames, about 5 minutes; skips with a message without a checkpoint): the proof that the interface
 changes no number. On a copy of the run folder (config, GT identity, code snapshot, the checkpoint linked):
@@ -27,18 +27,18 @@ sys.path[:0] = [ROOT, os.path.join(ROOT, "..", "autoresearch")]
 
 
 def quick():
-    from evalsuite.selftest_api import run_all
-    from evalsuite.api import Evaluation as _Evaluation
+    from Evaluation.selftest_api import run_all
+    from Evaluation.api import Evaluation as _Evaluation
     r = run_all(type(_Evaluation(project=ROOT).runner))                                                    # the Evaluation together with THE Runner (bev_fusion/runner) on the toy adapter
     assert r["ok"], r
     os.chdir(ROOT)
     from evaluation import bev_eval
-    from evalsuite.api import ADAPTER_FUNCTIONS, Evaluation
+    from Evaluation.api import ADAPTER_FUNCTIONS, Evaluation
     missing = [f for f in ADAPTER_FUNCTIONS if not hasattr(bev_eval, f)]
     assert not missing, f"bev_eval lacks {missing}"
     assert hasattr(bev_eval, "reference") and hasattr(bev_eval, "card") and hasattr(bev_eval, "time") and hasattr(bev_eval, "probe")
     assert hasattr(bev_eval, "free_source") and hasattr(bev_eval, "free_subject"), "the Runner's pair: both or none"
-    from evalsuite.api import EvaluationError
+    from Evaluation.api import EvaluationError
     from evaluation import bev_adapter                                                                   # an evaluator that cannot be hashed fails closed (a renamed file of NUMBER_PATHS)
     assert "bev_eval.py" in {os.path.basename(p) for p in bev_adapter.NUMBER_PATHS}, "the adapter's own code is part of the evaluator hash (and so of the evaluation id)"
     saved_paths = bev_adapter.NUMBER_PATHS
@@ -55,7 +55,7 @@ def quick():
     ev_ = Evaluation(project=ROOT)                                                                      # the project names its Runner: bev_fusion/runner/runner.py, built with (project, adapter)
     assert type(ev_.runner).__module__ == "runner.runner", type(ev_.runner)
     assert type(Evaluation(adapter="evaluation.bev_eval").runner).__module__ == "runner.runner", "the Evaluation always includes the project's Runner, whichever way the adapter is named"
-    cfg = json.load(open(os.path.join(ROOT, "evaluation", "evalsuite.json")))
+    cfg = json.load(open(os.path.join(ROOT, "evaluation", "evaluation.json")))
     assert cfg == {"adapter": "evaluation.bev_eval", "runner": "runner.runner:Runner"}, cfg
     s = bev_eval.sets()
     assert s["small.val"] == 10 and s["large.val"] == 82 and s["val"] is None and s["train"] is None, s
@@ -104,7 +104,7 @@ def quick():
             raise AssertionError(f"{bad} was accepted")
         except ValueError as e:
             assert "TEST" in str(e), e
-    from evalsuite.api import EvaluationError                                                              # one network per process: its code modules stay imported
+    from Evaluation.api import EvaluationError                                                              # one network per process: its code modules stay imported
     saved = dict(bev_eval._CODE)
     bev_eval._CODE["path"] = "/some/other/snapshot"
     try:
@@ -149,7 +149,7 @@ def quick():
         raise AssertionError("an unknown metric was accepted")
     except ValueError as e:
         assert "unknown metrics" in str(e)
-    out = subprocess.run([sys.executable, "-m", "evalsuite", "methods"], cwd=os.path.join(ROOT, "..", "autoresearch"), capture_output=True, text=True, timeout=120)
+    out = subprocess.run([sys.executable, "-m", "Evaluation", "methods"], cwd=os.path.join(ROOT, "..", "autoresearch"), capture_output=True, text=True, timeout=120)
     assert out.returncode == 0 and "Evaluation.run(" in out.stdout and "Evaluation.make_card(" in out.stdout, out.stderr[-300:]
     print(f"quick: interface checks {r['checks']} on the toy project, bev_eval has the adapter contract, sets {len(s)}, the command line lists its methods")
 
@@ -172,8 +172,8 @@ def real(run, scene, index):
         return False
     os.chdir(ROOT)
     from evaluation import bev_adapter as A
-    from evalsuite import EvalSuite
-    from evalsuite.api import Evaluation
+    from Evaluation import EvalSuite
+    from Evaluation.api import Evaluation
     src_run = os.path.join(ROOT, run)
     with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, "temp")) as tmp:
         net = os.path.relpath(os.path.join(tmp, os.path.basename(run)), ROOT)
@@ -192,7 +192,7 @@ def real(run, scene, index):
         assert r["n_frames"] == 1 and r["frames_predicted"] == 1 and r["predictions_reused"] is False and r["warnings"] == [], r
         rs_dir = os.path.join(net, "eval", "results", r["results"].split("@")[1])
         assert len(os.listdir(os.path.join(rs_dir, "frames"))) == 1, "only the frame asked for is stored (the scene ran whole up to it)"
-        from evalsuite.results import ResultSet
+        from Evaluation.results import ResultSet
         rs0 = ResultSet.open(rs_dir)
         stored0 = rs0.load(rs0.refs()[0])
         assert "loss" not in stored0.info and not any(k.startswith("group.") for k in stored0.info) and stored0.info.get("device"), "the Runner read no ground truth: no validation loss in what it stored"

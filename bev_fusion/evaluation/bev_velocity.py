@@ -25,7 +25,7 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path[:0] = [ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
-from evalsuite import Metric, Prediction, Sample  # noqa: E402
+from Evaluation import Metric, Prediction, Sample  # noqa: E402
 from evaluation import bev_curves as C  # noqa: E402
 from evaluation.bev_views import masks  # noqa: E402
 from evaluation.metrics import dt_key, gt_boxes_from_meta, in_front  # noqa: E402
@@ -68,7 +68,7 @@ def centre_index(boxes, grid, valid):
 
 
 class BevVelocityMetric(Metric):
-    """see the module text; a Metric of the evalsuite (frame / reduce), counts additive per frame"""
+    """see the module text; a Metric of the Evaluation (frame / reduce), counts additive per frame"""
     name = "vel"
     headline = ("dt+0.00/centre/field/moving/epe", "dt+0.00/centre/objhead/moving/epe", "dt+0.00/cells/static/epe", "dt+0.00/cells/vehicle/epe")
     LOW = ("epe", "rmse", "bias")
@@ -122,7 +122,7 @@ class BevVelocityMetric(Metric):
 
 def selftest():
     from types import SimpleNamespace
-    from evalsuite.contracts import FrameRef
+    from Evaluation.contracts import FrameRef
     grid = SimpleNamespace(x_min=0.0, y_min=-2.0, res=0.5)
     X, Y = 8, 8
     z = np.zeros((X, Y), np.float32)

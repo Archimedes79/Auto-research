@@ -36,8 +36,8 @@
   "ram_mb": 10000,
   "_gpu_slots_dir": "one GPU on this machine: the slot folder of the lane problem's launcher, so both problems count against the same 2 slots",
   "gpu_slots_dir": "../bev_fusion_lane_center/experiment_execution/runs/.gpu_slots",
-  "_trainsuite": "python -m trainsuite compose | start (autoresearch/trainsuite/compose.py): presets are json files of overrides, the composed config goes to out, check is the static check of training/startable.py, train is the command run.py wraps",
-  "trainsuite": {
+  "_training": "the block of the class Training (autoresearch/Training, `python3 -m Training check|run job.json`; compose.py): presets are json files of overrides, the composed config goes to out, check is the static check of training/startable.py, train is the command run.py wraps",
+  "training": {
     "presets": "training/configs/presets",
     "out": "temp/compose",
     "runs": "runs",

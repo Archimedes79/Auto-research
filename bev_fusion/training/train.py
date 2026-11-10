@@ -603,7 +603,7 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
 
 
 def _stop_requested(run_dir):
-    """reason (a string) when the file CONTROL of the run directory says {"cmd": "stop"}, else None (`python -m trainsuite stop <run>`; the protocol is trainkit.control).
+    """reason (a string) when the file CONTROL of the run directory says {"cmd": "stop"}, else None (`python -m Training stop <run>`; the protocol is trainkit.control).
     The loop asks through this name, so a test can let a stop request arrive at a chosen step"""
     return control.stop_requested(run_dir)
 
@@ -977,7 +977,7 @@ def _selftest():
         finally:
             globals()["evaluate"] = real_eval
         assert val_logged(edir, 2), "the evaluation the crash cut is made up on the resume"
-        # 3b stop request (autoresearch/trainsuite): CONTROL / STOPPED of an earlier stop are moved aside at the start (no clocks compared); a
+        # 3b stop request (autoresearch/Training): CONTROL / STOPPED of an earlier stop are moved aside at the start (no clocks compared); a
         # request that arrives while training stops the run at a step boundary with a checkpoint, a STOPPED marker and exit code 75 (not 0:
         # no `.done`); the run resumes from that checkpoint; the log rows carry the time `t`
         stop_cfg = dataclasses.replace(cfg, name="stoprun", steps=1, save_every=0, eval_every=0)

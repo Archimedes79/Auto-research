@@ -1,4 +1,4 @@
-"""The BEV adapter of the evaluation suite (autoresearch/evalsuite): Source + Subject + Task of a training run `runs/<name>`.
+"""The BEV adapter of the evaluation suite (autoresearch/Evaluation): Source + Subject + Task of a training run `runs/<name>`.
 
     build(run="runs/t1_r4_soa", device="cuda", split="val", workers=2, ckpt_dir=None, control="", prior=0)  ->  (Source, Subject, Task)
 
@@ -134,14 +134,14 @@ def gt_signature(ds) -> Optional[str]:
 
 
 PROVENANCE_DIR = os.path.join(ROOT, "..", "autoresearch", "tools")
-EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "evalsuite"))        # everything the evaluator is made of (the card's provenance block)
-# the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the evalsuite's frame loop,
+EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "Evaluation"))        # everything the evaluator is made of (the card's provenance block)
+# the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the Evaluation's frame loop,
 # counts, sampling and comparison core, and the views (D73: `bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`; `bev_annotation_pts.py`
 # builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too;
 # `bev_eval.py` is the class interface's adapter: the reference and the metrics without the loss). Not the selftests, mutants, board, report or README: an edit there changes no number and must not orphan a store that took 30 minutes
 # while other chats work in the same folders
 NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py", "bev_views.py", "bev_annotation_pts.py", "bev_eval.py")) + \
-    tuple(os.path.join(ROOT, "..", "autoresearch", "evalsuite", f) for f in ("comparison", "quantitative.py", "store.py", "runner.py", "contracts.py", "sampling.py"))
+    tuple(os.path.join(ROOT, "..", "autoresearch", "Evaluation", f) for f in ("comparison", "quantitative.py", "store.py", "runner.py", "contracts.py", "sampling.py"))
 
 
 def _provenance_module():
@@ -159,7 +159,7 @@ def _provenance_module():
 
 
 def evaluator_tree_hash(mod=None, paths=None) -> str:
-    """12 hex over the source files of the evaluator (default: all of evaluation/ and autoresearch/evalsuite/), provenance.tree_hash"""
+    """12 hex over the source files of the evaluator (default: all of evaluation/ and autoresearch/Evaluation/), provenance.tree_hash"""
     mod = mod or _provenance_module()
     return mod.tree_hash([os.path.abspath(p) for p in (EVALUATOR_PATHS if paths is None else paths)], mod.repo_root())
 
@@ -248,7 +248,7 @@ def _identity(x):
 
 # ------------------------------------------------------------------------------------------------ Source
 def _make_source_class():
-    from evalsuite import FrameRef, Sample, Source
+    from Evaluation import FrameRef, Sample, Source
 
     class _BEVSource(Source):
         def __init__(self, cfg, ds, ns, workers: int = 2, control: str = "", split: str = "val", evaluator: Optional[str] = None, set_hash: Optional[str] = None):
@@ -347,7 +347,7 @@ def _make_source_class():
 
 # ------------------------------------------------------------------------------------------------ Subject
 def bev_taps(grid):
-    from evalsuite import TapSpec
+    from Evaluation import TapSpec
     ext = (grid.y_min, grid.y_max, grid.x_min, grid.x_max)
     kw = dict(extent=ext, flip_x=True, optional=True)         # which stages exist depends on the configuration / snapshot
     return [TapSpec("lift", "feature_map", "camera", "energy only inside the camera cone (a wedge), strongest in the visible near field",
@@ -402,8 +402,8 @@ def _state_of_pair(o):
 
 
 def bev_hooks() -> dict:
-    """the forward hooks of the chain's stages (name -> evalsuite.torch_taps.Hook); recorded only when armed"""
-    from evalsuite.torch_taps import Hook
+    """the forward hooks of the chain's stages (name -> Evaluation.torch_taps.Hook); recorded only when armed"""
+    from Evaluation.torch_taps import Hook
     return {"lift": Hook("lift", pick=lambda o: o[:1], select="first"),
             "cam_reduce": Hook("cam_reduce", pick=lambda o: o[:1], select="first"),
             "cam_temporal": Hook("cam_temporal", pick=lambda o: o[0]),
@@ -420,8 +420,8 @@ def bev_hooks() -> dict:
 
 
 def _make_subject_classes():
-    from evalsuite import Prediction, Subject
-    from evalsuite.torch_taps import TapRecorder
+    from Evaluation import Prediction, Subject
+    from Evaluation.torch_taps import TapRecorder
 
     hooks = bev_hooks()
 
@@ -451,7 +451,7 @@ def _make_subject_classes():
         def ops(self, sample):
             """GMACs of the cached chain at batch 1 with dts -0.5 / 0 / +0.5 (the path `benchmark` times), counted by torch; the pre-trained
             camera heads are a fixed cost that is not in it"""
-            from evalsuite.torch_taps import count_ops
+            from Evaluation.torch_taps import count_ops
             b1 = self.ns.T.to_device(sample.inputs, self.device)
             r = count_ops(lambda: self.model(b1, dts=(-0.5, 0.0, 0.5)))
             r["note"] += "; the cached chain at batch 1 with dts -0.5 / 0 / +0.5 (what benchmark() times), without the pre-trained camera heads"

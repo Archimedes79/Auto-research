@@ -205,7 +205,7 @@ def run_frames(a, specs) -> int:
     sys.path.insert(0, ROOT)
     try:
         from evaluation import bev_suite
-        from evalsuite.cli import _qual_print
+        from Evaluation.cli import _qual_print
         out = a.out or (os.path.join(a.run, "eval", "suite" + bev_sets.tag(a.split)) if bev_sets.parse(a.split)[0] is not None else None)      # a named set: a folder of its own
         suite = bev_suite.make_suite(argparse.Namespace(run=a.run, device=a.device, workers=a.workers, split=a.split, ckpt_dir=a.ckpt_dir, control="", out=out, state="carry"))
         try:

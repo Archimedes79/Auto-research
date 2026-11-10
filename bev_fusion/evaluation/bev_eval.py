@@ -1,6 +1,6 @@
-"""The BEV system as a project of the evaluation class (`autoresearch/evalsuite/api.py`, named in `evaluation/evalsuite.json`): what a network, a set and a frame are here.
+"""The BEV system as a project of the evaluation class (`autoresearch/Evaluation/api.py`, named in `evaluation/evaluation.json`): what a network, a set and a frame are here.
 
-    AR_PROJECT=../bev_fusion  python -m evalsuite Evaluation.run runs/t23_C_s1 small.val --gt-key v8      (from autoresearch/; the whole interface: `python -m evalsuite methods`)
+    AR_PROJECT=../bev_fusion  python -m Evaluation Evaluation.run runs/t23_C_s1 small.val --gt-key v8      (from autoresearch/; the whole interface: `python -m Evaluation methods`)
 
 It adds no logic of its own: the Source and the Subject are `bev_adapter.build` (so the objects, and with them the numbers, are those of `bev_suite.py eval`), the sets are `bev_sets.py`
 (the training's `splits/`), the Task is `bev_suite._task_only` (the metric definitions without a model; the metric flags: maps / boxes are always on, `curves`, `fusion`, `velocity`
@@ -36,14 +36,14 @@ def _abs(net: str) -> str:
 
 
 _PREDICTION_FILES = (os.path.join(ROOT, "evaluation", "bev_adapter.py"), os.path.join(ROOT, "evaluation", "bev_free.py"),
-                     os.path.join(ROOT, "..", "autoresearch", "evalsuite", "runner.py"), os.path.join(ROOT, "..", "autoresearch", "evalsuite", "torch_taps.py"))       # the code that makes a prediction: the output
+                     os.path.join(ROOT, "..", "autoresearch", "Evaluation", "runner.py"), os.path.join(ROOT, "..", "autoresearch", "Evaluation", "torch_taps.py"))       # the code that makes a prediction: the output
 # decoding of both paths, the frame loop (memory carry / reset) and the taps; part of the identity of the predictions, so an edit of any of them predicts again
 
 
 def _claim_code(net: str) -> str:
     """the code of this run (its snapshot, else the live training/) is imported into this process once and for all: any later network with other code is refused, whatever it is asked for
     (a task, a timing, a probe, a source). -> the code folder"""
-    from evalsuite.api import EvaluationError
+    from Evaluation.api import EvaluationError
     code = os.path.abspath(os.path.join(_abs(net), "code")) if os.path.isdir(os.path.join(_abs(net), "code")) else os.path.join(ROOT, "training")
     if _CODE["path"] not in (None, code):
         raise EvaluationError(f"one network per process: this process imported the code of {_CODE['path']}, {net} has {code}; run it in another process (compare the evaluations by their ids)")
@@ -135,7 +135,7 @@ def subject(net: str, src, device: str):
         raise RuntimeError("the Subject of this source was handed out or released already")
     if str(device).startswith("cuda") and not str(subj.device).startswith("cuda"):
         import torch
-        from evalsuite.api import EvaluationError
+        from Evaluation.api import EvaluationError
         if not torch.cuda.is_available():
             raise EvaluationError(f"device {device} was asked for and CUDA is not available (pass device=cpu to run on the CPU)")
         subj.model.to(device)
@@ -196,7 +196,7 @@ def card(info: Dict[str, Any], store, quant, rs):
     protocol = GT, memory carried, and a provenance block; `subset` names the frames when they are not the whole set"""
     from evaluation import bev_adapter
     from evaluation.bev_suite import better_of, contract_card, provenance_block, to_legacy
-    from evalsuite.api import EvaluationError, Frames
+    from Evaluation.api import EvaluationError, Frames
     now = bev_adapter.evaluator_hash()
     if info.get("evaluator") != now or not now:                                  # a hash that cannot be computed is not "unchanged"
         raise EvaluationError(f"{info['id']} was scored with other evaluator code than the one now ({info.get('evaluator')} / {now}; None = a file that shapes the numbers is missing or renamed): "
@@ -215,12 +215,12 @@ def card(info: Dict[str, Any], store, quant, rs):
     e = SimpleNamespace(n=len(store.frames), warm=True, prior=0)
     subj = {"checkpoint": ident.get("checkpoint"), "step": _step(ident.get("checkpoint")), "device": a.device, "code": ident.get("code")}
     card_["provenance"] = provenance_block(a, e, store, subj, info.get("gt_signature"), "", info.get("state", "carry"), start={}, avail=store.scene_names())
-    card_["provenance"]["launcher"] = "evalsuite Evaluation.run: a direct call, no run.py (no ledger row, no GPU slot): a diagnostic unless it was started through run.py"
+    card_["provenance"]["launcher"] = "Evaluation Evaluation.run: a direct call, no run.py (no ledger row, no GPU slot): a diagnostic unless it was started through run.py"
     return card_
 
 
 def time(net: str, n: int = 30) -> Dict[str, Any]:
-    from evalsuite.api import EvaluationError
+    from Evaluation.api import EvaluationError
     from evaluation import bev_timing
     _claim_code(net)
     try:

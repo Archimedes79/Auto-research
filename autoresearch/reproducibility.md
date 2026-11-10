@@ -3,7 +3,7 @@
 Built; the collector is `tools/provenance.py` (`collect`, `compare`, `manifest`, `repro`), the result package and the clean-up of derived data are `tools/package.py`, the verified chain network -> run -> code -> data -> evaluations is `tools/lineage.py`. This page is the reference of the record; usage is in the docstring of each tool.
 
 ## The block `provenance` of a card
-Written into `card["provenance"]` by the BEV evaluator (`bev_fusion/evaluation/bev_suite.py eval`); the lane evaluator and `evalsuite` write none yet (the lane cards carry no block, `decide.py` then treats the values as unknown). The schema text is in `schemas/card.schema.json`.
+Written into `card["provenance"]` by the BEV evaluator (`bev_fusion/evaluation/bev_suite.py eval`); the lane evaluator and `Evaluation` write none yet (the lane cards carry no block, `decide.py` then treats the values as unknown). The schema text is in `schemas/card.schema.json`.
 - `gt`: version, signature, res, ss, options (with `boxes_at`), and the hash of the store's `index.json`. The signature is the canonical one: the store, not the code signature (a generator version that makes the GT of an older one reads that older store).
 - `evaluator`: commit, the list of files that differ from it (`dirty`; empty = clean), `code_hash` over the evaluator's source files, the metric settings. The hashes of the evaluator and of the checkpoint are taken at the start and at the end of the evaluation; a difference gives `dirty = "unknown"` and `changed_during_run`.
 - `data`: nuScenes version, split name, number of frames, `frame_hash` of the sorted frame tokens, and `manifest_hash` of `data/NuScenes/manifest.json` (made by `data/NuScenes/tools/make_manifest.py`).

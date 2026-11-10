@@ -29,8 +29,8 @@ sys.path[:0] = [ROOT, os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "
 from evaluation import bev_adapter as A, bev_gtcheck as GC, bev_suite, bev_views as V, metrics as M  # noqa: E402
 import evaluation.bev_task as BT  # noqa: E402
 from evaluation.bev_task import BEVTask, BevSegMetric, add_sample  # noqa: E402
-from evalsuite import Prediction, Sample  # noqa: E402
-from evalsuite.contracts import FrameRef  # noqa: E402
+from Evaluation import Prediction, Sample  # noqa: E402
+from Evaluation.contracts import FrameRef  # noqa: E402
 import layers as LY  # noqa: E402
 import losses as L  # noqa: E402
 from lift_pd import Grid  # noqa: E402
@@ -303,7 +303,7 @@ def real_checks(ck, samples):
 def view_checks(ck, samples):
     """every view and every metric family renders / runs for a model WITH the head (the Task's spec carries the extra row, the views look the GT up by it); the debug view
     (stages) has the two panels more than without the head, and the other views keep their panel count"""
-    from evalsuite import ViewContext
+    from Evaluation import ViewContext
     task = BEVTask(GRID, A.task_spec(SimpleNamespace(spec=SPEC, spec_1m=SPEC_1M)), GROUPS)
     task.curves = task.velocity = True
     _, s = samples[0]

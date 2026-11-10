@@ -205,7 +205,7 @@ class JobRunner:
         else:
             raise JobError("a job is a dict or the path of a json file")
         doc = {k: v for k, v in doc.items() if not str(k).startswith("_")}
-        if "call" not in doc and "config" in doc:                          # a training job file of trainsuite, as it is
+        if "call" not in doc and "config" in doc:                          # a training job file of Training, as it is
             doc.pop("kind", None)
             doc = dict(id=doc.get("id", ""), call="Training.run", args=dict(job=doc))
         return doc

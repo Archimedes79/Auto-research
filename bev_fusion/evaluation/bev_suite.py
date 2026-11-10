@@ -1,4 +1,4 @@
-"""Command line of the BEV system's evaluation: qualitative and quantitative suite on a training run (evalsuite + bev_adapter).
+"""Command line of the BEV system's evaluation: qualitative and quantitative suite on a training run (Evaluation + bev_adapter).
 
     python evaluation/bev_suite.py RUN [global options] <command ...>          (from the bev_fusion folder; RUN = runs/<name>)
 
@@ -37,7 +37,7 @@
                                                 paired scene bootstrap; same GT / frame checks as compare (evaluation/front_compare.py)
 Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train|<split>.<part>  --ckpt-dir DIR (moved checkpoints)
                 --control shuffle_radar|zero_radar|shuffle_cam|zero_cam  --out DIR (default RUN/eval/suite)  --state carry|reset
-Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/evalsuite/EXTENSIONS.md chapter 5 for what each command writes.
+Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/Evaluation/EXTENSIONS.md chapter 5 for what each command writes.
 """
 from __future__ import annotations
 
@@ -174,7 +174,7 @@ def data_use(split: str, store, avail=None) -> dict:
 
 def provenance_block(a, e, store, subj: dict, gt_sig, tag: str, state: str, start: dict = None, avail=None) -> dict:
     """the `provenance` block of the card (design autoresearch/reproducibility.md, collector autoresearch/tools/provenance.py): GT version and
-    signature, the hash of the evaluator's code (evaluation/ and autoresearch/evalsuite/) with the files that differ from its commit, the frame
+    signature, the hash of the evaluator's code (evaluation/ and autoresearch/Evaluation/) with the files that differ from its commit, the frame
     list, the raw-data manifest, the model (run, checkpoint hash and step, config hash, its training GT), the settings and the environment of THIS
     interpreter. `start` = provenance_start(): when the evaluator's source hash or the checkpoint's hash at the end differs from the one at the start,
     the block says so (evaluator.dirty = 'unknown', changed_during_run) and decide.py refuses the card as unchecked. A failure to collect never stops an
@@ -274,7 +274,7 @@ def stored_gt(stored: str):
 
 def gt_conflict(stored: str, gt_sig, force_unrecorded: bool):
     """(refusal message or None, the label of the result): a resume computes only the missing frames, so a stored run of another GT
-    would carry the current label. A run of another RECORDED GT is always refused (the evalsuite store refuses it too); a run made
+    would carry the current label. A run of another RECORDED GT is always refused (the Evaluation store refuses it too); a run made
     before the signature was recorded is resumed only with force_unrecorded, labelled 'mixed:unrecorded+<current>'."""
     old = stored_gt(stored)
     if old is None or old == gt_sig:
@@ -292,7 +292,7 @@ def train_gt(run: str):
 
 def evaluator_conflict(stored: str, hash_now):
     """refusal text or None: a resume computes only the missing frames, so a store started with other evaluator code would be finished with this code and
-    carry one hash on a mixture of both. A store made before the Source carried `evaluator_hash` has no value to compare: the evalsuite store tolerates the new
+    carry one hash on a mixture of both. A store made before the Source carried `evaluator_hash` has no value to compare: the Evaluation store tolerates the new
     key with its warning (resume of ... description gained keys)"""
     old = (_read_json(os.path.join(stored, "manifest.json")) or {}).get("source") or {}
     if "evaluator_hash" not in old or old["evaluator_hash"] == hash_now:
@@ -311,7 +311,7 @@ def quant_run(suite, force_evaluator: bool = False, **kw):
 
 
 def make_suite(a, prior: int = 0, state: str = None, evaluator: str = None):
-    from evalsuite import EvalSuite
+    from Evaluation import EvalSuite
     from evaluation.bev_adapter import build
     source, subject, task = build(a.run, device=a.device, split=a.split, workers=a.workers, ckpt_dir=a.ckpt_dir, control=a.control, prior=prior, evaluator=evaluator)
     out = a.out or os.path.join(a.run, "eval", "suite")
@@ -337,7 +337,7 @@ def cmd_eval(a, rest) -> int:
     state = "carry" if e.warm else "reset"
     suite = make_suite(a, state=state)
     prov0 = provenance_start(suite)                                         # the evaluator's and the checkpoint's hash NOW, before any frame is scored
-    from evalsuite.sampling import Sampler
+    from Evaluation.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
     name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', False) else ''}{'_vel' if getattr(a, 'velocity', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
     desc = suite.source.describe()
@@ -464,7 +464,7 @@ MEMORY_ROWS = (("drivable IoU@0 (in view)", "seg_fov/seg/{dt}/drivable_area/all/
 
 
 def interval_text(v: dict) -> str:
-    """the interval of one paired-bootstrap row (evalsuite stats): '95% [lo, hi]', '(excludes 0)', and the draws it rests on (n_valid / n_draws). A resample with
+    """the interval of one paired-bootstrap row (Evaluation stats): '95% [lo, hi]', '(excludes 0)', and the draws it rests on (n_valid / n_draws). A resample with
     nothing to score is dropped, so with n_valid < n_draws the interval is conditional on the scorable resamples: the row says so"""
     s = f"95% [{v['lo']:+.4f}, {v['hi']:+.4f}]" + ("  (excludes 0)" if v["lo"] > 0 or v["hi"] < 0 else "") + f"  draws {v['n_valid']}/{v['n_draws']}"
     return s + ("  WARNING: only some resamples were scorable, the interval is conditional on them" if v["n_valid"] < v["n_draws"] else "")
@@ -481,7 +481,7 @@ def cmd_memory(a, rest) -> int:
     L = int(suite.subject.cfg.seq_len)
     if L < 2:
         raise SystemExit(f"{a.run}: seq_len = {L}, nothing carried")
-    from evalsuite.sampling import Sampler
+    from Evaluation.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(m.clips, min_index=L - 1)
     cold = quant_run(suite, frames=frames, state="reset", name=f"memory_cold_n{m.clips}", progress=50)
     warm = quant_run(suite, frames=frames, state="warmup", name=f"memory_warm_n{m.clips}", progress=50)
@@ -623,7 +623,7 @@ def cmd_compare(argv) -> int:
         c.tag += bev_sets.tag(c.split)
     except ValueError as ex:
         p.error(str(ex))
-    from evalsuite.quantitative import Quantitative
+    from Evaluation.quantitative import Quantitative
     name = f"eval{c.tag}{'_curves' if c.curves else ''}{'_fusion' if c.fusion else ''}{'_vel' if c.velocity else ''}_n{c.n}"
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
     train_ids = (train_gt(c.run_a), train_gt(c.run_b))
@@ -784,7 +784,7 @@ def main(argv=None) -> int:
             return bev_modules.main([a.run, "--device", a.device if explicit else "cpu", "--split", a.split] + common + a.command[1:])
         from evaluation import bev_timing
         return bev_timing.main([a.run, "--device", a.device] + common + a.command[1:])
-    from evalsuite.cli import main as suite_main
+    from Evaluation.cli import main as suite_main
     out = a.out or os.path.join(a.run, "eval", "suite")
     pre = ["--adapter", "evaluation.bev_adapter:build", "--arg", f"run={a.run}", "--arg", f"device={a.device}", "--arg", f"workers={a.workers}",
            "--arg", f"split={a.split}", "--arg", f"control={a.control}", "--out", out, "--state", a.state]

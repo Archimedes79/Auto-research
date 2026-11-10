@@ -252,7 +252,7 @@ T.fit(make_model(), lambda m, b: (seen.append(float(b[0].sum())) or loss_fn(m, b
 assert len(seen) == 6 and seen[0:2] != seen[2:4] and seen[2:4] != seen[4:6], seen                      # 2 batches per epoch, reshuffled each epoch
 print("loader: a new pass every epoch, reshuffled:", True)
 
-# (8) the trainsuite contract: config.json, log.jsonl (rows with total / lr / grad_norm / grad.<module> / upd.<module> / t_data, an eval row), train.log; a stop request through CONTROL
+# (8) the Training contract: config.json, log.jsonl (rows with total / lr / grad_norm / grad.<module> / upd.<module> / t_data, an eval row), train.log; a stop request through CONTROL
 # ends the run with exit code 75 after a checkpoint (STOPPED, state "stopped", no .done), and a restart resumes to the SAME weights as an uninterrupted run
 import json
 kc = dict(kw, steps=60, log_every=20, ckpt_every=20, eval_fn=lambda m, s: {"val_mse": 0.5}, eval_every=30, probe=True, config={"freeze": []})
@@ -270,7 +270,7 @@ state = {"n": 0}
 
 
 def stopper(step):
-    if step == 25 and not os.path.exists(os.path.join(tmp, "d_stop", "STOPPED")):            # the stop request arrives while the run is going (the way `trainsuite stop` writes it)
+    if step == 25 and not os.path.exists(os.path.join(tmp, "d_stop", "STOPPED")):            # the stop request arrives while the run is going (the way `Training stop` writes it)
         json.dump({"cmd": "stop", "reason": "selftest"}, open(os.path.join(tmp, "d_stop", "CONTROL"), "w"))
     return batch_fn(step)
 
@@ -287,7 +287,7 @@ assert st["step"] == 26 and st["reason"] == "selftest" and not os.path.exists(os
 T.fit(md, loss_fn, T.Run("d_stop", tmp), **dict(kc, batch_fn=stopper))                         # the restart moves CONTROL / STOPPED aside and resumes from the checkpoint of the stop
 assert os.path.exists(os.path.join(ddir, ".done")) and os.path.exists(os.path.join(ddir, "STOPPED.old")) and not os.path.exists(os.path.join(ddir, "CONTROL"))
 same_stop = all(torch.allclose(a, b, atol=1e-6) for a, b in zip(mc.parameters(), md.parameters()))
-print("trainsuite contract: log.jsonl rows with grad./upd. keys, a stop request exits with code 75 and the resumed run equals the uninterrupted one:", same_stop)
+print("Training contract: log.jsonl rows with grad./upd. keys, a stop request exits with code 75 and the resumed run equals the uninterrupted one:", same_stop)
 assert same_stop
 # (8b) the last step is logged even when it is not a multiple of log_every (a 40-step smoke with the default log_every of 100 had no row)
 T.fit(make_model(), loss_fn, T.Run("e_last", tmp), **dict(kw, steps=45, log_every=20, ckpt_every=0, guard=False))

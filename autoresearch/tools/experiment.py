@@ -408,9 +408,9 @@ def migrate(folder, root, create_md=False):
 
 
 def kill_rules(exp):
-    """the kill criterion of a card as trainsuite kill rules (one per line or after a ';'): (rules, problems). Prose that is no rule is a problem, not a rule"""
-    sys.path.insert(0, os.path.dirname(HERE))   # autoresearch/ holds the package trainsuite
-    from trainsuite.kill import Rule
+    """the kill criterion of a card as Training kill rules (one per line or after a ';'): (rules, problems). Prose that is no rule is a problem, not a rule"""
+    sys.path.insert(0, os.path.dirname(HERE))   # autoresearch/ holds the package Training
+    from Training.kill import Rule
     rules, bad = [], []
     lines = [ln.split("#", 1)[0] for ln in (exp.get("kill") or "").splitlines()]       # a comment ends at the line, a ';' inside it is no separator
     for part in (p.strip() for ln in lines for p in ln.split(";")):
@@ -428,7 +428,7 @@ def write_kill_rules(rules, run_dir):
     if not os.path.isdir(run_dir):
         raise ValueError(f"{run_dir} is not an existing run folder (a stray folder with only a kill.txt would be listed as a run)")
     sys.path.insert(0, os.path.dirname(HERE))
-    from trainsuite.kill import read_text
+    from Training.kill import read_text
     kp = os.path.join(run_dir, "kill.txt")
     if os.path.exists(kp):
         with open(kp, "rb") as f:
@@ -496,7 +496,7 @@ def main():
         elif a.cmd == "kill":
             rules, bad = kill_rules(exp)
             if bad or not rules:
-                print(f"{exp['id']}: " + ("; ".join(bad) if bad else "the card has no kill criterion") + " - write it as trainsuite kill rules (key@step > value)")
+                print(f"{exp['id']}: " + ("; ".join(bad) if bad else "the card has no kill criterion") + " - write it as Training kill rules (key@step > value)")
                 rc = 1
                 continue
             print(f"{exp['id']}: {len(rules)} kill rule(s): " + " | ".join(rules))

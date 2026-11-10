@@ -1,5 +1,5 @@
 """bev_free - the BEV network run on frames WITHOUT the ground truth (D72): a Source that reads none and a Subject that computes no validation loss. They plug into the engine of
-autoresearch/evalsuite (its Runner drives a Subject over a Source and stores the predictions) in place of bev_adapter's BEVSource / BEVSubject, and give the same predictions.
+autoresearch/Evaluation (its Runner drives a Subject over a Source and stores the predictions) in place of bev_adapter's BEVSource / BEVSubject, and give the same predictions.
 
     src = free_source(built_source)         # a Source made by bev_adapter.build(...) (or bev_eval.source): the same set, frames and dataset keys, now without the ground truth
     subj = FreeSubject(built_subject)       # the BEVSubject that build() made: its model (EMA weights), config and tap recorder, now without the loss
@@ -18,11 +18,11 @@ from typing import Any, Dict, Sequence
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 AUTORESEARCH = os.path.abspath(os.path.join(ROOT, "..", "autoresearch"))
-for _p in (ROOT, AUTORESEARCH):                       # the helpers of the evaluation and the contracts of evalsuite (the code snapshot of the run keeps the first place)
+for _p in (ROOT, AUTORESEARCH):                       # the helpers of the evaluation and the contracts of Evaluation (the code snapshot of the run keeps the first place)
     if _p not in sys.path:
         sys.path.append(_p)
 
-from evalsuite import Prediction, Sample, Subject  # noqa: E402
+from Evaluation import Prediction, Sample, Subject  # noqa: E402
 from evaluation import bev_adapter as A  # noqa: E402
 
 DTS = (-0.5, 0.0, 0.5)                                # what the live path decodes: the dts of the ground truth's keys (now and +-0.5 s)

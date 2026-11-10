@@ -30,12 +30,12 @@ numbers) and is keyed by the prediction time offset dt (seconds; dt = 0 is the c
 Box dicts as training/object_head.py decode(): group, score, cx, cy (m, ego frame), length, width, yaw or radius, vx,
 vy; gt_boxes_from_meta() converts training/gt_bev.py meta["boxes"].
 The comparison itself (cell counts and tolerant counts, matching, the errors of a matched pair, average precision) is not here but in
-autoresearch/evalsuite/comparison/ (maps.py, boxes.py; read its README.md): this file adds what is specific to the BEV system (range bins,
+autoresearch/Evaluation/comparison/ (maps.py, boxes.py; read its README.md): this file adds what is specific to the BEV system (range bins,
 field of view, circles for pedestrians, dt keys, the known / unknown split, the lines) and calls that core. `match`, `ap_nuscenes`,
 `ap_all_points`, `tp_errors`, `dilate` and TP_ERR_KEYS stay importable from here under their old names (`match` is the core's
 `match_frames`). DetMeter reduces with ties="list": equal scores keep frame order, then detection order, as it always did.
 Two differences from the code before the core: a detection whose score is nan (a diverged model) raises a ValueError at its frame (it used to
-rank last and give garbage numbers); and importing this file imports the evalsuite package (numpy only), so a broken evalsuite breaks this file.
+rank last and give garbage numbers); and importing this file imports the Evaluation package (numpy only), so a broken Evaluation breaks this file.
 The mean errors (mATE / mASE / mAOE / mAVE) count a class with ground truth and no true positive as WORST_ERROR (1.0, the devkit's rule and the
 core's BoxMetric); until 2026-11-02 such a class was left out of the mean (a missed class improved it). AOE of the circle classes stays undefined
 (left out, as the devkit leaves out the orientation of a traffic cone); cards made before this change have mean errors that are not comparable.
@@ -52,8 +52,8 @@ import numpy as np
 _AUTORESEARCH = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "autoresearch"))
 if _AUTORESEARCH not in sys.path:
     sys.path.append(_AUTORESEARCH)                       # the comparison core is in the autoresearch folder next to this problem
-from evalsuite.comparison import boxes as _boxes, maps as _maps  # noqa: E402
-from evalsuite.comparison.metrics import WORST_ERROR  # noqa: E402
+from Evaluation.comparison import boxes as _boxes, maps as _maps  # noqa: E402
+from Evaluation.comparison.metrics import WORST_ERROR  # noqa: E402
 
 RANGE_BINS = ((0.0, 20.0), (20.0, 40.0), (40.0, 60.0))
 TOLERANCES = (0.0, 0.5, 1.0)
@@ -235,7 +235,7 @@ def in_front(b, x_max=60.0, half_fov=FRONT_HALF_FOV):
     return half_fov is None or abs(math.atan2(b["cy"], b["cx"])) <= half_fov
 
 
-# the comparison of a detection with the ground truth is evalsuite/comparison/boxes.py (read its README.md); the old names stay
+# the comparison of a detection with the ground truth is Evaluation/comparison/boxes.py (read its README.md); the old names stay
 tp_errors = _boxes.tp_errors              # ATE, ASE, AOE, AVE, BIoU of one matched pair (AOE nan for circles, AVE nan if a velocity is missing)
 match = _boxes.match_frames               # match(frames, thr): frames = [(dets, gts)] of ONE class -> (rows (score, is_tp, det, gt) in score order, n_gt)
 ap_nuscenes = _boxes.ap_nuscenes          # nuScenes AP: precision at 101 recall points, recall <= 0.1 and precision <= 0.1 clipped
@@ -248,7 +248,7 @@ class DetMeter:
     AP and TP errors (`result`). Underneath, everything is additive PER FRAME so any set of frames can be reduced without
     re-matching: `frame_rows` turns one frame into the true-positive flags of each of its detections (the greedy matching only
     involves the detection's own frame) plus the GT counts; `reduce_rows` sorts the rows of any set of frames by score and
-    computes the numbers. The evaluation suite stores the rows per frame (evalsuite adapter evaluation/bev_task.py)."""
+    computes the numbers. The evaluation suite stores the rows per frame (Evaluation adapter evaluation/bev_task.py)."""
 
     def __init__(self, classes=None, thresholds=DIST_THRESHOLDS, x_max=60.0, half_fov=FRONT_HALF_FOV, bins=RANGE_BINS):
         self.classes, self.thr, self.x_max, self.half_fov, self.bins = classes, thresholds, x_max, half_fov, bins
@@ -615,10 +615,10 @@ def _selftest():
     assert len(gt_boxes_from_meta(mb)) == 2 and len(gt_boxes_from_meta(mb, observed_only=False)) == 3
 
     # 5c the per-frame rows (frame_rows / reduce_rows) give the numbers of the ORIGINAL global greedy matching (oracle below: the
-    #    frozen copy of the former DetMeter code in evalsuite/selftest_comparison.py, independent of the core that DetMeter calls now)
+    #    frozen copy of the former DetMeter code in Evaluation/selftest_comparison.py, independent of the core that DetMeter calls now)
     #    on random frames with ties, empty frames, circles and boxes outside the field of view; the reduction is order-independent;
     #    `only` computes just the asked scopes
-    from evalsuite.selftest_comparison import _REF
+    from Evaluation.selftest_comparison import _REF
 
     def oracle_eval(frames):
         row = {}

@@ -26,7 +26,7 @@ import evaluation.bev_curves as C  # noqa: E402
 import evaluation.metrics as M  # noqa: E402
 import evaluation.bev_fusion_area as FA  # noqa: E402
 import evaluation.bev_velocity as V  # noqa: E402
-from evalsuite.comparison import boxes as B  # noqa: E402
+from Evaluation.comparison import boxes as B  # noqa: E402
 
 orig = {"care": FA.CARE, "near": FA.NEAR, "prepare": FA.prepare, "share": FA.footprint_share, "farea": FA.fusion_area, "cls": C.classification_numbers, "reg": C.regression_numbers, "tp": B.tp_errors, "front": M.in_front, "thr": M.TP_THRESHOLD, "vs": C.velocity_sums, "vci": V.centre_index, "vcs": V.cell_sets, "dilate": M.dilate, "worst": M.WORST_ERROR, "voc": V.object_cells}
 

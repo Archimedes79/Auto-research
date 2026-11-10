@@ -21,7 +21,7 @@ import traceback
 import numpy as np
 
 import lane_suite as LS
-from evalsuite import EvalSuite
+from Evaluation import EvalSuite
 from lane_task import measures as M
 
 CARD = f"{BP.ROOT}/runs/eval/champion/val.json"
