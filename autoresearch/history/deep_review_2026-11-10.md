@@ -53,7 +53,7 @@ Dead documents removed: `coordination.md` (the hold marker is in `hold.py` and R
 ## Final status of the open list (2026-11-10, end of the clean-base round)
 | open | owner | state |
 |---|---|---|
-| D75: the gate (hook reads the default problem for every path, BEV has no protected list, a crash allows the edit, 'decided' is a line agents can write) | Mirko | open |
+| D75: the gate. Holes 1 and 2 CLOSED the same day by Mirko's word (the hook asks every problem folder, bev_fusion has a protected list, config.json / project.py are protected, a crash refuses protected names and is logged; note in `D75.md`). Still open: hole 3 ('decided' is one line that agents can write, a grant is bound to no path) and hole 4 (commits through Bash carry protected files unseen), a syntax error in `guard_hook.py` or a missing `wsl.exe` (the `\|\| true` of the protected `.claude/settings.json`), and no bev TEST log exists | Mirko (holes 3, 4, the hook line) |
 | D73: frozen files | Training chat did the listed changes (be311601, d700f42f); `FROZEN.md` / `frozen.json` rewrite | BEV system chat |
 | the row of E268.p in the lane TEST log does not say DONE, so it opens again; the log is protected | Mirko (a grant under a decided D<n> to write DONE) | open |
 | the box-metric penalty for a class with GT and no TP (moves mATE / mAOE / mAVE of the golden numbers) | Mirko | open |
