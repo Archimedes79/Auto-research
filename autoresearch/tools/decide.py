@@ -385,6 +385,11 @@ def decide_experiment(exp, root):
     if bad:
         raise ValueError("the arms were not evaluated on the same thing: " + "; ".join(bad) + " (a known difference goes into evaluate.allow)")
     variant = exp.get("variant") or next(a for a in exp["arms"] if a != exp["control"])
+    need = {variant, exp["control"]} | {c["vs"] for c in exp["rule"] if c.get("vs") in exp["arms"]}
+    none = sorted(a for a in need if not any(cards[a].values()))
+    if none:                                                         # the first lane cards of 2026-11 describe their cards in a recipe text: nothing for the tool to read
+        raise ValueError(f"arm(s) {', '.join(none)} list no metric cards (`cards` of the arm: paths relative to the problem, '<file>#<name>' for one entry of a file): nothing to judge; "
+                         "write them into the card, or decide by hand and say so")
     head_metric, band = exp["metric"], exp["band"]
     def head(arm):  # the whole-split cards, else the subset cards in subset order (then the "seeds" of the headline are the subsets)
         return cards[arm].get("") or [c for s in sorted(cards[arm]) for c in cards[arm][s]]

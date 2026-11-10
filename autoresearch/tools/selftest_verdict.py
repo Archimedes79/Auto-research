@@ -346,6 +346,17 @@ def t_write_failures():
     assert not [f for f in os.listdir(f"{T}/experiments/E1_x") if ".tmp." in f], os.listdir(f"{T}/experiments/E1_x")
 
 
+def t_no_cards():
+    """an arm that lists no cards (a recipe text only, as the first lane cards of 2026-11): 'not decided' with the reason, no traceback, nothing written"""
+    exp = mutated()
+    exp["arms"]["a"].pop("cards")
+    exp["arms"]["a"]["recipe"] = "the cards are runs/x/card.json, described here only"
+    fresh(exp)
+    rc, out = decide("--experiment", CARD_MD, "--write")
+    says(out, "not decided", "arm(s) a list no metric cards")
+    assert rc == 1 and "Traceback" not in out and not os.path.exists(f"{T}/experiments/E1_x/decision.json"), out
+
+
 # ------------------------------------------------------------------ 5. the typed form
 
 
@@ -396,7 +407,7 @@ def t_sources():
     assert rc == 0 and not os.path.exists(f"{topic}/table.md"), out
 
 
-SECTIONS = [t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_typed, t_sources]
+SECTIONS = [t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_no_cards, t_typed, t_sources]
 
 
 def main():

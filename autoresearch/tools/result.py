@@ -31,14 +31,15 @@ def results_block(d, exp):
     """the generated part of results.md: everything in it comes from the decision and the card, no number is typed"""
     one = lambda s: " ".join(str(s).split())  # noqa: E731  (one line, no stray markup of a line break)
     var, ctl = d["variant"], d["control"]
-    eff = f"{d['effect']:+.4f}" + (f", interval [{d['interval'][0]:+.4f}, {d['interval'][1]:+.4f}]" if d.get("interval") else "") + f", pairing {d['pairing']}, {len(d['diffs'])} paired seed(s)"
+    # decision.json files of the first loops lack some keys (pairing, diffs, date): .get everywhere but for the verdict, the effect and the arms
+    eff = f"{d['effect']:+.4f}" + (f", interval [{d['interval'][0]:+.4f}, {d['interval'][1]:+.4f}]" if d.get("interval") else "") + f", pairing {d.get('pairing') or 'unknown'}, {len(d.get('diffs') or [])} paired seed(s)"
     how = f"(by hand: {one(d['by_hand'])})" if d.get("by_hand") else "(rule not registered at launch)" if d.get("registered") is False else "by the rule as written"
     lines = [GEN_BEGIN,
-             f"- **Card:** `experiment.md` (arm {var} against control {ctl}, headline `{d['metric']}`)"]
+             f"- **Card:** `experiment.md` (arm {var} against control {ctl}, headline `{d.get('metric', '?')}`)"]
     if d.get("rule_sha"):
         lines.append(f"- **Rule sha:** `{d['rule_sha']}`")
-    lines += [f"- **Verdict {how}:** {d['verdict']} ({d['date']})",
-              f"- **Why:** {one(d['why'])}",
+    lines += [f"- **Verdict {how}:** {d['verdict']} ({d.get('date') or 'date unknown'})",
+              f"- **Why:** {one(d.get('why', ''))}",
               f"- **Effect:** {eff}"]
     if d.get("prediction"):
         lines.append(f"- **Prediction:** {one(d['prediction'])}")
@@ -46,7 +47,7 @@ def results_block(d, exp):
     if rv or rc:
         lines.append(f"- **Runs:** {var}: {', '.join(rv) or '-'}; {ctl}: {', '.join(rc) or '-'}")
     lines.append("- **Rule clauses:**")
-    lines += [f"  - {'ok' if c['ok'] else 'MISS'}: {one(c['text'])}" + (f" (flags: {', '.join(c['flags'])})" if c["flags"] else "") for c in d["clauses"]]
+    lines += [f"  - {'ok' if c.get('ok') else 'MISS'}: {one(c.get('text', ''))}" + (f" (flags: {', '.join(c['flags'])})" if c.get("flags") else "") for c in d.get("clauses") or []]
     if d.get("cannot_tell"):
         lines.append("- **Provenance, cannot tell:** " + ", ".join(sorted({one(k).split(" ")[0] for k in d["cannot_tell"]})))
     lines.append(GEN_END)
