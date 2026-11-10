@@ -58,7 +58,7 @@ validation loss: it works alone on frames without labels (the BEV side: `bev_fre
 (`bev_suite.py eval` keeps them). `run` here books no ledger row and takes no GPU
 slot: a number that feeds a verdict is launched with `run.py ... -- python -m evalsuite Evaluation.run ...`. Checks: `../tests/test_evaluation_api.py` (without option: the interface on a toy project,
 the adapter's identity, TEST refused; `--real`: on `t20_base_s0`, CPU, needs 18 GB of free RAM, the interface equals the engine's own run score for score). `evaluate.py` and `bev_suite.py` stay the older front doors
-(nothing is frozen since D73); `bev_eval.py` adds no logic to them (it calls `bev_adapter.build`, `bev_suite._task_only`, `bev_suite.contract_card`).
+(nothing is frozen since D73); `bev_eval.py` adds no logic to them (it calls `bev_adapter.build`, `bev_suite._task_only`, `bev_suite.contract_card`). A network older than D48 (the three of `records/keep3.json`: t8 / t10 / t11; their snapshot has no `amp_context` / `gap_steps`) cannot run without ground truth: `Evaluation.run` / `Runner.predict` refuse it with 'too old for the run without ground truth' (`Evaluation.check` says so); evaluate it with `bev_suite.py eval` or `evaluate.py`, which read the ground truth with it (the golden check does exactly that on `t1_r4_soa`).
 
 ## Use
 
