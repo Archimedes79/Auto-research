@@ -4,8 +4,8 @@ Replaces `DECISIONS.md` (it is in git history). This folder is the only channel 
 
 | file | what |
 |---|---|
-| `D<n>.md` | one decision. The next free id is the highest `D<n>` plus one (`ls | sort -V | tail`). |
-| `no_id.md` | the early rows of 2026-10-25 that had no D id; kept word for word, they decide nothing for the hook. |
+| `D<n>.md` | one decision that is still in force or in use: it has a grant, it is open, it is cited by a living rule document (`CLAUDE.md`, `METHOD.md`, `README.md`, `FROZEN.md`, `PROBLEM.md`), or it is from D60 on. The next free id is the highest `D<n>` in this folder or in `old/` plus one (`ls . old | sort -V | tail`). |
+| `old/` | 28 older decisions (D1, D3, D5, D6, D9, D11, D14, D15, D17, D18, D26, D27, D29, D30, D36-D38, D41, D43, D45-D47, D50-D53, D56, D59) and `no_id.md` (the early rows of 2026-10-25 without an id), moved here on 2026-11-10 because nothing needs them for work any more. Word for word as before; documents that cite a number (D37) still find the file here. The hook reads only this folder, not `old/`: an id in `old/` is not decided for a grant (all grants on them have expired); to use one again, write a new decision that cites it. |
 
 **A file** has one block per step, newest decided block first:
 ```
