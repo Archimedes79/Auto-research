@@ -316,8 +316,10 @@ def check_parent(c, net, rdir, lin, rec):
     if not p:
         if cfg is not None and cfg.get("init_from"):
             p = dict(path=cfg["init_from"], kind="init", note="config.json init_from only: no hash recorded")
-        elif cfg is not None:
+        elif cfg is not None and "init_from" in cfg:
             return [(OK, "parent", "config.json init_from is empty: a fresh start (a resume of the same run keeps its run id)")]
+        elif cfg is not None:
+            return [(MISSING, "parent", "config.json has no init_from key: a fresh start is not recorded, so it cannot be told from an old run")]
         else:
             return [(MISSING, "parent", "no parent recorded (no lineage.json, no config.json): fresh start or old run, not told")]
     f = os.path.join(c.root, p["path"])
@@ -675,6 +677,11 @@ def selftest():
         assert rc == 0 and line(txt, "code", "no branch or tag holds it") == MISSING and line(txt, "checkpoint hash") == MISSING, txt
         rc, txt = show("skipnet")                                                       # a launcher word instead of a commit is not recorded, not a mismatch
         assert rc == 0 and line(txt, "run record", "commit skipped") == MISSING and "code snapshot" not in txt, txt
+        # a config.json WITHOUT the init_from key records nothing about the start: MISSING, not 'a fresh start' (null and "" are recorded empty values)
+        write("proj/runs/nokey/model.pt", "w")
+        for body, want, text in (('{"seed": 1}', MISSING, "no init_from key"), ('{"init_from": null}', OK, "fresh start"), ('{"init_from": ""}', OK, "fresh start")):
+            write("proj/runs/nokey/config.json", body)
+            assert line(show("nokey")[1], "parent", text) == want, body
         # mutation 1: one byte of the checkpoint (same size)
         open(ck, "wb").write(ckb[:-1] + b"X")
         rc, txt = run()

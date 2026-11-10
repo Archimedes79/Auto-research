@@ -13,13 +13,16 @@ code, which frames, which model and environment made a card, so that the experim
     python3 provenance.py --selftest
 
 A missing value reads "unknown", never a guess: no frames, no git, a path outside the repository all give unknown, and a dirty value that is
-unknown blocks like a dirty one. Two cards are comparable when GT version, GT signature, evaluator code hash and frame hash agree; a value
+unknown blocks like a dirty one. A run records the CODE signature of the GT (v9: 6a7aa7864a); the block names the STORE's (canonical_sig: v9's code makes the GT of v8, store
+c643a7539d) and the version of the store (its index.json, else autogt/versions.csv), and the signatures are compared as stores. `manifest` adds `gt_key` (autogt/gt_api.py) when
+that can be imported and the run's store is the one stored now. Two cards are comparable when GT version, GT signature, evaluator code hash and frame hash agree; a value
 that is unknown on one side is listed as "cannot tell"; a card whose evaluator code differs from its commit is a blocker. The evaluator hash
 covers the source files (.py .sh .ps1 .json .yaml .yml) under the given paths, sorted by posix path, line endings normalised, so it agrees
 between Windows and WSL. A checkpoint over 64 MB is hashed by its first and last 4 MB plus its size (marked p): a change in the middle is not
 seen. `ckpt_hash` is deliberately not a comparison key: cards of different models are the point of a comparison.
 """
 import argparse
+import csv
 import datetime as dt
 import hashlib
 import json
@@ -128,10 +131,46 @@ def evaluator_block(paths, repo, settings=None):
             "paths": [os.path.relpath(p, repo).replace("\\", "/") for p in paths], "settings": settings or {}}
 
 
+def read_versions(repo=None, name="versions.csv"):
+    """the rows of autogt/versions.csv (name="lane_versions.csv": the lane table) of the repository, as dicts; [] when the file is absent or unreadable"""
+    try:
+        with open(os.path.join(repo or repo_root(), "autogt", name), newline="", encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return []
+
+
+def canonical_sig(signature, rows):
+    """the signature of the STORE that holds the GT the code `signature` makes: a row with `same_gt_as` (v9 makes the GT of v8) shares the store of that earlier row (for the
+    lane table the earlier row of the same rig). The rule of autogt.versions.canonical / lane_gt.store_of, here over the rows because the tools run without numpy (a selftest pins
+    it against autogt/versions.py). A signature the table does not know, a cycle or a dangling name leave it unchanged. A run records the CODE signature (gt.json, cards): every
+    comparison and every store folder name goes through this first"""
+    key, seen = signature, set()
+    while key not in seen:
+        seen.add(key)
+        row = next((r for r in rows if r.get("signature") == key and r.get("same_gt_as")), None)
+        earlier = next((r for r in rows if r.get("version") == row["same_gt_as"] and (r.get("rig") or "lane_center") == (row.get("rig") or "lane_center")), None) if row else None
+        if earlier is None:
+            return key
+        key = earlier["signature"]
+    return signature
+
+
 def gt_block(key, repo, data_root=None):
-    """key = the GT cache key of the run (e.g. 0.5_4_15efbde2d1): the last part is the generator signature; the store's index.json names the version"""
-    sig = key.split("_")[-1] if key else ""
+    """key = the GT cache key of the run (e.g. 0.5_4_15efbde2d1; a list when train and val GT differ: the first counts, all are kept in `keys`): the last part is the generator
+    signature. `signature` is the STORE's (canonical_sig: v9's code makes the GT of v8, so its key names the store of v8, `code_signature` keeps the recorded one); the store's index.json
+    names the version, else (the store was deleted, D40) versions.csv does"""
+    keys = list(key) if isinstance(key, (list, tuple)) else None
+    if keys is not None:
+        key = keys[0] if keys else None
+    raw =key.split("_")[-1] if key else ""
+    rows = read_versions(repo) if raw else []
+    sig = canonical_sig(raw, rows)
     out = {"key": key or UNKNOWN, "signature": sig or UNKNOWN, "version": UNKNOWN}
+    if keys and len(keys) > 1:
+        out["keys"] = keys
+    if sig != raw:
+        out["code_signature"] = raw
     p = os.path.join(data_root or os.path.join(repo, "data", "autogt"), sig, "index.json") if sig else ""
     if p and os.path.isfile(p):
         try:
@@ -140,6 +179,8 @@ def gt_block(key, repo, data_root=None):
                        options=d.get("options", {}), index_hash=file_hash(p))
         except (OSError, ValueError, AttributeError):
             out["error"] = f"unreadable index {p}"
+    if out["version"] == UNKNOWN and sig:
+        out["version"] = next((r["version"] for r in rows if r.get("signature") == sig), UNKNOWN)
     return out
 
 
@@ -223,15 +264,20 @@ def _prov(x):
     return p if isinstance(p, dict) else {}
 
 
-def compare(a, b):
-    """-> (differences, cannot_tell): a difference in a known value or a dirty / unchecked evaluator blocks a comparison, an unknown value cannot be told"""
+def compare(a, b, rows=None):
+    """-> (differences, cannot_tell): a difference in a known value or a dirty / unchecked evaluator blocks a comparison, an unknown value cannot be told. The GT signatures are
+    compared as stores (canonical_sig over `rows`, default autogt/versions.csv): two codes that make the same GT byte for byte (v8 / v9) are the same GT"""
     a, b = _prov(a), _prov(b)
     diff, unknown = [], []
     for k in COMPARE_KEYS:
         x, y = _get(a, k), _get(b, k)
         if x in (None, UNKNOWN) or y in (None, UNKNOWN):
             unknown.append(".".join(k))
-        elif x != y:
+            continue
+        if k == ("gt", "signature"):
+            rows = read_versions() if rows is None else rows
+            x, y = canonical_sig(str(x), rows), canonical_sig(str(y), rows)
+        if x != y:
             diff.append(f"{'.'.join(k)}: {x} != {y}")
     for side, d in (("first", a), ("second", b)):
         if d.get("error"):
@@ -293,7 +339,7 @@ def repro(run_id, card_path=None):
         g, e, d, s = (prov.get(k) or {} for k in ("gt", "evaluator", "data", "subject"))
         v = str(g.get("version", ""))
         tag = "autogt/" + v if v.startswith("v") else "<autogt tag>"
-        store = os.path.join(repo_root(), "data", "autogt", str(g.get("signature")))
+        store = os.path.join(repo_root(), "data", "autogt", canonical_sig(str(g.get("signature")), read_versions()))      # a manifest of before 2026-11-10 holds the code signature
         L += [f"GT: version {g.get('version')} (signature {g.get('signature')}, dataset {g.get('dataset')}, options {g.get('options')}), code: git show {tag}",
               (f"the GT store {store} is present" if os.path.isdir(store) else
                f"the GT store {store} is MISSING: rebuild it with the code of {tag} (git worktree add ../autogt_{v} {tag}) and the options above"),
@@ -641,15 +687,15 @@ def repro_prepare(run_id, dest=None):
     return dest, cmd
 
 
-def find_run_dir(run_id):
-    """the folder a run writes into: <cards folder>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists"""
-    root = P.root()
+def find_run_dir(run_id, root=None):
+    """the folder a run writes into: <cards folder>/<id>, or the id with . as _ (bev_fusion: runs/t10_dual_s0); None when neither exists. `root` = another problem folder
+    (default: the current one). run_ar.sh names the folder of its code snapshot and log after the config file (runs/t23.C_s1/ holds only code/ and train.log) while the
+    trainer writes gt.json, config.json and the checkpoints into the underscored one (runs/t23_C_s1/): when both exist the one that holds those files is the run folder"""
+    root = root or P.root()
     base = P.cfg_of(root).get("cards", "runs")
-    for name in (run_id, run_id.replace(".", "_")):
-        d = os.path.join(root, base, name)
-        if os.path.isdir(d):
-            return d
-    return None
+    found = [d for d in (os.path.join(root, base, n) for n in dict.fromkeys((run_id, run_id.replace(".", "_")))) if os.path.isdir(d)]
+    holds = lambda d: any(os.path.isfile(os.path.join(d, f)) for f in ("config.json", "gt.json")) or final_ckpt(d)[0] is not None      # noqa: E731
+    return next((d for d in found if holds(d)), found[0] if found else None)
 
 
 def final_ckpt(run_dir):
@@ -729,6 +775,34 @@ def manifest_stale(old, r, run_dir):
     return step > recorded
 
 
+def gt_key_of(train_gt):
+    """the autogt GtKey (autogt/gt_api.py gt_key: reads the index.json of the stores, generates nothing) as a small dict, when the GT the run trained on (a gt_block) is the front store
+    that the key of the current source names. gt_key says what is stored NOW (its id covers the lane and mask parts of today too), so it is the key at the time the manifest is made,
+    not a rebuilt past one. None when autogt cannot be imported (it needs numpy, which the launcher's python may lack), the run trained on another store, or anything fails: optional"""
+    if os.environ.get("AR_GT_KEY") != "1":                           # opt in: importing autogt costs 25-33 s under the conda python and the launcher's python has no numpy anyway
+        return None
+    sig = (train_gt or {}).get("signature")
+    if not sig or sig == UNKNOWN:
+        return None
+    repo, added = repo_root(), False
+    if not os.path.isfile(os.path.join(repo, "autogt", "gt_api.py")):          # not a checkout with the suite: nothing to import (and no half-imported namespace package left behind)
+        return None
+    try:
+        if repo not in sys.path:
+            sys.path.insert(0, repo)
+            added = True
+        from autogt import gt_key
+        k = gt_key("bev_fusion", train_gt.get("dataset") if train_gt.get("dataset") not in (None, UNKNOWN) else "v1.0-trainval", "full")
+        if k.part("front").store != sig:
+            return None
+        return {"id": k.id, "release": k.release, "data": k.data, "complete": k.complete, "front_store": sig, "as_of": dt.date.today().isoformat()}
+    except Exception:
+        return None
+    finally:
+        if added and repo in sys.path:
+            sys.path.remove(repo)
+
+
 def manifest(run_id, run_dir=None, write=True, force=False):
     """The provenance block of a TRAINING run, made from its run record and its run folder: GT it trained on (gt.json), checkpoint, config, split,
     seed, the run's status, the code tag and commit, and the model bundle (network + losses) from the run's own code snapshot (<run folder>/code;
@@ -767,11 +841,20 @@ def manifest(run_id, run_dir=None, write=True, force=False):
     seed = seed if seed not in (None, "") else (r.get("seed") if r.get("seed") not in (None, "") else None)
     block = collect(gt_key=sig, split=r.get("split"), run=run_id, ckpt=ck, config=cfg, step=step, run_dir=run_dir if have_dir else None, seed=seed)
     block.pop("evaluator", None)  # a training run has no evaluator; its code is the run's commit
+    key = gt_key_of(block["subject"].get("train_gt"))
+    if key:
+        block["gt_key"] = key
     drift = r.get("code_drift") or {}
     block["code"] = {"tag": r.get("tag") or UNKNOWN, "commit": r.get("commit") or UNKNOWN, "code_hash": r.get("code_hash") or UNKNOWN,
                      "drift_files": drift.get("paths", []) if drift.get("n") else [], "command": r.get("command"), "cwd": r.get("cwd")}
     block["run_status"] = {"status": r.get("status") or UNKNOWN, "exit": r.get("exit"), "final": r.get("status") in ("ok", "done") and r.get("exit") == 0}
-    snap = os.path.join(run_dir, "code") if have_dir else None
+    snap = None
+    if have_dir:                                                      # run_ar.sh keeps code/ in the folder named after the config file (runs/t23.C_s1/), the trainer writes the rest to runs/t23_C_s1/
+        parent = os.path.dirname(run_dir)
+        for nm in dict.fromkeys([os.path.basename(run_dir), run_id, run_id.replace(".", "_"), run_id.replace("_", ".")]):
+            if os.path.isdir(os.path.join(parent, nm, "code")):
+                snap = os.path.join(parent, nm, "code")
+                break
     if snap and os.path.isdir(snap):
         tag = r.get("tag")
         ref = tag if tag and git(repo_root(), "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}") is not None else None
@@ -1130,6 +1213,85 @@ def selftest():
         with contextlib.redirect_stdout(buf):
             repro("r2")
         assert "manifest of the run" in buf.getvalue() and "model bundle (network + losses): 8 files + 0 repository files" in buf.getvalue(), buf.getvalue()
+        # review 2026-11-10 (1): run_ar.sh names the folder of the code snapshot and the log after the config (runs/r5.C_s1/), the trainer writes gt.json / config / checkpoints into runs/r5_C_s1/
+        put(proj, "runs/r5.C_s1/train.log", "x\n")
+        os.makedirs(os.path.join(proj, "runs", "r5.C_s1", "code"), exist_ok=True)
+        assert find_run_dir("r5.C_s1") == os.path.join(proj, "runs", "r5.C_s1"), "only one folder: it is the answer"
+        put(proj, "runs/r5_C_s1/gt.json", '{"gt_signature": "0.5_4_abc123"}')
+        put(proj, "runs/r5_C_s1/config.json", '{"seed": 1}')
+        assert find_run_dir("r5.C_s1") == os.path.join(proj, "runs", "r5_C_s1") == find_run_dir("r5.C_s1", root=proj), "the folder that holds gt.json / config.json, not the one named after the config"
+        assert find_run_dir("r5_C_s1") == os.path.join(proj, "runs", "r5_C_s1") and find_run_dir("r5.nothing") is None
+        os.makedirs(os.path.join(proj, "rr", "r5.C_s1"))
+        json.dump({"id": "r5.C_s1", "status": "ok", "exit": 0, "tag": "tg/r5", "commit": "abc"}, open(os.path.join(proj, "rr", "r5.C_s1", "run.json"), "w"))
+        m5 = manifest("r5.C_s1")
+        assert m5["subject"]["train_gt"]["key"] == "0.5_4_abc123" and m5["seed"] == 1, "the manifest reads the GT of the run from the folder that holds it: " + str(m5["subject"])
+        # (2) the GT store is named by the canonical signature: v9's code makes the GT of v8, a run records 6a7a... and the store is c643...
+        g2 = os.path.join(tmp, "gtrepo")
+        put(g2, "autogt/versions.csv", "version,signature,tag,date,generator,what_changed,same_gt_as\nv8,c8c8,autogt/v8,d,g,w,\nv9,c9c9,autogt/v9,d,g,w,v8\nv10,c10c,autogt/v10,d,g,w,\n")
+        os.makedirs(os.path.join(g2, "data", "autogt", "c8c8"))
+        json.dump({"signature": "c8c8", "gt_version": "v8", "version": "v1.0-trainval"}, open(os.path.join(g2, "data", "autogt", "c8c8", "index.json"), "w"))
+        gb = gt_block("0.5_4_c9c9", g2)
+        assert gb["signature"] == "c8c8" and gb["version"] == "v8" and gb["code_signature"] == "c9c9" and gb["key"] == "0.5_4_c9c9" and "index_hash" in gb, gb
+        shutil.rmtree(os.path.join(g2, "data", "autogt", "c8c8"))                      # the store deleted (D40): versions.csv still names the version
+        gb2 = gt_block("0.5_4_c9c9", g2)
+        assert gb2["signature"] == "c8c8" and gb2["version"] == "v8" and "index_hash" not in gb2, gb2
+        assert gt_block("0.5_4_c10c", g2)["version"] == "v10" and gt_block("0.5_4_zzzz", g2)["version"] == UNKNOWN and "code_signature" not in gt_block("0.5_4_c10c", g2)
+        gl = gt_block(["0.5_4_c9c9", "0.5_4_c10c"], g2)                                # train and val on different GT (gt.json holds a list): no crash, all keys kept
+        assert gl["signature"] == "c8c8" and gl["keys"] == ["0.5_4_c9c9", "0.5_4_c10c"], gl
+        rows_ = read_versions(g2)
+        any_card = lambda sig: {"provenance": {"gt": {"version": "v8", "signature": sig}, "evaluator": {"dirty": []}}}      # noqa: E731
+        assert not [x for x in compare(any_card("c8c8"), any_card("c9c9"), rows_)[0] if "gt.signature" in x], "the same GT under two code signatures compares equal"
+        assert [x for x in compare(any_card("c8c8"), any_card("c10c"), rows_)[0] if "gt.signature" in x], "another GT still differs"
+        lane_rows = [{"version": "l4", "signature": "s4", "rig": "", "same_gt_as": ""}, {"version": "l5", "signature": "s5", "rig": "lane_center", "same_gt_as": "l4"},
+                     {"version": "l5", "signature": "sbf", "rig": "bev_fusion", "same_gt_as": ""}]
+        cyc = [{"version": "a", "signature": "x", "same_gt_as": "b"}, {"version": "b", "signature": "y", "same_gt_as": "a"}, {"version": "c", "signature": "d", "same_gt_as": "zz"}]
+        assert canonical_sig("s5", lane_rows) == "s4" and canonical_sig("sbf", lane_rows) == "sbf" and canonical_sig("s4", lane_rows) == "s4", "the lane table: the earlier row of the same rig"
+        assert canonical_sig("x", cyc) == "x" and canonical_sig("d", cyc) == "d" and canonical_sig("none", cyc) == "none", "a cycle, a dangling name, an unknown signature leave it as it is"
+        av = os.path.join(os.path.dirname(os.path.dirname(HERE)), "autogt", "versions.py")          # the rule is autogt's: every row of the real table maps as autogt.versions.canonical does
+        if os.path.isfile(av):
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_autogt_versions_probe", av)
+            avm = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(avm)
+            real_rows = read_versions(os.path.dirname(os.path.dirname(HERE)))
+            assert real_rows and all(avm.canonical(r["signature"]) == canonical_sig(r["signature"], real_rows) for r in real_rows), "canonical_sig differs from autogt.versions.canonical"
+            assert any(canonical_sig(r["signature"], real_rows) != r["signature"] for r in real_rows), "the real table has a same_gt_as row (v9): the check above bites"
+        # (3) gt_key: the autogt key of what is stored now, only for the store the run trained on, and only when autogt can be imported
+        import types
+        fake_ag = types.ModuleType("autogt")
+
+        class _Part:
+            store = "abc123"
+
+        class _Key:
+            id, release, data, complete = "k123", "v12", "dd", True
+
+            def part(self, name):
+                return _Part()
+        asked = []
+        fake_ag.gt_key = lambda *a, **k: (asked.append(a), _Key())[1]
+        real_ag = sys.modules.get("autogt")
+        sys.modules["autogt"] = fake_ag
+        old_key = os.environ.pop("AR_GT_KEY", None)
+        try:
+            assert gt_key_of({"signature": "abc123", "dataset": "v1.0-trainval"}) is None and not asked, "without AR_GT_KEY=1 autogt is not imported (it costs 25-33 s)"
+            os.environ["AR_GT_KEY"] = "1"
+            gk = gt_key_of({"signature": "abc123", "dataset": "v1.0-trainval"})
+            assert gk["id"] == "k123" and gk["front_store"] == "abc123" and asked[0][:2] == ("bev_fusion", "v1.0-trainval"), gk
+            assert gt_key_of({"signature": "zzz"}) is None and gt_key_of({"signature": UNKNOWN}) is None and gt_key_of(None) is None, "another store than the one stored now: no key"
+            m5k = manifest("r5.C_s1", force=True)
+            assert m5k["gt_key"]["id"] == "k123", m5k.get("gt_key")
+            fake_ag.gt_key = lambda *a, **k: 1 / 0
+            assert gt_key_of({"signature": "abc123"}) is None and "gt_key" not in manifest("r5.C_s1", force=True), "a failing key leaves the field out"
+        finally:
+            if old_key is None:
+                os.environ.pop("AR_GT_KEY", None)
+            else:
+                os.environ["AR_GT_KEY"] = old_key
+            if real_ag is None:
+                sys.modules.pop("autogt", None)
+            else:
+                sys.modules["autogt"] = real_ag
         print("provenance selftest passed")
     finally:
         if old_env is None:
