@@ -1,4 +1,4 @@
-"""Gate of the temporal propagation block (training/temporal.py): smoke tests with known answers, then end-to-end
+"""Gate of the temporal propagation block (studies/early/temporal.py): smoke tests with known answers, then end-to-end
 speed learning without velocity labels.
 
 Smoke tests (each prints PASS / FAIL): identity at dt = 0; exact integer shift by ego motion; landing points against

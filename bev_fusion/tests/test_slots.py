@@ -7,7 +7,6 @@ small grid inside the cached chain (CachedBEVFusionModel), run on a synthetic ca
 second call of a clip (the first fills the memory: the radar branch has no past frames, so its memory blocks read nothing before),
 and (5) carry a temporal state into the next call. A new kind is a builder entry in model.py plus its line in KINDS below.
 Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_slots.py   (CPU, about 1-2 min, no data, no GPU)"""
-import dataclasses
 import math
 import os
 import sys

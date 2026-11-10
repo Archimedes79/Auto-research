@@ -94,7 +94,7 @@ def case(name, n_scenes, radars, sweeps, rng):
     med = lambda a: sorted(a)[len(a) // 2] if a else float("nan")   # noqa: E731
     cells = []
     for band in BANDS:
-        r, t, c = errs[band]
+        r, t = errs[band][:2]
         cells.append(f"{med(r):5.2f} / {med(t):6.2f} (n={len(r)})")
     print(f"{name:28s} | " + " | ".join(cells))
     return errs

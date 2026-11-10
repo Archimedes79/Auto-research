@@ -1,6 +1,6 @@
 # t8_bevfeat - feature swap: cached BEVFusion camera features (map-trained, stride 8) instead of the DualBEV cache (detection-trained, stride 16)
 
-Step 0 of plan 2.8 (image-encoder chat); runs by the lane owner (`temp/study/lane4.sh`, code pinned at 96a02be, GT signature 15efbde2d1).
+Step 0 of plan 2.8 (image-encoder chat); runs by the lane owner (`studies/recipes/study/lane4.sh`, code pinned at 96a02be, GT signature 15efbde2d1).
 Arms: `t8_bevfeat_s0/s1` (model.camera_features = "bevfusion", feature_cache data/cache/cam_feats_bevfusion), controls `t8_ctl_s0` / `t8_ctl_s1` (= t2_ref_s0 / s1 at the same
 commit and GT). `t8_ctl_s1` crashed at step 2500 with "CUDA unknown error"; the overnight chain resumed it from checkpoint 2500 on a newer code snapshot
 (run `t8.ctl_s1`, commit 9b3febf265, not 96a02be) and it finished at step 3000 on 2026-11-01 00:37. The code diff of that snapshot is not only default-off options

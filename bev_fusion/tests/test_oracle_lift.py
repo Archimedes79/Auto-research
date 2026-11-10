@@ -9,7 +9,6 @@ Variants: height slices of training/lift_pd.Grid (-0.75 .. 2.75 m), slices with 
 oversampling (4 sub-heights per 0.5 m slice, averaged). Feature resolution: full image (stride 1) and stride 8.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_oracle_lift.py [out.png]
 """
-import math
 import random
 import sys
 

@@ -17,8 +17,11 @@ import torch
 from torch import nn
 
 sys.path.insert(0, "training")
+sys.path.insert(0, "tests/support")
 import train as T  # noqa: E402
 from trainkit import amp as tk_amp, optim as tk_optim  # noqa: E402
+from toy_train import ToyLoss, ToyNet, same_tree  # noqa: E402
+
 
 fails = []
 
@@ -213,23 +216,6 @@ class Poison(torch.autograd.Function):
         return g * ctx.f, None
 
 
-class ToyNet(nn.Module):
-    def __init__(self):
-        super().__init__()
-        torch.manual_seed(0)
-        self.net = nn.Sequential(nn.Linear(6, 8), nn.BatchNorm1d(8), nn.Tanh(), nn.Linear(8, 3))
-        self.grid = None
-
-    def forward(self, batch, dts=None):
-        return self.net(batch["x"])
-
-
-class ToyLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.s = nn.Parameter(torch.zeros(2))
-
-
 DIAGS = []
 
 
@@ -288,16 +274,6 @@ def run_train(root, name, modes, crash_at=None, **kw):
     cks = sorted(f for f in os.listdir(d) if f.startswith("ckpt_") and f.endswith(".pt")) if os.path.isdir(d) else []
     ck = torch.load(os.path.join(d, cks[-1]), map_location="cpu", weights_only=False) if cks else None
     return dict(out=buf.getvalue(), rows=rows, ck=ck, exc=exc)
-
-
-def same_tree(a, b):
-    if isinstance(a, dict):
-        return a.keys() == b.keys() and all(same_tree(a[k], b[k]) for k in a)
-    if isinstance(a, (list, tuple)):
-        return len(a) == len(b) and all(same_tree(x, y) for x, y in zip(a, b))
-    if torch.is_tensor(a):
-        return torch.is_tensor(b) and a.shape == b.shape and torch.equal(a, b)
-    return a == b
 
 
 unscaled = lambda rows: [{k: v for k, v in r.items() if k not in ("t", "s_per_step", "loss_scale", "fp16_overflows")} for r in rows]      # noqa: E731

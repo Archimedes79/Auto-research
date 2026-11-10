@@ -2,7 +2,7 @@
 refinements"). World of studies/early/temporal_stages.py: objects A (8, 2) m/s and B (-2, -6) m/s, static stripes,
 random ego motion over 0.5 s. Trained on the warp MSE only (no velocity label).
 Arms:
-  H        four velocity hypotheses + static (training/temporal.py TemporalPropagation), flow = pi-weighted mean
+  H        four velocity hypotheses + static (studies/early/temporal.py TemporalPropagation), flow = pi-weighted mean
   H + R4   H, then 4 iterations of FlowRefine (correlation with the current frame around the landing point, shared
            conv update, v detached between iterations, loss on every iteration weighted 0.8^(K - k))
   0 + R4   FlowRefine from v = 0 (ego motion only) - can the lookup alone find motions of up to 4 m (8 cells)?
@@ -38,7 +38,6 @@ brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
     [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label,S+D+R4+smooth,S+DD+R4+smooth] [--smooth 0.05]
 """
-import math
 import random
 import sys
 import time
@@ -87,12 +86,6 @@ def radar_apply(v, meas, sigma_p=4.0, sigma_d=0.1):
     P = (torch.eye(2, device=v.device) * sigma_p ** 2).view(1, 2, 2, 1).expand(B, 2, 2, N)
     out, _ = doppler_update(v.reshape(B, 2, N), P, u, d, valid, sigma_d=sigma_d)
     return out.view_as(v)
-
-
-def radar_update(src, v0, sigma_p=4.0, sigma_d=0.1, rate=0.5):
-    """the flow updated with simulated Doppler (one draw of detections)."""
-    return radar_apply(v0, radar_measure(src, sigma_d, rate), sigma_p, sigma_d)
-
 
 
 class Arm(torch.nn.Module):

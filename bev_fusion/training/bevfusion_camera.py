@@ -12,7 +12,7 @@ Same call as the other encoders: `image_features(img) -> (prob (B, 118, 32, 88),
 feature cell j at pixel x = j (W - 1) / (w - 1) (and y alike), not at the cell centre (`frustum_pixels`): half a cell of 4 px against our lift's
 centre convention. The model was trained for BEV map segmentation with six cameras; its depth distribution comes from that task loss.
 The BEV part of the checkpoint (vtransform.downsample, decoder, heads) is not used here.
-Run the self-test: python training/bevfusion_camera.py    (probe on real images: temp/checks/probe_bevfusion_depth.py)
+Run the self-test: python training/bevfusion_camera.py    (probe on real images: studies/recipes/checks/probe_bevfusion_depth.py)
 """
 import os
 

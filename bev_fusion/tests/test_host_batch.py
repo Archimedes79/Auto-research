@@ -37,6 +37,7 @@ import synthetic_world as sw  # noqa: E402
 import timed_head as TH  # noqa: E402
 import train as T  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
+from model_gates import flat  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from model import ModelConfig  # noqa: E402
 from test_slots import BASE, batch_for  # noqa: E402
@@ -232,15 +233,6 @@ def part5(m, batch, loss, tag):
         grads = {n: q.grad.clone() for n, q in m.named_parameters() if q.grad is not None}
         T.host_side = _hs
         return out, res, grads, dict(SEEN)
-
-    def flat(res):
-        d = {}
-        for dt, p in res["out"].items():
-            for k, v in p.items():
-                for kk, t in (v.items() if isinstance(v, dict) else [("", v)]):
-                    if torch.is_tensor(t):
-                        d[(dt, k, kk)] = t
-        return d
 
     def same_run(a, b):
         fa, fb = flat(a[1]), flat(b[1])

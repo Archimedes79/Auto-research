@@ -1,7 +1,7 @@
 # t4_soa_front - state-of-the-art comparison with only the front area visible
 
 Started 2026-10-30 (request of Mirko: "Do a state of the art comparison considering only the front area as visible").
-Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-10-31), `temp/t4/dualbev_front_eval.py` (the DualBEV front-only records), and for the comparison `evaluation/front_compare.py` (`bev_suite.py front`, promoted from `temp/t4/compare_front.py` on 2026-11-01).
+Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-10-31), `studies/recipes/t4/dualbev_front_eval.py` (the DualBEV front-only records), and for the comparison `evaluation/front_compare.py` (`bev_suite.py front`, promoted from `temp/t4/compare_front.py` on 2026-11-01).
 
 ## 1 Card
 
@@ -21,7 +21,7 @@ Code: `training/legacy/dualbev_front.py` (self-test; in `training/` until 2026-1
 - **Decision rule.** Report both systems per class, per range, with paired scene bootstrap. A gap larger than the noise band 0.054 and an
   interval excluding 0 is a real gap; the size of the gap tells where the next work goes (training length vs. blocks).
 - **Kill / validity criterion.** The port must reproduce plausible detections: scores of the best car detection > 0.4 on frames with
-  nearby cars, nearest-detection distance to GT small (checked on frames, `temp/t4/debug_records.py`). The official 36.8 mAP cannot be
+  nearby cars, nearest-detection distance to GT small (checked on frames, `studies/recipes/t4/debug_records.py`). The official 36.8 mAP cannot be
   reproduced here (six cameras, 10 classes, 360 degrees, lidar-free), which is a limit of this check.
 
 ## 2 Log
@@ -53,7 +53,7 @@ centre-distance AP at 0.5 / 1 / 2 / 4 m, `mAP2` = vehicle + pedestrian. Differen
 - By distance: DualBEV 0.447 / 0.211 / 0.063 (0-20 / 20-40 / 40-50 m); ours 0.557 / 0.341 / 0.161. The camera-only arm of our system equals DualBEV
   in all three bins (0.439 / 0.204 / 0.054).
 - Localisation: matched confident detections (score >= 0.3, nearest same-group GT within 2 m) miss the GT centre by 0.76 m (DualBEV) and 0.50 m
-  (ours); no systematic offset (median dx +0.14 m, dy 0.00 m for DualBEV): the gap is precision, not a coordinate error (`temp/t4/bias_check.py`).
+  (ours); no systematic offset (median dx +0.14 m, dy 0.00 m for DualBEV): the gap is precision, not a coordinate error (`studies/recipes/t4/bias_check.py`).
 
 **Reading.** In the front area the pre-trained SOA camera detector and our camera-only system are the same (0.250 vs 0.242). Everything our
 system has beyond it comes from the radar branch (+0.13 at the same schedule) and, to a smaller degree, from longer training (+0.011 at 6000 steps, +0.025 at 7000 x 2 steps, both against the 3000-step reference 0.375);
@@ -87,6 +87,6 @@ contributes little at this budget. Consequence: the bug did not visibly cost acc
 wrong by it (not re-run), and the SOA reading in section 3 stands. The flag stays default off (cheaper to leave results comparable); a fresh arm
 for the corrected order would only be worth it together with longer training.
 
-Note on sources: `temp/t7/finish.sh` re-evaluates `t2_ref_s0` / `t2_ref_s1` with `bev_suite` after the t7 runs; the evaluation behind the
+Note on sources: `studies/recipes/t7/finish.sh` re-evaluates `t2_ref_s0` / `t2_ref_s1` with `bev_suite` after the t7 runs; the evaluation behind the
 tables above is then kept in `runs/t2_ref_s{0,1}/eval_legacy_2026-10-28/` (`scene_records.pkl`, `metrics.json`). To regenerate a table
 after that, point `bev_suite.py front` at those records (`LABEL=runs/t2_ref_s0/eval_legacy_2026-10-28/scene_records.pkl`), not at `runs/t2_ref_s0`.

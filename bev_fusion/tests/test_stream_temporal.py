@@ -37,10 +37,11 @@ import train as T  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from losses import BEVLoss, synthetic_gt  # noqa: E402
-from model import ModelConfig, check_config  # noqa: E402
+from model import ModelConfig  # noqa: E402
 from motion_block import block_inputs  # noqa: E402
 from precompute import Precompute  # noqa: E402
 from temporal_fusion import TemporalFusion  # noqa: E402
+from model_gates import refuser  # noqa: E402
 from test_slots import batch_for  # noqa: E402
 
 torch.set_num_threads(2)
@@ -309,12 +310,7 @@ for kind in M.CAM_BUFFERS:
 check(digests == {(223, "0f169833b881bec8")}, f"cam_buffer window / pair / recurrent: the state_dict keys and shapes of before, no new parameter ({digests})")
 
 
-def refused(**kw):
-    try:
-        check_config(ModelConfig(**dict(TINY, **kw)))
-        return False
-    except ValueError:
-        return True
+refused = refuser(TINY)
 
 
 check(refused(cam_buffer="stack") and refused(cam_buffer="pair", cam_temporal="none") and refused(cam_buffer="recurrent", cam_temporal="ego_gru")

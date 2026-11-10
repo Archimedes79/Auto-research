@@ -1,4 +1,4 @@
-"""Gate of the t11 velocity hurdle (experiments/t11_vel_hurdle/experiment.md): ObjectHead(moving=True) = a moving / static
+"""Gate of the t11 velocity hurdle (results/experiments/t11_vel_hurdle/experiment.md): ObjectHead(moving=True) = a moving / static
 logit `mov` + the velocity L1 on moving centres only + decode's gate; TrainConfig.init_from = warm start from another run.
 (G1) defaults unchanged: no `mov` branch, key or term; known answers of the two velocity losses (all centres vs moving only), of
      the mov BCE over all centres (only the pedestrian wrong: 10 / 3) and of the strict moving threshold (0.45 / 0.5 / 0.55 m/s),

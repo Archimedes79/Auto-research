@@ -492,9 +492,9 @@ def _test_ego_warp_gru():
 
 def _test_lift_s():
     try:
-        from .lift_pd import LiftPD, _front_camera, build_table, lift_pd
+        from .lift_pd import LiftPD, _front_camera
     except ImportError:
-        from lift_pd import LiftPD, _front_camera, build_table, lift_pd
+        from lift_pd import LiftPD, _front_camera
     dt64 = torch.float64
     grid = Grid()
     dc = torch.arange(1.25, 60.0, 0.5, dtype=dt64)              # 118 bins, centres on voxel centres in x

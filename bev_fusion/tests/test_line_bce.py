@@ -116,8 +116,8 @@ def heads(lm):
 
 lm_off, lm_on = L.BEVLoss(L.LossConfig(centreline_1m=True), grid), L.BEVLoss(L.LossConfig(centreline_1m=True, line_bce=2.0), grid)
 p_ = heads(lm_off)
-t_off, g_off, f_off = lm_off.terms_at(p_, gts[0.0], 0.0, 1.0)
-t_on, g_on, f_on = lm_on.terms_at(p_, gts[0.0], 0.0, 1.0)
+t_off, g_off, f_off = lm_off.terms_at(p_, gts[0.0], 0.0)
+t_on, g_on, f_on = lm_on.terms_at(p_, gts[0.0], 0.0)
 new = sorted(set(t_on) - set(t_off))
 check(new == ["sem.line_bce.lane_divider", "sem.line_bce.road_divider"], f"BEVLoss: the only new terms are the main head's line_bce terms ({new})")
 check(all(torch.equal(t_on[k], t_off[k]) for k in t_off), "BEVLoss: every other term (1 m centre-line head, camera aux head, radar aux, areas, objects) is bit-equal with the option on")

@@ -2,7 +2,7 @@
 
 Sequence of BEV maps with moving boxes (tests/support/synthetic_world.py: cars, trucks, pedestrians with ground velocities,
 lane lines, exact ego motion; frames F0, F1, F2 dt apart, like consecutive nuScenes GT keyframes). A small model of
-its own - encoder E (3 x 3 convs) per frame, the temporal block (training/temporal.py: TemporalPropagation velocity
+its own - encoder E (3 x 3 convs) per frame, the temporal block (studies/early/temporal.py: TemporalPropagation velocity
 hypotheses + FlowRefine, K iterations, bounded steps) and decoder D - predicts F1 from F0 ONLY through the motion:
   P = D(propagate(E(F0), v)),  v = FlowRefine(E(F0), E(F1), v0 = hypothesis mean)     (E(F1) only for the lookup)
 trained on BCE(P, F1) - no velocity label. The decoder could learn to move things itself (a conv net can shift);
@@ -30,7 +30,6 @@ Image: temp/checks/flow_explains.png. Run from the bev_fusion folder:
       [--rawwarp 1.0] (the explanation as a loss: MSE of the raw F0 moved with v alone against F1, on every refined flow;
       the decoder alone can no longer carry the motion)
 """
-import math
 import os
 import random
 import sys

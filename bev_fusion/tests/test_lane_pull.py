@@ -20,12 +20,13 @@ import time
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests", "training"):
+for sub in ("tests", "tests/support", "training"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from lift_pd import LiftPD  # noqa: E402
 from model import ModelConfig, check_config  # noqa: E402
 from nuscenes_dataset import DST_HW  # noqa: E402
+from model_gates import refuser  # noqa: E402
 from test_slots import batch_for  # noqa: E402
 
 torch.set_num_threads(2)
@@ -82,12 +83,7 @@ check(LiftPD(pd_.grid, [1.0, 2.0]).use_depth is True, "LiftPD's own default stay
 check(build(lane_branch="").lane is None, "no lane branch: nothing is built (the default True is accepted)")
 
 
-def refused(**kw):
-    try:
-        check_config(ModelConfig(**dict(TINY, **kw)))
-        return False
-    except ValueError:
-        return True
+refused = refuser(TINY)
 
 
 for kind in ("res4", "rgb"):

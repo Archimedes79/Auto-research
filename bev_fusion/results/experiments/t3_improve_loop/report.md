@@ -1,8 +1,8 @@
 # Eight tries to improve the camera + radar BEV system: what works, what does not, why, and how it relates to SOA
 
 Status 2026-10-30, reviewed once by a fresh reviewer against the primary files (corrections applied). Eight tries done (plus one running). The tables come from
-`runs/*/eval/metrics*.json` through `temp/study/collect.py` (`../t2_block_swaps/results/arms.md`); other numbers come from the named scripts and logs (probes `temp/calib/probe_*.log`,
-velocity `temp/calib/velocity_baseline.py`, controls `try1_controls.md`, latency `runs/t1_r4_soa/eval/latency.json`); no number is typed by hand. All tables: cold VAL, 1000 keyframes spread over the 82 validation scenes (parts 1-6 of
+`runs/*/eval/metrics*.json` through `studies/recipes/study/collect.py` (`../t2_block_swaps/results/arms.md`); other numbers come from the named scripts and logs (probes `temp/calib/probe_*.log`,
+velocity `studies/recipes/calib/velocity_baseline.py`, controls `try1_controls.md`, latency `runs/t1_r4_soa/eval/latency.json`); no number is typed by hand. All tables: cold VAL, 1000 keyframes spread over the 82 validation scenes (parts 1-6 of
 nuScenes, 150 scenes exist), EMA weights, 3000 optimiser steps from the same 428 training scenes, seed 0 unless stated. This is a short-schedule
 screening study of blocks, not a final system.
 
@@ -249,5 +249,5 @@ interchangeable here. What is missing for a SOA claim: six cameras, the full cla
 
 ## 11 Reproduce
 
-Code at commits listed in `experiment.md` (`0a3d73c` swap arms, `1a6b8d8` camera fixes, `d57bcc2` camera-off fix); queue and lanes `temp/study/lane2.sh`, `lane3.sh`; tables `temp/study/collect.py`;
-controls `evaluate_run.py --control`; probes `temp/calib/probe_*.py`; prior detector `temp/calib/prior_detector.py`; checkpoints of finished runs moved to `D:\Auto-research\bev_fusion_ckpts\` (copy back to re-evaluate).
+Code at commits listed in `experiment.md` (`0a3d73c` swap arms, `1a6b8d8` camera fixes, `d57bcc2` camera-off fix); queue and lanes `studies/recipes/study/lane2.sh`, `lane3.sh`; tables `studies/recipes/study/collect.py`;
+controls `evaluate_run.py --control`; probes `studies/recipes/calib/probe_*.py`; prior detector `studies/recipes/calib/prior_detector.py`; checkpoints of finished runs moved to `D:\Auto-research\bev_fusion_ckpts\` (copy back to re-evaluate).

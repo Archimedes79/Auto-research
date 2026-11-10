@@ -1,5 +1,5 @@
 """A toy to run the REAL train() on the CPU in about a second (the data path stubbed): a tiny network with a batch norm, a loss with a Kendall-like parameter, batches with a `mode` per
-batch (ok | inf_grad | nan_loss | bn_poison). Used by test_lr_groups.py; test_grad_scaler.py has its own copy of the same idea.
+batch (ok | inf_grad | nan_loss | bn_poison). Used by test_lr_groups.py and test_train_guards.py; test_grad_scaler.py takes ToyNet, ToyLoss and same_tree from here and keeps its own forward and batches.
     import toy_train as TT; res = TT.run_train(T, root, "name", {}, lr_groups={...})   # -> dict(out=stdout, rows=log rows, ck=newest checkpoint, exc=text of the exception or None)"""
 import contextlib
 import io

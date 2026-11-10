@@ -16,7 +16,6 @@ Stored in `temp/cache/s1_synth.pt` (derived data, not in git). Build: python stu
 The real data gets the same dict layout (prob, ctx, K, T_cam_car, hw, gt, mask, scene) in the S1a driver (to build, from
 training/feature_cache.py and training/gt_bev.py).
 """
-import math
 import os
 import random
 import sys

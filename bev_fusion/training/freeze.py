@@ -24,7 +24,6 @@ What "frozen" means here, and the traps it avoids:
 - a frozen module that is also a modality (a frozen fusion) switches modality dropout off in eval mode: that is the meaning of frozen
 """
 import difflib
-import hashlib
 
 import torch
 from torch import nn
@@ -46,11 +45,6 @@ def _aliases(model):
     for n, p in model.named_parameters(remove_duplicate=False):
         by_id.setdefault(id(p), (p, []))[1].append(n)
     return list(by_id.values())
-
-
-def select(model, prefixes):
-    """the (first) names of the parameters that any of the prefixes selects through any of their names"""
-    return [names[0] for p, names in _aliases(model) if any(_under(n, x) for n in names for x in as_list(prefixes))]
 
 
 def check_prefixes(model, prefixes, trainable_only=False):
@@ -159,11 +153,3 @@ def unchanged(model, snap):
     cur = model.state_dict(keep_vars=True)
     return sorted(k for k, t in snap.items() if k not in cur or not torch.equal(cur[k].detach(), t))
 
-
-def fingerprint(model):
-    """short hash of all parameters and buffers (a quick 'is this the same weights' for logs)"""
-    h = hashlib.sha1()
-    for n, t in list(model.state_dict().items()):
-        h.update(n.encode())
-        h.update(t.detach().cpu().double().contiguous().numpy().tobytes())          # double: bf16 has no numpy form
-    return h.hexdigest()[:12]

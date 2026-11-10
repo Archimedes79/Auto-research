@@ -2,7 +2,7 @@
 
 All numbers: nuScenes VAL (82 scenes, 3109 keyframes of the parts downloaded so far; the only exception is the train-subset check, labelled TRAIN: 800 samples of 428 scenes), EMA weights, front camera + five radars,
 0.5 m grid, 60 m range, one training seed per run, TEST split not used. Sources: `runs/<run>/eval/*.json|txt`, `results/tables_vs_r0.md`,
-`results/tables_vs_r3.md` (built by `temp/train/build_tables.py`). Cold = every frame from an empty memory (the table default);
+`results/tables_vs_r3.md` (built by `studies/recipes/train/build_tables.py`). Cold = every frame from an empty memory (the table default);
 warm = memory carried over the whole scene.
 
 ## 1 Summary

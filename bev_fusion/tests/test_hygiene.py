@@ -4,13 +4,12 @@
   2. #3 w_obj is a WEIGHT: the regression terms of the object head are weighted means over the objects (checked against single-object runs), the focal loss weights every cell (a cell of weight 0.5
      gets half the gradient, the others the same), the motion L1 is a weighted mean; the flag off keeps the plain means
   3. #2 an object of unknown velocity (vel_known False, velocity target 0) is out of the moving / static BCE and of the velocity L1, and its logit gets no gradient; off, it trains "static"
-  4. #4 the dead `radar_slot` branch of BEVLoss is gone (an output of that name adds no term); a stored config with w_radar_slot still loads
+  4. #4 the dead `radar_slot` branch of BEVLoss is gone (an output of that name adds no term); the field w_radar_slot is gone, so a config that still names it is refused with an error naming it
   5. the wiring: BEVLoss(LossConfig(hygiene_2026_11_02=True)) reaches the object head, the motion loss and train.forward_loss (batch_ego); the flag is off by default
   6. #6 splat_positions / splat_bev / splat_window compute geometry in float32 for bf16 / fp16 inputs (the bf16 cell centres were 0.125 m off at 32 - 64 m); float32 input is unchanged
   7. #1 batch_ego raises for a dt other than +-0.5 s when strict, and not otherwise
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_hygiene.py   (PYTHONPATH = the repository root for GtGenerator)
 """
-import math
 import sys
 
 import torch
@@ -225,7 +224,12 @@ check(torch.allclose(v_on, v_ref, rtol=1e-6) and not torch.allclose(v_off, v_ref
 import synthetic_world as sw  # noqa: E402
 scene = L._demo_scene(sw)
 gt = L.synthetic_gt(scene, grid)
-check(L.LossConfig().hygiene_2026_11_02 is False and L.LossConfig(**{"w_radar_slot": 0.1, "w_obj_vel": 1.0}).w_radar_slot == 0.1, "the flag is off by default; a stored config with w_radar_slot still loads")
+try:
+    L.LossConfig(**{"w_radar_slot": 0.1, "w_obj_vel": 1.0})
+    refused = ""
+except TypeError as e:
+    refused = str(e)
+check(L.LossConfig().hygiene_2026_11_02 is False and "w_radar_slot" in refused, f"the flag is off by default; a config that names the removed field w_radar_slot is refused by name ({refused[:70]})")
 o = make_out(mov=False, grad=False)
 for flag in (False, True):
     bl = L.BEVLoss(L.LossConfig(hygiene_2026_11_02=flag), grid)
@@ -317,7 +321,7 @@ wbf, wmbf = S.splat_window([(bev.bfloat16(), [(0.5, 8.0, 0.1)])], grid)
 w32b, wm32b = S.splat_window([(bev, [(0.5, 8.0, 0.1)])], grid)
 check((wmbf.float() - wm32b).abs().max().item() < 2e-2, "splat_window: the same for a bf16 frame with a chain of ego steps")
 
-# the chain of ego steps in half precision, float64 passing through, the correction head reading the BEV's own dtype
+# the chain of ego steps in half precision, float64 passing through
 vo = torch.randn(1, X * Y, 2, generator=torch.Generator().manual_seed(5))
 pc_bf = S.chain_positions(p32.bfloat16(), [(0.5, 8.0, 0.1), (0.5, 7.0, -0.1)], vo.bfloat16())
 pc_ref = S.chain_positions(p32.bfloat16().float(), [(0.5, 8.0, 0.1), (0.5, 7.0, -0.1)], vo.bfloat16().float())
@@ -325,17 +329,6 @@ check(pc_bf.dtype == torch.float32 and torch.equal(pc_bf, pc_ref), "chain_positi
 p64 = S.grid_points(grid, dtype=torch.float64)[None]
 q64 = S.splat_positions(p64, 0.5, torch.tensor([10.0], dtype=torch.float64), torch.tensor([0.05], dtype=torch.float64))
 check(q64.dtype == torch.float64 and S.chain_positions(p64, [(0.5, 8.0, 0.1)]).dtype == torch.float64, "float64 positions stay float64 (only half precision is widened)")
-seen = []
-
-
-def corr_spy(feat, pos, dt, v, omega):
-    seen.append(pos.dtype)
-    return torch.zeros(feat.shape[0], pos.shape[1], 2)
-
-
-S.splat_bev(bev.bfloat16(), grid, 0.5, v, om, corr=corr_spy)
-S.splat_window([(bev.bfloat16(), [(0.5, 8.0, 0.1)])], grid, corr=corr_spy)
-check(seen == [torch.bfloat16, torch.bfloat16], f"the correction head still gets the cell centres in the BEV's dtype, as before ({seen})")
 
 # ---------------------------------------------------------------- 7 batch_ego
 gs = [{"prev": [(0.48, 8.0, 0.1)], "next": [(0.52, 8.5, 0.0)]}]

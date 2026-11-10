@@ -13,7 +13,7 @@ One sample = keyframe k (it needs a previous and a next keyframe, for the GT at 
 - GT: `GtGenerator.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
   float16 npz in a cache folder of this project (derived data, not in git; written atomically, a broken file is rebuilt)
 - meta: tokens, timestamps, the ego speed and yaw rate of the last camera frame
-Raw data is read through the WSL views (~/data/nuscenes_full, ~/data/nuscenes for mini; datasets/NuScenes/README.md).
+Raw data is read through the WSL views (~/data/nuscenes_full, ~/data/nuscenes for mini; the repository's data/NuScenes/README.md).
 Splits: official nuScenes train / val scene names restricted to the scenes on disk (`available_scenes`).
 Run the self-test (nuScenes mini): python training/nuscenes_dataset.py
 """
@@ -24,13 +24,12 @@ import sys
 import numpy as np
 import torch
 from PIL import Image
-from pyquaternion import Quaternion
 
 _BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 while not os.path.isdir(os.path.join(_BEV_FUSION, "GtGenerator")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
     _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
 if _BEV_FUSION not in sys.path:
-    sys.path.append(_BEV_FUSION)                     # the GT generator: the standalone suite bev_fusion/GtGenerator/
+    sys.path.append(_BEV_FUSION)                     # the GT generator: the standalone suite GtGenerator/ at the repository root
 from GtGenerator.nuscenes_adapter import pose_matrix  # noqa: E402
 from GtGenerator.nuscenes_gt import NuScenesGT  # noqa: E402
 

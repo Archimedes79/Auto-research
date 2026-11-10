@@ -3,7 +3,7 @@
     16 x 44 batch is the same as with the field set explicitly (default path untouched);
 (b) "bevfusion": frustum cells, depth centres 1.0 + 0.5 i, 32 x 88 features give the same camera BEV shape; lift 's' is refused; the
     cached dataset carries bevfusion_ida (scale 0.48), the default dataset the DualBEV transform.
-Run: wsl bash tools/env/_py14.sh tests/test_camera_features.py   (CPU is enough, ~20 s)"""
+Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_camera_features.py   (CPU is enough, ~20 s)"""
 import os
 import sys
 
@@ -131,10 +131,10 @@ import dataclasses  # noqa: E402
 
 import feature_cache  # noqa: E402
 from interface import INPUTS  # noqa: E402
-from model import CAMERAS, CAMERA_FEATURES  # noqa: E402
+from model import CAMERAS  # noqa: E402
 import train as _train  # noqa: E402
 
-assert tuple(CAMERAS) == CAMERA_FEATURES == ("dualbev", "bevfusion", "dual"), CAMERA_FEATURES
+assert tuple(CAMERAS) == ("dualbev", "bevfusion", "dual"), tuple(CAMERAS)
 tcfg = {f.name for f in dataclasses.fields(_train.TrainConfig)}
 for kind, srcs in CAMERAS.items():
     assert srcs[0].suffix == "" and all(s.suffix for s in srcs[1:]) and len({s.suffix for s in srcs}) == len(srcs), (kind, srcs)

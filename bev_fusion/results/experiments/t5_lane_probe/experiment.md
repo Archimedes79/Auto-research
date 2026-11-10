@@ -2,7 +2,7 @@
 
 Started 2026-10-30 (Mirko: "Run the probe", after the finding that lane dividers are far behind the state of the art:
 mask IoU 0.27, zero-crossing F1 0.03 in `../t1_r4_soa/report.md`, against divider IoU 38.7 / 50.1 of GaussianLSS / GaussianCaR).
-Code: `temp/t5/lane_probe.py` (self-test `python temp/t5/lane_probe.py selftest`).
+Code: `studies/recipes/t5/lane_probe.py` (self-test `python studies/recipes/t5/lane_probe.py selftest`).
 
 ## 1 Card
 
@@ -53,7 +53,7 @@ Code: `temp/t5/lane_probe.py` (self-test `python temp/t5/lane_probe.py selftest`
 - 2026-10-30, validity check (`temp/t5/gt_overlay.png`, 10 val frames): where the GT draws a divider it lies on the painted line
   (scene-0096, 0269, 0346, 0562, and the far pieces of 0105, 0554, 0630): placement passes. But visible paint is often NOT in the GT
   (double yellow lines in scene-0003, 0277, 0630; dashed lines in 0277). Hypothesis "our record query drops long dividers that cross
-  the patch without a node inside" tested by `temp/t5/check_divider_records.py`: 40 val frames, 3887 m of divider in the grid
+  the patch without a node inside" tested by `studies/recipes/t5/check_divider_records.py`: 40 val frames, 3887 m of divider in the grid
   windows kept, 0 m dropped - FALSE. The nuScenes map layers `lane_divider` + `road_divider` themselves lack these lines (scene-0003:
   9.5 m of divider in the whole 60 m x 52 m window). This is a property of the dataset shared by every published nuScenes map model
   (MapTR's "divider" class is the same two layers), so it cannot explain our gap to them; for this probe, unlabelled paint counts as a
@@ -69,11 +69,11 @@ Code: `temp/t5/lane_probe.py` (self-test `python temp/t5/lane_probe.py selftest`
   precision at 1 cell only inside a 4-cell corridor around the labelled lines, F1 of the two; same heads retrained (same seed and
   frames, weights now saved), same threshold rule.
 - Rerun (identical IoU numbers, so the training is reproducible). Post-hoc F1 (recall@1 / corridor precision@1): prior 0.402, ctx16
-  0.409, fpn16 0.453 (+0.044 [+0.030, +0.060]), res8 0.391, res4 0.356, rgb 0.283. Where the labels are (`temp/t5/label_rows.py`):
+  0.409, fpn16 0.453 (+0.044 [+0.030, +0.060]), res8 0.391, res4 0.356, rgb 0.283. Where the labels are (`studies/recipes/t5/label_rows.py`):
   67 % of the labelled cells lie in image rows 16-31 of 64 (just below the horizon), 57 % at 20-60 m, where a line is compressed into a
   few rows, a flat-road projection error moves it by whole cells, and a per-pixel prior already hits many cells.
 
-## 3 Result and verdict (2026-10-30; numbers from `results.md`, made by `temp/t5/lane_probe.py eval`)
+## 3 Result and verdict (2026-10-30; numbers from `results.md`, made by `studies/recipes/t5/lane_probe.py eval`)
 
 VAL, 300 keyframes of 75 scenes, one seed; TRAIN 600 keyframes for the heads and the thresholds.
 
@@ -135,7 +135,7 @@ features in `temp/t5/feats/` are kept for v2 (the TRAIN part is reusable).
 
 ## 5 Probe v2 - result (2026-10-30)
 
-Run: `bash temp/t5/run_v2.sh` (CPU, 2 threads), code `temp/t5/lane_probe_v2.py`; table `results_v2.md` (copied from
+Run: `bash studies/recipes/t5/run_v2.sh` (CPU, 2 threads), code `studies/recipes/t5/lane_probe_v2.py`; table `results_v2.md` (copied from
 `temp/t5/results_v2.md`), picture `images/probe_v2_predictions.png` (not in git). VAL: 300 fresh keyframes of 82 val scenes (overlap with
 v1: 0); 25937 labelled line cells at 2-30 m (mean 86 per frame, 30 frames without one).
 

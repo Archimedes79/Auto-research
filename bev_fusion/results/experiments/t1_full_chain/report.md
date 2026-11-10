@@ -2,7 +2,7 @@
 
 Everything below is measured on the nuScenes VAL split (82 scenes, 3109 keyframes: the parts downloaded so far), EMA weights, front
 camera + five radars, 0.5 m grid, 60 m range. Numbers come from `results/` (copies of `runs/<run>/eval/*.json`, built by
-`temp/train/build_tables.py`); nothing is typed by hand except this text. The TEST split was not used. One seed per run.
+`studies/recipes/train/build_tables.py`); nothing is typed by hand except this text. The TEST split was not used. One seed per run.
 
 ## 1 Summary
 

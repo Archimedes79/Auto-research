@@ -150,7 +150,7 @@ def _selftest():
         streamed = {r["token"]: r for r in _stream_records(os.path.join(root, "v1.0-mini", "sample_data.json"), chunk=1 << 12)}
         assert streamed == full, "streamed records equal json.load"
         # key frames only keeps a subset (mini: the cached frames of one scene include sweeps)
-        n_all = len([t for t in source_tokens(src)[sorted(source_tokens(src))[0]] if t in fm or True])
+        n_all = len(source_tokens(src)[sorted(source_tokens(src))[0]])
     keys = filemap(root, "v1.0-mini", [t for ts in source_tokens(src).values() for t in ts])
     n_key = sum(1 for v in keys.values() if v[1])
     print(f"cache_bevfusion_features selftest ok: shards in the DualBEV cache format ((n, 198, 32, 88) float16 + token index, read by FeatureStore), "

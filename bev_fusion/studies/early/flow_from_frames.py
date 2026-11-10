@@ -79,8 +79,7 @@ def forward_splat(f0, v_hat, v, omega):
     v_obj = v_hat.permute(0, 2, 3, 1).reshape(B, X * Y, 2)
     pos = splat_positions(CENTRES.expand(B, -1, -1), DT, v, omega, v_obj)
     occ = f0.amax(1).reshape(B, X * Y)
-    out, mass = splat(f0.reshape(B, C, X * Y), pos, G, 6.0 * occ)
-    return out
+    return splat(f0.reshape(B, C, X * Y), pos, G, 6.0 * occ)[0]
 
 
 def blur(x, sigma):

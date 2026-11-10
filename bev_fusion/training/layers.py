@@ -2,7 +2,7 @@
 decides the channels, the target and the loss, so a new layer is a row, not new code.
 
     kind       channels                                                      loss (losses.map_terms)
-    area       1 logit: the coverage                                         BCE + region overlap (soft IoU / Dice semimetric)
+    area       1 logit: the coverage                                         BCE + region overlap (soft IoU)
     polyline   presence logit [+ truncated distance field, metres, linear]   dilated Dice [+ Huber on the distance] [+ L1 on the unit direction]
                [+ direction (cos, sin), raw, normalised in the loss]
     dense_box  1 logit: the object footprint coverage                        BCE + region overlap

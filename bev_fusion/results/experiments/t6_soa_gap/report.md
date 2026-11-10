@@ -6,7 +6,7 @@ at the 0.5 threshold); the tables are in `../t3_improve_loop/report.md` ("Maps a
 
 Question (Mirko): "Look exactly why performance is not SOA, find out." Method: measure the gap like for like wherever a published system
 can be scored with our own metric on our own frames, then decompose it with the evidence that exists (stored records, earlier arms) and
-name what is still unmeasured. CPU only (the GPU was shared with a training lane). Scripts: `temp/soa_gap/` (scratch, not a tool).
+name what is still unmeasured. CPU only (the GPU was shared with a training lane). Scripts: `studies/recipes/soa_gap/` (recipes of this experiment, not a tool).
 All numbers: nuScenes VAL (official val scenes), camera cells of the front camera, 0.5 m grid, front field of view <= 60 m, dt 0, one model
 snapshot (`runs/t1_r4_soa`, step 7000, EMA weights), no TEST split.
 
@@ -124,7 +124,7 @@ the numbers, not yet isolated by an experiment.
 4. Map-supervised stride-8 image features (plan 2.7, the image-encoder chat is distilling them now): the direct test of M6.
 5. Longer training on all 700 scenes with the existing feature shards (M8, M3).
 
-## 4 Question set: why does GaussianCaR win the maps? (analytic; `temp/soa_gap/analytic_questions.py`, `steps_curve.py`)
+## 4 Question set: why does GaussianCaR win the maps? (analytic; `studies/recipes/soa_gap/analytic_questions.py`, `steps_curve.py`)
 
 Arithmetic on the nuScenes camera model (CAM_FRONT f = 1266 px, height 1.51 m), on our image pipeline (704 wide, 256 rows, stride 16, 80
 channels) and on GaussianCaR's (448 x 800, stride 8, 128 channels, from the paper note), plus the measured tolerance curves.

@@ -94,7 +94,7 @@ def random_box(near_edge=False):
 
 
 same = True
-n_boxes = n_edge = 0
+n_boxes = 0
 for trial in range(60):
     batch = [[random_box(near_edge=rng.random() < 0.3) for _ in range(rng.choice([0, 1, 6, 30]))] for _ in range(rng.choice([1, 3]))]
     cap = rng.choice([4, 128])

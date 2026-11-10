@@ -55,7 +55,7 @@ try:
     from .augment import flip_cam
     from .bev_trunk import BEVTrunk, SemanticHead
     from .blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
-    from .camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
+    from .camera_encoder import FrontCameraEncoder, depth_centres
     from .extract import boxes_from_maps, dense_boxes, soft_line_map
     from .fusion import ConcatFusion, GateFusion
     from .lane_branch import LaneBranch
@@ -74,7 +74,7 @@ except ImportError:                                   # run as a script
     from augment import flip_cam
     from bev_trunk import BEVTrunk, SemanticHead
     from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
-    from camera_encoder import DEPTH_BINS, FrontCameraEncoder, depth_centres
+    from camera_encoder import FrontCameraEncoder, depth_centres
     from extract import boxes_from_maps, dense_boxes, soft_line_map
     from fusion import ConcatFusion, GateFusion
     from lane_branch import LaneBranch
@@ -153,7 +153,6 @@ class ModelConfig:
                                        # table (layers.py): output p["sem_1m"] = losses.layer_spec_1m; LossConfig.centreline_1m must agree. Off = no new parameter
     dense_objects: bool = True
     radar_stationary: bool = True      # radar aux head = losses.radar_aux_spec(radar_stationary)
-    n_sem: int = None                  # optional check: must equal len(layer_spec(...)) when given (train.py passes it)
     aux_heads: bool = True
     object_direction: bool = False     # object head: sign-free axis + front / back class (object_head.ObjectHead)
     object_moving: bool = False        # object head: moving / static logit, velocity on moving centres only (t11 hurdle)
@@ -175,8 +174,8 @@ class ModelConfig:
     freeze_camera: bool = True
     z_levels: tuple = Z_LEVELS
     grid_kwargs: dict = field(default_factory=dict)
-    dense_outputs: bool = False        # output interface: per dt the dense box output and the soft line map (extract.py); on for the
-                                       # planner and the prototype, off in training and timing (no loss reads them; stored ms stay comparable)
+    dense_outputs: bool = False        # output interface: per dt the dense box output and the soft line map (extract.py); off by default
+                                       # (no loss and no evaluation reads them yet, stored ms stay comparable), only tests/test_slots.py switches it on
 
 
 # ------------------------------------------------------------------ the network slots: one builder table each (kind -> block)
@@ -226,7 +225,6 @@ class CameraSource:
 CAMERAS = {"dualbev": (CameraSource("dualbev", "feature_cache", ""),),
            "bevfusion": (CameraSource("bevfusion", "feature_cache", ""),),
            "dual": (CameraSource("dualbev", "feature_cache", ""), CameraSource("bevfusion", "feature_cache2", "2"))}
-CAMERA_FEATURES = tuple(CAMERAS)
 
 
 def source_lift(src, cfg, grid):
@@ -392,8 +390,6 @@ class BEVFusionModel(nn.Module):
                                              nn.BatchNorm2d(cfg.head_channels), nn.ReLU(True))
             c = cfg.head_channels
         self.spec = layer_spec(cfg.centrelines, cfg.dense_objects)
-        if cfg.n_sem is not None and cfg.n_sem != len(self.spec):
-            raise ValueError(f"n_sem {cfg.n_sem} != len(layer_spec) {len(self.spec)}")
         self.mover = TimeMover(c, self.grid)
         self.motion_block = None
         if cfg.motion_block:                                     # t15: the field comes from the block; the 1x1 head is removed (built by
@@ -726,10 +722,6 @@ def _turn(vec, omega, dt):
     return torch.stack([c * vec[:, 0] - s * vec[:, 1], s * vec[:, 0] + c * vec[:, 1]], 1)
 
 
-def trainable_parameters(model):
-    return [p for p in model.parameters() if p.requires_grad]
-
-
 # ----------------------------------------------------------------------------------------------- self-test
 def _selftest():
     import os
@@ -768,7 +760,7 @@ def _selftest():
                       ("fusion", model.fusion), ("trunk", model.trunk), ("time mover", model.mover),
                       ("semantic head", model.sem_head), ("object head", model.obj_head)):
         assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in mod.parameters()), f"no gradient: {name}"
-    n_train = sum(p.numel() for p in trainable_parameters(model))
+    n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
     n_all = sum(p.numel() for p in model.parameters())
     groups = ", ".join(f"{k[6:]} {float(v.detach()):.2f}" for k, v in L.items() if k.startswith("group."))
     # a second call with the returned state and the step since (sequence mode)

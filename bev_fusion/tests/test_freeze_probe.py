@@ -110,8 +110,6 @@ m2.train()
 m2(X)
 leak = freeze.unchanged(m2, sn2)
 check("fusion.1.running_mean" in leak, "control: a frozen BatchNorm left in train mode DOES change its statistics, and `unchanged` finds it")
-fp0 = freeze.fingerprint(m)
-check(freeze.fingerprint(m) == fp0 and freeze.fingerprint(toy(1)) != freeze.fingerprint(toy(2)), "the fingerprint is stable and tells weights apart")
 check(freeze.unchanged(m, {"nope": torch.zeros(1)}) == ["nope"], "a name that is gone counts as changed")
 
 # 3 probe
@@ -191,9 +189,9 @@ check(not debug.overfit_ok([1.0, 1.0, 1.0]) and not debug.overfit_ok([1.0, float
 floor = lambda mm, b: (mm(b[0]) ** 2).mean() + 5.0                  # noqa: E731  a loss with a floor it cannot go below: falls, but not towards 0
 check(not debug.overfit_ok(debug.overfit_one_batch(toy(), floor, batch, steps=200, lr=1e-2)), "a loss that cannot reach 0 on one batch is reported as not overfit (a bug in the loss or the targets)")
 orig = toy()
-fp_orig = freeze.fingerprint(orig)
+orig_all = freeze.snapshot(orig, names=orig.state_dict().keys())
 changed, moved = debug.frozen_stayed(orig, loss_fn, batch, train_only=["head."])
-check(freeze.fingerprint(orig) == fp_orig and all(p.requires_grad for p in orig.parameters()), "frozen_stayed works on a copy: the model it was given is untouched")
+check(freeze.unchanged(orig, orig_all) == [] and all(p.requires_grad for p in orig.parameters()), "frozen_stayed works on a copy: the model it was given is untouched")
 check(changed == [] and "head.a.weight" in moved and not [n for n in moved if not n.startswith("head.")], f"frozen_stayed: nothing frozen changed, the head moved ({len(moved)} parameters)")
 changed, moved = debug.frozen_stayed(toy(), loss_fn, batch, freeze_=["lane.", "fusion."])
 check(changed == [] and sorted(moved) == ["head.a.bias", "head.a.weight", "head.b.bias", "head.b.weight"], "frozen_stayed with freeze_ names")

@@ -256,21 +256,21 @@ class TimeObjectHead(ObjectHead):
 
 
 # ------------------------------------------------------------------------------------------------ S5b: boxes in time
-def propagate_box_tensors(centre, yaw, vel, steps, delta=None, dyaw=None):
+def propagate_box_tensors(centre, yaw, vel, steps):
     """S5b (plan 8.3): move boxes to another time with the splat's position function (training/splat.py).
     centre (B, N, 2), yaw (B, N) or None (circles), vel (B, N, 2) box velocity in the source axes; steps =
-    [(dt_i, v_i, omega_i), ...] ego steps from the source to the target time (any sign of dt); delta (B, N, 2), dyaw
-    (B, N): an optional learned correction. Returns centre', yaw', vel' in the target frame; size / radius unchanged.
-    Differentiable in every input (the loss on the propagated box trains the velocity head and the correction)."""
+    [(dt_i, v_i, omega_i), ...] ego steps from the source to the target time (any sign of dt). Returns centre', yaw',
+    vel' in the target frame; size / radius unchanged. Differentiable in every input (the loss on the propagated box
+    trains the velocity head)."""
     try:
         from .splat import chain_positions
     except ImportError:
         from splat import chain_positions
-    c = chain_positions(centre, steps, vel, delta)
+    c = chain_positions(centre, steps, vel)
     th = sum(float(s[0]) * float(s[2]) for s in steps)
     co, si = math.cos(th), math.sin(th)
     v2 = torch.stack([co * vel[..., 0] + si * vel[..., 1], -si * vel[..., 0] + co * vel[..., 1]], -1)
-    y2 = None if yaw is None else yaw - th + (dyaw if dyaw is not None else 0.0)
+    y2 = None if yaw is None else yaw - th
     return c, y2, v2
 
 
@@ -290,28 +290,6 @@ def propagate_boxes(boxes, steps):
             nb["yaw"] = y[0, i].item()
         out.append(nb)
     return out
-
-
-class BoxCorrection(nn.Module):
-    """Bounded learned correction of a propagated box (S5b): (delta x, delta y, delta yaw) from the box's centre feature
-    and the ego / time inputs (v, omega, dt, v dt, omega dt) and the box velocity; zero start, |delta| <= d_max m,
-    |delta yaw| <= yaw_max rad. For objects that accelerate or turn (constant velocity is the model without it)."""
-
-    def __init__(self, cin, hidden=64, d_max=1.0, yaw_max=0.3):
-        super().__init__()
-        self.net = nn.Sequential(nn.Linear(cin + 7, hidden), nn.ReLU(), nn.Linear(hidden, hidden), nn.ReLU(),
-                                 nn.Linear(hidden, 3))
-        nn.init.zeros_(self.net[4].weight)
-        nn.init.zeros_(self.net[4].bias)
-        self.d_max, self.yaw_max = d_max, yaw_max
-
-    def forward(self, feat, vel, dt, v, omega):
-        """feat (B, N, C) centre features, vel (B, N, 2); dt, v, omega scalars -> delta (B, N, 2), dyaw (B, N)."""
-        B, N = feat.shape[:2]
-        e = torch.tensor([v, omega, dt, v * dt, omega * dt], dtype=feat.dtype, device=feat.device).expand(B, N, 5)
-        raw = self.net(torch.cat([feat, vel, e], -1))
-        d = self.d_max * torch.tanh(raw[..., :2] / self.d_max)
-        return d, self.yaw_max * torch.tanh(raw[..., 2] / self.yaw_max)
 
 
 def targets_as_output(t, grid, direction=False):
@@ -639,9 +617,6 @@ def _selftest():
     assert abs(b2["yaw"] + 0.2) < 1e-9
     b3 = propagate_boxes([b2], [(-0.5, 8.0, 0.4)])[0]
     assert abs(b3["cx"] - 20.0) < 0.02 and abs(b3["cy"] - 2.0) < 0.02 and abs(b3["yaw"]) < 1e-9
-    corr = BoxCorrection(cin=8)
-    d, dy = corr(torch.randn(1, 3, 8), torch.randn(1, 3, 2), 0.5, 10.0, 0.1)
-    assert d.abs().max() == 0 and dy.abs().max() == 0, "correction starts at zero"
     # 5 direction head (axis + front / back class): perfect maps decode to the GT yaw, also with the axis vector
     #   flipped (the class decides the half); the axis loss is sign-free; the class flips at DIR_OFFSET; gradients reach
     #   rot and dir
@@ -669,7 +644,7 @@ def _selftest():
     assert "dir" not in out and "dir" not in loss                       # default head: unchanged outputs and terms
     print("object_head selftest ok: perfect targets decode to the GT boxes (centre, size, yaw, radius, velocity), "
           "shapes, finite loss with gradients in every branch, focal loss ordering, box propagation (S5b), "
-          "correction zero start, direction head (classes, decode with either axis sign, sign-free axis loss, "
+          "direction head (classes, decode with either axis sign, sign-free axis loss, "
           "direction BCE, gradients)")
     _selftest_refiner(Grid)
 

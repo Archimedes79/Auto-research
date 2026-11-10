@@ -51,7 +51,7 @@ def flat(res):
 def run(n):
     run_dir = os.environ.get("EQUIV_RUN", "runs/t10_dual_s0")
     cfg = T.read_config(os.path.join(run_dir, "config.json"))
-    model, loss, cached = T.build(cfg)
+    model = T.build(cfg)[0]
     ck = torch.load(os.path.join(run_dir, os.environ.get("EQUIV_CKPT", "ckpt_00003000.pt")), map_location="cpu", weights_only=False)
     m = model.load_state_dict({k[6:]: v for k, v in ck["state"].items() if k.startswith("model.")}, strict=False)
     assert not m.unexpected_keys and all(k.startswith("camera.") for k in m.missing_keys), m

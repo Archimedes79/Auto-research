@@ -106,13 +106,12 @@
 /bev_fusion/results/*/bundle/
 # the result reports and overview pages (results/BEV_*/: videos, html, the text the build leaves) are outputs the build tools make again, not records
 /bev_fusion/results/BEV_*/
-# scratch of problem 2: not in git (as for the lane problem); only the two launch scripts that the snapshot lists in project.json fingerprint_extra stay in
+# scratch of problem 2: not in git (as for the lane problem); only the README and the redirect train/run_ar.sh (named by the run records of old commands) stay in; the recipes of closed work are in studies/recipes/
 /bev_fusion/temp/**
 !/bev_fusion/temp/README.md
 !/bev_fusion/temp/train/
 /bev_fusion/temp/train/**
 !/bev_fusion/temp/train/run_ar.sh
-!/bev_fusion/temp/train/run_cfg.sh
 # staged for deletion: the history of what was tracked stays, only the list (README.md) is a record
 /bev_fusion/_to_delete/**
 !/bev_fusion/_to_delete/README.md

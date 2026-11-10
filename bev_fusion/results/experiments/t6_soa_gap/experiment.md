@@ -36,7 +36,7 @@ information; (M7) the detection loss dominates the shared trunk (gradient at the
   - R2 the features limit the maps: all layers within the band of `ref_s0` (and below `ref_long`). Next: map-supervised, higher-resolution image
     features (plan 2.7) and an unfreezing arm; task decoupling is not worth building.
   - R3 mixed: one or two layers outside the band -> add the seed twin before deciding.
-- **Gate (done, `temp/soa_gap/check_maps_only_cfg.py`, 2026-10-30).** On the pinned code the config builds, the task weights are (1, 1, 0, 0), the
+- **Gate (done, `studies/recipes/soa_gap/check_maps_only_cfg.py`, 2026-10-30).** On the pinned code the config builds, the task weights are (1, 1, 0, 0), the
   radar aux weight is 0, and the gradient of the objects and motion groups with respect to a shared parameter is exactly 0.
 - **Kill / validity criterion.** The vehicle AP of the run must collapse (the object head is not trained: AP@2 about 0); if it does not,
   the weights did not apply and the run is void. A run that diverges or whose loss is NaN is repeated once at the same settings.
@@ -45,7 +45,7 @@ information; (M7) the detection loss dominates the shared trunk (gradient at the
 
 ## 3 Result (run overnight by the lane: trained 02:07 - 03:48, evaluated 03:48 - 03:57 on 2026-10-31; `runs/t6_maps_only/eval/`)
 
-Cold VAL, 1000 keyframes of 82 scenes, dt 0, camera cells (`temp/soa_gap/steps_curve.py`, `compare_maps_only.py`; paired scene bootstrap 1000
+Cold VAL, 1000 keyframes of 82 scenes, dt 0, camera cells (`studies/recipes/soa_gap/steps_curve.py`, `compare_maps_only.py`; paired scene bootstrap 1000
 draws, b - a, `evaluation/bev_legacy.compare`):
 
 | layer | ref_s0 | ref_s1 | **maps-only** | gain vs ref_s0 [95 %] | gain vs ref_s1 [95 %] | ref_long (6000 steps) | GaussianCaR (other subset) |
@@ -80,6 +80,6 @@ image content helps the thin LINES more than removing the competition does, and 
 ## 2 Log
 
 - 2026-10-30: config and gate done (commit bb745cf); queued as the last line of `temp/study/queue3.txt` (`cfg:t6_maps_only:0a3d73c`, after
-  `train:lift_s` and `train:trunk_small`; `temp/soa_gap/queue_maps_only.sh`); the owner of the lane (session "BEV system") was told. The lane
+  `train:lift_s` and `train:trunk_small`; `studies/recipes/soa_gap/queue_maps_only.sh`); the owner of the lane (session "BEV system") was told. The lane
   was evaluating `trunk_second` at the time; the run starts after the two jobs in front of it.
 - 2026-10-31: finished (exit 0, evaluated); result and verdict in section 3 (the section sits above this log).

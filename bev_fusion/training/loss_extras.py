@@ -1,22 +1,14 @@
 """Loss extras from the literature scan of 2026-10-26 (plan.md 8.4; notes in literature/papers, scout tables
-temp/scout_tables/papers_new_{mtl,mapl,trainrecipe}.csv). New functions only - training/losses.py is not edited; the
-wiring into BEVLoss is described per function (for the owner of losses.py) and used by training/train.py where it needs
-no change of losses.py. Conventions as losses.py: prob / target (B, K, X, Y), weights w broadcastable (a cell of weight 0
-is ignored), per-channel results (K,), 0 for a channel without GT.
+temp/scout_tables/papers_new_{mtl,mapl,trainrecipe}.csv): the pieces of the training loop that are not part of BEVLoss
+(UWSO, group_gradient_cosines and cross_time_consistency are used by training/train.py; losses.py imports the weighted-sum
+helpers `_wsum` / `_wcount` from here). Conventions as losses.py: prob / target (B, K, X, Y), weights w broadcastable (a cell
+of weight 0 is ignored), per-channel results (K,), 0 for a channel without GT.
 
-1  dice_semimetric_loss    Dice semimetric losses (2303.16296): 1 - <p, t> / (<p, t> + |p - t|_1). Equal to the soft
-                           IoU loss for binary targets, but 0 at p = t for SOFT targets (the fractional footprint cells of
-                           pedestrians / two-wheelers): losses.soft_iou_loss gives 0.667 at p = t = 0.5. Drop-in for soft_iou_loss.
-2  boundary_fp_loss        graded false-positive penalty with the stored truncated distance field (Boundary loss,
-                           1812.07032, unsigned form): sum w d(x) p(x) / sum w; no new GT; add to the line group with
-                           `ramp` (regional term first, boundary weight rising to w_max).
-3  UWSO                    UW-SO (2408.07985): weights softmax(1 / (L.detach() T)) over the task groups, one
+1  UWSO                    UW-SO (2408.07985): weights softmax(1 / (L.detach() T)) over the task groups, one
                            hyper-parameter T, no extra pass; drop-in for losses.TaskWeights (`loss.task = UWSO(...)`).
-4  group_gradient_cosines  diagnostic: cosine and norm of the task-group gradients at the shared BEV feature (head
+2  group_gradient_cosines  diagnostic: cosine and norm of the task-group gradients at the shared BEV feature (head
                            backward passes only) - look at it before any gradient surgery.
-5  beta_nll                beta-NLL (2203.09168): sg(sigma^(2 beta)) (err^2 / (2 sigma^2) + log sigma / 1): a log-variance
-                           channel on the distance / velocity heads; beta = 1 is MSE, beta = 0.5 the recommended start.
-6  cross_time_consistency  train-only cross-time consistency of the predictions at dt = 0 and dt = +-0.5 s (MapTCL
+3  cross_time_consistency  train-only cross-time consistency of the predictions at dt = 0 and dt = +-0.5 s (MapTCL
                            2608.05209, ST-P3 / FIERY-style warping, UnFlow 1711.07837 masks): the prediction at dt = 0 is
                            carried to the other time by the splat geometry (ego steps + the motion field) and compared,
                            BOTH directions (forward: splat P_0 and compare with P_b, stop-grad on P_b; backward: gather
@@ -53,28 +45,6 @@ def _wcount(w, like):
 
 
 # ------------------------------------------------------------------------------------------------ 1
-def dice_semimetric_loss(prob, target, w):
-    """1 - <p, t> / (<p, t> + |p - t|_1) per channel -> (K,) (Dice semimetric, the Jaccard form 'JML2' of 2303.16296)."""
-    inter = _wsum(prob * target, w)
-    l1 = _wsum((prob - target).abs(), w)
-    return torch.where(_wsum(target, w) > 0, 1 - inter / (inter + l1).clamp(min=EPS), torch.zeros_like(inter))
-
-
-# ------------------------------------------------------------------------------------------------ 2
-def boundary_fp_loss(prob, dist, w, dist_max):
-    """Sum w * min(d, dist_max) / dist_max * p / sum w per channel -> (K,): a prediction at distance d from the GT line
-    costs in proportion to d (0 on the line, 1 at dist_max or further). dist (B, K, X, Y) in metres, as the stored
-    `<line>_dist` channels. It has no incentive to cover the line: use it together with a regional term."""
-    d = dist.clamp(max=dist_max) / dist_max
-    return _wsum(d * prob, w) / _wcount(w, prob)
-
-
-def ramp(step_frac, hold=0.2, length=0.4, w_max=0.5):
-    """Weight of the boundary term: 0 for the first `hold` of the training, then linear to w_max over `length`."""
-    return w_max * min(1.0, max(0.0, (step_frac - hold) / max(length, EPS)))
-
-
-# ------------------------------------------------------------------------------------------------ 3
 class UWSO(nn.Module):
     """Task-group weights w = softmax(1 / (L.detach() T)) (UW-SO, 2408.07985); total = scale * sum_g w_g L_g with
     scale = the number of groups present (so equal losses give the weight 1 per group, like equal weighting).
@@ -92,7 +62,7 @@ class UWSO(nn.Module):
         return total, {g: w[i].detach() for i, g in enumerate(names)}
 
 
-# ------------------------------------------------------------------------------------------------ 4
+# ------------------------------------------------------------------------------------------------ 2
 def group_gradient_cosines(group_losses, feature):
     """Gradients of every group loss at the shared feature tensor (retain_graph): -> (names, cosine matrix (G, G),
     norms (G,)). Costs the head backward passes only. Negative cosines = conflicting groups."""
@@ -107,16 +77,7 @@ def group_gradient_cosines(group_losses, feature):
     return names, unit @ unit.T, norms
 
 
-# ------------------------------------------------------------------------------------------------ 5
-def beta_nll(mean, logvar, target, w, beta=0.5):
-    """beta-NLL per channel -> (K,): sg(sigma^(2 beta)) * (0.5 (t - mu)^2 / sigma^2 + 0.5 log sigma^2), weighted mean.
-    beta = 0 is the plain Gaussian NLL, beta = 1 gives 0.5 * MSE; logvar is the head's extra channel."""
-    var = logvar.exp()
-    nll = 0.5 * (target - mean) ** 2 / var + 0.5 * logvar
-    return _wsum(var.detach() ** beta * nll, w) / _wcount(w, mean)
-
-
-# ------------------------------------------------------------------------------------------------ 6
+# ------------------------------------------------------------------------------------------------ 3
 def _norm_xy(pos, grid):
     """positions in metres (B, N, 2) -> grid_sample coordinates (B, N, 2) = (along W = y, along H = x)."""
     nx = 2 * (pos[..., 0] - grid.x_min) / (grid.nx * grid.res) - 1
@@ -208,39 +169,7 @@ def _blob(grid, cx, cy, s=1.2, device="cpu"):
 
 def _selftest():
     torch.manual_seed(0)
-    # 1 Dice semimetric: equals the soft IoU loss for binary targets, 0 at p = t for a soft target (soft IoU is not)
-    try:
-        from .losses import soft_iou_loss
-    except ImportError:
-        from losses import soft_iou_loss
-    t = (torch.rand(2, 3, 16, 16) > 0.7).float()
-    p = torch.rand(2, 3, 16, 16)
-    w = torch.ones(2, 1, 16, 16)
-    assert torch.allclose(dice_semimetric_loss(p, t, w), soft_iou_loss(p, t, w), atol=1e-5), "binary = soft IoU"
-    ts = torch.full((1, 1, 8, 8), 0.5)
-    ws = torch.ones(1, 1, 8, 8)
-    assert dice_semimetric_loss(ts.clone(), ts, ws).abs().max() < 1e-6 and soft_iou_loss(ts.clone(), ts, ws).max() > 0.3
-    pp = torch.rand(1, 1, 8, 8, requires_grad=True)
-    dice_semimetric_loss(pp, ts, ws).sum().backward()
-    assert torch.isfinite(pp.grad).all()
-    wz = torch.ones(1, 1, 8, 8)
-    wz[..., :4] = 0                                                             # ignored cells: no loss, no gradient
-    pq = torch.rand(1, 1, 8, 8, requires_grad=True)
-    dice_semimetric_loss(pq, ts, wz).sum().backward()
-    assert pq.grad[..., :4].abs().sum() == 0
-
-    # 2 boundary FP loss: 0 on the line, grows with the displacement, far false positives cost more than near ones
-    line = torch.zeros(1, 1, 32, 32)
-    line[..., 16] = 1
-    dist = torch.stack([torch.arange(32.0)] * 32)[None, None]                   # |column - 16| below
-    dist = (dist - 16).abs() * 0.5                                              # metres, 0.5 m cells
-    on, off2, off6 = (torch.roll(line, k, 3) for k in (0, 2, 6))
-    one32 = torch.ones(1, 1, 32, 32)
-    b = [float(boundary_fp_loss(x, dist, one32, 3.0)) for x in (on, off2, off6)]
-    assert b[0] < 1e-9 and b[0] < b[1] < b[2], b
-    assert ramp(0.1) == 0 and abs(ramp(0.4) - 0.25) < 1e-9 and ramp(1.0) == 0.5
-
-    # 3 UW-SO: weights sum to 1, the smaller loss gets the larger weight, drop-in call of TaskWeights, equal losses -> 1 each
+    # 1 UW-SO: weights sum to 1, the smaller loss gets the larger weight, drop-in call of TaskWeights, equal losses -> 1 each
     uw = UWSO(T=1.0)
     tot, wts = uw({"areas": torch.tensor(0.2), "lines": torch.tensor(0.8), "objects": torch.tensor(0.5)})
     assert abs(sum(float(v) for v in wts.values()) - 1) < 1e-6 and wts["areas"] > wts["objects"] > wts["lines"]
@@ -250,7 +179,7 @@ def _selftest():
     uw({"a": la, "b": torch.tensor(1.0)})[0].backward()
     assert la.grad is not None and torch.isfinite(la.grad)
 
-    # 4 group gradient cosines: parallel, opposite and orthogonal groups
+    # 2 group gradient cosines: parallel, opposite and orthogonal groups
     f = torch.randn(4, 3, requires_grad=True)
     g_par, g_opp, g_orth = (f * 2).sum(), (-f * 3).sum(), (f[:, 0] * 0 + f[:, 1].sum() * 0 + (f * torch.tensor([[0.0, 0.0, 1.0]]).expand_as(f)).sum() * 0).sum()
     base = (f * torch.tensor([[1.0, 0.0, 0.0]])).sum()                          # gradient (1, 0, 0) per row
@@ -260,21 +189,7 @@ def _selftest():
     assert abs(C[i["base"], i["par"]] - 1) < 1e-6 and abs(C[i["base"], i["opp"]] + 1) < 1e-6 and abs(C[i["base"], i["orth"]]) < 1e-6
     assert abs(nrm[i["par"]] / nrm[i["base"]] - 2) < 1e-5
 
-    # 5 beta-NLL: beta = 1 -> 0.5 * MSE for the mean (the variance drops out of its gradient), beta = 0 -> the NLL;
-    #   a larger variance is cheaper where the error is large (heteroscedastic)
-    mu = torch.randn(2, 1, 6, 6, requires_grad=True)
-    tg = torch.randn(2, 1, 6, 6)
-    lv = torch.randn(2, 1, 6, 6, requires_grad=True)
-    w6 = torch.ones(2, 1, 6, 6)
-    g1 = torch.autograd.grad(beta_nll(mu, lv, tg, w6, 1.0).sum(), mu)[0]
-    g_mse = torch.autograd.grad((0.5 * ((tg - mu) ** 2).mean()), mu)[0]
-    assert torch.allclose(g1, g_mse, atol=1e-6), "beta = 1: MSE gradient"
-    err = torch.full((1, 1, 4, 4), 2.0)
-    zero = torch.zeros(1, 1, 4, 4)
-    w4 = torch.ones(1, 1, 4, 4)
-    assert beta_nll(zero, torch.full_like(err, math.log(4.0)), err, w4, 0.0) < beta_nll(zero, torch.zeros_like(err), err, w4, 0.0)
-
-    # 6 cross-time consistency: a blob moving at 8 m/s, ego static, the probabilities at dt = 0 and +-0.5 s exact
+    # 3 cross-time consistency: a blob moving at 8 m/s, ego static, the probabilities at dt = 0 and +-0.5 s exact
     grid = Grid(x_min=0.0, x_max=32.0, y_min=-8.0, y_max=8.0, res=0.5)
     X, Y = grid.nx, grid.ny
     P = {0.0: _blob(grid, 12.0, -2.0), 0.5: _blob(grid, 16.0, -2.0), -0.5: _blob(grid, 8.0, -2.0)}
@@ -322,8 +237,7 @@ def _selftest():
     assert vg.grad is not None and vg.grad.abs().sum() > 0
     wv = {0.0: torch.ones(1, 1, X, Y), 0.5: torch.zeros(1, 1, X, Y), -0.5: torch.zeros(1, 1, X, Y)}
     assert float(cross_time_consistency(P, st, v_true, grid, weights=wv)["total"]) == 0.0, "no visible cell: no loss"
-    print("loss_extras selftest ok: Dice semimetric (= soft IoU for binary, 0 at soft p = t), boundary FP loss graded by "
-          "distance, UW-SO weights, group gradient cosines (parallel / opposite / orthogonal), beta-NLL (beta = 1 -> MSE), "
+    print("loss_extras selftest ok: UW-SO weights, group gradient cosines (parallel / opposite / orthogonal), "
           f"cross-time consistency (moving blob {float(r['total']):.3f} vs no motion {float(r0['total']):.3f}; "
           f"pushed-out field {float(rf['total']):.2f} not 0; ego motion exact: matched-cell error "
           f"{float(rst['ferr@+0.5']):.3f} / {float(rst['berr@+0.5']):.3f} (fwd / bwd) vs wrong step "

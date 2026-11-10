@@ -70,9 +70,9 @@ class TimeMover(nn.Module):
     With a `carry` the splat runs over [state; carry]: the first C channels are the state moved exactly as a call without carry would move it (every channel
     is scattered on its own and the weights do not depend on the channels), which is why one call can serve both heads (ModelConfig.share_mover)."""
 
-    def __init__(self, c, grid=None, hidden=64, v_max=40.0, corr=None):
+    def __init__(self, c, grid=None, hidden=64, v_max=40.0):
         super().__init__()
-        self.grid, self.corr = grid or Grid(), corr
+        self.grid = grid or Grid()
         self.motion = MotionHead(c, hidden, v_max)
 
     def forward(self, state, dt, v, omega, v_field=None, carry=None):
@@ -83,11 +83,9 @@ class TimeMover(nn.Module):
             raise ValueError("TimeMover without its velocity head (ModelConfig.motion_block) needs v_field on every call")
         if carry is None:
             head = self.motion if v_field is None else (lambda _s: v_field)
-            return splat_bev(state, self.grid, dt, v, omega, head=head, corr=self.corr)
+            return splat_bev(state, self.grid, dt, v, omega, head=head)
         vf = self.motion(state) if v_field is None else v_field   # the head reads the state only, never the carried channels
         head = lambda _s: vf  # noqa: E731
-        if self.corr is not None:
-            raise ValueError("carry with a position correction: the correction would read the carried channels")
         C = state.shape[1]
         out, mass, v_hat = splat_bev(torch.cat([state, carry.to(state.dtype)], 1), self.grid, dt, v, omega, head=head)
         return out[:, :C], mass, v_hat, out[:, C:]

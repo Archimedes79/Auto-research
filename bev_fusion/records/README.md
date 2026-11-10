@@ -1,6 +1,6 @@
 # records - the run records of bev_fusion under autoresearch (D23, 2026-10-31)
 
-Since D23 a bev_fusion training starts through the launcher of the research system, `../../autoresearch/tools/run.py`, like the runs of the lane problem. The launcher writes the card (hypothesis, prediction, rule) and the facts of the run into the ledger, tags the code it ran (`bf/<run id>`: `training/`, `evaluation/`, `GtGenerator/`, `tests/`, `temp/train/run_cfg.sh` and `autoresearch/`, uncommitted changes included), waits for a GPU slot shared with the lane problem (2 slots on this machine), retries a CUDA "unknown error" and writes a done flag only for exit code 0. The paths are in `../project.json`.
+Since D23 a bev_fusion training starts through the launcher of the research system, `../../autoresearch/tools/run.py`, like the runs of the lane problem. The launcher writes the card (hypothesis, prediction, rule) and the facts of the run into the ledger, tags the code it ran (`bf/<run id>`: `training/`, `evaluation/`, `GtGenerator/`, `autoresearch/trainkit`, `tests/` and `tools/run_ar.sh`, uncommitted changes included; the launcher `run_cfg.sh` of the first runs, superseded by `tools/run_ar.sh`, is kept in `studies/recipes/train/`), waits for a GPU slot shared with the lane problem (2 slots on this machine), retries a CUDA "unknown error" and writes a done flag only for exit code 0. The paths are in `../project.json`.
 
 | file / folder | what |
 |---|---|
@@ -12,6 +12,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `jobs/` | the job files of the training system and how the other two suites are called, one folder each: `training/` (`trainsuite`), `running/` (`Runner`: no job files, the calls), `evaluation/` (`evalsuite`: no job files, the calls and the mapping from Mirko's sketch); small json recipes kept in git, an example checked by the suite's own `check` |
 | `CKPT_SLIM_2026-11-01.md` | what the cleanup of 2026-11-01 did: 34 finished runs slimmed to one checkpoint each (per-run sizes), the outdated caches deleted, what was kept on purpose and what is open |
 | `morning_2026-11-01.md` | summary of the overnight round of 2026-11-01 (D28): t10_dual seed twin, the velocity fix t11 (arms B' / B2), the prototype command, incidents and open items |
+| `observe_2026-10-30_notes.md` | what the observability report of `t1_r4_soa` showed (2026-10-30, at Mirko's request): the tool faults found by looking at the pictures and their fixes; moved here from `temp/review/observe_2026-10-30/NOTES.md` on 2026-11-10 (the probes it names are not in the tree) |
 | `sensor_coverage_2026-11-01.md` | proposal: one coverage rule per output type for training, evaluation and execution (what the code does today, findings, open points; Mirko's question of 2026-11-01) |
 | `cleanup_inventory_2026-11-02.md` | the repository-wide clean-up of D44 (5): a size and a rule per class, what is protected, what each class needs (owner, tag, archive); read-only list, nothing deleted by it |
 | `ckpt_archive_2026-11-10.md` | the 11 checkpoint files (1.8 GB) of old runs moved to `D:Auto-researchNuScenes_checkpointsbev_fusion` (copied, SHA-256 compared, then removed from C:; Mirko, hard rule 5), what stays and the restore command |
@@ -37,7 +38,7 @@ wsl bash -c 'AR_PROJECT=../bev_fusion nohup python3 ../autoresearch/tools/run.py
 - After the run: `ledger.py note <run id> --result "..." --decision "..."` (with the same `AR_PROJECT`).
 - A planned row first (`ledger.py add <run id> --hyp ... --pred ... --rule ...`) lets the start line carry only `--id`; chains wait with `--after <run id>`.
 
-Not yet under the launcher: the queue scripts in `temp/study/` (`lane*.sh`); they keep working, but their runs have no ledger row. The GT that a training reads is built from the live `GtGenerator/` (the tag records its state; the GT signature in the run's config is item F3 of the repository review).
+Not yet under the launcher: the queue scripts in `studies/recipes/study/` (`lane*.sh`, they call the superseded `run_cfg.sh`); they keep working, but their runs have no ledger row. The GT that a training reads is built from the live `GtGenerator/` (the tag records its state; the GT signature in the run's config is item F3 of the repository review).
 
 ## The best three networks (keep3.json)
 

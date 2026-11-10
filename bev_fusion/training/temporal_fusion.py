@@ -22,13 +22,7 @@ read once per frame), so nothing blurs or lags over time - the failure of chaine
 `obs_mass` (B, 1, X, Y) marks where the sensor actually observed (camera field of view, radar coverage); cells
 outside write nothing. The state is a dict of tensors; `detach_state` cuts the graph (truncated BPTT).
 
-ONE code path for camera and radar (Mirko): the two branches differ only in the data they pass, not in the module. The one
-separation is EXPLICIT data (`n_explicit` trailing input channels, e.g. the radar's Doppler information, counts, age):
-they are propagated through the window like all channels, but (a) vector / tensor channels (`vec2` = start indices of
-2-vectors, `sym2` = start indices of symmetric 2x2 tensors stored as (xx, xy, yy)) are ROTATED with the ego rotation of
-their source frame (a vector of the source axes seen in the target axes: R(-theta) v, a tensor R A R^T), and (b) they
-are not written to the static memory (an instantaneous measurement, not a property of the world); they still feed
-the velocity head as evidence. The camera runs the same class with n_explicit = 0.
+ONE code path for camera and radar (Mirko): the two branches differ only in the data they pass, not in the module.
 Conventions as training/splat.py: x forward, y left, maps (B, C, X, Y).
 Run the self-test: python training/temporal_fusion.py
 """
@@ -131,49 +125,28 @@ def read_memory(M, W, pose, ego_pts, X, Y, mem_grid):
     return out[:, :-1] / (den + 1e-6), den
 
 
-def rotate_explicit(x, theta, vec2=(), sym2=()):
-    """x (B, K, C, X, Y) sources, theta (K,) ego rotation of each source frame to the target (radians, left turn
-    positive): vec2 channels (c, c + 1) -> R(-theta) v, sym2 channels (c, c + 1, c + 2) = (xx, xy, yy) -> R A R^T."""
-    if not len(vec2) and not len(sym2):
-        return x
-    x = x.clone()
-    shape = (1, -1, 1, 1) if theta.dim() == 1 else (theta.shape[0], theta.shape[1], 1, 1)       # (K,) or per sample (B, K)
-    c, s = torch.cos(theta).view(shape), torch.sin(theta).view(shape)                           # R(-theta) = [[c, s], [-s, c]]
-    for i in vec2:
-        vx, vy = x[:, :, i].clone(), x[:, :, i + 1].clone()
-        x[:, :, i], x[:, :, i + 1] = c * vx + s * vy, -s * vx + c * vy
-    for i in sym2:
-        a, b, d = x[:, :, i].clone(), x[:, :, i + 1].clone(), x[:, :, i + 2].clone()
-        x[:, :, i] = c * c * a + 2 * c * s * b + s * s * d
-        x[:, :, i + 1] = -c * s * a + (c * c - s * s) * b + c * s * d
-        x[:, :, i + 2] = s * s * a - 2 * c * s * b + c * c * d
-    return x
-
-
 class TemporalFusion(nn.Module):
     # w_max 2 (was 8, 2026-10-26): the fuse conv sees conf / w_max; sequence training uses clips of 3 keyframes (at most 2
     # writes before the last read), so with 8 the conf input never exceeded about 0.25 in training but reaches 1.0 on a
     # long drive (out of distribution); with 2 it saturates inside a training clip. Window-only runs never read the memory.
     def __init__(self, c_in, c_out, grid, mem_cells=(256, 256), v_static=1.0, mem_tau=10.0, w_max=2.0, tau_src=0.3,
-                 head_hidden=32, use_memory=True, n_explicit=0, vec2=(), sym2=()):
+                 head_hidden=32):
         super().__init__()
         self.grid, self.c_in, self.c_out = grid, c_in, c_out
-        self.n_explicit, self.vec2, self.sym2 = n_explicit, tuple(vec2), tuple(sym2)
-        self.c_mem = c_in - n_explicit                                   # channels that live in the static memory
         self.mem_grid = Grid(x_min=-mem_cells[0] * grid.res / 2, x_max=mem_cells[0] * grid.res / 2,
                              y_min=-mem_cells[1] * grid.res / 2, y_max=mem_cells[1] * grid.res / 2, res=grid.res)
-        self.v_static, self.mem_tau, self.w_max, self.use_memory = v_static, mem_tau, w_max, use_memory
+        self.v_static, self.mem_tau, self.w_max = v_static, mem_tau, w_max
         self.head = VelocityHead(c_in, head_hidden)
         self.relevance = nn.Conv2d(c_in, 1, 1)
         nn.init.constant_(self.relevance.bias, 2.0)
         self.log_tau = nn.Parameter(torch.tensor(math.log(tau_src)))
-        self.fuse = nn.Sequential(nn.Conv2d(2 * c_in + self.c_mem + 3, c_out, 3, 1, 1, bias=False), nn.BatchNorm2d(c_out),
+        self.fuse = nn.Sequential(nn.Conv2d(3 * c_in + 3, c_out, 3, 1, 1, bias=False), nn.BatchNorm2d(c_out),
                                   nn.ReLU(True))
         self.register_buffer("ego_pts", grid_points(grid))
 
     def init_state(self, B, device=None, dtype=torch.float32):
         H, Wd = self.mem_grid.nx, self.mem_grid.ny
-        return {"M": torch.zeros(B, self.c_mem, H, Wd, device=device, dtype=dtype),
+        return {"M": torch.zeros(B, self.c_in, H, Wd, device=device, dtype=dtype),
                 "W": torch.zeros(B, 1, H, Wd, device=device, dtype=dtype),
                 "pose": torch.zeros(B, 3, device=device, dtype=dtype)}
 
@@ -207,31 +180,22 @@ class TemporalFusion(nn.Module):
         static = torch.exp(-v_hat.pow(2).sum(1, keepdim=True) / self.v_static ** 2)
         if len(past):
             out_w, mass_w = splat_window(list(past), self.grid, head=self.head, mass_gate=True)
-            # step values may be python scalars or per-sample (B,) tensors (nuScenes batches): ages / rotations (B, K)
-            def per_sample(fn):
-                return torch.stack([sum(fn(s) for s in steps) * cur.new_ones(B) for _, steps in past], 1)
-            ages = per_sample(lambda s: _col(s[0], cur)).abs()
-            theta = per_sample(lambda s: _col(s[0], cur) * _col(s[2], cur))
-            out_w = rotate_explicit(out_w, theta, self.vec2, self.sym2)
+            # step values may be python scalars or per-sample (B,) tensors (nuScenes batches): ages (B, K)
+            ages = torch.stack([sum(_col(s[0], cur) for s in steps) * cur.new_ones(B) for _, steps in past], 1).abs()
             agg, msum, age_mean = self.aggregate(out_w, mass_w, ages)
         else:
             agg, msum, age_mean = torch.zeros_like(cur), cur.new_zeros(B, 1, X, Y), cur.new_zeros(B, 1, X, Y)
-        if self.use_memory:
-            m_read, conf = read_memory(M, W, pose, self.ego_pts, X, Y, self.mem_grid)
-        else:
-            m_read, conf = cur.new_zeros(B, self.c_mem, X, Y), cur.new_zeros(B, 1, X, Y)
+        m_read, conf = read_memory(M, W, pose, self.ego_pts, X, Y, self.mem_grid)
         out = self.fuse(torch.cat([cur, agg, msum, age_mean, m_read, (conf / self.w_max).clamp(max=1.0)], 1))
-        if self.use_memory:
-            Cm = self.c_mem
-            om = obs_mass if obs_mass is not None else cur.new_ones(B, 1, X, Y)
-            feats = torch.cat([cur[:, :Cm].reshape(B, Cm, -1), static.reshape(B, 1, -1), om.reshape(B, 1, -1)], 1)
-            sp, mass = splat(feats, ego_to_memory(pose, self.ego_pts), self.mem_grid)
-            w_new = mass.clamp(max=1.0) * sp[:, Cm:Cm + 1] * sp[:, Cm + 1:Cm + 2]
-            dt = sum((_col(s[0], cur).abs() for s in as_chain(step)), cur.new_zeros(B))              # scalar or (B,) per step, summed over a chain
-            Wd = W * torch.exp(-dt / self.mem_tau).view(B, 1, 1, 1)
-            Wt = Wd + w_new
-            M = (M * Wd + sp[:, :Cm] * w_new) / (Wt + 1e-6)
-            W = Wt.clamp(max=self.w_max)
+        om = obs_mass if obs_mass is not None else cur.new_ones(B, 1, X, Y)
+        feats = torch.cat([cur.reshape(B, C, -1), static.reshape(B, 1, -1), om.reshape(B, 1, -1)], 1)
+        sp, mass = splat(feats, ego_to_memory(pose, self.ego_pts), self.mem_grid)
+        w_new = mass.clamp(max=1.0) * sp[:, C:C + 1] * sp[:, C + 1:C + 2]
+        dt = sum((_col(s[0], cur).abs() for s in as_chain(step)), cur.new_zeros(B))              # scalar or (B,) per step, summed over a chain
+        Wd = W * torch.exp(-dt / self.mem_tau).view(B, 1, 1, 1)
+        Wt = Wd + w_new
+        M = (M * Wd + sp[:, :C] * w_new) / (Wt + 1e-6)
+        W = Wt.clamp(max=self.w_max)
         aux = {"v_hat": v_hat, "static": static, "mass_sum": msum, "age_mean": age_mean, "mem_read": m_read,
                "mem_conf": conf, "agg": agg}
         return out, {"M": M, "W": W, "pose": pose}, aux
@@ -398,33 +362,8 @@ def _selftest():
     assert mod.relevance.weight.grad is not None and mod.log_tau.grad is not None
     assert mod.fuse[0].weight.grad is not None
 
-    # 9 explicit data (the radar side of the same class): vector / tensor channels are rotated with the ego rotation of their
-    #   source frame and stay out of the static memory; a left turn of 90 degrees turns a forward vector into a rightward one
-    sq = Grid(x_min=-8.0, x_max=8.0, y_min=-8.0, y_max=8.0, res=0.5)               # symmetric: a 90 degree turn maps it onto itself
-    Xs, Ys = sq.nx, sq.ny
-    rad = TemporalFusion(7, 8, sq, mem_cells=(64, 64), n_explicit=5, vec2=(2,), sym2=(4,)).eval()   # 2 learned + b (2) + A (3)
-    assert rad.c_mem == 2 and rad.init_state(1)["M"].shape[1] == 2, "explicit channels are not in the memory"
-    src = torch.zeros(1, 7, Xs, Ys)
-    src[:, 0] = 1.0
-    src[:, 2], src[:, 3] = 1.0, 0.0                                                  # b = (1, 0): forward
-    src[:, 4], src[:, 5], src[:, 6] = 1.0, 0.0, 0.0                                  # A = u u^T with u = forward (xx = 1)
-    th = math.pi / 2
-    with torch.no_grad():
-        out_w, mass_w = splat_window([(src, [(1.0, 0.0, th)])], sq, head=None, mass_gate=True)
-        rot = rotate_explicit(out_w, torch.tensor([th]), (2,), (4,))
-        ok = mass_w[0, 0, 0] > 0.99
-        assert ok.sum() > 800
-        bx, by = rot[0, 0, 2][ok].mean().item(), rot[0, 0, 3][ok].mean().item()
-        axx, axy, ayy = (rot[0, 0, i][ok].mean().item() for i in (4, 5, 6))
-        assert abs(bx) < 1e-5 and abs(by + 1.0) < 1e-5, f"vector after a left turn of 90 degrees: ({bx:.3f}, {by:.3f})"
-        assert abs(axx) < 1e-5 and abs(axy) < 1e-5 and abs(ayy - 1.0) < 1e-5, "tensor u u^T turned with the vector"
-        out, st9, aux9 = rad(src, [(src, [(1.0, 0.0, th)])], None, None)
-        assert out.shape == (1, 8, Xs, Ys) and torch.isfinite(out).all() and st9["M"].shape[1] == 2
-        # the camera is the same class with n_explicit = 0: the rotation is the identity
-        assert torch.equal(rotate_explicit(out_w, torch.tensor([th])), out_w)
-
     # 10 per-sample steps (nuScenes batches: different ego speed, yaw rate and dt per sample as (B,) tensors): one batched call
-    #    equals one call per sample (ages, rotations, memory decay and the pose all follow the sample)
+    #    equals one call per sample (ages, memory decay and the pose all follow the sample)
     mod = TemporalFusion(2, 8, grid, mem_cells=(128, 96)).eval()
     vs, oms, dts = torch.tensor([6.0, 12.0]), torch.tensor([0.0, 0.4]), torch.tensor([1 / 12, 1 / 6])
 
@@ -459,8 +398,8 @@ def _selftest():
     print(f"temporal_fusion selftest ok: lossless re-centring, fresh source dominates, memory vs world pattern "
           f"(straight corr {c14:.3f} -> {c36:.3f}, coverage {log[35][1]:.2f}; turning corr >= "
           f"{min(c for c, _, _ in logt[8:25]):.3f} over frames 8-24), no ghost trail with the velocity head "
-          f"({ghost_h:.3f} vs {ghost_o:.3f} without), window sources, gradients, explicit channels rotated and kept out "
-          f"of the memory (same class for radar), per-sample steps = one batched call, empty inputs")
+          f"({ghost_h:.3f} vs {ghost_o:.3f} without), window sources, gradients, "
+          f"per-sample steps = one batched call, empty inputs")
 
     try:
         from torch.utils.flop_counter import FlopCounterMode

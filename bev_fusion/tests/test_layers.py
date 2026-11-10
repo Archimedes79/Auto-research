@@ -14,7 +14,6 @@ import hashlib
 import math
 import os
 import sys
-from dataclasses import replace
 from itertools import product
 
 import numpy as np
@@ -66,7 +65,7 @@ def old_target_keys(centrelines):
     return keys + (["centreline", "centreline_dir"] if centrelines else [])
 
 
-def old_map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
+def old_map_terms(logits, T, spec, weights, cfg):
     idx = {}
     for i, (_, kind, _) in enumerate(spec):
         idx.setdefault(kind, []).append(i)
@@ -80,7 +79,7 @@ def old_map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
     terms, groups = {}, {}
     if "area" in idx:
         x, t, w = ch("area"), tg("area"), weights["area"]
-        bce, iou = L.soft_bce(x, t, w), L.overlap_loss(torch.sigmoid(x), t, w, cfg)
+        bce, iou = L.soft_bce(x, t, w), L.soft_iou_loss(torch.sigmoid(x), t, w)
         for j, n in enumerate(names["area"]):
             terms[f"area_bce.{n}"], terms[f"area_iou.{n}"] = bce[j], iou[j]
         groups["areas"] = (bce + cfg.w_area_iou * iou).mean()
@@ -93,12 +92,6 @@ def old_map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
         for j, n in enumerate(names["dist"]):
             terms[f"line_huber.{n}"] = hub[j]
         groups["lines"] = dice.mean() + hub.mean()
-        if cfg.line_boundary:
-            wb = L.ramp(step_frac, cfg.boundary_hold, cfg.boundary_ramp, cfg.boundary_w_max)
-            bnd = L.boundary_fp_loss(torch.sigmoid(ch("line")), tg("dist"), w, cfg.dist_max)
-            for j, n in enumerate(names["line"]):
-                terms[f"line_boundary.{n}"] = bnd[j]
-            groups["lines"] = groups["lines"] + wb * bnd.mean()
     if "centreline" in idx:
         w = weights["line"]
         dice = L.tolerant_dice_loss(torch.sigmoid(ch("centreline")), tg("centreline"), w, cfg.line_tolerance)[0]
@@ -107,7 +100,7 @@ def old_map_terms(logits, T, spec, weights, cfg, step_frac=1.0):
         groups["lines"] = groups.get("lines", 0.0) + dice + cfg.w_direction * dl
     if "object" in idx:
         x, t, w = ch("object"), tg("object"), weights["object"]
-        bce, iou = L.soft_bce(x, t, w), L.overlap_loss(torch.sigmoid(x), t, w, cfg)
+        bce, iou = L.soft_bce(x, t, w), L.soft_iou_loss(torch.sigmoid(x), t, w)
         for j, n in enumerate(names["object"]):
             terms[f"obj_bce.{n}"], terms[f"obj_iou.{n}"] = bce[j], iou[j]
         groups["objects"] = (bce + iou).mean()
@@ -129,7 +122,7 @@ class OldBEVLoss(L.BEVLoss):
         c = self.cfg
         self.spec, self.cam_spec, self.radar_spec = old_layer_spec(c.centrelines, c.dense_objects), old_layer_spec(False, True), old_radar_aux_spec(c.radar_stationary)
 
-    def terms_at(self, p, gts, dt, step_frac=1.0):
+    def terms_at(self, p, gts, dt):
         cfg = self.cfg
         dev = next(v for v in p.values() if torch.is_tensor(v)) if "obj" not in p else p["obj"]["hm"]
         T = L.build_layer_targets(gts, cfg, p.get("mass"), dt, dev.device)
@@ -139,7 +132,7 @@ class OldBEVLoss(L.BEVLoss):
             groups[g] = groups.get(g, 0.0) + v
         if "sem" in p:
             w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
-            t, g = old_map_terms(p["sem"], T, self.spec, w, cfg, step_frac)
+            t, g = old_map_terms(p["sem"], T, self.spec, w, cfg)
             terms.update(("sem." + k, v) for k, v in t.items())
             for k, v in g.items():
                 add(k, v)
@@ -157,17 +150,14 @@ class OldBEVLoss(L.BEVLoss):
             if cfg.consistency and tt is not None:
                 terms["motion_consistency"] = L.consistency_term(p["obj"]["vel"], p["v_hat"], tt)
                 add("motion", cfg.w_consistency * terms["motion_consistency"])
-        if "delta" in p:
-            terms["correction"] = L.correction_penalty(p["delta"])
-            fixed["correction"] = cfg.w_correction * terms["correction"]
         if "cam_aux" in p:
             wc = T["w_cam"]
-            t, g = old_map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg, step_frac)
+            t, g = old_map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg)
             terms.update(("cam_aux." + k, v) for k, v in t.items())
             fixed["cam_aux"] = cfg.w_cam_aux * sum(g.values())
         if "radar_aux" in p:
             wr = T["w_radar"]
-            t, g = old_map_terms(p["radar_aux"], T, self.radar_spec, {"object": wr * T["w_keep"], "stationary": wr}, cfg, step_frac)
+            t, g = old_map_terms(p["radar_aux"], T, self.radar_spec, {"object": wr * T["w_keep"], "stationary": wr}, cfg)
             terms.update(("radar_aux." + k, v) for k, v in t.items())
             fixed["radar_aux"] = cfg.w_radar_aux * sum(g.values())
         return terms, groups, fixed
@@ -178,7 +168,7 @@ class OldBEVLoss(L.BEVLoss):
             w = L.dt_weight(dt, step_frac, self.cfg)
             if w <= 0:
                 continue
-            terms, groups, fixed = self.terms_at(p, gts[dt], dt, step_frac)
+            terms, groups, fixed = self.terms_at(p, gts[dt], dt)
             tag = f"@{float(dt):+.1f}"
             out.update((k + tag, v) for k, v in terms.items())
             for g, v in groups.items():
@@ -230,14 +220,13 @@ for bad, why in ((dict(name="x", kind="blob"), "kind"), (dict(name="x", kind="ar
         check(True, f"a row with a bad {why} is refused")
 
 for cl, do in product((False, True), repeat=2):                   # the losses on the same logits / targets / weights
-    for arm in ({}, {"line_boundary": True}, {"area_overlap": "semimetric"}):
-        cfg = L.LossConfig(centrelines=cl, dense_objects=do, **arm)
-        T = L.build_layer_targets(gts[0.0], cfg)
-        w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
-        spec = L.layer_spec(cl, do)
-        got, gg = L.map_terms(logits(len(spec)), T, spec, w, cfg, 0.7)
-        ref, rg = old_map_terms(logits(len(spec)), T, old_layer_spec(cl, do), w, cfg, 0.7)
-        check(same(got, ref) and same(gg, rg) and len(got) > 0, f"map_terms = the old body: centrelines={cl} dense_objects={do} {arm or 'plain'} ({len(got)} terms, groups {list(gg)})")
+    cfg = L.LossConfig(centrelines=cl, dense_objects=do)
+    T = L.build_layer_targets(gts[0.0], cfg)
+    w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
+    spec = L.layer_spec(cl, do)
+    got, gg = L.map_terms(logits(len(spec)), T, spec, w, cfg)
+    ref, rg = old_map_terms(logits(len(spec)), T, old_layer_spec(cl, do), w, cfg)
+    check(same(got, ref) and same(gg, rg) and len(got) > 0, f"map_terms = the old body: centrelines={cl} dense_objects={do} ({len(got)} terms, groups {list(gg)})")
 derived = {"boxes", "obj_cells", "w_map", "w_lines", "w_obj", "w_cam", "w_radar", "w_keep", "w_fusion", "radar_stationary"}      # made from the layers, not read
 for cl in (False, True):
     check(set(L.build_layer_targets(gts[0.0], L.LossConfig(centrelines=cl))) == set(old_target_keys(cl)) | derived,
@@ -247,19 +236,19 @@ for cl, rs in product((False, True), repeat=2):
     cfg = L.LossConfig(centrelines=cl, radar_stationary=rs)
     lm = L.BEVLoss(cfg, grid)
     p = {"sem": logits(len(lm.spec)), "cam_aux": logits(len(lm.cam_spec), seed=4), "radar_aux": logits(len(lm.radar_spec), seed=5)}
-    terms, groups, fixed = lm.terms_at(p, gts[0.0], 0.0, 0.7)
+    terms, groups, fixed = lm.terms_at(p, gts[0.0], 0.0)
     T = L.build_layer_targets(gts[0.0], cfg)
     ref = {}
-    ref.update(("sem." + k, v) for k, v in old_map_terms(p["sem"], T, old_layer_spec(cl, True), {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}, cfg, 0.7)[0].items())
+    ref.update(("sem." + k, v) for k, v in old_map_terms(p["sem"], T, old_layer_spec(cl, True), {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}, cfg)[0].items())
     wc = T["w_cam"]
-    ref.update(("cam_aux." + k, v) for k, v in old_map_terms(p["cam_aux"], T, old_layer_spec(False, True), {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg, 0.7)[0].items())
+    ref.update(("cam_aux." + k, v) for k, v in old_map_terms(p["cam_aux"], T, old_layer_spec(False, True), {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg)[0].items())
     wr = T["w_radar"]
-    ref.update(("radar_aux." + k, v) for k, v in old_map_terms(p["radar_aux"], T, old_radar_aux_spec(rs), {"object": wr * T["w_keep"], "stationary": wr}, cfg, 0.7)[0].items())
+    ref.update(("radar_aux." + k, v) for k, v in old_map_terms(p["radar_aux"], T, old_radar_aux_spec(rs), {"object": wr * T["w_keep"], "stationary": wr}, cfg)[0].items())
     check(same(terms, ref), f"BEVLoss.terms_at (centrelines={cl}, radar_stationary={rs}): sem, cam_aux and radar_aux terms = the old body ({len(ref)} terms)")
 
 # the whole BEVLoss at dt 0 and 0.5 against the old copy: every term, the dt-weighted groups, the Kendall terms (s_g set to non-trivial values), aux and the total
-for cl, rs, boundary in product((False, True), (False, True), (False, True)):
-    cfg = L.LossConfig(centrelines=cl, radar_stationary=rs, line_boundary=boundary)
+for cl, rs in product((False, True), repeat=2):
+    cfg = L.LossConfig(centrelines=cl, radar_stationary=rs)
     new, old = L.BEVLoss(cfg, grid), OldBEVLoss(cfg, grid)
     s_g = torch.tensor([0.3, -0.7, 0.9, -1.1])
     for lm in (new, old):
@@ -268,8 +257,7 @@ for cl, rs, boundary in product((False, True), (False, True), (False, True)):
     preds = {}
     for dt in (0.0, 0.5):
         q = {"sem": logits(len(new.spec), seed=11), "cam_aux": logits(len(new.cam_spec), seed=12), "radar_aux": logits(len(new.radar_spec), seed=13),
-             "obj": {k: torch.randn(1, c, X, Y, generator=g) for k, c in (("hm", 3), ("off", 2), ("size", 2), ("rot", 2), ("rad", 1), ("vel", 2))},
-             "delta": 0.1 * torch.randn(1, 20, 2, generator=g)}
+             "obj": {k: torch.randn(1, c, X, Y, generator=g) for k, c in (("hm", 3), ("off", 2), ("size", 2), ("rot", 2), ("rad", 1), ("vel", 2))}}
         if dt == 0.0:
             q["v_hat"] = torch.randn(1, 2, X, Y, generator=g)
         else:
@@ -278,7 +266,7 @@ for cl, rs, boundary in product((False, True), (False, True), (False, True)):
     got, ref = new(preds, gts, 0.7), old(preds, gts, 0.7)
     groups_ = [k for k in ref if k.startswith(("group.", "s."))] + ["aux", "total"]
     check(same(got, ref) and len(groups_) >= 8 and abs(float(ref["total"])) > 1.0,
-          f"whole BEVLoss = the old copy: centrelines={cl} radar_stationary={rs} line_boundary={boundary} ({len(ref)} entries: terms, {len(groups_) - 2} group / Kendall, aux, total {float(ref['total']):.3f})")
+          f"whole BEVLoss = the old copy: centrelines={cl} radar_stationary={rs} ({len(ref)} entries: terms, {len(groups_) - 2} group / Kendall, aux, total {float(ref['total']):.3f})")
 
 # the network: the state_dict of a model with the option off is that of before (golden: key + shape rows of the code of 479100d)
 GRID = {"x_max": 16.0, "y_min": -8.0, "y_max": 8.0}                 # 32 x 32 cells

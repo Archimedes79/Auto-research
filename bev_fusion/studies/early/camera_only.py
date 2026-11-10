@@ -12,7 +12,6 @@ Metrics on held-out scenes: semantic IoU at 0.5 per class and range band; object
 errors (studies/early/object_head_synth.evaluate); depth: mean absolute error of the expected depth on non-sky cells.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/camera_only.py [--quick]
 """
-import math
 import os
 import random
 import sys

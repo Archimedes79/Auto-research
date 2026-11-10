@@ -29,6 +29,7 @@ import synthetic_world as sw  # noqa: E402
 import temporal_fusion as TF  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from lift_pd import Grid  # noqa: E402
+from model_gates import flat  # noqa: E402
 from model import ModelConfig  # noqa: E402
 from test_slots import BASE, batch_for  # noqa: E402
 from train import forward_loss  # noqa: E402
@@ -172,16 +173,6 @@ def run(m, loss, batch, flags):
     grads = {n: q.grad.clone() for n, q in m.named_parameters() if q.grad is not None}
     m.cfg.share_mover = m.cfg.splat_fused = m.cfg.sync_free = False
     return out, res, grads, {"told": {n for n, v in PROBE["seen"] if v}, "mover": PROBE["mover"]}
-
-
-def flat(res):
-    d = {}
-    for dt, p in res["out"].items():
-        for k, v in p.items():
-            for kk, t in (v.items() if isinstance(v, dict) else [("", v)]):
-                if torch.is_tensor(t):
-                    d[(dt, k, kk)] = t
-    return d
 
 
 ARMS = [("plain 1x1 motion head", {}), ("motion block + box read (the carry path)", dict(motion_block=True, box_vel_from_field=True))]

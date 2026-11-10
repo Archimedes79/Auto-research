@@ -50,10 +50,10 @@ def _geo_dtype(dtype):
     return torch.float32 if dtype in (torch.float16, torch.bfloat16) else dtype
 
 
-def splat_positions(p, dt, v, omega, v_obj=None, delta=None):
-    """p (B, N, 2) source positions; dt, v, omega: (B,) or (B, N); v_obj (B, N, 2) or None; delta (B, N, 2) a learned
-    correction in the target frame (CorrectionHead) or None -> p' (B, N, 2). Half-precision inputs are computed in float32."""
-    p, v_obj, delta = _geo(p), _geo(v_obj), _geo(delta)
+def splat_positions(p, dt, v, omega, v_obj=None):
+    """p (B, N, 2) source positions; dt, v, omega: (B,) or (B, N); v_obj (B, N, 2) or None -> p' (B, N, 2). Half-precision inputs are
+    computed in float32."""
+    p, v_obj = _geo(p), _geo(v_obj)
 
     def col(t):
         t = torch.as_tensor(t, dtype=p.dtype, device=p.device)
@@ -66,17 +66,16 @@ def splat_positions(p, dt, v, omega, v_obj=None, delta=None):
         qy = qy + v_obj[..., 1] * dt
     th = omega * dt
     c, s = torch.cos(th), torch.sin(th)
-    out = torch.stack([c * qx + s * qy, -s * qx + c * qy], -1)
-    return out if delta is None else out + delta
+    return torch.stack([c * qx + s * qy, -s * qx + c * qy], -1)
 
 
-def chain_positions(p, steps, v_obj=None, delta=None):
+def chain_positions(p, steps, v_obj=None):
     """Chain the COORDINATES over several frames (Mirko, 2026-10-25; temp/checks showed that chaining resampled MAPS
     smears and lags): p (B, N, 2) positions in the source frame, steps = [(dt_i, v_i, omega_i), ...] from the source
     frame to the target, oldest first (each value a scalar or (B,)); v_obj (B, N, 2) object velocity in the source
-    axes, constant in the world, so its vector is rotated along by R(-omega_i dt_i) at every step; delta (B, N, 2) an
-    optional correction added once at the end. The positions are then splatted once (splat_window)."""
-    p, v_obj, delta = _geo(p), _geo(v_obj), _geo(delta)
+    axes, constant in the world, so its vector is rotated along by R(-omega_i dt_i) at every step. The positions are then
+    splatted once (splat_window)."""
+    p, v_obj = _geo(p), _geo(v_obj)
     pos, vel = p, v_obj
     for dt, v, omega in steps:
         pos = splat_positions(pos, dt, v, omega, vel)
@@ -85,7 +84,7 @@ def chain_positions(p, steps, v_obj=None, delta=None):
                   * torch.as_tensor(dt, dtype=p.dtype, device=p.device)).reshape(-1, 1)
             c, s = torch.cos(th), torch.sin(th)
             vel = torch.stack([c * vel[..., 0] + s * vel[..., 1], -s * vel[..., 0] + c * vel[..., 1]], -1)
-    return pos if delta is None else pos + delta
+    return pos
 
 
 def ego_speed_yawrate(T_src, T_tgt, dt):
@@ -117,35 +116,6 @@ class VelocityHead(nn.Module):
         raw = self.net(x)
         out = self.v_max * torch.tanh(raw / self.v_max)
         return out.squeeze(-1) if squeeze else out
-
-
-class CorrectionHead(nn.Module):
-    """g_phi: a small learned correction of the target position (Mirko, 2026-10-25), on top of the geometric model:
-    delta = d_max tanh(raw / d_max), raw = MLP([feature; v; omega; dt; v dt; omega dt; x / x_scale; y / y_scale]) as
-    1x1 convs, 2 outputs in metres (target frame). Bounded to d_max (default 1 m = 2 cells: the range in which the
-    bilinear splat gives a usable position gradient) and zero at the start (pure geometric model). It can absorb what
-    the model leaves out: lag and blur of chained splats, acceleration, odometry / time-stamp / model errors."""
-
-    N_EGO = 7
-
-    def __init__(self, cin, hidden=32, d_max=1.0, x_scale=60.0, y_scale=26.0):
-        super().__init__()
-        self.net = nn.Sequential(nn.Conv2d(cin + self.N_EGO, hidden, 1), nn.ReLU(),
-                                 nn.Conv2d(hidden, hidden, 1), nn.ReLU(), nn.Conv2d(hidden, 2, 1))
-        nn.init.zeros_(self.net[4].weight)
-        nn.init.zeros_(self.net[4].bias)
-        self.d_max, self.x_scale, self.y_scale = d_max, x_scale, y_scale
-
-    def forward(self, feat, pos, dt, v, omega):
-        """feat (B, C, N) and pos (B, N, 2) source positions; dt, v, omega (B,) or scalars -> delta (B, N, 2)."""
-        B, C, N = feat.shape
-
-        def col(t):
-            return torch.as_tensor(t, dtype=feat.dtype, device=feat.device).reshape(-1, 1).expand(B, N)
-        dt, v, omega = col(dt), col(v), col(omega)
-        ego = torch.stack([v, omega, dt, v * dt, omega * dt, pos[..., 0] / self.x_scale, pos[..., 1] / self.y_scale], 1)
-        raw = self.net(torch.cat([feat, ego], 1).unsqueeze(-1))[..., 0]          # (B, 2, N)
-        return (self.d_max * torch.tanh(raw / self.d_max)).permute(0, 2, 1)
 
 
 def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False, fused=None):
@@ -205,43 +175,33 @@ def splat(feat, pos, grid, importance=None, eps=1e-6, mass_gate=False, fused=Non
     return out.view(B, C, X, Y), mass.view(B, 1, X, Y)
 
 
-def splat_bev(bev, grid, dt, v, omega, head=None, importance=None, corr=None):
+def splat_bev(bev, grid, dt, v, omega, head=None):
     """Move a BEV map (B, C, X, Y) of the source time to the target time: positions of the cell centres by
-    splat_positions with v_hat = head(bev) (or 0) and the correction corr(...) (or none), then splat.
+    splat_positions with v_hat = head(bev) (or 0), then splat.
     Returns (out, mass, v_hat or None)."""
     B, C, X, Y = bev.shape
     p = grid_points(grid, bev.device, _geo_dtype(bev.dtype)).unsqueeze(0).expand(B, -1, -1)     # cell centres in float32 even when the BEV is bf16 / fp16
     v_hat = head(bev) if head is not None else None
     v_obj = v_hat.permute(0, 2, 3, 1).reshape(B, X * Y, 2) if v_hat is not None else None
-    delta = corr(bev.reshape(B, C, X * Y), p.to(bev.dtype), dt, v, omega) if corr is not None else None      # the correction head reads them in the BEV's dtype, as before
-    pos = splat_positions(p, dt, v, omega, v_obj, delta)
-    imp = importance.reshape(B, X * Y) if importance is not None else None
-    out, mass = splat(bev.reshape(B, C, X * Y), pos, grid, imp)
+    pos = splat_positions(p, dt, v, omega, v_obj)
+    out, mass = splat(bev.reshape(B, C, X * Y), pos, grid)
     return out, mass, v_hat
 
 
-def splat_window(frames, grid, head=None, corr=None, importance=None, mass_gate=True):
+def splat_window(frames, grid, head=None, mass_gate=True):
     """Bring the last K original frames into the current time, each with ONE splat (no resampling chain).
 
     frames: list of (bev (B, C, X, Y), steps) - a past frame with its own per-frame ego steps to the current time
     (see chain_positions; [] for the current frame itself). Per frame: v_hat = head(bev) from its own features, the cell
-    centres chained by chain_positions, the correction corr(...) evaluated with the total dt and the dt-weighted mean
-    v, omega of its steps, one splat. importance: callable bev -> (B, X, Y) or None.
+    centres chained by chain_positions, one splat.
     Returns out (B, K, C, X, Y) and mass (B, K, 1, X, Y) for the temporal fusion."""
     outs, masses = [], []
     for bev, steps in frames:
         B, C, X, Y = bev.shape
         p = grid_points(grid, bev.device, _geo_dtype(bev.dtype)).unsqueeze(0).expand(B, -1, -1)       # float32 cell centres even when the BEV is bf16 / fp16
         v_obj = head(bev).permute(0, 2, 3, 1).reshape(B, X * Y, 2) if head is not None else None
-        delta = None
-        if corr is not None and steps:
-            T = sum(float(s[0]) for s in steps)
-            v_m = sum(float(s[0]) * float(s[1]) for s in steps) / T
-            w_m = sum(float(s[0]) * float(s[2]) for s in steps) / T
-            delta = corr(bev.reshape(B, C, X * Y), p.to(bev.dtype), T, v_m, w_m)
-        pos = chain_positions(p, steps, v_obj, delta)
-        imp = importance(bev).reshape(B, X * Y) if importance is not None else None
-        o, m = splat(bev.reshape(B, C, X * Y), pos, grid, imp, mass_gate=mass_gate)
+        pos = chain_positions(p, steps, v_obj)
+        o, m = splat(bev.reshape(B, C, X * Y), pos, grid, mass_gate=mass_gate)
         outs.append(o)
         masses.append(m)
     return torch.stack(outs, 1), torch.stack(masses, 1)
@@ -376,20 +336,6 @@ def _selftest():
     out_w, mass_w = splat_window([(old, st), (cur, [])], grid)
     assert torch.allclose(out_w[0, 0, 0] * (mass_w[0, 0, 0] > 0), out_w[0, 1, 0] * (mass_w[0, 1, 0] > 0)), "window"
 
-    # 10 correction head: zero at the start (no change), bounded by d_max, and it gets a gradient through the splat
-    corr = CorrectionHead(cin=3, d_max=1.0).double()
-    bev = torch.randn(1, 3, grid.nx, grid.ny, dtype=dt64)
-    a, _, _ = splat_bev(bev, grid, 0.3, 10.0, 0.2)
-    b, _, _ = splat_bev(bev, grid, 0.3, 10.0, 0.2, corr=corr)
-    assert torch.allclose(a, b), "correction starts at zero"
-    nn.init.normal_(corr.net[4].weight, std=50.0)
-    pts = grid_points(grid, dtype=dt64)[None]
-    d = corr(bev.reshape(1, 3, -1), pts, 0.3, 10.0, 0.2)
-    assert d.abs().max() <= 1.0 + 1e-12 and d.abs().max() > 0.5, "bounded by d_max"
-    nn.init.normal_(corr.net[4].weight, std=1e-2)
-    out, _, _ = splat_bev(bev, grid, 0.3, 10.0, 0.2, corr=corr)
-    (out[:, 0] * torch.randn_like(out[:, 0])).sum().backward()
-    assert corr.net[4].weight.grad is not None and corr.net[4].weight.grad.abs().sum() > 0, "gradient reaches g_phi"
     print("splat selftest ok: exact 2-cell shift, landing point = formula (vs exact CTRV within v w^2 dt^3), "
           "object velocity, forward-back, mass conservation, collision by importance, gradcheck, velocity head learns, "
           "moving blob")

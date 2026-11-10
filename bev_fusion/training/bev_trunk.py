@@ -10,9 +10,6 @@ Flow (grid 120 x 104 at 0.5 m; input = the fused map, c_in channels, 80 for the 
   stage 2: BasicBlock stride 2 + BasicBlock        c2 = 640 w   15 x 13   (stride 8)
   FPN_LSS: up(stage 2, x4) ++ stage 0 -> 3x3 conv -> 3x3 conv (mid = 512 w) -> up x2 -> 3x3 conv (256 w) -> 1x1
   head:    3x3 conv BN ReLU + 1x1 -> n_classes at the full grid (0.5 m)
-`light_up=True` replaces the full-resolution 3x3 conv of the last upsampling (the most expensive layer) by a
-sub-pixel conv at stride 2 (a 1x1 to 4 x channels at stride 2, then pixel shuffle), the same output at about 1/6 of
-the cost of that layer; not loadable from the pre-trained trunk.
 Run the self-test: python training/bev_trunk.py   (FLOP table: temp/checks/trunk_flops.py)
 """
 import torch
@@ -61,9 +58,9 @@ class BEVBackbone(nn.Module):
 
 class FPNLSS(nn.Module):
     """BEVDet FPN_LSS: deepest stage upsampled x4 and concatenated with stage 0, two 3x3 convs, upsample x2, 3x3 conv
-    and 1x1 conv to out channels at the full grid (light_up: sub-pixel conv instead of the full-resolution 3x3)."""
+    and 1x1 conv to out channels at the full grid."""
 
-    def __init__(self, chans, width=1.0, light_up=False, original_order=False):
+    def __init__(self, chans, width=1.0, original_order=False):
         super().__init__()
         self.original_order = original_order
         c0, _, c2 = chans
@@ -71,13 +68,9 @@ class FPNLSS(nn.Module):
         self.up1 = nn.Upsample(scale_factor=4, mode="bilinear", align_corners=True)
         self.conv = nn.Sequential(nn.Conv2d(c0 + c2, mid, 3, 1, 1, bias=False), nn.BatchNorm2d(mid), nn.ReLU(True),
                                   nn.Conv2d(mid, mid, 3, 1, 1, bias=False), nn.BatchNorm2d(mid), nn.ReLU(True))
-        if light_up:
-            self.up2 = nn.Sequential(nn.Conv2d(mid, 4 * out, 1, bias=False), nn.PixelShuffle(2),
-                                     nn.BatchNorm2d(out), nn.ReLU(True), nn.Conv2d(out, out, 1))
-        else:
-            self.up2 = nn.Sequential(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-                                     nn.Conv2d(mid, out, 3, 1, 1, bias=False), nn.BatchNorm2d(out), nn.ReLU(True),
-                                     nn.Conv2d(out, out, 1))
+        self.up2 = nn.Sequential(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+                                 nn.Conv2d(mid, out, 3, 1, 1, bias=False), nn.BatchNorm2d(out), nn.ReLU(True),
+                                 nn.Conv2d(out, out, 1))
         self.out_channels = out
 
     def forward(self, feats):
@@ -116,11 +109,11 @@ class SemanticHead(nn.Module):
 
 
 class BEVTrunk(nn.Module):
-    def __init__(self, cin=80, n_classes=14, width=1.0, light_up=False, head_hidden=None, detail=0, fpn_original_order=False):
+    def __init__(self, cin=80, n_classes=14, width=1.0, head_hidden=None, detail=0, fpn_original_order=False):
         """detail > 0: add the stride-1 detail path with that many channels (the pre-trained keys are unaffected)."""
         super().__init__()
         self.img_bev_encoder_backbone = BEVBackbone(cin, width)
-        self.img_bev_encoder_neck = FPNLSS(self.img_bev_encoder_backbone.chans, width, light_up, fpn_original_order)
+        self.img_bev_encoder_neck = FPNLSS(self.img_bev_encoder_backbone.chans, width, fpn_original_order)
         self.bev_detail = DetailPath(cin, detail) if detail else None
         self.head = SemanticHead(self.img_bev_encoder_neck.out_channels + (detail or 0), n_classes, head_hidden)
 
@@ -132,7 +125,7 @@ class BEVTrunk(nn.Module):
         return self.head(self.features(x))
 
     def load_pretrained(self, path):
-        """Load img_bev_encoder_backbone. / img_bev_encoder_neck. from a DualBEV checkpoint (width 1, no light_up);
+        """Load img_bev_encoder_backbone. / img_bev_encoder_neck. from a DualBEV checkpoint (width 1);
         returns the report (loaded, missing, unexpected, shape mismatches), as camera_encoder.load_pretrained."""
         sd = torch.load(path, map_location="cpu", weights_only=True)
         sd = sd.get("state_dict", sd)
@@ -168,13 +161,13 @@ def _selftest():
     stats = sum(v.numel() for k, v in trunk.state_dict().items()
                 if k.startswith(("img_bev_encoder_backbone.", "img_bev_encoder_neck.")) and "num_batches" not in k)
     assert stats == 26668896, stats          # parameters + BatchNorm statistics = the tensors of DualBEV's BEV encoder
-    # the light variants keep the output shape; widths scale the parameters roughly with w^2
-    for kw in ({"width": 0.5}, {"width": 0.5, "light_up": True}, {"width": 0.25, "light_up": True}):
+    # the narrow variants keep the output shape; widths scale the parameters roughly with w^2
+    for kw in ({"width": 0.5}, {"width": 0.25}):
         t = BEVTrunk(cin=48, n_classes=14, **kw).eval()
         with torch.no_grad():
             assert t(torch.randn(1, 48, 120, 104)).shape == (1, 14, 120, 104)
     # the stride-1 detail path: output shape unchanged, the pre-trained tensors unchanged, the head sees the extra channels
-    for kw in ({"width": 0.5, "light_up": True, "detail": 32}, {"width": 1.0, "detail": 32}):
+    for kw in ({"width": 0.5, "detail": 32}, {"width": 1.0, "detail": 32}):
         t = BEVTrunk(cin=48, n_classes=14, **kw).eval()
         with torch.no_grad():
             assert t(torch.randn(1, 48, 120, 104)).shape == (1, 14, 120, 104)
@@ -200,7 +193,7 @@ def _selftest():
     trunk(x).mean().backward()
     assert all(p.grad is not None for p in trunk.parameters())
     print(f"bev_trunk selftest ok: shapes of the three stages, output (2, 14, 120, 104), {enc / 1e6:.2f} M encoder "
-          f"parameters = DualBEV's, light variants, gradients")
+          f"parameters = DualBEV's, narrow variants, gradients")
 
 
 if __name__ == "__main__":

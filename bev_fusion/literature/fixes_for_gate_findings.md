@@ -1,6 +1,6 @@
 # Fixes for the four findings of the synthetic gates (scout of 2026-10-25)
 
-Fact tags: `checked` = read on a page or raw code file this session (all web reads went through a page summariser, quotes are paraphrases), `digest` = from a search summary or abstract only, `memory` = from my memory, `derived` = my arithmetic from stated assumptions. Notes of the new papers are in `papers/` (ids below), rows in `temp/scout_tables/papers_new_fixes.csv`. Nothing was downloaded or cloned.
+Fact tags: `checked` = read on a page or raw code file this session (all web reads went through a page summariser, quotes are paraphrases), `digest` = from a search summary or abstract only, `memory` = from my memory, `derived` = my arithmetic from stated assumptions. Notes of the new papers are in `papers/` (ids below), rows in `literature/scout_tables/papers_new_fixes.csv`. Nothing was downloaded or cloned.
 
 ## 1. Lift by point sampling misses thin surfaces and far range
 

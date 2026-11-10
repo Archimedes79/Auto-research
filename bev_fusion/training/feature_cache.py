@@ -7,8 +7,7 @@ all 98 k front frames of the 510 scenes 27 GB, only the frames the dataset uses 
 
 Storage: one shard per scene in `root` - `<scene>.npy` (float16, (n, 198, 16, 44): 118 probability channels, then 80
 context channels) + `<scene>.index.npz` (the sample_data tokens, row order). Files are .npy / .npz: ignored by git, derived
-data of this project (rebuilt by this script from the raw nuScenes data and the pre-trained checkpoint; data/README.md,
-data/rebuild.json). The build is resumable (a scene whose shard covers its tokens is skipped).
+data of this project (rebuilt by this script from the raw nuScenes data and the pre-trained checkpoint; data/README.md). The build is resumable (a scene whose shard covers its tokens is skipped).
 
 Use:
     store = FeatureStore(root)

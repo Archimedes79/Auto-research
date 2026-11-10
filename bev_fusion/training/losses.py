@@ -2,7 +2,7 @@
 
     per target time dt: GT of t_c + dt (GtGenerator layout) -> per-layer targets + per-cell weights (masks)
       -> per-output losses: areas, lines (+ centre-lines), dense objects (semantic head), object head stage 1,
-         motion head, splat correction penalty, camera / radar auxiliary heads, radar stationary-structure hook
+         motion head, camera / radar auxiliary heads, radar stationary-structure hook
       -> task groups (areas, lines, objects, motion), each term normalised by its own count
     total = sum_g exp(-s_g) L_g + s_g  (Kendall, 1705.07115; or fixed weights)  + fixed-weight auxiliary terms,
     with L_g = sum_dt w(dt) L_g(dt), w(0) = 1, w(+-0.5) = 0.5, w(+-1.0) = 0.25 and a warm-up on the dt != 0 terms.
@@ -28,14 +28,14 @@ try:
     from . import launch_saving as LS
     from .layers import DIST_MAX, channels, layer_table, pool_targets, source_keys   # layers.py also puts GtGenerator on the path
     from .lift_pd import Grid
-    from .loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
+    from .loss_extras import _wcount, _wsum
     from .object_head import _gather, build_targets, head_loss, refine_loss
     from .timed_head import MotionHead
 except ImportError:                                   # run as a script
     import launch_saving as LS
     from layers import DIST_MAX, channels, layer_table, pool_targets, source_keys
     from lift_pd import Grid
-    from loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
+    from loss_extras import _wcount, _wsum
     from object_head import _gather, build_targets, head_loss, refine_loss
     from timed_head import MotionHead
 
@@ -57,13 +57,7 @@ class LossConfig:
                                        # (a cell or an object centre there is neither positive nor negative); the aux heads keep their own area
     # per output
     w_area_iou: float = 0.5
-    area_overlap: str = "iou"          # arm "semimetric": Dice semimetric (2303.16296, 0 at p = t for soft targets)
-                                       # instead of 1 - soft IoU, on areas and dense objects (loss_extras.py)
     line_tolerance: int = 1            # cells of the dilated Dice
-    line_boundary: bool = False        # arm: + ramp(step_frac) x boundary loss on the GT distance field (1812.07032)
-    boundary_hold: float = 0.2         # ramp of the boundary term: 0 for this fraction, then linear
-    boundary_ramp: float = 0.4
-    boundary_w_max: float = 0.5
     line_bce: float = 0.0              # t23: weight of a tolerance-aware BCE on the line presence (lane / road divider), added to the lines group; 0 = off = every stored run is reproduced.
                                        # Positives: GT line cells (weight line_bce_pos); negatives: cells farther than line_bce_ignore metres from every GT line (weight 1); the band in
                                        # between (1 m by default, wider than the Dice's tolerance of line_tolerance cells = 0.5 m, on purpose: t23 card) is ignored, so a line found within
@@ -74,7 +68,7 @@ class LossConfig:
     dist_near: float = 1.0             # m: Huber weight 1 below, dist_w_far above
     dist_w_far: float = 0.25
     dist_max: float = DIST_MAX
-    centrelines: bool = False          # mask + direction; off until the S1 baseline exists
+    centrelines: bool = False          # the 0.5 m centre-line rows of the layer table (mask + direction); off by default, no stored config sets it
     centreline_1m: bool = False        # plan 2026-11-03: the centre-line row at the 1 m level (layers.py): presence + distance field + direction, targets pooled from
                                        # the 0.5 m GT (pool_targets); the model's sem_1m output (ModelConfig.centreline_1m must agree). Off = every stored run is reproduced
     w_direction: float = 0.5
@@ -87,12 +81,10 @@ class LossConfig:
     motion_w_background: float = 0.1
     consistency: bool = False          # object head vel at the GT centres vs the motion field (arm)
     w_consistency: float = 0.1
-    w_correction: float = 0.01         # 0.01 |delta|^2 on the splat correction
     w_cam_aux: float = 0.3
     w_radar_aux: float = 0.3
     radar_stationary: bool = True      # decision (3): the proxy target, used when the GT dict carries it. NO GT layer carries it (GtGenerator writes none), so its branch never runs and the
                                        # radar aux head has one untrained channel; false removes the channel and changes the head layout and the init (open_findings #4: at the next baseline)
-    w_radar_slot: float = 0.1          # UNUSED: no model output `radar_slot` exists (the branch was removed 2026-11-02); the field stays so that stored configs load
     sync_free: bool = False            # D53 / D54 (launch_saving.py): fixed-shape / host-side forms of the data-dependent steps of the loss (the motion term's one index, the distance-target discs, the targets copied from pinned memory, the channel index tensors cached); same numbers
     hygiene_2026_11_02: bool = False   # lead 2026-11-02, off = every stored run is reproduced bit for bit. On: (#3) the object head and the motion loss apply w_obj as a WEIGHT (w_interpolated,
                                        # w_unknown, ... reach the focal loss per cell, the regression terms per object and the motion L1 per cell; they only decided keep / ignore before),
@@ -269,24 +261,10 @@ def direction_l1(pred, target, mask, w):
     return ((u - target).abs() * ww).sum() / (2 * ww.sum()).clamp(min=EPS)
 
 
-def correction_penalty(delta):
-    """mean |delta|^2 of the splat correction (..., 2), metres."""
-    return (delta ** 2).sum(-1).mean()
-
-
-def overlap_loss(prob, target, w, cfg):
-    """The region-overlap term of areas and dense objects: 1 - soft IoU, or the Dice semimetric arm."""
-    if cfg.area_overlap == "semimetric":
-        return dice_semimetric_loss(prob, target, w)
-    if cfg.area_overlap != "iou":
-        raise ValueError(cfg.area_overlap)
-    return soft_iou_loss(prob, target, w)
-
-
-def map_terms(logits, T, spec, weights, cfg, step_frac=1.0, line_bce=False):
+def map_terms(logits, T, spec, weights, cfg, line_bce=False):
     """Losses of a semantic-type head (main or auxiliary) whose channels follow `spec`. weights: kind group -> (B, 1,
     X, Y) ('area', 'line', 'object', 'stationary'). Returns (terms, groups): per-channel terms and the group sums
-    (per-channel terms averaged inside a group, so a group is of order 1). step_frac: training progress (ramps).
+    (per-channel terms averaged inside a group, so a group is of order 1).
     line_bce: the t23 BCE term (cfg.line_bce) is added to the line channels only when the caller asks for it; BEVLoss asks for the main head, not for the 1 m centre-line head or the camera aux head."""
     idx = {}
     for i, (_, kind, _) in enumerate(spec):
@@ -301,7 +279,7 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0, line_bce=False):
     terms, groups = {}, {}
     if "area" in idx:
         x, t, w = ch("area"), tg("area"), weights["area"]
-        bce, iou = soft_bce(x, t, w), overlap_loss(torch.sigmoid(x), t, w, cfg)
+        bce, iou = soft_bce(x, t, w), soft_iou_loss(torch.sigmoid(x), t, w)
         for j, n in enumerate(names["area"]):
             terms[f"area_bce.{n}"], terms[f"area_iou.{n}"] = bce[j], iou[j]
         groups["areas"] = (bce + cfg.w_area_iou * iou).mean()
@@ -314,12 +292,6 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0, line_bce=False):
         for j, n in enumerate(names["dist"]):
             terms[f"line_huber.{n}"] = hub[j]
         groups["lines"] = dice.mean() + hub.mean()
-        if cfg.line_boundary:
-            wb = ramp(step_frac, cfg.boundary_hold, cfg.boundary_ramp, cfg.boundary_w_max)
-            bnd = boundary_fp_loss(torch.sigmoid(ch("line")), tg("dist"), w, cfg.dist_max)
-            for j, n in enumerate(names["line"]):
-                terms[f"line_boundary.{n}"] = bnd[j]
-            groups["lines"] = groups["lines"] + wb * bnd.mean()
         if line_bce and cfg.line_bce > 0.0:                      # t23: presence channels and distance channels are in the same line order (layers.channels)
             lb = line_bce_loss(ch("line"), tg("line"), tg("dist"), w, cfg.line_bce_pos, cfg.line_bce_ignore)
             for j, n in enumerate(names["line"]):
@@ -338,7 +310,7 @@ def map_terms(logits, T, spec, weights, cfg, step_frac=1.0, line_bce=False):
         groups["lines"] = groups.get("lines", 0.0) + cfg.w_direction * dl
     if "object" in idx:
         x, t, w = ch("object"), tg("object"), weights["object"]
-        bce, iou = soft_bce(x, t, w), overlap_loss(torch.sigmoid(x), t, w, cfg)
+        bce, iou = soft_bce(x, t, w), soft_iou_loss(torch.sigmoid(x), t, w)
         for j, n in enumerate(names["object"]):
             terms[f"obj_bce.{n}"], terms[f"obj_iou.{n}"] = bce[j], iou[j]
         groups["objects"] = (bce + iou).mean()
@@ -507,8 +479,8 @@ class BEVLoss(nn.Module):
     """The 8.4 total. forward(preds, gts, step_frac):
     preds: {dt: {'sem': (B, len(spec), X, Y) logits, 'sem_1m': (B, len(spec_1m), X / 2, Y / 2) logits (centreline_1m only; its terms are
             'sem1m.*' and join the lines group), 'obj': object head maps, 'v_hat': (B, 2, X, Y) motion field
-            (supervised at dt = 0 against the GT of t_c), 'mass': (B, 1, X, Y) splat mass at dt, 'delta': (..., 2)
-            splat correction, 'cam_aux': (B, len(cam_spec), X, Y), 'radar_aux': (B, len(radar_spec), X, Y)}; every entry optional
+            (supervised at dt = 0 against the GT of t_c), 'mass': (B, 1, X, Y) splat mass at dt,
+            'cam_aux': (B, len(cam_spec), X, Y), 'radar_aux': (B, len(radar_spec), X, Y)}; every entry optional
     gts: {dt: [gt_bev GT dict per sample]} (sample_targets builds it from training samples)
     Returns a dict: every term as '<name>@<dt>', 'group.<g>' (dt-weighted), 's.<g>', 'aux', 'total'."""
 
@@ -522,7 +494,7 @@ class BEVLoss(nn.Module):
         self.radar_spec = radar_aux_spec(c.radar_stationary)
         self.task = TaskWeights(TASK_GROUPS, c.task_weighting, c.fixed_weights, c.s_range)
 
-    def terms_at(self, p, gts, dt, step_frac=1.0):
+    def terms_at(self, p, gts, dt):
         """(terms, task-group losses, fixed-weight auxiliary losses) of one target time."""
         cfg = self.cfg
         dev = next(v for v in p.values() if torch.is_tensor(v)) if "obj" not in p else p["obj"]["hm"]
@@ -533,14 +505,14 @@ class BEVLoss(nn.Module):
             groups[g] = groups.get(g, 0.0) + v
         if "sem" in p:
             w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
-            t, g = map_terms(p["sem"], T, self.spec, w, cfg, step_frac, line_bce=True)
+            t, g = map_terms(p["sem"], T, self.spec, w, cfg, line_bce=True)
             terms.update(("sem." + k, v) for k, v in t.items())
             for k, v in g.items():
                 add(k, v)
         if bool(self.spec_1m) != ("sem_1m" in p):                # the layout flag lives in two configs (LossConfig, ModelConfig): a mismatch must not pass silently
             raise ValueError(f"centreline_1m: the loss has {len(self.spec_1m)} 1 m channels but the prediction {'has' if 'sem_1m' in p else 'has no'} 'sem_1m'")
         if self.spec_1m:
-            t, g = map_terms(p["sem_1m"], T, self.spec_1m, {"line": T["w_lines@1m"]}, cfg, step_frac)
+            t, g = map_terms(p["sem_1m"], T, self.spec_1m, {"line": T["w_lines@1m"]}, cfg)
             terms.update(("sem1m." + k, v) for k, v in t.items())
             for k, v in g.items():
                 add(k, v)
@@ -565,19 +537,14 @@ class BEVLoss(nn.Module):
             if cfg.consistency and tt is not None:
                 terms["motion_consistency"] = consistency_term(p["obj"]["vel"], p["v_hat"], tt)
                 add("motion", cfg.w_consistency * terms["motion_consistency"])
-        if "delta" in p:
-            terms["correction"] = correction_penalty(p["delta"])
-            fixed["correction"] = cfg.w_correction * terms["correction"]
         if "cam_aux" in p:
             wc = T["w_cam"]
-            t, g = map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]},
-                             cfg, step_frac)
+            t, g = map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg)
             terms.update(("cam_aux." + k, v) for k, v in t.items())
             fixed["cam_aux"] = cfg.w_cam_aux * sum(g.values())
         if "radar_aux" in p:
             wr = T["w_radar"]
-            t, g = map_terms(p["radar_aux"], T, self.radar_spec, {"object": wr * T["w_keep"], "stationary": wr}, cfg,
-                             step_frac)
+            t, g = map_terms(p["radar_aux"], T, self.radar_spec, {"object": wr * T["w_keep"], "stationary": wr}, cfg)
             terms.update(("radar_aux." + k, v) for k, v in t.items())
             fixed["radar_aux"] = cfg.w_radar_aux * sum(g.values())
         return terms, groups, fixed
@@ -592,7 +559,7 @@ class BEVLoss(nn.Module):
             w = dt_weight(dt, step_frac, self.cfg)
             if w <= 0:
                 continue
-            terms, groups, fixed = self.terms_at(p, gts[dt], dt, step_frac)
+            terms, groups, fixed = self.terms_at(p, gts[dt], dt)
             tag = f"@{float(dt):+.1f}"
             out.update((k + tag, v) for k, v in terms.items())
             for g, v in groups.items():
@@ -823,8 +790,7 @@ def _selftest():
         for dt in (0.0, 0.5):
             q = {"sem": r(1, len(spec), Xn, Y), "cam_aux": r(1, cam_n, Xn, Y), "radar_aux": r(1, rad_n, Xn, Y),
                  "obj": {k: r(1, c, Xn, Y) for k, c in (("hm", 3), ("off", 2), ("size", 2), ("rot", 2), ("rad", 1),
-                                                        ("vel", 2))},
-                 "delta": 0.1 * r(1, 20, 2)}
+                                                        ("vel", 2))}}
             if dt == 0.0:
                 q["v_hat"] = r(1, 2, Xn, Y)
             else:
@@ -902,18 +868,17 @@ def _selftest():
     assert dt_weight(0.46, 0.5) == 0.5 and dt_weight(-1.0, 1.0) == 0.25
 
     # overfit one synthetic sample: a free state, ONE shared mover, the semantic, object and both auxiliary heads as
-    # TimedHeads at dt = 0, +-0.5 s, a free correction delta; ~100 Adam steps; the total is finite and decreases
+    # TimedHeads at dt = 0, +-0.5 s; ~100 Adam steps; the total is finite and decreases
     torch.manual_seed(0)
     C = 16
     state = nn.Parameter(0.1 * torch.randn(1, C, X, Y))
-    delta = nn.Parameter(0.3 * torch.ones(1, 8, 2))
     mover = TimeMover(C, grid)
     sem = TimedHead(SemanticHead(C, len(spec)), C, mover)
     obj = TimedHead(ObjectHead(C, NUSC_GROUPS, hidden=16), C, mover)                 # small: CPU test
     cam = TimedHead(SemanticHead(C, cam_n), C, mover)
     rad = TimedHead(SemanticHead(C, rad_n), C, mover)
     lossf = BEVLoss(cfg, grid)
-    params = [state, delta] + list(lossf.parameters())
+    params = [state] + list(lossf.parameters())
     for m in (sem, obj, cam, rad):
         params += [q for q in m.parameters() if all(q is not r_ for r_ in params)]
     opt = torch.optim.Adam(params, lr=1e-2)
@@ -926,8 +891,6 @@ def _selftest():
                  "cam_aux": cam(state, dt, scene.v, scene.omega), "radar_aux": rad(state, dt, scene.v, scene.omega)}
             if dt == 0.0:
                 q["v_hat"] = aux["v_hat"]
-            else:
-                q["delta"] = delta
             preds[dt] = q
         res = lossf(preds, gts, 1.0)
         assert torch.isfinite(res["total"]), it
@@ -939,7 +902,6 @@ def _selftest():
         opt.step()
     (t_first, r_first), (t_last, r_last) = hist[0], hist[-1]
     assert t_last < t_first and r_last < 0.7 * r_first, hist[::10]
-    assert correction_penalty(delta).item() < 0.3 ** 2 * 2
     # an unobserved box (no lidar / radar point): not a heatmap positive, no gradient at its peak, footprint weight 0
     gu = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in gts[0.0][0].items()}
     bx0 = gu["meta"]["boxes"][0]
@@ -957,16 +919,6 @@ def _selftest():
     ix, iy = int((hb0["cx"] - grid.x_min) // grid.res), int((hb0["cy"] - grid.y_min) // grid.res)
     gi = [g_ for g_, _ in NUSC_GROUPS].index(bx0["group"])
     assert float(tt_u["hm"][0, gi, ix, iy]) < 1.0 and float(hm_u.grad[0, gi, ix, iy].abs()) == 0.0, "unobserved peak"
-    # the loss_extras arms: semimetric 0 at p = t for a soft target (soft IoU is not), boundary term ramps in
-    soft = torch.full((1, 1, 4, 4), 0.3)
-    one = torch.ones_like(soft)
-    assert overlap_loss(soft, soft, one, LossConfig(area_overlap="semimetric")).abs().max() < 1e-6
-    assert overlap_loss(soft, soft, one, LossConfig()).min() > 0.1
-    arm, w1 = LossConfig(line_boundary=True), torch.ones(1, 1, X, Y)
-    s0, Ta = leaf_preds(X, 1)[0.0]["sem"], build_layer_targets(gts[0.0], arm)
-    _, g0 = map_terms(s0, Ta, spec, {"area": w1, "line": w1, "object": w1}, arm, step_frac=0.0)
-    _, g1 = map_terms(s0, Ta, spec, {"area": w1, "line": w1, "object": w1}, arm, step_frac=1.0)
-    assert float(g1["lines"]) > float(g0["lines"]), (g0["lines"], g1["lines"])
     # dt weights: every nominal |dt| needs a listed weight; [[0, 1]] alone (the old no-time control) gave dt = +-0.5 the weight 1
     assert [dt_weight(d) for d in (0.0, 0.5, -0.5, 1.0)] == [1.0, 0.5, 0.5, 0.25]
     assert dt_weight(0.5, cfg=LossConfig(dt_weights=((0.0, 1.0), (0.5, 0.0)))) == 0.0

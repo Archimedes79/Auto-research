@@ -1,6 +1,6 @@
 # runs - one folder per training run (not in git except this file)
 
-`runs/<name>/` holds what `temp/train/run_cfg.sh` / `training/train.py` write: `config.json`, `log.jsonl`, `train.log`, checkpoints
+`runs/<name>/` holds what `tools/run_ar.sh` (before D23 the superseded `studies/recipes/train/run_cfg.sh`) / `training/train.py` write: `config.json`, `log.jsonl`, `train.log`, checkpoints
 (`ckpt_*.pt`, older ones moved to `data/checkpoints/<name>/` = `D:\Auto-research\NuScenes_checkpoints\bev_fusion\<name>\`, see `MOVED.txt`), `code/` (a `git archive` snapshot of
 `training/` at the pinned commit, `SNAPSHOT.txt` names it; `evaluation/bev_adapter.py` evaluates a run with its own snapshot) and
 `eval/` (metrics, tables, scene records, pictures, `suite/` = the evalsuite stores). `.done` marks exit code 0.

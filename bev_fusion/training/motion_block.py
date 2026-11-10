@@ -20,8 +20,6 @@ builds it inside the chain (`block_inputs` from the model's own camera frames, s
 mover as `v_field`, with `box_vel_from_field` also into the object head's `vel`).
 Run the self-test: python training/motion_block.py
 """
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

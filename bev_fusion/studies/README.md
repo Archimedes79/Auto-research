@@ -4,4 +4,5 @@ A study answers a question (does X work, how much of Y survives); a gate in `../
 
 | folder | what | read |
 |---|---|---|
-| `early/` | the 20 scripts (19 studies and the data of one of them) of October 2026 (flow, box head, radar encoding, temporal block, camera-only / radar-only decoders, S1 pipeline) that were named `test_*` in `tests/` until D48 (2026-11-03) | `early/README.md` (question, result, who imports it) |
+| `early/` | the 22 scripts of October 2026 (20 studies, the data of one of them, and `temporal.py`, the module seven of them import; flow, box head, radar encoding, temporal block, camera-only / radar-only decoders, S1 pipeline) that were named `test_*` in `tests/` until D48 (2026-11-03) | `early/README.md` (question, result, who imports it) |
+| `recipes/` | the 68 scripts and small result files that made the numbers of the closed experiments t1 - t8 and of the plan (calibration audit, queue drivers, lane probe, SOA gap, radar statistics, FLOPs, profiles), moved out of `temp/` on 2026-11-10 | `recipes/README.md` (one row per folder: experiment, status) |

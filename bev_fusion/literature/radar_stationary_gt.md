@@ -1,6 +1,6 @@
 # Radar stationary-structure target: how others supervise it, which GT can be reused, decision table
 
-Scout: 2026-10-26, scan mode, for plan.md 8.4 (row "radar aux head", item (b) STATIONARY STRUCTURE map; decision (3) of that section). Notes of the new papers are in `literature/papers/`, rows in `temp/scout_tables/papers_new_stationary_gt.csv`.
+Scout: 2026-10-26, scan mode, for plan.md 8.4 (row "radar aux head", item (b) STATIONARY STRUCTURE map; decision (3) of that section). Notes of the new papers are in `literature/papers/`, rows in `literature/scout_tables/papers_new_stationary_gt.csv`.
 
 Fact marks: `[c Sx]` checked (page read through a page summariser on 2026-10-26, source in the key at the end), `[d Sx]` digest (search snippet or a second-hand summary), `[m]` memory, `[calc]` computed from checked numbers, `[est]` estimate. Quotes are at most one sentence.
 

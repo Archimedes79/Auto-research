@@ -9,13 +9,13 @@ Three levels, cheap first:
      only one in the remainder)
   C  (--learned) the LEARNED encoder (two 3x3 convs, C channels) probed by a small 1x1 decoder, trained on 8 scenes,
      measured on the 2 held-out scenes AND on the training scenes (the gap = overfitting), against the ceiling of B:
-       plain      the L1 loss on the normalised raster channels (temp/radar/radar_recon_test.py)
+       plain      the L1 loss on the normalised raster channels (studies/early/radar_recon_test.py)
        tolweight  every channel weighted by 1 / its tolerance in normalised units (range 0.5 m, direction 3 deg,
                   Doppler 0.5 m/s, RCS 3 dB, age 0.1 s, position 0.25 m): the loss spends the capacity where the sensor is
                   precise - the test criterion and the loss then measure the same thing
        skip       the encoder's features concatenated with the lossless raster (RadarBEVSlots with_state=True): the
                   decoder can read the raster, so this reaches the ceiling by construction (the reference)
-A detection counts as recovered if ALL its fields lie within the tolerances at once (temp/radar/radar_recon_test.py).
+A detection counts as recovered if ALL its fields lie within the tolerances at once (studies/early/radar_recon_test.py).
 Pass criteria: A exact; C: tolweight on held-out >= 0.9 x the ceiling and train - held-out gap <= 3 points.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/radar_encoding.py [--learned [steps]]
 """
@@ -28,7 +28,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "temp/radar")
 import radar_bev as rb  # noqa: E402
 import radar_recon_test as rt  # noqa: E402
 from lift_pd import Grid  # noqa: E402

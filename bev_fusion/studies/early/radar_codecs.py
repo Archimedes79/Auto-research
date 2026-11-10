@@ -27,7 +27,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
-sys.path.insert(0, "temp/radar")
 import radar_bev as rb  # noqa: E402
 import radar_recon_test as rt  # noqa: E402
 from lift_pd import Grid  # noqa: E402
