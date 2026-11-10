@@ -690,7 +690,7 @@ def run(root=None, verbose=True):
     from .rig_masks import selftest as rig_masks_selftest
     rig_masks_msg = rig_masks_selftest(root, verbose=False)
     # 5j the light devkit cache: a group read from it equals the group scanned from the tables, a changed table invalidates it, other cameras take the scan
-    from .light_nusc import cache_valid, ensure_cache, light_nuscenes
+    from .light_nusc import cache_valid, ensure_cache, light_nuscenes, scene_names
     with tempfile.TemporaryDirectory() as d:
         assert not cache_valid(root, "v1.0-mini", d)
         ensure_cache(root, "v1.0-mini", d, verbose=False)
@@ -703,6 +703,16 @@ def run(root=None, verbose=True):
         assert {s["token"]: s["data"] for s in fast.sample} == {s["token"]: s["data"] for s in scan.sample}, "the reverse index (sample['data']) is the same"
         assert all("RADAR" not in r["filename"] for r in light_nuscenes(root, "v1.0-mini", names_, radars=False, cache_base=d).sample_data)
         assert any("CAM_BACK" in r["filename"] for r in light_nuscenes(root, "v1.0-mini", names_, cameras=("CAM_FRONT", "CAM_BACK"), cache_base=d).sample_data)
+        folder_ = os.path.join(d, "light_v1.0-mini")
+        victim_ = [f_ for f_ in os.listdir(folder_) if f_.endswith(".pkl.gz")][0]
+        os.rename(os.path.join(folder_, victim_), os.path.join(d, "aside.pkl.gz"))
+        gone = light_nuscenes(root, "v1.0-mini", [n_ for n_ in scene_names(root, "v1.0-mini")], cache_base=d)          # a cache file is gone although the index is valid (a swap, a damaged copy): the scan answers
+        assert len(gone.scene) == len(scene_names(root, "v1.0-mini")) and len(gone.sample_data) > 0, "a vanished cache file falls back to the scan"
+        os.rename(os.path.join(d, "aside.pkl.gz"), os.path.join(folder_, victim_))
+        ensure_cache(root, "v1.0-mini", d, verbose=False)                         # a valid cache is left alone
+        os.remove(os.path.join(folder_, "index.json"))
+        ensure_cache(root, "v1.0-mini", d, verbose=False)                         # a rebuild swaps the folder: the old one is renamed aside and removed, no .tmp / .old folder is left
+        assert cache_valid(root, "v1.0-mini", d) and os.listdir(d) == ["light_v1.0-mini"], os.listdir(d)
         idx_path = os.path.join(d, "light_v1.0-mini", "index.json")
         idx_ = json.load(open(idx_path))
         idx_["sources"]["ego_pose"][0] += 1                                  # the table on disk is no longer the one the cache was made from

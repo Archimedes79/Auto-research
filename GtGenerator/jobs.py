@@ -14,14 +14,12 @@ The class: the job runner builds `cls(project_folder)`, calls `method(**args)` a
 return a `GtKey`, so a job sees this small class of the same name: the same method names and arguments (a test pins them against gt_api.py), the result is the key as plain data, `ok` = the key is complete."""
 import os
 
+RIGS = ("lane_center", "bev_fusion")                                                                  # the systems of the lane GT (gt_api.SYSTEMS; a test pins that)
 NICE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_nice.sh")        # the "interpreter" of the child process: gcar python, nice 15, one thread (run_nice.sh passes the arguments on)
 
 
 def _plain(key):
-    """a GtKey (or the dict rig -> GtKey of rig="all") as json: ok = complete, the key id, its line"""
-    if isinstance(key, dict):
-        keys = {rig: _plain(k) for rig, k in key.items()}
-        return {"ok": all(k["ok"] for k in keys.values()), "keys": keys}
+    """a GtKey as json: ok = complete, the key id and its parts, its line"""
     return {"ok": bool(key.complete), "text": str(key), **key.as_dict()}
 
 
@@ -36,8 +34,11 @@ class GtGenerator:
         from . import gt_api
         return _plain(gt_api.generate_bev_gt(dataroot, set_name=set_name, scenes=scenes, out=out, version=version, workers=workers, borders=tuple(borders), verbose=verbose))
 
-    def generate_lane_gt(self, dataroot, rig="all", set_name=None, scenes=None, out=None, version=None, workers=1, verbose=True):
-        """the lane GT of one system (rig lane_center | bev_fusion) or both (rig all) for `set_name` or `scenes`; resumable -> the GT key(s) as plain data"""
+    def generate_lane_gt(self, dataroot, rig, set_name=None, scenes=None, out=None, version=None, workers=1, verbose=True):
+        """the lane GT of ONE system, rig lane_center | bev_fusion, for `set_name` or `scenes`; resumable -> the GT key as plain data. A job per rig (not `all`, as the command has it), so that the store
+        it writes is exactly the reference it names (`gt:lane.<rig>@<set>`) and the runner can tell two jobs that write the same store"""
+        if rig not in RIGS:
+            raise ValueError(f"rig must be one of {RIGS} (one job per system), not {rig!r}")
         from . import gt_api
         return _plain(gt_api.generate_lane_gt(dataroot, rig=rig, set_name=set_name, scenes=scenes, out=out, version=version, workers=workers, verbose=verbose))
 

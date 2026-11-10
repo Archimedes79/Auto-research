@@ -117,8 +117,11 @@ def ensure_cache(dataroot, version, base=None, verbose=True):
     with open(osp.join(tmp, "index.json"), "w") as f:
         json.dump({"format": CACHE_FORMAT, "version": version, "sources": _sources(root), "scenes": len(by), "channels": [k.strip("/") for k in _KEEP],
                    "built": time.strftime("%Y-%m-%d %H:%M:%S")}, f, indent=1)
-    shutil.rmtree(final, ignore_errors=True)
+    old = f"{final}.old.{os.getpid()}"                      # swap, never remove first: a reader sees the old folder or the new one, not half of a removal
+    if osp.isdir(final):
+        os.replace(final, old)
     os.replace(tmp, final)
+    shutil.rmtree(old, ignore_errors=True)
     if verbose:
         size = sum(e.stat().st_size for e in os.scandir(final)) / 1e6
         print(f"light devkit cache of {version}: {len(by)} sequences, {size:.0f} MB, {time.time() - t0:.0f} s -> {final}", flush=True)
@@ -144,11 +147,14 @@ def light_nuscenes(dataroot, version, scenes=None, verbose=False, cameras=("CAM_
         with open(osp.join(root, "scene.json")) as f:
             order = [s["token"] for s in json.load(f) if s["token"] in want]
         cached = {"sd": [], "ego": [], "ann": []}
-        for sc in order:
-            with gzip.open(osp.join(d, sc + ".pkl.gz"), "rb") as f:
-                part = pickle.load(f)
-            for k in cached:
-                cached[k].extend(part[k])
+        try:
+            for sc in order:
+                with gzip.open(osp.join(d, sc + ".pkl.gz"), "rb") as f:
+                    part = pickle.load(f)
+                for k in cached:
+                    cached[k].extend(part[k])
+        except (OSError, EOFError, pickle.UnpicklingError, KeyError):         # the cache was replaced or damaged while it was read: the scan gives the same records
+            cached = None
 
     def kept_sample_data():
         """the CAM_FRONT / RADAR records of the wanted samples: read once, the devkit asks for ego_pose first and needs their pose tokens"""

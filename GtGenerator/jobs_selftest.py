@@ -24,8 +24,10 @@ def _own_checks():
     for name, real in (("generate_bev_gt", gt_api.generate_bev_gt), ("generate_lane_gt", gt_api.generate_lane_gt)):
         mine = [p for p in inspect.signature(getattr(jobs.GtGenerator, name)).parameters.values() if p.name != "self"]
         theirs = [p for p in inspect.signature(real).parameters.values() if p.kind != p.VAR_KEYWORD]
-        assert [(p.name, p.default) for p in mine] == [(p.name, p.default) for p in theirs], f"{name}: the job class drifted from gt_api.{name}"
-    # the result is plain data with ok = complete, also for the dict of rig="all"
+        expected = [(p.name, p.empty if (name, p.name) == ("generate_lane_gt", "rig") else p.default) for p in theirs]          # the lane job has no `rig="all"`: one job per system
+        assert [(p.name, p.default) for p in mine] == expected, f"{name}: the job class drifted from gt_api.{name}"
+    assert set(jobs.RIGS) == set(gt_api.SYSTEMS), (jobs.RIGS, gt_api.SYSTEMS)
+    # the result is plain data with ok = complete
     class FakeKey:
         complete = False
 
@@ -34,12 +36,15 @@ def _own_checks():
 
         def as_dict(self):
             return {"id": "abc", "complete": self.complete}
+    try:
+        jobs.GtGenerator().generate_lane_gt("~/data/nuscenes", "all")
+        raise AssertionError("rig all must be refused: one job per system")
+    except ValueError:
+        pass
     r = jobs._plain(FakeKey())
     assert r["ok"] is False and r["id"] == "abc" and json.dumps(r), r
-    both = jobs._plain({"lane_center": FakeKey(), "bev_fusion": FakeKey()})
-    assert both["ok"] is False and set(both["keys"]) == {"lane_center", "bev_fusion"} and json.dumps(both)
     FakeKey.complete = True
-    assert jobs._plain({"a": FakeKey(), "b": FakeKey()})["ok"] is True and jobs._plain(FakeKey())["ok"] is True
+    assert jobs._plain(FakeKey())["ok"] is True
 
 
 def _without_numpy():
@@ -72,6 +77,8 @@ def _job_runner_check():
             assert "jobrunner" in " ".join(good["command"]) and good["command"].count("GtGenerator.jobs") >= 1 and "run_nice.sh" in " ".join(good["command"]), good["command"]
             lane = jr.check({"id": "gt.lane.small", "call": "GtGenerator.generate_lane_gt", "args": {"dataroot": data, "rig": "bev_fusion", "set_name": "small"}})
             assert lane["ok"] and lane["writes"] == ["gt:lane.bev_fusion@small"], lane
+            norig = jr.check({"id": "gt.lane.norig", "call": "GtGenerator.generate_lane_gt", "args": {"dataroot": data, "set_name": "small"}})
+            assert not norig["ok"], "the lane job needs its rig"
             for bad_args, why in (({"dataroot": data, "set_nam": "small"}, "unknown argument"), ({"set_name": "small"}, "dataroot is required"), ({"dataroot": os.path.join(t, "missing")}, "the data folder must exist")):
                 r = jr.check({"id": "gt.bad", "call": "GtGenerator.generate_bev_gt", "args": bad_args})
                 assert not r["ok"] and r["problems"], (why, r)
