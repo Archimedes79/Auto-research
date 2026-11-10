@@ -18,9 +18,8 @@ Built from the notes listed below only; regenerate rather than edit by hand. Thi
 |---|---|---|---|---|---|
 
 ## Detail links
-| note | what it is (one line) | verdict | extraction |
-|---|---|---|---|
-| [<id> <short title>](../papers/<id>.md) | ... | use / watch / context | [deep](../deep/<id>.md) or - |
+The generated table of all notes (title, summary, relevance, status, paper, code): [table.md](table.md). The notes this overview rests on, one line each:
+- [<id> <short title>](<id>/note.md) - why it is named here
 
 ## Open questions the literature does not answer
 

@@ -1,12 +1,21 @@
 # <paper id> <short title>
 
+<!-- One note per paper, with its code, in its own subfolder of the topic (topics/<slug>/<paper id>/note.md), written by one agent. The seven lines below are the header that tools/topic_table.py turns into the table of the topic: exactly these keys, in this order, one per line, directly after the title line, nothing between them; delete this comment. Links are plain (no spaces, quotes, brackets, parentheses, pipes: percent-encode them). -->
+
+- title: <the title of the paper>
+- relevance: <0-3; 3 = take it into the plan now>
+- summary: <about three sentences: what it does and why it matters for us>
+- status: <checked (page or full text read, with the URL in the body) / digest (from a summary) / memory>
+- paper: <https link to the paper or its project page>
+- code: <https link to the repository, or ->
+- verdict: <use / watch / context / not relevant>
+
 | | |
 |---|---|
-| source | <url>, <venue / year> |
-| fact status | checked (page read) / digest (from a summary) / memory |
+| venue / year | <venue, year> |
 | groups | <group id: relevance 0-3>, ... |
-| code / licence | <repo url or none>, <licence> |
-| verdict | use / watch / context / not relevant (reason) |
+| licence | <licence of the code, or none> |
+| why the verdict | <one line> |
 
 **What it does** (3-5 sentences, mechanism level): ...
 
