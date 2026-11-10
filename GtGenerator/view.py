@@ -260,7 +260,7 @@ def sheets(out_dir):
     for gi, grp in enumerate(groups):
         sheet = Image.new("RGB", (grp[0].width, 78 + sum(i.height for i in grp)), "white")
         d = ImageDraw.Draw(sheet)
-        d.text((8, 4), f"autoGT overview, sheet {gi + 1} of {len(groups)} - nuScenes mini", fill="black")
+        d.text((8, 4), f"GtGenerator overview, sheet {gi + 1} of {len(groups)} - nuScenes mini", fill="black")
         for li, t in enumerate(LEGEND):
             d.text((8, 22 + 18 * li), t, fill=(60, 60, 60))
         y = 78

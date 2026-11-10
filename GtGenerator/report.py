@@ -32,12 +32,13 @@ from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
 from .store import _flat, canonical_of, check_resume, finish_index, save_keyframe  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
+from .pipeline import GROUP_SCENES  # noqa: E402
 from .suite import GtGenerator  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
 
 _STATE = {}
 PAGE_LINES = 78
-GROUP = 60
+GROUP = GROUP_SCENES
 
 
 def _text_pages(pdf, title, lines, size=7.5):
@@ -121,7 +122,6 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
     for grp in groups:
         gen = GtGenerator(dataroot, version, light=True, scenes=grp, **options) if light else gen0
         _STATE["gen"], _STATE["cfg"] = gen, {"sig_dir": sig_dir, "stride": stride, "pick": pick}
-        its = None
         if workers > 1:
             pool = mp.get_context("fork").Pool(workers)
             its = pool.imap_unordered(_scene_task, grp)
@@ -164,7 +164,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
                 f"{workers} worker(s), {time.time() - t0:.0f} s",
                 f"stored GT: {sig_dir if sig_dir else 'not stored'} ({written} keyframes written in this run, others already there)",
                 f"failed sequences: {failed if failed else 'none'}", ""] + ck.text(fov)
-        _text_pages(pdf, "autoGT report - summary of the checks", head, size=8)
+        _text_pages(pdf, "GtGenerator report - summary of the checks", head, size=8)
         rows = ["sequence      keyframes  observed  moving  stationary  ignored  velocity overrides/conflicts  drivable share"]
         rows += [f"{n:12s} {kf:9d} {ob:9d} {mv:7d} {st:11d} {ig:8d} {fl:14d}              {dr:12.0%}"
                  for n, kf, ob, mv, st, ig, fl, dr in ck.scene_rows()]

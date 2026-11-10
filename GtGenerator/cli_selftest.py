@@ -63,9 +63,9 @@ class _FakeKey:
 
 
 def _mapping_checks():
-    from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store_audit, video, view
+    from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store, store_audit, video, view
     from . import lane_gt
-    from . import pipeline  # noqa: F401
+    from . import pipeline
     # the map of the module doc is the map of the code: every command is ONE method of GtGenerator, named in the doc; no method is without a command, and the command line imports nothing but the class
     from .api import Interface
     from .suite import GtGenerator
@@ -80,8 +80,9 @@ def _mapping_checks():
     import ast
     tree = ast.parse(open(cli.__file__, encoding="utf-8").read())
     imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level == 1}
-    assert imported <= {"pipeline", "store", "api", "suite"}, f"the command line reaches the suite only through GtGenerator (pipeline / store are the old names re-exported): {imported}"
+    assert imported <= {"store", "api", "suite"}, f"the command line reaches the suite only through GtGenerator (only store.detect_version, which the hashed lane_gt.py imports from there): {imported}"
     assert not any(isinstance(n, ast.Import) and any(x.name.startswith("GtGenerator") for x in n.names) for n in ast.walk(tree))
+    assert cli.detect_version is store.detect_version, "the hashed lane_gt.py does `from .cli import detect_version`: it must stay importable from the command line module"
     # every command has a --help that works
     for name in cmds:
         code, out, err = _run([name, "--help"])
@@ -227,15 +228,15 @@ def _error_checks(root):
         json.dump({"signature": sig, "res": 0.5, "ss": 4}, open(os.path.join(d, sig, "index.json"), "w"))
         code, out, err = _run(["build", "--dataroot", root, "--out", d, "--res", "0.25"])
         assert code == 2 and "holds res 0.5" in err, (code, err)
-    os.environ["AUTOGT_TRACEBACK"] = "1"
+    os.environ["GTGENERATOR_TRACEBACK"] = "1"
     try:
         try:
             _run(["generate", "~/r", "--workers", "0"])
-            raise AssertionError("AUTOGT_TRACEBACK=1 must raise")
+            raise AssertionError("GTGENERATOR_TRACEBACK=1 must raise")
         except ValueError as e:
             assert "workers" in str(e)
     finally:
-        del os.environ["AUTOGT_TRACEBACK"]
+        del os.environ["GTGENERATOR_TRACEBACK"]
     # not there is exit 1, with the key printed: an empty store folder for mini, the line is the key of the stored GT
     from . import gt_api
     with tempfile.TemporaryDirectory() as d:
@@ -323,7 +324,6 @@ def _store_checks(root):
             pass
     # a run that writes nothing leaves a finished store alone whatever stride it is asked for (it turned stride 1 into "mixed" and dropped the release); a `build` store has no manifest and gets one
     with tempfile.TemporaryDirectory() as d:
-        from .store import read_index
         r = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)
         path = os.path.join(d, r["signature"], "index.json")
         idx = json.load(open(path))
@@ -336,7 +336,7 @@ def _store_checks(root):
             res = AG_.generate(root, d, scenes=["scene-0061"], verbose=False)
         assert res["ok"] is False and res["masks_error"] == "OSError: disk full", "a failed mask cache is reported, the GT is not lost"
     with tempfile.TemporaryDirectory() as d:
-        n = pipeline.build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, verbose=False)
+        pipeline.build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, verbose=False)
         folder = os.path.join(d, os.listdir(d)[0])
         assert "commit" not in read_index(folder), "build writes no manifest"
         again = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)           # was a KeyError: 'commit'

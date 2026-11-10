@@ -1,6 +1,6 @@
 """Storage of the front GT: the keyframe files (`<signature>/<sample token>.npz`, float16 layers + the meta as a pickled object), the index.json of a store folder (the manifest: what it holds,
 which generator made it, whether it is a release), the resume checks, and the listing of a store folder by file name. No argparse, no devkit: everything that reads or writes a store comes here
-(`pipeline.py` writes with it, `suite.py` / `report.py` / `sets.py` read with it, `cli.py` re-exports the old names).
+(`pipeline.py` writes with it, `suite.py` / `report.py` / `sets.py` read with it; `cli.py` keeps `detect_version` only because the hashed `lane_gt.py` imports it from there).
 """
 import json
 import os
@@ -203,5 +203,3 @@ def detect_version(dataroot):
     if len(found) != 1:
         raise ValueError(f"{root}: " + (f"several nuScenes versions {found}, pass version=" if found else "no v1.0-*/scene.json: not a nuScenes folder"))
     return found[0]
-
-

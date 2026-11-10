@@ -51,7 +51,6 @@ def _native(path):
 
 
 def verify(path, n_frames):
-    import cv2
     cap = cv2.VideoCapture(path)
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fourcc = int(cap.get(cv2.CAP_PROP_FOURCC)).to_bytes(4, "little").decode("latin-1").lower()
@@ -83,7 +82,6 @@ def encode(frames, out, fps=12.0, crf=20):
         if r.returncode != 0 or not os.path.exists(out):
             raise RuntimeError(f"ffmpeg failed: {r.stderr[-400:]}")
         return {"path": out, "codec": "h264", "method": os.path.basename(ff), **verify(out, len(frames))}
-    from PIL import Image
     ims = [Image.open(f).convert("RGB") for f in frames]
     gif = os.path.splitext(out)[0] + ".gif"
     ims[0].save(gif, save_all=True, append_images=ims[1:], duration=int(1000 / fps), loop=0, optimize=True)
@@ -219,7 +217,6 @@ def run(scene_name, out_path, max_s=0.0, dataroot="~/data/nuscenes", version="v1
                 print(f"{n}/{len(frames)} frames", flush=True)
         res = encode(paths, out_path, fps=12)
     finally:
-        import shutil
         shutil.rmtree(tmp, ignore_errors=True)
     print("saved", res["path"], f"{res['frames']} frames, {res['frames'] / 12:.1f} s, {res['codec']} via {res['method']}")
     return res

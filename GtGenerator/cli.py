@@ -21,29 +21,26 @@ The command line reaches the suite ONLY through the class `GtGenerator` (GtGener
     check                  GtGenerator.check             consistency checks of the GT of mini        report   GtGenerator.report   the checks over all sequences, one PDF
     digest                 GtGenerator.digest            a digest per frame of mini (two generators that make the same GT give the same file)
     clean                  GtGenerator.clean             list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
-    selftest               GtGenerator.selftest          all tests of the suite (5 - 10 min), or parts with --only
+    selftest               GtGenerator.selftest          all tests of the suite (7 - 13 min), or parts with --only
 
-Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; AUTOGT_TRACEBACK=1 shows it).
+Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; GTGENERATOR_TRACEBACK=1 shows it).
 """
 import argparse
 import json
 import os
 import sys
 
-# the storage and the writer moved to store.py / pipeline.py; the old names stay importable from here (bev_fusion tests and other projects use them)
-from .pipeline import GROUP_SCENES, _group_task, _init, _same_generator, _work, _write_tokens, build, generate  # noqa: F401
-from .store import _environment, _flat, canonical_of, check_resume, detect_version, load_keyframe, run_manifest, save_keyframe, write_index  # noqa: F401
+from .store import detect_version  # noqa: F401  (stays importable from here: the hashed lane_gt.py imports it from this module; the next lane version can import it from store)
 
 
 # ---------------------------------------------------------------------------------------------------------------- argument helpers
 from .api import SELFTESTS  # noqa: E402  (the test parts `selftest --only` can run)
 
 
-def _which_scenes(p, set_flag=True):
+def _which_scenes(p):
     """--set | --scenes | --scenes-file: one of them (argparse refuses two)"""
     g = p.add_mutually_exclusive_group()
-    if set_flag:
-        g.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all 850 of trainval)")
+    g.add_argument("--set", dest="set_name", default=None, help="a scene set: small (the 10 sequences of mini) or full (all 850 of trainval)")
     g.add_argument("--scenes", nargs="+", help="names such as scene-0061 (default: all)")
     g.add_argument("--scenes-file", help="a file of sequence names, one per line")
 
@@ -61,9 +58,9 @@ def _parser():
 
     registry = {}
 
-    def command(name, method, help, **kw):
+    def command(name, method, help):
         """a command = one method of GtGenerator (GtGenerator/api.py); the options of the parser are the arguments of the method, by name"""
-        sp = sub.add_parser(name, help=help, description=help, **kw)
+        sp = sub.add_parser(name, help=help, description=help)
         sp.set_defaults(method=method)
         registry[name] = method
         return sp
@@ -197,7 +194,7 @@ def _parser():
     cl.add_argument("--stale-caches", metavar="DIR")
     cl.add_argument("--include-released", action="store_true", help="also list the released stores: --move only")
     cl.add_argument("--older-than", type=float, metavar="DAYS")
-    st = command("selftest", "selftest", "all tests of the suite (5 - 10 min), or only some of the file-level ones with --only")
+    st = command("selftest", "selftest", "all tests of the suite (7 - 13 min), or only some of the file-level ones with --only")
     st.add_argument("--only", nargs="+", choices=sorted(SELFTESTS), help="run only these parts (each prints its time): " + ", ".join(sorted(SELFTESTS)))
     p.registry = registry
     return p
@@ -246,8 +243,8 @@ def main(argv=None):
     from .suite import GtGenerator                                              # the class interface: the only way the command line reaches the suite
     try:
         code = _emit(getattr(GtGenerator, a.method)(**_kwargs(a)), getattr(a, "json", False))
-    except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (AUTOGT_TRACEBACK=1 shows the traceback)
-        if os.environ.get("AUTOGT_TRACEBACK"):
+    except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (GTGENERATOR_TRACEBACK=1 shows the traceback)
+        if os.environ.get("GTGENERATOR_TRACEBACK"):
             raise
         print(f"error: {e}", file=sys.stderr)
         raise SystemExit(2) from None

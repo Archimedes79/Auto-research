@@ -251,7 +251,7 @@ def scan_py(path):
     if not os.path.isdir(path):
         return {"files": None, "bytes": None, "list_sha256": None}
     entries = []
-    for dp, dn, fns in os.walk(path):
+    for dp, _, fns in os.walk(path):
         for f in fns:
             p = os.path.join(dp, f)
             entries.append((rel(p, path), os.path.getsize(p)))

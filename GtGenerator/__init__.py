@@ -16,7 +16,7 @@
     key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")   # BEV Fusion in one call: the front GT + the lane GT of its rig + the area masks -> the GT key (data + code signature)
     key = GtGenerator.generate_lane_gt(root, rig="lane_center")                  # Spurmitte (rig="all": both); key.load(token) / key.lane(token) / key.mask(token, "intersection", 0.5)
 
-Command line (from the repository root): python -m GtGenerator COMMAND ... ; every command is one method of GtGenerator (generate, generate-bev, generate-lane, area-masks, key, have, data, sets, versions, audit-lane, check, digest,
+Command line (from the repository root): python -m GtGenerator COMMAND ... ; every command is one method of GtGenerator (generate, generate-bev, generate-lane, area-masks, area-mask, key, have, data, sets, versions, audit-lane, check, digest,
 report, view, sheets, masks, lanegraph, video, clean, build, selftest: `python -m GtGenerator --help` has the map)
 Guide for agents: GtGenerator/AGENTS.md; reference: GtGenerator/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): GtGenerator.flow.estimate_flow.

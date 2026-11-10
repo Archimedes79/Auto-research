@@ -1,4 +1,4 @@
-"""Self-test of the whole autoGT suite (nuScenes mini needed for the real-data part): python -m GtGenerator selftest
+"""Self-test of the whole GtGenerator (nuScenes mini needed for the real-data part): python -m GtGenerator selftest
 
 1 flow estimator on a synthetic world with known truth (GtGenerator/flow.py)
 2 rasteriser: exact areas (also a big clipped polygon with a hole), line distance, occlusion
@@ -326,7 +326,8 @@ def run(root=None, verbose=True):
         suite_mod2.NuScenesGT.signature = real_sig
 
     # 5 the build command (cache keyed by the signature)
-    from .cli import build, load_keyframe
+    from .pipeline import build
+    from .store import load_keyframe
     with tempfile.TemporaryDirectory() as d:
         n = build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, workers=1, res=0.5, verbose=False)
         sig_dir = os.path.join(d, store_sig)
@@ -363,17 +364,17 @@ def run(root=None, verbose=True):
             assert store_sig in str(e)
     # 5b generate, the entry point: version found in the folder, groups of sequences with the light devkit give the same GT as the full
     #    devkit, a rerun writes nothing, a wrong scene or a wrong folder is refused with a message
-    from . import cli as cli_mod
+    from . import store as store_mod
     from . import pipeline as pipe_mod                                                  # the writer: its module globals are what the tests below patch
-    assert cli_mod.detect_version(root) == "v1.0-mini"
+    assert store_mod.detect_version(root) == "v1.0-mini"
     with tempfile.TemporaryDirectory() as d:
         old_group, pipe_mod.GROUP_SCENES = pipe_mod.GROUP_SCENES, 1                      # two groups: the loop over devkit loads is exercised
         try:
-            r = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+            r = pipe_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
             from . import suite as suite_mod
             real_gen, suite_mod.GtGenerator = suite_mod.GtGenerator, None                        # a rerun of finished groups must not load the devkit
             try:
-                again = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
+                again = pipe_mod.generate(root, d, scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
             finally:
                 suite_mod.GtGenerator = real_gen
         finally:
@@ -387,21 +388,19 @@ def run(root=None, verbose=True):
         assert _same_gt(mine, g2), "light == full: every layer and every meta entry"
         for bad, why in ((dict(scenes=["scene-9999"]), "unknown scene"), (dict(version="v1.0-trainval"), "version")):
             try:
-                cli_mod.generate(root, d, verbose=False, **bad)
+                pipe_mod.generate(root, d, verbose=False, **bad)
                 raise AssertionError(f"generate must refuse: {why}")
             except (ValueError, OSError):
                 pass
         try:
-            cli_mod.detect_version(d)
+            store_mod.detect_version(d)
             raise AssertionError("a folder that is not a nuScenes folder must be refused")
         except ValueError as e:
             assert "not a nuScenes folder" in str(e)
     # 5c scene sets and the manifest of a store: small is a part of full, a set is complete when every keyframe has a file, the index.json
     #    says gt_version / commit / dirty / sets_complete and whether the folder is a release
-    import contextlib
-    import io
     from . import sets
-    from .cli import write_index
+    from .store import write_index
     from .suite import GtGenerator as _Gen2
     assert sets.names() == ["full", "small"], sets.names()
     small, full_ = sets.scenes("small"), sets.scenes("full")
@@ -409,7 +408,7 @@ def run(root=None, verbose=True):
     small_tokens = sets.tokens("small", "v1.0-mini", root)
     assert len(small_tokens) > 300 and len(set(small_tokens)) == len(small_tokens), len(small_tokens)
     for call, why in ((lambda: sets.tokens("full", "v1.0-mini", root), "full is not in mini"), (lambda: sets.scenes("nope"), "unknown set"),
-                      (lambda: cli_mod.generate(root, "x", set_name="small", scenes=["scene-0061"]), "set and scenes together")):
+                      (lambda: pipe_mod.generate(root, "x", set_name="small", scenes=["scene-0061"]), "set and scenes together")):
         try:
             call()
             raise AssertionError(f"must refuse: {why}")
@@ -462,12 +461,12 @@ def run(root=None, verbose=True):
         assert m["sets_complete"] == ["full", "small"] and m["release"] is True, "mini cannot check full: its entry stays"
         m = manifest({**ok, "sets_complete": [], "sets_checked": ["full", "small"]})
         assert m.get("sets_complete", []) == [] and m["release"] is False, "a hole in full takes the set out and the release with it"
-        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": cli_mod._environment()})
+        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": store_mod._environment()})
         assert m["sets_complete"] == ["full", "small"] and m["release"] is True and set(m["environment"]) >= {"numpy", "shapely"}, m
         # a job that runs for hours refuses a generator that changed meanwhile (a pool worker imports the source tree afresh)
-        cli_mod._same_generator(gen5, gen5.signature())
+        pipe_mod._same_generator(gen5, gen5.signature())
         try:
-            cli_mod._same_generator(gen5, "deadbeef00")
+            pipe_mod._same_generator(gen5, "deadbeef00")
             raise AssertionError("a changed generator must be refused")
         except RuntimeError as e:
             assert "changed while this job runs" in str(e)
@@ -479,7 +478,7 @@ def run(root=None, verbose=True):
         old_dir, sets.DIR = sets.DIR, sets_dir                                         # a tiny set instead of the real ones
         try:
             assert sets.names() == ["tiny"] and sets.scenes("tiny") == ["scene-0061", "scene-0103"]
-            r = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+            r = pipe_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
         finally:
             sets.DIR = old_dir
         held = json.load(open(os.path.join(r["out"], "index.json")))
@@ -493,7 +492,7 @@ def run(root=None, verbose=True):
         real_state = versions_mod.code_state
         versions_mod.code_state = lambda *a, **k: {"commit": "abc1234", "dirty": True}   # a tree that is not clean: nothing to upgrade (the test must not depend on the state of the checkout)
         try:
-            r2 = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+            r2 = pipe_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
         finally:
             pipe_mod.write_index, sets.DIR = real_write, old_dir
             versions_mod.code_state = real_state
@@ -502,18 +501,18 @@ def run(root=None, verbose=True):
         versions_mod.code_state = lambda *a, **k: {"commit": "feed123", "dirty": False}
         sets.DIR = sets_dir
         try:
-            r3 = cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+            r3 = pipe_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
             up = json.load(open(os.path.join(r["out"], "index.json")))
             assert r3["written"] == 0 and up["commit"] == "feed123" and up["dirty"] is False and up["scenes"] == held["scenes"] and up["complete"] is True, up
             up["release"] = True
             json.dump(up, open(os.path.join(r["out"], "index.json"), "w"))
-            cli_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
+            pipe_mod.generate(root, d, set_name="tiny", stride=20, verbose=False)
             assert json.load(open(os.path.join(r["out"], "index.json"))) == up, "a release is left alone by a clean tree"
         finally:
             versions_mod.code_state, sets.DIR = real_state, old_dir
         assert versions_mod._changes_the_code(" M GtGenerator/cli.py") and versions_mod._changes_the_code("?? GtGenerator/new_module.py") and versions_mod._changes_the_code("R  GtGenerator/a.py -> GtGenerator/b.py")
         assert not any(versions_mod._changes_the_code(x) for x in (" M GtGenerator/README.md", "?? GtGenerator/architecture.svg", "?? GtGenerator/architecture.json", " M GtGenerator/REVIEW_2026-11-10.md")), "documents do not make a tree dirty"
-        r_opt = cli_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
+        r_opt = pipe_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
         assert r_opt["signature"] == _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"], use_flow=False).signature() != r["signature"]
     # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts
     #    nor marks an interrupted run complete; strides that differ are said so
@@ -543,15 +542,15 @@ def run(root=None, verbose=True):
     # 5e a rerun after damage writes exactly the damage; two worker processes (spawn) give the same GT as one; wrong arguments are refused
     with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as d2:
         kw = dict(scenes=["scene-0061", "scene-0103"], stride=20, verbose=False)
-        r = cli_mod.generate(root, d, **kw)
+        r = pipe_mod.generate(root, d, **kw)
         stored = sorted(f for f in os.listdir(r["out"]) if f.endswith(".npz"))
         os.remove(os.path.join(r["out"], stored[0]))                                   # a lost file,
         open(os.path.join(r["out"], stored[1]), "wb").close()                          # an empty one (full disk),
         open(os.path.join(r["out"], stored[2] + ".1.tmp.npz"), "wb").write(b"half")    # a leftover of a killed writer next to a good file
-        again = cli_mod.generate(root, d, **kw)
+        again = pipe_mod.generate(root, d, **kw)
         assert again["written"] == 2 and len(sets.held(r["out"])) == 4, again
         assert load_keyframe(r["out"], stored[1][:-4])["drivable_area"].shape == (120, 104)
-        two = cli_mod.generate(root, d2, workers=2, **kw)                              # the spawn pool: each worker builds its own generator
+        two = pipe_mod.generate(root, d2, workers=2, **kw)                              # the spawn pool: each worker builds its own generator
         assert two["written"] == 4 and two["signature"] == r["signature"], two
         for t in (stored[0][:-4], stored[3][:-4]):
             a_, b_ = load_keyframe(r["out"], t), load_keyframe(two["out"], t)
@@ -559,11 +558,11 @@ def run(root=None, verbose=True):
         for bad, why in ((dict(scenes=[]), "no scene is not all scenes"), (dict(scenes=["scene-0061"], stride=0), "stride 0"),
                          (dict(scenes=["scene-0061"], res=0.25), "another resolution in a used folder")):
             try:
-                cli_mod.generate(root, d, **{**dict(stride=20, verbose=False), **bad})
+                pipe_mod.generate(root, d, **{**dict(stride=20, verbose=False), **bad})
                 raise AssertionError(f"generate must refuse: {why}")
             except ValueError:
                 pass
-        dup = cli_mod.generate(root, d, scenes=["scene-0061", "scene-0061"], stride=20, verbose=False)
+        dup = pipe_mod.generate(root, d, scenes=["scene-0061", "scene-0061"], stride=20, verbose=False)
         assert dup["scenes"] == 1 and dup["keyframes"] == 2, dup                       # a name twice is one sequence
     # 5f the raw-data check: complete on mini, and a data root without files is reported (every listed file, the map expansion)
     ok_ = sets.check_raw(root, "v1.0-mini", scenes=["scene-0061"])
@@ -625,7 +624,7 @@ def run(root=None, verbose=True):
         assert not [f for _, _, fs in os.walk(d) for f in fs if f.lower().endswith((".png", ".jpg"))], "no picture files"
         stored = os.listdir(os.path.join(d, "data", rep["signature"]))
         assert "index.json" in stored and rep["written"] == len([f for f in stored if f.endswith(".npz")]), rep
-        from .cli import write_index                                                   # a smaller run must not shrink the folder's index
+        from .store import write_index                                                   # a smaller run must not shrink the folder's index
         from .suite import GtGenerator as _Gen
         sd_ = os.path.join(d, "data", rep["signature"])
         write_index(sd_, _Gen(root, "v1.0-mini", ss=4, light=True), "v1.0-mini", ["scene-0061"], 20, 1, {})
@@ -675,16 +674,16 @@ def run(root=None, verbose=True):
                                              "GtGenerator/releases.csv: add one (the releases are one running number: the next change of the front or the lane GT is the next number)")
     with tempfile.TemporaryDirectory() as d:
         toks_ = tokens_of_scene("scene-0061", "v1.0-mini", root)
-        both = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False)
+        both = pipe_mod.generate(root, d, scenes=["scene-0061"], verbose=False)
         assert both["written"] == len(toks_) and both["lane"] and both["lane"]["written"] == len(toks_), both
         assert both["masks_error"] is None and os.path.exists(os.path.join(d, "lane", both["lane_rigs"]["bev_fusion"]["signature"], "masks", "intersection_b0.5.npz")), "generate builds the area masks of the BEV Fusion store too"
         assert os.path.isdir(os.path.join(d, "lane", both["lane"]["signature"])) and lane_gt_mod.missing(toks_, data=os.path.join(d, "lane")) == []
         assert set(both["lane_rigs"]) == set(lane_gt_mod.RIGS) and all(r["written"] == len(toks_) for r in both["lane_rigs"].values()), "one store per rig of the lane GT"
         assert both["lane_rigs"]["bev_fusion"]["signature"] != both["lane"]["signature"] and lane_gt_mod.missing(toks_, data=os.path.join(d, "lane"), rig="bev_fusion") == []
         assert json.load(open(os.path.join(both["out"], "index.json")))["suite_release"] == V.current_release()
-        only = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False, lane=False)
+        only = pipe_mod.generate(root, d, scenes=["scene-0061"], verbose=False, lane=False)
         assert only["lane"] is None and only["written"] == 0, only
-        assert cli_mod.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False)["lane"] is None, "the lane GT is made for every keyframe: nothing at stride 20"
+        assert pipe_mod.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False)["lane"] is None, "the lane GT is made for every keyframe: nothing at stride 20"
     # 5k the two coverage masks (rig_masks.py): orientation, the static front mask against the per-frame GT layers, symmetry
     from .rig_masks import selftest as rig_masks_selftest
     rig_masks_msg = rig_masks_selftest(root, verbose=False)

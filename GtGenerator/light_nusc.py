@@ -1,5 +1,5 @@
 """A memory-light nuScenes devkit object for the GT generator: the full devkit of v1.0-trainval needs 8+ GB of RAM (3.5 million
-sample_data records, 1.3 million ego poses, 1.2 million annotations) and pushes a shared machine into swapping. autoGT only reads
+sample_data records, 1.3 million ego poses, 1.2 million annotations) and pushes a shared machine into swapping. GtGenerator only reads
 the CAM_FRONT and the five RADAR channels, and a run works through the sequences group by group, so:
 
     nusc = light_nuscenes("~/data/nuscenes_full", "v1.0-trainval", scenes=["scene-0001", ...])   # ~0.7 GB for 85 sequences

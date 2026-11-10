@@ -1,4 +1,4 @@
-"""The one-object interface of the autoGT suite (see GtGenerator/AGENTS.md for the short guide)."""
+"""The one-object interface of GtGenerator (see GtGenerator/AGENTS.md for the short guide)."""
 import functools
 import json
 import os

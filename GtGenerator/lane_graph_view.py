@@ -48,7 +48,7 @@ def _marker(img, uv, kind, size, label=None):
         cv2.putText(img, label, (u + s + 2, v - s), cv2.FONT_HERSHEY_SIMPLEX, max(0.35, s / 14), (255, 255, 255), 1, cv2.LINE_AA)
 
 
-def bev_image(graph, ppm=8, title=None, labels=True):
+def bev_image(graph, ppm=8, title=None):
     """the top view of a graph (any frame: it is turned into the lane frame, x right, y forward), the square window |x|, |y| <= half of the rig lane_center; ego at the centre"""
     graph = LG.in_frame(graph, "lane")
     half = graph["half"]
@@ -92,7 +92,7 @@ def bev_image(graph, ppm=8, title=None, labels=True):
         _marker(img, (u, v), e["type"], 5 if e["type"] != "window" else 7, None)
     ex, ey = px(np.array([0.0, 0.0]))
     cv2.rectangle(img, (int(ex - 1.0 * ppm), int(ey - 3.1 * ppm)), (int(ex + 1.0 * ppm), int(ey + 1.0 * ppm)), (255, 255, 255), 1)
-    if title and labels:
+    if title:
         cv2.putText(img, title, (8, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
     return img
 

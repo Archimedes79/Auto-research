@@ -1,6 +1,6 @@
 """One-off: list the trainval archives of the public nuScenes bucket with size and ETag (listing only, no download).
 
-Run from the problem folder: wsl python3 temp/loop19/list_nuscenes_bucket.py [filter]
+Run from the problem folder: wsl python3 data/NuScenes/tools/list_nuscenes_bucket.py [filter]
 """
 import re
 import sys

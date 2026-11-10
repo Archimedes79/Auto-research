@@ -90,11 +90,6 @@ def cache_path(store_dir, kind="intersection", border_m=0.0):
     return os.path.join(store_dir, "masks", f"{kind}_b{border_m:g}.npz")
 
 
-def held_names(store_dir):
-    """the tokens with a stored graph in the folder, by file name only"""
-    return store_names(store_dir, ".pkl.gz")
-
-
 def cache_complete(store_dir, kind="intersection", border_m=0.0, held=None):
     """True when the cache file exists, was made by THIS rasteriser (RASTER_VERSION) for the BEV grid and holds exactly the keyframes the store holds now (`held`: the tokens, scanned once by the caller)"""
     p = cache_path(store_dir, kind, border_m)
@@ -104,7 +99,7 @@ def cache_complete(store_dir, kind="intersection", border_m=0.0, held=None):
         with np.load(p) as z:
             if str(z["raster"]) != RASTER_VERSION or tuple(z["shape"]) != (GRID.nx, GRID.ny) or not np.allclose(z["grid"], [GRID.x_min, GRID.x_max, GRID.y_min, GRID.y_max, GRID.res]):
                 return False
-            return set(z["tokens"].tolist()) == (held_names(store_dir) if held is None else held)
+            return set(z["tokens"].tolist()) == (store_names(store_dir, ".pkl.gz") if held is None else held)
     except (OSError, ValueError, KeyError):
         return False
 
@@ -142,7 +137,7 @@ def build_mask_cache(store_dir, kinds=("intersection",), borders=(0.0, 0.5), for
     if not borders or not kinds:
         raise ValueError("kinds and borders: at least one each")
     borders = tuple(float(b) for b in borders)
-    tokens = sorted(held_names(store_dir))
+    tokens = sorted(store_names(store_dir, ".pkl.gz"))
     todo = [(k, b) for k in kinds for b in borders if force or not cache_complete(store_dir, k, b, set(tokens))]
     files = [cache_path(store_dir, k, b) for k in kinds for b in borders]
     if not todo:
