@@ -19,7 +19,7 @@ file), the tier (best three or normal) and the list of DERIVED files (name, size
 folders. The package stays in git; clean removes the derived files and the package then lists them under `deleted` (date, size, files, how to rebuild).
 Derived = rebuilt by evaluating the checkpoint again with the code of the tag: files with the suffix .pkl .npz .npy .png .jpg .jpeg .gif .mp4 .avi
 .webp and everything under eval/suite, but only in the run folder's top level, eval/, report/ and prototype/. Not derived (never touched): checkpoints,
-run.json, config.json, gt.json, logs, metrics / latency / card json, text files, code/, bundle/, autogt/ (the pinned sources of a resume), folders of
+run.json, config.json, gt.json, logs, metrics / latency / card json, text files, code/, bundle/, GtGenerator/ (the pinned sources of a resume), folders of
 other evaluators (eval_2026-10-31_first, eval_legacy_*) and files with legacy, _ctl_ or partial in their path (a superseded evaluator made them:
 evaluating again does not reproduce them), symbolic links.
 clean refuses a run (and says why) when: the best three are unknown (no keep3.json, or no entry), it is in the best three (by run id, run folder
@@ -29,11 +29,11 @@ younger than --min-age-days (at least one hour). Before anything is removed the 
 store files that mark an evaluation as finished (frames.jsonl, manifest.json) go first, so an interrupted delete leaves an unfinished store, never one
 that claims to be complete. A later clean adds to the `deleted` list, it never replaces it. Tags must be on origin to be a safe base for a rebuild:
 `check_git.py` lists the ones that are not.
-gt also looks at the lane GT stores (data/autogt/lane/<lane signature>, versions in autogt/lane_versions.csv, l1, l2, ...): the latest lane version stays, per rig (lane_center = Spurmitte,
+gt also looks at the lane GT stores (data/autogt/lane/<lane signature>, versions in GtGenerator/lane_versions.csv, l1, l2, ...): the latest lane version stays, per rig (lane_center = Spurmitte,
 bev_fusion = BEV Fusion; when its code makes the GT of an older version, `same_gt_as`, the store of that one), so does a store that a run which
 is not final names in its gt.json (`lane_signature`: NO trainer writes it today, so the lane stores are not protected by run records and the dry run prints a WARNING), an older one
-goes when its tag autogt/lane-lN exists (it is made again by `python -m autogt generate-lane`).
-gt keeps the latest version of autogt/versions.csv (the highest number; when its code makes the GT of an older version, `same_gt_as`, the store of that
+goes when its tag autogt/lane-lN exists (it is made again by `python -m autogt generate-lane` in a checkout of the tag: the package is called autogt up to l5 / v12, GtGenerator after the rename of 2026-11-10).
+gt keeps the latest version of GtGenerator/versions.csv (the highest number; when its code makes the GT of an older version, `same_gt_as`, the store of that
 one: they share a folder) and every store that is still needed. A run records the CODE signature (0.5_4_6a7aa7864a, v9), the folder is the STORE's (c643a7539d, v8): every signature
 goes through provenance.canonical_sig first. data/autogt is shared by all problem folders, so the run records of EVERY <repo>/*/project.json are read. Needed = named in the gt.json
 (also the `earlier` ones; a resume needs them) of a run that is not final; or of a network of the best three (keep3.json); or of a FINAL run that has no result package yet
@@ -63,7 +63,7 @@ import provenance as V  # noqa: E402
 DERIVED_SUFFIX = (".pkl", ".npz", ".npy", ".png", ".jpg", ".jpeg", ".gif", ".mp4", ".avi", ".webp")
 DERIVED_DIRS = ("eval/suite",)
 ALLOWED_TOP = ("eval", "report", "prototype", "")          # "" = a file in the run folder itself
-NEVER_DIRS = ("code", "bundle", "autogt")
+NEVER_DIRS = ("code", "bundle", "GtGenerator", "autogt")           # autogt: the pinned copy of a run before the rename of 2026-11-10
 SUPERSEDED = ("legacy", "_ctl_", "partial")               # parts of a path that mark results of a former evaluator or an unfinished one
 FIRST = ("frames.jsonl", "manifest.json")                 # the files that mark a store as complete: deleted first
 FINAL_STATES = ("ok", "done")
@@ -432,7 +432,7 @@ def gt_stores(root=None):
 
 
 def versions():
-    p = os.path.join(V.repo_root(), "autogt", "versions.csv")
+    p = os.path.join(V.repo_root(), "GtGenerator", "versions.csv")
     with open(p, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
@@ -504,7 +504,7 @@ def top3_users(rows, problems=None):
 
 
 def lane_versions():
-    p = os.path.join(V.repo_root(), "autogt", "lane_versions.csv")
+    p = os.path.join(V.repo_root(), "GtGenerator", "lane_versions.csv")
     if not os.path.isfile(p):
         return []
     with open(p, newline="", encoding="utf-8") as f:
@@ -557,7 +557,7 @@ def lane_plan(root=None, problems=None):
         elif sig in needed:
             plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(needed[sig][:4])}"))
         elif row is None:
-            plan.append((sig, "keep: not in autogt/lane_versions.csv, it cannot be regenerated from a tag"))
+            plan.append((sig, "keep: not in GtGenerator/lane_versions.csv, it cannot be regenerated from a tag"))
         elif os.path.islink(path) or not inside(path, root):
             plan.append((sig, "keep: a link, not a store folder of this data/autogt/lane"))
         elif not tag_exists(row["tag"]):
@@ -608,7 +608,7 @@ def gt_plan(root=None, problems=None):
             plan.append((sig, f"keep: used by the final run(s) {', '.join(use['unpackaged'][:4])}"
                               + (f" and {len(use['unpackaged']) - 4} more" if len(use["unpackaged"]) > 4 else "") + " that have no result package yet (package.py package <id> first)"))
         elif row is None:
-            plan.append((sig, "keep: not in autogt/versions.csv, it cannot be regenerated from a tag"))
+            plan.append((sig, "keep: not in GtGenerator/versions.csv, it cannot be regenerated from a tag"))
         elif os.path.islink(path) or not inside(path, root):
             plan.append((sig, "keep: a link, not a store folder of this data/autogt"))
         elif not tag_exists(row["tag"]):
@@ -653,7 +653,7 @@ def selftest():
             json.dump({"gt_signature": "0.5_4_aaa"}, open(os.path.join(d, "gt.json"), "w"))
             json.dump({"seed": 0}, open(os.path.join(d, "config.json"), "w"))
             json.dump({"mAP": 0.5, "n": 3, "nested": {"x": 1}, "flag": True, "metrics": {"seg/iou": 0.4, "txt": "a"}, "better": {"seg/iou": "higher"}}, open(os.path.join(d, "eval", "metrics.json"), "w"))
-            for rel in ("eval/scene_records.pkl", "eval/suite/sub/a.json", "eval/suite/frames.jsonl", "eval/pic.png", "code/keep.png", "autogt/ex/x.png", "eval_legacy_2026/old.png",
+            for rel in ("eval/scene_records.pkl", "eval/suite/sub/a.json", "eval/suite/frames.jsonl", "eval/pic.png", "code/keep.png", "GtGenerator/ex/x.png", "eval_legacy_2026/old.png",
                         "eval/scene_records_legacy_x.pkl", "eval/scene_records_ctl_a.pkl", "eval/empty_marker/.keep", *extra):
                 os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
                 open(os.path.join(d, rel), "wb").write(b"x" * 100)
@@ -668,7 +668,7 @@ def selftest():
         assert pk["tier"] == V.UNKNOWN and pk["metrics"]["eval/metrics.json"] == {"mAP": 0.5, "n": 3, "metrics.seg/iou": 0.4}, "numbers only (top level and the metrics / latency dicts), no other nested dict, no bool: " + str(pk["metrics"])
         want = ["eval/pic.png", "eval/scene_records.pkl", "eval/suite/frames.jsonl", "eval/suite/sub/a.json"]
         assert [x["path"] for x in pk["deep"]["files"]] == want and pk["deep"]["bytes"] == 400, pk["deep"]
-        for rel, yes in (("x/y.MP4", False), ("eval/y.MP4", True), ("code/a.png", False), ("bundle/a.png", False), ("autogt/e/a.png", False), ("log.jsonl", False), ("ckpt_1.pt", False),
+        for rel, yes in (("x/y.MP4", False), ("eval/y.MP4", True), ("code/a.png", False), ("bundle/a.png", False), ("GtGenerator/e/a.png", False), ("log.jsonl", False), ("ckpt_1.pt", False),
                          ("eval_2026/a.png", False), ("eval/a_legacy_b.pkl", False), ("eval/c_ctl_d.npz", False), ("eval/suite_x/a.png", True), ("eval/suite/a.json", True), ("a.png", True)):
             assert is_derived(rel) is yes, rel
         json.dump({"provenance": {"evaluator": {"commit": "c1", "code_hash": "h1", "dirty": ["a.py"]}, "data": {"split": "val", "n": 7, "frame_hash": "fh", "manifest_hash": "mh"},
@@ -728,7 +728,7 @@ def selftest():
         out = clean(apply=True, only=["x.a_s0"])
         assert out == [("x.a_s0", "deleted", 400)], out
         assert not os.path.exists(os.path.join(a, "eval", "pic.png")) and not os.path.exists(os.path.join(a, "eval", "suite")), "derived files and the folders they emptied are gone"
-        for keep in ("ckpt_00000010.pt", "eval/metrics.json", "code/keep.png", "autogt/ex/x.png", "gt.json", "config.json", "eval_legacy_2026/old.png", "eval/scene_records_legacy_x.pkl",
+        for keep in ("ckpt_00000010.pt", "eval/metrics.json", "code/keep.png", "GtGenerator/ex/x.png", "gt.json", "config.json", "eval_legacy_2026/old.png", "eval/scene_records_legacy_x.pkl",
                      "eval/scene_records_ctl_a.pkl", "eval/empty_marker/.keep"):
             assert os.path.isfile(os.path.join(a, keep)), keep
         assert os.path.isdir(os.path.join(a, "code")) and os.path.isdir(os.path.join(a, "eval", "empty_marker")), "folders that held nothing derived stay"
@@ -911,7 +911,7 @@ def selftest():
         tags.discard("tg/ok")
         assert dict(lane_plan(lroot)[1])["lold"].startswith("keep: the tag"), "no tag, no deletion"
         tags.add("tg/ok")
-        # two rigs and a version that makes an older version's GT (autogt/lane_versions.csv, l5): per rig the latest version stays, and where `same_gt_as` is set the earlier store
+        # two rigs and a version that makes an older version's GT (GtGenerator/lane_versions.csv, l5): per rig the latest version stays, and where `same_gt_as` is set the earlier store
         for sig in ("lbf", "l4s"):
             os.makedirs(os.path.join(lroot, sig))
             json.dump({"signature": sig}, open(os.path.join(lroot, sig, "index.json"), "w"))
@@ -987,8 +987,8 @@ def selftest():
         assert lane_notes([("l1", "keep: x")]) == [] and lane_notes([("l1", "delete: lane l1")]) == [LANE_GAP] and "cannot be protected by run records" in LANE_GAP
         # a stored manifest that says "version unknown" (made before the store was named canonically, or the store is deleted) is read again for the package: v9's key is the GT of v8
         g3 = os.path.join(tmp, "gtrepo")
-        os.makedirs(os.path.join(g3, "autogt"))
-        open(os.path.join(g3, "autogt", "versions.csv"), "w").write("version,signature,tag,date,generator,what_changed,same_gt_as\nv8,c8c8,t,d,g,w,\nv9,c9c9,t,d,g,w,v8\n")
+        os.makedirs(os.path.join(g3, "GtGenerator"))
+        open(os.path.join(g3, "GtGenerator", "versions.csv"), "w").write("version,signature,tag,date,generator,what_changed,same_gt_as\nv8,c8c8,t,d,g,w,\nv9,c9c9,t,d,g,w,v8\n")
         mk("x.o_s0")
         json.dump({"gt_signature": "0.5_4_c9c9"}, open(os.path.join(proj, "runs", "x_o_s0", "gt.json"), "w"))
         V.repo_root = lambda start=None: g3

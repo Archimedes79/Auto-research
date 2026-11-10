@@ -2,7 +2,7 @@
 function and the test asserts the call and its arguments), wrong arguments give a message and exit 2 and never a traceback, "not there" gives exit 1, every --help works, the key line printed is the key of the stored GT; and the
 consistency of the stores (listing by file name, a rerun that writes nothing keeps the manifest, versions tables).
 
-    python -m autogt.cli_selftest [--root ~/data/nuscenes]      (also run by `python -m autogt selftest`)
+    python -m GtGenerator.cli_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
 """
 import contextlib
 import io
@@ -81,7 +81,7 @@ def _mapping_checks():
     tree = ast.parse(open(cli.__file__, encoding="utf-8").read())
     imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level == 1}
     assert imported <= {"pipeline", "store", "api", "suite"}, f"the command line reaches the suite only through GtGenerator (pipeline / store are the old names re-exported): {imported}"
-    assert not any(isinstance(n, ast.Import) and any(x.name.startswith("autogt") for x in n.names) for n in ast.walk(tree))
+    assert not any(isinstance(n, ast.Import) and any(x.name.startswith("GtGenerator") for x in n.names) for n in ast.walk(tree))
     # every command has a --help that works
     for name in cmds:
         code, out, err = _run([name, "--help"])
@@ -420,12 +420,12 @@ def _store_checks(root):
         raise AssertionError("a release naming a missing front version must be refused")
     except ValueError:
         pass
-    # the documented module attributes are there after `import autogt`, and the rigs of gt_api are those of lane_gt
-    import autogt
+    # the documented module attributes are there after `import GtGenerator`, and the rigs of gt_api are those of lane_gt
+    import GtGenerator
     from . import gt_api
-    assert autogt.rig_masks.mask_for and set(autogt.lane_gt.RIGS) == set(gt_api.SYSTEMS), "autogt.lane_gt / autogt.rig_masks are there, the systems of gt_api are the rigs of lane_gt"
+    assert GtGenerator.rig_masks.mask_for and set(GtGenerator.lane_gt.RIGS) == set(gt_api.SYSTEMS), "GtGenerator.lane_gt / GtGenerator.rig_masks are there, the systems of gt_api are the rigs of lane_gt"
     try:
-        autogt.nothing_here
+        GtGenerator.nothing_here
         raise AssertionError("an unknown attribute must raise AttributeError")
     except AttributeError:
         pass
@@ -433,7 +433,7 @@ def _store_checks(root):
 
 def _architecture_check():
     """the architecture drawing (architecture.json -> .svg / .md) is in step with the code: every box points at real code, no file is in no box, the generated files are current (the check of
-    autoresearch/tools/archdraw.py; skipped when the tool is not there, e.g. in a copy of autogt alone)"""
+    autoresearch/tools/archdraw.py; skipped when the tool is not there, e.g. in a copy of GtGenerator alone)"""
     import subprocess
     import sys
     here = os.path.dirname(os.path.abspath(__file__))
@@ -441,7 +441,7 @@ def _architecture_check():
     if not os.path.exists(tool):
         return False
     r = subprocess.run([sys.executable, tool, "check", os.path.join(here, "architecture.json")], capture_output=True, text=True)
-    assert r.returncode == 0, "the architecture drawing is out of step with the code (run `python autoresearch/tools/archdraw.py render autogt/architecture.json`): " + r.stdout[-800:] + r.stderr[-300:]
+    assert r.returncode == 0, "the architecture drawing is out of step with the code (run `python autoresearch/tools/archdraw.py render GtGenerator/architecture.json`): " + r.stdout[-800:] + r.stderr[-300:]
     return True
 
 

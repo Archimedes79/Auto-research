@@ -10,7 +10,7 @@ One sample = keyframe k (it needs a previous and a next keyframe, for the GT at 
   optionally, its measured radial motion vr * u * age (the only object motion a radar measures); per detection:
   b (sample index after collation), x, y (m), r (range from its sensor), psi (ray direction in the current frame), vr
   (ego-compensated radial velocity, m/s), rcs, dt (age, s), sensor (0..4) - the format of training/radar_bev.py
-- GT: `autogt.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
+- GT: `GtGenerator.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
   float16 npz in a cache folder of this project (derived data, not in git; written atomically, a broken file is rebuilt)
 - meta: tokens, timestamps, the ego speed and yaw rate of the last camera frame
 Raw data is read through the WSL views (~/data/nuscenes_full, ~/data/nuscenes for mini; datasets/NuScenes/README.md).
@@ -27,12 +27,12 @@ from PIL import Image
 from pyquaternion import Quaternion
 
 _BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-while not os.path.isdir(os.path.join(_BEV_FUSION, "autogt")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
+while not os.path.isdir(os.path.join(_BEV_FUSION, "GtGenerator")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
     _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
 if _BEV_FUSION not in sys.path:
-    sys.path.append(_BEV_FUSION)                     # the GT generator: the standalone suite bev_fusion/autogt/
-from autogt.nuscenes_adapter import pose_matrix  # noqa: E402
-from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
+    sys.path.append(_BEV_FUSION)                     # the GT generator: the standalone suite bev_fusion/GtGenerator/
+from GtGenerator.nuscenes_adapter import pose_matrix  # noqa: E402
+from GtGenerator.nuscenes_gt import NuScenesGT  # noqa: E402
 
 try:
     from .camera_encoder import IMG_MEAN, IMG_STD, camera_vector, nuscenes_front_ida
@@ -193,7 +193,7 @@ class FrontRadarDataset(torch.utils.data.Dataset):
 
     # ---- GT (optionally cached)
     def gt_signature(self):
-        """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (autogt source + flags), the suffix of its GT
+        """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (GtGenerator source + flags), the suffix of its GT
         cache files; recorded by train.py (runs/<name>/gt.json) and by the evaluation (metrics.json, the suite's manifest).
         A grid with other extents than the default front grid (x 0..60 m, y -26..26 m) is another GT of the same resolution: its
         extents follow the resolution ('0.5_x0_40_y-20_20_4_<signature>'). The default keeps the names of every existing cache file."""

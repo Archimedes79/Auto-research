@@ -1,6 +1,6 @@
 """Losses of the BEV system (plan.md section 8.4, the loss specification; proposal of 2026-10-26).
 
-    per target time dt: GT of t_c + dt (autogt layout) -> per-layer targets + per-cell weights (masks)
+    per target time dt: GT of t_c + dt (GtGenerator layout) -> per-layer targets + per-cell weights (masks)
       -> per-output losses: areas, lines (+ centre-lines), dense objects (semantic head), object head stage 1,
          motion head, splat correction penalty, camera / radar auxiliary heads, radar stationary-structure hook
       -> task groups (areas, lines, objects, motion), each term normalised by its own count
@@ -26,7 +26,7 @@ import torch.nn.functional as F
 
 try:
     from . import launch_saving as LS
-    from .layers import DIST_MAX, channels, layer_table, pool_targets, source_keys   # layers.py also puts autogt on the path
+    from .layers import DIST_MAX, channels, layer_table, pool_targets, source_keys   # layers.py also puts GtGenerator on the path
     from .lift_pd import Grid
     from .loss_extras import _wcount, _wsum, boundary_fp_loss, dice_semimetric_loss, ramp
     from .object_head import _gather, build_targets, head_loss, refine_loss
@@ -90,7 +90,7 @@ class LossConfig:
     w_correction: float = 0.01         # 0.01 |delta|^2 on the splat correction
     w_cam_aux: float = 0.3
     w_radar_aux: float = 0.3
-    radar_stationary: bool = True      # decision (3): the proxy target, used when the GT dict carries it. NO GT layer carries it (autogt writes none), so its branch never runs and the
+    radar_stationary: bool = True      # decision (3): the proxy target, used when the GT dict carries it. NO GT layer carries it (GtGenerator writes none), so its branch never runs and the
                                        # radar aux head has one untrained channel; false removes the channel and changes the head layout and the init (open_findings #4: at the next baseline)
     w_radar_slot: float = 0.1          # UNUSED: no model output `radar_slot` exists (the branch was removed 2026-11-02); the field stays so that stored configs load
     sync_free: bool = False            # D53 / D54 (launch_saving.py): fixed-shape / host-side forms of the data-dependent steps of the loss (the motion term's one index, the distance-target discs, the targets copied from pinned memory, the channel index tensors cached); same numbers
@@ -173,7 +173,7 @@ def build_layer_targets(gts, cfg=None, mass=None, dt=0.0, device="cpu"):
     T = {}
     rows = layer_table(cfg.centrelines, True, cfg.centreline_1m)          # the objects are always read: the aux heads' targets
     has_stat = cfg.radar_stationary and all("radar_stationary" in g for g in gts)       # hook: another session builds it
-    has_flow = cfg.hygiene_2026_11_02 and all("flow_weight" in g for g in gts)          # autogt: 1 where the velocity is known, 0 on the cells of a box of unknown velocity (velocity 0 there)
+    has_flow = cfg.hygiene_2026_11_02 and all("flow_weight" in g for g in gts)          # GtGenerator: 1 where the velocity is known, 0 on the cells of a box of unknown velocity (velocity 0 there)
     has_ign = all("ignore" in g for g in gts)
     S = _stack_many(gts, source_keys(rows) + ["velocity", "instance", "camera", "occluded", "radar", "undefined"]
                     + (["radar_stationary"] if has_stat else []) + (["flow_weight"] if has_flow else []) + (["ignore"] if has_ign else []), device)
@@ -460,7 +460,7 @@ SIDE_DT = {"cur": 0.0, "prev": -0.5, "next": 0.5}     # nominal target time of e
 
 
 def sample_targets(samples):
-    """autogt training samples ({'cur', 'prev', 'next'}, a list = a batch) -> {nominal dt: [GT dict per sample]}, keyed by SIDE
+    """GtGenerator training samples ({'cur', 'prev', 'next'}, a list = a batch) -> {nominal dt: [GT dict per sample]}, keyed by SIDE
     (prev -0.5, cur 0, next +0.5), never by the rounded true gap: every list has one entry per sample, in batch order, aligned
     with the model's predictions at that dt (a 0.75 s keyframe gap, scene-0994, used to round to -1.0 and leave B - 1 targets
     for B predictions). The true gap stays in meta['dt'] / meta['steps']: train.batch_ego decodes each sample with it."""
@@ -614,7 +614,7 @@ def synthetic_gt(scene, grid):
     camera fan +-50 deg from (1.5, 0), radar fan +-60 deg from (3.5, 0) up to 70 m; radar_stationary = parked boxes +
     a 1 m band inside the drivable edge (the 8.4 proxy)."""
     import synthetic_world as sw
-    from autogt.layers import cell_centres, occlusion
+    from GtGenerator.layers import cell_centres, occlusion
     gx, gy = cell_centres(grid)
     base = sw.gt_bev(scene, grid)
     x0, y0, yaw = scene.lane_pose

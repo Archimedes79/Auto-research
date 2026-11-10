@@ -19,7 +19,7 @@ What is checked, in the order of the chain:
     whether the tag is pushed is check_git.py's list); the snapshot folder of the run (code/SNAPSHOT.txt) names the same commit; code_drift is listed
     (INFO; --strict: MISMATCH). The evaluation records <id>.* get the tag check too.
   3 parent: the checkpoint this one was started from (lineage.json, run.json, or the run's config.json init_from): exists, hash equals the recorded one.
-  4 data: the GT signature of the run (gt.json, or its provenance) is a row of autogt/versions.csv, its git tag autogt/vN exists, a version named by a
+  4 data: the GT signature of the run (gt.json, or its provenance) is a row of GtGenerator/versions.csv, its git tag autogt/vN exists, a version named by a
     provenance block is the version of that signature, the GT store (when present here) names the same version.
   5 evaluations: the cards that name the network (<cards>/<name>/*.json and <cards>/<name>/eval/*.json for the network's names): commit in git, a
     provenance block, its GT signature as in 4, its raw-data manifest hash equal to the current data/NuScenes/manifest.json; then provenance.compare of
@@ -126,7 +126,7 @@ class Ctx:
                     self.recs[i] = r
         self.versions = {}
         try:
-            with open(os.path.join(self.repo, "autogt", "versions.csv"), newline="", encoding="utf-8") as f:
+            with open(os.path.join(self.repo, "GtGenerator", "versions.csv"), newline="", encoding="utf-8") as f:
                 self.versions = {r["signature"]: r for r in csv.DictReader(f)}
         except OSError:
             pass
@@ -340,11 +340,11 @@ def check_gt(c, sig_key, version, label):
     if row is None:
         byv = next((r for r in c.versions.values() if r["version"] == version), None)
         if byv:
-            return [(MISMATCH, "data (GT)", f"{label}: names version {version} with signature {sig}, autogt/versions.csv has {byv['signature']} for it")]
-        return [(MISSING, "data (GT)", f"{label}: signature {sig} is no row of autogt/versions.csv (an unregistered generator state)")]
+            return [(MISMATCH, "data (GT)", f"{label}: names version {version} with signature {sig}, GtGenerator/versions.csv has {byv['signature']} for it")]
+        return [(MISSING, "data (GT)", f"{label}: signature {sig} is no row of GtGenerator/versions.csv (an unregistered generator state)")]
     out = []
     if version not in (None, UNKNOWN) and version != row["version"]:
-        return [(MISMATCH, "data (GT)", f"{label}: names version {version} but signature {sig} is {row['version']} in autogt/versions.csv")]
+        return [(MISMATCH, "data (GT)", f"{label}: names version {version} but signature {sig} is {row['version']} in GtGenerator/versions.csv")]
     tc = c.git("rev-parse", "--verify", "-q", f"refs/tags/{row['tag']}^{{commit}}")
     out.append((OK if tc else MISSING, "data (GT)", f"{label}: signature {sig} = {row['version']} ({row['date']}); git tag {row['tag']} " + (f"-> {tc[:10]}" if tc else "not found")))
     idx = jload(os.path.join(c.repo, "data", "autogt", sig, "index.json"))
@@ -603,7 +603,7 @@ def selftest():
     try:
         git("init", "-q")
         write("data/NuScenes/manifest.json", '{"datasets": {"v1.0-trainval": {"scenes": 850}}}')
-        write("autogt/versions.csv", "version,signature,tag,date,generator,what_changed\nv5,abc123,autogt/v5,2026-10-31,x,y\n")
+        write("GtGenerator/versions.csv", "version,signature,tag,date,generator,what_changed\nv5,abc123,autogt/v5,2026-10-31,x,y\n")
         write("code/a.py", "x = 1\n")
         git("add", "-A")
         git("commit", "-q", "-m", "c1")

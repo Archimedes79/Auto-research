@@ -1,14 +1,14 @@
-"""One-command GT evaluation of all sequences: python -m autogt report --version v1.0-mini --out REPORT.pdf [--data DIR] [--workers N]
+"""One-command GT evaluation of all sequences: python -m GtGenerator report --version v1.0-mini --out REPORT.pdf [--data DIR] [--workers N]
 
 For every keyframe of every sequence the generator runs ONCE; the result is stored in the cache (`DIR/<signature>/<token>.npz`, the
 same format as `build`, existing files are kept), fed to the automatic checks, and - for a few evenly spread sequences - drawn
 as a sample. The report is one PDF: summary of all checks, a table per sequence, optionally the leave-one-radar-out radar test,
 the legend and the sample pictures. The samples are drawn straight into the PDF: no picture file is ever written, so there is
-nothing to clean up afterwards except the report itself and the stored data, both covered by `python -m autogt clean`
+nothing to clean up afterwards except the report itself and the stored data, both covered by `python -m GtGenerator clean`
 (`--reports`, `--stale-caches`, `--all-caches`).
 
 Big datasets (v1.0-trainval, 850 sequences, 34,149 keyframes):
-- `--light` (automatic for trainval): the memory-light devkit (autogt/light_nusc.py); the sequences are processed in groups of
+- `--light` (automatic for trainval): the memory-light devkit (GtGenerator/light_nusc.py); the sequences are processed in groups of
   `GROUP` (60), each group loads only its own records: about 1 GB instead of 8+ GB for the full devkit
 - `--workers N`: N processes (fork: they share the devkit loaded once); the unit of work is one sequence. A finished sequence is saved
   as `DIR/<signature>/_scene_<name>.pkl` (its check accumulator and sample): an interrupted run (Ctrl-C, WSL restart, a stopped job)

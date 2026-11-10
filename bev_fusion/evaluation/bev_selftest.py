@@ -6,7 +6,7 @@
     python evaluation/bev_selftest.py --real      ONLY: the adapter on a real run: contract checker, every view, a quantitative run, outliers
 (--golden and --real are separate processes on purpose: one run's pinned code snapshot per process)
 
-The synthetic world is a curved road with lane / road dividers, vehicles and a pedestrian (GT layers and boxes like autogt's), and a
+The synthetic world is a curved road with lane / road dividers, vehicles and a pedestrian (GT layers and boxes like GtGenerator's), and a
 "network" that predicts the GT with noise; chosen frames are corrupted on purpose, so the outlier search has a known answer.
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.join(ROOT, ".."))                          # the repository root: `import autogt` (the suite lives there since 2026-11-01)
+sys.path.insert(0, os.path.join(ROOT, ".."))                          # the repository root: `import GtGenerator` (the suite lives there since 2026-11-01)
 sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 from evaluation import bev_adapter as A  # noqa: E402
 
@@ -72,7 +72,7 @@ def _centres():
 
 
 def synth_gt(seed: int, dt: float = 0.0) -> dict:
-    """GT layers + masks + meta of one frame (the keys of autogt's keyframe dict that the BEV task reads)"""
+    """GT layers + masks + meta of one frame (the keys of GtGenerator's keyframe dict that the BEV task reads)"""
     rng = np.random.default_rng(seed)
     X, Y = _centres()
     ph = rng.uniform(0, 6)

@@ -11,7 +11,7 @@ unpacked and compared with the data, the manifest then keeps its entry with `pre
 `--archive-check FILE` merges it), the SHA-256 of the metadata tables
 (`v1.0-trainval/*.json`, the dataset version itself), of the map expansion, of the licence and of the stored file lists, and, per sensor folder, the number of
 files, their bytes and the SHA-256 of the sorted list "path<TAB>size" (so one missing or extra file shows). A result card names the manifest by its SHA-256
-(`sha256sum data/NuScenes/manifest.json`); the GT built from this data is named by `autogt/versions.csv` and its `data/autogt/<signature>/index.json`
+(`sha256sum data/NuScenes/manifest.json`); the GT built from this data is named by `GtGenerator/versions.csv` and its `data/autogt/<signature>/index.json`
 (pointers under "links", not copies). Paths in the manifest are relative to the data root (`D:\\Auto-research\\NuScenes`) or to the repository.
 
 The folder fingerprints read 1.5 million files; from WSL that takes 30 minutes, so `scan_tree.ps1` (PowerShell, native, about a minute) does it when `powershell.exe`
@@ -352,7 +352,7 @@ def views(home, root, repo):
     return out
 
 
-LINKS = {"gt": {"registry": "autogt/versions.csv", "tags": "autogt/v<N>", "store": "data/autogt/<signature>/index.json", "check": "python -m autogt data <dataroot>"},
+LINKS = {"gt": {"registry": "GtGenerator/versions.csv", "tags": "autogt/v<N>", "store": "data/autogt/<signature>/index.json", "check": "python -m GtGenerator data <dataroot>"},
          "lane_additions": "bev_fusion_lane_center/data/rebuild.json",
          "recipes": "data/NuScenes/README.md and data/NuScenes/tools/ (link_views.sh builds the views)"}
 

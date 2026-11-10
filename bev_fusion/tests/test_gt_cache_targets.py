@@ -9,9 +9,9 @@ F3  `train.record_gt` writes runs/<name>/gt.json (the GT identity; `evaluation/b
     evaluation/bev_selftest.py).
 F4  the GT cache key (`FrontRadarDataset.gt_signature`) holds the grid extents when they are not the default front grid (second
     repository review 2026-10-31, B5); the default grid keeps the names of all existing cache files.
-F5  `autogt build` writes a provisional index.json before the first keyframe and refuses to continue a folder of another resolution /
+F5  `GtGenerator build` writes a provisional index.json before the first keyframe and refuses to continue a folder of another resolution /
     supersampling, also a folder of an interrupted build without index (B3).
-F6  `autogt.video.run` leaves no temporary pictures after a rendering, write or encoding error (B8).
+F6  `GtGenerator.video.run` leaves no temporary pictures after a rendering, write or encoding error (B8).
 F7  `train.trainable_state` / `load_checkpoint`: with freeze_camera false the camera weights are in the checkpoint and restored (B4).
 
 Usage (from the bev_fusion folder): python tests/test_gt_cache_targets.py
@@ -30,7 +30,7 @@ from nuscenes_dataset import FrontRadarDataset  # noqa: E402
 
 
 class FakeGT:
-    """stands in for autogt's NuScenesGT: a fixed signature and a tiny training sample; counts the generator calls"""
+    """stands in for GtGenerator's NuScenesGT: a fixed signature and a tiny training sample; counts the generator calls"""
 
     def __init__(self):
         self.calls = 0
@@ -138,12 +138,12 @@ def check_f3():
         T.record_gt(d, (D("0.5_4_bbb"), D("0.5_4_bbb")))                          # other GT on resume: recorded, the earlier kept
         assert json.load(open(os.path.join(d, "gt.json"))) == {"gt_signature": "0.5_4_bbb", "earlier": ["0.5_4_aaa"]}
         assert T.record_gt(d, (object(),)) is None                                 # datasets without a GT identity: nothing written
-    from autogt.versions import table
+    from GtGenerator.versions import table
     v5 = next(r for r in table() if r["version"] == "v5")["signature"]
     with tempfile.TemporaryDirectory() as d2:                                      # D29: a released signature also gets its version key
         T.record_gt(d2, (D("0.5_4_" + v5), D("0.5_4_" + v5)))
         assert json.load(open(os.path.join(d2, "gt.json"))) == {"gt_signature": "0.5_4_" + v5, "gt_version": "v5"}
-    print("F3 ok: gt.json records the GT identity of a run (grid, supersampling, autogt signature); a GT change on resume is kept")
+    print("F3 ok: gt.json records the GT identity of a run (grid, supersampling, GtGenerator signature); a GT change on resume is kept")
 
 
 def check_f4():
@@ -192,11 +192,11 @@ def refused(fn, what):
 
 
 def check_f5():
-    """autogt build: a folder of another resolution / supersampling is never continued, also after an interrupted build"""
+    """GtGenerator build: a folder of another resolution / supersampling is never continued, also after an interrupted build"""
     import json
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    from autogt import cli
-    from autogt.grid import GridSpec
+    from GtGenerator import cli
+    from GtGenerator.grid import GridSpec
 
     class Gen:
         grid, ss = GridSpec(res=0.5), 4
@@ -212,13 +212,13 @@ def check_f5():
         refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.25), 4), "(240, 208)")
         # the provisional index of a running build says what the folder holds
         cli.write_index(sig_dir, Gen(), "v1.0-mini", ["scene-0061"], 1, 40, {}, complete=False)
-        assert {k: v for k, v in json.load(open(os.path.join(sig_dir, "index.json"))).items() if k != "data_identity"} == {     # data_identity: the raw files the GT key names (autogt 2026-11-10)
+        assert {k: v for k, v in json.load(open(os.path.join(sig_dir, "index.json"))).items() if k != "data_identity"} == {     # data_identity: the raw files the GT key names (GtGenerator 2026-11-10)
             "signature": "testsig000", "version": "v1.0-mini", "res": 0.5, "ss": 4, "options": {}, "scenes": ["scene-0061"],
             "stride": 1, "keyframes": 40, "complete": False}
         cli.check_resume(sig_dir, GridSpec(res=0.5), 4)
         refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.25), 4), "holds res 0.5")
         refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.5), 2), "ss 4")
-        from autogt import clean                                                                       # `clean --stale-caches` leaves a running build alone
+        from GtGenerator import clean                                                                       # `clean --stale-caches` leaves a running build alone
         assert clean._running(sig_dir), "a provisional index written just now: a build may be running"
         os.utime(sig_dir, (time.time() - 7200, time.time() - 7200))
         assert not clean._running(sig_dir), "a provisional folder untouched for two hours is an interrupted build"
@@ -228,7 +228,7 @@ def check_f5():
         cli.check_resume(os.path.join(d, "nothing_yet"), GridSpec(res=0.25), 4)                       # a new folder is fine
 
     # the wiring: `build` itself (a fake generator in place of GtGenerator) and `clean.collect`
-    import autogt.suite as suite_mod
+    import GtGenerator.suite as suite_mod
 
     class FakeGT:
         seen, sig_dir = 0, None
@@ -267,7 +267,7 @@ def check_f5():
             refused(lambda: cli.build("root", "v1.0-mini", out, res=0.25, verbose=False), "no index.json")
     finally:
         suite_mod.GtGenerator = real
-    from autogt import clean as CL
+    from GtGenerator import clean as CL
     with tempfile.TemporaryDirectory() as d:
         caches = os.path.join(d, "caches")
         for name, complete in (("old_done", True), ("old_running", False), ("cur", True)):
@@ -277,13 +277,13 @@ def check_f5():
         stale = {os.path.basename(p) for p, _, _ in CL.collect(stale_caches=caches, current_signature={"cur"}, base=d)}
         every = {os.path.basename(p) for p, _, _ in CL.collect(all_caches=caches, base=d)}
         assert stale == {"old_done"} and every == {"old_done", "cur"}, (stale, every)         # a build that may be running is not offered, by either option
-    print("F5 ok: autogt build refuses to continue a folder of another resolution / supersampling (provisional index, or the stored grid)")
+    print("F5 ok: GtGenerator build refuses to continue a folder of another resolution / supersampling (provisional index, or the stored grid)")
 
 
 def check_f6():
-    """autogt video: a rendering, encoding or write error leaves no temporary pictures; the output folder is created"""
+    """GtGenerator video: a rendering, encoding or write error leaves no temporary pictures; the output folder is created"""
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    from autogt import video
+    from GtGenerator import video
 
     class Nusc:
         def get(self, kind, tok):
@@ -338,7 +338,7 @@ def check_f6():
         for k, v in keep.items():
             setattr(video, k, v)
         video.cv2.imwrite = imwrite
-    print("F6 ok: autogt video leaves no temporary pictures after an encoder or write error; the output folder is created")
+    print("F6 ok: GtGenerator video leaves no temporary pictures after an encoder or write error; the output folder is created")
 
 
 def check_f7():

@@ -1,7 +1,7 @@
 """The split lists (`splits/*.json`), `training/splits.py` (resolve, manifest, split.json) and the trainsuite hook that calls it. Known answers, no data, no GPU.
 
   1. the files: `large` = exactly the lists of the stored config t16_full.json (428 / 82 scenes), `xl` = those of t17_data.json (700 / 82, large inside it), `small` a
-     subset of `large` (60 / 10); train and val never share a scene; every file names an autogt version of autogt/versions.csv; train scenes are official nuScenes train scenes, val scenes official val scenes
+     subset of `large` (60 / 10); train and val never share a scene; every file names a GtGenerator version of GtGenerator/versions.csv; train scenes are official nuScenes train scenes, val scenes official val scenes
   2. resolve: `"split": "large"` gives the lists of the inline t16_full.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it; the
      trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false, [] and a number
      are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
@@ -53,9 +53,9 @@ check(xl["train"] == t17["train_scenes"] and xl["val"] == t17["val_scenes"] and 
 check(set(large["train"]) < set(xl["train"]) and xl["val"] == large["val"], "xl = large + 272 train scenes, the same val scenes")
 check(set(small["train"]) <= set(large["train"]) and set(small["val"]) <= set(large["val"]) and (len(small["train"]), len(small["val"])) == (60, 10), "small: 60 / 10 scenes, a subset of large")
 check(all(not set(d["train"]) & set(d["val"]) for d in (small, large, xl)), "no scene is in train and val of one split")
-with open(os.path.join("..", "autogt", "versions.csv"), newline="", encoding="utf-8") as f:
+with open(os.path.join("..", "GtGenerator", "versions.csv"), newline="", encoding="utf-8") as f:
     versions = {r["version"] for r in csv.DictReader(f)}
-check(all(d["gt"] in versions for d in (small, large, xl)), f"every split names an autogt version ({large['gt']}) of autogt/versions.csv")
+check(all(d["gt"] in versions for d in (small, large, xl)), f"every split names a GtGenerator version ({large['gt']}) of GtGenerator/versions.csv")
 from nuscenes.utils.splits import create_splits_scenes  # noqa: E402
 official = create_splits_scenes()
 check(all(set(d["train"]) <= set(official["train"]) and set(d["val"]) <= set(official["val"]) for d in (small, large, xl)), "train scenes are official train scenes, val scenes official val scenes (the devkit's lists)")

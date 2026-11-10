@@ -33,7 +33,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path[:0] = [os.path.join(ROOT, "training")]
 os.chdir(ROOT)
 sys.path.append(ROOT)
-sys.path.append(os.path.dirname(ROOT))                          # autogt (synthetic GT of losses.synthetic_gt): the repo root since its move out of bev_fusion
+sys.path.append(os.path.dirname(ROOT))                          # GtGenerator (synthetic GT of losses.synthetic_gt): the repo root since its move out of bev_fusion
 import object_head  # noqa: E402
 sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
 import synthetic_world as sw  # noqa: E402

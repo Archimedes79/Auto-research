@@ -1446,7 +1446,7 @@ try:
     assert RUN.code_drift(T4, cfg4, sc, before4, spec4) == ({}, "")
     open(f"{T4}/temp/loop1/p1.py", "w").write("a = 2\n")
     assert RUN.code_drift(T4, cfg4, sc, before4, spec4) == ({"n": 1, "paths": ["temp/loop1/p1.py"]}, ""), RUN.code_drift(T4, cfg4, sc, before4, spec4)
-    # scratch OUTSIDE the code folders (bev_fusion: code_dirs training / evaluation / autogt / tests, scratch temp): the tag holds its scripts (no result file), an
+    # scratch OUTSIDE the code folders (bev_fusion: code_dirs training / evaluation / GtGenerator / tests, scratch temp): the tag holds its scripts (no result file), an
     # edit of one is no code drift of the run, an edit of real code still is
     cfg4o = dict(code_dirs=["code"], fingerprint_extra=[], scratch="temp")
     before4o = RUN.drift_hash(T4, cfg4o)
@@ -1481,7 +1481,7 @@ try:
     _, ftag, fnote = RUN.git_snapshot(T4, cfg4b, "t", "S.fp", "m")
     assert ftag == "t/S.fp" and "temp/train/sub/helper.sh" in lsf(ftag), (ftag, fnote)
     shutil.rmtree(T4, ignore_errors=True)
-    # a code folder OUTSIDE the problem folder (code_dirs "../shared": a repository-level suite such as autogt): the spec is the repository
+    # a code folder OUTSIDE the problem folder (code_dirs "../shared": a repository-level suite such as GtGenerator): the spec is the repository
     # path, and the tag holds the files as they are in the working tree
     T5 = tempfile.mkdtemp()
     G5 = ["git", "-C", T5]

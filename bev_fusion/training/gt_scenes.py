@@ -1,15 +1,15 @@
 """The ground truth a config needs: its scene names, the check and the build - the `prepare` step of `python -m trainsuite start`.
 
     python training/gt_scenes.py CONFIG names     # the sequence names the config trains and validates on, one per line
-    python training/gt_scenes.py CONFIG check     # exit 0 when the autogt store holds every keyframe of them for the CURRENT generator, else 1 and how many are missing
+    python training/gt_scenes.py CONFIG check     # exit 0 when the GtGenerator store holds every keyframe of them for the CURRENT generator, else 1 and how many are missing
     python training/gt_scenes.py CONFIG build     # generate what is missing (the front GT only: --no-lane): resumable, nice 15, light devkit (hours for the whole trainval: a run of its own)
 
-autogt does not read training configs (it must not): this wrapper turns the config into a file of sequence names (`<config>.scenes.txt`, next to the config, one name per
-line) and calls `python -m autogt have|generate --scenes-file` from the repository top, as autogt's guide asks. Scenes: the official split of the config (`train_split`,
+GtGenerator does not read training configs (it must not): this wrapper turns the config into a file of sequence names (`<config>.scenes.txt`, next to the config, one name per
+line) and calls `python -m GtGenerator have|generate --scenes-file` from the repository top, as GtGenerator's guide asks. Scenes: the official split of the config (`train_split`,
 `val_split`; mini versions use mini_train / mini_val), restricted by `train_scenes` / `val_scenes`, the two parts together, without repeats. The trainer additionally leaves
-out scenes whose CAM_FRONT files are not on disk; the store check wants all of them (`python -m autogt data` says which raw files are missing).
-Which store: the autogt store is the single source going forward; until the dataset reads it (D29 part 5), the trainer builds its own cache (`gt_cache`) from the live
-generator, so a passing check says that the autogt store holds the GT, not that this cache is filled.
+out scenes whose CAM_FRONT files are not on disk; the store check wants all of them (`python -m GtGenerator data` says which raw files are missing).
+Which store: the GtGenerator store is the single source going forward; until the dataset reads it (D29 part 5), the trainer builds its own cache (`gt_cache`) from the live
+generator, so a passing check says that the GtGenerator store holds the GT, not that this cache is filled.
 Run from the bev_fusion folder in the WSL with the gcar environment; tests/test_gt_prepare.py.
 """
 import os
@@ -18,7 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                                   # bev_fusion/
-REPO = os.path.dirname(ROOT)                                   # the repository top: autogt runs from there
+REPO = os.path.dirname(ROOT)                                   # the repository top: GtGenerator runs from there
 sys.path.insert(0, HERE)
 
 
@@ -49,11 +49,11 @@ def write_names(cfg, path):
 
 
 def have_argv(cfg, names_file, py=None):
-    return [py or sys.executable, "-m", "autogt", "have", "--scenes-file", names_file, "--version", cfg.version, "--dataroot", os.path.expanduser(cfg.data_root)]
+    return [py or sys.executable, "-m", "GtGenerator", "have", "--scenes-file", names_file, "--version", cfg.version, "--dataroot", os.path.expanduser(cfg.data_root)]
 
 
 def build_argv(cfg, names_file, workers=2):
-    return ["bash", "autogt/run_nice.sh", "-m", "autogt", "generate", os.path.expanduser(cfg.data_root), "--version", cfg.version, "--scenes-file", names_file,
+    return ["bash", "GtGenerator/run_nice.sh", "-m", "GtGenerator", "generate", os.path.expanduser(cfg.data_root), "--version", cfg.version, "--scenes-file", names_file,
             "--workers", str(workers), "--no-lane"]                       # the front GT only: the lane stores belong to the lane GT (a BEV prepare must not write them)
 
 

@@ -1,5 +1,5 @@
 """Audit of a stored lane GT: does the store hold every keyframe of the nuScenes version, does every file load and hold what the version promises. Used for every store before it is released
-(l4, l5: 34,149 files, 4 - 8 min on one core); `python -m autogt audit-lane SYSTEM`.
+(l4, l5: 34,149 files, 4 - 8 min on one core); `python -m GtGenerator audit-lane SYSTEM`.
 
     r = store_audit.audit_lane(store_dir, rig, dataroot="~/data/nuscenes_full", version="v1.0-trainval")
     r["ok"], r["problems"] (the first 40: token, message), r["stats"] (tier lengths, visible shares, frames without a tier 1, ...), r["lines"] (the printable summary)

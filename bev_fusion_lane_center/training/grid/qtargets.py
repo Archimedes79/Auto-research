@@ -1,4 +1,4 @@
-"""Targets of the lane head (E273) from the lane GT of autogt (`autogt.lane_gt`, frame "lane": x right, y forward, |x|, |y| <= 50 m): nodes on a 2 m grid, the links between them,
+"""Targets of the lane head (E273) from the lane GT of GtGenerator (`GtGenerator.lane_gt`, frame "lane": x right, y forward, |x|, |y| <= 50 m): nodes on a 2 m grid, the links between them,
 the section starts, and the oracle that decodes nodes + links back to curves (the representation check of the card, section 3.4).
 
     nt = node_table(g)                       # g = one lane GT graph (dict); -> nodes, links, counts

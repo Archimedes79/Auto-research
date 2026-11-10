@@ -3,7 +3,7 @@
 The dataset writes the GT of a sample (keyframes k-1, k, k+1) into the cache on first use, which costs seconds per sample
 (map rasterisation) and stalls training; this tool does the same with `workers` processes before training, using the dataset's
 own cache writer (`FrontRadarDataset._gt`), so the files are exactly the ones the trainer reads. The cache key contains the
-signature of the generator (`FrontRadarDataset.gt_signature()`: autogt source + flags): after an edit of autogt the cache must be built
+signature of the generator (`FrontRadarDataset.gt_signature()`: GtGenerator source + flags): after an edit of GtGenerator the cache must be built
 again. Resumable (existing files are
 skipped by the writer). The workers are forks of one process that has loaded the devkit once (memory is shared).
 

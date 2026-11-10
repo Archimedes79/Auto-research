@@ -1,19 +1,19 @@
-"""Cleanup of what autogt generates (videos, pictures, old outputs, caches of outdated generator versions):
+"""Cleanup of what GtGenerator generates (videos, pictures, old outputs, caches of outdated generator versions):
 
-  python -m autogt clean --videos --pictures --reports --old-outputs --stale-caches DIR | --all-caches DIR [--older-than DAYS] [--move | --delete]
+  python -m GtGenerator clean --videos --pictures --reports --old-outputs --stale-caches DIR | --all-caches DIR [--older-than DAYS] [--move | --delete]
 
 Without --move / --delete it only lists what it would remove and the size (dry run). --move puts the items into
 _to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace). --delete removes only what one command rebuilds
 (videos, pictures, reports); stored GT (caches) and the old outputs are only moved: a store is deleted by autoresearch/tools/package.py, which
 writes the package of the runs that used it first (D40, hard rule 5).
-- videos / pictures: *.mp4 / *.gif and *.png in data/autogt/examples (they are reproducible: `python -m autogt video / view / sheets`)
-- reports: autogt_report_*.pdf in data/autogt/reports (what `python -m autogt report` writes by default; the report is self-contained,
+- videos / pictures: *.mp4 / *.gif and *.png in data/autogt/examples (they are reproducible: `python -m GtGenerator video / view / sheets`)
+- reports: autogt_report_*.pdf in data/autogt/reports (what `python -m GtGenerator report` writes by default; the report is self-contained,
   its sample pictures are drawn straight into the PDF and never exist as files; other PDFs there are not touched)
-(everything autogt generates lives under data/autogt/, outside the code package autogt/ and outside git)
+(everything GtGenerator generates lives under data/autogt/, outside the code package GtGenerator/ and outside git)
 - old-outputs: _to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
-- stale-caches DIR: the cache folders `DIR/<signature>` of `python -m autogt generate` / `build` / `report` whose signature is not a
+- stale-caches DIR: the cache folders `DIR/<signature>` of `python -m GtGenerator generate` / `build` / `report` whose signature is not a
   current one (the default options or `--boxes-at annotation`; every edit of the generator changes the signature); all-caches DIR: every
-  cache folder in DIR, the current one included. A folder is a cache only if its index.json is a record of autogt (a dict whose
+  cache folder in DIR, the current one included. A folder is a cache only if its index.json is a record of GtGenerator (a dict whose
   signature, when it has one, is the folder name). A released store is left alone, because an experiment on that version needs it (a rebuild takes
   hours): one whose signature is in versions.csv (D29) or lane_versions.csv, or whose index.json says `release: true` (the lane stores of v11 / v12
   have no row of their own for the store folder). `--include-released` lists them too, and then `--delete` is refused, they can only be moved.
@@ -38,7 +38,7 @@ def _running(p):
 
 
 def _is_cache(p):
-    """a folder of stored GT: it has an index.json that is a record of autogt (a dict whose signature, when it has one, is the folder name)"""
+    """a folder of stored GT: it has an index.json that is a record of GtGenerator (a dict whose signature, when it has one, is the folder name)"""
     idx = _index(p)
     return bool(idx) and idx.get("signature", os.path.basename(p)) == os.path.basename(p)
 
@@ -95,7 +95,7 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
     def cache_items(root, keep, category):
         for d in sorted(os.listdir(root)):
             p = os.path.join(root, d)
-            if not os.path.isdir(p) or os.path.islink(p) or d in keep or not _is_cache(p) or _running(p):      # only what autogt marked as its cache (not a link to
+            if not os.path.isdir(p) or os.path.islink(p) or d in keep or not _is_cache(p) or _running(p):      # only what GtGenerator marked as its cache (not a link to
                 continue                                                                                 # D:), and not a build that may still be running
             if d in released or _index(p).get("release") is True:
                 if include_released:
@@ -140,7 +140,7 @@ def clean(delete=False, move=False, base=BASE, verbose=True, **kw):
             target = os.path.join(dest, os.path.basename(p))
             shutil.move(p, target if not os.path.exists(target) else target + f"_{int(time.time())}")
         with open(os.path.join(dest, "README.md"), "a", encoding="utf-8") as f:
-            f.write(f"# autogt cleanup {datetime.date.today().isoformat()}\n\nMoved here by `python -m autogt clean --move` "
+            f.write(f"# GtGenerator cleanup {datetime.date.today().isoformat()}\n\nMoved here by `python -m GtGenerator clean --move` "
                     "(videos, pictures, reports, old outputs, caches of other generator versions). To restore, move a folder back; to free "
                     "the space, delete this folder once nothing needs it.\n\n" + "".join(f"- {os.path.basename(p)} ({c})\n" for p, _, c in items))
         say("moved to", dest)
@@ -170,7 +170,7 @@ def selftest():
             os.makedirs(os.path.join(cache, sig))
             json.dump({"signature": sig, "complete": True}, open(os.path.join(cache, sig, "index.json"), "w"))
         os.makedirs(os.path.join(cache, "foreign"))                                         # foreign index.json files are no cache:
-        json.dump(["not", "autogt"], open(os.path.join(cache, "foreign", "index.json"), "w"))        # a list,
+        json.dump(["not", "GtGenerator"], open(os.path.join(cache, "foreign", "index.json"), "w"))        # a list,
         os.makedirs(os.path.join(cache, "wrong"))
         json.dump({"signature": "other"}, open(os.path.join(cache, "wrong", "index.json"), "w"))     # another folder's signature
         got = collect(videos=True, base=b)

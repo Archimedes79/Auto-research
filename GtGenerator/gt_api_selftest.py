@@ -2,7 +2,7 @@
 the packed cache (round trip, resume, a store that grew, a changed rasteriser, an empty frame), real nuScenes mini frames against a raster made straight from the map and against the front GT's drivable
 area, and `generate_bev_gt` / `generate_lane_gt` on one sequence with the key they return (id, completeness, data identity).
 
-    python -m autogt.gt_api_selftest [--root ~/data/nuscenes]      (also run by `python -m autogt selftest`)
+    python -m GtGenerator.gt_api_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
 """
 import os
 import tempfile

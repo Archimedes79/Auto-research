@@ -1,7 +1,7 @@
 """The interface of the suite: the methods of the class `GtGenerator` (the class itself is in suite.py; its static methods are these). The command line (`cli.py`) reaches the suite ONLY through them:
-every command is one method, `python -m autogt generate-bev ROOT` is `GtGenerator.generate_bev_gt(ROOT)`.
+every command is one method, `python -m GtGenerator generate-bev ROOT` is `GtGenerator.generate_bev_gt(ROOT)`.
 
-    from autogt import GtGenerator
+    from GtGenerator import GtGenerator
     key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")        # front GT + lane GT of the rig bev_fusion + packed masks      -> GtKey
     key = GtGenerator.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")      # the lane GT of Spurmitte (rig="all": both)                    -> GtKey (a dict of them for "all")
     key = GtGenerator.gt_key("bev_fusion", set_name="full")                            # what is stored, nothing is generated; key.complete, key.load(token)
@@ -44,18 +44,18 @@ def _versions_text():
                    f"{'stored    ' if os.path.isdir(os.path.join(DATA, versions.canonical(r['signature']))) else 'not stored'}  {r['tag']:11s} "
                    f"{r['what_changed'][:70]}{same}")
     if cur not in {r["signature"] for r in rows}:
-        out.append(f"this source has the signature {cur}: no row in autogt/versions.csv (unreleased): `python -m autogt versions --update` derives it from git")
+        out.append(f"this source has the signature {cur}: no row in GtGenerator/versions.csv (unreleased): `python -m GtGenerator versions --update` derives it from git")
     here = versions.current_release()
-    out.append("lane GT (own versions, autogt/lane_versions.csv):")
+    out.append("lane GT (own versions, GtGenerator/lane_versions.csv):")
     for r in lane_gt.table():
         same = f" (the GT of {r['same_gt_as']})" if r["same_gt_as"] else ""
         out.append(f"  {r['version']:3s} {r['rig']:11s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == lane_gt.code_signature(rig=r['rig']) else '       '}  "
                    f"{'stored    ' if os.path.isdir(os.path.join(lane_gt.DATA, lane_gt.store_of(r['signature']))) else 'not stored'}  {r['what_changed'][:60]}{same}")
-    out.append("releases (the suite as one number, autogt/releases.csv):")
+    out.append("releases (the suite as one number, GtGenerator/releases.csv):")
     for r in versions.releases():
         out.append(f"  {r['release']:5s} front {r['front']:4s} + lane {r['lane']:3s}  {r['date']}  {'CURRENT' if r['release'] == here else '       '}  {r['what_changed'][:80]}")
     if here is None:
-        out.append(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.code_signature())}) has no row in autogt/releases.csv: `python -m autogt versions --update` derives it")
+        out.append(f"this source (front {versions.version_of(cur)}, lane {lane_gt.version_of(lane_gt.code_signature())}) has no row in GtGenerator/releases.csv: `python -m GtGenerator versions --update` derives it")
     return "\n".join(out)
 
 
@@ -177,7 +177,7 @@ class Interface:
             if update:
                 V.write_rows(prop)
                 tag = (prop["front"] or {}).get("tag")
-                text += "\nadded to autogt/versions.csv / releases.csv: review the rows (same_gt_as stays by hand, with a pinned proof), commit" + (f", then git tag -a {tag} -m '...'" if tag else "")
+                text += "\nadded to GtGenerator/versions.csv / releases.csv: review the rows (same_gt_as stays by hand, with a pinned proof), commit" + (f", then git tag -a {tag} -m '...'" if tag else "")
             else:
                 text += "\n(`versions --update` adds them)"
         return {"text": text, "proposal": prop}

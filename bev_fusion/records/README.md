@@ -1,6 +1,6 @@
 # records - the run records of bev_fusion under autoresearch (D23, 2026-10-31)
 
-Since D23 a bev_fusion training starts through the launcher of the research system, `../../autoresearch/tools/run.py`, like the runs of the lane problem. The launcher writes the card (hypothesis, prediction, rule) and the facts of the run into the ledger, tags the code it ran (`bf/<run id>`: `training/`, `evaluation/`, `autogt/`, `tests/`, `temp/train/run_cfg.sh` and `autoresearch/`, uncommitted changes included), waits for a GPU slot shared with the lane problem (2 slots on this machine), retries a CUDA "unknown error" and writes a done flag only for exit code 0. The paths are in `../project.json`.
+Since D23 a bev_fusion training starts through the launcher of the research system, `../../autoresearch/tools/run.py`, like the runs of the lane problem. The launcher writes the card (hypothesis, prediction, rule) and the facts of the run into the ledger, tags the code it ran (`bf/<run id>`: `training/`, `evaluation/`, `GtGenerator/`, `tests/`, `temp/train/run_cfg.sh` and `autoresearch/`, uncommitted changes included), waits for a GPU slot shared with the lane problem (2 slots on this machine), retries a CUDA "unknown error" and writes a done flag only for exit code 0. The paths are in `../project.json`.
 
 | file / folder | what |
 |---|---|
@@ -31,13 +31,13 @@ wsl bash -c 'AR_PROJECT=../bev_fusion nohup python3 ../autoresearch/tools/run.py
 
 - `--gpu-max-mb 3000` is `project.json` `trainsuite.gpu_max_mb`: a training starts only when the card has less than that in use (a t20-sized run holds 8-9 of the 12 GB; a second one next to it pages the GPU memory and both ran 13 times slower). `trainsuite start` and `queue add` pass it themselves (the start line that `training/startable.py` prints does not: that file is frozen, add the flag by hand); `gpu_settle_s` (180) makes the next launcher wait while a run that has just started loads its data.
 - `tools/run_ar.sh` (not `run_cfg.sh`, which always exits 0) trains from a `git archive` of `training/` and of `../autoresearch/trainkit` (the pinned engine, unpacked next to `train.py`) at `$AR_COMMIT`, the snapshot commit `run.py` made for this attempt (also on a resumed id, whose tag still names attempt 1), with the config copy inside that snapshot, and exits with `train.py`'s exit code, so a crash is a failed run and a CUDA "unknown error" is retried (`train.py` resumes from its last checkpoint).
-- Not pinned: `autogt/` is imported from the live tree when the training starts. The tag records its state, and the run writes the GT signature it used to `runs/<name>/gt.json`; `evaluation/bev_suite.py compare` checks it.
+- Not pinned: `GtGenerator/` is imported from the live tree when the training starts. The tag records its state, and the run writes the GT signature it used to `runs/<name>/gt.json`; `evaluation/bev_suite.py compare` checks it.
 - The training itself still writes `runs/<config name>/` (`train.log`, `log.jsonl`, checkpoints, `.done`) as before; the run record here holds the launcher's facts and the ledger row.
 - Watch it with `python -m trainsuite --root ../bev_fusion/runs watch <config name>` (from `autoresearch/`).
 - After the run: `ledger.py note <run id> --result "..." --decision "..."` (with the same `AR_PROJECT`).
 - A planned row first (`ledger.py add <run id> --hyp ... --pred ... --rule ...`) lets the start line carry only `--id`; chains wait with `--after <run id>`.
 
-Not yet under the launcher: the queue scripts in `temp/study/` (`lane*.sh`); they keep working, but their runs have no ledger row. The GT that a training reads is built from the live `autogt/` (the tag records its state; the GT signature in the run's config is item F3 of the repository review).
+Not yet under the launcher: the queue scripts in `temp/study/` (`lane*.sh`); they keep working, but their runs have no ledger row. The GT that a training reads is built from the live `GtGenerator/` (the tag records its state; the GT signature in the run's config is item F3 of the repository review).
 
 ## The best three networks (keep3.json)
 

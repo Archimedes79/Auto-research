@@ -1,6 +1,6 @@
 """Self-test of the lane graph (lane_graph.py, road_graph.py, lane_lines.py): a made-up map for the logic, nuScenes mini for the checks against the map.
 
-    python -m autogt.lane_graph_selftest [--root ~/data/nuscenes]      (also run by `python -m autogt selftest`)
+    python -m GtGenerator.lane_graph_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
 """
 import collections
 import json
@@ -241,7 +241,7 @@ def run(root=None, verbose=True):
         pass
     for rig in lane_gt.RIGS:
         assert lane_gt.version_of(lane_gt.code_signature(rig=rig)) is not None, (f"the lane GT source has the signature {lane_gt.code_signature(rig=rig)} for the rig {rig} but no row in "
-                                                                                  "autogt/lane_versions.csv: add one, commit, tag autogt/lane-l<N>")
+                                                                                  "GtGenerator/lane_versions.csv: add one, commit, tag autogt/lane-l<N>")
     gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
     lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
     n_frames, d_graph, d_ref, f1s, divpairs, found = 0, [], [], [], 0, 0

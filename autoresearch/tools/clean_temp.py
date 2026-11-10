@@ -301,7 +301,7 @@ def selftest():
         open(os.path.join(ref, fn), "w").write("x = 1\n")
         os.utime(os.path.join(ref, fn), (old, old))
     cfgp = dict(P.DEFAULTS, live_code=["training"], code_dirs=["training", "tests", "temp"], scratch="temp", trash="_to_delete")
-    assert live_dirs(cfgp) == ["training", "tests"] and live_dirs(dict(cfgp, code_dirs=[".", "./temp", "../autogt", "temp/sub"])) == ["training", "../autogt"], live_dirs(cfgp)
+    assert live_dirs(cfgp) == ["training", "tests"] and live_dirs(dict(cfgp, code_dirs=[".", "./temp", "../GtGenerator", "temp/sub"])) == ["training", "../GtGenerator"], live_dirs(cfgp)
 
     imp = tempfile.mkdtemp()                                                    # a module that live code finds elsewhere (autoresearch/tools on sys.path) is no dependency on a scratch copy
     os.makedirs(os.path.join(imp, "training"))

@@ -19,7 +19,7 @@
 
 # the nuScenes ground-truth suite (code only): what it generates (stored GT, reports, videos) goes to /data/autogt/, scratch to /temp/ -
 # both stay ignored by the first rule
-!/autogt/
+!/GtGenerator/
 
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/
@@ -185,7 +185,7 @@ status.json
 # (`archdraw.py check`), embedded in the READMEs; the one exception to the image rule above
 !/autoresearch/architecture.svg
 !/autoresearch/overview.svg
-!/autogt/architecture.svg
+!/GtGenerator/architecture.svg
 !/autoresearch/history/architecture_target_2026-11-01.svg
 !/bev_fusion/training/architecture.svg
 !/bev_fusion/training/architecture_target.svg

@@ -32,11 +32,11 @@ except ImportError:                                   # run as a script
     import launch_saving as LS
 
 _BEV_FUSION = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-while not os.path.isdir(os.path.join(_BEV_FUSION, "autogt")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
+while not os.path.isdir(os.path.join(_BEV_FUSION, "GtGenerator")) and os.path.dirname(_BEV_FUSION) != _BEV_FUSION:
     _BEV_FUSION = os.path.dirname(_BEV_FUSION)       # a run snapshot (runs/<name>/code/) sits three levels below the bev_fusion folder
 if _BEV_FUSION not in sys.path:
-    sys.path.append(_BEV_FUSION)                     # the GT layout: the standalone suite autogt/
-from autogt.layers import AREAS, DIST_MAX, LINES, OBJECTS  # noqa: E402,F401
+    sys.path.append(_BEV_FUSION)                     # the GT layout: the standalone suite GtGenerator/
+from GtGenerator.layers import AREAS, DIST_MAX, LINES, OBJECTS  # noqa: E402,F401
 
 KINDS = ("area", "polyline", "dense_box")
 LEVELS = {"0.5m": 1, "1m": 2}                         # level -> stride in cells of the 0.5 m GT grid
@@ -95,7 +95,7 @@ def channels(rows, level="0.5m"):
 
 
 def source_keys(rows):
-    """the GT layers (autogt keys) the targets of the rows are made from: a 0.5 m row's own keys, a pooled row's 0.5 m mask and direction"""
+    """the GT layers (GtGenerator keys) the targets of the rows are made from: a 0.5 m row's own keys, a pooled row's 0.5 m mask and direction"""
     keys = []
     for r in rows:
         own = ([r.name] + ([r.name + "_dist"] if r.dist and r.level == "0.5m" else []) + ([r.name + "_dir"] if r.direction else []))

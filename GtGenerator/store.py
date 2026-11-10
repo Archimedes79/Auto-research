@@ -80,7 +80,7 @@ def save_keyframe(path, flat):
 
 
 def run_manifest(sig_dir, version, dataroot, set_name=None, options=None):
-    """what a finished run records about itself in index.json: the set asked for, the commit and dirty flag of autogt/, and the
+    """what a finished run records about itself in index.json: the set asked for, the commit and dirty flag of GtGenerator/, and the
     sets that the folder now holds in full (see sets.py)"""
     from . import sets, versions
     from .suite import code_signature
@@ -107,7 +107,7 @@ def canonical_of(signature):
 
 
 def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True, run=None, old_complete=None):
-    """index.json of a cache folder (marks it as an autogt cache for `clean`, records what it holds). `build` writes it with
+    """index.json of a cache folder (marks it as a GtGenerator cache for `clean`, records what it holds). `build` writes it with
     complete=False before the first keyframe (so an interrupted build still says which resolution it holds) and again at the end.
     run = run_manifest(...) of a finished run adds the manifest keys set, commit, dirty, sets_complete and release (a complete folder
     whose signature is a released GT version, made from a clean tree, holding the set `full`); without it the keys of an earlier run

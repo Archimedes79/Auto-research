@@ -11,7 +11,7 @@ CPU, no data, no GPU, a minute. Every switch is off by default and a plain call 
      LossConfig.sync_free, each alone and all together: every output tensor, the loss terms and the gradients of every parameter equal the plain run (outputs bit for
      bit where the arithmetic is the same, the loss and the gradients to rounding: the two heads' gradients meet in one backward node)
   7. the switches are scoped: after a forward or a loss call every switch is off again, also after an error; the flags are off in a default config
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_launch_saving.py   (PYTHONPATH = the repository root for autogt)"""
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_launch_saving.py   (PYTHONPATH = the repository root for GtGenerator)"""
 import math
 import os
 import sys

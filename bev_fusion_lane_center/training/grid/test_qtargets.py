@@ -2,7 +2,7 @@
 
     wsl bash tools/env/_py14.sh test_qtargets.py [--n 200] [--marker 0]
 
-Frames: a seeded sample of the stored lane GT (`data/autogt/lane/<signature>`, the signature of the autogt source in this checkout). Gates (card): GT lane points within 0.3 m of the decoded
+Frames: a seeded sample of the stored lane GT (`data/autogt/lane/<signature>`, the signature of the GtGenerator source in this checkout). Gates (card): GT lane points within 0.3 m of the decoded
 curves >= 0.997 (1 m: 0.999); connector points within 1 m >= 0.97; decoded points within 0.3 m of the GT >= 0.97; frames with more than one node per cell: dropped normal candidates <= 1 % of the nodes;
 every node has an offset inside its cell; links: no link longer than 100 m that is not a long link; every piece with a node has exactly one section start.
 """
@@ -19,7 +19,7 @@ import qtargets as QT  # noqa: E402
 
 
 def frames(n, seed=0):
-    from autogt import lane_gt
+    from GtGenerator import lane_gt
     toks = sorted(lane_gt.held(os.path.join(lane_gt.DATA, lane_gt.signature())))
     rng = np.random.RandomState(seed)
     sel = rng.choice(len(toks), min(n, len(toks)), replace=False)

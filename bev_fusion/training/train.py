@@ -43,7 +43,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# the engine: a pinned copy next to this file (a run snapshot) wins, else the live autoresearch/ of the repository, found by walking up (as nuscenes_dataset.py finds autogt)
+# the engine: a pinned copy next to this file (a run snapshot) wins, else the live autoresearch/ of the repository, found by walking up (as nuscenes_dataset.py finds GtGenerator)
 _REPO = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(_REPO, "autoresearch", "trainkit")) and os.path.dirname(_REPO) != _REPO:
     _REPO = os.path.dirname(_REPO)
@@ -613,7 +613,7 @@ def _stop_requested(run_dir):
 
 def record_gt(out_dir, datasets):
     """runs/<name>/gt.json = {"gt_signature": ...}: the identity of the GT the run trains and validates on (FrontRadarDataset.gt_signature:
-    grid res, supersampling, autogt source + flags). A pinned code snapshot does not pin the GT (autogt is read live), so this file is
+    grid res, supersampling, GtGenerator source + flags). A pinned code snapshot does not pin the GT (GtGenerator is read live), so this file is
     what `evaluation/bev_suite.py compare` checks. A resume on another GT keeps the earlier signatures and warns. -> the signature(s)"""
     sigs = sorted({d.gt_signature() for d in datasets if hasattr(d, "gt_signature")})
     if not sigs:
@@ -621,7 +621,7 @@ def record_gt(out_dir, datasets):
     sig = sigs[0] if len(sigs) == 1 else sigs
     path = os.path.join(out_dir, "gt.json")
     try:                                                      # D29: the human key of the GT version (v5, ...) next to the signature; none for an unreleased source
-        from autogt.versions import version_of_key
+        from GtGenerator.versions import version_of_key
         ver = [version_of_key(s) for s in sigs]
         ver = None if None in ver else (ver[0] if len(ver) == 1 else ver)
     except ImportError:
@@ -895,7 +895,7 @@ def _selftest():
         model2, loss2, ema, last = train(cfg, datasets=(base, base))
         assert last["total"] == last["total"], "logged"
         gt_rec = json.load(open(os.path.join(tmp, "selftest", "gt.json")))          # the GT identity of the run (F3 of the review)
-        from autogt.versions import version_of_key                                  # D29: the version key next to the signature, for a released one
+        from GtGenerator.versions import version_of_key                                  # D29: the version key next to the signature, for a released one
         want_rec = {"gt_signature": base.gt_signature(), **({"gt_version": version_of_key(base.gt_signature())} if version_of_key(base.gt_signature()) else {})}
         assert gt_rec == want_rec and base.gt_signature().startswith("0.5_4_"), gt_rec
         ckpts = sorted(f for f in os.listdir(os.path.join(tmp, "selftest")) if f.endswith(".pt"))

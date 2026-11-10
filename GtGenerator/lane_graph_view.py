@@ -1,9 +1,9 @@
-"""Pictures of a lane graph (`autogt.lane_graph`): a top view and the graph projected into the six cameras (the review picture of the lane GT).
+"""Pictures of a lane graph (`GtGenerator.lane_graph`): a top view and the graph projected into the six cameras (the review picture of the lane GT).
 
-    python -m autogt lanegraph OUT.png scene-0061:8 [--version v1.0-mini] [--dataroot DIR]       (the scene and the number of the keyframe)
+    python -m GtGenerator lanegraph OUT.png scene-0061:8 [--version v1.0-mini] [--dataroot DIR]       (the scene and the number of the keyframe)
 
 The pieces are drawn in one colour per piece id, the events as markers (split orange up-triangle, merge blue down-triangle, stop red square, exit yellow square, start green
-circle, end grey circle, window edge white tick). Points lie on the ground plane of the ego frame (z = 0), as the other autogt layers do; every camera
+circle, end grey circle, window edge white tick). Points lie on the ground plane of the ego frame (z = 0), as the other GtGenerator layers do; every camera
 uses its own ego pose and calibration, so the motion between the six exposures is accounted for.
 """
 import os

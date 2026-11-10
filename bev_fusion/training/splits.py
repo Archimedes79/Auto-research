@@ -144,7 +144,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("resolve", help="stdin: a config (json) -> stdout: the config with the lists of its split")
-    p = sub.add_parser("names", help="the scene names of a split (train, then val), one per line: the format of gt_scenes.py names and autogt --scenes-file")
+    p = sub.add_parser("names", help="the scene names of a split (train, then val), one per line: the format of gt_scenes.py names and GtGenerator --scenes-file")
     p.add_argument("split")
     p = sub.add_parser("manifest", help="write RUN_DIR/manifest.json")
     p.add_argument("run_dir")

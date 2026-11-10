@@ -7,7 +7,7 @@
   4 a channel without GT line cells is punished for confident cells far from a line (the Dice is blind there) and not for the cells in the band
   5 (critic round) a non-uniform map weight in numerator AND normaliser, K channels = K single-channel calls, B frames = frames side by side, the defaults, a soft target,
     the pairing of line and distance channels in every real layer spec, ignore above the GT distance cap refused
-Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_line_bce.py   (PYTHONPATH = the repository root for autogt)
+Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_line_bce.py   (PYTHONPATH = the repository root for GtGenerator)
 """
 import itertools
 import math

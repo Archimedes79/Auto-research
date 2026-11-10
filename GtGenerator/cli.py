@@ -1,9 +1,9 @@
-"""Command line of the GtGenerator (from the repository root: `python -m autogt COMMAND ...`; in WSL: `wsl bash autogt/run_nice.sh -m autogt COMMAND ...`).
+"""Command line of the GtGenerator (from the repository root: `python -m GtGenerator COMMAND ...`; in WSL: `wsl bash GtGenerator/run_nice.sh -m GtGenerator COMMAND ...`).
 
-The command line reaches the suite ONLY through the class `GtGenerator` (autogt/api.py holds its methods): every command is ONE method call, so what the command line does is what Python does
-(`python -m autogt COMMAND --help` has the options of a command; the same call in Python is `GtGenerator.<method>(...)`).
+The command line reaches the suite ONLY through the class `GtGenerator` (GtGenerator/api.py holds its methods): every command is ONE method call, so what the command line does is what Python does
+(`python -m GtGenerator COMMAND --help` has the options of a command; the same call in Python is `GtGenerator.<method>(...)`).
 
-  make GT (all resumable; --out is always the ROOT that holds the stores, default data/autogt; the lane stores are below ROOT/lane; they print the GT key, see autogt/gt_api.py)
+  make GT (all resumable; --out is always the ROOT that holds the stores, default data/autogt; the lane stores are below ROOT/lane; they print the GT key, see GtGenerator/gt_api.py)
     generate DATAROOT      GtGenerator.generate          the front GT + both lane GTs + the area masks of the BEV Fusion store (everything)
     generate-bev DATAROOT  GtGenerator.generate_bev_gt   BEV Fusion: the front GT + the lane GT of its rig + the packed intersection masks
     generate-lane DATAROOT GtGenerator.generate_lane_gt  the lane GT of one system (--rig lane_center | bev_fusion | all)
@@ -56,13 +56,13 @@ def _generator_options(p):
 
 
 def _parser():
-    p = argparse.ArgumentParser(prog="python -m autogt", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(prog="python -m GtGenerator", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
 
     registry = {}
 
     def command(name, method, help, **kw):
-        """a command = one method of GtGenerator (autogt/api.py); the options of the parser are the arguments of the method, by name"""
+        """a command = one method of GtGenerator (GtGenerator/api.py); the options of the parser are the arguments of the method, by name"""
         sp = sub.add_parser(name, help=help, description=help, **kw)
         sp.set_defaults(method=method)
         registry[name] = method

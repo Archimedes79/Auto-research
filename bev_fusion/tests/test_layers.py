@@ -8,7 +8,7 @@
      truncated distance min-pool); the truncated distance equals scipy's exact transform; the pooled targets of a synthetic frame; the loss is finite, an
      oracle prediction costs ~0 and a reversed direction does not; through the tiny model the output 'sem_1m' has the shape (B, 4, X / 2, Y / 2), the loss is
      finite, and a gradient reaches every new parameter and the trunk; a model / loss disagreement on the flag is refused.
-Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_layers.py   (PYTHONPATH = the repository root for autogt)
+Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_layers.py   (PYTHONPATH = the repository root for GtGenerator)
 """
 import hashlib
 import math

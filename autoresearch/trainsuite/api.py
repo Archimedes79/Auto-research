@@ -219,7 +219,7 @@ def _checked_plan(c, j, final):
             problems.append("check: " + _tail(r))
     for pr in plan["prepare"]:
         r = subprocess.run(pr["check"] if final else pr["check_preview"], cwd=c.root, capture_output=True, text=True)
-        if r.returncode == 1:                                           # the check's word for "not there": 0 present, 1 missing (gt_scenes.py check -> autogt have), anything else is the check failing
+        if r.returncode == 1:                                           # the check's word for "not there": 0 present, 1 missing (gt_scenes.py check -> GtGenerator have), anything else is the check failing
             missing.append(pr)
         elif r.returncode:
             problems.append(f"prepare check {pr['name']} failed (exit {r.returncode}, not 'missing': nothing is built on that): " + _tail(r))

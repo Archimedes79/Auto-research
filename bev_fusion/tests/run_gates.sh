@@ -5,7 +5,7 @@
 # studies/early/ (D48): they train for up to 40 minutes and their recorded result is a narrow or open FAIL of the self-supervised arm.
 # Usage (from the bev_fusion folder): wsl bash tests/run_gates.sh [--all]
 cd "$(dirname "$0")/.." || exit 1
-export PYTHONPATH="$(cd .. && pwd)${PYTHONPATH:+:$PYTHONPATH}"     # autogt lives at the repository root since 2026-11-01 (`-m autogt selftest`)
+export PYTHONPATH="$(cd .. && pwd)${PYTHONPATH:+:$PYTHONPATH}"     # GtGenerator lives at the repository root since 2026-11-01 (`-m GtGenerator selftest`)
 PY="${PY:-$HOME/miniconda3/envs/gcar/bin/python}"
 fail=0
 run() {  # run <block> <command...>
@@ -74,7 +74,7 @@ run "bundle"            "$PY" tests/test_bundle.py                  # model.py +
 run "camera features"   "$PY" tests/test_camera_features.py         # the CAMERAS table, feature swap, dual branches, refusals; CPU, 12 s
 run "dual camera geometry" "$PY" tests/test_dual_camera_geometry.py   # both branches put an image pixel at the same BEV cell (< 0.5 px); CPU, 5 s
 run "freeze, probe"     "$PY" tests/test_freeze_probe.py            # freeze.py / probe.py / debug.py on a toy network; CPU, 4 s
-run "GT prepare"        "$PY" tests/test_gt_prepare.py              # scene lists, autogt command lines; no data, 5 s
+run "GT prepare"        "$PY" tests/test_gt_prepare.py              # scene lists, GtGenerator command lines; no data, 5 s
 run "run_ar launcher"   "$PY" tests/test_run_ar.py                  # D73: tools/run_ar.sh unpacks training/ and trainkit of the commit, the trainer imports the pinned copy, exit code, .done; a toy repo, 5 s
 run "radar memory ghost" "$PY" tests/test_radar_memory_ghost.py     # the Doppler write mask keeps a radial mover out of the radar memory; 3 s
 run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 motion block through the trainer's path; CPU, 7 s
@@ -100,7 +100,7 @@ if [ "${1:-}" = "--all" ]; then
   run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
   run "radar slot"      "$PY" tests/test_radar_slot.py              # delta_slots in the whole chain: side loss, gradients, old path unchanged; about 2 min
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
-  run "autoGT"          "$PY" -m autogt selftest
+  run "autoGT"          "$PY" -m GtGenerator selftest
   run "projection (R-GEO)" "$PY" tests/test_projection_general.py
   if ls runs/t16_full_s0/ckpt_*.pt > /dev/null 2>&1; then          # the front door of the evaluation against bev_suite.py eval on a copy of the real run
     run "evaluate door, golden" "$PY" tests/test_evaluate_door.py --real   # 4 val frames on the CPU, number for number; about 3 min, 2 x 6 GB

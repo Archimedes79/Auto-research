@@ -1,4 +1,4 @@
-"""The one-object interface of the autoGT suite (see autogt/AGENTS.md for the short guide)."""
+"""The one-object interface of the autoGT suite (see GtGenerator/AGENTS.md for the short guide)."""
 import functools
 import json
 import os
@@ -35,8 +35,8 @@ def current_signature(**options):
 
 
 def current_version(**options):
-    """the version key (autogt/versions.csv, decision D29) of THIS source: "v5"; with non-default options "v5+boxes_at='annotation'";
-    "unreleased" when the signature has no row yet (an edit of a signature file that was not versioned: `autogt selftest` fails then)"""
+    """the version key (GtGenerator/versions.csv, decision D29) of THIS source: "v5"; with non-default options "v5+boxes_at='annotation'";
+    "unreleased" when the signature has no row yet (an edit of a signature file that was not versioned: `GtGenerator selftest` fails then)"""
     from .versions import version_of
     base = version_of(current_signature())
     if base is None:
@@ -63,7 +63,7 @@ def missing(tokens, data=DATA, **options):
 
 
 def load(token, data=DATA, **options):
-    """the stored GT of one keyframe (written by `python -m autogt report` / `build`) for the current source and options:
+    """the stored GT of one keyframe (written by `python -m GtGenerator report` / `build`) for the current source and options:
     dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""
     sig_dir = os.path.join(data, current_signature(**options))
     try:
@@ -71,7 +71,7 @@ def load(token, data=DATA, **options):
     except FileNotFoundError:
         have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "examples", "lane", "cache")) if os.path.isdir(data) else []
         raise FileNotFoundError(f"no stored GT for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
-                                "`autogt.generate(<nuScenes folder>)` (shell: `python -m autogt generate`), or the generator source changed "
+                                "`GtGenerator.generate(<nuScenes folder>)` (shell: `python -m GtGenerator generate`), or the generator source changed "
                                 "since it was stored") from None
 
 
@@ -109,12 +109,12 @@ class GtGenerator(NuScenesGT, Interface):
     keyframes(scene_name)    sample tokens of a scene in time order
     scenes()                 scene names
     signature()              cache key of the generator (source + options)
-    options: stationary_fix, map_offsets, use_flow, use_radar, flow_config (autogt.flow.Config), boxes_at ("camera" = moving
+    options: stationary_fix, map_offsets, use_flow, use_radar, flow_config (GtGenerator.flow.Config), boxes_at ("camera" = moving
     boxes moved to the camera time by v * dt, default; "annotation" = as annotated)
-    light=True: a memory-light devkit (CAM_FRONT + radars only, autogt/light_nusc.py); scenes=[names]: only these sequences are
+    light=True: a memory-light devkit (CAM_FRONT + radars only, GtGenerator/light_nusc.py); scenes=[names]: only these sequences are
     loaded (v1.0-trainval: ~0.7 GB for 85 sequences instead of 8+ GB for all)
 
-    The same class is the interface of the whole suite: its STATIC methods (autogt/api.py) are what the command line calls, `GtGenerator.generate_bev_gt(root)`, `GtGenerator.generate_lane_gt(root)`,
+    The same class is the interface of the whole suite: its STATIC methods (GtGenerator/api.py) are what the command line calls, `GtGenerator.generate_bev_gt(root)`, `GtGenerator.generate_lane_gt(root)`,
     `GtGenerator.gt_key(system)`, `GtGenerator.generate`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
     """
 

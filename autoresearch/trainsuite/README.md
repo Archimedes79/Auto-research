@@ -120,7 +120,7 @@ What a run records, next to its checkpoints:
 | what | pinned by | not pinned |
 |---|---|---|
 | scenes | `split` becomes the lists in `runs/<id>/config.json` (name, counts and hashes in `manifest.json`); a new split is a new file in `bev_fusion/splits/` ([README](../../bev_fusion/splits/README.md)) | |
-| ground truth | `gt` in the split file = the autogt version its caches were checked against (v8); the run writes `gt.json`; evaluation compares only runs with the same signature | `autogt/` is imported live; the run's tag records its state |
+| ground truth | `gt` in the split file = the GtGenerator version its caches were checked against (v8); the run writes `gt.json`; evaluation compares only runs with the same signature | `GtGenerator/` is imported live; the run's tag records its state |
 | derived data | the cache paths in the config; `bev_fusion/data/README.md` says how each is built; `start` runs the project's `prepare` check (is the GT store complete for these scenes?), `--prepare` builds a missing one as a run of its own | the caches, raw nuScenes and the pretrained weights are files, not versions |
 | experiment code | `run.py` commits the code and tags it `bf/<id>`; `run_ar.sh` unpacks `bev_fusion/training` and `autoresearch/trainkit` of that commit into `runs/<id>/code/` and trains from there | editing `training/` while a run trains changes nothing for it; a resume trains from a new snapshot |
 ```

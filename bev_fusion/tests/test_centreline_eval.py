@@ -14,7 +14,7 @@
   MUTANTS           planted one at a time into the adapter / metric; each must make a check above fail (wrong presence channel, no upsample, a shifted upsample, wrong GT layer,
                     no sigmoid, cos / sin swapped, a flipped direction, an angle without the wrap, an axis angle that cannot tell a reversed line, a missing layer, the direction
                     on the fov meter only / unmasked on seen and out / without the splat mass, a changed result(), predict dropping the layer or the direction)
-Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_centreline_eval.py   (PYTHONPATH = the repository root for autogt)
+Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_centreline_eval.py   (PYTHONPATH = the repository root for GtGenerator)
 """
 import math
 import os

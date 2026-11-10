@@ -4,7 +4,7 @@ divider mask against its vectors, the map layers against exact polygons, the sto
 (links symmetric, window events, ids, tiers); plus a guard that the hashed lane sources import no module the signature does not cover. Nothing here changes a hashed file: the tests state what
 the generator does today, so a later change that moves it fails here before a GT is built from it.
 
-    python -m autogt.generator_selftest [--root ~/data/nuscenes]      (also run by `python -m autogt selftest`)
+    python -m GtGenerator.generator_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
 """
 import ast
 import math

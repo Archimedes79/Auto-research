@@ -12,9 +12,9 @@ caches fit (`model.CAMERAS`), `loss.fusion_area_only` is not combined with `mode
 exists (data root, caches, all pre-trained weights, `init_from`, `model.student_init` with a checkpoint in it), an existing run folder is not finished and its stored config equals this one
 (`train.check_resume`), the configs that stop at the first step or after the model is built are refused (`motion_block` needs `n_cam` >= 2, `loss.dt_weights`
 needs a weight near |dt| 0 and 0.5, `train_only` / `freeze` must name parameters: `freeze.plan` on a model built on the meta device, no weights),
-`radar_aux` without `delta_slots` and `loss.w_obj_mov` without `model.object_moving` are noted as doing nothing, the disk has room, and the GT: the autogt that would be imported (a pinned copy `<out_root>/<name>/autogt`, else the live
-`autogt/`) must have the signature files of the version `init_from`'s run was trained on (`gt.json` + `autogt/versions.csv`), or of
-`--expect-gt`; the live GT signature is otherwise hashed from the source at start, so a changed autogt silently means another GT. The uncommitted
+`radar_aux` without `delta_slots` and `loss.w_obj_mov` without `model.object_moving` are noted as doing nothing, the disk has room, and the GT: the GtGenerator that would be imported (a pinned copy `<out_root>/<name>/GtGenerator`, else the live
+`GtGenerator/`) must have the signature files of the version `init_from`'s run was trained on (`gt.json` + `GtGenerator/versions.csv`), or of
+`--expect-gt`; the live GT signature is otherwise hashed from the source at start, so a changed GtGenerator silently means another GT. The uncommitted
 files of `training/` are listed (the launcher's snapshot is a copy of the working tree, so the arms of a matched control can differ in code);
 `--require-clean` makes them a problem. Findings are problems (exit 1) or notes (exit 0). Run from `bev_fusion/` in the WSL with the gcar
 environment.
@@ -81,18 +81,18 @@ def dirty(root):
 
 
 def gt_identity(folder, base_signature, repo):
-    """(True / False / None, message): are the signature files of the autogt in `folder` the ones of the released version whose generator
-    signature is `base_signature` (autogt/versions.csv names its git tag)? None = cannot be told here"""
+    """(True / False / None, message): are the signature files of the GtGenerator in `folder` the ones of the released version whose generator
+    signature is `base_signature` (GtGenerator/versions.csv names its git tag)? None = cannot be told here"""
     sig = str(base_signature).rsplit("_", 1)[-1]
     try:
-        rows = list(csv.DictReader(open(os.path.join(repo, "autogt", "versions.csv"), newline="", encoding="utf-8")))
+        rows = list(csv.DictReader(open(os.path.join(repo, "GtGenerator", "versions.csv"), newline="", encoding="utf-8")))
     except OSError:
-        return None, "autogt/versions.csv is not readable: GT identity not checked"
+        return None, "GtGenerator/versions.csv is not readable: GT identity not checked"
     row = next((r for r in rows if r["signature"] == sig), None)
     if row is None:
-        return None, f"GT signature {sig} is not a released autogt version: GT identity not checked"
+        return None, f"GT signature {sig} is not a released GtGenerator version: GT identity not checked"
     tag = row["tag"]
-    prefix = next((p for p in ("autogt/", "bev_fusion/autogt/") if _git(["cat-file", "-e", f"{tag}:{p}nuscenes_gt.py"], repo) is not None), None)
+    prefix = next((p for p in ("GtGenerator/", "autogt/", "bev_fusion/autogt/") if _git(["cat-file", "-e", f"{tag}:{p}nuscenes_gt.py"], repo) is not None), None)   # the folder had the name autogt/ up to v12 / l5
     if prefix is None:
         return None, f"tag {tag} not found: GT identity not checked"
     src = _git(["show", f"{tag}:{prefix}nuscenes_gt.py"], repo)
@@ -111,10 +111,11 @@ def gt_identity(folder, base_signature, repo):
             bad.append(f)
     where = os.path.relpath(folder, repo).replace(os.sep, "/")
     if bad:
-        return False, (f"the autogt that would be imported ({where}) differs from {row['version']} ({sig}) in {', '.join(bad)}: the GT would "
-                       f"be another one (a cache rebuild, other numbers); pin {row['version']} as a copy at <out_root>/<name>/autogt "
+        return False, (f"the GtGenerator that would be imported ({where}) differs from {row['version']} ({sig}) in {', '.join(bad)}: the GT would "
+                       f"be another one (a cache rebuild, other numbers); pin {row['version']} as a copy at <out_root>/<name>/GtGenerator "
                        f"(`git archive {tag} {prefix.rstrip('/')} | tar -x -C <out_root>/<name>"
-                       f"{' --strip-components=%d' % (prefix.count('/') - 1) if prefix.count('/') > 1 else ''}`)")
+                       f"{' --strip-components=%d' % (prefix.count('/') - 1) if prefix.count('/') > 1 else ''}"
+                       f"{' && mv <out_root>/<name>/autogt <out_root>/<name>/GtGenerator' if prefix.rstrip('/').endswith('autogt') else ''}`)")
     return True, f"GT: {where} has the signature files of {row['version']} ({sig})"
 
 
@@ -240,7 +241,7 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
     need = CKPT_GB * (cfg.keep + 1)
     if free < need + 5:
         problems.append(f"free disk {free:.1f} GB on the run drive, the checkpoints need about {need:.1f} GB plus margin")
-    # GT identity: the version the base was trained on (init_from's run, else --expect-gt) against the autogt that would be imported
+    # GT identity: the version the base was trained on (init_from's run, else --expect-gt) against the GtGenerator that would be imported
     base = expect_gt
     if not base and cfg.init_from:
         try:
@@ -248,8 +249,8 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
         except (OSError, KeyError, ValueError):
             notes.append("init_from's run has no readable gt.json: GT identity not checked")
     if base:
-        pinned = os.path.join(run, "autogt")
-        ok, msg = gt_identity(pinned if os.path.isdir(pinned) else os.path.join(repo, "autogt"), base, repo)
+        pinned = os.path.join(run, "GtGenerator")
+        ok, msg = gt_identity(pinned if os.path.isdir(pinned) else os.path.join(repo, "GtGenerator"), base, repo)
         (notes if ok is not False else problems).append(msg)
     else:
         notes.append("GT identity not checked (no init_from and no --expect-gt)")
@@ -396,28 +397,28 @@ def _selftest():
         assert sorted(dirty(repo)) == ["a.py", "new.py", "sub dir/c d.py"], dirty(repo)
         assert dirty(os.path.join(tmp, "data")) is None or isinstance(dirty(os.path.join(tmp, "data")), list)    # inside the outer repo or not: no crash
         # GT identity against a tagged released version
-        os.makedirs(os.path.join(repo, "autogt"))
-        open(os.path.join(repo, "autogt", "nuscenes_gt.py"), "w").write('SIGNATURE_FILES = ("a.py", "b.py")\n')
+        os.makedirs(os.path.join(repo, "GtGenerator"))
+        open(os.path.join(repo, "GtGenerator", "nuscenes_gt.py"), "w").write('SIGNATURE_FILES = ("a.py", "b.py")\n')
         for n in ("a.py", "b.py"):
-            open(os.path.join(repo, "autogt", n), "w").write(f"# {n}\n")
-        open(os.path.join(repo, "autogt", "versions.csv"), "w", newline="").write(
+            open(os.path.join(repo, "GtGenerator", n), "w").write(f"# {n}\n")
+        open(os.path.join(repo, "GtGenerator", "versions.csv"), "w", newline="").write(
             "version,signature,tag,date,generator,what_changed\nv1,abc123,autogt/v1,2026-11-01,x,y\n")
-        for cmd in (["add", "autogt"], ["commit", "-q", "-m", "autogt"], ["tag", "autogt/v1"]):
+        for cmd in (["add", "GtGenerator"], ["commit", "-q", "-m", "GtGenerator"], ["tag", "autogt/v1"]):
             subprocess.run(git + cmd, cwd=repo, check=True, capture_output=True)
-        ok, msg = gt_identity(os.path.join(repo, "autogt"), "0.5_4_abc123", repo)
+        ok, msg = gt_identity(os.path.join(repo, "GtGenerator"), "0.5_4_abc123", repo)
         assert ok is True, msg
-        open(os.path.join(repo, "autogt", "b.py"), "w").write("# b changed\n")
-        ok, msg = gt_identity(os.path.join(repo, "autogt"), "0.5_4_abc123", repo)
+        open(os.path.join(repo, "GtGenerator", "b.py"), "w").write("# b changed\n")
+        ok, msg = gt_identity(os.path.join(repo, "GtGenerator"), "0.5_4_abc123", repo)
         assert ok is False and "b.py" in msg and "pin v1" in msg, msg
-        open(os.path.join(repo, "autogt", "b.py"), "w", newline="").write("# b.py\r\n")             # a CRLF checkout is the same source
-        assert gt_identity(os.path.join(repo, "autogt"), "0.5_4_abc123", repo)[0] is True
-        assert gt_identity(os.path.join(repo, "autogt"), "0.5_4_zzz", repo)[0] is None
-        # the real table: its header has the columns this reads, and the live autogt is not v5 (the tag resolves, so the answer is False)
+        open(os.path.join(repo, "GtGenerator", "b.py"), "w", newline="").write("# b.py\r\n")             # a CRLF checkout is the same source
+        assert gt_identity(os.path.join(repo, "GtGenerator"), "0.5_4_abc123", repo)[0] is True
+        assert gt_identity(os.path.join(repo, "GtGenerator"), "0.5_4_zzz", repo)[0] is None
+        # the real table: its header has the columns this reads, and the live GtGenerator is not v5 (the tag resolves, so the answer is False)
         real_repo = os.path.dirname(ROOT)
-        assert {"version", "signature", "tag"} <= set(csv.DictReader(open(os.path.join(real_repo, "autogt", "versions.csv"), newline="",
+        assert {"version", "signature", "tag"} <= set(csv.DictReader(open(os.path.join(real_repo, "GtGenerator", "versions.csv"), newline="",
                                                                           encoding="utf-8")).fieldnames)
         if _git(["rev-parse", "--verify", "-q", "autogt/v5"], real_repo):                  # not in an archive without the repository
-            ok, msg = gt_identity(os.path.join(real_repo, "autogt"), "0.5_4_15efbde2d1", real_repo)
+            ok, msg = gt_identity(os.path.join(real_repo, "GtGenerator"), "0.5_4_15efbde2d1", real_repo)
             assert ok is False and "differs from v5" in msg, (ok, msg)
         # the smoke twin keeps model and loss except the warm-up, is a valid config, and the start lines carry no made-up card
         s = smoke_config(write(name="base2", steps=6000, loss={"w_obj_vel": 1.0, "fusion_area_only": True, "warmup_hold": 0.2}),

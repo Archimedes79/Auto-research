@@ -4,7 +4,7 @@
 
     BEVSource      the val (or train) keyframes of the run's config, grouped into scenes (videos) in time order; one frame =
                    the cached-feature batch of the training code (batch of 1) + the GT of -0.5 / 0 / +0.5 s; worker processes read ahead;
-                   describe() carries `gt_signature` (the GT identity: the snapshot pins the code, not autogt, which is read live) and
+                   describe() carries `gt_signature` (the GT identity: the snapshot pins the code, not GtGenerator, which is read live) and
                    `evaluator_hash` (the evaluator's source files at build: the store's identity rule refuses a resume with other evaluator code)
     BEVSubject     the run's last checkpoint under its EMA weights (the run's own code snapshot `runs/<name>/code` when it exists, so
                    a run is evaluated with the code it was trained with), the chain's state carried frame to frame along a scene,
@@ -115,7 +115,7 @@ def freeze_scenes(cfg) -> None:
 def gt_version(sig) -> Optional[str]:
     """the GT version key (D29: v5, ...) of a GT identity '<res>_<ss>_<generator signature>'; None when it is not a released version"""
     try:
-        from autogt.versions import version_of_key
+        from GtGenerator.versions import version_of_key
         return version_of_key(sig) if sig else None
     except ImportError:
         return None

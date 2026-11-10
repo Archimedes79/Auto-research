@@ -1,9 +1,9 @@
-"""training/gt_scenes.py: the scene names of a config and the autogt check / build commands built from them (no data, no GPU, no autogt run: the commands are recorded).
+"""training/gt_scenes.py: the scene names of a config and the GtGenerator check / build commands built from them (no data, no GPU, no GtGenerator run: the commands are recorded).
 
   1. mini and trainval splits: the official scene lists of the config's train and val split (8 + 2 for mini, 700 + 150 for trainval), restricted by train_scenes /
      val_scenes, without repeats, train part first
-  2. the names file lies next to the config, one name per line, and autogt reads it (`autogt.cli` accepts it: one name per line, # comments)
-  3. check = `python -m autogt have --scenes-file F --version V --dataroot D`, build = `bash autogt/run_nice.sh -m autogt generate D --version V --scenes-file F --workers N`,
+  2. the names file lies next to the config, one name per line, and GtGenerator reads it (`GtGenerator.cli` accepts it: one name per line, # comments)
+  3. check = `python -m GtGenerator have --scenes-file F --version V --dataroot D`, build = `bash GtGenerator/run_nice.sh -m GtGenerator generate D --version V --scenes-file F --workers N`,
      both run from the repository top; the exit code of the check is passed on; a wrong command is a usage error (exit 2)
   4. the whole chain with a real config of the project (t10_dual_s0): names for the whole trainval, a project.json "prepare" entry that `python -m trainsuite start` can use
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_gt_prepare.py
@@ -60,12 +60,12 @@ def fake(code):
 
 rc = G.main([cfg_path, "check"], runner=fake(1))
 cmd, cwd = calls[-1]
-check(rc == 1 and cmd[1:4] == ["-m", "autogt", "have"] and cmd[cmd.index("--scenes-file") + 1] == G.names_path(cfg_path) and cmd[cmd.index("--version") + 1] == "v1.0-mini"
+check(rc == 1 and cmd[1:4] == ["-m", "GtGenerator", "have"] and cmd[cmd.index("--scenes-file") + 1] == G.names_path(cfg_path) and cmd[cmd.index("--version") + 1] == "v1.0-mini"
       and cmd[cmd.index("--dataroot") + 1] == os.path.expanduser("~/data/nuscenes_full") and cwd == G.REPO, f"check: {cmd[1:]}, exit code passed on, run from {cwd}")
-check(os.path.isdir(os.path.join(G.REPO, "autogt")) and os.path.isfile(os.path.join(G.REPO, "autogt", "run_nice.sh")), "the repository top holds autogt/run_nice.sh")
+check(os.path.isdir(os.path.join(G.REPO, "GtGenerator")) and os.path.isfile(os.path.join(G.REPO, "GtGenerator", "run_nice.sh")), "the repository top holds GtGenerator/run_nice.sh")
 rc = G.main([cfg_path, "build", "--workers", "3"], runner=fake(0))
 cmd, cwd = calls[-1]
-check(rc == 0 and cmd[:5] == ["bash", "autogt/run_nice.sh", "-m", "autogt", "generate"] and cmd[cmd.index("--workers") + 1] == "3" and "--scenes-file" in cmd and "--no-lane" in cmd and cwd == G.REPO, f"build: {cmd[1:]} (the front GT only: no lane stores)")
+check(rc == 0 and cmd[:5] == ["bash", "GtGenerator/run_nice.sh", "-m", "GtGenerator", "generate"] and cmd[cmd.index("--workers") + 1] == "3" and "--scenes-file" in cmd and "--no-lane" in cmd and cwd == G.REPO, f"build: {cmd[1:]} (the front GT only: no lane stores)")
 rc = G.main([cfg_path, "build"], runner=fake(0))
 check(calls[-1][0][calls[-1][0].index("--workers") + 1] == "2", "two workers by default")
 n_before = len(calls)

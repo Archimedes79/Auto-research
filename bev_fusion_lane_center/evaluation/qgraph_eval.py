@@ -4,7 +4,7 @@ read by one ruler (tested: the stored graphs of recall_sp0_dp give the counts of
 
     pred = qformat.oracle_prediction(lane_gt_graph)         # or the head's output: the dict of training/grid/qformat.py (nodes, links, assign)
     graph, bk = readout(pred)                                # the output step: e >= 0.5, p >= 0.5, one piece per section -> LaneGraph + bookkeeping
-    frames = val_frames()                                    # the 873 VAL frames (lane suite order): frame.gt = old graph GT, frame.lane() = lane GT of autogt
+    frames = val_frames()                                    # the 873 VAL frames (lane suite order): frame.gt = old graph GT, frame.lane() = lane GT of GtGenerator
     graph_metrics(graph, frames[0])                          # HEADLINE: Q, F1@1.0, lanes_found, topo P / R / F1, junction P / R / F1, dup_frac, R@1_far, vert100, pieces_per_gt_piece ...
     node_metrics(pred, frames[0].lane()); assign_metrics(pred, frames[0].lane())
     out = score_frames(preds, frames)                        # {'graph', 'nodes', 'assign'} pooled over frames the project's way (micro counts); records=True: + the per-frame counts for `paired`
@@ -126,7 +126,7 @@ def to_raw(graph):
 @dataclass
 class Frame:
     """one VAL frame: k position in the 873 (the order of the lane suite and of E271 / E272), row in the split file / feature files, token = nuScenes sample token, scene number,
-    gt = the old graph GT (dict pts, edges) that the lane suite scores against; lane() = the lane GT of autogt (FileNotFoundError while it is not stored), ref() = it prepared for lookups"""
+    gt = the old graph GT (dict pts, edges) that the lane suite scores against; lane() = the lane GT of GtGenerator (FileNotFoundError while it is not stored), ref() = it prepared for lookups"""
     k: int
     row: int
     token: str
@@ -138,7 +138,7 @@ class Frame:
     def lane(self):
         if self._lane is None:
             sys.path.insert(0, BP.REPO)
-            from autogt import lane_gt
+            from GtGenerator import lane_gt
             self._lane = lane_gt.load(self.token)
         return self._lane
 
@@ -160,7 +160,7 @@ def val_frames():
 def stored_share(frames):
     """share of the frames whose lane GT is in the store of this checkout's lane signature (the store is built in the background)"""
     sys.path.insert(0, BP.REPO)
-    from autogt import lane_gt
+    from GtGenerator import lane_gt
     held = lane_gt.held(os.path.join(lane_gt.DATA, lane_gt.signature()))
     return sum(f.token in held for f in frames) / max(len(frames), 1)
 

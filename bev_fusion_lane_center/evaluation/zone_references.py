@@ -158,7 +158,7 @@ def main():
                          in_sample=True), rows=rows, layer1=None, s_rows=[])
     try:
         sys.path.insert(0, BP.REPO)
-        from autogt import lane_gt
+        from GtGenerator import lane_gt
         res["meta"]["lane_signature"] = lane_gt.signature()
     except Exception as ex:  # noqa: BLE001 - the signature is documentation, not a reason to stop
         res["meta"]["lane_signature"] = f"unknown ({type(ex).__name__})"

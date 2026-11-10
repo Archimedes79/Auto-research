@@ -157,8 +157,8 @@ def git_identity_error(root):
 
 
 def repo_paths(top, root, names):
-    """names relative to the problem folder as paths relative to the repository top; normalised: a code folder outside the problem folder (code_dirs "../autogt")
-    becomes the repository path "autogt" """
+    """names relative to the problem folder as paths relative to the repository top; normalised: a code folder outside the problem folder (code_dirs "../GtGenerator")
+    becomes the repository path "GtGenerator" """
     rel = os.path.relpath(root, top).replace("\\", "/")
     rel = "" if rel == "." else rel + "/"
     return [posixpath.normpath(rel + n) for n in names]
@@ -187,7 +187,7 @@ def scratch_scripts(top, root, cfg, cmd=()):
     """the .py / .sh files below the scratch folder (project.json scratch, default "temp"), relative to the repository top, sorted by path; [] when the project sets it
     empty. The .gitignore keeps scratch out of ordinary commits (check_git.py), so the snapshot adds these by force: a run's tag (and `clean_temp.py --move`, which tags
     the same way) still holds the scripts of a loop. This holds also when the scratch folder lies OUTSIDE the code folders (bev_fusion: code_dirs training /
-    evaluation / autogt / tests, scratch temp): its scripts are in the tag but not in the drift check, which watches the code folders only, so another chat's new
+    evaluation / GtGenerator / tests, scratch temp): its scripts are in the tag but not in the drift check, which watches the code folders only, so another chat's new
     scratch script is no 'code drift' of a run. A script over SCRATCH_MAX_BYTES is left out, and so is everything beyond SCRATCH_MAX_FILES; of the rest the scripts
     the command line `cmd` names (by path from the repository or the problem folder, absolute, or by file name) stay first, then the newest by modification time.
     The number left out is in SCRATCH_SKIPPED[0] and git_snapshot names it in the note of the run"""

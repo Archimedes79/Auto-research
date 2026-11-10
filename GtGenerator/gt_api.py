@@ -1,19 +1,19 @@
 """The two functions of the suite, one per system, and the key they return.
 
-    import autogt
-    key = autogt.generate_bev_gt("~/data/nuscenes_full", set_name="full")     # BEV Fusion: the front GT + the lane GT of the rig bev_fusion + the area masks (intersection, borders 0 and 0.5 m)
-    key = autogt.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")  # Spurmitte: the lane GT of the rig lane_center (rig="all": a dict of both keys)
+    import GtGenerator
+    key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")     # BEV Fusion: the front GT + the lane GT of the rig bev_fusion + the area masks (intersection, borders 0 and 0.5 m)
+    key = GtGenerator.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")  # Spurmitte: the lane GT of the rig lane_center (rig="all": a dict of both keys)
     print(key)   # bev_fusion | data f615a7387e73 | v1.0-trainval full | release v12 | front 6a7aa7864a (the GT of store c643a7539d) @ 42c1792 | lane db288acca5 @ 181f72fe | masks of store db288acca5 | complete
-    key.load(token)     # BEV Fusion: the front GT of a keyframe (what autogt.load gives) ...
+    key.load(token)     # BEV Fusion: the front GT of a keyframe (what GtGenerator.load gives) ...
     key.lane(token)     # ... the lane graph of the system (frame ego for bev_fusion, lane for lane_center)
     key.mask(token, "intersection", border_m=0.5)    # ... and an area mask in the BEV grid, (120, 104) uint8
-    autogt.gt_key("bev_fusion", "v1.0-trainval", "full")    # the key of what is stored now, nothing is generated
+    GtGenerator.gt_key("bev_fusion", "v1.0-trainval", "full")    # the key of what is stored now, nothing is generated
 
-The same as methods of the class: `autogt.GtGenerator.generate_bev_gt(...)`, `GtGenerator.generate_lane_gt(...)`, `GtGenerator.gt_key(...)` (suite.py). Command line: `python -m autogt generate-bev ROOT --set full`,
+The same as methods of the class: `GtGenerator.GtGenerator.generate_bev_gt(...)`, `GtGenerator.generate_lane_gt(...)`, `GtGenerator.gt_key(...)` (suite.py). Command line: `python -m GtGenerator generate-bev ROOT --set full`,
 `generate-lane ROOT --rig lane_center|bev_fusion|all`, `generate ROOT` (everything), `key SYSTEM --set full` (cli.py: each command is one of these calls).
 
 THE KEY says which GT it is: the DATA (the identity of the raw nuScenes files, `data_identity` of data/NuScenes/manifest.json: the hash of its tables and files; read from the store when the store
-recorded it (the front index and the mask cache do), else from the manifest as it is now) and the CODE (per part the signature = hash of the generator files and options, the git commit of autogt/ that made
+recorded it (the front index and the mask cache do), else from the manifest as it is now) and the CODE (per part the signature = hash of the generator files and options, the git commit of GtGenerator/ that made
 the store and whether it was clean, the GT version, the suite release of releases.csv). `key.id` is a hash of the data and of the signatures of ALL parts of the system (also those a partial key does not
 list) and of the rasteriser: two keys with the same id are the same GT, whatever set was asked for and whichever function made them. Not to be confused with the nuScenes SAMPLE TOKEN of a keyframe,
 which the methods take. `key.complete` is True when every part is stored for what was asked for: the sets `full` / `small` by the sets the index.json of the store says it holds, a list of scenes by
@@ -40,8 +40,8 @@ class Part:
     signature: str                  # the code signature (hash of the generator files and options); for the masks: the lane code signature / the rasteriser version
     store: str                      # the folder name of the stored GT below data/autogt (the store of an older version when the code makes its GT)
     version: Optional[str]          # the GT version of the STORE (v8 / l4), None = unreleased
-    commit: Optional[str]           # git commit of autogt/ when the store was made
-    dirty: Optional[bool]           # autogt/ had uncommitted changes then (None: git could not tell)
+    commit: Optional[str]           # git commit of GtGenerator/ when the store was made
+    dirty: Optional[bool]           # GtGenerator/ had uncommitted changes then (None: git could not tell)
     complete: bool                  # the store holds everything asked for
     path: str                       # the folder
 
@@ -273,7 +273,7 @@ def _roots(dataroot, out, version):
 
 
 def generate_bev_gt(dataroot, set_name=None, scenes=None, out=None, version=None, workers=1, borders=BORDERS, verbose=True, **options):
-    """BEV Fusion: the front GT (autogt.generate without the lane GT; `options` are its generator options), the lane GT of the rig bev_fusion and the packed area masks (intersection at the `borders` in metres),
+    """BEV Fusion: the front GT (GtGenerator.generate without the lane GT; `options` are its generator options), the lane GT of the rig bev_fusion and the packed area masks (intersection at the `borders` in metres),
     for the sequences of `set_name` ("small" | "full") or `scenes`; all resumable. -> GtKey"""
     from .pipeline import generate
     _check(options, borders)

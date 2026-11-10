@@ -17,11 +17,11 @@ vis_cam    the cells the current camera frame observes (lift_pd.camera_visibilit
            live in a car. The write mask of the camera memory (the network mirrors it with the camera BEV for flipped samples); D36: the
            loss and scoring mask of the camera outputs.
 vis_radar  the cells the radar rig can see (D36, Mirko: "obs_radar stays the fan"): the +-60 deg / 70 m fans of the five radars, from their
-           calibrated poses (batch["radar_poses"]) through autogt.coverage.radar_cells - the one definition the ground truth uses -, made
+           calibrated poses (batch["radar_poses"]) through GtGenerator.coverage.radar_cells - the one definition the ground truth uses -, made
            once per rig. The fans cover 99.6 % of this grid (bev_fusion/records/sensor_coverage_2026-11-01.md), so the map restricts little
            today; what matters is that it comes from the geometry and not from a constant.
 vis_fusion the fusion area (D37: fusion results are reported on cells observed by camera and radar) = vis_cam x vis_radar; the evaluation
-           removes the cells hidden behind a GT box (autogt.coverage.hidden_by_boxes) on top.
+           removes the cells hidden behind a GT box (GtGenerator.coverage.hidden_by_boxes) on top.
 radar_hits the cells with at least one radar detection of this frame's compensated sweeps, widened by `dilate` cells (radar points are
            mirrored by the augmentation already): where the radar measured now, the write mask of the radar memory.
 radar_static the same cells, each weighted by how static its detections are by the measured Doppler (mean of exp(-(vr / v_static)^2),
@@ -46,14 +46,14 @@ _FANS = {}                                                    # (grid, the five 
 
 
 def _radar_cells():
-    """autogt.coverage.radar_cells (the fan the ground truth uses), imported when first needed: the folder autogt/ is found by walking
+    """GtGenerator.coverage.radar_cells (the fan the ground truth uses), imported when first needed: the folder GtGenerator/ is found by walking
     up from this file (the repository, or a run's snapshot that carries its own copy next to code/)"""
     root = os.path.dirname(os.path.abspath(__file__))
-    while not os.path.isdir(os.path.join(root, "autogt")) and os.path.dirname(root) != root:
+    while not os.path.isdir(os.path.join(root, "GtGenerator")) and os.path.dirname(root) != root:
         root = os.path.dirname(root)
     if root not in sys.path:
         sys.path.insert(0, root)
-    from autogt import coverage
+    from GtGenerator import coverage
     return coverage.radar_cells
 
 
@@ -133,7 +133,7 @@ class Precompute:
         return torch.stack(vis)[:, None].to(device=K.device, dtype=torch.float32)
 
     def radar_fan(self, batch):
-        """(B, 1, X, Y): the cells inside the fan of one of the five radars, from batch["radar_poses"] (autogt.coverage.radar_cells on the
+        """(B, 1, X, Y): the cells inside the fan of one of the five radars, from batch["radar_poses"] (GtGenerator.coverage.radar_cells on the
         cell centres: the definition of the ground truth); one computation per distinct rig"""
         if "radar_poses" not in batch:
             raise KeyError("vis_radar needs batch['radar_poses'] (B, 5, 4, 4), the radar calibration (nuscenes_dataset.collate makes it)")
@@ -194,7 +194,7 @@ def _selftest():
     assert out["vis_cam"].shape == (B, 1, grid.nx, grid.ny) and torch.equal(out["vis_cam"][0, 0], ref.float()), "camera map != lift_pd"
     assert 0.2 < ref.float().mean() < 0.9, ref.float().mean()
     gx, gy = np.meshgrid(grid.x_min + (np.arange(grid.nx) + 0.5) * grid.res, grid.y_min + (np.arange(grid.ny) + 0.5) * grid.res, indexing="ij")
-    assert torch.equal(out["vis_radar"][0, 0], torch.from_numpy(_radar_cells()(gx, gy, rig.numpy())).float()), "radar fan != autogt.coverage"
+    assert torch.equal(out["vis_radar"][0, 0], torch.from_numpy(_radar_cells()(gx, gy, rig.numpy())).float()), "radar fan != GtGenerator.coverage"
     assert 0.9 < out["vis_radar"].mean() <= 1.0, out["vis_radar"].mean()              # the five fans cover nearly the whole front grid
     assert torch.equal(out["vis_fusion"], out["vis_cam"] * out["vis_radar"]), "fusion area = camera x radar"
     one = pre(dict(batch, radar_poses=rig[:1].expand(B, 1, 4, 4).clone().repeat(1, 5, 1, 1)), ("vis_radar",))["vis_radar"][0, 0]
@@ -251,7 +251,7 @@ def _selftest():
         a = Precompute.from_config(mcfg)(dict(batch), ("vis_cam",))["vis_cam"]
         b = Precompute.from_model(CachedBEVFusionModel(mcfg))(dict(batch), ("vis_cam",))["vis_cam"]
         assert torch.equal(a, b), f"from_config != from_model ({cf})"
-    print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan = autogt.coverage.radar_cells of the calibrated poses, fusion area = camera x radar, "
+    print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan = GtGenerator.coverage.radar_cells of the calibrated poses, fusion area = camera x radar, "
           "radar hits from the detections, existing keys kept, maps mirrored, from_config = from_model")
 
 

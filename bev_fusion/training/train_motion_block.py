@@ -92,7 +92,7 @@ def pin_gt(ds, sig):
     """read the GT of an earlier generator signature, READ-ONLY: the dataset keeps only the samples whose cache file of that
     signature exists, and a missing file raises instead of being built by the current generator (which would store new GT
     under the old name). The base was trained and evaluated on its own signature (runs/<base>/gt.json); the live generator
-    may have changed since (autogt edits change the signature). -> (samples kept, samples before)"""
+    may have changed since (GtGenerator edits change the signature). -> (samples kept, samples before)"""
     n0 = len(ds.samples)
     ds.gt_signature = lambda: sig
     ds.samples = [t for t in ds.samples if os.path.exists(os.path.join(ds.cache_dir, f"{t}_{sig}.npz"))]

@@ -1,6 +1,6 @@
-"""Self-test of the whole autoGT suite (nuScenes mini needed for the real-data part): python -m autogt selftest
+"""Self-test of the whole autoGT suite (nuScenes mini needed for the real-data part): python -m GtGenerator selftest
 
-1 flow estimator on a synthetic world with known truth (autogt/flow.py)
+1 flow estimator on a synthetic world with known truth (GtGenerator/flow.py)
 2 rasteriser: exact areas (also a big clipped polygon with a hole), line distance, occlusion
 3 real keyframes: a road under the ego car in every map location, 0.25 m pooled = 0.5 m, static layers of the next keyframe =
   the current ones moved by the exact ego motion, instance layer consistent, stationary boxes fixed in the world,
@@ -26,7 +26,7 @@ from .nuscenes_gt import NuScenesGT
 
 
 def _same_gt(a, b):
-    """two keyframes (dict of layers + meta) agree in every array byte and every meta entry (checks._feed, the digest of `autogt digest`)"""
+    """two keyframes (dict of layers + meta) agree in every array byte and every meta entry (checks._feed, the digest of `GtGenerator digest`)"""
     import hashlib
     from .checks import _feed
     ha, hb = hashlib.sha1(), hashlib.sha1()
@@ -164,7 +164,7 @@ def run(root=None, verbose=True):
     c = np.array([gx[ix, iy], gy[ix, iy]])
     err = np.abs((c + k["flow_ego"][:, ix, iy] * dt) - (np.r_[c, 0, 1] @ Tn.T)[:2]).max()
     assert err < 0.05, err
-    # 4a coverage (v7, autogt/coverage.py): the camera layer is the old ground-plane projection, boxes hide with their height, every box
+    # 4a coverage (v7, GtGenerator/coverage.py): the camera layer is the old ground-plane projection, boxes hide with their height, every box
     #    carries the observed shares of its footprint, and the helpers have known answers
     from . import coverage as C
     from .nuscenes_adapter import pose_matrix
@@ -293,7 +293,7 @@ def run(root=None, verbose=True):
         "(then it is hashed and a change needs a new version row) or not (then list it)")
     rows_ = V.table()
     assert [r["version"] for r in rows_] == [f"v{i + 1}" for i in range(len(rows_))] and len({r["signature"] for r in rows_}) == len(rows_)
-    assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in autogt/versions.csv: `python -m autogt versions --update` derives one from git, "
+    assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in GtGenerator/versions.csv: `python -m GtGenerator versions --update` derives one from git, "
                                                       "commit, tag autogt/v<N> (decision D29)")
     store_sig = V.canonical(gt.signature())                       # the folder of the stored GT: the signature itself, or the older one whose GT this code makes
     assert current_version() == V.version_of(store_sig) and current_version(boxes_at="annotation").startswith(current_version() + "+")
@@ -305,7 +305,7 @@ def run(root=None, verbose=True):
     repo_ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if os.path.exists(os.path.join(repo_, ".git")):
         try:
-            tags_ = set(subprocess.run(["git", "-C", repo_, "tag", "-l", "autogt/*"], capture_output=True, text=True, timeout=30).stdout.split())
+            tags_ = set(subprocess.run(["git", "-C", repo_, "tag", "-l", "GtGenerator/*"], capture_output=True, text=True, timeout=30).stdout.split())
         except (OSError, subprocess.SubprocessError):
             tags_ = set()
         lost_ = [r["tag"] for r in rows_[:-1] if r["tag"] not in tags_]
@@ -511,8 +511,8 @@ def run(root=None, verbose=True):
             assert json.load(open(os.path.join(r["out"], "index.json"))) == up, "a release is left alone by a clean tree"
         finally:
             versions_mod.code_state, sets.DIR = real_state, old_dir
-        assert versions_mod._changes_the_code(" M autogt/cli.py") and versions_mod._changes_the_code("?? autogt/new_module.py") and versions_mod._changes_the_code("R  autogt/a.py -> autogt/b.py")
-        assert not any(versions_mod._changes_the_code(x) for x in (" M autogt/README.md", "?? autogt/architecture.svg", "?? autogt/architecture.json", " M autogt/REVIEW_2026-11-10.md")), "documents do not make a tree dirty"
+        assert versions_mod._changes_the_code(" M GtGenerator/cli.py") and versions_mod._changes_the_code("?? GtGenerator/new_module.py") and versions_mod._changes_the_code("R  GtGenerator/a.py -> GtGenerator/b.py")
+        assert not any(versions_mod._changes_the_code(x) for x in (" M GtGenerator/README.md", "?? GtGenerator/architecture.svg", "?? GtGenerator/architecture.json", " M GtGenerator/REVIEW_2026-11-10.md")), "documents do not make a tree dirty"
         r_opt = cli_mod.generate(root, d, scenes=["scene-0061"], stride=40, use_flow=False, verbose=False)      # the folder name without the devkit
         assert r_opt["signature"] == _Gen2(root, "v1.0-mini", ss=4, light=True, scenes=["scene-0061"], use_flow=False).signature() != r["signature"]
     # 5d the index of a folder holds what the folder holds (review of 2026-11-01): a smaller or a repeated run neither shrinks the counts
@@ -594,9 +594,9 @@ def run(root=None, verbose=True):
     for row in versions_pin.table():
         if row.get("same_gt_as"):
             store_ = versions_pin.canonical(row["signature"])
-            assert row["signature"] in pins.get(store_, {}).get("same_as", []), f"{row['version']} claims the GT of {row['same_gt_as']} (store {store_}) but no pinned proof names {row['signature']}: run `python -m autogt digest` in both source trees, compare, and add it to front_digests.json"
+            assert row["signature"] in pins.get(store_, {}).get("same_as", []), f"{row['version']} claims the GT of {row['same_gt_as']} (store {store_}) but no pinned proof names {row['signature']}: run `python -m GtGenerator digest` in both source trees, compare, and add it to front_digests.json"
     pin = pins.get(versions_pin.canonical(gt.signature()))
-    assert pin, f"the generator of today ({gt.signature()}) has no pinned digests: `python -m autogt digest OUT.json` (stride 2) and add them to front_digests.json"
+    assert pin, f"the generator of today ({gt.signature()}) has no pinned digests: `python -m GtGenerator digest OUT.json` (stride 2) and add them to front_digests.json"
     wrong = [k for k, v in dg1["digests"].items() if pin["digests"].get(k) != v]
     assert not wrong, f"the generator makes other frames than the pinned ones ({len(wrong)} of {len(dg1['digests'])}, e.g. {wrong[:2]}): a changed GT needs a new version row, not a changed pin"
     with tempfile.TemporaryDirectory() as d:
@@ -615,7 +615,7 @@ def run(root=None, verbose=True):
     guide = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "AGENTS.md"), encoding="utf-8").read()
     keys = [k for k in g2 if k != "meta"] + list(g2["meta"]) + list(g2["meta"]["boxes"][0]) + ["dt", "steps"]
     missing = [k for k in keys if f"`{k}`" not in guide]
-    assert not missing, f"autogt/AGENTS.md does not mention (in backticks): {missing}"
+    assert not missing, f"GtGenerator/AGENTS.md does not mention (in backticks): {missing}"
     from .report import report                                                        # 7 the report: one PDF, no picture files
     with tempfile.TemporaryDirectory() as d:
         rep = report(root, "v1.0-mini", os.path.join(d, "r.pdf"), os.path.join(d, "data"), scenes=["scene-0061", "scene-1077"], stride=20,
@@ -672,7 +672,7 @@ def run(root=None, verbose=True):
     from . import lane_gt as lane_gt_mod
     from .suite import scene_tokens as tokens_of_scene
     assert V.current_release() is not None, (f"this source (front {V.version_of(gt.signature())}, lane {lane_gt_mod.version_of(lane_gt_mod.code_signature())}) has no row in "
-                                             "autogt/releases.csv: add one (the releases are one running number: the next change of the front or the lane GT is the next number)")
+                                             "GtGenerator/releases.csv: add one (the releases are one running number: the next change of the front or the lane GT is the next number)")
     with tempfile.TemporaryDirectory() as d:
         toks_ = tokens_of_scene("scene-0061", "v1.0-mini", root)
         both = cli_mod.generate(root, d, scenes=["scene-0061"], verbose=False)
@@ -713,7 +713,7 @@ def run(root=None, verbose=True):
         r = make_video("scene-0061", os.path.join(d, "t.mp4"), 1.0, dataroot=root)
         assert r["frames"] == 12 and r["codec"] in ("h264", "gif"), r
     if verbose:
-        print(f"autogt selftest ok: signature {gt.signature()}; {len(seen)} locations have a road under the ego car; "
+        print(f"GtGenerator selftest ok: signature {gt.signature()}; {len(seen)} locations have a road under the ego car; "
               f"static layers move with the ego (IoU {iou:.3f}); {len(fixed)} stationary instances fixed in the world; "
               f"{len(moving)} moving boxes in scene-0061 kf 8 (median speed difference to the devkit {np.median(diffs):.2f} m/s); "
               f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")

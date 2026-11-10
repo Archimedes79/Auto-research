@@ -1,9 +1,9 @@
-"""Data of the lane head (E273): the 39 frozen BEV channels of a frame + everything the heads are trained on, drawn from the lane GT of autogt (`autogt.lane_gt`) in the data loader.
+"""Data of the lane head (E273): the 39 frozen BEV channels of a frame + everything the heads are trained on, drawn from the lane GT of GtGenerator (`GtGenerator.lane_gt`) in the data loader.
 
     ds, dl = loader("train" | "val_clean", bs=4, workers=3, map_mode="train" | "error" | "exact")
 
 Frames = the project's splits through `BuilderData` (TRAIN 8414, VAL 873 via `BuilderData.rows`: the stored feature files also hold the TEST rows, which are never iterated); the sample token of
-a row is `~/exp_gcar_b123/feats/{train,val}_tokens.json[row]`; the lane GT of the token comes from the store of the lane GT of this checkout (`autogt.lane_gt.load`). A frame whose graph is not
+a row is `~/exp_gcar_b123/feats/{train,val}_tokens.json[row]`; the lane GT of the token comes from the store of the lane GT of this checkout (`GtGenerator.lane_gt.load`). A frame whose graph is not
 stored (yet) is left out of the dataset (`missing` says how many; `strict=True` raises instead).
 Item (numpy -> torch): x (39, 200, 200) float16 (normalised as `GridData`); node targets `qtargets.grid_targets` on the 50 x 50 grid of 2 m cells: exists, flags (8), offset (m), dirv, sstart,
 piece (int, index into the GT pieces of the frame, -1 none), uout, uin; links `lk` (L, 4) int cells (iu, ju, iv, jv) + `lk_long` + `lk_scale` (L, 2) the fitted Hermite handle scales of the long links (NaN for short ones); pixel targets `qraster.pixel_targets` (lines_mask / lines_dist
@@ -32,7 +32,7 @@ ZONE_NAMES = ("zone", "zone_kind", "zone_gt", "exists_dense", "offset_dense", "d
 
 
 def lane_store():
-    from autogt import lane_gt
+    from GtGenerator import lane_gt
     return lane_gt, os.path.join(lane_gt.DATA, lane_gt.signature())
 
 

@@ -13,7 +13,7 @@ The prediction variants run through the REAL metrics of the suite (BevSegMetric,
     dropout     half of the positive cells and half of the boxes removed
     shuffled    the GT of ANOTHER frame: low everywhere (the metrics see through a plausible but wrong answer)
     null        all probabilities 0, no boxes, velocity 0: IoU 0, AUC 0.5, AP = prevalence
-What it does NOT test: the model, the GT generator's correctness against the world (that is autogt's own selftest and the visual checks), the
+What it does NOT test: the model, the GT generator's correctness against the world (that is GtGenerator's own selftest and the visual checks), the
 training path. A failing line here means the evaluation, the masks or the GT cache is wrong, not the network."""
 from __future__ import annotations
 

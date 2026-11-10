@@ -118,9 +118,9 @@ def real_frames(n=40):
     table, no frame gets MORE nodes, and the sparse table has clearly fewer in total (critic pass 2026-11-07, missing test b)"""
     try:
         sys.path.insert(0, os.path.join(HERE, "..", "..", ".."))
-        from autogt import lane_gt
+        from GtGenerator import lane_gt
         toks = sorted(lane_gt.held(os.path.join(lane_gt.DATA, lane_gt.signature())))
-    except Exception:                                                                             # no autogt / no store here: nothing to test
+    except Exception:                                                                             # no GtGenerator / no store here: nothing to test
         return
     if not toks:
         return

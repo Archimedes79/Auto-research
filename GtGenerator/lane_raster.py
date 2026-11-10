@@ -3,7 +3,7 @@
 The lane GT stores the road and intersection areas of a keyframe as polygons (`g["areas"]["road" | "intersection"]`, exterior + holes, not dilated), cut to the window of its rig.
 For BEV Fusion the rig `bev_fusion` has exactly the window of the BEV grid, so a mask of any area is one function:
 
-    from autogt import lane_raster, lane_gt
+    from GtGenerator import lane_raster, lane_gt
     g = lane_gt.load(token, rig="bev_fusion")
     m = lane_raster.area_mask(g, "intersection", border_m=0.5)        # (120, 104) uint8, [ix, iy] like the GT maps: x forward 0..60 m, y -26..26 m (iy = 0 is the RIGHT edge)
     m = lane_raster.load_mask(token, "intersection", border_m=0.5)    # the same from the packed cache (one array lookup), see build_mask_cache
@@ -20,7 +20,7 @@ a change of the rasteriser that changes a mask bumps that constant, the caches o
 (the Spurmitte rig has |x| <= 50 m, the BEV grid reaches 60 m). The cache is read as a whole (53 MB per border and process): load it before a DataLoader forks, or accept 53 MB per worker.
 `workers` > 1 builds with a pool of processes (34k frames: about 11 min in one process).
 
-    python -m autogt.gt_api_selftest       (this module is tested there)
+    python -m GtGenerator.gt_api_selftest       (this module is tested there)
 """
 import gzip
 import multiprocessing as mp
@@ -212,14 +212,14 @@ _CACHES = {}
 
 def load_mask(token, kind="intersection", border_m=0.0, store_dir=None):
     """the packed mask of a keyframe of the BEV Fusion lane store (default store: the one of THIS source, `lane_gt.signature(rig="bev_fusion")`), (nx, ny) uint8, [ix, iy] of the BEV grid.
-    Raises FileNotFoundError when the cache is not there (`python -m autogt generate-bev` or `lane_raster.build_mask_cache(store_dir)` makes it) and ValueError when it was made by another rasteriser"""
+    Raises FileNotFoundError when the cache is not there (`python -m GtGenerator generate-bev` or `lane_raster.build_mask_cache(store_dir)` makes it) and ValueError when it was made by another rasteriser"""
     if store_dir is None:
         from . import lane_gt
         store_dir = os.path.join(lane_gt.DATA, lane_gt.signature(rig="bev_fusion"))
     p = cache_path(store_dir, kind, border_m)
     if p not in _CACHES:
         if not os.path.exists(p):
-            raise FileNotFoundError(f"no mask cache {p}: make it with `python -m autogt generate-bev` (or lane_raster.build_mask_cache({store_dir!r}))")
+            raise FileNotFoundError(f"no mask cache {p}: make it with `python -m GtGenerator generate-bev` (or lane_raster.build_mask_cache({store_dir!r}))")
         c = MaskCache(p)
         if c.raster != RASTER_VERSION:
             raise ValueError(f"the mask cache {p} was made by another rasteriser ({c.raster}, this one is {RASTER_VERSION}): build_mask_cache makes it again")

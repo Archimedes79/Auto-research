@@ -1,5 +1,5 @@
 """The writer of the front GT: `generate` (THE entry point: read nuScenes from a folder, write the GT of every keyframe, resumable, memory-light, optionally with the lane GT and the masks)
-and `build` (the low-level writer behind `report`). The files and the index come from `store.py`. `python -m autogt generate ...` and `autogt.generate(...)` are this module."""
+and `build` (the low-level writer behind `report`). The files and the index come from `store.py`. `python -m GtGenerator generate ...` and `GtGenerator.generate(...)` are this module."""
 import multiprocessing as mp
 import os
 import time
@@ -99,14 +99,14 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
 
     dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
     out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default data/autogt, the
-               place `autogt.load(token)` reads from (not in git)
+               place `GtGenerator.load(token)` reads from (not in git)
     version    v1.0-mini / v1.0-trainval; default: the one found in dataroot (an error if there are several)
     scenes     names such as ["scene-0061"]; default all sequences of the version
     set_name   "small" (the 10 sequences of mini: small experiments) or "full" (all 850 of trainval: releases), the files of
-               autogt/sets/; instead of scenes (both given: an error)
+               GtGenerator/sets/; instead of scenes (both given: an error)
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
     workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see GtGenerator)
-    lane       also make the lane GT (lane graph, roads, lines, polygons: autogt/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
+    lane       also make the lane GT (lane graph, roads, lines, polygons: GtGenerator/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
                store of the same release (releases.csv); only with stride 1, the lane GT is made for every keyframe
     -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
         "written": new files, "release": the folder is a release (see write_index)}
@@ -174,7 +174,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     if verbose:
         print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx.get('commit')}"
               f"{', dirty' if idx.get('dirty') else ''}{', RELEASE' if idx.get('release') else ''}, sets complete: {idx.get('sets_complete', [])})\n"
-              f"read one with autogt.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
+              f"read one with GtGenerator.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
     lane_result = lane_rigs = masks_error = None
     if lane and stride == 1:
         from .gt_api import make_lane_gt                                    # both systems' lane GT + the masks derived from the BEV Fusion one: the same code as generate_bev_gt / generate_lane_gt

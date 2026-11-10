@@ -14,7 +14,7 @@
      but counted, warm-up steps are not counted, the GPU is waited for before and after each step
   6. the command line end to end with a builder that makes the tiny bench: the result file (blocks, effective settings, steps), the verdict text, --check builds nothing, one arm /
      equal names / one round are refused, a busy GPU is refused and --force runs, a config that asks for cuda without a GPU is refused, gpu_used_mb reads total - free
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_ab_timing.py   (PYTHONPATH = the repository root for autogt)"""
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_ab_timing.py   (PYTHONPATH = the repository root for GtGenerator)"""
 import contextlib
 import copy
 import dataclasses

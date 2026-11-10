@@ -1,7 +1,7 @@
 """Velocity of the dense field and of the box centres, split the way the velocity cards need it (t12, t15): `bev_suite.py eval --velocity`.
 
     cells     the field `vhat` (the time mover's / motion block's velocity, dt 0) against the GT velocity layer on the object cells of the camera view
-              (`masks()['obj_fov']` x any object layer > 0.5 x known velocity: `flow_weight` > 0 where the GT has it; autogt writes 0 m/s with
+              (`masks()['obj_fov']` x any object layer > 0.5 x known velocity: `flow_weight` > 0 where the GT has it; GtGenerator writes 0 m/s with
               flow_weight 0 for a box of unknown velocity, which would count as static), with the counts of bev_curves.velocity_sums: sets
               static (GT speed <= MOVING_SPEED, the evaluation's 0.5 m/s), and per class <cls> / <cls>_moving (the class layer > 0.5). The sets obj / moving
               themselves are `curve` numbers (`--curves`) and are not repeated here

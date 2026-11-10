@@ -341,7 +341,7 @@ def cmd_eval(a, rest) -> int:
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
     name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', False) else ''}{'_vel' if getattr(a, 'velocity', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
     desc = suite.source.describe()
-    gt_now = desc.get("gt_signature")                                    # the GT scored against (autogt is read live, not pinned)
+    gt_now = desc.get("gt_signature")                                    # the GT scored against (GtGenerator is read live, not pinned)
     quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
     ptag = bev_sets.tag(a.split) if bev_sets.parse(a.split)[0] is not None else ""     # the prior baseline of another set is another store (its train frames are the set's)
     stores = [os.path.join(quant_dir, name)] + ([os.path.join(quant_dir, f"prior{ptag}{e.prior}_n{e.n or 'all'}")] if e.prior else [])    # the prior baseline's stored run as well
@@ -544,7 +544,7 @@ def gt_check(run_a: str, run_b: str, ids: dict, force: bool = False) -> list:
     if bad:
         msg = "the two runs used different GT: " + "; ".join(bad)
         if not force:
-            raise SystemExit(f"compare refused: {msg}. Their numbers are not comparable: evaluate (train) both on the same autogt "
+            raise SystemExit(f"compare refused: {msg}. Their numbers are not comparable: evaluate (train) both on the same GtGenerator "
                              "version, or pass --force")
         warn.append(f"WARNING (--force): {msg}")
     return warn

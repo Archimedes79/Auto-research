@@ -1,6 +1,6 @@
 """Test of the data side of `lane_tiers` on a FAKE nuScenes devkit (no data needed): the driven path from the CAM_FRONT ego poses (rotated frame, start of a log, a standing car), the box prisms
 (footprint in the ego frame, observed boxes of the hiding classes only) and `add_tiers` end to end on a toy lane. The toy lane of `lane_tiers.selftest` covers the label rules; this covers the
-frames and the table reading (critic pass 2026-11-07, missing test a).   python -m autogt.lane_tiers_selftest"""
+frames and the table reading (critic pass 2026-11-07, missing test a).   python -m GtGenerator.lane_tiers_selftest"""
 import math
 
 import numpy as np

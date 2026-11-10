@@ -228,10 +228,10 @@ def annotated(samples, task):
 
 def geometry_rows(samples, task):
     """footprint geometry against an INDEPENDENT area: the cached `vehicle` layer is the area, so the footprint of a vehicle box must lie in it (mean share >= 0.95);
-    a y flip, swapped length / width or a negated yaw must fall below 0.9. Then the autogt reference implementation (autogt/coverage.py, the GT owner's): the same fusion
+    a y flip, swapped length / width or a negated yaw must fall below 0.9. Then the GtGenerator reference implementation (GtGenerator/coverage.py, the GT owner's): the same fusion
     cells, the same corner shares, and the same classes for the dict-based footprint that detections use."""
-    from autogt import coverage as AC
-    from autogt.grid import GridSpec
+    from GtGenerator import coverage as AC
+    from GtGenerator.grid import GridSpec
     from evaluation.bev_fusion_area import corner_share, footprint_share, fusion_area, gt_class, gt_with_shares
     rows, grid = [], GridSpec(res=0.5)
     shares = {"as is": [], "y flipped": [], "length / width swapped": [], "yaw negated": []}
@@ -255,8 +255,8 @@ def geometry_rows(samples, task):
     lab = f"geometry: {len(shares['as is'])} observed vehicle footprints against the cached vehicle layer as the area"
     rows += [(lab, "mean share as is >= 0.95 (1 = yes)", float(m["as is"] >= 0.95), 1.0, 0.0)]
     rows += [(lab, f"mean share {k} < 0.9 (1 = yes)", float(m[k] < 0.9), 1.0, 0.0) for k in ("y flipped", "length / width swapped", "yaw negated")]
-    lab = "autogt reference (autogt/coverage.py)"
-    rows += [(lab, "cells where fusion_area differs from fusion_cells", float(differ), 0.0, 0.0), (lab, "max |corner share - autogt footprint_share|", maxdiff, 0.0, 0.02),
+    lab = "GtGenerator reference (GtGenerator/coverage.py)"
+    rows += [(lab, "cells where fusion_area differs from fusion_cells", float(differ), 0.0, 0.0), (lab, "max |corner share - GtGenerator footprint_share|", maxdiff, 0.0, 0.02),
              (lab, "share of box footprints (dict form, as for detections) with another class than the corner form", n_cls / max(n_box, 1), 0.0, 0.01)]
     return rows
 
@@ -472,7 +472,7 @@ def maps_rows(samples, task):
 
 def _object_cells(g, task):
     """the cells whose GT velocity is scored (the curve numbers' obj / moving cells and bev_velocity's sets), from the masks and the GT arrays: camera cells without ignored
-    boxes x any object layer > 0.5 x known velocity (`flow_weight` > 0 where the GT has it: autogt writes 0 m/s with flow_weight 0 for a box of unknown velocity)"""
+    boxes x any object layer > 0.5 x known velocity (`flow_weight` > 0 where the GT has it: GtGenerator writes 0 m/s with flow_weight 0 for a box of unknown velocity)"""
     obj = masks(g)["obj_fov"] & np.any([np.asarray(g[c], np.float32) > 0.5 for c in task.groups if c in g], axis=0)
     return obj & (np.asarray(g["flow_weight"], np.float32) > 0) if "flow_weight" in g else obj
 

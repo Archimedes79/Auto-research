@@ -1,4 +1,4 @@
-"""Pixel-stage targets of the lane head (E273, card sections 2.1 and 3.1) drawn from the lane GT of autogt (`autogt.lane_gt`, frame "lane": x right, y forward, window |x|, |y| <= 50 m).
+"""Pixel-stage targets of the lane head (E273, card sections 2.1 and 3.1) drawn from the lane GT of GtGenerator (`GtGenerator.lane_gt`, frame "lane": x right, y forward, window |x|, |y| <= 50 m).
 Only vectors are stored; these rasters are made in the data loader, per frame, on the CPU.
 
     t = pixel_targets(g)               # g = one lane GT graph (dict) -> dict of the targets below + ms (total) and ms_parts (per target)

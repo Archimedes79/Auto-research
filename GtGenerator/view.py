@@ -1,4 +1,4 @@
-"""Pictures of the GT: python -m autogt view OUT_DIR [scene:keyframe | TOKEN ...]  and  python -m autogt sheets OUT_DIR
+"""Pictures of the GT: python -m GtGenerator view OUT_DIR [scene:keyframe | TOKEN ...]  and  python -m GtGenerator sheets OUT_DIR
 
 `scene:keyframe` (nuScenes mini, generated now) or a sample TOKEN (any stored keyframe, mini or trainval, drawn from the stored GT
 of the current generator, no devkit).

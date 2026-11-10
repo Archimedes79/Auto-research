@@ -14,7 +14,7 @@ code, which frames, which model and environment made a card, so that the experim
 
 A missing value reads "unknown", never a guess: no frames, no git, a path outside the repository all give unknown, and a dirty value that is
 unknown blocks like a dirty one. A run records the CODE signature of the GT (v9: 6a7aa7864a); the block names the STORE's (canonical_sig: v9's code makes the GT of v8, store
-c643a7539d) and the version of the store (its index.json, else autogt/versions.csv), and the signatures are compared as stores. `manifest` adds `gt_key` (autogt/gt_api.py) when
+c643a7539d) and the version of the store (its index.json, else GtGenerator/versions.csv), and the signatures are compared as stores. `manifest` adds `gt_key` (GtGenerator/gt_api.py) when
 that can be imported and the run's store is the one stored now. Two cards are comparable when GT version, GT signature, evaluator code hash and frame hash agree; a value
 that is unknown on one side is listed as "cannot tell"; a card whose evaluator code differs from its commit is a blocker. The evaluator hash
 covers the source files (.py .sh .ps1 .json .yaml .yml) under the given paths, sorted by posix path, line endings normalised, so it agrees
@@ -132,9 +132,9 @@ def evaluator_block(paths, repo, settings=None):
 
 
 def read_versions(repo=None, name="versions.csv"):
-    """the rows of autogt/versions.csv (name="lane_versions.csv": the lane table) of the repository, as dicts; [] when the file is absent or unreadable"""
+    """the rows of GtGenerator/versions.csv (name="lane_versions.csv": the lane table) of the repository, as dicts; [] when the file is absent or unreadable"""
     try:
-        with open(os.path.join(repo or repo_root(), "autogt", name), newline="", encoding="utf-8") as f:
+        with open(os.path.join(repo or repo_root(), "GtGenerator", name), newline="", encoding="utf-8") as f:
             return list(csv.DictReader(f))
     except (OSError, csv.Error, UnicodeDecodeError):
         return []
@@ -142,8 +142,8 @@ def read_versions(repo=None, name="versions.csv"):
 
 def canonical_sig(signature, rows):
     """the signature of the STORE that holds the GT the code `signature` makes: a row with `same_gt_as` (v9 makes the GT of v8) shares the store of that earlier row (for the
-    lane table the earlier row of the same rig). The rule of autogt.versions.canonical / lane_gt.store_of, here over the rows because the tools run without numpy (a selftest pins
-    it against autogt/versions.py). A signature the table does not know, a cycle or a dangling name leave it unchanged. A run records the CODE signature (gt.json, cards): every
+    lane table the earlier row of the same rig). The rule of GtGenerator.versions.canonical / lane_gt.store_of, here over the rows because the tools run without numpy (a selftest pins
+    it against GtGenerator/versions.py). A signature the table does not know, a cycle or a dangling name leave it unchanged. A run records the CODE signature (gt.json, cards): every
     comparison and every store folder name goes through this first"""
     key, seen = signature, set()
     while key not in seen:
@@ -266,7 +266,7 @@ def _prov(x):
 
 def compare(a, b, rows=None):
     """-> (differences, cannot_tell): a difference in a known value or a dirty / unchecked evaluator blocks a comparison, an unknown value cannot be told. The GT signatures are
-    compared as stores (canonical_sig over `rows`, default autogt/versions.csv): two codes that make the same GT byte for byte (v8 / v9) are the same GT"""
+    compared as stores (canonical_sig over `rows`, default GtGenerator/versions.csv): two codes that make the same GT byte for byte (v8 / v9) are the same GT"""
     a, b = _prov(a), _prov(b)
     diff, unknown = [], []
     for k in COMPARE_KEYS:
@@ -338,7 +338,7 @@ def repro(run_id, card_path=None):
     elif prov:
         g, e, d, s = (prov.get(k) or {} for k in ("gt", "evaluator", "data", "subject"))
         v = str(g.get("version", ""))
-        tag = "autogt/" + v if v.startswith("v") else "<autogt tag>"
+        tag = "autogt/" + v if v.startswith("v") else "<autogt tag>"           # the tag series keeps its name (D76)
         store = os.path.join(repo_root(), "data", "autogt", canonical_sig(str(g.get("signature")), read_versions()))      # a manifest of before 2026-11-10 holds the code signature
         L += [f"GT: version {g.get('version')} (signature {g.get('signature')}, dataset {g.get('dataset')}, options {g.get('options')}), code: git show {tag}",
               (f"the GT store {store} is present" if os.path.isdir(store) else
@@ -505,7 +505,7 @@ def tree_names(repo, ref):
 
 
 def repo_modules(dotted_names, repo, ref=None, prefixes=None):
-    """the files of the repository that absolute imports like `autogt.layers` name: for each dotted name the longest prefix that is a module file or a
+    """the files of the repository that absolute imports like `GtGenerator.layers` name: for each dotted name the longest prefix that is a module file or a
     package, plus the __init__.py of its parent packages; paths relative to the repository root, sorted. The name is looked for under the repository
     root and under the problem folder (code puts it on sys.path: bev_fusion/autogt before autogt moved to the top level). Names that are not
     repository code (torch.nn, numpy) find nothing. With `ref` (a tag) the files are looked for in that tag, not in the working tree"""
@@ -538,13 +538,13 @@ def repo_modules(dotted_names, repo, ref=None, prefixes=None):
 
 def bundle(code_dir, roots=BUNDLE_ROOTS, into=None, config=None, exclude=BUNDLE_EXCLUDE, repo_ref=None):
     """The model bundle of a run: the network and loss modules (import_closure of `roots` under code_dir), the repository modules they import
-    (`repo_files`: autogt/layers.py, the label layout the losses need) with a hash over all of them (line endings normalised), and the run's config.
+    (`repo_files`: GtGenerator/layers.py, the label layout the losses need) with a hash over all of them (line endings normalised), and the run's config.
     into = a folder to copy them to (results/<id>/bundle/, repository files under _repo/): the files that define the network and its losses, to read and
     to hash, not an installable package (see repo_imports_unfollowed); it is made next to the target, checked against the hash and moved into place, and an existing non-empty folder is left alone.
     What it still does NOT carry is listed, never hidden: missing_roots, unparsed (their imports are unknown), imports_excluded (the network imports
     the loop or a loader at module level), test_imports (only a selftest or a command-line tool imports them), external_local (repository folders
-    named by an import that no file was found for), dynamic_imports; the imports of the repository files themselves are not followed but listed (repo_imports_unfollowed: `autogt/__init__.py` imports
-    more of autogt, which the bundle does not carry: its version is the run's GT version and code tag). repo_ref = the
+    named by an import that no file was found for), dynamic_imports; the imports of the repository files themselves are not followed but listed (repo_imports_unfollowed: `GtGenerator/__init__.py` imports
+    more of GtGenerator, which the bundle does not carry: its version is the run's GT version and code tag). repo_ref = the
     code tag of the run: the repository files are taken from that tag (git show), so they are the ones the run saw, not today's.
     Nothing found reads "unknown", never an empty hash"""
     if not code_dir or not os.path.isdir(code_dir):
@@ -580,7 +580,7 @@ def _bundle_rest(code_dir, roots, into, config, exclude, repo_ref, repo, files, 
         repo_items.append(("_repo/" + rel, full))
     got = [label[len("_repo/"):] for label, _ in repo_items]
     std = getattr(sys, "stdlib_module_names", ())
-    unfollowed = set()                                       # what the repository files import and the bundle does not carry (autogt/__init__.py pulls in half of autogt)
+    unfollowed = set()                                       # what the repository files import and the bundle does not carry (GtGenerator/__init__.py pulls in half of GtGenerator)
     for label, full in repo_items:
         rel = label[len("_repo/"):]
         mod = rel[:-3].replace("/", ".")
@@ -776,22 +776,22 @@ def manifest_stale(old, r, run_dir):
 
 
 def gt_key_of(train_gt):
-    """the autogt GtKey (autogt/gt_api.py gt_key: reads the index.json of the stores, generates nothing) as a small dict, when the GT the run trained on (a gt_block) is the front store
+    """the GtGenerator GtKey (GtGenerator/gt_api.py gt_key: reads the index.json of the stores, generates nothing) as a small dict, when the GT the run trained on (a gt_block) is the front store
     that the key of the current source names. gt_key says what is stored NOW (its id covers the lane and mask parts of today too), so it is the key at the time the manifest is made,
-    not a rebuilt past one. None when autogt cannot be imported (it needs numpy, which the launcher's python may lack), the run trained on another store, or anything fails: optional"""
-    if os.environ.get("AR_GT_KEY") != "1":                           # opt in: importing autogt costs 25-33 s under the conda python and the launcher's python has no numpy anyway
+    not a rebuilt past one. None when GtGenerator cannot be imported (it needs numpy, which the launcher's python may lack), the run trained on another store, or anything fails: optional"""
+    if os.environ.get("AR_GT_KEY") != "1":                           # opt in: importing GtGenerator costs 25-33 s under the conda python and the launcher's python has no numpy anyway
         return None
     sig = (train_gt or {}).get("signature")
     if not sig or sig == UNKNOWN:
         return None
     repo, added = repo_root(), False
-    if not os.path.isfile(os.path.join(repo, "autogt", "gt_api.py")):          # not a checkout with the suite: nothing to import (and no half-imported namespace package left behind)
+    if not os.path.isfile(os.path.join(repo, "GtGenerator", "gt_api.py")):          # not a checkout with the suite: nothing to import (and no half-imported namespace package left behind)
         return None
     try:
         if repo not in sys.path:
             sys.path.insert(0, repo)
             added = True
-        from autogt import gt_key
+        from GtGenerator import gt_key
         k = gt_key("bev_fusion", train_gt.get("dataset") if train_gt.get("dataset") not in (None, UNKNOWN) else "v1.0-trainval", "full")
         if k.part("front").store != sig:
             return None
@@ -1078,47 +1078,47 @@ def selftest():
         bx = bundle(snap, exclude=("train.py",))
         assert "train.py" not in bx["files"] and bx["imports_excluded"] == ["pkg/act.py -> train.py"] and "train.py" in import_closure(snap), bx
         put(snap, "pkg/act.py", "Y = 2\n")
-        # test scopes and repository files: the imports of a selftest are listed, `autogt.layers` (a repository module) is part of the bundle
+        # test scopes and repository files: the imports of a selftest are listed, `GtGenerator.layers` (a repository module) is part of the bundle
         s3 = os.path.join(tmp, "snap3")
-        put(s3, "model.py", "import autogt.layers\nimport torch.nn\nimport helper\n\ndef _selftest():\n    import loader\n    import train\n\nif __name__ == '__main__':\n    import loader2\n")
+        put(s3, "model.py", "import GtGenerator.layers\nimport torch.nn\nimport helper\n\ndef _selftest():\n    import loader\n    import train\n\nif __name__ == '__main__':\n    import loader2\n")
         for f in ("helper.py", "loader.py", "loader2.py", "train.py"):
             put(s3, f, "X = 1\n")
-        put(s3, "losses.py", "from autogt.layers import AREAS\n")
-        put(tmp, "autogt/__init__.py", "")
-        put(tmp, "autogt/layers.py", "AREAS = 1\n")
-        put(tmp, "autogt/other.py", "OTHER = 1\n")
+        put(s3, "losses.py", "from GtGenerator.layers import AREAS\n")
+        put(tmp, "GtGenerator/__init__.py", "")
+        put(tmp, "GtGenerator/layers.py", "AREAS = 1\n")
+        put(tmp, "GtGenerator/other.py", "OTHER = 1\n")
         real_root3 = repo_root
         globals()["repo_root"] = lambda start=None: tmp
         try:
             b3 = bundle(s3, into=os.path.join(tmp, "out3"), exclude=("train.py",))
             assert b3["files"] == ["helper.py", "losses.py", "model.py"], b3["files"]
-            assert b3["repo_files"] == ["autogt/__init__.py", "autogt/layers.py"], b3["repo_files"]
+            assert b3["repo_files"] == ["GtGenerator/__init__.py", "GtGenerator/layers.py"], b3["repo_files"]
             assert b3["test_imports"] == ["model.py -> loader.py", "model.py -> loader2.py", "model.py -> train.py"] and b3["imports_excluded"] == [], b3
-            assert b3["external_local"] == [] and b3["copied_to"] == "out3" and os.path.isfile(os.path.join(tmp, "out3", "_repo", "autogt", "layers.py")), b3
+            assert b3["external_local"] == [] and b3["copied_to"] == "out3" and os.path.isfile(os.path.join(tmp, "out3", "_repo", "GtGenerator", "layers.py")), b3
             h3 = b3["code_hash"]
-            put(tmp, "autogt/layers.py", "AREAS = 2\n")
+            put(tmp, "GtGenerator/layers.py", "AREAS = 2\n")
             assert bundle(s3, exclude=("train.py",))["code_hash"] != h3, "a change of the repository module changes the hash"
-            put(tmp, "autogt/other.py", "OTHER = 2\n")
-            put(tmp, "autogt/layers.py", "AREAS = 1\n")
+            put(tmp, "GtGenerator/other.py", "OTHER = 2\n")
+            put(tmp, "GtGenerator/layers.py", "AREAS = 1\n")
             assert bundle(s3, exclude=("train.py",))["code_hash"] == h3, "a repository module that is not imported does not"
-            put(s3, "model.py", "import autogt.missing\nimport numpy\n")
+            put(s3, "model.py", "import GtGenerator.missing\nimport numpy\n")
             put(s3, "losses.py", "Y = 1\n")
             b4 = bundle(s3)
-            assert b4["repo_files"] == ["autogt/__init__.py"] and b4["external_local"] == [], b4   # a name that is no module still finds its package; numpy is not repository code
-            put(tmp, "autogt/__init__.py", "from .layers import AREAS\nfrom . import sets\n")
-            put(tmp, "autogt/sets.py", "S = 1\n")
-            run("add", "autogt")
-            run("commit", "-q", "-m", "autogt")
+            assert b4["repo_files"] == ["GtGenerator/__init__.py"] and b4["external_local"] == [], b4   # a name that is no module still finds its package; numpy is not repository code
+            put(tmp, "GtGenerator/__init__.py", "from .layers import AREAS\nfrom . import sets\n")
+            put(tmp, "GtGenerator/sets.py", "S = 1\n")
+            run("add", "GtGenerator")
+            run("commit", "-q", "-m", "GtGenerator")
             run("tag", "tg/layers")
-            put(tmp, "autogt/layers.py", "AREAS = 99  # edited after the run\n")
-            put(s3, "model.py", "import autogt.layers\n")
+            put(tmp, "GtGenerator/layers.py", "AREAS = 99  # edited after the run\n")
+            put(s3, "model.py", "import GtGenerator.layers\n")
             put(s3, "losses.py", "Y = 1\n")
             bt = bundle(s3, into=os.path.join(tmp, "out4"), repo_ref="tg/layers")
-            assert bt["repo_files"] == ["autogt/__init__.py", "autogt/layers.py"] and bt["repo_files_from"] == "tg/layers", bt
-            assert open(os.path.join(tmp, "out4", "_repo", "autogt", "layers.py")).read() == "AREAS = 1\n", "the copy is the file of the tag, not today's"
+            assert bt["repo_files"] == ["GtGenerator/__init__.py", "GtGenerator/layers.py"] and bt["repo_files_from"] == "tg/layers", bt
+            assert open(os.path.join(tmp, "out4", "_repo", "GtGenerator", "layers.py")).read() == "AREAS = 1\n", "the copy is the file of the tag, not today's"
             assert bundle(s3, repo_ref="tg/layers")["code_hash"] != bundle(s3)["code_hash"], "the tag's file and the edited working file differ in the hash"
             assert bundle(s3, repo_ref="tg/layers")["code_hash"] == bt["code_hash"] and bundle(s3, repo_ref="tg/nonexistent")["repo_files"] == [], "a ref without the files finds none"
-            assert bt["repo_imports_unfollowed"] == ["autogt/__init__.py -> autogt/sets.py"], bt["repo_imports_unfollowed"]   # the package __init__ imports more than the bundle carries
+            assert bt["repo_imports_unfollowed"] == ["GtGenerator/__init__.py -> GtGenerator/sets.py"], bt["repo_imports_unfollowed"]   # the package __init__ imports more than the bundle carries
             assert bundle(s3, repo_ref="tg/nonexistent")["repo_files_from"] == "tg/nonexistent" or "not in that tag" in bundle(s3, repo_ref="tg/nonexistent")["repo_files_from"]
             before = set(os.listdir(tempfile.gettempdir()))
             bundle(s3, into=os.path.join(tmp, "out5"), repo_ref="tg/layers")
@@ -1179,7 +1179,7 @@ def selftest():
         os.rename(os.path.join(tr, "ckpt_00000300.pt.moved"), os.path.join(tr, "ckpt_00000300.pt"))
         # hard cases of the closure: BOM, parent packages with code, level-2 relative imports, missing root, broken file, dynamic import, external local code
         s2 = os.path.join(tmp, "snap2")
-        open(os.path.join(s2 if os.path.isdir(s2) else (os.makedirs(s2) or s2), "model.py"), "w", encoding="utf-8-sig").write("import pkg.head\nimport autogt\nimport torch\nimport broken\nimport importlib\nimportlib.import_module('x')\n")
+        open(os.path.join(s2 if os.path.isdir(s2) else (os.makedirs(s2) or s2), "model.py"), "w", encoding="utf-8-sig").write("import pkg.head\nimport GtGenerator\nimport torch\nimport broken\nimport importlib\nimportlib.import_module('x')\n")
         put(s2, "pkg/__init__.py", "from .reg import R\n")
         put(s2, "pkg/reg.py", "R = 1\n")
         put(s2, "pkg/head.py", "from .. import top\nfrom ..lib import leaf\n")
@@ -1187,7 +1187,7 @@ def selftest():
         put(s2, "lib/__init__.py", "")
         put(s2, "lib/leaf.py", "L = 1\n")
         put(s2, "broken.py", "def (:\n")
-        os.makedirs(os.path.join(tmp, "autogt"), exist_ok=True)
+        os.makedirs(os.path.join(tmp, "GtGenerator"), exist_ok=True)
         b2 = bundle(s2)
         assert b2["files"] == ["broken.py", "lib/__init__.py", "lib/leaf.py", "model.py", "pkg/__init__.py", "pkg/head.py", "pkg/reg.py", "top.py"] or b2["files"] == sorted(b2["files"]), b2["files"]
         for f in ("model.py", "pkg/__init__.py", "pkg/reg.py", "pkg/head.py", "lib/leaf.py", "top.py"):
@@ -1227,7 +1227,7 @@ def selftest():
         assert m5["subject"]["train_gt"]["key"] == "0.5_4_abc123" and m5["seed"] == 1, "the manifest reads the GT of the run from the folder that holds it: " + str(m5["subject"])
         # (2) the GT store is named by the canonical signature: v9's code makes the GT of v8, a run records 6a7a... and the store is c643...
         g2 = os.path.join(tmp, "gtrepo")
-        put(g2, "autogt/versions.csv", "version,signature,tag,date,generator,what_changed,same_gt_as\nv8,c8c8,autogt/v8,d,g,w,\nv9,c9c9,autogt/v9,d,g,w,v8\nv10,c10c,autogt/v10,d,g,w,\n")
+        put(g2, "GtGenerator/versions.csv", "version,signature,tag,date,generator,what_changed,same_gt_as\nv8,c8c8,autogt/v8,d,g,w,\nv9,c9c9,autogt/v9,d,g,w,v8\nv10,c10c,autogt/v10,d,g,w,\n")
         os.makedirs(os.path.join(g2, "data", "autogt", "c8c8"))
         json.dump({"signature": "c8c8", "gt_version": "v8", "version": "v1.0-trainval"}, open(os.path.join(g2, "data", "autogt", "c8c8", "index.json"), "w"))
         gb = gt_block("0.5_4_c9c9", g2)
@@ -1247,18 +1247,18 @@ def selftest():
         cyc = [{"version": "a", "signature": "x", "same_gt_as": "b"}, {"version": "b", "signature": "y", "same_gt_as": "a"}, {"version": "c", "signature": "d", "same_gt_as": "zz"}]
         assert canonical_sig("s5", lane_rows) == "s4" and canonical_sig("sbf", lane_rows) == "sbf" and canonical_sig("s4", lane_rows) == "s4", "the lane table: the earlier row of the same rig"
         assert canonical_sig("x", cyc) == "x" and canonical_sig("d", cyc) == "d" and canonical_sig("none", cyc) == "none", "a cycle, a dangling name, an unknown signature leave it as it is"
-        av = os.path.join(os.path.dirname(os.path.dirname(HERE)), "autogt", "versions.py")          # the rule is autogt's: every row of the real table maps as autogt.versions.canonical does
+        av = os.path.join(os.path.dirname(os.path.dirname(HERE)), "GtGenerator", "versions.py")          # the rule is GtGenerator's: every row of the real table maps as GtGenerator.versions.canonical does
         if os.path.isfile(av):
             import importlib.util
             spec = importlib.util.spec_from_file_location("_autogt_versions_probe", av)
             avm = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(avm)
             real_rows = read_versions(os.path.dirname(os.path.dirname(HERE)))
-            assert real_rows and all(avm.canonical(r["signature"]) == canonical_sig(r["signature"], real_rows) for r in real_rows), "canonical_sig differs from autogt.versions.canonical"
+            assert real_rows and all(avm.canonical(r["signature"]) == canonical_sig(r["signature"], real_rows) for r in real_rows), "canonical_sig differs from GtGenerator.versions.canonical"
             assert any(canonical_sig(r["signature"], real_rows) != r["signature"] for r in real_rows), "the real table has a same_gt_as row (v9): the check above bites"
-        # (3) gt_key: the autogt key of what is stored now, only for the store the run trained on, and only when autogt can be imported
+        # (3) gt_key: the GtGenerator key of what is stored now, only for the store the run trained on, and only when GtGenerator can be imported
         import types
-        fake_ag = types.ModuleType("autogt")
+        fake_ag = types.ModuleType("GtGenerator")
 
         class _Part:
             store = "abc123"
@@ -1270,11 +1270,11 @@ def selftest():
                 return _Part()
         asked = []
         fake_ag.gt_key = lambda *a, **k: (asked.append(a), _Key())[1]
-        real_ag = sys.modules.get("autogt")
-        sys.modules["autogt"] = fake_ag
+        real_ag = sys.modules.get("GtGenerator")
+        sys.modules["GtGenerator"] = fake_ag
         old_key = os.environ.pop("AR_GT_KEY", None)
         try:
-            assert gt_key_of({"signature": "abc123", "dataset": "v1.0-trainval"}) is None and not asked, "without AR_GT_KEY=1 autogt is not imported (it costs 25-33 s)"
+            assert gt_key_of({"signature": "abc123", "dataset": "v1.0-trainval"}) is None and not asked, "without AR_GT_KEY=1 GtGenerator is not imported (it costs 25-33 s)"
             os.environ["AR_GT_KEY"] = "1"
             gk = gt_key_of({"signature": "abc123", "dataset": "v1.0-trainval"})
             assert gk["id"] == "k123" and gk["front_store"] == "abc123" and asked[0][:2] == ("bev_fusion", "v1.0-trainval"), gk
@@ -1289,9 +1289,9 @@ def selftest():
             else:
                 os.environ["AR_GT_KEY"] = old_key
             if real_ag is None:
-                sys.modules.pop("autogt", None)
+                sys.modules.pop("GtGenerator", None)
             else:
-                sys.modules["autogt"] = real_ag
+                sys.modules["GtGenerator"] = real_ag
         print("provenance selftest passed")
     finally:
         if old_env is None:
@@ -1318,7 +1318,7 @@ def main():
     ap.add_argument("--run-dir")
     ap.add_argument("--card")
     ap.add_argument("--force", action="store_true", help="manifest: rebuild an existing provenance.json")
-    ap.add_argument("--with-gt-key", action="store_true", help="manifest: also record the autogt GtKey of the GT store (imports autogt: 25-33 s under the conda python)")
+    ap.add_argument("--with-gt-key", action="store_true", help="manifest: also record the GtGenerator GtKey of the GT store (imports GtGenerator: 25-33 s under the conda python)")
     ap.add_argument("--repeat", action="store_true", help="repro: check the tag out in a worktree and print the repeat command")
     ap.add_argument("--dir", help="repro --run: where to put the worktree (default temp/repro/<id>)")
     a = ap.parse_args()

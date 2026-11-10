@@ -1,6 +1,6 @@
 """Pictures and videos of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels on the
 same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of `training/grid/qformat.py` (the contract) and the
-lane GT of the frame (`autogt.lane_gt`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
+lane GT of the frame (`GtGenerator.lane_gt`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
 dict through `pred_fn(token)`.
 
     python qgraph_view.py frame <token | scene-0221:12> --out DIR [--pred oracle|degraded] [--no-cams]
@@ -9,7 +9,7 @@ dict through `pred_fn(token)`.
     python qgraph_view.py --selftest              a synthetic frame (needs no stored GT; imports the scorer)
 
 Panels (1920 x 1080 with the six cameras; metres, x right, y forward, ego at the origin):
-  cameras   the GT lane graph projected into the six cameras (front large; the projection is `autogt.lane_graph_view.camera_image`; a camera that is not on disk is a grey tile)
+  cameras   the GT lane graph projected into the six cameras (front large; the projection is `GtGenerator.lane_graph_view.camera_image`; a camera that is not on disk is a grey tile)
   1 m       centre-lane cells: GT faint grey, correct dark, false positive light red, miss light blue (a cell counts when the other map has a cell within 1 cell); without
             `pred["maps"]` the cells of the delivered nodes are drawn instead
   2 m, 0.5 m  road and intersection cells (exact), dividers and boundary (one hue per class), the same scheme
@@ -71,8 +71,8 @@ _CACHE = {}
 
 # ------------------------------------------------------------------------------------------------------------------------------------------ data
 def load_gt(token):
-    """the stored lane GT graph of a keyframe (`autogt.lane_gt.load`)"""
-    from autogt import lane_gt
+    """the stored lane GT graph of a keyframe (`GtGenerator.lane_gt.load`)"""
+    from GtGenerator import lane_gt
     return lane_gt.load(token)
 
 
@@ -134,8 +134,8 @@ def camera_tiles(token, g, sizes, log=print):
     info = _infos().get(token)
     tiles = {}
     if info is not None:
-        from autogt import lane_graph_view as V
-        from autogt.nuscenes_adapter import pose_matrix
+        from GtGenerator import lane_graph_view as V
+        from GtGenerator.nuscenes_adapter import pose_matrix
 
         class _Gt:
             nusc, dataroot = _Nusc(info["cam_infos"]), NUSC
@@ -427,7 +427,7 @@ def scorer_numbers(pred, g, token):
 
 
 def piece_rgb(key):
-    """the colour of a piece id: the hue of `autogt.lane_graph_view` (so the camera panels and the ids panels agree), a little darker for a light background"""
+    """the colour of a piece id: the hue of `GtGenerator.lane_graph_view` (so the camera panels and the ids panels agree), a little darker for a light background"""
     return np.array(colorsys.hsv_to_rgb(((zlib.crc32(str(key).encode()) * 2654435761) % 180) / 180.0, 0.78, 0.80))
 
 

@@ -3,7 +3,7 @@
     fusion area       the cells of the GT layers `camera` (ground-plane projection into CAM_FRONT) x `radar` (the radar fan) x not hidden behind a box (`occluded`);
                       today the radar fan contains every camera cell, so it equals the camera cells that are not hidden (about 60 % of the grid)
     footprint share   f of a box = the share of its footprint (sampled every 0.25 m) that lies in the fusion area; outside the grid counts as outside. A GT box uses its four
-                      corners (as autogt.coverage.footprint_share, the stored `share_fusion` of GT v7); a detection uses its length / width / yaw, a pedestrian detection a disc
+                      corners (as GtGenerator.coverage.footprint_share, the stored `share_fusion` of GT v7); a detection uses its length / width / yaw, a pedestrian detection a disc
     GT classes        care f >= 0.5 | partial 0.1 <= f < 0.5 | don't care f < 0.1      (D38 (b): 0.1 and 0.5; a convention backed by records/footprint_share_study_2026-11-01.md)
     detections        ignored when more than half of the detection's own footprint lies outside the fusion area (the KITTI rule), or when it sits within 2 m of a neutral
                       GT box (partial / don't care in the headline, also one outside the scored window) of its class and within 2 m of no scored one: a detection on a don't-care
@@ -40,7 +40,7 @@ RES, X0, Y0 = 0.5, 0.0, -26.0                     # the front grid: axis 0 = x f
 CARE, PARTIAL = 0.5, 0.1                          # D38 (b)
 NEAR = 2.0                                        # m: the TP threshold of the errors; a detection this close to a neutral box of its class is neutral
 STEP = 0.25                                       # m: footprint sampling of a detection
-CORNER_STEP = 0.125                               # m: sampling of a GT box (4 x 4 per cell, at least 12 per axis): the same as autogt.coverage, so the shares equal the stored `share_fusion`
+CORNER_STEP = 0.125                               # m: sampling of a GT box (4 x 4 per cell, at least 12 per axis): the same as GtGenerator.coverage, so the shares equal the stored `share_fusion`
 
 
 def fusion_area(g) -> np.ndarray:
@@ -63,7 +63,7 @@ def _share(px, py, area) -> float:
 
 
 def corner_share(corners, area: np.ndarray) -> float:
-    """share of a rectangle given by its four consecutive corners (ego frame, x forward) that lies in `area`: the rule of autogt.coverage.footprint_share"""
+    """share of a rectangle given by its four consecutive corners (ego frame, x forward) that lies in `area`: the rule of GtGenerator.coverage.footprint_share"""
     c = np.asarray(corners, float)[:, :2]
     e1, e2 = c[1] - c[0], c[3] - c[0]
     n1, n2 = max(int(math.ceil(np.hypot(*e1) / CORNER_STEP)), 12), max(int(math.ceil(np.hypot(*e2) / CORNER_STEP)), 12)

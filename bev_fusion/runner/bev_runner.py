@@ -42,7 +42,7 @@ def use_code(run, code):
     if not os.path.exists(os.path.join(folder, "precompute.py")):
         raise SystemExit(f"{folder} has no precompute.py: a snapshot from before the five-layer build cannot be run here - "
                          f"use `--code training` to run its checkpoint under the live code")
-    for p in (os.path.join(ROOT, ".."), folder):                   # the repository (autogt/) behind the code folder
+    for p in (os.path.join(ROOT, ".."), folder):                   # the repository (GtGenerator/) behind the code folder
         if p in sys.path:
             sys.path.remove(p)
         sys.path.insert(0, p)
@@ -191,7 +191,7 @@ def precompute_frames(config, split, n, scene, first, out, write_frames):
     commit = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     dirty = bool(subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "--", "training"], capture_output=True, text=True).stdout.strip())
     summary = {"config": config, "split": split, "frames": len(rows), "code": commit + ("+dirty" if dirty else ""), "maps": list(MAPS),
-               "radar_static_vr": cfg.model.get("rad_static_vr", 1.0), "radar_fan": "autogt.coverage.radar_cells of the calibrated radar poses", "rows": rows}
+               "radar_static_vr": cfg.model.get("rad_static_vr", 1.0), "radar_fan": "GtGenerator.coverage.radar_cells of the calibrated radar poses", "rows": rows}
     if write_frames:
         json.dump(summary, open(os.path.join(out, "index.json"), "w"), indent=1)
     if fan_gt:

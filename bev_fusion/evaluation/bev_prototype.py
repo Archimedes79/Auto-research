@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 sys.path.insert(0, ROOT)
 
 FRAME = ("ego (vehicle) frame of the frame's own time, metres: x forward, y left; yaw in rad counter-clockwise from x; velocity = world "
-         "velocity of the object in the ego axes, m/s (the autogt GT definition)")
+         "velocity of the object in the ego axes, m/s (the GtGenerator GT definition)")
 FORECAST = ("+0.5 s: the boxes at the next keyframe (t + 0.40 ... 0.60 s) in the ego frame of that time; decoded, as in the evaluation, "
             "with the true gap and ego motion of that keyframe (from the GT: a deployed system supplies its own ego motion)")
 

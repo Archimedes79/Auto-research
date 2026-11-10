@@ -1,10 +1,10 @@
-"""Video: driving through the GT of one scene at the 12 Hz front-camera rate: python -m autogt video SCENE OUT.mp4 [seconds]
+"""Video: driving through the GT of one scene at the 12 Hz front-camera rate: python -m GtGenerator video SCENE OUT.mp4 [seconds]
 
 Left the camera image with the GT projected (map lines: lane divider yellow, road divider orange, centre-line cyan; 3D boxes:
 vehicle red, pedestrian magenta, two-wheeler orange, white rim = stationary, grey = no lidar / radar point); right the BEV GT
 in the ego frame at that frame (semantic layers dimmed outside the camera view, boxes with heading, speed in km/h).
 - map layers: the exact generator at the pose of EVERY camera frame (keyframes and sweeps)
-- boxes: annotated at 2 Hz only; autogt.flow interpolates the tracks to the camera time of every frame (stationary boxes use
+- boxes: annotated at 2 Hz only; GtGenerator.flow interpolates the tracks to the camera time of every frame (stationary boxes use
   their one fixed world pose) and gives the radar-corrected velocity
 H.264 (`encode` below: ffmpeg with libx264, read back after encoding), 12 fps.
 """
@@ -29,7 +29,7 @@ from .view import EDGES, densify, semantic_rgb
 # did not play). H.264 needs an ffmpeg with libx264: looked up in $FFMPEG, the PATH and the ffmpeg.exe builds installed on the Windows
 # side (called through WSL interop). Without one an animated GIF is written and the result says so. The file is decoded again after
 # encoding (frame count, first frame not black); a video that does not play is never reported as done. (Same method as
-# autoresearch/evalsuite/render/video.py, kept here so that autogt stays standalone.)
+# autoresearch/evalsuite/render/video.py, kept here so that GtGenerator stays standalone.)
 CANDIDATES = ("/mnt/c/Program Files/DownloadHelper CoApp/ffmpeg.exe",
               "/mnt/c/Program Files (x86)/Digiarty/VideoProc Converter AI/ffmpeg.exe")
 
@@ -186,7 +186,7 @@ def render(layers, scene, sd, kf_token, header, root, use_radar):
 
 def run(scene_name, out_path, max_s=0.0, dataroot="~/data/nuscenes", version="v1.0-mini", use_radar=True):
     root = os.path.expanduser(dataroot)
-    # map layers per frame; velocities come from autogt.flow; the memory-light devkit of this one sequence (the same GT, and trainval fits)
+    # map layers per frame; velocities come from GtGenerator.flow; the memory-light devkit of this one sequence (the same GT, and trainval fits)
     layers = GtGenerator(root, version, use_flow=False, light=True, scenes=[scene_name])
     scene = NuScenesScene(layers.nusc, root, scene_name)
     toks = layers.keyframes(scene_name)

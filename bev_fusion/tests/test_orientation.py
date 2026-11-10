@@ -2,12 +2,12 @@
 
 The convention everywhere: ego frame, x forward (up on the picture), y LEFT (left on the picture), arrays [ix, iy] with iy = 0 at the
 RIGHT edge (y = -26 m). A flipped axis, a wrong sign of a lateral component or a colour key that does not match the picture does not
-crash anything: the picture is just wrong, as the motion arrows of autogt/view.py were until 2026-10-31. This test puts two markers
+crash anything: the picture is just wrong, as the motion arrows of GtGenerator/view.py were until 2026-10-31. This test puts two markers
 into a map, A forward-left (x 45 m, y +15 m, moving 6 m/s forward and 3.6 m/s left) and B backward-right (x 10 m, y -18 m), lets each
 drawer draw them and measures where they land on the screen:
 
-  autogt/view.py       raster (show), motion arrows, colour key (colour_wheel) against flow_rgb
-  autogt/video.py      the video's bird's-eye image against the pixel mapping of its overlays (_px)
+  GtGenerator/view.py       raster (show), motion arrows, colour key (colour_wheel) against flow_rgb
+  GtGenerator/video.py      the video's bird's-eye image against the pixel mapping of its overlays (_px)
   evaluation/bev_views.py   the evalsuite BEV panel and the box heading line
   tests/support/flow_viz.py    the flow pictures of the temporal tests and their key
 
@@ -20,7 +20,7 @@ import sys
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for p in (ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch"), os.path.join(ROOT, "tests", "support")):   # ".." = the repository root: import autogt
+for p in (ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch"), os.path.join(ROOT, "tests", "support")):   # ".." = the repository root: import GtGenerator
     sys.path.insert(0, p)
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")
@@ -82,10 +82,10 @@ def screen_step(fig, ax, y, x, dy, dx):
 
 
 def test_autogt_view():
-    from autogt import view
+    from GtGenerator import view
     fig, ax = plt.subplots(figsize=(5, 6), dpi=100)
     view.show(ax, marker_map(), "t")
-    check_markers(fig, ax, "autogt.view.show")
+    check_markers(fig, ax, "GtGenerator.view.show")
     plt.close(fig)
     # the motion arrows: a car that drives forward-left points up-left, one that drives backward-right down-right
     fl = np.zeros((2, NX, NY), np.float32)
@@ -112,7 +112,7 @@ def test_autogt_view():
 
 
 def test_autogt_video():
-    from autogt import video
+    from GtGenerator import video
     img = video._bev_image(marker_map())                                         # BGR
     for (x, y), col in ((A, (0.0, 0.0, 1.0)), (B, GREEN)):                       # red and green in the BGR order of the image
         got, want = centroid(img.astype(int), col), video._px(x, y)
@@ -122,7 +122,7 @@ def test_autogt_video():
 
 def test_evaluation_panels():
     from evalsuite.render import figure
-    from autogt.grid import GridSpec
+    from GtGenerator.grid import GridSpec
     from evaluation import bev_views as V
     grid = GridSpec()
     fig, ax = plt.subplots(figsize=(5, 6), dpi=100)
@@ -169,5 +169,5 @@ if __name__ == "__main__":
     for t in (test_autogt_view, test_autogt_video, test_evaluation_panels, test_flow_viz):
         t()
         print("ok", t.__name__)
-    print("orientation test ok: raster, arrows, colour keys and heading lines of autogt, the video, the evaluation panels and flow_viz "
+    print("orientation test ok: raster, arrows, colour keys and heading lines of GtGenerator, the video, the evaluation panels and flow_viz "
           "agree (x up, +y left, forward-left = up-left)")

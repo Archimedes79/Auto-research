@@ -1,10 +1,10 @@
-"""Named scene sets: the small run and the full run (autogt/sets/<name>.txt).
+"""Named scene sets: the small run and the full run (GtGenerator/sets/<name>.txt).
 
     small  the 10 sequences of nuScenes mini: small experiments (404 keyframes, about 25 minutes to generate)
     full   all 850 sequences of nuScenes trainval: releases (34,149 keyframes, 5 - 8 hours to generate)
 
-A set file holds one scene name per line, `#` starts a comment. `autogt.generate(dataroot, set_name="small")` and
-`python -m autogt generate DATAROOT --set small` generate exactly those sequences; `python -m autogt sets` and `sets.status(name)` say how
+A set file holds one scene name per line, `#` starts a comment. `GtGenerator.generate(dataroot, set_name="small")` and
+`python -m GtGenerator generate DATAROOT --set small` generate exactly those sequences; `python -m GtGenerator sets` and `sets.status(name)` say how
 much of a set the store of the current generator holds. The store folder is shared by the sets (small is a part of full), so a set is
 "complete" when every keyframe of its scenes has a file; the index.json of a store lists the complete sets (key `sets_complete`).
 
@@ -12,9 +12,9 @@ much of a set the store of the current generator holds. The store folder is shar
     sets.scenes(name)             the scene names of a set
     sets.tokens(name, ...)        the sample tokens of those scenes (json tables only, no devkit)
     sets.status(name, ...)        {"set", "version", "have", "total", "complete"} for the current generator signature
-    sets.stored_for(scenes, ...)  the same for any list of sequence names, with the missing sample tokens: `python -m autogt have`
+    sets.stored_for(scenes, ...)  the same for any list of sequence names, with the missing sample tokens: `python -m GtGenerator have`
     sets.check_raw(dataroot, ...) are the raw files the generator reads on disk (tables, map expansion, CAM_FRONT, the five radars)?
-                                  `python -m autogt data`; sets.report_raw(result) prints it. The tools that fetch, verify and link the raw
+                                  `python -m GtGenerator data`; sets.report_raw(result) prints it. The tools that fetch, verify and link the raw
                                   data are `data/NuScenes/tools/` (its README describes the layout on D:)
 """
 import os
@@ -87,7 +87,7 @@ def status(name, data=None, version=None, dataroot=None, **options):
 
 def stored_for(want, data=None, version=None, dataroot=None, stride=1, **options):
     """the keyframes (every `stride`-th) of the sequences `want` (names) that the store of the current generator holds: the check before a
-    training or an evaluation -> {"version", "scenes", "total", "have", "missing": [sample tokens]}; `python -m autogt have`"""
+    training or an evaluation -> {"version", "scenes", "total", "have", "missing": [sample tokens]}; `python -m GtGenerator have`"""
     from .suite import DATA, current_signature, scene_tokens
     version, root = _find(list(want), version, dataroot)
     toks = [t for s in want for t in scene_tokens(s, version, root)[::stride]]
@@ -124,7 +124,7 @@ def complete_in(sig_dir, version, dataroot):
 
 
 # ---- the raw files a run needs
-# autogt reads the json tables, the map expansion of the cities of the sequences, and per keyframe and radar sweep the files of CAM_FRONT
+# GtGenerator reads the json tables, the map expansion of the cities of the sequences, and per keyframe and radar sweep the files of CAM_FRONT
 # and the five radars (the image is needed to look at the GT, the radar files for the velocity correction). One pass over the tables (no
 # devkit) and one listing per sensor folder; a file counts as present by its name, its content is not read.
 

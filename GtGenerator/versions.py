@@ -3,19 +3,19 @@
 The signature (10 hex chars over the six files grid.py, layers.py, flow.py, nuscenes_adapter.py, nuscenes_gt.py, coverage.py and the options) names the
 folder of the stored GT; the version is its human key. A version is: a row in versions.csv (next to this file), a git tag `autogt/vN`
 on the commit that holds that generator, and the key `gt_version` in the index.json of the stored GT. The rule when you edit one of the
-six files: the signature changes, `python -m autogt selftest` fails until versions.csv has a row for the new signature, then commit
+six files: the signature changes, `python -m GtGenerator selftest` fails until versions.csv has a row for the new signature, then commit
 and tag (`git tag -a autogt/v6 -m "..."`), rebuild the GT, tell the others. An old GT is rebuilt from its tag:
 `git worktree add temp/gt_v5 autogt/v5`, then run `build` of the package in that checkout (the old tags have no `generate`; exact
 command and the check that it is the checkout's package that runs: README.md, section Versions).
 
-    autogt.versions.table()          the rows (dicts)
-    autogt.versions.version_of(sig)  "v5" or None; autogt.current_version() the GT version of THIS source with the default options
-    autogt.versions.canonical(sig)   the signature of the store that `sig`'s code fills (`same_gt_as`: v9 makes the GT of v8, so it uses its store)
-    autogt.versions.version_of_key(k) the same for a training cache key '0.5_4_<signature>' (what runs/<name>/gt.json and the cards record)
-    autogt.versions.releases()       the rows of releases.csv: ONE number for the whole suite (the front GT version and the lane GT version that belong together)
-    autogt.versions.current_release()  the release of THIS source ("v10"), or None when the pair (front version, lane version) has no row yet
-    python -m autogt versions        the table, the current version marked, which GT is stored
-    autogt.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
+    GtGenerator.versions.table()          the rows (dicts)
+    GtGenerator.versions.version_of(sig)  "v5" or None; GtGenerator.current_version() the GT version of THIS source with the default options
+    GtGenerator.versions.canonical(sig)   the signature of the store that `sig`'s code fills (`same_gt_as`: v9 makes the GT of v8, so it uses its store)
+    GtGenerator.versions.version_of_key(k) the same for a training cache key '0.5_4_<signature>' (what runs/<name>/gt.json and the cards record)
+    GtGenerator.versions.releases()       the rows of releases.csv: ONE number for the whole suite (the front GT version and the lane GT version that belong together)
+    GtGenerator.versions.current_release()  the release of THIS source ("v10"), or None when the pair (front version, lane version) has no row yet
+    python -m GtGenerator versions        the table, the current version marked, which GT is stored
+    GtGenerator.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
 """
 import csv
 import os
@@ -24,7 +24,7 @@ FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "versions.csv")
 RELEASES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "releases.csv")
 
 # the modules of this package that do NOT shape the GT (command line, storage, reports, pictures, checks, scene sets, the light devkit loader,
-# this table). Every other module is hashed into the signature (nuscenes_gt.SIGNATURE_FILES); `python -m autogt selftest` fails for a module
+# this table). Every other module is hashed into the signature (nuscenes_gt.SIGNATURE_FILES); `python -m GtGenerator selftest` fails for a module
 # that is in neither list, and for a hashed module that nuscenes_gt.py does not import, so a change of the generator cannot slip past a version.
 # the lane GT (lane_gt.py, lane_graph.py, road_graph.py, lane_lines.py) has its own version (lane_versions.csv), not the front GT's signature
 NOT_GENERATOR = ("__init__.py", "__main__.py", "checks.py", "clean.py", "api.py", "cli.py", "pipeline.py", "store.py", "lane_gt.py", "lane_graph.py", "lane_graph_selftest.py", "lane_graph_view.py", "lane_tiers.py", "lane_tiers_selftest.py",
@@ -35,7 +35,7 @@ _TABLES = {}
 
 
 def _rows(path):
-    """the rows of a csv table, read again only when the file changed (a signature lookup needs the table twice: 6 - 16 ms per autogt.load otherwise)"""
+    """the rows of a csv table, read again only when the file changed (a signature lookup needs the table twice: 6 - 16 ms per GtGenerator.load otherwise)"""
     st = os.stat(path)
     key = (st.st_mtime_ns, st.st_size)
     if _TABLES.get(path, (None,))[0] != key:
@@ -71,7 +71,7 @@ def canonical(signature):
 
 def check_table(rows=None, release_rows=None, lane_versions=None):
     """versions.csv and releases.csv are consistent: signatures are unique, every same_gt_as names an EARLIER row (no cycle, no dangling name), every release names a front version of
-    versions.csv and a lane version of lane_versions.csv; raises ValueError (`autogt selftest` calls it)"""
+    versions.csv and a lane version of lane_versions.csv; raises ValueError (`GtGenerator selftest` calls it)"""
     rows = table() if rows is None else rows
     seen = []
     for r in rows:
@@ -102,7 +102,7 @@ def version_of_key(key):
 
 def releases():
     """the rows of releases.csv, oldest first: release, front (a version of versions.csv), lane (a version of lane_versions.csv), date, what_changed.
-    A release is the suite as one: `python -m autogt generate` makes the standard nuScenes GT (front) and the lane GT together, and the pair carries one
+    A release is the suite as one: `python -m GtGenerator generate` makes the standard nuScenes GT (front) and the lane GT together, and the pair carries one
     number. The numbers are one running sequence with the front versions (v10 = front v9 + lane l3): every later change of the front GT or of the lane GT is the
     next number (v11, ...), so the next front row of versions.csv is v11, not v10."""
     return [dict(r) for r in _rows(RELEASES)]
@@ -157,7 +157,7 @@ def propose(signature, lane_version, change, versions_rows=None, release_rows=No
     front = next((r["version"] for r in vrows if r["signature"] == signature), None)
     if front is None:
         front = f"v{nxt}"
-        out["front"] = {"version": front, "signature": signature, "tag": f"autogt/{front}", "date": change["date"], "generator": f"autogt/ (tag autogt/{front})",
+        out["front"] = {"version": front, "signature": signature, "tag": f"autogt/{front}", "date": change["date"], "generator": f"GtGenerator/ (tag autogt/{front})",
                         "what_changed": change["subject"], "same_gt_as": ""}
         nxt += 1
     if lane_version and not any(r["front"] == front and r["lane"] == lane_version for r in rrows):
@@ -192,7 +192,7 @@ def _changes_the_code(line):
 
 
 def code_state(max_age=20.0):
-    """{"commit": short hash of HEAD, "dirty": True when a file of autogt/ other than a document (.md, .svg, architecture.json) differs from it (edited or new files)}; both None, with a warning,
+    """{"commit": short hash of HEAD, "dirty": True when a file of GtGenerator/ other than a document (.md, .svg, architecture.json) differs from it (edited or new files)}; both None, with a warning,
     when git cannot tell. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one. A worktree
     that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then. The answer is kept `max_age` seconds: two git processes cost 0.5 - 1.5 s
     and a run writes its index several times within seconds (an hours-long run asks again at its end)."""
@@ -220,6 +220,6 @@ def code_state(max_age=20.0):
             _CODE_STATE.update(at=time.time(), value=value)
             return dict(value)
     import sys
-    print("WARNING: git cannot tell the commit and the state of autogt/ here: the manifest gets no commit and the store is no release; "
-          "run `python -m autogt generate` again from a clean checkout to stamp it", file=sys.stderr, flush=True)
+    print("WARNING: git cannot tell the commit and the state of GtGenerator/ here: the manifest gets no commit and the store is no release; "
+          "run `python -m GtGenerator generate` again from a clean checkout to stamp it", file=sys.stderr, flush=True)
     return {"commit": None, "dirty": None}

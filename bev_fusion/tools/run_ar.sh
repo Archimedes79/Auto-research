@@ -6,7 +6,7 @@
 #   - exit code = train.py's exit code (run_cfg.sh always ends with 0): run.py writes its done flag only for 0, and the last 40 lines of
 #     train.log are printed so run.py's CUDA "unknown error" retry and its last_lines see them
 #   - the engine (autoresearch/trainkit) is copied next to train.py, so the run imports ITS copy; a commit without that folder fails the launch (git archive)
-#   - not pinned: autogt/ is imported from the live tree when train.py starts (the run's tag records its state)
+#   - not pinned: GtGenerator/ is imported from the live tree when train.py starts (the run's tag records its state)
 # Usage (from bev_fusion/, see records/README.md): bash tools/run_ar.sh <config.json> [<commit>]; tests/test_run_ar.py
 cd "$(dirname "$0")/.." || exit 1
 cfg=$1; name=$(basename "$cfg" .json)

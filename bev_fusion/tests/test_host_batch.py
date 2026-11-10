@@ -13,7 +13,7 @@ CPU, no data, about a minute; the parts that need a GPU run when one is there (a
   6. launch_saving.to_dev / index and timed_head.dt_embedding give the plain values (and are the plain calls with the switch off)
   7. with a GPU: the ego tensors, the pinned copies, the cached index and the keyed lift do not wait for the GPU (torch.cuda.set_sync_debug_mode("error")); the old forms do - which is
      the proof that this part of the test can fail
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_host_batch.py   (PYTHONPATH = the repository root for autogt)"""
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_host_batch.py   (PYTHONPATH = the repository root for GtGenerator)"""
 
 
 import dataclasses

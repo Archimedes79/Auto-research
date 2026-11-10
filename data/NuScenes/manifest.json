@@ -1008,8 +1008,8 @@
  "licence": "nuScenes is for non-commercial use (the LICENSE of the data is under files); downloads only with Mirko's OK",
  "links": {
   "gt": {
-   "check": "python -m autogt data <dataroot>",
-   "registry": "autogt/versions.csv",
+   "check": "python -m GtGenerator data <dataroot>",
+   "registry": "GtGenerator/versions.csv",
    "store": "data/autogt/<signature>/index.json",
    "tags": "autogt/v<N>"
   },

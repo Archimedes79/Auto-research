@@ -56,7 +56,7 @@ def test_frames_tokens_and_store():
     assert len(fr) == 873 and [f.row for f in fr] == [int(r) for r in PD.BuilderData("val_clean").rows], "the VAL frames are the rows of BuilderData('val_clean')"
     assert len({f.token for f in fr}) == 873
     share = QE.stored_share(fr)
-    print(f"   share of the 873 VAL tokens with a stored lane GT: {share:.4f} (signature of this checkout's autogt source)")
+    print(f"   share of the 873 VAL tokens with a stored lane GT: {share:.4f} (signature of this checkout's GtGenerator source)")
     assert share > 0, "no lane GT stored for the VAL tokens"
     from scipy.spatial import cKDTree
     hit = []
@@ -75,7 +75,7 @@ def test_frames_tokens_and_store():
 def _held():
     if "held" not in _CACHE:
         sys.path.insert(0, BP.REPO)
-        from autogt import lane_gt
+        from GtGenerator import lane_gt
         _CACHE["held"] = lane_gt.held(os.path.join(lane_gt.DATA, lane_gt.signature()))
     return _CACHE["held"]
 

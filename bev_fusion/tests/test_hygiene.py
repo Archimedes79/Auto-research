@@ -8,7 +8,7 @@
   5. the wiring: BEVLoss(LossConfig(hygiene_2026_11_02=True)) reaches the object head, the motion loss and train.forward_loss (batch_ego); the flag is off by default
   6. #6 splat_positions / splat_bev / splat_window compute geometry in float32 for bf16 / fp16 inputs (the bf16 cell centres were 0.125 m off at 32 - 64 m); float32 input is unchanged
   7. #1 batch_ego raises for a dt other than +-0.5 s when strict, and not otherwise
-Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_hygiene.py   (PYTHONPATH = the repository root for autogt)
+Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_hygiene.py   (PYTHONPATH = the repository root for GtGenerator)
 """
 import math
 import sys

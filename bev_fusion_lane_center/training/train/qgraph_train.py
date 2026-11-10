@@ -70,7 +70,7 @@ def main():
         assert not (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0), "--node-loss zone runs without the E276 tier switches"
         LD.QData.DEFAULT_ZONE = True
     if (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0):
-        from autogt import lane_gt                                                                                          # the tier switches need the l4 labels: refuse an l3 store
+        from GtGenerator import lane_gt                                                                                          # the tier switches need the l4 labels: refuse an l3 store
         assert lane_gt.version_of(lane_gt.signature()) not in (None, "l1", "l2", "l3"), "the tier switches need the lane GT l4 (this source is " + str(lane_gt.version_of(lane_gt.signature())) + ")"
     model = QG.QGraph(width=a.width, soft_nms=a.soft_nms)
     hp = a.head or os.path.join(ROOT, "runs", f"e271_a_s{a.seed}", "model.pt")

@@ -19,10 +19,10 @@
   "lower_is_better": ["ate", "ase", "aoe", "ave", "mATE", "mASE", "mAOE", "mAVE", "ave_moving", "ave_static", "ave0_moving", "ave0_static",
                       "ave_slow_moving", "fp_hi", "field_mae", "angle_mae", "total", "group.areas", "group.lines", "group.motion", "group.objects","median_ms", "p90_ms", "mean_ms", "bev_dt0_median", "bev_3dt_median",
                       "bev_dt0_refined_boxes_median", "camera_heads_median"],
-  "code_dirs": ["training", "evaluation", "../autogt", "../autoresearch/trainkit", "tests"],
+  "code_dirs": ["training", "evaluation", "../GtGenerator", "../autoresearch/trainkit", "tests"],
   "fingerprint_extra": ["tools/run_ar.sh"],
   "scratch": "temp",
-  "live_code": ["training", "evaluation", "../autogt", "../autoresearch/trainkit"],
+  "live_code": ["training", "evaluation", "../GtGenerator", "../autoresearch/trainkit"],
   "trash": "_to_delete",
   "gpu_slots": 2,
   "_gpu_settle_s": "run.py waits while another launcher took its GPU slot less than this many seconds ago: that run has not loaded its data or allocated its memory yet, so the RAM / memory gates would read the box too early (two trainings started in the same second and slowed each other 13 times, 2026-11-04); a training takes about 70 s to its first logged step; 0 = off",
@@ -50,7 +50,7 @@
     "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "training"],
     "living": [],
     "skip_parts": [],
-    "index_dirs": ["training", "evaluation", "../autogt", "tests", "temp"],
+    "index_dirs": ["training", "evaluation", "../GtGenerator", "tests", "temp"],
     "extra_bases": []
   }
 }
