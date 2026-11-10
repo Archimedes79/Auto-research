@@ -350,7 +350,7 @@ def api_checks(tmp, ok):
                 assert got[got.index("--scene") + 1] == scene, (scene, got)
         finally:
             open(pj_path, "w").write(pj0)
-        # the rest: errors have one type, a project is an argument, the delegates keep their signature
+        # the rest: errors have one type, a project is an argument, the decorated methods keep their signature
         assert "words" in inspect.signature(T.queue_hold).parameters and "job" in inspect.signature(T.queue_add).parameters
         old_env = os.environ.pop("AR_PROJECT")
         try:

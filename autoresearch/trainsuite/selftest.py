@@ -958,7 +958,7 @@ def main():
             i = next(seq)
             f = orig(run, ref, since_step)
             return f + ([health.Finding("warn", "flappy", f"no output for {i} min")] if i % 2 == 0 else [])
-        cli.health.check = flapping
+        health.check = flapping
         cli.time.sleep = stop_after
         calls[0] = 0
         try:
@@ -969,7 +969,7 @@ def main():
                 except _Stop:
                     pass
         finally:
-            cli.health.check = orig
+            health.check = orig
             cli.time.sleep = real_sleep
         assert buf.getvalue().count("flappy") == 1, buf.getvalue()
         ok("a finding that comes and goes is reported once")

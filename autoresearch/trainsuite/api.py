@@ -38,7 +38,7 @@ import suitecli
 from . import compose as C
 from . import control, health, modules
 from . import trainqueue as TQ
-from .cli import speed_row, summary
+from .view import speed_row, summary
 from .kill import Rule
 from .runs import Run
 
