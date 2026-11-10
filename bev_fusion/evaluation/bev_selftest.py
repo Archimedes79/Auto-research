@@ -35,7 +35,7 @@ from evalsuite.render import figure  # noqa: E402
 from evaluation import bev_legacy, bev_suite  # noqa: E402
 from evaluation.bev_task import BEVTask, BevDetMetric, BevSegMetric, MASKS, add_sample  # noqa: E402
 from evaluation.bev_views import gt_boxes  # noqa: E402
-from evaluation.metrics import DetMeter, SegMeter, dt_key, flatten  # noqa: E402
+from evaluation.metrics import DetMeter, SegMeter, ap_nuscenes, dt_key, flatten, in_front  # noqa: E402
 from evaluation.metrics import match as metrics_match  # noqa: E402
 from evalsuite.comparison import boxes as BX  # noqa: E402
 
@@ -194,6 +194,14 @@ def frames_pred(n_frames=20):
             s = src.load(ref)
             out.append((s, sub.predict(s)))
     return out
+
+
+def former_det_ap(frames_by_scene, scenes, cls, thr=2.0):
+    """the AP of the former evaluate_run: ALL listed scenes matched in one pass (the greedy matching of a detection only involves its own frame); the reference of bev_legacy's per-scene flags"""
+    frames = [([d for d in ds if d["group"] == cls and in_front(d)], [g for g in gs if g["group"] == cls and in_front(g)])
+              for s in scenes for ds, gs in frames_by_scene[s]]
+    m, n_gt = metrics_match(frames, thr)
+    return ap_nuscenes([x[1] for x in m], n_gt)
 
 
 def same(a, b, tol=1e-12):
@@ -567,9 +575,9 @@ def _():
             assert layer[0] in rec["seg"]["bev-01"], layer
         sc = bev_legacy.scene_counts(rec, "drivable_area")["bev-01"]
         assert sc.shape == (2, 4) and sc[0, 0] > 0
-        # AP of the whole run: the suite's rows-based AP = the former global greedy matching (legacy det_ap) on the same boxes
+        # AP of the whole run: the suite's rows-based AP = the former global greedy matching (former_det_ap) on the same boxes
         frames_by_scene = {s: r[0.0] for s, r in rec["det"].items()}
-        legacy_ap = bev_legacy.det_ap(frames_by_scene, list(frames_by_scene), "vehicle", 2.0)
+        legacy_ap = former_det_ap(frames_by_scene, list(frames_by_scene), "vehicle", 2.0)
         assert same(suite.quant.table(st)["det.dt+0.00/vehicle/all/ap@2"], legacy_ap)
         # and the legacy paired comparison of two stored runs agrees with the suite's point estimates
         os.makedirs(os.path.join(d, "runs", "b", "eval"), exist_ok=True)

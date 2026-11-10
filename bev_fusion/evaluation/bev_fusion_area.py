@@ -262,9 +262,9 @@ def selftest():
     # a detection on the care box that also sits within 2 m of a neutral box of its class stays (it is near a scored one)
     keep3, _ = prepare([dict(box(6.5, 0), score=1.0)], [care, box(8.0, 0.0, l=1.0)], [1.0, 1.0], area, include_partial=False)
     assert len(keep3) == 1
-    edge = box(59.5, 0)                                                        # a neutral box just outside the window (x >= 60) still neutralises a detection next to it
     area2 = np.ones((140, 104), bool)
     area2[118:] = False
+    # a neutral box just outside the window (x >= 60) still neutralises a detection next to it
     k4, s4 = prepare([dict(box(58.5, 0), score=1.0)], [dict(box(60.5, 0))], [0.0], area2, include_partial=False)
     assert k4 == [] and s4 == [], "a detection within 2 m of a neutral box outside the window is ignored"
     assert footprint_share(dict(box(5, 0), length=float("nan")), area) == 0.0, "a NaN box is outside"

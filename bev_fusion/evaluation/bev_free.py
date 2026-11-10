@@ -8,9 +8,8 @@ autoresearch/evalsuite (its Runner drives a Subject over a Source and stores the
 
 What differs from the live pair, and nothing else: `FreeSource.load` returns `Sample(reference=None)` (the dataset item is made without `gt`); `FreeSubject.predict` calls the model the way
 train.forward_loss does before the loss (same ego gap, host copies, autocast, state and step) and stops there, so `info` has no `loss`; `describe()` names no ground truth. The outputs are built by
-the same functions as BEVSubject.predict builds them (`predictions`, `predictions_1m`, `object_head.decode`, `model.boxes`) and have the same structure and dtypes:
-tests/test_bev_free.py checks them bit for bit against the live subject on real frames. The five lines of output building are copied from bev_adapter.BEVSubject.predict:
-keep them in step with it (that test fails when they drift). One network per process, like bev_adapter.build.
+the same function as BEVSubject.predict builds them (`bev_adapter.outputs_of`) and have the same structure and dtypes:
+tests/test_bev_free.py checks them bit for bit against the live subject on real frames. One network per process, like bev_adapter.build.
 """
 import inspect
 import os
@@ -101,7 +100,7 @@ class FreeSubject(Subject):
     def predict(self, sample: Sample, taps: Sequence[str] = ()) -> Prediction:
         import torch
         b, ns = self.b, self.b.ns
-        T, model, cfg, device = ns.T, b.model, b.cfg, b.device
+        T, model, device = ns.T, b.model, b.device
         names = set(taps)
         b.rec.arm([n for n in (names | ({"radar_feat", "radar_memory"} if "radar_aux" in names else set())) if n in b.rec.hooks])
         batch = sample.inputs
@@ -110,7 +109,7 @@ class FreeSubject(Subject):
                 res = self._forward(batch)
                 if ns.detach_tree is not None and "state" in res:
                     self.state, self.prev = ns.detach_tree(res["state"]), batch
-                outputs = self._outputs(res)
+                outputs = A.outputs_of(model, res, ns, b.refine)
                 arrays = b.rec.read(0) if names else {}
                 if "memory_conf" in arrays:
                     arrays["memory_conf"] = arrays["memory_conf"][0]
@@ -143,23 +142,3 @@ class FreeSubject(Subject):
             check_outputs(res, self.dts, raise_on=True)
             self._checked = True
         return res
-
-    def _outputs(self, res) -> Dict[float, Dict[str, Any]]:
-        """the outputs of every dt, as BEVSubject.predict builds them (copied from it, see the head of this file)"""
-        b, ns = self.b, self.b.ns
-        model = b.model
-        grid, spec = model.grid, model.spec
-        refined = ({dt: model.boxes(res, dt, k=100, threshold=0.05, rescore=True) for dt in res["out"]} if b.refine else {})
-        dts = {}
-        for dt, p in res["out"].items():
-            prob, dist = A.predictions(p, 0, spec)
-            dts[dt] = {"prob": prob, "dist": dist,
-                       "mass": p["mass"][0, 0].float().cpu().numpy() if p.get("mass") is not None else None,
-                       "dets": ns.decode({k: v[:1].float().cpu() for k, v in p["obj"].items()}, grid, ns.NUSC_GROUPS, k=100, threshold=0.05)[0],
-                       "detr": list(refined[dt][0]) if b.refine else None,
-                       "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None,
-                       "objvel": p["obj"]["vel"][0].float().cpu().numpy() if "vel" in p["obj"] else None}
-            if getattr(model, "spec_1m", None):                               # the 1 m centre-line head: its presence is a layer of `prob`, its direction goes to the angle check
-                p1, dts[dt]["dir"] = A.predictions_1m(p, 0, model.spec_1m)
-                prob.update(p1)
-        return dts

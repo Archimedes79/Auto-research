@@ -235,14 +235,6 @@ def probe(net: str, frames: int = 3, device: str = "cpu") -> Dict[str, Any]:
     return bev_modules.probe(_abs(net), frames=frames, device=device)
 
 
-def evaluator_extra() -> str:
-    """the code that shapes the numbers outside the source's evaluator hash (bev_adapter.NUMBER_PATHS, which holds bev_views.py and bev_annotation_pts.py since D73): this adapter
-    (the reference, the metrics without the loss) and the label-free path; it goes into the id of an evaluation, so an edit of either scores the stored predictions again
-    instead of serving old numbers"""
-    files = ("bev_eval.py", "bev_free.py")
-    return hashlib.sha1("".join(_file_hash(os.path.join(ROOT, "evaluation", f)) for f in files).encode()).hexdigest()[:12]
-
-
 def evaluator_now():
     """the evaluator hash of the code as it is now (what a stored evaluation was scored with is in its record): `show_numbers` warns when they differ"""
     from evaluation import bev_adapter

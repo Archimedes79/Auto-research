@@ -16,7 +16,6 @@ background, no red (`ERR`, `class_colors`).
 from __future__ import annotations
 
 import math
-import textwrap
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -671,7 +670,6 @@ class DashboardView(BevView):
                 panels.append(bev(grid, "rgb", f"prediction at dt {dt:+.1f} s: {box_caption(bxd)}",
                                   composite(od["prob"], od["dist"], observed=observed_area(sample.reference[dt])), bsd))
         if o0.get("vhat") is not None:
-            sp = np.hypot(o0["vhat"][0], o0["vhat"][1])
             panels.append(bev(grid, "rgb", "predicted velocity: hue = direction, brightness = speed (full colour = 10 m/s)", speed_dir_rgb(o0["vhat"], 10.0), boxes))
         return Page(title="BEV dashboard", panels=panels, ncols=5, panel_size=(4.2, 3.9))
 

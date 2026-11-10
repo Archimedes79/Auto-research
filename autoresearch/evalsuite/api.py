@@ -295,7 +295,7 @@ class Evaluation(Helpers):
         try:
             self._release(source)                                             # only the ground truth is needed from here: the network a source may hold is given back
             desc = source.describe()
-            scenes, keep = fr.resolve(source)
+            _, keep = fr.resolve(source)
             res["gt"] = desc.get("gt_version") or desc.get("gt_signature")
             res["id"] = f"{self.ad.name(net)}@{self._eval_id(res['results'].partition('@')[2], keep, desc, metrics)}"
             if not desc.get("gt_signature"):
@@ -337,7 +337,7 @@ class Evaluation(Helpers):
         try:
             self._release(source)                                             # scoring needs the ground truth, not the network a source may hold: give it back now
             desc = source.describe()
-            scenes, keep = fr.resolve(source)
+            _, keep = fr.resolve(source)
             self._need_gt(desc, gt_key)
             missing = [r.label for r in keep if not rs.has(r)]
             if missing:
@@ -382,9 +382,8 @@ class Evaluation(Helpers):
 
     def _eval_id(self, rid: str, keep: Sequence[FrameRef], desc: Dict[str, Any], metrics: Sequence[str]) -> str:
         """what the numbers depend on: the predictions, the frames (with their dataset keys), the set they were asked through, the ground truth, the metrics, the evaluator code (the source's
-        hash, and the adapter's own `evaluator_extra()` for the code that shapes numbers outside it)"""
-        extra = self.ad.evaluator_extra() if hasattr(self.ad, "evaluator_extra") else None
-        return "e" + digest([rid, digest([[r.label, r.key] for r in keep], 40), desc.get("split"), desc.get("set_hash"), desc.get("gt_signature"), sorted(metrics), desc.get("evaluator_hash"), extra])
+        `evaluator_hash`: it must cover every file that shapes a number)"""
+        return "e" + digest([rid, digest([[r.label, r.key] for r in keep], 40), desc.get("split"), desc.get("set_hash"), desc.get("gt_signature"), sorted(metrics), desc.get("evaluator_hash")])
 
     @staticmethod
     def _need_gt(desc: Dict[str, Any], gt_key: Optional[str]) -> None:
@@ -492,13 +491,13 @@ class Evaluation(Helpers):
 
     def get_cost(self, id: str) -> Dict[str, Any]:
         """ms per frame of the network as it ran (the median over the frames of the last session that ran frames, on that day's machine)"""
-        info, store, q = self._open(id)
+        info, store, _ = self._open(id)
         rs = self._predictions(info)
         return {"id": id, "predict": rs.manifest.get("cost") if rs else None, "devices": sorted({fr["info"]["device"] for fr in store.frames if fr["info"].get("device")})}
 
     def report(self, id: str) -> str:
         """the html page of an evaluation (numbers, scenes by drag, outliers); returns its path"""
-        info, store, q = self._open(id)
+        _, store, q = self._open(id)
         return q.report(store, render=0)
 
     def make_card(self, id: str, out: str = "") -> Dict[str, Any]:
@@ -529,7 +528,7 @@ class Evaluation(Helpers):
     def draw_frame(self, id: str, frame: str, view: str = "overview", device: str = "cpu", workers: int = 0) -> Dict[str, Any]:
         """draw one frame of an evaluation. Drawing runs the network on that frame again (the engine's own path, with the history of its scene, on `device`; its scores can differ slightly
         from the stored ones when the evaluation ran on another device): the one place besides the Runner that executes the network. Returns the picture paths and the frame's scores"""
-        info, store, q = self._open(id)
+        info = self._open(id)[0]
         self._same_network(info, self._predictions(info))
         fr = Frames.parse(info["frames"])
         source = self._source(info["network"], fr.of, workers, info.get("control", ""), True)

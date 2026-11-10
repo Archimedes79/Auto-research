@@ -306,7 +306,7 @@ def probe(run, frames=3, device="cpu", split="val", out_dir=None, threads=2, ckp
 
 
 def _probe_frames(refs, src, subj, rec, forward, modules, response, rows, out_dir, run):
-    ns, model, cfg = subj.ns, subj.model, subj.cfg
+    ns, model = subj.ns, subj.model
     T, dev = ns.T, subj.device
     for k, (scene, idx) in enumerate(refs):
         ref = src.frames(scene)[idx]

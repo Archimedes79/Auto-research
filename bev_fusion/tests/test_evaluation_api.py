@@ -38,9 +38,9 @@ def quick():
     assert not missing, f"bev_eval lacks {missing}"
     assert hasattr(bev_eval, "reference") and hasattr(bev_eval, "card") and hasattr(bev_eval, "time") and hasattr(bev_eval, "probe")
     assert hasattr(bev_eval, "free_source") and hasattr(bev_eval, "free_subject"), "the Runner's pair: both or none"
-    assert len(bev_eval.evaluator_extra()) == 12, "the adapter's own code is part of the evaluation id"
     from evalsuite.api import EvaluationError
     from evaluation import bev_adapter                                                                   # an evaluator that cannot be hashed fails closed (a renamed file of NUMBER_PATHS)
+    assert "bev_eval.py" in {os.path.basename(p) for p in bev_adapter.NUMBER_PATHS}, "the adapter's own code is part of the evaluator hash (and so of the evaluation id)"
     saved_paths = bev_adapter.NUMBER_PATHS
     bev_adapter.NUMBER_PATHS = saved_paths + (os.path.join(ROOT, "evaluation", "no_such_file_renamed.py"),)
     try:

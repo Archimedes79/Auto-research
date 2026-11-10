@@ -13,7 +13,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
-from typing import Iterator, List, Optional, Sequence, Tuple
+from typing import Iterator, Optional, Sequence, Tuple
 
 from .contracts import FrameRef, Prediction, Sample, Source, Subject
 

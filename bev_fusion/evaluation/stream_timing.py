@@ -11,7 +11,6 @@ for the dts (0,) and (-0.5, 0, 0.5); median of --n calls after 3 warm-up calls, 
 Run from the bev_fusion folder; the GPU is used only when nvidia-smi shows no compute process and < 10 % utilisation (the desktop holds about
 1.3 GB with no job). Result: a table on stdout and temp/stream/timing_<size>_<device>.json."""
 import argparse
-import dataclasses
 import json
 import os
 import statistics

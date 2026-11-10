@@ -127,7 +127,7 @@ def main():
         ck = torch.load(os.path.join(ROOT, a.ckpt), map_location="cpu", weights_only=False)
         src = {k[6:]: v for k, v in ck["state"].items() if k.startswith("model.")}
         src.update(ck["ema"])
-        miss, unexp = m.load_state_dict({k: v for k, v in src.items() if k in m.state_dict()}, strict=False)
+        miss, _ = m.load_state_dict({k: v for k, v in src.items() if k in m.state_dict()}, strict=False)
         print(f"checkpoint {a.ckpt}: {len(miss)} model keys missing, {len(src) - len(src.keys() & m.state_dict().keys())} checkpoint keys not used (lane branch off)")
     else:
         with torch.no_grad():

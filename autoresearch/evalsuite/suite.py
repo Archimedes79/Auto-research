@@ -1,4 +1,5 @@
-"""EvalSuite: the one object the rest of the toolchain uses.
+"""EvalSuite: the engine's workbench. `Evaluation` (api.py) is the front door of a person or an agent and builds one of these for each call; bev_suite.py, the lane project and the
+engine's selftests use it directly (the older entry point), and it is the way to work with a network that has no project adapter.
 
     suite = EvalSuite(source, subject, task, out="eval_out")
     suite.qual.frame("scene-0061/12", views=("overview", "debug"))      # one concrete frame

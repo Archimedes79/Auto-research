@@ -23,7 +23,7 @@ import numpy as np
 
 from evalsuite import Flag, Metric, Prediction, Sample, Task, View
 from evalsuite.qualitative import DebugView
-from evaluation.metrics import DetMeter, SegMeter, bin_label, dt_key, in_front
+from evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
 from evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
 
 MASKS = ("fov", "seen", "out", "obj")

@@ -85,14 +85,6 @@ def ap_from_flags(flags, scenes):
     return ap_nuscenes(fl[np.argsort(-sc, kind="stable")], n_gt)
 
 
-def det_ap(frames_by_scene, scenes, cls, thr=2.0):
-    frames = [([d for d in ds if d["group"] == cls], [g for g in gs if g["group"] == cls])
-              for s in scenes for ds, gs in frames_by_scene[s]]
-    frames = [([d for d in ds if in_front(d)], [g for g in gs if in_front(g)]) for ds, gs in frames]
-    m, n_gt = match(frames, thr)
-    return ap_nuscenes([x[1] for x in m], n_gt)
-
-
 def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0, tag=""):
     """paired scene bootstrap of the headline numbers: b - a, mean and 95 % interval (draws: evalsuite.stats.scene_picks, the same stream for
     every number; since 2026-10-31, D24 - intervals of earlier compares used numpy default_rng draws and differ in the random part only). det_a / det_b: the box set of each run
@@ -123,7 +115,7 @@ def compare(run_a, run_b, n_boot=1000, seed=0, det_a="det", det_b="det", dt=0.0,
     for cls in ("vehicle", "pedestrian"):
         for thr in (1.0, 2.0):            # AP@1 added 2026-10-29: AP@2 has a high no-sensor floor (t3_improve_loop try 1)
             # the greedy matching of a detection only involves its own frame, so the true-positive flags of every scene are fixed:
-            # compute them once, a resample only re-sorts the concatenated flags (equal to re-running det_ap, but fast)
+            # compute them once, a resample only re-sorts the concatenated flags (equal to matching all scenes in one pass, but fast: bev_selftest.former_det_ap is that pass)
             fl_a, fl_b = scene_flags(fa, sc, cls, thr), scene_flags(fb, sc, cls, thr)
             a0, b0 = ap_from_flags(fl_a, sc), ap_from_flags(fl_b, sc)
             ds = []

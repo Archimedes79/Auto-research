@@ -28,7 +28,8 @@ import numpy as np
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 AUTORESEARCH = os.path.abspath(os.path.join(ROOT, "..", "autoresearch"))
 CAMERA_FRAME_KEYS = ("prob", "ctx", "img", "prob2", "ctx2")     # the camera inputs of a frame dict (the camera controls replace all of them)
-LANE_IMAGE_KEYS = ("lane_img", "lane_img_old")                  # the images an item carries beside its frames (t7 lane branch / t22 student; _old: the older frames, student_frames 'all')
+LANE_IMAGE_KEYS = ("lane_img", "lane_img_old")                  # the images an item carries beside its frames (t7 lane branch / t22 student); lane_img_old: the stored runs t22_B2_s0, t22_B_all, t22_standin_all_pair4
+#                                                               (student_frames 'all') emit it; a camera control that leaves it in is the t3 cam_off bug (bev_modules.zero_cam, bev_probe.perturb: the same keys)
 
 
 def perturb_camera(item, other, control):
@@ -136,10 +137,10 @@ PROVENANCE_DIR = os.path.join(ROOT, "..", "autoresearch", "tools")
 EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "autoresearch", "evalsuite"))        # everything the evaluator is made of (the card's provenance block)
 # the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the evalsuite's frame loop,
 # counts, sampling and comparison core, and the views (D73: `bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`; `bev_annotation_pts.py`
-# builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too, as it did in
-# `bev_eval.evaluator_extra()` before). Not the selftests, mutants, board, report or README: an edit there changes no number and must not orphan a store that took 30 minutes
+# builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too;
+# `bev_eval.py` is the class interface's adapter: the reference and the metrics without the loss). Not the selftests, mutants, board, report or README: an edit there changes no number and must not orphan a store that took 30 minutes
 # while other chats work in the same folders
-NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py", "bev_views.py", "bev_annotation_pts.py")) + \
+NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py", "bev_views.py", "bev_annotation_pts.py", "bev_eval.py")) + \
     tuple(os.path.join(ROOT, "..", "autoresearch", "evalsuite", f) for f in ("comparison", "quantitative.py", "store.py", "runner.py", "contracts.py", "sampling.py"))
 
 
@@ -211,6 +212,26 @@ def predictions_1m(p, b, spec_1m):
             if name + "_cos" in idx:
                 direction[name] = up(sem[[idx[name + "_cos"], idx[name + "_sin"]]])
     return prob, direction
+
+
+def outputs_of(model, res, ns, refine):
+    """the outputs of every dt of one model result (sample 0) the way both Subjects return them (BEVSubject here, bev_free.FreeSubject): maps as probabilities and distances, the decoded
+    boxes (`dets`, and `detr` when the run refines), the velocity maps, and with a 1 m centre-line head its layers and direction"""
+    grid, spec = model.grid, model.spec
+    refined = ({dt: model.boxes(res, dt, k=100, threshold=0.05, rescore=True) for dt in res["out"]} if refine else {})
+    dts = {}
+    for dt, p in res["out"].items():
+        prob, dist = predictions(p, 0, spec)
+        dts[dt] = {"prob": prob, "dist": dist,
+                   "mass": p["mass"][0, 0].float().cpu().numpy() if p.get("mass") is not None else None,
+                   "dets": ns.decode({k: v[:1].float().cpu() for k, v in p["obj"].items()}, grid, ns.NUSC_GROUPS, k=100, threshold=0.05)[0],
+                   "detr": list(refined[dt][0]) if refine else None,
+                   "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None,
+                   "objvel": p["obj"]["vel"][0].float().cpu().numpy() if "vel" in p["obj"] else None}     # the object head's raw velocity map (bev_velocity centres)
+        if getattr(model, "spec_1m", None):                                   # the 1 m centre-line head: its presence is a layer of `prob`, its direction goes to the angle check
+            p1, dts[dt]["dir"] = predictions_1m(p, 0, model.spec_1m)
+            prob.update(p1)
+    return dts
 
 
 def task_spec(model):
@@ -452,20 +473,7 @@ def _make_subject_classes():
                 out, res, _ = T.forward_loss(self.model, self.loss, batch, 1.0, self.device, self.cfg.amp, self.cfg, train_terms=False, **kw)
                 if ns.detach_tree is not None and "state" in res:
                     self.state, self.prev = ns.detach_tree(res["state"]), batch
-                grid, spec = self.model.grid, self.model.spec
-                refined = ({dt: self.model.boxes(res, dt, k=100, threshold=0.05, rescore=True) for dt in res["out"]} if self.refine else {})
-                dts = {}
-                for dt, p in res["out"].items():
-                    prob, dist = predictions(p, 0, spec)
-                    dts[dt] = {"prob": prob, "dist": dist,
-                               "mass": p["mass"][0, 0].float().cpu().numpy() if p.get("mass") is not None else None,
-                               "dets": ns.decode({k: v[:1].float().cpu() for k, v in p["obj"].items()}, grid, ns.NUSC_GROUPS, k=100, threshold=0.05)[0],
-                               "detr": list(refined[dt][0]) if self.refine else None,
-                               "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None,
-                               "objvel": p["obj"]["vel"][0].float().cpu().numpy() if "vel" in p["obj"] else None}     # the object head's raw velocity map (bev_velocity centres)
-                    if getattr(self.model, "spec_1m", None):                          # the 1 m centre-line head: its presence is a layer of `prob`, its direction goes to the angle check
-                        p1, dts[dt]["dir"] = predictions_1m(p, 0, self.model.spec_1m)
-                        prob.update(p1)
+                dts = outputs_of(self.model, res, ns, self.refine)
                 arrays = self.rec.read(0) if names else {}
                 if "memory_conf" in arrays:
                     arrays["memory_conf"] = arrays["memory_conf"][0]

@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List
 
 import numpy as np
 
-from .contracts import FrameRef, Page, Prediction, Sample
+from .contracts import Page, Prediction, Sample
 from .render import figure
 
 
@@ -193,7 +193,7 @@ def check_adapter(suite, n_frames: int = 4) -> List[Dict[str, Any]]:
     def has_overview():
         assert "overview" in views, "the Task must offer an 'overview' view"
     _run(R, "task: has an overview view", has_overview)
-    from .qualitative import DebugView, Qualitative
+    from .qualitative import DebugView
     allv = dict(views)
     allv.setdefault("debug", DebugView())
     for name, v in allv.items():
