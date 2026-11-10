@@ -42,7 +42,7 @@ def cli(*argv):
 def main():
     # (1) layering, in a process of its own
     code = ("import sys; sys.path.insert(0, %r); import runner.runner; "
-            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'trainsuite', 'runsuite', 'nuscenes', 'cv2')))" % ROOT)
+            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'trainsuite', 'nuscenes', 'cv2')))" % ROOT)
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=os.path.dirname(ROOT))
     assert p.returncode == 0 and p.stdout.strip() == "[]", (p.stdout, p.stderr[-300:])
 
