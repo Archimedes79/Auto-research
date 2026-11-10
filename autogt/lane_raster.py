@@ -27,6 +27,7 @@ import multiprocessing as mp
 import os
 import pickle
 import time
+import zlib
 
 import numpy as np
 
@@ -123,8 +124,11 @@ def _rows(args):
     nbytes = (GRID.nx * GRID.ny + 7) // 8
     out = {(k, b): np.zeros((len(tokens), nbytes), np.uint8) for k in kinds for b in borders}
     for i, tok in enumerate(tokens):
-        with gzip.open(os.path.join(store_dir, tok + ".pkl.gz"), "rb") as f:
-            g = pickle.load(f)
+        try:
+            with gzip.open(os.path.join(store_dir, tok + ".pkl.gz"), "rb") as f:
+                g = pickle.load(f)
+        except (EOFError, OSError, zlib.error, pickle.UnpicklingError) as e:
+            raise ValueError(f"unreadable lane file {tok}.pkl.gz in {store_dir} ({type(e).__name__}: {e}): make it again (generate-lane rewrites a zero-byte file; audit-lane lists the damaged ones)") from None
         for k in kinds:
             for b, m in area_masks(g, k, borders).items():
                 out[(k, b)][i] = np.packbits(m.ravel())

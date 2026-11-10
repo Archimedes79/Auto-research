@@ -202,21 +202,24 @@ try:
     # a killed launcher leaves a stalled record: --after blocks on it, schedule.derived shows it failed, a new attempt is allowed
     stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
-        if RUN.record(f"{T}/runs/S.stall").get("status") == "running":
+        if RUN.record(f"{T}/runs/S.stall").get("status") == "running" and RUN.record(f"{T}/runs/S.stall").get("pid"):
             break
         import time
         time.sleep(0.1)
     pid = RUN.record(f"{T}/runs/S.stall").get("pid")
+    assert pid and RUN.record(f"{T}/runs/S.stall").get("pgid"), "the command's pid and process group are in the record right after it started"
     stall.kill()
     stall.wait()
-    if pid:
-        try:
-            os.kill(int(pid), 9)
-        except OSError:
-            pass
     stale = dict(env, AR_STALE_S="1")
     time.sleep(1.5)
     assert RUN.state_of(f"{T}/runs/S.stall") == "running", "fresh heartbeat without the env override"
+    alive = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
+    assert alive.returncode == 2 and f"its command still runs (pid {pid}" in alive.stdout, alive.stdout      # the launcher is dead but the command lives: no second run next to it
+    os.kill(int(pid), 9)                                       # now the command is gone too: the old behaviour (stalled, a new attempt is allowed)
+    for _ in range(50):
+        if not RUN.command_alive(RUN.record(f"{T}/runs/S.stall")):
+            break
+        time.sleep(0.1)
     dep = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.dep", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--after", "S.stall", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
     assert dep.returncode == 3 and "stalled" in dep.stdout, dep.stdout
     redo = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=stale)
@@ -1113,11 +1116,11 @@ try:
     json.dump(dict(base, id="E6", arms=dict(a=dict(names=["v"], run_ids=["S.live2", "S.never_ran"]), c=dict(names=["c"])), deterministic=True),
               open(f"{T}/experiments/E1_x/experiment.json", "w"))
     before = set(rows())
-    wr = subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write"], capture_output=True, text=True, env=env, cwd=T)
+    wr = subprocess.run([sys.executable, f"{HERE}/decide.py", "--experiment", f"{T}/experiments/E1_x/experiment.json", "--write", "--by-hand", "selftest: S.never_ran has no row"], capture_output=True, text=True, env=env, cwd=T)  # the gate refuses a run that never ran (selftest_verdict.py); by hand it goes on
     assert wr.returncode == 0 and "no ledger row S.never_ran" in wr.stdout and set(rows()) == before, wr.stdout + wr.stderr
     assert "decide.py" in rows()["S.live2"]["decision"], rows()["S.live2"]
     pw = subprocess.run([sys.executable, f"{HERE}/decide.py", "--variant", "0.76,0.75", "--control", "0.73,0.72", "--id", "S.never_plain", "--write"], capture_output=True, text=True, env=env, cwd=T)
-    assert pw.returncode == 0 and "no ledger row S.never_plain" in pw.stdout and "S.never_plain" not in rows(), "the typed-score path makes no ghost row either"
+    assert pw.returncode == 1 and "no ledger row S.never_plain" in pw.stdout and "S.never_plain" not in rows(), "the typed-score path makes no ghost row either (and refuses: exit 1)"
     # a command that cannot even be started is a failed run (exit 127), not a launcher that dies
     nb = subprocess.run([sys.executable, f"{HERE}/run.py", "--id", "S.nobin", "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "/nonexistent/binary"], capture_output=True, text=True, env=env)
     assert nb.returncode == 127 and rows()["S.nobin"]["status"] == "failed" and RUN.record(f"{T}/runs/S.nobin")["status"] == "failed", (nb.stdout, nb.stderr[-300:])
@@ -1287,6 +1290,10 @@ try:
     machine_lock.selftest()
     import provenance  # result-package provenance (autoresearch/reproducibility.md)
     provenance.selftest()
+    import package  # the result package and the clean-up of derived data (D40): stores read the runs of every problem folder
+    package.selftest()
+    import lineage  # every link of a network's chain verified
+    lineage.selftest()
     import guard_hook  # P4: protected files, grants, json entries, Windows spellings
     guard_hook.selftest()
     import metrics  # P3: loop table from ledger, decision files and TEST log
@@ -1480,6 +1487,32 @@ try:
     assert strict.returncode == 1, "check_numbers --strict must fail on a number missing from the sources"
     ad = subprocess.run([sys.executable, f"{HERE}/archdraw.py", "--selftest"], capture_output=True, text=True)
     assert ad.returncode == 0, "archdraw selftest: " + ad.stdout[-400:] + ad.stderr[-800:]
+    # project.locked: the lock of a holder of this machine and system that is gone is taken over at once (a SIGKILLed runner used to block every command for 120 s);
+    # a live holder, a lock of the older three-field form and a lock of another machine are waited for
+    import project as PLK
+    lk = f"{T}/lockprobe.csv"
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    open(lk + ".lock", "w").write(f"{gone.pid} {time.time()} {PLK._WHO} tok")
+    t_lock = time.time()
+    with PLK.locked(lk, wait_s=5):
+        pass
+    assert time.time() - t_lock < 3 and not os.path.exists(lk + ".lock"), "a dead holder's lock is taken over at once"
+    for text, why in ((f"{os.getpid()} {time.time()} {PLK._WHO} tok", "a live holder"), (f"{gone.pid} {time.time()} tok", "the older three-field form"), (f"{gone.pid} {time.time()} other:host tok", "another machine")):
+        open(lk + ".lock", "w").write(text)
+        try:
+            with PLK.locked(lk, wait_s=1):
+                pass
+            raise AssertionError("must wait for " + why)
+        except TimeoutError:
+            pass
+        os.remove(lk + ".lock")
+    # the selftests of the other tools and of the parts that live in their own files (the deep review of 2026-11-10: a tool change is gated by this file, so it runs them too)
+    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"]):
+        if not os.path.exists(f"{HERE}/{extra[0]}"):
+            continue
+        ex = subprocess.run([sys.executable, f"{HERE}/{extra[0]}", *extra[1:]], capture_output=True, text=True)  # the real environment: these selftests build their own throw-away folders
+        assert ex.returncode == 0, f"{extra[0]} {' '.join(extra[1:])}: " + ex.stdout[-400:] + ex.stderr[-800:]
     print("autoresearch tools selftest passed")
 finally:
     shutil.rmtree(T, ignore_errors=True)

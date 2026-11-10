@@ -32,7 +32,7 @@ from shapely.geometry import Polygon
 from . import flow as flowmod
 from .grid import GridSpec
 from .nuscenes_adapter import RADARS, NuScenesScene
-from .suite import AutoGT
+from .suite import GtGenerator
 
 
 SRC_HASH = hashlib.sha1(open(__file__, "rb").read()).hexdigest()[:10]       # version of the checks: stored in every accumulator
@@ -182,7 +182,7 @@ def digests(dataroot, version="v1.0-mini", stride=2, sweeps=("scene-0061", "scen
     frames: the evidence that two generators make the same GT (`same_gt_as` in versions.csv). Run `python -m autogt digest OUT.json` in both
     source trees and compare the files (`digest --compare A.json B.json`). -> {signature, digests: {token or token@k: sha1}}"""
     dataroot = os.path.expanduser(dataroot)
-    gen = AutoGT(dataroot, version, light=True)
+    gen = GtGenerator(dataroot, version, light=True)
     from .suite import scene_tokens
     out = {}
     for name in sorted({s["name"] for s in gen.nusc.scene}):
@@ -202,7 +202,7 @@ def digests(dataroot, version="v1.0-mini", stride=2, sweeps=("scene-0061", "scen
 
 
 def run(dataroot, version="v1.0-mini", scenes=None, stride=1, holdout=False):
-    gen = AutoGT(dataroot, version)
+    gen = GtGenerator(dataroot, version)
     ck = Checks(gen.grid)
     for name in (scenes or gen.scenes()):
         for k, tok in enumerate(gen.keyframes(name)):

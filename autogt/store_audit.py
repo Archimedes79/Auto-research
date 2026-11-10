@@ -9,10 +9,10 @@ window (`window` and `rig` for the rectangular rig, none for lane_center), the s
 `pts`, vis and occ exclusive, tier_src > 0 exactly where tier is 1), no NaN, every point of pieces / lines / areas / events inside the window, event tier and vis, `ego_path`, `tier_info` against the pieces.
 """
 import gzip
-import json
 import os
 import pickle
 import time
+import zlib
 
 import numpy as np
 
@@ -122,8 +122,12 @@ def audit_lane(store_dir, rig, dataroot=None, version="v1.0-trainval", scenes=No
     sig = idx.get("signature", os.path.basename(os.path.normpath(store_dir)))
     rows, t0 = [], time.time()
     for i, tok in enumerate(order[:limit]):
-        with gzip.open(os.path.join(store_dir, tok + ".pkl.gz"), "rb") as f:
-            g = pickle.load(f)
+        try:
+            with gzip.open(os.path.join(store_dir, tok + ".pkl.gz"), "rb") as f:
+                g = pickle.load(f)
+        except (EOFError, OSError, zlib.error, pickle.UnpicklingError) as e:              # a zero-byte or truncated file: a problem of this token, not a crash of the audit
+            fail(tok, f"unreadable file ({type(e).__name__}: {e})")
+            continue
         r = check_graph(tok, g, sig, rig)
         if isinstance(r, str):
             fail(tok, r)

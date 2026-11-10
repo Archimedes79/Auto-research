@@ -30,9 +30,9 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .store import _flat, canonical_of, check_resume, run_manifest, save_keyframe, write_index  # noqa: E402
+from .store import _flat, canonical_of, check_resume, finish_index, save_keyframe  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
-from .suite import AutoGT  # noqa: E402
+from .suite import GtGenerator  # noqa: E402
 from .view import LEGEND, figure  # noqa: E402
 
 _STATE = {}
@@ -105,9 +105,9 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
     """see the module docstring; returns dict(pdf, signature, keyframes, written, stored, samples, failed)."""
     if light:
         names = scenes or scene_names(dataroot, version)
-        gen0 = AutoGT(dataroot, version, light=True, scenes=names[:1], **options)
+        gen0 = GtGenerator(dataroot, version, light=True, scenes=names[:1], **options)
     else:
-        gen0 = AutoGT(dataroot, version, **options)
+        gen0 = GtGenerator(dataroot, version, **options)
         names = scenes or gen0.scenes()
     sig = gen0.signature()
     grid = gen0.grid
@@ -119,7 +119,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
     results, t0, done = {}, time.time(), 0
     groups = [names[i:i + GROUP] for i in range(0, len(names), GROUP)] if light else [names]
     for grp in groups:
-        gen = AutoGT(dataroot, version, light=True, scenes=grp, **options) if light else gen0
+        gen = GtGenerator(dataroot, version, light=True, scenes=grp, **options) if light else gen0
         _STATE["gen"], _STATE["cfg"] = gen, {"sig_dir": sig_dir, "stride": stride, "pick": pick}
         its = None
         if workers > 1:
@@ -141,12 +141,12 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
         gc.collect()
     # the sample pictures and the radar field of view need the devkit of a few sequences only
     keep = sorted(n for n in names if results[n][2] is not None) or names[:1]
-    gen = AutoGT(dataroot, version, light=True, scenes=keep, **options) if light else gen0
+    gen = GtGenerator(dataroot, version, light=True, scenes=keep, **options) if light else gen0
     ck = Checks(grid)
     failed = {n: r[3] for n, r in results.items() if r[3]}
     held, written = {}, 0
     for n in names:                                                   # merged in sequence order
-        _, c, sample, err = results[n]
+        _, c, sample, _ = results[n]
         if c is not None:
             ck.merge(c)
             written += getattr(c, "written", 0)
@@ -154,8 +154,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
                 held[n] = sample
     n_kf = len(ck.st["dt_ms"])
     if sig_dir:
-        write_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options,
-                    run=run_manifest(sig_dir, version, dataroot))
+        finish_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options, written, dataroot)      # a report that wrote nothing leaves the manifest of a finished store alone
     fov = radar_fov(gen, [n for n in keep if n not in failed], stride)
     ho = leave_one_radar_out(gen, [n for n in names if n not in failed], stride) if (holdout and not light) else None
     os.makedirs(os.path.dirname(os.path.abspath(out_pdf)), exist_ok=True)

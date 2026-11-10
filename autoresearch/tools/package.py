@@ -31,16 +31,20 @@ that claims to be complete. A later clean adds to the `deleted` list, it never r
 `check_git.py` lists the ones that are not.
 gt also looks at the lane GT stores (data/autogt/lane/<lane signature>, versions in autogt/lane_versions.csv, l1, l2, ...): the latest lane version stays, per rig (lane_center = Spurmitte,
 bev_fusion = BEV Fusion; when its code makes the GT of an older version, `same_gt_as`, the store of that one), so does a store that a run which
-is not final names in its gt.json (`lane_signature`), an older one goes when its tag autogt/lane-lN exists (it is made again by `python -m autogt generate-lane`).
+is not final names in its gt.json (`lane_signature`: NO trainer writes it today, so the lane stores are not protected by run records and the dry run prints a WARNING), an older one
+goes when its tag autogt/lane-lN exists (it is made again by `python -m autogt generate-lane`).
 gt keeps the latest version of autogt/versions.csv (the highest number; when its code makes the GT of an older version, `same_gt_as`, the store of that
-one: they share a folder) and every store that a run which is not final names in its gt.json (also the
-`earlier` ones; a resume needs them); an older store is deleted only when its tag autogt/vN exists (it can be regenerated from the tag and the options in
-its index.json) and it is a real folder inside data/autogt. A best-three network trained on an older GT cannot be evaluated again against its own GT
+one: they share a folder) and every store that is still needed. A run records the CODE signature (0.5_4_6a7aa7864a, v9), the folder is the STORE's (c643a7539d, v8): every signature
+goes through provenance.canonical_sig first. data/autogt is shared by all problem folders, so the run records of EVERY <repo>/*/project.json are read. Needed = named in the gt.json
+(also the `earlier` ones; a resume needs them) of a run that is not final; or of a network of the best three (keep3.json); or of a FINAL run that has no result package yet
+(the clean-up writes the package first: `package.py package <id>`). An older store is deleted only when its tag autogt/vN exists (it can be regenerated from the tag and the options in
+its index.json) and it is a real folder inside data/autogt. A network trained on an older GT cannot be evaluated again against its own GT
 after that store is gone: it is regenerated first. Deletions are appended to <records folder>/CLEAN_LOG.md.
 """
 import argparse
 import csv
 import datetime as dt
+import glob
 import json
 import os
 import re
@@ -67,12 +71,16 @@ METRIC_FILES = ("eval/metrics.json", "eval/latency.json")
 MIN_AGE_DAYS = 1.0 / 24
 
 
-def records_dir():
-    return os.path.dirname(P.path("ledger"))
+def records_dir(root=None):
+    return os.path.dirname(P.path("ledger") if root is None else os.path.join(root, P.cfg_of(root)["ledger"]))
 
 
-def run_record(run_id):
-    p = os.path.join(P.path("run_records"), run_id, "run.json")
+def run_records_path(root=None):
+    return P.path("run_records") if root is None else os.path.join(root, P.cfg_of(root)["run_records"])
+
+
+def run_record(run_id, root=None):
+    p = os.path.join(run_records_path(root), run_id, "run.json")
     return json.load(open(p, encoding="utf-8")) if os.path.isfile(p) else None
 
 
@@ -84,26 +92,36 @@ def is_final(r):
     return bool(r) and r.get("status") in FINAL_STATES and r.get("exit") == 0
 
 
-def top3_runs():
-    """folder names and ids of the best three (keep3.json beside the ledger): the entry's name, key, runs, and the run folder named in its checkpoint and
-    card paths (runs/<folder>/...); None when the record is missing, unreadable or holds no entry (then nothing is deleted)"""
-    p = os.path.join(records_dir(), "keep3.json")
+def keep3_entries(root=None):
+    """the entries of keep3.json beside the ledger of a problem folder (default: the current one); None when the record is missing, unreadable or holds no entry"""
+    p = os.path.join(records_dir(root), "keep3.json")
     if not os.path.isfile(p):
         return None
     try:
         entries = json.load(open(p, encoding="utf-8")).get("entries") or []
     except (OSError, ValueError, AttributeError):
         return None
+    return [e for e in entries if isinstance(e, dict)] or None
+
+
+def entry_names(e):
+    """folder names and ids of one best-three entry: its name, key, runs, and the run folder named in its checkpoint and card paths (runs/<folder>/...)"""
     out = set()
-    for e in entries:
-        out.update(x for x in (e.get("runs") or []) if isinstance(x, str))
-        out.update(x for x in (e.get("key"), e.get("name")) if isinstance(x, str))
-        paths = [c.get("path", "") for c in (e.get("checkpoints") or []) if isinstance(c, dict)] + [e.get("card") or ""]
-        for pa in paths:
-            parts = str(pa).replace("\\", "/").split("/")
-            if len(parts) >= 2 and parts[0] == "runs":
-                out.add(parts[1])
+    out.update(x for x in (e.get("runs") or []) if isinstance(x, str))
+    out.update(x for x in (e.get("key"), e.get("name")) if isinstance(x, str))
+    paths = [c.get("path", "") for c in (e.get("checkpoints") or []) if isinstance(c, dict)] + [e.get("card") or ""]
+    for pa in paths:
+        parts = str(pa).replace("\\", "/").split("/")
+        if len(parts) >= 2 and parts[0] == "runs":
+            out.add(parts[1])
     out.discard("")
+    return out
+
+
+def top3_runs():
+    """folder names and ids of the best three (keep3.json beside the ledger); None when the record is missing, unreadable or holds no entry (then nothing is deleted)"""
+    entries = keep3_entries()
+    out = set().union(*(entry_names(e) for e in entries)) if entries else set()
     return out or None
 
 
@@ -155,22 +173,24 @@ def numbers(path, cap=80):
 
 
 def build(run_id, run_dir=None):
-    """the package dict of a run (nothing is written); the provenance manifest is made first when it is missing"""
+    """the package dict of a run (nothing is written but the provenance manifest, which is made first when it is missing or of an earlier state of the run)"""
     r = run_record(run_id)
     if r is None:
         sys.exit(f"no run record for {run_id}")
     run_dir = run_dir or V.find_run_dir(run_id)
     prov_file = os.path.join(V.results_dir(run_id), "provenance.json")
-    prov = V.manifest(run_id, run_dir) if not os.path.isfile(prov_file) else json.load(open(prov_file, encoding="utf-8"))
+    prov = V.manifest(run_id, run_dir)                       # the stored file unless it is of an earlier state of the run (resumed: a newer checkpoint, another status); then rebuilt
     have_dir = bool(run_dir and os.path.isdir(run_dir))
     top = top3_runs()
     name = os.path.basename(run_dir.rstrip("/\\")) if have_dir else run_id.replace(".", "_")
+    tg = V._get(prov, ("subject", "train_gt")) or V._get(prov, ("gt",)) or {}
+    if tg.get("key") not in (None, V.UNKNOWN) and tg.get("version") in (None, V.UNKNOWN):      # a manifest of before the store was named canonically (v9's key, the store of v8) or of a deleted store
+        tg = V.gt_block(tg["key"], V.repo_root())
     pk = {"schema": 1, "made": dt.datetime.now().isoformat(timespec="seconds"), "run": run_id, "run_dir": os.path.relpath(run_dir, P.root()).replace("\\", "/") if have_dir else V.UNKNOWN,
           "status": {"status": r.get("status"), "exit": r.get("exit"), "final": is_final(r)},
           "tier": "top3" if top is not None and (name in top or run_id in top) else ("normal" if top is not None else V.UNKNOWN),
           "code": {"tag": r.get("tag") or V.UNKNOWN, "commit": r.get("commit") or V.UNKNOWN, "code_hash": r.get("code_hash") or V.UNKNOWN},
-          "gt": {"version": V._get(prov, ("subject", "train_gt", "version")) or V._get(prov, ("gt", "version")) or V.UNKNOWN,
-                 "signature": V._get(prov, ("subject", "train_gt", "signature")) or V._get(prov, ("gt", "signature")) or V.UNKNOWN},
+          "gt": {"version": tg.get("version") or V.UNKNOWN, "signature": tg.get("signature") or V.UNKNOWN},
           "bundle": {"code_hash": V._get(prov, ("bundle", "code_hash")) or V.UNKNOWN, "files": len(V._get(prov, ("bundle", "files")) or [])},
           "model": {"ckpt": V._get(prov, ("subject", "ckpt")) or V.UNKNOWN, "ckpt_hash": V._get(prov, ("subject", "ckpt_hash")) or V.UNKNOWN, "step": V._get(prov, ("subject", "step")),
                     "config_hash": V._get(prov, ("subject", "config_hash")) or V.UNKNOWN, "seed": prov.get("seed", V.UNKNOWN)},
@@ -301,8 +321,8 @@ def log_line(text):
         f.write(f"- {dt.datetime.now().isoformat(timespec='seconds')}: {text}\n")
 
 
-def run_ids():
-    d = P.path("run_records")
+def run_ids(root=None):
+    d = run_records_path(root)
     return sorted(x for x in os.listdir(d) if os.path.isfile(os.path.join(d, x, "run.json"))) if os.path.isdir(d) else []
 
 
@@ -425,22 +445,56 @@ def sigs_of(gt_json, keys=("gt_signature", "earlier")):
     return {str(v).split("_")[-1] for v in vals if isinstance(v, str) and v and not v.startswith("unknown")}
 
 
-def needed_by_unfinished(keys=("gt_signature", "earlier")):
-    """signature -> [run ids] of the runs that are not final and name it in their gt.json under one of `keys` (a resume needs it)"""
-    needed = {}
-    for rid in run_ids():
-        if is_final(run_record(rid)):
-            continue
-        rd = V.find_run_dir(rid)
-        g = os.path.join(rd, "gt.json") if rd else ""
-        if g and os.path.isfile(g):
+def problem_roots(top=None):
+    """the problem folders of the repository (<repo>/*/project.json): data/autogt is shared by all of them, so a clean-up of it reads the runs of every one"""
+    return sorted(os.path.dirname(p) for p in glob.glob(os.path.join(glob.escape(top or V.repo_root()), "*", "project.json")))
+
+
+def gt_names(root, name, keys, rows):
+    """the canonical signatures (V.canonical_sig over `rows`) that the gt.json of the run folder `name` of a problem folder names under `keys`; set() when it has none"""
+    rd = V.find_run_dir(name, root)
+    g = os.path.join(rd, "gt.json") if rd else ""
+    try:
+        return {V.canonical_sig(s, rows) for s in sigs_of(json.load(open(g, encoding="utf-8")), keys)} if os.path.isfile(g) else set()
+    except (OSError, ValueError, AttributeError):
+        return set()
+
+
+def gt_users(rows, keys=("gt_signature", "earlier"), problems=None):
+    """canonical signature -> {"unfinished": [...], "unpackaged": [...]} from the run records of every problem folder: the runs that are not final and name the store in their
+    gt.json under one of `keys` (a resume needs it; an unreadable record counts as not final), and the final runs that name it and have no results/<id>/package.json yet
+    (the clean-up writes the result package first). Entries read "<problem folder>:<run id>"."""
+    out = {}
+    for root in problem_roots() if problems is None else problems:
+        who, results = os.path.basename(root.rstrip("/\\")), P.cfg_of(root).get("results", "results")
+        for rid in run_ids(root):
             try:
-                found = sigs_of(json.load(open(g, encoding="utf-8")), keys)
-            except (OSError, ValueError, AttributeError):
-                found = set()
-            for sig in found:
-                needed.setdefault(sig, []).append(rid)
-    return needed
+                final = is_final(run_record(rid, root))
+            except (OSError, ValueError):
+                final = False
+            packaged = os.path.isfile(os.path.join(root, results, rid, "package.json"))
+            for sig in gt_names(root, rid, keys, rows):
+                slot = out.setdefault(sig, {"unfinished": [], "unpackaged": []})
+                if not final:
+                    slot["unfinished"].append(f"{who}:{rid}")
+                elif not packaged:
+                    slot["unpackaged"].append(f"{who}:{rid}")
+    return out
+
+
+def top3_users(rows, problems=None):
+    """canonical signature -> ["<problem folder>:<entry>"] of the networks of the best three (keep3.json of every problem folder) that were trained on that store: the run folders
+    an entry names (entry_names) -> their gt.json, the `earlier` GT too"""
+    out = {}
+    for root in problem_roots() if problems is None else problems:
+        who = os.path.basename(root.rstrip("/\\"))
+        for e in keep3_entries(root) or []:
+            sigs = set().union(*(gt_names(root, n, ("gt_signature", "earlier"), rows) for n in entry_names(e)))
+            for rec in [e] + [c for c in (e.get("checkpoints") or []) if isinstance(c, dict)]:          # a keep3 record that carries the signature itself counts too
+                sigs |= {V.canonical_sig(s, rows) for s in sigs_of(rec, ("gt_signature",))}
+            for sig in sigs:
+                out.setdefault(sig, []).append(f"{who}:{e.get('name') or e.get('key')}")
+    return out
 
 
 def lane_versions():
@@ -455,10 +509,19 @@ def lane_stores(root):
     return sorted(d for d in os.listdir(root) if os.path.isfile(os.path.join(root, d, "index.json"))) if os.path.isdir(root) else []
 
 
-def lane_plan(root=None):
+LANE_GAP = ("WARNING: lane stores cannot be protected by run records: no trainer writes the lane GT it read into its run folder (a gt.json has no lane_signature), so a lane "
+            "store is safe only as the latest version of its rig; a job that reads an older one (a running lane training, a best-three network) is not seen. Check the jobs first")
+
+
+def lane_notes(plan):
+    """the warnings that belong to a lane plan: LANE_GAP whenever it would delete a store"""
+    return [LANE_GAP] if any(text.startswith("delete") for _, text in plan) else []
+
+
+def lane_plan(root=None, problems=None):
     """-> (latest lane row or None, [(signature, verdict text)]) for data/autogt/lane/: the latest lane version stays, for each rig (lane_center = Spurmitte, bev_fusion = BEV Fusion;
     a row without `rig` is lane_center), and when its code makes the GT of an older version (`same_gt_as`) that version's store is the one that stays; so does a store that a
-    run which is not final names (`lane_signature` in its gt.json); an older one goes when its tag exists"""
+    run which is not final names (`lane_signature` in its gt.json, in any problem folder: written by no trainer today, see LANE_GAP); an older one goes when its tag exists"""
     root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
     rows = lane_versions()
     if not rows:
@@ -466,7 +529,7 @@ def lane_plan(root=None):
     num = lambda r: int(re.fullmatch(r"l(\d+)", r.get("version", "")).group(1)) if re.fullmatch(r"l(\d+)", r.get("version", "")) else -1      # noqa: E731
     rig = lambda r: r.get("rig") or "lane_center"                                                                                         # noqa: E731
     latest = max(rows, key=num)
-    needed = needed_by_unfinished(("lane_signature",))
+    needed = {s: u["unfinished"] for s, u in gt_users(rows, ("lane_signature",), problems).items() if u["unfinished"]}
     by_sig = {x["signature"]: x for x in rows}
     keep_sig = {}                                    # store signature -> the latest row (per rig) whose store it is
     for r_ in sorted({rig(x) for x in rows}):
@@ -498,9 +561,9 @@ def lane_plan(root=None):
     return latest, plan
 
 
-def lane_clean(apply=False, root=None):
+def lane_clean(apply=False, root=None, problems=None):
     root = root or os.path.join(V.repo_root(), "data", "autogt", "lane")
-    latest, plan = lane_plan(root)
+    latest, plan = lane_plan(root, problems)
     done = []
     for sig, text in plan:
         if text.startswith("delete") and apply:
@@ -510,8 +573,9 @@ def lane_clean(apply=False, root=None):
     return latest, plan, done
 
 
-def gt_plan(root=None):
-    """-> (latest row, [(signature, verdict text)]): the latest version of versions.csv stays, so does every store that a run which is not final names"""
+def gt_plan(root=None, problems=None):
+    """-> (latest row, [(signature, verdict text)]): the latest version of versions.csv stays, so does every store that is still needed, by the run records of EVERY problem folder
+    (`problems`, default problem_roots()): a run that is not final, a network of the best three, a final run that has no result package yet. Signatures are compared as stores"""
     root = root or os.path.join(V.repo_root(), "data", "autogt")
     rows = versions()
     latest = max(rows, key=vnum)
@@ -520,16 +584,23 @@ def gt_plan(root=None):
     while shared.get("same_gt_as") in by_version and shared["version"] not in seen:
         seen.add(shared["version"])
         shared = by_version[shared["same_gt_as"]]
-    needed = needed_by_unfinished()
+    problems = problem_roots() if problems is None else problems
+    users, best = gt_users(rows, problems=problems), top3_users(rows, problems)
     plan = []
     by_sig = {x["signature"]: x for x in rows}
     for sig in gt_stores(root):
         row = by_sig.get(sig)
         path = os.path.join(root, sig)
+        use = users.get(sig, {})
         if sig == shared["signature"]:
             plan.append((sig, f"keep: the latest version ({latest['version']})" + (f", its code makes the GT of {shared['version']}, the version of this store" if shared is not latest else "")))
-        elif sig in needed:
-            plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(needed[sig][:4])}"))
+        elif use.get("unfinished"):
+            plan.append((sig, f"keep: needed by the unfinished run(s) {', '.join(use['unfinished'][:4])}"))
+        elif sig in best:
+            plan.append((sig, f"keep: the best three network(s) {', '.join(best[sig][:4])} trained on it"))
+        elif use.get("unpackaged"):
+            plan.append((sig, f"keep: used by the final run(s) {', '.join(use['unpackaged'][:4])}"
+                              + (f" and {len(use['unpackaged']) - 4} more" if len(use["unpackaged"]) > 4 else "") + " that have no result package yet (package.py package <id> first)"))
         elif row is None:
             plan.append((sig, "keep: not in autogt/versions.csv, it cannot be regenerated from a tag"))
         elif os.path.islink(path) or not inside(path, root):
@@ -541,9 +612,9 @@ def gt_plan(root=None):
     return latest, plan
 
 
-def gt_clean(apply=False, root=None):
+def gt_clean(apply=False, root=None, problems=None):
     root = root or os.path.join(V.repo_root(), "data", "autogt")
-    latest, plan = gt_plan(root)
+    latest, plan = gt_plan(root, problems)
     done = []
     for sig, text in plan:
         if text.startswith("delete") and apply:
@@ -556,13 +627,14 @@ def gt_clean(apply=False, root=None):
 def selftest():
     tmp = tempfile.mkdtemp()
     old_env = os.environ.get("AR_PROJECT")
-    global tag_exists, versions, lane_versions
-    real_tag, real_versions, real_lane = tag_exists, versions, lane_versions
+    global tag_exists, versions, lane_versions, problem_roots
+    real_tag, real_versions, real_lane, real_problems = tag_exists, versions, lane_versions, problem_roots
     try:
         proj = os.path.join(tmp, "proj")
         os.makedirs(os.path.join(proj, "records"))
         json.dump({"ledger": "records/LEDGER.csv", "run_records": "records/runs", "cards": "runs"}, open(os.path.join(proj, "project.json"), "w"))
         os.environ["AR_PROJECT"] = proj
+        problem_roots = lambda top=None: [proj]       # noqa: E731  (the real one globs the repository's problem folders: the tests below pass their own list where it matters)
         tags = {"tg/ok"}
         tag_exists = lambda t: t in tags       # noqa: E731
 
@@ -853,10 +925,81 @@ def selftest():
         _, _, ldone = lane_clean(True, lroot)
         assert ldone == ["lold"] and not os.path.exists(os.path.join(lroot, "lold")) and os.path.isdir(os.path.join(lroot, "lneed")), ldone
         assert "lane GT store lold" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
+        # review 2026-11-10 (1): the package of a run that was resumed after the first package names its final checkpoint, not the one of the stored manifest
+        mk("x.r_s0", status="stopped", exit_=75)
+        pr0 = write("x.r_s0")
+        assert pr0["status"]["final"] is False and pr0["model"]["ckpt"] == "ckpt_00000010.pt", pr0["model"]
+        rjr = os.path.join(proj, "records", "runs", "x.r_s0", "run.json")
+        json.dump(dict(json.load(open(rjr)), status="ok", exit=0), open(rjr, "w"))
+        open(os.path.join(proj, "runs", "x_r_s0", "ckpt_00000030.pt"), "wb").write(b"w" * 30)
+        pr1 = write("x.r_s0")
+        assert pr1["status"]["final"] is True and pr1["model"]["ckpt"] == "ckpt_00000030.pt" and pr1["model"]["step"] == 30, "a resumed run: " + str(pr1["model"])
+        # (2) data/autogt is shared by every problem folder; signatures are compared as stores; the best three, a torn record and a final run without its package keep a store
+        proj2 = os.path.join(tmp, "proj2")
+        os.makedirs(os.path.join(proj2, "records"))
+        json.dump({"ledger": "records/LEDGER.csv", "run_records": "records/runs", "cards": "runs"}, open(os.path.join(proj2, "project.json"), "w"))
+        assert real_problems(tmp) == [proj, proj2], real_problems(tmp)
+
+        def run2(rid, folder, status, exit_, gt, package=False):
+            os.makedirs(os.path.join(proj2, "records", "runs", rid))
+            json.dump({"id": rid, "status": status, "exit": exit_}, open(os.path.join(proj2, "records", "runs", rid, "run.json"), "w"))
+            os.makedirs(os.path.join(proj2, "runs", folder))
+            json.dump({"gt_signature": gt}, open(os.path.join(proj2, "runs", folder, "gt.json"), "w"))
+            if package:
+                os.makedirs(os.path.join(proj2, "results", rid))
+                open(os.path.join(proj2, "results", rid, "package.json"), "w").write("{}")
+        rows2 = [{"version": f"v{n}", "signature": f"s{n}", "tag": "tg/ok"} for n in (3, 4, 5, 6, 7, 8)] + [{"version": "v9", "signature": "s9", "tag": "tg/ok", "same_gt_as": "v8"},
+                                                                                                            {"version": "v10", "signature": "s10", "tag": "tg/ok"}]
+        gt2 = os.path.join(tmp, "gt2")
+        for sig in ("s3", "s4", "s5", "s6", "s7", "s8", "s10"):
+            os.makedirs(os.path.join(gt2, sig))
+            json.dump({"signature": sig}, open(os.path.join(gt2, sig, "index.json"), "w"))
+        os.makedirs(os.path.join(proj2, "runs", "t.C_s1", "code"))               # run_ar.sh names the folder of the code snapshot after the config: no gt.json in it
+        run2("t.C_s1", "t_C_s1", "running", None, "0.5_4_s9")                      # not final, in the OTHER problem, recorded under the CODE signature of v9 (its store is v8's)
+        run2("b7", "b7", "ok", 0, "0.5_4_s7", package=True)                        # a network of the best three of the other problem
+        json.dump({"entries": [{"name": "n7", "key": "b7", "runs": ["b7"], "checkpoints": [{"path": "runs/b7/ckpt_00000001.pt"}]},
+                               {"name": "n3", "key": "nofolder", "checkpoints": [{"path": "runs/nofolder/ckpt_1.pt", "gt_signature": "0.5_4_s3"}]}]}, open(os.path.join(proj2, "records", "keep3.json"), "w"))
+        run2("f6", "f6", "ok", 0, "0.5_4_s6")                                      # final, no result package
+        run2("torn", "torn", "ok", 0, "0.5_4_s4")
+        open(os.path.join(proj2, "records", "runs", "torn", "run.json"), "w").write('{"id": "torn"')       # a record that cannot be read may be a running job
+        versions = lambda: rows2       # noqa: E731
+        problem_roots = lambda top=None: [proj, proj2]       # noqa: E731
+        _, p2 = gt_plan(gt2)
+        g2 = dict(p2)
+        assert g2["s10"].startswith("keep: the latest") and g2["s5"].startswith("delete"), g2
+        assert g2["s8"].startswith("keep: needed by the unfinished run(s) proj2:t.C_s1"), "the run of another problem folder, in the folder that holds its gt.json, under the code signature of v9: " + g2["s8"]
+        assert g2["s7"].startswith("keep: the best three network(s) proj2:n7"), g2["s7"]
+        assert g2["s3"].startswith("keep: the best three network(s) proj2:n3"), "an entry whose record carries the signature itself, with no run folder: " + g2["s3"]
+        assert "proj2:f6" in g2["s6"] and "no result package" in g2["s6"] and g2["s6"].startswith("keep"), g2["s6"]
+        assert g2["s4"].startswith("keep: needed by") and "proj2:torn" in g2["s4"], g2["s4"]
+        assert all(dict(gt_plan(gt2, [proj])[1])[s].startswith("delete") for s in ("s8", "s7", "s6", "s4", "s3")), "read only the current problem, the stores would go"
+        os.makedirs(os.path.join(proj2, "results", "f6"))
+        open(os.path.join(proj2, "results", "f6", "package.json"), "w").write("{}")
+        assert dict(gt_plan(gt2)[1])["s6"].startswith("delete"), "the package of the final run is written: the store may go"
+        _, _, done2 = gt_clean(True, gt2)
+        assert sorted(done2) == ["s5", "s6"] and all(os.path.isdir(os.path.join(gt2, s)) for s in ("s3", "s4", "s7", "s8", "s10")), done2
+        assert lane_notes([("l1", "keep: x")]) == [] and lane_notes([("l1", "delete: lane l1")]) == [LANE_GAP] and "cannot be protected by run records" in LANE_GAP
+        # a stored manifest that says "version unknown" (made before the store was named canonically, or the store is deleted) is read again for the package: v9's key is the GT of v8
+        g3 = os.path.join(tmp, "gtrepo")
+        os.makedirs(os.path.join(g3, "autogt"))
+        open(os.path.join(g3, "autogt", "versions.csv"), "w").write("version,signature,tag,date,generator,what_changed,same_gt_as\nv8,c8c8,t,d,g,w,\nv9,c9c9,t,d,g,w,v8\n")
+        mk("x.o_s0")
+        json.dump({"gt_signature": "0.5_4_c9c9"}, open(os.path.join(proj, "runs", "x_o_s0", "gt.json"), "w"))
+        V.repo_root = lambda start=None: g3
+        try:
+            po = write("x.o_s0")
+            assert po["gt"] == {"version": "v8", "signature": "c8c8"}, po["gt"]
+            provf = os.path.join(proj, "results", "x.o_s0", "provenance.json")
+            old_prov = json.load(open(provf))
+            old_prov["subject"]["train_gt"] = {"key": "0.5_4_c9c9", "signature": "c9c9", "version": "unknown"}          # what the 2026-11-02 tool stored
+            json.dump(old_prov, open(provf, "w"))
+            assert write("x.o_s0")["gt"] == {"version": "v8", "signature": "c8c8"}, "the package reads the GT again from the key"
+        finally:
+            V.repo_root = real_root
         print("package selftest passed")
     finally:
         tempfile.tempdir = None
-        tag_exists, versions, lane_versions = real_tag, real_versions, real_lane
+        tag_exists, versions, lane_versions, problem_roots = real_tag, real_versions, real_lane, real_problems
         if old_env is None:
             os.environ.pop("AR_PROJECT", None)
         else:
@@ -898,6 +1041,8 @@ def main():
             print(f"latest lane GT version: {lane_latest['version']} ({lane_latest['signature']})")
             for sig, text in lane_p:
                 print(f"  {sig:14} {text}")
+            for note in lane_notes(lane_p):
+                print(note)
         print(("deleted: " + ", ".join(done + lane_done)) if a.apply else "dry run: nothing deleted (--apply)")
     else:
         ap.error("package <run id> | show <run id> | clean [--apply] | gt [--apply] | --selftest")

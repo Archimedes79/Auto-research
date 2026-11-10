@@ -2,7 +2,9 @@
 
     python autoresearch/tools/clean_temp.py loop19             # dry run: what would go, what live code still imports from it
     python autoresearch/tools/clean_temp.py loop19 --move      # commit + tag the scratch (<prefix>/loop19-scratch), then move it to <trash>/temp_loop19/
-    python autoresearch/tools/clean_temp.py loop19 --delete    # commit + tag, then delete (the tag keeps the scripts only: refused when the folder holds any other file; use --move then)
+    python autoresearch/tools/clean_temp.py loop19 --delete    # commit + tag, then delete (the tag keeps the scripts only: refused when the folder holds any other file, or when no tag holds
+                                                               # a file with its CURRENT content (every file is compared by blob id; an old <prefix>/loop19-scratch of an earlier
+                                                               # snapshot gets a new tag <prefix>/loop19-scratch.attempt2 for the new one); use --move then)
     python autoresearch/tools/clean_temp.py loop19 --move --ignore-refs   # go on although a document or config still names a file of it (history); --force: only the 6-hour guard
     python autoresearch/tools/clean_temp.py --selftest
 
@@ -36,22 +38,65 @@ def kept_by_snapshot(cfg):
     return any(norm(d) in (".", "") or s == norm(d) or s.startswith(norm(d) + "/") for d in cfg["code_dirs"])
 
 
-def missing_from_tag(root, tag, folders):
-    """the files of the scratch folders that the tag does NOT contain: an existing tag of an earlier snapshot, a .gitignore rule, or a
-    file that is not a script (the snapshot adds the .py / .sh files of the scratch only: a result.json or notes.md is held by no tag)"""
+def tree_blobs(top, ref):
+    """{path: blob id} of the files that the tag or commit `ref` holds (-z: a name with a space or a quote is one name); {} when git cannot read it"""
+    from run import git
+    out = {}
+    for ent in git(top, "ls-tree", "-r", "-z", ref).stdout.split("\0"):
+        meta, _, path = ent.partition("\t")                      # "<mode> <type> <blob id>" TAB name
+        if path:
+            out[path] = meta.split()[2]
+    return out
+
+
+def blob_ids(top, rels):
+    """the blob id git would store for each working-tree file (the filters of the repository applied, as `git add` does), None where git cannot hash it"""
+    from run import git
+    out = []
+    for i in range(0, len(rels), 100):
+        chunk = rels[i:i + 100]
+        r = git(top, "hash-object", "--", *chunk)
+        ids = r.stdout.split()
+        out += ids if r.returncode == 0 and len(ids) == len(chunk) else [None] * len(chunk)
+    return out
+
+
+def not_held(root, ref, folders):
+    """the files of the scratch folders whose CURRENT content the tag or commit `ref` does not hold: not in it (a .gitignore rule, or a file that is not a script: the snapshot
+    adds the .py / .sh files of the scratch only, a result.json or notes.md is held by no tag), or in it with another blob id (an old tag of an earlier snapshot: the names
+    agree and the content does not)"""
     from run import git
     top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
-    have = set(x for x in git(top, "ls-tree", "-r", "--name-only", "-z", tag).stdout.split("\0") if x)     # -z: a name with a space or a quote is one name
-    out = []
-    for f in folders:
-        for dp, _, fns in os.walk(f):
-            for fn in fns:
-                if "__pycache__" in dp:
-                    continue
-                rel = os.path.relpath(os.path.join(dp, fn), top).replace(chr(92), "/")
-                if rel not in have:
-                    out.append(rel)
-    return out
+    have = tree_blobs(top, ref)
+    rels = [os.path.relpath(os.path.join(dp, fn), top).replace(chr(92), "/") for f in folders for dp, _, fns in os.walk(f) if "__pycache__" not in dp for fn in fns]
+    named = [r for r in rels if r in have]
+    return [r for r in rels if r not in have] + [r for r, h in zip(named, blob_ids(top, named)) if h != have[r]]
+
+
+def tag_for_delete(root, commit, tag, folders, note=""):
+    """-> (tag, lost): a tag that holds the current content of every file of the folders (lost == []), else (None, the files that no snapshot holds). git_snapshot reuses an
+    existing <prefix>/<name>-scratch and leaves the new snapshot commit on no ref ('tag existed'): that tag holds the earlier state, so a delete would lose what changed since.
+    Then the new snapshot is tagged <tag>.attempt2 (.attempt3 ...) and compared again; nothing is tagged when the snapshot itself does not hold the files"""
+    from run import git
+    lost = not_held(root, tag, folders)
+    if not lost:
+        return tag, []
+    lost = not_held(root, commit, folders)
+    if lost:
+        return None, lost
+    top = git(root, "rev-parse", "--show-toplevel").stdout.strip()
+    for n in range(2, 100):
+        new = f"{tag}.attempt{n}"
+        if git(top, "rev-parse", "-q", "--verify", f"refs/tags/{new}").returncode == 0:
+            if not not_held(root, new, folders):                  # an earlier --delete that stopped after the tag: it holds this state
+                return new, []
+            continue
+        r = git(top, "tag", "-a", new, "-m", (f"{note or tag}: the snapshot of the scratch as it was before the clean-up (the tag {tag} holds an earlier state)")[:200], commit)
+        if r.returncode != 0:
+            return None, [f"(the tag {new} could not be made: {r.stderr.strip()[:100]})"]
+        lost = not_held(root, new, folders)
+        return (new, []) if not lost else (None, lost)
+    return None, [f"(no free name {tag}.attemptN)"]
 
 
 def modules_in(folders):
@@ -191,6 +236,7 @@ def run(name, move=False, delete=False, force=False, root=None, cfg=None, git=Tr
     if delete and git and not kept_by_snapshot(cfg):   # decided BEFORE the snapshot: a refusal must leave no tag behind
         print(f"  REFUSED: --delete needs '{cfg['scratch']}' in project.json code_dirs (the snapshot commits code_dirs only); use --move")
         return 1
+    held = None
     if git:
         from run import git_snapshot
         commit, tag, note = git_snapshot(root, cfg, cfg["tag_prefix"], f"{name}-scratch", f"scratch of {name} before clean-up")
@@ -198,14 +244,22 @@ def run(name, move=False, delete=False, force=False, root=None, cfg=None, git=Tr
         if delete and not tag:                     # no repository, or a git step failed: nothing holds the scripts
             print(f"  REFUSED: --delete needs the scratch in git, but the snapshot gave no tag ({commit} {note}); use --move or fix git")
             return 1
-        if delete:                                 # an old tag of an earlier snapshot ("tag existed") may not hold today's scripts
-            lost = missing_from_tag(root, tag, folders)
+        if delete:                                 # an old tag of an earlier snapshot ("tag existed") holds the earlier content: compare every file by blob id, tag the new snapshot if need be
+            held, lost = tag_for_delete(root, commit, tag, folders, f"scratch of {name}")
             if lost:
-                print(f"  REFUSED: tag {tag} does not contain {len(lost)} file(s), e.g. {lost[:3]} (only scripts are tagged); "
-                      "use --move (or a new scratch name)")
+                print(f"  REFUSED: no tag holds {len(lost)} file(s) as they are now, e.g. {lost[:3]} (only scripts are tagged); use --move (or a new scratch name)")
                 return 1
+            if held != tag:
+                print(f"  tag {tag} holds an earlier state of the scratch: the new snapshot {commit} is tagged {held}")
+    if delete and not held:                        # git=False (a test setting) or no check: nothing proves the files are kept
+        print("  REFUSED: --delete needs a tag that holds the files; use --move")
+        return 1
     for f in folders:
         if delete:
+            lost = not_held(root, held, [f])       # again right before the delete: a file written since the snapshot is not in the tag
+            if lost:
+                print(f"  REFUSED: {len(lost)} file(s) changed since the snapshot, e.g. {lost[:3]}; nothing of {os.path.relpath(f, root)} was deleted; run it again or use --move")
+                return 1
             shutil.rmtree(f)
             print("deleted", os.path.relpath(f, root))
         else:
@@ -323,13 +377,54 @@ def selftest():
     # the scratch is not in code_dirs: refused before the snapshot, so no tag is left behind
     assert run("loop97", delete=True, root=repo, cfg=cfgr, git=True) == 1 and os.path.exists(os.path.join(repo, "temp/loop97/s.py"))
     assert g("tag").strip() == "", "a refused --delete must not create a tag"
-    # an old tag without today's scripts (a resumed snapshot) is refused too; the scripts stay
+    # an old tag without today's scripts (a resumed snapshot): the tag is not reused, the new snapshot gets <tag>.attempt2 and holds the script; only then it goes
     g("tag", "-a", "t/loop96-scratch", "-m", "old attempt")
     cfgr2 = dict(cfgr, code_dirs=["code", "./temp"])
-    assert run("loop96", delete=True, root=repo, cfg=cfgr2, git=True) == 1 and os.path.exists(os.path.join(repo, "temp/loop96/s.py"))
+    assert run("loop96", delete=True, root=repo, cfg=cfgr2, git=True) == 0 and not os.path.exists(os.path.join(repo, "temp/loop96"))
+    assert g("show", "t/loop96-scratch.attempt2:temp/loop96/s.py") == "y = 1\n" and "temp/loop96/s.py" not in g("ls-tree", "-r", "--name-only", "t/loop96-scratch").split(), "the old tag stays as it was"
     # scratch in code_dirs (a "./temp" spelling too), fresh tag: the snapshot holds the script and --delete goes through
     assert run("loop97", delete=True, root=repo, cfg=cfgr2, git=True) == 0 and not os.path.exists(os.path.join(repo, "temp/loop97"))
     assert "temp/loop97/s.py" in g("ls-tree", "-r", "--name-only", "t/loop97-scratch").split(), "the tag must hold the deleted script"
+
+    def scratch(n, text, **files):
+        os.makedirs(os.path.join(repo, "temp", n), exist_ok=True)
+        for fn, body in dict({"s.py": text}, **files).items():
+            open(os.path.join(repo, "temp", n, fn), "w").write(body)
+            os.utime(os.path.join(repo, "temp", n, fn), (old, old))
+    # the finding of the deep review: <prefix>/loop93-scratch exists from an earlier --move (old content); the same file names come back with NEW content. Names agree, content does not:
+    # the old tag must not pass for the new files (the snapshot commit would hang on no ref and the folder be deleted)
+    scratch("loop93", "y = 1\n")
+    assert run("loop93", move=True, root=repo, cfg=cfgr2, git=True) == 0
+    shutil.move(os.path.join(repo, "_to_delete/temp_loop93/loop93"), os.path.join(repo, "temp/loop93"))
+    scratch("loop93", "y = 2\n")
+    assert run("loop93", delete=True, root=repo, cfg=cfgr2, git=True) == 0 and not os.path.exists(os.path.join(repo, "temp/loop93"))
+    assert g("show", "t/loop93-scratch:temp/loop93/s.py") == "y = 1\n", "the old tag is untouched"
+    assert g("show", "t/loop93-scratch.attempt2:temp/loop93/s.py") == "y = 2\n", "the new content is held by a tag of its own"
+    scratch("loop93", "y = 3\n")                                               # and once more: attempt2 holds y = 2, so attempt3 is made
+    assert run("loop93", delete=True, root=repo, cfg=cfgr2, git=True) == 0
+    assert g("show", "t/loop93-scratch.attempt3:temp/loop93/s.py") == "y = 3\n" and g("show", "t/loop93-scratch.attempt2:temp/loop93/s.py") == "y = 2\n"
+    scratch("loop93", "y = 3\n")                                               # the same state again: attempt3 already holds it, no attempt4
+    assert run("loop93", delete=True, root=repo, cfg=cfgr2, git=True) == 0 and "t/loop93-scratch.attempt4" not in g("tag").split()
+    # a tag that cannot be made: refused, the scripts stay
+    g("tag", "-a", "t/loop91-scratch", "-m", "old attempt")
+    g("tag", "-a", "t/loop91-scratch.attempt2/blocker", "-m", "a ref that blocks the name attempt2")
+    scratch("loop91", "y = 1\n")
+    assert run("loop91", delete=True, root=repo, cfg=cfgr2, git=True) == 1 and os.path.exists(os.path.join(repo, "temp/loop91/s.py")), "no tag could be made: refuse"
+    # a file written after the snapshot is in no tag: the check right before the delete refuses it
+    scratch("loop90", "y = 1\n")
+    real_tag_for_delete = tag_for_delete
+
+    def writes_after_snapshot(*a, **k):
+        res = real_tag_for_delete(*a, **k)
+        open(os.path.join(repo, "temp/loop90/s.py"), "w").write("y = 99\n")      # a job writes while the clean-up runs
+        os.utime(os.path.join(repo, "temp/loop90/s.py"), (old, old))
+        return res
+    globals()["tag_for_delete"] = writes_after_snapshot
+    try:
+        assert run("loop90", delete=True, root=repo, cfg=cfgr2, git=True) == 1 and open(os.path.join(repo, "temp/loop90/s.py")).read() == "y = 99\n"
+    finally:
+        globals()["tag_for_delete"] = real_tag_for_delete
+    assert run("loop90", delete=True, root=repo, cfg=cfgr2, git=False) == 1 and os.path.exists(os.path.join(repo, "temp/loop90/s.py")), "git=False proves nothing: --delete refuses"
     # a result file next to the script is held by no tag: --delete refuses (hard rule 5), --move keeps it
     open(os.path.join(repo, ".gitignore"), "w").write("temp/**\n")                       # the repository's rule: the snapshot then adds the scripts only
     os.makedirs(os.path.join(repo, "temp", "loop95"))

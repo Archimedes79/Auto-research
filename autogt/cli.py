@@ -1,27 +1,27 @@
-"""Command line of the autoGT suite (from the repository root: `python -m autogt COMMAND ...`; in WSL: `wsl bash autogt/run_nice.sh -m autogt COMMAND ...`).
+"""Command line of the GtGenerator (from the repository root: `python -m autogt COMMAND ...`; in WSL: `wsl bash autogt/run_nice.sh -m autogt COMMAND ...`).
 
-The command line reaches the suite ONLY through the class `AutoGT` (autogt/api.py holds its methods): every command is ONE method call, so what the command line does is what Python does
-(`python -m autogt COMMAND --help` has the options of a command; the same call in Python is `AutoGT.<method>(...)`).
+The command line reaches the suite ONLY through the class `GtGenerator` (autogt/api.py holds its methods): every command is ONE method call, so what the command line does is what Python does
+(`python -m autogt COMMAND --help` has the options of a command; the same call in Python is `GtGenerator.<method>(...)`).
 
   make GT (all resumable; --out is always the ROOT that holds the stores, default data/autogt; the lane stores are below ROOT/lane; they print the GT key, see autogt/gt_api.py)
-    generate DATAROOT      AutoGT.generate          the front GT + both lane GTs + the area masks of the BEV Fusion store (everything)
-    generate-bev DATAROOT  AutoGT.generate_bev_gt   BEV Fusion: the front GT + the lane GT of its rig + the packed intersection masks
-    generate-lane DATAROOT AutoGT.generate_lane_gt  the lane GT of one system (--rig lane_center | bev_fusion | all)
-    area-masks             AutoGT.area_masks        only the packed masks of an existing BEV Fusion lane store
-    build                  AutoGT.build             the low-level writer behind `report` (one full devkit, --out required)
+    generate DATAROOT      GtGenerator.generate          the front GT + both lane GTs + the area masks of the BEV Fusion store (everything)
+    generate-bev DATAROOT  GtGenerator.generate_bev_gt   BEV Fusion: the front GT + the lane GT of its rig + the packed intersection masks
+    generate-lane DATAROOT GtGenerator.generate_lane_gt  the lane GT of one system (--rig lane_center | bev_fusion | all)
+    area-masks             GtGenerator.area_masks        only the packed masks of an existing BEV Fusion lane store
+    build                  GtGenerator.build             the low-level writer behind `report` (one full devkit, --out required)
   look at GT
-    key SYSTEM             AutoGT.gt_key            the key of what is stored (exit 1 when incomplete), --json for the dict
-    have                   AutoGT.have              is the front GT of this generator there for these sequences? (exit 1 when not: the check before a training)
-    data DATAROOT          AutoGT.check_data        are the raw nuScenes files on disk? (exit 1 when not)
-    sets / versions        AutoGT.sets / versions   the scene sets and how much is stored / the GT versions, lane versions and releases
-    area-mask TOKEN        AutoGT.area_mask         one area mask: the number of cells, --png to draw it
-    view / sheets / video / lanegraph / masks   AutoGT.view / sheets / video / lanegraph / masks   pictures of keyframes, of the lane graph, of the coverage masks; videos
+    key SYSTEM             GtGenerator.gt_key            the key of what is stored (exit 1 when incomplete), --json for the dict
+    have                   GtGenerator.have              is the front GT of this generator there for these sequences? (exit 1 when not: the check before a training)
+    data DATAROOT          GtGenerator.check_data        are the raw nuScenes files on disk? (exit 1 when not)
+    sets / versions        GtGenerator.sets / versions   the scene sets and how much is stored / the GT versions, lane versions and releases
+    area-mask TOKEN        GtGenerator.area_mask         one area mask: the number of cells, --png to draw it
+    view / sheets / video / lanegraph / masks   GtGenerator.view / sheets / video / lanegraph / masks   pictures of keyframes, of the lane graph, of the coverage masks; videos
   check and clean
-    audit-lane SYSTEM      AutoGT.audit_lane        the audit of a stored lane GT before its release (exit 1 on a problem)
-    check                  AutoGT.check             consistency checks of the GT of mini        report   AutoGT.report   the checks over all sequences, one PDF
-    digest                 AutoGT.digest            a digest per frame of mini (two generators that make the same GT give the same file)
-    clean                  AutoGT.clean             list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
-    selftest               AutoGT.selftest          all tests of the suite (5 - 10 min), or parts with --only
+    audit-lane SYSTEM      GtGenerator.audit_lane        the audit of a stored lane GT before its release (exit 1 on a problem)
+    check                  GtGenerator.check             consistency checks of the GT of mini        report   GtGenerator.report   the checks over all sequences, one PDF
+    digest                 GtGenerator.digest            a digest per frame of mini (two generators that make the same GT give the same file)
+    clean                  GtGenerator.clean             list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
+    selftest               GtGenerator.selftest          all tests of the suite (5 - 10 min), or parts with --only
 
 Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; AUTOGT_TRACEBACK=1 shows it).
 """
@@ -62,7 +62,7 @@ def _parser():
     registry = {}
 
     def command(name, method, help, **kw):
-        """a command = one method of AutoGT (autogt/api.py); the options of the parser are the arguments of the method, by name"""
+        """a command = one method of GtGenerator (autogt/api.py); the options of the parser are the arguments of the method, by name"""
         sp = sub.add_parser(name, help=help, description=help, **kw)
         sp.set_defaults(method=method)
         registry[name] = method
@@ -124,6 +124,8 @@ def _parser():
     _which_scenes(k)
     k.add_argument("--dataroot", default=None, help="a nuScenes folder: complete is then judged by every keyframe of its json tables")
     k.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt)")
+    k.add_argument("--border-m", dest="borders", type=float, nargs="+", default=[0.0, 0.5], help="the mask borders in metres the masks part must hold (default 0 and 0.5)")
+    k.add_argument("--fast", dest="deep", action="store_false", help="judge by file names only: a zero-byte file is not looked for (saves about 30 s on the full set)")
     k.add_argument("--json", action="store_true", help="print the key as json")
     h = command("have", "have", "is the stored front GT of the current generator there for these sequences? exit 1 when not (the check before a training; sets.stored_for)")
     _which_scenes(h)
@@ -141,6 +143,7 @@ def _parser():
     mk.add_argument("token", help="the nuScenes sample token of a keyframe")
     mk.add_argument("--kind", default="intersection", choices=["intersection", "road"])
     mk.add_argument("--border-m", type=float, default=0.0)
+    mk.add_argument("--out", default=None, help="the ROOT of the stores (default data/autogt)")
     mk.add_argument("--png", default=None, help="write the mask as a picture (x forward = up, y left = left)")
     v = command("view", "view", "sample pictures of keyframes (camera, semantic BEV, objects + velocity, motion)")
     v.add_argument("out")
@@ -200,7 +203,7 @@ def _parser():
 
 
 def commands():
-    """{command name: the method of AutoGT that runs it} (a test pins that every command is documented in the module doc and maps onto a method)"""
+    """{command name: the method of GtGenerator that runs it} (a test pins that every command is documented in the module doc and maps onto a method)"""
     return _parser().registry
 
 
@@ -239,9 +242,9 @@ def _emit(r, as_json=False):
 
 def main(argv=None):
     a = _parser().parse_args(argv)
-    from .suite import AutoGT                                              # the class interface: the only way the command line reaches the suite
+    from .suite import GtGenerator                                              # the class interface: the only way the command line reaches the suite
     try:
-        code = _emit(getattr(AutoGT, a.method)(**_kwargs(a)), getattr(a, "json", False))
+        code = _emit(getattr(GtGenerator, a.method)(**_kwargs(a)), getattr(a, "json", False))
     except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (AUTOGT_TRACEBACK=1 shows the traceback)
         if os.environ.get("AUTOGT_TRACEBACK"):
             raise

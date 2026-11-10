@@ -6,6 +6,7 @@ autoresearch/). Paths in project.json are relative to the problem folder; P.path
 import contextlib
 import json
 import os
+import socket
 import sys
 import threading
 import time
@@ -75,6 +76,25 @@ def experiment_dirs(problem_root=None):
     return [os.path.join(r, d) for d in cfg_of(r)["experiment_dirs"]]
 
 
+_WHO = f"{sys.platform}:{socket.gethostname()}".replace(" ", "_")  # the machine and operating system a pid belongs to (WSL and Windows number their processes apart)
+
+
+def _holder_dead(lock):
+    """True when the lock names a holder of THIS machine and operating system ('<pid> <time> <who> <token>') whose process no longer runs: waiters take such a lock over
+    at once instead of after stale_s. A lock of the older three-field form, of another machine or system, or an unreadable one is never judged dead"""
+    try:
+        with open(lock, encoding="utf-8") as f:
+            parts = f.read().split()
+        if len(parts) != 4 or parts[2] != _WHO or os.name == "nt":
+            return False
+        os.kill(int(parts[0]), 0)
+    except ProcessLookupError:
+        return True
+    except (OSError, ValueError):
+        return False
+    return False
+
+
 def _holds(lock, token):
     """does the lock file still carry this holder's token (last field of '<pid> <time> <token>')? A lock that was taken over is not ours any more"""
     try:
@@ -86,7 +106,7 @@ def _holds(lock, token):
 
 @contextlib.contextmanager
 def locked(path, wait_s=None, stale_s=120):
-    """exclusive lock on a shared state file (ledger, schedule): <path>.lock is created atomically with '<pid> <time> <token>' and its mtime is renewed every
+    """exclusive lock on a shared state file (ledger, schedule): <path>.lock is created atomically with '<pid> <time> <who> <token>' and its mtime is renewed every
     stale_s / 4 s while the holder is inside the block, so only a dead or frozen holder ages out: a lock not renewed for stale_s is taken over. The holder
     removes the lock only when the file still carries its token. Known residual: two waiters that take over the same stale lock at the same
     instant can, very rarely, both enter (the put-back of a lock that was not stale after all is not atomic)"""
@@ -97,15 +117,15 @@ def locked(path, wait_s=None, stale_s=120):
     while True:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, f"{os.getpid()} {time.time()} {token}".encode())
+            os.write(fd, f"{os.getpid()} {time.time()} {_WHO} {token}".encode())
             os.close(fd)
             break
         except FileExistsError:
             try:
-                if time.time() - os.path.getmtime(lock) > stale_s:
+                if time.time() - os.path.getmtime(lock) > stale_s or _holder_dead(lock):
                     gone = f"{lock}.stale.{os.getpid()}"
                     os.rename(lock, gone)  # only one waiter wins the rename; the others see FileNotFoundError and retry
-                    if time.time() - os.path.getmtime(gone) <= stale_s and not os.path.exists(lock):
+                    if time.time() - os.path.getmtime(gone) <= stale_s and not _holder_dead(gone) and not os.path.exists(lock):
                         os.rename(gone, lock)  # not stale after all (another waiter's takeover came first, and this is its fresh lock): put it back and wait
                     else:
                         os.remove(gone)

@@ -10,11 +10,14 @@ Both present: they must be equal (check says so), so a migration cannot leave tw
 
 An experiment is found by its id (prefix of a folder under experiments/ or under the other folders of project.json "experiment_dirs"), by its folder or by the path of its experiment.md / experiment.json. Card refs: a path relative to the
 problem folder, optionally '#a/b/c' into the JSON; a card has its metrics under 'metrics' (evaluate.py cards), a flat dict is the metrics itself.
+For the verdict path: rule_sha(card) names the rule (run.py stores it in the run record at launch, decide.py compares), card_for_run(run id) finds the card that lists a run,
+check refuses a card file listed twice, clause fields out of range (at_least, subsets, min_effect, max_loss) and a malformed `sources` list (research notes "<topic slug>/<note id>").
 """
 import argparse
 import csv
 import datetime
 import glob
+import hashlib
 import json
 import os
 import re
@@ -29,6 +32,8 @@ import card as CARD  # noqa: E402
 
 SCHEMA = os.path.join(P.AR, "schemas", "experiment.schema.json")
 TYPES = {"str": str, "number": (int, float), "dict": dict, "list": list, "bool": bool}
+RULE_KEYS = ("id", "kind", "metric", "direction", "band", "prediction", "control", "variant", "deterministic", "pairing", "rule", "evaluate")  # what a verdict is decided by
+SOURCE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*")  # a research note a card tests: <topic slug>/<note id>
 
 
 def schema():
@@ -106,6 +111,34 @@ def find(exp):
     return hits[0]
 
 
+def rule_sha(exp):
+    """16 hex characters that name the rule of a card: sha256 of the canonical json of RULE_KEYS and the arm letters (not the arms' recipes, cards, names, run ids, seeds, base or
+    settings, not kill or budget). run.py stores it as `card_sha` in the run record at launch; decide.py compares it with the card as it is when it decides, so a rule edited
+    after the launch is found"""
+    part = {k: exp[k] for k in RULE_KEYS if k in exp}
+    part["arms"] = list(exp.get("arms") or [])
+    return hashlib.sha256(json.dumps(part, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+
+
+def card_for_run(run_id, root=None):
+    """(card dict, path) of the first card whose arms list `run_id` in their run_ids, else None. Never raises: run.py asks at every launch, and a broken card file
+    or a missing project must not stop a run"""
+    try:
+        for base in P.experiment_dirs(root):
+            for d in sorted(glob.glob(os.path.join(base, "*"))):
+                try:
+                    src = source(d) if os.path.isdir(d) else None
+                    exp = read(src) if src else None
+                except Exception:  # noqa: BLE001  (one unreadable card is skipped, the others are still searched)
+                    continue
+                arms = exp.get("arms") if isinstance(exp, dict) else None
+                if isinstance(arms, dict) and any(isinstance(a, dict) and isinstance(a.get("run_ids"), list) and run_id in a["run_ids"] for a in arms.values()):
+                    return exp, src
+    except (Exception, SystemExit):  # noqa: BLE001  (P.root() exits when there is no problem folder)
+        return None
+    return None
+
+
 def read(path):
     """the card dict of an experiment.md (block) or an experiment.json; ValueError when it is missing, unreadable or not valid json"""
     if path.endswith(".md"):
@@ -165,6 +198,31 @@ def arm_cards(exp, letter, root=None):
     return out
 
 
+def ref_key(ref, root):
+    """(resolved file, inner path) of a card ref: two refs with the same key are the same card"""
+    path, _, inner = ref.partition("#")
+    full = path if os.path.isabs(path) else os.path.join(root, path)
+    return os.path.normcase(os.path.realpath(full)), "/".join(k for k in inner.split("/") if k)
+
+
+def duplicate_cards(cards, root=None):
+    """problems for a card that is listed twice inside one arm or in two arms: it would count as two paired seeds (or as the control of itself), and INCONCLUSIVE
+    would turn into KEEP. cards: {arm letter: arm_cards(...)}"""
+    root, seen, bad = root or P.root(), {}, []
+    for a, by_subset in cards.items():
+        mine = set()
+        for lst in by_subset.values():
+            for _, _, ref in lst:
+                key = ref_key(ref, root)
+                if key in mine:
+                    bad.append(f"arm {a}: card {ref} is listed twice (it would count as two seeds)")
+                elif key in seen:
+                    bad.append(f"card {ref} is listed in arm {seen[key]} and in arm {a} (the same measurement cannot be both)")
+                mine.add(key)
+                seen.setdefault(key, a)
+    return list(dict.fromkeys(bad))
+
+
 def check(exp, path):
     """list of problems (empty = ready)"""
     sc = schema()
@@ -202,6 +260,8 @@ def check(exp, path):
             typed.append(f"arm {a}: names must be a list of strings")
         if isinstance(arm, dict) and "cards" in arm and not isinstance(arm["cards"], (list, dict)):
             typed.append(f"arm {a}: cards must be a list or an object")
+        if isinstance(arm, dict) and "run_ids" in arm and not (isinstance(arm["run_ids"], list) and all(isinstance(r, str) for r in arm["run_ids"])):
+            typed.append(f"arm {a}: run_ids must be a list of run ids (strings)")
     if not isinstance(exp["prediction"].get("vs"), str) or any(not isinstance(c.get("metric", ""), str) or not isinstance(c.get("vs", ""), str) for c in clauses):
         typed.append("prediction.vs, and the metric and vs of every clause, must be strings (arm letters, metric names)")
     if typed:
@@ -215,6 +275,10 @@ def check(exp, path):
     thresholds = [("band", exp["band"]), ("prediction.value", pred.get("value"))] + [
         (f"clause {i} {k}", c[k]) for i, c in enumerate(exp["rule"]) if isinstance(c, dict) for k in ("min_effect", "max_loss", "band") if k in c]
     bad += [f"{name} must be a finite number" for name, v in thresholds if not CARD.is_number(v)]
+    bad += [f"clause {i} {k} must be >= 0 (a loss is allowed through max_loss, a gain required through min_effect)" for i, c in enumerate(exp["rule"])
+            if isinstance(c, dict) for k in ("min_effect", "max_loss") if CARD.is_number(c.get(k)) and c[k] < 0]
+    if "sources" in exp and not (isinstance(exp["sources"], list) and all(isinstance(s, str) and SOURCE.fullmatch(s) for s in exp["sources"])):
+        bad.append("sources must be a list of '<topic slug>/<note id>' (letters, digits, . _ - ; each part starts with a letter or digit)")
     allow = exp["evaluate"].get("allow", [])
     if not isinstance(allow, list) or any(x not in ("split", "subset", "denominator", "protocol", "provenance") for x in allow):
         bad.append("evaluate.allow must be a list of: split, subset, denominator, protocol, provenance")
@@ -228,13 +292,21 @@ def check(exp, path):
             bad.append(f"clause {i} ({c['metric']}): exactly one of min_effect / max_loss")
         if c.get("vs", exp["control"]) not in arms:
             bad.append(f"clause {i}: vs {c.get('vs')} is not an arm")
-        if c.get("subsets") and not isinstance(c["subsets"], list):
-            bad.append(f"clause {i}: subsets must be a list")
+        subs = c.get("subsets")
+        if subs is not None and not (isinstance(subs, list) and all(isinstance(s, str) for s in subs)):
+            bad.append(f"clause {i}: subsets must be a list of subset names")
+        elif subs and len(set(subs)) != len(subs):
+            bad.append(f"clause {i}: subsets must be unique ({', '.join(sorted({s for s in subs if subs.count(s) > 1}))} twice)")
+        if "at_least" in c:
+            k = len(subs) if isinstance(subs, list) and subs else 1
+            if isinstance(c["at_least"], bool) or not isinstance(c["at_least"], int) or not 1 <= c["at_least"] <= k:
+                bad.append(f"clause {i}: at_least must be a whole number from 1 to {k} (the subsets of the clause; 1 when it has none)")
     if not any(c["metric"] == exp["metric"] for c in exp["rule"] if isinstance(c, dict)):
         bad.append(f"no clause on the headline metric {exp['metric']}")
     if not isinstance(exp["evaluate"].get("split"), str) or not exp["evaluate"]["split"].strip():
         bad.append("evaluate.split must name the split or benchmark set (val | test | confirm | <benchmark>)")
     every = []  # the cards of all arms: the directions they declare must agree (decide.card_lower)
+    by_arm = {}  # the cards per arm: a card file listed twice is no second seed
     resolved = 0  # arms whose cards exist: with all of them the decision itself is tried below
     for a in arms:
         try:
@@ -245,6 +317,7 @@ def check(exp, path):
         except Exception as e:  # noqa: BLE001  (a card ref of the wrong type, ...: reported, never raised)
             bad.append(f"arm {a}: cannot read its cards ({type(e).__name__}: {e})")
             continue
+        by_arm[a] = cards
         resolved += bool(cards)
         for s, lst in cards.items():
             for m, full, ref in lst:
@@ -252,8 +325,9 @@ def check(exp, path):
                 if full is not None:  # a full card follows the evaluator contract (legacy cards without the schema field pass); a bare metrics dict is accepted as is
                     bad += [f"arm {a}: card {ref}: {b}" for b in CARD.validate(full, P.cfg_of(root).get("headline_metrics", []))]
                 for c in exp["rule"]:
-                    if isinstance(c, dict) and c.get("metric") and c["metric"] not in m and (not c.get("subsets") or s in c["subsets"]):
+                    if isinstance(c, dict) and c.get("metric") and c["metric"] not in m and (not isinstance(c.get("subsets"), list) or not c["subsets"] or s in c["subsets"]):
                         bad.append(f"arm {a}{' ' + s if s else ''}: card {ref} has no metric {c['metric']}")
+    bad += duplicate_cards(by_arm, root)
     for metric in dict.fromkeys([exp["metric"]] + [c["metric"] for c in exp["rule"] if isinstance(c, dict) and c.get("metric")]):
         try:
             said = card_lower(metric, every, root)

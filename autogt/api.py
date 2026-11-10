@@ -1,20 +1,30 @@
-"""The interface of the suite: the methods of the class `AutoGT` (the class itself is in suite.py; its static methods are these). The command line (`cli.py`) reaches the suite ONLY through them:
-every command is one method, `python -m autogt generate-bev ROOT` is `AutoGT.generate_bev_gt(ROOT)`.
+"""The interface of the suite: the methods of the class `GtGenerator` (the class itself is in suite.py; its static methods are these). The command line (`cli.py`) reaches the suite ONLY through them:
+every command is one method, `python -m autogt generate-bev ROOT` is `GtGenerator.generate_bev_gt(ROOT)`.
 
-    from autogt import AutoGT
-    key = AutoGT.generate_bev_gt("~/data/nuscenes_full", set_name="full")        # front GT + lane GT of the rig bev_fusion + packed masks      -> GtKey
-    key = AutoGT.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")      # the lane GT of Spurmitte (rig="all": both)                    -> GtKey (a dict of them for "all")
-    key = AutoGT.gt_key("bev_fusion", set_name="full")                            # what is stored, nothing is generated; key.complete, key.load(token)
-    AutoGT.generate(root, set_name="small")                                       # everything (front, both lane GTs, masks)                      -> dict, with the keys
-    AutoGT.have(set_name="full")  /  AutoGT.check_data(root)  /  AutoGT.audit_lane("bev_fusion")  /  AutoGT.sets()  /  AutoGT.versions()   -> dict {ok, text, ...}
+    from autogt import GtGenerator
+    key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")        # front GT + lane GT of the rig bev_fusion + packed masks      -> GtKey
+    key = GtGenerator.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")      # the lane GT of Spurmitte (rig="all": both)                    -> GtKey (a dict of them for "all")
+    key = GtGenerator.gt_key("bev_fusion", set_name="full")                            # what is stored, nothing is generated; key.complete, key.load(token)
+    GtGenerator.generate(root, set_name="small")                                       # everything (front, both lane GTs, masks)                      -> dict, with the keys
+    GtGenerator.have(set_name="full")  /  GtGenerator.check_data(root)  /  GtGenerator.audit_lane("bev_fusion")  /  GtGenerator.sets()  /  GtGenerator.versions()   -> dict {ok, text, ...}
 
 The rules (the convention of the suites, autoresearch/README.md "The interface of the suites"): plain data in and out (paths, names, numbers, lists; a dict back, a `GtKey` for the keys); a method
 that has nothing to say about progress does not print; a wrong argument raises ValueError with the message; a dict may hold `text` (what the command line prints) and `ok` (False: the thing
 asked about is not there / not complete: exit code 1). Long runs print their progress when `verbose` (default True). The work itself is in the modules below this file (pipeline, gt_api,
 store_audit, lane_raster, sets, checks, report, view, video, clean ...): these methods only shape the arguments and the result, so a module can be used without the class too.
 """
+import contextlib
 import json
 import os
+
+
+@contextlib.contextmanager
+def _bad_pick():
+    """an unknown sequence (StopIteration) or a keyframe number out of range (IndexError) in the picture commands is a wrong argument: ValueError with the message"""
+    try:
+        yield
+    except (StopIteration, IndexError) as e:
+        raise ValueError(f"no such sequence or keyframe ({type(e).__name__}): check the scene name and the keyframe number") from None
 
 
 def _options(use_flow=True, use_radar=True, boxes_at="camera"):
@@ -66,11 +76,11 @@ def _sets_text():
 
 # parts of the suite that `selftest(only=...)` can run alone: name -> module
 SELFTESTS = {"cli": "cli_selftest", "gt_api": "gt_api_selftest", "generator": "generator_selftest", "lane_graph": "lane_graph_selftest", "lane_tiers": "lane_tiers_selftest",
-             "clean": "clean", "rig_masks": "rig_masks"}
+             "clean": "clean", "rig_masks": "rig_masks", "lane_toy": "lane_tiers"}
 
 
 class Interface:
-    """the static methods of `AutoGT`: one per command of the command line, grouped as the README says (make GT / look at GT / check / pictures / tidy)"""
+    """the static methods of `GtGenerator`: one per command of the command line, grouped as the README says (make GT / look at GT / check / pictures / tidy)"""
 
     # ------------------------------------------------------------------------------------------------------------ make GT
     @staticmethod
@@ -153,11 +163,13 @@ class Interface:
         return {"text": _versions_text()}
 
     @staticmethod
-    def area_mask(token, kind="intersection", border_m=0.0, png=None):
-        """one area mask of a keyframe of the BEV Fusion lane store: its number of cells, optionally drawn to `png` (lane_raster.area_mask) -> {cells, shape, text, png}"""
+    def area_mask(token, kind="intersection", border_m=0.0, png=None, out=None):
+        """one area mask of a keyframe of the BEV Fusion lane store below the store root `out` (default data/autogt): its number of cells, optionally drawn to `png` (lane_raster.area_mask) -> {cells, shape, text, png}"""
         import numpy as np
         from . import lane_gt, lane_raster
-        g = lane_gt.load(token, rig="bev_fusion")
+        if not 0.0 <= border_m < 100.0:                                  # also refuses nan
+            raise ValueError(f"border_m must be 0 or more (metres), got {border_m}")
+        g = lane_gt.load(token, data=os.path.join(os.path.expanduser(out), "lane") if out else lane_gt.DATA, rig="bev_fusion")
         m = lane_raster.area_mask(g, kind, border_m)
         text = f"{kind} mask of {token}, border {border_m:g} m: {int(m.sum())} of {m.size} cells ({m.shape[0]} x {m.shape[1]}, x forward 0 .. 60 m, y left -26 .. 26 m)"
         if png:
@@ -175,6 +187,8 @@ class Interface:
         -> {ok, problems, stats, lines}"""
         from . import lane_gt, store_audit
         from .suite import DATA, default_root
+        if limit is not None and limit < 1:
+            raise ValueError(f"limit must be 1 or more, got {limit}")
         store = os.path.join(os.path.expanduser(out) if out else DATA, "lane", lane_gt.signature(rig=system))
         if not os.path.isdir(store):
             raise ValueError(f"no lane store {store}")
@@ -184,6 +198,8 @@ class Interface:
     def check(dataroot="~/data/nuscenes", version="v1.0-mini", scenes=None, stride=1, holdout=False):
         """automatic consistency checks of the GT over keyframes (checks.run); raises when a check fails"""
         from . import checks
+        from .store import check_arguments
+        check_arguments(stride=stride)
         checks.run(os.path.expanduser(dataroot), version, scenes, stride, holdout)
         return {"ok": True}
 
@@ -193,7 +209,9 @@ class Interface:
         """evaluate the GT of all sequences, store it, write ONE PDF report with samples (report.report; made at 0.5 m) -> {out, text}"""
         import datetime
         from . import report
+        from .store import check_arguments
         from .suite import DATA, default_root
+        check_arguments(stride=stride, workers=workers)
         out = out or os.path.join(DATA, "reports", f"autogt_report_{version}_{datetime.date.today().isoformat()}.pdf")
         light = light or "trainval" in version
         note = "note: the leave-one-radar-out test needs the full devkit: skipped with the light devkit (trainval)" if holdout and light else ""
@@ -241,7 +259,8 @@ class Interface:
     def view(out, picks=None, total=False):
         """sample pictures of keyframes (view.run); picks = ["scene-0061:8" (mini, generated now) or a sample token (stored GT)]"""
         from . import view
-        view.run(out, [x.split(":") for x in picks] if picks else None, total=total)
+        with _bad_pick():
+            view.run(out, [x.split(":") for x in picks] if picks else None, total=total)
         return {"out": out}
 
     @staticmethod
@@ -265,16 +284,18 @@ class Interface:
         from . import lane_graph_view as V
         from .lane_gt import LaneGT
         from .light_nusc import light_nuscenes
-        from .suite import AutoGT, default_root
+        from .suite import GtGenerator, default_root
         root = os.path.expanduser(dataroot or default_root(version))
         name, sep, k = pick.partition(":")
         if not sep or not k.isdigit():
             raise ValueError(f"pick: scene-0061:8 (the scene and the number of the keyframe), got {pick!r}")
-        nusc = light_nuscenes(root, version, [name], cameras=V.CAMERAS, radars=False)
-        gt = AutoGT(root, version, nusc=nusc)
-        tok = gt.keyframes(name)[int(k)]
-        g = LaneGT(root, version, nusc=nusc).graph(tok)
-        cv2.imwrite(out, V.mosaic(gt, tok, g, title=f"{name}:{k} {g['location']}  " + V.legend_text(g)))
+        with _bad_pick():
+            nusc = light_nuscenes(root, version, [name], cameras=V.CAMERAS, radars=False)
+            gt = GtGenerator(root, version, nusc=nusc)
+            tok = gt.keyframes(name)[int(k)]
+            g = LaneGT(root, version, nusc=nusc).graph(tok)
+        if not cv2.imwrite(out, V.mosaic(gt, tok, g, title=f"{name}:{k} {g['location']}  " + V.legend_text(g))):
+            raise ValueError(f"could not write {out}")
         return {"out": out, "text": f"{out}: {V.legend_text(g)}"}
 
     @staticmethod
@@ -282,7 +303,8 @@ class Interface:
         """drive through the GT of one sequence at 12 Hz (H.264, read back; video.run) -> video.run's dict"""
         from . import video
         from .suite import default_root
-        return video.run(scene, mp4, seconds, dataroot=dataroot or default_root(version), version=version)
+        with _bad_pick():
+            return video.run(scene, mp4, seconds, dataroot=dataroot or default_root(version), version=version)
 
     # ------------------------------------------------------------------------------------------------------------ tidy
     @staticmethod
