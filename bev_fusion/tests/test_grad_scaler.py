@@ -1,4 +1,4 @@
-"""amp = "fp16" with a GradScaler (training/train.py: amp_context, make_scaler, optimizer_step, bad_steps_after, scaler_extra, run_clip(scaler=...)); CPU, seconds, toy network.
+"""amp = "fp16" with a GradScaler (autoresearch/trainkit: amp_context, make_scaler, optimizer_step, bad_steps_after, scaler_extra; training/train.py: run_clip(scaler=...)); CPU, seconds, toy network.
 
   1. amp_context: bf16 / fp16 autocast on CUDA, nothing on the CPU or for "off"; an unknown name is an error (it used to mean off silently)
   2. make_scaler: only for fp16, with the start scale of the config
@@ -18,6 +18,7 @@ from torch import nn
 
 sys.path.insert(0, "training")
 import train as T  # noqa: E402
+from trainkit import amp as tk_amp, optim as tk_optim  # noqa: E402
 
 fails = []
 
@@ -59,9 +60,9 @@ check(errs == 4, "an unknown amp name is a ValueError")
 
 # 2 make_scaler
 cfg = T.TrainConfig(amp="fp16", fp16_scale=256.0)
-sc = T.make_scaler(cfg, "cpu")
+sc = tk_amp.make_scaler(cfg, "cpu")
 check(isinstance(sc, torch.amp.GradScaler) and sc.get_scale() == 256.0, "make_scaler(fp16): a GradScaler with the start scale of the config")
-check(T.make_scaler(T.TrainConfig(), "cuda") is None and T.make_scaler(T.TrainConfig(amp="bf16"), "cuda") is None, "no scaler for off and bf16")
+check(tk_amp.make_scaler(T.TrainConfig(), "cuda") is None and tk_amp.make_scaler(T.TrainConfig(amp="bf16"), "cuda") is None, "no scaler for off and bf16")
 check(T.TrainConfig().amp == "off" and T.TrainConfig().fp16_scale == 1024.0, "defaults: amp off, start scale 1024")
 
 # 3 without a scaler = the inline code
@@ -132,8 +133,8 @@ check(st == "overflow" and not torch.isfinite(gn) and same(w6, p6) and sc6.get_s
 # 6 the count of bad steps
 sc7 = Scaler(1024.0)
 low = Scaler(0.5)
-check(T.bad_steps_after("ok", 3, sc7) == 0 and T.bad_steps_after("nonfinite", 3, sc7) == 4 and T.bad_steps_after("nonfinite", 0, None) == 1, "ok resets, a non-finite loss or gradient counts")
-check(T.bad_steps_after("overflow", 3, sc7) == 3 and T.bad_steps_after("overflow", 3, low) == 4, "an fp16 overflow counts only once the scale is below 1")
+check(tk_optim.bad_steps_after("ok", 3, sc7) == 0 and tk_optim.bad_steps_after("nonfinite", 3, sc7) == 4 and tk_optim.bad_steps_after("nonfinite", 0, None) == 1, "ok resets, a non-finite loss or gradient counts")
+check(tk_optim.bad_steps_after("overflow", 3, sc7) == 3 and tk_optim.bad_steps_after("overflow", 3, low) == 4, "an fp16 overflow counts only once the scale is below 1")
 
 # 7 run_clip with a scaler
 w = nn.Parameter(torch.tensor([0.7, -0.4, 1.3]))
@@ -163,10 +164,10 @@ check(torch.equal(gs, gp * 1024.0), "run_clip(scaler): the gradients are exactly
 sc8 = Scaler(1024.0)
 sc8.scale(torch.tensor(1.0))                                                # the scale is created lazily, by the first scale() (train() always scales before it updates)
 sc8.update(64.0)
-ex = T.scaler_extra(sc8)
+ex = tk_amp.scaler_extra(sc8)
 sc9 = Scaler(1024.0)
 sc9.load_state_dict(ex["scaler"])
-check(T.scaler_extra(None) == {} and sc9.get_scale() == 64.0, "the scale travels in the checkpoint's extra; no scaler, nothing")
+check(tk_amp.scaler_extra(None) == {} and sc9.get_scale() == 64.0, "the scale travels in the checkpoint's extra; no scaler, nothing")
 check("amp" not in T.RESUME_FREE and "fp16_scale" not in T.RESUME_FREE, "amp and fp16_scale are not free on a resume")
 old = {"amp": "off", "fp16_scale": 1024.0}
 try:
@@ -188,9 +189,9 @@ for poison in (None, None, None, float("inf"), None):                     # thre
         pg[0].grad[0, 0] = poison
     seq9.append(T.optimizer_step(og, pg, 0.5, scg)[1])
 check(seq9 == ["ok", "ok", "ok", "overflow", "ok"] and scg.get_scale() == 512.0, f"an overflow restarts the count of clean steps: scale 1024 -> 512 and it does not double again at once ({scg.get_scale()})")
-check(T.bad_steps_after("overflow", 3, Scaler(1.0)) == 3 and T.bad_steps_after("overflow", 3, Scaler(0.9999)) == 4, "the boundary: at scale exactly 1 an overflow still does not count")
-check(T.make_scaler(T.TrainConfig(amp="fp16", fp16_growth_interval=7), "cpu").get_growth_interval() == 7, "fp16_growth_interval reaches the scaler")
-check(T.poisoned_buffers(nn.Sequential(nn.BatchNorm1d(3))) == [] and T.poisoned_buffers(nn.Sequential(nn.BatchNorm1d(3)).apply(lambda m: m.running_mean.fill_(float("inf")) if hasattr(m, "running_mean") else None)) == ["0.running_mean"],
+check(tk_optim.bad_steps_after("overflow", 3, Scaler(1.0)) == 3 and tk_optim.bad_steps_after("overflow", 3, Scaler(0.9999)) == 4, "the boundary: at scale exactly 1 an overflow still does not count")
+check(tk_amp.make_scaler(T.TrainConfig(amp="fp16", fp16_growth_interval=7), "cpu").get_growth_interval() == 7, "fp16_growth_interval reaches the scaler")
+check(tk_optim.poisoned_buffers(nn.Sequential(nn.BatchNorm1d(3))) == [] and tk_optim.poisoned_buffers(nn.Sequential(nn.BatchNorm1d(3)).apply(lambda m: m.running_mean.fill_(float("inf")) if hasattr(m, "running_mean") else None)) == ["0.running_mean"],
       "poisoned_buffers names the batch-norm statistics that are not finite")
 
 # 10 the REAL train() on a CPU toy (the data path stubbed): fp16 with a power-of-two scale = amp off, bit for bit, also through overflows; the scale in rows and checkpoint

@@ -52,19 +52,19 @@ if os.path.join(_REPO, "autoresearch") not in sys.path:
 import trainkit  # noqa: E402
 from trainkit import checkpoint as tk_ckpt  # noqa: E402
 from trainkit import control  # noqa: E402
-from trainkit.config import Config  # noqa: E402
+from trainkit.config import Config, read_config as read_engine_config  # noqa: E402
 from trainkit.control import EXIT_STOPPED  # noqa: E402
 from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
 from trainkit.optim import clip_groups, lr_group_params  # noqa: E402
 from trainkit.util import detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
-# the old names of what moved, still importable as train.X (tests/, evaluation/, runner/, train_motion_block.py and the self-test below use them)
-from trainkit.amp import amp_context, make_scaler, scaler_extra  # noqa: E402,F401
-from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume, warm_start  # noqa: E402,F401
+# engine names that are also read as train.X (startable.py, ab_timing.py, evaluation/, runner/ and the tests); anything else of the engine is imported from trainkit
+from trainkit.amp import amp_context  # noqa: E402,F401
+from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume  # noqa: E402,F401
 from trainkit.ema import EMA  # noqa: E402,F401
-from trainkit.optim import bad_steps_after, clip_gradients, optimizer_step, param_groups, poisoned_buffers  # noqa: E402,F401
+from trainkit.optim import optimizer_step, param_groups  # noqa: E402,F401
 from trainkit.runlog import val_logged  # noqa: E402,F401
-from trainkit.schedule import lr_factor, scheduled_lr  # noqa: E402,F401
+from trainkit.schedule import lr_factor  # noqa: E402,F401
 
 try:
     from .augment import flip_batch
@@ -1102,8 +1102,7 @@ def _selftest():
 
 def read_config(path):
     """TrainConfig of a config file; keys starting with "_" are comments for the reader (e.g. "_about"), every other unknown key is an error"""
-    with open(path) as fh:
-        return TrainConfig(**{k: v for k, v in json.load(fh).items() if not k.startswith("_")})
+    return read_engine_config(TrainConfig, path)
 
 
 if __name__ == "__main__":

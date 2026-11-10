@@ -1,4 +1,4 @@
-"""TrainConfig.lr_groups: a module's own learning rate and warm-up (training/train.py: lr_group_params, param_groups, scheduled_lr, check_resume; experiments/t17_motion_lr section 3);
+"""TrainConfig.lr_groups: a module's own learning rate and warm-up (autoresearch/trainkit: lr_group_params, param_groups, scheduled_lr, check_resume; experiments/t17_motion_lr section 3);
 CPU, seconds, toy network, and the REAL train() on a toy.
 
   1. without lr_groups (None or {}) param_groups is exactly the old function: two groups, the same parameters in the same order, the same weight decay
@@ -22,6 +22,7 @@ sys.path.insert(0, "training")
 sys.path.insert(0, "tests/support")
 import toy_train as TT  # noqa: E402
 import train as T  # noqa: E402
+from trainkit import schedule as tk_schedule  # noqa: E402
 
 fails = []
 
@@ -100,18 +101,18 @@ untagged, tagged = {"lr": 0.0}, {"lr": 0.0, **{k: v for k, v in g4[2].items() if
 ok_chain = ok_mb = True
 for step in (0, 150, 299, 300, 999, 1000, 3000, 5999):
     f = T.lr_factor(step, cfg.warmup, cfg.steps, cfg.lr_min_frac)
-    ok_chain &= T.scheduled_lr(untagged, step, cfg, f) == cfg.lr * f
+    ok_chain &= tk_schedule.scheduled_lr(untagged, step, cfg, f) == cfg.lr * f
     hand = 1e-4 * (1 / 3 + 2 / 3 * (step + 1) / 1000) if step < 1000 else 1e-4 * (0.01 + 0.99 * 0.5 * (1 + math.cos(math.pi * (step - 1000) / 5000)))
-    ok_mb &= abs(T.scheduled_lr(tagged, step, cfg, f) - hand) < 1e-15
+    ok_mb &= abs(tk_schedule.scheduled_lr(tagged, step, cfg, f) - hand) < 1e-15
 check(ok_chain, "an untagged group: cfg.lr * lr_factor, exactly the old single schedule (8 steps)")
 check(ok_mb, "a tagged group: lr 1e-4 with its own warm-up 1000, against the formula by hand (8 steps)")
 f0 = T.lr_factor(0, 300, 6000, 0.01)
-check(abs(T.scheduled_lr(tagged, 0, cfg, f0) - 3.3400e-5) < 1e-9 and abs(T.scheduled_lr(tagged, 999, cfg, T.lr_factor(999, 300, 6000, 0.01)) - 1e-4) < 1e-12
-      and abs(T.scheduled_lr(tagged, 1000, cfg, T.lr_factor(1000, 300, 6000, 0.01)) - 1e-4) < 1e-12, "the card's numbers: 3.34e-5 at step 0, 1e-4 at steps 999 and 1000")
+check(abs(tk_schedule.scheduled_lr(tagged, 0, cfg, f0) - 3.3400e-5) < 1e-9 and abs(tk_schedule.scheduled_lr(tagged, 999, cfg, T.lr_factor(999, 300, 6000, 0.01)) - 1e-4) < 1e-12
+      and abs(tk_schedule.scheduled_lr(tagged, 1000, cfg, T.lr_factor(1000, 300, 6000, 0.01)) - 1e-4) < 1e-12, "the card's numbers: 3.34e-5 at step 0, 1e-4 at steps 999 and 1000")
 only_lr = {"base_lr": 1e-4}
 only_wu = {"base_lr": 3e-4, "warmup": 50}
-check(abs(T.scheduled_lr(only_lr, 10, cfg, T.lr_factor(10, 300, 6000, 0.01)) - 1e-4 * T.lr_factor(10, 300, 6000, 0.01)) < 1e-18
-      and abs(T.scheduled_lr(only_wu, 10, cfg, T.lr_factor(10, 300, 6000, 0.01)) - 3e-4 * T.lr_factor(10, 50, 6000, 0.01)) < 1e-18, "only lr: the chain's warm-up; only warmup: the chain's lr")
+check(abs(tk_schedule.scheduled_lr(only_lr, 10, cfg, T.lr_factor(10, 300, 6000, 0.01)) - 1e-4 * T.lr_factor(10, 300, 6000, 0.01)) < 1e-18
+      and abs(tk_schedule.scheduled_lr(only_wu, 10, cfg, T.lr_factor(10, 300, 6000, 0.01)) - 3e-4 * T.lr_factor(10, 50, 6000, 0.01)) < 1e-18, "only lr: the chain's warm-up; only warmup: the chain's lr")
 
 # 4 errors
 bad = {"a prefix that names nothing": {"motoin_block": {"lr": 1e-4}}, "overlapping prefixes": {"motion_block": {"lr": 1e-4}, "motion_block.0": {"lr": 2e-4}},

@@ -1,7 +1,7 @@
 """The one command-line generator of the suites (the convention: autoresearch/README.md, section 'The interface of the suites'): every method of a suite's class is ONE command, the same call
 as in Python. The command line of trainsuite is configured at the end of its api.py, evalsuite/apicli.py and the Runner of bev_fusion/runner are the same few lines, on top of this module.
 
-    cli = suitecli.Cli(Training, "trainsuite", TrainingError, "TRAINSUITE_TRACEBACK", legacy=LEGACY, positional=("job", "i", "a", "b"), need_all=("queue_hold",), text={"check": ...})
+    cli = suitecli.Cli(Training, "trainsuite", TrainingError, "TRAINSUITE_TRACEBACK", legacy=LEGACY, positional=("job", "i", "a", "b"), text={"check": ...})
     rc = cli.dispatch(argv)          # None when argv names no method of the class (the older argparse commands take over), else the exit code
 
 What the generator does with a method `Class.queue_add(job, start=True)`:
@@ -10,7 +10,7 @@ What the generator does with a method `Class.queue_add(job, start=True)`:
   (`--no-start` when it is on by default); a list or tuple is repeatable or comma separated (`--taps a,b`, `--kill R1 --kill R2`; a comma inside one value splits it); an int or float keeps
   its type; anything else is a text;
 - `--project DIR`, `--json` (exactly what the method returns on stdout, NaN / Infinity / numpy become null / numbers / lists; whatever the method prints goes to stderr) and the options of
-  `extra` come with every command; `need_all` methods want an item `I` or `--all` (not both);
+  `extra` come with every command;
 - exit codes: 0 done, 1 the result is a dict with ok=False (`check`, the dry run `plan`, any other dry run), 2 an error: a message on stderr, no traceback (a non-empty value of the environment variable `traceback_env` shows it). Every Exception and
   every SystemExit of a method is such a message (a SystemExit with code 0 is a normal end); the suite's own error class is printed without its type name;
 - the text of a result: `key: value` lines, lists as `- item`, floats with six digits (a large float, an epoch for example, keeps its digits; nan and inf are shown as they are).
@@ -91,10 +91,10 @@ def method_list(cls: type) -> List[Dict[str, str]]:
 
 class Cli:
     def __init__(self, cls: type, prog: str, error: type, traceback_env: str, legacy: Sequence[str] = (), positional: Sequence[str] = (), option_names: Sequence[str] = (),
-                 need_all: Sequence[str] = (), text: Optional[Dict[str, Callable]] = None, extra: Sequence[Tuple[str, str]] = (), make: Optional[Callable] = None):
+                 text: Optional[Dict[str, Callable]] = None, extra: Sequence[Tuple[str, str]] = (), make: Optional[Callable] = None):
         self.cls, self.prog, self.error, self.traceback_env = cls, prog, error, traceback_env
         self.legacy = {w.replace("-", "_") for w in legacy}
-        self.positional, self.option_names, self.need_all = tuple(positional), tuple(option_names), tuple(need_all)
+        self.positional, self.option_names = tuple(positional), tuple(option_names)
         self.text, self.extra = dict(text or {}), tuple(extra)
         self.make = make or (lambda cls, a: cls(a.project))
 
@@ -130,20 +130,10 @@ class Cli:
         for flag, helptext in self.extra:
             ap.add_argument(flag, default=None, help=helptext)
         ap.add_argument("--json", action="store_true", help="print exactly what the method returns (nothing else on stdout)")
-        if name in self.need_all:
-            ap.add_argument("--all", action="store_true", help="every item (instead of naming one)")
         return ap
 
-    def arguments(self, name: str, ap: argparse.ArgumentParser, a: argparse.Namespace) -> Dict[str, Any]:
+    def arguments(self, name: str, a: argparse.Namespace) -> Dict[str, Any]:
         """the keyword arguments of the method from the parsed command line"""
-        if name in self.need_all:
-            item = getattr(a, "i", None)
-            if a.all and item:
-                ap.error("give an item or --all, not both")
-            if not a.all and not item:
-                ap.error("name the item (I) or give --all: without an item the call means every item")
-            if a.all:
-                a.i = None
         kw = {}
         for p in _params(getattr(self.cls, name)):
             v = getattr(a, p.name)
@@ -157,7 +147,7 @@ class Cli:
         """run method `name` with the command line `args`; -> the exit code"""
         ap = self.parser(name)
         a = ap.parse_args(list(args))
-        kw = self.arguments(name, ap, a)
+        kw = self.arguments(name, a)
         try:
             with contextlib.redirect_stdout(sys.stderr):                       # whatever the engine or the project prints is not the result
                 result = getattr(self.make(self.cls, a), name)(**kw)
@@ -251,7 +241,7 @@ def selftest() -> int:
 
     class Err(Exception):
         pass
-    cli = Cli(Toy, "toy", Err, "TOY_TRACEBACK", legacy=("list", "old-word"), positional=("job", "i", "a", "b", "items", "ratio"), option_names=("words",), need_all=("hold",))
+    cli = Cli(Toy, "toy", Err, "TOY_TRACEBACK", legacy=("list", "old-word"), positional=("job", "i", "a", "b", "items", "ratio"), option_names=("words",))
     rc, out, err = run(cli, "Toy.add", "j1", "--no-start", "--taps", "a,b", "--taps", "c", "--seed", "3", "--rate", "0.25", "--note", "x y", "--json", "--project", "P")
     got = json.loads(out)
     assert rc == 0 and got["start"] is False and got["taps"] == ["a", "b", "c"] and got["seed"] == 3 and got["rate"] == 0.25 and got["loss"] is None and got["project"] == "P", (rc, out)
@@ -271,13 +261,10 @@ def selftest() -> int:
     assert run(cli, "ends")[0] == 0, "a SystemExit with code 0 is a normal end"
     rc, out, err = run(cli, "stats", "x")
     assert rc == 2 and err == "error: KeyError: no run 'x'\n", err
-    assert run(cli, "hold", "--words", "W")[0] == ("exit", 2), "no item and no --all is a usage error"
-    assert run(cli, "hold", "", "--words", "W")[0] == ("exit", 2), "an empty item is no item"
-    assert run(cli, "hold", "7", "--all", "--words", "W")[0] == ("exit", 2), "an item and --all"
     rc, out, err = run(cli, "hold", "7", "--words", "W", "--json")
     assert rc == 0 and json.loads(out) == {"words": "W", "i": "7"}
-    rc, out, err = run(cli, "hold", "--all", "--words", "W", "--json")
-    assert rc == 0 and json.loads(out)["i"] is None
+    rc, out, err = run(cli, "hold", "--words", "W", "--json")
+    assert rc == 0 and json.loads(out)["i"] is None, "an optional positional that is not given keeps its default"
     assert run(cli, "hold", "--json")[0] == ("exit", 2), "words is required"
     rc, out, err = run(cli, "pos", "ab,cd", "0.25", "--n", "4", "--json")
     assert json.loads(out)["items"] == ["ab", "cd"], out

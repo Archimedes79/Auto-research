@@ -32,7 +32,8 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from losses import _gather, build_layer_targets, motion_term, object_head_terms, sample_targets  # noqa: E402
 from motion_block import MotionBlock, backward_warp, block_inputs  # noqa: E402
-from train import build, forward_loss, make_datasets, make_loader, read_config, val_subset, warm_start  # noqa: E402
+from train import build, forward_loss, make_datasets, make_loader, read_config, val_subset  # noqa: E402
+from trainkit.checkpoint import warm_start  # noqa: E402  (importing train put autoresearch/ on sys.path)
 
 
 class Hook(torch.nn.Module):

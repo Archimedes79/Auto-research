@@ -45,6 +45,8 @@ try:
     from . import train as T
 except ImportError:                                   # run as a script
     import train as T
+from trainkit.amp import make_scaler              # noqa: E402  (importing train put autoresearch/ on sys.path)
+from trainkit.checkpoint import warm_start        # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PRESETS = os.path.join(HERE, "configs", "presets")
@@ -202,7 +204,7 @@ class Bench:
         self.opt = torch.optim.AdamW(T.param_groups(model, loss, cfg.lr * LR_FRACTION, cfg.weight_decay, cfg.lr_groups), lr=cfg.lr * LR_FRACTION, betas=(0.9, 0.999))
         self.params = [p for g in self.opt.param_groups for p in g["params"]]
         self.clip_split = T.clip_groups(model, cfg.grad_clip_split)
-        self.scaler = T.make_scaler(cfg, device)
+        self.scaler = make_scaler(cfg, device)
         self.ema = T.EMA(model, cfg.ema, skip=frozen)
         self.base = self.current()
         self.n = 0
@@ -315,7 +317,7 @@ def build_bench(cfg, warm, steps):
         T.freeze_mod.apply(model, cfg.train_only, cfg.freeze)
         frozen = T.freeze_mod.frozen_keys(model)
     if cfg.init_from:
-        T.warm_start(cfg.init_from, model, loss, reset=cfg.init_reset)
+        warm_start(cfg.init_from, model, loss, reset=cfg.init_reset)
     train_ds, val_ds = T.make_datasets(cfg)
     T.check_grids(model, train_ds, val_ds)
     if cfg.seq_len > 1:

@@ -38,6 +38,7 @@ import object_head  # noqa: E402
 sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
 import synthetic_world as sw  # noqa: E402
 import train as tr  # noqa: E402
+from trainkit.checkpoint import warm_start  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from losses import NUSC_GROUPS, BEVLoss, LossConfig, synthetic_gt  # noqa: E402
 from object_head import ObjectHead, _gather, build_targets, decode, head_loss, targets_as_output  # noqa: E402
@@ -158,7 +159,7 @@ for name, fresh_want in (("t11_vel_hurdle", sorted(branch("mov") + branch("vel")
     torch.manual_seed(cfg.seed)
     model, loss, _ = tr.build(cfg)
     vel0 = {k: v.clone() for k, v in model.state_dict().items() if k.startswith("obj_head.head.vel.")}
-    fresh = tr.warm_start(cfg.init_from, model, loss, ck, reset=cfg.init_reset)
+    fresh = warm_start(cfg.init_from, model, loss, ck, reset=cfg.init_reset)
     assert fresh == fresh_want, (name, fresh)
     sd = model.state_dict()
     for k, v in ck["ema"].items():                              # vel: its fresh initialisation; everything else: the checkpoint
@@ -177,7 +178,7 @@ for name, fresh_want in (("t11_vel_hurdle", sorted(branch("mov") + branch("vel")
         for bad, reset in (({**ck["ema"], k0: torch.zeros(1, 1, 1, 1)}, ()), ({**ck["ema"], "obj_head.head.nothing.weight": torch.zeros(1)}, ()),
                            (ck["ema"], ("obj_head.head.nothing.",))):
             try:
-                tr.warm_start(CKPT, model, loss, dict(ck, ema=bad), reset=reset)
+                warm_start(CKPT, model, loss, dict(ck, ema=bad), reset=reset)
                 raise AssertionError("a checkpoint that does not fit the model was accepted")
             except ValueError:
                 pass
@@ -214,7 +215,7 @@ try:
     assert all(torch.equal(emab.shadow[k], sdb[k]) for k in emab.shadow), "the EMA starts at the warm-started weights"
     tr.train(dataclasses.replace(cfg_b, name="a_like", model=base.model), datasets=data)
     assert torch.equal(torch.rand(4), draw_b), "the arms with and without the mov branch leave different random streams"
-    import trainkit.checkpoint as tk_ckpt                       # train() warm-starts through the engine's function (trainkit.loop.fit calls checkpoint.warm_start), not through train.warm_start
+    import trainkit.checkpoint as tk_ckpt                       # train() warm-starts through the engine's function (trainkit.loop.fit calls checkpoint.warm_start)
     real, calls = tk_ckpt.warm_start, []
 
     def counting(*a, **k):

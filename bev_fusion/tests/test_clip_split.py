@@ -17,6 +17,7 @@ from torch import nn
 
 sys.path.insert(0, "training")
 import train as T  # noqa: E402
+from trainkit import optim as tk_optim  # noqa: E402
 
 fails = []
 
@@ -55,7 +56,7 @@ def gnorm(ps):
 
 # 1 without a split: the global torch call
 a, b = with_grads({"big": 100.0, "bigger": 3.0, "small": 4.0}), with_grads({"big": 100.0, "bigger": 3.0, "small": 4.0})
-ra = T.clip_gradients(list(a.parameters()), 5.0)
+ra = tk_optim.clip_gradients(list(a.parameters()), 5.0)
 rb = torch.nn.utils.clip_grad_norm_(list(b.parameters()), 5.0)
 check(torch.equal(ra, rb) and all(torch.equal(p.grad, q.grad) for p, q in zip(a.parameters(), b.parameters())), "no split: the same bits as the one global torch call")
 check(abs(float(ra) - math.sqrt(100 ** 2 + 3 ** 2 + 4 ** 2)) < 1e-4, f"no split: the returned norm is the global norm before the clip ({float(ra):.4f})")
@@ -63,26 +64,26 @@ check(abs(float(ra) - math.sqrt(100 ** 2 + 3 ** 2 + 4 ** 2)) < 1e-4, f"no split:
 # 2 with a split
 m = with_grads({"big": 100.0, "bigger": 12.0, "small": 3.0})
 split = T.clip_groups(m, ("big",))
-r = T.clip_gradients(list(m.parameters()), 5.0, split)
+r = tk_optim.clip_gradients(list(m.parameters()), 5.0, split)
 check(abs(gnorm(m.big.parameters()) - 5.0) < 1e-4, f"split: the listed module is clipped to 5 on its own ({gnorm(m.big.parameters()):.4f})")
 check(abs(gnorm(list(m.bigger.parameters()) + list(m.small.parameters())) - 5.0) < 1e-4,
       "split: the rest is clipped to 5 as one group (12 and 3 together are 12.4)")
 m2 = with_grads({"big": 100.0, "bigger": 2.0, "small": 1.0})
-T.clip_gradients(list(m2.parameters()), 5.0, T.clip_groups(m2, ("big",)))
+tk_optim.clip_gradients(list(m2.parameters()), 5.0, T.clip_groups(m2, ("big",)))
 check(abs(gnorm(m2.bigger.parameters()) - 2.0) < 1e-5 and abs(gnorm(m2.small.parameters()) - 1.0) < 1e-5,
       "split: a group below the limit is left alone (the global clip would have scaled it by 0.05)")
 m3 = with_grads({"big": 100.0, "bigger": 2.0, "small": 1.0})
-T.clip_gradients(list(m3.parameters()), 5.0)
+tk_optim.clip_gradients(list(m3.parameters()), 5.0)
 check(gnorm(m3.small.parameters()) < 0.06, "control: the global clip does scale the small module down to 0.05 (the problem the split removes)")
 
 # 3 the returned norm
 check(abs(float(r) - math.sqrt(100 ** 2 + 12 ** 2 + 3 ** 2)) < 1e-3, f"split: the returned norm is that of all gradients before the clip ({float(r):.3f})")
 m4 = with_grads({"big": 1.0, "bigger": 1.0, "small": 1.0})
 m4.small.weight.grad[0, 0] = float("nan")
-check(not bool(torch.isfinite(T.clip_gradients(list(m4.parameters()), 5.0, T.clip_groups(m4, ("big",))))), "split: a non-finite gradient in the rest makes the returned norm non-finite")
+check(not bool(torch.isfinite(tk_optim.clip_gradients(list(m4.parameters()), 5.0, T.clip_groups(m4, ("big",))))), "split: a non-finite gradient in the rest makes the returned norm non-finite")
 m5 = with_grads({"big": 1.0, "bigger": 1.0, "small": 1.0})
 m5.big.bias.grad[0] = float("inf")
-check(not bool(torch.isfinite(T.clip_gradients(list(m5.parameters()), 5.0, T.clip_groups(m5, ("big",))))), "split: a non-finite gradient in the listed module makes it non-finite")
+check(not bool(torch.isfinite(tk_optim.clip_gradients(list(m5.parameters()), 5.0, T.clip_groups(m5, ("big",))))), "split: a non-finite gradient in the listed module makes it non-finite")
 
 # 4 clip_groups
 g = T.clip_groups(Toy(), ("big",))
@@ -129,15 +130,15 @@ check(torch.allclose(m8.big.weight, w_big - lr * sc_big * g_big, atol=1e-6) and 
 m9 = with_grads({"big": 100.0, "bigger": 1.0, "small": 1.0})
 for p in list(m9.bigger.parameters()) + list(m9.small.parameters()):
     p.grad = None                                              # the rest has no gradient in this step (a frozen-in-this-step branch): no crash, the norm is the listed module's
-r9 = T.clip_gradients(list(m9.parameters()), 5.0, T.clip_groups(m9, ("big",)))
+r9 = tk_optim.clip_gradients(list(m9.parameters()), 5.0, T.clip_groups(m9, ("big",)))
 check(abs(float(r9) - 100.0) < 1e-3 and abs(gnorm(m9.big.parameters()) - 5.0) < 1e-4, "a rest without any gradient: no crash, the returned norm is the listed module's")
 m10 = with_grads({"big": 100.0, "bigger": 2.0, "small": 1.0})
 for p in m10.big.parameters():
     p.grad = None
-r10 = T.clip_gradients(list(m10.parameters()), 5.0, T.clip_groups(m10, ("big",)))
+r10 = tk_optim.clip_gradients(list(m10.parameters()), 5.0, T.clip_groups(m10, ("big",)))
 check(abs(float(r10) - math.sqrt(5.0)) < 1e-3, "a listed module without any gradient: its group counts 0, the rest is clipped on its own")
 m11 = with_grads({"big": 100.0, "bigger": 2.0, "small": 1.0})
-check(len(T.clip_groups(m11, ("big", "bigger", "small"))) == 3 and T.clip_gradients(list(m11.parameters()), 5.0, T.clip_groups(m11, ("big", "bigger", "small"))) is not None,
+check(len(T.clip_groups(m11, ("big", "bigger", "small"))) == 3 and tk_optim.clip_gradients(list(m11.parameters()), 5.0, T.clip_groups(m11, ("big", "bigger", "small"))) is not None,
       "every module listed: the rest is empty and that is fine")
 m12 = with_grads({"big": 1.0, "bigger": 1.0, "small": 1.0})
 m12.small.weight.grad[0, 0] = float("nan")
