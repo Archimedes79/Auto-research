@@ -5,6 +5,8 @@
 E274 switches (`--ev-w`, `--node-w-evt`, `--node-w-inter`, `--long-match`, see `qgraph.CFG`) default to the E273 loss; `--gate-phases` lets only the named phases stop the script.
 E282 switches (`--node-loss zone --zone-bias 0.05`, with `--sparse EPS CHORD`, phase 3 only, no tier switches; default `e273` = the per-cell loss): the zone-matching existence loss `qgraph.zone_targets` on the
 sparse node target (zones from `qzones`); the node gate of phase 3 is for per-cell targets, so use `--gate-phases` with an empty list and score with the zone metrics (`evaluation/zone_metrics.py`).
+E284: `--phases 8 --resume-from runs/<B run>/model.pt` trains the junction END head (`qendnet.py`: tolerant entry / exit keypoints + pair decision) on the frozen pixel and node stages of that run; the model.pt then
+holds all of B's tensors plus `ends.*` (args['ends'] = True, read by `qpredict.load_model`); B's own numbers are unchanged by construction.
 Phase 2 pixel maps (the 1 m branch starts from the E271 head `runs/e271_a_s<seed>/model.pt`), 3 nodes (pixels frozen), 4 links + Hermite scales (pixels, nodes frozen), 5 sections (the node
 head's s output; links frozen), 6 map encoder + assignment (rest frozen), 7 everything jointly at a lower learning rate. Every phase is a run of its own (`runs/<name>_p<k>`, model.pt, .done)
 and the next one starts from the previous model; after every phase the gate of the card (kill criterion) is read on 150 VAL frames: a failed gate stops the script with exit code 3 (the run
@@ -25,8 +27,8 @@ import lane_gt_data as LD  # noqa: E402
 import qgraph as QG  # noqa: E402
 import trainer as T  # noqa: E402
 
-STEPS = {2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000}
-LR = {2: 1e-3, 3: 1e-3, 4: 1e-3, 5: 5e-4, 6: 1e-3, 7: 2e-4}
+STEPS = {2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000, 8: 3000}
+LR = {2: 1e-3, 3: 1e-3, 4: 1e-3, 5: 5e-4, 6: 1e-3, 7: 2e-4, 8: 1e-3}
 
 
 def main():
@@ -72,7 +74,11 @@ def main():
     if (a.tier_w or a.neg_w or a.link_tier_w or a.vis_w != 1.0):
         from GtGenerator import lane_gt                                                                                          # the tier switches need the l4 labels: refuse an l3 store
         assert lane_gt.version_of(lane_gt.signature()) not in (None, "l1", "l2", "l3"), "the tier switches need the lane GT l4 (this source is " + str(lane_gt.version_of(lane_gt.signature())) + ")"
-    model = QG.QGraph(width=a.width, soft_nms=a.soft_nms)
+    a.ends = 8 in a.phases                                                                    # E284: phase 8 = the junction end head on the frozen pixel / node stages (start with --resume-from the model.pt of a finished B run); the batch then carries the GT ends
+    if a.ends:
+        assert list(a.phases) == [8] and a.resume_from, "phase 8 trains alone, from a finished model: --phases 8 --resume-from runs/<B>/model.pt"
+        LD.QData.DEFAULT_ENDS = True
+    model = QG.QGraph(width=a.width, soft_nms=a.soft_nms, ends=a.ends)
     hp = a.head or os.path.join(ROOT, "runs", f"e271_a_s{a.seed}", "model.pt")
     if os.path.exists(hp):
         n = model.pyr.load_e271(hp)

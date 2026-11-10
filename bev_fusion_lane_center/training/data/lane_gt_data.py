@@ -24,6 +24,7 @@ for sub in ("training/data", "training/grid", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import map_sim as MS  # noqa: E402
 import p16_data as PD  # noqa: E402
+import qends as QEND  # noqa: E402
 import qtargets as QT  # noqa: E402
 import qzones as QZ  # noqa: E402
 
@@ -39,13 +40,15 @@ def lane_store():
 class QData(torch.utils.data.Dataset):
     DEFAULT_SPARSE = None                                          # E276: set by `qgraph_train.py --sparse EPS CHORD` so that the train loader AND the gates (they build their own QData) see the same targets
     DEFAULT_ZONE = False                                           # E282: set by `qgraph_train.py --node-loss zone`: the batch also carries the zone maps (needs a sparse target)
+    DEFAULT_ENDS = False                                           # E284: set by `qgraph_train.py --phases 8`: the batch also carries the junction ends and the true pairs (`qends.end_table`)
 
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None):
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None):
         self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
         sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
         self.sparse = None if sparse is None else (float(sparse[0]), float(sparse[1]))                   # E276: the sparse node target (eps, max chord) in metres, None = a node in every 2 m cell
         self.zone = QData.DEFAULT_ZONE if zone is None else bool(zone)
+        self.ends = QData.DEFAULT_ENDS if ends is None else bool(ends)
         assert not self.zone or self.sparse is not None, "the zone maps need the sparse node target"
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{PD.D}/feats/{part}_tokens.json"))
@@ -83,6 +86,9 @@ class QData(torch.utils.data.Dataset):
         out.update({n: torch.from_numpy(v) for n, v in t.items()})
         if self.zone:                                                                                  # E282: zones of the sparse target + the DENSE offset / direction of every cell's node
             out.update({n: torch.from_numpy(np.ascontiguousarray(v)) for n, v in QZ.zone_maps(QZ.zones(g, self.sparse)).items()})
+        if self.ends:                                                                                 # E284: the GT ends of the junctions (lane frame x, y, tx, ty) and the true (entry, exit) pairs
+            et = QEND.end_table(g) or QEND.empty_table()
+            out.update(ent=torch.from_numpy(et["ent"]).float().reshape(-1, 4), ext=torch.from_numpy(et["ext"]).float().reshape(-1, 4), pairs=torch.from_numpy(et["pairs"]).long().reshape(-1, 2))
         if self.pixels:
             import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
@@ -105,6 +111,14 @@ def collate(b):
             n = len(o["g05"])
             g05[i, :n], t05[i, :n], m05[i, :n] = o["g05"], o["t05"], 1.0
         out.update(g05=g05, t05=t05, m05=m05)
+    if "ent" in b[0]:                                                                                  # E284: ends and true pairs, padded (masks ent_m / ext_m, pairs -1)
+        E, X, P_ = (max(1, max(len(o[k]) for o in b)) for k in ("ent", "ext", "pairs"))
+        ent, ext, pairs = torch.zeros(B, E, 4), torch.zeros(B, X, 4), -torch.ones(B, P_, 2, dtype=torch.long)
+        ent_m, ext_m = torch.zeros(B, E, dtype=torch.bool), torch.zeros(B, X, dtype=torch.bool)
+        for i, o in enumerate(b):
+            ent[i, :len(o["ent"])], ext[i, :len(o["ext"])], pairs[i, :len(o["pairs"])] = o["ent"], o["ext"], o["pairs"]
+            ent_m[i, :len(o["ent"])], ext_m[i, :len(o["ext"])] = True, True
+        out.update(ent=ent, ext=ext, ent_m=ent_m, ext_m=ext_m, pairs=pairs)
     L = max(1, max(len(o["lk"]) for o in b))
     lk, lkl, lks = -torch.ones(B, L, 4, dtype=torch.long), torch.zeros(B, L, dtype=torch.bool), torch.full((B, L, 2), float("nan"))
     for i, o in enumerate(b):
@@ -131,8 +145,8 @@ def collate(b):
     return out
 
 
-def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None, zone=None):
-    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse, zone=zone)
+def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None, zone=None, ends=None):
+    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse, zone=zone, ends=ends)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle,
                                            persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 
