@@ -316,8 +316,25 @@ def gate_assign(model, run, n):
     return dict(res, **{"pass": bool(ok), "why": "lane_acc(error) >= geometric start; lane_acc(exact) >= geometric start - 0.03 (the card's guard of 0.01 is read on the full scoring)"})
 
 
+def gate_ends(model, run, n):
+    """E284 phase 8: the end head's own numbers on n VAL frames (keypoints p >= 0.5 against the GT ends within 4 m / 30 degrees; pairs p >= 0.5 against the true pairs of the matched ends). Numbers only: the
+    card's rule is read on the delivered graph (`evaluation/qends_eval.py`); a gate that cannot be read still stops the night."""
+    import qendnet as QEN
+    tot = {}
+    model.eval()
+    with torch.no_grad():
+        for b in _batches("exact", n):
+            for k, v in QEN.end_counts(model.ends_forward(b, gt=False), b).items():
+                tot[k] = tot.get(k, 0) + v
+    model.train()
+    r = lambda a, b_: a / max(b_, 1)  # noqa: E731
+    res = dict(ent_recall=r(tot["ent_hit"], tot["ent_n"]), ent_precision=r(tot["ent_ok"], tot["ent_kp"]), ext_recall=r(tot["ext_hit"], tot["ext_n"]), ext_precision=r(tot["ext_ok"], tot["ext_kp"]),
+               pair_recall=r(tot["pairs_hit"], tot["pairs_n"]), pair_precision=r(tot["pairs_ok"], tot["pairs_kp"]), counts=tot)
+    return dict(res, **{"pass": True, "why": "phase 8: numbers only"})
+
+
 def gate(model, phase, run, n=150):
-    fn = {2: gate_pixels, 3: gate_nodes, 4: gate_links, 5: gate_sections, 6: gate_assign}.get(phase)
+    fn = {2: gate_pixels, 3: gate_nodes, 4: gate_links, 5: gate_sections, 6: gate_assign, 8: gate_ends}.get(phase)
     if phase == 7:
         res = {}
         for k in (2, 3, 4, 5, 6):
