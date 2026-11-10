@@ -947,7 +947,8 @@ def card_fields(run_id):
     experiment.py cannot say: a card must never be what stops a launch"""
     try:
         import experiment
-        exp = experiment.card_for_run(run_id)
+        found = experiment.card_for_run(run_id)             # (card, path) or None
+        exp = found[0] if found else None
         return dict(card_id=exp.get("id", ""), card_sha=experiment.rule_sha(exp)) if exp else {}
     except (Exception, SystemExit):             # ImportError, AttributeError (an experiment.py without the two functions), a broken card
         return {}

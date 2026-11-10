@@ -1,5 +1,5 @@
 """Self-test of the launcher and ledger rules of the deep review of 2026-11-10 (run.py, ledger.py, hold.py): the TEST gate, the command pid of a run whose launcher
-was killed, the ledger freeze, id twins, the scratch scripts of a snapshot, notes that stay, the card hash, a hold that arrives before the start, the settle wait.
+was killed, the ledger freeze, id twins, the scratch scripts of a snapshot, notes that stay, the card hash, a hold that arrives before the start, the settle wait, and the whole chain (run -> decide -> result) with the real tools.
 
     python autoresearch/tools/selftest_launch.py        (needs git and bash, e.g. in the WSL; selftest.py runs it at its end)
 
@@ -261,7 +261,7 @@ def test_notes():
 def test_card_fields():
     """7: card_id / card_sha of experiment.card_for_run / rule_sha go into the record; no card, an old experiment.py and a crashing one leave them out, the run goes on"""
     stub = ("import sys, types; sys.path.insert(0, sys.argv[1]); mode = sys.argv[2]; m = types.ModuleType('experiment')\n"
-            "if mode == 'card': m.card_for_run = lambda rid: {'id': 'E9'}; m.rule_sha = lambda exp: 'abc123'\n"
+            "if mode == 'card': m.card_for_run = lambda rid: ({'id': 'E9'}, 'experiments/E9/experiment.md'); m.rule_sha = lambda exp: 'abc123'\n"
             "if mode == 'none': m.card_for_run = lambda rid: None; m.rule_sha = lambda exp: 'x'\n"
             "if mode == 'crash': m.card_for_run = lambda rid: 1 / 0\n"
             "sys.modules['experiment'] = m\n"
@@ -327,7 +327,52 @@ def test_settle():
     assert mine.try_take() and json.load(open(f"{slots}/0/run.json"))["out_dir"] == out, "the owner file names the run folder"
 
 
-TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle")
+def test_chain():
+    """12: the whole chain with the real tools, no stubs: run.py registers the rule of the card that lists the run, decide.py judges the finished runs, refuses a rule that was edited
+    after the launch (and labels a verdict 'by hand' when it is told to), records the verdict (ledger token first, decision.json), result.py writes the page again from decision.json"""
+    set_cfg(experiment_dirs=["experiments"])
+    exp = dict(id="E7", title="t", kind="variant", metric="Q", direction="higher", band=0.01, prediction=dict(value=0.03, vs="c"), control="c", rule=[dict(metric="Q", min_effect=0.01)],
+               evaluate=dict(split="val"), pairing="position",
+               arms=dict(a=dict(cards=["cards.json#a0", "cards.json#a1"], run_ids=["K.a0", "K.a1"]), c=dict(cards=["cards.json#c0", "cards.json#c1"], run_ids=["K.c0", "K.c1"])))
+    json.dump(dict(a0=dict(Q=0.76), a1=dict(Q=0.74), c0=dict(Q=0.73), c1=dict(Q=0.72)), open(f"{T}/cards.json", "w"))
+    folder = f"{T}/experiments/E7_k"
+    os.makedirs(folder, exist_ok=True)
+    cardfile = f"{folder}/experiment.md"
+
+    def write_card(e):
+        open(cardfile, "w", encoding="utf-8", newline="\n").write("# E7 t\n\n```json card\n" + json.dumps(e, indent=1) + "\n```\n")
+
+    def tool(name, *args):
+        r = subprocess.run([sys.executable, f"{HERE}/{name}", *args], capture_output=True, text=True, env=env)
+        return r.returncode, r.stdout + r.stderr
+
+    write_card(exp)
+    for rid in ("K.a0", "K.a1", "K.c0", "K.c1"):
+        r = go(rid, ["bash", "-c", "echo x"], "--no-git")
+        assert r.returncode == 0 and rec_of(rid).get("card_id") == "E7" and rec_of(rid).get("card_sha"), (rid, r.stdout, r.stderr[-300:], rec_of(rid))
+    rc, out = tool("decide.py", "--experiment", cardfile)
+    assert rc == 0 and "E7: KEEP" in out and "rule not registered" not in out, out
+    edited = json.loads(json.dumps(exp))
+    edited["rule"][0]["min_effect"] = 0.05                                  # the rule is edited after the runs: a KEEP would turn into a CUT
+    write_card(edited)
+    rc, out = tool("decide.py", "--experiment", cardfile, "--write")
+    assert rc == 1 and "the rule changed after run K." in out and not os.path.exists(f"{folder}/decision.json") and not os.path.exists(f"{folder}/results.md"), out
+    rc, out = tool("decide.py", "--experiment", cardfile, "--by-hand", "rule edited on purpose")
+    assert rc == 0 and "E7: CUT" in out and "by hand: rule edited on purpose" in out, out
+    write_card(exp)
+    rc, out = tool("decide.py", "--experiment", cardfile, "--write")
+    d = json.load(open(f"{folder}/decision.json", encoding="utf-8"))
+    assert rc == 0 and d["verdict"] == "KEEP" and d["registered"] is True and d["by_hand"] == "", (out, d)
+    assert rows()["K.a0"]["decision"].startswith("decide.py ") and rows()["K.c0"]["decision"] == "", "the verdict token on the variant rows only"
+    page = open(f"{folder}/results.md", encoding="utf-8").read()
+    assert page.startswith("# E7 result - KEEP\n") and "<!-- result.py:begin" in page, page
+    os.remove(f"{folder}/results.md")
+    rc, out = tool("result.py", "E7")
+    assert rc == 0 and "results.md: created" in out and os.path.exists(f"{folder}/results.md"), out
+    set_cfg()
+
+
+TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle", "test_chain")
 try:
     set_cfg()
     for name in sys.argv[1:] or TESTS:                  # one test by name: python selftest_launch.py test_settle
