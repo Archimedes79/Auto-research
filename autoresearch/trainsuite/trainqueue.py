@@ -53,7 +53,8 @@ def boot_id():
 
 def context(project=None):
     """the project's paths and the launcher's modules"""
-    sys.path.insert(0, TOOLS)
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
     if project:
         os.environ["AR_PROJECT"] = project
     import hold as H
@@ -123,10 +124,20 @@ def launcher_alive(c, rid, rec):
     return True if argv is None else (any(x.endswith("run.py") for x in argv) and rid in argv)
 
 
+def runner_script(c):
+    """the file the project's runner starts (the last word before {args} in project.json runsuite.command, e.g. runner/bev_runner.py); "" when there is none"""
+    words = ((c.cfg.get("runsuite") or {}).get("command") or "").split("{args}")[0].replace('"', " ").replace("'", " ").split()
+    return words[-1] if words and ("/" in words[-1] or "." in words[-1]) else ""
+
+
 def is_training(c, rid, rec):
-    """a run of this project that trains: its run folder exists, or its command names its own folder (the config is named after the id). An evaluation, a data build
-    or a timing job is not one: hold leaves it alone"""
-    return os.path.isdir(os.path.join(c.runs, folder(rid))) or folder(rid) in (rec.get("command") or "")
+    """a run of this project that trains: its run folder exists, or its command names its own folder (the config is named after the id). An evaluation, a data build, a runner job
+    (its command starts the runner; its output folder may carry the id) or a timing job is not one: hold leaves it alone"""
+    cmd = rec.get("command") or ""
+    script = runner_script(c)
+    if script and script in cmd:
+        return False
+    return os.path.isdir(os.path.join(c.runs, folder(rid))) or folder(rid) in cmd
 
 
 def orphans(c, it):
@@ -265,8 +276,9 @@ def new_item(q, rid, argv, **kw):
 
 
 # ---- add
-def add(c, plan, rid, after=(), priority=5, note=""):
-    """put a composed `start` plan in the list; -> the item"""
+def add(c, plan, rid, after=(), priority=5, note="", extra=None):
+    """put a composed `start` plan in the list; -> the item. `extra`: more fields of the item (the job, its kind, its kill rules). A plan of a job that has no config of its own
+    (a runner job: the plan holds only `argv`) is stored without one"""
     with edit(c) as q:
         twin = next((i["id"] for i in q["items"] if folder(i["id"]) == folder(rid)), None)
         if twin == rid:
@@ -275,8 +287,8 @@ def add(c, plan, rid, after=(), priority=5, note=""):
             raise QueueError(f"{rid} has the run folder of {twin} (a . becomes _): two items must not share one folder")
         if c.R.state_of(os.path.join(c.records, rid)) in ("done", "ok"):
             raise QueueError(f"{rid} finished with exit 0: run.py refuses the id (use a new id)")
-        return new_item(q, rid, plan["argv"], composed=os.path.relpath(plan["composed"], c.root).replace(os.sep, "/"), config=plan["config"], after=list(after),
-                        priority=int(priority), note=note)
+        composed = os.path.relpath(plan["composed"], c.root).replace(os.sep, "/") if plan.get("composed") else ""
+        return new_item(q, rid, plan["argv"], composed=composed, config=plan.get("config"), after=list(after), priority=int(priority), note=note, **(extra or {}))
 
 
 def write_config(c, it):
@@ -292,6 +304,29 @@ def write_config(c, it):
         pass
     os.makedirs(os.path.dirname(p), exist_ok=True)
     C.write(it["config"], p)
+
+
+def write_kill(run_dir, rules):
+    """append the kill rules that <run_dir>/kill.txt does not hold yet (an existing file is kept, a UTF-16 one is left alone); creates the run folder: call it only for a run that
+    has started (a stray folder with only a kill.txt would be listed as a run). -> the number of rules added"""
+    if not rules:
+        return 0
+    os.makedirs(run_dir, exist_ok=True)
+    kp = os.path.join(run_dir, "kill.txt")
+    txt = ""
+    if os.path.exists(kp):
+        with open(kp, "rb") as f:
+            if f.read(2) in (b"\xff\xfe", b"\xfe\xff"):
+                return 0
+        with open(kp, encoding="utf-8-sig", errors="replace") as f:
+            txt = f.read()
+    norm = lambda s: " ".join(s.split())                              # noqa: E731  spacing is no difference between two rules
+    have = [norm(h.split("#", 1)[0]) for h in txt.splitlines()]
+    new = [r for r in rules if norm(r) not in have]
+    if new:
+        with open(kp, "a", encoding="utf-8") as f:
+            f.write(("\n" if txt and not txt.endswith("\n") else "") + "".join(r + "\n" for r in new))
+    return len(new)
 
 
 # ---- the runner
@@ -315,6 +350,7 @@ def launch(c, it, wait=3.0):
             tail = [x for x in lf.read().strip().splitlines()[-2:] if x]
         it["refused"] = " | ".join(tail)[:300] or f"exit {rc}"
         return False, f"launcher refused (exit {rc}): {it['refused']}"
+    write_kill(os.path.join(c.runs, folder(it["id"])), it.get("kill"))     # the launcher survived its first seconds: the job's kill rules go where `watch` and `status` read them
     _CHILDREN.append(proc)
     it["launched"], it["launched_t"], it["boot"] = now(), time.time(), boot_id()
     it.pop("retry", None)
@@ -488,6 +524,9 @@ def hold(c, ids=(), all_=False, words="", reason="", wait=180.0, out=print):
                 if all_ or rid in ids:
                     result[rid] = "not touched: not a training (no run folder of its own, its command does not name one)"
                 del active[rid]
+        for rid, it in known.items():                                   # a runner job (kind "run") is no training: its run is not asked to stop, no hold is written for it
+            if it.get("kind", "train") != "train" and (all_ or rid in ids):
+                result[rid] = "not touched: not a training (a runner job)"
         wanted = sorted((set(active) | live) if all_ else set(ids))
         for rid in ids:
             if rid not in active and rid not in known and rid not in result:

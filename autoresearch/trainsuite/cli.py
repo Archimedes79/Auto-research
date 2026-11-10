@@ -498,6 +498,16 @@ def cmd_queue_add(a):
     import subprocess
     from . import compose as C
     TQ, c = _queue(a)
+    if a.id is None:                                             # a job file ({"id": ..., "config": ...}) is the simple way (api.py); the options below are the older one
+        from . import apicli
+        if apicli.is_job_file(a.base):
+            older = [n for n, v, d in (("--preset", a.preset, []), ("--set", a.set, []), ("--hyp", a.hyp, None), ("--pred", a.pred, None), ("--rule", a.rule, None), ("--no-card", a.no_card, False),
+                                       ("--no-check", a.no_check, False), ("--after", a.after, ""), ("--priority", a.priority, 5), ("--note", a.note, ""), ("--run-arg", a.run_arg, [])) if v != d]
+            if older:
+                keys = ", ".join('"' + x.lstrip("-").replace("-", "_") + '"' for x in older)
+                raise TQ.QueueError(f"{' '.join(older)} cannot be combined with a job file (they would be ignored): put them in the job file ({keys})")
+            return apicli.cmd_queue_add_job(a)
+        raise TQ.QueueError('--id is required (or give a job file: {"id": "...", "config": "..."}, see api.py)')
     if not c.block:
         raise TQ.QueueError('project.json has no "trainsuite" block')
     try:
@@ -601,6 +611,17 @@ def cmd_start(a):
     if a.go and plan["held"]:                                    # run.py would refuse the training 3 s after a prepare job (hours of GT build) had started: refuse before any job
         print(f"start: run id {a.id} is ON HOLD (hold.py show); nothing started, no prepare job either")
         return 1
+    if a.go:                                                     # the person's pause of the queue binds a direct start too (hard rule 6), as it does for Training.run
+        from . import api
+        from . import trainqueue as TQ
+        try:
+            blocks = api.queue_blocks(TQ.context(a.project), a.id)
+        except TQ.QueueError as e:
+            print(f"start: {e}", file=sys.stderr)
+            return 2
+        if blocks:
+            print(f"start: {'; '.join(blocks)}; nothing started, no prepare job either")
+            return 1
     try:
         C.write(plan["config"], target)
     except C.ComposeError as e:
@@ -664,6 +685,11 @@ def cmd_start(a):
 
 
 def main(argv=None):
+    from . import api, apicli                                    # every method of the class Training is a command: `Training.queue_add job.json`, `methods` lists them
+    legacy = {"status", "health", "curves", "speed", "queue", "stop", "resume", "watch", "early", "compose", "start", "selftest", "plot", "compare"}      # the older words keep their meaning
+    rc = apicli.dispatch(api.Training, sys.argv[1:] if argv is None else list(argv), "trainsuite", legacy)
+    if rc is not None:
+        return rc
     ap = argparse.ArgumentParser(prog="trainsuite", description=__doc__)
     ap.add_argument("--root", default="runs", help="folder of the run directories (default: ./runs; from autoresearch/ use ../<problem>/runs)")
     ap.add_argument("--loss", default="total", help="key of the optimised loss in the metrics stream (default: total)")
@@ -680,12 +706,14 @@ def main(argv=None):
     p.add_argument("--all", action="store_true", help="also runs without activity in the last 24 h")
     p.add_argument("--json", action="store_true")
     add("health", cmd_health, 1, help="health checks and kill rules of one run (exit 1 on alert or kill hit)")
-    p = add("curves", cmd_curves, "+", help="loss curves of one or more runs as a png")
-    p.add_argument("--keys", nargs="+")
-    p.add_argument("--smooth", type=int, default=10)
-    p.add_argument("--out")
-    p = add("speed", cmd_speed, "+", help="runs side by side, the first is the baseline: s/step and speed-up, data wait, GPU busy, peak memory, loss at the last shared step")
-    p.add_argument("--skip", type=int, default=10, help="logged rows to leave out as warm-up (default 10)")
+    for name in ("curves", "plot"):                              # `plot` is the word of the interface (api.plot); `curves` the older one
+        p = add(name, cmd_curves, "+", help="loss curves of one or more runs as a png")
+        p.add_argument("--keys", nargs="+")
+        p.add_argument("--smooth", type=int, default=10)
+        p.add_argument("--out")
+    for name in ("speed", "compare"):                            # `compare` is the word of the interface (api.compare); `speed` the older one
+        p = add(name, cmd_speed, "+", help="runs side by side, the first is the baseline: s/step and speed-up, data wait, GPU busy, peak memory, loss at the last shared step")
+        p.add_argument("--skip", type=int, default=10, help="logged rows to leave out as warm-up (default 10)")
     p = sub.add_parser("queue", help="the GPU slots, the line of waiting runs, the RAM gate, the holds and the queue items of the project; add / serve / hold / resume / drop (AR_PROJECT or --project)")
     p.add_argument("--project", help="project folder (default: AR_PROJECT)")
     p.set_defaults(fn=cmd_queue)
@@ -696,9 +724,10 @@ def main(argv=None):
         s.add_argument("--project", default=argparse.SUPPRESS, help="project folder (default: AR_PROJECT)")
         s.set_defaults(fn=fn)
         return s
-    s = qsub("add", cmd_queue_add, help="compose a run like `start` and put it in the queue (the runner starts it when its turn comes)")
-    s.add_argument("base")
-    s.add_argument("--id", required=True)
+    s = qsub("add", cmd_queue_add, help="put a job file (or a config with --id and options, like `start`) in the queue (the runner starts it when its turn comes)")
+    s.add_argument("base", help="a job file, or the network config of the older form")
+    s.add_argument("--json", action="store_true", help="with a job file: print the item as json")
+    s.add_argument("--id", default=None, help="not for a job file (its id is in the file)")
     s.add_argument("--preset", action="append", default=[])
     s.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
     s.add_argument("--hyp"), s.add_argument("--pred"), s.add_argument("--rule")
@@ -725,8 +754,23 @@ def main(argv=None):
     s.add_argument("--words", default="", help="the person's own words that allow it (required)")
     s.add_argument("--fresh-code", action="store_true", help="continue on the code of now, not of the first attempt (the hot-fix loop)")
     s.add_argument("--no-runner", action="store_true", help="do not start the runner")
-    s = qsub("drop", cmd_queue_drop, help="remove an item that is not running")
+    s = qsub("drop", cmd_queue_drop, help="remove an item that is not running (the older name of `remove`)")
     s.add_argument("id")
+    from . import apicli as AC                                   # the words of the interface (api.py): check, run, queue list / get / remove / start / status
+    ji = lambda s_: s_.add_argument("--json", action="store_true", help="print what the function returns")                                       # noqa: E731
+    ji(qsub("list", AC.cmd_queue_list, help="the queue in its order, the running training, slots, machine lock, RAM, GPU memory, holds"))
+    s = qsub("get", AC.cmd_queue_get, help="one item: its job, config, command and state")
+    s.add_argument("i", help="queue number (1 = first), id or run folder name")
+    ji(s)
+    s = qsub("remove", AC.cmd_queue_remove, help="take an item out that has not started")
+    s.add_argument("i", help="queue number, id or run folder name")
+    ji(s)
+    ji(qsub("start", AC.cmd_queue_start, help="make sure the runner runs"))
+    s = qsub("status", AC.cmd_queue_status, help="one training in full: state, ETA, loss, gradient, skipped steps, data, health, kill rules, speed (default: the running one)")
+    s.add_argument("i", nargs="?", default=None, help="queue number, id or run folder name")
+    s.add_argument("--kill", action="append", default=[], help='kill rule, e.g. "group.lines@1000 > 1.48" (repeatable)')
+    s.add_argument("--vs", help="reference run to compare the loss with at the same step")
+    ji(s)
     p = add("stop", cmd_stop, 1, help="ask the trainer to checkpoint and stop (refused when its code snapshot has no stop check)")
     p.add_argument("--reason", default="stopped by hand")
     add("resume", cmd_resume, 1, help="move CONTROL / STOPPED of an earlier stop aside (the trainer does it itself at its start)")

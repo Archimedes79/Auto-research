@@ -304,6 +304,10 @@ def queue_checks(tmp, ok):
         ok("hold --all does not touch a run that is not a training (no run folder, its command does not name one) and does not put it in the queue")
 
         # 9 an unreadable list is moved aside and refused: an empty list written over it would lose the holds and the pause
+        rp = TQ.runner_alive(c)                                                     # the `resume --all` above started a runner: it would move the broken file aside itself, and the command
+        if rp:                                                                      # under test then finds no file (a race that failed this step once in a while)
+            os.kill(rp, signal.SIGKILL)
+            until(lambda: TQ.runner_alive(c) == 0, 10, what="the runner is gone")
         open(c.qpath, "w").write("{ not json")
         rc, out, err = cli(proj, "hold", "--all", "--words", "w")
         assert rc == 2 and "could not be read" in err and any(".bad." in n for n in os.listdir(c.slots)), (rc, err)

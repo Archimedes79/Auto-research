@@ -44,6 +44,11 @@
     "prepare": [{"name": "gt", "check": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} check\"",
                  "build": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python training/gt_scenes.py {config} build\"", "wait_min": 600}]
   },
+  "_runsuite": "python -m runsuite check | run | status | queue add (autoresearch/runsuite): the runner of the trained network, jobs of kind run in the same queue as the trainings; {args} is where the mode and the flags go (runner/bev_runner.py documents them)",
+  "runsuite": {
+    "command": "bash -c \"$HOME/miniconda3/envs/gcar/bin/python runner/bev_runner.py {args}\"",
+    "runs": "runs"
+  },
   "structure": {
     "root_files": ["README.md", "project.json", "FROZEN.md", "frozen.json"],
     "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "training"],

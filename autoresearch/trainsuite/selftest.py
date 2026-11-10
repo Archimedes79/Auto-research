@@ -1561,6 +1561,10 @@ def main():
             print(r.stdout, end="")
             assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
             ok("queue self-test (selftest_queue.py) passed")
+            r = subprocess.run([sys.executable, "-m", "trainsuite.selftest_api"], cwd=os.path.dirname(HERE), capture_output=True, text=True)       # the interface (api.py, runsuite): real launchers, a toy trainer and runner
+            print(r.stdout, end="")
+            assert r.returncode == 0, r.stdout[-1500:] + r.stderr[-1500:]
+            ok("interface self-test (selftest_api.py: jobs, check, run, status, stop, compare, the queue functions, the runner, the command line) passed")
     print(f"trainsuite selftest: {n[0]} groups of checks passed")
     return 0
 
