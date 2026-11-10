@@ -221,7 +221,8 @@ def real(run, scene, index):
         os.chdir(os.path.join(ROOT, "..", "autoresearch"))                                                 # the documented working folder: the card must not depend on being in bev_fusion
         made = ev.make_card(r["id"])
         c = made["card"]
-        chk_card = subprocess.run([sys.executable, os.path.join(ROOT, "..", "autoresearch", "tools", "card.py"), "check", made["path"]], capture_output=True, text=True, timeout=120)
+        chk_card = subprocess.run([sys.executable, os.path.join(ROOT, "..", "autoresearch", "tools", "card.py"), "check", made["path"]], capture_output=True, text=True, timeout=120,
+                                  env={**os.environ, "AR_PROJECT": ROOT})                                    # the headline metrics of THIS problem (the default problem of the tools is the lane one)
         assert chk_card.returncode == 0, (made["path"], chk_card.stdout[-300:], chk_card.stderr[-300:])      # the written file is a valid card of the contract
         os.chdir(ROOT)
         snap = open(os.path.join(src_run, "code", "SNAPSHOT.txt")).read().split()
