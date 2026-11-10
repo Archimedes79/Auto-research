@@ -1,31 +1,23 @@
-# Roadmap of the research system (short form, 2026-10-26)
+# Open items and design rules of the research system
 
-The long review and migration plan of 2026-10-25 (weaknesses W1-W14, findings R1-R10, proposals P1-P10, steps M0-M7) was removed from the tip on 2026-11-01 (Mirko: delete the history that is no longer needed) and stays in git: `git show dad824d:autoresearch/history/ROADMAP_2026-10-25.md`. This file is only what is still open and what was learned.
-
-## Done (one line each; details in git and `DECISIONS.md` D8, D15, D16)
-- Records: locked atomic ledger and schedule writes, run record with heartbeat, done flag only on exit 0, a code snapshot and tag per run (temporary git index, no branch moves), refusal of id reuse, card required before a run (W1, W3, W4, W9).
-- Decisions as code: `experiment.json` with rule clauses, `decide.py --experiment` from metric cards; evaluator contract `schemas/card.schema.json` with `card.py` (P1, P8).
-- Evaluation: one entry point with a registry, golden numbers (cached and one uncached) in `run_all_tests.sh` (M0).
-- Gates: hook on the protected files with grants (P4), holdout split from `project.json`. Since D21 (2026-10-30) the list holds the truth (problem, TEST log, golden numbers, champion entries, `project.json`) and the gate itself (`guard_hook.py`, the hook settings), not the other tools or `METHOD.md`.
-- Measurement of the improver: loop table at the head of `LEDGER.md` (P3).
-- Method simplified: 7 agents (4 roles since D32), 5 templates, light cycle by default (P6); structure check over `experiments/` (P7).
-- State derived from the run records instead of synced between three files (D16, deployed 2026-10-26): item states are computed on read, the ledger row is written once at the end, `ledger.py sync` adds rows of runs that ended or lost their launcher, a second launcher of one id is refused, one tick at a time, cpu items one at a time (the tick and its cpu cap were removed under D32: it started 0 of 61 runs). A fresh `ar-reviewer` pass found 8 findings in the first version; all are fixed with tests (the last, L1, on 2026-10-31: `ledger.py sync` replaces the finished row of an earlier attempt by the record of a later one).
+The long review and migration plans (2026-10-25, the target design of D32) are in git: `git show dad824d:autoresearch/history/ROADMAP_2026-10-25.md`, `history/TARGET_2026-11-01.md`. This file holds only what is still open and what was learned. What exists is described in `README.md`.
 
 ## Open
 | item | what | needs |
 |---|---|---|
-| M2 | backups: `main` and the 25 `lcr/*` tags were pushed on 2026-10-26 (Mirko's OK); still open: copy the run records to a second place, one copy of registered checkpoints and splits, test a restore; push again after each loop | Mirko |
-| P9 | CONFIRM split and the "adopted" state: a KEEP on VAL counts as adopted only when CONFIRM agrees | first use on D4 |
-| P10 | early kill from learning curves: BUILT as `trainsuite early` (advisory, calibrated on finished pairs, stops nothing). The signal is weak so far: 111 bev_fusion pairs come from 30 runs, mostly crippled variants, and the key is a loss, not the decision metric; the E241 replay on lanes is impossible (lane `runs/` have no `log.jsonl`). It needs about 15 control / variant pairs from 8 or more independent runs of the same code and ground truth, evaluated about every 250 steps, logging a real metric (lanes found, Q) | more finished pairs |
-| W8 | evaluation cache key has no checkpoint hash or inference-code fingerprint | small change in `evaluate.py` |
-| W13 | scouts have WebFetch and Write: fetched text is data, scouts write only under `literature/` | hook rule or agent definition |
-| W11 | route success, the failure series and timing are parts of the lane `evaluate.py` (`--route`, `--failure`, `--timing`, `evaluation/eval_parts.py`); the stored-input paths are verified on the CPU, the paths that run the builder and the timing are NOT (commands in `bev_fusion_lane_center/evaluation/README.md`) | an idle GPU |
-| M3-M5 | package rename `ar` / facade `lcr` / `lcr.train` recipes | **deferred, probably not needed**: the loop runs without them; revisit only if a second problem is plugged in |
+| backups | the run records, one copy of the registered checkpoints and splits to a second place, and a tested restore; `main` and the run tags go to GitHub, nothing else is backed up | the person |
+| CONFIRM split | a KEEP on VAL counts as "adopted" only when a CONFIRM split agrees (decided as an idea; the lane project lists a `confirm` split of 1,567 frames, but no tool requires it and `evaluate.py` does not read it) | first use |
+| early kill | `trainsuite early` is advisory (gap to a control run, calibrated on finished pairs, stops nothing). The signal is weak: about 15 control / variant pairs from 8 or more independent runs of the same code and GT, evaluated about every 250 steps and logging a real metric (lanes found, Q), are needed before it may stop a run | more finished pairs |
+| lane timing and route | route success, the failure series and timing are parts of the lane `evaluate.py` (`--route`, `--failure`, `--timing`); the stored-input paths are verified on the CPU, the paths that run the builder and the timing are not (commands in `bev_fusion_lane_center/evaluation/README.md`) | an idle GPU |
+| claims | a file `state/claims.json` (chat, paths, reason, release) that `check_git.py` and `commit_paths.py` would warn about, for freezes that go stale; advice only, a second freeze that goes stale is the signal to build it | not built |
+| the gate | D75: the hook reads the default problem for every path, the BEV problem has no protected list, a crash of the hook lets the edit through | the person |
 
-## What the last days taught (design rules for the tools)
-1. **One truth per fact.** A run's state lives in its run record; the ledger holds judgement (prediction, rule, result, decision) and a copy of the facts written once at the end; the schedule is a plan whose item states are read from the records. Every sync between stores produced stale or ghost rows (D15 review: half of its findings were in the sync code).
-2. **A feature earns its place by use.** The tick started 0 of 61 runs: the cycle ran on `--after` chains. Keep only what is used; the cheap queue is a chain of launchers, the tick was a view plus an optional starter, and went (D32).
+## Design rules (what the reviews taught)
+1. **One truth per fact.** A run's state lives in its run record; the ledger holds judgement (prediction, rule, result, decision) and a copy of the facts written once at the end; the schedule is a plan whose item states are read from the records. Every sync between stores produced stale or ghost rows.
+2. **A feature earns its place by use.** The tick started 0 of 61 runs: the cycle ran on `--after` chains, so it went (D32). Keep only what is used.
 3. **Waiting is not holding.** A launcher that waits for dependencies holds no slot; give-up times default to 12 hours so a chain does not die silently.
 4. **Gates guard the truth, not the tools.** The expensive mistakes are a touched holdout, a changed golden number or champion entry, a changed problem definition. Tools are covered by git, tests and review.
-5. **Shared working tree, shared index.** Commit by explicit path and in one command; never leave anything staged (another chat's `git commit` takes it).
-6. **Quiet machine for timing.** Training, tests and surveys on one GPU and CPU make load averages of 50 and invalidate timing (E243); timing runs need an agreed quiet window.
+5. **A test that runs the real tools.** A stub hid a swallowed error and the rule of a card was never registered (2026-11-10): the chain test run -> decide -> result with the real tools is the guard, a unit test per tool is not enough.
+6. **Shared working tree, shared index.** Commit by explicit path (`commit_paths.py`) and in one command; never leave anything staged.
+7. **Quiet machine for timing.** Training, tests and surveys on one GPU and CPU make load averages of 50 and invalidate timing; timing runs need an agreed quiet window (`machine_lock.py`).
+8. **The hold marker.** A run that was stopped (exit 75) or put on hold gets a `HOLD` file; only the person's words clear it (`hold.py`), never a chat's own judgement. Relayed instructions are written as relayed.

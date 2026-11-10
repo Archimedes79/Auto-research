@@ -14,7 +14,7 @@ Order: Mirko ("Tiefenreview des gesamten Systems und der Suiten ... Schwaechen b
 ## Still open (not fixed, with the owner)
 - D75 (Mirko): the gate. The BEV problem has no protected list; a crash of the hook allows the edit; a decision is one line in a folder that agents write.
 - D73 (Mirko): frozen-file defects (train.py resume and validation, gt_scenes `--no-lane`, bev_views.py in the evaluator hash, run_ar.sh is an uncommitted scratch line that the pinned engine depends on).
-- Lane `evaluate.py` `test_allowed` and `eval_parts` token files still accept any mention of an id / a TEST token file under `--split val`: wire to `run.test_log_opens` and refuse a token file of another split (the lane chat's code, paused by D74).
+- FIXED in the third pass (below): lane `evaluate.py` `test_allowed` and the `eval_parts` token files accepted any mention of an id / a TEST token file under `--split val`.
 - Two literature stacks (the lane's `papers.csv` / catalogue and the new `topics/`) have no bridge; PROBLEM.md of the lane project (protected) still describes the old one and the removed PLAN / schedule files.
 - The research procedure has not been run on a real topic; `docs/` of the spot check, the known-paper check and the feedback into the notes are tested on synthetic folders only.
 - Small: `package.py gt --apply` prints the lane warning after the deletion; `lineage` reports the best three as MISSING for the parent link (their config.json has no `init_from` key); the stored provenance.json of three runs still say 'unknown' (`provenance.py manifest <id> --force` rewrites them).
@@ -35,7 +35,33 @@ Three more fresh critics and four real runs of the rebuilt tools, because one in
 
 ### Still open after the second pass
 - D75 (the hook takes the default problem for every path; BEV has no protected list), D73 (frozen items), as before.
-- The project key `cards` has two meanings (evaluation-card folder for `experiment.arm_cards`, parent of the run folders for `provenance.find_run_dir` / `package`); the lane sets `cards: runs/eval`, so lane runs get no manifest, package or clean-up. Needs a second key `runs` (lane `project.json`).
-- `run.py` OK rows of the TEST log accept any `D<n>` token without checking that the D<n> is decided (only the hook protects the log, and only for the lane).
-- Pushing: 46 files in lane run tags are forbidden types; push the clean tags one by one, never `--tags` (check_git.py says so now). `bev_fusion/temp/train/run_ar.sh` is the one scratch script that must be promoted (116 references; D73, the BEV lead).
-- `autoresearch/README.md` in the working tree is an older copy of HEAD (it lacks the rows of result.py, the two lifecycle tests and trainkit): do not commit it as it is.
+- (the rest of this list was closed or re-listed in the third pass below)
+
+## Third pass (the same day): the open items that needed no decision
+Asked by Mirko ("Fixe die Befunde am System") and by the BEV system lead (clean-base round). Every shared change had a fresh critic pass; the first one found eight problems in the first version of the TEST-gate change (a design called D7 opened a row, `no OK yet` and `OK?` opened, loading `run.py` by path put the autoresearch `hold.py` into the lane's `sys.modules`, the launcher integration was untested), all fixed below.
+| item | fix | test |
+|---|---|---|
+| TEST-log row accepts any `D<n>`, the word OK anywhere | the gate is its own small module, `tools/testgate.py` (standard library, loaded by `run.py` and, by path and without touching `sys.path`, by the lane's evaluator). Positive forms only: the NEWEST row of the id decides, a USED row (DONE) closes the id for good; the note cell must START with the person's OK and hold no condition or negation, or the row cites `granted by D<n>` / `D<n> (Mirko <date>: "...")` of a decision that is decided AND says it grants a TEST check (`one TEST check`; D28, D32, D4, D61 do, D7 only mentions TEST); `grants` defaults to the empty set; rows end only at CR / LF. Two critic passes: the first found a design called D7 opening a row and the `hold.py` clash, the second 30 phrasings (`not OK`, `OK for VAL only`, `OK: pending`, U+2028 ...) that a deny-list let through | `testgate.py --selftest` (all of them), `selftest_launch.py test_gate` (through the launcher), `selftest.py` runs both |
+| lane `evaluate.py test_allowed` read the log as a substring | it asks the same module (`test_gate()`), run-id shape kept; `decided` can be passed | `test_evaluate_guard.py` (real log: E230.f1p closed, E268.p opens with D28 only; `sys.path` / `sys.modules` unchanged) |
+| `--route-tokens` / `--series-dir` of a TEST file under `--split val` | `eval_parts.names_test`: a stored input that names the TEST split is read only under `--split test` (best effort on the name) | `test_eval_parts.py` (refused under val, not refused under test) |
+| key `cards` = evaluation cards AND parent of the run folders | new key `runs` (default `runs`) for `provenance.find_run_dir`, `package clean` and the best-three protection; `cards` stays the evaluation-card folder (`card.py`, `experiment.arm_cards`, `lineage`); the lane needs no `project.json` edit | `provenance.py --selftest`, `package.py --selftest` |
+| `package.py gt --apply` printed the lane warning after the deletion | plan and warnings first, and that same plan is applied (`planned=`) | `package.py --selftest` |
+| `card.py check --all` called a sweep grid a broken card | only files that start with a split of the project are cards | `selftest.py` |
+| `check_git.py --used` counted run.json references like code | `recorded` is its own class: 14 files are run or imported by code or launchers (the work list), 155 are named only by run records, 158 only cited; the git rule still promotes the 155, the run tag keeps them meanwhile | `check_git.py --selftest` |
+Dead documents removed: `coordination.md` (the hold marker is in `hold.py` and ROADMAP rule 8; claims were never built), `fewer_files.md` (built in 2026-11-01). Rewritten shorter and true: `ROADMAP.md`, `reproducibility.md`. New: `suites.json` / `.svg` / `.md`, the drawing of the four suites, shown in the README. The dead-code scan of `tools/` (AST: functions and classes nothing but tests use, unused imports, commented-out code, `if False`) found nothing.
+
+## Final status of the open list (2026-11-10, end of the clean-base round)
+| open | owner | state |
+|---|---|---|
+| D75: the gate (hook reads the default problem for every path, BEV has no protected list, a crash allows the edit, 'decided' is a line agents can write) | Mirko | open |
+| D73: frozen files | Training chat did the listed changes (be311601, d700f42f); `FROZEN.md` / `frozen.json` rewrite | BEV system chat |
+| the row of E268.p in the lane TEST log does not say DONE, so it opens again; the log is protected | Mirko (a grant under a decided D<n> to write DONE) | open |
+| the box-metric penalty for a class with GT and no TP (moves mATE / mAOE / mAVE of the golden numbers) | Mirko | open |
+| 9 scratch tags with forbidden files (autogt 6, lcr 3) stay local; the 23 clean tags are on origin | Mirko | open |
+| 14 scratch files that code points at (`check_git.py --used`) and the 155 that run records name; the git rule promotes both | BEV and lane chats | open |
+| lane GT items: index `scenes` holds only the last run, the lane signature misses coverage.py / grid.py, `held` stats every file | GT chat / Mirko (a version) | open |
+| E273-E283 cards describe their arms in recipe text; `decide.py` cannot read them | decided by hand | by design |
+| `bev_fusion/project.json` has no `structure.living`, so `check_structure.py` checks no BEV document; the lane's 11 problems are old paths | BEV system chat; lane paused by D74 | open |
+| the rename autogt -> GtGenerator (D76) is in the working tree, not committed; the tag series `autogt/vN` keeps its name | GT chat | in flight |
+| two literature stacks without a bridge; the lane `PROBLEM.md` (protected) still describes the old one | Mirko (a D<n>) | open |
+Pushed on 2026-11-10 at Mirko's word: main up to 033f70a7 and 23 run tags; never `git push --tags`.
