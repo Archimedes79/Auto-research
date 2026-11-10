@@ -219,6 +219,11 @@ def _error_checks(root):
         code, out, err = _run(argv)
         assert code == 2 and word in err and "Traceback" not in err, (argv, code, err[-300:])
     assert "Traceback" not in _run(["generate", "~/r", "--workers", "0"])[2]
+    # a wrong pick leaves no output folder behind (the picture command used to create it first)
+    with tempfile.TemporaryDirectory() as d:
+        o = os.path.join(d, "o.png")
+        code, out, err = _run(["view", o, "scene-9999:1", "--total"])
+        assert code == 2 and "no such sequence" in err and not os.path.exists(o), (code, err[-300:], os.listdir(d))
     # a folder of another resolution: `build` (the library call) exits with the message, the command is a wrong argument (exit 2)
     import json
     from .suite import current_signature

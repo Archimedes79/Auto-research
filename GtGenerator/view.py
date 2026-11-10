@@ -205,6 +205,7 @@ def figure(gt_gen, name, k, out_dir, total=False, gt=None):
     fig.subplots_adjust(left=0.01, right=0.92, top=0.92, bottom=0.07, wspace=0.18)
     if out_dir is None:
         return fig
+    os.makedirs(out_dir, exist_ok=True)                                             # here, not in `run`: a wrong pick must leave no empty folder behind
     p = os.path.join(out_dir, f"gt_sample_{name}_k{k:02d}.png")
     fig.savefig(p, dpi=72)
     plt.close(fig)
@@ -233,7 +234,6 @@ def stored(token, out_dir=None, total=False, data=None):
 
 def run(out_dir, picks=None, dataroot="~/data/nuscenes", version="v1.0-mini", total=False):
     """picks: [(scene, keyframe index)] generated now from nuScenes mini, or [(sample token,)] drawn from the stored GT (any version)."""
-    os.makedirs(out_dir, exist_ok=True)
     gen = None
     out = []
     for p in (picks or DEFAULT):
