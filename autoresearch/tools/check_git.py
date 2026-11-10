@@ -19,8 +19,9 @@ What it checks
      scratch is only counted: `git add -A` would sweep it in; an untracked forbidden file is an error.
   3. scratch that is used: a file in a `temp/` folder named by a living file (code, launcher, run record, experiment card) or a folder of scratch put on
      `sys.path` by living code. Such a file is not temporary any more; it belongs in a code folder (training/, evaluation/, tools/ ...) with a test, or the
-     card should carry the command instead. Listed, never an error: it is the work list for promoting them. "run or imported" means the referrer is code, a
-     launcher or a run record (a docstring mention counts, so look at the list); folders and globs (`temp/t10/*.sh`) are not followed.
+     card should carry the command instead. Listed, never an error: it is the work list for promoting them. "run or imported" means the referrer is code or a
+     launcher (a docstring mention counts, so look at the list); a run.json that names the file as its command is "recorded" (the run's tag keeps the script, the git
+     rule promotes it too); folders and globs (`temp/t10/*.sh`) are not followed.
 Folders named history/ are archives and are neither scanned for references nor reported. Merge commits are not inspected (their count is shown).
 Exit codes: 0 fine, 1 an error found, 2 wrong use or nothing to check.
 """
@@ -247,7 +248,8 @@ def path_errors(top, paths, sizes=None, scratch_ok=False, lead=""):
 
 
 def used_scratch(top):
-    """({scratch file: {'tracked': bool, 'executed': [referrers that are code, launchers or run records], 'cited': [documents that name it]}},
+    """({scratch file: {'tracked': bool, 'executed': [referrers that are code or launchers: the work list for a promotion], 'recorded': [run.json files that name it as
+    their command: the run's tag keeps the script, nothing to promote unless code uses it too], 'cited': [documents that name it]}},
     [(referrer, scratch folder put on sys.path)]) for the scratch that a living file (not scratch itself, not in a history/ folder) points at. A path is resolved
     from the referrer's folder, its project folder (the first folder with a temp/ below the top), then the top; $VAR/ prefixes are dropped."""
     tracked = set(names(top, "ls-files"))
@@ -269,8 +271,8 @@ def used_scratch(top):
             for base in bases:
                 t = os.path.normpath(os.path.join(base, rel)).replace("\\", "/")
                 if classify(t) == "scratch" and os.path.isfile(os.path.join(top, t)):
-                    kind = "executed" if (f.endswith((".py", ".sh", ".ps1")) or os.path.basename(f) == "run.json") else "cited"
-                    d = out.setdefault(t, {"tracked": t in tracked, "executed": [], "cited": []})
+                    kind = "recorded" if os.path.basename(f) == "run.json" else "executed" if f.endswith((".py", ".sh", ".ps1")) else "cited"
+                    d = out.setdefault(t, {"tracked": t in tracked, "executed": [], "recorded": [], "cited": []})
                     d[kind].append(f)
                     break
         if f.endswith(".py"):
@@ -301,17 +303,18 @@ def report(top, show_all=False, remote_on=True):
     tracked_scratch = [p for p in names(top, "ls-files") if classify(p) == "scratch"]
     used, imports = used_scratch(top)
     ex = sorted((t for t, d in used.items() if d["executed"]), key=lambda t: -len(used[t]["executed"]))
-    ci = sorted((t for t, d in used.items() if not d["executed"]), key=lambda t: -len(used[t]["cited"]))
+    rec = sorted((t for t, d in used.items() if not d["executed"] and d["recorded"]), key=lambda t: -len(used[t]["recorded"]))
+    ci = sorted((t for t, d in used.items() if not d["executed"] and not d["recorded"]), key=lambda t: -len(used[t]["cited"]))
     lines += ["", f"scratch in git: {len(tracked_scratch)} tracked file(s) in temp/ or _to_delete/ folders (legacy; new ones are refused above)",
-              f"scratch that is used: {len(ex)} file(s) run or imported by living files, {len(ci)} only cited in documents, {len(set(t for _, t in imports))} scratch folder(s) put on sys.path"
-              + ("" if show_all else "  (--used lists them)")]
+              f"scratch that is used: {len(ex)} file(s) run or imported by living code or launchers (the work list), {len(rec)} named only by run records (the git rule promotes these too; the run's tag keeps them meanwhile), "
+              f"{len(ci)} only cited in documents, {len(set(t for _, t in imports))} scratch folder(s) put on sys.path" + ("" if show_all else "  (--used lists them)")]
     if show_all:
-        for title, group in (("run or imported (the first to promote):", ex), ("only cited:", ci)):
+        for title, group in (("run or imported by code (the first to promote):", ex), ("named only by run records (kept by the run tags):", rec), ("only cited:", ci)):
             if group:
                 lines.append("  " + title)
                 for t in group:
                     d = used[t]
-                    refs = d["executed"] + d["cited"]
+                    refs = d["executed"] + d["recorded"] + d["cited"]
                     lines.append(f"    {t} [{'tracked' if d['tracked'] else 'UNTRACKED'}] {len(refs)} ref(s), e.g. {', '.join(refs[:2])}")
         if imports:
             lines.append("  scratch folders on sys.path (their modules are imported by living code):")
@@ -348,12 +351,15 @@ def _selftest():
         put("proj/experiments/e1/experiment.md", "made with `temp/tool.sh` and `temp/gone.sh`, see temp/lonely.py.")
         put("proj/training/launch.sh", "bash $REPO/temp/tool.sh")
         put("proj/history/old.md", "temp/lonely.py")             # archives are not scanned
+        put("proj/temp/recorded.sh", "echo r")                   # named only by the record of a finished run: nothing to promote
+        put("proj/records/runs/r1/run.json", '{"command": ["bash", "temp/recorded.sh"]}')
         sh("add", "-A", "-f")
         sh("commit", "-qm", "base")
         sh("branch", "-q", "up")                                 # the "upstream": a local branch is enough for the arithmetic
         sh("branch", "-q", "--set-upstream-to=up")
         used, imports = used_scratch(top)
-        assert set(used) == {"proj/temp/tool.sh", "proj/temp/lonely.py"}, used                  # temp/gone.sh does not exist; history/ not scanned
+        assert set(used) == {"proj/temp/tool.sh", "proj/temp/lonely.py", "proj/temp/recorded.sh"}, used                  # temp/gone.sh does not exist; history/ not scanned
+        assert used["proj/temp/recorded.sh"] == {"tracked": True, "executed": [], "recorded": ["proj/records/runs/r1/run.json"], "cited": []}, used["proj/temp/recorded.sh"]
         assert used["proj/temp/tool.sh"]["executed"] == ["proj/training/launch.sh"] and used["proj/temp/tool.sh"]["cited"] == ["proj/experiments/e1/experiment.md"]
         assert used["proj/temp/lonely.py"]["executed"] == [] and used["proj/temp/lonely.py"]["cited"] == ["proj/experiments/e1/experiment.md"]
         assert imports == [("proj/training/run.py", "proj/temp/lib")], imports

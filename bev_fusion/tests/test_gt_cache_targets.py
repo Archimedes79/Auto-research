@@ -195,7 +195,7 @@ def check_f5():
     """GtGenerator build: a folder of another resolution / supersampling is never continued, also after an interrupted build"""
     import json
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    from GtGenerator import cli
+    from GtGenerator import pipeline, store
     from GtGenerator.grid import GridSpec
 
     class Gen:
@@ -208,24 +208,24 @@ def check_f5():
         os.makedirs(sig_dir)
         # an interrupted build of the time before the provisional index: keyframes, no index.json -> compared with the cell grid
         np.savez_compressed(os.path.join(sig_dir, "a.npz"), drivable_area=np.zeros((120, 104), np.float16))
-        cli.check_resume(sig_dir, GridSpec(res=0.5), 4)
-        refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.25), 4), "(240, 208)")
+        store.check_resume(sig_dir, GridSpec(res=0.5), 4)
+        refused(lambda: store.check_resume(sig_dir, GridSpec(res=0.25), 4), "(240, 208)")
         # the provisional index of a running build says what the folder holds
-        cli.write_index(sig_dir, Gen(), "v1.0-mini", ["scene-0061"], 1, 40, {}, complete=False)
+        store.write_index(sig_dir, Gen(), "v1.0-mini", ["scene-0061"], 1, 40, {}, complete=False)
         assert {k: v for k, v in json.load(open(os.path.join(sig_dir, "index.json"))).items() if k != "data_identity"} == {     # data_identity: the raw files the GT key names (GtGenerator 2026-11-10)
             "signature": "testsig000", "version": "v1.0-mini", "res": 0.5, "ss": 4, "options": {}, "scenes": ["scene-0061"],
             "stride": 1, "keyframes": 40, "complete": False}
-        cli.check_resume(sig_dir, GridSpec(res=0.5), 4)
-        refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.25), 4), "holds res 0.5")
-        refused(lambda: cli.check_resume(sig_dir, GridSpec(res=0.5), 2), "ss 4")
+        store.check_resume(sig_dir, GridSpec(res=0.5), 4)
+        refused(lambda: store.check_resume(sig_dir, GridSpec(res=0.25), 4), "holds res 0.5")
+        refused(lambda: store.check_resume(sig_dir, GridSpec(res=0.5), 2), "ss 4")
         from GtGenerator import clean                                                                       # `clean --stale-caches` leaves a running build alone
         assert clean._running(sig_dir), "a provisional index written just now: a build may be running"
         os.utime(sig_dir, (time.time() - 7200, time.time() - 7200))
         assert not clean._running(sig_dir), "a provisional folder untouched for two hours is an interrupted build"
-        cli.write_index(sig_dir, Gen(), "v1.0-mini", ["scene-0061"], 1, 40, {})                       # the end of the build
+        store.write_index(sig_dir, Gen(), "v1.0-mini", ["scene-0061"], 1, 40, {})                       # the end of the build
         assert json.load(open(os.path.join(sig_dir, "index.json")))["complete"] is True and not clean._running(sig_dir)
         assert sorted(os.listdir(sig_dir)) == ["a.npz", "index.json"], os.listdir(sig_dir)             # no temporary file left
-        cli.check_resume(os.path.join(d, "nothing_yet"), GridSpec(res=0.25), 4)                       # a new folder is fine
+        store.check_resume(os.path.join(d, "nothing_yet"), GridSpec(res=0.25), 4)                       # a new folder is fine
 
     # the wiring: `build` itself (a fake generator in place of GtGenerator) and `clean.collect`
     import GtGenerator.suite as suite_mod
@@ -257,14 +257,14 @@ def check_f5():
             out = os.path.join(d, "out")
             FakeGT.sig_dir = os.path.join(out, "wiresig000")
             index = os.path.join(FakeGT.sig_dir, "index.json")
-            assert cli.build("root", "v1.0-mini", out, res=0.5, verbose=False) == 2 and FakeGT.seen == 2
+            assert pipeline.build("root", "v1.0-mini", out, res=0.5, verbose=False) == 2 and FakeGT.seen == 2
             with open(index) as f:
                 assert json.load(f)["complete"] is True
-            refused(lambda: cli.build("root", "v1.0-mini", out, res=0.25, verbose=False), "holds res 0.5")
+            refused(lambda: pipeline.build("root", "v1.0-mini", out, res=0.25, verbose=False), "holds res 0.5")
             assert FakeGT.seen == 2, "a refused build must not generate anything"
-            assert cli.build("root", "v1.0-mini", out, res=0.5, verbose=False) == 0               # a resume: all there already
+            assert pipeline.build("root", "v1.0-mini", out, res=0.5, verbose=False) == 0               # a resume: all there already
             os.remove(index)                                                                       # an interrupted build of the time before the provisional index
-            refused(lambda: cli.build("root", "v1.0-mini", out, res=0.25, verbose=False), "no index.json")
+            refused(lambda: pipeline.build("root", "v1.0-mini", out, res=0.25, verbose=False), "no index.json")
     finally:
         suite_mod.GtGenerator = real
     from GtGenerator import clean as CL

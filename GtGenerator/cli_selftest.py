@@ -227,15 +227,15 @@ def _error_checks(root):
         json.dump({"signature": sig, "res": 0.5, "ss": 4}, open(os.path.join(d, sig, "index.json"), "w"))
         code, out, err = _run(["build", "--dataroot", root, "--out", d, "--res", "0.25"])
         assert code == 2 and "holds res 0.5" in err, (code, err)
-    os.environ["AUTOGT_TRACEBACK"] = "1"
+    os.environ["GTGENERATOR_TRACEBACK"] = "1"
     try:
         try:
             _run(["generate", "~/r", "--workers", "0"])
-            raise AssertionError("AUTOGT_TRACEBACK=1 must raise")
+            raise AssertionError("GTGENERATOR_TRACEBACK=1 must raise")
         except ValueError as e:
             assert "workers" in str(e)
     finally:
-        del os.environ["AUTOGT_TRACEBACK"]
+        del os.environ["GTGENERATOR_TRACEBACK"]
     # not there is exit 1, with the key printed: an empty store folder for mini, the line is the key of the stored GT
     from . import gt_api
     with tempfile.TemporaryDirectory() as d:
@@ -336,7 +336,7 @@ def _store_checks(root):
             res = AG_.generate(root, d, scenes=["scene-0061"], verbose=False)
         assert res["ok"] is False and res["masks_error"] == "OSError: disk full", "a failed mask cache is reported, the GT is not lost"
     with tempfile.TemporaryDirectory() as d:
-        n = pipeline.build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, verbose=False)
+        pipeline.build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, verbose=False)
         folder = os.path.join(d, os.listdir(d)[0])
         assert "commit" not in read_index(folder), "build writes no manifest"
         again = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)           # was a KeyError: 'commit'

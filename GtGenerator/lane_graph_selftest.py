@@ -148,7 +148,7 @@ def _lines():
     try:
         long = _line((-30, 1), (30, 1), 0.5)
         lg = {"chunks": LL._chunks(long, "boundary"), "params": {}}
-        for i, c in enumerate(lg["chunks"]):
+        for c in lg["chunks"]:
             c["line"] = 0
         out = LL.crop_lines(lg, _pose(0, 0, math.pi / 2), half=20.0)
         assert len(out["boundary"]) == 1 and out["boundary"][0]["start_open"] and out["boundary"][0]["end_open"], out["boundary"]
@@ -221,7 +221,7 @@ def run(root=None, verbose=True):
     from .nuscenes_gt import SIGNATURE_FILES
     from .suite import GtGenerator
     root = os.path.expanduser(root or "~/data/nuscenes")
-    mg, g = _made_up()
+    _made_up()
     _lines()
     _areas()
     # neighbours: three lanes side by side, going the same way, and an opposite lane
@@ -293,7 +293,7 @@ def run(root=None, verbose=True):
     assert np.mean(f1s) > 0.95 and min(f1s) > 0.8, (np.mean(f1s), min(f1s))                                                         # events + links
     assert n_lane_on_road >= 0.97 * n_lane_pts > 0 and n_conn_in >= 0.95 * n_conn > 0, (n_lane_on_road, n_lane_pts, n_conn_in, n_conn)      # areas and graph agree
     # neighbours against the map's own divider tokens (the lanes that have them): a.right divider == b.left divider means b is right of a
-    for loc, (mgm, rgm, lgm) in lgt._maps.items():
+    for loc, (_, rgm, _) in lgt._maps.items():
         nmap = gt.map_for(next(s["token"] for s in gt.nusc.scene if gt.nusc.get("log", s["log_token"])["location"] == loc))
         left, right = collections.defaultdict(set), collections.defaultdict(set)
         for l in nmap.lane:

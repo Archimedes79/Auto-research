@@ -23,16 +23,14 @@ The command line reaches the suite ONLY through the class `GtGenerator` (GtGener
     clean                  GtGenerator.clean             list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
     selftest               GtGenerator.selftest          all tests of the suite (5 - 10 min), or parts with --only
 
-Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; AUTOGT_TRACEBACK=1 shows it).
+Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; GTGENERATOR_TRACEBACK=1 shows it).
 """
 import argparse
 import json
 import os
 import sys
 
-# the storage and the writer moved to store.py / pipeline.py; the old names stay importable from here (bev_fusion tests and other projects use them)
-from .pipeline import GROUP_SCENES, _group_task, _init, _same_generator, _work, _write_tokens, build, generate  # noqa: F401
-from .store import _environment, _flat, canonical_of, check_resume, detect_version, load_keyframe, run_manifest, save_keyframe, write_index  # noqa: F401
+from .store import detect_version  # noqa: F401  (stays importable from here: the hashed lane_gt.py imports it from this module; the next lane version can import it from store)
 
 
 # ---------------------------------------------------------------------------------------------------------------- argument helpers
@@ -246,8 +244,8 @@ def main(argv=None):
     from .suite import GtGenerator                                              # the class interface: the only way the command line reaches the suite
     try:
         code = _emit(getattr(GtGenerator, a.method)(**_kwargs(a)), getattr(a, "json", False))
-    except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (AUTOGT_TRACEBACK=1 shows the traceback)
-        if os.environ.get("AUTOGT_TRACEBACK"):
+    except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (GTGENERATOR_TRACEBACK=1 shows the traceback)
+        if os.environ.get("GTGENERATOR_TRACEBACK"):
             raise
         print(f"error: {e}", file=sys.stderr)
         raise SystemExit(2) from None

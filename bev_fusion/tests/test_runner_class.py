@@ -19,6 +19,7 @@ os.chdir(ROOT)
 from runner import __main__ as command_line  # noqa: E402
 from runner import Runner  # noqa: E402
 
+import suitecli  # noqa: E402
 from evalsuite import selftest_api as TOY  # noqa: E402
 
 
@@ -42,14 +43,14 @@ def cli(*argv):
 def main():
     # (1) layering, in a process of its own
     code = ("import sys; sys.path.insert(0, %r); import runner.runner; "
-            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'trainsuite', 'nuscenes', 'cv2')))" % ROOT)
+            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('torch', 'trainsuite', 'suitecli', 'nuscenes', 'cv2')))" % ROOT)
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=os.path.dirname(ROOT))
     assert p.returncode == 0 and p.stdout.strip() == "[]", (p.stdout, p.stderr[-300:])
 
     # (2) the methods are the commands
-    infos = Runner.methods()
+    infos = suitecli.method_list(Runner)
     names = [m["name"] for m in infos]
-    public = [n for n, f in vars(Runner).items() if callable(f) and not n.startswith("_") and n != "methods"]
+    public = [n for n, f in vars(Runner).items() if callable(f) and not n.startswith("_")]
     assert names == list(Runner.METHODS) == ["predict", "plan", "list_results", "tap", "time", "probe"] and set(public) == set(names), (names, public)
     assert all(m["summary"] and not m["summary"].endswith(("e.g.", "i.e.")) for m in infos), "a summary is a whole sentence"
     assert all(n.split("_")[0] in {"predict", "plan", "list", "tap", "time", "probe"} for n in names)

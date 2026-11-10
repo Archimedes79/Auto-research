@@ -6,7 +6,7 @@ import time
 import types
 
 from .grid import GridSpec
-from .store import _flat, canonical_of, check_arguments, check_resume, detect_version, finish_index, front_keys, read_index, run_manifest, save_keyframe, write_index
+from .store import _flat, canonical_of, check_arguments, check_resume, detect_version, finish_index, front_keys, read_index, save_keyframe, write_index
 
 _STATE = {}
 GROUP_SCENES = 60            # sequences per devkit load: the memory-light devkit of 60 sequences needs 0.4 GB (the full trainval one 6.4 GB)

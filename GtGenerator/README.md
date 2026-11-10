@@ -30,7 +30,7 @@ m = key.mask(token, "intersection", 0.5)                                        
 ```
 `--out ROOT` is the **root of the stores** (default `data/autogt`) for every command that makes or looks at stores: the front GT goes to `ROOT/<signature>/`, the lane GT to `ROOT/lane/<signature>/` (exceptions with the same job under another word: `have --data`, `report --data` name the root; `report --out` is the PDF, `build --out` the folder to write). A scene choice is `--set small|full` (the sets of
 `sets/`), `--scenes scene-0061 ...` or `--scenes-file F`, never two of them. Careful: `small` here is the 10 sequences of nuScenes mini (`sets/small.txt`); the BEV project's own `small` split (`bev_fusion/splits/`) is another list of scenes: pass it with `--scenes-file`, `GtGenerator key bev_fusion --set small` says nothing about it. Exit codes: 0 done, 1 the thing asked about is not there / not complete, 2 wrong arguments (a message, no traceback;
-`AUTOGT_TRACEBACK=1` shows it). Methods return plain data (a `GtKey`, or a dict with `ok` and `text`), raise `ValueError` for wrong arguments and print only the progress of long runs (`verbose`).
+`GTGENERATOR_TRACEBACK=1` shows it). Methods return plain data (a `GtKey`, or a dict with `ok` and `text`), raise `ValueError` for wrong arguments and print only the progress of long runs (`verbose`).
 
 ### The GT key
 `key = GtGenerator.generate_bev_gt(root, set_name="full")` makes everything BEV Fusion needs; `GtGenerator.generate_lane_gt(root, rig="lane_center")` the lane GT of Spurmitte (`rig="all"`: both, a dict). The key names what you got:
@@ -95,7 +95,7 @@ Kept simple on purpose: **one class, one block of code per problem, one output p
 **Versions are derived from git, nobody types them.** The signature is a hash of the bytes of the hashed files (the code that makes the GT); the key records the git commit next to it. The commit cannot be the version: it changes with every edit anywhere (docs, tests, tools) while the GT stays
 the same (five commits, one signature on 2026-11-10), and a commit-derived version would rename and invalidate 34k frames without a content change. `python -m GtGenerator versions` shows the tables; for a new signature `versions --update` derives the rows from git (the next number of the
 running sequence, the date and the text of the last commit that touched the hashed files) and adds them to `versions.csv` / `releases.csv`: review, commit, tag. By hand stay `same_gt_as` (new code that makes the same GT as an old version needs its pinned digests in
-`front_digests.json`: the selftest checks it) and the lane versions (`lane_versions.csv` belongs to the lane project).
+`front_digests.json`; the lane l5 = l4 proof is `lane_l4_digest.json`: the selftest checks both) and the lane versions (`lane_versions.csv` belongs to the lane project). `.gitattributes` pins LF line ends for the hashed files (a Windows checkout with autocrlf would give another signature).
 
 **Why an `index.json` per store folder (the manifest), and what is `store.py`?** A store is a folder of 34,149 keyframe files, and the files cannot say four things about themselves: whether the run that wrote them
 finished and which sequences and stride they cover (`complete`, `scenes`, `stride`: otherwise "complete" needs the nuScenes json tables, i.e. the raw data), with which resolution and supersampling (a resume must refuse to mix them),
