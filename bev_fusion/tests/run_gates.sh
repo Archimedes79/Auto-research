@@ -87,6 +87,7 @@ run "stream temporal"  "$PY" tests/test_stream_temporal.py          # cam_buffer
 run "stream tools"     "$PY" tests/test_stream_tools.py              # the promoted t21 diagnostics (stream_drift, stream_timing, arm_guards): drift smoke on nuScenes mini, timing smoke, guards table; CPU, about 30 s
 run "student encoder"  "$PY" tests/test_student_encoder.py          # t22 stage A: the student's contract, H8 geometry, gradients, distillation loss, CLI stop / resume on a synthetic tree; CPU, about 12 s, no data
 run "student chain"    "$PY" tests/test_student_chain.py            # t22 stage B: camera_student in the chain: off = old code, frame-0 splice, student_side, trainable / frozen student, anchor, refusals; CPU, about 30 s, no data
+run "evaluation api"    "$PY" tests/test_evaluation_api.py          # the class interface (toy project, the adapter's identity, TEST refused); no data, seconds
 run "evaluate door"     "$PY" tests/test_evaluate_door.py           # evaluation/evaluate.py translates options into bev_suite commands (--real: the golden check, by hand); no data, 1 s
 run "report build"      "$PY" tests/test_report_build.py            # results/build: a fixture report (every number in a source file, every cell in place), missing / wrong inputs stop the build, 23 mutants; CPU, 8 s, no data
 run "trainkit selftest" bash -c "cd ../autoresearch && $PY -m trainkit.selftest"    # the engine of the trainer on a toy network; CPU
@@ -100,6 +101,7 @@ if [ "${1:-}" = "--all" ]; then
   run "projection (R-GEO)" "$PY" tests/test_projection_general.py
   if ls runs/t16_full_s0/ckpt_*.pt > /dev/null 2>&1; then          # the front door of the evaluation against bev_suite.py eval on a copy of the real run
     run "evaluate door, golden" "$PY" tests/test_evaluate_door.py --real   # 4 val frames on the CPU, number for number; about 3 min, 2 x 6 GB
+    run "evaluation api, real" "$PY" tests/test_evaluation_api.py --real   # the class interface equals the engine on a real frame (CPU, 4 frames, about 5 min)
     run "evaluate door, sets"   "$PY" tests/test_evaluate_door.py --sets   # large.val / large.train against val / train, small.val's own scenes; 4 frames on the CPU; about 6 min, 2 x 6 GB
   else
     echo "SKIP  evaluate door, golden  | no checkpoint in runs/t16_full_s0"

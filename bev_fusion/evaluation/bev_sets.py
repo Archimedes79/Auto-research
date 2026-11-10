@@ -89,6 +89,16 @@ def names(splits_dir: str = None) -> list:
     return out
 
 
+def counts(splits_dir: str = None) -> dict:
+    """{set: number of scenes} of every set the splits folder defines"""
+    S = _splits()
+    out = {}
+    for n in names(splits_dir):
+        split, part = n.split(".")
+        out[n] = len(S.load(split, *([splits_dir] if splits_dir else []))[part])
+    return out
+
+
 def set_hash(name: str, splits_dir: str = None) -> str:
     """12 hex digits of the scene names of a NAMED set (training/splits.py list_hash of the file's part): the identity of the set, so a split file edited under the same name is seen"""
     split, part = parse(name)
@@ -150,7 +160,7 @@ def selftest():
         with open(os.path.join(tmp, "tiny.json"), "w") as f:
             json.dump({"about": "toy", "gt": "v8", "train": ["s1", "s2"], "val": ["s3"]}, f)
         assert names(tmp) == ["tiny.train", "tiny.val"] and lists("tiny.val", [], [], tmp) == (["s1", "s2"], ["s3"])
-        assert "tiny.val" in table(tmp) and "toy" in table(tmp)
+        assert "tiny.val" in table(tmp) and "toy" in table(tmp) and counts(tmp) == {"tiny.train": 2, "tiny.val": 1} and counts()["small.val"] == 10
         assert set_hash("tiny.val", tmp) == S.list_hash(["s3"]) != set_hash("tiny.train", tmp) and set_hash("small.val") == S.list_hash(sm_v)
         try:
             set_hash("val")
