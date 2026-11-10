@@ -1,0 +1,7 @@
+{
+  "_comment": "step 1 of the example chain: the ground truth of a GtGenerator set (a store that is complete is not rebuilt, so on the full store this step ends in seconds). The set is a GtGenerator set (`python -m GtGenerator sets`), not a BEV split",
+  "id": "demo.gt",
+  "call": "GtGenerator.generate_bev_gt",
+  "args": {"dataroot": "~/data/nuscenes_full", "set_name": "full"},
+  "note": "example chain, step 1: GT"
+}

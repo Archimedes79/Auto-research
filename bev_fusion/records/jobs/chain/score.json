@@ -1,0 +1,8 @@
+{
+  "_comment": "step 4 of the example chain: the numbers. `results` is the id that step 3 returned, filled in when this job starts; `frames` must be the frames of step 3. Another GT or metric needs only this step again, not the network",
+  "id": "demo.score",
+  "call": "Evaluation.score",
+  "args": {"results": {"$result": "demo.predict:results"}, "frames": "small.val"},
+  "after": ["demo.predict"],
+  "note": "example chain, step 4: scores of the stored predictions"
+}

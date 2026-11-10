@@ -8,6 +8,7 @@ training takes a job file; the other two take arguments. The convention for all 
 | `training/` | `Training` (`autoresearch/trainsuite`, `python -m trainsuite`) | a job file: `Training.check` looks, `Training.run` starts; see `training/README.md` |
 | `running/` | `Runner` (`bev_fusion/runner`, `python -m runner`) | arguments: `Runner.plan` (dry run), `Runner.predict` (the network on frames, stored); see `running/README.md` |
 | `evaluation/` | `Evaluation` (`autoresearch/evalsuite`, `python -m evalsuite`; BEV adapter `evaluation/bev_eval.py`) | arguments: `Evaluation.run` (predict through the Runner, then score), `Evaluation.score` (only score what is stored); see `evaluation/README.md` |
+| `chain/` | all of them, one after the other (`autoresearch/jobrunner`) | four job files: GT, training, predictions, numbers; the data named in the arguments; see `chain/README.md` |
 
 ```
 training/*.json  --Training.run-->       runs/<name>/ (checkpoint, config, code snapshot)

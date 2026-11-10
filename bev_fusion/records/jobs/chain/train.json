@@ -1,0 +1,10 @@
+{
+  "_comment": "step 2 of the example chain: a training job file of the trainsuite (it becomes Training.run). `split` names the training data (splits/<split>.json), `preset` the length; 30 steps is a smoke test, not a result",
+  "id": "demo.t20",
+  "config": "training/configs/t20_base.json",
+  "preset": ["small"],
+  "set": {"split": "small", "steps": 30, "warmup": 5, "eval_every": 30, "eval_batches": 2, "save_every": 30},
+  "no_card": true,
+  "after": ["demo.gt"],
+  "note": "example chain, step 2: training on the split small (diagnostic: no card, feeds no verdict)"
+}

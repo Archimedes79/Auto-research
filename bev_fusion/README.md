@@ -25,6 +25,7 @@ From this folder, in the WSL (env `gcar`, `~/miniconda3/envs/gcar/bin/python`); 
 | the scenes of a run | `python training/splits.py names small` (a split's scenes), `python training/splits.py manifest runs/<run>` (split, GT, code commit and card of a run in one file) |
 | evaluate a run | the front door: `python evaluation/evaluate.py runs/<run> --quant` (numbers), `--qual 8` or `--qual scene-0061/12` (pictures), `--videos 3`, `--time` (idle GPU), `--all` (what the t16 chain did); it calls `bev_suite.py`, whose sub-commands (`eval`, `modules`, `timing`, `qual`, `generalisation`, `report`, `compare` = paired bootstrap) are in `evaluation/README.md` |
 | the ground truth | `python -m GtGenerator sets` (what the store holds), `python -m GtGenerator generate ...`: `../GtGenerator/README.md` |
+| the whole way on a data set | GT, training, predictions, numbers as four jobs (`autoresearch/jobrunner`, the data named in the arguments): `records/jobs/chain/README.md` |
 | the trained network on frames, no GT | `python -m runner Runner.predict runs/<name> small.val --taps fused` (the class `Runner`); the planner-facing `python runner/bev_runner.py precompute / network / full ...`: `runner/README.md` |
 
 ## Folders

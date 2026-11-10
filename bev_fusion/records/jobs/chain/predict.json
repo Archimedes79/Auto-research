@@ -1,0 +1,8 @@
+{
+  "_comment": "step 3 of the example chain: the trained network on the frames of a set, no ground truth, stored. `network` is the run folder of step 2 (run id demo.t20 = runs/demo_t20); `frames` is the data: <split>.<part> (small.val, large.val, ...), val, spread:N:set, scenes:a,b:val, ...",
+  "id": "demo.predict",
+  "call": "Runner.predict",
+  "args": {"network": "demo_t20", "frames": "small.val"},
+  "after": ["demo.t20"],
+  "note": "example chain, step 3: predictions of the network on small.val"
+}
