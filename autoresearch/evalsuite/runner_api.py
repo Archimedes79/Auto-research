@@ -1,16 +1,17 @@
-"""Runner: the class that executes a network and stores what it predicts (D70, D72). The Evaluation calls it; it also works alone, to try a network on frames that have no labels.
+"""Runner: the class that executes a network and stores what it predicts (D70, D72). The layer below the Evaluation (api.py), which is the front door and calls it (`tap`, `time`, `probe` are passed through); it also works alone in Python, to try a network on frames that
+have no labels. It has no command line here: the commands of the Runner are runsuite's.
 
     rn = Runner()                                                  # the project is AR_PROJECT (default), its adapter says what a network and its data are (api.py)
-    rn.check("runs/t23_C_s1", "large.val")                         # the dry run: scenes, frames, what is stored, what would run, the problems
-    rn.run("runs/t23_C_s1", "large.val", taps=("fused",))          # predict what is not stored yet, store it (ResultSet, results.py): the id `<network>@r<hash>`
-    rn.tap(id, "scene-0061/12", "fused");  rn.list("runs/t23_C_s1")
+    rn.plan("runs/t23_C_s1", "large.val")                          # the dry run: scenes, frames, what is stored, what would run, the problems
+    rn.predict("runs/t23_C_s1", "large.val", taps=("fused",))      # predict what is not stored yet, store it (ResultSet, results.py): the id `<network>@r<hash>`
+    rn.tap(id, "scene-0061/12", "fused");  rn.list_results("runs/t23_C_s1")
 
 It reads no ground truth and computes no validation loss: the adapter's `free_source` / `free_subject` (when it has them; else its `source` / `subject`) give a Source whose frames have
 no reference and a Subject that only predicts. A network with a memory always runs warm, whole scenes in time order from its own start (D70); the frames asked for decide which results are kept.
 What is stored is the same ResultSet whoever asks (same identity rules as api.py): `Evaluation.score` scores it later when a ground truth exists. Also here, because they execute the
-network: `time` (ms per module and frame, idle GPU) and `probe` (the module probe). `run` is not `autoresearch/tools/run.py`: no ledger row, no GPU slot.
+network: `time` (ms per module and frame, idle GPU) and `probe` (the module probe). `predict` is not `autoresearch/tools/run.py`: no ledger row, no GPU slot.
 The health of a carried memory (the adapter's MEMORY_TAP, the mean of that tap per frame): empty at the first frame of a scene, filling over its frames; a scene that fails is a warning
-in the result of `run`, never an error. Not the engine's `runner.Runner` (that one only iterates frames through a Subject)."""
+in the result of `predict`, never an error. Not the engine's `runner.Runner` (that one only iterates frames through a Subject)."""
 from __future__ import annotations
 
 import os
@@ -28,8 +29,8 @@ from .runner import Runner as FrameRunner                      # the engine's fr
 
 class Runner(Helpers):
     # ---------------------------------------------------------------------------------------- the dry run and what is stored
-    def check(self, network: str, frames: str = "val", taps: Sequence[str] = (), workers: int = 0, control: str = "") -> Dict[str, Any]:
-        """the dry run: what `run` would do with these frames and what is wrong (`ok`, `problems`). No frame runs; the data and the checkpoint are opened (a BEV network is built on the CPU)"""
+    def plan(self, network: str, frames: str = "val", taps: Sequence[str] = (), workers: int = 0, control: str = "") -> Dict[str, Any]:
+        """the dry run of `predict`: what it would do with these frames and what is wrong (`ok`, `problems`). No frame runs; the data and the checkpoint are opened (a BEV network is built on the CPU)"""
         problems: List[str] = []
         taps = names(taps)
         res: Dict[str, Any] = {"network": network, "frames": str(frames), "ok": False, "problems": problems}
@@ -60,7 +61,7 @@ class Runner(Helpers):
         res["ok"] = not problems
         return res
 
-    def list(self, network: str) -> List[Dict[str, Any]]:
+    def list_results(self, network: str) -> List[Dict[str, Any]]:
         """the stored predictions of a network, with their size"""
         net = self.resolve(network)
         base, name, rows = os.path.join(self.ad.out(net), "results"), self.ad.name(net), []
@@ -86,13 +87,13 @@ class Runner(Helpers):
         if not name:
             return {"results": results, "frame": ref.label, "taps": rs.tap_names(ref)}
         if name not in rs.tap_names(ref):
-            raise EvaluationError(f"{frame} of {results} has no tap {name!r}; it has {rs.tap_names(ref)} (ask for it with `run --taps {name}`)")
+            raise EvaluationError(f"{frame} of {results} has no tap {name!r}; it has {rs.tap_names(ref)} (ask for it with `predict --taps {name}`)")
         path = rs.tap_path(ref, name)
         arr = np.load(path, mmap_mode="r")
         return {"results": results, "frame": ref.label, "tap": name, "path": path, "shape": list(arr.shape), "dtype": str(arr.dtype)}
 
     # ---------------------------------------------------------------------------------------- running (the only code that executes the network)
-    def run(self, network: str, frames: str = "val", taps: Sequence[str] = (), device: str = "cuda", workers: int = 2, control: str = "", progress: int = 50) -> Dict[str, Any]:
+    def predict(self, network: str, frames: str = "val", taps: Sequence[str] = (), device: str = "cuda", workers: int = 2, control: str = "", progress: int = 50) -> Dict[str, Any]:
         """run the network on the frames that are not stored yet (whole scenes in time order, warm: D70) and store what it predicts, with the intermediate results `taps` when asked;
         no ground truth is read. -> the id of the predictions, what was done and the warnings of the memory's health"""
         net, fr, taps = self.resolve(network), Frames.parse(frames), names(taps)

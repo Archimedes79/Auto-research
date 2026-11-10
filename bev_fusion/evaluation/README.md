@@ -33,30 +33,31 @@ A new set is a new file in `splits/` (and is then also a split the training can 
 
 ## The class interface: `Evaluation` (D70: the memory is carried, the predictions are stored)
 
-The same evaluation as one class with the pattern of the other suites (`../../autoresearch/INTERFACE.md`; the code in `../../autoresearch/evalsuite/api.py`, this project's side is `bev_eval.py`, named in `evalsuite.json`).
+The same evaluation as one class with the pattern of the other suites (`../../autoresearch/README.md`; the code in `../../autoresearch/evalsuite/api.py`, this project's side is `bev_eval.py`, named in `evalsuite.json`).
 From `autoresearch/` with `AR_PROJECT=../bev_fusion`:
 ```
 python -m evalsuite Evaluation.check runs/t23_C_s1 small.val                  # the dry run: scenes, frames, what is stored, the id, the problems (exit 1 when there are)
 python -m evalsuite Evaluation.run runs/t23_C_s1 small.val --gt-key v8        # predict what is not stored yet, then score; --json for a machine
-python -m evalsuite Evaluation.quant t23_C_s1@e3f9a2c1d4b0 --match drivable  # the ids are printed by run and by `Evaluation.list runs/t23_C_s1`
+python -m evalsuite Evaluation.show-numbers t23_C_s1@e3f9a2c1d4b0 --match drivable   # the ids are printed by run and by `Evaluation.list runs/t23_C_s1`
 python -m evalsuite Evaluation.compare A_ID B_ID                              # b - a (a = the control), refused on another GT or other frames; each network ran in its own process
+python -m evalsuite tap t23_C_s1@r3f9a2c1d4b0 scene-0061/12 --name fused       # an intermediate result stored with the predictions (asked for with `run --taps fused`)
 ```
 ```python
 from evalsuite import Evaluation
 ev = Evaluation()                              # AR_PROJECT=../bev_fusion
 r = ev.run("runs/t23_C_s1", "spread:200:large.val", gt_key="v8", metrics=("maps", "boxes", "fusion"))
-r.quant(), r.by("scene"), r.worst("seg"), r.card()
+ev.show_numbers(r["id"]), ev.split_numbers(r["id"], "scene"), ev.find_worst(r["id"], "seg"), ev.make_card(r["id"])
 ```
 One network per process: the code of a run (its snapshot) stays imported, `bev_eval.source` refuses a second snapshot in the same process. What differs from `bev_suite.py eval`: a network with a memory runs warm, whole scenes in time order from its own start (the frames you ask for decide which results are kept and scored; `eval` without
 `--warm` starts every frame cold, so the numbers of the two are not comparable); what the network predicted is stored once per network and checkpoint under `RUN/eval/results/<id>/` (about 1 - 2 MB per
-frame) and a subset, a new GT or the metrics `curves` / `fusion` / `velocity` added are scored from it without the network (`predict` and `score` are the two halves of `run`); the ids are
+frame) and a subset, a new GT or the metrics `curves` / `fusion` / `velocity` added are scored from it without the network (`Runner.predict` and `Evaluation.score` are the two halves of `Evaluation.run`; the Evaluation is the front door, the command line offers only it); the ids are
 `<run>@r<hash>` (predictions) and `<run>@e<hash>` (a scored evaluation, under `RUN/eval/suite/quant/`, readable by the older `quant` commands). Intermediate results (`--taps lift,fused,motion_l2,...`: the taps of `bev_adapter.bev_hooks()`, `trunk`, ...) are stored next to the frames under `taps/` and read with `Evaluation.tap`;
 the health of the camera memory (D70) is checked on every scene the network runs from the tap `memory_conf` (empty at the first frame, > 0.05 = not initialised; not filling = not used) and shows
-as a warning. What the interface does not do yet: a ground-truth-free `predict` (the Subject computes its val loss from the GT, so a frame without labels needs a Subject without the loss: a change
-of the frozen `bev_adapter.py` or a second Subject class). The val loss is computed by the network while it
-predicts, against the ground truth of that moment: a rescoring under another GT keeps it and says so (`warnings`; the card leaves `val_loss/*` out). `run` here books no ledger row and takes no GPU
+as a warning. The network is run by the `Runner` class (the layer below the Evaluation: `predict`, `plan`, `list_results`, `tap`, `time`, `probe`; D72; its own command line is runsuite's), which reads no ground truth and computes no
+validation loss: it works alone on frames without labels (the BEV side: `bev_free.py`, `free_source` / `free_subject` of the adapter), `Evaluation.run` calls it and scores its predictions; so an Evaluation has no `loss.*` / `val_loss/*`
+(`bev_suite.py eval` keeps them). `run` here books no ledger row and takes no GPU
 slot: a number that feeds a verdict is launched with `run.py ... -- python -m evalsuite Evaluation.run ...`. Checks: `../tests/test_evaluation_api.py` (without option: the interface on a toy project,
-the adapter's identity, TEST refused; `--real`: on `t16_full_s0`, CPU, the interface equals the engine's own run score for score). `evaluate.py` and `bev_suite.py` stay the front doors of the
+the adapter's identity, TEST refused; `--real`: on `t20_base_s0`, CPU, needs 18 GB of free RAM, the interface equals the engine's own run score for score). `evaluate.py` and `bev_suite.py` stay the front doors of the
 frozen frame; `bev_eval.py` adds no logic to them (it calls `bev_adapter.build`, `bev_suite._task_only`, `bev_suite.contract_card`).
 
 ## Use
@@ -102,7 +103,7 @@ Global options: `--device cuda|cpu --workers N --split SET (val | train | <split
 | file | content | test |
 |---|---|---|
 | `bev_sets.py` | the sets the evaluation runs on (`val` / `train` = the run's lists, `<split>.<part>` of `splits/`; the one definition is the training's, no list of its own): `parse`, `tag`, `lists`, `names`, `table`; `--list` / `--selftest` | `bev_sets.py --selftest`, `../tests/test_evaluate_door.py` (`--sets` runs a named set against the run's own, CPU, by hand) |
-| `bev_eval.py` + `evalsuite.json` | the BEV system as a project of the class interface `Evaluation` (see "The class interface"): `identity` (checkpoint fingerprint, config, code, the adapter), `source` / `subject` (via `bev_adapter.build`), `task`, `reference` (the GT without the inputs), `card`, `time`, `probe`, `resolve` (a run name or path) | `../tests/test_evaluation_api.py` |
+| `bev_eval.py` + `evalsuite.json` | the BEV system as a project of the class interface `Evaluation` (see "The class interface"): `identity` (checkpoint fingerprint, config, code, the adapter files `bev_adapter.py` + `bev_free.py`), `source` / `subject` (via `bev_adapter.build`), `free_source` / `free_subject` (the Runner's pair, via `bev_free.py`), `task`, `reference` (the GT without the inputs), `card`, `time`, `probe`, `resolve` (a run name or path) | `../tests/test_evaluation_api.py` |
 | `bev_free.py` | the BEV network run WITHOUT the ground truth (D72): `free_source(built_source)` (a Source whose items carry no `gt`, `Sample(reference=None)`, `describe()` without a ground-truth signature, the planned frame's dataset key checked) and `FreeSubject(built_subject)` (the model of a `BEVSubject` called the way `train.forward_loss` calls it before the loss: ego gap, host copies, autocast, carried state; `info` without `loss`); the outputs are built by the same functions as `BEVSubject.predict` builds them and are bit-equal to it; plugged into `Evaluation` through the adapter functions `free_source` / `free_subject` of `bev_eval.py`. The output-building lines are copied from the frozen `bev_adapter.py`: the test fails when they drift | `../tests/test_bev_free.py` |
 | `bev_suite.py` | the command line of this folder: the suite's commands on a run + `eval`, `time`, `memory`, `compare` and the legacy exports | `bev_selftest.py` |
 | `evaluate.py` | the front door of the evaluation (see "The one command"): `plan(args)` turns the options into the ordered `bev_suite.py` commands (a pure function), `execute()` runs them one process each (fatal and soft steps, the second try of generalisation, the exit code) after `refusal()` has checked the options and writes `RUN/eval/door.json`; no metric of its own (only the named frames of `--qual` are drawn in this process, through `bev_suite.make_suite`) | `../tests/test_evaluate_door.py` (the plan of `--all` equals the t16 chain command by command plus the report page, the executor rules with a fake runner, the refusals; `--real`: the golden check against `bev_suite.py eval` on a finished run) |

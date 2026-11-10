@@ -2,7 +2,7 @@
 
 Without option (CPU, seconds, no data): the checks of the interface on its toy project (`evalsuite/selftest_api.py`), `bev_sets` / adapter contract (every function the interface needs is there),
 and the command line lists its methods.
-With --real [RUN] (a finished run with a checkpoint, default runs/t16_full_s0; CPU, 4 frames, about 5 minutes; skips with a message without a checkpoint): the proof that the interface
+With --real [RUN] (a finished run with a checkpoint, default runs/t20_base_s0; CPU, 4 frames, about 5 minutes; skips with a message without a checkpoint): the proof that the interface
 changes no number. On a copy of the run folder (config, GT identity, code snapshot, the checkpoint linked):
   1  `Evaluation.run(RUN, "frames:scene-0103/3:val")` = the engine's own run of the same objects (`bev_adapter.build`, `quant.run(scenes, max_frames=4, state="carry")`): every score of that
      frame equal, number for number; the scene ran whole and warm up to the frame asked for, the other three frames are not stored
@@ -22,6 +22,7 @@ import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+NEED_GB = 18
 sys.path[:0] = [ROOT, os.path.join(ROOT, "..", "autoresearch")]
 
 
@@ -35,11 +36,13 @@ def quick():
     missing = [f for f in ADAPTER_FUNCTIONS if not hasattr(bev_eval, f)]
     assert not missing, f"bev_eval lacks {missing}"
     assert hasattr(bev_eval, "reference") and hasattr(bev_eval, "card") and hasattr(bev_eval, "time") and hasattr(bev_eval, "probe")
+    assert hasattr(bev_eval, "free_source") and hasattr(bev_eval, "free_subject"), "the Runner's pair: both or none"
+    assert len(bev_eval.evaluator_extra()) == 12, "the adapter's own code is part of the evaluation id"
     cfg = json.load(open(os.path.join(ROOT, "evaluation", "evalsuite.json")))
     assert cfg == {"adapter": "evaluation.bev_eval"}, cfg
     s = bev_eval.sets()
     assert s["small.val"] == 10 and s["large.val"] == 82 and s["val"] is None and s["train"] is None, s
-    # the identity of a network: its checkpoint (name, size, fingerprint), config, code and the adapter; a retrained checkpoint of the same name is another identity
+    # the identity of a network: its checkpoint (name, fingerprint), config, code and the adapter (bev_adapter.py and bev_free.py); a retrained checkpoint of the same name is another identity
     with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, "temp")) as tmp:
         run = os.path.join(tmp, "fake_run")
         os.makedirs(run)
@@ -47,7 +50,13 @@ def quick():
         ck = os.path.join(run, "ckpt_00000010.pt")
         open(ck, "wb").write(os.urandom(50_000))
         a = bev_eval.identity(run)
-        assert a["checkpoint"] == "ckpt_00000010.pt" and a["size"] == 50_000 and a["adapter"] and a == bev_eval.identity(run), a
+        assert a["checkpoint"] == "ckpt_00000010.pt" and a["adapter"] and a == bev_eval.identity(run), a
+        file_hash = bev_eval._file_hash
+        bev_eval._file_hash = lambda p: file_hash(p) + ("x" if p.endswith("bev_free.py") else "")           # an edit of bev_free.py (the Runner's path) is another identity
+        try:
+            assert bev_eval.identity(run)["adapter"] != a["adapter"], "bev_free.py is part of the identity"
+        finally:
+            bev_eval._file_hash = file_hash
         assert a["code"].startswith("live training/ "), "a run without a code snapshot is identified by the live training/ code it will be imported from"
         data = bytearray(open(ck, "rb").read())
         data[25_000] ^= 1                                                                                 # a byte in the MIDDLE of the file
@@ -85,6 +94,13 @@ def quick():
         raise AssertionError("a second code snapshot was accepted in one process")
     except EvaluationError as e:
         assert "one network per process" in str(e), e
+        bev_eval._CODE["path"] = "/some/other/snapshot"                           # every way into the network's code claims it: a task, a timing and a probe too
+        for call in (lambda: bev_eval.task("runs/t16_full_s0", ("maps", "boxes")), lambda: bev_eval.time("runs/t16_full_s0"), lambda: bev_eval.probe("runs/t16_full_s0")):
+            try:
+                call()
+                raise AssertionError("a second code snapshot was accepted by a task / timing / probe")
+            except EvaluationError as e:
+                assert "one network per process" in str(e), e
     finally:
         bev_eval._CODE.update(saved)
     import torch                                                                                         # cuda asked for: moved when there, an error (never a quiet CPU run) when not
@@ -116,13 +132,25 @@ def quick():
     except ValueError as e:
         assert "unknown metrics" in str(e)
     out = subprocess.run([sys.executable, "-m", "evalsuite", "methods"], cwd=os.path.join(ROOT, "..", "autoresearch"), capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "Evaluation.run(" in out.stdout and "Evaluation.card(" in out.stdout, out.stderr[-300:]
+    assert out.returncode == 0 and "Evaluation.run(" in out.stdout and "Evaluation.make_card(" in out.stdout, out.stderr[-300:]
     print(f"quick: interface checks {r['checks']} on the toy project, bev_eval has the adapter contract, sets {len(s)}, the command line lists its methods")
+
+
+def available_gb():
+    try:
+        with open("/proc/meminfo") as f:
+            return int(next(ln for ln in f if ln.startswith("MemAvailable")).split()[1]) / 1e6
+    except (OSError, StopIteration, ValueError):
+        return None
 
 
 def real(run, scene, index):
     if not glob.glob(os.path.join(ROOT, run, "ckpt_*.pt")):
         print(f"SKIP real check: {run} has no checkpoint here")
+        return False
+    free = available_gb()
+    if free is not None and free < NEED_GB:                                          # the box is shared: the real check holds two built networks and their tables (about 15 GB at its peak)
+        print(f"SKIP real check: {free:.1f} GB available, it needs {NEED_GB} GB (wait until the other jobs are done)")
         return False
     os.chdir(ROOT)
     from evaluation import bev_adapter as A
@@ -145,11 +173,16 @@ def real(run, scene, index):
         assert r["n_frames"] == 1 and r["frames_predicted"] == 1 and r["predictions_reused"] is False and r["warnings"] == [], r
         rs_dir = os.path.join(net, "eval", "results", r["results"].split("@")[1])
         assert len(os.listdir(os.path.join(rs_dir, "frames"))) == 1, "only the frame asked for is stored (the scene ran whole up to it)"
+        from evalsuite.results import ResultSet
+        rs0 = ResultSet.open(rs_dir)
+        stored0 = rs0.load(rs0.refs()[0])
+        assert "loss" not in stored0.info and not any(k.startswith("group.") for k in stored0.info) and stored0.info.get("device"), "the Runner read no ground truth: no validation loss in what it stored"
+        assert rs0.manifest["identity"]["inputs"].get("dataset") and "gt_signature" not in rs0.manifest["identity"]["inputs"], rs0.manifest["identity"]["inputs"]
         src, subj, task = A.build(net, device="cpu", split="val", workers=0)
         suite = EvalSuite(src, subj, task, out=os.path.join(tmp, "engine"), state="carry")
         store = suite.quant.run(scenes=[scene], max_frames=index + 1, name="engine", progress=0)
-        mine = ev.by(r["id"], "frame")
-        want = next(fr["scores"] for fr in store.frames if fr["label"] == f"{scene}/{index:03d}")
+        mine = ev.split_numbers(r["id"], "frame")
+        want = {k: v for k, v in next(fr["scores"] for fr in store.frames if fr["label"] == f"{scene}/{index:03d}").items() if not k.startswith("loss.")}    # the Runner reads no ground truth: no val loss
         assert set(mine) == {f"{scene}/{index:03d}"}, set(mine)
         got = mine[f"{scene}/{index:03d}"]
         bad = [k for k in want if k in got and abs(got[k] - want[k]) > 1e-9 * max(1.0, abs(want[k]))]
@@ -161,13 +194,13 @@ def real(run, scene, index):
         assert r2["predictions_reused"] and r2["id"] == r["id"], r2
         r3 = ev.run(net, frames, metrics=("maps", "boxes", "fusion"), device="cpu", workers=0, progress=0)
         assert r3["predictions_reused"] and r3["results"] == r["results"] and r3["id"] != r["id"], r3
-        q2, q3 = r.quant()["numbers"], r3.quant()["numbers"]
+        q2, q3 = ev.show_numbers(r["id"])["numbers"], ev.show_numbers(r3["id"])["numbers"]
         shared = [k for k in q2 if k in q3]
         assert shared and all(abs(q2[k] - q3[k]) <= 1e-12 * max(1.0, abs(q2[k])) or (q2[k] != q2[k] and q3[k] != q3[k]) for k in shared) and any("detf" in k for k in q3), "fusion added, the rest unchanged"
         print(f"  2 ok: the stored predictions were reused; the fusion numbers added: {len(q3) - len(q2)} more, {len(shared)} shared numbers equal")
         # 3 card, check, list
         os.chdir(os.path.join(ROOT, "..", "autoresearch"))                                                 # the documented working folder: the card must not depend on being in bev_fusion
-        c = r.card()
+        c = ev.make_card(r["id"])
         os.chdir(ROOT)
         snap = open(os.path.join(src_run, "code", "SNAPSHOT.txt")).read().split()
         assert c["commit"] == snap[snap.index("commit") + 1] and "seed" in c, (c.get("commit"), c.get("seed"))
@@ -181,7 +214,7 @@ def real(run, scene, index):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--real", nargs="?", const="runs/t16_full_s0", default=None, metavar="RUN")
+    ap.add_argument("--real", nargs="?", const="runs/t20_base_s0", default=None, metavar="RUN")
     ap.add_argument("--scene", default="scene-0103")
     ap.add_argument("--index", type=int, default=3)
     a = ap.parse_args()

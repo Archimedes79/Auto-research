@@ -5,7 +5,7 @@ seconds:  `python -m evalsuite.selftest_api`  or  `python -m evalsuite Evaluatio
 What it proves: Frames round-trips and resolves; a ResultSet returns exactly what was stored and belongs to an identity, two writers exclude each other, a dead writer's lock is taken over;
 `run` equals the engine's own run (same numbers, carry state) on the kept frames, also for one frame in the middle of a scene (the scene runs whole and warm: D70); a second `run`, and a
 subset of an earlier one, take the stored predictions (the network is not called); a new ground truth is scored from them without the network and the self-computed number is flagged; a run
-that was killed half-way resumes with the right memory; Runner.run + score = Evaluation.run; `check` finds the problems before anything runs; the reading methods agree with the engine; the command
+that was killed half-way resumes with the right memory; Runner.predict + score = Evaluation.run; `check` finds the problems before anything runs; the reading methods agree with the engine; the command
 line prints what the methods return (clean json), maps errors to exit 2, and its words do not collide with the older commands."""
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ import io
 import json
 import os
 import pickle
+import re
 import shutil
 import struct
 import subprocess
@@ -34,8 +35,9 @@ from .results import Locked, ResultSet, decode, encode, result_id, writer_lock
 from .suite import EvalSuite
 
 # ------------------------------------------------------------------------------------------------ the toy project (this module is its own adapter)
-STATE = SimpleNamespace(root="", gt="g1", shift=0, calls=0, loads=0, free_loads=0, fail_at=None, memory="ok", bump=0, change=False)
+STATE = SimpleNamespace(root="", gt="g1", shift=0, calls=0, loads=0, free_loads=0, fail_at=None, memory="ok", bump=0, change=False, ev="x")
 MEMORY_TAP = "memory_conf"
+COMPARE_IGNORE = {"source": ("evaluator_hash",)}                                   # the arms may differ in the evaluator code: compare says so in its warnings
 
 
 def name(network): return os.path.basename(network)
@@ -57,7 +59,7 @@ class Source(minimal.MinSource):
         return super().load(ref)
 
     def describe(self):
-        return {"class": "ToySource", "dataset": "toy", "split": self.of, "scenes": len(self.scenes()), "gt_signature": STATE.gt, "gt_version": None, "evaluator_hash": "x"}
+        return {"class": "ToySource", "dataset": "toy", "split": self.of, "scenes": len(self.scenes()), "gt_signature": STATE.gt, "gt_version": None, "evaluator_hash": STATE.ev}
 
 
 class Subject(minimal.MinSubject):
@@ -88,8 +90,8 @@ class Subject(minimal.MinSubject):
 
 class FreeSource(minimal.MinSource):
     """the data the Runner reads: no ground truth (reference None), its own load counter; it describes what the network is fed like the labelled source does"""
-    def __init__(self, of):
-        self.of = of
+    def __init__(self, of, control=""):
+        self.of, self.control = of, control
 
     def scenes(self):
         return ["demo-0"] if self.of == "small" else super().scenes()
@@ -100,11 +102,11 @@ class FreeSource(minimal.MinSource):
         return Sample(s.ref, inputs=s.inputs, reference=None, meta={"token": ref.key})
 
     def describe(self):
-        return {"class": "FreeSource", "dataset": "toy", "split": self.of, "scenes": len(self.scenes())}
+        return {"class": "FreeSource", "dataset": "toy", "split": self.of, "scenes": len(self.scenes()), "control": self.control or None}
 
 
 def source(net, of, workers=0, control=""): return Source(of)                       # with ground truth: what the Evaluation scores with
-def free_source(net, of, workers=0, control=""): return FreeSource(of)               # without: what the Runner runs on
+def free_source(net, of, workers=0, control=""): return FreeSource(of, control)       # without: what the Runner runs on
 def subject(net, src, device): return Subject(float(net.split("thr")[-1]))
 def free_subject(net, src, device):                                                  # (the toy network never reads a ground truth)
     STATE.bump += 1 if STATE.change else 0                                           # "a training wrote a new checkpoint while the network was loaded"
@@ -313,8 +315,8 @@ def check_run():
     r2, sub = ev.run(net, "val", progress=0), ev.run(net, "scenes:demo-0:val", progress=0)
     assert STATE.calls == 0 and r2["predictions_reused"] and r2["id"] == allr["id"] and ev.show_numbers(r2["id"]) == ev.show_numbers(allr["id"]), "the same question"
     assert sub["predictions_reused"] and sub["results"] == allr["results"] and sub["id"] != allr["id"] and sub["n_frames"] == 6, "a subset costs no network"
-    # Runner.run + score = Evaluation.run
-    pr = ev.runner.run(net, "val")
+    # Runner.predict + score = Evaluation.run
+    pr = ev.runner.predict(net, "val")
     assert pr["results"] == allr["results"] and pr["frames_predicted"] == 0 and ev.score(pr["results"], "val")["id"] == allr["id"]
     _raises(EvaluationError, "not in", ev.score, pr["results"], "scenes:demo-9")
     # a new ground truth: another evaluation id, scored from the stored predictions, no network and no input loaded
@@ -352,6 +354,37 @@ def check_run():
         with writer_lock(os.path.join(out(net4), "results", rid)):
             _raises(EvaluationError, "being written by pid", ev.run, net4, "val", progress=0)
         assert ev.run(net4, "val", progress=0)["id"], "the lock is free again"
+    # the identity of the predictions: a checkpoint that changed, or another control, is another ResultSet (never the stored frames of the old one)
+    base = ev.runner.predict(net, "scenes:demo-0:val")["results"]
+    STATE.bump = 1
+    try:
+        moved = ev.runner.predict(net, "scenes:demo-0:val")
+        assert moved["results"] != base and moved["frames_predicted"] == 6, "another checkpoint: predicted again under another id"
+    finally:
+        STATE.bump = 0
+    ctl = ev.runner.predict(net, "scenes:demo-0:val", control="camera_off")
+    assert ctl["results"] not in (base, moved["results"]) and ev.check(net, "scenes:demo-0:val", control="camera_off")["results"] == ctl["results"], "another control: another set"
+    # the same frames asked through another set: another evaluation id (never a clash in one store), a clear message otherwise
+    one, two = ev.run(net, "scenes:demo-0:val", progress=0), ev.run(net, "scenes:demo-0:small", progress=0)
+    assert one["id"] != two["id"] and one["results"] == two["results"], "the set is part of the question; the predictions are shared"
+    # the evaluator code of two evaluations differs: compare says so
+    STATE.ev = "y"
+    try:
+        low_y = ev.run(net, "val", progress=0)
+    finally:
+        STATE.ev = "x"
+    assert low_y["id"] != allr["id"] and low_y["results"] == allr["results"], "another evaluator hash: scored again from the same predictions"
+    assert any("different evaluator code" in w for w in ev.compare(allr["id"], low_y["id"]).get("warnings", [])), "compare names a difference of the evaluator"
+    # the evaluation of an id that is being written is refused with the holder's name
+    if results_mod.fcntl is not None:
+        eid = ev.check(net, "val", metrics=("maps",))["id"].partition("@")[2]
+        with writer_lock(os.path.join(out(net), "suite", "quant", eid)):
+            _raises(EvaluationError, "being written by pid", ev.score, allr["results"], "val", None, ("maps",))
+        assert ev.score(allr["results"], "val", None, ("maps",))["id"].endswith(eid)
+    # an adapter without the label-free pair: the Runner reads the labelled source and subject (more data than it needs, the same numbers)
+    plain_ad = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, reference=reference, card=card)
+    fb = Evaluation(adapter=plain_ad).run("runs/thr0.45", "val", progress=0)
+    _same(Evaluation(adapter=plain_ad).show_numbers(fb["id"])["numbers"], _engine("runs/thr0.45", Frames.parse("val")), "the fallback path")
     # the adapter: free_source and free_subject go together
     half = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, free_source=free_source)
     _raises(EvaluationError, "go together", load_adapter, half, None)
@@ -359,24 +392,25 @@ def check_run():
     # the identity of the network changes while it is loaded (a training wrote a checkpoint): nothing is stored, the message says why
     STATE.change = True
     try:
-        _raises(EvaluationError, "changed while it was loaded", ev.runner.run, "runs/thr0.8", "scenes:demo-0:val")
+        _raises(EvaluationError, "changed while it was loaded", ev.runner.predict, "runs/thr0.8", "scenes:demo-0:val")
     finally:
         STATE.change, STATE.bump = False, 0
     assert all(x["frames"] == 0 for x in ev.list("runs/thr0.8")), "no frame was stored"
     # intermediate results: asked for with the predictions; a frame stored without them is predicted again, one with them is reused; unknown taps are refused before the network runs
     net5, STATE.calls = "runs/thr0.6", 0
-    plain = ev.runner.run(net5, "scenes:demo-0:val")
+    plain = ev.runner.predict(net5, "scenes:demo-0:val")
     assert plain["frames_predicted"] == 6
-    with_tap = ev.runner.run(net5, "scenes:demo-0:val", taps=("feat",))
+    with_tap = ev.runner.predict(net5, "scenes:demo-0:val", taps=("feat",))
     assert with_tap["frames_predicted"] == 6 and with_tap["results"] == plain["results"], "stored without the tap: predicted again to get it"
     STATE.calls = 0
-    assert ev.runner.run(net5, "scenes:demo-0:val", taps=("feat",))["frames_predicted"] == 0 and STATE.calls == 0 and ev.runner.run(net5, "scenes:demo-0:val")["frames_predicted"] == 0, "and reused"
+    assert ev.runner.predict(net5, "scenes:demo-0:val", taps=("feat",))["frames_predicted"] == 0 and STATE.calls == 0 and ev.runner.predict(net5, "scenes:demo-0:val")["frames_predicted"] == 0, "and reused"
     assert ev.runner.tap(plain["results"], "demo-0/2")["taps"] == ["feat"]
     t = ev.runner.tap(plain["results"], "demo-0/2", "feat")
     assert t["shape"] == [32, 32] and np.load(t["path"]).shape == (32, 32)
     _raises(EvaluationError, "has no tap", ev.runner.tap, plain["results"], "demo-0/2", "memory_conf")
-    _raises(EvaluationError, "unknown taps", ev.runner.run, net5, "val", taps=("nothing",))
-    assert ev.runner.run(net5, "scenes:demo-0:val", taps="feat")["frames_predicted"] == 0 and ev.runner.check(net5, "scenes:demo-0:val", taps="feat")["frames_stored"] == 6, "a bare string is one tap, not its letters"
+    _raises(EvaluationError, "unknown taps", ev.runner.predict, net5, "val", taps=("nothing",))
+    assert ev.runner.predict(net5, "scenes:demo-0:val", taps="feat")["frames_predicted"] == 0 and ev.runner.plan(net5, "scenes:demo-0:val", taps="feat")["frames_stored"] == 6, "a bare string is one tap, not its letters"
+    assert ev.check(net5, "scenes:demo-0:val", taps=("feat",))["frames_stored"] == 6 and ev.check(net5, "scenes:demo-0:val", taps=("memory_conf",))["frames_stored"] == 0, "check asks for taps like run"
     # the health of the memory (D70): healthy = no warning; full from the start, or never filling = a warning in the predictions' result
     assert plain["warnings"] == [] and ev.run(net5, "scenes:demo-0:val", progress=0)["warnings"] == []
     for mode, text in (("stuck", "not empty at the first frame"), ("flat", "does not fill")):
@@ -427,6 +461,13 @@ def check_reading(ev, net, allr, low):
     assert Evaluation(adapter=ME).show_numbers(allr["id"])["numbers"] == ev.show_numbers(allr["id"])["numbers"], "a new object finds the evaluation by its id"
     pic = ev.draw_frame(allr["id"], "demo-1/4")
     assert os.path.isfile(pic["images"]["overview"]) and "iou.iou" in pic["scores"]
+    gone = os.path.join(out(net), "results", allr["results"].partition("@")[2], "manifest.json")
+    os.rename(gone, gone + ".away")                                                     # the predictions are gone (package.py clean keeps the manifest, a person may not): a card or a picture cannot be certified
+    try:
+        _raises(EvaluationError, "are gone", ev.make_card, allr["id"])
+        _raises(EvaluationError, "are gone", ev.draw_frame, allr["id"], "demo-1/4")
+    finally:
+        os.rename(gone + ".away", gone)
 
 
 def check_cli():
@@ -450,7 +491,7 @@ def check_cli():
     code, text, _ = call("draw-frame", info["id"], "demo-0/2", *base)                         # the hyphen form of draw_frame
     assert code == 0 and ".png" in text, text
     code, text, _ = call("methods")
-    assert code == 0 and "Evaluation.run(" in text and "Evaluation.compare(" in text and "Runner.run(" in text and "Runner.tap(" in text and "gt_key=None" in text
+    assert code == 0 and "Evaluation.run(" in text and "Evaluation.compare(" in text and "Evaluation.tap(" in text and "gt_key=None" in text and not re.search(r"Runner\.\w+\(", text), "the Evaluation is the one front door of the command line"
     code, _, err = call("Evaluation.show_numbers", "thr0.5@e0000", *base)
     assert code == 2 and "no evaluation" in err
     code, _, err = call("run", "runs/thr0.5", "scenes:demo-9", *base)                         # a data error is a message and exit 2, not a traceback
@@ -463,14 +504,16 @@ def check_cli():
     assert _clean({"a": float("nan"), "b": [np.float32(1.5), float("inf")], "c": (1, 2)}) == {"a": None, "b": [1.5, None], "c": [1, 2]}
     # the words of the older command line stay theirs: a method with the name of an old command must be listed in LEGACY
     old = {c for a in cli.build_parser()._actions if isinstance(a, __import__("argparse")._SubParsersAction) for c in a.choices}
-    assert {m for m in Evaluation.METHODS + Runner.METHODS if m in old} <= set(LEGACY), (old, Evaluation.METHODS, Runner.METHODS)
-    code, text, _ = call("Runner.run", "runs/thr0.5", "val", "--json", "--workers", "0", "--progress", "0", *base)                 # the Runner alone: predictions without a ground truth
-    ran = json.loads(text)
-    assert code == 0 and ran["results"] == info["results"] and ran["frames_predicted"] == 0 and ran["predictions_reused"] is True, (code, text[:200])
-    assert call("tap", info["results"], "demo-0/2", *base)[0] is None, "a bare word is the Evaluation's: the Runner's words need the class name"
-    code, text, _ = call("Runner.tap", info["results"], "demo-0/2", *base)
+    assert {m for m in Evaluation.METHODS if m in old} <= set(LEGACY), (old, Evaluation.METHODS)
+    # the layers: the command line offers the Evaluation only; what executes the network (tap, time, probe) is passed to the Runner
+    assert call("Runner.run", "runs/thr0.5", "val", *base)[0] is None, "the Runner is not on this command line (runsuite has it)"
+    code, text, _ = call("tap", info["results"], "demo-0/2", *base)
     assert code == 0 and "taps" in text, text
-    assert call("Runner.list", "runs/thr0.5", *base)[0] == 0 and call("Runner.check", "runs/thr0.5", "val", *base)[0] == 0
+    for word, what in (("time", "no timing"), ("probe", "no probe")):
+        code, _, err = call("Evaluation." + word, "runs/thr0.5", *base)
+        assert code == 2 and what in err, (word, code, err)
+    code, text, _ = call("Evaluation.list", "runs/thr0.5", *base)
+    assert code == 0 and "predictions" in text
 
 
 def run_all():

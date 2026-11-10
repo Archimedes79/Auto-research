@@ -8,8 +8,8 @@ switch the families of `--curves --fusion --velocity`), the card is `bev_suite.c
 `eval/` (`eval/results/<id>` the predictions, `eval/suite/quant/<id>` the scored evaluation).
 
 What differs from `bev_suite.py eval`: the memory is always carried (D70: whole scenes in time order from the network's own start, the frames asked for decide what is kept and scored; the
-old `eval` without `--warm` starts every frame cold), and the predictions are stored, so a new GT is scored without the network. The val loss of a result is the one computed when the network
-ran (it needs the ground truth of that moment): it is kept as it was, whatever GT a later scoring uses.
+old `eval` without `--warm` starts every frame cold), the predictions are stored, so a new GT is scored without the network, and the network is run by the Runner (D72), which reads no ground
+truth: a prediction carries no validation loss, so `loss.*` / `val_loss/*` are not among the numbers of an Evaluation (`bev_suite.py eval` keeps them).
 Limits: the identity of a network reads its last checkpoint, so predictions of a run whose checkpoints were archived or slimmed (keep3) are found under the identity of the file that was there, and a
 changed file is another network; a network is addressed by the name of its run folder (`runs/x` and `archive/x` would share the id `x@...`).
 """
@@ -33,6 +33,17 @@ _CODE = {"path": None}                           # the code snapshot of the firs
 
 def _abs(net: str) -> str:
     return net if os.path.isabs(net) else os.path.join(ROOT, net)
+
+
+def _claim_code(net: str) -> str:
+    """the code of this run (its snapshot, else the live training/) is imported into this process once and for all: any later network with other code is refused, whatever it is asked for
+    (a task, a timing, a probe, a source). -> the code folder"""
+    from evalsuite.api import EvaluationError
+    code = os.path.abspath(os.path.join(_abs(net), "code")) if os.path.isdir(os.path.join(_abs(net), "code")) else os.path.join(ROOT, "training")
+    if _CODE["path"] not in (None, code):
+        raise EvaluationError(f"one network per process: this process imported the code of {_CODE['path']}, {net} has {code}; run it in another process (compare the evaluations by their ids)")
+    _CODE["path"] = code
+    return code
 
 
 def resolve(text: str) -> str:
@@ -80,13 +91,14 @@ def _tree_hash(folder: str) -> str:
     """the hash of the python files of a folder (name and content, line endings ignored): the code a run without a snapshot is evaluated with"""
     h = hashlib.sha1()
     for p in sorted(glob.glob(os.path.join(folder, "*.py"))):
-        h.update(os.path.basename(p).encode() + hashlib.sha1(open(p, "rb").read().replace(b"\r\n", b"\n")).digest())
+        with open(p, "rb") as f:
+            h.update(os.path.basename(p).encode() + hashlib.sha1(f.read().replace(b"\r\n", b"\n")).digest())
     return h.hexdigest()[:12]
 
 
 def identity(net: str) -> Dict[str, Any]:
-    """what the predictions of this network depend on, read without loading it: the last checkpoint (name, size and the hash of the whole file), the config, the code (the snapshot's
-    record, or a hash of the live training/ code for a run that has none: it is imported then), and Subject.predict / the output decoding in bev_adapter.py"""
+    """what the predictions of this network depend on, read without loading it: the last checkpoint (name and the hash of the whole file), the config, the code (the snapshot's record, or a
+    hash of the live training/ code for a run that has none: it is imported then), and Subject.predict / the output decoding in bev_adapter.py and bev_free.py (the two paths give the same predictions)"""
     net = _abs(net)
     ckpts = sorted(glob.glob(os.path.join(net, "ckpt_*.pt")))
     if not ckpts:
@@ -97,21 +109,16 @@ def identity(net: str) -> Dict[str, Any]:
             code = f.read().strip()
     except OSError:
         code = "live training/ " + _tree_hash(os.path.join(ROOT, "training"))
-    return {"run": name(net), "checkpoint": os.path.basename(last), "size": os.path.getsize(last), "sha1": _file_hash(last), "config": _file_hash(os.path.join(net, "config.json")),
-            "code": code, "adapter": _file_hash(os.path.join(ROOT, "evaluation", "bev_adapter.py"))}
+    adapter = hashlib.sha1("".join(_file_hash(os.path.join(ROOT, "evaluation", f)) for f in ("bev_adapter.py", "bev_free.py")).encode()).hexdigest()[:12]
+    return {"run": name(net), "checkpoint": os.path.basename(last), "sha1": _file_hash(last), "config": _file_hash(os.path.join(net, "config.json")), "code": code, "adapter": adapter}
 
 
 def source(net: str, of: str, workers: int = 2, control: str = ""):
     """the Source of the set `of` for this run (val / train: its own lists, `<split>.<part>`: a file of splits/); the Subject is built with it (on the CPU) and handed out by `subject`"""
-    from evalsuite.api import EvaluationError
     from evaluation import bev_sets
     bev_sets.parse(of)                                                  # TEST and malformed names are refused before anything is built
-    code = os.path.abspath(os.path.join(_abs(net), "code")) if os.path.isdir(os.path.join(_abs(net), "code")) else os.path.join(ROOT, "training")
-    if _CODE["path"] not in (None, code):
-        raise EvaluationError(f"one network per process: this process imported the code of {_CODE['path']}, {net} has {code}; run it in another process (compare the evaluations by their ids)")
-    _CODE["path"] = code
-    A = _A()
-    src, subj, _ = A.build(net, device="cpu", split=of, workers=workers, control=control)
+    _claim_code(net)
+    src, subj, _ = _A().build(net, device="cpu", split=of, workers=workers, control=control)
     src._bev_subject = subj
     return src
 
@@ -136,6 +143,23 @@ def subject(net: str, src, device: str):
 def release(src) -> None:
     """drop the Subject a source holds (a check or a rescoring never runs it)"""
     src._bev_subject = None
+    import gc
+    gc.collect()                                                        # a built network and its nuScenes tables are several GB: give them back before the next build
+
+
+def free_source(net: str, of: str, workers: int = 2, control: str = ""):
+    """the Source the Runner reads: the same set, frames and dataset keys as `source`, without the ground truth (bev_free.FreeSource); the Subject travels with it"""
+    from evaluation.bev_free import free_source as make
+    built = source(net, of, workers, control)
+    free = make(built)
+    built._bev_subject = None                                           # the free Source holds it now
+    return free
+
+
+def free_subject(net: str, src, device: str):
+    """the network without the validation loss (bev_free.FreeSubject over the BEVSubject `subject` hands out)"""
+    from evaluation.bev_free import FreeSubject
+    return FreeSubject(subject(net, src, device))
 
 
 def task(net: str, metrics=("maps", "boxes")):
@@ -144,7 +168,11 @@ def task(net: str, metrics=("maps", "boxes")):
     unknown = sorted(set(metrics) - {"maps", "boxes", "curves", "fusion", "velocity"})
     if unknown:
         raise ValueError(f"unknown metrics {unknown}: maps, boxes, curves, fusion, velocity")
-    return bev_suite._task_only(net, "curves" in metrics, "fusion" in metrics, "velocity" in metrics)
+    _claim_code(net)
+    t = bev_suite._task_only(net, "curves" in metrics, "fusion" in metrics, "velocity" in metrics)
+    metrics_of = t.metrics
+    t.metrics = lambda: [m for m in metrics_of() if m.name != "loss"]       # the Runner reads no ground truth, so a prediction carries no validation loss (D72); `bev_suite.py eval` keeps it
+    return t
 
 
 def reference(src, ref):
@@ -161,17 +189,17 @@ def _step(checkpoint: str):
 def card(info: Dict[str, Any], store, quant, rs):
     """the metric card of an evaluation in the contract of autoresearch/tools/decide.py (what `bev_suite.py eval` writes as eval/card.json): the numbers with their directions,
     protocol = GT, memory carried, and a provenance block; `subset` names the frames when they are not the whole set"""
+    from evaluation import bev_adapter
     from evaluation.bev_suite import better_of, contract_card, provenance_block, to_legacy
-    from evalsuite.api import Frames
+    from evalsuite.api import EvaluationError, Frames
+    if info.get("evaluator") and info["evaluator"] != bev_adapter.evaluator_hash():
+        raise EvaluationError(f"{info['id']} was scored with other evaluator code than the one now ({info['evaluator']} / {bev_adapter.evaluator_hash()}): score the predictions again "
+                              f"(`score {info['results']}`, no network is run), then make the card of the new evaluation")
     tab = quant.table(store)
     flat, better = to_legacy(tab), better_of(tab, quant.s.task.metrics())
     ident = rs.manifest["identity"]["network"] if rs else {}
     run = _abs(info["network"])                                                # the run folder as a path that works from any working directory
     flat["info/step"], flat["info/n_samples"], flat["info/n_scenes"] = _step(ident.get("checkpoint")), len(store.frames), len(store.scene_names())
-    gts = {fr["info"].get("gt_at_predict") for fr in store.frames if fr["info"].get("gt_at_predict")}
-    if gts not in (set(), {info.get("gt_signature")}):                          # predicted under another GT: its val loss is not this GT's
-        flat = {k: v for k, v in flat.items() if not k.startswith("val_loss/")}
-        better = {k: v for k, v in better.items() if not k.startswith("val_loss/")}
     fr = Frames.parse(info["frames"])
     devices = sorted({fr_["info"]["device"] for fr_ in store.frames if fr_["info"].get("device")})
     card_ = contract_card(run, fr.of, "", flat, better, len(store.frames), info.get("gt_signature"), info.get("state", "carry"), info.get("control", ""))
@@ -188,6 +216,7 @@ def card(info: Dict[str, Any], store, quant, rs):
 def time(net: str, n: int = 30) -> Dict[str, Any]:
     from evalsuite.api import EvaluationError
     from evaluation import bev_timing
+    _claim_code(net)
     try:
         return bev_timing.run_timing(_abs(net), n=n)
     except SystemExit as ex:                                           # the idle-GPU guard refuses with a message
@@ -196,7 +225,14 @@ def time(net: str, n: int = 30) -> Dict[str, Any]:
 
 def probe(net: str, frames: int = 3, device: str = "cpu") -> Dict[str, Any]:
     from evaluation import bev_modules
+    _claim_code(net)
     return bev_modules.probe(_abs(net), frames=frames, device=device)
+
+
+def evaluator_extra() -> str:
+    """the code that shapes the numbers outside the source's evaluator hash (bev_adapter.NUMBER_PATHS): this adapter (the reference, the metrics without the loss) and the label-free path;
+    it goes into the id of an evaluation, so an edit of either scores the stored predictions again instead of serving old numbers"""
+    return hashlib.sha1("".join(_file_hash(os.path.join(ROOT, "evaluation", f)) for f in ("bev_eval.py", "bev_free.py")).encode()).hexdigest()[:12]
 
 
 COMPARE_IGNORE = bev_suite.COMPARE_IGNORE                                    # the arms may differ in what the model is fed; the evaluator hash only guards a resume
