@@ -1,0 +1,57 @@
+{
+ "id": "chain.t20",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/run_ar.sh temp/compose/chain_t20.json",
+ "argv": [
+  "bash",
+  "tools/run_ar.sh",
+  "temp/compose/chain_t20.json"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 464403,
+ "created": "2026-11-10T10:25:37",
+ "status": "ok",
+ "after": "chain.gt",
+ "timeout_min": 0,
+ "started": "2026-11-10T10:29:39",
+ "code_hash": "13d8f9304d3f",
+ "commit": "fcd3912b8f",
+ "tag": "bf/chain.t20",
+ "git_note": "1126 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 467646,
+ "pgid": 467646,
+ "pid_start": 3791201,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "autoresearch/jobrunner/api.py",
+   "autoresearch/jobrunner/catalogue.py",
+   "autoresearch/jobrunner/selftest.py"
+  ],
+  "n_other": 3
+ },
+ "exit": 0,
+ "duration_s": 210,
+ "attempts": 1,
+ "ended": "2026-11-10T10:33:41",
+ "last_lines": [
+  "=== attempt 2026-11-10T10:29:39: bash tools/run_ar.sh temp/compose/chain_t20.json",
+  "=== 2026-11-10_10:29:45 run chain.t20 commit fcd3912b8f config temp/compose/chain_t20.json",
+  "trainkit: the pinned copy /mnt/c/Auto-research/bev_fusion/runs/chain_t20/code/trainkit",
+  "step 1: total 30.5030 lr 1.40e-04 grad 116.28",
+  "step 10: total 37.8711 lr 2.81e-04 grad 156.49",
+  "step 20: total 40.2335 lr 1.22e-04 grad 472.51",
+  "step 30: total 33.3647 lr 1.48e-06 grad 102.23",
+  "step 30: val total 28.3769",
+  "chain_t20 exit 0 10:33:09"
+ ]
+}
