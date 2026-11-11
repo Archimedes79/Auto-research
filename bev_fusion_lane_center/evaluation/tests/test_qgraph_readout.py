@@ -197,7 +197,35 @@ def scorer():
     return M
 
 
+def exempt_and_mnms():
+    """the special-type exemption (`x`, `x<p>`) and the Matrix-NMS spec (E288 / E296): a flagged node survives the close-node rule and the Matrix-NMS decay; the spec names are stable; `plain` with `x` and sigma <= 0 are refused"""
+    s = RO.parse("close:1.5x@0.5")
+    assert s.exempt and s.kind == "close" and RO.name(s) == "close1.5x_t0.5", s
+    s2 = RO.parse("mnms:1.75s0.1x@0.5")
+    assert s2.exempt and s2.sigma == 0.1 and RO.name(s2) == "mnms1.75s0.1x_t0.5"
+    assert not RO.parse("close:1.5@0.5").exempt
+    pos = np.array([[0, 0], [0.4, 0], [5, 5]], float)
+    e = np.array([0.95, 0.9, 0.8])
+    flags = np.zeros((3, 8))
+    flags[1, 1] = 0.9                                                                   # node 1 is an exit
+    pred = dict(nodes=dict(pos=pos, e=e, flags=flags))
+    assert RO.apply(pred, RO.parse("close:1.5@0.5"))["nodes"]["e"][1] == 0.0
+    assert RO.apply(pred, RO.parse("close:1.5x@0.5"))["nodes"]["e"][1] == 0.9
+    assert RO.apply(pred, RO.parse("mnms:1.75s0.1@0.5"))["nodes"]["e"][1] == 0.0
+    assert RO.apply(pred, RO.parse("mnms:1.75s0.1x@0.5"))["nodes"]["e"][1] == 0.9
+    sp = RO.parse("close:1.5x0.95@0.5")
+    assert sp.exempt == 0.95 and RO.name(sp) == "close1.5x0.95_t0.5", sp
+    assert RO.apply(pred, sp)["nodes"]["e"][1] == 0.0                                 # the exit flag 0.9 is below 0.95: not protected
+    for bad in ("plain:0.5x", "mnms:1.75s0@0.5"):
+        try:
+            RO.parse(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"spec {bad!r} must be refused")
+
+
 def main():
+    exempt_and_mnms()
     cases()
     properties()
     ties_and_dump()

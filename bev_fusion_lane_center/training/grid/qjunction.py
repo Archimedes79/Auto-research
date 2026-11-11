@@ -15,11 +15,9 @@ N05, RES05, HALF = 200, 0.5, 50.0
 
 
 def _fill(mask, poly):
-    import cv2
-    pts = np.round(((np.asarray(poly, float) + HALF) / RES05)[:, ::-1]).astype(np.int32)        # (column = y, row = x) for cv2
+    pts = ((np.asarray(poly, float) + HALF) / RES05)[:, ::-1]                                   # (column = y, row = x) for cv2
     if len(pts) >= 3:
-        cv2.fillPoly(mask, [pts], 1)
-        cv2.polylines(mask, [pts], True, 1, 1)
+        JG.fill_poly(mask, pts, line=True)
 
 
 def junction_targets(g, paint=None):

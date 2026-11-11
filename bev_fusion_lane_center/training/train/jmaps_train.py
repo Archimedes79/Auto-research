@@ -30,6 +30,7 @@ def main():
     ap.add_argument("--d", type=int, default=64)
     ap.add_argument("--joint", action="store_true")
     ap.add_argument("--far-w", type=float, default=0.0, help="E304: the heat BCE of the cells beyond 35 m counts 1 + w times")
+    ap.add_argument("--raster", default="legacy", choices=("legacy", "exact"), help="E306: the polygon targets (zone, conflict core, stop lines, crossings) rasterised with the exact area rule instead of the legacy half-cell shifted fill")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--bs", type=int, default=8)
@@ -37,6 +38,8 @@ def main():
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()
     T.seed_all(a.seed)
+    if a.raster == "exact":                                                                              # read at the call by `jgt.fill_poly`, inherited by the loader workers
+        os.environ["BFLC_RASTER"] = "exact"
     LD.QData.DEFAULT_JUNCTION = True
     model = JM.JModel(width=48, d=a.d, ctx=a.ctx)
     base = a.base or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")

@@ -3,7 +3,8 @@
     wsl bash tools/env/_py14.sh jends_train.py --name e287_p2_s0 --seed 0 --maps runs/e286_j1_s0/model.pt [--no-order] [--no-evidence] [--cross-w 1.0] [--steps 3000] [--smoke]
 
 The maps run (`jmaps_train.py`, JModel = B's pyramid + the junction maps head) is frozen; only `jends.JEnds` trains (keypoints from the entry / exit heat, pair logits with the rank features of the order rule and the
-evidence along the Hermite curve, loss = BCE + dual softmax + the soft crossing penalty). Output `runs/<name>/model.pt` (the JModel and the JEnds state + args), read by `evaluation/jends_eval.py`.
+evidence along the Hermite curve, loss = BCE + dual softmax + the soft crossing penalty). `--e2e` (E305, D82 "bleibe differenzierbar"): the maps head is trained TOGETHER with the pair head, the pair loss reaches the heat (soft-argmax
+of the keypoints, heading, features, evidence samples) and the maps loss keeps the maps meaningful (`--maps-w`); the pyramid of the baseline stays frozen. Output `runs/<name>/model.pt` (the JModel and the JEnds state + args), read by `evaluation/jends_eval.py`.
 """
 import argparse
 import os
@@ -22,14 +23,18 @@ import trainer as T  # noqa: E402
 
 
 class JEndModel(nn.Module):
-    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False):
+    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False, e2e=False):
         super().__init__()
+        self.e2e = e2e
         self.jmodel = JM.JModel(width=48, d=maps_args.get("d", 64), ctx=maps_args.get("ctx", "dil"))
         self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales)
 
     def forward(self, x, gt=None):
-        with torch.no_grad():
+        if self.e2e:                                                                                     # the maps head (jmodel.jm) gets the gradient of the pair loss
             P, out = self.jmodel(x, joint=False)
+        else:
+            with torch.no_grad():
+                P, out = self.jmodel(x, joint=False)
         return P, out, self.je(out, P, gt=gt)
 
 
@@ -43,6 +48,9 @@ def main():
     ap.add_argument("--cross-w", type=float, default=1.0)
     ap.add_argument("--scales", action="store_true", help="E303: two handle scales per pair (the delivered curve), trained against the fitted scales of the true pairs")
     ap.add_argument("--driven-w", type=float, default=0.0, help="E298: the positive pair terms of the pairs the ego drives count 1 + w times")
+    ap.add_argument("--e2e", action="store_true", help="E305: train the maps head together with the pair head (the pair loss reaches the heat)")
+    ap.add_argument("--maps-w", type=float, default=1.0, help="--e2e: weight of the junction maps loss next to the pair loss")
+    ap.add_argument("--raster", default="legacy", choices=("legacy", "exact"), help="E306: exact polygon targets for the maps loss of --e2e (the pair head itself reads no raster target)")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--bs", type=int, default=8)
@@ -50,31 +58,40 @@ def main():
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()
     T.seed_all(a.seed)
+    if a.raster == "exact":
+        os.environ["BFLC_RASTER"] = "exact"
     LD.QData.DEFAULT_JUNCTION = True
     mp = a.maps or os.path.join(ROOT, "runs", f"e286_j1_s{a.seed}", "model.pt")
     ck = torch.load(mp, map_location="cpu")
-    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales)
+    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e)
     model.jmodel.load_state_dict(ck["state"])
     ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train", pixels=False)
     run = T.Run(a.name)
     steps = 20 if a.smoke else a.steps
-    ps = list(model.je.parameters())
+    ps = list(model.je.parameters()) + (list(model.jmodel.jm.parameters()) if a.e2e else [])
     for p in model.parameters():
         p.requires_grad_(False)
     for p in ps:
         p.requires_grad_(True)
-    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
+    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
 
     def loss_fn(m, b):
         dev = next(m.parameters()).device
         x = b["x"].to(dev, non_blocking=True).float()
         gt = {k: b[k].to(dev) for k in ("ent", "ext", "ent_m", "ext_m")}
-        _, _, out = m(x, gt=gt)
+        _, jout, out = m(x, gt=gt)
         loss, info = JE.jends_loss(out, b, cross_w=a.cross_w, driven_w=a.driven_w)
+        if a.e2e:
+            lm, im = JM.jmaps_loss(jout, b)
+            loss = loss + a.maps_w * lm
+            info.update({"j_" + k: v for k, v in im.items()})
         return loss, info
 
-    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, maps=mp))
+    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, e2e=a.e2e, maps=mp))
     torch.save(dict(state=model.state_dict(), args=dict(vars(a), maps_args=ck["args"])), run.path("model.pt"))
+    if a.e2e:                                                                                          # the maps head as a plain maps run, so `jmaps_eval.py score --run <name>_maps` reads it
+        os.makedirs(os.path.join(ROOT, "runs", a.name + "_maps"), exist_ok=True)
+        torch.save(dict(state=model.jmodel.state_dict(), args=dict(ck["args"], e2e_from=a.name)), os.path.join(ROOT, "runs", a.name + "_maps", "model.pt"))
     run.mark_done()
     run.log("done", a.name)
 

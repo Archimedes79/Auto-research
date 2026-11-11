@@ -1,6 +1,6 @@
 """Score of the junction maps head (E286): maps and entry / exit keypoints on the VAL frames, next to the baseline B's own event heat maps read the same way.
 
-    wsl bash tools/env/_py14.sh jmaps_eval.py score --run e286_j0_s0 [--base runs/e273_p_s0/model.pt] [--max 0]     -> runs/<run>/jmaps_val.json + a printed table
+    wsl bash tools/env/_py14.sh jmaps_eval.py score --run e286_j0_s0 [--base runs/e273_p_s0/model.pt] [--max 0]     -> runs/<run>/jmaps_val.json + a printed table (`--raster exact|legacy`: the zone / core / paint targets rasterised that way, written to jmaps_val_<raster>.json)
     wsl bash tools/env/_py14.sh jmaps_eval.py selftest
 
 Numbers (VAL 873 frames or the first --max, scene-disjoint from TRAIN, TEST never; every frame counts, frames without a junction carry the false alarms):
@@ -117,6 +117,9 @@ def score(a):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(dev).eval()
     basem.to(dev).eval()
+    raster = a.raster or args.get("raster", "legacy")                                                      # the targets of the zone / core / paint IoU are rasterised as the run was trained (or as asked)
+    if raster == "exact":
+        os.environ["BFLC_RASTER"] = "exact"
     ds, dl = LD.loader("val_clean", bs=8, workers=a.workers, shuffle=False, map_mode="exact", pixels=False)
     assert ds.missing == 0, f"{ds.missing} VAL frames have no stored lane GT"
     acc = Acc()
@@ -180,7 +183,7 @@ def score(a):
             if a.max and n >= a.max:
                 break
     from GtGenerator import lane_gt
-    res = dict(run=a.run, base=base_path, frames=n, args=args, lane_gt_signature=lane_gt.signature(), painted_unavailable_frames=int(acc.k.get("painted_unavailable", {}).get("frames", 0)))
+    res = dict(run=a.run, base=base_path, frames=n, args=args, raster=raster, lane_gt_signature=lane_gt.signature(), painted_unavailable_frames=int(acc.k.get("painted_unavailable", {}).get("frames", 0)))
     for name in ("zone", "core"):
         z = acc.k[name]
         res[f"{name}_iou"] = z["tp"] / max(z["tp"] + z["fp"] + z["fn"], 1)
@@ -223,7 +226,7 @@ def score(a):
             sweep_res[who][typ] = dict(rows=rows, best_f1=max(r["f1"] for r in rows), best_thr=max(rows, key=lambda r: r["f1"])["thr"])
     res["thr_sweep"] = sweep_res
     res["kp_f1_best_threshold"] = {who: (sweep_res[who]["ent"]["best_f1"] + sweep_res[who]["ext"]["best_f1"]) / 2 for who in sweep_res}
-    out_path = os.path.join(run_dir, "jmaps_val.json")
+    out_path = os.path.join(run_dir, "jmaps_val.json" if a.raster is None else f"jmaps_val_{a.raster}.json")                  # a score on re-rasterised targets never overwrites the run's own file
     json.dump(res, open(out_path, "w"), indent=1, default=float)
     print(f"{a.run}: VAL {n} frames; zone IoU {res['zone_iou']:.3f} F1 {res['zone_f1']:.3f}; core IoU {res['core_iou']:.3f} F1 {res['core_f1']:.3f}; stop line P/R {res['stop_prec']:.3f}/{res['stop_rec']:.3f}; crossing P/R {res['crossing_prec']:.3f}/{res['crossing_rec']:.3f}")
     print("keypoints (tol 3.0 m): head with heading | head distance only | baseline B events (distance only)")
@@ -262,6 +265,7 @@ if __name__ == "__main__":
     s.add_argument("--run", required=True)
     s.add_argument("--base", default=None)
     s.add_argument("--max", type=int, default=0)
+    s.add_argument("--raster", default=None, choices=("legacy", "exact"), help="score the zone / core / paint IoU against targets rasterised this way (default: as the run was trained)")
     s.add_argument("--workers", type=int, default=3)
     sub.add_parser("selftest")
     a = ap.parse_args()

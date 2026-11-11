@@ -81,6 +81,16 @@ def selftest():
     x = torch.randn(1, 39, 200, 200)
     P, out, oe = m(x)
     assert oe["logit"].shape == (1, 32, 32) and out["j1"].shape == (1, 8, 100, 100)
+    # E305: with e2e the pair logits reach the maps head (and never the frozen pyramid); without it the maps head gets nothing
+    for e2e in (False, True):
+        m = JT.JEndModel(dict(d=64, ctx="none"), order=True, evidence=True, e2e=e2e)
+        m.zero_grad()
+        P, out, oe = m(torch.randn(1, 39, 200, 200), gt=dict(ent=torch.zeros(1, 16, 4), ext=torch.zeros(1, 16, 4), ent_m=torch.zeros(1, 16, dtype=torch.bool), ext_m=torch.zeros(1, 16, dtype=torch.bool)))
+        (oe["logit"].sum() + oe["kp_pos"].sum()).backward()
+        gm = sum(float(p.grad.abs().sum()) for p in m.jmodel.jm.parameters() if p.grad is not None)
+        gp = sum(float(p.grad.abs().sum()) for p in m.jmodel.pyr.parameters() if p.grad is not None)
+        assert gp == 0.0, "the frozen pyramid must not get a gradient"
+        assert (gm > 0) == e2e, (e2e, gm)
     print("jends_eval selftest ok")
 
 

@@ -17,6 +17,8 @@ whose centres lie within 14 m are the same arm (the same road, the two direction
 (non-crossing); where k entries meet k exits the solution is entry i to exit i (identity). The zone and the arms use nothing but the lane GT.
 Run the self-test: python jgt.py
 """
+import os
+
 import numpy as np
 
 import qends as QE
@@ -215,21 +217,49 @@ def junction_gt(g):
                 ent_vis=ent_vis, ext_vis=ext_vis, pair_pts=pair_pts, core=core, order=dict(maneuvers=len(man), multi=n_multi, monotone=n_mono, identity=n_ident))
 
 
+def raster_exact():
+    """BFLC_RASTER=exact: the polygon masks cover a cell when MORE THAN HALF of its area is inside the polygon (8 x 8 supersampling, no half-cell shift); default: the legacy `np.round` + `cv2.fillPoly` of E285 / E286, kept so the stored numbers stay reproducible"""
+    return os.environ.get("BFLC_RASTER", "") == "exact"
+
+
+SS = 8
+
+
+def fill_poly(mask, pts_cells, line=False):
+    """fill the polygon `pts_cells` ((m, 2) in CELL units, column = y first as cv2 wants: x = column) into `mask` (uint8, row = x). Legacy: integer vertices (cv2 puts integer coordinates on pixel CENTRES while our cell k spans [k, k + 1): the mask is
+    shifted by half a cell, critic 2026-11-11); `line`: the outline is drawn too (thin stop lines stay visible). Exact (BFLC_RASTER=exact): a cell is in when more than half of it is inside (`line`: more than a quarter, the thin paint)"""
+    import cv2
+    pts = np.asarray(pts_cells, float)
+    if raster_exact():
+        c0, c1 = max(int(np.floor(pts[:, 0].min())), 0), min(int(np.ceil(pts[:, 0].max())) + 1, mask.shape[1])
+        r0, r1 = max(int(np.floor(pts[:, 1].min())), 0), min(int(np.ceil(pts[:, 1].max())) + 1, mask.shape[0])
+        if c1 <= c0 or r1 <= r0:
+            return
+        big = np.zeros(((r1 - r0) * SS, (c1 - c0) * SS), np.uint8)
+        q = np.round(((pts - np.array([c0, r0])) * SS - 0.5) * 16).astype(np.int32)                     # sub-cell vertices (1/16 of a supersample), supersample centres at integer coordinates
+        cv2.fillPoly(big, [q], 1, lineType=cv2.LINE_8, shift=4)
+        cov = big.reshape(r1 - r0, SS, c1 - c0, SS).mean((1, 3))
+        mask[r0:r1, c0:c1] |= (cov > (0.25 if line else 0.5)).astype(mask.dtype)
+    else:
+        q = np.round(pts).astype(np.int32)
+        cv2.fillPoly(mask, [q], 1)
+        if line:
+            cv2.polylines(mask, [q], True, 1, 1)
+
+
 def fields(jg, n=100, res=1.0, half=50.0):
     """the 1 m maps of the head, row = x, column = y as `qtargets`: zone + conflict core (2, n, n), entry / exit heat (2, n, n) Gaussians, entry / exit heading (4, n, n) at the cells within 2 sigma of an end"""
-    import cv2
     zone = np.zeros((2, n, n), np.uint8)
     heat = np.zeros((2, n, n), np.float32)
     head = np.zeros((4, n, n), np.float32)
     if jg is None:
         return zone.astype(np.float32), heat, head
     for z in jg["zones"]:
-        pts = ((z["poly"] + half) / res)[:, ::-1]
-        cv2.fillPoly(zone[0], [np.round(pts).astype(np.int32)], 1)
+        fill_poly(zone[0], ((z["poly"] + half) / res)[:, ::-1])
     if jg.get("core") is not None:
         for q in (jg["core"].geoms if hasattr(jg["core"], "geoms") else [jg["core"]]):
             if q.geom_type == "Polygon" and not q.is_empty:
-                cv2.fillPoly(zone[1], [np.round(((np.asarray(q.exterior.coords, float) + half) / res)[:, ::-1]).astype(np.int32)], 1)
+                fill_poly(zone[1], ((np.asarray(q.exterior.coords, float) + half) / res)[:, ::-1])
     ii, jj = np.meshgrid(-half + (np.arange(n) + 0.5) * res, -half + (np.arange(n) + 0.5) * res, indexing="ij")
     for k, E in enumerate((jg["ent"], jg["ext"])):
         for e in E:
@@ -240,6 +270,52 @@ def fields(jg, n=100, res=1.0, half=50.0):
             near = (d2 <= (2 * SIG) ** 2) & upd
             head[2 * k][near], head[2 * k + 1][near] = e[2], e[3]
     return zone.astype(np.float32), heat, head
+
+
+def _selftest_raster():
+    """the exact raster puts a cell in the mask when its CENTRE is inside the polygon; the legacy one is shifted by half a cell (kept for the stored numbers)"""
+    box = np.array([[-1.2, 0.3], [3.4, 0.3], [3.4, 5.7], [-1.2, 5.7]])                           # x in [-1.2, 3.4], y in [0.3, 5.7] metres
+    cells = ((box + 50.0) / 1.0)[:, ::-1]
+    old = os.environ.pop("BFLC_RASTER", None)
+    try:
+        m0 = np.zeros((100, 100), np.uint8)
+        fill_poly(m0, cells)
+        os.environ["BFLC_RASTER"] = "exact"
+        m1 = np.zeros((100, 100), np.uint8)
+        fill_poly(m1, cells)
+        xc = -49.5 + np.arange(100)
+        want = ((xc[:, None] >= -1.2) & (xc[:, None] <= 3.4) & (xc[None, :] >= 0.3) & (xc[None, :] <= 5.7)).astype(np.uint8)
+        assert (m1 == want).all(), (int(m1.sum()), int(want.sum()))
+        assert m0.sum() > 0 and not (m0 == want).all(), "the legacy raster is the half-cell shifted one"
+        from shapely.geometry import Polygon, box as sbox
+        rng = np.random.RandomState(0)
+        bad_exact = bad_legacy = n_ref = 0
+        for _ in range(20):                                                                           # random convex polygons: the cells with more than half their area inside agree with shapely
+            ang = np.sort(rng.uniform(0, 2 * np.pi, 6))
+            poly = np.stack([rng.uniform(-20, 20) + rng.uniform(2, 9) * np.cos(ang), rng.uniform(-20, 20) + rng.uniform(2, 9) * np.sin(ang)], 1)
+            sp = Polygon(poly)
+            if not sp.is_valid or sp.area < 2:
+                continue
+            mm = np.zeros((100, 100), np.uint8)
+            fill_poly(mm, ((poly + 50.0) / 1.0)[:, ::-1])
+            os.environ.pop("BFLC_RASTER", None)
+            ml = np.zeros((100, 100), np.uint8)
+            fill_poly(ml, ((poly + 50.0) / 1.0)[:, ::-1])
+            os.environ["BFLC_RASTER"] = "exact"
+            lo = np.array([sp.bounds[0] + 50 - 2, sp.bounds[1] + 50 - 2]).astype(int).clip(0, 99)
+            hi = np.array([sp.bounds[2] + 50 + 2, sp.bounds[3] + 50 + 2]).astype(int).clip(0, 99)
+            ref = np.zeros((100, 100), bool)
+            for i in range(lo[0], hi[0] + 1):
+                for j in range(lo[1], hi[1] + 1):
+                    ref[i, j] = sp.intersection(sbox(i - 50, j - 50, i - 49, j - 49)).area > 0.5
+            bad_exact += int((mm.astype(bool) != ref).sum())
+            bad_legacy += int((ml.astype(bool) != ref).sum())
+            n_ref += int(ref.sum())
+        assert bad_exact <= 0.06 * n_ref and bad_exact < 0.5 * bad_legacy, (bad_exact, bad_legacy, n_ref)       # the exact mode follows the area rule, the legacy one is off by the half cell
+    finally:
+        os.environ.pop("BFLC_RASTER", None)
+        if old is not None:
+            os.environ["BFLC_RASTER"] = old
 
 
 def _selftest():
@@ -261,11 +337,28 @@ def _selftest():
     # the leftmost lane looking north is x = -1.75 -> rank 0, and it goes to the leftmost exit
     for r in jg["pairs"]:
         assert r[4] == r[5], jg["pairs"]
+    for e, r in zip(jg["ent"], jg["ent_rank"]):                                           # looking north (+y) the left is -x: rank 0 is the lane at x = -1.75
+        assert (r == 0) == (e[0] < 0), (e, r)
+    # crossed connectors (the left entry goes to the right exit and the right entry to the left exit): the order rule is violated on this maneuver and a conflict core exists
+    pcs2 = []
+    for i, (s, nth) in enumerate(zip(south, north[::-1])):
+        conn = run(s[-1], nth[0], 16)
+        pts = np.vstack([s, conn, nth])
+        pcs2.append(dict(piece=f"q{i}", pts=pts, tier=np.full(len(pts), 3), segments=[dict(kind="lane", i0=0, i1=len(s) - 1), dict(kind="connector", i0=len(s), i1=len(s) + len(conn) - 1),
+                                                                            dict(kind="lane", i0=len(s) + len(conn), i1=len(pts) - 1)]))
+    jx = junction_gt(dict(pieces=pcs2))
+    assert jx["order"]["multi"] == 1 and jx["order"]["monotone"] == 0 and jx["order"]["identity"] == 0, jx["order"]
+    assert jx["core"] is not None and not jx["core"].is_empty and jx["core"].area > 1.0
     zn, heat, head = fields(jg)
+    for k, EE in enumerate((jg["ent"], jg["ext"])):                                       # the heat peaks at the cell that holds the end (row = x, column = y, origin -50 m)
+        for e in EE:
+            i, j = int((e[0] + 50.0) // 1.0), int((e[1] + 50.0) // 1.0)
+            assert heat[k][i, j] > 0.7, (k, e, heat[k][i, j])
     assert zn[0].sum() > 50 and zn.shape[0] == 2 and heat.max() > 0.85 and abs(np.hypot(head[0], head[1]).max() - 1.0) < 1e-5
     assert junction_gt(dict(pieces=[])) is None
     print("jgt selftest ok")
 
 
 if __name__ == "__main__":
+    _selftest_raster()
     _selftest()
