@@ -1,0 +1,51 @@
+# E293 How far into the junction can points be placed? Evidence and interpolation error along the connectors by depth (D83)
+
+Card of 2026-11-11, written by the lane chat on Mirko's request ("Gucke, wie weit man Punkte in die Kreuzung legen kann", D83). CPU analysis on the stored lane GT and B's pixel stage; no training, no change of the GT definition before the numbers (D83 item 3). It extends E283 (section 9: the GT entry point is the painted stop line, connector points inside the intersection have no painted marker within 1 m).
+
+## 0. The card (what the tools run)
+```json card
+{
+ "id": "E293",
+ "card": "",
+ "title": "depth probe: for the points of the GT connectors at depth d from the entry, the painted evidence, B's 1 m lane-centre heat (against the heat on FALSE candidate paths) and the error of the Hermite curve between the true ends",
+ "kind": "variant",
+ "deterministic": true,
+ "metric": "hermite_within_1m",
+ "direction": "higher",
+ "band": 0.05,
+ "prediction": {"value": 0.90, "vs": "c"},
+ "arms": {
+  "c": {"recipe": "the share of GT connector points within 1.0 m of the cubic Hermite curve (tangent = chord) between the true entry and the true exit of their run, over all depths (the interpolation limit: how many points inside a junction a node set needs when the ends are right)"},
+  "h": {"recipe": "the same at depth bins 0-2 / 2-5 / 5-10 / 10-15 / 15-25 / 25+ m from the entry, next to the heat and paint measures; the depth up to which the Hermite curve is within 1 m for 0.95 of the points is the answer"}
+ },
+ "control": "c",
+ "variant": "h",
+ "pairing": "position",
+ "seeds": [0],
+ "rule": [{"metric": "hermite_within_1m", "vs": "c", "min_effect": 0.0}],
+ "budget_gpu_h": 0.0,
+ "kill": "the connector runs of the probe are not those of `qends.end_table` (the count of true pairs differs)",
+ "evaluate": {"split": "val"}
+}
+```
+By hand (a measurement, no KEEP / CUT; label "by hand: analysis"): the table of section 3 is the result; the reading and what follows from it are written below.
+
+## 1. The three evidences per depth d (arclength from the entry along the GT connector)
+(1) painted: distance to the nearest lane divider / road divider / boundary line of the lane GT, stop line or crossing (sidecar), share within 1 m; (2) the pixel stage: B's 1 m lane-centre heat (centre1 channel 0, 3 x 3 maximum), share >= 0.3 on the true connector AND on the false candidate paths (the geometrically possible pairs of `qends` that are not true: Hermite curves between a true entry and a wrong exit), the CONTROL that tells whether the heat says WHICH path; (3) interpolation: distance of the true point to the Hermite curve of its own run, share within 0.5 m / 1 m, median and p90.
+
+## 2. First numbers (16 VAL frames, 224 connector runs, seed 0; the larger run follows, section 3)
+| depth from the entry | true: heat >= 0.3 | false paths: heat >= 0.3 | painted within 1 m (true / false) | Hermite within 0.5 m / 1 m | error median / p90 |
+|---|---|---|---|---|---|
+| 0 - 2 m | 0.95 | 0.94 | 0.02 / 0.01 | 1.00 / 1.00 | 0.03 / 0.08 m |
+| 2 - 5 m | 0.96 | 0.96 | 0.03 / 0.03 | 0.98 / 1.00 | 0.05 / 0.29 m |
+| 5 - 10 m | 0.98 | 0.97 | 0.02 / 0.26 | 0.79 / 0.96 | 0.06 / 0.76 m |
+| 10 - 15 m | 1.00 | 0.95 | 0.00 / 0.26 | 0.73 / 0.86 | 0.05 / 1.17 m |
+| 15 - 25 m | 0.99 | 0.88 | 0.02 / 0.33 | 0.85 / 0.97 | 0.06 / 0.68 m |
+| 25 m and deeper | 0.93 | 0.77 | 0.21 / 0.26 | 1.00 / 1.00 | 0.04 / 0.08 m |
+Reading (preliminary): (a) **the pixel stage has lane-centre evidence everywhere inside the junction, but it does not tell the true connector from a false one until the last 10 m before the exit**: the heat is 0.94 - 0.97 on false candidate paths too for the first 15 m (the smear of E283), the difference appears at 15 m and beyond (0.99 against 0.88); (b) there is practically no paint on the true connectors inside the junction (0.00 - 0.03 within 1 m up to 15 m depth); (c) **a Hermite curve between the true ends is within 1 m of 86 - 100 % of the points (median error 5 cm, p90 up to 1.2 m at 10 - 15 m depth)**: no node is needed inside the junction when the ends and the pair are right, one extra point per connector would only serve the p90 tail. So points can be put into the junction as far as the PAIR is known: the position along a connector is determined by the two ends and the pair (the interpolation), the evidence that selects the pair sits at the ends (paint at the entry, the lanes at the exit), not in between.
+
+## 3. Result with more frames
+(To be filled with `runs/e293/depth_probe_s0.json`, 240 frames, when the CPU run ends.)
+
+## 4. What follows (proposals, not decided)
+(1) No dense node target inside the junction: the representation is entry, exit, pair and the Hermite curve (E287); (2) a MIDPOINT per delivered connector as an extra learned correction (p90 tail) is a cheap refinement of E287 if the pair numbers are good; (3) the entry point may be put deeper than the stop line only where the heat starts to be informative: not before the last 10 m: the evidence says the exit side is better seen than the middle; (4) the end-recall lever (E286) matters more than anything inside the junction.
