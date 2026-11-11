@@ -31,6 +31,10 @@ def parse(text):
         raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>[x]@<thr> or mnms:<radius>[s<sigma>][x]@<thr> (x[<p>] = the nodes of the special types stop / exit / split / merge at p >= 0.5 (or <p>) are never suppressed)")
     kind = "plain" if m.group(1) == "plain" else ("close" if m.group(2) is not None else "mnms")
     spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(7)), float(m.group(4)) if m.group(4) else None, (float(m.group(6)) if m.group(6) else 0.5) if m.group(5) else False)
+    if spec.kind == "plain" and spec.exempt:
+        raise ValueError(f"read-out spec {text!r}: x (protect the special types) is for close / mnms, not plain")
+    if spec.sigma is not None and not spec.sigma > 0.0:
+        raise ValueError(f"read-out spec {text!r}: sigma must be above 0")
     if not spec.thr > 0.0:                                         # a dropped node has e = 0: with a threshold of 0 it would be delivered again
         raise ValueError(f"read-out spec {text!r}: the threshold must be above 0")
     return spec

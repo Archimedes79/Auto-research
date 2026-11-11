@@ -49,24 +49,36 @@ def match(pred, gt, tol, use_ang):
 
 
 def painted_of(token, n_ent, n_ext):
-    """(painted flags of the GT entries, of the GT exits, city) of a frame, aligned with the batch's GT ends; (None, None, city) when the paint sidecar or the junction GT is missing or does not line up"""
-    city = None
+    """(painted flags of the GT entries, of the GT exits, city) of a frame, aligned with the batch's GT ends; (None, None, city) when the paint sidecar is missing or the junction GT does not line up with the batch (counted by the caller)"""
+    import jgt as JG
+    import junction_paint as JP
+    import qjunction as QJ
+    from GtGenerator import lane_gt
+    g = lane_gt.load(token)
+    city = "boston" if "boston" in str(g.get("location", "")) else "singapore"
+    jg = JG.junction_gt(g)
     try:
-        import jgt as JG
-        import junction_paint as JP
-        import qjunction as QJ
-        from GtGenerator import lane_gt
-        g = lane_gt.load(token)
-        city = "boston" if "boston" in str(g.get("location", "")) else "singapore"
-        jg = JG.junction_gt(g)
-        try:
-            paint = JP.load(token)
-        except FileNotFoundError:
-            return None, None, city
-        pe, px = QJ.painted_flags(jg, paint)
-        return (pe, px, city) if len(pe) == n_ent and len(px) == n_ext else (None, None, city)
-    except Exception:
+        paint = JP.load(token)
+    except FileNotFoundError:
         return None, None, city
+    pe, px = QJ.painted_flags(jg, paint)
+    return (pe, px, city) if len(pe) == n_ent and len(px) == n_ext else (None, None, city)
+
+
+def crowded_of(G, tol=4.0, ang=30.0):
+    """(n,) bool: a GT end with another end of the same kind within tol metres and ang degrees of heading (one keypoint can serve only one of them: the strict matching is harder there)"""
+    G = np.asarray(G, float)
+    out = np.zeros(len(G), bool)
+    for j in range(len(G)):
+        d = np.linalg.norm(G[:, :2] - G[j, :2], axis=1)
+        a = np.degrees(np.arccos(np.clip(G[:, 2] * G[j, 2] + G[:, 3] * G[j, 3], -1, 1)))
+        m = (d <= tol) & (a <= ang)
+        m[j] = False
+        out[j] = bool(m.any())
+    return out
+
+
+THR_SWEEP = (0.2, 0.3, 0.4, 0.5, 0.6, 0.7)
 
 
 def _range_class(E):
@@ -106,6 +118,7 @@ def score(a):
     model.to(dev).eval()
     basem.to(dev).eval()
     ds, dl = LD.loader("val_clean", bs=8, workers=a.workers, shuffle=False, map_mode="exact", pixels=False)
+    assert ds.missing == 0, f"{ds.missing} VAL frames have no stored lane GT"
     acc = Acc()
     n = 0
     with torch.no_grad():
@@ -126,10 +139,19 @@ def score(a):
             ev = Pb["centre1"][:, 6:12].float()
             fake = dict(j1=torch.cat([torch.zeros_like(ev[:, :2]), ev[:, 2:3], ev[:, 3:4], torch.zeros_like(ev[:, :1]).repeat(1, 4, 1, 1)], 1))
             kps = {"ours": JM.keypoints(out, thr=0.3), "ours5": JM.keypoints(out, thr=0.5), "B": JM.keypoints(fake, thr=0.3), "B5": JM.keypoints(fake, thr=0.5)}
+            sweep = {t: (JM.keypoints(out, thr=t), JM.keypoints(fake, thr=t)) for t in THR_SWEEP}                                   # critic 2026-11-11: both maps at the same fixed threshold is not a fair comparison of differently calibrated maps
             for i in range(x.shape[0]):
                 ent_g = b["ent"][i][b["ent_m"][i]].numpy()
                 ext_g = b["ext"][i][b["ext_m"][i]].numpy()
                 pe, px, city = painted_of(b["token"][i], len(ent_g), len(ext_g))
+                if pe is None and len(ent_g):
+                    acc.add("painted_unavailable", frames=1)
+                cr_e, cr_x = crowded_of(ent_g) if len(ent_g) else np.zeros(0, bool), crowded_of(ext_g) if len(ext_g) else np.zeros(0, bool)
+                for t, (ko, kb) in sweep.items():
+                    for typ, gt in (("ent", ent_g), ("ext", ext_g)):
+                        for who, kk in (("ours", ko), ("B", kb)):
+                            pairs_, npred_, ngt_ = match(kk[i][typ].numpy(), gt, 3.0, False)
+                            acc.add(f"sweep_{who}_{t}_{typ}", tp=len(pairs_), pred=npred_, gt=ngt_)
                 rc_e, rc_x = _range_class(ent_g) if len(ent_g) else np.zeros(0, int), _range_class(ext_g) if len(ext_g) else np.zeros(0, int)
                 for who, kk in kps.items():
                     for tol in (1.5, 3.0):
@@ -147,6 +169,8 @@ def score(a):
                                         hit[j] = True
                                     if fl is not None:
                                         acc.add(f"split_{who}_{typ}", gt_p=int(fl.sum()), hit_p=int(hit[fl].sum()), gt_u=int((~fl).sum()), hit_u=int(hit[~fl].sum()))
+                                    cr = cr_e if typ == "ent" else cr_x
+                                    acc.add(f"crowd_{who}_{typ}", gt_c=int(cr.sum()), hit_c=int(hit[cr].sum()), gt_n=int((~cr).sum()), hit_n=int(hit[~cr].sum()))
                                     rc = rc_e if typ == "ent" else rc_x
                                     for k, nm in enumerate(("lt20", "20to35", "gt35")):                                  # range from the ego, E300: the far ends are the hole
                                         acc.add(f"range_{who}_{typ}_{nm}", n=int((rc == k).sum()), hit=int(hit[rc == k].sum()))
@@ -155,7 +179,8 @@ def score(a):
             n += x.shape[0]
             if a.max and n >= a.max:
                 break
-    res = dict(run=a.run, base=base_path, frames=n, args=args)
+    from GtGenerator import lane_gt
+    res = dict(run=a.run, base=base_path, frames=n, args=args, lane_gt_signature=lane_gt.signature(), painted_unavailable_frames=int(acc.k.get("painted_unavailable", {}).get("frames", 0)))
     for name in ("zone", "core"):
         z = acc.k[name]
         res[f"{name}_iou"] = z["tp"] / max(z["tp"] + z["fp"] + z["fn"], 1)
@@ -181,6 +206,23 @@ def score(a):
         if key.startswith("range_") or key.startswith("city_"):
             other[key] = dict(n=int(d["n"]), recall=d["hit"] / max(d["n"], 1))
     res["range_city_split"] = other
+    crowd = {}
+    for key, d in acc.k.items():
+        if key.startswith("crowd_"):
+            crowd[key[6:]] = dict(crowded_recall=d["hit_c"] / max(d["gt_c"], 1), crowded_n=int(d["gt_c"]), isolated_recall=d["hit_n"] / max(d["gt_n"], 1), isolated_n=int(d["gt_n"]))
+    res["crowded_split"] = crowd
+    sweep_res = {}
+    for who in ("ours", "B"):
+        sweep_res[who] = {}
+        for typ in ("ent", "ext"):
+            rows = []
+            for t in THR_SWEEP:
+                d = acc.k[f"sweep_{who}_{t}_{typ}"]
+                r_, p_ = d["tp"] / max(d["gt"], 1), d["tp"] / max(d["pred"], 1)
+                rows.append(dict(thr=t, recall=r_, precision=p_, f1=2 * r_ * p_ / max(r_ + p_, 1e-9)))
+            sweep_res[who][typ] = dict(rows=rows, best_f1=max(r["f1"] for r in rows), best_thr=max(rows, key=lambda r: r["f1"])["thr"])
+    res["thr_sweep"] = sweep_res
+    res["kp_f1_best_threshold"] = {who: (sweep_res[who]["ent"]["best_f1"] + sweep_res[who]["ext"]["best_f1"]) / 2 for who in sweep_res}
     out_path = os.path.join(run_dir, "jmaps_val.json")
     json.dump(res, open(out_path, "w"), indent=1, default=float)
     print(f"{a.run}: VAL {n} frames; zone IoU {res['zone_iou']:.3f} F1 {res['zone_f1']:.3f}; core IoU {res['core_iou']:.3f} F1 {res['core_f1']:.3f}; stop line P/R {res['stop_prec']:.3f}/{res['stop_rec']:.3f}; crossing P/R {res['crossing_prec']:.3f}/{res['crossing_rec']:.3f}")
@@ -194,6 +236,9 @@ def score(a):
             print(f"  {typ} {tag}: R/P {h['recall']:.3f}/{h['precision']:.3f} (angle median {h['ang_median']}) | {hn['recall']:.3f}/{hn['precision']:.3f} | B {bb['recall']:.3f}/{bb['precision']:.3f}")
     for k, v in split.items():
         print(f"  recall at {k}: painted {v['painted_recall']:.3f} (n {v['painted_gt']}), unpainted {v['unpainted_recall']:.3f} (n {v['unpainted_gt']})")
+    print("  best F1 over the thresholds (distance only, 3 m): ours %.3f (entry thr %s, exit thr %s), B %.3f (%s, %s)" % (res["kp_f1_best_threshold"]["ours"], sweep_res["ours"]["ent"]["best_thr"], sweep_res["ours"]["ext"]["best_thr"], res["kp_f1_best_threshold"]["B"], sweep_res["B"]["ent"]["best_thr"], sweep_res["B"]["ext"]["best_thr"]))
+    for k, v in sorted(crowd.items()):
+        print(f"  recall {k}: crowded {v['crowded_recall']:.3f} (n {v['crowded_n']}), isolated {v['isolated_recall']:.3f} (n {v['isolated_n']})")
     for k, v in sorted(other.items()):
         print(f"  recall {k}: {v['recall']:.3f} (n {v['n']})")
     print("written", out_path)

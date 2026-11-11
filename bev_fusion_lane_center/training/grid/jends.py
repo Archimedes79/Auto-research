@@ -73,11 +73,12 @@ class JEnds(nn.Module):
         heat = j1[:, 2:4]                                                        # entry, exit logits (B, 2, 100, 100)
         dirv = torch.stack([_unit(j1[:, 4:6]), _unit(j1[:, 6:8])], 1)            # (B, 2, 2, H, W)
         c = _centres(dev)
-        idxs, valids = [], []
+        idxs, valids, reals = [], [], []
         for kk in (0, 1):
             p = heat[:, kk].detach().sigmoid()
             mx = F.max_pool2d(p[:, None], 3, 1, 1)[:, 0]
             score = torch.where((p >= mx) & (p > PEAK_MIN), p, torch.zeros_like(p)).flatten(1)
+            peak_score = score
             if gt is not None:
                 ends, m = gt["ent"] if kk == 0 else gt["ext"], gt["ent_m"] if kk == 0 else gt["ext_m"]
                 i = ((ends[..., :2] + HALF) / RES).floor().long().clamp(0, N1 - 1)
@@ -88,7 +89,8 @@ class JEnds(nn.Module):
             v, ix = score.topk(self.k, dim=1)
             idxs.append(ix)
             valids.append(v > 0)
-        idx, valid = torch.stack(idxs, 1), torch.stack(valids, 1)                # (B, 2, K)
+            reals.append(peak_score.gather(1, ix) > 0)                                    # a keypoint that is a real peak of the heat (not only an injected GT cell)
+        idx, valid, real = torch.stack(idxs, 1), torch.stack(valids, 1), torch.stack(reals, 1)                # (B, 2, K)
         # soft-argmax position over the 3 x 3 window of the peak (differentiable in the heat), heading and probability at the peak, features of the 1 m map
         pos, D, pr, feat = [], [], [], []
         off = torch.tensor([-1.0, 0.0, 1.0], device=dev)
@@ -139,7 +141,7 @@ class JEnds(nn.Module):
             feats.append(ev)
         ga = ra = gb = rb = None
         if self.order:
-            rk, ga, ra, gb, rb = self.rank_matrix(pos, D, valid)
+            rk, ga, ra, gb, rb = self.rank_matrix(pos, D, valid & real if gt is not None else valid)         # groups and ranks from the real peaks only: the same distribution in training and at evaluation
             feats.append(rk)
         fcat = torch.cat(feats, -1)
         logit = self.pair(fcat)[..., 0]
@@ -274,6 +276,13 @@ def _selftest():
             batch["pdrv"] = torch.zeros(B, 2)
             _, iz = jends_loss(out, batch, driven_w=2.0)
             assert abs(iz["bce"] - i0["bce"]) < 1e-6, (iz, i0)
+    # critic 2026-11-11: with no real peak at all (heat far below the peak floor) every injected GT keypoint is its own group: the rank features cannot see the injected ends
+    jq = dict(jout, j1=jout["j1"].clone())
+    jq["j1"][:, 2:4] = -9.0
+    mq = JEnds(d=d, order=True, evidence=False)
+    oq = mq(jq, P, gt=gt)
+    ga = oq["ga"]
+    assert all(len(set(ga[b].tolist())) == K for b in range(B)), "injected keypoints must not form groups"
     # E303: the scale head (two handle scales per pair) trains against the fitted scales of the true pairs
     m = JEnds(d=d, order=True, evidence=True, scales=True)
     out = m(jout, P, gt=gt)

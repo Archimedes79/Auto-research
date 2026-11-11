@@ -1,0 +1,11 @@
+import re, sys, html
+s = open(sys.argv[1], encoding="utf-8").read()
+s = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", s, flags=re.S)
+s = re.sub(r"<svg.*?</svg>", "[chart]", s, flags=re.S)
+s = re.sub(r"<img[^>]*>", "[image]", s)
+s = re.sub(r"<video.*?</video>", "[video]", s, flags=re.S)
+s = re.sub(r"</(p|h[1-6]|li|tr|div|figure|figcaption|table)>", "\n", s)
+s = re.sub(r"<[^>]+>", " ", s)
+s = html.unescape(re.sub(r"[ \t]+", " ", s))
+s = re.sub(r"\n\s*\n+", "\n", s)
+print(s[: int(sys.argv[2])])
