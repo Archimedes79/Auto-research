@@ -193,6 +193,10 @@ def junction_gt(g):
         m = (ent_arm[a], ext_arm[b])
         rows.append([a, b, ent_arm[a], ext_arm[b], ra[a], rb[b], len(cnt_in[m]), len(cnt_out[m]), QE.sang(ENT[a, 2:], EXT[b, 2:]), float(drv[(a, b)])])
     pairs = np.array(rows, float)
+    first = {}
+    for r, a_, b_ in zip(runs, eid, xid):
+        first.setdefault((a_, b_), r["pts"])
+    pair_pts = [first[(int(r[0]), int(r[1]))] for r in rows]                                                         # E303: the GT connector points of every pair (first run), in the order of `pairs`
     # the order-preserving rule per maneuver
     man = {}
     for r in rows:
@@ -208,7 +212,7 @@ def junction_gt(g):
         ki, ko = int(rr[0][6]), int(rr[0][7])
         n_ident += int(mono and ki == ko and all(int(r[4]) == int(r[5]) for r in rr))
     return dict(zones=zones, ent=ENT, ext=EXT, ent_arm=ent_arm, ext_arm=ext_arm, ent_rank=ra, ext_rank=rb, arms=arms, pairs=pairs,
-                ent_vis=ent_vis, ext_vis=ext_vis, core=core, order=dict(maneuvers=len(man), multi=n_multi, monotone=n_mono, identity=n_ident))
+                ent_vis=ent_vis, ext_vis=ext_vis, pair_pts=pair_pts, core=core, order=dict(maneuvers=len(man), multi=n_multi, monotone=n_mono, identity=n_ident))
 
 
 def fields(jg, n=100, res=1.0, half=50.0):

@@ -51,7 +51,7 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs):
     for i, k in enumerate(kinds):
         if k == "link" and bool(long_mask[links[i][0]]):
             P = np.asarray(lines[i], float)
-            if any(np.linalg.norm(P[0] - pa) <= COVER_POS and np.linalg.norm(P[-1] - pb) <= COVER_POS for pa, ta, pb, tb in pairs):
+            if any(np.linalg.norm(P[0] - pr[0]) <= COVER_POS and np.linalg.norm(P[-1] - pr[2]) <= COVER_POS for pr in pairs):
                 continue
         keep.append(i)
     new = {old: j for j, old in enumerate(keep)}
@@ -60,9 +60,13 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs):
     E2 = [(new[a], new[b]) for a, b in edges if a in new and b in new]
     ends = [(P[-1], _tan(P, True), P[0], _tan(P, False)) for P in L2]
     wired = 0
-    for n, (pa, ta, pb, tb) in enumerate(pairs):
+    for n, pr in enumerate(pairs):
+        pa, ta, pb, tb = pr[:4]                                                                       # E303: a pair may carry the two handle scales (pr[4], pr[5])
         m = len(L2)
-        L2.append(QEND.curve(np.asarray(pa, float), np.asarray(ta, float), np.asarray(pb, float), np.asarray(tb, float), 1.0, 0.25))
+        if len(pr) > 4:
+            L2.append(QEND.curve_s(np.asarray(pa, float), np.asarray(ta, float), np.asarray(pb, float), np.asarray(tb, float), float(pr[4]), float(pr[5])))
+        else:
+            L2.append(QEND.curve(np.asarray(pa, float), np.asarray(ta, float), np.asarray(pb, float), np.asarray(tb, float), 1.0, 0.25))
         N2.append([10000 + n, 20000 + n])
         w_in = w_out = False
         for i, (le, te, fs, ts) in enumerate(ends):
@@ -140,7 +144,7 @@ def cmd_score(a):
         k = e["kp_pos"].shape[0] // 2
         p = 1.0 / (1.0 + np.exp(-e["logit"])) * e["allowed"]
         ia, ib = np.nonzero(p >= a.thr)
-        pairs = [(e["kp_pos"][i], e["kp_dir"][i], e["kp_pos"][k + j], e["kp_dir"][k + j]) for i, j in zip(ia, ib)]
+        pairs = [(e["kp_pos"][i], e["kp_dir"][i], e["kp_pos"][k + j], e["kp_dir"][k + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None and not a.chord else ()) for i, j in zip(ia, ib)]
         raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs)
         n_curves += n_c
         n_wired += n_w
@@ -189,6 +193,7 @@ if __name__ == "__main__":
     s.add_argument("--thr", type=float, default=0.5)
     s.add_argument("--full", default=None)
     s.add_argument("--base", default=None)
+    s.add_argument("--chord", action="store_true", help="E303: use the chord tangent for the connectors even when the dump carries learned handle scales (the control)")
     sub.add_parser("selftest")
     args = ap.parse_args()
     {"dump": cmd_dump, "score": cmd_score, "selftest": lambda _: selftest()}[args.cmd](args)

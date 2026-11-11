@@ -144,6 +144,16 @@ def curve(a, ta, b, tb, k=1.0, step=0.25):
     return h00 * a + h10 * (k * L * ta) + h01 * b + h11 * (k * L * tb)
 
 
+def curve_s(a, ta, b, tb, sa=1.0 / 3.0, sb=1.0 / 3.0, step=0.25):
+    """the cubic Bezier / Hermite curve from a (heading ta) to b (heading tb) with the handle scales sa, sb in units of the chord (the control points a + sa x chord x ta and b - sb x chord x tb; sa = sb = 1/3 is `curve` with k = 1;
+    the scales of `qtargets.fit_long_scales` / E303 are these), points about `step` metres apart"""
+    L = float(np.linalg.norm(b - a))
+    n = max(8, int(1.6 * L / step))
+    s = np.linspace(0, 1, n)[:, None]
+    q1, q2 = a + sa * L * ta, b - sb * L * tb
+    return (1 - s) ** 3 * a + 3 * (1 - s) ** 2 * s * q1 + 3 * (1 - s) * s ** 2 * q2 + s ** 3 * b
+
+
 def _selftest():
     # a T-junction: the lane comes from the south (0, -20) -> (0, -6), a connector turns left to (-6, 0) -> and the lane continues west; a second one goes straight on north
     def piece(pts, conn_from, conn_to):
@@ -160,6 +170,8 @@ def _selftest():
     assert len(et["cand"]) == 2 and et["y"].sum() == 2 and et["X"].shape == (2, NF), (et["cand"], et["y"], et["X"].shape)
     assert end_table(dict(pieces=[piece(south, 5, 6)])) is None
     c = curve(np.array([0.0, 0.0]), np.array([0.0, 1.0]), np.array([4.0, 4.0]), np.array([1.0, 0.0]))
+    c2 = curve_s(np.array([0.0, 0.0]), np.array([0.0, 1.0]), np.array([4.0, 4.0]), np.array([1.0, 0.0]))
+    assert np.allclose(c, c2), 'curve_s with the scales 1/3 is curve with k = 1'
     assert np.allclose(c[0], [0, 0]) and np.allclose(c[-1], [4, 4]) and len(c) >= 8
     print("qends selftest ok")
 

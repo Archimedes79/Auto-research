@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--ctx", default="dil", choices=("none", "dil", "attn"))
     ap.add_argument("--d", type=int, default=64)
     ap.add_argument("--joint", action="store_true")
+    ap.add_argument("--far-w", type=float, default=0.0, help="E304: the heat BCE of the cells beyond 35 m counts 1 + w times")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--bs", type=int, default=8)
@@ -54,7 +55,7 @@ def main():
         dev = next(m.parameters()).device
         x = b["x"].to(dev, non_blocking=True).float()
         P, out = m(x, joint=a.joint)
-        loss, info = JM.jmaps_loss(out, b)
+        loss, info = JM.jmaps_loss(out, b, far_w=a.far_w)
         info = {"j_" + k: v for k, v in info.items()}
         if a.joint:
             lp, ip = QG.pixel_loss(P, b)

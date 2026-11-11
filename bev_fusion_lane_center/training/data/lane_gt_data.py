@@ -103,6 +103,7 @@ class QData(torch.utils.data.Dataset):
             jt, jg = QJ.junction_targets(g, paint)
             out.update({n: torch.from_numpy(np.ascontiguousarray(v)) for n, v in jt.items()})
             npair = len(out["pairs"]) if "pairs" in out else 0                                           # E298: 1 for a true pair the ego drives (tier 1), in the order of `pairs` (the sorted true pairs of `qends.end_table` = the rows of `jgt`'s pairs)
+            out["pscale"] = torch.from_numpy(QJ.fit_pair_scales(jg)) if (jg is not None and len(jg["pairs"]) == npair) else torch.full((npair, 2), float("nan"))        # E303: the fitted handle scales of the true pairs
             out["pdrv"] = torch.from_numpy(np.ascontiguousarray(jg["pairs"][:, 9].astype(np.float32))) if (jg is not None and len(jg["pairs"]) == npair) else torch.zeros(npair)
         if self.pixels:
             import qraster as QR
@@ -139,6 +140,10 @@ def collate(b):
             for i, o in enumerate(b):
                 pdrv[i, :len(o["pdrv"])] = o["pdrv"]
             out["pdrv"] = pdrv
+            ps = torch.full((B, P_, 2), float("nan"))                                                         # E303
+            for i, o in enumerate(b):
+                ps[i, :len(o["pscale"])] = o["pscale"]
+            out["pscale"] = ps
     L = max(1, max(len(o["lk"]) for o in b))
     lk, lkl, lks = -torch.ones(B, L, 4, dtype=torch.long), torch.zeros(B, L, dtype=torch.bool), torch.full((B, L, 2), float("nan"))
     for i, o in enumerate(b):

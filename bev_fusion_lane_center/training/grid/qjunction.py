@@ -35,6 +35,31 @@ def junction_targets(g, paint=None):
     return dict(jz=zone, jheat=heat, jdir=head, jpaint=np.stack([stop, ped]).astype(np.float32)), jg
 
 
+def fit_pair_scales(jg, scales=(0.05, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0, 1.25)):
+    """E303: the two handle scales (sa, sb, in chords) of the Hermite curve of every true pair, fitted to the GT connector points of the pair (grid search, the cost of `qtargets.fit_long_scales`) -> (P, 2) float32 in the order of
+    `jg['pairs']` (NaN when a pair has no connector points). What the pair head's scale outputs are trained towards."""
+    import qends as QE
+    from scipy.spatial import cKDTree
+    out = np.full((0 if jg is None else len(jg["pairs"]), 2), np.nan, np.float32)
+    if jg is None:
+        return out
+    for n, (r, pts) in enumerate(zip(jg["pairs"], jg["pair_pts"])):
+        a, b = int(r[0]), int(r[1])
+        pa, ta, pb, tb = jg["ent"][a, :2], jg["ent"][a, 2:], jg["ext"][b, :2], jg["ext"][b, 2:]
+        tgt = np.asarray(pts, float)
+        if len(tgt) < 3 or np.linalg.norm(pb - pa) < 1.0:
+            continue
+        tt = cKDTree(tgt)
+        best = 1e9
+        for sa in scales:
+            for sb in scales:
+                cur = QE.curve_s(pa, ta, pb, tb, sa, sb, step=0.5)
+                m = tt.query(cur)[0].mean() + 0.2 * cKDTree(cur).query(tgt)[0].mean()
+                if m < best:
+                    best, out[n] = m, (sa, sb)
+    return out
+
+
 def painted_flags(jg, paint, stop_m=3.0, ped_m=4.0):
     """(ent_painted (E,), ext_painted (X,)) bool: an end is PAINTED when a stop line of a type other than the turn stop (turn stops lie inside the junction, they are waiting points, not entries) lies within `stop_m`
     or a pedestrian crossing within `ped_m` (E285: only about half of the entries are painted: the rest has to be inferred from context)"""
@@ -67,6 +92,8 @@ def _selftest():
     assert t["jz"][0].sum() > 20 and t["jpaint"][0].sum() >= 8 and t["jpaint"][1].sum() > 20
     # the stop line lies at x = 0, y = -8: row 100, column 84 / 85 of the 0.5 m grid
     assert t["jpaint"][0][100, 83:86].sum() > 0
+    sc = fit_pair_scales(jg)
+    assert sc.shape == (len(jg["pairs"]), 2) and np.isfinite(sc).all() and (sc >= 0.05).all(), sc
     pe, px = painted_flags(jg, paint)
     assert len(pe) == len(jg["ent"]) and pe[0] and px[0], (pe, px)                         # stop sign line at the entry, crossing at the exit
     t0, jg0 = junction_targets(dict(pieces=[]), None)

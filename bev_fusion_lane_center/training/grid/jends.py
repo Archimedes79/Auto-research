@@ -57,13 +57,15 @@ def _sample(maps, pts):
 
 
 class JEnds(nn.Module):
-    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64):
+    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False):
         super().__init__()
-        self.k, self.order, self.evidence = k, order, evidence
+        self.k, self.order, self.evidence, self.scales = k, order, evidence, scales
         self.kp = nn.Linear(f1 + 6, d)
         self.blocks = nn.ModuleList([SetBlock(d), SetBlock(d)])
         nin = 2 * d + NG + (NEV if evidence else 0) + (NRK if order else 0)
         self.pair = nn.Sequential(nn.Linear(nin, hid), nn.GELU(), nn.Linear(hid, hid), nn.GELU(), nn.Linear(hid, 1))
+        if scales:                                                                                           # E303: the two handle scales of the delivered curve, in chords (0.05 .. 1.25 like the fit grid)
+            self.scale = nn.Sequential(nn.Linear(nin, 32), nn.GELU(), nn.Linear(32, 2))
 
     def forward(self, jout, P, gt=None):
         j1, f1 = jout["j1"].float(), jout["f1"]
@@ -139,8 +141,11 @@ class JEnds(nn.Module):
         if self.order:
             rk, ga, ra, gb, rb = self.rank_matrix(pos, D, valid)
             feats.append(rk)
-        logit = self.pair(torch.cat(feats, -1))[..., 0]
+        fcat = torch.cat(feats, -1)
+        logit = self.pair(fcat)[..., 0]
         out = dict(heat=heat, idx=idx, valid=valid, kp_pos=pos, kp_dir=D, kp_p=pr, logit=logit, allowed=allowed)
+        if self.scales:
+            out["scale"] = 0.05 + 1.2 * self.scale(fcat).sigmoid()
         if self.order:
             out.update(ga=ga, ra=ra, gb=gb, rb=rb)
         return out
@@ -193,7 +198,7 @@ def crossing_penalty(out):
     return (Pm * t).sum() / (Pm.sum() + 1.0)
 
 
-def jends_loss(out, batch, cross_w=1.0, driven_w=0.0):
+def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5):
     dev = out["heat"].device
     B = out["heat"].shape[0]
     match = QEN.match_keypoints(out, batch)
@@ -223,6 +228,16 @@ def jends_loss(out, batch, cross_w=1.0, driven_w=0.0):
         bce = dual = z.sum() * 0.0
     loss = bce + 0.5 * dual
     info.update(bce=float(bce), dual=float(dual), pos_pairs=float((y * allowed).sum()), allowed=float(allowed.sum()))
+    if "scale" in out and "pscale" in batch and scale_w > 0:                                                    # E303: L1 of the predicted handle scales against the fitted ones, on the matched true pairs
+        S = torch.full((B, E + 1, X + 1, 2), float("nan"), device=dev)
+        ps = batch["pscale"].to(dev)
+        S[bi[pv], pairs[..., 0][pv], pairs[..., 1][pv]] = ps[pv]
+        St = S[torch.arange(B, device=dev)[:, None, None], ia[:, :, None], ib[:, None, :]]
+        m = (y > 0) & allowed & torch.isfinite(St[..., 0])
+        if m.any():
+            ls = (out["scale"][m] - St[m]).abs().mean()
+            loss = loss + scale_w * ls
+            info["scale_l1"] = float(ls)
     if "ga" in out and cross_w > 0 and allowed.any():
         cp = crossing_penalty(out)
         loss = loss + cross_w * cp
@@ -259,6 +274,17 @@ def _selftest():
             batch["pdrv"] = torch.zeros(B, 2)
             _, iz = jends_loss(out, batch, driven_w=2.0)
             assert abs(iz["bce"] - i0["bce"]) < 1e-6, (iz, i0)
+    # E303: the scale head (two handle scales per pair) trains against the fitted scales of the true pairs
+    m = JEnds(d=d, order=True, evidence=True, scales=True)
+    out = m(jout, P, gt=gt)
+    assert out["scale"].shape == (B, K, K, 2) and float(out["scale"].min()) >= 0.05 and float(out["scale"].max()) <= 1.25
+    batch["pscale"] = torch.full((B, 2, 2), 0.3)
+    loss, info = jends_loss(out, batch)
+    loss.backward()
+    assert "scale_l1" in info and all(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in m.scale.parameters()), info
+    batch.pop("pscale")
+    _, info2 = jends_loss(out, batch)
+    assert "scale_l1" not in info2
     # the crossing penalty: P = 1 on the crossed pair set {0 -> 1, 1 -> 0} is large, on the ordered set {0 -> 0, 1 -> 1} it is zero
     out = dict(logit=torch.full((1, K, K), -20.0), allowed=torch.ones(1, K, K, dtype=torch.bool), ga=torch.zeros(1, K, dtype=torch.long), gb=torch.zeros(1, K, dtype=torch.long),
                ra=torch.arange(K).float()[None], rb=torch.arange(K).float()[None])

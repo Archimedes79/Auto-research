@@ -98,7 +98,7 @@ def _dice(logit, y, eps=1.0):
     return (1 - (2 * inter + eps) / (p.sum((-2, -1)) + y.sum((-2, -1)) + eps)).mean()
 
 
-def jmaps_loss(out, batch):
+def jmaps_loss(out, batch, far_w=0.0, far_r=35.0):
     dev = out["j1"].device
     j1, j05 = out["j1"].float(), out["j05"].float()
     jz, jh, jd, jp = (batch[k].to(dev).float() for k in ("jz", "jheat", "jdir", "jpaint"))
@@ -106,7 +106,12 @@ def jmaps_loss(out, batch):
     l_z = F.binary_cross_entropy_with_logits(j1[:, :2], jz) + _dice(j1[:, :2], jz)
     info["zone"] = float(l_z)
     pw = torch.tensor(20.0, device=dev)
-    l_h = F.binary_cross_entropy_with_logits(j1[:, 2:4], jh, pos_weight=pw) + _dice(j1[:, 2:4], jh)
+    if far_w > 0:                                                                                      # E304: the cells beyond far_r metres from the ego count 1 + far_w times in the heat BCE (53 % of the GT ends are there, the recall is 0.55)
+        cc = -50.0 + (torch.arange(100, device=dev).float() + 0.5)
+        wmap = 1.0 + far_w * ((cc[:, None] ** 2 + cc[None, :] ** 2).sqrt() > far_r).float()
+        l_h = (F.binary_cross_entropy_with_logits(j1[:, 2:4], jh, pos_weight=pw, reduction="none") * wmap).mean() + _dice(j1[:, 2:4], jh)
+    else:
+        l_h = F.binary_cross_entropy_with_logits(j1[:, 2:4], jh, pos_weight=pw) + _dice(j1[:, 2:4], jh)
     info["heat"] = float(l_h)
     l_d = 0.0
     for k in range(2):                                                       # heading where the target has one: cosine loss on the normalised raw output
@@ -162,6 +167,8 @@ def _selftest():
         batch["jheat"][:, 0, 30, 50] = 1
         batch["jdir"][:, 0, 30, 50], batch["jdir"][:, 1, 30, 50] = 0.0, 1.0
         loss, info = jmaps_loss(out, batch)
+        lf, _ = jmaps_loss(out, batch, far_w=2.0)                                                         # E304: the far weight changes the loss and nothing else
+        assert abs(float(lf) - float(loss)) > 1e-6
         loss.backward()
         dead = [n for n, p in m.named_parameters() if p.grad is None or float(p.grad.abs().sum()) == 0.0]
         assert not dead, (ctx, dead)

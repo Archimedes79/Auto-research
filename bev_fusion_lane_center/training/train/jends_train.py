@@ -22,10 +22,10 @@ import trainer as T  # noqa: E402
 
 
 class JEndModel(nn.Module):
-    def __init__(self, maps_args, order=True, evidence=True, d=64):
+    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False):
         super().__init__()
         self.jmodel = JM.JModel(width=48, d=maps_args.get("d", 64), ctx=maps_args.get("ctx", "dil"))
-        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64))
+        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales)
 
     def forward(self, x, gt=None):
         with torch.no_grad():
@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--no-order", action="store_true")
     ap.add_argument("--no-evidence", action="store_true")
     ap.add_argument("--cross-w", type=float, default=1.0)
+    ap.add_argument("--scales", action="store_true", help="E303: two handle scales per pair (the delivered curve), trained against the fitted scales of the true pairs")
     ap.add_argument("--driven-w", type=float, default=0.0, help="E298: the positive pair terms of the pairs the ego drives count 1 + w times")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
@@ -52,7 +53,7 @@ def main():
     LD.QData.DEFAULT_JUNCTION = True
     mp = a.maps or os.path.join(ROOT, "runs", f"e286_j1_s{a.seed}", "model.pt")
     ck = torch.load(mp, map_location="cpu")
-    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence)
+    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales)
     model.jmodel.load_state_dict(ck["state"])
     ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train", pixels=False)
     run = T.Run(a.name)

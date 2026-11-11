@@ -25,7 +25,7 @@ def load_model(run, dev):
     import jends_train as JT
     ck = torch.load(os.path.join(ROOT, "runs", run, "model.pt"), map_location="cpu")
     a = ck["args"]
-    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"])
+    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)))
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), a
 
@@ -49,7 +49,8 @@ def dump(a):
                 break
             for i in range(len(b["token"])):
                 frames.append(dict(token=b["token"][i], row=int(b["row"][i]), kp_pos=out["kp_pos"][i].cpu().numpy(), kp_dir=out["kp_dir"][i].cpu().numpy(), kp_p=out["kp_p"][i].cpu().numpy(),
-                                   valid=out["valid"][i].cpu().numpy(), logit=out["logit"][i].float().cpu().numpy(), allowed=out["allowed"][i].cpu().numpy()))
+                                   valid=out["valid"][i].cpu().numpy(), logit=out["logit"][i].float().cpu().numpy(), allowed=out["allowed"][i].cpu().numpy(),
+                                   scale=out["scale"][i].float().cpu().numpy() if "scale" in out else None))
     r = lambda x, y: x / max(y, 1)  # noqa: E731
     head = dict(ent_recall=r(tot["ent_hit"], tot["ent_n"]), ent_precision=r(tot["ent_ok"], tot["ent_kp"]), ext_recall=r(tot["ext_hit"], tot["ext_n"]), ext_precision=r(tot["ext_ok"], tot["ext_kp"]),
                 pair_recall=r(tot["pairs_hit"], tot["pairs_n"]), pair_precision=r(tot["pairs_ok"], tot["pairs_kp"]), counts=tot, thr=a.thr, frames=len(frames), order=not args["no_order"],
@@ -62,7 +63,7 @@ def dump(a):
 
 def score(a):
     import qends_eval as QE
-    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True))
+    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False))))
 
 
 def selftest():
@@ -85,6 +86,7 @@ if __name__ == "__main__":
             s.add_argument("--max", type=int, default=0, help="only the first N frames (a test of the pipeline; the score needs all 873)")
         if name == "score":
             s.add_argument("--seed", type=int, required=True)
+            s.add_argument("--chord", action="store_true", help="E303: the chord-tangent connectors even when the dump has learned handle scales (the shape control: same pairs)")
     sub.add_parser("selftest")
     a = ap.parse_args()
     {"dump": dump, "score": score, "selftest": lambda _: selftest()}[a.cmd](a)
