@@ -64,6 +64,11 @@ class QData(torch.utils.data.Dataset):
         self.missing = len(ks_all) - len(self.ks)
         if strict and self.missing:
             raise FileNotFoundError(f"{self.missing} of {len(ks_all)} frames have no stored lane GT in {d}")
+        if self.junction:                                                                                 # critic 2026-11-11: a missing sidecar counted in a worker copy never reached the main process
+            import junction_paint as JP
+            pdir = JP.paint_dir()
+            miss = [self.tokens[int(self.bd.rows[k])] for k in self.ks if not os.path.exists(os.path.join(pdir, self.tokens[int(self.bd.rows[k])] + ".pkl"))]
+            assert not miss, f"{len(miss)} frames have no paint sidecar in {pdir} (junction_paint.py make); first {miss[:3]}"
         self.mm = None
 
     def __len__(self):

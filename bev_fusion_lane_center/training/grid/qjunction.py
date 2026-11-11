@@ -62,20 +62,20 @@ def fit_pair_scales(jg, scales=(0.05, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0, 1.25)):
 
 def painted_flags(jg, paint, stop_m=3.0, ped_m=4.0):
     """(ent_painted (E,), ext_painted (X,)) bool: an end is PAINTED when a stop line of a type other than the turn stop (turn stops lie inside the junction, they are waiting points, not entries) lies within `stop_m`
-    or a pedestrian crossing within `ped_m` (E285: only about half of the entries are painted: the rest has to be inferred from context)"""
+    or a pedestrian crossing within `ped_m`; an EXIT is painted by a crossing only (critic 2026-11-11: the stop line of the arm's own entry side lies next to its exits) (E285: only part of the ends are painted: the rest has to be inferred from context)"""
     if jg is None:
         return np.zeros(0, bool), np.zeros(0, bool)
     from shapely.geometry import Point, Polygon
     stops = [Polygon(s["poly"]).buffer(0) for s in (paint or {}).get("stop_line", []) if s["type"] != 0 and len(s["poly"]) > 2]
     peds = [Polygon(p).buffer(0) for p in (paint or {}).get("ped_crossing", []) if len(p) > 2]
 
-    def flag(E):
+    def flag(E, use_stops):
         out = np.zeros(len(E), bool)
         for i, e in enumerate(E):
             pt = Point(float(e[0]), float(e[1]))
-            out[i] = any(p.distance(pt) <= stop_m for p in stops) or any(p.distance(pt) <= ped_m for p in peds)
+            out[i] = (use_stops and any(p.distance(pt) <= stop_m for p in stops)) or any(p.distance(pt) <= ped_m for p in peds)
         return out
-    return flag(jg["ent"]), flag(jg["ext"])
+    return flag(jg["ent"], True), flag(jg["ext"], False)
 
 
 def _selftest():
