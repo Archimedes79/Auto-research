@@ -5,7 +5,7 @@
 
 Per GT pair: delivered = a keypoint of the dump matches its entry and one its exit (within 4 m and 30 degrees) and the head's logit of that keypoint pair is >= 0 (p >= 0.5, allowed). Per GT end: found = a valid keypoint matches it.
 Splits (rows of the printed tables): the ego drove the pair (tier 1, non-causal label) or not; city (boston / singapore: the traffic side differs); lanes of the entry arm (1, 2, 3+); the turn class of the pair (straight < 35 degrees, left, right,
-other); for the ends: painted (stop line / crossing near, `qjunction.painted_flags`) or not, visible (camera sees it, no box hides it: the l4 label `vis`) or not, and the distance from the ego (< 20, 20 - 35, > 35 m).
+other); for the ends: painted (stop line / crossing near, `qjunction.painted_flags`) or not, visible (the l4 label `vis`: a camera sees it, no box hides it; the near blind zone of about 5 m counts as hidden) or not, and the distance from the ego (< 20, 20 - 35, > 35 m).
 """
 import argparse
 import json
@@ -53,8 +53,8 @@ def score(a):
                 f = frames[t]
                 K = f["logit"].shape[0]
                 kp, kd = f["kp_pos"], f["kp_dir"]
-                ia = JR._match(kp[:K], kd[:K], f["valid"][0], jg["ent"])
-                ib = JR._match(kp[K:], kd[K:], f["valid"][1], jg["ext"])
+                ia = JR._match(kp[:K], kd[:K], f["valid"][0] & (f["kp_p"][:K] >= a.kp_thr), jg["ent"])
+                ib = JR._match(kp[K:], kd[K:], f["valid"][1] & (f["kp_p"][K:] >= a.kp_thr), jg["ext"])
                 try:
                     pe, px = QJ.painted_flags(jg, JP.load(t))
                 except FileNotFoundError:
@@ -63,10 +63,13 @@ def score(a):
                 for r in jg["pairs"]:
                     i, j = int(r[0]), int(r[1])
                     hit = ia[i] >= 0 and ib[j] >= 0 and bool(f["allowed"][ia[i], ib[j]]) and f["logit"][ia[i], ib[j]] >= 0
+                    rng = rng_class(float(np.linalg.norm(jg["ent"][i, :2])))
                     add(P, ("all", ""), hit)
                     add(P, ("driven", "yes" if r[9] else "no"), hit)
                     add(P, ("city", city), hit)
-                    add(P, ("lanes of the entry arm", str(min(int(r[6]), 3)) if r[6] < 3 else "3+"), hit)
+                    add(P, ("entries in use in the maneuver", str(int(r[6])) if r[6] < 3 else "3+"), hit)
+                    add(P, ("driven x range", ("driven " if r[9] else "other ") + rng), hit)
+                    add(P, ("range of the entry", rng), hit)
                     add(P, ("turn", turn_class(r[8])), hit)
                 for kind, EE, M, fl, vis in (("entry", jg["ent"], ia, pe, jg["ent_vis"]), ("exit", jg["ext"], ib, px, jg["ext_vis"])):
                     for q, e in enumerate(EE):
@@ -85,7 +88,7 @@ def score(a):
         for k, v in res["ends"].items():
             print(f"  end found    {k:32s} n {v['n']:6d}  {v['recall']:.3f}")
     os.makedirs(os.path.join(ROOT, "runs", "e300"), exist_ok=True)
-    json.dump(out, open(os.path.join(ROOT, "runs", "e300", "splits_" + "_".join(a.run) + ".json"), "w"), indent=1)
+    json.dump(out, open(os.path.join(ROOT, "runs", "e300", f"splits_thr{a.kp_thr:g}_" + "_".join(a.run) + ".json"), "w"), indent=1)
 
 
 def selftest():
@@ -99,6 +102,7 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("score")
     s.add_argument("--run", nargs="+", required=True)
+    s.add_argument("--kp-thr", type=float, default=0.5, help="keypoints below this probability do not count (strict one-to-one matching, as the head's own counter)")
     sub.add_parser("selftest")
     a = ap.parse_args()
     selftest() if a.cmd == "selftest" else score(a)

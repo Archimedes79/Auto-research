@@ -73,13 +73,20 @@ def rule_pairs(ent, ext):
 
 
 def _match(kp, kd, valid, G, pos_tol=4.0, ang=30.0):
+    """STRICT one-to-one matching (critic 2026-11-11): greedy by distance over all (keypoint, GT end) pairs within pos_tol and ang degrees, every keypoint and every GT end used at most once -> (n_GT,) index of the keypoint, -1 none"""
     out = -np.ones(len(G), int)
-    for g, e in enumerate(G):
-        d = np.linalg.norm(kp - e[:2], axis=1)
-        a = np.degrees(np.arccos(np.clip(kd @ e[2:], -1, 1)))
-        ok = valid & (d <= pos_tol) & (a <= ang)
-        if ok.any():
-            out[g] = int(np.argmin(np.where(ok, d, 1e9)))
+    if not len(G) or not valid.any():
+        return out
+    ki = np.where(valid)[0]
+    d = np.linalg.norm(kp[ki][:, None, :2] - np.asarray(G)[None, :, :2], axis=-1)
+    a = np.degrees(np.arccos(np.clip(kd[ki][:, None, 0] * np.asarray(G)[None, :, 2] + kd[ki][:, None, 1] * np.asarray(G)[None, :, 3], -1, 1)))
+    ok = (d <= pos_tol) & (a <= ang)
+    used = set()
+    for dist, i, j in sorted((d[i, j], i, j) for i, j in zip(*np.where(ok))):
+        if i in used or out[j] >= 0:
+            continue
+        used.add(i)
+        out[j] = int(ki[i])
     return out
 
 
@@ -88,7 +95,7 @@ def score(a):
     res = {}
     for run in a.run:
         frames = {f["token"]: f for f in pickle.load(open(os.path.join(ROOT, "runs", run, "ends_val.pkl"), "rb"))}
-        tot = dict(gt=0, rule_hit=0, rule_n=0, rule_ok=0, head_hit=0, head_n=0, head_ok=0)
+        tot = dict(gt=0, ceiling=0, rule_hit=0, rule_n=0, rule_ok=0, head_hit=0, head_n=0, head_ok=0)
         for sid, (name, toks) in QV.val_scenes().items():
             for t in toks:
                 if t not in frames:
@@ -99,15 +106,17 @@ def score(a):
                 gt_pairs = set() if jg is None else {(int(p[0]), int(p[1])) for p in jg["pairs"]}
                 tot["gt"] += len(gt_pairs)
                 kp, kd = f["kp_pos"], f["kp_dir"]
-                ve, vx = f["valid"][0], f["valid"][1]
+                ve = f["valid"][0] & (f["kp_p"][:K] >= a.kp_thr)                                      # the same keypoint threshold for the rule and for the head
+                vx = f["valid"][1] & (f["kp_p"][K:] >= a.kp_thr)
                 ie, ix = np.where(ve)[0], np.where(vx)[0]
                 R = rule_pairs(np.concatenate([kp[:K][ie], kd[:K][ie]], 1), np.concatenate([kp[K:][ix], kd[K:][ix]], 1))
-                Hd = (1 / (1 + np.exp(-f["logit"]))) * f["allowed"] >= 0.5
+                Hd = ((1 / (1 + np.exp(-f["logit"]))) * f["allowed"] >= 0.5) & ve[:, None] & vx[None, :]
                 if jg is not None:
                     ma = _match(kp[:K], kd[:K], ve, jg["ent"])
                     mb = _match(kp[K:], kd[K:], vx, jg["ext"])
-                    inv_a = {int(k): g for g, k in enumerate(ma) if k >= 0}
-                    inv_b = {int(k): g for g, k in enumerate(mb) if k >= 0}
+                    inv_a = {int(k): g_ for g_, k in enumerate(ma) if k >= 0}
+                    inv_b = {int(k): g_ for g_, k in enumerate(mb) if k >= 0}
+                    tot["ceiling"] += sum(1 for (x, y) in gt_pairs if ma[x] >= 0 and mb[y] >= 0)
                 else:
                     inv_a = inv_b = {}
                 for name_, M, rows, cols in (("rule", R, ie, ix), ("head", Hd, np.arange(K), np.arange(K))):
@@ -121,11 +130,12 @@ def score(a):
                             got.add(key)
                     tot[f"{name_}_hit"] += len(got)
         r = lambda x, y: x / max(y, 1)  # noqa: E731
-        res[run] = dict(gt_pairs=tot["gt"], rule=dict(recall=r(tot["rule_hit"], tot["gt"]), precision=r(tot["rule_ok"], tot["rule_n"]), delivered=tot["rule_n"]),
+        res[run] = dict(keypoint_thr=a.kp_thr, matching="strict one-to-one, 4 m, 30 degrees", gt_pairs=tot["gt"], ceiling_both_ends_matched=r(tot["ceiling"], tot["gt"]),
+                        rule=dict(recall=r(tot["rule_hit"], tot["gt"]), precision=r(tot["rule_ok"], tot["rule_n"]), delivered=tot["rule_n"]),
                         head=dict(recall=r(tot["head_hit"], tot["gt"]), precision=r(tot["head_ok"], tot["head_n"]), delivered=tot["head_n"]))
         print(run, json.dumps(res[run]))
     os.makedirs(os.path.join(ROOT, "runs", "e287"), exist_ok=True)
-    json.dump(res, open(os.path.join(ROOT, "runs", "e287", "rule_control.json"), "w"), indent=1)
+    json.dump(res, open(os.path.join(ROOT, "runs", "e287", f"rule_control_thr{a.kp_thr:g}_" + "_".join(a.run) + ".json"), "w"), indent=1)
 
 
 def selftest():
@@ -136,6 +146,10 @@ def selftest():
     assert R[0, 0] and R[1, 1] and not R[0, 1] and not R[1, 0], R                      # entry 1 -> exit 1, entry 2 -> exit 2 (D82)
     assert R[0, 2] and not R[1, 2], R                                                     # the left turn only from the leftmost lane
     assert not rule_pairs(ent[:0], ext).any() and not rule_pairs(ent, ext[:0]).any()
+    # strict matching: one keypoint between two GT ends 3.5 m apart serves only one of them
+    kpp = np.array([[0.0, 0.0]]); kdd = np.array([[0.0, 1.0]]); G = np.array([[-1.75, 0.0, 0.0, 1.0], [1.75, 0.0, 0.0, 1.0]])
+    mm = _match(kpp, kdd, np.array([True]), G)
+    assert (mm >= 0).sum() == 1, mm
     print("jrule_control selftest ok")
 
 
@@ -144,6 +158,7 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("score")
     s.add_argument("--run", nargs="+", required=True)
+    s.add_argument("--kp-thr", type=float, default=0.5, help="keypoints below this probability are dropped for the rule AND the head")
     sub.add_parser("selftest")
     a = ap.parse_args()
     selftest() if a.cmd == "selftest" else score(a)
