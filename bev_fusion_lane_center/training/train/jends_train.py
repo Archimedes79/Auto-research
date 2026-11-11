@@ -62,6 +62,7 @@ def main():
     if a.raster == "exact":
         os.environ["BFLC_RASTER"] = "exact"
     LD.QData.DEFAULT_JUNCTION = True
+    LD.QData.DEFAULT_PSCALE = a.scales                                                                   # the fitted handle scales cost 0.15 s per frame: only for the scale head
     mp = a.maps or os.path.join(ROOT, "runs", f"e286_j1_s{a.seed}", "model.pt")
     ck = torch.load(mp, map_location="cpu")
     model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e, capacity=a.capacity)
