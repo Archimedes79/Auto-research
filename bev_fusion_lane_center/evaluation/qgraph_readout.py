@@ -1,7 +1,7 @@
 """Read-out steps for the nodes the lane head delivers (E275). Pure numpy, no model, no GPU.
 
     keep = suppress_close_nodes(pos, e, radius=1.5, thr=0.5)        # (M,) bool: the nodes that stay
-    spec = parse("close:1.5@0.5")                                   # "plain@0.4" = the node threshold only; "close:<R>@<thr>" = close-node suppression, then the threshold
+    spec = parse("close:1.5@0.5")                                   # "plain@0.4" = the node threshold only; "close:<R>@<thr>" = close-node suppression, then the threshold; "mnms:<R>@<thr>" = Matrix-NMS (E288)
     q = apply(pred, spec)                                           # the prediction with the dropped nodes at e = 0: every consumer of the read-out (qgraph_eval.kept / node_counts /
                                                                     # assign_counts) then sees them as not delivered; plain returns `pred` itself
 
@@ -20,16 +20,17 @@ from collections import namedtuple
 
 import numpy as np
 
-Spec = namedtuple("Spec", "kind radius thr")        # kind "plain" (radius None) or "close"
-_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?))@(\d+(?:\.\d+)?)$")
+Spec = namedtuple("Spec", "kind radius thr")        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay)
+_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?))@(\d+(?:\.\d+)?)$")
 
 
 def parse(text):
     """'plain@0.5' -> Spec('plain', None, 0.5); 'close:1.5@0.4' -> Spec('close', 1.5, 0.4)"""
     m = _SPEC.match(text.strip())
     if not m:
-        raise ValueError(f"read-out spec {text!r}: expected plain@<thr> or close:<radius>@<thr>")
-    spec = Spec("plain" if m.group(1) == "plain" else "close", None if m.group(2) is None else float(m.group(2)), float(m.group(3)))
+        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>@<thr> or mnms:<radius>@<thr>")
+    kind = "plain" if m.group(1) == "plain" else ("close" if m.group(2) is not None else "mnms")
+    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(4)))
     if not spec.thr > 0.0:                                         # a dropped node has e = 0: with a threshold of 0 it would be delivered again
         raise ValueError(f"read-out spec {text!r}: the threshold must be above 0")
     return spec
@@ -37,7 +38,7 @@ def parse(text):
 
 def name(spec):
     """folder-safe name: plain_t0.5, close1.5_t0.4"""
-    return f"plain_t{spec.thr:g}" if spec.kind == "plain" else f"close{spec.radius:g}_t{spec.thr:g}"
+    return f"plain_t{spec.thr:g}" if spec.kind == "plain" else f"{spec.kind}{spec.radius:g}_t{spec.thr:g}"
 
 
 def suppress_close_nodes(pos, e, radius, thr=0.5):
@@ -61,6 +62,28 @@ def suppress_close_nodes(pos, e, radius, thr=0.5):
     return keep
 
 
+def matrix_nms(pos, e, radius, thr=0.5, sigma=0.5):
+    """E288: the one-pass Matrix-NMS decay (SOLOv2, Wang et al. 2020) on the nodes with e >= thr: the overlap of two nodes is o = max(0, 1 - d / radius); going through the nodes by e descending,
+    the decay of node j is the minimum over the higher nodes i of exp(-(o_ij^2 - c_i^2) / sigma) with the compensation c_i = max over the nodes k above i of o_ki (a node that is itself suppressed
+    suppresses less); the decayed score is e_j x decay_j. -> (M,) float: the decayed scores (0 below thr). No sequential keep set: one matrix product-free pass, differentiable in e and pos"""
+    pos = np.asarray(pos, float).reshape(-1, 2)
+    e = np.asarray(e, float).reshape(-1)
+    out = np.zeros(len(e))
+    cand = np.flatnonzero(e >= thr)
+    if not len(cand):
+        return out
+    order = cand[np.argsort(-e[cand], kind="stable")]
+    P = pos[order]
+    d = np.sqrt(((P[:, None, :] - P[None, :, :]) ** 2).sum(-1))
+    o = np.triu(np.maximum(0.0, 1.0 - d / radius), 1)                        # o[i, j], i above j
+    comp = o.max(0)                                                         # c_i = max_k<i o[k, i] (column i holds the overlaps of i with the nodes above it)
+    decay = np.exp(-(o ** 2 - comp[:, None] ** 2) / sigma)
+    decay = np.where(np.triu(np.ones_like(o), 1) > 0, decay, np.inf).min(0)   # over the higher nodes i < j
+    decay = np.where(np.isfinite(decay), decay, 1.0)
+    out[order] = e[order] * decay
+    return np.where(out >= thr, out, 0.0)
+
+
 def apply(pred, spec):
     """the prediction as the read-out of `spec` sees it. plain: `pred` itself. close: a shallow copy whose nodes['e'] is 0 for every node that was not kept (the thresholded set is kept
     exactly as suppress_close_nodes returns it; the other arrays and the links are shared, not copied)"""
@@ -68,9 +91,12 @@ def apply(pred, spec):
         return pred
     nd = pred["nodes"]
     e = np.asarray(nd["e"], float)
-    keep = suppress_close_nodes(nd["pos"], e, spec.radius, spec.thr)
     q = copy.copy(pred)
     q["nodes"] = dict(nd)
+    if spec.kind == "mnms":                                                  # E288: the decayed scores replace e (a node below the threshold after the decay is not delivered)
+        q["nodes"]["e"] = matrix_nms(nd["pos"], e, spec.radius, spec.thr).reshape(e.shape)
+        return q
+    keep = suppress_close_nodes(nd["pos"], e, spec.radius, spec.thr)
     q["nodes"]["e"] = np.where(keep, e.reshape(-1), 0.0).reshape(e.shape)
     return q
 
