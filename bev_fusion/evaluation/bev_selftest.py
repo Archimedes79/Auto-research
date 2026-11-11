@@ -361,7 +361,7 @@ def _():
         bev_suite.cmd_compare(["runs/none_a", "runs/none_b", "--split", "small.val", "--n", "80"])
         raise AssertionError("compare found a store that does not exist")
     except SystemExit as ex:
-        assert "eval_small_val_n80" in str(ex), ex
+        assert "eval_small_val_fusion_n80" in str(ex), ex                       # D31: the fusion part is in the store name by default
     try:
         with contextlib.redirect_stderr(io.StringIO()):
             bev_suite.cmd_compare(["runs/none_a", "runs/none_b", "--split", "small.test"])

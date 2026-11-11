@@ -3,7 +3,7 @@
 It computes nothing itself. Every option is one or more commands of `bev_suite.py`, each run as its own process, so every output is where bev_suite
 puts it. What the door adds is `RUN/eval/door.json`: the options and the commands (exit code, seconds) of each call.
 
-    --quant              eval --n N                       the numbers: table, metrics.json, card.json (+ --curves --fusion --velocity: PR / ROC, fusion area, velocity field)
+    --quant              eval --n N                       the numbers: table, metrics.json, card.json (the boxes are scored on the fusion area too since D31: `--no-fusion` leaves that out; + --curves --velocity: PR / ROC, velocity field)
     --qual N | F1,F2,..  qual random N --seed S           N random frames as pictures, or the named frames (scene-0061/12,...; one process for all of them)
     --videos N | V1,V2   qual videos N --seed S           N random scenes as videos, or the named scenes (scene-0061,...)
     --time               timing --n 30 + time             ms per module and ms per frame (idle GPU only: timing refuses a busy one)
@@ -60,7 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--n", type=positive_int, default=1000, help="val frames of --quant / --all (default 1000)")
     p.add_argument("--seed", type=int, default=1, help="seed of the random frames and scenes (default 1)")
     p.add_argument("--curves", action="store_true", help="with --quant: also PR / ROC / calibration (bev_suite --curves)")
-    p.add_argument("--fusion", action="store_true", help="with --quant: also the fusion-area scoring (bev_suite --fusion)")
+    p.add_argument("--fusion", action=argparse.BooleanOptionalAction, default=True,
+                   help="with --quant: also the fusion-area scoring (bev_suite --fusion), ON by default since D31 (the network's field of view is the headline); --no-fusion leaves it out (the numbers of a store made before D31)")
     p.add_argument("--velocity", action="store_true", help="with --quant: also the velocity field (bev_suite --velocity)")
     p.add_argument("--device", default="cuda", help="cuda | cpu (default cuda)")
     p.add_argument("--workers", type=int, default=2, help="read-ahead processes (default 2)")
@@ -92,7 +93,7 @@ def step(name, argv=None, fatal=True, tries=1, store=None, frames=None) -> dict:
 def global_options(a, out=None) -> list:
     """the global options of bev_suite, always written out; out = the --out to hand on (None: none)"""
     return (["--device", a.device, "--workers", str(a.workers), "--split", a.split] + (["--ckpt-dir", a.ckpt_dir] if a.ckpt_dir else [])
-            + (["--out", out] if out else []))
+            + (["--out", out] if out else []) + ([] if a.fusion else ["--no-fusion"]))
 
 
 def plan(a) -> list:
@@ -113,11 +114,11 @@ def plan(a) -> list:
     if a.time:
         steps.append(step("time", G + ["time"]))
     if a.quant or a.all:
-        more = [f"--{f}" for f in ("curves", "fusion", "velocity") if a.all or getattr(a, f)]
+        more = [f"--{f}" for f in ("curves", "fusion", "velocity") if getattr(a, f) or (a.all and (f != "fusion" or a.fusion))]
         steps.append(step("numbers", G + more + ["eval", "--n", str(a.n)] + (["--prior", str(ALL_PRIOR), "--images", str(ALL_IMAGES)] if a.all else [])))
     if a.all:
         suite_out = a.out or os.path.join(a.run, "eval", "suite")
-        steps.append(step("generalisation", G + ["generalisation", "--n", str(a.n)], fatal=False, tries=2, store=os.path.join(suite_out, "quant", f"eval_train_n{a.n}")))
+        steps.append(step("generalisation", G + ["generalisation", "--n", str(a.n)], fatal=False, tries=2, store=os.path.join(suite_out, "quant", f"eval_train{'_fusion' if a.fusion else ''}_n{a.n}")))
         steps.append(step("modules", G + ["modules", "--frames", "4"], fatal=False))
     if a.qual:
         q = count_or_list(a.qual, "qual")

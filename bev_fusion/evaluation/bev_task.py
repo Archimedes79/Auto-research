@@ -276,7 +276,7 @@ class BEVTask(Task):
         if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
             from evaluation.bev_curves import BevCurveMetric
             ms.append(BevCurveMetric(self.spec, self.groups))
-        if getattr(self, "fusion", False):                                    # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers
+        if getattr(self, "fusion", False):                                    # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers; the entry points (evaluate.py, bev_suite eval / compare, bev_eval.task) switch it on by default since D31, a Task built by hand does not
             from evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
             ms += [BevFusionDetMetric(self.groups, "detf"), BevFusionDetMetric(self.groups, "detfp", include_partial=True), BevCoverageMetric(self.groups, self._pts())]
         if getattr(self, "velocity", False):                                  # field / box-centre velocity per cell set (bev_velocity.py), off by default

@@ -171,13 +171,13 @@ def free_subject(net: str, src, device: str):
 
 
 def task(net: str, metrics=("maps", "boxes")):
-    """the metric definitions of this run without loading it; `metrics` = maps, boxes (always), curves, fusion, velocity"""
+    """the metric definitions of this run without loading it; `metrics` = maps, boxes, fusion (always on since D31; the name is still accepted), curves, velocity"""
     from evaluation import bev_suite
     unknown = sorted(set(metrics) - {"maps", "boxes", "curves", "fusion", "velocity"})
     if unknown:
         raise ValueError(f"unknown metrics {unknown}: maps, boxes, curves, fusion, velocity")
     _claim_code(net)
-    t = bev_suite._task_only(net, "curves" in metrics, "fusion" in metrics, "velocity" in metrics)
+    t = bev_suite._task_only(net, "curves" in metrics, True, "velocity" in metrics)       # the fusion-area scoring is always on (D31: the network's field of view is the headline)
     metrics_of = t.metrics
     t.metrics = lambda: [m for m in metrics_of() if m.name != "loss"]       # the Runner reads no ground truth, so a prediction carries no validation loss (D72); `bev_suite.py eval` keeps it
     return t

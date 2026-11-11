@@ -73,15 +73,19 @@ def check_plan():
     assert c["report"] == ["report", "--no-pictures", "--val-table", "runs/x/eval/by_n/table_n1000.txt", "--train-table", "runs/x/eval/by_n/table_train_n1000.txt"], \
         "the tables generalisation passes to its page"
     assert [s["fatal"] for s in allp] == [False, True, False, False, False, False, False], "in the chain only the numbers are fatal"
-    assert allp[2]["tries"] == 2 and allp[2]["store"] == "runs/x/eval/suite/quant/eval_train_n1000"
+    assert allp[2]["tries"] == 2 and allp[2]["store"] == "runs/x/eval/suite/quant/eval_train_fusion_n1000", "the store carries the fusion part (D31: on by default)"
+    nf = steps_of("--all", "--no-fusion")                                            # D31: --no-fusion leaves the fusion-area scoring out of every step, and the store name says so
+    assert cmds(nf)["numbers"] == ["--no-fusion", "--curves", "--velocity", "eval", "--n", "1000", "--prior", "500", "--images", "8"], cmds(nf)["numbers"]
+    assert nf[2]["store"] == "runs/x/eval/suite/quant/eval_train_n1000", nf[2]["store"]
     plus = steps_of("--all", "--qual", "scene-0003/1", "--videos", "scene-0003")           # more asked for on top of the chain: soft too, and where they belong
     assert [(s["name"], s["fatal"]) for s in plus] == [("timing", False), ("numbers", True), ("generalisation", False), ("modules", False), ("frames", False),
                                                        ("videos", False), ("showcase", False), ("report", False)]
     assert [(s["name"], s["fatal"]) for s in steps_of("--all", "--qual", "2")][4] == ("qual", False)
     assert cmds(steps_of("--all", "--n", "200", "--out", "o"))["showcase"][:2] == ["--out", "o/showcase"]
     # every single option
-    assert cmds(steps_of("--quant", "--n", "50")) == {"numbers": ["eval", "--n", "50"]}, "the golden relation: --quant is a plain eval"
-    assert cmds(steps_of("--quant", "--curves", "--velocity"))["numbers"] == ["--curves", "--velocity", "eval", "--n", "1000"]
+    assert cmds(steps_of("--quant", "--n", "50")) == {"numbers": ["--fusion", "eval", "--n", "50"]}, "the golden relation: --quant is a plain eval (bev_suite's own default has the fusion-area scoring on since D31, the door says it)"
+    assert cmds(steps_of("--quant", "--no-fusion", "--n", "50")) == {"numbers": ["--no-fusion", "eval", "--n", "50"]}, "--no-fusion: the numbers of a store made before D31"
+    assert cmds(steps_of("--quant", "--curves", "--velocity"))["numbers"] == ["--curves", "--fusion", "--velocity", "eval", "--n", "1000"]
     assert cmds(steps_of("--time")) == {"time": ["time"], "timing": ["timing", "--n", "30"]}
     # --out: bev_timing's is a FILE (bev_suite hands its global --out on to it), so timing gets a file inside the folder; the rest the folder, the showcase a subfolder
     assert cmds(steps_of("--time", "--out", "o")) == {"timing": ["--out", "o/timing_modules.json", "timing", "--n", "30"], "time": ["--out", "o", "time"]}
@@ -96,7 +100,7 @@ def check_plan():
     assert cmds(steps_of("--videos", "2")) == {"videos": ["qual", "videos", "2", "--seed", "1"]}
     assert [s["name"] for s in steps_of("--videos", "1", "--quant", "--time")] == ["timing", "time", "numbers", "videos"], "timing first (idle GPU)"
     g = steps_of("--quant", "--device", "cpu", "--workers", "0", "--split", "train", "--ckpt-dir", "d", "--out", "o")[0]["argv"]
-    assert g[:-3] == ["--device", "cpu", "--workers", "0", "--split", "train", "--ckpt-dir", "d", "--out", "o"], g
+    assert g[:-4] == ["--device", "cpu", "--workers", "0", "--split", "train", "--ckpt-dir", "d", "--out", "o"], g
     # refusals: no TEST split, no --all on train, malformed names
     assert refused("--quant", "--split", "test") and refused("--all", "--split", "train")
     # sets (evaluation/bev_sets.py): a named set goes to bev_suite as it is; a malformed name and TEST are refused, --all is the run's own lists
@@ -136,7 +140,7 @@ def check_execute():
         assert E.execute(a, E.plan(a), runner) == 3 and seen == ["timing", "numbers"]
         # timing, generalisation (twice) and modules fail: listed, the chain goes on, and the call still ends non-zero (the first failure's code);
         # the half-made store is set aside, not deleted
-        store = os.path.join(run, "eval", "suite", "quant", "eval_train_n1000")
+        store = os.path.join(run, "eval", "suite", "quant", "eval_train_fusion_n1000")             # D31: the fusion part is in the name
         os.makedirs(store)
         with open(os.path.join(store, "frames.jsonl"), "w") as f:
             f.write("half\n")
@@ -144,7 +148,7 @@ def check_execute():
         assert E.execute(a, E.plan(a), runner) == 2
         assert seen == ["timing", "numbers", "generalisation", "generalisation", "modules", "videos", "showcase", "report"], seen
         assert not os.path.exists(store)
-        kept = glob.glob(os.path.join(run, "eval", "suite", "failed_stores", "eval_train_n1000.*", "frames.jsonl"))
+        kept = glob.glob(os.path.join(run, "eval", "suite", "failed_stores", "eval_train_fusion_n1000.*", "frames.jsonl"))
         assert len(kept) == 1 and open(kept[0]).read() == "half\n"
         # generalisation passes at the second try: nothing failed
         runner, seen = fake_runner({"generalisation": [1, 0]})

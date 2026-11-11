@@ -316,7 +316,7 @@ def make_suite(a, prior: int = 0, state: str = None, evaluator: str = None):
     source, subject, task = build(a.run, device=a.device, split=a.split, workers=a.workers, ckpt_dir=a.ckpt_dir, control=a.control, prior=prior, evaluator=evaluator)
     out = a.out or os.path.join(a.run, "eval", "suite")
     task.curves = bool(getattr(a, "curves", False))                          # --curves: PR / ROC / calibration / velocity regression next to the standard numbers
-    task.fusion = bool(getattr(a, "fusion", False))                          # --fusion: boxes scored on the fusion area (detf / detfp) and the coverage split (cov), D37 / D38
+    task.fusion = bool(getattr(a, "fusion", True))                           # --fusion (the default since D31): boxes scored on the fusion area (detf / detfp) and the coverage split (cov), D37 / D38
     task.velocity = bool(getattr(a, "velocity", False))                      # --velocity: field per cell set and box-centre velocity (vel, bev_velocity.py)
     return EvalSuite(source, subject, task, out=out, state=state or a.state)
 
@@ -339,7 +339,7 @@ def cmd_eval(a, rest) -> int:
     prov0 = provenance_start(suite)                                         # the evaluator's and the checkpoint's hash NOW, before any frame is scored
     from Evaluation.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
-    name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', False) else ''}{'_vel' if getattr(a, 'velocity', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
+    name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', True) else ''}{'_vel' if getattr(a, 'velocity', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
     desc = suite.source.describe()
     gt_now = desc.get("gt_signature")                                    # the GT scored against (GtGenerator is read live, not pinned)
     quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
@@ -514,8 +514,8 @@ def cmd_memory(a, rest) -> int:
     return 0
 
 
-def _task_only(run: str, curves: bool = False, fusion: bool = False, velocity: bool = False):
-    """the Task of a run without loading its checkpoint (metrics definitions only; curves / fusion / velocity: the metric families of a store made with --curves / --fusion / --velocity)"""
+def _task_only(run: str, curves: bool = False, fusion: bool = True, velocity: bool = False):
+    """the Task of a run without loading its checkpoint (metrics definitions only; curves / fusion / velocity: the metric families of a store made with --curves / --fusion / --velocity; fusion is on by default since D31)"""
     from evaluation import bev_adapter as B
     from evaluation.bev_task import BEVTask
     os.chdir(ROOT)
@@ -616,7 +616,7 @@ def cmd_compare(argv) -> int:
     p.add_argument("--dt", type=float, default=0.0, help="legacy records only: target time of the detection numbers")
     p.add_argument("--force", action="store_true", help="compare even when the GT signatures or (legacy records) the frame sets differ")
     p.add_argument("--curves", action="store_true", help="compare the stores made with `eval --curves` (PR / ROC / calibration / velocity numbers are bootstrapped too)")
-    p.add_argument("--fusion", action="store_true", help="compare the stores made with `eval --fusion` (detf / detfp / cov)")
+    p.add_argument("--fusion", action=argparse.BooleanOptionalAction, default=True, help="compare the stores made with `eval --fusion` (detf / detfp / cov; the default since D31, --no-fusion for a store made before)")
     p.add_argument("--velocity", action="store_true", help="compare the stores made with `eval --velocity` (vel)")
     c = p.parse_args(argv)
     try:
@@ -628,6 +628,11 @@ def cmd_compare(argv) -> int:
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
     train_ids = (train_gt(c.run_a), train_gt(c.run_b))
     if not all(os.path.exists(s) for s in stores):
+        if c.fusion:                                                # D31: the fusion part is in the name by default; stores made before have none
+            old = name.replace("_fusion", "", 1)
+            if all(os.path.exists(os.path.join(r, "eval", "suite", "quant", old, "manifest.json")) for r in (c.run_a, c.run_b)):
+                raise SystemExit(f"compare: the stores '{old}' exist for both runs but '{name}' does not (the fusion-area scoring is on by default since D31): "
+                                 "use `compare --no-fusion` for stores made before, or evaluate both again")
         ra, rb = (legacy_record(r, c.tag, c.n) for r in (c.run_a, c.run_b))
         if ra is not None and rb is not None:                   # runs evaluated before the suite: the former pickle records
             if ra[0] != rb[0]:
@@ -661,7 +666,8 @@ def cmd_compare(argv) -> int:
 
 REPORT_NOTE = ("maps are scored on `seg_fov` = the grid cells the front camera sees (62 % of the grid; today's fusion area, D37), objects inside "
                "+-32.3 deg and x < 60 m; `det`: boxes without a lidar / radar point are dropped from the GT, a detection on one still counts as a false "
-               "detection (`detf` / `detfp` of `eval --fusion` make that two-sided, D38). dt +-0.5 s = the neighbouring keyframe in its own ego frame.")
+               "detection (`detf` / `detfp` make that two-sided, D38; they are on by default since D31 and are the headline of the boxes, `det` stays for reference). "
+               "dt +-0.5 s = the neighbouring keyframe in its own ego frame.")
 
 
 def cmd_report(a, rest) -> int:
@@ -746,7 +752,9 @@ def main(argv=None) -> int:
     p.add_argument("--split", default="val", help="the set to run on: val | train (the run's own lists) or <split>.<part> of splits/ (small.val, large.train, ...; evaluation/bev_sets.py --list)")
     p.add_argument("--ckpt-dir", default=None)
     p.add_argument("--curves", action="store_true", help="also PR / ROC / calibration per layer and velocity regression (evaluation/bev_curves.py)")
-    p.add_argument("--fusion", action="store_true", help="also boxes scored on the fusion area (detf: care boxes, detfp: + partial) and the coverage split of the complete GT set (cov), D37 / D38 (evaluation/bev_fusion_area.py)")
+    p.add_argument("--fusion", action=argparse.BooleanOptionalAction, default=True,
+                   help="also boxes scored on the fusion area (detf: care boxes, detfp: + partial) and the coverage split of the complete GT set (cov), D37 / D38 (evaluation/bev_fusion_area.py); "
+                        "ON by default since D31 (the network's field of view is the headline, the old `det` numbers stay for reference); --no-fusion leaves it out")
     p.add_argument("--velocity", action="store_true", help="also the velocity field per cell set (static, per class, moving) and at the GT box centres (field / object head / zero), evaluation/bev_velocity.py")
     p.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"])
     p.add_argument("--out", default=None)

@@ -207,6 +207,7 @@ def real(run, scene, index):
         assert "loss" not in stored0.info and not any(k.startswith("group.") for k in stored0.info) and stored0.info.get("device"), "the Runner read no ground truth: no validation loss in what it stored"
         assert rs0.manifest["identity"]["inputs"].get("dataset") and "gt_signature" not in rs0.manifest["identity"]["inputs"], rs0.manifest["identity"]["inputs"]
         src, subj, task = A.build(net, device="cpu", split="val", workers=0)
+        task.fusion = True                                                                                 # D31: the Evaluation scores the fusion area by default, so does the engine run it is compared with
         suite = EvalSuite(src, subj, task, out=os.path.join(tmp, "engine"), state="carry")
         store = suite.quant.run(scenes=[scene], max_frames=index + 1, name="engine", progress=0)
         mine = ev.split_numbers(r["id"], "frame")
@@ -220,12 +221,13 @@ def real(run, scene, index):
         # 2 reuse and rescoring
         r2 = ev.run(net, frames, device="cpu", workers=0, progress=0)
         assert r2["predictions_reused"] and r2["id"] == r["id"], r2
-        r3 = ev.run(net, frames, metrics=("maps", "boxes", "fusion"), device="cpu", workers=0, progress=0)
+        r3 = ev.run(net, frames, metrics=("maps", "boxes", "curves"), device="cpu", workers=0, progress=0)              # D31: the fusion-area scoring is always on, so the family added here is the curves
         assert r3["predictions_reused"] and r3["results"] == r["results"] and r3["id"] != r["id"], r3
         q2, q3 = ev.show_numbers(r["id"])["numbers"], ev.show_numbers(r3["id"])["numbers"]
         shared = [k for k in q2 if k in q3]
-        assert shared and all(abs(q2[k] - q3[k]) <= 1e-12 * max(1.0, abs(q2[k])) or (q2[k] != q2[k] and q3[k] != q3[k]) for k in shared) and any("detf" in k for k in q3), "fusion added, the rest unchanged"
-        print(f"  2 ok: the stored predictions were reused; the fusion numbers added: {len(q3) - len(q2)} more, {len(shared)} shared numbers equal")
+        assert any("detf" in k for k in q2), "the fusion-area numbers are in the default scoring (D31)"
+        assert shared and all(abs(q2[k] - q3[k]) <= 1e-12 * max(1.0, abs(q2[k])) or (q2[k] != q2[k] and q3[k] != q3[k]) for k in shared) and len(q3) > len(q2), "curves added, the rest unchanged"
+        print(f"  2 ok: the stored predictions were reused; the curve numbers added: {len(q3) - len(q2)} more, {len(shared)} shared numbers equal (the fusion-area numbers are in both)")
         # 3 card, check, list
         os.chdir(os.path.join(ROOT, "..", "autoresearch"))                                                 # the documented working folder: the card must not depend on being in bev_fusion
         made = ev.make_card(r["id"])
