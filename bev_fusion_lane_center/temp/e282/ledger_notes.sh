@@ -1,0 +1,8 @@
+#!/bin/bash
+# scratch (E282): the judgement columns of the four pilot rows; numbers from runs/e282_p_<arm>_2000/result.json via temp/e282/pilot_outcome.json
+cd "$(dirname "$0")/../.." || exit 1
+L="python3 ../autoresearch/tools/ledger.py"
+$L note E282.p_d --result "validity reference: node gate precision 0.873 / recall 0.818 (floors 0.75 / 0.5), free-zone recall 0.902, free-zone exact 0.057, off-zone 0.141, 31.0 nodes per 100 m at e >= 0.5" --decision "pilot VALID (reference of the gate, not a variant)"
+$L note E282.p_s --result "control per-cell sparse loss (no tier switches): e >= 0.5 gives 4.4 nodes per 100 m, free-zone recall 0.129, exact 0.070; matched-density threshold 0.44 gives 17.2 per 100 m on VAL, free-zone recall 0.596, exact 0.153, fixed-zone recall 0.577, off-zone 0.125" --decision "control; does not pass the floors (S-PASSES not met); matched density within 14.4 +- 3"
+$L note E282.p_m --result "zone-matching loss (bias 0.05): e >= 0.5 gives 8.9 nodes per 100 m, free-zone recall 0.354, exact 0.185, fixed-zone recall 0.426, off-zone 0.132; winners off the GT cell 0.55 at the end (random winners about 0.58); gain over s at matched density in free-zone exact +0.032 (bootstrap lo90 +0.020, needed >= 0.15 and lo90 > 0.05)" --decision "STOP-A by the written gate (pilot-level closure of card E282: floors free recall, free exact, fixed recall and gain failed); CPU, one seed, 601 frames, 2000 steps"
+$L note E282.p_m5 --result "bias 0.5: e >= 0.5 gives 5.6 nodes per 100 m, free-zone recall 0.196, exact 0.107; winners off the GT cell 0.10 (stays on the GT cells); gain over s at matched density -0.046" --decision "reported, not judged"
