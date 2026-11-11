@@ -20,17 +20,17 @@ from collections import namedtuple
 
 import numpy as np
 
-Spec = namedtuple("Spec", "kind radius thr sigma", defaults=(None,))        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay, sigma = its Gaussian width, None = 0.5)
-_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?)(?:s(\d+(?:\.\d+)?))?)@(\d+(?:\.\d+)?)$")
+Spec = namedtuple("Spec", "kind radius thr sigma exempt", defaults=(None, False))        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay, sigma = its Gaussian width, None = 0.5)
+_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?)(?:s(\d+(?:\.\d+)?))?)(x)?@(\d+(?:\.\d+)?)$")
 
 
 def parse(text):
     """'plain@0.5' -> Spec('plain', None, 0.5); 'close:1.5@0.4' -> Spec('close', 1.5, 0.4)"""
     m = _SPEC.match(text.strip())
     if not m:
-        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>@<thr> or mnms:<radius>[s<sigma>]@<thr>")
+        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>[x]@<thr> or mnms:<radius>[s<sigma>][x]@<thr> (x = the nodes of the special types stop / exit / split / merge at p >= 0.5 are never suppressed)")
     kind = "plain" if m.group(1) == "plain" else ("close" if m.group(2) is not None else "mnms")
-    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(5)), float(m.group(4)) if m.group(4) else None)
+    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(6)), float(m.group(4)) if m.group(4) else None, bool(m.group(5)))
     if not spec.thr > 0.0:                                         # a dropped node has e = 0: with a threshold of 0 it would be delivered again
         raise ValueError(f"read-out spec {text!r}: the threshold must be above 0")
     return spec
@@ -40,11 +40,11 @@ def name(spec):
     """folder-safe name: plain_t0.5, close1.5_t0.4"""
     if spec.kind == "plain":
         return f"plain_t{spec.thr:g}"
-    return f"{spec.kind}{spec.radius:g}" + (f"s{spec.sigma:g}" if spec.sigma else "") + f"_t{spec.thr:g}"
+    return f"{spec.kind}{spec.radius:g}" + (f"s{spec.sigma:g}" if spec.sigma else "") + ("x" if spec.exempt else "") + f"_t{spec.thr:g}"
 
 
-def suppress_close_nodes(pos, e, radius, thr=0.5):
-    """-> keep (M,) bool; see the module docstring for the rule"""
+def suppress_close_nodes(pos, e, radius, thr=0.5, protect=None):
+    """-> keep (M,) bool; see the module docstring for the rule. protect (M,) bool (E296): a candidate node that is protected is always kept (it still suppresses the weaker nodes around it)"""
     pos = np.asarray(pos, float).reshape(-1, 2)
     e = np.asarray(e, float).reshape(-1)
     assert len(pos) == len(e), (pos.shape, e.shape)
@@ -56,7 +56,7 @@ def suppress_close_nodes(pos, e, radius, thr=0.5):
     n = 0
     r2 = float(radius) ** 2
     for i in order:
-        if n and np.min(((kept[:n] - pos[i]) ** 2).sum(1)) < r2:
+        if n and np.min(((kept[:n] - pos[i]) ** 2).sum(1)) < r2 and not (protect is not None and protect[i]):
             continue
         kept[n] = pos[i]
         n += 1
@@ -64,7 +64,7 @@ def suppress_close_nodes(pos, e, radius, thr=0.5):
     return keep
 
 
-def matrix_nms(pos, e, radius, thr=0.5, sigma=0.5):
+def matrix_nms(pos, e, radius, thr=0.5, sigma=0.5, protect=None):
     """E288: the one-pass Matrix-NMS decay (SOLOv2, Wang et al. 2020) on the nodes with e >= thr: the overlap of two nodes is o = max(0, 1 - d / radius); going through the nodes by e descending,
     the decay of node j is the minimum over the higher nodes i of exp(-(o_ij^2 - c_i^2) / sigma) with the compensation c_i = max over the nodes k above i of o_ki (a node that is itself suppressed
     suppresses less); the decayed score is e_j x decay_j. -> (M,) float: the decayed scores (0 below thr). No sequential keep set: one matrix product-free pass, differentiable in e and pos"""
@@ -82,6 +82,8 @@ def matrix_nms(pos, e, radius, thr=0.5, sigma=0.5):
     decay = np.exp(-(o ** 2 - comp[:, None] ** 2) / sigma)
     decay = np.where(np.triu(np.ones_like(o), 1) > 0, decay, np.inf).min(0)   # over the higher nodes i < j
     decay = np.where(np.isfinite(decay), decay, 1.0)
+    if protect is not None:
+        decay = np.where(np.asarray(protect, bool)[order], 1.0, decay)                                      # E296: a protected node is not decayed (it still decays the weaker ones)
     out[order] = e[order] * decay
     return np.where(out >= thr, out, 0.0)
 
@@ -95,10 +97,13 @@ def apply(pred, spec):
     e = np.asarray(nd["e"], float)
     q = copy.copy(pred)
     q["nodes"] = dict(nd)
+    protect = None
+    if spec.exempt:                                                          # E296: stop / exit / split / merge (flags 0 - 3 of `qtargets.FLAGS`) at p >= 0.5
+        protect = (np.asarray(nd["flags"], float).reshape(len(e.reshape(-1)), -1)[:, :4] >= 0.5).any(1)
     if spec.kind == "mnms":                                                  # E288: the decayed scores replace e (a node below the threshold after the decay is not delivered)
-        q["nodes"]["e"] = matrix_nms(nd["pos"], e, spec.radius, spec.thr, spec.sigma or 0.5).reshape(e.shape)
+        q["nodes"]["e"] = matrix_nms(nd["pos"], e, spec.radius, spec.thr, spec.sigma or 0.5, protect).reshape(e.shape)
         return q
-    keep = suppress_close_nodes(nd["pos"], e, spec.radius, spec.thr)
+    keep = suppress_close_nodes(nd["pos"], e, spec.radius, spec.thr, protect)
     q["nodes"]["e"] = np.where(keep, e.reshape(-1), 0.0).reshape(e.shape)
     return q
 

@@ -7,6 +7,7 @@
     jg["arms"]                    list of dict(c (2,) centre, t (2,) heading into the junction, n_in, n_out, spread_in, spread_out (longitudinal std of the ends, metres), zone)
     jg["pairs"]                   (P, 10) float: entry, exit, arm_in, arm_out, rank_in, rank_out, k_in, k_out (entries / exits of that arm pair in use), turn (degrees, + left), driven (the ego drove it, tier 1)
     jg["core"]                    shapely geometry or None: the conflict core, where connectors of different pairs cross, merge or diverge (`_core`)
+    jg["ent_vis"], jg["ext_vis"]  (E,) / (X,) bool: the end is seen by a camera and not hidden by a box (the l4 label `vis` at the start / end of the connector run; True without the label)
     jg["order"]                   dict(maneuvers, multi, monotone, identity): the order-preserving rule of D82 counted on the true pairs
     fields(jg, n=100, res=1.0)    the 1 m maps of the head: zone and conflict core (2 channels), entry heat, exit heat (Gaussian, sigma `SIG`), entry / exit heading (2 each)
 
@@ -38,6 +39,7 @@ def _runs(g):
             if s["kind"] == "connector":
                 conn[s["i0"]: s["i1"] + 1] = True
         tier = np.asarray(pc.get("tier", np.full(len(q), 3)))
+        vis = np.asarray(pc.get("vis", np.ones(len(q), bool))).astype(bool)
         k = 0
         while k < len(q):
             if conn[k]:
@@ -45,7 +47,7 @@ def _runs(g):
                 while j + 1 < len(q) and conn[j + 1]:
                     j += 1
                 if j - k + 1 >= 3:
-                    runs.append(dict(pts=q[k: j + 1], a=(q[k], tan[k]), b=(q[j], tan[j]), driven=bool((tier[k: j + 1] == 1).mean() > 0.5), piece=pc["piece"]))
+                    runs.append(dict(pts=q[k: j + 1], a=(q[k], tan[k]), b=(q[j], tan[j]), driven=bool((tier[k: j + 1] == 1).mean() > 0.5), piece=pc["piece"], vis_a=bool(vis[k]), vis_b=bool(vis[j])))
                 k = j + 1
             else:
                 k += 1
@@ -169,6 +171,10 @@ def junction_gt(g):
             arms.append(dict(c=cout[j], t=-tout[j], n_in=0, n_out=int((gb == j).sum()), spread_in=0.0, spread_out=_spread(EXT, gb, j)))
     ent_arm = np.array([arm_of_in[i] for i in ga], int)
     ext_arm = np.array([arm_of_out[j] for j in gb], int)
+    ent_vis, ext_vis = np.zeros(len(ENT), bool), np.zeros(len(EXT), bool)
+    for r, a_, b_ in zip(runs, eid, xid):                                              # a GT end counts as VISIBLE when a camera sees its point and no box hides it (the l4 label `vis`) for at least one of its runs
+        ent_vis[a_] |= r["vis_a"]
+        ext_vis[b_] |= r["vis_b"]
     zones = _zones(runs)
     core = _core(runs, eid, xid)
     for a in arms:
@@ -202,7 +208,7 @@ def junction_gt(g):
         ki, ko = int(rr[0][6]), int(rr[0][7])
         n_ident += int(mono and ki == ko and all(int(r[4]) == int(r[5]) for r in rr))
     return dict(zones=zones, ent=ENT, ext=EXT, ent_arm=ent_arm, ext_arm=ext_arm, ent_rank=ra, ext_rank=rb, arms=arms, pairs=pairs,
-                core=core, order=dict(maneuvers=len(man), multi=n_multi, monotone=n_mono, identity=n_ident))
+                ent_vis=ent_vis, ext_vis=ext_vis, core=core, order=dict(maneuvers=len(man), multi=n_multi, monotone=n_mono, identity=n_ident))
 
 
 def fields(jg, n=100, res=1.0, half=50.0):
