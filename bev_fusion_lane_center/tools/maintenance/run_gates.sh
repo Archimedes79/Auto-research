@@ -38,6 +38,8 @@ run "head: junction maps scoring (E286)"                 jmaps_eval.py selftest
 run "head: junction pictures (E285)"                     viz/junction_view.py --selftest
 run "head: pair head v2, order penalty (E287)"            grid/jends.py
 run "head: pair head v2 read-out (E287)"                 jends_eval.py selftest
+run "head: rule control of the pair decision (E287)"      jrule_control.py selftest
+run "head: read-out replay (E288)"                       readout_replay.py selftest
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
 run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py

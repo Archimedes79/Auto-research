@@ -28,7 +28,7 @@ Card of 2026-11-11, written by the lane chat on Mirko's word (D82: "wenn 2 Ein u
  "rule": [
   {"metric": "topo_F1", "vs": "c", "min_effect": 0.02},
   {"metric": "F1@1.0", "vs": "c", "max_loss": 0.01},
-  {"metric": "dup_frac", "vs": "c", "max_gain": 0.02},
+  {"metric": "dup_frac", "vs": "c", "max_loss": 0.02},
   {"metric": "junction_F1", "vs": "c", "max_loss": 0.03}
  ],
  "budget_gpu_h": 1.5,

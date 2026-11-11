@@ -25,8 +25,8 @@ Card of 2026-11-11, written by the lane chat on Mirko's word (D82: "Kann man Nod
  "rule": [
   {"metric": "topo_F1", "vs": "c", "min_effect": 0.01},
   {"metric": "F1@1.0", "vs": "c", "max_loss": 0.01},
-  {"metric": "dup_frac", "vs": "c", "max_gain": 0.02},
-  {"metric": "vert100_dp", "vs": "c", "max_gain": 1.0}
+  {"metric": "dup_frac", "vs": "c", "max_loss": 0.02},
+  {"metric": "vert100_dp", "vs": "c", "max_loss": 1.0}
  ],
  "budget_gpu_h": 0.0,
  "kill": "the replay of `close:1.5@0.5` does not reproduce the stored E275 numbers (topo F1 0.6259 / 0.6249 for the plain graph of E284, which is this control) to 0.001: the dump or the scorer is not the one of the record",
