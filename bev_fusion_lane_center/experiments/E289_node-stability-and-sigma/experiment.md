@@ -43,3 +43,13 @@ Arm c: GPU forward of B (a few minutes) on 873 frames x 3 shifts, CPU matching; 
 
 ## 3. Command
 `temp/e289/shift_probe.py` (scratch; promoted into `evaluation/` when it is used a second time) through `run.py --no-card` for the diagnostic (it feeds no verdict by itself: the verdict, if any, is of arm s). Result `runs/e289/shift_probe_s<S>.json`.
+
+## 4. Result of the diagnostic, seed 0 (2026-11-11, CPU, `temp/e289/shift_probe.py`, all 873 VAL frames, about 225,000 delivered nodes per shift; seed 1 follows in the same file `runs/e289/shift_probe_s1.json`)
+| shift of the input features | jitter_rate (no partner within 1.0 m) | median displacement of the matched nodes after un-shifting |
+|---|---|---|
+| none (kill check) | 0 (0 unmatched nodes) | - |
+| 0.5 m in x | 0.042 | 0.13 m (p90 0.50) |
+| 0.5 m in y | 0.032 | **0.50 m** (p90 0.51) |
+| 1 m in x and 1 m in y | **0.248** | 0.93 m (p90 0.99) |
+| 2 m in x (one node cell) | 0.014 | 0.015 m |
+Mean over the four shifts 0.084 (prediction 0.15 for half-metre shifts: the real number is lower for 0.5 m, 0.04, and high for 1 m, 0.25). Readings: (a) the harness is right: a shift by a whole 2 m cell gives back the same nodes (0.015 m); (b) **the nodes are locked to the grid**: after a 0.5 m shift in y the median node sits exactly 0.5 m from where it was (it did not follow the content), and a shift of half a cell (1 m) makes one node in four lose its partner; (c) this is partly NOT an error of the geometry: the GT node of a cell is "the point of the true line nearest to the cell centre" (E273), so ALONG a line the vertex position is a function of the grid phase by definition, and a node-to-node test counts every phase change as a jump. The measure that matters for the planner is the stability of the LINE (a node of one output within 0.5 m of a link curve of the other) and the phase along the line separately; the card's arm s (sigma, shift-consistency) therefore needs that metric first: **step 1b** = the same probe with the delivered graph (links, sections) scored by the lane suite between the original and the un-shifted output (line F1 at 0.5 m as the stability). The jitter rate of c is above 0.10 for the 1 m shift, so arm s (a shift-consistency loss, and a vertex placement that does not depend on the grid phase: the sparse nodes of E276 / E282 on a chord rule, curvature-placed) stays in the plan; the sigma head follows the stability of the line, not of the phase.
