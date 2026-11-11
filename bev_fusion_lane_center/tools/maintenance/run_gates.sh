@@ -31,6 +31,13 @@ run "head: map simulator"                                grid/map_sim.py
 run "head: junction ends and pairs of the lane GT (E284)" grid/qends.py
 run "head: end head, loss, counts (E284)"                grid/qendnet.py
 run "head: end read-out (connectors, rule) (E284)"       qends_eval.py selftest
+run "head: junction GT layer, order rule (E285)"         grid/jgt.py
+run "head: junction map targets (E285)"                  grid/qjunction.py
+run "head: junction maps head, loss, keypoints (E286)"   grid/jmaps.py
+run "head: junction maps scoring (E286)"                 jmaps_eval.py selftest
+run "head: junction pictures (E285)"                     viz/junction_view.py --selftest
+run "head: pair head v2, order penalty (E287)"            grid/jends.py
+run "head: pair head v2 read-out (E287)"                 jends_eval.py selftest
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
 run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py

@@ -120,7 +120,7 @@ def cmd_score(a):
     mine = torch.load(os.path.join(run_dir, "model.pt"), map_location="cpu")["state"]
     base = torch.load(base_pt, map_location="cpu")["state"]
     shared = [k for k in base if not k.startswith("ends.")]
-    bad = [k for k in shared if k not in mine or not torch.equal(mine[k], base[k])]
+    bad = [] if getattr(a, "skip_base_check", False) else [k for k in shared if k not in mine or not torch.equal(mine[k], base[k])]      # E287: a pair head on the junction maps run is not a QGraph checkpoint (jends_eval.py says so)
     assert not bad, f"the run changed tensors of the base run ({len(bad)}): {bad[:5]}; its delivered graph is not B's"
     full = a.full or os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{a.seed}.pkl")
     dump = pickle.load(open(full, "rb"))

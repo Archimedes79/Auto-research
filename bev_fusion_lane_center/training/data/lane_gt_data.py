@@ -20,15 +20,17 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training/data", "training/grid", ".."):
+for sub in ("training/data", "training/data/prep", "training/grid", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import map_sim as MS  # noqa: E402
 import p16_data as PD  # noqa: E402
 import qends as QEND  # noqa: E402
+import qjunction as QJ  # noqa: E402
 import qtargets as QT  # noqa: E402
 import qzones as QZ  # noqa: E402
 
 BOX = 48.0
+JUNCTION_NAMES = ("jz", "jheat", "jdir", "jpaint")                                                                           # E285: the junction maps of `qjunction.junction_targets` (only with junction=True)
 ZONE_NAMES = ("zone", "zone_kind", "zone_gt", "exists_dense", "offset_dense", "dirv_dense")          # E282: the maps of `qzones.zone_maps` (only with zone=True)
 
 
@@ -40,15 +42,18 @@ def lane_store():
 class QData(torch.utils.data.Dataset):
     DEFAULT_SPARSE = None                                          # E276: set by `qgraph_train.py --sparse EPS CHORD` so that the train loader AND the gates (they build their own QData) see the same targets
     DEFAULT_ZONE = False                                           # E282: set by `qgraph_train.py --node-loss zone`: the batch also carries the zone maps (needs a sparse target)
+    DEFAULT_JUNCTION = False                                       # E286: set by `jmaps_train.py`: the batch also carries the junction maps (zone, entry / exit heat + heading, paint) and the ends
     DEFAULT_ENDS = False                                           # E284: set by `qgraph_train.py --phases 8`: the batch also carries the junction ends and the true pairs (`qends.end_table`)
 
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None):
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None, junction=None):
         self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
         sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
         self.sparse = None if sparse is None else (float(sparse[0]), float(sparse[1]))                   # E276: the sparse node target (eps, max chord) in metres, None = a node in every 2 m cell
         self.zone = QData.DEFAULT_ZONE if zone is None else bool(zone)
-        self.ends = QData.DEFAULT_ENDS if ends is None else bool(ends)
+        self.junction = QData.DEFAULT_JUNCTION if junction is None else bool(junction)
+        self.ends = (QData.DEFAULT_ENDS if ends is None else bool(ends)) or self.junction
+        self.paint_missing = 0
         assert not self.zone or self.sparse is not None, "the zone maps need the sparse node target"
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{PD.D}/feats/{part}_tokens.json"))
@@ -89,6 +94,14 @@ class QData(torch.utils.data.Dataset):
         if self.ends:                                                                                 # E284: the GT ends of the junctions (lane frame x, y, tx, ty) and the true (entry, exit) pairs
             et = QEND.end_table(g) or QEND.empty_table()
             out.update(ent=torch.from_numpy(et["ent"]).float().reshape(-1, 4), ext=torch.from_numpy(et["ext"]).float().reshape(-1, 4), pairs=torch.from_numpy(et["pairs"]).long().reshape(-1, 2))
+        if self.junction:                                                                              # E285: the junction GT of the frame (zone, ends heat + heading, painted stop lines / crossings)
+            try:
+                import junction_paint as JP
+                paint = JP.load(token)
+            except FileNotFoundError:
+                paint, self.paint_missing = None, self.paint_missing + 1
+            jt, _ = QJ.junction_targets(g, paint)
+            out.update({n: torch.from_numpy(np.ascontiguousarray(v)) for n, v in jt.items()})
         if self.pixels:
             import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
@@ -101,7 +114,7 @@ def collate(b):
     out = dict(row=torch.tensor([o["row"] for o in b]), k=torch.tensor([o["k"] for o in b]), token=[o["token"] for o in b])
     for n in ("x", "exists", "flags", "offset", "dirv", "sstart", "piece", "uout", "uin", "tier", "vis", "ztier"):        # tier / vis / ztier: E276 (l4 labels, zeros / ones without them)
         out[n] = torch.stack([o[n] for o in b])
-    for n in ("lines_mask", "lines_dist", "events1", "road2") + ZONE_NAMES:
+    for n in ("lines_mask", "lines_dist", "events1", "road2") + ZONE_NAMES + JUNCTION_NAMES:
         if n in b[0]:
             out[n] = torch.stack([o[n] for o in b])
     if "g05" in b[0]:
@@ -145,8 +158,8 @@ def collate(b):
     return out
 
 
-def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None, zone=None, ends=None):
-    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse, zone=zone, ends=ends)
+def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None, zone=None, ends=None, junction=None):
+    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse, zone=zone, ends=ends, junction=junction)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle,
                                            persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 
