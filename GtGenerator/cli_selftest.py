@@ -63,7 +63,7 @@ class _FakeKey:
 
 
 def _mapping_checks():
-    from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store, store_audit, video, view
+    from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store_audit, video, view
     from . import lane_gt
     from . import pipeline
     # the map of the module doc is the map of the code: every command is ONE method of GtGenerator, named in the doc; no method is without a command, and the command line imports nothing but the class
@@ -80,9 +80,9 @@ def _mapping_checks():
     import ast
     tree = ast.parse(open(cli.__file__, encoding="utf-8").read())
     imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level == 1}
-    assert imported <= {"store", "api", "suite"}, f"the command line reaches the suite only through GtGenerator (only store.detect_version, which the hashed lane_gt.py imports from there): {imported}"
+    assert imported <= {"store", "api", "suite"}, f"the command line reaches the suite only through GtGenerator: {imported}"
     assert not any(isinstance(n, ast.Import) and any(x.name.startswith("GtGenerator") for x in n.names) for n in ast.walk(tree))
-    assert cli.detect_version is store.detect_version, "the hashed lane_gt.py does `from .cli import detect_version`: it must stay importable from the command line module"
+    assert not hasattr(cli, "detect_version"), "the command line module re-exports no old name (the hashed lane_gt.py takes detect_version from store)"
     # every command has a --help that works
     for name in cmds:
         code, out, err = _run([name, "--help"])
@@ -272,7 +272,7 @@ def _store_checks(root):
         open(os.path.join(d, sig, "a" * 32 + ".npz"), "wb").write(b"x")
         few, many = ["a" * 32, "z" * 32], ["a" * 32] + ["z%031d" % i for i in range(60)]
         assert suite.missing(few, data=d) == ["z" * 32] and suite.missing(many, data=d) == many[1:]
-    for kw in (dict(stride=0), dict(res=0), dict(ss=0), dict(workers=0), dict(set_name="small", scenes=["scene-0061"])):
+    for kw in (dict(stride=0), dict(res=0), dict(ss=0), dict(ss=3), dict(workers=0), dict(set_name="small", scenes=["scene-0061"])):
         try:
             check_arguments(**kw)
             raise AssertionError(f"{kw} must be refused")
@@ -372,12 +372,13 @@ def _store_checks(root):
     change = {"date": "2026-11-11", "subject": "a front change"}
     vrows, rrows = versions.table(), versions.releases()
     top = max([int(r["version"][1:]) for r in vrows] + [int(r["release"][1:]) for r in rrows])
-    none = versions.propose(vrows[-1]["signature"], "l5", change, vrows, rrows)
+    last = rrows[-1]                                                                     # the newest release: its front version and its lane version are known
+    none = versions.propose(next(r["signature"] for r in vrows if r["version"] == last["front"]), last["lane"], change, vrows, rrows)
     assert none == {"front": None, "release": None}, "a known signature with a known release: nothing to add"
     new_front = versions.propose("ffffffffff", "l5", change, vrows, rrows)
     assert new_front["front"]["version"] == f"v{top + 1}" and new_front["front"]["tag"] == f"autogt/v{top + 1}" and new_front["front"]["same_gt_as"] == "" and new_front["front"]["what_changed"] == "a front change"
     assert new_front["release"]["release"] == f"v{top + 2}" and new_front["release"]["front"] == f"v{top + 1}" and new_front["release"]["lane"] == "l5", new_front
-    new_lane = versions.propose(vrows[-1]["signature"], "l6", change, vrows, rrows)
+    new_lane = versions.propose(vrows[-1]["signature"], "l99", change, vrows, rrows)
     assert new_lane["front"] is None and new_lane["release"]["release"] == f"v{top + 1}" and new_lane["release"]["front"] == vrows[-1]["version"], new_lane
     with tempfile.TemporaryDirectory() as t_:
         vf, rf = os.path.join(t_, "versions.csv"), os.path.join(t_, "releases.csv")

@@ -1,10 +1,10 @@
-"""The lane GT of autogt: the lane graph, the road structure and the lines of a keyframe window, with its OWN version and store.
+"""The lane GT of GtGenerator: the lane graph, the road structure and the lines of a keyframe window, with its OWN version and store.
 
 It is not part of the front generator (`nuscenes_gt.py`): the front GT, its signature and its store stay as they are, whatever is changed here. The lane graph is made from the
 nuScenes map and the ego pose at the front-camera time only (no image, radar); the l4 labels (tiers, visibility: lane_tiers.py) also read the CAM_FRONT ego poses around the keyframe
-(non-causal: labels only, never an input) and the annotated boxes (scipy and pyquaternion are needed for them); about 40 ms for the graph and 27 ms for the labels per keyframe on an idle core.
+(non-causal: labels only, never an input) and the annotated boxes (scipy and pyquaternion are needed for them); l6: about 43 ms (lane_center) / 34 ms (bev_fusion) per keyframe for graph and labels on an idle core.
 
-    from autogt import lane_gt
+    from GtGenerator import lane_gt
     g = lane_gt.load(sample_token)                                    # the stored graph (data/autogt/lane/<lane signature>/<token>.pkl.gz)
     g = lane_gt.LaneGT("~/data/nuscenes_full", "v1.0-trainval", scenes=[name]).graph(sample_token)       # made on demand
     lane_gt.generate("~/data/nuscenes_full", set_name="full")         # the complete set: resumable, groups of sequences, workers=N
@@ -16,35 +16,38 @@ listed in AGENTS.md, section 3b. Frame "lane" (x right, y forward, ego rear axle
 RIGS (l5). The suite makes the lane GT for the two systems of the repository, each with its own frame, window and cameras (`RIGS`, parameter `rig`):
     lane_center   Spurmitte: frame "lane", the square |x|, |y| <= 50 m, `vis` / `occ` from the six cameras                      lane_gt.load(token)
     bev_fusion    BEV Fusion: frame "ego" (x forward, y left), the window of its BEV grid x 0 .. 60 m, y -26 .. 26 m, `vis` / `occ` from CAM_FRONT   lane_gt.load(token, rig="bev_fusion")
-The geometry, the ids, the events and the tiers come from the same code and the same rules; the rig changes only the frame, the cut and the cameras of the visibility (so near the border of
-the smaller window a neighbour whose tier-1 lane lies outside the window can be tier 3 instead of tier 2). Each rig has its own store.
+The geometry, the ids, the events and the tiers come from the same code and the same rules; the rig changes only the frame, the cut and the cameras of the visibility (l6: the tiers are decided on a wide
+window the same for both rigs, so a point that two rigs share has the same tier; in l5 a neighbour whose tier-1 lane lay outside the smaller window could be tier 3 instead of tier 2). Each rig has its own store.
 
-VERSION. The signature of the lane GT is the hash of the source of lane_graph.py, road_graph.py, lane_lines.py, lane_tiers.py, rig_masks.py and this file plus the parameters
+VERSION. The signature of the lane GT is the hash of the source of lane_graph.py, road_graph.py, lane_lines.py, lane_tiers.py, rig_cameras.py and this file plus the parameters
 that differ from DEFAULTS (the rig is one of them); the table `lane_versions.csv` (next to this file) names each signature (version l1, l2, ..., a git tag autogt/lane-lN; one row
 per rig). A parameter that is open with Mirko (boundary layers, corner angle, stop rule) is a parameter: another value is another signature, stored next to the first.
 Generate / load use the signature of THIS source, like the front GT does. `code_signature` is the hash; `signature` is the folder of the store: the same, except that a row
 with `same_gt_as` (a version whose code makes the GT of an earlier one, like v9 -> v8 of the front GT) points to the earlier version's folder (l5 lane_center -> l4).
+What this file imports from the package must not shape a label: the table readers, the devkit loader, the listing of a store (`store`, `sets`, `suite`, `light_nusc`, `versions`); a test pins it.
 """
 import csv
 import gzip
 import hashlib
 import json
-import math
 import multiprocessing as mp
 import os
 import pickle
 import time
+import warnings
+
+import numpy as np
 
 from . import lane_graph as LG
 from . import lane_lines as LL
 from . import lane_tiers as LT
-from . import rig_masks as RM
+from . import rig_cameras as RC
 from . import road_graph as RG
-from .nuscenes_adapter import pose_matrix
+from . import store
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(os.path.dirname(HERE), "data", "autogt", "lane")          # <repository root>/data/autogt/lane
-SOURCE_FILES = ("lane_graph.py", "road_graph.py", "lane_lines.py", "lane_gt.py", "lane_tiers.py", "rig_masks.py")          # l4: the tiers and the camera rig they use
+SOURCE_FILES = ("lane_graph.py", "road_graph.py", "lane_lines.py", "lane_gt.py", "lane_tiers.py", "rig_cameras.py")          # l4: the tiers and the camera rig they use
 DEFAULTS = dict(half=50.0, min_len=2.0, step=0.5, inter_frac=0.5, stop_rule="intersection_branch", boundary_layers=("drivable_area",),
                 corner_deg=30.0, corner_base=2.0,
                 tier_back=25.0, tier_ahead=55.0, path_tol=1.5, path_cos=0.7, neighbour_tol=10.0, min_ahead=40.0, min_back=20.0, extend=True, opposite_tier=3,      # l4: lane_tiers.py
@@ -53,8 +56,12 @@ DEFAULTS = dict(half=50.0, min_len=2.0, step=0.5, inter_frac=0.5, stop_rule="int
 #   lane_center  Spurmitte (builds on GaussianCaR): frame "lane" (x right, y forward), the square window |x|, |y| <= half (50 m), `vis` / `occ` from the six cameras
 #   bev_fusion   BEV Fusion (front camera + radars): frame "ego" (x forward, y left), the window of its BEV grid x 0 .. 60 m, y -26 .. 26 m (grid.GridSpec), `vis` / `occ` from CAM_FRONT
 # `window` None = the square of `half`. The tiers (which lane is the ego lane, its neighbours) do not depend on the rig; only the frame, the window and the cameras do.
-RIGS = {"lane_center": dict(frame="lane", window=None, cameras=RM.SIX),
+RIGS = {"lane_center": dict(frame="lane", window=None, cameras=RC.SIX),
         "bev_fusion": dict(frame="ego", window=(0.0, 60.0, -26.0, 26.0), cameras=("CAM_FRONT",))}
+# l6: the tiers (lane_tiers.py) are decided on the keyframe cut to the square |x|, |y| <= max(TIER_HALF, the bound of the rig's window + TIER_MARGIN), whatever the window of the rig is. The driven
+# path reaches 80 m, the extension marks the rest of its piece (only about the first 77 m of it can change a label inside the grid) and a neighbour counts within 10 m of tier 1; 100 m (the same for
+# both rigs) gave the tiers of 250 m on every point of the 970 frames of the l6 check (a road that leaves the 100 m square and comes back inside the extension is excluded by that check, not by argument)
+TIER_HALF, TIER_MARGIN = 100.0, 40.0
 GROUP_SCENES = 60
 _SIGNATURES = {}
 _STORE_KEYS = {}
@@ -155,6 +162,15 @@ def version_of(sig):
     return next((r["version"] for r in table() if r["signature"] == sig), None)
 
 
+def pose_matrix(rec):
+    """T_e2g (4 x 4) of an ego_pose record (a copy of nuscenes_adapter.pose_matrix: that file belongs to the signature of the front GT, this one to the lane GT's)"""
+    from pyquaternion import Quaternion
+    T = np.eye(4)
+    T[:3, :3] = Quaternion(rec["rotation"]).rotation_matrix
+    T[:3, 3] = rec["translation"]
+    return T
+
+
 class LaneGT:
     """LaneGT(dataroot, version, nusc=None, scenes=None, **params): the lane graph of keyframes. `nusc`: an existing devkit object (anything with `get`),
     otherwise the memory-light devkit of `scenes` (CAM_FRONT only). The maps are turned into graphs once per location."""
@@ -211,7 +227,10 @@ class LaneGT:
         g["params"].update(step=p["step"], boundary_layers=list(p["boundary_layers"]), corner_deg=p["corner_deg"], corner_base=p["corner_base"])
         g["location"], g["sample"], g["signature"] = loc, sample_token, self.signature()
         g["params"].update({k: p[k] for k in DEFAULTS if k.startswith("tier_") or k in ("path_tol", "path_cos", "neighbour_tol", "min_ahead", "min_back", "extend", "opposite_tier")})
-        LT.add_tiers(g, self.nusc, sample_token, T, p, rig["cameras"])                                    # l4: tier / vis per point, the driven path (lane_tiers.py); l5: the cameras of the rig
+        wide = LG.crop(mg, T, half=max(TIER_HALF, half + TIER_MARGIN), min_len=p["min_len"], frame=frame, rg=rg, full=False)         # l6: the tiers are decided on this window, the same for every rig, and carried over
+        LT.add_tiers(g, self.nusc, sample_token, T, p, rig["cameras"], wide=wide)                                       # l4: tier / vis per point, the driven path (lane_tiers.py); l5: the cameras of the rig
+        for q in g["pieces"]:
+            del q["src"]                                                                                  # the vertex of the map piece each point stands for: only needed to carry the tiers over
         if p["rig"] != DEFAULTS["rig"]:
             g["rig"] = p["rig"]                                                                           # only a graph of another rig than lane_center names it: the l4 graphs are unchanged
         return g
@@ -229,12 +248,11 @@ def _save(sig_dir, token, g):
     os.replace(tmp, _file(sig_dir, token))
 
 
-def held(sig_dir):
-    """the sample tokens with a stored graph in the folder (a temporary or an empty file does not count)"""
-    if not os.path.isdir(sig_dir):
-        return set()
-    with os.scandir(sig_dir) as it:
-        return {e.name[:-7] for e in it if e.name.endswith(".pkl.gz") and ".tmp" not in e.name and e.stat().st_size > 0}
+def held(sig_dir, nonempty=False):
+    """the sample tokens with a stored graph in the folder, by file name: one listing, 0.2 s for 34k files on the 9p mounts (the stat per file that an empty-file check needs took 101 s); a temporary
+    file does not count. `nonempty` also drops a zero-byte file (a stat per file on 16 threads, 12 - 16 s: `generate` asks once per run, so that a damaged file is made again). A file is written
+    whole and renamed (`_save`), so a zero-byte file is damage from outside; `missing()` and the readers do not look for it (`load` refuses it with FileNotFoundError): run `generate` to repair a store"""
+    return store.names(sig_dir, ".pkl.gz", nonempty)
 
 
 def load(token, data=DATA, **params):
@@ -244,7 +262,7 @@ def load(token, data=DATA, **params):
     if not (os.path.exists(path) and os.path.getsize(path) > 0):
         have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d))) if os.path.isdir(data) else []
         raise FileNotFoundError(f"no stored lane graph for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
-                                "`python -m autogt generate-lane <nuScenes folder> --set full`, or the lane GT source changed since it was stored")
+                                "`python -m GtGenerator generate-lane <nuScenes folder> --set full`, or the lane GT source changed since it was stored")
     with gzip.open(path, "rb") as f:
         return pickle.load(f)
 
@@ -255,19 +273,10 @@ def missing(tokens, data=DATA, **params):
     return [t for t in tokens if t not in have]
 
 
-def _environment():
-    from importlib import metadata
-    out = {}
-    for pkg in ("numpy", "shapely", "opencv-python", "nuscenes-devkit", "pyquaternion"):
-        try:
-            out[pkg] = metadata.version(pkg)
-        except metadata.PackageNotFoundError:
-            out[pkg] = "?"
-    return out
-
-
 def write_index(sig_dir, version, names, params, sets_complete, complete=True):
-    """index.json of a lane store: what it holds and whether it is a release (complete, a released version, a clean tree, the set `full`)"""
+    """index.json of a lane store: what it holds and whether it is a release (complete, a released version, a clean tree, the set `full`). `names` = the sequences the store was asked for, those of
+    every run on this folder (`generate` adds the earlier ones); `complete` = every keyframe of all of them is stored. One writer per folder: `generate` reads the old index and writes a new one, so two
+    runs on the same folder at the same time can lose scene names (the frames are safe: each file is written whole); `environment` is that of the LAST run (a change is warned about, not listed)"""
     from . import versions
     held_now = held(sig_dir)
     state = versions.code_state()
@@ -278,13 +287,22 @@ def write_index(sig_dir, version, names, params, sets_complete, complete=True):
         shown["window"] = list(RIGS[params["rig"]]["window"])                 # a rectangular rig: `half` is only a bound, the window is what the graphs are cut to
     idx = dict(signature=sig, lane_version=lane_version, version=version, scenes=list(names), keyframes=len(held_now), complete=bool(complete),
                params=shown, sets_complete=sorted(sets_complete),
-               commit=state["commit"], dirty=state["dirty"], environment=_environment(),
+               commit=state["commit"], dirty=state["dirty"], environment=store.environment(),
                release=bool(complete and lane_version and state["dirty"] is False and "full" in sets_complete))
     tmp = os.path.join(sig_dir, f"index.json.{os.getpid()}.tmp")
     with open(tmp, "w") as f:
         json.dump(idx, f, indent=1)
     os.replace(tmp, os.path.join(sig_dir, "index.json"))
     return idx
+
+
+def _warn_environment(before):
+    """a store that grows under other versions of numpy, shapely or opencv than its index records (`before` = its `environment`): the frames of the runs can differ in the last digits.
+    A warning, not a refusal: the index then records the versions of this run"""
+    now = store.environment()
+    changed = {k: (before[k], now[k]) for k in ("numpy", "shapely", "opencv-python") if k in (before or {}) and before[k] != now[k]}
+    if changed:
+        warnings.warn(f"this lane store was written under other library versions (index: {changed}, now): its frames may differ from the new ones in the last digits", RuntimeWarning, stacklevel=3)
 
 
 def _group_task(args):
@@ -303,14 +321,14 @@ def _group_task(args):
 def generate(dataroot, out=None, version=None, scenes=None, set_name=None, workers=1, verbose=True, **params):
     """make the lane graph of every keyframe of `scenes` (names; default: all sequences, or the `set_name` set "small" / "full") and store it under
     OUT/<lane signature>/ (default data/autogt/lane); files that exist are skipped (resumable); `workers` processes, one group of sequences each.
-    -> {"out", "signature", "lane_version", "scenes", "keyframes", "written", "release"}"""
+    The index.json of the folder names the sequences of every run on it (a key over several runs reads them all) and is `complete` when every keyframe of all of them is stored; a folder that was
+    written under other versions of numpy / shapely / opencv gives a RuntimeWarning. -> {"out", "signature", "lane_version", "scenes", "keyframes", "written", "release"}"""
     from . import sets
-    from .cli import detect_version
     from .suite import json_tables, scene_tokens
     if set_name and scenes is not None:
         raise ValueError(f"pass either scenes= or set_name= ({set_name!r}), not both")
     dataroot = os.path.expanduser(dataroot)
-    version = version or detect_version(dataroot)
+    version = version or store.detect_version(dataroot)
     out = os.path.expanduser(out) if out else DATA
     known = [s["name"] for s in json_tables(dataroot, version)[0]]
     names = sets.scenes(set_name) if set_name else known if scenes is None else list(dict.fromkeys(scenes))
@@ -320,9 +338,12 @@ def generate(dataroot, out=None, version=None, scenes=None, set_name=None, worke
     code_sig = code_signature(**p)
     sig_dir = os.path.join(out, signature(**p))                    # the store of this code: an earlier version's when the table says it makes the same GT
     os.makedirs(sig_dir, exist_ok=True)
-    tokens = {n: scene_tokens(n, version, dataroot) for n in names}
-    n_total = sum(len(t) for t in tokens.values())
-    stored = held(sig_dir)
+    prior = store.read_index(sig_dir)
+    _warn_environment(prior.get("environment"))
+    asked = list(dict.fromkeys(prior.get("scenes", []) + names))   # the sequences of the earlier runs on this folder stay in its index
+    tokens = {n: scene_tokens(n, version, dataroot) for n in asked if n in known}
+    n_total = sum(len(tokens[n]) for n in names)
+    stored = held(sig_dir, nonempty=True)
     size = min(GROUP_SCENES, max(1, -(-len(names) // workers)))
     groups = []
     for g0 in range(0, len(names), size):
@@ -331,7 +352,7 @@ def generate(dataroot, out=None, version=None, scenes=None, set_name=None, worke
         if todo:
             groups.append((grp, todo))
     if groups:
-        write_index(sig_dir, version, names, p, [], complete=False)
+        write_index(sig_dir, version, asked, p, [], complete=False)
     done = 0
     t0 = time.time()
     if workers <= 1 or len(groups) <= 1:
@@ -356,22 +377,16 @@ def generate(dataroot, out=None, version=None, scenes=None, set_name=None, worke
             continue
         if all(t in now for t in want):
             complete_sets.append(name)
-    complete = all(t in now for n in names for t in tokens[n])
-    old = os.path.join(sig_dir, "index.json")
-    if done == 0 and complete and os.path.exists(old):             # nothing to add to a complete store: its index keeps the commit and the environment that made it
-        try:
-            with open(old) as f:
-                idx = json.load(f)
-        except ValueError:
-            idx = {}                                               # a damaged index is written again
+    complete = all(t in now for ts in tokens.values() for t in ts) and (len(tokens) == len(asked) or bool(prior.get("complete")))      # earlier sequences this nuScenes folder does not have: as the index said
+    if done == 0 and complete and prior:                           # nothing to add to a complete store: its index keeps the commit and the environment that made it (a damaged index is written again)
         from . import versions
-        can_upgrade = versions.code_state()["dirty"] is False and not idx.get("release")      # a clean tree can turn the index of an earlier, dirty run into a release
-        if idx.get("complete") and set(names) <= set(idx.get("scenes", [])) and set(complete_sets) <= set(idx.get("sets_complete", [])) and not can_upgrade:
+        can_upgrade = versions.code_state()["dirty"] is False and not prior.get("release")      # a clean tree can turn the index of an earlier, dirty run into a release
+        if prior.get("complete") and set(names) <= set(prior.get("scenes", [])) and set(complete_sets) <= set(prior.get("sets_complete", [])) and not can_upgrade:
             if verbose:
-                print(f"0 keyframes written, {n_total} already there: {sig_dir}  (index kept: lane version {idx['lane_version']}, commit {idx['commit']})")
-            return {"out": sig_dir, "signature": signature(**p), "code_signature": code_sig, "lane_version": idx["lane_version"], "scenes": len(names), "keyframes": n_total,
-                    "written": 0, "release": idx["release"]}
-    idx = write_index(sig_dir, version, names, p, complete_sets, complete=complete)
+                print(f"0 keyframes written, {n_total} already there: {sig_dir}  (index kept: lane version {prior['lane_version']}, commit {prior['commit']})")
+            return {"out": sig_dir, "signature": signature(**p), "code_signature": code_sig, "lane_version": prior["lane_version"], "scenes": len(names), "keyframes": n_total,
+                    "written": 0, "release": prior["release"]}
+    idx = write_index(sig_dir, version, asked, p, complete_sets, complete=complete)
     if verbose:
         print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (lane version {idx['lane_version']}, commit {idx['commit']}"
               f"{', dirty' if idx['dirty'] else ''}{', RELEASE' if idx['release'] else ''}, sets complete: {idx['sets_complete']})")

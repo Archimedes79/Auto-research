@@ -127,18 +127,25 @@ def _wedge(cam_xy, pts, fp):
 def blocked(points, cam, prisms):
     """bool (n,): the straight line from the camera `cam` (x, y, z) to each of `points` (n, 3) passes through the volume of one of the
     `prisms` before it ends. A point inside or on a prism is not blocked by that one (a box does not hide itself)."""
-    points, cam = np.asarray(points, float), np.asarray(cam, float)
-    out = np.zeros(len(points), bool)
+    points = np.asarray(points, float)
+    return blocked_at_heights(points[:, :2], points[None, :, 2], cam, prisms)[0]
+
+
+def blocked_at_heights(xy, z, cam, prisms):
+    """bool (k, n): `blocked` for the points (xy[i], z[h, i]) - k heights over the same n ground positions: the clip of the segment against a footprint does not depend on the
+    height, so it is made once for all k."""
+    xy, z, cam = np.asarray(xy, float), np.asarray(z, float), np.asarray(cam, float)
+    out = np.zeros(z.shape, bool)
     for fp, z_lo, z_hi in prisms:
         if fp[:, 0].max() < cam[0]:
             continue
-        idx = np.nonzero(_wedge(cam[:2], points[:, :2], fp) & ~out)[0]
+        idx = np.nonzero(_wedge(cam[:2], xy, fp) & ~out.all(0))[0]
         if not len(idx):
             continue
-        t0, t1 = _clip(cam[:2], points[idx, :2], fp)
+        t0, t1 = _clip(cam[:2], xy[idx], fp)
         cross = (t0 < t1) & (t1 < 1.0)               # enters the footprint, ends beyond it
-        za, zb = cam[2] + t0 * (points[idx, 2] - cam[2]), cam[2] + t1 * (points[idx, 2] - cam[2])
-        out[idx] |= cross & (np.maximum(za, zb) >= z_lo) & (np.minimum(za, zb) <= z_hi)
+        za, zb = cam[2] + t0 * (z[:, idx] - cam[2]), cam[2] + t1 * (z[:, idx] - cam[2])
+        out[:, idx] |= cross & (np.maximum(za, zb) >= z_lo) & (np.minimum(za, zb) <= z_hi)
     return out
 
 
@@ -185,7 +192,7 @@ def object_shares_many(boxes, prisms, cam, K, T_c2e, size, radar_poses, grid, st
     and not hidden by another box), in the radar fan, and in both. Samples outside the grid count as not observed. -> a list of
     {"camera", "radar", "fusion"}"""
     zero = {"camera": 0.0, "radar": 0.0, "fusion": 0.0}
-    xs, zk, spans, start = [], [], [], 0
+    xs, zk, oks, spans, start = [], [], [], [], 0
     for box in boxes:
         fp, z_lo, z_hi = prism_of(box)
         xy = footprint_samples(fp, step)
@@ -195,14 +202,18 @@ def object_shares_many(boxes, prisms, cam, K, T_c2e, size, radar_poses, grid, st
             continue
         n = len(xy)
         xs.append(xy)
+        oks.append(ok)
         zk.append(np.repeat((z_lo + np.asarray(FRACTIONS) * (z_hi - z_lo))[:, None], n, axis=1))        # (heights, n)
         spans.append((start, n, ok))
         start += n
     if not xs:
         return [dict(zero) for _ in boxes]
-    xy_all, z_all = np.concatenate(xs), np.concatenate(zk, axis=1)
-    pts = np.concatenate([np.c_[xy_all, z_all[k]] for k in range(len(FRACTIONS))])
-    vis = (camera_cells(pts[:, 0], pts[:, 1], K, T_c2e, size, z=pts[:, 2]) & ~blocked(pts, cam, prisms)).reshape(len(FRACTIONS), -1)
+    xy_all, z_all, ok_all = np.concatenate(xs), np.concatenate(zk, axis=1), np.concatenate(oks)
+    k = len(FRACTIONS)
+    in_view = camera_cells(np.tile(xy_all[:, 0], k), np.tile(xy_all[:, 1], k), K, T_c2e, size, z=z_all.ravel()).reshape(k, -1)
+    vis = in_view & ok_all[None, :]                                    # a sample off the grid is never counted: no need to ask whether it is hidden
+    ask = np.nonzero(vis.any(0))[0]
+    vis[:, ask] &= ~blocked_at_heights(xy_all[ask], z_all[:, ask], cam, prisms)
     seen_all = vis.any(0)
     fan_all = radar_cells(xy_all[:, 0], xy_all[:, 1], radar_poses)
     out = []

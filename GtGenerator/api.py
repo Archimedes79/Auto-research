@@ -76,7 +76,7 @@ def _sets_text():
 
 # parts of the suite that `selftest(only=...)` can run alone: name -> module
 SELFTESTS = {"cli": "cli_selftest", "gt_api": "gt_api_selftest", "generator": "generator_selftest", "lane_graph": "lane_graph_selftest", "lane_tiers": "lane_tiers_selftest",
-             "clean": "clean", "rig_masks": "rig_masks", "lane_toy": "lane_tiers", "jobs": "jobs_selftest"}
+             "clean": "clean", "rig_masks": "rig_masks", "lane_toy": "lane_tiers", "jobs": "jobs_selftest", "flow": "flow_selftest"}
 
 
 class Interface:

@@ -1,6 +1,6 @@
 """Storage of the front GT: the keyframe files (`<signature>/<sample token>.npz`, float16 layers + the meta as a pickled object), the index.json of a store folder (the manifest: what it holds,
 which generator made it, whether it is a release), the resume checks, and the listing of a store folder by file name. No argparse, no devkit: everything that reads or writes a store comes here
-(`pipeline.py` writes with it, `suite.py` / `report.py` / `sets.py` read with it; `cli.py` keeps `detect_version` only because the hashed `lane_gt.py` imports it from there).
+(`pipeline.py` writes with it, `suite.py` / `report.py` / `sets.py` read with it; the hashed `lane_gt.py` uses `names`, `read_index`, `environment` and `detect_version` of it).
 """
 import json
 import os
@@ -36,8 +36,8 @@ def check_arguments(stride=1, res=0.5, ss=4, workers=1, set_name=None, scenes=No
     """the arguments of generate / build / report that would otherwise end in a ZeroDivisionError or a silent wrong run -> ValueError with the message"""
     if stride < 1:
         raise ValueError(f"stride must be 1 or more, got {stride}")
-    if res <= 0 or ss < 1:
-        raise ValueError(f"res must be positive and ss 1 or more, got res {res}, ss {ss}")
+    if res <= 0 or ss < 2 or ss % 2:
+        raise ValueError(f"res must be positive and ss even (2, 4, ...), got res {res}, ss {ss}")
     if workers < 1:
         raise ValueError(f"workers must be 1 or more, got {workers}")
     if set_name and scenes is not None:
@@ -84,13 +84,13 @@ def run_manifest(sig_dir, version, dataroot, set_name=None, options=None):
     sets that the folder now holds in full (see sets.py)"""
     from . import sets, versions
     from .suite import code_signature
-    return {"set": set_name, **versions.code_state(), "generator": code_signature(**(options or {})), "environment": _environment(),
+    return {"set": set_name, **versions.code_state(), "generator": code_signature(**(options or {})), "environment": environment(),
             "sets_complete": sets.complete_in(sig_dir, version, dataroot), "sets_checked": sets.checkable(version, dataroot),
             "suite_release": versions.current_release()}
 
 
-def _environment():
-    """the versions of the libraries whose behaviour shapes the stored bytes (the generator signature hashes our files, not these)"""
+def environment():
+    """the versions of the libraries whose behaviour shapes the stored bytes (the generator signature hashes our files, not these); the index.json of a store records them"""
     from importlib import metadata
     out = {}
     for pkg in ("numpy", "shapely", "opencv-python", "matplotlib", "nuscenes-devkit", "pyquaternion"):

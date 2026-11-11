@@ -1,4 +1,4 @@
-"""Neighbours, lane counts and roads of the lane graph (`autogt.lane_graph`): which lanes are side by side, and the road graph above the lanes.
+"""Neighbours, lane counts and roads of the lane graph (`lane_graph.py`): which lanes are side by side, and the road graph above the lanes.
 
 The nuScenes map has NO road graph: a lane's edge-line tokens match no road block (0 of 3,662 lanes in the four maps), two of the four maps (singapore-
 queenstown, singapore-hollandvillage) have road segments only for intersections and road blocks that do not point at a segment, and nothing says how
@@ -6,17 +6,15 @@ many lanes a road has. So everything here is derived from the lane centre-lines.
 
 NEIGHBOURS. At every metre of a lane the nearest lane on its left (and right) is searched: its centre-line point lies 1.5 - 6 m to the side, abreast
 (within 1 m along the lane) and parallel (within 25 degrees: co-directional; antiparallel: opposite). A lane is a neighbour of another when this holds
-along at least `min_overlap` metres. `lane_count` at a point = 1 + the number of lanes found by following left and right neighbours.
+along at least `min_overlap` metres; the relation is symmetric (a lane found from one side only counts from both). `lane_count` at a point = 1 + the number of lanes found by following left and right neighbours.
 ROADS. A road is a set of lanes joined by the neighbour relation and by 1-in-1-out lane-to-lane links (it ends where lanes split, merge or reach an
 intersection). An INTERSECTION is a connected area of road segments flagged is_intersection (the connectors inside it belong to it). A connector outside
 every intersection belongs to the road of its predecessor lane. The road graph has roads and intersections as nodes and the lane successors as edges.
-LINKS. Every joined piece gets `road` (the road or intersection under its middle), `roads_along` (all of them in travel order), `left`, `right`
-and `opposite` (piece ids), `lane_count` and `lane_index` (lanes to its left); the crop lists the roads and intersections of the window.
+LINKS. Every joined piece gets `road` (the road or intersection under its middle), `left`, `right` and `opposite` (piece ids), `lane_count` and `lane_index` (lanes to its left; a piece of
+connectors only has no lane of its own and takes those of the lane before it, else after it); the crop lists the roads and intersections of the window with the parts that run along them.
 Open with Mirko: the neighbour distances, the minimum overlap and whether an opposite road counts as part of the same road.
 """
 import numpy as np
-
-from .lane_graph import _length
 
 DEFAULTS = dict(lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0, min_overlap=3, hops=8)
 
@@ -43,7 +41,7 @@ def _samples(polys, kind, step=1.0, base=0.5):
 
 
 def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0, min_overlap=3, hops=8):
-    """-> dict(left, right, opposite: token -> [tokens]; lane_count, lane_min, lane_max, lane_index: token -> int)"""
+    """-> dict(left, right, opposite: token -> [tokens], symmetric; lane_count, lane_max, lane_index: token -> int)"""
     X, H, lane, toks = _samples(polys, kind)
     n = len(X)
     cos_par = np.cos(np.radians(par_deg))
@@ -88,9 +86,10 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
         for i in np.nonzero(arr >= 0)[0]:
             pair[(name, lane[i], lane[arr[i]])] = pair.get((name, lane[i], lane[arr[i]]), 0) + 1
     out = {name: {t: [] for t in toks} for name in ("left", "right", "opposite")}
-    for (name, a, b), c in sorted(pair.items()):
-        if c >= min_overlap:
-            out[name][toks[a]].append(toks[b])
+    found = {k for k, c in pair.items() if c >= min_overlap}
+    found |= {({"left": "right", "right": "left", "opposite": "opposite"}[name], b, a) for name, a, b in found}      # the relation is symmetric (b left of a <=> a right of b); the search is from one lane only, so a pair at the minimum overlap was found from one side
+    for name, a, b in sorted(found):
+        out[name][toks[a]].append(toks[b])
     # lane count: follow the left / right neighbours point by point
     count = np.ones(n, np.int64)
     idx_left = np.zeros(n, np.int64)
@@ -102,12 +101,12 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
             if is_left:
                 idx_left += m
             cur = np.where(m, arr[np.maximum(cur, 0)], -1)
-    for name in ("lane_count", "lane_min", "lane_max", "lane_index"):
+    for name in ("lane_count", "lane_max", "lane_index"):
         out[name] = {}
     for li, t in enumerate(toks):
         m = lane == li
         out["lane_count"][t] = int(np.median(count[m]))
-        out["lane_min"][t], out["lane_max"][t] = int(count[m].min()), int(count[m].max())
+        out["lane_max"][t] = int(count[m].max())
         out["lane_index"][t] = int(np.median(idx_left[m]))
     return out
 
@@ -198,38 +197,40 @@ def build_road_graph(mg, **params):
         for tok in tokens_lane:
             for name in ("left", "right", "opposite"):
                 link[name].update(piece_of[b] for b in nb[name][tok] if piece_of[b] != pid)
+        link["has_lane"] = bool(tokens_lane)
         link["lane_count"] = int(np.median([nb["lane_count"][t] for t in tokens_lane])) if tokens_lane else 0
         link["lane_index"] = int(np.median([nb["lane_index"][t] for t in tokens_lane])) if tokens_lane else 0
         plinks[pid] = link
-    return dict(nb=nb, roads=roads, areas=areas, area_geoms=area_geoms, road_of=road_of, area_of=area_of, node_of=node_of, edges=edges, opposite=opposite, plinks=plinks,
-                params=p)
+    for pid, link in plinks.items():                                       # a piece of connectors only has no lane of its own: it takes the count and the index of the lane it comes from, else of the lane it leads to
+        donor = next((q for q in pieces[pid]["pred"] + pieces[pid]["succ"] if plinks[q]["has_lane"]), None) if not link["has_lane"] else None
+        if donor is not None:
+            link["lane_count"], link["lane_index"] = plinks[donor]["lane_count"], plinks[donor]["lane_index"]
+    return dict(nb=nb, roads=roads, areas=areas, area_geoms=area_geoms, edges=edges, opposite=opposite, plinks=plinks)
 
 
-def attach(graph, mg, rg):
-    """add the road structure to a crop (`lane_graph.crop` calls this with rg = build_road_graph(mg)): per part `road`, `roads_along`, `left`,
-    `right`, `opposite`, `lane_count`, `lane_index`; and graph["roads"], the roads and intersections present in the window with their edges"""
+def attach(graph, rg):
+    """add the road structure to a crop (`lane_graph.crop` calls this with rg = build_road_graph(mg)): per part `road`, `left`, `right`, `opposite`, `lane_count`, `lane_index`;
+    and graph["roads"], the roads and intersections present in the window with their edges and the parts that run along them"""
     parts_of = {}
     for part in graph["pieces"]:
         parts_of.setdefault(part["piece"], []).append(part)
-    present = set()
+    on_node = {}                                                    # node id -> the parts that run along it
     for part in graph["pieces"]:
         link = rg["plinks"][part["piece"]]
-        first, last = part["seg"]
-        mid = (first + last) // 2
-        along = [a for a in link["along"] if a[2] >= first and a[1] <= last + 1]
-        mid_node = next((a[0] for a in link["along"] if a[1] <= mid <= a[2]), along[0][0] if along else None)
-        part["road"] = mid_node
-        part["roads_along"] = [a[0] for a in along]
+        lo, hi = int(part["src"][0]), int(part["src"][-1])           # the vertices of the piece the part stands for
+        along = [a[0] for a in link["along"] if a[2] >= lo and a[1] <= hi]
+        mid = (lo + hi - 1) // 2
+        part["road"] = next((a[0] for a in link["along"] if a[1] <= mid <= a[2]), along[0] if along else None)
         for name in ("left", "right", "opposite"):
             part[name] = sorted(q["id"] for pid in link[name] for q in parts_of.get(pid, []))
         part["lane_count"], part["lane_index"] = link["lane_count"], link["lane_index"]
-        present.update(part["roads_along"])
+        for nid in dict.fromkeys(along):
+            on_node.setdefault(nid, []).append(part["id"])
     nodes = []
-    for nid in sorted(present):
+    for nid in sorted(on_node):
         node = rg["roads"].get(nid) or rg["areas"][nid]
-        nodes.append(dict(id=nid, kind=node["kind"], lane_max=node.get("lane_max", 0),
-                          pieces=sorted(q["id"] for q in graph["pieces"] if nid in q["roads_along"]),
-                          succ=sorted(b for b in rg["edges"].get(nid, ()) if b in present),
-                          opposite=sorted(b for b in rg["opposite"].get(nid, ()) if b in present)))
+        nodes.append(dict(id=nid, kind=node["kind"], lane_max=node.get("lane_max", 0), pieces=sorted(on_node[nid]),
+                          succ=sorted(b for b in rg["edges"].get(nid, ()) if b in on_node),
+                          opposite=sorted(b for b in rg["opposite"].get(nid, ()) if b in on_node)))
     graph["roads"] = nodes
     return graph

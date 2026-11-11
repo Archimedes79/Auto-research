@@ -38,7 +38,8 @@ def _same_gt(a, b):
 def run(root=None, verbose=True):
     import torch
     import torch.nn.functional as F
-    flowmod._selftest()                                                                               # 1
+    from .flow_selftest import run as flow_selftest                                                  # 1 the flow box on a synthetic world with known truth
+    flow_msg = flow_selftest(verbose=False)
     # 1b ego velocity at the ends of a sequence (v6): a drive at 10 m/s along world x with a yaw rate of 0.2 rad/s, poses every 0.1 s over 1 s; the
     #    first and the last pose give the same speed as the middle (the clamped window of v5 gave half of it)
     tt_ = np.arange(0, 1.01, 0.1)
@@ -292,7 +293,8 @@ def run(root=None, verbose=True):
         f"{loose_} is neither in SIGNATURE_FILES (nuscenes_gt.py) nor in versions.NOT_GENERATOR: decide whether it shapes the GT "
         "(then it is hashed and a change needs a new version row) or not (then list it)")
     rows_ = V.table()
-    assert [r["version"] for r in rows_] == [f"v{i + 1}" for i in range(len(rows_))] and len({r["signature"] for r in rows_}) == len(rows_)
+    nums_ = [int(r["version"][1:]) for r in rows_]                                       # the front versions and the releases are ONE running sequence: the front rows have gaps (v9, v13)
+    assert nums_ == sorted(set(nums_)) and nums_[0] == 1 and len({r["signature"] for r in rows_}) == len(rows_), nums_
     assert V.version_of(gt.signature()) is not None, (f"the generator signature {gt.signature()} has no row in GtGenerator/versions.csv: `python -m GtGenerator versions --update` derives one from git, "
                                                       "commit, tag autogt/v<N> (decision D29)")
     store_sig = V.canonical(gt.signature())                       # the folder of the stored GT: the signature itself, or the older one whose GT this code makes
@@ -461,7 +463,7 @@ def run(root=None, verbose=True):
         assert m["sets_complete"] == ["full", "small"] and m["release"] is True, "mini cannot check full: its entry stays"
         m = manifest({**ok, "sets_complete": [], "sets_checked": ["full", "small"]})
         assert m.get("sets_complete", []) == [] and m["release"] is False, "a hole in full takes the set out and the release with it"
-        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": store_mod._environment()})
+        m = manifest({**ok, "sets_complete": ["full", "small"], "sets_checked": ["full", "small"], "environment": store_mod.environment()})
         assert m["sets_complete"] == ["full", "small"] and m["release"] is True and set(m["environment"]) >= {"numpy", "shapely"}, m
         # a job that runs for hours refuses a generator that changed meanwhile (a pool worker imports the source tree afresh)
         pipe_mod._same_generator(gen5, gen5.signature())
@@ -730,6 +732,7 @@ def run(root=None, verbose=True):
               f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
         print(lane_graph_msg)
         print(gt_api_msg)
+        print(flow_msg)
         print(cli_msg)
         print(jobs_msg)
         print(generator_msg)

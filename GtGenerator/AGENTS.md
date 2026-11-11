@@ -10,7 +10,7 @@ sequences / 404 keyframes, trainval = 850 / 34,149).
 |---|---|
 | **the whole GT of one system, one call** (Mirko 2026-11-10) | **BEV Fusion:** `key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")` / `python -m GtGenerator generate-bev ROOT --set full` = the front GT + the lane GT of the rig `bev_fusion` + the packed area masks (intersection, borders 0 and 0.5 m); **Spurmitte:** `GtGenerator.generate_lane_gt(root, rig="lane_center")` / `generate-lane ROOT --rig lane_center` (`rig="all"`: both, a dict). All resumable. They return a **GT key** (`GtGenerator/gt_api.py`): the DATA (`data_identity` of data/NuScenes/manifest.json) + per part the CODE (signature, git commit of GtGenerator/, dirty, version) + the suite release; `str(key)` is one readable line, `key.id` 12 hex characters (same id = same GT), `key.complete`. Not the nuScenes sample token. `GtGenerator.gt_key("bev_fusion", "v1.0-trainval", "full")` reads the key of what is stored, generates nothing |
 | to read through a key | `key.load(sample_token)` (BEV Fusion: the front GT), `key.lane(sample_token)` (the lane graph of the system: frame ego for `bev_fusion`, lane for `lane_center`), `key.mask(sample_token, "intersection", border_m=0.5)` = a plain (120, 104) uint8 array in the BEV grid, `[ix, iy]` like the GT maps (x forward, iy = 0 the RIGHT edge), from the packed cache below the lane store (`<lane store>/masks/intersection_b0.5.npz`, 53 MB per border for trainval); the same from a graph without the cache: `GtGenerator.lane_raster.area_mask(g, "intersection", border_m)` (only for the rig `bev_fusion`: the window of the Spurmitte rig does not cover 60 m) |
-| **the command line is the class interface** | every `python -m GtGenerator COMMAND` is ONE method of the class `GtGenerator` (GtGenerator/api.py; the command line imports nothing but the class and `store.detect_version`, which the hashed `lane_gt.py` takes from there; `python -m GtGenerator --help` has the map, `cli.commands()` lists command -> method), the same calls as in Python, `GtGenerator.generate_bev_gt(root)` ...: `generate` / `generate-bev` / `generate-lane` / `area-masks` / `build` make GT, `key SYSTEM` prints the GT key (exit 1 when incomplete, `--json`), `have` / `data` / `sets` / `versions` / `area-mask TOKEN` look at it, `audit-lane SYSTEM` checks a stored lane GT before it is released (exit 1 on a problem; `store_audit.audit_lane`), `view` / `sheets` / `video` / `lanegraph` / `masks` draw it, `check` / `report` / `digest` / `clean` / `selftest [--only cli gt_api generator lane_graph lane_tiers lane_toy clean rig_masks]` check and tidy. `--out` is always the ROOT of the stores (default data/autogt, lane stores below ROOT/lane); wrong arguments exit 2 with a message (GTGENERATOR_TRACEBACK=1: the traceback), "not there" exits 1; the architecture is drawn in `architecture.svg` (one class, one code block and one output per problem; a test keeps it in step with the code); `versions --update` derives the rows a new signature needs from git; a list of sequences comes from a file (`--scenes-file`) and a key names it `scenes:<id>` |
+| **the command line is the class interface** | every `python -m GtGenerator COMMAND` is ONE method of the class `GtGenerator` (GtGenerator/api.py; the command line imports nothing but the class; the hashed `lane_gt.py` takes `detect_version` from `store`; `python -m GtGenerator --help` has the map, `cli.commands()` lists command -> method), the same calls as in Python, `GtGenerator.generate_bev_gt(root)` ...: `generate` / `generate-bev` / `generate-lane` / `area-masks` / `build` make GT, `key SYSTEM` prints the GT key (exit 1 when incomplete, `--json`), `have` / `data` / `sets` / `versions` / `area-mask TOKEN` look at it, `audit-lane SYSTEM` checks a stored lane GT before it is released (exit 1 on a problem; `store_audit.audit_lane`), `view` / `sheets` / `video` / `lanegraph` / `masks` draw it, `check` / `report` / `digest` / `clean` / `selftest [--only cli gt_api generator lane_graph lane_tiers lane_toy clean rig_masks]` check and tidy. `--out` is always the ROOT of the stores (default data/autogt, lane stores below ROOT/lane); wrong arguments exit 2 with a message (GTGENERATOR_TRACEBACK=1: the traceback), "not there" exits 1; the architecture is drawn in `architecture.svg` (one class, one code block and one output per problem; a test keeps it in step with the code); `versions --update` derives the rows a new signature needs from git; a list of sequences comes from a file (`--scenes-file`) and a key names it `scenes:<id>` |
 | the GT of keyframes that are already generated (training, analysis) | `GtGenerator.load(token)` - ~15 ms, no nuScenes needed; the tokens of a sequence: `GtGenerator.scene_tokens("scene-0561", "v1.0-trainval")` (json tables, 1 s) |
 | to generate the GT of a nuScenes folder (all sequences or some) and store it where `load` reads it | `GtGenerator.generate("~/data/nuscenes_full")` (or `python -m GtGenerator generate ~/data/nuscenes_full [--out DIR] [--scenes scene-0061 ...] [--stride N]`): finds the version in the folder, memory-light, resumable (a rerun writes only what is missing, a finished group loads no devkit; a rerun that writes nothing leaves the manifest of a finished store alone), returns `{"out", "signature", "gt_version", "version", "scenes", "keyframes", "written", "release", "lane", "lane_rigs", "masks_error"}` (the class method `GtGenerator.GtGenerator.generate` adds `keys` and `ok`; its 5th positional argument is `set_name`, `GtGenerator.generate`'s is `stride`: pass keywords); trainval 5-8 h; default `out` = `data/autogt` -> `<signature>/<token>.npz` + `index.json`; one generate / report per folder at a time |
 | a small or a full run | `GtGenerator.generate(dataroot, set_name="small")` (the 10 sequences of mini, ~25 min, small experiments) or `"full"` (all 850 of trainval, 5-8 h, releases); shell `--set small|full`; `python -m GtGenerator sets` shows how much of each is stored; the manifest in `index.json` (`gt_version`, `commit`, `dirty`, `sets_complete`, `release`) says what a folder is: `release: true` = complete, released GT version, clean tree, `full` held |
@@ -62,7 +62,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `lane_divider` `road_divider` | (nx, ny) | 1-cell line masks |
 | `lane_divider_dist` `road_divider_dist` | (nx, ny) | distance to the nearest line in m, truncated at 2 |
 | `centreline` | (nx, ny) | mask of the lane / lane-connector centre-lines |
-| `centreline_dir` | (2, nx, ny) | direction of travel (cos, sin of the heading) on `centreline` cells: the MEAN of the lines in the cell, so shorter than 1 where lines cross (down to 0.04): normalise it if you need a unit vector |
+| `centreline_dir` | (2, nx, ny) | direction of travel (cos, sin of the heading) on `centreline` cells: a unit vector (the mean over the lines in the cell, scaled to length 1), (0, 0) where they cancel out |
 | `vehicle` `pedestrian` `two_wheeler` | (nx, ny) | footprint coverage of **observed** boxes (at least one lidar or radar point) |
 | `instance` | (nx, ny) int32 | index into `meta["boxes"]` of the box that covers the cell, -1 = none |
 | `ignore` | (nx, ny) | boxes WITHOUT any lidar / radar point: neither object nor free space - leave out of every loss |
@@ -70,7 +70,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 | `flow_ego` | (2, nx, ny) | apparent velocity of a static world point caused by the ego motion, -(v + omega x r) |
 | `flow` | (2, nx, ny) | `flow_ego + velocity`: the apparent motion in the camera frame; displacement over any dt = `flow * dt` |
 | `flow_weight` | (nx, ny) | 1 = velocity known, 0 = unknown (ignored boxes, unknown velocity): the supervision mask |
-| `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s (0.1 in free space; 0 on the cells of an observed box of unknown velocity, where `flow_weight` is 0: never use 1 / sigma without the weight) |
+| `flow_sigma` | (nx, ny) | std of the velocity estimate in m/s: 0.1 in free space, 10 on EVERY cell whose `flow_weight` is 0 (a box of unknown velocity or without a sensor point), always finite |
 | `camera` | (nx, ny) | ground cells that project into the CAM_FRONT image |
 | `occluded` | (nx, ny) | ground cells a box hides from the camera, by the box's real height (v7: no longer an infinitely high box; section 3a) |
 | `radar` | (nx, ny) | cells inside the +-60 deg fan of one of the five radars |
@@ -84,7 +84,7 @@ Vectors are (2, nx, ny) = (x, y) components in ego axes. All layers are float32 
 (s, signed: negative for prev) and `steps` (list of (dt, ego speed m/s, yaw rate rad/s) per 12 Hz camera frame).
 
 One box of `meta["boxes"]`: `group` ("vehicle" / "pedestrian" / "two_wheeler"), `corners` (4x2 footprint, ego x, y), `center` (3, ego
-frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, ego frame; NOT wrapped: 25 - 30 % of the boxes lie outside [-pi, pi], use sin / cos or wrap it), `vel` (2, world velocity m/s in ego axes),
+frame, at the camera time), `size` ([width, length, height] m), `yaw` (rad, relative to the ego heading, wrapped to [-pi, pi]), `vel` (2, world velocity m/s in ego axes),
 `vel_source` ("stationary" / "track" / "track+radar" / "radar" / "unknown"), `vel_flag` ("ok", "unobserved", "short_track",
 "stationary_but_moving", "radar_override", "radar_conflict"), `vel_sigma` (m/s; NaN when unknown), `vel_known` (bool; False = unknown: `vel` is (0, 0), never use it without this flag), `visibility` (nuScenes
 annotator bin "1".."4" = 0-40 / 40-60 / 60-80 / 80-100 %), `token` (annotation), `instance` (instance token), `stationary` (bool:
@@ -132,7 +132,7 @@ ONE command makes both: `python -m GtGenerator generate ~/data/nuscenes_full --s
 `python -m GtGenerator generate-lane [--rig lane_center|bev_fusion|all]` makes the lane GT alone. `python -m GtGenerator versions` shows the front versions, the lane versions and the releases.
 The lane graph of a keyframe window is NOT part of the front generator: the front GT, its signature and its store do not change when the lane GT does. The graph is made from the
 nuScenes map and the ego pose at the front-camera time only (about 40 ms per keyframe); the l4 labels (tiers, visibility) also read the CAM_FRONT ego poses around the keyframe and the
-annotated boxes (27 ms). It has its own signature (hash of `lane_graph.py road_graph.py lane_lines.py lane_gt.py lane_tiers.py rig_masks.py` + the parameters that differ from
+annotated boxes (27 ms). It has its own signature (hash of `lane_graph.py road_graph.py lane_lines.py lane_gt.py lane_tiers.py rig_cameras.py` + the parameters that differ from
 `lane_gt.DEFAULTS`, the rig is one), its own table `lane_versions.csv` (l1, ...; git tag `autogt/lane-lN`) and its own store `data/autogt/lane/<lane signature>/<sample token>.pkl.gz` + `index.json`.
 ```
 g = GtGenerator.lane_gt.load(sample_token)                                       # stored (python -m GtGenerator generate-lane ~/data/nuscenes_full --set full)
@@ -143,12 +143,13 @@ A graph is a dict: `frame` ("lane": x RIGHT, y forward, ego rear axle at the fro
 y left), `half` (50 m: the window is |x|, |y| <= 50), `location`, `sample`, `signature`, `params`, and
 - `pieces`: lanes and connectors joined while the join is 1 in, 1 out (a new id only at a split or a merge), cut to the window: `id` (the first 8+ characters of the token
   of its first map piece; "<id>#1" for a second part that comes back into the window: its number depends on the window, so use `piece`, the id of the piece, which is the same
-  in every frame, for anything that must be stable), `piece`, `part`, `kind` (lane / connector / mixed), `pts` (n, 2) float32 every 0.5 m in travel order, `start_open` /
-  `end_open` (cut by the window), `length`, `tokens` (the nuScenes map pieces it covers), `segments` (`[{token, kind, i0, i1, in_intersection}]`: the index ranges of `pts` per
+  in every frame, for anything that must be stable), `piece`, `part`, `kind` (lane / connector / mixed), `pts` (n, 2) float32 every 0.5 m in travel order (l6: no repeated points), `start_open` /
+  `end_open` (cut by the window), `length`, `segments` (`[{token, kind, i0, i1, in_intersection}]`: the index ranges of `pts` per
   map piece, contiguous; `in_intersection` is the test of lane_graph for a connector), `succ` / `pred` (ids inside the window), `left` / `right` / `opposite` (ids of the lanes
-  beside it; the opposite lane on either side), `road`, `roads_along`, `lane_count`, `lane_index` (0 = leftmost);
-- `events`: `type` split / merge / cross / stop / exit / start / end / window, `pos`, `in` / `out` (piece ids), `dirs_in` / `dirs_out` (unit vectors, one row per id in the same
-  order), `partial` (a branch lies outside the window); a stop or exit has `on`, `s` (metres along the part), `n_succ` (stop) / `n_pred` (exit); a window event has `io`
+  beside it; the opposite lane on either side), `road`, `lane_count`, `lane_index` (0 = leftmost; l6: a piece of connectors only takes the count and the index of the lane before it, else after it);
+- `events`: `type` split / merge / cross / stop / exit / start / end / window, `pos` (l6: a split at the end of its piece, a merge at the start of its piece, not between the ends of a map gap), `in` / `out` (piece ids),
+  `dirs_in` / `dirs_out` (unit vectors, one row per id in the same order; l6: unit also for a pose with pitch or roll), `partial` (a branch lies outside the window); l6: a stop or exit always has an `in` and an `out`, and every
+  natural end (not cut, no successor) of a part is a successor, an event that names it, or the window; a stop or exit has `on`, `s` (metres along the part), `n_succ` (stop) / `n_pred` (exit); a window event has `io`
   ("in" / "out"). A stop point is the end of a LANE whose successor connector lies inside an intersection, an exit the start of a LANE whose predecessor connector does (`stop_rule`,
   default: for the intersection branches only). Both can lie inside a joined piece (a lane with one connector after it): then `out` of the stop (`in` of the exit) is that piece;
 - `roads`: the roads and intersections of the window (`id`, `kind`, `lane_max`, `pieces`, `succ`, `opposite`); the nuScenes map has no road graph, roads are derived from the
@@ -165,8 +166,8 @@ within 10 m of a tier-1 point, 3 = the rest (branches not taken, opposite lanes,
 two-wheeler box hides it (real box height; the ground UNDER a box is hidden, a rear box hides for the rear cameras; static structures are not in the map, so a point behind a building counts as visible; boxes
 are at the annotation time); `occ` (bool) = in a camera's view but hidden by a box; `tier_src` (uint8) 0 / 1 driven / 2 map extension. Per event: `tier`, `vis`. Per graph: `ego_path` = `{"pts" (n, 2) in the frame of the graph,
 "back_m", "ahead_m" (the driven metres)}` and `tier_info` (metres per tier, visible metres per tier, hiding boxes, extension metres). New parameters (part of the lane signature): `tier_back` 25, `tier_ahead` 55,
-`path_tol` 1.5, `path_cos` 0.7, `neighbour_tol` 10, `min_ahead` 40, `extend` True, `opposite_tier` 3. The cost is about 27 ms per keyframe. Self-tests: `python -m GtGenerator.lane_tiers` (toy lane), `python -m GtGenerator.lane_tiers_selftest` (a fake devkit), both also run by `python -m GtGenerator selftest`. `rig_masks.py` is part of the lane
-signature from l4 on (the camera calibration the visibility uses: any edit of it, also of the BEV-fusion mask, is a new lane signature). Known limits of the labels: the cameras see no ground
+`path_tol` 1.5, `path_cos` 0.7, `neighbour_tol` 10, `min_ahead` 40, `extend` True, `opposite_tier` 3. The cost is about 27 ms per keyframe. Self-tests: `python -m GtGenerator.lane_tiers` (toy lane), `python -m GtGenerator.lane_tiers_selftest` (a fake devkit), both also run by `python -m GtGenerator selftest`. `rig_cameras.py` (l6; until l5 `rig_masks.py`) is part of the lane
+signature from l4 on (the camera calibration the visibility uses: any edit of it is a new lane signature). Known limits of the labels: the cameras see no ground
 within about 4.5 m of the car, so `vis` is False there (a consumer that demands nodes near the car must not read it as "hidden"; `occ` is False there); the tier-1 map extension grows whole
 pieces (a standing car or the first keyframes of a log get tier 1 for the rest of the piece, more than the 55 m / 25 m it is asked for); `vis` is cameras only, no radar. The graph geometry equals l3
 (checked on 970 frames of the partial store by the lane project's scratch check and, for the rig `lane_center` of l5, on 400 stored frames and by the 40 pinned digests of `lane_l4_digest.json`).
@@ -183,6 +184,12 @@ border; a graph of the rectangular rig carries the keys `window` and `rig`, the 
 is the ego lane); a BEV Fusion consumer that wants "demanded" nodes reads `vis` of its own camera. `python -m GtGenerator generate` makes the standard GT and both lane stores; `generate-lane --rig bev_fusion` makes one.
 `lane_gt.signature()` is the folder of the store, `lane_gt.code_signature()` the hash of the code (they differ where `same_gt_as` points to an earlier store). Release v12 = front v9 + lane l5 (both rigs).
 Only vectors and events are stored; rasters are drawn from them where they are needed. Picture: `python -m GtGenerator lanegraph out.png scene-0061:8` (six cameras + top view, rig lane_center).
+**l6 (prepared 2026-11-10, D78 "corrections, better directions of the lanes, better entry and exit points, and clean up"; code only, no store built, not current): the same graph with these changes** (the field-by-field
+check against l5: 970 frames, every difference is one of them): no repeated points (zero-length segments), unit event directions, junction events at the branch end, a stop / exit always with its in and out, every
+natural end explained, `segments` of a part that starts after a joint without the piece before it, `lane_count` / `lane_index` of a connector-only piece taken from the lane before (else after) it, symmetric left / right / opposite,
+valid area polygons, the tiers decided on a wide window (`lane_gt.TIER_HALF`, 100 m, for both rigs) so that no window changes a tier (the rigs now agree on every shared point), `tier_info.extension_m` = the metres the extension
+grew in that wide window, the lane signature over `rig_cameras.py` instead of `rig_masks.py`; the fields `tokens` and `roads_along` of a part are gone; the lane index lists the sequences of every run on the folder and
+`generate` warns when the library versions of the store and of the run differ. About 40 ms per keyframe for `lane_center`, 30 ms for `bev_fusion` (l5: 95 / 41 ms).
 Open with Mirko, kept as parameters (another value = another lane signature): `boundary_layers`, `corner_deg`, `stop_rule`.
 
 ## 4. Rules you must follow when you use or change it
@@ -209,7 +216,7 @@ Open with Mirko, kept as parameters (another value = another lane signature): `b
   unknown velocity are not moved. `GtGenerator(..., boxes_at="annotation")` / `--boxes-at annotation` restores the annotation positions
   (nuScenes-style evaluation; another signature). A time `dt` is a decoder input only to predict to ANOTHER time (the +-0.5 s keyframes).
 - **Stationary means stationary**: a parked car has ONE world pose and velocity 0 in all keyframes; map corrections are allowed per
-  map element in world coordinates (`map_offsets`), never per frame.
+  map element, never per frame.
 - **Where a loss or a score counts** (D36 - D38): the coverage of section 3a (`coverage_for`), not the old per-layer habits.
 - **Supervision masks**: objects only where `observed`; leave `ignore` out; velocity only where `flow_weight > 0`; `camera` /
   `occluded` / `radar` / `undefined` say what the sensors can see. **"Moving" has one definition**: known velocity and speed above
@@ -255,7 +262,7 @@ cur["flow"] * dt                         # first-order displacement of every cel
   (O1-O8 objects, M1-M3 map, V1-V3 velocity; `checks.py` documents each) and the leave-one-radar-out test of the radar correction.
 - Change the generator: edit, `python -m GtGenerator selftest`, `report` on mini, tell the trainer the new signature, then
   `python -m GtGenerator clean --stale-caches data/autogt` (dry run first). A new layer must also be added to the table above (selftest fails otherwise).
-- Another dataset: write an adapter that builds `Track`, `Ego`, `RadarFrame`, `GridSpec` for `GtGenerator.flow.estimate_flow`
+- Another dataset: write an adapter that builds `Track`, `Ego`, `RadarFrame` for `GtGenerator.flow.estimate_flow`
   (numpy only) and a generator for the static layers (`layers.py` is reusable).
 
 ## 6. Files

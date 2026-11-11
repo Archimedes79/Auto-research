@@ -129,7 +129,7 @@ def render(layers, scene, sd, kf_token, header, root, use_radar):
     T_g2e = np.linalg.inv(meta["T_e2g"])
     K, T_e2c = meta["K"], np.linalg.inv(meta["T_c2e"])
     t = sd["timestamp"] * 1e-6
-    fg = flowmod.estimate_flow(scene.tracks, scene.ego, t, None, scene.radar(t) if use_radar else ())
+    fg = flowmod.estimate_flow(scene.tracks, scene.ego, t, scene.radar(t) if use_radar else ())
     by_id = {tr.id: tr for tr in scene.tracks}
     img = cv2.cvtColor(np.asarray(Image.open(os.path.join(root, sd["filename"])).convert("RGB")), cv2.COLOR_RGB2BGR)
     for layer, pls in meta["vectors"].items():

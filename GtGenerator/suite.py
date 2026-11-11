@@ -21,7 +21,7 @@ def code_signature(**options):
     `missing`) does not change folders when a signature file is edited while it runs."""
     key = repr(sorted(options.items()))
     if key not in _SIGNATURES:
-        opt = dict(stationary_fix=True, map_offsets={}, use_flow=True, use_radar=True, flow_config=None, boxes_at="camera")
+        opt = dict(use_flow=True, use_radar=True, flow_config=None, boxes_at="camera")
         opt.update(options)
         _SIGNATURES[key] = NuScenesGT.signature(types.SimpleNamespace(**opt))
     return _SIGNATURES[key]
@@ -109,7 +109,7 @@ class GtGenerator(NuScenesGT, Interface):
     keyframes(scene_name)    sample tokens of a scene in time order
     scenes()                 scene names
     signature()              cache key of the generator (source + options)
-    options: stationary_fix, map_offsets, use_flow, use_radar, flow_config (GtGenerator.flow.Config), boxes_at ("camera" = moving
+    options: use_flow, use_radar, flow_config (GtGenerator.flow.Config), boxes_at ("camera" = moving
     boxes moved to the camera time by v * dt, default; "annotation" = as annotated)
     light=True: a memory-light devkit (CAM_FRONT + radars only, GtGenerator/light_nusc.py); scenes=[names]: only these sequences are
     loaded (v1.0-trainval: ~0.7 GB for 85 sequences instead of 8+ GB for all)
@@ -147,4 +147,4 @@ class GtGenerator(NuScenesGT, Interface):
         return out
 
 
-AutoGT = GtGenerator        # the old name of the class: the hashed generator files and the BEV project import it (a rename of those files would change the signature)
+AutoGT = GtGenerator        # the old name of the class: the hashed lane files (rig_masks.py, lane_gt.py) import it (a rename there would change a lane signature)

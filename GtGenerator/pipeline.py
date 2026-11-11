@@ -105,7 +105,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     set_name   "small" (the 10 sequences of mini: small experiments) or "full" (all 850 of trainval: releases), the files of
                GtGenerator/sets/; instead of scenes (both given: an error)
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
-    workers    processes (1 = this process); options: stationary_fix, use_flow, use_radar, boxes_at, ... (see GtGenerator)
+    workers    processes (1 = this process); options: use_flow, use_radar, boxes_at, ... (see GtGenerator)
     lane       also make the lane GT (lane graph, roads, lines, polygons: GtGenerator/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
                store of the same release (releases.csv); only with stride 1, the lane GT is made for every keyframe
     -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,

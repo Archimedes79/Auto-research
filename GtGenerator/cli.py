@@ -30,11 +30,10 @@ import json
 import os
 import sys
 
-from .store import detect_version  # noqa: F401  (stays importable from here: the hashed lane_gt.py imports it from this module; the next lane version can import it from store)
+from .api import SELFTESTS  # the test parts `selftest --only` can run
 
 
 # ---------------------------------------------------------------------------------------------------------------- argument helpers
-from .api import SELFTESTS  # noqa: E402  (the test parts `selftest --only` can run)
 
 
 def _which_scenes(p):
