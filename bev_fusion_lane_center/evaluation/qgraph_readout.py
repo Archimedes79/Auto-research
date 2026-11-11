@@ -20,17 +20,17 @@ from collections import namedtuple
 
 import numpy as np
 
-Spec = namedtuple("Spec", "kind radius thr sigma exempt", defaults=(None, False))        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay, sigma = its Gaussian width, None = 0.5)
-_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?)(?:s(\d+(?:\.\d+)?))?)(x)?@(\d+(?:\.\d+)?)$")
+Spec = namedtuple("Spec", "kind radius thr sigma exempt", defaults=(None, False))        # exempt: False, or the flag probability from which a stop / exit / split / merge node is protected (x = 0.5, x0.8 = 0.8)        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay, sigma = its Gaussian width, None = 0.5)
+_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?)(?:s(\d+(?:\.\d+)?))?)(x(?:(\d+(?:\.\d+)?))?)?@(\d+(?:\.\d+)?)$")
 
 
 def parse(text):
     """'plain@0.5' -> Spec('plain', None, 0.5); 'close:1.5@0.4' -> Spec('close', 1.5, 0.4)"""
     m = _SPEC.match(text.strip())
     if not m:
-        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>[x]@<thr> or mnms:<radius>[s<sigma>][x]@<thr> (x = the nodes of the special types stop / exit / split / merge at p >= 0.5 are never suppressed)")
+        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>[x]@<thr> or mnms:<radius>[s<sigma>][x]@<thr> (x[<p>] = the nodes of the special types stop / exit / split / merge at p >= 0.5 (or <p>) are never suppressed)")
     kind = "plain" if m.group(1) == "plain" else ("close" if m.group(2) is not None else "mnms")
-    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(6)), float(m.group(4)) if m.group(4) else None, bool(m.group(5)))
+    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(7)), float(m.group(4)) if m.group(4) else None, (float(m.group(6)) if m.group(6) else 0.5) if m.group(5) else False)
     if not spec.thr > 0.0:                                         # a dropped node has e = 0: with a threshold of 0 it would be delivered again
         raise ValueError(f"read-out spec {text!r}: the threshold must be above 0")
     return spec
@@ -40,7 +40,7 @@ def name(spec):
     """folder-safe name: plain_t0.5, close1.5_t0.4"""
     if spec.kind == "plain":
         return f"plain_t{spec.thr:g}"
-    return f"{spec.kind}{spec.radius:g}" + (f"s{spec.sigma:g}" if spec.sigma else "") + ("x" if spec.exempt else "") + f"_t{spec.thr:g}"
+    return f"{spec.kind}{spec.radius:g}" + (f"s{spec.sigma:g}" if spec.sigma else "") + (("x" if spec.exempt == 0.5 else f"x{spec.exempt:g}") if spec.exempt else "") + f"_t{spec.thr:g}"
 
 
 def suppress_close_nodes(pos, e, radius, thr=0.5, protect=None):
@@ -99,7 +99,7 @@ def apply(pred, spec):
     q["nodes"] = dict(nd)
     protect = None
     if spec.exempt:                                                          # E296: stop / exit / split / merge (flags 0 - 3 of `qtargets.FLAGS`) at p >= 0.5
-        protect = (np.asarray(nd["flags"], float).reshape(len(e.reshape(-1)), -1)[:, :4] >= 0.5).any(1)
+        protect = (np.asarray(nd["flags"], float).reshape(len(e.reshape(-1)), -1)[:, :4] >= float(spec.exempt)).any(1)
     if spec.kind == "mnms":                                                  # E288: the decayed scores replace e (a node below the threshold after the decay is not delivered)
         q["nodes"]["e"] = matrix_nms(nd["pos"], e, spec.radius, spec.thr, spec.sigma or 0.5, protect).reshape(e.shape)
         return q

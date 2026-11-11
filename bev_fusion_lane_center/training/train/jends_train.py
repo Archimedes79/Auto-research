@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--no-order", action="store_true")
     ap.add_argument("--no-evidence", action="store_true")
     ap.add_argument("--cross-w", type=float, default=1.0)
+    ap.add_argument("--driven-w", type=float, default=0.0, help="E298: the positive pair terms of the pairs the ego drives count 1 + w times")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--bs", type=int, default=8)
@@ -68,7 +69,7 @@ def main():
         x = b["x"].to(dev, non_blocking=True).float()
         gt = {k: b[k].to(dev) for k in ("ent", "ext", "ent_m", "ext_m")}
         _, _, out = m(x, gt=gt)
-        loss, info = JE.jends_loss(out, b, cross_w=a.cross_w)
+        loss, info = JE.jends_loss(out, b, cross_w=a.cross_w, driven_w=a.driven_w)
         return loss, info
 
     T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, maps=mp))

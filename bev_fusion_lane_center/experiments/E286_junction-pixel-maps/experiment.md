@@ -47,3 +47,6 @@ Three arms on the frozen B pyramid (so the maps are read from B's own features; 
 
 ## 4. Pictures
 `tools/viz/junction_view.py frame <scene:idx> --out DIR --pred e286_j1_s0`: the GT layer next to the head's heat / keypoints / zone / core / stop lines.
+
+## 5. The control c, measured before the first run (2026-11-11, CPU, all 873 VAL frames, `jmaps_eval.py score` on an untrained head: its B columns are the control)
+B's own stop / exit event heat maps read as keypoints (3 x 3 peaks above 0.3, tolerance 3.0 m, distance only): **entry recall / precision 0.548 / 0.323 (F1 0.406), exit 0.546 / 0.307 (F1 0.393): `kp_f1` of c = 0.400** (threshold 0.5: 0.527 / 0.344 and 0.526 / 0.326). Painted ends are found far more often than unpainted ones: entries 0.651 against 0.483, exits 0.692 against 0.488 (17 - 20 points): B's maps lean on the paint. The prediction of the card (+0.15) means `kp_f1` about 0.55 for the dilated arm; KEEP needs above 0.45 on both seeds. The scorer also reports recall by distance from the ego (< 20 / 20 - 35 / > 35 m) and by city (E300: the far range and Singapore are the holes of the E284 head).

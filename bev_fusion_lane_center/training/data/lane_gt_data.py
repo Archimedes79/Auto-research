@@ -100,8 +100,10 @@ class QData(torch.utils.data.Dataset):
                 paint = JP.load(token)
             except FileNotFoundError:
                 paint, self.paint_missing = None, self.paint_missing + 1
-            jt, _ = QJ.junction_targets(g, paint)
+            jt, jg = QJ.junction_targets(g, paint)
             out.update({n: torch.from_numpy(np.ascontiguousarray(v)) for n, v in jt.items()})
+            npair = len(out["pairs"]) if "pairs" in out else 0                                           # E298: 1 for a true pair the ego drives (tier 1), in the order of `pairs` (the sorted true pairs of `qends.end_table` = the rows of `jgt`'s pairs)
+            out["pdrv"] = torch.from_numpy(np.ascontiguousarray(jg["pairs"][:, 9].astype(np.float32))) if (jg is not None and len(jg["pairs"]) == npair) else torch.zeros(npair)
         if self.pixels:
             import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
@@ -132,6 +134,11 @@ def collate(b):
             ent[i, :len(o["ent"])], ext[i, :len(o["ext"])], pairs[i, :len(o["pairs"])] = o["ent"], o["ext"], o["pairs"]
             ent_m[i, :len(o["ent"])], ext_m[i, :len(o["ext"])] = True, True
         out.update(ent=ent, ext=ext, ent_m=ent_m, ext_m=ext_m, pairs=pairs)
+        if "pdrv" in b[0]:                                                                                # E298
+            pdrv = torch.zeros(B, P_)
+            for i, o in enumerate(b):
+                pdrv[i, :len(o["pdrv"])] = o["pdrv"]
+            out["pdrv"] = pdrv
     L = max(1, max(len(o["lk"]) for o in b))
     lk, lkl, lks = -torch.ones(B, L, 4, dtype=torch.long), torch.zeros(B, L, dtype=torch.bool), torch.full((B, L, 2), float("nan"))
     for i, o in enumerate(b):

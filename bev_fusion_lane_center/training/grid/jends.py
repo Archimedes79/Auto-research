@@ -193,7 +193,7 @@ def crossing_penalty(out):
     return (Pm * t).sum() / (Pm.sum() + 1.0)
 
 
-def jends_loss(out, batch, cross_w=1.0):
+def jends_loss(out, batch, cross_w=1.0, driven_w=0.0):
     dev = out["heat"].device
     B = out["heat"].shape[0]
     match = QEN.match_keypoints(out, batch)
@@ -209,8 +209,15 @@ def jends_loss(out, batch, cross_w=1.0):
     allowed = out["allowed"]
     z = out["logit"].float()
     info = {}
+    wmat = torch.ones_like(y)
+    if driven_w > 0 and "pdrv" in batch:                                                                   # E298: the positive terms of the pairs the ego drives count 1 + driven_w times
+        Dv = torch.zeros(B, E + 1, X + 1, device=dev)
+        pd = batch["pdrv"].to(dev)
+        Dv[bi[pv], pairs[..., 0][pv], pairs[..., 1][pv]] = pd[pv]
+        yd = Dv[torch.arange(B, device=dev)[:, None, None], ia[:, :, None], ib[:, None, :]]
+        wmat = 1.0 + driven_w * yd * y
     if allowed.any():
-        bce = (F.binary_cross_entropy_with_logits(z, y, reduction="none", pos_weight=torch.tensor(3.0, device=dev)) * allowed).sum() / allowed.sum()
+        bce = (F.binary_cross_entropy_with_logits(z, y, reduction="none", pos_weight=torch.tensor(3.0, device=dev)) * wmat * allowed).sum() / allowed.sum()
         dual = QEN._dual_softmax(z, y, allowed)
     else:
         bce = dual = z.sum() * 0.0
@@ -244,6 +251,14 @@ def _selftest():
         dead = [n for n, p in m.named_parameters() if p.grad is None]
         assert not dead, (order, evidence, dead)
         assert info["pos_pairs"] >= 2 * B, info
+        if order and evidence:                                                                         # E298: the driven weight raises the positive BCE terms and changes nothing when off
+            batch["pdrv"] = torch.ones(B, 2)
+            _, i0 = jends_loss(out, batch, driven_w=0.0)
+            _, i2 = jends_loss(out, batch, driven_w=2.0)
+            assert i2["bce"] > i0["bce"] + 1e-6 and abs(i0["bce"] - info["bce"]) < 1e-6, (i0, i2, info)
+            batch["pdrv"] = torch.zeros(B, 2)
+            _, iz = jends_loss(out, batch, driven_w=2.0)
+            assert abs(iz["bce"] - i0["bce"]) < 1e-6, (iz, i0)
     # the crossing penalty: P = 1 on the crossed pair set {0 -> 1, 1 -> 0} is large, on the ordered set {0 -> 0, 1 -> 1} it is zero
     out = dict(logit=torch.full((1, K, K), -20.0), allowed=torch.ones(1, K, K, dtype=torch.bool), ga=torch.zeros(1, K, dtype=torch.long), gb=torch.zeros(1, K, dtype=torch.long),
                ra=torch.arange(K).float()[None], rb=torch.arange(K).float()[None])

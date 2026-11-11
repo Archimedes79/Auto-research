@@ -7,7 +7,7 @@ Written by the lane chat. The brief (Mirko, 2026-11-11): recognise on a 1 m grid
 |---|---|---|---|
 | 1 | GT with everything (zone too large) | **E285** junction GT layer (zone, conflict core, arms, ranks, pairs, paint, painted, vis); **D83** merge of l6 and the l6 lane store | done; gates 873 frames; l6 store generating, merge after the night chains |
 | 2 | 1 m maps: direction, entry / exit, junction area, paint | **E286** j0 / j1 / j2 (+ joint jj) on B's frozen pyramid | training (22:00 -> 00:30), scoring after |
-| 2b | split / merge outside junctions on the 1 m maps | **E301** split / merge heat + heading added to the junction maps (planned, needs the maps code free) | card |
+| 2b | split / merge outside junctions on the 1 m maps | **E301** closed by data: 99.8 % of the split / merge events lie inside a junction zone (5 outside on VAL): nothing to train; inside the junction they are the entry / exit markers and the conflict core (E286 / E287) | closed, not run |
 | 2c | "then no 2 m grid is needed" | **E294** nodes read from the 1 m maps only (E271 sparsification + E286 maps) against the 2 m node head | card (GPU, day) |
 | 3 | 2 m nodes with type + direction | E273 node head (flags, heading) = B | exists |
 | 3b | position uncertainty per node | **E295** sigma head (beta-NLL) + calibration + variance-vote read-out; after E289 step 1b says what is unstable | card |
@@ -32,5 +32,5 @@ Written by the lane chat. The brief (Mirko, 2026-11-11): recognise on a 1 m grid
 10. **Budget**: the delivered graph must stay at <= 14.3 vertices per 100 m after the output stage; E288 / E296 keep the vertex guard.
 
 ## 3. Order of the work and the GPU
-Night 2026-11-11 (22:00 - 07:00): E286 (6 runs) -> E287 (6 runs) -> joint arm + q2 (E286.jj / E287.q2) -> E289 line probe; CPU alongside: E288 / E293 / E296 / E300 replays, the l6 store. Thursday day window (08:30 - 17:30): E294, E295, E292 training (needs the merged code), E298, then E299. Merge of GtGenerator about 05:00 (after the chains), the loaders switch to l6 afterwards; runs on l4 stay valid records.
+Night 2026-11-11 (22:00 - 07:00): E286 (6 runs) -> E287 (6 runs) -> joint arm + q2 (E286.jj / E287.q2) -> E289 line probe; CPU alongside: E288 / E293 / E296 / E300 replays, the l6 store. Thursday day window (08:30 - 17:30): E298 (code ready), E294, E295, E292 training (needs the merged code), E302, then E299 (E301 is closed). Merge of GtGenerator about 05:00 (after the chains), the loaders switch to l6 afterwards; runs on l4 stay valid records.
 Rules for every card: written rule before the run, two seeds for a trained arm, VAL 873, the controls named in the card, a TIE is kept and refined in a follow-up card whose control is the TIE variant.

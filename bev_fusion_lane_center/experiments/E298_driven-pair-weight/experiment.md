@@ -7,7 +7,7 @@ Card of 2026-11-11 (plan card, behind E287; code after the night chains because 
 {
  "id": "E298",
  "card": "",
- "title": "pair head p2 of E287 with the positive pair terms (BCE and dual softmax) weighted by 1 + w x driven (w = 2), against p2 with equal weights",
+ "title": "pair head p2 of E287 with the positive terms of the pair BCE weighted by 1 + w x driven (w = 2; the dual softmax stays unweighted), against p2 with equal weights",
  "kind": "variant",
  "deterministic": false,
  "metric": "driven_pair_recall",
