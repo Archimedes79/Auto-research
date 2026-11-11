@@ -18,7 +18,8 @@ Card of 2026-11-11, written by the lane chat on Mirko's word (D82: "wenn 2 Ein u
   "c": {"recipe": "control = the plain delivered graph of B + the hard step of E275 (runs e273_p_s0 / e273_p_s1, close:1.5@0.5), the same as the control of E284; no new training"},
   "p0": {"recipe": "pair head on the new keypoints, no order features, no evidence, no crossing penalty (`--no-order --no-evidence --cross-w 0`): the E284 head on better pixels"},
   "p1": {"recipe": "+ the order rule: rank features of the entry / exit groups and the soft crossing penalty (`--no-evidence`)"},
-  "p2": {"recipe": "+ the evidence along the Hermite curve (lane-centre probability of B, zone, conflict core, stop line, crossing): the full head"}
+  "p2": {"recipe": "+ the evidence along the Hermite curve (lane-centre probability of B, zone, conflict core, stop line, crossing): the full head"},
+  "q2": {"recipe": "the full head of p2 on the maps of the JOINT arm jj of E286 (the pyramid trained together with the junction head); the delivered graph under the connectors is still B's own"}
  },
  "control": "c",
  "variant": "p2",
@@ -47,3 +48,11 @@ Two seeds, 3000 steps, lr 1e-3, batch 8, on the maps run of E286 with the best c
 
 ## 3. Command and records
 `wsl bash temp/e287/start_pairs.sh <p0|p1|p2> <seed>` (scratch wrapper around `run.py --require-card`, the exact command is in the run record), then `jends_eval.py dump --run e287_<arm>_s<S>` and `score --run e287_<arm>_s<S> --seed <S>`. Result files: `runs/e287_<arm>_s<S>/ends_head.json`, `ends_card.json`. GPU: nights 22 - 07 and weekdays 08:30 - 17:30 only.
+
+## 4. Controls measured before the runs (2026-11-11, CPU, `evaluation/jrule_control.py`, the keypoints of the E284 head h2, VAL 873, 11083 true pairs)
+The rule control (written in the file's docstring before the numbers; groups and ranks of the keypoints, a connected exit group per turn class, lane matching by normalised rank, extreme lanes for the turns) on the SAME keypoints as the E284 head:
+| | pair recall | pair precision | pairs delivered |
+|---|---|---|---|
+| rule, seed 0 / seed 1 keypoints | 0.378 / 0.365 | 0.140 / 0.128 | 29948 / 31682 |
+| E284 head (logit >= 0), same keypoints | 0.286 / 0.292 | 0.588 / 0.584 | 5399 / 5542 |
+Reading: the rule delivers 5 - 6 times as many pairs and is wrong for 86 - 87 % of them: as a decision it is far behind the head (precision 0.13 against 0.59); but its recall 0.37 - 0.38 shows the CEILING of the keypoints: with the E284 end recall of 0.58 two ends of a pair are both found for about 0.34 - 0.38 of the true pairs, so the pair recall of the E284 head (0.29) is already close to what its keypoints allow. **Consequence for this card: the lever is the end recall (E286), not only the pair decision**; the head p0 / p1 / p2 is compared with the rule at equal keypoints (`jrule_control.py score --run e287_<arm>_s<S>`), and the rank features of p1 give the head the rule's information as features. The first temporal measurement is in E290 section 4 (pair flips 20 %, 52 - 54 % of the true pairs delivered in neither of two frames).

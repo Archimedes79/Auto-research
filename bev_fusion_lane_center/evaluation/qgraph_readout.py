@@ -20,17 +20,17 @@ from collections import namedtuple
 
 import numpy as np
 
-Spec = namedtuple("Spec", "kind radius thr")        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay)
-_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?))@(\d+(?:\.\d+)?)$")
+Spec = namedtuple("Spec", "kind radius thr sigma", defaults=(None,))        # kind "plain" (radius None), "close" or "mnms" (E288: one-pass Matrix-NMS decay, sigma = its Gaussian width, None = 0.5)
+_SPEC = re.compile(r"^(plain|close:(\d+(?:\.\d+)?)|mnms:(\d+(?:\.\d+)?)(?:s(\d+(?:\.\d+)?))?)@(\d+(?:\.\d+)?)$")
 
 
 def parse(text):
     """'plain@0.5' -> Spec('plain', None, 0.5); 'close:1.5@0.4' -> Spec('close', 1.5, 0.4)"""
     m = _SPEC.match(text.strip())
     if not m:
-        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>@<thr> or mnms:<radius>@<thr>")
+        raise ValueError(f"read-out spec {text!r}: expected plain@<thr>, close:<radius>@<thr> or mnms:<radius>[s<sigma>]@<thr>")
     kind = "plain" if m.group(1) == "plain" else ("close" if m.group(2) is not None else "mnms")
-    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(4)))
+    spec = Spec(kind, None if kind == "plain" else float(m.group(2) if kind == "close" else m.group(3)), float(m.group(5)), float(m.group(4)) if m.group(4) else None)
     if not spec.thr > 0.0:                                         # a dropped node has e = 0: with a threshold of 0 it would be delivered again
         raise ValueError(f"read-out spec {text!r}: the threshold must be above 0")
     return spec
@@ -38,7 +38,9 @@ def parse(text):
 
 def name(spec):
     """folder-safe name: plain_t0.5, close1.5_t0.4"""
-    return f"plain_t{spec.thr:g}" if spec.kind == "plain" else f"{spec.kind}{spec.radius:g}_t{spec.thr:g}"
+    if spec.kind == "plain":
+        return f"plain_t{spec.thr:g}"
+    return f"{spec.kind}{spec.radius:g}" + (f"s{spec.sigma:g}" if spec.sigma else "") + f"_t{spec.thr:g}"
 
 
 def suppress_close_nodes(pos, e, radius, thr=0.5):
@@ -94,7 +96,7 @@ def apply(pred, spec):
     q = copy.copy(pred)
     q["nodes"] = dict(nd)
     if spec.kind == "mnms":                                                  # E288: the decayed scores replace e (a node below the threshold after the decay is not delivered)
-        q["nodes"]["e"] = matrix_nms(nd["pos"], e, spec.radius, spec.thr).reshape(e.shape)
+        q["nodes"]["e"] = matrix_nms(nd["pos"], e, spec.radius, spec.thr, spec.sigma or 0.5).reshape(e.shape)
         return q
     keep = suppress_close_nodes(nd["pos"], e, spec.radius, spec.thr)
     q["nodes"]["e"] = np.where(keep, e.reshape(-1), 0.0).reshape(e.shape)

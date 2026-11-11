@@ -10,6 +10,7 @@ Numbers (VAL 873 frames or the first --max, scene-disjoint from TRAIN, TEST neve
                      within 30 degrees (greedy by distance); recall = matched GT ends / GT ends, precision = matched predictions / predictions; thr 0.3 and 0.5, tol 1.5 and 3.0 m (D79 used 3 m, 30 degrees)
   baseline B         the stop / exit event heat maps of the baseline's pixel stage (centre1 channels 8 / 9), the same extraction, distance only (B has no heading)
   heading            median angle error (degrees) at the matched predictions
+  painted split      recall of the entries / exits that are PAINTED (a stop line of another type than the turn stop within 3 m, or a crossing within 4 m: `qjunction.painted_flags`) and of the rest (thr 0.3, 3 m)
 """
 import argparse
 import json
@@ -45,6 +46,24 @@ def match(pred, gt, tol, use_ang):
             uj.add(j)
             pairs.append((i, j, float(ang[i, j])))
     return pairs, len(pred), len(gt)
+
+
+def painted_of(token, n_ent, n_ext):
+    """(painted flags of the GT entries, of the GT exits) of a frame, aligned with the batch's GT ends; None when the paint sidecar or the junction GT is missing or does not line up"""
+    try:
+        import jgt as JG
+        import junction_paint as JP
+        import qjunction as QJ
+        from GtGenerator import lane_gt
+        jg = JG.junction_gt(lane_gt.load(token))
+        try:
+            paint = JP.load(token)
+        except FileNotFoundError:
+            return None, None
+        pe, px = QJ.painted_flags(jg, paint)
+        return (pe, px) if len(pe) == n_ent and len(px) == n_ext else (None, None)
+    except Exception:
+        return None, None
 
 
 def _dil(m):
@@ -102,6 +121,7 @@ def score(a):
             for i in range(x.shape[0]):
                 ent_g = b["ent"][i][b["ent_m"][i]].numpy()
                 ext_g = b["ext"][i][b["ext_m"][i]].numpy()
+                pe, px = painted_of(b["token"][i], len(ent_g), len(ext_g))
                 for who, kk in kps.items():
                     for tol in (1.5, 3.0):
                         for use_ang in ((True, False) if who.startswith("ours") else (False,)):
@@ -111,6 +131,13 @@ def score(a):
                                 acc.add(key + "_" + typ, tp=len(pairs), pred=npred, gt=ngt)
                                 if use_ang and who == "ours" and tol == 3.0:
                                     acc.lst(key + "_" + typ, "ang", [p[2] for p in pairs])
+                                if tol == 3.0 and who in ("ours", "B") and use_ang == (who == "ours"):                       # recall on painted / unpainted ends (head with heading, B distance only, thr 0.3)
+                                    fl = pe if typ == "ent" else px
+                                    if fl is not None:
+                                        hit = np.zeros(len(gt), bool)
+                                        for _, j, _ in pairs:
+                                            hit[j] = True
+                                        acc.add(f"split_{who}_{typ}", gt_p=int(fl.sum()), hit_p=int(hit[fl].sum()), gt_u=int((~fl).sum()), hit_u=int(hit[~fl].sum()))
             n += x.shape[0]
             if a.max and n >= a.max:
                 break
@@ -130,6 +157,11 @@ def score(a):
         p = d["tp"] / max(d["pred"], 1)
         kp[key] = dict(recall=r, precision=p, f1=2 * r * p / max(r + p, 1e-9), gt=int(d["gt"]), pred=int(d["pred"]), tp=int(d["tp"]), ang_median=float(np.median(d["ang"])) if d.get("ang") else None)
     res["keypoints"] = kp
+    split = {}
+    for key, d in acc.k.items():
+        if key.startswith("split_"):
+            split[key[6:]] = dict(painted_recall=d["hit_p"] / max(d["gt_p"], 1), unpainted_recall=d["hit_u"] / max(d["gt_u"], 1), painted_gt=int(d["gt_p"]), unpainted_gt=int(d["gt_u"]))
+    res["painted_split"] = split
     out_path = os.path.join(run_dir, "jmaps_val.json")
     json.dump(res, open(out_path, "w"), indent=1, default=float)
     print(f"{a.run}: VAL {n} frames; zone IoU {res['zone_iou']:.3f} F1 {res['zone_f1']:.3f}; core IoU {res['core_iou']:.3f} F1 {res['core_f1']:.3f}; stop line P/R {res['stop_prec']:.3f}/{res['stop_rec']:.3f}; crossing P/R {res['crossing_prec']:.3f}/{res['crossing_rec']:.3f}")
@@ -141,6 +173,8 @@ def score(a):
             bkey = "B" if thr == "ours" else "B5"
             bb = kp[f"kp_{bkey}_tol3.0_noang_{typ}"]
             print(f"  {typ} {tag}: R/P {h['recall']:.3f}/{h['precision']:.3f} (angle median {h['ang_median']}) | {hn['recall']:.3f}/{hn['precision']:.3f} | B {bb['recall']:.3f}/{bb['precision']:.3f}")
+    for k, v in split.items():
+        print(f"  recall at {k}: painted {v['painted_recall']:.3f} (n {v['painted_gt']}), unpainted {v['unpainted_recall']:.3f} (n {v['unpainted_gt']})")
     print("written", out_path)
 
 

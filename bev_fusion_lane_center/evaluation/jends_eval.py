@@ -45,6 +45,8 @@ def dump(a):
             _, _, out = m(x, gt=None)
             for k, v in QEN.end_counts(out, b, a.thr).items():
                 tot[k] = tot.get(k, 0) + v
+            if a.max and len(frames) >= a.max:
+                break
             for i in range(len(b["token"])):
                 frames.append(dict(token=b["token"][i], row=int(b["row"][i]), kp_pos=out["kp_pos"][i].cpu().numpy(), kp_dir=out["kp_dir"][i].cpu().numpy(), kp_p=out["kp_p"][i].cpu().numpy(),
                                    valid=out["valid"][i].cpu().numpy(), logit=out["logit"][i].float().cpu().numpy(), allowed=out["allowed"][i].cpu().numpy()))
@@ -79,6 +81,8 @@ if __name__ == "__main__":
         s = sub.add_parser(name)
         s.add_argument("--run", required=True)
         s.add_argument("--thr", type=float, default=0.5)
+        if name == "dump":
+            s.add_argument("--max", type=int, default=0, help="only the first N frames (a test of the pipeline; the score needs all 873)")
         if name == "score":
             s.add_argument("--seed", type=int, required=True)
     sub.add_parser("selftest")
