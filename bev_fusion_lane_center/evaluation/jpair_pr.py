@@ -40,6 +40,14 @@ def precision_at_recall(rows, recall):
     return max(p) if p else None
 
 
+def precision_at_recall_exact(scores, labels, n_gt, recall):
+    """the precision at the smallest number of delivered pairs (the best scores first) whose recall reaches `recall`: no threshold grid (None when the candidates never reach it)"""
+    order = np.argsort(-scores, kind="stable")
+    tp = np.cumsum(labels[order])
+    k = np.searchsorted(tp, np.ceil(recall * n_gt - 1e-9))
+    return None if k >= len(tp) or n_gt == 0 or recall <= 0 else float(tp[k] / (k + 1))
+
+
 def candidates(run, kp_thr):
     """(logits, labels, n_gt) of all candidate pairs of a dump (VAL 873)"""
     import qgraph_view as QV
@@ -78,7 +86,7 @@ def score(a):
         print(r, "logit >= 0: recall %.3f precision %.3f" % (out[r]["at_zero"]["recall"], out[r]["at_zero"]["precision"]), f"({n_gt} true pairs, {len(sc)} candidates)")
     if a.control:
         rc = out[a.control]["at_zero"]["recall"]
-        pr = precision_at_recall(curve(*cands[a.run][:2], cands[a.run][2]), rc)
+        pr = precision_at_recall_exact(cands[a.run][0], cands[a.run][1], cands[a.run][2], rc)
         out["precision_at_control_recall"] = dict(control_recall=rc, control_precision=out[a.control]["at_zero"]["precision"], run_precision=pr, gain=None if pr is None else pr - out[a.control]["at_zero"]["precision"])
         print("precision of", a.run, "at the recall of", a.control, "(%.3f):" % rc, None if pr is None else "%.3f (control %.3f, gain %+.3f)" % (pr, out[a.control]["at_zero"]["precision"], out["precision_at_control_recall"]["gain"]))
     os.makedirs(os.path.join(ROOT, "runs", "e302"), exist_ok=True)
@@ -93,6 +101,7 @@ def selftest():
     assert rows[1][3] == 2 and rows[1][2] == 1.0 and abs(rows[1][1] - 0.4) < 1e-12
     assert rows[2][3] == 0 and rows[2][1] == 0.0
     assert precision_at_recall(rows, 0.4) == 1.0 and precision_at_recall(rows, 0.6) == 0.75 and precision_at_recall(rows, 0.9) is None
+    assert precision_at_recall_exact(sc, lab, 5, 0.4) == 1.0 and abs(precision_at_recall_exact(sc, lab, 5, 0.6) - 0.75) < 1e-12 and precision_at_recall_exact(sc, lab, 5, 0.9) is None   # 0.6 = three true pairs: reached at the fourth delivered
     print("jpair_pr selftest ok")
 
 

@@ -227,7 +227,7 @@ SS = 8
 
 def fill_poly(mask, pts_cells, line=False):
     """fill the polygon `pts_cells` ((m, 2) in CELL units, column = y first as cv2 wants: x = column) into `mask` (uint8, row = x). Legacy: integer vertices (cv2 puts integer coordinates on pixel CENTRES while our cell k spans [k, k + 1): the mask is
-    shifted by half a cell, critic 2026-11-11); `line`: the outline is drawn too (thin stop lines stay visible). Exact (BFLC_RASTER=exact): a cell is in when more than half of it is inside (`line`: more than a quarter, the thin paint)"""
+    shifted by half a cell, critic 2026-11-11); `line`: the outline is drawn too (thin stop lines stay visible). Exact (BFLC_RASTER=exact): a cell is in when more than half of it is inside (`line`: more than a quarter for polygons thinner than one cell, so a thin stop line stays visible; the others use the half rule). 8 x 8 supersampling: about 3 % of the cells differ from the analytic area rule (the name 'exact' is relative to the legacy fill)"""
     import cv2
     pts = np.asarray(pts_cells, float)
     if raster_exact():
@@ -239,7 +239,9 @@ def fill_poly(mask, pts_cells, line=False):
         q = np.round(((pts - np.array([c0, r0])) * SS - 0.5) * 16).astype(np.int32)                     # sub-cell vertices (1/16 of a supersample), supersample centres at integer coordinates
         cv2.fillPoly(big, [q], 1, lineType=cv2.LINE_8, shift=4)
         cov = big.reshape(r1 - r0, SS, c1 - c0, SS).mean((1, 3))
-        mask[r0:r1, c0:c1] |= (cov > (0.25 if line else 0.5)).astype(mask.dtype)
+        per = np.linalg.norm(np.roll(pts, -1, axis=0) - pts, axis=1).sum()
+        thick = 2.0 * abs(0.5 * np.sum(pts[:, 0] * np.roll(pts[:, 1], -1) - np.roll(pts[:, 0], -1) * pts[:, 1])) / max(per, 1e-9)         # 2 A / perimeter ~ the width of a strip
+        mask[r0:r1, c0:c1] |= (cov > (0.25 if (line and thick < 1.0) else 0.5)).astype(mask.dtype)
     else:
         q = np.round(pts).astype(np.int32)
         cv2.fillPoly(mask, [q], 1)

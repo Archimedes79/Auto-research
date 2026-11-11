@@ -70,6 +70,8 @@ def score(a):
     m = re.search(r"_s(\d+)[/\\]", mp.replace("\\", "/") + "/")
     assert args.get("seed", a.seed) == a.seed and (m is None or int(m.group(1)) == a.seed), f"--seed {a.seed} does not match the run (seed {args.get('seed')}, maps {mp}): its delivered graph would be another seed's"
     base = torch.load(os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt"), map_location="cpu")["state"]
+    keys = [k for k in base if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"])]
+    assert keys, "no pyramid tensor of the base run is in the checkpoint: the pyramid check would be empty"
     pyr_same = all(torch.equal(ck["state"]["jmodel." + k] if "jmodel." + k in ck["state"] else ck["state"][k], v) for k, v in base.items() if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"]))
     print("pyramid of the maps run == the base run's:", pyr_same, "(False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')")
     QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False))))

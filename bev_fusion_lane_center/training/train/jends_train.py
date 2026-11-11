@@ -93,7 +93,7 @@ def main():
     torch.save(dict(state=model.state_dict(), args=dict(vars(a), maps_args=ck["args"])), run.path("model.pt"))
     if a.e2e:                                                                                          # the maps head as a plain maps run, so `jmaps_eval.py score --run <name>_maps` reads it
         os.makedirs(os.path.join(ROOT, "runs", a.name + "_maps"), exist_ok=True)
-        torch.save(dict(state=model.jmodel.state_dict(), args=dict(ck["args"], e2e_from=a.name)), os.path.join(ROOT, "runs", a.name + "_maps", "model.pt"))
+        torch.save(dict(state=model.jmodel.state_dict(), args=dict(ck["args"], e2e_from=a.name, raster=a.raster)), os.path.join(ROOT, "runs", a.name + "_maps", "model.pt"))
     run.mark_done()
     run.log("done", a.name)
 

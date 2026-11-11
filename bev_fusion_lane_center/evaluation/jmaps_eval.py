@@ -120,6 +120,8 @@ def score(a):
     raster = a.raster or args.get("raster", "legacy")                                                      # the targets of the zone / core / paint IoU are rasterised as the run was trained (or as asked)
     if raster == "exact":
         os.environ["BFLC_RASTER"] = "exact"
+    else:
+        os.environ.pop("BFLC_RASTER", None)                                                               # an inherited exact setting must not score a legacy run
     ds, dl = LD.loader("val_clean", bs=8, workers=a.workers, shuffle=False, map_mode="exact", pixels=False)
     assert ds.missing == 0, f"{ds.missing} VAL frames have no stored lane GT"
     acc = Acc()

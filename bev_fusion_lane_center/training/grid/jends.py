@@ -9,8 +9,8 @@ entry in its entry group and of an exit in its exit group (groups as `jgt._group
 punishes P(i -> j) P(i' -> j') when the ranks of i, i' and j, j' are crossed inside one pair of groups (D82: entry 1 to exit 1, entry 2 to exit 2); (3) `evidence`: the Hermite curve of the pair (tangent = chord) is
 sampled at 12 points in the maps (lane-centre probability of B, zone, conflict core, stop line, crossing) and the means / minimum are features. All soft; the choice of the K strongest peaks is an index choice (the
 gradient flows through the values, the D7 convention), the group / rank bookkeeping is a function of the keypoint positions (no gradient needed), both named in the card.
-E302 `capacity`: instead of independent pair logits (+ dual softmax) the pair probability is the plan of a log-domain Sinkhorn with a dustbin: every entry has a predicted out-degree {0, 1, 2, 3+} (0 = a false keypoint), every exit an in-degree; an entry that
-feeds a turn AND the straight exit (27 % of the entries, E285) has mass 2, a merge exit takes two entries (33 %). The plan is read as a logit (`logit = log P / (1 - P)`), so the read-out (`logit >= 0`), the counts and the crossing penalty work unchanged. Differentiable (10 unrolled iterations).
+E302 `capacity`: instead of independent pair logits (+ dual softmax) the pair probability comes from the plan of a log-domain Sinkhorn with a dustbin: every entry has a predicted out-degree {0, 1, 2, 3+} (0 = a false keypoint), every exit an in-degree; an entry that
+feeds a turn AND the straight exit (27 % of the entries, E285) has mass 2, a merge exit takes two entries (33 %). A plan entry is a MASS (up to the degree), the pair probability is q = P / max(1, min(row mass, column mass)) in [0, 1] (the share of the smaller capacity this pair uses; one entry of degree 1 with two equally good exits gives 0.5 each), read as a logit, so the read-out (`logit >= 0`, i.e. q >= 0.5), the counts and the crossing penalty work unchanged. Differentiable (10 unrolled iterations).
 Run the self-test: python jends.py
 """
 import math
@@ -60,9 +60,9 @@ def _sample(maps, pts):
     return out[..., 0].transpose(1, 2).reshape(B, *shp, maps.shape[1])
 
 
-def sinkhorn_plan(z, allowed, re, rx, alpha, iters=SINK_ITERS):
+def sinkhorn_plan(z, allowed, re, rx, alpha, iters=SINK_ITERS, full=False):
     """(B, K, K) transport plan of the pair scores `z` (B, K, K; disallowed pairs get ~no mass) with a dustbin row and column: row masses `re` (B, K) = the expected out-degree of the entries, column masses `rx` = the in-degree of the exits;
-    the dustbin takes what is not connected (its mass makes both marginal sums equal). Log domain, `iters` unrolled iterations, differentiable in z, re, rx and alpha. P_ij is about the probability of the pair when the degrees are right."""
+    the dustbin takes what is not connected (its mass makes both marginal sums equal). Log domain, `iters` unrolled iterations, differentiable in z, re, rx and alpha. P_ij is a mass (<= min(re_i, rx_j)); `full`: the whole (B, K + 1, K + 1) plan with the dustbin row / column."""
     B, K_ = z.shape[0], z.shape[1]
     S = torch.where(allowed, z, torch.full_like(z, -30.0))
     col = alpha.expand(B, K_, 1)
@@ -73,7 +73,8 @@ def sinkhorn_plan(z, allowed, re, rx, alpha, iters=SINK_ITERS):
     for _ in range(iters):
         u = log_a - torch.logsumexp(M + v[:, None, :], 2)
         v = log_b - torch.logsumexp(M + u[:, :, None], 1)
-    return (M + u[:, :, None] + v[:, None, :])[:, :K_, :K_].exp()
+    plan = (M + u[:, :, None] + v[:, None, :]).exp()
+    return plan if full else plan[:, :K_, :K_]
 
 
 class JEnds(nn.Module):
@@ -170,13 +171,14 @@ class JEnds(nn.Module):
         logit = self.pair(fcat)[..., 0]
         extra = {}
         if self.capacity:                                                                                    # E302: the pair probability is the plan of a capacitated Sinkhorn, expressed as a logit
-            de, dx = self.deg_e(ta_t), self.deg_x(tb_t)
+            de, dgx = self.deg_e(ta_t), self.deg_x(tb_t)
             vals = logit.new_tensor(DEG_VALUES)
             re = (de.float().softmax(-1) * vals).sum(-1) * valid[:, 0]
-            rx = (dx.float().softmax(-1) * vals).sum(-1) * valid[:, 1]
-            Pm = sinkhorn_plan(logit.float(), allowed, re, rx, self.alpha).clamp(1e-5, 1 - 1e-5)
+            rx = (dgx.float().softmax(-1) * vals).sum(-1) * valid[:, 1]
+            Pm = sinkhorn_plan(logit.float(), allowed, re, rx, self.alpha)
+            Pm = (Pm / torch.minimum(re[:, :, None], rx[:, None, :]).clamp_min(1.0)).clamp(1e-5, 1 - 1e-5)          # the share of the smaller capacity
             logit = (Pm / (1 - Pm)).log()
-            extra = dict(deg_e=de, deg_x=dx)
+            extra = dict(deg_e=de, deg_x=dgx)
         out = dict(heat=heat, idx=idx, valid=valid, kp_pos=pos, kp_dir=D, kp_p=pr, logit=logit, allowed=allowed, **extra)
         if self.scales:
             out["scale"] = 0.05 + 1.2 * self.scale(fcat).sigmoid()
@@ -232,6 +234,14 @@ def crossing_penalty(out):
     return (Pm * t).sum() / (Pm.sum() + 1.0)
 
 
+def degree_classes(T, match_e, match_x):
+    """(cls_e, cls_x) (B, K) long: the degree class {0, 1, 2, 3+} of every keypoint: the number of true pairs of the GT end it is matched to (rows of T (B, E, X) = out-degree of an entry, columns = in-degree of an exit), 0 for an unmatched keypoint"""
+    res = []
+    for deg, mt in ((T.sum(2), match_e), (T.sum(1), match_x)):
+        res.append(torch.where(mt >= 0, deg.gather(1, mt.clamp_min(0)).clamp(max=3).long(), torch.zeros_like(mt)))
+    return res
+
+
 def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5):
     dev = out["heat"].device
     B = out["heat"].shape[0]
@@ -262,12 +272,13 @@ def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5):
         bce = dual = z.sum() * 0.0
     cap = "deg_e" in out
     loss = bce + (0.0 if cap else 0.5 * dual)                                                               # the plan already makes rows and columns compete (E302)
-    info.update(bce=float(bce), dual=float(dual), pos_pairs=float((y * allowed).sum()), allowed=float(allowed.sum()))
+    info.update(bce=float(bce), pos_pairs=float((y * allowed).sum()), allowed=float(allowed.sum()))
+    if not cap:
+        info["dual"] = float(dual)
     if cap:                                                                                                  # E302: the degree classes of the keypoints (a keypoint that is no GT end: class 0)
-        Tt = T[:, :E, :X].float()
         ce_tot, acc_tot, n_tot = z.new_zeros(()), 0.0, 0
-        for k_, (deg, mt, dl) in enumerate(((Tt.sum(2), match[0], out["deg_e"]), (Tt.sum(1), match[1], out["deg_x"]))):
-            cls = torch.where(mt >= 0, deg.gather(1, mt.clamp_min(0)).clamp(max=3).long(), torch.zeros_like(mt))
+        cls_all = degree_classes(T[:, :E, :X].float(), match[0], match[1])
+        for k_, (cls, dl) in enumerate(zip(cls_all, (out["deg_e"], out["deg_x"]))):
             v = out["valid"][:, k_]
             if v.any():
                 ce_tot = ce_tot + F.cross_entropy(dl.float()[v], cls[v])
@@ -332,6 +343,18 @@ def _selftest():
     z2[0, 0, 0], z2[0, 0, 1] = 2.0, 2.0
     P2 = sinkhorn_plan(z2, torch.ones(1, 4, 4, dtype=torch.bool), torch.tensor([[2.0, 0.0, 0.0, 0.0]]), torch.tensor([[1.0, 1.0, 0.0, 0.0]]), al)
     assert P2[0, 0, 0] > 0.7 and P2[0, 0, 1] > 0.7, P2[0]
+    # critic 2026-11-12: pairs 0 -> 0, 0 -> 1, 1 -> 2, 2 -> 2 (entry 0 has degree 2, exit 2 a merge of two): the class targets, with an unmatched keypoint
+    Tm = torch.zeros(1, 3, 3)
+    for a_, b_ in ((0, 0), (0, 1), (1, 2), (2, 2)):
+        Tm[0, a_, b_] = 1.0
+    ce_, cx_ = degree_classes(Tm, torch.tensor([[0, 1, 2, -1]]), torch.tensor([[0, 1, 2, -1]]))
+    assert ce_.tolist() == [[2, 1, 1, 0]] and cx_.tolist() == [[1, 1, 2, 0]], (ce_, cx_)
+    # the full plan has the marginals it was given, also when the total entry mass is not the total exit mass (E != X), and the share of the smaller capacity is in [0, 1]
+    ze = torch.randn(1, 5, 5)
+    re_, rx_ = torch.tensor([[2.0, 1.0, 0.0, 0.0, 0.0]]), torch.tensor([[1.0, 1.0, 0.5, 0.0, 0.0]])
+    full = sinkhorn_plan(ze, torch.ones(1, 5, 5, dtype=torch.bool), re_, rx_, torch.zeros(()), iters=50, full=True)
+    assert abs(float(full[0, 0].sum()) - 2.0) < 1e-2 and abs(float(full[0, 1].sum()) - 1.0) < 1e-2 and abs(float(full[0, 5].sum()) - 2.5) < 1e-2, full[0].sum(1)
+    assert abs(float(full[0, :, 0].sum()) - 1.0) < 1e-2 and abs(float(full[0, :, 5].sum()) - 3.0) < 1e-2, full[0].sum(0)
     mc = JEnds(d=d, order=True, evidence=True, capacity=True)
     out = mc(jout, P, gt=gt)
     assert out["deg_e"].shape == (B, K, 4) and torch.isfinite(out["logit"]).all()

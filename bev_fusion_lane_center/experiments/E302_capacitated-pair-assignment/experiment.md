@@ -2,6 +2,8 @@
 
 Card of 2026-11-11 (plan card, behind E287). The scan (`scan_2026-11-11_junction_topology.md`): the field uses independent pair logits or a geometry prior; no lane paper puts a Sinkhorn / dustbin layer or an order constraint on entry x exit. E285 measured the degrees of the true pairs: 27 % of the entries have more than one exit (turn and straight from one lane), 33 % of the exits more than one entry (merges): a one-to-one transport with unit masses is wrong for about a third of the ends; a CAPACITATED transport (row mass = the predicted out-degree of the entry, column mass = the in-degree of the exit, a dustbin for the rest) is right. With the SD lane count (E291) the capacities have a prior.
 
+Written after the first code review of 2026-11-12 (what the review changed: the plan entry is a mass and is divided by the smaller capacity before it is read as a probability; the card first said "NLL under P, read-out at 0.5 x the row mass"). The control p2 and this arm are both trained after commit 15f30cbc (the rank features come from real peaks in training now: an older p2 is not a valid control).
+
 ## 0. The card (what the tools run)
 ```json card
 {
@@ -16,7 +18,7 @@ Card of 2026-11-11 (plan card, behind E287). The scan (`scan_2026-11-11_junction
  "prediction": {"value": 0.05, "vs": "c"},
  "arms": {
   "c": {"recipe": "control = E287 p2 (BCE + dual softmax with a 'none' entry)"},
-  "k": {"recipe": "`jends.py` + a degree head (2 linear layers on the keypoint tokens, cross-entropy against the true degrees from `jgt`), the pair probability = the transport plan P of a Sinkhorn (10 iterations, row masses = the expected out-degree, column masses = the expected in-degree, dustbin row / column), loss = NLL of the true pairs under P + the degree CE + the crossing penalty of E287; read-out at P >= 0.5 x the row mass"}
+  "k": {"recipe": "`jends.py` + a degree head (2 linear layers on the keypoint tokens, cross-entropy against the true degrees from `jgt`), the pair probability = the transport plan P of a Sinkhorn (10 iterations, row masses = the expected out-degree, column masses = the expected in-degree, dustbin row / column), pair probability q = P / max(1, min(row mass, column mass)) (the share of the smaller capacity the pair uses, in [0, 1]), loss = BCE (pos_weight 3) on q + 0.5 x the degree CE (classes 0, 1, 2, 3+; 0 = a keypoint that is no GT end) + the crossing penalty of E287, no dual softmax; read-out q >= 0.5 (= logit >= 0 of the dump, so the E287 read-out and counts are unchanged)"}
  },
  "control": "c",
  "variant": "k",

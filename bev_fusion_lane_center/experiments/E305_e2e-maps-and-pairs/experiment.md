@@ -2,6 +2,8 @@
 
 Card of 2026-11-11 (plan card). E287 trains the pair head on FROZEN junction maps: the heat, the headings and the features it reads are fixed, so the pair loss cannot correct a keypoint that sits a metre off or a heading that is wrong although all of them are inputs of the pair decision. The chain "maps -> keypoints (soft-argmax) -> pair logits -> connectors" is differentiable end to end except one named hard step (the 3 x 3 peak choice of the keypoints; the position is a soft-argmax of the window, `jends.py`). The critic of 2026-11-11 asked for the joint option and for a gradient assertion in the self-test: both are part of this card (`jends_train.py --e2e`, `jends_eval.py selftest`).
 
+Control and variant are both trained after commit 15f30cbc (real-peak rank features); the maps head and the pair head share one optimiser (lr 1e-3, one-cycle, one global gradient clip of 3.0): a pretrained head and a fresh one under one schedule is part of what the card tests, the kill criterion covers a drift of the maps.
+
 ## 0. The card (what the tools run)
 ```json card
 {
