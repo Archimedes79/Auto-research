@@ -25,7 +25,7 @@ def load_model(run, dev):
     import jends_train as JT
     ck = torch.load(os.path.join(ROOT, "runs", run, "model.pt"), map_location="cpu")
     a = ck["args"]
-    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)))
+    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)), capacity=bool(a.get("capacity", False)))
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), a
 

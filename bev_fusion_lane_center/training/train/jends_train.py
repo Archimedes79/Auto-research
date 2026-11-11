@@ -23,11 +23,11 @@ import trainer as T  # noqa: E402
 
 
 class JEndModel(nn.Module):
-    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False, e2e=False):
+    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False, e2e=False, capacity=False):
         super().__init__()
         self.e2e = e2e
         self.jmodel = JM.JModel(width=48, d=maps_args.get("d", 64), ctx=maps_args.get("ctx", "dil"))
-        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales)
+        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales, capacity=capacity)
 
     def forward(self, x, gt=None):
         if self.e2e:                                                                                     # the maps head (jmodel.jm) gets the gradient of the pair loss
@@ -48,6 +48,7 @@ def main():
     ap.add_argument("--cross-w", type=float, default=1.0)
     ap.add_argument("--scales", action="store_true", help="E303: two handle scales per pair (the delivered curve), trained against the fitted scales of the true pairs")
     ap.add_argument("--driven-w", type=float, default=0.0, help="E298: the positive pair terms of the pairs the ego drives count 1 + w times")
+    ap.add_argument("--capacity", action="store_true", help="E302: degree heads + a capacitated Sinkhorn plan with a dustbin instead of independent pair logits + dual softmax")
     ap.add_argument("--e2e", action="store_true", help="E305: train the maps head together with the pair head (the pair loss reaches the heat)")
     ap.add_argument("--maps-w", type=float, default=1.0, help="--e2e: weight of the junction maps loss next to the pair loss")
     ap.add_argument("--raster", default="legacy", choices=("legacy", "exact"), help="E306: exact polygon targets for the maps loss of --e2e (the pair head itself reads no raster target)")
@@ -63,7 +64,7 @@ def main():
     LD.QData.DEFAULT_JUNCTION = True
     mp = a.maps or os.path.join(ROOT, "runs", f"e286_j1_s{a.seed}", "model.pt")
     ck = torch.load(mp, map_location="cpu")
-    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e)
+    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e, capacity=a.capacity)
     model.jmodel.load_state_dict(ck["state"])
     ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train", pixels=False)
     run = T.Run(a.name)
@@ -73,7 +74,7 @@ def main():
         p.requires_grad_(False)
     for p in ps:
         p.requires_grad_(True)
-    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
+    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e} capacity={a.capacity}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
 
     def loss_fn(m, b):
         dev = next(m.parameters()).device
@@ -87,7 +88,7 @@ def main():
             info.update({"j_" + k: v for k, v in im.items()})
         return loss, info
 
-    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, e2e=a.e2e, maps=mp))
+    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, e2e=a.e2e, capacity=a.capacity, maps=mp))
     torch.save(dict(state=model.state_dict(), args=dict(vars(a), maps_args=ck["args"])), run.path("model.pt"))
     if a.e2e:                                                                                          # the maps head as a plain maps run, so `jmaps_eval.py score --run <name>_maps` reads it
         os.makedirs(os.path.join(ROOT, "runs", a.name + "_maps"), exist_ok=True)
