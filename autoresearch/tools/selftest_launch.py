@@ -290,17 +290,19 @@ def test_notes():
 def test_card_fields():
     """7: card_id / card_sha of experiment.card_for_run / rule_sha go into the record; no card, an old experiment.py and a crashing one leave them out, the run goes on"""
     stub = ("import sys, types; sys.path.insert(0, sys.argv[1]); mode = sys.argv[2]; m = types.ModuleType('experiment')\n"
-            "if mode == 'card': m.card_for_run = lambda rid: ({'id': 'E9'}, 'experiments/E9/experiment.md'); m.rule_sha = lambda exp: 'abc123'\n"
+            "if mode in ('card', 'arms'): m.card_for_run = lambda rid: ({'id': 'E9'}, 'experiments/E9/experiment.md'); m.rule_sha = lambda exp: 'abc123'\n"
+            "if mode == 'arms': m.arms_lock = lambda exp: {'a': {'run_ids': ['L.card_arms']}}\n"
             "if mode == 'none': m.card_for_run = lambda rid: None; m.rule_sha = lambda exp: 'x'\n"
             "if mode == 'crash': m.card_for_run = lambda rid: 1 / 0\n"
             "sys.modules['experiment'] = m\n"
             "import run; sys.argv = ['run.py'] + sys.argv[3:]; sys.exit(run.main())")
-    for mode in ("card", "none", "old", "crash"):
+    for mode in ("card", "arms", "none", "old", "crash"):
         rid = f"L.card_{mode}"
         r = subprocess.run([sys.executable, "-c", stub, HERE, mode, "--id", rid, "--hyp", "h", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "echo x"], capture_output=True, text=True, env=env)
         rec = rec_of(rid)
         assert r.returncode == 0 and rec.get("status") == "ok", (mode, r.stdout, r.stderr[-300:])
-        assert (rec.get("card_id"), rec.get("card_sha")) == (("E9", "abc123") if mode == "card" else (None, None)), (mode, rec)
+        assert (rec.get("card_id"), rec.get("card_sha")) == (("E9", "abc123") if mode in ("card", "arms") else (None, None)), (mode, rec)
+        assert rec.get("card_arms") == ({"a": {"run_ids": ["L.card_arms"]}} if mode == "arms" else None), ("the arms at launch go next to the rule; an experiment.py without arms_lock still registers the rule", mode, rec)
 
 
 def test_hold_before_start():

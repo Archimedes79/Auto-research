@@ -33,7 +33,9 @@ Rule (autoresearch/METHOD.md, P3 step 5; schema autoresearch/schemas/experiment.
   * the prediction error is measured in the raw direction of the card (variant - control), also for a lower-is-better metric
   * the gate (hard rule 4: the rule is written before the run): every run id the variant and the control arm list needs a ledger row with status ok, and a run whose
     record carries the `card_sha` that run.py stored at launch must still match experiment.rule_sha(card); else nothing is decided ("the rule changed after run X was
-    launched"). No run with a card_sha: decided, labelled "rule not registered at launch". --by-hand "reason" bypasses the gate and labels the verdict "by hand: reason"
+    launched"). Next to it the record carries `card_arms` (experiment.arms_lock: which cards, names, seeds and run ids each arm listed at launch): the card of now may only
+    add to them, a seed at the end; a card moved to another arm, reordered or dropped is refused the same way ("the arms changed after run X was launched"). A record
+    without card_arms (launched before 2026-11-12) is decided and labelled "arms not registered at launch". No run with a card_sha: decided, labelled "rule not registered at launch". --by-hand "reason" bypasses the gate and labels the verdict "by hand: reason"
     (decision.json, the ledger token, results.md). The typed form needs the ledger row of --id with status ok and is always "by hand: typed scores"
   * --write records, in this order: the decision column of the variant arm's ledger rows (run_ids), TOKEN FIRST: "decide.py <date>: VERDICT (effect ...)", then " | " and the
     prose that was there (cut to 400 characters in all; the token is never cut; an earlier token is replaced); decision.json next to the card (written atomically; the earlier
@@ -501,7 +503,7 @@ def run_gate(exp, rows, records):
     `card_sha` of the rule at launch (run.py): it must equal experiment.rule_sha(card) now. registered: how many listed runs carry such a card_sha, as (n, of m)"""
     import experiment as X
     import run as RUN
-    now, status, bad, n_reg = X.rule_sha(exp), {r["id"]: r.get("status") or "" for r in rows}, [], 0
+    now, status, bad, n_reg, n_old, n_open = X.rule_sha(exp), {r["id"]: r.get("status") or "" for r in rows}, [], 0, 0, 0
     by_id = {r["id"]: r for r in rows}
     listed = listed_runs(exp)
     for rid in listed:
@@ -522,14 +524,22 @@ def run_gate(exp, rows, records):
             n_reg += 1
             if sha != now:
                 bad.append(f"the rule changed after run {rid} was launched (card_sha {sha}, the card now {now})")
-    return bad, (n_reg, len(listed))
+            if isinstance(rec.get("card_arms"), dict):                # the arms' cards, seeds and run ids at launch: the card of now may only add to them (a seed at the end)
+                moved = X.arms_extend(rec["card_arms"], X.arms_lock(exp))
+                if moved:
+                    bad.append(f"the arms changed after run {rid} was launched: " + "; ".join(moved[:3]))
+                elif not X.arms_listed(rec["card_arms"]):
+                    n_open += 1
+            else:
+                n_old += 1
+    return bad, (n_reg, len(listed), n_old, n_open)
 
 
 def gated_decision(exp, root, rows, records, by_hand=""):
     """decide_experiment behind the gate; ValueError with the reasons when a listed run is not ok, is a --no-card run, is being repeated, or the rule changed after its launch
     (by_hand bypasses all of it). The decision carries rule_sha, registered (every listed run held the card_sha of this rule), registered_runs ("n of m"), and by_hand (the reason)"""
     import experiment as X
-    bad, (n_reg, n_all) = ([], (0, 0)) if by_hand else run_gate(exp, rows, records)
+    bad, (n_reg, n_all, n_old, n_open) = ([], (0, 0, 0, 0)) if by_hand else run_gate(exp, rows, records)
     if bad:
         raise ValueError("; ".join(bad))
     d = decide_experiment(exp, root)
@@ -538,6 +548,10 @@ def gated_decision(exp, root, rows, records, by_hand=""):
     if not by_hand and not registered:
         d["why"] += ("; no run id is listed in the card (run_ids): the gate checked no run and the rule was not registered at launch" if not n_all else
                      f"; rule not registered at launch (card_sha in {n_reg} of {n_all} listed run records)")
+    if not by_hand and n_old:   # launched before 2026-11-12: the rule was registered, the arms (which cards are whose seeds) were not
+        d["why"] += f"; arms not registered at launch ({n_old} of {n_all} listed run records hold no card_arms)"
+    if not by_hand and n_open:  # the card named no cards when the run started: which card is whose seed was written after the run
+        d["why"] += f"; the arms listed no cards at launch ({n_open} of {n_all} listed runs): the cards were assigned to the arms after the run"
     return d
 
 

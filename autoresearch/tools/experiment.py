@@ -114,12 +114,68 @@ def find(exp):
 def rule_sha(exp):
     """16 hex characters that name the rule of a card: sha256 of the canonical json of RULE_KEYS and the arm letters (not the arms' recipes, cards, names, run ids, seeds, base or
     settings, not kill or budget). run.py stores it as `card_sha` in the run record at launch; decide.py compares it with the card as it is when it decides, so a rule edited
-    after the launch is found"""
+    after the launch is found. The arms (cards, names, seeds, run ids) are locked apart, by arms_lock / arms_extend: they may grow by a seed, a hash would forbid that"""
     part = {k: exp[k] for k in RULE_KEYS if k in exp}
     if isinstance(part.get("evaluate"), dict):                       # what is measured; the list of known differences (allow) may grow after the launch
         part["evaluate"] = {k: part["evaluate"][k] for k in ("split", "subset", "compare") if k in part["evaluate"]}
     part["arms"] = list(exp.get("arms") or [])
     return hashlib.sha256(json.dumps(part, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+
+
+def _arm_order(arm):
+    """{subset or '': [ref, ...]} in the order arm_cards builds it (names first, as 'name:<n>', then cards; a single ref of a subset is a list of one): the order
+    decide.py pairs by position"""
+    out = {}
+    if "names" in arm:
+        out[""] = [f"name:{n}" for n in arm["names"]]
+    cards = arm.get("cards")
+    if isinstance(cards, list):
+        out[""] = out.get("", []) + [str(c) for c in cards]
+    elif isinstance(cards, dict):
+        for s, refs in cards.items():
+            out[str(s)] = [str(c) for c in (refs if isinstance(refs, list) else [refs])]
+    return out
+
+
+def arms_lock(exp):
+    """what the arms list at launch: {arm: {"order": {subset: [refs in pairing order]}, "seeds": [...], "run_ids": [...]}}, plus the card's top-level `seeds` under "".
+    run.py stores it as `card_arms` next to card_sha; decide.py checks that the card of now only EXTENDS it (arms_extend): a seed may be added at the end, nothing
+    may be removed, reordered, moved to another arm, or re-paired by a `seeds` list that the launch did not have"""
+    out = {}
+    for a, v in (exp.get("arms") or {}).items():
+        if isinstance(v, dict):
+            out[a] = {"order": _arm_order(v), **{k: v[k] for k in ("seeds", "run_ids") if k in v}}
+    if "seeds" in exp:
+        out[""] = {"seeds": exp["seeds"]}
+    return json.loads(json.dumps(out))
+
+
+def _extends(old, new, where):
+    if isinstance(old, list):
+        return [] if isinstance(new, list) and new[:len(old)] == old else [f"{where}: {json.dumps(old)} at launch, {json.dumps(new)} now (only additions at the end are allowed)"]
+    if isinstance(old, dict):
+        if not isinstance(new, dict):
+            return [f"{where}: {json.dumps(old)} at launch, {json.dumps(new)} now"]
+        return [p for k in old for p in (_extends(old[k], new[k], f"{where}.{k}") if k in new else [f"{where}.{k}: listed at launch, gone now"])]
+    return [] if old == new else [f"{where}: {json.dumps(old)} at launch, {json.dumps(new)} now"]
+
+
+def arms_extend(old, new):
+    """the ways the arms of now (arms_lock of the card) are not the arms at launch plus additions at the end: every list of the launch is a prefix of the list of now,
+    every key (arm, subset) is still there, other values are equal; a `seeds` list that the launch did not have (on an arm, or the card's own) is a change when cards
+    were listed at launch, because it re-pairs them by seed identity. [] = only additions"""
+    out = _extends(old, new, "arms")
+    listed = any(refs for v in old.values() if isinstance(v, dict) for refs in (v.get("order") or {}).values())
+    if listed:
+        for a, v in new.items():
+            if isinstance(v, dict) and "seeds" in v and (a not in old or "seeds" not in old[a]) and (a == "" or a in old):
+                out.append(f"arms.{a or 'card'}.seeds: added after the launch (it re-pairs the cards listed then by seed identity)")
+    return out
+
+
+def arms_listed(lock):
+    """did the arms list any card or name at launch? (a card that adds them only after the run fixes which card belongs to which arm afterwards)"""
+    return any(refs for v in (lock or {}).values() if isinstance(v, dict) for refs in (v.get("order") or {}).values())
 
 
 def card_for_run(run_id, root=None):

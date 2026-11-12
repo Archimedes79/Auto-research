@@ -529,7 +529,67 @@ def t_verdict_review():
     fresh()
 
 
-SECTIONS = [t_verdict_review, t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources]
+def t_arms_lock():
+    """the arms as registered at launch (run.py card_arms, experiment.arms_lock): the card may only ADD to them (a seed at the end); moving a card to another arm,
+    reordering the seeds or dropping one is refused like an edited rule; a record from before 2026-11-12 without card_arms is decided and says so"""
+    sha = X.rule_sha(BASE)
+    fresh(sha=sha)
+    lock = X.arms_lock(BASE)
+    for r in RUNS:
+        rec = json.load(open(f"{T}/runs/{r}/run.json"))
+        json.dump(dict(rec, card_arms=lock), open(f"{T}/runs/{r}/run.json", "w"))
+    rc, out = decide("--experiment", CARD_MD)
+    assert rc == 0 and "arms not registered" not in out, out
+    swapped = json.loads(json.dumps(BASE))
+    swapped["arms"]["a"]["cards"], swapped["arms"]["c"]["cards"] = BASE["arms"]["c"]["cards"], BASE["arms"]["a"]["cards"]
+    assert X.rule_sha(swapped) == sha, "the rule hash alone does not see the swap: that is why the arms are locked"
+    put_card(swapped)
+    rc, out = decide("--experiment", CARD_MD)
+    says(out, "the arms changed after run V.a0 was launched")
+    assert rc == 1, out
+    reordered = json.loads(json.dumps(BASE))
+    reordered["arms"]["a"]["cards"] = list(reversed(BASE["arms"]["a"]["cards"]))
+    put_card(reordered)
+    assert decide("--experiment", CARD_MD)[0] == 1, "reordered seeds (position pairing) are refused"
+    dropped = json.loads(json.dumps(BASE))
+    dropped["arms"]["a"]["cards"] = BASE["arms"]["a"]["cards"][:1]
+    put_card(dropped)
+    assert decide("--experiment", CARD_MD)[0] == 1, "a dropped seed is refused"
+    grown = json.loads(json.dumps(BASE))       # a seed added at the end of both arms: allowed (INCONCLUSIVE -> add a seed)
+    CARDS2 = dict(CARDS, a2=dict(Q=0.75, F=0.9), cc=dict(Q=0.72, F=0.9))
+    json.dump(CARDS2, open(f"{T}/cards.json", "w"))
+    grown["arms"]["a"]["cards"] = BASE["arms"]["a"]["cards"] + ["cards.json#a2"]
+    grown["arms"]["c"]["cards"] = BASE["arms"]["c"]["cards"] + ["cards.json#cc"]
+    put_card(grown)
+    rc, out = decide("--experiment", CARD_MD)
+    assert rc == 0, ("a seed added at the end is allowed", out)
+    fresh(sha=sha)                                    # records without card_arms: decided, labelled
+    rc, out = decide("--experiment", CARD_MD, "--write")
+    assert rc == 0 and "arms not registered at launch (4 of 4" in decision()["why"], decision()["why"]
+    lk = lambda arms, **top: X.arms_lock(dict(top, arms=arms))  # noqa: E731
+    old = lk(dict(a=dict(cards={"day": "x"}), c=dict(cards={"day": "y"})))
+    assert X.arms_extend(old, lk(dict(a=dict(cards={"day": ["x", "x2"], "night": ["z"]}), c=dict(cards={"day": ["y"]}), b=dict(cards=["q"])))) == [], \
+        "a seed, a subset or an arm may be added; a single ref of a subset is a list of one"
+    assert X.arms_extend(old, lk(dict(a=dict(cards={"night": ["x"]}), c=dict(cards={"day": "y"})))), "a subset that is gone is a change"
+    pos = lk(dict(a=dict(cards=["v0", "v1"]), c=dict(cards=["c0", "c1"])), pairing="position")
+    assert X.arms_extend(pos, lk(dict(a=dict(names=["X"], cards=["v0", "v1"]), c=dict(cards=["c0", "c1", "c2"])), pairing="position")), \
+        "names added in front of the cards shift the pairs (critic 2026-11-12)"
+    assert X.arms_extend(lk(dict(a=dict(cards=["v0", "v1"]), c=dict(cards=["c0", "c1"])), seeds=[0, 1]),
+                         lk(dict(a=dict(cards=["v0", "v1"], seeds=[1, 0]), c=dict(cards=["c0", "c1"], seeds=[0, 1])), seeds=[0, 1])), \
+        "arm seeds added after the launch re-pair the cards by identity (critic 2026-11-12)"
+    assert X.arms_extend(lk(dict(a=dict(run_ids=["r0"]), c=dict(run_ids=["r1"]))), lk(dict(a=dict(run_ids=["r0"], cards=["v0"], seeds=[0]), c=dict(run_ids=["r1"], cards=["c0"])))) == [], \
+        "arms that listed no card at launch may get their cards and seeds later ..."
+    assert not X.arms_listed(lk(dict(a=dict(run_ids=["r0"]), c=dict(run_ids=["r1"])))) and X.arms_listed(pos), "... and arms_listed tells the gate so"
+    fresh(sha=sha)
+    for r in RUNS:
+        rec = json.load(open(f"{T}/runs/{r}/run.json"))
+        json.dump(dict(rec, card_arms=lk({k: dict(run_ids=v["run_ids"]) for k, v in BASE["arms"].items()})), open(f"{T}/runs/{r}/run.json", "w"))
+    rc, out = decide("--experiment", CARD_MD, "--write")
+    assert rc == 0 and "the arms listed no cards at launch (4 of 4" in decision()["why"], decision()["why"]
+    fresh()
+
+
+SECTIONS = [t_verdict_review, t_arms_lock, t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources]
 
 
 def main():

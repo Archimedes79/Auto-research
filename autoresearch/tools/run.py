@@ -45,7 +45,7 @@ What it does (paths from the problem's project.json, see project.py):
   * command pid the command's pid and process group are written into the run record (pid, pgid, pid_start) right after it started. A killed launcher leaves the
                 command running (its own process group): such a record is `stalled`, but the id is refused (with the pid) while the command lives, and the GPU slot of
                 the run stays taken (GpuSlot.stale); once the command is gone the record counts as stalled and the id may be started again
-  * card id     a run with a registered experiment card (experiment.card_for_run) records card_id and card_sha (experiment.rule_sha: the hash of the rule block) in its record
+  * card id     a run with a registered experiment card (experiment.card_for_run) records card_id, card_sha (experiment.rule_sha: the hash of the rule block) and card_arms (experiment.arms_lock: the arms' cards, seeds and run ids) in its record
   * after       --after <ids>: waits for the done flags of those runs (refuses when one of them failed, stalled or was stopped); waiting is not counted as run time
   * holdout     --split <holdout> (project.json holdout_split, default test; a name that starts with it and an underscore, `test_clean`, and the names in project.json
                 holdout_aliases count too, in --split and in the command's own `--split` / `--split=`) is refused unless the run id is named as a whole token in a TABLE
@@ -954,7 +954,14 @@ def card_fields(run_id):
         import experiment
         found = experiment.card_for_run(run_id)             # (card, path) or None
         exp = found[0] if found else None
-        return dict(card_id=exp.get("id", ""), card_sha=experiment.rule_sha(exp)) if exp else {}
+        if not exp:
+            return {}
+        out = dict(card_id=exp.get("id", ""), card_sha=experiment.rule_sha(exp))
+        try:                                                     # the arms at launch (2026-11-12); a failure here (or an older experiment.py) keeps the rule registered
+            out["card_arms"] = experiment.arms_lock(exp)
+        except Exception:  # noqa: BLE001
+            pass
+        return out
     except (Exception, SystemExit):             # ImportError, AttributeError (an experiment.py without the two functions), a broken card
         return {}
 
@@ -1099,7 +1106,7 @@ def main():
             rec["attempts_before"] = prev.get("attempts", 0) + prev.get("attempts_before", 0)
         fields = card_fields(a.id)          # the registered experiment card and the hash of its rule block, as they were when the run started
         if prev.get("card_sha") and fields.get("card_id", prev.get("card_id")) == prev.get("card_id"):
-            fields = {"card_id": prev.get("card_id", ""), "card_sha": prev["card_sha"]}    # a resume / --again keeps the first registration: a rule edited since is found by decide.py
+            fields = {"card_id": prev.get("card_id", ""), "card_sha": prev["card_sha"], **({"card_arms": prev["card_arms"]} if "card_arms" in prev else {})}    # a resume / --again keeps the first registration: a rule or arm list edited since is found by decide.py
         rec.update(fields)
         save_rec(os.path.join(d, "run.json"), rec)
     finally:
