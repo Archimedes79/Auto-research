@@ -115,7 +115,7 @@ class Attach(nn.Module):
     """E320: a differentiable replacement of the snap of the read-out (E311). Every keypoint (entry or exit) chooses among the nodes of B's frozen node head (`qnodes.NodeHead` outputs on the same batch, 2 m grid: existence, the 8 type flags, long-link
     and section scores, position, direction, token) that lie within ATT_REACH m and ATT_ANG degrees of it (the reach of the delivered wiring, `qends_eval.WIRE_POS / WIRE_ANG`), at most ATT_M of them (the nearest). Score = an MLP on (distance, along / across offset and heading agreement of the node, its existence and type
     probabilities, its token, the kind of the keypoint, the keypoint's own token); a learned 'no attachment' (the dustbin, from the keypoint token) competes in the softmax. The attached end is the weighted mean: position = w0 x keypoint + sum w_m x node_m, heading = the
-    normalised weighted mean of the headings, so the curve starts / ends ON a node of B (a delivered piece end) by construction and falls back to the keypoint when nothing is in reach. All soft; the choice of the candidate set (the nearest ATT_M gated nodes) is an index choice, the
+    normalised weighted mean of the headings, a convex combination of the keypoint and the candidate nodes: when one weight dominates the curve starts / ends at that node, and it falls back to the keypoint when nothing is in reach. It is NOT guaranteed to be a delivered piece end (the candidates are the raw nodes with existence > 0.05, mid-section nodes of a lane included; the weighted mean lies inside their hull; the dustbin falls back to the keypoint), and the proximity wiring of the read-out (4 m / 45 degrees, `qends_eval.add_connectors`) still decides which pieces the connector is joined to. All soft; the choice of the candidate set (the nearest ATT_M gated nodes) is an index choice, the
     gradient flows through the values and the keypoint position (the D7 convention, named in the card). Returns att_pos / att_dir (B, 2K, 2), att_p = 1 - w0 (B, 2K), att_logit (B, 2K, M + 1; index 0 = no attachment), att_cpos (B, 2K, M, 2) the candidates' positions, att_cvalid (B, 2K, M) bool."""
 
     def __init__(self, d=64, tok=64, hid=64, m=ATT_M):
@@ -367,7 +367,7 @@ def geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs):
         loss = shape
         info.update(geom_shape=float(shape), geom_n=float(m.sum()), geom_d_curve=float(d1.mean()), geom_d_gt=float(d2.mean()))
     ends, n_end, d_all = kp.new_zeros(()), 0, []
-    ce_tot, n_acc, n_bin, kp_d = kp.new_zeros(()), 0, 0, []
+    ce_tot, st = kp.new_zeros(()), dict(n=0, ce=0.0, acc=0, near=0, bin=0, kp_d=[], att_d=[])                    # st: the attachment statistics over the keypoints with at least one candidate (critic 2026-11-12: the trivial dustbin cases and the keypoints without a node in reach are no information)
     for k, (key, mkey) in enumerate((("ent", "ent_m"), ("ext", "ext_m"))):
         G, gm = batch[key].to(dev).float(), batch[mkey].to(dev)
         kpk, kdk = kp[:, k * K_:(k + 1) * K_], kd[:, k * K_:(k + 1) * K_]
@@ -389,9 +389,16 @@ def geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs):
                 dc = torch.where(out["att_cvalid"][:, k * K_:(k + 1) * K_], dc, torch.full_like(dc, 1e6))
                 tgt = torch.where(dc.min(2)[0] <= ATT_TGT, dc.argmin(2) + 1, torch.zeros_like(dc[..., 0], dtype=torch.long))
             ce_tot = ce_tot + F.cross_entropy(lg[ok], tgt[ok], reduction="sum")
-            n_acc += int((lg[ok].argmax(-1) == tgt[ok]).sum())
-            n_bin += int((tgt[ok] == 0).sum())
-            kp_d.append(((kpk - g) ** 2).sum(-1).add(1e-8).sqrt()[ok].detach())
+            with torch.no_grad():
+                sel = ok & out["att_cvalid"][:, k * K_:(k + 1) * K_].any(-1)
+                if sel.any():
+                    st["n"] += int(sel.sum())
+                    st["ce"] += float(F.cross_entropy(lg[sel], tgt[sel], reduction="sum"))
+                    st["acc"] += int((lg[sel].argmax(-1) == tgt[sel]).sum())
+                    st["near"] += int((tgt[sel] == 1).sum())                                                  # the baseline 'take the nearest candidate' (the candidates are sorted by distance)
+                    st["bin"] += int((tgt[sel] == 0).sum())
+                    st["kp_d"].append(((kpk - g) ** 2).sum(-1).add(1e-8).sqrt()[sel])
+                    st["att_d"].append(((epk - g) ** 2).sum(-1).add(1e-8).sqrt()[sel])
         if "kp_logsig" in out:
             s = out["kp_logsig"][:, k * K_:(k + 1) * K_][ok]
             ends = ends + (d * torch.exp(-s) + s).sum()
@@ -404,10 +411,11 @@ def geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs):
         ends = ends / n_end
         loss = ends if loss is None else loss + ends
         info.update(geom_end=float(ends), geom_end_d=float(torch.cat(d_all).mean()))
-        if kp_d:                                                                                             # E320: the cross entropy of the attachment over the candidates (+ the dustbin)
-            ce = ce_tot / n_end
-            loss = loss + ce
-            info.update(att_ce=float(ce), att_acc=n_acc / n_end, att_bin=n_bin / n_end, att_kp_d=float(torch.cat(kp_d).mean()))
+        if "att_logit" in out:                                                                               # E320: the cross entropy of the attachment over the candidates (+ the dustbin), normalised like the end term
+            loss = loss + ce_tot / n_end
+            if st["n"]:                                                                                      # logged over the keypoints with >= 1 candidate: att_acc against att_acc_nearest (= take the nearest candidate), att_ce (chance is ln(n_candidates + 1)), the attached against the keypoint end error
+                info.update(att_n=float(st["n"]), att_ce=st["ce"] / st["n"], att_acc=st["acc"] / st["n"], att_acc_nearest=st["near"] / st["n"], att_bin=st["bin"] / st["n"],
+                            att_kp_d=float(torch.cat(st["kp_d"]).mean()), att_d=float(torch.cat(st["att_d"]).mean()))
     return loss, info
 
 
@@ -470,7 +478,8 @@ def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5, geom_w=0.0):
         cp = crossing_penalty(out)
         loss = loss + cross_w * cp
         info["cross"] = float(cp)
-    if geom_w > 0 and "ppts" in batch:                                                                          # E317 / E318: the shape and the ends of the delivered connector
+    if geom_w > 0:                                                                                              # E317 / E318 / E320: the shape and the ends of the delivered connector
+        assert "ppts" in batch, "geom_w > 0 needs the GT connector polylines in the batch (`QData.DEFAULT_PPTS = True`, set by jends_train.py --geom-w): without them the whole geometry and attachment loss would be skipped silently"
         lg, ig = geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs)
         if lg is not None:
             loss = loss + geom_w * lg
@@ -573,6 +582,11 @@ def _selftest():
     assert abs(float(_dist_to_polyline(torch.tensor([[0.0, 1.0], [3.0, 0.0]]), torch.tensor([[-1.0, 0.0], [1.0, 0.0]]))[1]) - 2.0) < 1e-3
     assert abs(float(_huber(torch.tensor(0.5))) - 0.125) < 1e-6 and abs(float(_huber(torch.tensor(2.0))) - 1.5) < 1e-6
     # the loss in the model: the GT connector of the two pairs is the straight line between the GT ends (batch['ppts']); gradient into the heat (positions), the headings, the scales, the pair features
+    try:                                                                                                       # critic 2026-11-12: geom_w > 0 without the GT polylines must fail loudly, not skip the whole geometry loss
+        jends_loss(out, batch, geom_w=0.5)
+        raise RuntimeError("geom_w > 0 without batch['ppts'] must raise")
+    except AssertionError as ex_:
+        assert "polylines" in str(ex_), ex_
     ppts = torch.zeros(B, 2, 16, 2)
     for k_, x_ in enumerate((-1.75, 1.75)):
         ppts[:, k_, :, 0], ppts[:, k_, :, 1] = x_, torch.linspace(-8.0, 8.0, 16)
@@ -651,6 +665,60 @@ def _selftest():
     out["logit"][0, 0, 0], out["logit"][0, 1, 1] = -20.0, -20.0
     out["logit"][0, 0, 1], out["logit"][0, 1, 0] = 20.0, 20.0
     assert float(crossing_penalty(out)) > 0.3, float(crossing_penalty(out))
+    # E320, critic 2026-11-12 (three mutations survived the first self-test): the candidate gate, the number of candidates, the heading mix and the direct position gradient, on a scene built for them
+    cg = -50.0 + (torch.arange(50).float() + 0.5) * 2.0
+    n2 = dict(e=torch.full((1, 50, 50), -8.0), flags=torch.full((1, 8, 50, 50), -8.0), uout=torch.full((1, 50, 50), -8.0), uin=torch.full((1, 50, 50), -8.0), s=torch.full((1, 50, 50), -8.0),
+              pos=torch.stack([cg.view(50, 1).expand(50, 50), cg.view(1, 50).expand(50, 50)], 0)[None].clone(), dir_raw=torch.zeros(1, 2, 50, 50), tok=torch.randn(1, 64, 50, 50))
+    n2["dir_raw"][:, 1] = 1.0
+    for i_ in (23, 24, 25):                                                                                   # a block of 12 existing nodes around the keypoint, all heading (0, 1)
+        for j_ in (19, 20, 21, 22):
+            n2["e"][:, i_, j_] = 4.0
+    rot = lambda deg: (-math.sin(math.radians(deg)), math.cos(math.radians(deg)))  # noqa: E731
+    n2["dir_raw"][0, :, 23, 21] = torch.tensor(rot(60.0))                                                   # 60 degrees off: outside the 45 degree gate
+    n2["dir_raw"][0, :, 25, 21] = torch.tensor(rot(20.0))                                                   # 20 degrees off: inside the gate, it must turn the attached heading
+    kpA, kpB = torch.tensor([-1.8, -7.9]), torch.tensor([30.0, 30.0])                                          # A has more than ATT_M gated nodes, B has none
+    pos2 = torch.stack([kpA, kpB])[None].clone().requires_grad_(True)
+    D2 = torch.tensor([[[0.0, 1.0], [0.0, 1.0]]])
+    at = Attach(d=64)
+    for p_ in at.parameters():
+        nn.init.zeros_(p_)
+    with torch.no_grad():
+        at.dust.bias.fill_(-20.0)                                                                             # no dustbin: the weights are uniform over the valid candidates (zero scores)
+    o2 = at(torch.zeros(1, 2, 64), pos2, D2, torch.zeros(1, 2), n2)
+    npos2, ndir2 = n2["pos"][0].flatten(1).t(), torch.nn.functional.normalize(n2["dir_raw"][0].flatten(1).t(), dim=-1)
+    dd2 = (npos2 - kpA).norm(dim=-1)
+    gate2 = (dd2 <= ATT_REACH) & ((ndir2 * D2[0, 0]).sum(-1) >= math.cos(math.radians(ATT_ANG))) & (n2["e"][0].flatten() > -2.9)
+    assert int(gate2.sum()) > ATT_M, int(gate2.sum())                                                         # more gated nodes than the cap: the nearest ATT_M must be kept
+    want = npos2[gate2][dd2[gate2].argsort()[:ATT_M]]
+    got = o2["att_cpos"][0, 0][o2["att_cvalid"][0, 0]]
+    assert o2["att_cvalid"][0, 0].sum() == ATT_M and torch.allclose(got, want, atol=1e-5), (got, want)
+    assert not any(torch.allclose(row, npos2[23 * 50 + 21]) for row in got), "the node turned by 60 degrees must be gated out"
+    assert not o2["att_cvalid"][0, 1].any() and torch.allclose(o2["att_pos"][0, 1], kpB), "a keypoint with no node in reach keeps its position"
+    mean_dir = torch.nn.functional.normalize(ndir2[gate2][dd2[gate2].argsort()[:ATT_M]].mean(0), dim=0)
+    dev_deg = math.degrees(math.acos(float(torch.clamp((o2["att_dir"][0, 0] * D2[0, 0]).sum(), -1, 1))))
+    assert float((o2["att_dir"][0, 0] - mean_dir).abs().max()) < 1e-4 and dev_deg > 1.0, (o2["att_dir"][0, 0], mean_dir, dev_deg)    # the 20 degree node turns the attached heading: ignoring the heading mix gives dev_deg = 0
+    for p_ in at.parameters():                                                                               # the direct gradient of the attached position w.r.t. the keypoint: w0 per coordinate (the scores are constants here)
+        nn.init.zeros_(p_)
+    o3 = at(torch.zeros(1, 2, 64), pos2, D2, torch.zeros(1, 2), n2)
+    o3["att_pos"].sum().backward()
+    w0A = 1.0 / (ATT_M + 1.0)
+    assert abs(float(pos2.grad[0, 0].sum()) - 2 * w0A) < 1e-5 and abs(float(pos2.grad[0, 1].sum()) - 2.0) < 1e-5, pos2.grad                  # w0 x keypoint carries a gradient (cut it with detach and this is 0)
+    # flag-off identity that stays in the repo (critic 2026-11-12): the E312 pair head (the `je.*` weights of runs/e312_p_s0, when the run is there) on a seeded synthetic input gives the numbers pinned from the committed code of 7386e0e1 (E317 / E318 / E320 off); no attach / unc keys
+    import os
+    ckp = os.path.join(os.environ.get("BFLC_ROOT", ""), "runs", "e312_p_s0", "model.pt")
+    if os.environ.get("BFLC_ROOT") and os.path.exists(ckp):
+        st_ = {k_[3:]: v_ for k_, v_ in torch.load(ckp, map_location="cpu")["state"].items() if k_.startswith("je.")}
+        mg = JEnds(d=64, order=True, evidence=True, scales=True)
+        mg.load_state_dict(st_)
+        mg.eval()
+        gg = torch.Generator().manual_seed(7)
+        jg_ = dict(j1=torch.randn(2, 8, 100, 100, generator=gg) * 0.5 - 2.5, j05=torch.randn(2, 2, 200, 200, generator=gg) - 2.0, f1=torch.randn(2, 64, 100, 100, generator=gg))
+        pg_ = dict(centre1=torch.randn(2, 12, 100, 100, generator=gg))
+        with torch.no_grad():
+            og = mg(jg_, pg_, gt=None)
+        for k_, v_ in dict(logit=-25719.9688, kp_pos=-645.8732, scale=2228.1379, kp_p=34.751).items():
+            assert abs(float(og[k_].sum()) - v_) <= 1e-3 * max(1.0, abs(v_)), (k_, float(og[k_].sum()), v_)
+        assert int(og["allowed"].sum()) == 1003 and int(og["valid"].sum()) == 128 and not any(k_.startswith(("att_", "kp_logsig")) for k_ in og), "the flag-off model must reproduce the E312 head"
     print("jends selftest ok; params", sum(p.numel() for p in JEnds().parameters()) / 1e6, "M")
 
 

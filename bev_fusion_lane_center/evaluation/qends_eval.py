@@ -44,13 +44,23 @@ def _ang(u, v):
     return float(np.degrees(np.arccos(np.clip(u @ v, -1.0, 1.0))))
 
 
-def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=False, snap_all=False, snap_guard=False, snap_dedup=False, snap_nogeom=False, snap_both=False):
+def make_pairs(e, ia, ib, k, attach=False, chord=False, fit=None):
+    """the `pairs` of `add_connectors` for the candidates (ia[n], ib[n]) of a dump frame `e` (`jends_eval.py dump`; k = keypoints per kind): (entry end, entry heading, exit end, exit heading) + the learned handle scales (pr[4], pr[5]) when the dump has them and not `chord`
+    (`fit`: a dict {(i, j): scales} instead, the oracle with fitted scales of `jmaneuver.py`). attach (E320): the ATTACHED ends and headings of the dump (att_pos / att_dir) instead of the keypoints'; the one place where the read-outs (cmd_score, jmaneuver) choose between the two."""
+    qp, qd = (e["att_pos"], e["att_dir"]) if attach else (e["kp_pos"], e["kp_dir"])
+    if fit is not None:
+        return [(qp[i], qd[i], qp[k + j], qd[k + j]) + fit.get((int(i), int(j)), ()) for i, j in zip(ia, ib)]
+    return [(qp[i], qd[i], qp[k + j], qd[k + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None and not chord else ()) for i, j in zip(ia, ib)]
+
+
+def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=False, snap_all=False, snap_guard=False, snap_dedup=False, snap_nogeom=False, snap_both=False, wire_pos=None):
     """the delivered graph (lines, edges, nodes as of `qgraph_eval.readout`; kinds / links = its `bk["kind"]` / `bk["piece_links"]`; long_mask = which links are long) with the end head's connectors:
     pairs = [(entry xy, entry heading, exit xy, exit heading)] -> (raw graph dict for the scorer, curves added, curves wired at both ends).
     snap (E311): the connector is drawn from the end of the NEAREST delivered piece wired to the entry (position and direction of that piece end) to the start of the nearest piece wired to the exit, instead of from the keypoints (1.4 m off the GT
     ends on average: the curve then ends beside the pieces and the topology scores see a gap); an end with no piece in reach keeps its keypoint; only that one piece is wired at each end.
     Options of the snapped read-out (each only with snap, all default off; E311 refinements, the E311 verdict is the plain `snap`): snap_all = wire EVERY piece in reach of the snapped end (the default wiring loop on the snapped ends: separates the effect of the geometry from the
     effect of wiring one piece only), snap_guard = a pair whose snapped ends make a degenerate curve (chord under 1 m or a chord that runs against one of the two headings) keeps its keypoints, snap_dedup = a second curve between the same two snapped pieces is not added, snap_both = no curve for a pair whose entry or exit finds no piece in reach (no floating curves), snap_nogeom = a control: wire only the nearest piece per end but draw the curve from the keypoints (separates the wiring rule from the geometry)"""
+    wp = WIRE_POS if wire_pos is None else float(wire_pos)                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
     keep = []
     for i, k in enumerate(kinds):
         if k == "link" and bool(long_mask[links[i][0]]):
@@ -75,10 +85,10 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
             d_in = d_out = np.inf
             for i, (le, te, fs, ts) in enumerate(ends):
                 d = np.linalg.norm(le - pa)
-                if d <= WIRE_POS and _ang(te, ta) <= WIRE_ANG and d < d_in:
+                if d <= wp and _ang(te, ta) <= WIRE_ANG and d < d_in:
                     w_in, d_in = i, d
                 d = np.linalg.norm(fs - pb)
-                if d <= WIRE_POS and _ang(ts, tb) <= WIRE_ANG and d < d_out:
+                if d <= wp and _ang(ts, tb) <= WIRE_ANG and d < d_out:
                     w_out, d_out = i, d
             if snap_both and (w_in is None or w_out is None):
                 continue
@@ -112,10 +122,10 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
             continue
         w_in = w_out = False
         for i, (le, te, fs, ts) in enumerate(ends):
-            if np.linalg.norm(le - pa) <= WIRE_POS and _ang(te, ta) <= WIRE_ANG:
+            if np.linalg.norm(le - pa) <= wp and _ang(te, ta) <= WIRE_ANG:
                 E2.append((i, m))
                 w_in = True
-            if np.linalg.norm(fs - pb) <= WIRE_POS and _ang(ts, tb) <= WIRE_ANG:
+            if np.linalg.norm(fs - pb) <= wp and _ang(ts, tb) <= WIRE_ANG:
                 E2.append((m, i))
                 w_out = True
         wired += int(w_in and w_out)
@@ -176,8 +186,11 @@ def cmd_score(a):
     spec = QR.parse("close:1.5@0.5")
     rec = dict(base=[], head=[])
     attach = bool(getattr(a, "attach", False))
+    attach_r = getattr(a, "attach_r", None)                                                                                  # E320: the wiring radius (m) of the attached read-out (default: today's 4 m); the card file name carries it
+    assert attach_r is None or attach, "--attach-r needs --attach"
     assert not attach or ("att_pos" in next(iter(ends.values()))), f"{a.run}: the dump has no attached ends (train with --attach, then jends_eval.py dump)"
-    n_curves = n_wired = 0
+    n_curves = n_wired = n_drop = 0
+    gap = dict(n=0, **{k_: 0 for k_ in ("in", "out", "kp_in", "kp_out")})
     t0 = time.time()
     for b, (f, d) in enumerate(zip(frames, dump)):
         pred = QR.apply(dict(nodes=dict(pos=d["pos"], dirv=d["dirv"], e=d["e"], flags=d["flags"], section=d["section"], s=d.get("s")),
@@ -188,11 +201,20 @@ def cmd_score(a):
         k = e["kp_pos"].shape[0] // 2
         p = 1.0 / (1.0 + np.exp(-e["logit"])) * e["allowed"]
         ia, ib = np.nonzero(p >= a.thr)
-        qp, qd = (e["att_pos"], e["att_dir"]) if attach else (e["kp_pos"], e["kp_dir"])                                  # E320: the attached ends of the dump instead of the keypoints
-        pairs = [(qp[i], qd[i], qp[k + j], qd[k + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None and not a.chord else ()) for i, j in zip(ia, ib)]
-        raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)))
+        pairs = make_pairs(e, ia, ib, k, attach=attach, chord=a.chord)                                                      # E320: attach = the attached ends of the dump instead of the keypoints
+        le = np.array([np.asarray(P, float)[-1] for P in graph.lines if len(P)]).reshape(-1, 2)                              # critic 2026-11-12 (C3): do the connector ends touch a delivered piece end (an end of a line, within 1 m)?
+        fs = np.array([np.asarray(P, float)[0] for P in graph.lines if len(P)]).reshape(-1, 2)
+        near = lambda pts, q: bool(len(pts) and np.linalg.norm(pts - q, axis=1).min() <= 1.0)  # noqa: E731
+        for i, j in zip(ia, ib):
+            gap["n"] += 1
+            gap["in"] += near(le, e["att_pos"][i] if attach else e["kp_pos"][i])
+            gap["out"] += near(fs, e["att_pos"][k + j] if attach else e["kp_pos"][k + j])
+            gap["kp_in"] += near(le, e["kp_pos"][i])
+            gap["kp_out"] += near(fs, e["kp_pos"][k + j])
+        raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), wire_pos=attach_r)
         n_curves += n_c
         n_wired += n_w
+        n_drop += len(graph.lines) - (len(raw["pts"]) - len(pairs))                                                          # B's long links that a connector covers and the read-out drops
         rec["head"].append(QE.graph_counts(raw, f))
         f._lane = f._ref = None
         if (b + 1) % 200 == 0:
@@ -205,12 +227,17 @@ def cmd_score(a):
     snap = bool(getattr(a, "snap", False))
     out["snap"] = snap
     out["attach"] = attach
+    out["attach_r"] = attach_r
+    out["long_links_dropped"] = n_drop
+    r_ = lambda x: float(x) / max(gap["n"], 1)  # noqa: E731
+    out["ends_within_1m_of_a_delivered_piece_end"] = dict(pairs=gap["n"], entry=r_(gap["in"]), exit=r_(gap["out"]), keypoint_entry=r_(gap["kp_in"]), keypoint_exit=r_(gap["kp_out"]))      # of the ends the connectors use (attached ends under attach) and of the raw keypoints
     opts = [k for k in ("snap_all", "snap_guard", "snap_dedup", "snap_nogeom", "snap_both") if getattr(a, k, False)]
     out["snap_options"] = opts
     # the card of record (`ends_card.json`) is the unsnapped read-out at the threshold 0.5 only: another threshold or a snapped read-out gets its own file (the E308 incident of 2026-11-12: a scratch sweep emptied the card of record)
     chord = bool(getattr(a, "chord", False))
-    name = "ends_card.json" if (not snap and not chord and a.thr == 0.5) else "ends_card_" + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + ("attach_" if attach else "") + f"thr{a.thr}.json"     # the chord control has its own file too (it overwrote the card of the learned scales on 2026-11-12)
+    name = "ends_card.json" if (not snap and not chord and not attach and a.thr == 0.5) else "ends_card_" + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + (("attach_" + (f"r{attach_r}_" if attach_r else "")) if attach else "") + f"thr{a.thr}.json"     # the chord control has its own file too (it overwrote the card of the learned scales on 2026-11-12)
     json.dump(out, open(os.path.join(run_dir, name), "w"), indent=1)
+    pickle.dump(dict(scenes=[f.scene for f in frames], base=rec["base"], head=rec["head"]), open(os.path.join(run_dir, name[:-5] + ".counts.pkl"), "wb"))        # the per-frame counts: `jdiag.py boot` resamples them by scene (paired interval of two read-outs, E320)
     print(f"{'':16s}" + "".join(f"{k:>12s}" for k in KEYS))
     for v in ("base", "head"):
         print(f"{v:16s}" + "".join(f"{num[v][k]:12.4f}" for k in KEYS))
@@ -264,6 +291,19 @@ def selftest():
     assert len(add_connectors(dl, [], [[i] for i in range(7)], dk, dlk, dm, two, snap=True)[0]["pts"]) == 9 and len(add_connectors(dl, [], [[i] for i in range(7)], dk, dlk, dm, two, snap=True, snap_dedup=True)[0]["pts"]) == 8
     base = dict(topo_F1=0.60, **{"F1@1.0": 0.80}, dup_frac=0.2, vert100_dp=19.0, junction_F1=0.25)
     assert holds(dict(base, topo_F1=0.63), base)[0] and not holds(dict(base, topo_F1=0.61), base)[0] and not holds(dict(base, topo_F1=0.63, dup_frac=0.3), base)[0]
+    # E320, critic 2026-11-12: the attached ends of a dump frame reach the curves (the mutation `qp, qd = kp_pos, kp_dir` passed every earlier test), also in the primary read-out (attached ends + one nearest piece per end, the geometry kept)
+    e = dict(kp_pos=np.array([[1.2, -2.5], [8.9, 2.5]]), kp_dir=np.array([[0.0, 1.0], [0.0, 1.0]]), att_pos=np.array([[0.0, -2.0], [8.0, 2.0]]), att_dir=np.array([[0.0, 1.0], [0.0, 1.0]]), scale=np.full((1, 1, 2), 0.3))
+    pk, pa_ = make_pairs(e, [0], [0], 1), make_pairs(e, [0], [0], 1, attach=True)
+    assert np.allclose(pk[0][0], [1.2, -2.5]) and np.allclose(pa_[0][0], [0.0, -2.0]) and np.allclose(pa_[0][2], [8.0, 2.0]) and len(pa_[0]) == 6 and len(make_pairs(e, [0], [0], 1, attach=True, chord=True)[0]) == 4
+    ck = add_connectors(lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, pk)[0]["pts"][-1]
+    ca = add_connectors(lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, pa_)[0]["pts"][-1]
+    assert np.allclose(ck[0], [1.2, -2.5]) and np.allclose(ca[0], [0.0, -2.0]) and np.allclose(ca[-1], [8.0, 2.0]), (ck[0], ca[0])
+    rp, n_p, w_p = add_connectors(lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, pa_, snap=True, snap_nogeom=True)
+    assert w_p == 1 and np.allclose(rp["pts"][-1][0], [0.0, -2.0]) and (0, len(rp["pts"]) - 1) in rp["edges"] and (len(rp["pts"]) - 1, 1) in rp["edges"], rp["edges"]                      # the curve stays on the attached ends, one piece per end is wired
+    assert len(make_pairs(dict(e, scale=None), [0], [0], 1)[0]) == 4 and make_pairs(e, [0], [0], 1, fit={(0, 0): (0.5, 0.6)})[0][4:] == (0.5, 0.6)
+    off_ = [(np.array([2.0, -2.0]), np.array([0.0, 1.0]), np.array([8.0, 2.0]), np.array([0.0, 1.0]))]                # the wiring radius: an end 2 m beside the piece end is wired by the default 4 m, not by a tight 1 m radius, and wired again at 2.5 m
+    g_ = (lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, off_)
+    assert add_connectors(*g_)[2] == 1 and add_connectors(*g_, wire_pos=1.0)[2] == 0 and add_connectors(*g_, wire_pos=2.5)[2] == 1 and add_connectors(*g_, wire_pos=4.0)[2] == 1
     print("qends_eval selftest ok")
 
 

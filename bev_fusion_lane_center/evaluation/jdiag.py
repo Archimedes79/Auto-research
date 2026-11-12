@@ -5,6 +5,8 @@
     wsl bash tools/env/_py14.sh jdiag.py kperr  e284_h2_s0 e287_p2_s0               position and heading error of the matched keypoints on the GT ends that all runs found
     wsl bash tools/env/_py14.sh jdiag.py maps   e313_s e307_n                       keypoint F1 / crowded / isolated / far entry recall / zone IoU of one maps arm against another, both seeds (runs/<arm>_s<S>/jmaps_val.json)
     wsl bash tools/env/_py14.sh jdiag.py snaprule e287_p2 e305_e                    the rule of the E311 card on runs/<net>_s<S>/ends_card_snap_thr<t>.json (`jends_eval.py score --snap --thr t`): topo F1 over the plain graph > +0.02 with F1@1.0 >= -0.01, dup_frac not higher, vertices <= +1.0, junction F1 >= -0.03; both seeds of every net
+    wsl bash tools/env/_py14.sh jdiag.py boot   e320_a_s0 ends_card_snap_nogeom_attach_thr0.1 e312_p_s0 ends_card_snap_thr0.1
+                                                                                    paired scene bootstrap (1000 resamples of the VAL scenes) of the difference of two read-outs on the same frames: topo F1, junction F1, F1@1.0, lanes found (E320: a - c per seed; reads runs/<run>/<card stem>.counts.pkl that `score` writes)
     wsl bash tools/env/_py14.sh jdiag.py selftest
 
 `common`, `curve` and `kperr` read runs/<run>/ends_val.pkl (`jends_eval.py dump` / `qends_eval.py dump`) and the VAL lane GT (matching: strict one-to-one, 4 m, 30 degrees, `jrule_control._match`); VAL only. CPU.
@@ -128,7 +130,7 @@ def kperr(runs):
     import jgt as J
     import qgraph_view as QV
     frames = _frames(runs)
-    E = {r: dict(pos=[], ang=[]) for r in runs}
+    E = {r: dict(pos=[], ang=[], apos=[], aang=[]) for r in runs}
     n = 0
     for sid, (name, toks) in QV.val_scenes().items():
         for t in toks:
@@ -153,10 +155,41 @@ def kperr(runs):
                         c = float(np.clip(np.dot(f["kp_dir"][k], gt[g][2:4]) / (np.linalg.norm(f["kp_dir"][k]) * np.linalg.norm(gt[g][2:4]) + 1e-9), -1, 1))
                         E[r]["pos"].append(float(np.linalg.norm(f["kp_pos"][k] - gt[g][:2])))
                         E[r]["ang"].append(float(np.degrees(np.arccos(c))))
+                        if "att_pos" in f:                                                                                     # E320: the ATTACHED end of the same keypoint against the same GT end
+                            ca = float(np.clip(np.dot(f["att_dir"][k], gt[g][2:4]) / (np.linalg.norm(f["att_dir"][k]) * np.linalg.norm(gt[g][2:4]) + 1e-9), -1, 1))
+                            E[r]["apos"].append(float(np.linalg.norm(f["att_pos"][k] - gt[g][:2])))
+                            E[r]["aang"].append(float(np.degrees(np.arccos(ca))))
     print("common GT ends:", n)
     for r in runs:
         p, a = np.array(E[r]["pos"]), np.array(E[r]["ang"])
         print(f"{r:12s} position error: mean {p.mean():.2f} m, median {np.median(p):.2f}, 90% {np.percentile(p, 90):.2f}; heading error: mean {a.mean():.1f} deg, median {np.median(a):.1f}, 90% {np.percentile(a, 90):.1f}")
+        if E[r]["apos"]:                                                                                                         # E320: the attached ends of the same matched keypoints
+            p2, a2 = np.array(E[r]["apos"]), np.array(E[r]["aang"])
+            print(f"{'  attached':12s} position error: mean {p2.mean():.2f} m, median {np.median(p2):.2f}, 90% {np.percentile(p2, 90):.2f}; heading error: mean {a2.mean():.1f} deg, median {np.median(a2):.1f}, 90% {np.percentile(a2, 90):.1f}")
+
+
+def boot(ra, ca, rb, cb, n=1000, seed=0):
+    """paired scene bootstrap of (read-out A - read-out B) on the same VAL frames: the pooled topo F1, junction F1, F1@1.0 and lanes found over resampled scenes (frames of a scene stay together), from the per-frame counts of the two score cards
+    (`runs/<run>/<card stem>.counts.pkl`, written by `qends_eval.cmd_score`); prints the point difference, the bootstrap mean and the 95 % interval. The rule of a card stays the point estimate; this is the interval next to it."""
+    import qgraph_eval as QE
+    A, B = (pickle.load(open(os.path.join(ROOT, "runs", r, c + ".counts.pkl"), "rb")) for r, c in ((ra, ca), (rb, cb)))
+    assert A["scenes"] == B["scenes"], "the two read-outs must be scored on the same frames"
+    sc = np.asarray(A["scenes"])
+    uniq = sorted(set(sc.tolist()))
+    where = {s: np.where(sc == s)[0] for s in uniq}
+    keys = ("topo_F1", "junction_F1", "F1@1.0", "lanes_found")
+    pa, pb = QE.graph_numbers(A["head"]), QE.graph_numbers(B["head"])
+    rng = np.random.RandomState(seed)
+    d = {k: [] for k in keys}
+    for _ in range(n):
+        pick = np.concatenate([where[uniq[i]] for i in rng.randint(0, len(uniq), len(uniq))])
+        na, nb = QE.graph_numbers([A["head"][i] for i in pick]), QE.graph_numbers([B["head"][i] for i in pick])
+        for k in keys:
+            d[k].append(na[k] - nb[k])
+    print(f"A = {ra} {ca}   B = {rb} {cb}   {len(uniq)} scenes, {n} resamples")
+    for k in keys:
+        x = np.asarray(d[k])
+        print(f"  {k:12s} A - B: point {pa[k] - pb[k]:+.4f}, bootstrap mean {x.mean():+.4f}, 95 % [{np.percentile(x, 2.5):+.4f}, {np.percentile(x, 97.5):+.4f}]")
 
 
 def maps_summary(d):
@@ -219,6 +252,8 @@ if __name__ == "__main__":
         curve(sys.argv[2])
     elif cmd == "kperr" and len(sys.argv) > 2:
         kperr(sys.argv[2:])
+    elif cmd == "boot" and len(sys.argv) == 6:
+        boot(*sys.argv[2:6])
     elif cmd == "snaprule" and len(sys.argv) > 2:
         snaprule(sys.argv[2:])
     elif cmd == "maps" and len(sys.argv) == 4:

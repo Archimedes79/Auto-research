@@ -95,12 +95,17 @@ def main():
         p.requires_grad_(True)
     run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e} capacity={a.capacity} ntok={a.ntok} geom_w={a.geom_w} unc={a.unc} attach={a.attach}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
 
+    calls = [0]
+
     def loss_fn(m, b):
         dev = next(m.parameters()).device
         x = b["x"].to(dev, non_blocking=True).float()
         gt = {k: b[k].to(dev) for k in ("ent", "ext", "ent_m", "ext_m")}
         _, jout, out = m(x, gt=gt)
         loss, info = JE.jends_loss(out, b, cross_w=a.cross_w, driven_w=a.driven_w, geom_w=a.geom_w)
+        calls[0] += 1
+        if a.geom_w > 0 and calls[0] == 100:                                                              # critic 2026-11-12: a wrong pair alignment of the GT polylines shows as geom_n far below pos_pairs
+            run.log(f"step 100 check of the geometry loss: geom_n {info.get('geom_n', 0.0):.0f} pairs with a GT polyline of pos_pairs {info.get('pos_pairs', 0.0):.0f} positives, geom_end_d {info.get('geom_end_d', float('nan')):.2f} m" + (f", attachment over {info['att_n']:.0f} keypoints with a candidate: att_acc {info['att_acc']:.2f} (nearest-candidate baseline {info['att_acc_nearest']:.2f}), att_ce {info['att_ce']:.2f}, attached end error {info['att_d']:.2f} m against the keypoint's {info['att_kp_d']:.2f} m (train frames, GT-injected keypoints included)" if "att_ce" in info else ""))
         if a.e2e:
             lm, im = JM.jmaps_loss(jout, b)
             loss = loss + a.maps_w * lm
