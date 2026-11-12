@@ -69,3 +69,12 @@ E303 (handle scales: +13 points of the pairs that are found) and everything that
 | oracle pair classifier | 6905 | 0.628 | 0.941 |
 | oracle pairs + fitted handle scales | 7231 | 0.658 | 0.951 |
 Reading: E305 gains 6.0 points at p >= 0.5 and 11.1 at p >= 0.1 over the plain graph (E308: 4.1 and 9.1). At p >= 0.1 the connectors cover MORE maneuvers than the oracle pair classifier (0.636 against 0.628): the oracle delivers one curve per true pair of strictly matched keypoints only (52 % of the pairs), the threshold 0.1 delivers more than three times as many curves, among them lanes of pairs whose keypoints did not match strictly. An oracle is a sanity check, not an upper bound. Snapping moves the geometric coverage by -0.3 .. -0.6 points: it is a topology gain, not a geometry gain (E311).
+
+## 6. E312 (narrower end heat, handle scales, snapped ends) with the same measure (`runs/e312_p_s<S>/maneuver_val.json`, written by `temp/day6/day6.sh`: `jmaneuver.py score --variants plain p0.5s p0.1s p0.1`)
+| delivered graph | seed 0: realised / share | seed 1: realised / share |
+|---|---|---|
+| plain (B + hard close-node step) | 5773 / 0.525 | 5394 / 0.491 |
+| connectors p >= 0.5, snapped ends | 6725 / 0.612 | 6608 / 0.601 |
+| connectors p >= 0.1, snapped ends | 7770 / **0.707** | 7703 / **0.701** |
+| connectors p >= 0.1, from the keypoints | 7833 / 0.713 | 7760 / 0.706 |
+Reading: the maneuver coverage rises from 52.5 % / 49.1 % to 70.7 % / 70.1 % (+18.2 / +21.0 points; E305 on the E286 maps: 52.5 % -> 63.6 %, +11.1; E308: +9.1), junction precision 0.944 - 0.946 (plain 0.953 / 0.957). The narrower end heat finds the ends that the earlier maps missed (entry / exit recall 0.75 / 0.77 against 0.65 / 0.64), and each found end carries its maneuvers. The pair precision at the recall of E305 (jpair_pr): 0.759 / 0.773 against 0.654 / 0.662 (+0.105 / +0.111).
