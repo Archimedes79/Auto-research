@@ -44,9 +44,10 @@ class QData(torch.utils.data.Dataset):
     DEFAULT_ZONE = False                                           # E282: set by `qgraph_train.py --node-loss zone`: the batch also carries the zone maps (needs a sparse target)
     DEFAULT_JUNCTION = False                                       # E286: set by `jmaps_train.py`: the batch also carries the junction maps (zone, entry / exit heat + heading, paint) and the ends
     DEFAULT_PSCALE = False                                         # E303: set by `jends_train.py --scales`: the batch carries the fitted handle scales of the true pairs (a grid search, about 0.15 s per frame: NOT computed for the other runs)
-    DEFAULT_ENDS = False                                           # E284: set by `qgraph_train.py --phases 8`: the batch also carries the junction ends and the true pairs (`qends.end_table`)
+    DEFAULT_PPTS = False                                           # E317: set by `jends_train.py --geom-w`: the batch carries the GT connector polyline of every true pair (16 points of equal arc length) for the geometry loss of the pair head
+    DEFAULT_ENDS = False                                         # E284: set by `qgraph_train.py --phases 8`: the batch also carries the junction ends and the true pairs (`qends.end_table`)
 
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None, junction=None, pscale=None):
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None, junction=None, pscale=None, ppts=None):
         self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
         sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
@@ -56,6 +57,7 @@ class QData(torch.utils.data.Dataset):
         self.ends = (QData.DEFAULT_ENDS if ends is None else bool(ends)) or self.junction
         self.paint_missing = 0
         self.pscale = QData.DEFAULT_PSCALE if pscale is None else bool(pscale)
+        self.ppts = QData.DEFAULT_PPTS if ppts is None else bool(ppts)
         assert not self.zone or self.sparse is not None, "the zone maps need the sparse node target"
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{PD.D}/feats/{part}_tokens.json"))
@@ -112,6 +114,8 @@ class QData(torch.utils.data.Dataset):
             npair = len(out["pairs"]) if "pairs" in out else 0                                           # E298: 1 for a true pair the ego drives (tier 1), in the order of `pairs` (the sorted true pairs of `qends.end_table` = the rows of `jgt`'s pairs)
             out["pscale"] = torch.from_numpy(QJ.fit_pair_scales(jg)) if (self.pscale and jg is not None and len(jg["pairs"]) == npair) else torch.full((npair, 2), float("nan"))        # E303: the fitted handle scales of the true pairs
             out["pdrv"] = torch.from_numpy(np.ascontiguousarray(jg["pairs"][:, 9].astype(np.float32))) if (jg is not None and len(jg["pairs"]) == npair) else torch.zeros(npair)
+            if self.ppts:                                                                                  # E317: the GT connector polyline of every true pair, in the order of `pairs` (NaN when the frame has none)
+                out["ppts"] = torch.from_numpy(QJ.pair_polylines(jg)) if (jg is not None and len(jg["pairs"]) == npair) else torch.full((npair, QJ.PPTS_N, 2), float("nan"))
         if self.pixels:
             import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
@@ -151,6 +155,11 @@ def collate(b):
             for i, o in enumerate(b):
                 ps[i, :len(o["pscale"])] = o["pscale"]
             out["pscale"] = ps
+            if "ppts" in b[0]:                                                                                # E317
+                pp = torch.full((B, P_, b[0]["ppts"].shape[1], 2), float("nan"))
+                for i, o in enumerate(b):
+                    pp[i, :len(o["ppts"])] = o["ppts"]
+                out["ppts"] = pp
     L = max(1, max(len(o["lk"]) for o in b))
     lk, lkl, lks = -torch.ones(B, L, 4, dtype=torch.long), torch.zeros(B, L, dtype=torch.bool), torch.full((B, L, 2), float("nan"))
     for i, o in enumerate(b):

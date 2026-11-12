@@ -12,7 +12,10 @@ gradient flows through the values, the D7 convention), the group / rank bookkeep
 E302 `capacity`: instead of independent pair logits (+ dual softmax) the pair probability comes from the plan of a log-domain Sinkhorn with a dustbin: every entry has a predicted out-degree {0, 1, 2, 3+} (0 = a false keypoint), every exit an in-degree; an entry that
 feeds a turn AND the straight exit (27 % of the entries, E285) has mass 2, a merge exit takes two entries (33 %). A plan entry is a MASS (up to the degree), the pair probability is q = P / max(1, min(row mass, column mass)) in [0, 1] (the share of the smaller capacity this pair uses; one entry of degree 1 with two equally good exits gives 0.5 each), read as a logit, so the read-out (`logit >= 0`, i.e. q >= 0.5), the counts and the crossing penalty work unchanged. Differentiable (10 unrolled iterations).
 E308 `ntok`: B's node tokens (the frozen node head of the E273 baseline on the same pyramid, 64 channels at 2 m) are sampled at the keypoints and enter the keypoint token: the E284 end head reads them and ranks the pairs between true ends better (AUC 0.974) than the head on the maps' own features alone (0.930, E287 p2).
-Run the self-test: python jends.py
+E317 `geom_loss` (`--geom-w`): the delivered connector is supervised directly: the curve of every true keypoint pair (`_bezier_s`, the keypoint ends, headings and learned handle scales) against the GT connector polyline of the pair (symmetric point-to-polyline
+distance, smooth L1 1 m) plus the position of every matched keypoint against its GT end. The gradient reaches the soft-argmax positions (so the heat of the maps head), the headings and the scales: the shape is a constraint of the loss, not only of the parametrisation.
+E318 `unc`: a position scale (log sigma, metres) per keypoint from its token; the end-position term becomes the Laplace NLL |d| exp(-s) + s (heteroscedastic: an end may be declared uncertain); s enters the pair logit as a detached feature and is the output `kp_logsig` (an uncertainty per end for the planner).
+Both are off by default (the E312 recipe is unchanged bit for bit). Run the self-test: python jends.py
 """
 import math
 
@@ -52,6 +55,33 @@ def _hermite(a, ta, b, tb, n=12):
     return h00 * a_ + h10 * ta_ + h01 * b_ + h11 * tb_
 
 
+def _bezier_s(a, ta, b, tb, sa=None, sb=None, n=16):
+    """points (..., n, 2) of the DELIVERED connector, the cubic Bezier of `qends.curve_s` in torch: control points a + sa L ta and b - sb L tb with L = the chord and the handle scales sa, sb (the E303 scale head; None = 1/3, which is `_hermite`'s chord-tangent curve);
+    differentiable in the end points, the headings and the scales"""
+    L = (b - a).norm(dim=-1, keepdim=True)
+    sa_ = 1.0 / 3.0 if sa is None else sa[..., None]
+    sb_ = 1.0 / 3.0 if sb is None else sb[..., None]
+    s = torch.linspace(0, 1, n, device=a.device).view(*([1] * (a.dim() - 1)), n, 1)
+    a_, b_ = a[..., None, :], b[..., None, :]
+    q1, q2 = (a + sa_ * L * ta)[..., None, :], (b - sb_ * L * tb)[..., None, :]
+    return (1 - s) ** 3 * a_ + 3 * (1 - s) ** 2 * s * q1 + 3 * (1 - s) * s ** 2 * q2 + s ** 3 * b_
+
+
+def _dist_to_polyline(pts, poly):
+    """(..., Np) distance of every point of `pts` (..., Np, 2) to the polyline `poly` (..., Nq, 2) (point-to-segment, so the sampling of the polyline does not enter); a small floor under the square root keeps the gradient finite on the line"""
+    a, b = poly[..., :-1, :], poly[..., 1:, :]
+    ab = b - a
+    ap = pts[..., :, None, :] - a[..., None, :, :]
+    t = ((ap * ab[..., None, :, :]).sum(-1) / (ab * ab).sum(-1).clamp_min(1e-9)[..., None, :]).clamp(0.0, 1.0)
+    d2 = ((ap - t[..., None] * ab[..., None, :, :]) ** 2).sum(-1)
+    return (d2.min(-1)[0] + 1e-8).sqrt()
+
+
+def _huber(d, delta=1.0):
+    """smooth L1 of a distance: quadratic inside `delta` metres, linear beyond"""
+    return torch.where(d < delta, 0.5 * d * d / delta, d - 0.5 * delta)
+
+
 def _sample(maps, pts):
     """maps (B, C, H, W) (rows = x, columns = y, origin -50 m, extent 100 m), pts (B, ..., 2) metres -> (B, ..., C) bilinear samples (zero outside)"""
     B = maps.shape[0]
@@ -79,18 +109,22 @@ def sinkhorn_plan(z, allowed, re, rx, alpha, iters=SINK_ITERS, full=False):
 
 
 class JEnds(nn.Module):
-    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, capacity=False, ntok=0):
+    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, capacity=False, ntok=0, unc=False):
         super().__init__()
-        self.k, self.order, self.evidence, self.scales, self.capacity, self.ntok = k, order, evidence, scales, capacity, ntok
+        self.k, self.order, self.evidence, self.scales, self.capacity, self.ntok, self.unc = k, order, evidence, scales, capacity, ntok, unc
         self.kp = nn.Linear(f1 + 6 + ntok, d)
         self.blocks = nn.ModuleList([SetBlock(d), SetBlock(d)])
-        nin = 2 * d + NG + (NEV if evidence else 0) + (NRK if order else 0)
+        nin = 2 * d + NG + (NEV if evidence else 0) + (NRK if order else 0) + (2 if unc else 0)                  # E318: + the position scales (log sigma) of the entry and the exit keypoint
         self.pair = nn.Sequential(nn.Linear(nin, hid), nn.GELU(), nn.Linear(hid, hid), nn.GELU(), nn.Linear(hid, 1))
         if capacity:                                                                                         # E302: the degree heads on the keypoint tokens (classes 0, 1, 2, 3+) and the dustbin score
             self.deg_e, self.deg_x = nn.Linear(d, 4), nn.Linear(d, 4)
             self.alpha = nn.Parameter(torch.zeros(()))
         if scales:                                                                                           # E303: the two handle scales of the delivered curve, in chords (0.05 .. 1.25 like the fit grid)
             self.scale = nn.Sequential(nn.Linear(nin, 32), nn.GELU(), nn.Linear(32, 2))
+        if unc:                                                                                              # E318: one position scale per keypoint (log sigma in metres) from its self-attended token; sigma = 1 m at the start
+            self.logsig = nn.Linear(d, 1)
+            nn.init.zeros_(self.logsig.weight)
+            nn.init.zeros_(self.logsig.bias)
 
     def forward(self, jout, P, gt=None, tok=None):
         j1, f1 = jout["j1"].float(), jout["f1"]
@@ -170,6 +204,11 @@ class JEnds(nn.Module):
         if self.order:
             rk, ga, ra, gb, rb = self.rank_matrix(pos, D, valid & real if gt is not None else valid)         # groups and ranks from the real peaks only: the same distribution in training and at evaluation
             feats.append(rk)
+        ls = None
+        if self.unc:                                                                                         # E318: the position scales enter the pair logit as features, detached (the pair loss does not shape them)
+            ls = self.logsig(t)[..., 0].float().clamp(-3.0, 3.0)                                             # (B, 2K): sigma 0.05 .. 20 m
+            lsd = ls.detach()
+            feats.append(torch.stack([lsd[:, :K_, None].expand_as(L), lsd[:, None, K_:].expand_as(L)], -1))
         fcat = torch.cat(feats, -1)
         logit = self.pair(fcat)[..., 0]
         extra = {}
@@ -185,6 +224,8 @@ class JEnds(nn.Module):
         out = dict(heat=heat, idx=idx, valid=valid, kp_pos=pos, kp_dir=D, kp_p=pr, logit=logit, allowed=allowed, **extra)
         if self.scales:
             out["scale"] = 0.05 + 1.2 * self.scale(fcat).sigmoid()
+        if ls is not None:
+            out["kp_logsig"] = ls
         if self.order:
             out.update(ga=ga, ra=ra, gb=gb, rb=rb)
         return out
@@ -245,7 +286,61 @@ def degree_classes(T, match_e, match_x):
     return res
 
 
-def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5):
+def geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs):
+    """E317 / E318: the geometry of the delivered connector, supervised directly. (1) SHAPE: for every true pair whose two ends are keypoints (y = 1, allowed) the delivered curve (`_bezier_s`: the keypoint ends, the headings, the learned
+    handle scales, 16 samples) against the GT connector polyline of the pair (`batch['ppts']`, 16 points of equal arc length): symmetric point-to-polyline distance, smooth L1 with delta 1 m, curve -> GT and GT -> curve. (2) ENDS: every valid keypoint
+    within 4 m / 30 degrees of a GT end of its kind against the nearest such end, smooth L1 (E317) or, when the head has a position scale (`kp_logsig`, E318), the Laplace NLL |d| exp(-s) + s (the net may say that an end is uncertain, at the price of s).
+    The gradient reaches the keypoint positions (through the soft-argmax into the heat, so into the maps head with --e2e), the headings (the dir maps) and the scales. Returns (loss or None, info); `ia`, `ib`: the matched GT end of every keypoint
+    (E / X = none) as in `jends_loss` (they pick the GT polyline of a keypoint pair)."""
+    dev = out["heat"].device
+    B, K_ = out["valid"].shape[0], out["idx"].shape[2]
+    E, X = batch["ent"].shape[1], batch["ext"].shape[1]
+    pp = batch["ppts"].to(dev).float()
+    PP = torch.full((B, E + 1, X + 1) + tuple(pp.shape[2:]), float("nan"), device=dev)
+    PP[bi[pv], pairs[..., 0][pv], pairs[..., 1][pv]] = pp[pv]
+    PPt = PP[torch.arange(B, device=dev)[:, None, None], ia[:, :, None], ib[:, None, :]]                      # (B, K, K, N, 2): the GT polyline of the pair (keypoint i, keypoint j), NaN when it is no true pair
+    m = (y > 0) & allowed & torch.isfinite(PPt[..., 0, 0])
+    kp, kd = out["kp_pos"].float(), out["kp_dir"].float()
+    info, loss = {}, None
+    if m.any():
+        b_, i_, j_ = m.nonzero(as_tuple=True)
+        sc = out.get("scale")
+        curve = _bezier_s(kp[b_, i_], kd[b_, i_], kp[b_, K_ + j_], kd[b_, K_ + j_], None if sc is None else sc[b_, i_, j_, 0].float(), None if sc is None else sc[b_, i_, j_, 1].float())
+        gt = PPt[m]
+        d1, d2 = _dist_to_polyline(curve, gt), _dist_to_polyline(gt, curve)
+        shape = _huber(d1).mean() + _huber(d2).mean()
+        loss = shape
+        info.update(geom_shape=float(shape), geom_n=float(m.sum()), geom_d_curve=float(d1.mean()), geom_d_gt=float(d2.mean()))
+    ends, n_end, d_all = kp.new_zeros(()), 0, []
+    for k, (key, mkey) in enumerate((("ent", "ent_m"), ("ext", "ext_m"))):
+        G, gm = batch[key].to(dev).float(), batch[mkey].to(dev)
+        kpk, kdk = kp[:, k * K_:(k + 1) * K_], kd[:, k * K_:(k + 1) * K_]
+        with torch.no_grad():                                                                                # every valid keypoint of the kind is pulled to the nearest GT end within 4 m / 30 degrees (many to one: a real peak that
+            dk = (kpk[:, :, None, :] - G[:, None, :, :2]).norm(dim=-1)                                        # lies next to the keypoint the BCE matched is a delivered connector end too, so its position counts)
+            ang = (kdk[:, :, None, :] * G[:, None, :, 2:]).sum(-1)
+            okm = (dk <= QEN.MATCH_POS) & (ang >= math.cos(math.radians(QEN.MATCH_ANG))) & gm[:, None, :] & out["valid"][:, k, :, None]
+            a_ = torch.where(okm, dk, torch.full_like(dk, 1e6)).argmin(2)
+            ok = okm.any(2)
+        if not ok.any():
+            continue
+        g = G[..., :2].gather(1, a_[..., None].expand(-1, -1, 2))
+        d = ((kpk - g) ** 2).sum(-1).add(1e-8).sqrt()[ok]
+        if "kp_logsig" in out:
+            s = out["kp_logsig"][:, k * K_:(k + 1) * K_][ok]
+            ends = ends + (d * torch.exp(-s) + s).sum()
+            info["geom_sig"] = float(s.exp().mean())
+        else:
+            ends = ends + _huber(d).sum()
+        n_end += int(ok.sum())
+        d_all.append(d.detach())
+    if n_end:
+        ends = ends / n_end
+        loss = ends if loss is None else loss + ends
+        info.update(geom_end=float(ends), geom_end_d=float(torch.cat(d_all).mean()))
+    return loss, info
+
+
+def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5, geom_w=0.0):
     dev = out["heat"].device
     B = out["heat"].shape[0]
     match = QEN.match_keypoints(out, batch)
@@ -304,6 +399,11 @@ def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5):
         cp = crossing_penalty(out)
         loss = loss + cross_w * cp
         info["cross"] = float(cp)
+    if geom_w > 0 and "ppts" in batch:                                                                          # E317 / E318: the shape and the ends of the delivered connector
+        lg, ig = geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs)
+        if lg is not None:
+            loss = loss + geom_w * lg
+            info.update(ig)
     return loss, info
 
 
@@ -392,6 +492,52 @@ def _selftest():
     batch.pop("pscale")
     _, info2 = jends_loss(out, batch)
     assert "scale_l1" not in info2
+    # E317: the pieces of the geometry loss. The delivered curve with chord tangents (scales 1/3) is `_hermite`; a straight connector lies on its chord; distance / smooth L1 by hand
+    pa_, pb_ = torch.tensor([[0.0, 0.0], [1.0, 2.0]]), torch.tensor([[0.0, 12.0], [9.0, 2.0]])
+    ta_, tb_ = torch.tensor([[0.0, 1.0], [1.0, 0.0]]), torch.tensor([[0.0, 1.0], [1.0, 0.0]])
+    cb, ch = _bezier_s(pa_, ta_, pb_, tb_, n=12), _hermite(pa_, ta_, pb_, tb_, n=12)
+    assert float((cb - ch).abs().max()) < 1e-5, "the Bezier of the delivered curve at scales 1/3 must be the chord-tangent Hermite curve"
+    line = torch.stack([pa_, pb_], 1)                                                                          # (2, 2, 2): the straight polylines
+    assert float(_dist_to_polyline(cb, line).max()) < 1e-3
+    assert abs(float(_dist_to_polyline(torch.tensor([[0.0, 1.0], [3.0, 0.0]]), torch.tensor([[-1.0, 0.0], [1.0, 0.0]]))[1]) - 2.0) < 1e-3
+    assert abs(float(_huber(torch.tensor(0.5))) - 0.125) < 1e-6 and abs(float(_huber(torch.tensor(2.0))) - 1.5) < 1e-6
+    # the loss in the model: the GT connector of the two pairs is the straight line between the GT ends (batch['ppts']); gradient into the heat (positions), the headings, the scales, the pair features
+    ppts = torch.zeros(B, 2, 16, 2)
+    for k_, x_ in enumerate((-1.75, 1.75)):
+        ppts[:, k_, :, 0], ppts[:, k_, :, 1] = x_, torch.linspace(-8.0, 8.0, 16)
+    batch["ppts"] = ppts
+    m = JEnds(d=d, order=True, evidence=True, scales=True)
+    jr = dict(jout, j1=jout["j1"].clone().requires_grad_(True))
+    out = m(jr, P, gt=gt)
+    l0, i0 = jends_loss(out, batch)
+    lg, ig = jends_loss(out, batch, geom_w=0.5)
+    assert "geom_shape" not in i0 and "geom_shape" in ig and ig["geom_n"] >= 2 * B and float(lg) > float(l0) and ig["geom_end_d"] >= 0, (i0, ig)
+    lg.backward()
+    g1 = jr["j1"].grad
+    assert float(g1[:, 2:4].abs().sum()) > 0, "the geometry loss must reach the entry / exit heat (the soft-argmax positions)"
+    assert float(g1[:, 4:8].abs().sum()) > 0, "the geometry loss must reach the heading maps"
+    assert all(p_.grad is not None and float(p_.grad.abs().sum()) > 0 for p_ in m.scale.parameters()), "the geometry loss must reach the scale head"
+    # E318: a position scale per keypoint, features of the pair logit (detached), the Laplace NLL for the ends
+    mu = JEnds(d=d, order=True, evidence=True, scales=True, unc=True)
+    out = mu(jout, P, gt=gt)
+    assert out["kp_logsig"].shape == (B, 2 * K) and float(out["kp_logsig"].abs().max()) < 1e-6, "sigma starts at 1 m"
+    out["logit"].sum().backward()
+    assert mu.logsig.weight.grad is None or float(mu.logsig.weight.grad.abs().sum()) == 0.0, "the pair loss must not shape the position scale (detached feature)"
+    mu.zero_grad()
+    out = mu(jout, P, gt=gt)
+    lu, iu = jends_loss(out, batch, geom_w=0.5)
+    lu.backward()
+    assert "geom_sig" in iu and float(mu.logsig.bias.grad.abs().sum()) > 0, "the end NLL must train the position scale"
+    # the NLL by hand: ends 3 m off with s = 0 -> d / sigma + s is large and wants a larger sigma; ends 0.1 m off wants a smaller one
+    oq = dict(heat=torch.zeros(1, 2, 4, 4), valid=torch.ones(1, 2, 2, dtype=torch.bool), idx=torch.zeros(1, 2, 2, dtype=torch.long), kp_pos=torch.tensor([[[3.0, 0.0], [0.1, 0.0], [20.0, 0.0], [0.0, 0.0]]]),
+              kp_dir=torch.tensor([[[1.0, 0.0]] * 3 + [[0.0, 1.0]]]), kp_logsig=torch.zeros(1, 4, requires_grad=True))
+    bq = dict(ent=torch.tensor([[[0.0, 0.0, 1.0, 0.0]] * 2]), ext=torch.tensor([[[0.0, 0.0, 1.0, 0.0]] * 2]), ent_m=torch.ones(1, 2, dtype=torch.bool), ext_m=torch.ones(1, 2, dtype=torch.bool),
+              ppts=torch.full((1, 0, 16, 2), float("nan")), pairs=-torch.ones(1, 0, 2, dtype=torch.long))
+    lq, iq = geom_loss(oq, bq, torch.zeros(1, 2, 2), torch.zeros(1, 2, 2, dtype=torch.bool), torch.tensor([[2, 2]]), torch.tensor([[2, 2]]), torch.zeros(1, 0, dtype=torch.long), torch.zeros(1, 0, dtype=torch.bool), -torch.ones(1, 0, 2, dtype=torch.long))
+    lq.backward()
+    gs = oq["kp_logsig"].grad[0]
+    assert gs[0] < 0 < gs[1] and gs[2] == 0 and gs[3] == 0, f"a 3 m error must push log sigma up, a 0.1 m error down, a keypoint 20 m away or turned 90 degrees is no end (no gradient): {gs}"
+    assert abs(iq["geom_end_d"] - 1.55) < 1e-3, iq                                                              # mean of 3.0 and 0.1: the two keypoints that are ends
     # the crossing penalty: P = 1 on the crossed pair set {0 -> 1, 1 -> 0} is large, on the ordered set {0 -> 0, 1 -> 1} it is zero
     out = dict(logit=torch.full((1, K, K), -20.0), allowed=torch.ones(1, K, K, dtype=torch.bool), ga=torch.zeros(1, K, dtype=torch.long), gb=torch.zeros(1, K, dtype=torch.long),
                ra=torch.arange(K).float()[None], rb=torch.arange(K).float()[None])

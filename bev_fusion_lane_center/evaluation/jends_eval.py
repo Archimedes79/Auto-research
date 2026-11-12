@@ -25,7 +25,7 @@ def load_model(run, dev):
     import jends_train as JT
     ck = torch.load(os.path.join(ROOT, "runs", run, "model.pt"), map_location="cpu")
     a = ck["args"]
-    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)), capacity=bool(a.get("capacity", False)), ntok=bool(a.get("ntok", False)))
+    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)), capacity=bool(a.get("capacity", False)), ntok=bool(a.get("ntok", False)), unc=bool(a.get("unc", False)))
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), a
 
@@ -48,9 +48,12 @@ def dump(a):
             if a.max and len(frames) >= a.max:
                 break
             for i in range(len(b["token"])):
-                frames.append(dict(token=b["token"][i], row=int(b["row"][i]), kp_pos=out["kp_pos"][i].cpu().numpy(), kp_dir=out["kp_dir"][i].cpu().numpy(), kp_p=out["kp_p"][i].cpu().numpy(),
-                                   valid=out["valid"][i].cpu().numpy(), logit=out["logit"][i].float().cpu().numpy(), allowed=out["allowed"][i].cpu().numpy(),
-                                   scale=out["scale"][i].float().cpu().numpy() if "scale" in out else None))
+                fr = dict(token=b["token"][i], row=int(b["row"][i]), kp_pos=out["kp_pos"][i].cpu().numpy(), kp_dir=out["kp_dir"][i].cpu().numpy(), kp_p=out["kp_p"][i].cpu().numpy(),
+                          valid=out["valid"][i].cpu().numpy(), logit=out["logit"][i].float().cpu().numpy(), allowed=out["allowed"][i].cpu().numpy(),
+                          scale=out["scale"][i].float().cpu().numpy() if "scale" in out else None)
+                if "kp_logsig" in out:                                                                                                         # E318: the position scale (log sigma, m) of every keypoint
+                    fr["logsig"] = out["kp_logsig"][i].float().cpu().numpy()
+                frames.append(fr)
     r = lambda x, y: x / max(y, 1)  # noqa: E731
     head = dict(ent_recall=r(tot["ent_hit"], tot["ent_n"]), ent_precision=r(tot["ent_ok"], tot["ent_kp"]), ext_recall=r(tot["ext_hit"], tot["ext_n"]), ext_precision=r(tot["ext_ok"], tot["ext_kp"]),
                 pair_recall=r(tot["pairs_hit"], tot["pairs_n"]), pair_precision=r(tot["pairs_ok"], tot["pairs_kp"]), counts=tot, thr=a.thr, frames=len(frames), order=not args["no_order"],

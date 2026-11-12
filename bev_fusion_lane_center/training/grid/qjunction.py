@@ -58,6 +58,25 @@ def fit_pair_scales(jg, scales=(0.05, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0, 1.25)):
     return out
 
 
+PPTS_N = 16
+
+
+def pair_polylines(jg, n=PPTS_N):
+    """E317: the GT connector polyline of every true pair (the first connector run of the pair, `jg['pair_pts']`) resampled to `n` points of equal arc length, in the order of `jg['pairs']` -> (P, n, 2) float32, all NaN
+    for a pair whose run has no length. What the geometry loss of the pair head (`jends.geom_loss`) compares the delivered curve with."""
+    out = np.full((0 if jg is None else len(jg["pairs"]), n, 2), np.nan, np.float32)
+    if jg is None:
+        return out
+    for k, pts in enumerate(jg["pair_pts"]):
+        q = np.asarray(pts, float).reshape(-1, 2)
+        seg = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(q, axis=0), axis=1))]
+        if len(q) < 2 or seg[-1] < 1e-3:
+            continue
+        s = np.linspace(0.0, seg[-1], n)
+        out[k] = np.stack([np.interp(s, seg, q[:, 0]), np.interp(s, seg, q[:, 1])], 1)
+    return out
+
+
 def painted_flags(jg, paint, stop_m=3.0, ped_m=4.0):
     """(ent_painted (E,), ext_painted (X,)) bool: an end is PAINTED when a stop line of a type other than the turn stop (turn stops lie inside the junction, they are waiting points, not entries) lies within `stop_m`
     or a pedestrian crossing within `ped_m`; an EXIT is painted by a crossing only (critic 2026-11-11: the stop line of the arm's own entry side lies next to its exits) (E285: only part of the ends are painted: the rest has to be inferred from context)"""
@@ -92,6 +111,10 @@ def _selftest():
     assert t["jpaint"][0][100, 83:86].sum() > 0
     sc = fit_pair_scales(jg)
     assert sc.shape == (len(jg["pairs"]), 2) and np.isfinite(sc).all() and (sc >= 0.05).all(), sc
+    pp = pair_polylines(jg)                                                                   # E317: one equal-arc-length polyline per true pair, from the entry run point to the exit run point
+    assert pp.shape == (len(jg["pairs"]), PPTS_N, 2) and np.isfinite(pp).all(), pp.shape
+    assert np.abs(pp[:, 0] - np.array([r[0] for r in jg["pair_pts"]])).max() < 1e-4 and np.abs(pp[:, -1] - np.array([r[-1] for r in jg["pair_pts"]])).max() < 1e-4
+    assert pair_polylines(None).shape == (0, PPTS_N, 2)
     pe, px = painted_flags(jg, paint)
     assert len(pe) == len(jg["ent"]) and pe[0] and px[0], (pe, px)                         # stop sign line at the entry, crossing at the exit
     t0, jg0 = junction_targets(dict(pieces=[]), None)
