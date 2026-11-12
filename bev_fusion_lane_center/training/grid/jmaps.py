@@ -12,6 +12,9 @@ Everything on the training path is a soft map (BCE + dice, cosine loss for the h
 E319 `DirX` (ctx "dil+dirx", `jmaps_train.py --dirx`): a heading-guided bidirectional exchange on the 1 m features, between the context blocks and the output convolutions. Every cell reads the features AHEAD and BEHIND it along the lane
 heading t(x) of the pyramid's own centre-lane field (`P["centre1"]` channels 1, 2) at 2 / 4 / 8 m (bilinear `grid_sample` at x +- s t(x): dense, differentiable in the features and in the heading), a residual 1 x 1 block mixes them (last layer zero-initialised, so the
 model starts as the model without it); two rounds, the second one with a heading refined from the features of the first (zero-initialised correction). The flag lives in the ctx string, so every loader that builds `JModel(ctx=args["ctx"])` builds the right model.
+E332 (D84, simplify) `+nopaint` / `+nozone` (`jmaps_train.py --no-paint --no-zone`): the head without its auxiliary maps. `nopaint` drops the 0.5 m branch (`m05`, `head05`, 1.48 of the head's 3.26 GMACs): the output has no `j05`, the loss no paint term;
+`nozone` keeps the 1 m output layout (zone / core channels exist but are no longer supervised, nothing reads them) and marks `out["skip"] = ("zone",)` so that `jmaps_loss` leaves the zone / core term out. The pair head must then run `--no-evidence` (the evidence along the
+curve reads the zone, core and paint maps). Both flags live in the ctx string; the flags off are the head of E307 bit for bit.
 Axes: rows = x (right), columns = y (forward), origin -50 m; 1 m cells (100 x 100) and 0.5 m cells (200 x 200). Run the self-test: python jmaps.py
 """
 import torch
@@ -94,9 +97,10 @@ class JMaps(nn.Module):
     def __init__(self, c2=144, c1=48, c05=32, d=64, ctx="dil"):
         super().__init__()
         base, *mods = ctx.split("+")
-        assert base in ("none", "dil", "attn") and set(mods) <= {"dirx"}, ctx
+        assert base in ("none", "dil", "attn") and set(mods) <= {"dirx", "nopaint", "nozone"}, ctx
         ctx = base
         self.ctx_mode, self.d = ctx, d
+        self.paint, self.zone = "nopaint" not in mods, "nozone" not in mods                  # E332: the 0.5 m paint branch / the zone + core supervision of the 1 m branch
         self.p2 = nn.Sequential(nn.Conv2d(c2, d, 1, bias=False), nn.GroupNorm(8, d), nn.ReLU(inplace=True))
         self.blocks = nn.ModuleList([ResDil(d, k) for k in (1, 2, 4, 8)]) if ctx != "none" else nn.ModuleList()
         if ctx == "attn":
@@ -105,13 +109,15 @@ class JMaps(nn.Module):
             self.attn = nn.TransformerEncoderLayer(d_model=d, nhead=4, dim_feedforward=2 * d, dropout=0.0, batch_first=True, norm_first=True)
         self.m1 = block(c1 + d, d)
         self.head1 = nn.Conv2d(d, NCH1, 1)
-        self.m05 = block(c05 + d, 32)
-        self.head05 = nn.Conv2d(32, 2, 1)
-        for m in (self.head1, self.head05):
+        if self.paint:
+            self.m05 = block(c05 + d, 32)
+            self.head05 = nn.Conv2d(32, 2, 1)
+        for m in ((self.head1, self.head05) if self.paint else (self.head1,)):
             nn.init.normal_(m.weight, std=0.01)
         with torch.no_grad():
             self.head1.bias.copy_(torch.tensor([-3.0, -3.0, -4.0, -4.0, 0.0, 1.0, 0.0, 1.0]))
-            self.head05.bias.copy_(torch.tensor([-4.0, -4.0]))
+            if self.paint:
+                self.head05.bias.copy_(torch.tensor([-4.0, -4.0]))
         self.dirx = DirX(d) if "dirx" in mods else None                      # created LAST: the random initialisation of every other tensor is the same with and without the flag
 
     def forward(self, P):
@@ -128,8 +134,10 @@ class JMaps(nn.Module):
         if self.dirx is not None:                                            # E319: forward / backward exchange along the lane heading, before the output convolutions and before `f1` is read by the pair head
             x1 = self.dirx(x1, P)
         j1 = self.head1(x1)
+        if not self.paint:                                                   # E332: no 0.5 m branch; `skip` names the loss terms that are left out
+            return dict(j1=j1, f1=x1) if self.zone else dict(j1=j1, f1=x1, skip=("zone",))
         j05 = self.head05(self.m05(torch.cat([P["feat05"], up(x1, 2)], 1)))
-        return dict(j1=j1, j05=j05, f1=x1)
+        return dict(j1=j1, j05=j05, f1=x1) if self.zone else dict(j1=j1, j05=j05, f1=x1, skip=("zone",))
 
 
 class JModel(nn.Module):
@@ -166,10 +174,14 @@ def _dice(logit, y, eps=1.0):
 
 def jmaps_loss(out, batch, far_w=0.0, far_r=35.0):
     dev = out["j1"].device
-    j1, j05 = out["j1"].float(), out["j05"].float()
+    j1 = out["j1"].float()
+    j05 = out["j05"].float() if "j05" in out else None                                                  # E332: a head without the paint branch has no j05 and no paint loss
     jz, jh, jd, jp = (batch[k].to(dev).float() for k in ("jz", "jheat", "jdir", "jpaint"))
     info = {}
-    l_z = F.binary_cross_entropy_with_logits(j1[:, :2], jz) + _dice(j1[:, :2], jz)
+    if "zone" in out.get("skip", ()):                                                                   # E332: the zone / core maps are not supervised (nothing reads them)
+        l_z = 0.0
+    else:
+        l_z = F.binary_cross_entropy_with_logits(j1[:, :2], jz) + _dice(j1[:, :2], jz)
     info["zone"] = float(l_z)
     pw = torch.tensor(20.0, device=dev)
     if far_w > 0:                                                                                      # E304: the cells beyond far_r metres from the ego count 1 + far_w times in the heat BCE (53 % of the GT ends are there, the recall is 0.55)
@@ -187,7 +199,7 @@ def jmaps_loss(out, batch, far_w=0.0, far_r=35.0):
         pr = pr / pr.norm(dim=1, keepdim=True).clamp_min(1e-4)
         l_d = l_d + ((1 - (pr * tgt).sum(1)) * m).sum() / m.sum().clamp_min(1.0)
     info["dir"] = float(l_d)
-    l_p = F.binary_cross_entropy_with_logits(j05, jp, pos_weight=torch.tensor(10.0, device=dev)) + _dice(j05, jp)
+    l_p = F.binary_cross_entropy_with_logits(j05, jp, pos_weight=torch.tensor(10.0, device=dev)) + _dice(j05, jp) if j05 is not None else 0.0
     info["paint"] = float(l_p)
     return l_z + l_h + 0.5 * l_d + l_p, info
 
@@ -224,10 +236,11 @@ def keypoints(out, thr=0.3, half=50.0, res=1.0):
 def _selftest():
     torch.manual_seed(0)
     P = dict(feat2=torch.randn(2, 144, 50, 50), feat1=torch.randn(2, 48, 100, 100), feat05=torch.randn(2, 32, 200, 200), centre1=torch.randn(2, 12, 100, 100))
-    for ctx in ("none", "dil", "attn", "dil+dirx"):
+    for ctx in ("none", "dil", "attn", "dil+dirx", "dil+nopaint", "dil+nopaint+nozone", "dil+dirx+nopaint+nozone"):
         m = JMaps(ctx=ctx)
         out = m(P)
-        assert out["j1"].shape == (2, 8, 100, 100) and out["j05"].shape == (2, 2, 200, 200), (ctx, out["j1"].shape)
+        assert out["j1"].shape == (2, 8, 100, 100) and (("j05" in out and out["j05"].shape == (2, 2, 200, 200)) == ("nopaint" not in ctx)), (ctx, out["j1"].shape)
+        assert ("skip" in out) == ("nozone" in ctx), ctx
         batch = dict(jz=torch.zeros(2, 2, 100, 100), jheat=torch.zeros(2, 2, 100, 100), jdir=torch.zeros(2, 4, 100, 100), jpaint=torch.zeros(2, 2, 200, 200))
         batch["jz"][:, :, 40:60, 40:60] = 1
         batch["jheat"][:, 0, 30, 50] = 1

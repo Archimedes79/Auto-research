@@ -52,6 +52,9 @@ run "E273 lane head: map encoder + assignment" grid/qassign.py
 run "E273 / E274 lane head: all phases, gradients, E274 switches" grid/qgraph.py
 run "E273 pixel targets (synthetic)" grid/qraster.py
 run "E319 junction maps head: heading-guided exchange (flag off = before, zero start, gradients, geometry)" grid/test_jmaps_dirx.py
+run "E332 junction maps head without auxiliary maps (flags off = before, bit-identical reduction, loss terms, gradients)" grid/test_jmaps_simplify.py
+run "E330 cost of the junction system per block (parameters, MACs)" jmodel_cost.py selftest
+run "E331 - E335 adoption rule of a removal arm" jrule_removal.py selftest
 run "E273 pixel targets on real lane GT frames" grid/test_qraster.py
 run "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
 run "E273 local scorer (oracle, degradations, lane suite reproduction)" test_qgraph_eval.py
