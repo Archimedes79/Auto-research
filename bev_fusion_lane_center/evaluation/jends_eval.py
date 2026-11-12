@@ -74,7 +74,7 @@ def score(a):
     assert keys, "no pyramid tensor of the base run is in the checkpoint: the pyramid check would be empty"
     pyr_same = all(torch.equal(ck["state"]["jmodel." + k] if "jmodel." + k in ck["state"] else ck["state"][k], v) for k, v in base.items() if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"]))
     print("pyramid of the maps run == the base run's:", pyr_same, "(False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')")
-    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False))))
+    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False))))
 
 
 def selftest():
@@ -108,6 +108,9 @@ if __name__ == "__main__":
         if name == "score":
             s.add_argument("--seed", type=int, required=True)
             s.add_argument("--chord", action="store_true", help="E303: the chord-tangent connectors even when the dump has learned handle scales (the shape control: same pairs)")
+            s.add_argument("--snap", action="store_true", help="E311: connectors drawn from the end of the delivered piece wired to the entry to the start of the piece wired to the exit (writes ends_card_snap_thr<t>.json, the card of record stays)")
+            for k_ in ("--snap-all", "--snap-guard", "--snap-dedup", "--snap-nogeom", "--snap-both"):
+                s.add_argument(k_, action="store_true", help="refinement of --snap (see qends_eval.add_connectors)")
     sub.add_parser("selftest")
     a = ap.parse_args()
     {"dump": dump, "score": score, "selftest": lambda _: selftest()}[a.cmd](a)

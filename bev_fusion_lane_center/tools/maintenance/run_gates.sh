@@ -42,6 +42,7 @@ run "head: rule control of the pair decision (E287)"      jrule_control.py selft
 run "head: read-out replay (E288)"                       readout_replay.py selftest
 run "head: failure splits of the pair head (E300)"        jsplits.py selftest
 run "head: pair precision at a fixed recall (E302)"       jpair_pr.py selftest
+run "head: maneuver coverage of a delivered graph (E310)"   jmaneuver.py selftest
 run "head: torch Matrix-NMS layer (E292)"                 grid/qmnms.py
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
