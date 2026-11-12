@@ -60,12 +60,13 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
     ends on average: the curve then ends beside the pieces and the topology scores see a gap); an end with no piece in reach keeps its keypoint; only that one piece is wired at each end.
     Options of the snapped read-out (each only with snap, all default off; E311 refinements, the E311 verdict is the plain `snap`): snap_all = wire EVERY piece in reach of the snapped end (the default wiring loop on the snapped ends: separates the effect of the geometry from the
     effect of wiring one piece only), snap_guard = a pair whose snapped ends make a degenerate curve (chord under 1 m or a chord that runs against one of the two headings) keeps its keypoints, snap_dedup = a second curve between the same two snapped pieces is not added, snap_both = no curve for a pair whose entry or exit finds no piece in reach (no floating curves), snap_nogeom = a control: wire only the nearest piece per end but draw the curve from the keypoints (separates the wiring rule from the geometry)"""
-    wp = WIRE_POS if wire_pos is None else float(wire_pos)                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
+    wp = WIRE_POS if wire_pos is None else float(wire_pos)
+    cp_ = COVER_POS if wire_pos is None else min(COVER_POS, wp)                                                   # N1 (critic 2026-11-13): a long link is dropped only when a connector's ends are within the WIRING radius: under a tight radius a connector that is not wired to the pieces must not delete the long link of B either                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
     keep = []
     for i, k in enumerate(kinds):
         if k == "link" and bool(long_mask[links[i][0]]):
             P = np.asarray(lines[i], float)
-            if any(np.linalg.norm(P[0] - pr[0]) <= COVER_POS and np.linalg.norm(P[-1] - pr[2]) <= COVER_POS for pr in pairs):
+            if any(np.linalg.norm(P[0] - pr[0]) <= cp_ and np.linalg.norm(P[-1] - pr[2]) <= cp_ for pr in pairs):
                 continue
         keep.append(i)
     new = {old: j for j, old in enumerate(keep)}
@@ -304,6 +305,9 @@ def selftest():
     off_ = [(np.array([2.0, -2.0]), np.array([0.0, 1.0]), np.array([8.0, 2.0]), np.array([0.0, 1.0]))]                # the wiring radius: an end 2 m beside the piece end is wired by the default 4 m, not by a tight 1 m radius, and wired again at 2.5 m
     g_ = (lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, off_)
     assert add_connectors(*g_)[2] == 1 and add_connectors(*g_, wire_pos=1.0)[2] == 0 and add_connectors(*g_, wire_pos=2.5)[2] == 1 and add_connectors(*g_, wire_pos=4.0)[2] == 1
+    off2_ = [(np.array([2.5, -2.0]), np.array([0.0, 1.0]), np.array([10.5, 2.0]), np.array([0.0, 1.0]))]              # N1: both ends 2.5 m from the delivered long link (piece ends at (0, -2) and (8, 2)): covered, hence dropped, by the default (4 m) and by a 4 m / 2.5 m radius; KEPT under a 1.0 m radius (not wired, so it must not delete the link)
+    g2_ = (lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, off2_)
+    assert len(add_connectors(*g2_)[0]["pts"]) == 3 and len(add_connectors(*g2_, wire_pos=4.0)[0]["pts"]) == 3 and len(add_connectors(*g2_, wire_pos=2.5)[0]["pts"]) == 3 and len(add_connectors(*g2_, wire_pos=1.0)[0]["pts"]) == 4
     print("qends_eval selftest ok")
 
 

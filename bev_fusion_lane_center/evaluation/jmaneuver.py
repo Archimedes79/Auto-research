@@ -130,6 +130,18 @@ def frame_counts(raw, mans, ref_tree):
     return int(sum(real)), len(mans), hit, len(near), real
 
 
+def parse_variants(names):
+    """(snapped, attached, attached_n, attached_r, thr) of the variant names: p<t> connectors of the run's pair logits at probability t | p<t>s snapped ends (E311) | p<t>a attached ends, proximity wiring (E320) | p<t>an attached ends + one nearest piece per end, the curve kept (the E320 primary read-out) |
+    p<t>ar<r> attached ends, wiring radius r m; `thr` maps every p-variant to its threshold (plain / oracle / oracle+fit are not in it), snapped / attached / attached_n are sets of names, attached_r maps a name to its radius"""
+    parsed = {v: re.fullmatch(r"p(\d+(?:\.\d+)?)(s|an|a|ar(\d+(?:\.\d+)?))?", v) for v in names}
+    snapped = {v for v, m in parsed.items() if m and m.group(2) == "s"}
+    attached_n = {v for v, m in parsed.items() if m and m.group(2) == "an"}
+    attached_r = {v: float(m.group(3)) for v, m in parsed.items() if m and m.group(3)}
+    attached = {v for v, m in parsed.items() if m and m.group(2) in ("a", "an")} | set(attached_r)
+    thr = {v: float(m.group(1)) for v, m in parsed.items() if m}
+    return snapped, attached, attached_n, attached_r, thr
+
+
 def score(a):
     import jgt as J
     import jrule_control as JR
@@ -141,12 +153,7 @@ def score(a):
     import qjunction as QJ
     names = a.variants
     names = [("p" + v[3:]) if v.startswith("p>=") else v for v in names]                      # p>=0.5 (quoted) = p0.5
-    snapped = {v for v in names if v.startswith("p") and v.endswith("s") and v[1:-1].replace(".", "", 1).isdigit()}                    # p0.1s = connectors at p >= 0.1 with snapped ends (E311)
-    parsed = {v: re.fullmatch(r"p(\d+(?:\.\d+)?)(s|an|a|ar(\d+(?:\.\d+)?))?", v) for v in names}                                       # p<t> | p<t>s snapped | p<t>a attached, proximity wiring | p<t>an attached + one nearest piece per end (the E320 primary read-out) | p<t>ar<r> attached + wiring radius r m
-    attached_n = {v for v, m in parsed.items() if m and m.group(2) == "an"}
-    attached_r = {v: float(m.group(3)) for v, m in parsed.items() if m and m.group(3)}
-    attached = {v for v, m in parsed.items() if m and m.group(2) in ("a", "an")} | set(attached_r)
-    thr = {v: float(m.group(1)) for v, m in parsed.items() if m}
+    snapped, attached, attached_n, attached_r, thr = parse_variants(names)                                       # p<t> | p<t>s snapped | p<t>a attached, proximity wiring | p<t>an attached + one nearest piece per end (the E320 primary read-out) | p<t>ar<r> attached + wiring radius r m
     unknown = [v for v in names if v not in ("plain", "oracle", "oracle+fit") and v not in thr]
     assert not unknown, f"unknown variants {unknown} (plain, p<t> such as p0.5, oracle, oracle+fit)"
     frames = QGE.val_frames()
@@ -285,6 +292,9 @@ def selftest():
     g2 = dict(pieces=[dict(pts=short, segments=[dict(kind="connector", i0=0, i1=len(short) - 1)]), dict(pts=long_, segments=[dict(kind="connector", i0=0, i1=len(long_) - 1)])])
     m2 = maneuvers(g2, QE.cluster)
     assert len(m2) <= 2 and max(len(m[2]) for m in m2) == 101, [len(m[2]) for m in m2]
+    sn, at, an, ar, th = parse_variants(["plain", "p0.5", "p0.1", "p0.1s", "p0.1a", "p0.1an", "p0.1ar1.5", "p0.2ar1.0", "oracle", "oracle+fit", "p0.1x"])        # N5 (critic 2026-11-13): the variant names of the read-outs reach the right settings
+    assert th == {"p0.5": 0.5, "p0.1": 0.1, "p0.1s": 0.1, "p0.1a": 0.1, "p0.1an": 0.1, "p0.1ar1.5": 0.1, "p0.2ar1.0": 0.2}, th
+    assert sn == {"p0.1s"} and at == {"p0.1a", "p0.1an", "p0.1ar1.5", "p0.2ar1.0"} and an == {"p0.1an"} and ar == {"p0.1ar1.5": 1.5, "p0.2ar1.0": 1.0}, (sn, at, an, ar)
     print("jmaneuver selftest ok")
 
 

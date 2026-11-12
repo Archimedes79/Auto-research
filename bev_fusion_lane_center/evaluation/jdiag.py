@@ -7,6 +7,7 @@
     wsl bash tools/env/_py14.sh jdiag.py snaprule e287_p2 e305_e                    the rule of the E311 card on runs/<net>_s<S>/ends_card_snap_thr<t>.json (`jends_eval.py score --snap --thr t`): topo F1 over the plain graph > +0.02 with F1@1.0 >= -0.01, dup_frac not higher, vertices <= +1.0, junction F1 >= -0.03; both seeds of every net
     wsl bash tools/env/_py14.sh jdiag.py boot   e320_a_s0 ends_card_snap_nogeom_attach_thr0.1 e312_p_s0 ends_card_snap_thr0.1
                                                                                     paired scene bootstrap (1000 resamples of the VAL scenes) of the difference of two read-outs on the same frames: topo F1, junction F1, F1@1.0, lanes found (E320: a - c per seed; reads runs/<run>/<card stem>.counts.pkl that `score` writes)
+    wsl bash tools/env/_py14.sh jdiag.py attlog e320_a_s0                           the attachment statistics of the training log (att_acc, att_acc_nearest, att_ce, att_bin, att_kp_d, att_d), the mean of the last 10 rows of runs/<run>/log.jsonl weighted by att_n (E320 kill criterion; one row = one batch of 8 frames, a single row is noise)
     wsl bash tools/env/_py14.sh jdiag.py selftest
 
 `common`, `curve` and `kperr` read runs/<run>/ends_val.pkl (`jends_eval.py dump` / `qends_eval.py dump`) and the VAL lane GT (matching: strict one-to-one, 4 m, 30 degrees, `jrule_control._match`); VAL only. CPU.
@@ -192,6 +193,20 @@ def boot(ra, ca, rb, cb, n=1000, seed=0):
         print(f"  {k:12s} A - B: point {pa[k] - pb[k]:+.4f}, bootstrap mean {x.mean():+.4f}, 95 % [{np.percentile(x, 2.5):+.4f}, {np.percentile(x, 97.5):+.4f}]")
 
 
+def attlog(run, last=10, rows=None):
+    """E320: the attachment statistics of the training log, the mean over the last `last` rows that carry att_n of runs/<run>/log.jsonl (`rows`: a list of dicts instead, for the test) weighted by att_n; one row is one batch of 8 frames, so a single row is noise (the standard error of att_acc - att_acc_nearest is about 0.05 there). Returns the dict and prints it,
+    with att_acc - att_acc_nearest: the kill criterion of the card reads this difference against its margin."""
+    if rows is None:
+        rows = [json.loads(l) for l in open(os.path.join(ROOT, "runs", run, "log.jsonl")) if l.strip()]
+    rows = [r for r in rows if r.get("att_n", 0) > 0][-last:]
+    assert rows, f"{run}: no row of log.jsonl carries att_n (a run without --attach)"
+    w = np.array([r["att_n"] for r in rows], float)
+    out = {k: float(np.average([r[k] for r in rows], weights=w)) for k in ("att_acc", "att_acc_nearest", "att_ce", "att_bin", "att_kp_d", "att_d")}
+    out.update(rows=len(rows), att_n=float(w.sum()), first_step=rows[0].get("step"), last_step=rows[-1].get("step"), att_acc_minus_nearest=out["att_acc"] - out["att_acc_nearest"])
+    print(f"{run}: " + ", ".join(f"{k} {v:.3f}" if isinstance(v, float) else f"{k} {v}" for k, v in out.items()))
+    return out
+
+
 def maps_summary(d):
     """the numbers of one jmaps_val.json that the maps cards compare: keypoint F1 (mean of entry and exit, 3 m, thr 0.3, distance only), zone IoU, crowded / isolated entry recall, entry recall beyond 35 m, best-threshold F1"""
     k = d["keypoints"]
@@ -231,6 +246,9 @@ def snaprule(nets, thrs=(0.5, 0.2, 0.1)):
 
 
 def selftest():
+    t = attlog("x", last=2, rows=[dict(att_n=10, att_acc=0.1, att_acc_nearest=0.1, att_ce=1.0, att_bin=0.0, att_kp_d=1.0, att_d=1.0, step=100), dict(att_n=10, att_acc=0.5, att_acc_nearest=0.4, att_ce=1.0, att_bin=0.0, att_kp_d=1.0, att_d=0.8, step=200),
+                                  dict(att_n=30, att_acc=0.8, att_acc_nearest=0.5, att_ce=0.5, att_bin=0.0, att_kp_d=1.0, att_d=0.6, step=300), dict(step=400)])         # E320: the last 2 rows with att_n, weighted by att_n
+    assert abs(t["att_acc"] - (0.5 * 10 + 0.8 * 30) / 40) < 1e-9 and abs(t["att_acc_minus_nearest"] - ((0.5 - 0.4) * 10 + (0.8 - 0.5) * 30) / 40) < 1e-9 and t["last_step"] == 300 and t["rows"] == 2, t
     assert auc([0.9, 0.8, 0.2, 0.1], [1, 1, 0, 0]) == 1.0 and auc([0.1, 0.2, 0.8, 0.9], [1, 1, 0, 0]) == 0.0
     assert np.isnan(auc([0.1, 0.2], [1, 1]))
     d = dict(keypoints={"kp_ours_tol3.0_noang_ent": {"f1": 0.7}, "kp_ours_tol3.0_noang_ext": {"f1": 0.5}}, zone_iou=0.76, core_iou=0.58, crowded_split={"ours_ent": {"crowded_recall": 0.8, "isolated_recall": 0.7}},
@@ -254,6 +272,8 @@ if __name__ == "__main__":
         kperr(sys.argv[2:])
     elif cmd == "boot" and len(sys.argv) == 6:
         boot(*sys.argv[2:6])
+    elif cmd == "attlog" and len(sys.argv) == 3:
+        attlog(sys.argv[2])
     elif cmd == "snaprule" and len(sys.argv) > 2:
         snaprule(sys.argv[2:])
     elif cmd == "maps" and len(sys.argv) == 4:
