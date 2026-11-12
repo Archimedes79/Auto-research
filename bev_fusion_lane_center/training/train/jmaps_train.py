@@ -1,6 +1,6 @@
 """Trainer of the junction maps head (E286, D82): entry / exit heat + heading, junction zone, painted stop lines / crossings, on the pixel stage of a baseline run; start it through `autoresearch/tools/run.py`.
 
-    wsl bash tools/env/_py14.sh jmaps_train.py --name e286_j0_s0 --seed 0 --base runs/e273_p_s0/model.pt [--ctx none|dil|attn] [--joint] [--steps 3000] [--smoke]
+    wsl bash tools/env/_py14.sh jmaps_train.py --name e286_j0_s0 --seed 0 --base runs/e273_p_s0/model.pt [--ctx none|dil|attn] [--dirx] [--joint] [--steps 3000] [--smoke]
 
 `--joint` also trains the pixel stage (the pyramid, with its own pixel loss kept so that B's maps do not drift; the nodes / links of B no longer match such a pixel stage, so a joint run is judged on the
 maps only); without it the pyramid is frozen and the junction head reads B's own features. Frames: TRAIN through `lane_gt_data.QData(junction=True)` (the paint sidecars of
@@ -32,12 +32,15 @@ def main():
     ap.add_argument("--far-w", type=float, default=0.0, help="E304: the heat BCE of the cells beyond 35 m counts 1 + w times")
     ap.add_argument("--raster", default="legacy", choices=("legacy", "exact"), help="E306: the polygon targets (zone, conflict core, stop lines, crossings) rasterised with the exact area rule instead of the legacy half-cell shifted fill")
     ap.add_argument("--sigma", type=float, default=1.5, help="E307: the width (m) of the Gaussian entry / exit heat targets (1.5 = E286)")
+    ap.add_argument("--dirx", action="store_true", help="E319: the heading-guided bidirectional exchange along the lane (jmaps.DirX) on the 1 m features; stored as ctx '<ctx>+dirx', so every loader builds the same model")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()
+    if a.dirx:                                                                                           # the flag lives in the ctx string: jends_train.py, jmaps_eval.py and junction_view.py build JModel(ctx=args["ctx"])
+        a.ctx = a.ctx + "+dirx"
     T.seed_all(a.seed)
     if a.sigma != 1.5:
         os.environ["BFLC_SIG"] = str(a.sigma)

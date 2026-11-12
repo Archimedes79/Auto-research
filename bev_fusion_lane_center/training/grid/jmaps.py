@@ -1,6 +1,6 @@
 """The junction maps head (E286, D82): entry / exit points with heading, the junction zone and the painted evidence (stop lines, pedestrian crossings) as pixel maps, read from the pixel stage of the lane head.
 
-    jm = JMaps(c2=144, c1=48, c05=32, d=64, ctx="dil")           # ctx: "none" | "dil" (dilated residual blocks at 2 m) | "attn" (dil + one self-attention layer at 4 m)
+    jm = JMaps(c2=144, c1=48, c05=32, d=64, ctx="dil")           # ctx: "none" | "dil" (dilated residual blocks at 2 m) | "attn" (dil + one self-attention layer at 4 m); "+dirx" appended (E319): the heading-guided exchange `DirX`
     out = jm(P)                                                  # P = the dict of `pyramid.PyramidHead` (feat2, feat1, feat05)
         out["j1"]   (B, 8, 100, 100)   1 m logits: zone, conflict core, entry heat, exit heat, entry heading (tx, ty raw), exit heading (tx, ty raw)
         out["j05"]  (B, 2, 200, 200)   0.5 m logits: stop lines, pedestrian crossings
@@ -9,6 +9,9 @@
     kp = keypoints(out, thr=0.3)                                 # per frame: entry / exit keypoints (x, y, tx, ty, p) by a 3 x 3 local maximum + soft-argmax; a hard READ-OUT, not on the training path
 
 Everything on the training path is a soft map (BCE + dice, cosine loss for the heading); the keypoint extraction is for scoring and for the delivered output (named in the card).
+E319 `DirX` (ctx "dil+dirx", `jmaps_train.py --dirx`): a heading-guided bidirectional exchange on the 1 m features, between the context blocks and the output convolutions. Every cell reads the features AHEAD and BEHIND it along the lane
+heading t(x) of the pyramid's own centre-lane field (`P["centre1"]` channels 1, 2) at 2 / 4 / 8 m (bilinear `grid_sample` at x +- s t(x): dense, differentiable in the features and in the heading), a residual 1 x 1 block mixes them (last layer zero-initialised, so the
+model starts as the model without it); two rounds, the second one with a heading refined from the features of the first (zero-initialised correction). The flag lives in the ctx string, so every loader that builds `JModel(ctx=args["ctx"])` builds the right model.
 Axes: rows = x (right), columns = y (forward), origin -50 m; 1 m cells (100 x 100) and 0.5 m cells (200 x 200). Run the self-test: python jmaps.py
 """
 import torch
@@ -29,10 +32,70 @@ class ResDil(nn.Module):
         return F.relu(x + self.f(x))
 
 
+HALF1 = 50.0                                                             # the 1 m maps cover -50 .. 50 m in x and y
+
+
+def _unit2(v, eps=1e-4):
+    return v / v.norm(dim=1, keepdim=True).clamp_min(eps)
+
+
+def shift_along(f, t, s, half=HALF1):
+    """f (B, C, H, W) read at x + s * t(x): t (B, 2, H, W) the unit heading per cell as (component along the rows = x, along the columns = y), s in metres (negative = behind), bilinear, zero outside the map.
+    -> (B, C, H, W) float32; differentiable in f and in t"""
+    B, C, H, W = f.shape
+    dev = f.device
+    ci = -half + (torch.arange(H, device=dev, dtype=torch.float32) + 0.5) * (2 * half / H)
+    cj = -half + (torch.arange(W, device=dev, dtype=torch.float32) + 0.5) * (2 * half / W)
+    px = ci[None, :, None] + s * t[:, 0].float()
+    py = cj[None, None, :] + s * t[:, 1].float()
+    g = torch.stack([py, px], -1) / half                                  # grid x = column = y, grid y = row = x (as `jends._sample`)
+    return F.grid_sample(f.float(), g, mode="bilinear", padding_mode="zeros", align_corners=False)
+
+
+class DirX(nn.Module):
+    """E319: the heading-guided bidirectional exchange along the lane (a smoother in the Kalman sense, dense and soft). Per round every cell gets the features at x + s t(x) (ahead, 'forward') and x - s t(x) (behind, 'backward'),
+    s in `steps` metres, and a residual 1 x 1 block mixes them with the cell's own features and the pyramid's centre-lane probability (where the heading field means something): f <- f + mix(cat[f, ahead_s, behind_s, p]).
+    The last layer of every mix is zero-initialised (the model starts as the one without the block). Between the rounds the heading is refined by a zero-initialised 1 x 1 correction of the features, t <- unit(t + turn(f)): the second round follows
+    the curve the first round saw. The pyramid heading enters detached (the exchange does not move the pyramid's own heading); the sampling positions are differentiable in the refined heading. Information reaches `rounds * max(steps)` m each way."""
+
+    def __init__(self, d=64, steps=(2.0, 4.0, 8.0), rounds=2, hid=32):
+        super().__init__()
+        self.steps, self.rounds = tuple(float(s) for s in steps), rounds
+        nin = (1 + 2 * len(self.steps)) * d + 1
+        self.mix = nn.ModuleList()
+        for _ in range(rounds):
+            last = nn.Conv2d(hid, d, 1)
+            nn.init.zeros_(last.weight)
+            nn.init.zeros_(last.bias)
+            self.mix.append(nn.Sequential(nn.Conv2d(nin, hid, 1, bias=False), nn.GroupNorm(8, hid), nn.ReLU(inplace=True), last))
+        self.turn = nn.ModuleList()
+        for _ in range(rounds - 1):
+            c = nn.Conv2d(d, 2, 1)
+            nn.init.zeros_(c.weight)
+            nn.init.zeros_(c.bias)
+            self.turn.append(c)
+
+    def forward(self, f, P):
+        c1 = P["centre1"]
+        t = _unit2(c1[:, 1:3].detach().float())
+        pc = c1[:, :1].detach().float().sigmoid()
+        for r in range(self.rounds):
+            parts = [f.float()]
+            for s in self.steps:
+                parts += [shift_along(f, t, s), shift_along(f, t, -s)]
+            parts.append(pc)
+            f = f + self.mix[r](torch.cat(parts, 1))
+            if r < self.rounds - 1:
+                t = _unit2(t + self.turn[r](f).float())
+        return f
+
+
 class JMaps(nn.Module):
     def __init__(self, c2=144, c1=48, c05=32, d=64, ctx="dil"):
         super().__init__()
-        assert ctx in ("none", "dil", "attn"), ctx
+        base, *mods = ctx.split("+")
+        assert base in ("none", "dil", "attn") and set(mods) <= {"dirx"}, ctx
+        ctx = base
         self.ctx_mode, self.d = ctx, d
         self.p2 = nn.Sequential(nn.Conv2d(c2, d, 1, bias=False), nn.GroupNorm(8, d), nn.ReLU(inplace=True))
         self.blocks = nn.ModuleList([ResDil(d, k) for k in (1, 2, 4, 8)]) if ctx != "none" else nn.ModuleList()
@@ -49,6 +112,7 @@ class JMaps(nn.Module):
         with torch.no_grad():
             self.head1.bias.copy_(torch.tensor([-3.0, -3.0, -4.0, -4.0, 0.0, 1.0, 0.0, 1.0]))
             self.head05.bias.copy_(torch.tensor([-4.0, -4.0]))
+        self.dirx = DirX(d) if "dirx" in mods else None                      # created LAST: the random initialisation of every other tensor is the same with and without the flag
 
     def forward(self, P):
         up = lambda t, n: F.interpolate(t, scale_factor=n, mode="bilinear", align_corners=False)  # noqa: E731
@@ -61,6 +125,8 @@ class JMaps(nn.Module):
             t = self.attn(t.flatten(2).transpose(1, 2) + self.pos)
             c = c + up(t.transpose(1, 2).reshape(B, d, 25, 25), 2)[:, :, :50, :50]
         x1 = self.m1(torch.cat([P["feat1"], up(c, 2)], 1))
+        if self.dirx is not None:                                            # E319: forward / backward exchange along the lane heading, before the output convolutions and before `f1` is read by the pair head
+            x1 = self.dirx(x1, P)
         j1 = self.head1(x1)
         j05 = self.head05(self.m05(torch.cat([P["feat05"], up(x1, 2)], 1)))
         return dict(j1=j1, j05=j05, f1=x1)
@@ -157,8 +223,8 @@ def keypoints(out, thr=0.3, half=50.0, res=1.0):
 
 def _selftest():
     torch.manual_seed(0)
-    P = dict(feat2=torch.randn(2, 144, 50, 50), feat1=torch.randn(2, 48, 100, 100), feat05=torch.randn(2, 32, 200, 200))
-    for ctx in ("none", "dil", "attn"):
+    P = dict(feat2=torch.randn(2, 144, 50, 50), feat1=torch.randn(2, 48, 100, 100), feat05=torch.randn(2, 32, 200, 200), centre1=torch.randn(2, 12, 100, 100))
+    for ctx in ("none", "dil", "attn", "dil+dirx"):
         m = JMaps(ctx=ctx)
         out = m(P)
         assert out["j1"].shape == (2, 8, 100, 100) and out["j05"].shape == (2, 2, 200, 200), (ctx, out["j1"].shape)
@@ -170,6 +236,15 @@ def _selftest():
         lf, _ = jmaps_loss(out, batch, far_w=2.0)                                                         # E304: the far weight changes the loss and nothing else
         assert abs(float(lf) - float(loss)) > 1e-6
         loss.backward()
+        if m.dirx is not None:                                                                            # zero-initialised last layers: the first step opens the gradient of everything before them
+            for _ in range(2):
+                with torch.no_grad():
+                    for p in m.parameters():
+                        if p.grad is not None:
+                            p.sub_(0.05 * p.grad)
+                m.zero_grad()
+                loss, _ = jmaps_loss(m(P), batch)
+                loss.backward()
         dead = [n for n, p in m.named_parameters() if p.grad is None or float(p.grad.abs().sum()) == 0.0]
         assert not dead, (ctx, dead)
     # keypoints: a clean peak at cell (30, 50) is found at x = -19.5, y = 0.5
