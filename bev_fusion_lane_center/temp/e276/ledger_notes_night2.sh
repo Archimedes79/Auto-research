@@ -1,0 +1,10 @@
+#!/bin/bash
+# scratch (2026-11-08 01:30): the judgement columns of arm t (verdict276 kind t, written by the scheduler at 01:19); numbers from runs/e276/<run>/card.json and temp/e276/verdicts.log
+cd "$(dirname "$0")/../.."
+L="python3 ../autoresearch/tools/ledger.py note"
+R='arm t (tier-weighted loss on the dense node target) against B on lane GT l4, seed 0 / seed 1: t12_F1_1 0.886 / 0.885 against 0.888 / 0.875 (gain -0.002 / +0.010, band 0.02), tier-1 recall 0.838 / 0.842 against 0.851 / 0.811 (-0.013 / +0.031), topo F1 0.580 / 0.573 against 0.597 / 0.595 (-0.017 / -0.022), lanes found 0.557 / 0.529 against 0.644 / 0.630, far-lane (tier 3) recall 0.698 / 0.670 against 0.796 / 0.769, node precision 0.892 / 0.888 against 0.873 / 0.868, node recall 0.804 / 0.790 against 0.833 / 0.833, own-lane zone false nodes 10.1 % / 10.8 % against 10.2 % / 10.1 %, delivered nodes per 100 m -5.6 % / -7.4 %; assignment p-g exact -0.0044 / -0.0058, error +0.0778 / +0.0731 (guards held)'
+D='verdict276 kind t: TIE (both gains inside the band, guards held): the tier weights do not lift the own lane; the price is far-lane recall (-0.10) and lanes found (-0.09 / -0.10); B stays the baseline, arm t is not adopted. Prediction (+0.04 in t12_F1_1, a 25 % fall of false own-lane nodes) missed; the guard-side prediction (topo F1 -0.01 to -0.05) held'
+$L E276.t_s0 --result "$R" --decision "$D" --notes 'training 22:28-23:58 (phases 3-7), gate of phase 3 passed (node precision 0.93, recall within 2 m 0.85); scored by E276.tq_s0'
+$L E276.t_s1 --result "$R" --decision "$D" --notes 'training 23:42-01:05 (phases 3-7), gate of phase 3 passed; scored by E276.tq_s1'
+$L E276.tq_s0 --result 'scoring card of arm t seed 0 on lane GT l4 (runs/e276/e276_t_s0/card.json, full dump temp/e276/predfull_e276_t_s0.pkl): numbers in the row of E276.t_s0' --decision 'feeds verdict276 (TIE)'
+$L E276.tq_s1 --result 'scoring card of arm t seed 1 on lane GT l4 (runs/e276/e276_t_s1/card.json): numbers in the row of E276.t_s1' --decision 'feeds verdict276 (TIE)'
