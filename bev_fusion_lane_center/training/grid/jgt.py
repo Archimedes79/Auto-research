@@ -262,14 +262,15 @@ def fields(jg, n=100, res=1.0, half=50.0):
         for q in (jg["core"].geoms if hasattr(jg["core"], "geoms") else [jg["core"]]):
             if q.geom_type == "Polygon" and not q.is_empty:
                 fill_poly(zone[1], ((np.asarray(q.exterior.coords, float) + half) / res)[:, ::-1])
+    sig = float(os.environ.get("BFLC_SIG", SIG))                                                          # E307: the width of the end Gaussians (default 1.5 m; BFLC_SIG=1.0 for the crowded ends), read at the call, inherited by the loader workers
     ii, jj = np.meshgrid(-half + (np.arange(n) + 0.5) * res, -half + (np.arange(n) + 0.5) * res, indexing="ij")
     for k, E in enumerate((jg["ent"], jg["ext"])):
         for e in E:
             d2 = (ii - e[0]) ** 2 + (jj - e[1]) ** 2
-            h = np.exp(-d2 / (2 * SIG ** 2)).astype(np.float32)
+            h = np.exp(-d2 / (2 * sig ** 2)).astype(np.float32)
             upd = h > heat[k]
             heat[k][upd] = h[upd]
-            near = (d2 <= (2 * SIG) ** 2) & upd
+            near = (d2 <= (2 * sig) ** 2) & upd
             head[2 * k][near], head[2 * k + 1][near] = e[2], e[3]
     return zone.astype(np.float32), heat, head
 
@@ -352,6 +353,14 @@ def _selftest():
     assert jx["order"]["multi"] == 1 and jx["order"]["monotone"] == 0 and jx["order"]["identity"] == 0, jx["order"]
     assert jx["core"] is not None and not jx["core"].is_empty and jx["core"].area > 1.0
     zn, heat, head = fields(jg)
+    os.environ["BFLC_SIG"] = "1.0"                                                                              # E307: a narrower Gaussian is lower one metre from the end and equal at the end
+    try:
+        _, heat_n, _ = fields(jg)
+    finally:
+        os.environ.pop("BFLC_SIG", None)
+    e0 = jg["ent"][0]
+    ci, cj = int((e0[0] + 50.0) // 1.0), int((e0[1] + 50.0) // 1.0)
+    assert heat_n[0][ci, cj] <= heat[0][ci, cj] + 1e-6 and heat_n[0][ci, min(cj + 2, 99)] < heat[0][ci, min(cj + 2, 99)], (heat_n[0][ci, cj], heat[0][ci, cj])
     for k, EE in enumerate((jg["ent"], jg["ext"])):                                       # the heat peaks at the cell that holds the end (row = x, column = y, origin -50 m)
         for e in EE:
             i, j = int((e[0] + 50.0) // 1.0), int((e[1] + 50.0) // 1.0)
