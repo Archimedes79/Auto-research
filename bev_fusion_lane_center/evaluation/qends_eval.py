@@ -204,7 +204,8 @@ def cmd_score(a):
     opts = [k for k in ("snap_all", "snap_guard", "snap_dedup", "snap_nogeom", "snap_both") if getattr(a, k, False)]
     out["snap_options"] = opts
     # the card of record (`ends_card.json`) is the unsnapped read-out at the threshold 0.5 only: another threshold or a snapped read-out gets its own file (the E308 incident of 2026-11-12: a scratch sweep emptied the card of record)
-    name = "ends_card.json" if (not snap and a.thr == 0.5) else "ends_card_" + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + f"thr{a.thr}.json"
+    chord = bool(getattr(a, "chord", False))
+    name = "ends_card.json" if (not snap and not chord and a.thr == 0.5) else "ends_card_" + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + f"thr{a.thr}.json"     # the chord control has its own file too (it overwrote the card of the learned scales on 2026-11-12)
     json.dump(out, open(os.path.join(run_dir, name), "w"), indent=1)
     print(f"{'':16s}" + "".join(f"{k:>12s}" for k in KEYS))
     for v in ("base", "head"):
