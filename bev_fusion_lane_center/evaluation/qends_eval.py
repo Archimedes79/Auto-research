@@ -175,6 +175,8 @@ def cmd_score(a):
     assert [d["row"] for d in dump] == [f.row for f in frames], "the full dump is not in the order of the VAL frames"
     spec = QR.parse("close:1.5@0.5")
     rec = dict(base=[], head=[])
+    attach = bool(getattr(a, "attach", False))
+    assert not attach or ("att_pos" in next(iter(ends.values()))), f"{a.run}: the dump has no attached ends (train with --attach, then jends_eval.py dump)"
     n_curves = n_wired = 0
     t0 = time.time()
     for b, (f, d) in enumerate(zip(frames, dump)):
@@ -186,7 +188,8 @@ def cmd_score(a):
         k = e["kp_pos"].shape[0] // 2
         p = 1.0 / (1.0 + np.exp(-e["logit"])) * e["allowed"]
         ia, ib = np.nonzero(p >= a.thr)
-        pairs = [(e["kp_pos"][i], e["kp_dir"][i], e["kp_pos"][k + j], e["kp_dir"][k + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None and not a.chord else ()) for i, j in zip(ia, ib)]
+        qp, qd = (e["att_pos"], e["att_dir"]) if attach else (e["kp_pos"], e["kp_dir"])                                  # E320: the attached ends of the dump instead of the keypoints
+        pairs = [(qp[i], qd[i], qp[k + j], qd[k + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None and not a.chord else ()) for i, j in zip(ia, ib)]
         raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)))
         n_curves += n_c
         n_wired += n_w
@@ -201,11 +204,12 @@ def cmd_score(a):
                note="by the rule of D79 against the plain delivered graph of the same seed; the verdict over both seeds is the card's")
     snap = bool(getattr(a, "snap", False))
     out["snap"] = snap
+    out["attach"] = attach
     opts = [k for k in ("snap_all", "snap_guard", "snap_dedup", "snap_nogeom", "snap_both") if getattr(a, k, False)]
     out["snap_options"] = opts
     # the card of record (`ends_card.json`) is the unsnapped read-out at the threshold 0.5 only: another threshold or a snapped read-out gets its own file (the E308 incident of 2026-11-12: a scratch sweep emptied the card of record)
     chord = bool(getattr(a, "chord", False))
-    name = "ends_card.json" if (not snap and not chord and a.thr == 0.5) else "ends_card_" + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + f"thr{a.thr}.json"     # the chord control has its own file too (it overwrote the card of the learned scales on 2026-11-12)
+    name = "ends_card.json" if (not snap and not chord and a.thr == 0.5) else "ends_card_" + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + ("attach_" if attach else "") + f"thr{a.thr}.json"     # the chord control has its own file too (it overwrote the card of the learned scales on 2026-11-12)
     json.dump(out, open(os.path.join(run_dir, name), "w"), indent=1)
     print(f"{'':16s}" + "".join(f"{k:>12s}" for k in KEYS))
     for v in ("base", "head"):

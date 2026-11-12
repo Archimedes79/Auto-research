@@ -25,7 +25,7 @@ def load_model(run, dev):
     import jends_train as JT
     ck = torch.load(os.path.join(ROOT, "runs", run, "model.pt"), map_location="cpu")
     a = ck["args"]
-    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)), capacity=bool(a.get("capacity", False)), ntok=bool(a.get("ntok", False)), unc=bool(a.get("unc", False)))
+    m = JT.JEndModel(a["maps_args"], order=not a["no_order"], evidence=not a["no_evidence"], scales=bool(a.get("scales", False)), capacity=bool(a.get("capacity", False)), ntok=bool(a.get("ntok", False)), unc=bool(a.get("unc", False)), attach=bool(a.get("attach", False)))
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), a
 
@@ -53,6 +53,8 @@ def dump(a):
                           scale=out["scale"][i].float().cpu().numpy() if "scale" in out else None)
                 if "kp_logsig" in out:                                                                                                         # E318: the position scale (log sigma, m) of every keypoint
                     fr["logsig"] = out["kp_logsig"][i].float().cpu().numpy()
+                if "att_pos" in out:                                                                                                           # E320: the attached ends (position, heading, probability of an attachment) of every keypoint
+                    fr.update(att_pos=out["att_pos"][i].float().cpu().numpy(), att_dir=out["att_dir"][i].float().cpu().numpy(), att_p=out["att_p"][i].float().cpu().numpy())
                 frames.append(fr)
     r = lambda x, y: x / max(y, 1)  # noqa: E731
     head = dict(ent_recall=r(tot["ent_hit"], tot["ent_n"]), ent_precision=r(tot["ent_ok"], tot["ent_kp"]), ext_recall=r(tot["ext_hit"], tot["ext_n"]), ext_precision=r(tot["ext_ok"], tot["ext_kp"]),
@@ -77,7 +79,7 @@ def score(a):
     assert keys, "no pyramid tensor of the base run is in the checkpoint: the pyramid check would be empty"
     pyr_same = all(torch.equal(ck["state"]["jmodel." + k] if "jmodel." + k in ck["state"] else ck["state"][k], v) for k, v in base.items() if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"]))
     print("pyramid of the maps run == the base run's:", pyr_same, "(False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')")
-    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False))))
+    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), attach=bool(getattr(a, "attach", False))))
 
 
 def selftest():
@@ -112,6 +114,7 @@ if __name__ == "__main__":
             s.add_argument("--seed", type=int, required=True)
             s.add_argument("--chord", action="store_true", help="E303: the chord-tangent connectors even when the dump has learned handle scales (the shape control: same pairs)")
             s.add_argument("--snap", action="store_true", help="E311: connectors drawn from the end of the delivered piece wired to the entry to the start of the piece wired to the exit (writes ends_card_snap_thr<t>.json, the card of record stays)")
+            s.add_argument("--attach", action="store_true", help="E320: connectors drawn from the ATTACHED ends of the dump (att_pos / att_dir; no snap, the default wiring of every piece in reach), writes ends_card_attach_thr<t>.json")
             for k_ in ("--snap-all", "--snap-guard", "--snap-dedup", "--snap-nogeom", "--snap-both"):
                 s.add_argument(k_, action="store_true", help="refinement of --snap (see qends_eval.add_connectors)")
     sub.add_parser("selftest")
