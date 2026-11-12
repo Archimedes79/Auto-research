@@ -58,27 +58,16 @@ def _tool(name: str):
     return _MODULES[name]
 
 
-def _stat(pid: Any) -> Optional[List[str]]:
-    """the fields after the name in /proc/<pid>/stat (state first, start time at index 19), None when there is no such process. Needs /proc: os.kill(pid, 0) would terminate it on Windows"""
-    try:
-        pid = int(pid)
-    except (TypeError, ValueError):
-        return None
-    if pid <= 0:
-        return None
+def _alive(pid: Any, start: Optional[str] = None) -> bool:
+    """is a process with this pid alive (run.py proc_stat: a zombie is not; with `start` it must also be the process that began at that time, not a later one that got
+    the pid). Needs /proc: os.kill(pid, 0) would terminate the process on Windows"""
     if not os.path.isdir("/proc"):
         raise JobError("the job runner needs Linux /proc: run it under WSL")
     try:
-        with open(f"/proc/{pid}/stat") as f:
-            return f.read().rsplit(")", 1)[1].split()
-    except (OSError, IndexError):
-        return None
-
-
-def _alive(pid: Any, start: Optional[str] = None) -> bool:
-    """is a process with this pid alive (a zombie is not; with `start` it must also be the process that began at that time, not a later one that got the pid)"""
-    st = _stat(pid)
-    return st is not None and st[0] != "Z" and (start is None or len(st) > 19 and st[19] == start)
+        st = _tool("run").proc_stat(int(pid)) if int(pid) > 0 else None
+    except (TypeError, ValueError):
+        return False
+    return st is not None and st[0] != "Z" and (start is None or str(st[1]) == str(start))
 
 
 def _spawn(argv: List[str], cwd: str, env: Dict[str, str], log: str) -> int:
@@ -665,12 +654,12 @@ class JobRunner:
         os.makedirs(self._jd(jid), exist_ok=True)
         path = self._jd(jid, "submit.lock")
         me = threading.get_ident()
-        st = _stat(os.getpid())
+        st = _tool("run").proc_stat(os.getpid())                         # (state, start time): the start time tells this process from a later one with the same pid
         t0 = time.time()
         while True:
             try:
                 fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, f"{os.getpid()} {st[19] if st and len(st) > 19 else ''} {me}".encode())
+                os.write(fd, f"{os.getpid()} {st[1] if st else ''} {me}".encode())
                 os.close(fd)
                 break
             except FileExistsError:
