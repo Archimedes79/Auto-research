@@ -1,4 +1,4 @@
-"""Loop metrics of the research system (ROADMAP P3): what a loop ran, decided and predicted, read from the ledger, the decision files of decide.py
+"""Loop metrics of the research system: what a loop ran, decided and predicted, read from the ledger, the decision files of decide.py
 and the TEST log. Standard library only.
 
     python3 autoresearch/tools/metrics.py                  # one row per loop

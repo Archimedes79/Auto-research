@@ -83,7 +83,7 @@
         "Training/cli.py",
         "suitecli.py"
       ],
-      "note": "suitecli.py generates the commands from the methods of the class; the older words (status, health, watch, queue, ...) keep their own output"
+      "note": "suitecli.py generates the commands from the methods of the class; the older words (health, watch, early, compose, queue) keep their own output"
     },
     {
       "id": "c_ru",
@@ -202,7 +202,7 @@
     },
     {
       "id": "e_ev",
-      "label": "quantitative, qualitative,\ncost, stats, comparison,\nResultSet",
+      "label": "quantitative, qualitative,\ncost, stats, comparison,\nrun store",
       "kind": "engine",
       "col": 3,
       "row": 2,
@@ -212,7 +212,7 @@
         "Evaluation/cost.py",
         "Evaluation/stats.py",
         "Evaluation/comparison/",
-        "Evaluation/results.py",
+        "Evaluation/store.py",
         "../bev_fusion/evaluation/bev_eval.py",
         "../bev_fusion_lane_center/evaluation/lane_suite.py"
       ],
@@ -247,7 +247,7 @@
       "col": 2,
       "row": 3,
       "code": [
-        "Evaluation/store.py"
+        "Evaluation/results.py"
       ],
       "note": "one per identity (network, checkpoint, inputs); any question reuses its frames"
     },

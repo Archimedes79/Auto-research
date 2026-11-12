@@ -1,6 +1,6 @@
 """Reading one training run directory (standard library only).
 
-A run directory follows the contract of README.md: `config.json` (key `steps`), the metrics stream `log.jsonl`, the text log `train.log`,
+A run directory follows the contract of EXTENSIONS.md chapter 8: `config.json` (key `steps`), the metrics stream `log.jsonl`, the text log `train.log`,
 the flag `.done` (only for exit code 0), the control files `CONTROL` / `STOPPED`. Layouts that differ are described in an optional
 `Training.json` inside the run directory: {"log": "metrics.jsonl", "text_log": "run.log", "loss": "loss", "steps": 3000, "progress": "it "}.
 """

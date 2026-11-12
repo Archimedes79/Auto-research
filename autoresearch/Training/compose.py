@@ -7,7 +7,7 @@
 The modes of a training are values in the config, not code paths: a preset is a small json file of overrides (`<presets dir>/<name>.json`, deep-merged in the order
 given), `--set a.b=c` overrides one value (c is read as json when it parses: `steps=500`, `flip_aug=0.5`, `train_only=["fusion."]`, else it is a string), the base
 file stays as it is, the composed file is written to a scratch path. Every change is printed with its old value and its source, a key that the base file did not
-have is marked NEW (a typo shows there; the project's check command refuses an unknown key before a GPU is touched). `check` / `run` need a `Training` block in the
+have is marked NEW (a typo shows there; the project's check command refuses an unknown key before a GPU is touched). `check` / `run` need a `training` block in the
 project's project.json: {"presets": dir, "out": dir for the composed files, "check": command with {config}, "train": command with {config}, "runs": run folder,
 "prepare": [{"name": "gt", "check": command with {config} (exit 0 = present, 1 = missing, any other exit = the check itself failed), "build": command with {config} (resumable), "wait_min": minutes the training may wait for it}]}.
 `check` / `run` run the prepare checks; a missing item stops it unless the job says `"prepare": true`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)

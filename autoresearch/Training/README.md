@@ -9,7 +9,7 @@ Who does what in a training (the folders are the BEV system's; another project p
 | the launcher | `autoresearch/tools/run.py` | card, ledger row, code tag, GPU slot, retry |
 | this suite | `autoresearch/Training/` | compose a config, check, run, queue, status / list / health / watch, plot, stop; no project code, standard library only (`plot` also needs matplotlib) |
 
-Run every command from `autoresearch/`. `AR_PROJECT=../bev_fusion` names the problem (the default is the lane one); `R=../bev_fusion/runs` is the folder of the run directories. `python -m Training selftest` checks the suite on synthetic runs in seconds.
+Run every command from `autoresearch/`. `AR_PROJECT=../bev_fusion` names the problem (the default is the lane one); `R=../bev_fusion/runs` is the folder of the run directories. `python -m Training selftest` checks the suite on synthetic runs in several minutes (`TS_SELFTEST_NO_QUEUE=1`: seconds).
 ```
 export AR_PROJECT=../bev_fusion; R=../bev_fusion/runs
 ```
@@ -135,7 +135,7 @@ A training is a job file (section 0.3). `check` is the preview, `run` starts it:
 echo '{"id": "t20.demo", "config": "training/configs/t20_base.json", "preset": ["small"], "set": {"split": "small", "steps": 600}, "no_card": true}' > job.json
 python -m Training check job.json
 ```
-`check` starts nothing and writes no run record; the composed config goes to `bev_fusion/temp/compose/<id>.preview.json` (scratch). It prints the changes against the base file, the notes of the split
+`check` starts nothing and writes no run record; the composed config goes to `bev_fusion/temp/compose/<id with . as _>.preview.json` (scratch). It prints the changes against the base file, the notes of the split
 resolution, the problems the project's static check and `prepare` check find (`training/startable.py`, `gt_scenes.py`) and the exact `run.py` command:
 ```
 t20.demo: OK, nothing is started by a check
@@ -143,7 +143,7 @@ t20.demo: OK, nothing is started by a check
   note: resolve: val_scenes = 10 entries
   10 change(s) against the config:
       steps: 6000 -> 400  (preset small)  ...  split: "large" -> "small"  (set)   steps: 400 -> 600  (set)   name: "t20_base" -> "t20_demo"  (id)
-  command: cd <bev_fusion> && AR_PROJECT=<bev_fusion> python3 .../tools/run.py --id t20.demo --gpu --split train --no-card -- bash tools/run_ar.sh temp/compose/t20_demo.json
+  command: python3 .../tools/run.py --id t20.demo --gpu --split train --gpu-max-mb 3000 --no-card -- bash tools/run_ar.sh temp/compose/t20_demo.json
 ```
 - **`run job.json`** starts it detached and waits 3 s (`wait`) to see whether `run.py` refused the id (held, running, finished, no card). **The same call again continues** a stopped or crashed run from its last checkpoint.
 - **The card.** A run that may feed a verdict needs `"card": {"hyp": "...", "pred": "...", "rule": "..."}`. `"no_card": true` is for diagnostic runs (smoke, bring-up, timing): the ledger row says "no card" and the run never feeds a verdict.
@@ -215,10 +215,10 @@ python -m Training queue                                            # (output sh
 # GPU memory: 8718 MB in use; a training starts only below 3000 MB: a training waits
 # on hold (only the person's words clear a hold: hold.py clear ID --words ...):  profile.t10  speed.d  t16.ctl_s0 ...
 ```
-**It exists** (since 2026-11-01). The view shows the **machine lock** (`machine_lock.py`: a measurement that needs the box alone; an exclusive lock holds every other launcher back, and its ticket in the line does not hold up the lock owner's own launches), and a slot that is still **loading** (see below). Every `run.py --gpu` is a launcher process that waits in one first-come-first-served line, takes one of the 2 GPU slots (the lane project counts against the same two) and starts only when the RAM gate lets it (`ram_mb` 10000 in `project.json`: two jobs run in parallel only when the box has RAM for both; with the memory gate below, two big trainings never overlap). A held id is refused. **Settle time** (`gpu_settle_s` in `project.json`, `--settle-s`, 0 = off, `AR_SETTLE_S` overrides; bev_fusion sets 180): a launcher waits while another one took its slot less than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet, so the RAM and memory gates would read the box too early (on 2026-11-04 two trainings started in the same second on the 12 GB card and slowed each other 13 times). It delays only launchers of a project that sets it, evaluations of that project included (a run that ends within the time frees its slot and delays nobody). **Memory gate:** the `Training` block of `project.json` may set `"gpu_max_mb": 3000`; `run`, `queue add` and the queue runner then pass `--gpu-max-mb 3000` to `run.py`, so a training starts only when the card has less than that in use, i.e. when no other big job holds it (a hand-typed `run.py` line without the flag is not gated; the view shows the memory in use against the gate, and a waiting launcher says in its heartbeat what it waits for).
+**It exists** (since 2026-11-01). The view shows the **machine lock** (`machine_lock.py`: a measurement that needs the box alone; an exclusive lock holds every other launcher back, and its ticket in the line does not hold up the lock owner's own launches), and a slot that is still **loading** (see below). Every `run.py --gpu` is a launcher process that waits in one first-come-first-served line, takes one of the 2 GPU slots (the lane project counts against the same two) and starts only when the RAM gate lets it (`ram_mb` 10000 in `project.json`: two jobs run in parallel only when the box has RAM for both; with the memory gate below, two big trainings never overlap). A held id is refused. **Settle time** (`gpu_settle_s` in `project.json`, `--settle-s`, 0 = off, `AR_SETTLE_S` overrides; bev_fusion sets 180): a launcher waits while another one took its slot less than that many seconds ago, because that run has not loaded its data or allocated its GPU memory yet, so the RAM and memory gates would read the box too early (on 2026-11-04 two trainings started in the same second on the 12 GB card and slowed each other 13 times). It delays only launchers of a project that sets it, evaluations of that project included (a run that ends within the time frees its slot and delays nobody). **Memory gate:** the `training` block of `project.json` may set `"gpu_max_mb": 3000`; `run`, `queue add` and the queue runner then pass `--gpu-max-mb 3000` to `run.py`, so a training starts only when the card has less than that in use, i.e. when no other big job holds it (a hand-typed `run.py` line without the flag is not gated; the view shows the memory in use against the gate, and a waiting launcher says in its heartbeat what it waits for).
 ```
 # a job file with "after": ["t20.demo2"] in its job: run.py waits for that run
-python -m Training run demo3.json                                   #   ... run.py --id t20.demo3 --gpu --split train --no-card --after t20.demo2 -- bash tools/run_ar.sh temp/compose/t20_demo3.json
+python -m Training run demo3.json                                   #   ... run.py --id t20.demo3 --gpu --split train --gpu-max-mb 3000 --no-card --after t20.demo2 -- bash tools/run_ar.sh temp/compose/t20_demo3.json
 ```
 **The queue that outlives its launchers** (since 2026-11-03). A launcher waits as a process: a WSL shutdown, a kill or `--wait-after` running out ended every chain behind it (the chain behind `t17.data` went "blocked" on 2026-11-02). The queue is a persistent list plus one small runner:
 ```
@@ -246,9 +246,9 @@ Where the launches come from (counted on CPU for the t20 chain, 2026-11-03, `bev
 | 3 | the 3 dts as one batch of 3B (-40 % ops) | counted | **changes the training**: BatchNorm statistics over dt (open finding #5), so a new baseline and Mirko's word |
 | 4 | larger micro-batch, fewer accumulation steps | t1 chain, effective batch 16, idle GPU: 4 x 4 = 2.5 s per step (4.4 GB), 8 x 2 = 2.1 s (8.6 GB), 2 x 8 = 5.3 s (`training/configs/README.md`) | the current chain peaks at 8.8 - 9.3 GB of 11 GB; BatchNorm sees other batches |
 | 5 | more loader workers / targets in the workers | data wait 4 % (`speed.a3`) to 7 % (`t16.full_s0`): at most that much; `w_obj` depends on the splat mass, so the targets cannot leave the main process | RAM per worker (one run takes about 10 GB) |
-| no gain | fused AdamW (< 1 % of the launches), `cudnn_benchmark`, TF32 (risky for coordinates) while the step is host-bound; bf16 + `cudnn_benchmark` (`speed.c2`): 2.71 against 2.66 s, peak memory -40 %, gradient norm median 865 against 34, loss +8 % | | fp16 with a loss scale is built (`speed.e` waits as a held run) |
+| no gain | fused AdamW (< 1 % of the launches), `cudnn_benchmark`, TF32 (risky for coordinates) while the step is host-bound; bf16 + `cudnn_benchmark` (`speed.c2`): 2.71 against 2.66 s, peak memory -40 %, gradient norm median 865 against 34, loss +8 % | | fp16 with a loss scale is built |
 
-Measure a change on a short run with a quiet GPU (the same config on a busy box ran at 7.7 s per step, `speed.a`, against 2.66 s on a calm one, `speed.a3`): `python -m Training compare <base run> <changed run> --skip 10` puts them side by side. Three of the levers wait as held runs (`speed.d/e/f`). To compare two settings of the SAME model (the switches of D53 / D54, `pin_memory`, workers), the in-process A/B timer `bev_fusion/training/ab_timing.py` needs about 7 minutes for two arms (4 rounds) and sees less drift than two runs (blocks of steps in the order A B / B A in one process, no checkpoints); a different model (a built-in option) still goes through a run and `speed`.
+Measure a change on a short run with a quiet GPU (the same config on a busy box ran at 7.7 s per step, `speed.a`, against 2.66 s on a calm one, `speed.a3`): `python -m Training compare <base run> <changed run> --skip 10` puts them side by side. To compare two settings of the SAME model (the switches of D53 / D54, `pin_memory`, workers), the in-process A/B timer `bev_fusion/training/ab_timing.py` needs about 7 minutes for two arms (4 rounds) and sees less drift than two runs (blocks of steps in the order A B / B A in one process, no checkpoints); a different model (a built-in option) still goes through a run and `compare`.
 
 ## 9. The files of this folder
 | file | what |

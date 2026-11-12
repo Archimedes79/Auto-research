@@ -1,7 +1,7 @@
 """Self-test of the job runner on a throw-away problem folder (its own project.json, ledger, run.py records; never the real machine lock, ledger or GPU slots):
 the catalogue, the check of a job (keys, arguments against the method, data references, card rules, the gates of run.py a job could slip past), the run.py command a job
 becomes, submit / start / idempotence / restart / failure with a fake launcher, the states read from run.py's records, and the whole way with the REAL run.py and the child
-process (`python -m jobrunner call`). `python -m jobrunner selftest`; ~40 s."""
+process (`python -m jobrunner call`). `python -m jobrunner selftest`; about 1 min."""
 from __future__ import annotations
 
 import json
@@ -677,12 +677,37 @@ def test_real(T):
     ok(m.returncode == 0 and "submit  (JobRunner.submit(job, start=True, deep=False))" in m.stdout and "check  (JobRunner.check(job, deep=False))" in m.stdout, m.stdout)
 
 
+def test_proc(T):
+    """process liveness through run.py's /proc reader: a pid that is no number or <= 0 is not alive (also without /proc); without /proc a real check and the
+    submit lock refuse instead of guessing (os.kill(pid, 0) would terminate a process on Windows)"""
+    for bad in (None, "", "abc", 0, -1, "0"):
+        ok(A._alive(bad) is False, f"{bad!r} is no live process")
+    ok(A._alive(os.getpid()) and A._alive(str(os.getpid())), "this process lives")
+    real = A.os.path.isdir
+    A.os.path.isdir = lambda p: False if p == "/proc" else real(p)
+    try:
+        ok(A._alive(None) is False, "no pid needs no /proc")
+        try:
+            A._alive(os.getpid())
+            ok(False, "a real pid without /proc must raise")
+        except JobError as e:
+            ok("/proc" in str(e))
+        try:
+            with JobRunner(T)._lock("proc.lock"):
+                pass
+            ok(False, "the submit lock without /proc must raise")
+        except JobError as e:
+            ok("/proc" in str(e))
+    finally:
+        A.os.path.isdir = real
+
+
 def main():
     T = tempfile.mkdtemp(prefix="jobrunner_selftest_")
     keep = os.environ.get("JOBRUNNER_KEEP")
     try:
         project(T)
-        for fn in (test_catalogue, test_check, test_gates, test_submit, test_real):
+        for fn in (test_catalogue, test_check, test_gates, test_submit, test_real, test_proc):
             fn(T)
             print(f"  {fn.__name__[5:]:10s} ok")
     finally:

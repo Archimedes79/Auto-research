@@ -1,5 +1,5 @@
 """Self-test on synthetic runs with known answers (stdlib; curves are checked when matplotlib is installed).
-Run: python -m Training selftest    (from autoresearch/, a few seconds, writes only to a temporary folder)"""
+Run: python -m Training selftest    (from autoresearch/, several minutes, writes only to a temporary folder)"""
 import codecs
 import contextlib
 import io

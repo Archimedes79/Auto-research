@@ -1,4 +1,4 @@
-"""Copy the agent definitions (autoresearch/agents/*.md) into the workspace's .claude/agents/ so Claude Code sessions started in the workspace
+"""Copy the agent definitions (autoresearch/agents/*.md, not its README.md) into the workspace's .claude/agents/ so Claude Code sessions started in the workspace
 can spawn them by name (ar-planner, ar-critic, ...). Run again after editing an agent. Standard library only.
 
     python autoresearch/tools/install_agents.py [--workspace <folder>]   (default: the folder that contains autoresearch/)
@@ -108,7 +108,7 @@ def selftest():
         # the real definitions of this repository pass
         real = os.path.join(P.AR, "agents")
         for f in sorted(os.listdir(real)):
-            if f.endswith(".md"):
+            if f.endswith(".md") and f != "README.md":
                 assert lint(os.path.join(real, f)) == [], (f, lint(os.path.join(real, f)))
         print("install_agents selftest passed")
     finally:
@@ -125,7 +125,7 @@ def main():
         return selftest()
     src = os.path.join(P.AR, "agents")
     dst = os.path.join(a.workspace, ".claude", "agents")
-    ours = sorted(f for f in os.listdir(src) if f.endswith(".md"))
+    ours = sorted(f for f in os.listdir(src) if f.endswith(".md") and f != "README.md")   # the README of the folder is no agent
     found = {f: lint(os.path.join(src, f)) for f in ours}
     lint_bad = [f"{f}: {p}" for f, ps in found.items() for p in ps]
     if a.check:
