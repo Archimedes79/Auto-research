@@ -42,3 +42,12 @@ Two seeds, 3000 steps, lr 1e-3, batch 8, the context arm of j1, VAL 873 frames, 
 
 ## 3. Command and records
 `wsl bash temp/e307/start_narrow.sh <seed>` (scratch wrapper around `run.py --require-card`), then `jmaps_eval.py score --run e307_n_s<S>`. GPU: nights 22 - 07 and weekdays 08:30 - 17:30 only.
+
+## 2. Result (2026-11-12 11:56; trained 10:57 - 11:48, both seeds, 3000 steps; `jmaps_eval.py score --run e307_n_s<S>` -> `runs/e307_n_s<S>/jmaps_val.json`, VAL 873, the control c = E286 j1 of the same seed (frozen pyramid, dilated context); comparison script `temp/gt2/maps_cmp.py`)
+| seed | arm | keypoint F1 (3 m, thr 0.3) | best-threshold F1 | entry recall crowded / isolated | entry recall > 35 m | zone IoU | core IoU |
+|---|---|---|---|---|---|---|---|
+| 0 | c = E286 j1 | 0.630 | 0.653 | 0.542 / 0.657 | 0.551 | 0.760 | 0.571 |
+| 0 | **E307 sigma 1.0** | **0.723** (+0.093) | 0.737 (+0.084) | **0.789** (+0.247) / 0.714 (+0.057) | 0.652 (+0.101) | 0.767 (+0.007) | 0.584 |
+| 1 | c = E286 j1 | 0.642 | 0.666 | 0.576 / 0.674 | 0.562 | 0.759 | 0.578 |
+| 1 | **E307 sigma 1.0** | **0.705** (+0.063) | 0.727 (+0.061) | **0.789** (+0.213) / 0.710 (+0.036) | 0.651 (+0.089) | 0.761 (+0.002) | 0.581 |
+**Verdict by the rule: KEEP** (keypoint F1 +0.093 / +0.063 against the +0.01 of the rule, crowded entry recall +0.247 / +0.213 against +0.04, zone IoU within 0.01 on both seeds). The prediction (+0.02 kp F1, crowded +0.06, isolated within 0.01) is missed by a wide margin in the good direction. The far range improves as well (+0.10 / +0.09 entry recall beyond 35 m) although the arm has no far-range weight: with a 1.5 m Gaussian the heat of far, blurred ends is a plateau that falls below the peak read-out, a narrower target gives a peak. **Base for the later steps: the E307 maps** (E312 builds the pair head on them; the far-range weight of E304 was stopped at step 200 for that reason). Not yet known: whether the better ends also lift the pairs and the delivered graph (E312).

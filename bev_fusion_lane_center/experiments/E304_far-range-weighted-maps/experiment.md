@@ -33,3 +33,6 @@ Card of 2026-11-11. E300 (E284 head) and E286 (j1) agree: the ends beyond 35 m f
 }
 ```
 By hand (label "by hand: keypoint scorer"; `recall_far` = the mean of entry and exit recall beyond 35 m at thr 0.3, 3 m; `recall_near` within 20 m; both from the range split of `jmaps_eval.py`): KEEP when the far recall rises by more than 0.03 on both seeds with `kp_f1` not lower by more than 0.01 and the near recall not lower by more than 0.02; TIE kept and refined (D82; the refinement is a larger weight or a far-range context level); CUT below. Reported: precision beyond 35 m (a higher weight may buy recall with false ends), city split.
+
+## 2. Stopped (2026-11-12 11:57, by hand)
+Started 11:49 (both lanes) behind E307 in day chain 4; stopped at step 200 of 3000 (SIGTERM, exit 143) when E307 (heat sigma 1.0 m, no far-range weight) turned out to lift the entry recall beyond 35 m by +0.10 / +0.09 on its own (E307 card section 2): the single-factor test of the far-range weight on the old sigma 1.5 m is no longer the question; the GPU slots went to E312 (pair head on the E307 maps). The arm combined with sigma 1.0 (`--sigma 1.0 --far-w 2`) is the planned follow-up (E313). No verdict.
