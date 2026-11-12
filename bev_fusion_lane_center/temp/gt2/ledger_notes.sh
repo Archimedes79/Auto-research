@@ -1,0 +1,11 @@
+cd "$(dirname "$0")/../.."
+L="python3 ../autoresearch/tools/ledger.py"
+note() { $L note "$1" --result "$2" --decision "$3" 2>&1 | tail -n 1; }
+note E287.p0_s0 "topo F1 0.6275 (+0.0016 vs plain), lanes found +0.017, junction recall +0.057, dup -0.030; pair R/P 0.141/0.549" "TIE by hand: card rule (topo F1 +0.02 not reached on any seed), kept and refined"
+note E287.p0_s1 "topo F1 0.6235 (-0.0014 vs plain), lanes found +0.022, junction recall +0.100, dup -0.028; pair R/P 0.181/0.598" "TIE by hand: card rule (topo F1 +0.02 not reached on any seed), kept and refined"
+note E287.p1_s0 "topo F1 0.6313 (+0.0055 vs plain), lanes found +0.023, junction recall +0.063, dup -0.031; pair R/P 0.182/0.602" "TIE by hand: card rule (topo F1 +0.02 not reached on any seed), kept and refined"
+note E287.p1_s1 "topo F1 0.6267 (+0.0018 vs plain), lanes found +0.024, junction recall +0.107, dup -0.024; pair R/P 0.186/0.599" "TIE by hand: card rule (topo F1 +0.02 not reached on any seed), kept and refined"
+note E287.p2_s0 "topo F1 0.6320 (+0.0061 vs plain), lanes found +0.020, junction recall +0.044, dup -0.024; pair R/P 0.158/0.598" "TIE by hand: card rule (topo F1 +0.02 not reached on any seed), kept and refined"
+note E287.p2_s1 "topo F1 0.6286 (+0.0037 vs plain), lanes found +0.027, junction recall +0.086, dup -0.022; pair R/P 0.177/0.638 (dump on the CPU: host memory)" "TIE by hand: card rule (topo F1 +0.02 not reached on any seed), kept and refined"
+note E308.t_s0 "pair precision at the recall of E287 p2: 0.694 (+0.057); AUC among true ends 0.940 (p2 0.930); topo F1 0.6323 (+0.0003 vs p2)" "TIE by hand: pair scorer (+0.03 on both seeds not reached: +0.057 / +0.021), kept and refined"
+note E308.t_s1 "pair precision at the recall of E287 p2: 0.699 (+0.021); AUC among true ends 0.948 (p2 0.934); topo F1 0.6295 (+0.0009 vs p2)" "TIE by hand: pair scorer (+0.03 on both seeds not reached: +0.057 / +0.021), kept and refined"
