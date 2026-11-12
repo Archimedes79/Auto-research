@@ -16,7 +16,7 @@ Found 2026-11-12 while looking for why the numbers did not match the pictures (E
  "prediction": {"value": 0.015, "vs": "c"},
  "arms": {
   "c": {"recipe": "control = the plain delivered graph of B + the hard close-node step of the same seed (no connectors); the unsnapped connectors of the same dump are the second reference"},
-  "s": {"recipe": "`temp/jr/snapconn.py` `add_connectors_snap` (scored by `temp/gt2/snap_score.py`: the scorer of record `qends_eval.cmd_score` with only the connector function replaced), pairs at p >= t"}
+  "s": {"recipe": "`qends_eval.add_connectors(snap=True)` (promoted from the scratch `snapconn.py` after the critic pass; scored by `jends_eval.py score --snap --thr t`, the scorer of record with only the connector function changed), pairs at p >= t"}
  },
  "control": "c",
  "variant": "s",
@@ -47,7 +47,7 @@ By hand (label "by hand: replay"): the rule is the D79 rule of E287 applied to t
 | 1 | 0.1 | 9131 | 0.6532 | +0.0283 | +0.0703 | +0.0574 | +0.1384 | -0.0433 | +0.0276 | -0.0192 | +0.0649 |
 The same dumps drawn from the keypoints (E309): topo F1 +0.0064 / +0.0046 at 0.5 and +0.0054 / +0.0071 at 0.1. Snapping roughly doubles the topology gain and turns the junction F1 from -0.015 / +0.014 into +0.032 / +0.057 at p >= 0.1; the maneuver coverage (a pure geometry measure, E310) does not see it (53.6 % against 53.8 % at 0.5): the gain is in how the graph is connected, which the topology scores measure. The F1@1.0, duplicates and topo precision guards hold.
 
-## 2. Confirmation (2026-11-12 10:15, CPU, VAL 873, `temp/gt2/snap/<run>_thr<t>.json`, the scorer of record with only the connector function changed (`jends_eval.py score --snap` after the promotion); differences to the plain graph of the same seed; rule applied by `temp/gt2/e311_rule.py`)
+## 2. Confirmation (2026-11-12 10:15, CPU, VAL 873, `runs/<run>/ends_card_snap_thr<t>.json` (the first confirmation scores were written by a scratch scorer into `temp/gt2/snap/` with the same code path and copied there), the scorer of record with only the connector function changed (`jends_eval.py score --snap` after the promotion); differences to the plain graph of the same seed; rule applied by `jdiag.py snaprule e287_p2 e305_e`)
 | network | p >= | seed 0 topo F1 / F1@1.0 / dup / vert / junction F1 | seed 1 | rule |
 |---|---|---|---|---|
 | E287 p2 | 0.5 | +0.0144 / +0.0088 / -0.0198 / +0.09 / +0.0088 | +0.0132 / +0.0113 / -0.0163 / +0.07 / +0.0205 | fails (topo F1 below +0.02) |

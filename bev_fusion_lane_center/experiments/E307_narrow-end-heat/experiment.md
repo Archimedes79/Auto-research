@@ -43,7 +43,7 @@ Two seeds, 3000 steps, lr 1e-3, batch 8, the context arm of j1, VAL 873 frames, 
 ## 3. Command and records
 `wsl bash temp/e307/start_narrow.sh <seed>` (scratch wrapper around `run.py --require-card`), then `jmaps_eval.py score --run e307_n_s<S>`. GPU: nights 22 - 07 and weekdays 08:30 - 17:30 only.
 
-## 2. Result (2026-11-12 11:56; trained 10:57 - 11:48, both seeds, 3000 steps; `jmaps_eval.py score --run e307_n_s<S>` -> `runs/e307_n_s<S>/jmaps_val.json`, VAL 873, the control c = E286 j1 of the same seed (frozen pyramid, dilated context); comparison script `temp/gt2/maps_cmp.py`)
+## 2. Result (2026-11-12 11:56; trained 10:57 - 11:48, both seeds, 3000 steps; `jmaps_eval.py score --run e307_n_s<S>` -> `runs/e307_n_s<S>/jmaps_val.json`, VAL 873, the control c = E286 j1 of the same seed (frozen pyramid, dilated context); comparison `wsl bash tools/env/_py14.sh jdiag.py maps e307_n e286_j1`)
 | seed | arm | keypoint F1 (3 m, thr 0.3) | best-threshold F1 | entry recall crowded / isolated | entry recall > 35 m | zone IoU | core IoU |
 |---|---|---|---|---|---|---|---|
 | 0 | c = E286 j1 | 0.630 | 0.653 | 0.542 / 0.657 | 0.551 | 0.760 | 0.571 |

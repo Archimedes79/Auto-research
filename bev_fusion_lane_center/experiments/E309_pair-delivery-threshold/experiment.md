@@ -14,7 +14,7 @@
  "prediction": {"value": 0.04, "vs": "c"},
  "arms": {
   "c": {"recipe": "control = the same dump delivered at p >= 0.5 (`jends_eval.py score --thr 0.5`, the number of record of E287 / E308)"},
-  "t": {"recipe": "the same dump delivered at the threshold of the rule below (`temp/gt2/thr_sweep.py <run> <seed> 0.3 0.2 0.1`: the scorer of record, only `--thr` changes, the run's own ends_card.json is left alone)"}
+  "t": {"recipe": "the same dump delivered at the threshold of the rule below (`jends_eval.py score --run <run> --seed <S> --thr t`: the scorer of record, only `--thr` changes; the card goes to `runs/<run>/ends_card_thr<t>.json`, the card of record is only written at p >= 0.5; the first sweep used a scratch wrapper `temp/gt2/thr_sweep.py`)"}
  },
  "control": "c",
  "variant": "t",
@@ -47,3 +47,12 @@ By hand (label "by hand: replay"): the dumps are the ones of E308 / E287 p2 (and
 | 1 | 0.2 | 6989 | 0.6316 (+0.0067) | +0.0515 | +0.0099 | +0.1850 | -0.0502 | +0.0204 | +0.13 |
 | 1 | 0.1 | 9131 | 0.6320 (+0.0071) | +0.0696 | +0.0142 | +0.2303 | -0.0558 | +0.0248 | +0.09 |
 (For the threshold 0.5 of the same runs see E308 section 4: lanes found +0.022 / +0.026, topo F1 +0.0064 / +0.0046 over the plain graph.) Reading: the lower the threshold, the more lanes are found and the fewer duplicates are left, F1@1.0 rises, topo F1 stays flat (+0.005 to +0.007: the extra curves cost about what they gain on that metric) and junction F1 moves little (-0.016 .. +0.014).
+
+## 2. Confirmation on E287 p2 (2026-11-12 10:30, CPU, VAL 873; differences to the same dump delivered at p >= 0.5 = c; E308 is the exploratory network of section 1; unsnapped connectors; `temp/gt2/thr/<run>_thr<t>.json`)
+| network | p >= | seed 0: lanes found / F1@1.0 / dup / topo F1 / junction F1 | seed 1 | rule |
+|---|---|---|---|---|
+| E287 p2 | 0.3 | +0.0167 / +0.0039 / -0.0143 / +0.0013 / -0.0032 | +0.0164 / +0.0074 / -0.0133 / +0.0017 / +0.0054 | fails (lanes found below +0.03) |
+| E287 p2 | 0.2 | +0.0277 / +0.0057 / -0.0257 / +0.0000 / -0.0030 | +0.0292 / +0.0119 / -0.0224 / +0.0021 / +0.0098 | fails (just below +0.03) |
+| E287 p2 | 0.1 | +0.0456 / +0.0082 / -0.0358 / -0.0025 / -0.0001 | +0.0523 / +0.0165 / -0.0298 / -0.0004 / +0.0123 | holds |
+| E308 | 0.1 | +0.0332 / +0.0087 / -0.0370 / -0.0010 / +0.0017 | +0.0434 / +0.0138 / -0.0290 / +0.0025 / +0.0119 | holds |
+**Verdict by the rule: KEEP at p >= 0.1** (on E287 p2, the independent network, and on E308: lanes found +0.033 .. +0.052 over the delivery at 0.5, F1@1.0 +0.008 .. +0.017, duplicates -0.03 .. -0.04, topo F1 and junction F1 flat within the guards, vertices within +0.20); 0.2 and 0.3 TIE (kept). The lowest threshold that holds wins. The snapped read-out of E311 reaches the same conclusion on its own metric (p >= 0.1 holds on all four cells, p >= 0.5 does not). The sweep ran through a scratch wrapper; `jends_eval.py score --thr t` now writes the card of another threshold to `ends_card_thr<t>.json` and needs no wrapper.

@@ -32,9 +32,9 @@ E307 (2026-11-12): the narrower end heat, sigma 1.0 m instead of 1.5 m, lifted t
  "evaluate": {"split": "val"}
 }
 ```
-By hand (`maps_cmp.py e313_s e307_n`, the numbers of `jmaps_eval.py score`): KEEP when the keypoint F1 rises by more than +0.01 on BOTH seeds with the crowded entry recall not lower by more than 0.03 and the zone IoU within 0.01; TIE (kept; D82: the narrower or the wider arm is kept by the cost: equal, E307) when inside the band; CUT when it falls by more than 0.01. The keypoint F1 is read at a fixed threshold 0.3: a narrower heat is lower one metre from the end, so the best-threshold F1 is reported next to it (a fair read).
+By hand (`jdiag.py maps e313_s e307_n`, the numbers of `jmaps_eval.py score`): KEEP when the keypoint F1 rises by more than +0.01 on BOTH seeds with the crowded entry recall not lower by more than 0.03 and the zone IoU within 0.01; TIE (kept; D82: the narrower or the wider arm is kept by the cost: equal, E307) when inside the band; CUT when it falls by more than 0.01. The keypoint F1 is read at a fixed threshold 0.3: a narrower heat is lower one metre from the end, so the best-threshold F1 is reported next to it (a fair read).
 
-## 1. Result (2026-11-12 14:10; trained 13:08 - 14:02, both seeds; `jmaps_eval.py score --run e313_s_s<S>`, VAL 873; `temp/gt2/maps_cmp.py e313_s e307_n`)
+## 1. Result (2026-11-12 14:10; trained 13:08 - 14:02, both seeds; `jmaps_eval.py score --run e313_s_s<S>`, VAL 873; `jdiag.py maps e313_s e307_n`)
 | seed | arm | keypoint F1 | best-threshold F1 | entry recall crowded / isolated | entry recall > 35 m | zone IoU | core IoU |
 |---|---|---|---|---|---|---|---|
 | 0 | c = E307 (sigma 1.0) | 0.723 | 0.737 | 0.789 / 0.714 | 0.652 | 0.767 | 0.584 |
