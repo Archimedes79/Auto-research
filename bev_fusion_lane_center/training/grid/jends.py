@@ -11,6 +11,7 @@ sampled at 12 points in the maps (lane-centre probability of B, zone, conflict c
 gradient flows through the values, the D7 convention), the group / rank bookkeeping is a function of the keypoint positions (no gradient needed), both named in the card.
 E302 `capacity`: instead of independent pair logits (+ dual softmax) the pair probability comes from the plan of a log-domain Sinkhorn with a dustbin: every entry has a predicted out-degree {0, 1, 2, 3+} (0 = a false keypoint), every exit an in-degree; an entry that
 feeds a turn AND the straight exit (27 % of the entries, E285) has mass 2, a merge exit takes two entries (33 %). A plan entry is a MASS (up to the degree), the pair probability is q = P / max(1, min(row mass, column mass)) in [0, 1] (the share of the smaller capacity this pair uses; one entry of degree 1 with two equally good exits gives 0.5 each), read as a logit, so the read-out (`logit >= 0`, i.e. q >= 0.5), the counts and the crossing penalty work unchanged. Differentiable (10 unrolled iterations).
+E308 `ntok`: B's node tokens (the frozen node head of the E273 baseline on the same pyramid, 64 channels at 2 m) are sampled at the keypoints and enter the keypoint token: the E284 end head reads them and ranks the pairs between true ends better (AUC 0.974) than the head on the maps' own features alone (0.930, E287 p2).
 Run the self-test: python jends.py
 """
 import math
@@ -78,10 +79,10 @@ def sinkhorn_plan(z, allowed, re, rx, alpha, iters=SINK_ITERS, full=False):
 
 
 class JEnds(nn.Module):
-    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, capacity=False):
+    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, capacity=False, ntok=0):
         super().__init__()
-        self.k, self.order, self.evidence, self.scales, self.capacity = k, order, evidence, scales, capacity
-        self.kp = nn.Linear(f1 + 6, d)
+        self.k, self.order, self.evidence, self.scales, self.capacity, self.ntok = k, order, evidence, scales, capacity, ntok
+        self.kp = nn.Linear(f1 + 6 + ntok, d)
         self.blocks = nn.ModuleList([SetBlock(d), SetBlock(d)])
         nin = 2 * d + NG + (NEV if evidence else 0) + (NRK if order else 0)
         self.pair = nn.Sequential(nn.Linear(nin, hid), nn.GELU(), nn.Linear(hid, hid), nn.GELU(), nn.Linear(hid, 1))
@@ -91,7 +92,7 @@ class JEnds(nn.Module):
         if scales:                                                                                           # E303: the two handle scales of the delivered curve, in chords (0.05 .. 1.25 like the fit grid)
             self.scale = nn.Sequential(nn.Linear(nin, 32), nn.GELU(), nn.Linear(32, 2))
 
-    def forward(self, jout, P, gt=None):
+    def forward(self, jout, P, gt=None, tok=None):
         j1, f1 = jout["j1"].float(), jout["f1"]
         B, dev = j1.shape[0], j1.device
         heat = j1[:, 2:4]                                                        # entry, exit logits (B, 2, 100, 100)
@@ -137,6 +138,8 @@ class JEnds(nn.Module):
         K_ = self.k
         kind = torch.cat([torch.zeros(B, K_), torch.ones(B, K_)], 1).to(dev)
         v2 = valid.flatten(1)
+        if self.ntok:                                                                                          # E308: B's node tokens at the keypoints (bilinear, 2 m grid over the same 100 m)
+            feat = torch.cat([feat, _sample(tok.float(), pos)], -1)
         t = self.kp(torch.cat([feat, pos / HALF, D, pr[..., None], kind[..., None]], -1))
         for blk in self.blocks:
             t = blk(t, ~v2)
@@ -333,6 +336,15 @@ def _selftest():
             batch["pdrv"] = torch.zeros(B, 2)
             _, iz = jends_loss(out, batch, driven_w=2.0)
             assert abs(iz["bce"] - i0["bce"]) < 1e-6, (iz, i0)
+    # E308: with node tokens the pair logits depend on the tokens (and the kp layer takes them)
+    mt = JEnds(d=d, order=True, evidence=False, ntok=64)
+    tok_a, tok_b = torch.randn(B, 64, 50, 50), torch.randn(B, 64, 50, 50)
+    la = mt(jout, P, gt=gt, tok=tok_a)["logit"]
+    lb = mt(jout, P, gt=gt, tok=tok_b)["logit"]
+    assert float((la - lb).abs().max()) > 1e-4, "the node tokens must reach the pair logits"
+    loss, info = jends_loss(mt(jout, P, gt=gt, tok=tok_a), batch)
+    loss.backward()
+    assert all(p_.grad is not None for p_ in mt.parameters()), [n for n, p_ in mt.named_parameters() if p_.grad is None]
     # E302: the capacitated plan. Two entries, two exits, all degree 1, scores favour the diagonal: the plan is the identity; an entry of degree 2 feeds two exits of degree 1; a false keypoint (degree 0) gets no mass
     z = torch.full((1, 4, 4), -3.0)
     z[0, 0, 0], z[0, 1, 1] = 4.0, 4.0
