@@ -1,0 +1,17 @@
+# E323 - duplicates of the E320 read-out against the number of delivered curves: a matched operating point (stub, no run)
+
+Stub of 2026-11-13 06:45, written by the lane chat on the lane lead's order after the E320 verdict (CUT by the guard dup_frac on seed 0, `experiments/E320_soft-attach-replaces-snap/experiment.md` section 3). No card block, no run, no number below is claimed beyond what is stored in the cards of E312, E315, E316, E320. Read-out only (CPU, the dumps exist), no training. It needs its card block, a fresh `ar-critic` pass and the lane lead's go before anything is scored.
+
+## Question
+The E320 recipe passes the topo F1 bound of its card on both seeds (PRIMARY read-out a - u' = +0.0097 / +0.0129) and breaks the dup_frac guard on seed 0 (+0.0184 against 0.01; seed 1 +0.0094). Is that guard break a property of the attached ends, or of the larger number of curves that the run delivers at the same threshold p >= 0.1 (12018 / 12208 against E312's 11378 / 11849)?
+
+## What the numbers say so far (stored cards, VAL, snapped read-out p >= 0.1)
+Within a seed, dup_frac rises with the number of delivered curves across four recipes: seed 0 E316 10887 curves 0.1678, E312 11378 0.1747, E315 12123 0.1807, E320 12018 0.1834; seed 1 E316 10694 0.1532, E312 11849 0.1557, E320 12208 0.1589, E315 12503 0.1629. The PRIMARY read-out of E320 adds +0.0097 / +0.0062 on top of the run's own snapped read-out (0.1931 against 0.1834; 0.1651 against 0.1589). So part of the break is the curve count (the threshold p >= 0.1 was set on E312's probabilities and the E320 pair head, trained with the geometry and attachment losses, delivers more pairs above it), the rest the attached ends.
+
+## Design (a proposal for the card, not decided)
+One operating point per seed, set by a count and never by the target metric: the threshold t_a at which the PRIMARY read-out of E320 delivers as many curves as E312 does at p >= 0.1 (11378 / 11849, within 1 %); scored with `jends_eval.py score --attach --snap --snap-nogeom --thr <t_a>` on the existing dumps (CPU, nice, about 4 minutes per score). Compared with c and u' of E312 at p >= 0.1 and the guards of the E320 card, by the same rule, both seeds. A sweep of thresholds is reported next to it (not in the rule) so that the curve of topo F1 and dup_frac against the threshold is visible for E312 (c, u') and E320 together.
+
+**Rule (to be fixed in the card before the run):** KEEP-at-operating-point when, on both seeds, topo F1 of a(t_a) is at least u'(0.1) + 0.005 with the guards F1@1.0, dup_frac (against c(0.1), 0.01), vertices and junction F1 held; otherwise CUT (a guard breaks or the topo F1 is below the bound) and the duplicates are the property of the attachment, which E322 (soft wiring) must then address; TIE as in the E320 card. This card does NOT change the verdict of E320 (the rule of E320 was fixed at p >= 0.1); a KEEP here would say that a fair threshold for the E320 recipe exists, and adopting that recipe as the system of record would still need its own TEST use under Mirko's OK (D84) and the lane lead's decision.
+
+## Labels the card must carry
+The threshold t_a is calibrated on VAL by the curve count of E312, so the comparison is in-sample on VAL for that one number (not for the topo F1). Hard steps unchanged: the threshold itself, the one-piece wiring, the keypoint peak choice. If a duplicate term in the loss or a soft duplicate suppression (Matrix-NMS layer, E292) is the better lever it is a separate card; this one only separates the two causes.
