@@ -1,47 +1,68 @@
-# E292 Matrix-NMS as a layer inside the training graph (D82: "bleibe differenzierbar"; follows E288)
+# E292 - the Matrix-NMS layer in the forward path of B replaces the hard close-node step of the delivered graph (E312 system, D55 / D82)
 
-Card of 2026-11-11 (a plan card, not coded yet), written by the lane chat. E288 showed that the one-pass Matrix-NMS decay with R 1.75 m and sigma 0.1 reproduces the hard close-node step of the delivered graph (topo F1 0.6270 / 0.6250 against 0.6259 / 0.6249, vertices -0.05 / -0.10 per 100 m, both seeds) as a smooth operator on the existence scores and the node positions. The hard step is the named non-differentiable read-out; a layer after the node head would let the loss on the delivered graph reach the pruning (E277's three-pass soft step was a CUT, E279's 1.25 m version a KEEP that is open for Mirko).
+Card of 2026-11-11, updated 2026-11-13 by the lane chat on the lane lead's order (D86) to the current system: the base is the E312 system (E307 maps + the `--e2e --scales` pair head, connectors p >= 0.1, snapped), the layer is trained in B's forward path AND used at the read-out, the hard close-node step is gone from the delivered path of the arm. **Status: card only, no code changed, nothing started.** E288 (CPU replay on the stored dump of B) showed that the one-pass Matrix-NMS decay with R 1.75 m and sigma 0.1 reproduces the hard step (topo F1 0.6270 / 0.6250 against 0.6259 / 0.6249, vertices -0.05 / -0.10 per 100 m). E277 (the 3-pass soft step, trained from the phase-2 checkpoints) reproduced it end to end (topo F1 within 0.005 / 0.001 of the hard step) and was CUT by the guards on seed 0 (F1@1.0 -0.0147, lanes found -0.0394 against B). The torch layer exists (`training/grid/qmnms.py`, selftest against the numpy function); what does not exist is the model switch, the fine-tune phase and the scorer options (section 2).
 
 ## 0. The card (what the tools run)
 ```json card
 {
  "id": "E292",
  "card": "",
- "title": "the lane head B with the Matrix-NMS layer (R 1.75, sigma 0.1) after the node head, the stages after it (links, sections, assignment) fine-tuned with the damped existence, against B with the hard step of record",
+ "title": "E312 with B's delivered graph from a head fine-tuned with the Matrix-NMS layer (R 1.75 m, sigma 0.1) after the node head, read out WITHOUT the hard close-node step, against E312 of the same seed (B + the hard step)",
  "kind": "block",
  "deterministic": false,
  "metric": "topo_F1",
  "direction": "higher",
- "band": 0.02,
- "prediction": {"value": 0.003, "vs": "c"},
+ "band": 0.01,
+ "prediction": {"value": -0.003, "vs": "c"},
+ "better": {"dup_frac": "lower", "vert100_dp": "lower"},
  "arms": {
-  "c": {"recipe": "control = B + the hard step `close:1.5@0.5` (runs e273_p_s0 / e273_p_s1): topo F1 0.6259 / 0.6249"},
-  "m": {"recipe": "`QGraph(soft_nms=('mnms', 1.75, 0.1))`: `no['e']` after the node head is the Matrix-NMS-damped logit (the head's own stays in `no['e_raw']`, as E277); phases 4 - 7 fine-tuned from B's checkpoint (links, sections, assignment, joint), 2 seeds; read out WITHOUT the hard step (`plain@0.5`) and with it"}
+  "c": {"recipe": "control = E312 of the same seed, snapped read-out at p >= 0.1 on B + the hard step `close:1.5@0.5` (`runs/e312_p_s<S>/ends_card_snap_thr0.1.json`): topo F1 0.6825 / 0.6864, junction F1 0.3194 / 0.3143, dup_frac 0.1747 / 0.1557, F1@1.0 0.8669 / 0.8685, lanes found 0.7376 / 0.7423, vertices 19.55 / 20.10"},
+  "a": {"recipe": "B' = B's final checkpoint (`runs/e273_p_s<S>/model.pt`) fine-tuned with `QGraph(soft_nms=('mnms', 1.75, 0.1))`, the pyramid FROZEN, the schedule of section 1 (phases 3, 4, 5, 6 and the new phase 9 at half the steps of E273); the delivered graph of B' read out at e' >= 0.5 and p >= 0.5 with NO hard step (`plain@0.5`); the connectors, the snap and everything else are E312's, unchanged (its maps and pair head sit on the same frozen pyramid); run ids E292.a_s<S>", "run_ids": ["E292.a_s0", "E292.a_s1"]},
+  "c2": {"recipe": "control for the extra fine-tuning (not in the rule): the same schedule WITHOUT the layer (`soft_nms=None`), read out with the hard step `close:1.5@0.5` as c; run ids E292.c2_s<S>", "run_ids": ["E292.c2_s0", "E292.c2_s1"]}
  },
  "control": "c",
- "variant": "m",
+ "variant": "a",
  "pairing": "position",
  "seeds": [0, 1],
  "rule": [
-  {"metric": "topo_F1", "vs": "c", "min_effect": 0.02},
+  {"metric": "topo_F1", "vs": "c", "max_loss": 0.01},
   {"metric": "F1@1.0", "vs": "c", "max_loss": 0.01},
-  {"metric": "dup_frac", "vs": "c", "max_loss": 0.02},
+  {"metric": "dup_frac", "vs": "c", "max_loss": 0.01},
   {"metric": "vert100_dp", "vs": "c", "max_loss": 1.0},
-  {"metric": "junction_F1", "vs": "c", "max_loss": 0.03}
+  {"metric": "junction_F1", "vs": "c", "max_loss": 0.03},
+  {"metric": "lanes_found", "vs": "c", "max_loss": 0.03}
  ],
- "budget_gpu_h": 6.0,
- "kill": "the damped existence has no gradient to the node head (the gradient report of `qgraph.py` shows zero for `nodes`); or the layer at inference does not reproduce `qgraph_readout.matrix_nms` on the same scores (checked on 20 frames)",
+ "budget_gpu_h": 2.5,
+ "kill": "the loss is not finite; or the gate of a fine-tune phase fails (node precision within 2 m below 0.75, node recall within 2 m below 0.5: the gates of E277); or the gradient report of `qgraph.py` shows zero gradient for `nodes` under the layer; or the layer at inference does not reproduce `qgraph_readout.matrix_nms` on the same scores (20 frames, 2e-5)",
  "evaluate": {"split": "val"}
 }
 ```
-By hand (the lane suite numbers, label "by hand: lane suite"): KEEP when topo F1 rises by more than +0.02 on both seeds with the guards held; a TIE (the likely outcome: the layer is the hard step in smooth form) is **kept and refined (D82)**: it then counts as the differentiable replacement of the hard step (the E2E claim: no rule step between the node head and the delivered graph), provided no guard breaks; CUT below -0.02 or a guard broken on both seeds. Reported: lanes found, Q, duplicates, ms of the layer (it is an (n x n) pass on at most 512 nodes).
+**Verdict rule (written before the run; by hand: replay for the scores of stored dumps, the training runs go through `run.py`):**
+- **KEEP (the layer replaces the hard step)** when, on BOTH seeds, snapped topo F1 of a is at least c - 0.01, every guard of the block holds (F1@1.0, dup_frac, vertices, junction F1, lanes found against c), the structural condition holds (the delivered path of a has no close-node step: read-out `plain@0.5`, and reading a WITH the hard step on top changes topo F1 by less than 0.002 on both seeds: nothing is left for the hard step to remove), and the cost of the delivered path does not rise (section 3: the ms of the layer plus the remaining read-out not above the hard step's, measured on an idle GPU; the host step it replaces is 1.8 ms per frame on the CPU).
+- **TIE, kept and refined (D82):** the same score conditions hold but the cost rises (or is not yet measured): the layer is the differentiable twin of the hard step and is not adopted as the delivered path; the E2E statement 'the hard step has a trained differentiable twin that ties it' is all that is claimed.
+- **CUT:** topo F1 below c - 0.01 or any guard broken on EITHER seed (E320 applied the same reading: a guard break on one seed is a CUT). If a gains more than +0.01 over c on both seeds the attribution is read against c2 (the extra fine-tuning), not claimed for the layer.
 
-## 1. The layer
-`qnodes.matrix_nms_logit(e_logit, pos, R, sigma)`: the torch version of `qgraph_readout.matrix_nms` on the existence probabilities of the (up to 2500) cells restricted to the top-512 by e (an index choice with the gradient through the values, as `sections` / `qlinks`): overlap o = relu(1 - d / R), decay = min over the higher nodes of exp(-(o^2 - c^2) / sigma), c = the compensation, damped logit = logit(sigmoid(e) x decay). Differentiable in e and pos; the sort is by e (detached). The node positions of the loss are B's.
+## 1. Card text
+- **Statement (falsifiable):** a head fine-tuned with the one-pass Matrix-NMS layer after the node head delivers a graph that, read out without the hard close-node step and wired with E312's connectors, scores within the band of E312 (snapped topo F1 at least c - 0.01 on both seeds, guards held), so that the delivered path has one hard step fewer.
+- **Why it is the next step:** after E320 / E322 the wiring side of the delivered graph is closed for accuracy; the remaining rule steps of the delivered path are in B's own read-out (D55): the node threshold, the link threshold, the chain extraction and the close-node step. The close-node step is the one with a differentiable twin that already reproduces it (E288) and that has been trained once end to end (E277).
+- **What changes (one factor):** `QGraph.node_stage` replaces `no['e']` by `matrix_nms_logit(no['e'], no['pos'], 1.75, 0.1)` (the head's own logit stays in `no['e_raw']`); the node loss, the active-node choice of the links, the section stage, the assignment and the read-out all see the damped existence, as in E277. The layer has no parameters; it is differentiable in the node's own existence logit and in the positions of both nodes, not in the stronger node's existence (the order is a comparison without gradient: unlike E277's product form the loss cannot raise the stronger node through the weaker one's decay).
+- **Fine-tune schedule (a and c2 identical, from B's FINAL checkpoint, pyramid frozen):** phase 3 (node head) 3000 steps, phase 4 (links) 2500, phase 5 (s head) 1000, phase 6 (map encoder and assigner) 750, new phase 9 (nodes, links, map encoder, assigner jointly, pyramid frozen, lr 2e-4 as phase 7) 1000: half of the steps of E273's phases 3 - 7 (STEPS = 6000 / 5000 / 2000 / 1500 and 2000 for the joint phase), the learning rates of the phases, the E273 losses, no E274 / E276 / E282 switches; about 8250 steps at 0.2 s = 28 minutes per run. **The pyramid stays B's: that is what keeps E312's maps and pair head valid** (`jends_eval.py score` checks that the pyramid of the maps run equals the base run's; with base = B' it holds because the fine-tune never updates it). A fine-tune from the phase-2 checkpoints as in E277 would update the pyramid in the joint phase and force the maps and the pair head to be retrained (about 2 GPU hours more per seed); it is the fallback if the warm start fails its gates.
+- **Controls and confounds:** (1) the extra fine-tuning itself: c2 (the same schedule without the layer, hard step at the read-out) is part of the card and costs the same as a (28 minutes per seed); the rule compares a with c (the system of record), c2 attributes a gain beyond +0.01 and shows how much the fine-tune alone moves c. (2) R 1.75 / sigma 0.1 were chosen on VAL in the replay of E288 (best of six specs; the hard step has R 1.5): in-sample on VAL for two numbers, fixed before this card. (3) The connectors of E312 were calibrated (p >= 0.1) on B's graph with the hard step; a changed graph changes which pieces the snap finds, so the comparison is a system comparison, not a graph comparison. (4) One fine-tune per arm and seed: the training noise of a is one draw (the E312-style seed twin is not budgeted; the bootstrap of the scene resamples is the interval). (5) E277 found that the soft step costs lanes found on one seed; the guard 'lanes found at least c - 0.03' is in the rule because of it.
+- **Named hard steps that remain in the delivered path (D55: named, on the output or as comparisons without gradient):** the threshold e' >= 0.5 on the damped existence and p >= 0.5 on the links, the top-512 candidate selection of the link stage (an index choice), the neighbour order inside the layer (a comparison without gradient), the chain extraction and the Hermite sampling of the read-out, Douglas-Peucker in the scorer; and on the connector side the threshold p >= 0.1, the keypoint peak choice and the one-piece nearest-end snap (E322: at its ceiling). **Removed by this card: the close-node step (`close:1.5@0.5`, a greedy sequential rule).**
+- **Prediction (numbers, written before the run; a hit is within +-0.003 for topo F1, +-0.01 for lanes found, +-0.004 for dup_frac):** a - c: snapped topo F1 -0.003 (E288 replay +0.0011 / +0.0001; E277's trained soft step against the hard step -0.005 / -0.001), lanes found -0.010 (E277 -0.023 / +0.005), junction F1 -0.005, F1@1.0 -0.003 (E277 -0.010 / +0.004), dup_frac +0.002, vertices -0.2 per 100 m. Expected verdict: TIE; the cost decides whether it is adopted. If the lanes found guard or F1@1.0 breaks on seed 0 as in E277 the CUT is the written outcome.
+- **Not claimed:** that the layer improves anything; that the retraining from the phase-2 start would give the same; anything about the TEST split (not touched, D84 covers only E312).
 
-## 2. Design
-Phases 4 - 7 of `qgraph_train.py` from B's checkpoint with `--soft-nms mnms 1.75 0.1` (the E277 switch extended), the E274 / E276 switches at their defaults; the gates of phases 4 - 7 as in E273. Two seeds. VAL 873, TEST never. Cost: about 3 GPU hours per seed.
-**Prediction (a number):** topo F1 +0.003 over c (a TIE).
+## 2. What exists and what has to be built (after the critic pass; flag off = E312 bit for bit)
+Exists: `training/grid/qmnms.py` (`matrix_nms_logit`, selftest against `qgraph_readout.matrix_nms` at three (R, sigma) on random frames and a gradient test), `QGraph(soft_nms=...)` and `qgraph_train.py --soft-nms` for the E277 soft step, `--resume-from`, the phase gates, `qgraph_readout.parse` specs (`plain@0.5`, `close:1.5@0.5`, `mnms:1.75s0.1@0.5`).
+To build: (1) `QGraph(soft_nms=('mnms', R, sigma))` as a second form of the switch (the E277 triple stays; `args['soft_nms']` travels with the checkpoint, `qpredict.load_model` reads both forms; the default model must stay bit-identical to E312's B); (2) phase 9 in `PHASE_TRAIN` / `PHASE_FROZEN` and `STEPS` / `LR` of `qgraph_train.py`; (3) in the scorer: `--full <dump of B'>`, `--base <B' checkpoint>` (the pyramid check), `--spec plain@0.5` and an output tag so that the card of record of E312 is never overwritten (the E308 incident rule: every read-out has its own file); the B' full dump by `qgraph_run_eval.py score --dump-full` (GPU, about 5 minutes per run); (4) tests: the model-level layer against the numpy function on a real B dump (20 frames), flag-off identity of the forward path and of `load_model` for an E273 checkpoint, the pyramid of B' equal to B's after the fine-tune (`torch.equal`), phase 9 trains exactly nodes / links / menc / asg and never the pyramid (gradient report), and mutations that must be killed (the layer's order sign, the compensation term, the damped logit fed back to the node loss, the pyramid not frozen). A fresh critic pass on the code (mode code) before the READY file; `temp/e292/READY` (first line = the run-name prefix) and the start scripts follow the pattern of E320. No GPU before the first arms of day13 are done and only inside the windows (nights 22:00 - 05:00, Mon - Fri 08:30 - 15:30, start by 05:00 / 15:30).
 
-## 3. Not done here
-The code (the torch layer and its unit test against the numpy function), the switch in `qgraph_train.py`, the run. Behind E287 / E289 in the queue; the night of 2026-11-11 has the pair head and the junction maps first.
+## 3. Cost, stated before the run
+- **Parameters and MACs of the layer:** 0 parameters; per frame 8 shifted neighbour passes over the 50 x 50 node grid with about 30 element-wise operations each, about 0.6 MFLOP (counted by hand; no matrix product, so no MAC count in the FlopCounter sense), against 7.96 GMACs for the E312 system and about 4.7 GMACs of B's pyramid: below 0.01 % of the compute.
+- **Time:** the layer on the CPU (torch, one thread, 1 x 50 x 50): 2.98 ms; the hard step it replaces (`qgraph_readout.apply`, numpy, python loop, mean over 200 frames of B's dump, seed 0, CPU): 1.80 ms (p90 3.64 ms), about 182 nodes with e >= 0.5 per frame. **On the CPU the layer is NOT cheaper than the hard step.** On the GPU the layer is about 100 small kernels in the 24.2 ms of B and removes a host-side python step; neither is measured (no idle GPU while day13 trains): the idle-GPU timing of B and of B' with the layer (`temp/jr/timing_junction.py`-style, batch 1, bf16) is part of the card and decides the cost condition of the verdict rule. Training cost: the layer adds 8 shifts to every node-stage forward / backward (a few per cent of a step, not measured).
+- **Budget:** four fine-tune runs (a and c2, two seeds) of about 28 minutes, four B-dumps of about 5 GPU minutes, CPU scoring of about 8 minutes per read-out: about 2.5 GPU hours in two slots (about 1.2 hours of wall time).
+
+## 4. Risks
+(1) The node head under the damped loss loses recall as in E277 (a GT node pair within 1.5 m, 32 % of the GT nodes, cannot both stay): the guards lanes found / F1@1.0 are in the rule. (2) A warm start from a head trained without damping may need more than half the steps: the gates stop the run, the fallback is the phase-2 start (section 1). (3) The cost condition may fail while the scores pass: that is the TIE branch, stated in advance. (4) The snapped topo F1 of E312 depends on the wiring to B's pieces: a different graph may move it for reasons that are not the layer (confound 3).
+
+## 5. Referee
+The fresh `ar-critic` pass (cards mode) is written below when it has run.
