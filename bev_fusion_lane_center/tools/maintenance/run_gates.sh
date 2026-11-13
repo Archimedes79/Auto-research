@@ -44,6 +44,7 @@ run "head: failure splits of the pair head (E300)"        jsplits.py selftest
 run "head: pair precision at a fixed recall (E302)"       jpair_pr.py selftest
 run "head: maneuver coverage of a delivered graph (E310)"   jmaneuver.py selftest
 run "head: diagnostics of the junction thread (E307 - E313)"  jdiag.py selftest
+run "head: wiring of the connectors, oracle gate (E322)"  jwiring.py selftest
 run "head: torch Matrix-NMS layer (E292)"                 grid/qmnms.py
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
