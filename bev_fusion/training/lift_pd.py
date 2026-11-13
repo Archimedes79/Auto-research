@@ -24,6 +24,7 @@ Run the self-test: python training/lift_pd.py   (CPU is enough; prints the timin
 """
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,6 +52,12 @@ class Grid:
         xs = self.x_min + (torch.arange(self.nx, device=device, dtype=dtype) + 0.5) * self.res
         ys = self.y_min + (torch.arange(self.ny, device=device, dtype=dtype) + 0.5) * self.res
         return xs, ys
+
+    def centres(self):
+        """(gx, gy): cell-centre coordinates, both numpy (nx, ny): the interface of GtGenerator.grid.GridSpec (GT v13 reads grid.centres() on the
+        grid it is given, and the BEV dataset gives it this one)"""
+        xs, ys = self.xy_centres(dtype=torch.float64)
+        return np.meshgrid(xs.numpy(), ys.numpy(), indexing="ij")
 
 
 def build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida=None):
@@ -294,6 +301,11 @@ def _selftest():
     frac = ((dn + 1) * D - 1) / 2
     assert abs(dc[0].item() + 0.5 * frac - x) < 1e-9, "depth bin index"
     assert tab["valid"][i] == 1
+
+    # 1b the GT generator (v13) reads grid.centres(): numpy cell centres, both (nx, ny), x forward along the first axis
+    gx, gy = grid.centres()
+    assert gx.shape == gy.shape == (120, 104) and gx.dtype == np.float64
+    assert gx[0, 0] == 0.25 and gx[119, 0] == 59.75 and gy[0, 0] == -25.75 and gy[0, 103] == 25.75 and (gx[:, 0] == gx[:, 5]).all()
 
     # 2 uniform depth: PD = P / D
     feat = torch.randn(1, 4, 56, 100, dtype=dt)
