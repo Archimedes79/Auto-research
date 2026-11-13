@@ -2,6 +2,8 @@
 
 One place for how results are measured. Rule: **do not write a private metric - use or extend these**, compare only on identical frames, run the self-tests after touching anything here (`tools/maintenance/run_all_tests.sh`).
 
+> **Reference system (D89, 2026-11-13):** `evaluate.py` with `models/registry.json`, `eval_parts.py`, `drivers/p16_*` / `p18_*`, `loops/loopNN/` and `vertex_eval.run_ref` score the old chain of loops 8 - 18. They are kept for reproduction and comparison, marked as reference, and not developed further (see `../training/README.md`); the lane head is scored by `qgraph_run_eval.py` and the `j*_eval.py` scorers.
+
 ## Evaluate a model: one command
 
 ```
