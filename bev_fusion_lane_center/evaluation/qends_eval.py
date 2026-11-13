@@ -27,11 +27,18 @@ import numpy as np
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 for sub in ("evaluation", "training", "training/grid", "training/data", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
+import jwire as JW  # noqa: E402
 import qends as QEND  # noqa: E402
 
 KEYS = ("Q", "F1@1.0", "lanes_found", "topo_F1", "topo_P", "topo_R", "junction_F1", "junction_P", "junction_R", "dup_frac", "vert100_dp")
 WIRE_POS, WIRE_ANG = 4.0, 45.0
 COVER_POS = 4.0
+
+
+def cover_pos(wire_pos=None):
+    """the radius within which a connector's ends cover (drop) a long link of B: COVER_POS, and under a tight wiring radius the smaller of the two (N1, critic 2026-11-13); the one place `add_connectors` and the
+    caller that builds the kept list for a `wire_choice` (E325) read it"""
+    return COVER_POS if wire_pos is None else min(COVER_POS, float(wire_pos))
 
 
 def _tan(P, at_end):
@@ -54,27 +61,23 @@ def make_pairs(e, ia, ib, k, attach=False, chord=False, fit=None):
     return [(qp[i], qd[i], qp[k + j], qd[k + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None and not chord else ()) for i, j in zip(ia, ib)]
 
 
-def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=False, snap_all=False, snap_guard=False, snap_dedup=False, snap_nogeom=False, snap_both=False, wire_pos=None):
+def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=False, snap_all=False, snap_guard=False, snap_dedup=False, snap_nogeom=False, snap_both=False, wire_pos=None, wire_choice=None):
     """the delivered graph (lines, edges, nodes as of `qgraph_eval.readout`; kinds / links = its `bk["kind"]` / `bk["piece_links"]`; long_mask = which links are long) with the end head's connectors:
     pairs = [(entry xy, entry heading, exit xy, exit heading)] -> (raw graph dict for the scorer, curves added, curves wired at both ends).
     snap (E311): the connector is drawn from the end of the NEAREST delivered piece wired to the entry (position and direction of that piece end) to the start of the nearest piece wired to the exit, instead of from the keypoints (1.4 m off the GT
     ends on average: the curve then ends beside the pieces and the topology scores see a gap); an end with no piece in reach keeps its keypoint; only that one piece is wired at each end.
     Options of the snapped read-out (each only with snap, all default off; E311 refinements, the E311 verdict is the plain `snap`): snap_all = wire EVERY piece in reach of the snapped end (the default wiring loop on the snapped ends: separates the effect of the geometry from the
     effect of wiring one piece only), snap_guard = a pair whose snapped ends make a degenerate curve (chord under 1 m or a chord that runs against one of the two headings) keeps its keypoints, snap_dedup = a second curve between the same two snapped pieces is not added, snap_both = no curve for a pair whose entry or exit finds no piece in reach (no floating curves), snap_nogeom = a control: wire only the nearest piece per end but draw the curve from the keypoints (separates the wiring rule from the geometry)"""
+    # E325: wire_choice = None (the nearest-piece rule, bit for bit) or ONE (entry piece index or None, exit piece index or None) per pair, the indices into the KEPT pieces (`jwire.kept_ends`: after the long-link
+    # cover drop below); needs snap. A head or the zero-parameter twin (`jwire.twin_choice`) fills it; the rest of the snapped read-out (nogeom, guard, dedup, both) is unchanged.
+    assert wire_choice is None or (snap and not snap_all and not snap_guard and len(wire_choice) == len(pairs)), "wire_choice needs snap and one entry per pair, and neither snap_all (it wires every piece in reach) nor snap_guard (it drops the choice)"
     wp = WIRE_POS if wire_pos is None else float(wire_pos)
-    cp_ = COVER_POS if wire_pos is None else min(COVER_POS, wp)                                                   # N1 (critic 2026-11-13): a long link is dropped only when a connector's ends are within the WIRING radius: under a tight radius a connector that is not wired to the pieces must not delete the long link of B either                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
-    keep = []
-    for i, k in enumerate(kinds):
-        if k == "link" and bool(long_mask[links[i][0]]):
-            P = np.asarray(lines[i], float)
-            if any(np.linalg.norm(P[0] - pr[0]) <= cp_ and np.linalg.norm(P[-1] - pr[2]) <= cp_ for pr in pairs):
-                continue
-        keep.append(i)
+    cp_ = cover_pos(wire_pos)                                                   # N1 (critic 2026-11-13): a long link is dropped only when a connector's ends are within the WIRING radius: under a tight radius a connector that is not wired to the pieces must not delete the long link of B either                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
+    keep, ends = JW.kept_ends(lines, kinds, links, long_mask, pairs, cp_)
     new = {old: j for j, old in enumerate(keep)}
     L2 = [np.asarray(lines[i], float) for i in keep]
     N2 = [list(nodes[i]) for i in keep]
     E2 = [(new[a], new[b]) for a, b in edges if a in new and b in new]
-    ends = [(P[-1], _tan(P, True), P[0], _tan(P, False)) for P in L2]
     wired = 0
     seen = set()
     for n, pr in enumerate(pairs):
@@ -84,14 +87,19 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
         if snap:
             default_wire = snap_all
             pa, ta, pb, tb = (np.asarray(x, float) for x in (pa, ta, pb, tb))
-            d_in = d_out = np.inf
-            for i, (le, te, fs, ts) in enumerate(ends):
-                d = np.linalg.norm(le - pa)
-                if d <= wp and _ang(te, ta) <= WIRE_ANG and d < d_in:
-                    w_in, d_in = i, d
-                d = np.linalg.norm(fs - pb)
-                if d <= wp and _ang(ts, tb) <= WIRE_ANG and d < d_out:
-                    w_out, d_out = i, d
+            if wire_choice is not None:                                                                  # E325: the pieces are CHOSEN by the caller (a head, or the zero-parameter twin of the rule)
+                w_in, w_out = wire_choice[n]
+                assert all(w is None or (isinstance(w, (int, np.integer)) and not isinstance(w, bool) and 0 <= w < len(ends)) for w in (w_in, w_out)), f"wire_choice[{n}] = {(w_in, w_out)}: not an integer index into the {len(ends)} kept pieces"
+                # the gate (reach, heading) is NOT checked here: the caller chooses among the kept pieces, the gate is the input side of its choice (`jwire.candidates`)
+            else:
+                d_in = d_out = np.inf
+                for i, (le, te, fs, ts) in enumerate(ends):
+                    d = np.linalg.norm(le - pa)
+                    if d <= wp and _ang(te, ta) <= WIRE_ANG and d < d_in:
+                        w_in, d_in = i, d
+                    d = np.linalg.norm(fs - pb)
+                    if d <= wp and _ang(ts, tb) <= WIRE_ANG and d < d_out:
+                        w_out, d_out = i, d
             if snap_both and (w_in is None or w_out is None):
                 continue
             if snap_dedup and w_in is not None and w_out is not None:
@@ -194,7 +202,7 @@ def score_target(a, run_dir):
     re-scoring of the run's own graph stays as it was)."""
     tag = getattr(a, "tag", None)
     full, base, spec = getattr(a, "full", None), getattr(a, "base", None), getattr(a, "spec", None)
-    assert not (full or base or spec) or tag, "--full / --base / --spec score another graph than B's: give a --tag (it names the card, so that the card of record of the run stays)"
+    assert not (full or base or spec or getattr(a, "wire", None)) or tag, "--full / --base / --spec / --wire score another graph than the card of record: give a --tag (it names the card, so that the card of record of the run stays)"
     assert bool(full) == bool(base), "--full and --base go together: the dump and the checkpoint of the same head"
     assert tag is None or (re.fullmatch(r"[a-z0-9]+", tag) and tag not in RESERVED_TAGS and not re.fullmatch(r"(thr|r)[0-9]*", tag)), f"--tag {tag!r}: lower-case letters and digits only, not a word of the card names (it is part of a file name)"
     seed = getattr(a, "seed", None)
@@ -213,6 +221,8 @@ def cmd_score(a):
     import qgraph_readout as QR
     run_dir = os.path.join(ROOT, "runs", a.run)
     name, spec_s, tag = score_target(a, run_dir)                                                                        # before anything long runs
+    wire = getattr(a, "wire", None)
+    assert wire in (None, "twin") and (wire is None or (bool(getattr(a, "snap", False)) and not getattr(a, "snap_all", False) and not getattr(a, "snap_guard", False) and getattr(a, "attach_r", None) is None)), "--wire twin needs --snap, no --attach-r, no --snap-all / --snap-guard"
     base_pt = a.base or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")
     mine = torch.load(os.path.join(run_dir, "model.pt"), map_location="cpu")["state"]
     base = torch.load(base_pt, map_location="cpu")["state"]
@@ -252,7 +262,10 @@ def cmd_score(a):
             gap["out"] += near(fs, e["att_pos"][k + j] if attach else e["kp_pos"][k + j])
             gap["kp_in"] += near(le, e["kp_pos"][i])
             gap["kp_out"] += near(fs, e["kp_pos"][k + j])
-        raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), wire_pos=attach_r)
+        wc = None
+        if wire == "twin":                                                                                                      # E325 arm t: the zero-parameter twin chooses the pieces; must reproduce the card of record bit for bit
+            wc = JW.twin_choice(JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, cover_pos())[1], pairs, WIRE_POS, WIRE_ANG)
+        raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, wire_choice=wc, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), wire_pos=attach_r)
         n_curves += n_c
         n_wired += n_w
         n_drop += len(graph.lines) - (len(raw["pts"]) - len(pairs))                                                          # B's long links that a connector covers and the read-out drops
@@ -277,6 +290,7 @@ def cmd_score(a):
     out["full"] = os.path.relpath(full, ROOT).replace(os.sep, "/") if full.startswith(ROOT) else full                    # E292: the dump the delivered graph was read from, the read-out and the tag are part of the card
     out["spec"] = spec_s
     out["tag"] = tag
+    out["wire"] = wire
     # the card of record (`ends_card.json`) is the unsnapped read-out at the threshold 0.5 only: another threshold or a snapped read-out gets its own file (the E308 incident of 2026-11-12: a scratch sweep emptied the card of record)
     # the file name is `card_name(a)` (the chord control has its own file too: it overwrote the card of the learned scales on 2026-11-12)
     json.dump(out, open(os.path.join(run_dir, name), "w"), indent=1)
@@ -400,6 +414,7 @@ if __name__ == "__main__":
     s.add_argument("--full", default=None, help="the full prediction dump of the head whose graph is delivered (default: B's, temp/e276/predfull_e273_p_s<seed>.pkl); E292: the dump of B'; needs --base and --tag")
     s.add_argument("--base", default=None, help="the checkpoint of the same head (default runs/e273_p_s<seed>/model.pt); needs --full")
     s.add_argument("--spec", default=None, help="the read-out of the delivered graph (qgraph_readout spec; default close:1.5@0.5, the hard close-node step; E292: plain@0.5 for a head with the layer); needs --tag")
+    s.add_argument("--wire", default=None, choices=(None, "twin"), help="E325: choose the wired pieces through add_connectors(wire_choice=...): twin = the zero-parameter twin of the nearest-piece rule (needs --snap and --tag); must reproduce the E312 cards")
     s.add_argument("--tag", default=None, help="E292: names the card (ends_card_<tag>_...): mandatory with --full / --base / --spec; a tagged card is never overwritten")
     s.add_argument("--chord", action="store_true", help="E303: use the chord tangent for the connectors even when the dump carries learned handle scales (the control)")
     s.add_argument("--snap", action="store_true", help="E311: draw the connectors from the end of the delivered piece wired to the entry to the start of the piece wired to the exit (the keypoints only decide which entry joins which exit); the card goes to ends_card_snap_thr<t>.json")

@@ -81,7 +81,7 @@ def score(a):
     pyr_same = all(torch.equal(ck["state"]["jmodel." + k] if "jmodel." + k in ck["state"] else ck["state"][k], v) for k, v in base.items() if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"]))
     print("pyramid of the maps run == the base run's:", pyr_same, "(False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')")
     assert pyr_same or not getattr(a, "base", None), "E292: the pyramid of the maps run is not the pyramid of --base: the connectors would sit on other pixel features than the delivered graph"
-    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=getattr(a, "full", None), base=getattr(a, "base", None), spec=getattr(a, "spec", None), tag=getattr(a, "tag", None), skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), attach=bool(getattr(a, "attach", False)), attach_r=getattr(a, "attach_r", None)))
+    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=getattr(a, "full", None), base=getattr(a, "base", None), spec=getattr(a, "spec", None), tag=getattr(a, "tag", None), wire=getattr(a, "wire", None), skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), attach=bool(getattr(a, "attach", False)), attach_r=getattr(a, "attach_r", None)))
 
 
 def selftest():
@@ -120,6 +120,7 @@ if __name__ == "__main__":
             s.add_argument("--full", default=None, help="E292: the full prediction dump of the head whose graph is delivered (B'); needs --base and --tag")
             s.add_argument("--base", default=None, help="E292: the checkpoint of that head; its pyramid must be the maps run's (asserted); needs --full")
             s.add_argument("--spec", default=None, help="E292: the read-out of the delivered graph (default close:1.5@0.5; plain@0.5 for a head with the Matrix-NMS layer); needs --tag")
+            s.add_argument("--wire", default=None, choices=(None, "twin"), help="E325: the zero-parameter twin of the nearest-piece rule chooses the wired pieces (needs --snap and --tag)")
             s.add_argument("--tag", default=None, help="E292: names the card (ends_card_<tag>_...): mandatory with --full / --base / --spec; a tagged card is never overwritten")
             s.add_argument("--attach", action="store_true", help="E320: connectors drawn from the ATTACHED ends of the dump (att_pos / att_dir; no snap, the default wiring of every piece in reach), writes ends_card_attach_thr<t>.json")
             for k_ in ("--snap-all", "--snap-guard", "--snap-dedup", "--snap-nogeom", "--snap-both"):
