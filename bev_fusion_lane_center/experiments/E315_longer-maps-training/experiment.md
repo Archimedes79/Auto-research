@@ -39,3 +39,30 @@ By hand (label "by hand: replay"): `jmaps_eval.py score --run e315_m_s<S>` for t
 ## 1. Design and prediction
 Two seeds, the same data and loss as E307 / E312; only the steps of the maps stage change (3000 -> 6000; the learning-rate schedule is the trainer's, stretched to the run length). The pair stage is the unchanged E312 recipe, so the joint training adds 3000 more maps steps in both arms (c: 6000 in all, l: 9000 in all). VAL 873 frames, TEST untouched. **Prediction (a number):** topo F1 +0.010 over E312 (a TIE at the edge of the band); keypoint F1 of the maps +0.02; if the maps gain but the delivered graph does not, the limit is the pair stage, not the maps (E316 asks the pair stage).
 Cost: maps 6000 steps at about 0.9 s = 1.5 h, pair stage 3000 steps at about 1.9 s = 1.6 h, two seeds in the two GPU slots, then dump and scores (about 15 minutes).
+
+## 2. Result (VAL 873 frames, two seeds; read from the result files on 2026-11-13 02:05 by the lane lead)
+Runs: maps `E315.m_s<S>` (6000 steps, 22:00 - 23:56, 0.95 s/step on the loaded CPU), pair stage `E315.p_s<S>` (`--e2e --scales --maps-w 1.0`, 3000 steps, 2.2 - 2.3 s/step under load, 00:04 - 01:32); post scoring by `temp/day11` (snapped, plain, pair PR, maneuver) and the not snapped p >= 0.1 read-out scored afterwards (`temp/e315/unsnap_p01.sh`). Control = E312 of the same seed (E307 maps 3000 steps, same pair stage).
+
+| VAL | E312 s0 | **E315 s0** | E312 s1 | **E315 s1** |
+|---|---|---|---|---|
+| **snapped p >= 0.1: topo F1** | 0.6825 | **0.6789** | 0.6864 | **0.6825** |
+| over the plain graph | +0.0566 | +0.0530 | +0.0615 | +0.0576 |
+| **E315 - E312 (the rule)** | | **-0.0036** | | **-0.0039** |
+| lanes found | 0.7376 | 0.7450 | 0.7423 | 0.7454 |
+| junction F1 (guard -0.03) | 0.3194 | 0.3230 | 0.3143 | 0.3209 |
+| junction recall | 0.680 | 0.697 | 0.674 | 0.696 |
+| dup_frac (guard +0.01) | 0.1747 | 0.1807 (+0.0060) | 0.1557 | 0.1629 (+0.0072) |
+| F1@1.0 (guard -0.01) | 0.8669 | 0.8669 | 0.8685 | 0.8689 |
+| vertices / 100 m (guard) | 19.55 | 19.39 | 20.10 | 19.81 |
+| not snapped p >= 0.1: topo F1 | 0.6438 | 0.6398 (-0.0040) | 0.6481 | 0.6444 (-0.0037) |
+| not snapped, thr 0.5 (card of record): topo F1 | 0.6392 | 0.6407 | 0.6429 | 0.6439 |
+| maneuvers realised, p0.1 snapped | 0.7069 | 0.7109 | 0.7008 | 0.7093 |
+| entry / exit recall of the keypoints (pair run) | 0.745 / 0.771 | 0.753 / 0.781 | 0.752 / 0.767 | 0.761 / 0.784 |
+| pair recall (logit >= 0) / precision | 0.298 / 0.743 | 0.376 / 0.741 | 0.328 / 0.724 | 0.379 / 0.740 |
+| precision at E312's recall (`jpair_pr.py`) | | 0.764 (+0.021) | | 0.768 (+0.044) |
+| maps stage: keypoint F1 (3 m, thr 0.3) | E307 0.7233 | **0.7481** (+0.025) | E307 0.7051 | **0.7488** (+0.044) |
+| maps stage: entry / exit recall | 0.750 / 0.754 | 0.767 / 0.778 | 0.746 / 0.749 | 0.775 / 0.786 |
+
+**Verdict (by hand: replay, the rule of section 0): TIE.** KEEP needed more than +0.01 topo F1 over E312 on both seeds; the result is -0.0036 / -0.0039 (CUT would be below -0.01), all guards held (dup_frac +0.006 / +0.007 stays below 0.01). The shorter recipe (E312: maps 3000 steps) stays, because on a tie the cheaper variant wins (the E315 recipe costs 1.5 h more per seed of training for no gain in the delivered graph). The not snapped read-out says the same (-0.0040 / -0.0037).
+
+**What it shows.** The prediction of the card was right for the maps (keypoint F1 +0.02 predicted, +0.025 / +0.044 measured) and for the pair precision at equal recall (+0.02 predicted, +0.021 / +0.044), and wrong for the delivered graph (+0.010 predicted, -0.004 measured). Twice the maps training lifts the end detection clearly (recall of the keypoints, pair recall +0.08 / +0.05, maneuvers +0.004 / +0.009) but not the topology of the delivered graph: with the snap the cap is the attachment of the connectors to the delivered pieces (69 % of the snap's gain is wiring, E320), not the quality of the ends. Compute: no change at run time (same model); training +1.5 h per seed. E316 (the pair stage trained 6000 steps on the E307 maps) is the other half of the question and runs next.
