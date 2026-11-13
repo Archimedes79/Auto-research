@@ -178,7 +178,7 @@ def boot(ra, ca, rb, cb, n=1000, seed=0):
     sc = np.asarray(A["scenes"])
     uniq = sorted(set(sc.tolist()))
     where = {s: np.where(sc == s)[0] for s in uniq}
-    keys = ("topo_F1", "junction_F1", "F1@1.0", "lanes_found")
+    keys = ("topo_F1", "junction_F1", "F1@1.0", "lanes_found", "dup_frac")                                          # E323: the duplicates carry an interval too (the guard of E320 broke on one seed and held on the other by 0.0006)
     pa, pb = QE.graph_numbers(A["head"]), QE.graph_numbers(B["head"])
     rng = np.random.RandomState(seed)
     d = {k: [] for k in keys}

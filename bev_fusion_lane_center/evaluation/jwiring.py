@@ -160,6 +160,9 @@ def score(a):
     out = dict(run=a.run, seed=a.seed, thr=a.thr, attach=a.attach, frames=min(len(frames), a.max or len(frames)), stat=stat, numbers={v: {kk: float(num[v][kk]) for kk in KEYS if kk in num[v]} for v in num})
     name = f"wiring_g0{'_attach' if a.attach else ''}{'_max' + str(a.max) if a.max else ''}.json"
     json.dump(out, open(os.path.join(ROOT, "runs", a.run, name), "w"), indent=1)
+    if not a.max:                                                                                                       # the per-frame counts of every variant: `jdiag.py boot <run> wiring_g0_o <run> wiring_g0_c` (paired scene bootstrap)
+        for v, _ in VARIANTS:
+            pickle.dump(dict(scenes=[f.scene for f in frames], base=rec["c"], head=rec[v]), open(os.path.join(ROOT, "runs", a.run, f"wiring_g0{'_attach' if a.attach else ''}_{v}.counts.pkl"), "wb"))
     print(f"{'':8s}" + "".join(f"{kk:>12s}" for kk in KEYS))
     for v, _ in VARIANTS:
         print(f"{v:8s}" + "".join(f"{num[v][kk]:12.4f}" for kk in KEYS))
