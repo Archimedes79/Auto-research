@@ -1,6 +1,6 @@
 # E330 - inventory of the E312 system, what it costs, which options are dead, and the plan to simplify it (D84 item 4, D85)
 
-Card of 2026-11-12 23:40, written by the lane chat (fork D) on Mirko's order of 2026-11-12 ("Versuche das System zu vereinfachen und die Komplexitaet zu reduzieren", D84) with the priority of D85 (E320 first: the simplification arms E331 - E335 run AFTER the E320 result). CPU analysis of files and code, no training. Numbers: `evaluation/jmodel_cost.py` (parameters and MACs, torch FlopCounterMode, batch 1, CPU), `runs/e273/e273_p_s0/timing.json` (B on an idle GPU), the logs of the runs (`runs/<run>/log.txt`), the cards of the runs. The ms of the junction heads are measured by `temp/jr/timing_junction.py` on an idle GPU in the night chain (pending).
+Card of 2026-11-12 23:40, written by the lane chat (fork D) on Mirko's order of 2026-11-12 ("Versuche das System zu vereinfachen und die Komplexitaet zu reduzieren", D84) with the priority of D85 (E320 first: the simplification arms E331 - E335 run AFTER the E320 result). CPU analysis of files and code, no training. Numbers: `evaluation/jmodel_cost.py` (parameters and MACs, torch FlopCounterMode, batch 1, CPU), `runs/e273/e273_p_s0/timing.json` (B on an idle GPU), the logs of the runs (`runs/<run>/log.txt`), the cards of the runs. The ms of the junction heads were measured by `temp/jr/timing_junction.py` on an idle GPU on 2026-11-13 04:16 (batch 1, bf16, median of 60; `temp/jr/timing_junction.json`): pyramid 4.55 ms, junction maps 2.82, pair head 9.71, junction stack together 17.09. Start of the arms: see the start rule at the head of section 8.
 
 ## 0. The card (what the tools run)
 ```json card
@@ -114,10 +114,11 @@ Savings combined (E332 a + E333, if both adopted): 5.464 GMACs, 2.353 M paramete
 Not audited here: `training/grid/chain*.py`, `hold.py`, `assign.py`, `qassign.py`, `map_sim.py` (the grid chain E272 and the map assignment of B, 1.0 kLOC), `qmnms.py` (Matrix-NMS of E288, used by the replay).
 
 ## 8. Schedule proposal (after the E320 result, D85)
+**Start rule (one line, updated 2026-11-13 05:10 after E320 started early):** E331 - E334 start when E320 and its post scores exist (`temp/day12/DAY12C_DONE` and `DAY12D_DONE`) and the lane lead has read the verdict by the card rule and touched `temp/day13/GO`; GO is touched before 08:30 only after those result files exist, and no arm starts outside the window (nights 22:00 - 05:00, Mon-Fri 08:30 - 15:30). E320 started at 04:17 and ends about 06:20, so with GO on the read the first arm (E331) starts when the window opens at 08:30; the table below assumes that.
 GPU hours from the measured step times (pair stage 3000 steps 1.15 - 1.6 h per seed, maps stage 0.9 h, post-processing 0.25 h with the dumps one at a time; both seeds in the two slots at once, so wall = per-seed time):
 | order | arm | wall h | slot hours (2 seeds) | window |
 |---|---|---|---|---|
-| 0 | E320 (lane lead, first) + the booked day11 until about 04:30 Fri | - | - | |
+| 0 | E320 (lane lead, first; started 04:17 after day11, which was done at 04:16) | - | - | until about 06:20 |
 | 1 | E331 | 1.65 | 3.3 | Fri 08:30 - 10:10 |
 | 2 | E332 arm a (maps 0.9 + pairs 1.15 - 1.6 + post) | 2.55 | 5.1 | Fri 10:10 - 12:45 |
 | 3 | E333 | 2.4 | 4.8 | Fri 12:45 - 15:10 |
