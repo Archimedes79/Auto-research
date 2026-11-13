@@ -107,7 +107,8 @@ def _load(a):
 
 def score(a):
     import jwiring as JW
-    from qends_eval import COVER_POS, add_connectors, make_pairs
+    from jwire import kept_ends
+    from qends_eval import cover_pos, add_connectors, make_pairs
     QE, QR, dump, ends, runs = _load(a)
     gt = pickle.load(open(JW.GT_PATH, "rb"))
     frames, spec = QE.val_frames(), QR.parse("close:1.5@0.5")
@@ -135,8 +136,7 @@ def score(a):
             m_out = JW.match(e["kp_pos"][k:], e["kp_dir"][k:], valid[1], g["ext"], g["ext_m"])
             pairs = make_pairs(e, ia, ib, k, attach=att)
             raw, n_c, _ = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], lm, pairs, snap=True, snap_nogeom=ng)
-            kept = [kd for i, kd in enumerate(bk["kind"]) if not (kd == "link" and bool(lm[bk["piece_links"][i][0]]) and any(np.linalg.norm(np.asarray(graph.lines[i], float)[0] - q[0]) <= COVER_POS
-                                                                                                                             and np.linalg.norm(np.asarray(graph.lines[i], float)[-1] - q[2]) <= COVER_POS for q in pairs))]
+            kept = [bk["kind"][i] for i in kept_ends(graph.lines, bk["kind"], bk["piece_links"], lm, pairs, cover_pos())[0]]                       # the kinds of the pieces the cover drop keeps (E325: one place for it)
             assert len(kept) == len(raw["pts"]) - n_c, (len(kept), len(raw["pts"]), n_c)
             t, (dups, pts) = attribute(raw, n_c, kept)
             T = tot[v]
