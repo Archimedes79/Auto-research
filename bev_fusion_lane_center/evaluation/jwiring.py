@@ -10,9 +10,11 @@ The snapped read-out of a run (connectors p >= thr, each end wired to ONE delive
   c       by the rule: the nearest piece end within 4 m / 45 degrees of the keypoint end (the card of record of E312, `ends_card_snap_thr0.1.json`; the sanity check: it must reproduce that card)
   o       by the rule applied at the matched GT END (an oracle selection: the piece the rule would pick if the keypoint were exactly on the GT end; an end that matches no GT end or finds no piece at its GT end keeps the keypoint rule)
   o_drop  as o, and a pair with an end that matches no GT end is not delivered (an oracle for the false connectors; separates the choice of the piece from the filter for false pairs)
-  r2 r3 r6  the rule with the reach 2 / 3 / 6 m instead of 4 m (is a learned gate worth anything: the reach is the one parameter of the rule)
-The headroom of a learned selection is o - c (the oracle cannot be beaten by a head that is trained against it); `stat` counts the ends, the ends that match a GT end, those that find a piece at the GT end, and how often the rule at the keypoint
-picks the same piece end as the rule at the GT end. VAL only, TEST never. The matching of keypoints to GT ends is the one of `qendnet.match_keypoints` (strict one-to-one, 4 m, 30 degrees), copied here in numpy.
+  second  the POSITIVE CONTROL: every end with a second place in reach is joined to the second nearest piece end (a wrong choice on purpose: the metric must see it)
+  r2 r3 r6  the rule with the reach 2 / 3 / 6 m instead of 4 m (the reach is the one parameter of the rule; a smaller reach also shrinks the cover radius of B's long links, `add_connectors(wire_pos=)`, so these are not a pure wiring effect)
+The headroom of a learned selection that imitates the nearest-at-GT-end label is o - c (a head trained against that label cannot beat it); `stat` counts the ends, the ends that match a GT end, those that find a piece at the GT end, how often the rule
+at the keypoint picks the same piece end as the rule at the GT end (`same` of `both`; `multi_same` of `multi` = only the ends with two or more places to choose from) and the ties (two candidates at the same distance at the GT end: co-located
+ends, which add_connectors resolves by list order). NOT covered: a choice of the heading among tied ends, wiring both tied pieces, an end left unwired (the dustbin: needs a per-end option in `add_connectors`). VAL only, TEST never. The matching of keypoints to GT ends is the one of `qendnet.match_keypoints` (strict one-to-one, 4 m, 30 degrees), copied here in numpy.
 """
 import argparse
 import json
@@ -30,7 +32,7 @@ from qends_eval import WIRE_ANG, WIRE_POS, KEYS, _ang, _tan, add_connectors, mak
 
 MATCH_POS, MATCH_ANG = 4.0, 30.0
 GT_PATH = os.path.join(ROOT, "temp", "jwiring", "gt_ends_val.pkl")
-VARIANTS = (("c", None), ("o", None), ("o_drop", None), ("r2", 2.0), ("r3", 3.0), ("r6", 6.0))
+VARIANTS = (("c", None), ("o", None), ("o_drop", None), ("second", None), ("r2", 2.0), ("r3", 3.0), ("r6", 6.0))
 
 
 def match(kp, kd, valid, G, m):
@@ -57,44 +59,74 @@ def piece_ends(lines):
     return [(P[-1], _tan(P, True), P[0], _tan(P, False)) for P in L]
 
 
-def rule_end(pe, pos, tan, entry, reach=WIRE_POS):
-    """the delivered piece end the nearest-piece rule picks for an end at pos with heading tan (entry: the last point of a piece, exit: the first point; within `reach` m and 45 degrees), (point, tangent) or None"""
-    best, bd = None, np.inf
+def rule_candidates(pe, pos, tan, entry, reach=WIRE_POS):
+    """the delivered piece ends in reach of an end at pos with heading tan (entry: the last point of a piece, exit: the first point; within `reach` m and 45 degrees) as [(distance, point, tangent)], nearest first;
+    a tie in the distance keeps the list order, as the strict `d < d_in` of `add_connectors` does"""
+    out = []
     for en in pe:
         q, t = (en[0], en[1]) if entry else (en[2], en[3])
-        d = np.linalg.norm(q - pos)
-        if d <= reach and _ang(t, tan) <= WIRE_ANG and d < bd:
-            best, bd = (q, t), d
-    return best
+        d = float(np.linalg.norm(q - pos))
+        if d <= reach and _ang(t, tan) <= WIRE_ANG:
+            out.append((d, q, t))
+    out.sort(key=lambda c: c[0])
+    return out
+
+
+def rule_end(pe, pos, tan, entry, reach=WIRE_POS):
+    """the delivered piece end the nearest-piece rule picks (the first of `rule_candidates`), (point, tangent) or None"""
+    c = rule_candidates(pe, pos, tan, entry, reach)
+    return (c[0][1], c[0][2]) if c else None
+
+
+def second_end(pe, pos, tan, entry, reach=WIRE_POS):
+    """the POSITIVE CONTROL of the gate: the second nearest piece end at a different position (a co-located end is the same place), None when there is no second place in reach"""
+    c = rule_candidates(pe, pos, tan, entry, reach)
+    for d, q, t in c[1:]:
+        if np.linalg.norm(q - c[0][1]) > 1e-6:
+            return q, t
+    return None
 
 
 def oracle_pairs(pairs, ia, ib, pe, m_in, m_out, gt_ent, gt_ext, qp, qd, k, stat=None):
     """pairs of `make_pairs` with every end that matches a GT end and finds a piece at that GT end replaced by that piece end (position, tangent): add_connectors(snap=True) then wires exactly that piece.
-    Returns (o_pairs, o_drop_pairs); stat (dict) is incremented: ends, matched, found, both (the rule at the keypoint also finds a piece), same (and it is the same piece end)"""
-    o_pairs, od_pairs = [], []
+    Returns (o_pairs, o_drop_pairs, second_pairs); stat (dict) is incremented: ends, matched, found, both (the rule at the keypoint also finds a piece), same (and it is the same piece end), multi (of `both`: the rule at the keypoint has
+    two or more PLACES to choose from), multi_same (and it picks the oracle's), tie (oracle ends whose two nearest candidates at the GT end are at the same distance: co-located ends of a fork / merge, which add_connectors resolves by list order).
+    second_pairs: the positive control, the same pairs with every end that has a second place in reach joined to that second piece end instead of the nearest (the metric must see a wrong choice)"""
+    o_pairs, od_pairs, sec_pairs = [], [], []
     for n, (i, j) in enumerate(zip(ia, ib)):
         new = list(pairs[n])
+        sec = list(pairs[n])
         for slot, kidx, mt, G, entry in ((0, i, m_in, gt_ent, True), (2, j, m_out, gt_ext, False)):
+            se = second_end(pe, qp[kidx + (0 if entry else k)], qd[kidx + (0 if entry else k)], entry)
+            if se is not None:
+                sec[slot], sec[slot + 1] = se[0], se[1]
             gi = mt[kidx]
             if stat is not None:
                 stat["ends"] += 1
                 stat["matched"] += int(gi >= 0)
             if gi < 0:
                 continue
-            oe = rule_end(pe, G[gi, :2], G[gi, 2:], entry)
-            if oe is None:
+            cg = rule_candidates(pe, G[gi, :2], G[gi, 2:], entry)
+            if not cg:
                 continue
+            oe = (cg[0][1], cg[0][2])
             if stat is not None:
                 stat["found"] += 1
-                ke = rule_end(pe, qp[kidx + (0 if entry else k)], qd[kidx + (0 if entry else k)], entry)
-                if ke is not None:
+                stat["tie"] += int(len(cg) > 1 and cg[1][0] - cg[0][0] <= 1e-6)
+                ck = rule_candidates(pe, qp[kidx + (0 if entry else k)], qd[kidx + (0 if entry else k)], entry)
+                if ck:
+                    same = bool(np.linalg.norm(ck[0][1] - oe[0]) < 1e-9)
                     stat["both"] += 1
-                    stat["same"] += int(np.linalg.norm(ke[0] - oe[0]) < 1e-9)
+                    stat["same"] += int(same)
+                    if len({tuple(np.round(c[1], 6)) for c in ck}) >= 2:
+                        stat["multi"] += 1
+                        stat["multi_same"] += int(same)
             new[slot], new[slot + 1] = oe[0], oe[1]
         o_pairs.append(tuple(new))
+        sec_pairs.append(tuple(sec))
         if m_in[i] >= 0 and m_out[j] >= 0:
             od_pairs.append(tuple(new))
-    return o_pairs, od_pairs
+    return o_pairs, od_pairs, sec_pairs
 
 
 def gt_ends(a=None):
@@ -132,7 +164,7 @@ def score(a):
     QE, QR, dump, ends, frames, spec = _load(a)
     gt = pickle.load(open(GT_PATH, "rb"))
     rec = {v: [] for v, _ in VARIANTS}
-    stat = dict(ends=0, matched=0, found=0, both=0, same=0)
+    stat = dict(ends=0, matched=0, found=0, both=0, same=0, multi=0, multi_same=0, tie=0)
     t0 = time.time()
     for b, (f, d) in enumerate(zip(frames, dump)):
         if a.max and b >= a.max:
@@ -148,8 +180,8 @@ def score(a):
         valid = np.asarray(e["valid"], bool)
         m_in = match(e["kp_pos"][:k], e["kp_dir"][:k], valid[0], g["ent"], g["ent_m"])
         m_out = match(e["kp_pos"][k:], e["kp_dir"][k:], valid[1], g["ext"], g["ext_m"])
-        o_pairs, od_pairs = oracle_pairs(pairs, ia, ib, pe, m_in, m_out, g["ent"], g["ext"], qp, qd, k, stat)
-        use = {"c": pairs, "o": o_pairs, "o_drop": od_pairs, "r2": pairs, "r3": pairs, "r6": pairs}
+        o_pairs, od_pairs, sec_pairs = oracle_pairs(pairs, ia, ib, pe, m_in, m_out, g["ent"], g["ext"], qp, qd, k, stat)
+        use = {"c": pairs, "o": o_pairs, "o_drop": od_pairs, "second": sec_pairs, "r2": pairs, "r3": pairs, "r6": pairs}
         for name, reach in VARIANTS:
             raw, _, _ = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), use[name], snap=True, wire_pos=reach)
             rec[name].append(QE.graph_counts(raw, f))
@@ -217,10 +249,34 @@ def selftest():
     # the oracle pair: the entry end of the keypoint is replaced by piece 1's end, the exit keypoint matches nothing and stays
     pairs = [(kp, up, np.array([8.0, 2.0]), up2)]
     m_in, m_out = np.array([0]), np.array([-1])
-    stat = dict(ends=0, matched=0, found=0, both=0, same=0)
-    op, od = oracle_pairs(pairs, np.array([0]), np.array([0]), pe, m_in, m_out, np.array([[2.4, -2.0, 0.0, 1.0]]), np.array([[0.0, 0.0, 0.0, 1.0]]), np.array([kp, np.array([8.0, 2.0])]), np.array([up, up2]), 1, stat)
+    stat = dict(ends=0, matched=0, found=0, both=0, same=0, multi=0, multi_same=0, tie=0)
+    qpp, qdd = np.array([kp, np.array([8.0, 2.0])]), np.array([up, up2])
+    op, od, sp = oracle_pairs(pairs, np.array([0]), np.array([0]), pe, m_in, m_out, np.array([[2.4, -2.0, 0.0, 1.0]]), np.array([[0.0, 0.0, 0.0, 1.0]]), qpp, qdd, 1, stat)
     assert np.allclose(op[0][0], [2.5, -2.0]) and np.allclose(op[0][2], [8.0, 2.0]) and od == [], (op, od)
-    assert stat == dict(ends=2, matched=1, found=1, both=1, same=0), stat
+    assert stat == dict(ends=2, matched=1, found=1, both=1, same=0, multi=1, multi_same=0, tie=0), stat
+    assert np.allclose(sp[0][0], [2.5, -2.0]), sp                                                       # the positive control joins the SECOND nearest entry piece end (piece 1); the exit has only one place in reach (8, 2) within 4 m: unchanged
+    # the exit slot: a matched exit keypoint at (9.0, 2.0) (nearer to piece 2 at x = 8 than to piece 3 at x = 10.5) with the GT exit at (10.4, 2.0): the oracle joins piece 3, the rule piece 2
+    pairs_x = [(np.array([0.0, -2.0]), up, np.array([9.0, 2.0]), up2)]
+    rx = rule_end(pe, np.array([9.0, 2.0]), up2, False)
+    assert np.allclose(rx[0], [8.0, 2.0]), rx
+    opx, odx, spx = oracle_pairs(pairs_x, np.array([0]), np.array([0]), pe, np.array([-1]), np.array([0]), np.array([[0.0, -2.0, 0.0, 1.0]]), np.array([[10.4, 2.0, 0.0, 1.0]]), np.array([[0.0, -2.0], [9.0, 2.0]]), np.array([up, up2]), 1, None)
+    assert np.allclose(opx[0][2], [10.5, 2.0]) and np.allclose(opx[0][0], [0.0, -2.0]) and odx == [], opx
+    assert np.allclose(spx[0][2], [10.5, 2.0]), spx                                                    # the second nearest exit piece is piece 3
+    kinds, links, long_mask = ["lane"] * 4, [(0,), (1,), (2,), (3,)], np.array([False] * 4)
+    r_x = add_connectors(lines, [], [[0], [1], [2], [3]], kinds, links, long_mask, opx, snap=True)[0]
+    assert (4, 3) in r_x["edges"] and (4, 2) not in r_x["edges"], r_x["edges"]                         # the exit side of add_connectors wires exactly the chosen piece
+    # a tie: two pieces end at the SAME place with headings 0 and 30 degrees: rule_candidates lists both at the same distance, the rule takes the first (list order), the second nearest PLACE does not exist
+    th = np.radians(30.0)
+    la = np.c_[np.zeros(10) + 20, np.linspace(-20, 0, 10)]
+    lb = np.c_[20 + np.linspace(-20, 0, 10) * np.sin(-th) * -1, np.linspace(-20, 0, 10) * np.cos(th)]
+    lb = lb - lb[-1] + np.array([20.0, 0.0])
+    pe2 = piece_ends([la, lb])
+    cands = rule_candidates(pe2, np.array([20.0, 0.5]), up, True)
+    assert len(cands) == 2 and abs(cands[0][0] - cands[1][0]) < 1e-9 and np.allclose(cands[0][1], cands[1][1]), cands
+    assert np.allclose(rule_end(pe2, np.array([20.0, 0.5]), up, True)[1], pe2[0][1]) and second_end(pe2, np.array([20.0, 0.5]), up, True) is None
+    stat2 = dict(ends=0, matched=0, found=0, both=0, same=0, multi=0, multi_same=0, tie=0)
+    oracle_pairs([(np.array([20.0, 0.5]), up, np.array([40.0, 40.0]), up2)], np.array([0]), np.array([0]), pe2, np.array([0]), np.array([-1]), np.array([[20.0, 0.0, 0.0, 1.0]]), np.array([[0.0, 0.0, 0.0, 1.0]]), np.array([[20.0, 0.5], [40.0, 40.0]]), np.array([up, up2]), 1, stat2)
+    assert stat2["tie"] == 1 and stat2["multi"] == 0 and stat2["same"] == 1, stat2                      # the tie is counted; one PLACE only: not a choice
     # add_connectors(snap=True) wires exactly the chosen piece: the rule's pair joins piece 0, the oracle's pair joins piece 1
     kinds, links, long_mask = ["lane"] * 4, [(0,), (1,), (2,), (3,)], np.array([False] * 4)
     r_rule = add_connectors(lines, [], [[0], [1], [2], [3]], kinds, links, long_mask, pairs, snap=True)[0]
