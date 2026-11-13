@@ -2,7 +2,7 @@
 
     model = QGraph(width=48)
     out = model(batch, upto="assign", frozen=("pyr", "nodes"))          # stages after `upto` are not run; stages in `frozen` run under no_grad
-    loss, info = qgraph_loss(model, batch, phase)                       # phase 2 pixels | 3 nodes | 4 links | 5 sections | 6 assign | 7 joint
+    loss, info = qgraph_loss(model, batch, phase)                       # phase 2 pixels | 3 nodes | 4 links | 5 sections | 6 assign | 7 joint | 8 end head | 9 joint without the pixel stage (E292)
 
 Stages: pyr (`pyramid.PyramidHead`), nodes (`qnodes.NodeHead`), links (`qlinks.LinkHead`), sections (`sections.section_membership`, no parameters beyond the node head's s output),
 assign (`qassign.MapEncoder` + `qassign.Assigner`). The forward path is made of soft steps; the index choices (active nodes, long-link endpoints) are named in `qlinks`; the thresholds of the
@@ -19,17 +19,21 @@ import losses as GL
 import qassign as QA
 import qendnet as QEN
 import qlinks as QL
+import qmnms as QMN
 import qnodes as QN
 import sections as SE
 from pyramid import PyramidHead
 
 STAGES = ("pyr", "nodes", "links", "sections", "assign")
-PHASE_UPTO = {2: "pyr", 3: "nodes", 4: "links", 5: "sections", 6: "assign", 7: "assign"}
+PHASE_UPTO = {2: "pyr", 3: "nodes", 4: "links", 5: "sections", 6: "assign", 7: "assign", 9: "assign"}
 PHASE_TRAIN = {2: ("pyr",), 3: ("nodes",), 4: ("links",), 5: ("nodes_s",), 6: ("menc", "asg"), 7: ("pyr", "nodes", "links", "menc", "asg")}
 PHASE_FROZEN = {2: (), 3: ("pyr",), 4: ("pyr", "nodes"), 5: ("pyr", "links"), 6: ("pyr", "nodes", "links"), 7: ()}
 # E284: phase 8 trains the junction END head (`qendnet`) on the frozen pixel and node stages; the model must be built with ends=True. It is a side stage: B's checkpoint, forward path and numbers are untouched.
 PHASE_TRAIN[8] = ("ends",)
 PHASE_FROZEN[8] = ("pyr", "nodes")
+# E292: phase 9 is the joint phase 7 without the pixel stage: nodes, links, map encoder and assigner train together on a FROZEN pyramid (the fine-tune of B's final checkpoint, so E312's maps and pair head stay valid)
+PHASE_TRAIN[9] = ("nodes", "links", "menc", "asg")
+PHASE_FROZEN[9] = ("pyr",)
 W = dict(pix=1.0, node=1.0, link=1.0, sec=1.0, asg=1.0)
 # E274 switches (the defaults are the E273 loss): ev_w = weight of the 1 m event heat-map loss in the pixel stage; node_w_evt / node_w_inter = extra weight of the POSITIVES of the existence loss
 # at event cells / at cells inside the (grown) intersection mask (weight 1 + w_evt * event + w_inter * inter); long_match = weight of the dual-softmax loss over the long-link candidates (E274)
@@ -45,9 +49,16 @@ CFG = dict(ev_w=1.0, node_w_evt=0.0, node_w_inter=0.0, long_match=0.0, tier_w=No
 class QGraph(torch.nn.Module):
     def __init__(self, width=48, f05=32, d=64, soft_nms=None, ends=False):
         """soft_nms = None (the E273 head) or (radius m, tau m, passes) of `qnodes.soft_suppress_logit` (E277: the close-node suppression as a soft step right after the node head: the existence
-        logit `no['e']` that every later stage, the loss and the read-out see is the damped one; the head's own logit stays in `no['e_raw']`). A property of the model, not of the loss: it travels
-        with the checkpoint (`args['soft_nms']`, read by `qpredict.load_model`)."""
+        logit `no['e']` that every later stage, the loss and the read-out see is the damped one; the head's own logit stays in `no['e_raw']`) or ('mnms', radius m, sigma) of `qmnms.matrix_nms_logit`
+        (E292: the one-pass Matrix-NMS decay in the same place, with a hard neighbour ORDER and a smooth decision to drop; no parameters). A property of the model, not of the loss: it travels
+        with the checkpoint (`args['soft_nms']`, read by `qpredict.load_model`; the Matrix-NMS form is a list that starts with the string 'mnms')."""
         super().__init__()
+        self.mnms = None
+        if soft_nms and soft_nms[0] == "mnms":
+            assert len(soft_nms) == 3, soft_nms
+            self.mnms = (float(soft_nms[1]), float(soft_nms[2]))                                  # (radius m, sigma): the asserts of `qmnms.matrix_nms_logit` apply when it runs, here at build time
+            assert 0.0 < self.mnms[0] <= 2.0 and self.mnms[1] > 0.0, soft_nms
+            soft_nms = None
         self.soft_nms = tuple(float(v) for v in soft_nms) if soft_nms else None
         assert self.soft_nms is None or (len(self.soft_nms) == 3 and 0.0 < self.soft_nms[0] <= 2.0 and self.soft_nms[1] > 0.0 and self.soft_nms[2] >= 1 and self.soft_nms[2] == int(self.soft_nms[2])), soft_nms
         self.pyr = PyramidHead(width=width, f05=f05)
@@ -75,6 +86,10 @@ class QGraph(torch.nn.Module):
             no = dict(no)
             no["e_raw"] = no["e"]
             no["e"] = QN.soft_suppress_logit(no["e"], no["pos"], self.soft_nms[0], self.soft_nms[1], int(self.soft_nms[2]))
+        elif self.mnms:                                                                           # E292: the same place, the Matrix-NMS decay (e_raw = the head's own logit)
+            no = dict(no)
+            no["e_raw"] = no["e"]
+            no["e"] = QMN.matrix_nms_logit(no["e"], no["pos"], self.mnms[0], self.mnms[1])
         return no
 
     def forward(self, batch, upto="assign", frozen=(), gt=True, rounds=2):
@@ -378,16 +393,16 @@ def qgraph_loss(model, batch, phase):
     if phase in (2, 7):
         l, i = pixel_loss(out["P"], batch)
         loss, info = loss + W["pix"] * l, {**info, **{"px_" + k: v for k, v in i.items()}}
-    if phase in (3, 5, 7):
+    if phase in (3, 5, 7, 9):
         l, i = node_loss(out["no"], batch)
         loss, info = loss + W["node"] * l, {**info, **{"n_" + k: v for k, v in i.items()}}
-    if phase in (4, 7):
+    if phase in (4, 7, 9):
         l, i = link_loss(out["L"], batch)
         loss, info = loss + W["link"] * l, {**info, **{"l_" + k: v for k, v in i.items()}}
-    if phase in (5, 7):
+    if phase in (5, 7, 9):
         ce, pl = SE.section_loss(out["M"], dict(piece=batch["piece"].to(out["L"]["act"].device), sstart=batch["sstart"].to(out["L"]["act"].device)), out["L"])
         loss, info = loss + W["sec"] * (ce + pl), {**info, "s_ce": float(ce), "s_pair": float(pl)}
-    if phase in (6, 7):
+    if phase in (6, 7, 9):
         l, i = assign_loss(out["A"], out["L"], batch)
         loss, info = loss + W["asg"] * l, {**info, **{"a_" + k: v for k, v in i.items()}}
     return loss, info
@@ -407,10 +422,8 @@ def trainable_params(model, phase):
     return ps
 
 
-def _selftest():
-    torch.manual_seed(0)
-    B = 2
-    m = QGraph(width=16, f05=16, d=32)
+def _toy_batch(B=2):
+    """a synthetic batch with the real shapes (two lane pieces A -> B along x = 0, two window events); the batch of the selftest and of `test_mnms_layer.py`"""
     # a synthetic batch with the real shapes
     import numpy as np
     import qtargets as QT
@@ -435,9 +448,17 @@ def _selftest():
     import sys
     sys.path.insert(0, "../data")
     import lane_gt_data as LD
-    b = LD.collate([item, item])
+    b = LD.collate([item] * B)
     b["lk_scale"] = torch.full((B, b["lk"].shape[1], 2), float("nan"))
-    for phase in (2, 3, 4, 5, 6, 7):
+    return b
+
+
+def _selftest():
+    torch.manual_seed(0)
+    B = 2
+    m = QGraph(width=16, f05=16, d=32)
+    b = _toy_batch(B)
+    for phase in (2, 3, 4, 5, 6, 7, 9):
         m.zero_grad()
         loss, info = qgraph_loss(m, b, phase)
         assert torch.isfinite(loss), (phase, info)
@@ -517,6 +538,20 @@ def _selftest():
         loss.backward()
         assert sum(float(p.grad.abs().sum()) for p in trainable_params(ms, phase) if p.grad is not None) > 0, f"soft_nms, phase {phase}: no gradient reaches the trainable parameters"
     print("E277 soft close-node step ok: every phase finite, the gradient reaches the trainable groups")
+    # E292: the Matrix-NMS form: the same switch, no new parameters, every phase finite, the gradient reaches the trainable groups, none the frozen ones (phase 9 included)
+    mm = QGraph(width=16, f05=16, d=32, soft_nms=["mnms", 1.75, 0.1])
+    assert mm.mnms == (1.75, 0.1) and mm.soft_nms is None and set(mm.state_dict()) == set(m.state_dict())
+    mm.load_state_dict(m.state_dict())
+    for phase in (3, 4, 5, 6, 7, 9):
+        mm.zero_grad()
+        loss, info = qgraph_loss(mm, b, phase)
+        assert torch.isfinite(loss), ("mnms", phase, info)
+        loss.backward()
+        assert sum(float(p.grad.abs().sum()) for p in trainable_params(mm, phase) if p.grad is not None) > 0, f"mnms, phase {phase}: no gradient reaches the trainable parameters"
+        frozen_got = [n for n in PHASE_FROZEN[phase] if any(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in {"pyr": mm.pyr, "nodes": mm.nodes, "links": mm.links}[n].parameters())]
+        assert not frozen_got, f"mnms, phase {phase}: frozen stage {frozen_got} got a gradient"
+    assert {n for n in PHASE_TRAIN[9]} == {"nodes", "links", "menc", "asg"} and PHASE_FROZEN[9] == ("pyr",)
+    print("E292 Matrix-NMS layer ok: every phase finite incl. phase 9, the gradient reaches the trainable groups, none the pyramid")
     print("qgraph selftest ok")
 
 

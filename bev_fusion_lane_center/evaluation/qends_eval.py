@@ -4,7 +4,7 @@
     wsl bash tools/env/_py14.sh qends_eval.py score --run e284_diag_s0 --seed 0 [--thr 0.5] [--snap [--snap-all] [--snap-guard] [--snap-dedup]]  # CPU: the delivered graph with the head's connectors, scored by the E273 scorer; D79's rule against the plain delivered graph
     wsl bash tools/env/_py14.sh qends_eval.py selftest
 
-What is delivered: the graph of B read out as before (`qgraph_readout` close:1.5@0.5, `qgraph_eval.readout`), and for every pair of the end head with probability >= thr the cubic Hermite curve of `qends.curve`
+What is delivered: the graph of B read out as before (`qgraph_readout` close:1.5@0.5, `qgraph_eval.readout`; E292: `score --full <dump of B'> --base <B' checkpoint> --spec plain@0.5 --tag a` reads the graph of another head, see `score_target`), and for every pair of the end head with probability >= thr the cubic Hermite curve of `qends.curve`
 (tangent = chord) from the entry keypoint to the exit keypoint, wired to the delivered section pieces whose last point lies within 4 m (and 45 degrees) of the entry and whose first point lies within 4 m (and 45
 degrees) of the exit (the wiring of the E283 oracles `temp/e284/p19..p22`, copied here). A delivered LONG-link piece is dropped when a curve covers it (a curve starts within 4 m of its first point and ends within 4 m
 of its last point); the others stay (the 'keep' integration: a head with gaps does not remove the connectors it does not know). The stage trains on the frozen pixel / node / link stages of a B run
@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import pickle
+import re
 import sys
 import time
 
@@ -168,11 +169,50 @@ def cmd_dump(a):
     print(json.dumps(head, indent=1))
 
 
+DEFAULT_SPEC = "close:1.5@0.5"                                                                                                  # the read-out of B's delivered graph since E275
+SNAP_OPTS = ("snap_all", "snap_guard", "snap_dedup", "snap_nogeom", "snap_both")
+
+
+def card_name(a):
+    """the file name of the card of this scoring (`a`: the options of `cmd_score`). The card of record of a run (`ends_card.json`: the unsnapped read-out at 0.5) is only written by the plain call; every other
+    option gets its own file (the E308 incident of 2026-11-12); a scoring of ANOTHER head's graph (`--full` / `--base` / `--spec`, E292) carries its `--tag` in the name."""
+    snap, chord, attach, attach_r = bool(getattr(a, "snap", False)), bool(getattr(a, "chord", False)), bool(getattr(a, "attach", False)), getattr(a, "attach_r", None)
+    opts = [k for k in SNAP_OPTS if getattr(a, k, False)]
+    tag = getattr(a, "tag", None)
+    if not snap and not chord and not attach and a.thr == 0.5:
+        return "ends_card.json" if not tag else f"ends_card_{tag}.json"
+    return ("ends_card_" + (tag + "_" if tag else "") + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "")
+            + (("attach_" + (f"r{attach_r}_" if attach_r else "")) if attach else "") + f"thr{a.thr}.json")
+
+
+RESERVED_TAGS = ("snap", "chord", "attach", "all", "guard", "dedup", "nogeom", "both")                       # words of `card_name`: a tag with one of them could name the card of record of the run
+
+
+def score_target(a, run_dir):
+    """-> (card name, read-out spec, tag) after the checks of E292: a scoring of another head's graph (`--full` the full prediction dump, `--base` the checkpoint of the same head, `--spec` the read-out) needs a `--tag`
+    that names the card (the card of record of the run is never reached), `--full` and `--base` go together, and a TAGGED card or counts file that exists is never overwritten (give a new tag; the untagged
+    re-scoring of the run's own graph stays as it was)."""
+    tag = getattr(a, "tag", None)
+    full, base, spec = getattr(a, "full", None), getattr(a, "base", None), getattr(a, "spec", None)
+    assert not (full or base or spec) or tag, "--full / --base / --spec score another graph than B's: give a --tag (it names the card, so that the card of record of the run stays)"
+    assert bool(full) == bool(base), "--full and --base go together: the dump and the checkpoint of the same head"
+    assert tag is None or (re.fullmatch(r"[a-z0-9]+", tag) and tag not in RESERVED_TAGS and not re.fullmatch(r"(thr|r)[0-9]*", tag)), f"--tag {tag!r}: lower-case letters and digits only, not a word of the card names (it is part of a file name)"
+    seed = getattr(a, "seed", None)
+    for what, path, name in (("--full", full, os.path.basename(str(full))), ("--base", base, os.path.basename(os.path.dirname(str(base))))):      # the file name of the dump, the run folder of the checkpoint
+        assert not path or seed is None or re.search(rf"_s{seed}(?!\d)", name), f"{what} {path}: its name does not carry _s{seed}: the dump and the checkpoint must be of seed {seed}"
+    name = card_name(a)
+    if tag:
+        for f in (name, name[:-5] + ".counts.pkl"):
+            assert not os.path.exists(os.path.join(run_dir, f)), f"{os.path.join(run_dir, f)} exists: a tagged card is never overwritten (give a new --tag or move the old file by hand)"
+    return name, spec or DEFAULT_SPEC, tag
+
+
 def cmd_score(a):
     import torch
     import qgraph_eval as QE
     import qgraph_readout as QR
     run_dir = os.path.join(ROOT, "runs", a.run)
+    name, spec_s, tag = score_target(a, run_dir)                                                                        # before anything long runs
     base_pt = a.base or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")
     mine = torch.load(os.path.join(run_dir, "model.pt"), map_location="cpu")["state"]
     base = torch.load(base_pt, map_location="cpu")["state"]
@@ -184,7 +224,7 @@ def cmd_score(a):
     ends = {f["row"]: f for f in pickle.load(open(os.path.join(run_dir, "ends_val.pkl"), "rb"))}
     frames = QE.val_frames()
     assert [d["row"] for d in dump] == [f.row for f in frames], "the full dump is not in the order of the VAL frames"
-    spec = QR.parse("close:1.5@0.5")
+    spec = QR.parse(spec_s)
     rec = dict(base=[], head=[])
     attach = bool(getattr(a, "attach", False))
     attach_r = getattr(a, "attach_r", None)                                                                                  # E320: the wiring radius (m) of the attached read-out (default: today's 4 m); the card file name carries it
@@ -232,11 +272,13 @@ def cmd_score(a):
     out["long_links_dropped"] = n_drop
     r_ = lambda x: float(x) / max(gap["n"], 1)  # noqa: E731
     out["ends_within_1m_of_a_delivered_piece_end"] = dict(pairs=gap["n"], entry=r_(gap["in"]), exit=r_(gap["out"]), keypoint_entry=r_(gap["kp_in"]), keypoint_exit=r_(gap["kp_out"]))      # of the ends the connectors use (attached ends under attach) and of the raw keypoints
-    opts = [k for k in ("snap_all", "snap_guard", "snap_dedup", "snap_nogeom", "snap_both") if getattr(a, k, False)]
+    opts = [k for k in SNAP_OPTS if getattr(a, k, False)]
     out["snap_options"] = opts
+    out["full"] = os.path.relpath(full, ROOT).replace(os.sep, "/") if full.startswith(ROOT) else full                    # E292: the dump the delivered graph was read from, the read-out and the tag are part of the card
+    out["spec"] = spec_s
+    out["tag"] = tag
     # the card of record (`ends_card.json`) is the unsnapped read-out at the threshold 0.5 only: another threshold or a snapped read-out gets its own file (the E308 incident of 2026-11-12: a scratch sweep emptied the card of record)
-    chord = bool(getattr(a, "chord", False))
-    name = "ends_card.json" if (not snap and not chord and not attach and a.thr == 0.5) else "ends_card_" + ("chord_" if chord else "") + ("snap" + "".join("_" + k[5:] for k in opts) + "_" if snap else "") + (("attach_" + (f"r{attach_r}_" if attach_r else "")) if attach else "") + f"thr{a.thr}.json"     # the chord control has its own file too (it overwrote the card of the learned scales on 2026-11-12)
+    # the file name is `card_name(a)` (the chord control has its own file too: it overwrote the card of the learned scales on 2026-11-12)
     json.dump(out, open(os.path.join(run_dir, name), "w"), indent=1)
     pickle.dump(dict(scenes=[f.scene for f in frames], base=rec["base"], head=rec["head"]), open(os.path.join(run_dir, name[:-5] + ".counts.pkl"), "wb"))        # the per-frame counts: `jdiag.py boot` resamples them by scene (paired interval of two read-outs, E320)
     print(f"{'':16s}" + "".join(f"{k:>12s}" for k in KEYS))
@@ -308,6 +350,40 @@ def selftest():
     off2_ = [(np.array([2.5, -2.0]), np.array([0.0, 1.0]), np.array([10.5, 2.0]), np.array([0.0, 1.0]))]              # N1: both ends 2.5 m from the delivered long link (piece ends at (0, -2) and (8, 2)): covered, hence dropped, by the default (4 m) and by a 4 m / 2.5 m radius; KEPT under a 1.0 m radius (not wired, so it must not delete the link)
     g2_ = (lines, [(0, 2), (2, 1)], [[0], [1], [2]], kinds, links, long_mask, off2_)
     assert len(add_connectors(*g2_)[0]["pts"]) == 3 and len(add_connectors(*g2_, wire_pos=4.0)[0]["pts"]) == 3 and len(add_connectors(*g2_, wire_pos=2.5)[0]["pts"]) == 3 and len(add_connectors(*g2_, wire_pos=1.0)[0]["pts"]) == 4
+    # E292: the card names, the tag rules and the refusal to overwrite a tagged card
+    from types import SimpleNamespace as NS
+    import tempfile
+    names = [(NS(thr=0.5), "ends_card.json"), (NS(thr=0.1, snap=True), "ends_card_snap_thr0.1.json"), (NS(thr=0.1, snap=True, snap_nogeom=True), "ends_card_snap_nogeom_thr0.1.json"),
+             (NS(thr=0.5, chord=True), "ends_card_chord_thr0.5.json"), (NS(thr=0.1, attach=True), "ends_card_attach_thr0.1.json"), (NS(thr=0.1, attach=True, attach_r=1.5), "ends_card_attach_r1.5_thr0.1.json"),
+             (NS(thr=0.5, tag="a"), "ends_card_a.json"), (NS(thr=0.1, snap=True, tag="c2"), "ends_card_c2_snap_thr0.1.json")]
+    for opt, want in names:
+        assert card_name(opt) == want, (card_name(opt), want)
+    with tempfile.TemporaryDirectory() as d:
+        def refused(opt):
+            try:
+                score_target(opt, d)
+            except AssertionError:
+                return True
+            return False
+        assert score_target(NS(thr=0.1, snap=True), d) == ("ends_card_snap_thr0.1.json", DEFAULT_SPEC, None)
+        assert score_target(NS(thr=0.1, snap=True, full="x.pkl", base="b.pt", spec="plain@0.5", tag="a"), d) == ("ends_card_a_snap_thr0.1.json", "plain@0.5", "a")
+        assert refused(NS(thr=0.1, snap=True, full="x.pkl", base="b.pt")), "another head's dump without a tag must be refused"
+        assert refused(NS(thr=0.1, snap=True, spec="plain@0.5")), "another read-out without a tag must be refused"
+        assert refused(NS(thr=0.1, snap=True, full="x.pkl", tag="a")), "--full without --base must be refused"
+        assert refused(NS(thr=0.1, snap=True, tag="A b")), "a tag that is not a file-name word must be refused"
+        for t_ in ("snap", "chord", "attach", "thr0", "r"):
+            assert refused(NS(thr=0.1, snap=True, tag=t_)), f"the tag {t_!r} could name a card of record"
+        assert refused(NS(thr=0.1, snap=True, seed=0, full="temp/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s0/model.pt", tag="a")), "a dump of another seed must be refused"
+        assert refused(NS(thr=0.1, snap=True, seed=1, full="temp/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s10/model.pt", tag="a")), "_s10 is not _s1"
+        assert not refused(NS(thr=0.1, snap=True, seed=1, full="temp/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s1/model.pt", tag="a")), "the paths of the right seed must pass"
+        for f in ("ends_card_a_snap_thr0.1.json",):
+            open(os.path.join(d, f), "w").write("{}")
+        assert refused(NS(thr=0.1, snap=True, full="x.pkl", base="b.pt", tag="a")), "an existing tagged card must not be overwritten"
+        os.remove(os.path.join(d, "ends_card_a_snap_thr0.1.json"))
+        open(os.path.join(d, "ends_card_a_snap_thr0.1.counts.pkl"), "w").write("x")
+        assert refused(NS(thr=0.1, snap=True, full="x.pkl", base="b.pt", tag="a")), "an existing tagged counts file must not be overwritten"
+        open(os.path.join(d, "ends_card_snap_thr0.1.json"), "w").write("{}")
+        assert not refused(NS(thr=0.1, snap=True)), "the untagged re-scoring of the run's own graph keeps overwriting its card (as before E292)"
     print("qends_eval selftest ok")
 
 
@@ -321,8 +397,10 @@ if __name__ == "__main__":
     s.add_argument("--run", required=True)
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--thr", type=float, default=0.5)
-    s.add_argument("--full", default=None)
-    s.add_argument("--base", default=None)
+    s.add_argument("--full", default=None, help="the full prediction dump of the head whose graph is delivered (default: B's, temp/e276/predfull_e273_p_s<seed>.pkl); E292: the dump of B'; needs --base and --tag")
+    s.add_argument("--base", default=None, help="the checkpoint of the same head (default runs/e273_p_s<seed>/model.pt); needs --full")
+    s.add_argument("--spec", default=None, help="the read-out of the delivered graph (qgraph_readout spec; default close:1.5@0.5, the hard close-node step; E292: plain@0.5 for a head with the layer); needs --tag")
+    s.add_argument("--tag", default=None, help="E292: names the card (ends_card_<tag>_...): mandatory with --full / --base / --spec; a tagged card is never overwritten")
     s.add_argument("--chord", action="store_true", help="E303: use the chord tangent for the connectors even when the dump carries learned handle scales (the control)")
     s.add_argument("--snap", action="store_true", help="E311: draw the connectors from the end of the delivered piece wired to the entry to the start of the piece wired to the exit (the keypoints only decide which entry joins which exit); the card goes to ends_card_snap_thr<t>.json")
     for k, h in (("--snap-all", "with --snap: wire every piece in reach of the snapped end"), ("--snap-guard", "with --snap: a degenerate snapped curve keeps its keypoints"), ("--snap-dedup", "with --snap: no second curve between the same two snapped pieces"), ("--snap-nogeom", "with --snap: control, nearest piece per end for the wiring but the curve from the keypoints"), ("--snap-both", "with --snap: no curve for a pair that is not wired at both ends")):

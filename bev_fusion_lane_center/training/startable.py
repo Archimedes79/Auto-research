@@ -45,7 +45,7 @@ DESIGNS = {
         "name": (str, lambda v: None if v and "/" not in v and "." not in v else "a folder name without . and /", "run folder runs/<name> (the phases write runs/<name>_p<k>)"),
         "design": (str, None, "this table"),
         "seed": (int, lambda v: None if v >= 0 else "must be >= 0", "seed of the run; also picks the E271 head runs/e271_a_s<seed> the pixel stage starts from"),
-        "phases": (list, lambda v: None if v and all(isinstance(x, int) and 2 <= x <= 7 for x in v) else "a non-empty list of phases 2..7", "phases to run in order (default 2 3 4 5 6 7)"),
+        "phases": (list, lambda v: None if v and all(isinstance(x, int) and 2 <= x <= 9 for x in v) else "a non-empty list of phases 2..9", "phases to run in order (default 2 3 4 5 6 7; 8 = the end head, 9 = the E292 fine-tune with a frozen pyramid)"),
         "steps": (list, lambda v: None if v and all(isinstance(x, int) and x > 0 for x in v) else "a list of steps > 0, one per phase", "steps per phase, in the order of phases (default: the trainer's)"),
         "bs": (int, _pos, "batch size"),
         "workers": (int, lambda v: None if v >= 0 else "must be >= 0", "data loader workers (2 - 3 while another chat trains)"),
@@ -55,6 +55,8 @@ DESIGNS = {
         "smoke": (bool, None, "a few steps per phase"),
         "no_gates": (bool, None, "do not stop at a failed gate of a phase (a run by hand, name it in the ledger note)"),
         "gate_phases": (list, None, "only a failed gate of these phases stops the run"),
+        "gate_node_prec": ((int, float), lambda v: None if 0 <= v <= 1 else "a fraction 0..1", "E274: the node gate also needs this node precision within 2 m"),
+        "gate_node_rec": ((int, float), lambda v: None if 0 <= v <= 1 else "a fraction 0..1", "E274: the node gate also needs this node recall within 2 m"),
         "ev_w": ((int, float), _pos, "E274: weight of the 1 m event heat-map loss"),
         "node_w_evt": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E274: extra weight of the existence positives at event cells"),
         "node_w_inter": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E274: extra weight of the existence positives inside the intersection mask"),
@@ -67,6 +69,7 @@ DESIGNS = {
         "node_loss": (str, lambda v: None if v in ("e273", "zone") else "e273 or zone", "E282: the node loss"),
         "zone_bias": ((int, float), lambda v: None if v >= 0 else "must be >= 0", "E282: the tie-break bonus of the zone loss"),
         "soft_nms": (list, lambda v: None if len(v) == 3 else "three values: radius m, smoothness m, passes", "E277: the close-node suppression as a soft step"),
+        "soft_nms_mnms": (list, lambda v: None if len(v) == 2 and all(isinstance(x, (int, float)) for x in v) and 0 < v[0] <= 2 and v[1] > 0 else "two numbers: radius m in (0, 2], sigma > 0", "E292: the one-pass Matrix-NMS layer after the node head"),
         "_about": (str, None, "free text"),
     },
 }
@@ -187,7 +190,7 @@ def selftest():
     assert any("input missing" in x for x in p)
     q = dict(name="e273_p_s0", design="qgraph_head", seed=0, workers=3, node_w_evt=3.0, sparse=[0.3, 7.5])
     assert not check(q, root=tmp0, inputs=[])[0]
-    for bad, frag in (({"phases": [1]}, "phases 2..7"), ({"tier_w": [1, 2]}, "three factors"), ({"node_loss": "x"}, "e273 or zone"), ({"steps": [0]}, "steps > 0"), ({"stepz": 1}, "unknown key")):
+    for bad, frag in (({"phases": [1]}, "phases 2..9"), ({"phases": [3, 10]}, "phases 2..9"), ({"soft_nms_mnms": [2.5, 0.1]}, "radius m in (0, 2]"), ({"soft_nms_mnms": ["a", 0.1]}, "two numbers"), ({"tier_w": [1, 2]}, "three factors"), ({"node_loss": "x"}, "e273 or zone"), ({"steps": [0]}, "steps > 0"), ({"stepz": 1}, "unknown key")):
         p, _ = check(dict(q, **bad), root=tmp0, inputs=[])
         assert any(frag in x for x in p), (bad, p)
     assert "runs/e271_a_s1/model.pt" in inputs_of(dict(q, seed=1)) and "runs/e271_a_s0/model.pt" not in inputs_of(dict(q, head="x.pt"))

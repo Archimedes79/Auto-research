@@ -16,8 +16,8 @@ for sub in ("training", "training/train"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 
 FLAGS = {"grid_head": ("name", "seed", "steps", "bs", "lr", "width", "workers", "budget", "per100"),
-         "qgraph_head": ("name", "seed", "phases", "steps", "bs", "workers", "width", "head", "resume_from", "gate_phases", "ev_w", "node_w_evt", "node_w_inter", "long_match", "tier_w", "vis_w",
-                         "neg_w", "link_tier_w", "sparse", "node_loss", "zone_bias", "soft_nms")}
+         "qgraph_head": ("name", "seed", "phases", "steps", "bs", "workers", "width", "head", "resume_from", "gate_phases", "gate_node_prec", "gate_node_rec", "ev_w", "node_w_evt", "node_w_inter", "long_match", "tier_w", "vis_w",
+                         "neg_w", "link_tier_w", "sparse", "node_loss", "zone_bias", "soft_nms", "soft_nms_mnms")}
 SWITCHES = ("smoke", "no_gates")                    # a key that is true becomes a flag without a value
 
 

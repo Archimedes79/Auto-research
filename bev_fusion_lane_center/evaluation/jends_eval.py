@@ -74,12 +74,14 @@ def score(a):
     import re
     m = re.search(r"_s(\d+)[/\\]", mp.replace("\\", "/") + "/")
     assert args.get("seed", a.seed) == a.seed and (m is None or int(m.group(1)) == a.seed), f"--seed {a.seed} does not match the run (seed {args.get('seed')}, maps {mp}): its delivered graph would be another seed's"
-    base = torch.load(os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt"), map_location="cpu")["state"]
+    base_pt = getattr(a, "base", None) or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")                          # E292: the checkpoint of the head whose graph is delivered (B')
+    base = torch.load(base_pt, map_location="cpu")["state"]
     keys = [k for k in base if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"])]
     assert keys, "no pyramid tensor of the base run is in the checkpoint: the pyramid check would be empty"
     pyr_same = all(torch.equal(ck["state"]["jmodel." + k] if "jmodel." + k in ck["state"] else ck["state"][k], v) for k, v in base.items() if k.startswith("pyr.") and (("jmodel." + k) in ck["state"] or k in ck["state"]))
     print("pyramid of the maps run == the base run's:", pyr_same, "(False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')")
-    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=None, base=None, skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), attach=bool(getattr(a, "attach", False)), attach_r=getattr(a, "attach_r", None)))
+    assert pyr_same or not getattr(a, "base", None), "E292: the pyramid of the maps run is not the pyramid of --base: the connectors would sit on other pixel features than the delivered graph"
+    QE.cmd_score(SimpleNamespace(run=a.run, seed=a.seed, thr=a.thr, full=getattr(a, "full", None), base=getattr(a, "base", None), spec=getattr(a, "spec", None), tag=getattr(a, "tag", None), skip_base_check=True, chord=bool(getattr(a, "chord", False)), snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), attach=bool(getattr(a, "attach", False)), attach_r=getattr(a, "attach_r", None)))
 
 
 def selftest():
@@ -115,6 +117,10 @@ if __name__ == "__main__":
             s.add_argument("--chord", action="store_true", help="E303: the chord-tangent connectors even when the dump has learned handle scales (the shape control: same pairs)")
             s.add_argument("--snap", action="store_true", help="E311: connectors drawn from the end of the delivered piece wired to the entry to the start of the piece wired to the exit (writes ends_card_snap_thr<t>.json, the card of record stays)")
             s.add_argument("--attach-r", type=float, default=None, help="E320: with --attach, the radius (m) of the proximity wiring of the connector ends (default 4: every piece end in reach; the tight read-outs use 1.5 and 1.0); the card file name carries it")
+            s.add_argument("--full", default=None, help="E292: the full prediction dump of the head whose graph is delivered (B'); needs --base and --tag")
+            s.add_argument("--base", default=None, help="E292: the checkpoint of that head; its pyramid must be the maps run's (asserted); needs --full")
+            s.add_argument("--spec", default=None, help="E292: the read-out of the delivered graph (default close:1.5@0.5; plain@0.5 for a head with the Matrix-NMS layer); needs --tag")
+            s.add_argument("--tag", default=None, help="E292: names the card (ends_card_<tag>_...): mandatory with --full / --base / --spec; a tagged card is never overwritten")
             s.add_argument("--attach", action="store_true", help="E320: connectors drawn from the ATTACHED ends of the dump (att_pos / att_dir; no snap, the default wiring of every piece in reach), writes ends_card_attach_thr<t>.json")
             for k_ in ("--snap-all", "--snap-guard", "--snap-dedup", "--snap-nogeom", "--snap-both"):
                 s.add_argument(k_, action="store_true", help="refinement of --snap (see qends_eval.add_connectors)")

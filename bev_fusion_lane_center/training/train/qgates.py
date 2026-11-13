@@ -335,14 +335,14 @@ def gate_ends(model, run, n):
 
 def gate(model, phase, run, n=150):
     fn = {2: gate_pixels, 3: gate_nodes, 4: gate_links, 5: gate_sections, 6: gate_assign, 8: gate_ends}.get(phase)
-    if phase == 7:
+    if phase in (7, 9):
         res = {}
-        for k in (2, 3, 4, 5, 6):
+        for k in ((2, 3, 4, 5, 6) if phase == 7 else (3, 4, 5, 6)):                               # E292: phase 9 has a frozen pyramid, so no pixel reading
             try:
                 res[f"p{k}"] = {kk: vv for kk, vv in gate(model, k, run, n).items() if kk not in ("pass", "why")}
             except Exception as e:
                 res[f"p{k}"] = dict(error=repr(e))
-        return dict(res, **{"pass": True, "why": "phase 7: numbers only"})
+        return dict(res, **{"pass": True, "why": f"phase {phase}: numbers only"})
     try:
         return fn(model, run, n)
     except Exception as e:                                                                   # fail CLOSED: a gate that cannot be read stops the night (the kill criterion is not enforced otherwise)

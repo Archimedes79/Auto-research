@@ -7,6 +7,8 @@ E282 switches (`--node-loss zone --zone-bias 0.05`, with `--sparse EPS CHORD`, p
 sparse node target (zones from `qzones`); the node gate of phase 3 is for per-cell targets, so use `--gate-phases` with an empty list and score with the zone metrics (`evaluation/zone_metrics.py`).
 E284: `--phases 8 --resume-from runs/<B run>/model.pt` trains the junction END head (`qendnet.py`: tolerant entry / exit keypoints + pair decision) on the frozen pixel and node stages of that run; the model.pt then
 holds all of B's tensors plus `ends.*` (args['ends'] = True, read by `qpredict.load_model`); B's own numbers are unchanged by construction.
+E292: `--phases 3 4 5 6 9 --resume-from runs/<B run>/model.pt` is the fine-tune of a finished B with the pyramid FROZEN (phase 9 = nodes, links, map encoder, assigner jointly at lr 2e-4, no pixel loss; its gate only reports); `--soft-nms-mnms R SIGMA`
+puts the one-pass Matrix-NMS layer (`qmnms.py`) after the node head (the E277 soft step is `--soft-nms`; one of the two).
 Phase 2 pixel maps (the 1 m branch starts from the E271 head `runs/e271_a_s<seed>/model.pt`), 3 nodes (pixels frozen), 4 links + Hermite scales (pixels, nodes frozen), 5 sections (the node
 head's s output; links frozen), 6 map encoder + assignment (rest frozen), 7 everything jointly at a lower learning rate. Every phase is a run of its own (`runs/<name>_p<k>`, model.pt, .done)
 and the next one starts from the previous model; after every phase the gate of the card (kill criterion) is read on 150 VAL frames: a failed gate stops the script with exit code 3 (the run
@@ -27,8 +29,15 @@ import lane_gt_data as LD  # noqa: E402
 import qgraph as QG  # noqa: E402
 import trainer as T  # noqa: E402
 
-STEPS = {2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000, 8: 3000}
-LR = {2: 1e-3, 3: 1e-3, 4: 1e-3, 5: 5e-4, 6: 1e-3, 7: 2e-4, 8: 1e-3}
+STEPS = {2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000, 8: 3000, 9: 1000}
+LR = {2: 1e-3, 3: 1e-3, 4: 1e-3, 5: 5e-4, 6: 1e-3, 7: 2e-4, 8: 1e-3, 9: 2e-4}
+
+
+def resolve_soft_nms(soft_nms, mnms):
+    """the `soft_nms` setting of the model from the two flags: the E277 triple (--soft-nms), the Matrix-NMS pair (--soft-nms-mnms R SIGMA -> ['mnms', R, sigma], the form QGraph and `qpredict.load_model` read from
+    args['soft_nms']), or None; the two forms together are refused"""
+    assert not (soft_nms and mnms), "--soft-nms and --soft-nms-mnms are two forms of the same switch: give one"
+    return ["mnms"] + [float(v) for v in mnms] if mnms else soft_nms
 
 
 def main():
@@ -58,8 +67,10 @@ def main():
     ap.add_argument("--node-loss", choices=("e273", "zone"), default="e273", help="E282: e273 = the per-cell existence loss; zone = the zone-matching loss on the sparse target (needs --sparse; the tier switches must be off; the node gate of phase 3 is for per-cell targets, use --gate-phases with an empty list and score with the zone metrics)")
     ap.add_argument("--zone-bias", type=float, default=0.05, help="E282: the logit bonus of the cell that holds the sparse GT node when the winner of a zone is chosen (a tie-break)")
     ap.add_argument("--soft-nms", type=float, nargs=3, default=None, metavar=("RADIUS", "TAU", "PASSES"), help="E277: the close-node suppression as a soft step after the node head (radius m, smoothness m, passes)")
+    ap.add_argument("--soft-nms-mnms", type=float, nargs=2, default=None, metavar=("RADIUS", "SIGMA"), help="E292: the one-pass Matrix-NMS layer after the node head (radius m, sigma) in place of the E277 soft step; travels with the checkpoint as args['soft_nms'] = ['mnms', R, sigma]")
     ap.add_argument("--resume-from", default=None, help="a model.pt of an earlier phase to start from (the phases before it are skipped by listing only the later ones)")
     a = ap.parse_args()
+    a.soft_nms = resolve_soft_nms(a.soft_nms, a.soft_nms_mnms)                                    # the form that QGraph and qpredict.load_model read (travels in args['soft_nms'])
     T.seed_all(a.seed)
     QG.CFG.update(ev_w=a.ev_w, node_w_evt=a.node_w_evt, node_w_inter=a.node_w_inter, long_match=a.long_match)               # E274 switches (defaults = E273)
     QG.CFG.update(tier_w=a.tier_w, vis_w=a.vis_w, neg_w=a.neg_w, link_tier_w=a.link_tier_w)                                 # E276 switches (defaults = E273)

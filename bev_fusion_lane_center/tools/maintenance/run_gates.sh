@@ -48,6 +48,7 @@ run "head: wiring of the connectors, oracle gate (E322)"  jwiring.py selftest
 run "head: duplicate attribution of dup_frac (E324)"  jdup.py selftest
 run "head: previous-keyframe ceiling and replay (E299 step 0)"  jtime.py selftest
 run "head: torch Matrix-NMS layer (E292)"                 grid/qmnms.py
+run "head: Matrix-NMS switch, phase 9, mutations (E292)"  grid/test_mnms_layer.py
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
 run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py

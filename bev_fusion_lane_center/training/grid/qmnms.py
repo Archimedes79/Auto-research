@@ -12,7 +12,7 @@ import torch
 import torch.nn.functional as F
 
 
-def matrix_nms_logit(e_logit, pos, radius=1.75, sigma=0.1, eps=1e-6):
+def matrix_nms_logit(e_logit, pos, radius=1.75, sigma=0.1):
     assert 0.0 < radius <= 2.0 and sigma > 0.0, (radius, sigma)
     e = e_logit.float().sigmoid()
     pos = pos.float()
@@ -34,13 +34,17 @@ def matrix_nms_logit(e_logit, pos, radius=1.75, sigma=0.1, eps=1e-6):
     zero = torch.zeros_like(e)
     comp = torch.stack([torch.where(m, o, zero) for o, m in zip(ov, dom)], 0).max(0)[0]            # c_i: the largest overlap of cell i with a stronger neighbour
     cp = F.pad(comp[:, None], (1, 1, 1, 1), value=0.0)[:, 0]
-    decay = torch.ones_like(e)
+    x = torch.zeros_like(e)                                                                         # decay_i = exp(-x_i), x_i = max(0, the largest (o_ij^2 - c_j^2) / sigma over the stronger neighbours j)
     for (dy, dx), o, m in zip(shifts, ov, dom):
         cj = cp[:, dy:dy + H, dx:dx + W]                                                            # the compensation of the stronger neighbour j
-        f = torch.exp(-(o.square() - cj.square()) / sigma)
-        decay = torch.minimum(decay, torch.where(m, f, torch.ones_like(f)))
-    e2 = (e * decay).clamp(eps, 1.0 - eps)
-    return torch.log(e2) - torch.log1p(-e2)
+        x = torch.maximum(x, torch.where(m, (o.square() - cj.square()) / sigma, zero))
+    # logit(e x decay) = log(decay) - log(1 - decay + exp(-z)), computed without leaving the log space: no clamp, so the gradient is alive at any logit (the first version clamped e' at 1e-6, which made
+    # it flat beyond |logit| 13.8: the dead gradient that E277's critic removed from the soft step); where nothing decays (x = 0) the output is z itself
+    z = e_logit.float()
+    has = x > 0.0
+    ld = torch.where(has, -x, torch.full_like(x, -1.0))                                             # a safe value where nothing decays: the formula is not evaluated there, so no inf * 0 in the backward pass
+    damped = ld - torch.logaddexp(torch.log(-torch.expm1(ld)), -z)
+    return torch.where(has, damped, z)
 
 
 def _selftest():
@@ -72,6 +76,21 @@ def _selftest():
     pos.data[0, 1, 1, 2] -= 1.8                                                                     # pull the second node onto the first (4 m grid: cells 2 m apart, offset -1.8 -> 0.2 m)
     matrix_nms_logit(e_logit, pos).sigmoid()[0, 1, 2].backward()
     assert e_logit.grad[0, 1, 2].abs() > 0 and e_logit.grad[0, 1, 1].abs() == 0 and pos.grad[0, :, 1, 2].abs().sum() > 0 and pos.grad[0, :, 1, 1].abs().sum() > 0, (e_logit.grad[0, 1, 2], e_logit.grad[0, 1, 1], pos.grad[0, :, 1, 2], pos.grad[0, :, 1, 1])
+    # no dead gradient at the extremes (the first version clamped e' at 1e-6): an isolated node returns its own logit with gradient 1 at any |logit|; a node under a stronger one at the same place
+    # returns about z + log(decay) (decay = exp(-1 / sigma)) with a finite, positive gradient even for a logit of -14.5 (e below 1e-6)
+    for v in (-30.0, -14.5, 14.5, 30.0):
+        lz = torch.tensor([[[v, -9.0]]], requires_grad=True)
+        pz = torch.zeros(1, 2, 1, 2)
+        pz[0, 1, 0, 1] = 5.0                                                                        # the second cell is far away: nothing to decay it
+        oz = matrix_nms_logit(lz, pz)
+        oz.sum().backward()
+        assert torch.allclose(oz.detach()[0, 0], lz.detach()[0, 0], atol=1e-4) and torch.allclose(lz.grad[0, 0], torch.ones(2), atol=1e-4), (v, oz, lz.grad)
+    for v in (-30.0, -14.5, -5.0, 3.0):
+        lz = torch.tensor([[[8.0, v]]], requires_grad=True)                                         # the weaker node (cell 1) shares the stronger one's position
+        oz = matrix_nms_logit(lz, torch.zeros(1, 2, 1, 2), 1.75, 0.1)
+        oz[0, 0, 1].backward()
+        assert torch.isfinite(oz).all() and torch.isfinite(lz.grad).all() and float(lz.grad[0, 0, 1]) > 0.0, (v, oz, lz.grad)
+        assert v > -14.0 or abs(float(oz[0, 0, 1]) - (v - (1.0 - 1e-4 / 1.75) ** 2 / 0.1)) < 1e-3, (v, float(oz[0, 0, 1]))                  # e is tiny: logit(e x decay) = z + log(decay), decay = exp(-o^2 / sigma)
     print("qmnms selftest ok")
 
 
