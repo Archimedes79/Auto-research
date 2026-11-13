@@ -7,7 +7,7 @@ Same counting as `sparse_lanes/topo_metrics.dup_counts` (dense points every 0.5 
 4 m of a piece never count), but every duplicate point is attributed, for six read-outs (all on B's delivered graph with the hard step `close:1.5@0.5`, connectors at p >= 0.1, snapped to the delivered pieces):
   c  E312 snapped (keypoint ends, the snap's geometry)      u  E312 snap-nogeom (same curves as c, keypoint geometry)      k  E320 own keypoints snapped      kn  E320 own keypoints snap-nogeom
   a  E320 PRIMARY (attached ends, snap-nogeom)              l  a third run read out like c (--l-run, e.g. E316)
-  by kind        own piece / partner piece = connector (C) or B piece (B): CC (no B partner), CB (a B partner; `conn_dup_with_c_partner` of them also have a connector partner), BC, BB; for CB the arc length from the nearest end of the
+  by kind        own piece / partner piece = connector (C) or B piece (B): CC (no B partner), CB (a B partner), BC, BB, and `conn_dup_with_c_partner` = the connector duplicate points that have a connector partner (CC + `CBc`, the CB points that also have one); for CB the arc length from the nearest end of the
                  connector (4 - 8, 8 - 16, 16+ m) and the kind of the B piece (section / link)
   by truth       a connector is TRUE when both of its ends match the two ends of one GT pair (strict one-to-one matching of `jwiring.match`, 4 m, 30 degrees), FALSE otherwise (wrong pairs, unmatched or duplicate keypoints, unannotated lanes
                  are not told apart): curves, curve points and duplicate points of each
@@ -55,7 +55,7 @@ def attribute(pred, n_conn, kinds=None, r=0.75, cos_min=0.9, end_zone=4.0):
     """pred = the graph dict of the scorer (pts, edges, nodes); the LAST n_conn pieces are the connectors, in the order of the pairs; kinds = the kinds ('section' / 'link') of the B pieces, same order, optional.
     -> (total, per_conn) with total = dict(points, dup, CC, CB, BC, BB, conn_points, arc_*, partner_section, partner_link) and per_conn = (dup points per connector, points per connector)"""
     P, D, I = GE.dense_points(pred)
-    t = dict(points=len(P), dup=0, CC=0, CB=0, BC=0, BB=0, conn_points=0, arc_4_8=0, arc_8_16=0, arc_16p=0, partner_section=0, partner_link=0, conn_dup_with_c_partner=0)
+    t = dict(points=len(P), dup=0, CC=0, CB=0, BC=0, BB=0, conn_points=0, arc_4_8=0, arc_8_16=0, arc_16p=0, partner_section=0, partner_link=0, conn_dup_with_c_partner=0, CBc=0)
     dups, pts = np.zeros(n_conn, int), np.zeros(n_conn, int)
     if len(P) < 2:
         return t, (dups, pts)
@@ -79,8 +79,9 @@ def attribute(pred, n_conn, kinds=None, r=0.75, cos_min=0.9, end_zone=4.0):
             t[("C" if isC[k] else "B") + ("C" if isC[j] else "B")] += 1
             if isC[k]:
                 dups[int(I[k]) - nB] += 1
-                t["conn_dup_with_c_partner"] += int(has_c)                                                 # a connector duplicate point that ALSO has a connector partner (hidden in CB when a B partner exists)
+                t["conn_dup_with_c_partner"] += int(has_c)                                                 # ALL connector duplicate points that have a connector partner: the CC points (no B partner) and the CB points that also have one
                 if has_b:
+                    t["CBc"] += int(has_c)                                                                 # of the CB points: those that ALSO have a connector partner (hidden behind the B partner in the CB class)
                     for lo, hi, name in ARC:
                         if lo <= margin[k] < hi:
                             t[name] += 1
@@ -111,7 +112,7 @@ def score(a):
     gt = pickle.load(open(JW.GT_PATH, "rb"))
     frames, spec = QE.val_frames(), QR.parse("close:1.5@0.5")
     use = [(n, runs[r], att, ng) for n, r, att, ng in VARIANTS if runs.get(r)]
-    keys = ("points", "dup", "CC", "CB", "BC", "BB", "conn_points", "arc_4_8", "arc_8_16", "arc_16p", "partner_section", "partner_link", "conn_dup_with_c_partner")
+    keys = ("points", "dup", "CC", "CB", "BC", "BB", "conn_points", "arc_4_8", "arc_8_16", "arc_16p", "partner_section", "partner_link", "conn_dup_with_c_partner", "CBc")
     bins = [(0.1, 0.3), (0.3, 0.5), (0.5, 0.8), (0.8, 1.01)]
     tot = {n: dict({k: 0 for k in keys}, run=run, curves=0, truth={tr: dict(curves=0, points=0, dup=0) for tr in ("true", "false")}, bins={str(b): dict(curves=0, points=0, dup=0, true=0) for b in bins}) for n, run, _, _ in use}
     t0 = time.time()
@@ -161,7 +162,7 @@ def score(a):
     json.dump(tot, open(os.path.join(ROOT, "temp", "jdup", f"s{a.seed}{'_max' + str(a.max) if a.max else ''}.json"), "w"), indent=1)
     for v, run, _, _ in use:
         T = tot[v]
-        print(f"{NAMES[v]} [{run}]: points {T['points']} dup {T['dup']} ({T['dup'] / max(T['points'], 1):.4f}); CC (no B partner) {T['CC']} CB {T['CB']} (of which {T['conn_dup_with_c_partner']} connector duplicate points also have a connector partner) BC {T['BC']} BB {T['BB']}; "
+        print(f"{NAMES[v]} [{run}]: points {T['points']} dup {T['dup']} ({T['dup'] / max(T['points'], 1):.4f}); CC (no B partner) {T['CC']} CB {T['CB']} BC {T['BC']} BB {T['BB']}; connector duplicate points with a connector partner {T['conn_dup_with_c_partner']} = CC + CB-with-a-connector-partner {T['CBc']} ({100 * T['conn_dup_with_c_partner'] / max(T['CC'] + T['CB'], 1):.1f} % of the connector duplicate points CC + CB); "
               f"curves {T['curves']} (points {T['conn_points']}); CB by arc 4-8 / 8-16 / 16+: {T['arc_4_8']} / {T['arc_8_16']} / {T['arc_16p']}, partner section / link {T['partner_section']} / {T['partner_link']}")
         print(f"   curves true / false {T['truth']['true']['curves']} / {T['truth']['false']['curves']}; duplicate points of connectors true / false {T['truth']['true']['dup']} / {T['truth']['false']['dup']}; per curve {T['truth']['true']['dup'] / max(T['truth']['true']['curves'], 1):.1f} / {T['truth']['false']['dup'] / max(T['truth']['false']['curves'], 1):.1f}")
         for bn, bb in T["bins"].items():
@@ -186,6 +187,12 @@ def selftest():
     pred3 = dict(pts=[lane(0.0, -30, 30), lane(20.0, -30, 30), lane(10.0, -20, 20), lane(10.4, -20, 20)], edges=[], nodes=[[0, 1], [2, 3], [4, 5], [6, 7]])
     t3, _ = attribute(pred3, 2, ["section", "section"])
     assert t3["CC"] > 0 and t3["CB"] == 0 and t3["dup"] == TM.dup_counts(pred3)[0], t3
+    # the connector-partner key: CC points count once (key == CC, CBc == 0), a lane with no connector near it has key 0, a connector pair beside a lane has both a B and a connector partner (CBc == key - CC)
+    assert t3["conn_dup_with_c_partner"] == t3["CC"] and t3["CBc"] == 0, t3
+    assert t["conn_dup_with_c_partner"] == 0 and t["CBc"] == 0, t
+    pred4 = dict(pts=[lane(0.0, -30, 30), lane(30.0, -30, 30), lane(0.3, -20, 20), lane(-0.3, -20, 20)], edges=[], nodes=[[0, 1], [2, 3], [4, 5], [6, 7]])
+    t4, _ = attribute(pred4, 2, ["section", "section"])
+    assert t4["CB"] > 0 and t4["CBc"] == t4["CB"] and t4["conn_dup_with_c_partner"] == t4["CC"] + t4["CBc"] and t4["dup"] == TM.dup_counts(pred4)[0], t4
     print("jdup selftest ok")
 
 
