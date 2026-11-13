@@ -55,3 +55,23 @@ python3 ../autoresearch/tools/run.py --id E321.t --retries 0 --require-card --sp
   -- bash tools/env/_py14.sh evaluation/jtest_eval.py all --split test --test-id E321.t --seeds 0 1 --device cpu
 ```
 GPU alternative (needs a free slot, about 4 minutes of GPU per seed for the dumps, the rest on the CPU; the device of the stored VAL dumps): the same command with `--gpu` after `--retries 0`, `bash tools/env/_pyr.sh` and `--device cuda`.
+
+## 4. Result (TEST, one use, 2026-11-13 00:08 - 01:01, CPU, run `E321.t`, code tag `lcr/E321.t`, written by the lane lead)
+Report only (D84): nothing selected, tuned or re-read on TEST; the read-outs were fixed on VAL. TEST 833 frames, 21 scenes. Control = the plain delivered graph of B (E273 + `close:1.5@0.5`) on the same frames of the same seed. Paired scene bootstrap (winner - control) in brackets.
+
+| | seed 0 plain | seed 0 not snapped | seed 0 snapped | seed 1 plain | seed 1 not snapped | seed 1 snapped |
+|---|---|---|---|---|---|---|
+| topo F1 | 0.5631 | 0.5864 | **0.6264** | 0.5706 | 0.5947 | **0.6326** |
+| vs plain | | +0.0233 [+0.0121, +0.0363] | **+0.0633 [+0.0519, +0.0751]** | | +0.0241 [+0.0105, +0.0396] | **+0.0620 [+0.0492, +0.0755]** |
+| lanes found | 0.5732 | 0.6758 | 0.6731 | 0.5568 | 0.6807 | 0.6719 |
+| junction F1 | 0.2515 | 0.2371 | 0.3028 | 0.2495 | 0.2453 | 0.3099 |
+| junction F1 vs plain | | -0.0144 [-0.0287, +0.0016] | +0.0512 [+0.0340, +0.0714] | | -0.0042 [-0.0220, +0.0130] | +0.0605 [+0.0415, +0.0843] |
+| dup_frac | 0.2569 | 0.1669 | 0.1845 | 0.2359 | 0.1556 | 0.1684 |
+| Q | 0.6352 | 0.6495 | 0.6686 | 0.6314 | 0.6531 | 0.6706 |
+| F1@1.0 | 0.7925 | 0.8343 | 0.8340 | 0.7837 | 0.8362 | 0.8329 |
+| vertices / 100 m (Douglas-Peucker 0.3 m) | 20.84 | 21.35 | 21.22 | 21.22 | 21.25 | 21.16 |
+| maneuvers realised (of 14214) | 0.477 | 0.636 | 0.632 | 0.453 | 0.642 | 0.631 |
+
+**Reading.** The VAL gain holds on unseen scenes: snapped +0.0633 / +0.0620 topo F1 over the plain graph (VAL +0.057 / +0.062), every paired interval above zero; the prediction of the card (+0.045 snapped, +0.015 not snapped) was exceeded (not snapped +0.0233 / +0.0241, VAL +0.018 / +0.023). As on VAL the snap carries about 63 % / 61 % of the topology gain (the rule step of the read-out; the differentiable not-snapped read-out gives +0.023 / +0.024), while lanes found (+0.10 / +0.12), F1@1.0 (+0.04 / +0.05), duplicates (-0.07 .. -0.09) and the maneuver coverage (0.48 -> 0.63 and 0.45 -> 0.63) are equal for both read-outs. The not-snapped read-out does not improve the junction F1 (-0.014 / -0.004, intervals contain 0) because its precision falls; the snapped one does (+0.051 / +0.061). The plain graph is harder on TEST than on VAL (topo F1 0.563 / 0.571 against 0.626 / 0.625). Vertices per 100 m stay at 21 (both TEST and the plain graph; the 14.3 budget is a property of the output stage, not of this comparison). No promotion (D4 stays Mirko's); E312 stays the system of record, with E320 (the differentiable replacement of the snap) measured next on VAL.
+
+**Code during the run.** The launcher noted that code files changed on disk while E321.t ran (28 files: the E320 / critic-fix commits of the pair-head and read-out files `jends.py`, `jends_eval.py`, `qends_eval.py`, `jmaneuver.py`, `jdiag.py`, the fork-D maps flags, installed at 00:10 - 00:40, all with their flags off). They are bit-identical for the E312 path by the committed tests (flag-off identity of `JEnds` / `jends_loss`, the old read-outs and maneuver variants identical on the 8-frame chain check, `wire_pos=None` identical) and the numbers above were not re-read or re-run. After the run the current code was checked once more on VAL: `jtest_eval.py verify --seed 0 / 1` (log `temp/e321/reverify_val_s<S>.log`, result below when it ends).
