@@ -18,7 +18,7 @@ The delivered chain of `champion`, `fast_recall` and `recall`, drawn from the co
 - experiment summaries - experiments/ : one folder per experiment, E<id>_<slug> (card, detail plan, summary); reports/weekly/
 - training - training/ : the product (models, data, losses, train, pipeline, search), trainer.py with checkpoint + resume
 - evaluation - evaluation/ : evaluate.py (one entry point, names in models/registry.json), metrics and protocol (sparse_lanes, lane_grid), drivers/, loops/, tests, examples
-- tools/ : problem-specific helpers: env launchers, viz, video, catalogue, literature, maintenance (make_structure.py, run_all_tests.sh, CLEANUP_LIST.md); the general tools are in ../autoresearch/tools/
+- tools/ : problem-specific helpers: env launchers, viz, video, literature, maintenance (make_structure.py, run_all_tests.sh, CLEANUP_LIST.md); the general tools are in ../autoresearch/tools/
 - reports/ : weekly/ (the two weekly reports, two decks, loop 17 draft), build/ (builders), source/ (figures and number digests)
 - temp/ : short-lived work
 - runs/ raw outputs, models/ checkpoint registry, data/ splits, _to_delete/ staged for the user
@@ -31,7 +31,7 @@ The delivered chain of `champion`, `fast_recall` and `recall`, drawn from the co
 - whole chain: training/pipeline/p16_pipeline.py
 - evaluate a named model (all metrics, paired comparison): evaluation/evaluate.py <name> [--compare <name>] (names in models/registry.json); metric code: evaluation/sparse_lanes, dense maps: evaluation/lane_grid
 - final, fast, timing evaluation: evaluation/drivers/p16_final_eval.py, p16_timing.py
-- images, videos, tables, reports: tools/viz/render.py, tools/video/make_video.py, tools/catalogue/build_experiment_table.py, reports/build/
+- images, videos, tables, reports: tools/viz/render.py, tools/video/make_video.py, reports/build/
 
 ## Run
 - `wsl bash tools/env/_py14.sh p16_fast_check.py --n 20` (fast path = reference graphs, 2 min)
