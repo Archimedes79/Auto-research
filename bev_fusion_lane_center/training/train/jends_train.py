@@ -24,11 +24,11 @@ import trainer as T  # noqa: E402
 
 
 class JEndModel(nn.Module):
-    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False, e2e=False, capacity=False, ntok=False, unc=False, attach=False):
+    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False, e2e=False, ntok=False, unc=False, attach=False):
         super().__init__()
         self.e2e = e2e
         self.jmodel = JM.JModel(width=48, d=maps_args.get("d", 64), ctx=maps_args.get("ctx", "dil"))
-        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales, capacity=capacity, ntok=64 if ntok else 0, unc=unc, attach=attach)
+        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales, ntok=64 if ntok else 0, unc=unc, attach=attach)
         self.nodes = QN.NodeHead(c2=3 * 48, c1=48, c05=32, d=64) if (ntok or attach) else None           # E308: B's frozen node head: its tokens at the keypoints; E320: its nodes are the candidates of the attached connector ends
 
     def forward(self, x, gt=None):
@@ -55,7 +55,6 @@ def main():
     ap.add_argument("--cross-w", type=float, default=1.0)
     ap.add_argument("--scales", action="store_true", help="E303: two handle scales per pair (the delivered curve), trained against the fitted scales of the true pairs")
     ap.add_argument("--driven-w", type=float, default=0.0, help="E298: the positive pair terms of the pairs the ego drives count 1 + w times")
-    ap.add_argument("--capacity", action="store_true", help="E302: degree heads + a capacitated Sinkhorn plan with a dustbin instead of independent pair logits + dual softmax")
     ap.add_argument("--ntok", action="store_true", help="E308: the pair head also reads the node tokens of B (frozen node head of the E273 baseline) at the keypoints")
     ap.add_argument("--geom-w", type=float, default=0.0, help="E317: weight of the geometry loss of the delivered connector (curve against the GT connector polyline of the true pairs + the matched keypoint ends against the GT ends); 0 = off")
     ap.add_argument("--unc", action="store_true", help="E318: a position scale (log sigma) per keypoint: the end term of the geometry loss becomes a Laplace NLL, the scales are features of the pair logit and the output kp_logsig (needs --geom-w > 0)")
@@ -79,7 +78,7 @@ def main():
     LD.QData.DEFAULT_PPTS = a.geom_w > 0                                                                 # E317: the GT connector polylines of the true pairs, only for the geometry loss
     mp = a.maps or os.path.join(ROOT, "runs", f"e286_j1_s{a.seed}", "model.pt")
     ck = torch.load(mp, map_location="cpu")
-    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e, capacity=a.capacity, ntok=a.ntok, unc=a.unc, attach=a.attach)
+    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e, ntok=a.ntok, unc=a.unc, attach=a.attach)
     model.jmodel.load_state_dict(ck["state"])
     if a.ntok or a.attach:
         base = ck["args"].get("base") or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")
@@ -93,7 +92,7 @@ def main():
         p.requires_grad_(False)
     for p in ps:
         p.requires_grad_(True)
-    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e} capacity={a.capacity} ntok={a.ntok} geom_w={a.geom_w} unc={a.unc} attach={a.attach}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
+    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e} ntok={a.ntok} geom_w={a.geom_w} unc={a.unc} attach={a.attach}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
 
     calls = [0]
 
@@ -112,7 +111,7 @@ def main():
             info.update({"j_" + k: v for k, v in im.items()})
         return loss, info
 
-    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, e2e=a.e2e, capacity=a.capacity, ntok=a.ntok, geom_w=a.geom_w, unc=a.unc, attach=a.attach, maps=mp))
+    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, e2e=a.e2e, ntok=a.ntok, geom_w=a.geom_w, unc=a.unc, attach=a.attach, maps=mp))
     torch.save(dict(state=model.state_dict(), args=dict(vars(a), maps_args=ck["args"])), run.path("model.pt"))
     if a.e2e:                                                                                          # the maps head as a plain maps run, so `jmaps_eval.py score --run <name>_maps` reads it
         os.makedirs(os.path.join(ROOT, "runs", a.name + "_maps"), exist_ok=True)

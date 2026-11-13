@@ -83,7 +83,7 @@ def build(a):
     if a.run:
         ck = torch.load(os.path.join(ROOT, "runs", a.run, "model.pt"), map_location="cpu")
         ar = ck["args"]
-        return JT.JEndModel(ar["maps_args"], order=not ar.get("no_order", False), evidence=not ar.get("no_evidence", False), scales=bool(ar.get("scales", False)), capacity=bool(ar.get("capacity", False)),
+        return JT.JEndModel(ar["maps_args"], order=not ar.get("no_order", False), evidence=not ar.get("no_evidence", False), scales=bool(ar.get("scales", False)),
                             ntok=bool(ar.get("ntok", False)), unc=bool(ar.get("unc", False)))
     return JT.JEndModel(dict(d=a.d, ctx=a.ctx), order=True, evidence=bool(a.evidence), scales=bool(a.scales))
 

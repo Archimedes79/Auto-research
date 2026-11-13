@@ -9,8 +9,6 @@ entry in its entry group and of an exit in its exit group (groups as `jgt._group
 punishes P(i -> j) P(i' -> j') when the ranks of i, i' and j, j' are crossed inside one pair of groups (D82: entry 1 to exit 1, entry 2 to exit 2); (3) `evidence`: the Hermite curve of the pair (tangent = chord) is
 sampled at 12 points in the maps (lane-centre probability of B, zone, conflict core, stop line, crossing) and the means / minimum are features. All soft; the choice of the K strongest peaks is an index choice (the
 gradient flows through the values, the D7 convention), the group / rank bookkeeping is a function of the keypoint positions (no gradient needed), both named in the card.
-E302 `capacity`: instead of independent pair logits (+ dual softmax) the pair probability comes from the plan of a log-domain Sinkhorn with a dustbin: every entry has a predicted out-degree {0, 1, 2, 3+} (0 = a false keypoint), every exit an in-degree; an entry that
-feeds a turn AND the straight exit (27 % of the entries, E285) has mass 2, a merge exit takes two entries (33 %). A plan entry is a MASS (up to the degree), the pair probability is q = P / max(1, min(row mass, column mass)) in [0, 1] (the share of the smaller capacity this pair uses; one entry of degree 1 with two equally good exits gives 0.5 each), read as a logit, so the read-out (`logit >= 0`, i.e. q >= 0.5), the counts and the crossing penalty work unchanged. Differentiable (10 unrolled iterations).
 E308 `ntok`: B's node tokens (the frozen node head of the E273 baseline on the same pyramid, 64 channels at 2 m) are sampled at the keypoints and enter the keypoint token: the E284 end head reads them and ranks the pairs between true ends better (AUC 0.974) than the head on the maps' own features alone (0.930, E287 p2).
 E317 `geom_loss` (`--geom-w`): the delivered connector is supervised directly: the curve of every true keypoint pair (`_bezier_s`, the keypoint ends, headings and learned handle scales) against the GT connector polyline of the pair (symmetric point-to-polyline
 distance, smooth L1 1 m) plus the position of every matched keypoint against its GT end. The gradient reaches the soft-argmax positions (so the heat of the maps head), the headings and the scales: the shape is a constraint of the loss, not only of the parametrisation.
@@ -33,8 +31,6 @@ HALF, RES, N1 = 50.0, 1.0, 100
 PEAK_MIN = 0.1
 NG, NEV, NRK = 13, 6, 5
 COS_TURN, MIN_CHORD = QEN.COS_TURN, QEN.MIN_CHORD
-SINK_ITERS = 10
-DEG_VALUES = (0.0, 1.0, 2.0, 3.3)                                                                          # the degree classes 0, 1, 2, 3+ as masses
 
 
 def _centres(device):
@@ -91,23 +87,6 @@ def _sample(maps, pts):
     return out[..., 0].transpose(1, 2).reshape(B, *shp, maps.shape[1])
 
 
-def sinkhorn_plan(z, allowed, re, rx, alpha, iters=SINK_ITERS, full=False):
-    """(B, K, K) transport plan of the pair scores `z` (B, K, K; disallowed pairs get ~no mass) with a dustbin row and column: row masses `re` (B, K) = the expected out-degree of the entries, column masses `rx` = the in-degree of the exits;
-    the dustbin takes what is not connected (its mass makes both marginal sums equal). Log domain, `iters` unrolled iterations, differentiable in z, re, rx and alpha. P_ij is a mass (<= min(re_i, rx_j)); `full`: the whole (B, K + 1, K + 1) plan with the dustbin row / column."""
-    B, K_ = z.shape[0], z.shape[1]
-    S = torch.where(allowed, z, torch.full_like(z, -30.0))
-    col = alpha.expand(B, K_, 1)
-    M = torch.cat([torch.cat([S, col], 2), torch.cat([alpha.expand(B, 1, K_), z.new_zeros(B, 1, 1)], 2)], 1)             # (B, K + 1, K + 1)
-    log_a = torch.cat([(re + 1e-6).log(), (rx.sum(1, keepdim=True) + 1e-6).log()], 1)
-    log_b = torch.cat([(rx + 1e-6).log(), (re.sum(1, keepdim=True) + 1e-6).log()], 1)
-    u, v = torch.zeros_like(log_a), torch.zeros_like(log_b)
-    for _ in range(iters):
-        u = log_a - torch.logsumexp(M + v[:, None, :], 2)
-        v = log_b - torch.logsumexp(M + u[:, :, None], 1)
-    plan = (M + u[:, :, None] + v[:, None, :]).exp()
-    return plan if full else plan[:, :K_, :K_]
-
-
 ATT_M, ATT_REACH, ATT_ANG, ATT_TGT = 8, 4.0, 45.0, 2.5
 
 
@@ -158,16 +137,13 @@ class Attach(nn.Module):
 
 
 class JEnds(nn.Module):
-    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, capacity=False, ntok=0, unc=False, attach=False):
+    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, ntok=0, unc=False, attach=False):
         super().__init__()
-        self.k, self.order, self.evidence, self.scales, self.capacity, self.ntok, self.unc = k, order, evidence, scales, capacity, ntok, unc
+        self.k, self.order, self.evidence, self.scales, self.ntok, self.unc = k, order, evidence, scales, ntok, unc
         self.kp = nn.Linear(f1 + 6 + ntok, d)
         self.blocks = nn.ModuleList([SetBlock(d), SetBlock(d)])
         nin = 2 * d + NG + (NEV if evidence else 0) + (NRK if order else 0) + (2 if unc else 0)                  # E318: + the position scales (log sigma) of the entry and the exit keypoint
         self.pair = nn.Sequential(nn.Linear(nin, hid), nn.GELU(), nn.Linear(hid, hid), nn.GELU(), nn.Linear(hid, 1))
-        if capacity:                                                                                         # E302: the degree heads on the keypoint tokens (classes 0, 1, 2, 3+) and the dustbin score
-            self.deg_e, self.deg_x = nn.Linear(d, 4), nn.Linear(d, 4)
-            self.alpha = nn.Parameter(torch.zeros(()))
         if scales:                                                                                           # E303: the two handle scales of the delivered curve, in chords (0.05 .. 1.25 like the fit grid)
             self.scale = nn.Sequential(nn.Linear(nin, 32), nn.GELU(), nn.Linear(32, 2))
         if unc:                                                                                              # E318: one position scale per keypoint (log sigma in metres) from its self-attended token; sigma = 1 m at the start
@@ -261,17 +237,7 @@ class JEnds(nn.Module):
             feats.append(torch.stack([lsd[:, :K_, None].expand_as(L), lsd[:, None, K_:].expand_as(L)], -1))
         fcat = torch.cat(feats, -1)
         logit = self.pair(fcat)[..., 0]
-        extra = {}
-        if self.capacity:                                                                                    # E302: the pair probability is the plan of a capacitated Sinkhorn, expressed as a logit
-            de, dgx = self.deg_e(ta_t), self.deg_x(tb_t)
-            vals = logit.new_tensor(DEG_VALUES)
-            re = (de.float().softmax(-1) * vals).sum(-1) * valid[:, 0]
-            rx = (dgx.float().softmax(-1) * vals).sum(-1) * valid[:, 1]
-            Pm = sinkhorn_plan(logit.float(), allowed, re, rx, self.alpha)
-            Pm = (Pm / torch.minimum(re[:, :, None], rx[:, None, :]).clamp_min(1.0)).clamp(1e-5, 1 - 1e-5)          # the share of the smaller capacity
-            logit = (Pm / (1 - Pm)).log()
-            extra = dict(deg_e=de, deg_x=dgx)
-        out = dict(heat=heat, idx=idx, valid=valid, kp_pos=pos, kp_dir=D, kp_p=pr, logit=logit, allowed=allowed, **extra)
+        out = dict(heat=heat, idx=idx, valid=valid, kp_pos=pos, kp_dir=D, kp_p=pr, logit=logit, allowed=allowed)
         if self.scales:
             out["scale"] = 0.05 + 1.2 * self.scale(fcat).sigmoid()
         if ls is not None:
@@ -329,14 +295,6 @@ def crossing_penalty(out):
     Rout = ((gb[:, :, None] == gb[:, None, :]) & (rb[:, :, None] > rb[:, None, :])).float()         # [j, j'] same exit group, rank j > rank j'
     t = torch.bmm(torch.bmm(Rin, Pm), Rout.transpose(1, 2))                                          # (B, K, K): sum over i', j' of Rin[i, i'] P[i', j'] Rout[j, j']
     return (Pm * t).sum() / (Pm.sum() + 1.0)
-
-
-def degree_classes(T, match_e, match_x):
-    """(cls_e, cls_x) (B, K) long: the degree class {0, 1, 2, 3+} of every keypoint: the number of true pairs of the GT end it is matched to (rows of T (B, E, X) = out-degree of an entry, columns = in-degree of an exit), 0 for an unmatched keypoint"""
-    res = []
-    for deg, mt in ((T.sum(2), match_e), (T.sum(1), match_x)):
-        res.append(torch.where(mt >= 0, deg.gather(1, mt.clamp_min(0)).clamp(max=3).long(), torch.zeros_like(mt)))
-    return res
 
 
 def geom_loss(out, batch, y, allowed, ia, ib, bi, pv, pairs):
@@ -447,23 +405,9 @@ def jends_loss(out, batch, cross_w=1.0, driven_w=0.0, scale_w=0.5, geom_w=0.0):
         dual = QEN._dual_softmax(z, y, allowed)
     else:
         bce = dual = z.sum() * 0.0
-    cap = "deg_e" in out
-    loss = bce + (0.0 if cap else 0.5 * dual)                                                               # the plan already makes rows and columns compete (E302)
+    loss = bce + 0.5 * dual
     info.update(bce=float(bce), pos_pairs=float((y * allowed).sum()), allowed=float(allowed.sum()))
-    if not cap:
-        info["dual"] = float(dual)
-    if cap:                                                                                                  # E302: the degree classes of the keypoints (a keypoint that is no GT end: class 0)
-        ce_tot, acc_tot, n_tot = z.new_zeros(()), 0.0, 0
-        cls_all = degree_classes(T[:, :E, :X].float(), match[0], match[1])
-        for k_, (cls, dl) in enumerate(zip(cls_all, (out["deg_e"], out["deg_x"]))):
-            v = out["valid"][:, k_]
-            if v.any():
-                ce_tot = ce_tot + F.cross_entropy(dl.float()[v], cls[v])
-                acc_tot += float((dl[v].argmax(-1) == cls[v]).float().mean())
-                n_tot += 1
-        if n_tot:
-            loss = loss + 0.5 * ce_tot
-            info.update(deg_ce=float(ce_tot), deg_acc=acc_tot / n_tot)
+    info["dual"] = float(dual)
     if "scale" in out and "pscale" in batch and scale_w > 0:                                                    # E303: L1 of the predicted handle scales against the fitted ones, on the matched true pairs
         S = torch.full((B, E + 1, X + 1, 2), float("nan"), device=dev)
         ps = batch["pscale"].to(dev)
@@ -525,35 +469,6 @@ def _selftest():
     loss, info = jends_loss(mt(jout, P, gt=gt, tok=tok_a), batch)
     loss.backward()
     assert all(p_.grad is not None for p_ in mt.parameters()), [n for n, p_ in mt.named_parameters() if p_.grad is None]
-    # E302: the capacitated plan. Two entries, two exits, all degree 1, scores favour the diagonal: the plan is the identity; an entry of degree 2 feeds two exits of degree 1; a false keypoint (degree 0) gets no mass
-    z = torch.full((1, 4, 4), -3.0)
-    z[0, 0, 0], z[0, 1, 1] = 4.0, 4.0
-    al = torch.zeros(())
-    Pl = sinkhorn_plan(z, torch.ones(1, 4, 4, dtype=torch.bool), torch.tensor([[1.0, 1.0, 0.0, 0.0]]), torch.tensor([[1.0, 1.0, 0.0, 0.0]]), al)
-    assert Pl[0, 0, 0] > 0.8 and Pl[0, 1, 1] > 0.8 and Pl[0, 0, 1] < 0.1 and Pl[0, 2:].sum() < 1e-3 and Pl[0, :, 2:].sum() < 1e-3, Pl[0]
-    z2 = torch.full((1, 4, 4), -3.0)
-    z2[0, 0, 0], z2[0, 0, 1] = 2.0, 2.0
-    P2 = sinkhorn_plan(z2, torch.ones(1, 4, 4, dtype=torch.bool), torch.tensor([[2.0, 0.0, 0.0, 0.0]]), torch.tensor([[1.0, 1.0, 0.0, 0.0]]), al)
-    assert P2[0, 0, 0] > 0.7 and P2[0, 0, 1] > 0.7, P2[0]
-    # critic 2026-11-12: pairs 0 -> 0, 0 -> 1, 1 -> 2, 2 -> 2 (entry 0 has degree 2, exit 2 a merge of two): the class targets, with an unmatched keypoint
-    Tm = torch.zeros(1, 3, 3)
-    for a_, b_ in ((0, 0), (0, 1), (1, 2), (2, 2)):
-        Tm[0, a_, b_] = 1.0
-    ce_, cx_ = degree_classes(Tm, torch.tensor([[0, 1, 2, -1]]), torch.tensor([[0, 1, 2, -1]]))
-    assert ce_.tolist() == [[2, 1, 1, 0]] and cx_.tolist() == [[1, 1, 2, 0]], (ce_, cx_)
-    # the full plan has the marginals it was given, also when the total entry mass is not the total exit mass (E != X), and the share of the smaller capacity is in [0, 1]
-    ze = torch.randn(1, 5, 5)
-    re_, rx_ = torch.tensor([[2.0, 1.0, 0.0, 0.0, 0.0]]), torch.tensor([[1.0, 1.0, 0.5, 0.0, 0.0]])
-    full = sinkhorn_plan(ze, torch.ones(1, 5, 5, dtype=torch.bool), re_, rx_, torch.zeros(()), iters=50, full=True)
-    assert abs(float(full[0, 0].sum()) - 2.0) < 1e-2 and abs(float(full[0, 1].sum()) - 1.0) < 1e-2 and abs(float(full[0, 5].sum()) - 2.5) < 1e-2, full[0].sum(1)
-    assert abs(float(full[0, :, 0].sum()) - 1.0) < 1e-2 and abs(float(full[0, :, 5].sum()) - 3.0) < 1e-2, full[0].sum(0)
-    mc = JEnds(d=d, order=True, evidence=True, capacity=True)
-    out = mc(jout, P, gt=gt)
-    assert out["deg_e"].shape == (B, K, 4) and torch.isfinite(out["logit"]).all()
-    loss, info = jends_loss(out, batch)
-    loss.backward()
-    dead = [n for n, p_ in mc.named_parameters() if p_.grad is None]
-    assert not dead and "deg_ce" in info and info["pos_pairs"] >= 2 * B, (dead, info)
     # critic 2026-11-11: with no real peak at all (heat far below the peak floor) every injected GT keypoint is its own group: the rank features cannot see the injected ends
     jq = dict(jout, j1=jout["j1"].clone())
     jq["j1"][:, 2:4] = -9.0
