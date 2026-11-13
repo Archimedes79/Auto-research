@@ -46,6 +46,7 @@ run "head: maneuver coverage of a delivered graph (E310)"   jmaneuver.py selftes
 run "head: diagnostics of the junction thread (E307 - E313)"  jdiag.py selftest
 run "head: wiring of the connectors, oracle gate (E322)"  jwiring.py selftest
 run "head: duplicate attribution of dup_frac (E324)"  jdup.py selftest
+run "head: previous-keyframe ceiling and replay (E299 step 0)"  jtime.py selftest
 run "head: torch Matrix-NMS layer (E292)"                 grid/qmnms.py
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
