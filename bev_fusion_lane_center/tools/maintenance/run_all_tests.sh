@@ -15,6 +15,7 @@ run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "connectivity / duplicate / range metrics" topo_metrics.py
 run "metric response to controlled errors"  test_metric_response.py
 run "TEST guard + cache key of evaluate.py"  test_evaluate_guard.py
+run "GPU wait gate before the dump / score steps (D100, CPU)" test_gpu_gate.py
 run "evaluate.py parts: route success, failure series, timing (stored inputs, CPU)" test_eval_parts.py
 run "lane task of the evaluation suite (moved from autoresearch, D24)" test_lane_task.py
 run "p18_joint guarded step: non-finite loss, skipped optimiser steps, scale-drop rule" test_p18_joint_guard.py

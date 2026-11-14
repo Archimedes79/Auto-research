@@ -115,6 +115,9 @@ def score(a):
     basem = JM.JModel(width=48, d=64, ctx="none")
     basem.load_base(base_path)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
+    if dev == "cuda":                                                                                                                          # D100: a dump / score next to two trainings crashed one of them (CUDA unknown error, 2026-11-14)
+        import gpu_gate
+        gpu_gate.wait_for_room(who=f"jmaps_eval score {a.run}")
     model.to(dev).eval()
     basem.to(dev).eval()
     raster = a.raster or args.get("raster", "legacy")                                                      # the targets of the zone / core / paint IoU are rasterised as the run was trained (or as asked)

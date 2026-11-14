@@ -34,6 +34,9 @@ def dump(a):
     import lane_gt_data as LD
     import qendnet as QEN
     dev = "cuda" if torch.cuda.is_available() else "cpu"
+    if dev == "cuda":                                                                                                                          # D100: a dump / score next to two trainings crashed one of them (CUDA unknown error, 2026-11-14)
+        import gpu_gate
+        gpu_gate.wait_for_room(who=f"jends_eval dump {a.run}")
     m, args = load_model(a.run, dev)
     LD.QData.DEFAULT_JUNCTION = True
     ds, dl = LD.loader("val_clean", bs=8, workers=2, shuffle=False, map_mode="error", pixels=False)
