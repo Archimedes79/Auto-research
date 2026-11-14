@@ -99,10 +99,13 @@ def warm_start(path, model, loss, ck=None, reset=()):
     return sorted(k for k in own if k not in src)
 
 
-def prune_checkpoints(out_dir, keep):
+def prune_checkpoints(out_dir, keep, keep_steps=()):
+    """the newest `keep` checkpoints stay, and every checkpoint whose step is in `keep_steps` (Config.keep_steps); the rest goes, a failed write's .tmp too"""
     cks = sorted(f for f in os.listdir(out_dir) if f.startswith("ckpt_") and f.endswith(".pt"))
+    protected = {f"ckpt_{int(s):08d}.pt" for s in keep_steps}
     for f in cks[:-keep]:
-        os.remove(os.path.join(out_dir, f))
+        if f not in protected:
+            os.remove(os.path.join(out_dir, f))
     for f in os.listdir(out_dir):                               # a write that failed (disk full) leaves ckpt_*.pt.tmp behind
         if f.startswith("ckpt_") and f.endswith(".pt.tmp"):
             os.remove(os.path.join(out_dir, f))

@@ -30,7 +30,10 @@ class Config:
     eval_every: int = 1000
     save_every: int = 500
     keep: int = 3
-    slim_at_end: bool = False                    # True: a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half
+    keep_steps: tuple = ()                       # steps whose checkpoint is never pruned (a learning curve from one run: t26 keeps 1/6, 1/3, 2/3 and all of its steps), on top of the newest `keep`.
+                                                 # Each must be a multiple of save_every and not above steps (checked at the start of fit: a step that is never saved would keep nothing).
+                                                 # () = today's pruning, bit for bit. Free on a resume
+    slim_at_end: bool = False                   # True: a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half
                                                  # the size, no older ones): it evaluates and warm-starts but cannot resume training.
                                                  # False (default; Mirko 2026-11-01: keep the full data to resume later): `keep` complete ones
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting
@@ -42,7 +45,7 @@ class Config:
     device: str = "cuda"
 
     # not fields (no annotation): the rules of a resume, read by checkpoint.check_resume; a project's config class overrides them
-    RESUME_FREE = ("name", "out_root", "device", "log_every", "eval_every", "save_every", "keep", "slim_at_end", "max_bad_steps")   # fields a resume may change (paths, the cadence of logging and saving); every other difference is refused
+    RESUME_FREE = ("name", "out_root", "device", "log_every", "eval_every", "save_every", "keep", "keep_steps", "slim_at_end", "max_bad_steps")   # fields a resume may change (paths, the cadence of logging and saving); every other difference is refused
     RESUME_SWITCHES = ()                         # fields that a checkpoint from before them lacks and that change the numbers when turned on in the middle of a run
     RESUME_ENV = "TRAINKIT_RESUME_ANY"           # the environment variable that overrides the refusal (set to 1)
 
