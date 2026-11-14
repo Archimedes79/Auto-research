@@ -1,5 +1,7 @@
 # E339 - a narrow junction maps head taught by the wide one (soft-target distillation), simplification arm S4b: runs only when the plain narrow head of E333 is NOT adopted
 
+**Status 2026-11-14: WITHDRAWN, never run (D92: Mirko does not want the width narrowed).** The code of this card (`jmaps.distill_loss`, `--teacher`, `--distill-w`) was taken out again; it is in commit 50460b87 (`git show 50460b87 -- training/grid/jmaps.py training/train/jmaps_train.py`).
+
 Card of 2026-11-14 12:00, version 2 after the fresh critic (REVISE on the card, ACCEPT on the code with fixes; all answered below). Written by the lane chat on Mirko's order of 2026-11-14 ("suche Vereinfachungen, weniger Code und Komplexitaet, nur E2E differenzierbare Loesungen") and the literature scan of the same day (`literature/scan_2026-11-14_e2e_simplify.md`, ranking C.1 = scan items 4 and 5: DWPose [2307.15880]: a heat-map student distilled from a wider teacher, RTMPose-l 64.8 without and 66.5 AP with distillation against 65.3 AP of its teacher; channel-wise distillation [Shu et al., 2011.13256]; abstract pages read, no table numbers). The junction maps head is 41 % of the system's MACs (E330). E333 asks whether a PLAIN narrower head (width 40) is enough; **this card is the fallback: it runs only when E333 is not adopted**, because distillation costs a teacher stage and about 25 lines of code, and the order is less code. Training-time only: the delivered path is the same differentiable network, only narrower; the teacher is no part of the system.
 
 ## 0. The card (what the tools run)

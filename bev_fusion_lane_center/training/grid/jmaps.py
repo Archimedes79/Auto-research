@@ -204,26 +204,6 @@ def jmaps_loss(out, batch, far_w=0.0, far_r=35.0):
     return l_z + l_h + 0.5 * l_d + l_p, info
 
 
-def distill_loss(out, tout, peak=0.3):
-    """E339: a narrower student follows the frozen teacher's maps (the same pyramid features): the entry / exit heat logits (channels 2:4) against the teacher's heat PROBABILITIES as soft targets: plain BCE (its minimum is the teacher's own
-    logit; the positive weight 20 of the ground-truth loss would move the minimum from 0.01 to 0.17), summed over the cells and divided by the number of peak cells of the teacher (probability > peak, the mask of the heading term: the number of positives, as CenterNet / FCOS
-    normalise; a mean over the 10 000 cells would dilute the gradient of the ends to nothing, the probability mass would make the scale depend on the teacher's background calibration; a softmax over the cells, CWD, would give a weak end next to a strong
-    one a fraction of a percent of the mass), + the cosine of the student's heading to the teacher's heading at the cells where the teacher
-    sees an end (heat probability > peak; the headings are trained at the ground-truth ends only, elsewhere they are noise), weight 0.5 as in `jmaps_loss`; zone / core / paint keep their ground-truth losses only -> (loss, info)"""
-    s, t = out["j1"].float(), tout["j1"].detach().float()
-    pt = t[:, 2:4].sigmoid()
-    pk = (pt > peak).float()
-    l_h = F.binary_cross_entropy_with_logits(s[:, 2:4], pt, reduction="sum") / pk.sum().clamp_min(1.0)
-    l_d = 0.0
-    for k in range(2):
-        ps, th = s[:, 4 + 2 * k: 6 + 2 * k], t[:, 4 + 2 * k: 6 + 2 * k]
-        ps = ps / ps.norm(dim=1, keepdim=True).clamp_min(1e-4)
-        th = th / th.norm(dim=1, keepdim=True).clamp_min(1e-4)
-        m = pk[:, k]
-        l_d = l_d + ((1 - (ps * th).sum(1)) * m).sum() / m.sum().clamp_min(1.0)
-    return l_h + 0.5 * l_d, dict(bce=float(l_h), dir=float(l_d))
-
-
 @torch.no_grad()
 def keypoints(out, thr=0.3, half=50.0, res=1.0):
     """entry / exit keypoints per frame: 3 x 3 local maxima of the heat above thr, position by the soft-argmax of the 3 x 3 window (sub-cell), heading from the heading channels at the peak.
@@ -287,48 +267,6 @@ def _selftest():
     o["j1"][0, 4, 30, 50] = 0.0
     kp = keypoints(o, thr=0.5)[0]
     assert len(kp["ent"]) == 1 and len(kp["ext"]) == 0 and abs(kp["ent"][0, 0] + 19.5) < 0.1 and abs(kp["ent"][0, 1] - 0.5) < 0.1 and kp["ent"][0, 3] > 0.99, kp
-    # E339 distillation. (1) the soft-target BCE is smallest at the teacher's own logits; (2) the teacher gets NO gradient although its forward kept the graph (the detach in `distill_loss` is tested, not the requires_grad flag);
-    # (3) the heading term has zero gradient at a cell where the teacher sees no end and a gradient at its peak; (4) a student of width 32 follows a teacher of width 64: the loss falls by more than 20 % in 40 SGD steps
-    teacher, student = JMaps(d=64), JMaps(d=32)
-    tout = teacher(P)                                                                                       # gradients ENABLED: only the detach keeps the teacher out of the student's graph
-    tout = dict(j1=tout["j1"] + torch.cat([torch.zeros(2, 2, 100, 100), 3.0 * torch.randn(2, 2, 100, 100), torch.zeros(2, 4, 100, 100)], 1))   # a teacher with structure: the heat logits are not all alike
-    sj = dict(j1=tout["j1"].detach().clone())
-    l0 = float(distill_loss(sj, tout)[0])
-    assert l0 < float(distill_loss(dict(j1=sj["j1"] + torch.cat([torch.zeros(2, 2, 100, 100), torch.randn(2, 2, 100, 100), torch.zeros(2, 4, 100, 100)], 1)), tout)[0])
-    assert l0 < float(distill_loss(dict(j1=sj["j1"] + torch.cat([torch.zeros(2, 2, 100, 100), 2.0 * torch.ones(2, 2, 100, 100), torch.zeros(2, 4, 100, 100)], 1)), tout)[0])
-    ld0, opt = None, torch.optim.SGD(student.parameters(), lr=0.05)
-    for it in range(40):
-        sout = student(P)
-        ld, di = distill_loss(sout, tout)
-        ld0 = float(ld) if ld0 is None else ld0
-        opt.zero_grad()
-        ld.backward()
-        opt.step()
-    assert float(ld) < 0.8 * ld0 and all(p.grad is None for p in teacher.parameters()) and any(p.grad is not None for p in student.parameters()), (ld0, float(ld))
-    assert set(di) == {"bce", "dir"}
-    tj = torch.full((1, 8, 100, 100), -7.0)
-    tj[0, 2, 30, 50] = 4.0
-    tj[0, 4, :, :], tj[0, 5, :, :] = 0.0, 1.0
-    sh = torch.zeros(1, 8, 100, 100, requires_grad=True)
-    sh_in = sh + torch.cat([torch.zeros(1, 4, 100, 100), torch.ones(1, 1, 100, 100), torch.zeros(1, 3, 100, 100)], 1)                    # the student's heading (1, 0) against the teacher's (0, 1)
-    distill_loss(dict(j1=sh_in), dict(j1=tj))[0].backward()
-    g = sh.grad[0, 4:6].abs().sum(0)
-    assert float(g[30, 50]) > 0 and float(g[10, 10]) == 0.0 and float(g[30, 51]) == 0.0, "the heading term must act at the teacher's peak only"
-    # one fixed pair, both kinds, pins the exit side, the 0.3 boundary and the normaliser: the teacher has an entry peak (p 0.98) at (30, 50), an entry cell at p 0.4 at (60, 20), an entry cell at p 0.2 at (70, 70) (below the mask) and an exit peak at (40, 40);
-    # teacher headings: entry (0, 1), exit (1, 0). Student = teacher except: heat +0.5 at the entry peak, +1.0 at the exit peak; entry heading (0, -1) (opposite) everywhere but (0, 1) (the same) at the 0.4 cell; exit heading (1, 0) (the same)
-    # -> heading loss = (2 + 0) / 2 for the entry kind + 0 for the exit kind = 1; heat loss = the BCE of every cell (written out with logsigmoid) / 3 peak cells
-    t2 = torch.full((1, 8, 100, 100), -7.0)
-    t2[0, 2, 30, 50], t2[0, 2, 60, 20], t2[0, 2, 70, 70], t2[0, 3, 40, 40] = 4.0, -0.405465, -1.386294, 4.0
-    t2[0, 4], t2[0, 5], t2[0, 6], t2[0, 7] = 0.0, 1.0, 1.0, 0.0
-    s2 = t2.clone()
-    s2[0, 2, 30, 50] += 0.5
-    s2[0, 3, 40, 40] += 1.0
-    s2[0, 4], s2[0, 5], s2[0, 6], s2[0, 7] = 0.0, -1.0, 1.0, 0.0
-    s2[0, 4, 60, 20], s2[0, 5, 60, 20] = 0.0, 1.0
-    o2 = distill_loss(dict(j1=s2), dict(j1=t2))[1]
-    p_, z_ = torch.sigmoid(t2[:, 2:4]).double(), s2[:, 2:4].double()
-    want_bce = float((-(p_ * F.logsigmoid(z_)) - (1 - p_) * F.logsigmoid(-z_)).sum()) / 3.0
-    assert abs(o2["bce"] - want_bce) < 1e-3 * want_bce and abs(o2["dir"] - 1.0) < 1e-4, (o2, want_bce)
     print("jmaps selftest ok; params", sum(p.numel() for p in JMaps(ctx="attn").parameters()) / 1e6, "M")
 
 

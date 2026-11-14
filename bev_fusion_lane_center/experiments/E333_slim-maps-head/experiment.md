@@ -1,5 +1,7 @@
 # E333 - a slimmer junction maps head, width 40 instead of 64 (simplification arm S4)
 
+**Status 2026-11-14: WITHDRAWN, never run (D92: Mirko, "Schraenke nicht die Breite ein aber gucke, wie man sonst Rechenzeit sparen kann").** The width of the heads stays 64. The card stays as the record of the idea; the compute is saved elsewhere (E341 and the timing job, HANDOVER).
+
 Card of 2026-11-13 00:00, written by the lane chat (fork D) under D84 item 4 (simplify) and D85 (this arm runs AFTER E320). The junction maps head carries 64 channels through four dilated residual blocks and the 1 m branch; with the context at 2 m and an output of 8 + 2 maps that may be more than it needs. Width 40 (a multiple of 8 for the group norms) takes 40 % of the head's MACs away (the 0.5 m branch shrinks little: its cost is the 0.5 m resolution).
 
 ## 0. The card (what the tools run)

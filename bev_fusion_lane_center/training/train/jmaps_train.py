@@ -1,6 +1,6 @@
 """Trainer of the junction maps head (E286, D82): entry / exit heat + heading, junction zone, painted stop lines / crossings, on the pixel stage of a baseline run; start it through `autoresearch/tools/run.py`.
 
-    wsl bash tools/env/_py14.sh jmaps_train.py --name e286_j0_s0 --seed 0 --base runs/e273_p_s0/model.pt [--ctx none|dil|attn] [--d 64] [--dirx] [--no-paint] [--no-zone] [--joint] [--teacher runs/<wider maps run>/model.pt [--distill-w 1.0]] [--steps 3000] [--smoke]
+    wsl bash tools/env/_py14.sh jmaps_train.py --name e286_j0_s0 --seed 0 --base runs/e273_p_s0/model.pt [--ctx none|dil|attn] [--d 64] [--dirx] [--no-paint] [--no-zone] [--joint] [--steps 3000] [--smoke]
 
 `--joint` also trains the pixel stage (the pyramid, with its own pixel loss kept so that B's maps do not drift; the nodes / links of B no longer match such a pixel stage, so a joint run is judged on the
 maps only); without it the pyramid is frozen and the junction head reads B's own features. Frames: TRAIN through `lane_gt_data.QData(junction=True)` (the paint sidecars of
@@ -35,8 +35,6 @@ def main():
     ap.add_argument("--dirx", action="store_true", help="E319: the heading-guided bidirectional exchange along the lane (jmaps.DirX) on the 1 m features; stored as ctx '<ctx>+dirx', so every loader builds the same model")
     ap.add_argument("--no-paint", action="store_true", help="E332: no 0.5 m paint branch (stop lines, crossings: -1.48 of 3.26 GMACs of the head), no paint loss; stored as ctx '<ctx>+nopaint'. The pair head must then run --no-evidence")
     ap.add_argument("--no-zone", action="store_true", help="E332: the zone / core maps are not supervised (nothing reads them without the evidence); stored as ctx '<ctx>+nozone'")
-    ap.add_argument("--teacher", default=None, help="E339: the maps run (model.pt) of a wider head on the same pyramid whose entry / exit heat and headings the student follows (soft-target heat BCE + heading cosine at the teacher's peaks, `jmaps.distill_loss`); the teacher is not saved and not trained")
-    ap.add_argument("--distill-w", type=float, default=1.0, help="E339: the weight of the distillation loss (with --teacher)")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--bs", type=int, default=8)
@@ -68,31 +66,12 @@ def main():
         p.requires_grad_(True)
     run.log(f"jmaps {a.ctx} joint={a.joint}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.2f} M, pyramid tensors loaded {n} of {tot} from {base}, train frames {len(ds)} (missing lane GT: {ds.missing})")
 
-    teacher = None
-    if a.teacher:                                                                                        # E339: only the junction head of the teacher run; the pyramid is the frozen one both heads read
-        tc = torch.load(a.teacher, map_location="cpu", weights_only=False)
-        assert not a.joint and not tc["args"].get("joint") and tc["args"].get("base") == a.base, f"the teacher {a.teacher} must read the same frozen pyramid (base {tc['args'].get('base')} against {a.base}, joint {tc['args'].get('joint')})"
-        teacher = JM.JMaps(c2=3 * 48, c1=48, c05=32, d=tc["args"]["d"], ctx=tc["args"]["ctx"])
-        teacher.load_state_dict({k[3:]: v for k, v in tc["state"].items() if k.startswith("jm.")})
-        teacher.eval()
-        for p in teacher.parameters():
-            p.requires_grad_(False)
-        run.log(f"teacher {a.teacher}: d {tc['args']['d']}, ctx {tc['args']['ctx']}, distillation weight {a.distill_w}")
-
     def loss_fn(m, b):
         dev = next(m.parameters()).device
         x = b["x"].to(dev, non_blocking=True).float()
         P, out = m(x, joint=a.joint)
         loss, info = JM.jmaps_loss(out, b, far_w=a.far_w)
         info = {"j_" + k: v for k, v in info.items()}
-        if teacher is not None:
-            if next(teacher.parameters()).device != dev:
-                teacher.to(dev)
-            with torch.no_grad():
-                tout = teacher(P)
-            ld, di = JM.distill_loss(out, tout)
-            loss = loss + a.distill_w * ld
-            info.update({"k_" + k: v for k, v in di.items()})
         if a.joint:
             lp, ip = QG.pixel_loss(P, b)
             loss = loss + lp
