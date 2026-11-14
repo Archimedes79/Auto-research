@@ -116,10 +116,13 @@ def perturb(batch, control):
     """in place: the sanity controls on a collated batch of two or more samples (the model must lose what the control takes away)"""
     import torch
     B = len(batch["tokens"])
-    if control == "shuffle_radar":
-        batch["radar"]["b"] = (batch["radar"]["b"] + 1) % B
+    if control == "shuffle_radar":          # the batch's radar dict and every radar_seq set (radar_per_frame, t25), each dict once
+        for r in {id(r): r for r in [batch["radar"], *batch.get("radar_seq", [])]}.values():
+            r["b"] = (r["b"] + 1) % B
     elif control == "zero_radar":
         batch["radar"] = {k: v[:0] for k, v in batch["radar"].items()}
+        if "radar_seq" in batch:
+            batch["radar_seq"] = [{k: v[:0] for k, v in r.items()} for r in batch["radar_seq"]]
     elif control in ("shuffle_cam", "zero_cam"):          # every camera input of the batch: both feature caches (t10), the lane image (t7)
         for k in ("prob", "ctx", "prob2", "ctx2", "img", "lane_img", "lane_img_old"):      # lane_img_old: the older frames' images of student_frames 'all' (t22)
             if k in batch:

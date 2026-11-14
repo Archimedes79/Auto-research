@@ -52,6 +52,22 @@ def perturb_camera(item, other, control):
             item[k] = other[k] if control == "shuffle_cam" else item[k] * 0
 
 
+def perturb_radar(item, other, control):
+    """in place, the radar sanity controls on one dataset item: the radar of `other` (shuffle_radar) or nothing (zero_radar), for the item's radar set AND, with
+    radar_per_frame (t25), for every set of item["radar_seq"] (the radar branch of the recursive unroll reads those, not item["radar"]: a control that leaves them in
+    would measure too small a radar dependence). `other` is an item of the same dataset, so it carries radar_seq exactly when `item` does."""
+    if control == "shuffle_radar":
+        item["radar"] = other["radar"]
+        if "radar_seq" in item:
+            item["radar_seq"] = other["radar_seq"]
+    elif control == "zero_radar":
+        item["radar"] = {k: v[:0] for k, v in item["radar"].items()}
+        if "radar_seq" in item:
+            item["radar_seq"] = [{k: v[:0] for k, v in r.items()} for r in item["radar_seq"]]
+    else:
+        raise ValueError(f"unknown radar control {control}")
+
+
 def setup_paths(run: Optional[str] = None) -> str:
     """the run's code snapshot (runs/<name>/code) or training/ first on sys.path, then the bev_fusion folder and autoresearch;
     returns the code folder"""
@@ -306,10 +322,8 @@ def _make_source_class():
             sanity numbers recorded before 2026-11-01 used the +7 frame)"""
             c = self.control
             other = self.ds[(self._idx[ref.key] + len(self.ds) // 2) % len(self.ds)]
-            if c == "shuffle_radar":
-                item["radar"] = other["radar"]
-            elif c == "zero_radar":
-                item["radar"] = {k: v[:0] for k, v in item["radar"].items()}
+            if c in ("shuffle_radar", "zero_radar"):
+                perturb_radar(item, other, c)
             elif c in ("shuffle_cam", "zero_cam"):
                 perturb_camera(item, other, c)
             else:
@@ -409,9 +423,9 @@ def bev_hooks() -> dict:
             "cam_temporal": Hook("cam_temporal", pick=lambda o: o[0]),
             "temporal_agg": Hook("cam_temporal", pick=lambda o: o[2]["agg"]),
             "memory_conf": Hook("cam_temporal", pick=lambda o: o[2]["mem_conf"]),
-            "radar_raster": Hook("radar.net", when="in"),
-            "radar_feat": Hook("radar", pick=_first_of_pair),
-            "radar_state": Hook("radar", pick=_state_of_pair),
+            "radar_raster": Hook("radar.net", when="in", select="first"),      # first: with radar_per_frame (t25) the radar block runs once per camera frame, newest first;
+            "radar_feat": Hook("radar", pick=_first_of_pair, select="first"),  # the default 'last' would show the OLDEST frame's sweep (a single call: no change)
+            "radar_state": Hook("radar", pick=_state_of_pair, select="first"),
             "radar_memory": Hook("rad_temporal", pick=lambda o: o[0]),
             "fused": Hook("fusion"),
             "motion_l0": Hook("motion_block", pick=lambda o: o[0]),

@@ -646,6 +646,39 @@ def _():
         raise AssertionError("an unknown camera key must be refused")
     except ValueError:
         pass
+    # the radar controls reach every set of radar_seq (radar_per_frame, t25: the recursive unroll's radar branch reads those, not "radar")
+    def rad(n):
+        return {"x": torch.arange(float(n)), "vr": torch.ones(n), "b": torch.tensor([0, 1, 1][:n])}
+    rb = {"tokens": ["a", "b"], "radar": rad(3), "radar_seq": [rad(3), rad(2)]}
+    P.perturb(rb, "shuffle_radar")
+    assert rb["radar"]["b"].tolist() == [1, 0, 0] and rb["radar_seq"][0]["b"].tolist() == [1, 0, 0] and rb["radar_seq"][1]["b"].tolist() == [1, 0], rb
+    one = rad(3)
+    rb = {"tokens": ["a", "b"], "radar": one, "radar_seq": [one, rad(2)]}                     # the same dict twice is shifted once
+    P.perturb(rb, "shuffle_radar")
+    assert one["b"].tolist() == [1, 0, 0], one
+    P.perturb(rb, "zero_radar")
+    assert rb["radar"]["x"].numel() == 0 and all(s["x"].numel() == 0 and s["b"].numel() == 0 for s in rb["radar_seq"]), rb
+    rb = {"tokens": ["a", "b"], "radar": rad(3)}
+    P.perturb(rb, "zero_radar")
+    assert "radar_seq" not in rb and rb["radar"]["x"].numel() == 0
+
+    def ritem(v, n):
+        r = {"x": torch.full((n,), float(v)), "vr": torch.ones(n)}
+        return {"radar": r, "radar_seq": [r, {"x": torch.full((n + 1,), float(v)), "vr": torch.ones(n + 1)}]}
+    it, other = ritem(5, 3), ritem(9, 2)                                                       # the path of `bev_suite.py eval --control`
+    A.perturb_radar(it, other, "shuffle_radar")
+    assert float(it["radar"]["x"][0]) == 9 and all(float(s["x"][0]) == 9 for s in it["radar_seq"]) and len(it["radar_seq"][1]["x"]) == 3
+    it = ritem(5, 3)
+    A.perturb_radar(it, other, "zero_radar")
+    assert it["radar"]["x"].numel() == 0 and len(it["radar_seq"]) == 2 and all(s["x"].numel() == 0 and s["vr"].numel() == 0 for s in it["radar_seq"])
+    plain = {"radar": {"x": torch.ones(2)}}
+    A.perturb_radar(plain, plain, "zero_radar")
+    assert "radar_seq" not in plain and plain["radar"]["x"].numel() == 0
+    try:
+        A.perturb_radar(it, other, "zero_cam")
+        raise AssertionError("an unknown radar control must be refused")
+    except ValueError:
+        pass
 
 
 @check("load_run: a run trained with train_only / freeze loads (the plan is applied before the optimiser is built, as train() does: its state has a slot per trainable parameter); a plain run still loads")

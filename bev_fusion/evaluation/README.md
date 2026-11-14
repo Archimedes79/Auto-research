@@ -99,6 +99,7 @@ Global options: `--device cuda|cpu --workers N --split SET (val | train | <split
 - **GT refusal:** a stored run of another recorded GT is refused. One made before the signature was recorded is resumed only with `--force-resume` and labelled `mixed:unrecorded+<current>`; the prior baseline's store is checked too.
 - **Legacy pickle:** `scene_records` is written only when the process saw every stored frame.
 - **Camera controls:** `--control shuffle_cam|zero_cam` replace every camera input (`bev_adapter.perturb_camera`: both feature caches, the image, the t7 lane image).
+- **Radar controls:** `--control shuffle_radar|zero_radar` (and the module probe's `zero_radar` / `zero_doppler`) act on the radar AND on every set of `radar_seq` (radar_per_frame, t25: one radar set per camera frame; `bev_adapter.perturb_radar`, `bev_modules.map_radar`, `bev_probe.perturb`). The radar taps (`radar_raster`, `radar_feat`, `radar_state`) show the newest frame's set.
 
 ## Files
 

@@ -150,18 +150,26 @@ def zero_cam(batch):
     return {**batch, **{k: batch[k] * 0 for k in ("prob", "ctx", "prob2", "ctx2", "lane_img", "lane_img_old", "img") if k in batch and torch.is_tensor(batch[k])}}
 
 
+def map_radar(batch, fn):
+    """the batch with `fn` applied to its radar dict and to every set of batch["radar_seq"] (radar_per_frame, t25: one radar set per camera frame, the sets the
+    recursive unroll's radar branch reads): a perturbation that leaves them in would measure too small a radar dependence"""
+    out = {**batch, "radar": fn(batch["radar"])}
+    if "radar_seq" in batch:
+        out["radar_seq"] = [fn(r) for r in batch["radar_seq"]]
+    return out
+
+
 def zero_radar(batch):
-    """no radar detection at all (every list of the detection dict empty) and the hit / static maps zero"""
-    r = batch["radar"]
-    keep = torch.zeros(r["x"].shape[0], dtype=torch.bool)
-    out = {**batch, "radar": {k: v[keep] for k, v in r.items()}}
+    """no radar detection at all (every list of the detection dict empty, in every radar_seq set too) and the hit / static maps zero"""
+    out = map_radar(batch, lambda r: {k: v[:0] for k, v in r.items()})
     out.update({k: batch[k] * 0 for k in ("radar_hits", "radar_static") if k in batch and torch.is_tensor(batch[k])})
     return out
 
 
 def zero_doppler(batch):
-    """the radial velocity of every detection 0 (in the ego-compensated frame that reads 'every detection stands still'): positions, ranges and rcs stay"""
-    return {**batch, "radar": {**batch["radar"], "vr": batch["radar"]["vr"] * 0}}
+    """the radial velocity of every detection 0 (in the ego-compensated frame that reads 'every detection stands still'): positions, ranges and rcs stay; in every
+    radar_seq set too"""
+    return map_radar(batch, lambda r: {**r, "vr": r["vr"] * 0})
 
 
 PERTURBATIONS = {"zero_cam": zero_cam, "zero_radar": zero_radar, "zero_doppler": zero_doppler}
@@ -406,6 +414,13 @@ def selftest():
     assert r["radar"]["x"].numel() == 0 and r["radar"]["vr"].numel() == 0 and r["radar_hits"].abs().sum() == 0 and r["prob"].sum() == 2 and r["lane_img"].sum() == 3 and r["lane_img_old"].sum() == 6
     assert d["radar"]["vr"].abs().sum() == 0 and d["radar"]["x"].sum() == 10 and d["radar"]["y"].sum() == 5 and d["prob"].sum() == 2
     assert all(torch.equal(batch[k], snapshot[k]) if torch.is_tensor(batch[k]) else all(torch.equal(batch[k][kk], snapshot[k][kk]) for kk in batch[k]) for k in batch), "the batch is not changed in place"
+    # radar_per_frame (t25): the sets of radar_seq are perturbed too (the recursive unroll's radar branch reads those), the batch is not changed in place
+    seq = {"radar": {"x": torch.arange(5.0), "vr": torch.ones(5)}, "radar_seq": [{"x": torch.arange(5.0), "vr": torch.ones(5)}, {"x": torch.arange(3.0), "vr": torch.ones(3)}]}
+    rs, ds = zero_radar(seq), zero_doppler(seq)
+    assert rs["radar"]["x"].numel() == 0 and len(rs["radar_seq"]) == 2 and all(s["x"].numel() == 0 and s["vr"].numel() == 0 for s in rs["radar_seq"])
+    assert ds["radar"]["vr"].abs().sum() == 0 and all(s["vr"].abs().sum() == 0 for s in ds["radar_seq"]) and ds["radar_seq"][1]["x"].sum() == 3
+    assert seq["radar_seq"][0]["vr"].sum() == 5 and seq["radar_seq"][1]["x"].numel() == 3 and seq["radar"]["x"].numel() == 5, "radar_seq is not changed in place"
+    assert "radar_seq" not in zero_radar(batch) and "radar_seq" not in zero_doppler(batch), "a batch without radar_seq stays without"
     # response row: a stage that follows its input changes, one that does not stays
     base = {"radar": {"out": torch.ones(2, 3)}, "fusion": {"out": torch.ones(2, 3)}}
     new = {"radar": {"out": torch.zeros(2, 3)}, "fusion": {"out": torch.ones(2, 3)}}
