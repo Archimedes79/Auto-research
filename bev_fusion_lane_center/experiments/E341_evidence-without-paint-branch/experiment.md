@@ -44,3 +44,25 @@ The code (committed with this card): `JEnds(paint_ev=False)` drops the two paint
 
 ## 2. Referee
 Fresh `ar-critic` before the GPU run (card and the diff of `jends.py` / `jends_train.py`).
+
+## 3. Result (2026-11-14, by hand: replay of the stored cards; runs E341.p_s0 17:21 - 18:29 and E341.p_s1 18:51 - 20:17, VAL 873 frames, 22 scenes)
+**Token by the rule written above: ADOPT the removal on the E312 recipe** (`jrule_removal.py --arm e341_p_s --control e312_p_s`, exit 0, rerun by the lane experiments chat after the lane lead's first read: within the band on both seeds and both read-outs, every guard held). **Seed 1 is close to the bound:** unsnapped -0.0080, 0.0020 inside the 0.010 band, and its paired interval [-0.0167, -0.0001] does not exclude a loss beyond the bound (below); the rule stays the point estimate (D85), so ADOPT says "within the band", not "no loss". Numbers are from the stored cards (`runs/e341_p_s<S>/ends_card*_thr0.1.json`, `runs/e312_p_s<S>/...`), the intervals from `jdiag.py boot` (paired scene bootstrap, 22 scenes, 1000 resamples; run by hand on 2026-11-14 21:25 - 21:29, logs `temp/e341/manual_boot_*.log`).
+
+| VAL, control E312 of the same seed | seed 0 | seed 1 |
+|---|---|---|
+| unsnapped topo F1: E341 / E312 / difference | 0.6438 / 0.6438 / **+0.0000** | 0.6402 / 0.6481 / **-0.0080** |
+| unsnapped difference, paired 95 % interval | [-0.0061, +0.0065] | [-0.0167, -0.0001] |
+| snapped topo F1: E341 / E312 / difference | 0.6830 / 0.6825 / **+0.0005** | 0.6804 / 0.6864 / **-0.0060** |
+| snapped difference, paired 95 % interval | [-0.0072, +0.0068] | [-0.0168, +0.0029] |
+| F1@1.0 (unsnapped / snapped) | -0.0007 / -0.0000 | -0.0017 / +0.0009 |
+| dup_frac (unsnapped / snapped), bound +0.01 | +0.0015 / +0.0048 | +0.0047 / +0.0050 |
+| junction F1 (unsnapped / snapped) | -0.0002 / +0.0042 | +0.0019 / +0.0063 |
+| vertices per 100 m (unsnapped / snapped), bound +1.0 | -0.14 / -0.12 | -0.10 / -0.12 |
+| lanes found (unsnapped / snapped) | +0.0044 / +0.0036 | +0.0015 / +0.0098 |
+| pair precision at E312's recall | 0.744 against 0.743 | 0.725 against 0.724 |
+| maneuvers realised p >= 0.1 / snapped (of 10 991) | 7854 / 7751 (E312 7833 / 7770) | 7886 / 7804 (E312 7760 / 7703) |
+
+**Reading.** (1) **The 0.5 m paint branch can go on the E312 recipe:** the evidence along the curve with its four non-paint inputs (lane heat, zone, core) loses +0.0000 / -0.0080 unsnapped and +0.0005 / -0.0060 snapped; every guard holds with room (dup_frac at most +0.0050 against the +0.01 bound, vertices lower, junction F1 not lower). (2) **The prediction** (unsnapped -0.008, snapped -0.003): seed 1 hit the unsnapped number exactly, seed 0 missed it by 0.008 on the good side; the mean over the seeds is -0.0040 unsnapped and -0.0028 snapped. (3) **How firm:** the seeds differ by 0.008 unsnapped and 0.0065 snapped (E312's two seeds differ by 0.0044): the point estimate of one seed cannot resolve +-0.003; the pair-stage noise has never been measured (E318 revision item 1, one run per arm and seed). The unsnapped interval of seed 1 excludes zero by 0.0001, so a small real loss is likely there, and it reaches -0.0167: ADOPT is not "proved no worse than 0.01". (4) **Against E332 arm a (the same maps without any evidence):** unsnapped E341 is above it by +0.0189 [+0.0109, +0.0285] on seed 0 and +0.0026 [-0.0085, +0.0130] on seed 1; snapped +0.0050 [-0.0022, +0.0118] and -0.0045 [-0.0078, -0.0008]: the four-input evidence is worth something on the differentiable read-out of seed 0, nothing certain on seed 1, and the snap's wiring makes the evidence moot or slightly negative on seed 1. (5) **Pair head quality** is unchanged (precision at E312's recall +0.001 on both seeds), and the maneuver coverage holds (seed 0 +21 / -19 maneuvers, seed 1 +126 / +101 of 10 991).
+**What it saves** (the arm builds the maps head without `m05` / `head05` and the two paint inputs): 1.477 GMACs of the system's 7.955 (-18.6 %), 0.037 M of 2.632 M parameters; in ms about 1.3 ms of the 17.09 ms forward is an ESTIMATE until E342 part B times the E341 checkpoint on an idle GPU. Not saved yet: the loader still builds the paint layer (`batch["jpaint"]`) and the sidecars of `data/prep/junction_paint.py` stay needed.
+**Status of the chain:** the last step of the E341 chain (`jmaps_eval.py score --run e341_p_s1_maps`, a maps-only diagnostic that does not enter the rule) was held by the GPU wait gate (`evaluation/gpu_gate.py`, D100) while a training held the GPU; this result does not wait for it. The maps own score of seed 0 is stored (`runs/e341_p_s0_maps/jmaps_val.json`).
+**D94 and what follows:** ADOPT here means "adopted on the E312 recipe"; the control of every new arm is E324 s, which is about 0.015 higher snapped. The transfer to the E324 s recipe is the card `experiments/E348_e324s-recipe-without-paint-branch/experiment.md` (queued after E317 - E319). Nothing is changed in `PROBLEM.md` or the registry (a champion change needs the TEST and the grants of D94 / D95).
