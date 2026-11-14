@@ -30,7 +30,10 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 (state["buf"] = raw + fused): each frame is lifted once and fused with the previous fused state (splat_window on it, its
                 velocity head); a batch unrolls its F frames oldest -> newest, starting from the previous call's buffer (training: the
                 previous keyframe; none: cold). Train / deploy: training chains up to 3 keyframes x F frames, a stream is unbounded. The motion
-                block reads two RAW BEVs (current + the frame before it) in both modes. The radar keeps its own 0.5 s point buffer
+                block reads two RAW BEVs (current + the frame before it) in both modes. The radar keeps its own 0.5 s point buffer, or, with
+                radar_per_frame (t25, needs "recurrent" and rad_temporal 'window_memory'), one sweep per camera frame (batch["radar_seq"]) through the
+                radar block and the radar temporal block over the same frames and ego chains as the camera (state["buf"]["rad_fused"], state["rad"]),
+                entering as a residual that starts as the identity (radar features + rad_mix(block output), rad_mix zero-initialised)
   camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, training/student_encoder.py): a small trained image encoder replaces, for the current frame, the DualBEV
                 depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached outputs
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
@@ -111,6 +114,13 @@ class ModelConfig:
     rad_static_gate: bool = False      # the radar memory writes only where the measured Doppler says static (precompute.radar_static), not
                                        # everywhere a detection is (radar_hits): a moving car is not remembered; needs rad_temporal
     rad_static_vr: float = 1.0         # the Doppler (m/s) at which a detection counts as 1/e static: weight exp(-(vr / rad_static_vr)^2)
+    radar_per_frame: bool = False      # t25: the radar branch runs per camera frame inside the recurrent unroll: each frame's own radar set (batch["radar_seq"],
+                                       # nuscenes_dataset radar_per_frame; the dataset follows this switch, train.make_datasets) goes through the radar block and
+                                       # rad_temporal with the previous fused radar BEV as its past, like the camera; needs cam_buffer 'recurrent' and rad_temporal
+                                       # 'window_memory' (the GRU would count its own past twice). The memory enters as a residual that starts as the identity:
+                                       # fused = radar features + rad_mix(block output), rad_mix a zero-initialised 1 x 1 conv (new keys rad_mix.*), so a fresh block
+                                       # does not scramble the radar input of the pretrained fusion; the write mask is made per frame from that frame's sweep.
+                                       # Know: the radar side loss reads the newest frame's features only, the motion block reads batch["radar"] (= the newest set)
     fusion: str = "concat"
     c_cam: int = 64
     c_rad: int = 32
@@ -300,6 +310,11 @@ def check_config(cfg):
         errs.append("rad_static_gate gates the write of the radar memory: it needs rad_temporal 'window_memory' / 'ego_gru' and a radar")
     if cfg.rad_static_vr <= 0:
         errs.append(f"rad_static_vr must be positive (m/s), is {cfg.rad_static_vr}")
+    if not isinstance(cfg.radar_per_frame, bool):                     # a config value null / 0 / "false" must not silently switch the radar branch
+        errs.append(f"radar_per_frame must be true or false, is {cfg.radar_per_frame!r}")
+    elif cfg.radar_per_frame and (cfg.cam_buffer != "recurrent" or cfg.rad_temporal != "window_memory" or cfg.radar_kind == "off"):
+        errs.append("radar_per_frame steps the radar block next to the recurrent camera unroll: it needs cam_buffer 'recurrent', rad_temporal "
+                    "'window_memory' (the ego_gru would take its own past in twice) and a radar")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
     if not isinstance(cfg.lane_use_depth, bool):                      # t24: a config value null / 0 / "false" must not silently pick a lift
@@ -413,6 +428,11 @@ class BEVFusionModel(nn.Module):
         self.head_1m = SemanticHead(c, len(self.spec_1m)) if self.spec_1m else None   # one pyramid level down, reads the sem head's moved state.
         # Built LAST: at one seed the init of every other module is the same with the option on or off (the random numbers it draws come after theirs)
         self.student = _build_student(cfg) if cfg.camera_student else None            # t22: the image encoder that stands in for the cached teachers of frame 0 (the cached model uses it)
+        self.rad_mix = None                                                           # t25 radar_per_frame (built after the student too): the residual of the radar memory starts as the identity
+        if cfg.radar_per_frame:
+            self.rad_mix = nn.Conv2d(cfg.c_rad, cfg.c_rad, 1)
+            nn.init.zeros_(self.rad_mix.weight)
+            nn.init.zeros_(self.rad_mix.bias)
 
     # ---- camera
     def camera_bevs(self, batch):
@@ -519,36 +539,46 @@ class BEVFusionModel(nn.Module):
         used = sum((s[0] for s in as_chain(steps[-1], frames)), frames.new_zeros(frames.shape[0]))
         return (dt - used).clamp(min=0), v, w
 
-    def _unroll(self, frames, steps, cam_state, step, obs, buf=None):
-        """cam_buffer 'recurrent': frames (B, F, C, X, Y), 0 = newest, through the temporal block oldest -> newest, every frame lifted once. A
-        call fuses its frame with the previous call's fused output only (past = [(fused, ego chain between the two frames)]: moved by
-        splat_window with the block's velocity head and mass gate); the world memory is read and written at every frame, as in a stream.
-        The chain continues from buf (the previous call's fused output) or starts cold at the oldest frame. `step` is the ego step to the
-        oldest frame: stream (one frame) as given (a triple or the sweep chain since the previous frame); batch the trainer's keyframe gap
-        step (one triple) reduced by `_step_to_oldest`. Needs steps[k + 1] = the sweeps k + 1 -> k, then steps[k] (the frames of a sample are consecutive).
-        -> (fused output of the newest frame, new cam state)"""
-        block, B, Fn = self.cam_temporal, frames.shape[0], frames.shape[1]
+    def _moves(self, frames, steps, step):
+        """cam_buffer 'recurrent': the ego chain INTO each frame of the unroll, oldest -> newest (frames (B, F, C, X, Y), 0 = newest): the first from the
+        previous call's frame to the oldest one (empty on a cold start), then frame k + 1 -> k. `step` is the ego step to the oldest frame: stream (one
+        frame) as given (a triple or the sweep chain since the previous frame); batch the trainer's keyframe gap step (one triple) reduced by
+        `_step_to_oldest`. Needs steps[k + 1] = the sweeps k + 1 -> k, then steps[k] (the frames of a sample are consecutive)."""
+        Fn = frames.shape[1]
         move = as_chain(step, frames)
         if Fn > 1 and move:
             if len(move) != 1:
                 raise ValueError("a batch of several frames takes the keyframe gap step as ONE (dt, v, omega) triple, not a chain")
             move = [self._step_to_oldest(move[0], steps, frames)]
-        fused = buf["fused"] if buf is not None else None
-        for k in range(Fn - 1, -1, -1):
-            if k < Fn - 1:                                   # frame k + 1 -> k: the first sweeps of frame k + 1's chain
-                n = len(steps[k + 1]) - len(steps[k])
-                if n < 0:
-                    raise ValueError(f"frame {k + 1} has fewer ego steps ({len(steps[k + 1])}) than frame {k} ({len(steps[k])})")
-                move = as_chain(steps[k + 1][:n], frames)
-            fused, cam_state, _ = block(frames[:, k], [] if fused is None else [(fused, move)], cam_state, move, obs)
-        return fused, cam_state
+        moves = [move]
+        for k in range(Fn - 2, -1, -1):                      # frame k + 1 -> k: the first sweeps of frame k + 1's chain
+            n = len(steps[k + 1]) - len(steps[k])
+            if n < 0:
+                raise ValueError(f"frame {k + 1} has fewer ego steps ({len(steps[k + 1])}) than frame {k} ({len(steps[k])})")
+            moves.append(as_chain(steps[k + 1][:n], frames))
+        return moves
 
-    def _camera_buffered(self, frames, steps, radar, state, step, obs):
+    @staticmethod
+    def _recur(block, bevs, moves, state, fused, obs, residual=None):
+        """cam_buffer 'recurrent': bevs (B, F, C, X, Y), 0 = newest, through a temporal block oldest -> newest, every frame lifted / encoded once. A
+        frame is fused with the previous fused output only (past = [(fused, ego chain between the two frames)]: moved by splat_window with the
+        block's velocity head and mass gate); the world memory is read and written at every frame, as in a stream. The chain continues from
+        `fused` (the previous call's fused output) or starts cold (None) at the oldest frame. moves: `_moves`; obs: the write mask of each frame,
+        a list indexed like bevs. residual (the radar's rad_mix): the fused output of a frame is bevs[:, k] + residual(block output), which is
+        also what the next frame gets as its past. -> (fused output of the newest frame, new state)"""
+        for j, k in enumerate(range(bevs.shape[1] - 1, -1, -1)):
+            fused, state, _ = block(bevs[:, k], [] if fused is None else [(fused, moves[j])], state, moves[j], obs[k])
+            if residual is not None:
+                fused = bevs[:, k] + residual(fused)
+        return fused, state
+
+    def _camera_buffered(self, frames, steps, radar, state, step, obs, rad_in=None):
         """cam_buffer 'pair' / 'recurrent' (t21). The motion block, when present, reads (current raw BEV, previous raw BEV) in both - never the
         fused state; its time baseline is the previous processed frame (0.167 s at stride 2), not the window's oldest frame, in batch mode
         too (frame 1), so stream = batch. 'pair': the window is ONE frame, the previous one (a batch of 2 frames is the window path with
-        K = 1). 'recurrent': `_unroll`. radar None: no motion block (`advance`). -> (camera BEV, cam state, motion-block levels or None,
-        the new state["buf"])"""
+        K = 1). 'recurrent': `_recur` over `_moves`; rad_in (radar_per_frame, `_radar_frames`): the radar branch steps over the same frames and
+        moves, from state["rad"] and buf["rad_fused"]. radar None: no motion block (`advance`). -> (camera BEV, cam state, motion-block levels or
+        None, the new state["buf"], (fused radar BEV, radar state) or None)"""
         Fn, mode = frames.shape[1], self.cfg.cam_buffer
         if mode == "pair" and Fn > 2:
             raise ValueError(f"cam_buffer 'pair' takes two frames (n_cam 2) or one (stream), the batch has {Fn}")
@@ -557,25 +587,57 @@ class BEVFusionModel(nn.Module):
         v_levels = None
         if self.motion_block is not None and radar is not None:
             v_levels = self.motion_block(*block_inputs(pair, pair_steps, radar, self.grid))
+        rad = None
         if mode == "pair":
             cam, cam_state = self._branch_temporal(self.cam_temporal, pair if warm else pair[:, :1], pair_steps, state.get("cam"), step, obs)
         else:
-            cam, cam_state = self._unroll(frames, steps, state.get("cam"), step, obs, buf)
-        return cam, cam_state, v_levels, self._next_buffer(frames, cam, mode == "recurrent")
+            moves = self._moves(frames, steps, step)
+            cam, cam_state = self._recur(self.cam_temporal, frames, moves, state.get("cam"), None if buf is None else buf["fused"], [obs] * Fn)
+            if rad_in is not None:
+                rad = self._recur(self.rad_temporal, rad_in["bevs"], moves, state.get("rad"), None if buf is None else buf["rad_fused"], rad_in["obs"], self.rad_mix)
+        new_buf = self._next_buffer(frames, cam, mode == "recurrent")
+        if rad is not None:
+            new_buf["rad_fused"] = rad[0]
+        return cam, cam_state, v_levels, new_buf, rad
+
+    def _encode_radar(self, radar, B, device):
+        """the radar block on one radar set -> (radar BEV (B, c_rad, X, Y), radar_side or None); radar_kind 'delta_slots': the side loss (train.py) reads
+        the features and the lossless raster"""
+        if self.cfg.radar_kind == "off":
+            return torch.zeros(B, self.cfg.c_rad, self.grid.nx, self.grid.ny, device=device), None
+        if self.cfg.radar_kind == "delta_slots":
+            rad, rstate = self.radar(radar, B, with_state=True)
+            return rad, {"features": rad, "state": rstate}
+        return self.radar(radar, B), None
+
+    def _radar_frames(self, batch, like):
+        """radar_per_frame (t25): the radar branch's input for the recurrent unroll, from batch["radar_seq"] (one radar set per camera frame, 0 = newest, the
+        camera frames' order; `like` = the camera BEVs (B, F, C, X, Y)). -> {"bevs": (B, F, c_rad, X, Y) the radar block on each frame's own sweep,
+        "obs": the memory's write mask of each frame's sweep (radar_hits / radar_static) as a list indexed like the frames, "side": the newest frame's
+        radar_side or None}"""
+        seq = batch.get("radar_seq")
+        if seq is None or len(seq) != like.shape[1]:
+            raise ValueError(f"radar_per_frame needs batch['radar_seq'], one radar set per camera frame ({like.shape[1]}): nuscenes_dataset radar_per_frame, "
+                             f"got {None if seq is None else len(seq)}")
+        B, pre = like.shape[0], Precompute.from_model(self)
+        enc = [self._encode_radar(r, B, like.device) for r in seq]
+        return {"bevs": torch.stack([e[0] for e in enc], 1), "side": enc[0][1], "obs": [pre.radar_mask(self._rad_mask, r, B).to(like) for r in seq]}
 
     def advance(self, batch, state=None, step=None):
         """stream mode, a frame that needs no output (cam_buffer 'pair' / 'recurrent'): lift + the camera temporal block only - no motion block,
-        radar, trunk or heads - and the new state, the one `forward` would return for the cam / buf entries; forward() on the next frame
-        continues from it. One frame, `step` as in forward. Needs rad_temporal 'none' (its state would go stale); a mirror-augmented batch is
+        trunk or heads - and the new state, the one `forward` would return for the cam / buf (and rad) entries; forward() on the next frame
+        continues from it. One frame, `step` as in forward. Needs rad_temporal 'none' (its state would go stale) or radar_per_frame (t25: the
+        frame's sweep, batch["radar_seq"] of one set, goes through the radar block and rad_temporal as well); a mirror-augmented batch is
         refused (training only)."""
-        if self.cfg.cam_buffer == "window" or self.rad_temporal is not None or self._flip_any(batch):
-            raise ValueError("advance: cam_buffer 'pair' / 'recurrent', rad_temporal 'none' and no flipped sample")
+        if self.cfg.cam_buffer == "window" or (self.rad_temporal is not None and not self.cfg.radar_per_frame) or self._flip_any(batch):
+            raise ValueError("advance: cam_buffer 'pair' / 'recurrent', rad_temporal 'none' (or radar_per_frame) and no flipped sample")
         batch = Precompute.from_model(self)(dict(batch), ("vis_cam",))
         frames = self.camera_bevs(batch)
         self._student_side = None                                 # no loss follows an advance
         steps = [[tuple(torch.as_tensor(t, dtype=frames.dtype, device=frames.device) for t in s) for s in f] for f in batch["steps"]]
-        _, cam_state, _, buf = self._camera_buffered(frames, steps, None, state or {}, step, batch["vis_cam"].to(frames))
-        return dict(state or {}, cam=cam_state, buf=buf)
+        rad_in = self._radar_frames(batch, frames) if self.cfg.radar_per_frame else None
+        _, cam_state, _, buf, rad = self._camera_buffered(frames, steps, None, state or {}, step, batch["vis_cam"].to(frames), rad_in)
+        return dict(state or {}, cam=cam_state, buf=buf, **({} if rad is None else {"rad": rad[1]}))
 
     def _refine_train(self, obj, feat, gts, dt):
         """S5c training step of one target time: candidates = top-k decoded boxes (detached) + jittered GT copies,
@@ -609,7 +671,8 @@ class BEVFusionModel(nn.Module):
         frame's raw camera BEV, and its fused output); a batch of ONE frame is a stream step: the previous frame comes from state["buf"] (none:
         cold start) and `step` is the ego step since it, one triple or the per-sweep chain (a list of triples like batch["steps"][k], which
         is what the batch path uses); with 'recurrent' a batch of several frames continues from state["buf"] too when `step` is given (the
-        trainer's keyframe gap step), 'pair' never. Returns {"out": preds, "state": ..., "features": trunk
+        trainer's keyframe gap step), 'pair' never. radar_per_frame (t25): batch["radar_seq"] holds one radar set per camera frame (a stream step: one), the
+        radar state stepped per frame is state["rad"] and the buffer also holds the fused radar BEV (state["buf"]["rad_fused"]). Returns {"out": preds, "state": ..., "features": trunk
         features}, preds in the layout of losses.BEVLoss: {dt: {"sem", "obj" (object head maps), "mass" (splat mass at dt), "v_hat" (dt = 0),
         "cam_aux" / "radar_aux" (dt = 0, training only)}}. ego: optional {nominal dt: (dt, v, omega)} as (B,) tensors -
         the true gap to the target keyframe and the gap-mean ego motion per sample (the GT keyframe is 0.40-0.60 s
@@ -623,7 +686,8 @@ class BEVFusionModel(nn.Module):
         if "host" in batch and not self.cfg.sync_free:           # D54: the CPU copies of the calibration and the flip flags are used only with sync_free; without it the old code runs
             batch = {k: v for k, v in batch.items() if k != "host"}
         need = (("vis_cam",) if self.cam_temporal is not None else ()) + \
-               ((self._rad_mask,) if self.rad_temporal is not None else ())     # every memory kind gets its write mask (arms matched)
+               ((self._rad_mask,) if self.rad_temporal is not None and not self.cfg.radar_per_frame else ())     # every memory kind gets its write mask (arms
+                                                                                    # matched); radar_per_frame makes it per frame in _radar_frames
         batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
         cam_frames = self.camera_bevs(batch)                                         # the batch's frame (kept when precomputed)
         student_side, self._student_side = self._student_side, None                  # camera_student: set by the cached model's camera_bevs, handed out with the result
@@ -634,9 +698,10 @@ class BEVFusionModel(nn.Module):
         flipped = self._flip_any(batch)
         if flipped:                                              # and the targets of these samples were mirrored by flip_batch
             cam_frames = flip_cam(cam_frames, None, flip)[0]     # (the visibility map is mirrored by the precompute step)
-        v_levels, buf = None, None
+        v_levels, buf, rad_out = None, None, None
+        rad_in = self._radar_frames(batch, cam_frames) if self.cfg.radar_per_frame else None      # t25: the radar block on every frame's own sweep
         if self.cfg.cam_buffer != "window":                      # t21: one buffered frame instead of the window (_camera_buffered)
-            cam, cam_state, v_levels, buf = self._camera_buffered(cam_frames, steps, batch["radar"], state, step, cam_obs)
+            cam, cam_state, v_levels, buf, rad_out = self._camera_buffered(cam_frames, steps, batch["radar"], state, step, cam_obs, rad_in)
         else:
             if self.motion_block is not None:                    # t15: the velocity field from two camera frames + radar (motion_block.py)
                 v_levels = self.motion_block(*block_inputs(cam_frames, steps, batch["radar"], self.grid))
@@ -653,18 +718,14 @@ class BEVFusionModel(nn.Module):
             if flipped:
                 lane = flip_cam(lane[:, None], None, flip)[0][:, 0]
             cam = cam + lane
-        radar_side = None
-        if self.cfg.radar_kind == "off":
-            rad = torch.zeros(cam.shape[0], self.cfg.c_rad, self.grid.nx, self.grid.ny, device=cam.device)
-        elif self.cfg.radar_kind == "delta_slots":               # features + the lossless raster: the side loss (train.py) reads both
-            rad, rstate = self.radar(batch["radar"], cam.shape[0], with_state=True)
-            radar_side = {"features": rad, "state": rstate}
+        if rad_in is not None:                                   # t25: the radar branch ran next to the camera's unroll (the side loss: the newest frame)
+            (rad, rad_state), radar_side = rad_out, rad_in["side"]
         else:
-            rad = self.radar(batch["radar"], cam.shape[0])
-        rad_obs = batch[self._rad_mask].to(rad) if self._rad_mask in batch else None   # radar memory: write where it measured (with
-                                                                                       # rad_static_gate: where it measured the static world);
-                                                                                       # no radar points: no mask = everywhere
-        rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
+            rad, radar_side = self._encode_radar(batch["radar"], cam.shape[0], cam.device)
+            rad_obs = batch[self._rad_mask].to(rad) if self._rad_mask in batch else None   # radar memory: write where it measured (with
+                                                                                           # rad_static_gate: where it measured the static world);
+                                                                                           # no radar points: no mask = everywhere
+            rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
         S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:
             S = self.head_reduce(S)

@@ -3,7 +3,8 @@ augmentation of the BEV detectors (BEVDet's BDA, BEVFusion) - the frozen camera 
 the BEV (after the lift) and on every other input and target:
 
   camera BEV and camera visibility   flipped along y inside BEVFusionModel.forward (batch["flip"], bool (B,))
-  radar detections                   y -> -y, ray direction psi -> -psi (range, Doppler along the ray, rcs, age unchanged)
+  radar detections                   y -> -y, ray direction psi -> -psi (range, Doppler along the ray, rcs, age unchanged); also every
+                                     set of batch["radar_seq"] (radar_per_frame, t25)
   ego motion                         yaw rate omega -> -omega (batch["omega"], batch["steps"], the GT meta steps)
   GT rasters (X, Y)                  flipped along the last axis; velocity (vx, vy) and centreline direction (cos, sin): the
                                      lateral component changes sign
@@ -58,6 +59,15 @@ def flip_gt(g):
     return out
 
 
+def flip_radar(rad, flip):
+    """a radar dict (nuscenes_dataset collate) with y and psi negated where flip[b] (bool (B,), on the host); a new dict, the input is not changed"""
+    rad = dict(rad)
+    f = flip[rad["b"].cpu()].to(rad["y"].device)
+    rad["y"] = torch.where(f, -rad["y"], rad["y"])
+    rad["psi"] = torch.where(f, -rad["psi"], rad["psi"])
+    return rad
+
+
 def flip_batch(batch, flip):
     """Mirror the samples b with flip[b] of a collated batch, in place; sets batch["flip"] (bool (B,)) for the model."""
     flip = torch.as_tensor(flip, dtype=torch.bool).cpu()
@@ -69,11 +79,9 @@ def flip_batch(batch, flip):
     batch["steps"] = [[(dt, v, w * sign.to(w.dtype)) for dt, v, w in fr] for fr in batch["steps"]]
     if "gap_steps" in batch:
         batch["gap_steps"] = [{k: [(dt, v, -w) for dt, v, w in s] for k, s in g.items()} if flip[i] else g for i, g in enumerate(batch["gap_steps"])]
-    rad = dict(batch["radar"])
-    f = flip[rad["b"].cpu()].to(rad["y"].device)
-    rad["y"] = torch.where(f, -rad["y"], rad["y"])
-    rad["psi"] = torch.where(f, -rad["psi"], rad["psi"])
-    batch["radar"] = rad
+    batch["radar"] = flip_radar(batch["radar"], flip)
+    if "radar_seq" in batch:                                     # radar_per_frame (t25): the radar set of every camera frame
+        batch["radar_seq"] = [flip_radar(r, flip) for r in batch["radar_seq"]]
     if "gt" in batch:
         batch["gt"] = [{key: flip_gt(g) for key, g in s.items()} if flip[i] else s for i, s in enumerate(batch["gt"])]
     for key in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits", "radar_static"):    # precomputed maps (precompute.MAPS) already in the batch

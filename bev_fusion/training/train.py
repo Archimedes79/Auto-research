@@ -116,6 +116,7 @@ class TrainConfig(Config):
     gt_cache: str = "data/cache/gt"              # GT cache folder of the dataset ("" = off)
     feature_cache2: str = ""                     # second feature cache (BEVFusion, camera_features "dual", t10; "" = off)
     radar_cache: str = ""                        # per-sample radar cache folder (feature_cache.py; "" = off; exact)
+    radar_window: float = 0.5                    # s of radar sweeps before the camera time that make one radar set (nuscenes_dataset); 0.09 = the newest sweep of each radar (t25: one sweep per step)
     lane_images: str = ""                        # key-frame image cache of the lane branch (lane_branch.py, t7; "" = off)
     n_cam: int = 3
     cam_stride: int = 2
@@ -219,7 +220,8 @@ def make_datasets(cfg):
             toks = [t for t in toks if nusc.get("scene", t)["name"] in set(names)]
         return toks
     kw = dict(n_cam=cfg.n_cam, cam_stride=cfg.cam_stride, with_gt=True, nusc=nusc,
-              cache_dir=cfg.gt_cache or None)
+              cache_dir=cfg.gt_cache or None, radar_window=cfg.radar_window,
+              radar_per_frame=cfg.model.get("radar_per_frame", False))        # the model's switch: one radar set per camera frame (batch["radar_seq"])
     out = []
     for split, names in ((cfg.train_split, cfg.train_scenes), (cfg.val_split, cfg.val_scenes)):
         if cfg.feature_cache:
@@ -292,6 +294,8 @@ def to_device(batch, device, non_blocking=False):
             out[k] = v.to(device, non_blocking=non_blocking)
         elif k == "radar":
             out[k] = {a: b.to(device, non_blocking=non_blocking) for a, b in v.items()}
+        elif k == "radar_seq":
+            out[k] = [{a: b.to(device, non_blocking=non_blocking) for a, b in r.items()} for r in v]
         elif k == "steps":
             out[k] = [[tuple(t.to(device, non_blocking=non_blocking) for t in s) for s in fr] for fr in v]
         else:

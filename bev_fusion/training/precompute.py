@@ -27,6 +27,8 @@ radar_hits the cells with at least one radar detection of this frame's compensat
 radar_static the same cells, each weighted by how static its detections are by the measured Doppler (mean of exp(-(vr / v_static)^2),
            vr ego-compensated, so a return of the static world has vr ~ 0): the write mask of the radar memory with ModelConfig.
            rad_static_gate - only the static world is remembered, a moving car (not in the same place next frame) is not.
+           `pre.radar_mask(name, radar, B)` makes either map for ONE radar set: the batch's, or, with ModelConfig.radar_per_frame (t25), each
+           camera frame's own sweep of batch["radar_seq"] (the model calls it per frame; the batch keeps no per-frame maps).
 Run the self-test: python training/precompute.py
 """
 import math
@@ -147,6 +149,14 @@ class Precompute:
             fans.append(_FANS[key])
         return torch.stack(fans)[:, None].to(batch["K"].device)
 
+    def radar_mask(self, name, radar, B):
+        """(B, 1, X, Y): the write mask `name` ('radar_hits' or 'radar_static') of ONE radar set (the batch's, or one frame's own sweep of radar_seq, t25)"""
+        if name == "radar_hits":
+            return radar_hits(radar, B, self.grid, self.radar_dilate)
+        if name == "radar_static":
+            return radar_static(radar, B, self.grid, self.radar_static_vr, self.radar_dilate)
+        raise ValueError(f"radar_mask: {name!r} is not 'radar_hits' or 'radar_static'")
+
     def __call__(self, batch, keys=MAPS):
         """adds the requested maps (default all) to `batch` and returns it; a key already present is kept. Every map is in the
         batch's own frame: the rig maps (camera, fan) are mirrored for flipped samples, the radar hits come from points that the
@@ -162,10 +172,9 @@ class Precompute:
             batch["vis_radar"] = mirror(self.radar_fan(batch))
         if "vis_fusion" in need and "vis_fusion" not in batch:
             batch["vis_fusion"] = batch["vis_cam"] * batch["vis_radar"]
-        if "radar_hits" in need and "radar_hits" not in batch and "radar" in batch:
-            batch["radar_hits"] = radar_hits(batch["radar"], B, self.grid, self.radar_dilate).to(dev)
-        if "radar_static" in need and "radar_static" not in batch and "radar" in batch:
-            batch["radar_static"] = radar_static(batch["radar"], B, self.grid, self.radar_static_vr, self.radar_dilate).to(dev)
+        for name in ("radar_hits", "radar_static"):
+            if name in need and name not in batch and "radar" in batch:
+                batch[name] = self.radar_mask(name, batch["radar"], B).to(dev)
         return batch
 
 
@@ -228,6 +237,12 @@ def _selftest():
     sm = radar_static(mix, B, grid, 1.0, 0)
     assert abs(float(sm[0, 0, ix(10.2), iy(0.3)]) - (1 + math.exp(-9)) / 2) < 1e-6, "the mean of the detections in a cell"
     assert abs(float(radar_static(mix, B, grid, 4.0, 0)[0, 0, ix(10.2), iy(0.3)]) - (math.exp(-0) + math.exp(-(3 / 4) ** 2)) / 2) < 1e-6
+    assert torch.equal(pre.radar_mask("radar_hits", batch["radar"], B), hits) and torch.equal(pre.radar_mask("radar_static", batch["radar"], B), st), "radar_mask = the batch maps"
+    try:
+        pre.radar_mask("radar_hit", batch["radar"], B)
+        raise AssertionError("an unknown mask name must be refused")
+    except ValueError:
+        pass
     nan = {"x": torch.tensor([10.2]), "y": torch.tensor([0.3]), "b": torch.tensor([0]), "vr": torch.tensor([float("nan")])}
     assert torch.isfinite(radar_static(nan, B, grid, 1.0, 1)).all() and radar_static(nan, B, grid, 1.0, 1).sum() == 0, "a NaN Doppler is not static"
     kept = pre(dict(batch, vis_cam=torch.zeros(B, 1, grid.nx, grid.ny)))

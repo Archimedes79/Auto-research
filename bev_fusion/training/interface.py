@@ -20,6 +20,8 @@ INPUTS = {
     "v": (True, "(B,) ego speed at the keyframe, m/s"),
     "omega": (True, "(B,) ego yaw rate at the keyframe, rad/s"),
     "radar": (True, "dict of (N,) tensors: detections of 0.5 s of sweeps of all radars compensated to now, with 'b' = the sample index"),
+    "radar_seq": (False, "radar_per_frame (t25): list of F radar dicts as 'radar', one per camera frame at THAT frame's camera time in that frame's ego frame (0 = now = 'radar'); "
+                         "read with ModelConfig.radar_per_frame, otherwise ignored"),
     "img": (False, "(B, F, 3, H, W) images for the live camera heads; the cached chain carries a (B, F, 1) placeholder and reads prob / ctx"),
     "cam_vec": (False, "(B, F, 27) camera vector of the DualBEV depth net; live camera heads only"),
     "prob": (False, "(B, F, D, h, w) cached depth probabilities of the frozen image heads (camera_features dualbev / dual)"),
@@ -85,6 +87,19 @@ def _batch_size(batch):
     return None, None
 
 
+def _radar_problems(name, rad, B):
+    """the problems of one radar dict (batch["radar"], or one set of batch["radar_seq"]): sample index, fields, field lengths"""
+    errs = []
+    if "b" in rad and len(rad["b"]) and int(rad["b"].max()) >= B:
+        errs.append(f"{name}: sample index {int(rad['b'].max())} >= B = {B}")
+    if rad:
+        errs += [f"{name}: missing field {f!r} ({m})" for f, m in RADAR_FIELDS.items() if f not in rad]
+        n = {len(v) for v in rad.values() if torch.is_tensor(v)}
+        if len(n) > 1:
+            errs.append(f"{name}: fields of different lengths {sorted(n)}")
+    return errs
+
+
 def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=False):
     """the input contract: required keys present, unknown keys named, shapes consistent in B and F, tensors finite"""
     errs = [f"missing input {k!r}: {m}" for k, (req, m) in INPUTS.items() if req and k not in batch]
@@ -104,14 +119,12 @@ def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=Fa
                 errs.append(f"{k}: leading shape {tuple(batch[k].shape[:2])} != (B, 1) = {(B, 1)}")
         if "steps" in batch and len(batch["steps"]) != Fn:
             errs.append(f"steps: {len(batch['steps'])} frames != F = {Fn}")
-        rad = batch.get("radar", {})
-        if "b" in rad and len(rad["b"]) and int(rad["b"].max()) >= B:
-            errs.append(f"radar: sample index {int(rad['b'].max())} >= B = {B}")
-        if rad:
-            errs += [f"radar: missing field {f!r} ({m})" for f, m in RADAR_FIELDS.items() if f not in rad]
-            n = {len(v) for v in rad.values() if torch.is_tensor(v)}
-            if len(n) > 1:
-                errs.append(f"radar: fields of different lengths {sorted(n)}")
+        errs += _radar_problems("radar", batch.get("radar", {}), B)
+        if "radar_seq" in batch:
+            if len(batch["radar_seq"]) != Fn:
+                errs.append(f"radar_seq: {len(batch['radar_seq'])} radar sets != F = {Fn}")
+            for k, rad in enumerate(batch["radar_seq"]):
+                errs += _radar_problems(f"radar_seq[{k}]", rad, B)
     for k, v in batch.items():
         if torch.is_tensor(v) and v.is_floating_point() and not torch.isfinite(v).all():
             errs.append(f"{k}: not finite")
@@ -159,6 +172,9 @@ def _selftest():
     e = check_inputs(dict(batch, radar={k: v for k, v in radar.items() if k != "vr"}))
     assert any("'vr'" in x for x in e), e
     assert any("lengths" in x for x in check_inputs(dict(batch, radar=dict(radar, rcs=z(4)))))
+    assert check_inputs(dict(batch, radar_seq=[radar] * Fn)) == []                               # radar_per_frame: one set per camera frame
+    e = check_inputs(dict(batch, radar_seq=[radar, {k: v for k, v in radar.items() if k != "vr"}]))
+    assert any("2 radar sets != F = 3" in x for x in e) and any("radar_seq[1]: missing field 'vr'" in x for x in e), e
     bad = dict(batch, v=z(B + 1), extra=1)
     del bad["omega"]
     e = check_inputs(bad)

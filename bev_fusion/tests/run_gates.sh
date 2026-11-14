@@ -88,6 +88,7 @@ run "precompute"        "$PY" training/precompute.py               # layer 1: ca
 run "feature store"     "$PY" training/feature_cache.py shards-selftest         # atomic shard round trip, feature-size guard, a cut build is refused and rebuilt; CPU, 8 s
 run "camera off"        "$PY" training/feature_cache.py camera-off-selftest     # camera_off on the cached model: zero camera BEV; CPU, 8 s
 run "stream temporal"  "$PY" tests/test_stream_temporal.py         # cam_buffer pair / recurrent (t21): stream = batch, buffer rules, gradient through the carry, window unchanged, 8 mutants; CPU, about 2 min, no data
+run "radar recursive"  "$PY" tests/test_radar_recursive.py          # radar_per_frame (t25): one sweep per step, radar past in the feature state: stream = batch, identity start, gradient, per-frame mask, plumbing, 9 mutants, t25 configs; CPU, about 3 min, no data
 run "stream tools"     "$PY" tests/test_stream_tools.py              # the promoted t21 diagnostics (stream_drift, stream_timing, arm_guards): drift smoke on nuScenes mini, timing smoke, guards table; CPU, about 30 s
 run "student encoder"  "$PY" tests/test_student_encoder.py          # t22 stage A: the student's contract, H8 geometry, gradients, distillation loss, CLI stop / resume on a synthetic tree; CPU, about 12 s, no data
 run "student chain"    "$PY" tests/test_student_chain.py            # t22 stage B: camera_student in the chain: off = old code, frame-0 splice, student_side, trainable / frozen student, anchor, refusals; CPU, about 30 s, no data

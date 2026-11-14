@@ -10,6 +10,10 @@ One sample = keyframe k (it needs a previous and a next keyframe, for the GT at 
   optionally, its measured radial motion vr * u * age (the only object motion a radar measures); per detection:
   b (sample index after collation), x, y (m), r (range from its sensor), psi (ray direction in the current frame), vr
   (ego-compensated radial velocity, m/s), rcs, dt (age, s), sensor (0..4) - the format of training/radar_bev.py
+  radar_per_frame (t25, default off): item["radar_seq"] = the same set for EVERY camera frame of the window (index 0 = the current
+  frame = item["radar"]), each made at THAT frame's camera time and moved into that frame's ego frame; with radar_window 0.09 the
+  newest sweep of each radar (about 54 detections in the grid per keyframe against 300 for 0.5 s): the radar input of a network that
+  gets one frame and one sweep per step
 - GT: `GtGenerator.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
   float16 npz in a cache folder of this project (derived data, not in git; written atomically, a broken file is rebuilt)
 - meta: tokens, timestamps, the ego speed and yaw rate of the last camera frame
@@ -93,11 +97,11 @@ def available_scenes(nusc, split):
 
 class FrontRadarDataset(torch.utils.data.Dataset):
     def __init__(self, dataroot, version, scenes=None, grid=None, n_cam=3, cam_stride=2, radar_window=0.5,
-                 radar_doppler_shift=True, with_gt=True, gt_ss=4, cache_dir=None, nusc=None):
+                 radar_doppler_shift=True, with_gt=True, gt_ss=4, cache_dir=None, nusc=None, radar_per_frame=False):
         self.gt = NuScenesGT(dataroot, version, nusc)
         self.nusc, self.root = self.gt.nusc, dataroot
         self.grid = grid or Grid()
-        self.n_cam, self.cam_stride, self.radar_window = n_cam, cam_stride, radar_window
+        self.n_cam, self.cam_stride, self.radar_window, self.radar_per_frame = n_cam, cam_stride, radar_window, radar_per_frame
         self.doppler_shift, self.with_gt, self.gt_ss, self.cache_dir = radar_doppler_shift, with_gt, gt_ss, cache_dir
         scenes = set(scenes) if scenes is not None else {s["token"] for s in self.nusc.scene}
         self.samples = [s["token"] for s in self.nusc.sample if s["scene_token"] in scenes and s["prev"] and s["next"]]
@@ -238,15 +242,25 @@ class FrontRadarDataset(torch.utils.data.Dataset):
                       if sample[key] else []) for key in ("prev", "next")}   # the ego steps from now to the neighbouring keyframes, from the poses
         item = {"token": token, "frames": frames, "radar": radar, "radar_poses": self._radar_poses(sample), "ida": self.ida,
                 "gap_steps": gap, "ego": {"v": last[-1][1], "omega": last[-1][2]}, "timestamp": cur["timestamp"]}
+        if self.radar_per_frame:                       # the same radar set at every frame's own camera time (frame 0 = the set above)
+            item["radar_seq"] = [radar] + [self._radar(sample, self.nusc.get("sample_data", f["token"])) for f in frames[1:]]
         if self.with_gt:
             item["gt"] = self._gt(token)
         return item
 
 
+def stack_radar(rads):
+    """the radar sets of the samples of a batch (dicts of (N,) tensors) as one dict, with the sample index b"""
+    rad = {k: torch.cat([r[k] for r in rads]) for k in rads[0]}
+    rad["b"] = torch.cat([torch.full((len(r["x"]),), b, dtype=torch.long) for b, r in enumerate(rads)])
+    return rad
+
+
 def collate(items):
     """Batch: images (B, F, 3, H, W) and per-frame rig tensors (B, F, ...); per frame the ego steps as tensors (B,) per
     step (the same number of steps for every sample of a frame index: frames with fewer steps - the scene start -
-    are padded with zero steps); radar detections concatenated with a sample index b; GT kept as a list."""
+    are padded with zero steps); radar detections concatenated with a sample index b (radar_per_frame: also one such set per
+    camera frame, "radar_seq"); GT kept as a list."""
     B, Fn = len(items), len(items[0]["frames"])
     out = {"img": torch.stack([torch.stack([f["img"] for f in it["frames"]]) for it in items]),
            "K": torch.stack([torch.stack([f["K"] for f in it["frames"]]) for it in items]),
@@ -266,15 +280,45 @@ def collate(items):
     out["steps"] = steps
     out["steps_raw"] = [[f["steps"] for f in it["frames"]] for it in items]      # per sample, python floats
     out["gap_steps"] = [it["gap_steps"] for it in items]                         # per sample {"prev": steps, "next": steps}, python floats
-    rad = {k: torch.cat([it["radar"][k] for it in items]) for k in items[0]["radar"]}
-    rad["b"] = torch.cat([torch.full((len(it["radar"]["x"]),), b, dtype=torch.long) for b, it in enumerate(items)])
-    out["radar"] = rad
+    out["radar"] = stack_radar([it["radar"] for it in items])
+    if "radar_seq" in items[0]:                                                  # radar_per_frame: one stacked set per camera frame, 0 = now
+        out["radar_seq"] = [stack_radar([it["radar_seq"][k] for it in items]) for k in range(Fn)]
     if "gt" in items[0]:
         out["gt"] = [it["gt"] for it in items]
     return out
 
 
 # ----------------------------------------------------------------------------------------------- self-test
+def _selftest_per_frame(ds, root):
+    """radar_per_frame (t25): one set per camera frame at that frame's own camera time; radar_window 0.09 = the newest sweep of each radar.
+    ds: a mini dataset (its nusc is shared). -> the mean number of one-sweep detections inside the grid per keyframe"""
+    kw = dict(grid=ds.grid, n_cam=3, cam_stride=2, with_gt=False, radar_window=0.09, nusc=ds.nusc)
+    flat, per = FrontRadarDataset(root, "v1.0-mini", **kw), FrontRadarDataset(root, "v1.0-mini", radar_per_frame=True, **kw)
+    sq = per[10]
+    assert len(sq["radar_seq"]) == 3 and sq["radar_seq"][0] is sq["radar"], "frame 0 of radar_seq is the item's radar"
+    assert all(torch.equal(sq["radar"][k], flat[10]["radar"][k]) for k in sq["radar"]), "radar_seq[0] = the one-sweep radar of the same sample"
+    for k, r in enumerate(sq["radar_seq"]):
+        t_k = sq["frames"][k]["timestamp"]
+        assert 0 <= float(r["dt"].min()) and float(r["dt"].max()) <= 0.09 + 1e-6, (k, float(r["dt"].max()))
+        for si, ch in enumerate(RADARS):                              # the newest sweep of this radar not after THIS frame's time
+            sd = ds.nusc.get("sample_data", ds.nusc.get("sample", ds.samples[10])["data"][ch])
+            while sd["next"] and ds.nusc.get("sample_data", sd["next"])["timestamp"] <= t_k:
+                sd = ds.nusc.get("sample_data", sd["next"])
+            while sd["timestamp"] > t_k:
+                sd = ds.nusc.get("sample_data", sd["prev"])
+            if (r["sensor"] == si).any():
+                assert abs(float(r["dt"][r["sensor"] == si].min()) - (t_k - sd["timestamp"]) * 1e-6) < 1e-6, (k, ch)
+    assert not torch.equal(sq["radar_seq"][0]["x"], sq["radar_seq"][2]["x"]), "the oldest frame's sweeps are other detections"
+    g, n = ds.grid, []                                                # the points inside the grid per keyframe (records/radar_sweep_density_2026-11-13.txt: 54 on mini)
+    for i in range(0, len(flat), 8):
+        r = flat[i]["radar"]
+        n.append(int(((r["x"] >= g.x_min) & (r["x"] < g.x_max) & (r["y"] >= g.y_min) & (r["y"] < g.y_max)).sum()))
+    assert 40 < np.mean(n) < 70, f"{np.mean(n):.1f} points in the grid per keyframe with one sweep"
+    bs = collate([per[10], per[11]])
+    assert len(bs["radar_seq"]) == 3 and int(bs["radar_seq"][2]["b"].max()) == 1 and all(torch.equal(bs["radar_seq"][0][k], bs["radar"][k]) for k in bs["radar"])
+    return float(np.mean(n))
+
+
 def _selftest():
     root = os.path.expanduser("~/data/nuscenes")
     ds = FrontRadarDataset(root, "v1.0-mini", grid=Grid(), n_cam=3, cam_stride=2, with_gt=True)
@@ -340,11 +384,13 @@ def _selftest():
     b = collate([ds[10], ds[11]])
     assert b["img"].shape == (2, 3, 3, 256, 704) and b["K"].shape == (2, 3, 3, 3)
     assert len(b["steps"]) == 3 and len(b["steps"][2]) == 4 and b["steps"][2][0][0].shape == (2,)
-    assert int(b["radar"]["b"].max()) == 1 and len(b["radar"]["b"]) == len(b["radar"]["x"])
+    assert int(b["radar"]["b"].max()) == 1 and len(b["radar"]["b"]) == len(b["radar"]["x"]) and "radar_seq" not in b and "radar_seq" not in it
+    n_grid = _selftest_per_frame(ds, root)
     print(f"nuscenes_dataset selftest ok: {len(ds)} mini samples; 3 camera frames 0 / {dts[1]:.3f} / {dts[2]:.3f} s old "
           f"with 0 / 2 / 4 ego steps; {len(rad['x'])} radar detections from {len(rad['sensor'].unique())} radars, age <= "
           f"{float(rad['dt'].max()):.3f} s; pose transform = steps chain within {math.hypot(c[0] - q[0], c[1] - q[1]):.3f} m; "
-          f"GT cur / prev / next; collation")
+          f"GT cur / prev / next; collation; radar_per_frame: one set per camera frame, frame 0 = the radar_window 0.09 set, "
+          f"{n_grid:.1f} points in the grid per keyframe")
 
 
 if __name__ == "__main__":
