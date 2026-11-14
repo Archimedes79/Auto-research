@@ -212,6 +212,22 @@ def main():
         except SystemExit:
             pass
         check(sorted(f for f in os.listdir(os.path.join(tmp, "keep")) if f.startswith("ckpt_")) == ["ckpt_00000007.pt"], "stop: the checkpoint of the stop is the only one left with keep 1")
+        try:                                             # keep_steps: a checkpoint every 2 steps, keep 1, steps 4 and 8 protected, stop at step 11 -> 4, 8 and the newest (11) are left
+            run(tmp, "keepsteps", stop_check=stop_after(11), save_every=2, keep=1, keep_steps=(4, 8))
+        except SystemExit:
+            pass
+        check(sorted(f for f in os.listdir(os.path.join(tmp, "keepsteps")) if f.startswith("ckpt_")) == ["ckpt_00000004.pt", "ckpt_00000008.pt", "ckpt_00000011.pt"], "keep_steps: the listed steps' checkpoints stay next to the newest `keep`, nothing else")
+        run(tmp, "keepsteps", save_every=2, keep=1, keep_steps=(4, 8))      # the resume finishes the run: the final weights and the listed steps are what is left
+        check(sorted(f for f in os.listdir(os.path.join(tmp, "keepsteps")) if f.startswith("ckpt_")) == ["ckpt_00000004.pt", "ckpt_00000008.pt", "ckpt_00000012.pt"], "keep_steps: a resumed, finished run keeps the final checkpoint and the listed steps")
+        run(tmp, "keepsteps", save_every=2, keep=1)                          # keep_steps is free on a resume (RESUME_FREE): a resume of the finished run with another list is allowed
+        check("keep_steps" in Config.RESUME_FREE, "keep_steps: a field a resume may change")
+        for bad in ((5,), (14,), (0,), (4.0,)):          # a step that is never saved (not a multiple of save_every, beyond steps, zero, not an integer) is refused at the start
+            try:
+                run(tmp, "keepbad", save_every=2, keep_steps=bad)
+                raise AssertionError(f"keep_steps {bad} must be refused")
+            except ValueError:
+                pass
+        print("  ok  keep_steps: 5 (not a multiple of save_every), 14 (above steps), 0 and 4.0 (not a step) are refused at the start")
         events = []
 
         class Count(Hooks):
