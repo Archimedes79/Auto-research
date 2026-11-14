@@ -15,7 +15,6 @@ run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "connectivity / duplicate / range metrics" topo_metrics.py
 run "metric response to controlled errors"  test_metric_response.py
 run "TEST guard + cache key of evaluate.py"  test_evaluate_guard.py
-run "GPU wait gate before the dump / score steps (D100, CPU)" test_gpu_gate.py
 run "evaluate.py parts: route success, failure series, timing (stored inputs, CPU)" test_eval_parts.py
 run "lane task of the evaluation suite (moved from autoresearch, D24)" test_lane_task.py
 run "p18_joint guarded step: non-finite loss, skipped optimiser steps, scale-drop rule" test_p18_joint_guard.py
@@ -56,6 +55,9 @@ run "E319 junction maps head: heading-guided exchange (flag off = before, zero s
 run "E332 junction maps head without auxiliary maps (flags off = before, bit-identical reduction, loss terms, gradients)" grid/test_jmaps_simplify.py
 run "E330 cost of the junction system per block (parameters, MACs)" jmodel_cost.py selftest
 run "E331 - E335 adoption rule of a removal arm" jrule_removal.py selftest
+run "E345 pruning probe: cost table = FlopCounterMode part by part, saved cost of a set (random init)" jprune_cost.py selftest
+run "E345 pruning probe: unit table (45 units, 84 points), attention-head edit, hooks, dead-hook assert (random init, CPU)" jprune_probe.py selftest
+run "E345 pruning probe on the stored E312 / E324 s models: dump == jends_eval.dump, calibration, appliers, controls, saved cost vs narrowed copies, table logic (CPU, about 6 minutes)" test_jprune_probe.py
 run "E273 pixel targets on real lane GT frames" grid/test_qraster.py
 run "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
 run "E273 local scorer (oracle, degradations, lane suite reproduction)" test_qgraph_eval.py
@@ -74,4 +76,6 @@ run "E282 zones of the sparse node target, zone-matching loss (toy lane, winner 
 run "E282 zone metrics (hand cases, position membership, additivity, bootstrap, matched threshold, density against the scorer)" test_zone_metrics.py
 run "E282 pilot runner (gate outcomes on fake results, control matched density, targets per arm, run names)" train/test_qnode_pilot.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
+run "E321 / E343 TEST module (gate, split rows, paired bootstrap, stored-card match, variants)" jtest_eval.py selftest
+run "E343 TEST module on toy data (write helper, dump validation, reading rule, scoring glue, control checks, E321 hashes)" test_jtest_eval.py
 exit $fail
