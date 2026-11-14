@@ -215,14 +215,26 @@ def score_target(a, run_dir):
     return name, spec or DEFAULT_SPEC, tag
 
 
+def check_wire(a):
+    """-> (wire, wire_run) after the option checks of `--wire` / `--wire-run` (E325): twin / head need --snap and none of --attach, --attach-r, --snap-all, --snap-guard (the head was not trained on attached ends, the others
+    override a choice); `--wire head` needs `--wire-run` and only it takes it"""
+    wire, wire_run = getattr(a, "wire", None), getattr(a, "wire_run", None)
+    assert wire in (None, "twin", "head"), f"--wire {wire!r}: twin or head"
+    assert wire is None or (bool(getattr(a, "snap", False)) and not any(getattr(a, k, False) for k in ("snap_all", "snap_guard", "attach")) and getattr(a, "attach_r", None) is None), "--wire twin / head needs --snap and none of --attach, --attach-r, --snap-all, --snap-guard"
+    assert (wire == "head") == bool(wire_run), "--wire head needs --wire-run <run of the head> (and --wire-run only goes with --wire head)"
+    return wire, wire_run
+
+
 def cmd_score(a):
     import torch
     import qgraph_eval as QE
     import qgraph_readout as QR
     run_dir = os.path.join(ROOT, "runs", a.run)
     name, spec_s, tag = score_target(a, run_dir)                                                                        # before anything long runs
-    wire = getattr(a, "wire", None)
-    assert wire in (None, "twin") and (wire is None or (bool(getattr(a, "snap", False)) and not getattr(a, "snap_all", False) and not getattr(a, "snap_guard", False) and getattr(a, "attach_r", None) is None)), "--wire twin needs --snap, no --attach-r, no --snap-all / --snap-guard"
+    wire, wire_run = check_wire(a)
+    if wire == "head":
+        import jwire_head as JH                                                                                         # E325: the learned head `runs/<run>/model.pt`, or `<run>:<file>` for another checkpoint of the run (model_h1.pt: a second head seed)
+        head = JH.load_wire(*wire_run.partition(":")[::2])
     base_pt = a.base or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")
     mine = torch.load(os.path.join(run_dir, "model.pt"), map_location="cpu")["state"]
     base = torch.load(base_pt, map_location="cpu")["state"]
@@ -265,6 +277,10 @@ def cmd_score(a):
         wc = None
         if wire == "twin":                                                                                                      # E325 arm t: the zero-parameter twin chooses the pieces; must reproduce the card of record bit for bit
             wc = JW.twin_choice(JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, cover_pos())[1], pairs, WIRE_POS, WIRE_ANG)
+        elif wire == "head":                                                                                                    # E325 arm w: the learned head chooses the pieces (its features never read the GT)
+            keep_, ends_ = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, cover_pos())
+            attrs_ = JH.piece_attrs(graph.lines, bk["kind"], bk["piece_nodes"], bk["piece_links"], np.asarray(pred["nodes"]["e"], float).reshape(-1), np.asarray(pred["links"]["p"], float).reshape(-1), keep_)
+            wc = JH.wire_choice_head(head, ends_, attrs_, pairs, [(float(e["kp_p"][i]), float(e["kp_p"][k + j])) for i, j in zip(ia, ib)], WIRE_POS)
         raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, wire_choice=wc, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), wire_pos=attach_r)
         n_curves += n_c
         n_wired += n_w
@@ -291,6 +307,7 @@ def cmd_score(a):
     out["spec"] = spec_s
     out["tag"] = tag
     out["wire"] = wire
+    out["wire_run"] = wire_run
     # the card of record (`ends_card.json`) is the unsnapped read-out at the threshold 0.5 only: another threshold or a snapped read-out gets its own file (the E308 incident of 2026-11-12: a scratch sweep emptied the card of record)
     # the file name is `card_name(a)` (the chord control has its own file too: it overwrote the card of the learned scales on 2026-11-12)
     json.dump(out, open(os.path.join(run_dir, name), "w"), indent=1)
@@ -398,6 +415,17 @@ def selftest():
         assert refused(NS(thr=0.1, snap=True, full="x.pkl", base="b.pt", tag="a")), "an existing tagged counts file must not be overwritten"
         open(os.path.join(d, "ends_card_snap_thr0.1.json"), "w").write("{}")
         assert not refused(NS(thr=0.1, snap=True)), "the untagged re-scoring of the run's own graph keeps overwriting its card (as before E292)"
+    # E325: the option checks of --wire / --wire-run
+    from types import SimpleNamespace as NS2
+    for ok_opt in (NS2(), NS2(wire="twin", snap=True), NS2(wire="head", snap=True, wire_run="e325_w_s0")):
+        check_wire(ok_opt)
+    for bad_opt in (NS2(wire="twin"), NS2(wire="head", snap=True), NS2(wire="twin", snap=True, wire_run="x"), NS2(wire="head", snap=True, wire_run="x", attach=True), NS2(wire="head", snap=True, wire_run="x", attach_r=1.5),
+                    NS2(wire="twin", snap=True, snap_all=True), NS2(wire="twin", snap=True, snap_guard=True), NS2(wire="soft", snap=True), NS2(snap=True, wire_run="x")):
+        try:
+            check_wire(bad_opt)
+        except AssertionError:
+            continue
+        raise AssertionError(f"accepted {bad_opt}")
     print("qends_eval selftest ok")
 
 
@@ -414,7 +442,8 @@ if __name__ == "__main__":
     s.add_argument("--full", default=None, help="the full prediction dump of the head whose graph is delivered (default: B's, temp/e276/predfull_e273_p_s<seed>.pkl); E292: the dump of B'; needs --base and --tag")
     s.add_argument("--base", default=None, help="the checkpoint of the same head (default runs/e273_p_s<seed>/model.pt); needs --full")
     s.add_argument("--spec", default=None, help="the read-out of the delivered graph (qgraph_readout spec; default close:1.5@0.5, the hard close-node step; E292: plain@0.5 for a head with the layer); needs --tag")
-    s.add_argument("--wire", default=None, choices=(None, "twin"), help="E325: choose the wired pieces through add_connectors(wire_choice=...): twin = the zero-parameter twin of the nearest-piece rule (needs --snap and --tag); must reproduce the E312 cards")
+    s.add_argument("--wire", default=None, choices=(None, "twin", "head"), help="E325: choose the wired pieces through add_connectors(wire_choice=...): twin = the zero-parameter twin of the nearest-piece rule, head = the learned head of --wire-run (needs --snap and --tag); the twin must reproduce the E312 cards")
+    s.add_argument("--wire-run", default=None, help="E325: the run of the head for --wire head (runs/<name>/model.pt, written by jwire_train.py run)")
     s.add_argument("--tag", default=None, help="E292: names the card (ends_card_<tag>_...): mandatory with --full / --base / --spec; a tagged card is never overwritten")
     s.add_argument("--chord", action="store_true", help="E303: use the chord tangent for the connectors even when the dump carries learned handle scales (the control)")
     s.add_argument("--snap", action="store_true", help="E311: draw the connectors from the end of the delivered piece wired to the entry to the start of the piece wired to the exit (the keypoints only decide which entry joins which exit); the card goes to ends_card_snap_thr<t>.json")
