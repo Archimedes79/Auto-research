@@ -3,7 +3,7 @@
  - `nopaint` is the flag-off head minus the 0.5 m branch: the state of a flag-off head loads into it with only `m05` / `head05` unexpected, and the 1 m outputs and features are then bit-identical; the parameter count drops by exactly those two blocks;
  - the loss: without `j05` the paint term is gone (and only it), with `skip = ("zone",)` the zone / core term is gone (and only it);
  - the gradient: every tensor of a reduced head gets a gradient, the zone / core output channels get none under `nozone`, the heat and heading channels do;
- - the pair head runs on the reduced head with `evidence=False` and the pair loss reaches the maps head (the E305 `--e2e` path); with the evidence on it fails loudly (it reads the zone, core and paint maps);
+ - the pair head runs on the reduced head with `evidence=False` and the pair loss reaches the maps head (the E305 `--e2e` path); with the evidence on and the default `paint_ev=True` it fails loudly; `paint_ev=False` (E341, set by `JEndModel` from a `nopaint` ctx) reads the four evidence inputs that need no paint map and the pair loss reaches the zone / core channels through them (it reads the zone, core and paint maps);
  - the cost (parameters, MACs, batch 1) of the head variants is printed: what each removal saves.
 Run: python test_jmaps_simplify.py   (`_py14.sh grid/test_jmaps_simplify.py`)"""
 import os
@@ -81,9 +81,23 @@ def main():
         raise AssertionError("evidence on a head without the paint maps must fail")
     except KeyError:
         pass
+    # E341: the evidence of four inputs (no paint maxima) on a head without the 0.5 m branch: the pair loss reaches the zone / core channels through it, and JEndModel builds that head from the ctx of the maps
+    m = TD.build("dil+nopaint")
+    out = JE.JEnds(d=64, order=True, evidence=True, f1=64, paint_ev=False)(m(P), P)
+    (out["logit"].sum() + out["kp_pos"].sum()).backward()
+    assert float(m.head1.weight.grad[:2].abs().sum()) > 0, "the pair loss must reach the zone / core channels through the four-input evidence"
+    import jends_train as JT
+    for ctx_, nin_ in (("dil", 152), ("dil+nopaint", 150)):
+        assert JT.JEndModel(dict(d=64, ctx=ctx_), order=True, evidence=True).je.pair[0].in_features == nin_, ctx_
+    try:
+        JT.JEndModel(dict(d=64, ctx="dil+nopaint+nozone"), order=True, evidence=True)
+        refused = False
+    except AssertionError:
+        refused = True
+    assert refused, "evidence on a nozone head must be refused"
     J2 = J.JModel(ctx="dil+nopaint+nozone")
     assert "j05" not in J2.jm(P) and sum(p.numel() for p in J2.jm.parameters()) < sum(p.numel() for p in J.JModel(ctx="dil").jm.parameters())
-    print("pair head (evidence off) on the reduced head: the pair loss reaches the maps head; evidence on fails loudly: ok")
+    print("pair head (evidence off) on the reduced head: the pair loss reaches the maps head; JEnds(paint_ev=True) on it fails loudly, JEnds(paint_ev=False) / JEndModel on a nopaint ctx read the four-input evidence (150 inputs), nozone with evidence is refused: ok")
     # 6. the cost of the variants
     P1 = TD.mk_P(B=1)
     base = gmac(TD.build("dil"), P1)

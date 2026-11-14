@@ -1,6 +1,6 @@
 """The junction pair head v2 (E287, D82): which entry joins which exit, read from the junction maps of E286 (`jmaps.py`), with the order rule and the painted / lane evidence along the candidate curve.
 
-    JEnds(d=64, order=True, evidence=True)(jout, P, gt=None) -> dict    jout = `JModel` output (j1, j05, f1), P = the pyramid dict (centre1 for the lane heat); gt = the batch's GT ends in training
+    JEnds(d=64, order=True, evidence=True, paint_ev=True)(jout, P, gt=None) -> dict    jout = `JModel` output (j1, j05, f1), P = the pyramid dict (centre1 for the lane heat); gt = the batch's GT ends in training
     jends_loss(out, batch) -> (loss, info)                              pair BCE + dual softmax with a 'none' entry (as `qendnet`) + the soft crossing penalty (order rule)
     The `out` dict carries the keys of `qendnet.EndHead` (heat, idx, valid, kp_pos, kp_dir, kp_p, logit, allowed), so `qendnet.end_counts` / `match_keypoints` and the read-out of `evaluation/qends_eval.py` work unchanged.
 
@@ -137,12 +137,12 @@ class Attach(nn.Module):
 
 
 class JEnds(nn.Module):
-    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, ntok=0, unc=False, attach=False):
+    def __init__(self, d=64, hid=64, k=K, order=True, evidence=True, f1=64, scales=False, ntok=0, unc=False, attach=False, paint_ev=True):
         super().__init__()
-        self.k, self.order, self.evidence, self.scales, self.ntok, self.unc = k, order, evidence, scales, ntok, unc
+        self.k, self.order, self.evidence, self.scales, self.ntok, self.unc, self.paint_ev = k, order, evidence, scales, ntok, unc, paint_ev   # E341: paint_ev = False: no 0.5 m paint maps (stop line, crossing) among the evidence, 4 of the 6 inputs
         self.kp = nn.Linear(f1 + 6 + ntok, d)
         self.blocks = nn.ModuleList([SetBlock(d), SetBlock(d)])
-        nin = 2 * d + NG + (NEV if evidence else 0) + (NRK if order else 0) + (2 if unc else 0)                  # E318: + the position scales (log sigma) of the entry and the exit keypoint
+        nin = 2 * d + NG + ((NEV if paint_ev else NEV - 2) if evidence else 0) + (NRK if order else 0) + (2 if unc else 0)                  # E318: + the position scales (log sigma) of the entry and the exit keypoint
         self.pair = nn.Sequential(nn.Linear(nin, hid), nn.GELU(), nn.Linear(hid, hid), nn.GELU(), nn.Linear(hid, 1))
         if scales:                                                                                           # E303: the two handle scales of the delivered curve, in chords (0.05 .. 1.25 like the fit grid)
             self.scale = nn.Sequential(nn.Linear(nin, 32), nn.GELU(), nn.Linear(32, 2))
@@ -223,9 +223,11 @@ class JEnds(nn.Module):
             pts = _hermite(pa[:, :, None, :].expand_as(ch), ta_, pb[:, None, :, :].expand_as(ch), tb_)             # (B, K, K, 12, 2)
             lane = _sample(P["centre1"][:, :1].float().sigmoid(), pts)[..., 0]
             zc = _sample(jout["j1"][:, :2].float().sigmoid(), pts)
-            pnt = _sample(jout["j05"].float().sigmoid(), pts)
-            ev = torch.stack([lane.mean(-1), lane.min(-1)[0], zc[..., 0].mean(-1), zc[..., 1].mean(-1), pnt[..., 0].max(-1)[0], pnt[..., 1].max(-1)[0]], -1)
-            feats.append(ev)
+            ev = [lane.mean(-1), lane.min(-1)[0], zc[..., 0].mean(-1), zc[..., 1].mean(-1)]
+            if self.paint_ev:                                                                                # E341: the two paint maxima need the 0.5 m branch
+                pnt = _sample(jout["j05"].float().sigmoid(), pts)
+                ev += [pnt[..., 0].max(-1)[0], pnt[..., 1].max(-1)[0]]
+            feats.append(torch.stack(ev, -1))
         ga = ra = gb = rb = None
         if self.order:
             rk, ga, ra, gb, rb = self.rank_matrix(pos, D, valid & real if gt is not None else valid)         # groups and ranks from the real peaks only: the same distribution in training and at evaluation
@@ -443,16 +445,21 @@ def _selftest():
     ext = torch.tensor([[[-1.75, 8.0, 0.0, 1.0], [1.75, 8.0, 0.0, 1.0]]] * B)
     gt = dict(ent=ent, ext=ext, ent_m=torch.ones(B, 2, dtype=torch.bool), ext_m=torch.ones(B, 2, dtype=torch.bool))
     batch = dict(ent=ent, ext=ext, ent_m=gt["ent_m"], ext_m=gt["ext_m"], pairs=torch.tensor([[[0, 0], [1, 1]]] * B))
-    for order, evidence in ((False, False), (True, False), (True, True)):
-        m = JEnds(d=d, order=order, evidence=evidence)
-        out = m(jout, P, gt=gt)
+    seen = {}
+    for order, evidence, paint_ev in ((False, False, True), (True, False, True), (True, True, True), (True, True, False)):                                    # E341: the last case has no 0.5 m branch
+        torch.manual_seed(0)                                                                           # the token layers are built before the pair MLP: the same seed gives the same tokens, so the two evidence cases can be compared column by column
+        m = JEnds(d=d, order=order, evidence=evidence, paint_ev=paint_ev)
+        jo = jout if paint_ev else {k_: v_ for k_, v_ in jout.items() if k_ != "j05"}
+        if evidence:
+            m.pair.register_forward_pre_hook(lambda _m, a_, key=paint_ev: seen.__setitem__(key, a_[0].detach().clone()))
+        out = m(jo, P, gt=gt)
         assert out["logit"].shape == (B, K, K) and out["kp_pos"].shape == (B, 2 * K, 2), out["logit"].shape
         loss, info = jends_loss(out, batch)
         loss.backward()
         dead = [n for n, p in m.named_parameters() if p.grad is None]
-        assert not dead, (order, evidence, dead)
+        assert not dead, (order, evidence, paint_ev, dead)
         assert info["pos_pairs"] >= 2 * B, info
-        if order and evidence:                                                                         # E298: the driven weight raises the positive BCE terms and changes nothing when off
+        if order and evidence and paint_ev:                                                                         # E298: the driven weight raises the positive BCE terms and changes nothing when off
             batch["pdrv"] = torch.ones(B, 2)
             _, i0 = jends_loss(out, batch, driven_w=0.0)
             _, i2 = jends_loss(out, batch, driven_w=2.0)
@@ -460,6 +467,26 @@ def _selftest():
             batch["pdrv"] = torch.zeros(B, 2)
             _, iz = jends_loss(out, batch, driven_w=2.0)
             assert abs(iz["bce"] - i0["bce"]) < 1e-6, (iz, i0)
+    c0 = 2 * d + NG                                                                                    # E341: the input of the pair MLP without the paint maps is the one with them minus the two paint columns (evidence columns 4 and 5), nothing else moves
+    assert seen[True].shape[-1] == seen[False].shape[-1] + 2 and torch.equal(torch.cat([seen[True][..., :c0 + 4], seen[True][..., c0 + 6:]], -1), seen[False]), "the evidence without the paint maps must be the same features minus the two paint columns"
+    assert not torch.equal(seen[True][..., c0 + 4: c0 + 6], torch.zeros_like(seen[True][..., c0 + 4: c0 + 6])), "the paint columns of the full evidence must carry the 0.5 m maps"
+    jz = dict(jout)                                                                                    # E341: zone about sigmoid(-1) = 0.27, core about sigmoid(-2) = 0.12 (the two evidence columns 2 and 3 must read their own channel, not each other's)
+    jz["j1"] = jout["j1"].clone()
+    jz["j1"][:, 0] += 1.0
+    torch.manual_seed(0)
+    mz = JEnds(d=d, order=True, evidence=True, paint_ev=False)
+    mz.pair.register_forward_pre_hook(lambda _m, a_: seen.__setitem__("z", a_[0].detach().clone()))
+    mz({k_: v_ for k_, v_ in jz.items() if k_ != "j05"}, P, gt=gt)
+    zc_ = seen["z"][..., c0 + 2: c0 + 4]
+    assert abs(float(zc_[..., 0].mean()) - 0.269) < 0.03 and abs(float(zc_[..., 1].mean()) - 0.119) < 0.03, (float(zc_[..., 0].mean()), float(zc_[..., 1].mean()))
+    jp = dict(jout)                                                                                    # E341: the two paint columns (4, 5) read their own channel: stop line about sigmoid(4) = 0.98, crossing about sigmoid(-4) = 0.02 (a swap of the two is caught)
+    jp["j05"] = torch.cat([torch.full((B, 1, 200, 200), 4.0), torch.full((B, 1, 200, 200), -4.0)], 1)
+    torch.manual_seed(0)
+    mp = JEnds(d=d, order=True, evidence=True, paint_ev=True)
+    mp.pair.register_forward_pre_hook(lambda _m, a_: seen.__setitem__("p", a_[0].detach().clone()))
+    mp(jp, P, gt=gt)
+    pc_ = seen["p"][..., c0 + 4: c0 + 6]
+    assert abs(float(pc_[..., 0].mean()) - 0.982) < 0.01 and abs(float(pc_[..., 1].mean()) - 0.018) < 0.01, (float(pc_[..., 0].mean()), float(pc_[..., 1].mean()))
     # E308: with node tokens the pair logits depend on the tokens (and the kp layer takes them)
     mt = JEnds(d=d, order=True, evidence=False, ntok=64)
     tok_a, tok_b = torch.randn(B, 64, 50, 50), torch.randn(B, 64, 50, 50)

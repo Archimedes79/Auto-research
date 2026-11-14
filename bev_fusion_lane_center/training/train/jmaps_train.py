@@ -33,7 +33,7 @@ def main():
     ap.add_argument("--raster", default="legacy", choices=("legacy", "exact"), help="E306: the polygon targets (zone, conflict core, stop lines, crossings) rasterised with the exact area rule instead of the legacy half-cell shifted fill")
     ap.add_argument("--sigma", type=float, default=1.5, help="E307: the width (m) of the Gaussian entry / exit heat targets (1.5 = E286)")
     ap.add_argument("--dirx", action="store_true", help="E319: the heading-guided bidirectional exchange along the lane (jmaps.DirX) on the 1 m features; stored as ctx '<ctx>+dirx', so every loader builds the same model")
-    ap.add_argument("--no-paint", action="store_true", help="E332: no 0.5 m paint branch (stop lines, crossings: -1.48 of 3.26 GMACs of the head), no paint loss; stored as ctx '<ctx>+nopaint'. The pair head must then run --no-evidence")
+    ap.add_argument("--no-paint", action="store_true", help="E332: no 0.5 m paint branch (stop lines, crossings: -1.48 of 3.26 GMACs of the head), no paint loss; stored as ctx '<ctx>+nopaint'. The pair head then runs with the four-input evidence (E341) or --no-evidence (E332)")
     ap.add_argument("--no-zone", action="store_true", help="E332: the zone / core maps are not supervised (nothing reads them without the evidence); stored as ctx '<ctx>+nozone'")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--lr", type=float, default=1e-3)

@@ -86,7 +86,8 @@ def _match_idx(kp, G, tol=3.0):
 
 def _panel_maps(axs, out, jg, b=0):
     import jmaps as JM
-    j1, j05 = out["j1"][b].float().sigmoid().numpy(), out["j05"][b].float().sigmoid().numpy()
+    j1 = out["j1"][b].float().sigmoid().numpy()
+    j05 = out["j05"][b].float().sigmoid().numpy() if "j05" in out else None                                  # E341 / E332: a head without the 0.5 m branch has no paint maps
     ext = [-50, 50, -50, 50]
     axs[0].imshow(np.maximum(j1[2], j1[3]).T, origin="lower", extent=ext, cmap="magma", vmin=0, vmax=1)
     kp = JM.keypoints(dict(j1=out["j1"][b:b + 1]), thr=0.3)[0]
@@ -100,7 +101,8 @@ def _panel_maps(axs, out, jg, b=0):
     rgb = np.zeros((100, 100, 3))
     rgb[..., 2], rgb[..., 0] = j1[0], j1[1]
     axs[1].imshow(rgb.transpose(1, 0, 2), origin="lower", extent=ext)
-    axs[1].imshow(np.ma.masked_less(j05[0], 0.5).T, origin="lower", extent=ext, cmap="autumn", vmin=0, vmax=1)
+    if j05 is not None:
+        axs[1].imshow(np.ma.masked_less(j05[0], 0.5).T, origin="lower", extent=ext, cmap="autumn", vmin=0, vmax=1)
     axs[1].set_title("head: zone (blue), core (red), stop line p > 0.5 (orange)", fontsize=8)
 
 

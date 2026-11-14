@@ -13,8 +13,8 @@ E319 `DirX` (ctx "dil+dirx", `jmaps_train.py --dirx`): a heading-guided bidirect
 heading t(x) of the pyramid's own centre-lane field (`P["centre1"]` channels 1, 2) at 2 / 4 / 8 m (bilinear `grid_sample` at x +- s t(x): dense, differentiable in the features and in the heading), a residual 1 x 1 block mixes them (last layer zero-initialised, so the
 model starts as the model without it); two rounds, the second one with a heading refined from the features of the first (zero-initialised correction). The flag lives in the ctx string, so every loader that builds `JModel(ctx=args["ctx"])` builds the right model.
 E332 (D84, simplify) `+nopaint` / `+nozone` (`jmaps_train.py --no-paint --no-zone`): the head without its auxiliary maps. `nopaint` drops the 0.5 m branch (`m05`, `head05`, 1.48 of the head's 3.26 GMACs): the output has no `j05`, the loss no paint term;
-`nozone` keeps the 1 m output layout (zone / core channels exist but are no longer supervised, nothing reads them) and marks `out["skip"] = ("zone",)` so that `jmaps_loss` leaves the zone / core term out. The pair head must then run `--no-evidence` (the evidence along the
-curve reads the zone, core and paint maps). Both flags live in the ctx string; the flags off are the head of E307 bit for bit.
+`nozone` keeps the 1 m output layout (zone / core channels exist but are no longer supervised, nothing reads them) and marks `out["skip"] = ("zone",)` so that `jmaps_loss` leaves the zone / core term out. The pair head then reads the evidence along the curve without its two paint inputs (E341: `JEnds(paint_ev=False)`, set by
+`JEndModel` from the ctx) or runs `--no-evidence` (E332); `nozone` needs `--no-evidence` (the evidence reads the zone and core maps). Both flags live in the ctx string; the flags off are the head of E307 bit for bit.
 Axes: rows = x (right), columns = y (forward), origin -50 m; 1 m cells (100 x 100) and 0.5 m cells (200 x 200). Run the self-test: python jmaps.py
 """
 import torch
