@@ -8,4 +8,6 @@ New chat: "Read HANDOVER.md and continue". Results live in the cards (`experimen
 
 **Running:** day14 (E334) and day16 (E325), 22:00; day18 (E341) waits for markers; critic on E317 - E319 running; day19 (E317, E318.u, E319, one at a time after E341) not written. WSL restart kills chains: `wsl bash temp/day14/day14.sh`, `day16`, `day18`.
 
+**E344 plan (E2E completion, query head Q-Lane on the 1 m grid): waits for Mirko's four answers (section 7); nothing built.**
+
 **Next:** critics -> READY / ACCEPTED, `hold.py clear <id>` (ten ids), day19; D99 step-0 card (CPU / one GPU job); card E343 (TEST of E324 s); old-chain step 1; dead-code batches; E342 install; results E325 / E334 / E341.
