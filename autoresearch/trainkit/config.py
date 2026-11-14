@@ -30,7 +30,11 @@ class Config:
     eval_every: int = 1000
     save_every: int = 500
     keep: int = 3
-    slim_at_end: bool = False                    # True: a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half
+    keep_steps: tuple = ()                       # steps whose checkpoint is never pruned (a learning curve from one run: t26 keeps 1/6, 1/3, 2/3 and all of its steps), on top of the newest `keep`.
+                                                 # Each must be a multiple of save_every and not above steps (checked at the start of fit: a step that is never saved would keep nothing).
+                                                 # () or None = today's pruning, bit for bit. NOT free on a resume (a resume without the list would prune the protected checkpoints: check_resume refuses it). Protected checkpoints stay full-size
+                                                 # even with slim_at_end (only the final one is written slim)
+    slim_at_end: bool = False                   # True: a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half
                                                  # the size, no older ones): it evaluates and warm-starts but cannot resume training.
                                                  # False (default; Mirko 2026-11-01: keep the full data to resume later): `keep` complete ones
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting

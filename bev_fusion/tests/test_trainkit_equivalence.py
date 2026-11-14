@@ -37,7 +37,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path.insert(0, os.path.join(ROOT, "training"))
 OLD_COMMIT = "df9d4370723116462e879a335da9d3ec83841229"            # the last commit of training/train.py before the engine moved out (hygiene flag, lr_groups)
 WALL = ("t", "s_per_step", "t_data", "t_step")                   # wall-clock fields of a log row
-ADDED = ("student_anchor", "student_anchor_floor", "student_anchor_until")      # TrainConfig fields added after OLD_COMMIT (t22 stage B, default off): the old trainer has none, so they are left out of every config compared
+ADDED = ("student_anchor", "student_anchor_floor", "student_anchor_until", "img_jitter", "img_jitter_from", "radar_window", "keep_steps")      # TrainConfig fields added after OLD_COMMIT (t22 stage B, t25 radar_window, t26 image jitter and keep_steps, default off): the old trainer has none, so they are left out of every config compared
 ADDED_VAL = ("n", "n_skipped")                                   # the keys a validation row has since 2026-11-10 (D73, review finding 2: the batches in the mean and the ones left out as non-finite); the old trainer has none, every value that it has stays compared
 if os.path.isdir("/dev/shm"):
     tempfile.tempdir = "/dev/shm"                               # the run folders of the toy are small and written with fsync: keep them off the disk
@@ -338,7 +338,7 @@ def mutants():
     def no_clip(params, grad_clip, split=()):
         return torch.linalg.vector_norm(torch.stack([p.grad.norm() for p in params if p.grad is not None]))
 
-    stop_block = "            save(step)\n            checkpoint.prune_checkpoints(out_dir, cfg.keep)\n            control.mark_stopped"
+    stop_block = "            save(step)\n            checkpoint.prune_checkpoints(out_dir, cfg.keep, keep_steps)\n            control.mark_stopped"
     tmp_prune = 'if f.startswith("ckpt_") and f.endswith(".pt.tmp"):\n            os.remove(os.path.join(out_dir, f))'
     return [
         ("EMA decay one step off", [(em.EMA, "update", ema_off_by_one)]),
@@ -349,7 +349,7 @@ def mutants():
         ("step_frac is (step + 1) / steps", fit("StepInfo(step, step / max(1, cfg.steps), m, cfg.accum, scaler)", "StepInfo(step, (step + 1) / cfg.steps, m, cfg.accum, scaler)")),
         ("gradient clip skipped", [(op, "clip_gradients", no_clip)]),
         ("a bad step does not count", [(op, "bad_steps_after", lambda status, bad, scaler=None: 0)]),
-        ("old checkpoints are not pruned", [(ck, "prune_checkpoints", lambda out_dir, keep: None)]),
+        ("old checkpoints are not pruned", [(ck, "prune_checkpoints", lambda out_dir, keep, keep_steps=(): None)]),
         ("no prune after the stop checkpoint", fit(stop_block, "            save(step)\n            control.mark_stopped")),
         ("prune leaves the .tmp of a failed write", [(ck, "prune_checkpoints", mutated(ck, tmp_prune, tmp_prune.replace("os.remove(os.path.join(out_dir, f))", "pass")).prune_checkpoints)]),
         ("checkpoint written in place, not through a .tmp", [(ck, "save_checkpoint", mutated(ck, 'tmp = path + ".tmp"', "tmp = path").save_checkpoint)]),

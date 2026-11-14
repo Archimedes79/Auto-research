@@ -212,6 +212,29 @@ def main():
         except SystemExit:
             pass
         check(sorted(f for f in os.listdir(os.path.join(tmp, "keep")) if f.startswith("ckpt_")) == ["ckpt_00000007.pt"], "stop: the checkpoint of the stop is the only one left with keep 1")
+        try:                                             # keep_steps: a checkpoint every 2 steps, keep 1, steps 4 and 8 protected, stop at step 11 -> 4, 8 and the newest (11) are left
+            run(tmp, "keepsteps", stop_check=stop_after(11), save_every=2, keep=1, keep_steps=(4, 8))
+        except SystemExit:
+            pass
+        check(sorted(f for f in os.listdir(os.path.join(tmp, "keepsteps")) if f.startswith("ckpt_")) == ["ckpt_00000004.pt", "ckpt_00000008.pt", "ckpt_00000011.pt"], "keep_steps: the listed steps' checkpoints stay next to the newest `keep`, nothing else")
+        run(tmp, "keepsteps", save_every=2, keep=1, keep_steps=(4, 8))      # the resume finishes the run: the final weights and the listed steps are what is left
+        check(sorted(f for f in os.listdir(os.path.join(tmp, "keepsteps")) if f.startswith("ckpt_")) == ["ckpt_00000004.pt", "ckpt_00000008.pt", "ckpt_00000012.pt"], "keep_steps: a resumed, finished run keeps the final checkpoint and the listed steps")
+        for other in ((), (4,)):                                             # a resume that leaves the list out or changes it would prune the protected checkpoints: refused, the files stay
+            try:
+                run(tmp, "keepsteps", save_every=2, keep=1, keep_steps=other)
+                raise AssertionError(f"a resume with keep_steps {other} must be refused")
+            except SystemExit:
+                pass
+        check("keep_steps" not in Config.RESUME_FREE and sorted(f for f in os.listdir(os.path.join(tmp, "keepsteps")) if f.startswith("ckpt_")) == ["ckpt_00000004.pt", "ckpt_00000008.pt", "ckpt_00000012.pt"], "keep_steps: not free on a resume (a changed or missing list is refused) and the protected checkpoints are still there")
+        run(tmp, "keepnone", save_every=2, keep=1, keep_steps=None)
+        check(sorted(f for f in os.listdir(os.path.join(tmp, "keepnone")) if f.startswith("ckpt_")) == ["ckpt_00000012.pt"], "keep_steps: None = no list")
+        for bad, ev in (((5,), 2), ((14,), 2), ((0,), 2), ((4.0,), 2), ((True,), 1)):          # a step that is never saved (not a multiple of save_every, beyond steps, zero, not an integer, a bool) is refused at the start
+            try:
+                run(tmp, "keepbad", save_every=ev, keep_steps=bad)
+                raise AssertionError(f"keep_steps {bad} must be refused")
+            except ValueError:
+                pass
+        print("  ok  keep_steps: 5 (not a multiple of save_every), 14 (above steps), 0, 4.0 and True (not a step) are refused at the start")
         events = []
 
         class Count(Hooks):

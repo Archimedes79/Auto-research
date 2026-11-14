@@ -19,6 +19,7 @@ move to log_superseded.jsonl.
 import contextlib
 import dataclasses
 import json
+import numbers
 import os
 import time
 
@@ -94,6 +95,10 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     control.stop_requested). The rules of a resume are the config class' (Config.RESUME_FREE, RESUME_SWITCHES, RESUME_ENV)."""
     hooks = hooks or Hooks()
     stop_check = stop_check or control.stop_requested
+    keep_steps = tuple(cfg.keep_steps or ())                    # None (a json null) = no list
+    bad_keep = [s for s in keep_steps if not (isinstance(s, numbers.Integral) and not isinstance(s, bool) and 0 < s <= cfg.steps and cfg.save_every and s % cfg.save_every == 0)]
+    if bad_keep:                                                # a step that is never saved keeps nothing: said at the start, not after days
+        raise ValueError(f"keep_steps {bad_keep}: each must be an integer multiple of save_every ({cfg.save_every}) and not above steps ({cfg.steps})")
     clip_split = optim.clip_groups(model, cfg.grad_clip_split)
     opt = torch.optim.AdamW(optim.param_groups(model, loss, cfg.lr, cfg.weight_decay, cfg.lr_groups), lr=cfg.lr, betas=(0.9, 0.999))
     scaler = make_scaler(cfg, device)                           # amp "fp16" only
@@ -158,7 +163,7 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
         reason = stop_check(out_dir)                    # `python -m Training stop <run>` (autoresearch/Training)
         if reason is not None:
             save(step)
-            checkpoint.prune_checkpoints(out_dir, cfg.keep)
+            checkpoint.prune_checkpoints(out_dir, cfg.keep, keep_steps)
             control.mark_stopped(out_dir, step, reason)
             print(f"step {step}: stop requested ({reason}), checkpoint saved, exit {control.EXIT_STOPPED}", flush=True)
             raise SystemExit(control.EXIT_STOPPED)
@@ -219,11 +224,11 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
             print(f"step {step}: total {rec['total']:.4f} lr {rec['lr']:.2e} grad {rec['grad_norm']:.2f}", flush=True)
         if cfg.save_every and step % cfg.save_every == 0:       # before the evaluation (and also after a skipped step): an evaluation
             save(step)                                          # that dies no longer costs the steps since the last save
-            checkpoint.prune_checkpoints(out_dir, cfg.keep)
+            checkpoint.prune_checkpoints(out_dir, cfg.keep, keep_steps)
         if evaluate is not None and cfg.eval_every and step % cfg.eval_every == 0:
             validate(step)
     hooks.close()                                               # a run shorter than the profiler's warm-up + window writes what it has (before the final save: its wall time must not hold the checkpoint write)
     save(step, slim=cfg.slim_at_end or was_slim)
-    checkpoint.prune_checkpoints(out_dir, 1 if (cfg.slim_at_end or was_slim) else cfg.keep)         # a finished run: the final weights only
+    checkpoint.prune_checkpoints(out_dir, 1 if (cfg.slim_at_end or was_slim) else cfg.keep, keep_steps)        # a finished run: the final weights only
     log.close()
     return model, loss, ema, last
