@@ -37,6 +37,7 @@
                                                 paired scene bootstrap; same GT / frame checks as compare (evaluation/front_compare.py)
 Global options: --device cuda|cpu  --workers N (read-ahead processes, default 2)  --split val|train|<split>.<part>  --ckpt-dir DIR (moved checkpoints)
                 --control shuffle_radar|zero_radar|shuffle_cam|zero_cam  --out DIR (default RUN/eval/suite)  --state carry|reset
+                --curves  --fusion / --no-fusion  --velocity  --junction-free (more metric families of `eval`; the last: the divider rows without the intersection cells, D66)
 Outputs: RUN/eval/suite/{qualitative, quant}; see autoresearch/Evaluation/EXTENSIONS.md chapter 5 for what each command writes.
 """
 from __future__ import annotations
@@ -55,7 +56,7 @@ sys.path.insert(0, os.path.join(ROOT, ".."))                       # so that `au
 sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 sys.path.insert(0, ROOT)
 from evaluation import bev_adapter as A  # noqa: E402  (numpy only at import: the chain's code is imported later, after setup_paths)
-from evaluation import bev_sets  # noqa: E402
+from evaluation import bev_junction, bev_sets  # noqa: E402
 
 HEADLINE_LAYERS = (("drivable_area", "iou@0"), ("drivable_area", "iou@0.5"), ("ped_crossing", "iou@0"), ("walkway", "iou@0"),
                    ("carpark_area", "iou@0"), ("lane_divider", "iou@0.5"), ("lane_divider", "iou@1"), ("road_divider", "iou@1"),
@@ -66,6 +67,11 @@ HEADLINE_LAYERS = (("drivable_area", "iou@0"), ("drivable_area", "iou@0.5"), ("p
 def tag_of(warm: bool, split: str, control: str) -> str:
     """the suffix of the outputs: warm, the set (bev_sets.tag: '' for val, '_train', '_small_val') and the control"""
     return ("_warm" if warm else "") + bev_sets.tag(split) + (f"_ctl_{control}" if control else "")
+
+
+def store_name(tag: str, curves: bool, fusion: bool, velocity: bool, junction_free: bool, n) -> str:
+    """the name of the suite store of an `eval` (and the one `compare` reads): every metric family that is switched on is part of it, so a store made without one is not resumed"""
+    return f"eval{tag}{'_curves' if curves else ''}{'_fusion' if fusion else ''}{'_vel' if velocity else ''}{'_jf' if junction_free else ''}_n{n}"
 
 
 def _flat_name(m: str, rest: str, prefix_seg: str):
@@ -219,6 +225,7 @@ def headline_table(flat: dict) -> str:
         for dt in ("dt+0.00", "dt+0.50", "dt-0.50"):
             for layer, metric in HEADLINE_LAYERS:
                 keys.append(f"{pre}/seg/{dt}/{layer}/all/all/{metric}")
+    keys += [f"seg_{m}/seg/dt+0.00/{layer}/all/all/iou@{t}" for m in bev_junction.MASKS for layer in bev_junction.JUNCTION_LAYERS for t in ("0.5", "1")]     # --junction-free only (D66)
     for pre in ("seg_obj", "prior_obj"):
         for dt in ("dt+0.00", "dt+0.50"):
             for layer in ("vehicle", "pedestrian", "two_wheeler"):
@@ -313,11 +320,14 @@ def quant_run(suite, force_evaluator: bool = False, **kw):
 def make_suite(a, prior: int = 0, state: str = None, evaluator: str = None):
     from Evaluation import EvalSuite
     from evaluation.bev_adapter import build
+    junction = bev_junction.JunctionMasks() if getattr(a, "junction_free", False) else None     # before the network is loaded: a missing or foreign mask cache stops here
     source, subject, task = build(a.run, device=a.device, split=a.split, workers=a.workers, ckpt_dir=a.ckpt_dir, control=a.control, prior=prior, evaluator=evaluator)
     out = a.out or os.path.join(a.run, "eval", "suite")
     task.curves = bool(getattr(a, "curves", False))                          # --curves: PR / ROC / calibration / velocity regression next to the standard numbers
     task.fusion = bool(getattr(a, "fusion", True))                           # --fusion (the default since D31): boxes scored on the fusion area (detf / detfp) and the coverage split (cov), D37 / D38
     task.velocity = bool(getattr(a, "velocity", False))                      # --velocity: field per cell set and box-centre velocity (vel, bev_velocity.py)
+    if junction is not None:                                                 # --junction-free: the divider rows without the map's intersection cells (D66, bev_junction.py); its mask id is part of the
+        task.junction, source.junction_mask = junction, junction.describe()  # Source's description, so a resume of the store and a `compare` of two stores refuse another mask
     return EvalSuite(source, subject, task, out=out, state=state or a.state)
 
 
@@ -339,7 +349,7 @@ def cmd_eval(a, rest) -> int:
     prov0 = provenance_start(suite)                                         # the evaluator's and the checkpoint's hash NOW, before any frame is scored
     from Evaluation.sampling import Sampler
     frames = Sampler(suite.source, 0).spread(e.n, e.scenes) if e.n else None
-    name = f"eval{tag}{'_curves' if getattr(a, 'curves', False) else ''}{'_fusion' if getattr(a, 'fusion', True) else ''}{'_vel' if getattr(a, 'velocity', False) else ''}_n{e.n or 'all'}"      # curve / fusion numbers need their own store: an eval made without them is not resumed
+    name = store_name(tag, getattr(a, "curves", False), getattr(a, "fusion", True), getattr(a, "velocity", False), getattr(a, "junction_free", False), e.n or "all")      # curve / fusion numbers need their own store: an eval made without them is not resumed
     desc = suite.source.describe()
     gt_now = desc.get("gt_signature")                                    # the GT scored against (GtGenerator is read live, not pinned)
     quant_dir = os.path.join(a.out or os.path.join(a.run, "eval", "suite"), "quant")
@@ -402,6 +412,7 @@ def cmd_eval(a, rest) -> int:
     write_both("metrics", "json", json.dumps({"run": a.run, "checkpoint": subj.get("checkpoint"), "split": a.split, "weights": "EMA",
                                               "memory": "carried over the whole scene" if e.warm else "empty (cold)", "code": subj.get("code"),
                                               "gt_signature": gt_sig, "train_gt_signature": train_gt(a.run),
+                                              **({"junction_mask": suite.task.junction.describe()} if suite.task.junction is not None else {}),      # the mask id of the junction-free rows (D66)
                                               "suite_run": os.path.relpath(store.path, a.run), "metrics": flat, "better": better,
                                               "latency": lat}, indent=1, default=float))
     card = contract_card(a.run, a.split, tag, flat, better, len(store.frames), gt_sig, state, a.control)         # for decide.py
@@ -514,8 +525,9 @@ def cmd_memory(a, rest) -> int:
     return 0
 
 
-def _task_only(run: str, curves: bool = False, fusion: bool = True, velocity: bool = False):
-    """the Task of a run without loading its checkpoint (metrics definitions only; curves / fusion / velocity: the metric families of a store made with --curves / --fusion / --velocity; fusion is on by default since D31)"""
+def _task_only(run: str, curves: bool = False, fusion: bool = True, velocity: bool = False, junction_free: bool = False):
+    """the Task of a run without loading its checkpoint (metrics definitions only; curves / fusion / velocity / junction_free: the metric families of a store made with --curves / --fusion /
+    --velocity / --junction-free; fusion is on by default since D31)"""
     from evaluation import bev_adapter as B
     from evaluation.bev_task import BEVTask
     os.chdir(ROOT)
@@ -527,6 +539,7 @@ def _task_only(run: str, curves: bool = False, fusion: bool = True, velocity: bo
     refine = bool(cfg.model.get("refine")) and hasattr(model, "boxes")
     task = BEVTask(model.grid, B.task_spec(model), [g for g, _ in ns.NUSC_GROUPS], refine=refine)
     task.curves, task.fusion, task.velocity = curves, fusion, velocity
+    task.junction = bev_junction.JunctionMasks() if junction_free else None
     return task
 
 
@@ -618,13 +631,14 @@ def cmd_compare(argv) -> int:
     p.add_argument("--curves", action="store_true", help="compare the stores made with `eval --curves` (PR / ROC / calibration / velocity numbers are bootstrapped too)")
     p.add_argument("--fusion", action=argparse.BooleanOptionalAction, default=True, help="compare the stores made with `eval --fusion` (detf / detfp / cov; the default since D31, --no-fusion for a store made before)")
     p.add_argument("--velocity", action="store_true", help="compare the stores made with `eval --velocity` (vel)")
+    p.add_argument("--junction-free", action="store_true", help="compare the stores made with `eval --junction-free` (the divider rows without the intersection cells are bootstrapped too)")
     c = p.parse_args(argv)
     try:
         c.tag += bev_sets.tag(c.split)
     except ValueError as ex:
         p.error(str(ex))
     from Evaluation.quantitative import Quantitative
-    name = f"eval{c.tag}{'_curves' if c.curves else ''}{'_fusion' if c.fusion else ''}{'_vel' if c.velocity else ''}_n{c.n}"
+    name = store_name(c.tag, c.curves, c.fusion, c.velocity, c.junction_free, c.n)
     stores = [os.path.join(r, "eval", "suite", "quant", name, "manifest.json") for r in (c.run_a, c.run_b)]
     train_ids = (train_gt(c.run_a), train_gt(c.run_b))
     if not all(os.path.exists(s) for s in stores):
@@ -654,7 +668,7 @@ def cmd_compare(argv) -> int:
     if hashes[0] != hashes[1]:                                     # not a refusal (the stores were made at different times: decide.py's provenance check judges the cards)
         print(f"WARNING: the two evaluations were made with different evaluator code ({c.run_a}: {hashes[0]}, {c.run_b}: {hashes[1]}); "
               "part of a difference may come from the evaluator, not from the runs")
-    task = _task_only(c.run_a, c.curves, c.fusion, c.velocity)
+    task = _task_only(c.run_a, c.curves, c.fusion, c.velocity, c.junction_free)
     q = Quantitative(SimpleNamespace(out=os.path.join(c.run_a, "eval", "suite"), task=task))
     res = q.compare(os.path.join(c.run_a, "eval", "suite", "quant", name), os.path.join(c.run_b, "eval", "suite", "quant", name), c.boot, c.seed,
                     force=c.force, ignore=COMPARE_IGNORE)
@@ -756,6 +770,9 @@ def main(argv=None) -> int:
                    help="also boxes scored on the fusion area (detf: care boxes, detfp: + partial) and the coverage split of the complete GT set (cov), D37 / D38 (evaluation/bev_fusion_area.py); "
                         "ON by default since D31 (the network's field of view is the headline, the old `det` numbers stay for reference); --no-fusion leaves it out")
     p.add_argument("--velocity", action="store_true", help="also the velocity field per cell set (static, per class, moving) and at the GT box centres (field / object head / zero), evaluation/bev_velocity.py")
+    p.add_argument("--junction-free", action="store_true",
+                   help="also the lane_divider / road_divider IoU with the map's intersection polygons left out of the prediction, the GT and the scored cells (D66; masks fovj = polygons, "
+                        "fovjb = polygons + 0.5 m: rows seg_fovj/... seg_fovjb/..., evaluation/bev_junction.py); the standard rows are unchanged, the store gets the suffix _jf")
     p.add_argument("--control", default="", choices=["", "shuffle_radar", "zero_radar", "shuffle_cam", "zero_cam"])
     p.add_argument("--out", default=None)
     p.add_argument("--state", default="carry", choices=["carry", "reset", "warmup"])

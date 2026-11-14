@@ -63,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fusion", action=argparse.BooleanOptionalAction, default=True,
                    help="with --quant: also the fusion-area scoring (bev_suite --fusion), ON by default since D31 (the network's field of view is the headline); --no-fusion leaves it out (the numbers of a store made before D31)")
     p.add_argument("--velocity", action="store_true", help="with --quant: also the velocity field (bev_suite --velocity)")
+    p.add_argument("--junction-free", action="store_true", help="with --quant: also the divider rows without the map's intersection cells (bev_suite --junction-free, D66)")
     p.add_argument("--device", default="cuda", help="cuda | cpu (default cuda)")
     p.add_argument("--workers", type=int, default=2, help="read-ahead processes (default 2)")
     p.add_argument("--split", default="val", metavar="SET", help="val | train (the run's own lists) or <split>.<part> of splits/ (small.val, large.train, ...); --sets lists them")
@@ -114,7 +115,7 @@ def plan(a) -> list:
     if a.time:
         steps.append(step("time", G + ["time"]))
     if a.quant or a.all:
-        more = [f"--{f}" for f in ("curves", "fusion", "velocity") if getattr(a, f) or (a.all and (f != "fusion" or a.fusion))]
+        more = [f"--{f}" for f in ("curves", "fusion", "velocity") if getattr(a, f) or (a.all and (f != "fusion" or a.fusion))] + (["--junction-free"] if a.junction_free else [])
         steps.append(step("numbers", G + more + ["eval", "--n", str(a.n)] + (["--prior", str(ALL_PRIOR), "--images", str(ALL_IMAGES)] if a.all else [])))
     if a.all:
         suite_out = a.out or os.path.join(a.run, "eval", "suite")

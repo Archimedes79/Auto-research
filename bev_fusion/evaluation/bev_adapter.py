@@ -154,9 +154,9 @@ EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(ROOT, "..", "a
 # the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the Evaluation's frame loop,
 # counts, sampling and comparison core, and the views (D73: `bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`; `bev_annotation_pts.py`
 # builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too;
-# `bev_eval.py` is the class interface's adapter: the reference and the metrics without the loss). Not the selftests, mutants, board, report or README: an edit there changes no number and must not orphan a store that took 30 minutes
+# `bev_eval.py` is the class interface's adapter: the reference and the metrics without the loss; `bev_junction.py` is the cut of the junction-free divider rows, D66). Not the selftests, mutants, board, report or README: an edit there changes no number and must not orphan a store that took 30 minutes
 # while other chats work in the same folders
-NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py", "bev_views.py", "bev_annotation_pts.py", "bev_eval.py")) + \
+NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py", "bev_views.py", "bev_annotation_pts.py", "bev_junction.py", "bev_eval.py")) + \
     tuple(os.path.join(ROOT, "..", "autoresearch", "Evaluation", f) for f in ("comparison", "quantitative.py", "store.py", "runner.py", "contracts.py", "sampling.py"))
 
 
@@ -296,7 +296,10 @@ def _make_source_class():
             return {"class": "BEVSource", "dataset": "nuScenes " + self.cfg.version, "split": self.split, "scenes": len(self._frames),
                     "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None,
                     "gt_signature": sig, "gt_version": gt_version(sig), "evaluator_hash": self.evaluator,
-                    **({"set_hash": self.set_hash} if self.set_hash else {})}
+                    **({"set_hash": self.set_hash} if self.set_hash else {}),
+                    **({"junction_mask": self.junction_mask} if self.junction_mask else {})}
+
+        junction_mask = None          # the mask id of the junction-free rows (bev_junction.JunctionMasks.describe, set by bev_suite.make_suite): part of the store identity, so a resume or a compare with another mask is refused
 
         # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
         def prefetch(self, refs: Sequence[FrameRef]) -> None:

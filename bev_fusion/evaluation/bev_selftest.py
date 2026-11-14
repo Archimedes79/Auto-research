@@ -245,6 +245,34 @@ def _():
     assert m.reduce([]) is not None
 
 
+@check("BevSegMetric with junction masks (--junction-free, D66): every standard key bit-identical to the metric without them; the fovj / fovjb rows (dividers only, all dts, with mass) equal "
+       "the SegMeter fed with the intersection cells cut out; the headline gains exactly the junction rows; the class's headline is not changed; a plain metric has none")
+def _():
+    from evaluation import bev_junction
+    X, Y = _centres()
+    inter = {"fovj": (X > 20) & (X < 30) & (np.abs(Y) < 6), "fovjb": (X > 19.5) & (X < 30.5) & (np.abs(Y) < 6.5)}
+    m0, m1 = BevSegMetric(GRID, SPEC), BevSegMetric(GRID, SPEC, lambda g: inter)
+    fp = frames_pred(10)
+    r0, r1 = m0.reduce([m0.frame(s, p) for s, p in fp]), m1.reduce([m1.frame(s, p) for s, p in fp])
+    assert all(r1[k] == r0[k] or (r0[k] != r0[k] and r1[k] != r1[k]) for k in r0), "the standard rows are untouched"
+    extra = {k: v for k, v in r1.items() if k not in r0}
+    assert extra and all(k.split("/")[0] in bev_junction.MASKS and k.split("/")[2] in bev_junction.JUNCTION_LAYERS for k in extra), sorted(extra)[:3]
+    for mname in bev_junction.MASKS:
+        want = SegMeter(GRID)
+        keep = ~inter[mname]
+        for s, p in fp:
+            for dt, o in p.outputs["dt"].items():
+                g = s.reference[dt]
+                want.add({n: np.where(keep, o["prob"][n], 0) for n in LINES}, {n: np.where(keep, g[n], 0) for n in LINES}, mask=(np.asarray(g["camera"]) > 0) & keep,
+                         mass=o["mass"] if dt else None, dt=dt)
+        ref = {f"{mname}/" + k[len("seg/"):]: v for k, v in flatten({"seg": want.result()}).items()}
+        assert {k: v for k, v in extra.items() if k.startswith(mname + "/")}.keys() == ref.keys() and all(same(extra[k], ref[k]) for k in ref), mname
+    assert set(m1.headline) - set(BevSegMetric.headline) == set(bev_junction.HEADLINE) and m0.headline == BevSegMetric.headline
+    part = m1.reduce([m1.frame(s, p) for s, p in fp], keys=list(bev_junction.HEADLINE))
+    assert all(part[k] == part[k] and part[k] == r1[k] for k in part), "selective reduce"
+    assert r1["fovj/dt+0.00/lane_divider/all/all/iou@0.5"] != r1["fov/dt+0.00/lane_divider/all/all/iou@0.5"], "the planted junction changes the number"
+
+
 @check("BevDetMetric: reduce(all frames) = DetMeter fed directly (every key, plain and refined boxes); selective keys; headline AP")
 def _():
     fp = frames_pred(20)
@@ -610,6 +638,80 @@ def RunStoreOpen(path):
     return RunStore.open(path)
 
 
+@check("--junction-free through the suite (D66): the store holds the fovj / fovjb counts, the flat table has the seg_fovj / seg_fovjb rows and headline_table prints them, `compare` bootstraps them "
+       "(a worse network falls), a suite without the option has none")
+def _():
+    X, Y = _centres()
+    inter = {"fovj": (X > 20) & (X < 30) & (np.abs(Y) < 6), "fovjb": (X > 19.5) & (X < 30.5) & (np.abs(Y) < 6.5)}
+    with tempfile.TemporaryDirectory() as d:
+        a, b, plain = make_suite(d), make_suite(d, noise=0.45, shift=2, name="worse"), make_suite(d)
+        for s in (a, b):
+            s.task.junction = lambda g: inter
+        sa, sb, sp = a.quant.run(name="ja", progress=0), b.quant.run(name="jb", progress=0), plain.quant.run(name="jp", progress=0)
+        flat, key = bev_suite.to_legacy(a.quant.table(sa)), "seg_fovj/seg/dt+0.00/lane_divider/all/all/iou@0.5"
+        assert key in flat and "seg_fovjb/seg/dt+0.00/road_divider/all/all/iou@1" in flat and key in bev_suite.headline_table(flat)
+        assert not any(k.startswith(("seg_fovj/", "seg_fovjb/")) for k in bev_suite.to_legacy(plain.quant.table(sp))), "no option, no rows"
+        std = {k: v for k, v in flat.items() if not k.startswith(("seg_fovj/", "seg_fovjb/"))}
+        base = bev_suite.to_legacy(plain.quant.table(sp))
+        assert set(std) == set(base) and all(same(std[k], base[k], 0.0) for k in base), "the standard rows of the same frames are unchanged (a nan equals a nan)"
+        cmp = a.quant.compare("ja", "jb", boot=50)["metrics"]
+        jk = "seg.fovj/dt+0.00/lane_divider/all/all/iou@0.5"
+        assert jk in cmp and cmp[jk]["diff"] < 0 and cmp[jk]["hi"] < 0 and bev_task_head() in cmp, "the junction rows are bootstrapped next to the standard ones"
+
+
+class MaskedSource(SynthSource):
+    """SynthSource that describes itself with the mask id of the junction-free rows, as the BEV adapter's Source does after bev_suite.make_suite"""
+    def __init__(self, mask, **kw):
+        super().__init__(**kw)
+        self.mask = mask
+
+    def describe(self):
+        return dict(super().describe(), junction_mask=self.mask)
+
+
+@check("--junction-free mask id (D66): the BEV Source describes itself with it only when set; the store's identity rule refuses a resume with another mask id and `compare` two stores with "
+       "different ones; the same id resumes")
+def _():
+    from types import SimpleNamespace as NS
+    from Evaluation.store import RunStore
+
+    class Nusc:
+        def get(self, table, tok):
+            return {"scene_token": "s", "timestamp": int(tok[1:])} if table == "sample" else {"name": "scene-0001"}
+
+    class Ds:
+        samples, nusc, grid, gt_ss, gt = ["t0", "t1"], Nusc(), NS(res=0.5), 4, NS(signature=lambda: "sig")
+
+        def __len__(self):
+            return 2
+    src = A._make_source_class()(NS(version="v1.0-mini", feature_cache=None), Ds(), NS(T=NS(collate=None, collate_cached=None)), workers=0, evaluator="abcdef012345")
+    assert "junction_mask" not in src.describe(), "no option, no key: the stored descriptions of every other evaluation are unchanged"
+    mask = {"lane_store": "s1", "raster": "1", "borders_m": {"fovj": 0.0, "fovjb": 0.5}, "cache_data": {"fovj": "d", "fovjb": "d"}}
+    src.junction_mask = mask
+    assert src.describe()["junction_mask"] == mask
+    groups = ["vehicle", "two_wheeler", "pedestrian"]
+    with tempfile.TemporaryDirectory() as d:
+        def suite_of(m):
+            return EvalSuite(MaskedSource(m), SynthSubject(), BEVTask(GRID, SPEC, groups, refine=True), out=d, state="reset")
+        first = suite_of(mask).quant.run(scenes=["bev-00"], name="x", progress=0)
+        assert first.manifest["source"]["junction_mask"] == mask and first.manifest["finished"]
+        assert suite_of(dict(mask)).quant.run(scenes=["bev-00"], name="x", progress=0).manifest["resumed"] == 1, "the same mask id resumes"
+        other = dict(mask, lane_store="s2")
+        for other_mask in (other, dict(mask, cache_data={"fovj": "d2", "fovjb": "d"})):
+            try:
+                suite_of(other_mask).quant.run(scenes=["bev-00"], name="x", progress=0)
+                raise AssertionError("a resume with another mask id must be refused")
+            except ValueError as e:
+                assert "junction_mask" in str(e), e
+        suite_of(other).quant.run(scenes=["bev-00"], name="y", progress=0)
+        try:
+            suite_of(mask).quant.compare("x", "y", boot=20)
+            raise AssertionError("two stores with different mask ids must not be compared")
+        except ValueError as e:
+            assert "junction_mask" in str(e), e
+        RunStore.create(os.path.join(d, "quant", "x"), dict(first.manifest))                         # and the store's own rule says yes to its own manifest
+
+
 @check("bev_probe: the chain's names resolve lazily; helpers agree with the adapter's; gt_boxes takes one argument as before")
 def _():
     from evaluation import bev_probe as P
@@ -906,7 +1008,8 @@ def _():
     # the hash itself: 12 hex over the files of the evaluator paths; any edit changes it, the same files give the same value; build() takes it once
     assert len(A.evaluator_hash()) == 12 and A.evaluator_hash() == A.evaluator_tree_hash(paths=A.NUMBER_PATHS) and A.evaluator_hash() != A.evaluator_tree_hash()
     assert all(os.path.exists(p) for p in A.NUMBER_PATHS)
-    assert not {"bev_selftest.py", "bev_mutants.py", "board.py", "bev_suite.py"} & {os.path.basename(p) for p in A.NUMBER_PATHS}, "an edit of a test changes no number"
+    assert not {"bev_selftest.py", "bev_mutants.py", "board.py", "bev_suite.py", "bev_junction_check.py", "soa_maps.py"} & {os.path.basename(p) for p in A.NUMBER_PATHS}, "an edit of a test changes no number"
+    assert "bev_junction.py" in {os.path.basename(p) for p in A.NUMBER_PATHS}, "the junction-free rows' cut and mask reader shape the numbers (its checks are in bev_junction_check.py)"
     assert {"bev_views.py", "bev_annotation_pts.py"} <= {os.path.basename(p) for p in A.NUMBER_PATHS}, "the views make every map's denominator: an edit of them changes the evaluator hash (D73)"
     with tempfile.TemporaryDirectory() as t:
         keep, A.NUMBER_PATHS = A.NUMBER_PATHS, (os.path.join(t, "ev"),)

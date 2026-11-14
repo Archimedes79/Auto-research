@@ -1,8 +1,9 @@
 """The BEV Task of the evaluation suite (Evaluation): what the outputs of the chain mean.
 
     BevSegMetric   maps: tolerant IoU per layer / range bin / dt / subset and line zero-crossing F1 (metrics.SegMeter); a model with the 1 m centre-line
-                   head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad)
-    BevDetMetric   boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows; 'det' = plain decode,
+                   head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad); `--junction-free` adds the two divider layers again without the
+                   map's intersection cells under the masks `fovj` / `fovjb` (D66, bev_junction.py)
+    BevDetMetric  boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows; 'det' = plain decode,
                    'detr' = boxes refined by S5c)
     BevLossMetric  the training loss of the frame (means over frames; per-frame totals rank frames)
     BEVTask        the three plus the views of bev_views.py and the plausibility checks of a frame
@@ -23,6 +24,7 @@ import numpy as np
 
 from Evaluation import Flag, Metric, Prediction, Sample, Task, View
 from Evaluation.qualitative import DebugView
+from evaluation import bev_junction
 from evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
 from evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
 
@@ -30,9 +32,10 @@ MASKS = ("fov", "seen", "out", "obj")
 
 
 # ------------------------------------------------------------------------------------------------ maps
-def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None) -> None:
+def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None, junction=None) -> None:
     """all SegMeter updates of one sample at one dt; meters: {"fov": SegMeter, "seen": SegMeter, "obj": SegMeter}. direction: layer -> (2, X, Y) predicted (cos, sin)
-    of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model"""
+    of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model.
+    junction: {mask name of bev_junction.MASKS: (X, Y) intersection cells}, the divider layers scored again without them (D66) under that mask's meter; None = not"""
     k = layer_index(spec)
     m = masks(g)
     areas = {n: prob[n] for n, (_, kind, _) in k.items() if kind in ("area", "line")}       # line = the 1-cell mask head
@@ -46,6 +49,9 @@ def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None) -> None:
         if direction:
             meters[mname].add_directions(direction, {n: np.asarray(g[n + "_dir"], np.float32) for n in direction}, gt_a, mask=m[mname], mass=mass, dt=dt)
     meters["obj"].add(objs, gt_o, mask=m["obj_fov"], mass=mass, dt=dt)
+    for mname, inter in (junction or {}).items():                  # the dividers without the map's intersection cells (prediction, GT and scored cells alike)
+        pj, gj, fj = bev_junction.junction_free(areas, gt_a, m["fov"], inter)
+        meters[mname].add(pj, gj, mask=fj, mass=mass, dt=dt)
 
 
 def _ikey(mname, dt, layer, subset, b) -> str:
@@ -67,14 +73,17 @@ class BevSegMetric(Metric):
                                        "fov/dt+0.00/ped_crossing/all/all/iou@0", "fov/dt+0.00/road_divider/all/all/iou@1")
     better = {}                                                          # higher is better, but for the distance-field error (direction)
 
-    def __init__(self, grid, spec):
-        self.grid, self.spec = grid, spec
+    def __init__(self, grid, spec, junction=None):
+        self.grid, self.spec, self.junction = grid, spec, junction       # junction: bev_junction.JunctionMasks = also the junction-free divider rows (`--junction-free`), None = not
+        if junction is not None:
+            self.headline = type(self).headline + bev_junction.HEADLINE
 
     def frame(self, sample: Sample, pred: Prediction):
-        meters = {m: SegMeter(self.grid) for m in MASKS}
+        meters = {m: SegMeter(self.grid) for m in MASKS + (tuple(bev_junction.MASKS) if self.junction else ())}
         for dt, o in pred.outputs["dt"].items():
             mass = o["mass"] if (o["mass"] is not None and abs(dt) > 1e-6) else None
-            add_sample(meters, o["prob"], o["dist"], sample.reference[dt], self.spec, dt, mass, o.get("dir"))
+            g = sample.reference[dt]
+            add_sample(meters, o["prob"], o["dist"], g, self.spec, dt, mass, o.get("dir"), self.junction(g) if self.junction else None)
         keys, cnt, n_gt, err, n_err = [], [], [], [], []
         for mname, m in meters.items():
             for (dt, name, sname, b), acc in m.c.items():
@@ -113,7 +122,7 @@ class BevSegMetric(Metric):
     def reduce(self, counts, keys: Optional[Sequence[str]] = None):
         want = None if keys is None else {_flat_to_ikey(k) for k in keys}
         acc = self._accumulate(counts, want)
-        meters = {m: SegMeter(self.grid) for m in MASKS}
+        meters = {m: SegMeter(self.grid) for m in MASKS + tuple(bev_junction.MASKS)}      # the junction masks are empty (no key) in a store made without `--junction-free`
         for key, (cnt, n_gt, err, n_err) in acc.items():
             mname, dt, layer, subset, b = key.split("|")
             meters[mname].c[(round(float(dt), 3), layer, subset, b)] = {"cnt": cnt, "n_gt": n_gt, "err": err, "n_err": n_err}
@@ -270,7 +279,7 @@ class BEVTask(Task):
         self.depth_centres, self.z_levels, self.refine = depth_centres, tuple(z_levels), refine
 
     def metrics(self) -> List[Metric]:
-        ms: List[Metric] = [BevSegMetric(self.grid, self.spec), BevDetMetric(self.groups, "det", "dets")]
+        ms: List[Metric] = [BevSegMetric(self.grid, self.spec, self.junction), BevDetMetric(self.groups, "det", "dets")]
         if self.refine:
             ms.append(BevDetMetric(self.groups, "detr", "detr"))
         if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
@@ -284,6 +293,8 @@ class BEVTask(Task):
             ms.append(BevVelocityMetric(self.grid, self.groups))
         ms.append(BevLossMetric())
         return ms
+
+    junction = None          # a bev_junction.JunctionMasks = also the junction-free divider rows (`--junction-free`, D66); set by bev_suite.make_suite / _task_only, None = not
 
     _PTS = []
 

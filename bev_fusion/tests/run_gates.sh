@@ -31,6 +31,10 @@ run "timed heads"       "$PY" training/timed_head.py
 run "object head"       "$PY" training/object_head.py
 run "metrics"           "$PY" evaluation/metrics.py
 run "front compare"     "$PY" evaluation/front_compare.py
+run "junction rows"     "$PY" evaluation/bev_junction_check.py         # D66: the intersection cells out of the divider rows (rule, dilation barrier, add_sample rows, mask reader and mask id); no data
+run "SOA maps scorer"   "$PY" evaluation/soa_maps.py --selftest        # GaussianCaR maps against ours: mapping by hand, claim region, known answers, the scene bootstrap draw by draw; no data
+run "SOA maps mutants"  "$PY" evaluation/soa_maps.py --mutants         # the 13 planted bugs of that scorer must all be caught
+run "CRN export"        "$PY" tests/test_crn_export.py                 # t26 G0: CRN json -> our frames (planted box, 11 planted bugs, toy chain), TF32 / overlay / devkit-filter gates; no data
 run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py

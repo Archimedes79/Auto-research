@@ -104,7 +104,7 @@ def find_store(run, n, tag="", store=None):
         if not os.path.exists(os.path.join(base, store, "frames.jsonl")):
             raise SystemExit(f"no store {os.path.join(base, store)}")
         return os.path.join(base, store)
-    pat = re.compile(rf"^eval{re.escape(tag)}(_curves|_fusion|_vel)*_n{n}$")
+    pat = re.compile(rf"^eval{re.escape(tag)}(_curves|_fusion|_vel|_jf)*_n{n}$")
     found = sorted(d for d in os.listdir(base) if pat.match(d) and os.path.exists(os.path.join(base, d, "frames.jsonl"))) if os.path.isdir(base) else []
     if len(found) != 1:
         raise SystemExit(f"{'no' if not found else 'several'} suite store for --n {n} --tag '{tag}' in {base}: {found or sorted(os.listdir(base)) if os.path.isdir(base) else 'no quant folder'} "
