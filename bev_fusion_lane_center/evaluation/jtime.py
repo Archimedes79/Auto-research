@@ -4,6 +4,8 @@
                                                                                         probability stays below 0.1) and END-MISS flips (an end has no counterpart keypoint at t: a re-scoring layer cannot fix those)
     wsl bash tools/env/_py14.sh jtime.py replay --seed 0 [--w 0.5] [--run e312_p_s0]   the zero-parameter replay: the pair logit of a pair with a counterpart pair at t-1 becomes (1 - w) x logit(t) + w x logit(t-1); pair precision at the recall of the
                                                                                         original (logit 0 and -2.2, `jpair_pr` definition) and the snapped topo F1 of the E312 read-out with the replayed logits
+    wsl bash tools/env/_py14.sh jtime.py ends --seed 0 [--run e312_p_s0]                the END prior (E299 step 0b): of the GT ends of t that the keypoints of t miss, how many does a keypoint of t-1, warped by the ego motion, match
+                                                                                        (RECOVERABLE), and what does carrying the unmatched keypoints of t-1 over (heat probability >= q) add: true against false ends; keypoint recall / precision before and after
     wsl bash tools/env/_py14.sh jtime.py selftest
 
 The association of keypoints across the two frames uses the PREDICTED keypoints only (the keypoints of t-1 warped by the relative ego pose into the frame of t; mutual nearest neighbours within 3 m and 30 degrees); the GT enters only the truth label of a pair (`jwiring.match` and the GT pairs of
@@ -148,6 +150,67 @@ def ceiling(a):
     json.dump(out, open(os.path.join(ROOT, "temp", "jtime", f"{run}_ceiling.json"), "w"), indent=1)
 
 
+GRID = 50.0                    # half extent of the BEV grid (m): a keypoint of t-1 that leaves the grid cannot be a new end at t
+QS = (0.0, 0.2, 0.4, 0.6, 0.8)  # a keypoint of t-1 without counterpart at t is carried over when its heat peak probability kp_p >= q
+QSTAR = 0.6                    # the operating point PRE-REGISTERED in the card (E299 step 0b)
+
+
+def end_recovery(e0, e1, g1, f0, f1, qs=QS):
+    """the END prior of one pair of frames (labels only for the statistics): the GT ends of t (g1) are `matched` by a keypoint of t (the strict match of `jwiring.match`) or MISSED; a missed end is RECOVERABLE when a keypoint of t-1, warped by the ego
+    motion into the frame of t, matches it. A keypoint of t-1 with no counterpart at t (`counterpart`) and inside the grid is carried over at the heat probability q: it is a TRUE addition when it matches a missed GT end of t, else a FALSE addition (an end that
+    is gone, a duplicate of a matched end, a wrong position or heading) -> dict(gt, delivered, tp, recoverable, q={q: dict(true, false)})"""
+    import jwiring as JW
+    k = e1["kp_pos"].shape[0] // 2
+    v0, v1 = np.asarray(e0["valid"], bool), np.asarray(e1["valid"], bool)
+    out = dict(gt=0, delivered=0, tp=0, recoverable=0, q={q: dict(true=0, false=0) for q in qs})
+    for kind, (G, m) in enumerate(((g1["ent"], g1["ent_m"]), (g1["ext"], g1["ext_m"]))):
+        sl = slice(kind * k, (kind + 1) * k)
+        E0 = np.concatenate([e0["kp_pos"][sl], e0["kp_dir"][sl]], 1)
+        E1 = np.concatenate([e1["kp_pos"][sl], e1["kp_dir"][sl]], 1)
+        W0 = warp(E0, f0, f1)
+        m1 = JW.match(E1[:, :2], E1[:, 2:], v1[kind], G, m)
+        m0 = JW.match(W0[:, :2], W0[:, 2:], v0[kind], G, m)
+        cp = counterpart(W0, E1, v0[kind], v1[kind])
+        cov1 = {int(x) for x in m1 if x >= 0}
+        miss = {int(x) for x in np.nonzero(m)[0]} - cov1
+        out["gt"] += int(m.sum())
+        out["delivered"] += int(v1[kind].sum())
+        out["tp"] += len(cov1)
+        out["recoverable"] += len({int(x) for x in m0 if x >= 0} & miss)
+        carry = (np.abs(W0[:, :2]) <= GRID).all(1) & v0[kind] & (cp < 0)
+        for q in qs:
+            for i in np.nonzero(carry & (np.asarray(e0["kp_p"])[sl] >= q))[0]:
+                out["q"][q]["true" if (m0[i] >= 0 and int(m0[i]) in miss) else "false"] += 1
+    return out
+
+
+def ends_ceiling(a):
+    run, ends, gt, frames, scenes, infos = _setup(a)
+    tot = None
+    n = 0
+    for t0, t1 in _pairs_of_frames(scenes, ends):
+        r = end_recovery(ends[t0], ends[t1], gt[frames[t1].row], lane_frame(infos[t0]), lane_frame(infos[t1]))
+        n += 1
+        if tot is None:
+            tot = r
+            continue
+        for kk in ("gt", "delivered", "tp", "recoverable"):
+            tot[kk] += r[kk]
+        for q in QS:
+            for kk in ("true", "false"):
+                tot["q"][q][kk] += r["q"][q][kk]
+    out = dict(run=run, consecutive_pairs_of_frames=n, **{kk: tot[kk] for kk in ("gt", "delivered", "tp", "recoverable")})
+    out["end_recall_at_t"], out["end_precision_at_t"] = tot["tp"] / tot["gt"], tot["tp"] / tot["delivered"]
+    out["recoverable_share_of_gt_ends"] = tot["recoverable"] / tot["gt"]
+    out["recoverable_share_of_missed_ends"] = tot["recoverable"] / max(tot["gt"] - tot["tp"], 1)
+    out["carry_over"] = {str(q): dict(true=tot["q"][q]["true"], false=tot["q"][q]["false"], recall=(tot["tp"] + tot["q"][q]["true"]) / tot["gt"],
+                                      precision=(tot["tp"] + tot["q"][q]["true"]) / (tot["delivered"] + tot["q"][q]["true"] + tot["q"][q]["false"])) for q in QS}
+    out["pre_registered_q"] = QSTAR
+    print(json.dumps(out, indent=1))
+    os.makedirs(os.path.join(ROOT, "temp", "jtime"), exist_ok=True)
+    json.dump(out, open(os.path.join(ROOT, "temp", "jtime", f"{run}_ends.json"), "w"), indent=1)
+
+
 def replay(a):
     import jpair_pr as JP
     import qgraph_eval as QE
@@ -234,13 +297,28 @@ def selftest():
     # the probability and the truth helpers on a tiny dump
     e = dict(logit=np.array([[0.0, -9.0], [-9.0, 2.0]]), allowed=np.ones((2, 2), bool))
     assert np.allclose(_prob(e)[0, 0], 0.5) and _prob(e)[1, 1] > 0.85
+    # the end prior (k = 4 slots per kind; the same pose twice): GT entry ends A (0, 10) and B (5, 20); t has a keypoint at A only; t-1 has keypoints at A, B, a far one C (30, 30) and one that leaves the grid D (60, 0)
+    # -> B is missed and recoverable; B is a TRUE carry-over (q <= 0.7), C a FALSE one, A has a counterpart (no carry-over), D is outside the grid
+    def dump(pts, probs):
+        kp = np.zeros((8, 2), np.float32)
+        kd = np.tile(np.array([0.0, 1.0], np.float32), (8, 1))
+        kpp = np.zeros(8, np.float32)
+        valid = np.zeros((2, 4), bool)
+        for i, (p, pr) in enumerate(zip(pts, probs)):
+            kp[i], kpp[i], valid[0, i] = p, pr, True
+        return dict(kp_pos=kp, kp_dir=kd, kp_p=kpp, valid=valid)
+    fz = lane_frame(info(0.0, (0.0, 0.0)))
+    G1 = dict(ent=np.array([[0.0, 10.0, 0.0, 1.0], [5.0, 20.0, 0.0, 1.0]], np.float32), ent_m=np.ones(2, bool), ext=np.zeros((1, 4), np.float32), ext_m=np.zeros(1, bool))
+    r = end_recovery(dump([(0, 10), (5, 20), (30, 30), (60, 0)], [0.9, 0.7, 0.8, 0.9]), dump([(0, 10)], [0.9]), G1, fz, fz)
+    assert (r["gt"], r["delivered"], r["tp"], r["recoverable"]) == (2, 1, 1, 1), r
+    assert r["q"][0.0] == dict(true=1, false=1) and r["q"][0.8] == dict(true=0, false=1) and r["q"][0.6] == dict(true=1, false=1), r["q"]                  # q = 0.8 drops B (p 0.7) and keeps C (p 0.8)
     print("jtime selftest ok")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for c in ("ceiling", "replay"):
+    for c in ("ceiling", "replay", "ends"):
         s = sub.add_parser(c)
         s.add_argument("--seed", type=int, required=True)
         s.add_argument("--run", default=None)
@@ -248,4 +326,4 @@ if __name__ == "__main__":
             s.add_argument("--w", type=float, default=0.5)
     sub.add_parser("selftest")
     a = ap.parse_args()
-    {"ceiling": ceiling, "replay": replay, "selftest": lambda _: selftest()}[a.cmd](a)
+    {"ceiling": ceiling, "replay": replay, "ends": ends_ceiling, "selftest": lambda _: selftest()}[a.cmd](a)
