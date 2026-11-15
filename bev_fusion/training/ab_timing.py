@@ -260,7 +260,7 @@ class Bench:
             t0 = time.perf_counter()
             self.opt.zero_grad(set_to_none=True)
             wait, finite = 0.0, True
-            for _ in range(cfg.accum):
+            for micro in range(cfg.accum):
                 t1 = time.perf_counter()
                 try:
                     item = next(it)
@@ -269,7 +269,7 @@ class Bench:
                     item = next(it)
                 wait += time.perf_counter() - t1
                 out, ok, _, _ = T.run_clip(self.model, self.loss, item if isinstance(item, list) else [item], 0.5, self.device, cfg.amp, cfg,
-                                           diag=False, backward=True, augment=True, scaler=self.scaler)
+                                           diag=False, backward=True, augment=True, scaler=self.scaler, step=self.n, micro=micro)      # (step, micro: the image jitter's draw)
                 if not ok:
                     finite = False
                     break

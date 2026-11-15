@@ -67,7 +67,7 @@ from trainkit.runlog import val_logged  # noqa: E402,F401
 from trainkit.schedule import lr_factor  # noqa: E402,F401
 
 try:
-    from .augment import flip_batch
+    from .augment import draw_jitter, flip_batch, jitter_seed
     from .feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
     from . import freeze as freeze_mod
     from .probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident
@@ -80,7 +80,7 @@ try:
     from .student_encoder import anchor_terms, student_anchor_weight
 except ImportError:                                   # run as a script
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from augment import flip_batch
+    from augment import draw_jitter, flip_batch, jitter_seed
     from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
     import freeze as freeze_mod
     from probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident
@@ -97,7 +97,7 @@ except ImportError:                                   # run as a script
 RESUME_FREE = Config.RESUME_FREE + ("data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers", "eval_batches", "grad_diag_every",
                                     "probe", "pin_memory", "prefetch_factor", "profile_steps")
 # switches a checkpoint from before them lacks: turning one on in the middle of a run changes the numbers (a freeze plan, the speed flags, the split clip, the lr groups)
-RESUME_SWITCHES = ("train_only", "freeze", "cudnn_benchmark", "tf32", "grad_clip_split", "lr_groups", "student_anchor")
+RESUME_SWITCHES = ("train_only", "freeze", "cudnn_benchmark", "tf32", "grad_clip_split", "lr_groups", "student_anchor", "img_jitter")
 
 
 @dataclass
@@ -136,6 +136,10 @@ class TrainConfig(Config):
                                                  # (no depth ground truth); 0 = off (nothing computed, nothing logged)
     student_anchor_floor: float = 0.1            # the fraction of student_anchor it falls to ...
     student_anchor_until: float = 0.5            # ... linearly until this fraction of the steps, constant after (student_encoder.student_anchor_weight)
+    img_jitter: float = 0.0                      # t26: strength of the photometric jitter of the camera student's input in training (needs model.camera_student): brightness, contrast, saturation +-0.4 x it,
+                                                 # gamma 1.25 ** (+-it), gaussian noise 0.02 x it (augment.jitter_images); one random draw per sample (a clip: one), the same for every frame of it, a function
+                                                 # of (seed, step, micro-batch) so a resume repeats it; the anchor keeps comparing with the teachers' outputs of the clean image. 0 = off, bit for bit
+    img_jitter_from: float = 0.0                 # the fraction of the steps (step / steps) from which the jitter is on: until the anchor has reached its floor the student's input is the clean image the cached targets belong to
     grad_diag_every: int = 0                     # log the cosines of the task-group gradients at the BEV feature every N steps
     seq_len: int = 1                             # keyframes per clip: > 1 trains on clips of consecutive keyframes of one scene with
                                                  # the world memory carried from keyframe to keyframe (batch_size = clips per
@@ -193,13 +197,19 @@ def build(cfg):
 
 
 def student_findings(cfg, mcfg):
-    """what model.camera_student and the anchor need of the config, as messages (build raises them, startable.py lists them): the student replaces cached outputs of the current frame, so a
-    feature cache and the key-frame image folder (lane_images); the anchor needs a student that trains, and a schedule that makes sense"""
+    """what model.camera_student, the anchor and the image jitter need of the config, as messages (build raises them, startable.py lists them): the student replaces cached outputs of the current frame
+    (student_frames 'all': of every frame of the window), so a feature cache and the key-frame image folder (lane_images); the anchor needs a student that trains, and a schedule that makes sense"""
     out = []
     if mcfg.camera_student and not cfg.feature_cache:
         out.append("model.camera_student replaces cached teacher outputs: it needs a feature_cache")
     if mcfg.camera_student and not cfg.lane_images:
         out.append("model.camera_student reads the current key-frame image: it needs lane_images (the folder of the key-frame JPEGs, data/cache/img_front)")
+    if mcfg.camera_student and mcfg.student_frames == "all" and cfg.n_cam < 2:
+        out.append("model.student_frames 'all' feeds the student the older frames of the window: it needs n_cam >= 2")
+    if not 0 <= cfg.img_jitter <= 2 or not 0 <= cfg.img_jitter_from < 1:
+        out.append(f"img_jitter {cfg.img_jitter} (0 = off .. 2) and img_jitter_from {cfg.img_jitter_from} (0 <= from < 1, a fraction of the steps)")
+    if cfg.img_jitter > 0 and not mcfg.camera_student:
+        out.append("img_jitter jitters the camera student's input: it needs model.camera_student")
     if cfg.student_anchor < 0 or not 0 <= cfg.student_anchor_floor <= 1 or not 0 < cfg.student_anchor_until <= 1:
         out.append(f"student_anchor {cfg.student_anchor} (>= 0), student_anchor_floor {cfg.student_anchor_floor} (0..1), student_anchor_until {cfg.student_anchor_until} (0 < until <= 1)")
     if cfg.student_anchor > 0 and not (mcfg.camera_student and mcfg.student_trainable):
@@ -229,6 +239,7 @@ def make_datasets(cfg):
                                                store=FeatureStore(cfg.feature_cache), radar_cache=cfg.radar_cache or None,
                                                camera_features=cfg.model.get("camera_features", "dualbev"),
                                                lane_images=cfg.lane_images or None,
+                                               lane_images_older=bool(cfg.model.get("camera_student")) and cfg.model.get("student_frames", "current") == "all",
                                                store2=FeatureStore(cfg.feature_cache2) if cfg.feature_cache2 else None, **kw))
         else:
             out.append(FrontRadarDataset(root, cfg.version, scenes(split, names), **kw))
@@ -537,13 +548,14 @@ LOGGED_TERMS = ("objhead.vel@+0.0", "objhead.mov@+0.0", "motion@+0.0", "radar_au
                                                                              # the velocity terms (t11), hidden in group.objects / motion
 
 
-def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False, augment=False, scaler=None):
+def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_terms=True, backward=False, augment=False, scaler=None, step=0, micro=0):
     """One clip = a list of batches (consecutive keyframes of the same scenes; a single batch = a clip of length 1). The
     model state (world memory) is carried from keyframe to keyframe with the ego step between them: detached at every
     keyframe, or with cfg.seq_bptt kept in the graph through the clip. backward: backpropagate the mean loss of the clip
     divided by cfg.accum, right after each keyframe (with seq_bptt the earlier graphs are retained for the state path of
     the later keyframes, so the gradient is that of the clip's mean loss). scaler: the GradScaler of amp "fp16": the loss is scaled before the backward (the gradients stay
-    scaled until optimizer_step unscales them); the logged terms are the unscaled ones.
+    scaled until optimizer_step unscales them); the logged terms are the unscaled ones. augment: the mirror (cfg.flip_aug) and, from step_frac = cfg.img_jitter_from on, the photometric jitter of the
+    student's image (cfg.img_jitter: batch["img_jitter"], one draw per clip of this micro-batch, drawn from (cfg.seed, step, micro) = the optimiser step and the micro-batch inside it).
     -> (dict of the scalar terms averaged over the keyframes, finite flag, diag of the last keyframe or None, list of the
     per-keyframe totals)."""
     L, state, prev, kf, dg = len(clip), None, None, [], None
@@ -553,10 +565,13 @@ def run_clip(model, loss, clip, step_frac, device, amp, cfg, diag=False, train_t
         flip = torch.rand(len(clip[0]["tokens"])) < cfg.flip_aug
         for batch in clip:
             flip_batch(batch, flip)
+    jitter = augment and cfg is not None and cfg.img_jitter > 0 and step_frac >= cfg.img_jitter_from
     for t, batch in enumerate(clip):
-        step = clip_step(prev, device) if prev is not None else None
+        if jitter:                                                # the same draw for every key frame of a clip (one scene), the pixel noise differs per key frame
+            batch["img_jitter"] = draw_jitter(len(batch["tokens"]), cfg.img_jitter, jitter_seed(cfg.seed, step, micro), t)
+        step_ego = clip_step(prev, device) if prev is not None else None
         out, res, _ = forward_loss(model, loss, batch, step_frac, device, amp, cfg, diag=diag and t == L - 1,
-                                   train_terms=train_terms, state=state, step=step)
+                                   train_terms=train_terms, state=state, step=step_ego)
         if not torch.isfinite(out["total"]):
             acc, totals = _unpack(kf, L)
             return acc, False, dg, totals
@@ -751,7 +766,7 @@ def train(cfg, eval_fn=None, datasets=None):
     def step_fn(item, info):                                    # one micro-batch (a clip of keyframes): forward and backward
         diag = bool(cfg.grad_diag_every) and info.scaler is None and (info.step + 1) % cfg.grad_diag_every == 0         # not under fp16: the group gradients would be taken unscaled and underflow
         out, ok, dg, _ = run_clip(model, loss, item if isinstance(item, list) else [item], info.frac, device, cfg.amp, cfg,
-                                  diag=diag and info.micro == 0, backward=True, augment=True, scaler=info.scaler)
+                                  diag=diag and info.micro == 0, backward=True, augment=True, scaler=info.scaler, step=info.step, micro=info.micro)
         return out, ok, ({"diag": dg} if dg else None)
 
     return fit(cfg, model, loss, train_loader, step_fn, out_dir, device,

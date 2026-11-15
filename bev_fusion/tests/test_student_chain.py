@@ -13,7 +13,7 @@ oracles); the encoder itself is tests/test_student_encoder.py.
      BEV reaches every student tensor, BatchNorm statistics do not move under model.train() / ema.applied (a plain StudentEncoder's do); frozen: no gradient, no graph, no
      `student.` key in the checkpoint state; built last (every other tensor equal with the option on or off); lr_groups give the student its own rate; warm start keeps the
      student as loaded; a checkpoint of the chain without a student loads into the chain with a frozen one (the stand-in evaluation path)
-  E  config: each refusal of model.check_config on its own, lane_branch stays allowed, the base model refuses the option, student_frames other than 'current' refused (the variant 'all' was cut with t22 stage B2); train.build
+  E  config: each refusal of model.check_config on its own, lane_branch stays allowed, the base model refuses the option, student_frames other than 'current' / 'all' refused ('all': tests/test_student_window.py); train.build
      refusals (feature cache, lane_images, anchor without a trainable student, schedule range)
   F  anchor: zero for student = teacher and positive otherwise (by hand), the weight schedule at 0 / until/2 / until / 1, forward_loss adds weight x anchor to the total in
      training (with its gradient reaching the student) and only logs it in validation, run_clip logs it
@@ -360,8 +360,9 @@ check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_st
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, camera_off=True))), "camera_off"), "refused with camera_off")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="nope", student_trainable=True))), "camera_student='nope'", "stub"), "an unknown kind is refused and the kinds are named")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_frames="oldest", student_trainable=True))), "student_frames"), "an unknown student_frames is refused")
-check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_frames="all", student_trainable=True))), "student_frames", "only 'current'"),
-      "student_frames 'all' is refused (the variant was cut with t22 stage B2: tag bf/t22.B2_s0)")
+check(not raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_frames="all", student_trainable=True)))),
+      "student_frames 'all' with a student is accepted (t26: tests/test_student_window.py)")
+check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, student_frames="all"))), "student_frames", "without camera_student"), "student_frames 'all' without camera_student is refused")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub"))), "frozen", "student_init"), "a frozen student without student_init is refused")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, student_trainable=True))), "without camera_student"), "student_init / student_trainable without camera_student: refused")
 check(raises(ValueError, lambda: check_config(ModelConfig(**dict(DUAL, camera_student="stub", student_trainable=True, cam_adapter=True, camera_off=True))), "cam_adapter", "camera_off"),
@@ -681,7 +682,7 @@ base_get = FC.FrontRadarDataset.__getitem__
 FC.FrontRadarDataset.__getitem__ = lambda self, i: {"frames": [{"token": t} for t in toks]}
 try:
     ds = object.__new__(FC.CachedFrontRadarDataset)
-    ds.sources, ds.stores, ds.lane_images = [], [], img_root
+    ds.sources, ds.stores, ds.lane_images, ds.lane_images_older = [], [], img_root, False
     item = ds[0]
 finally:
     FC.FrontRadarDataset.__getitem__ = base_get

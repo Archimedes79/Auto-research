@@ -40,9 +40,10 @@ import freeze as freeze_mod                                     # noqa: E402
 import losses                                                   # noqa: E402
 import model as M                                               # noqa: E402
 import train as T                                               # noqa: E402
+from lane_branch import KEY, build_settings, key_built, key_missing_scenes, older_built, older_key, older_missing_scenes, older_root      # noqa: E402
 from student_encoder import newest_checkpoint                   # noqa: E402
 
-SMOKE = dict(steps=20, warmup=5, eval_every=10, save_every=10, keep=1, log_every=5)
+SMOKE = dict(steps=20, warmup=5, eval_every=10, save_every=10, keep=1, log_every=5, keep_steps=[])      # keep_steps: the engine refuses a step above `steps` or off the save_every grid (t26 lists 6000 .. 36000)
 SMOKE_LOSS = dict(warmup_hold=0.0, warmup_ramp=0.01)           # the dt != 0 terms and the aux heads run inside 20 steps
 CKPT_GB = 0.45                                                 # one complete checkpoint (state + ema + Adam moments), measured 445.7 MB
 
@@ -152,6 +153,39 @@ def clip_split_findings(mc, split):
     return []
 
 
+def older_cache_findings(lane_images, cfg):
+    """problems of the older-frame image cache (student_frames 'all'): <lane_images>/sweeps must hold a FINISHED build of this window (n_cam, cam_stride) that covers every scene of the config -
+    a half-built cache fails at its first missing frame, perhaps only in the first evaluation, hours into the run"""
+    scenes, built, key = set(cfg.train_scenes) | set(cfg.val_scenes), older_built(lane_images), older_key(cfg.n_cam, cfg.cam_stride)
+    if not os.path.isdir(older_root(lane_images)):
+        return [f"model.student_frames 'all' reads the older frames' images from {cfg.lane_images}/sweeps: it does not exist (python training/lane_branch.py build-cache-older <config>)"]
+    if not scenes:
+        return ["model.student_frames 'all': the config names no scenes (a split), so the older-frame cache cannot be checked against them: use a split"]
+    if key not in built:
+        return [f"model.student_frames 'all': {cfg.lane_images}/sweeps has no finished build for {key} (BUILT.json lists {sorted(built) or 'nothing'}; python training/lane_branch.py build-cache-older <config>)"]
+    if built[key].get("settings", build_settings()) != build_settings():
+        return [f"model.student_frames 'all': the build of {key} in {cfg.lane_images}/sweeps was made with {built[key]['settings']}, the builder now makes {build_settings()}: build it again in a new folder"]
+    missing = older_missing_scenes(lane_images, cfg.n_cam, cfg.cam_stride, scenes)
+    return [f"model.student_frames 'all': the finished build of {key} in {cfg.lane_images}/sweeps lacks {len(missing)} of the config's {len(scenes)} scenes, e.g. {missing[:3]} "
+            "(python training/lane_branch.py build-cache-older <config> with this config)"] if missing else []
+
+
+def key_cache_findings(lane_images, cfg):
+    """problems of the key-frame image cache of a student_frames 'all' config: <lane_images>/BUILT.json must hold a FINISHED key-frame build that covers every scene of the config (the older-frame
+    cache has its own marker). Other configs with lane_images are not asked: their caches were built before the marker existed"""
+    scenes, built = set(cfg.train_scenes) | set(cfg.val_scenes), key_built(lane_images)
+    if not scenes:
+        return []                                                       # older_cache_findings says so
+    if KEY not in built:
+        return [f"model.student_frames 'all': {cfg.lane_images} has no finished key-frame build (BUILT.json lists {sorted(built) or 'nothing'}; python training/lane_branch.py build-cache <config>: "
+                "resumable, it writes the marker when every sample is through)"]
+    if built[KEY].get("settings", build_settings()) != build_settings():
+        return [f"model.student_frames 'all': the key frames in {cfg.lane_images} were made with {built[KEY]['settings']}, the builder now makes {build_settings()}"]
+    missing = key_missing_scenes(lane_images, scenes)
+    return [f"model.student_frames 'all': the finished key-frame build in {cfg.lane_images} lacks {len(missing)} of the config's {len(scenes)} scenes, e.g. {missing[:3]} "
+            "(python training/lane_branch.py build-cache <config> with this config)"] if missing else []
+
+
 def check(path, root=ROOT, require_clean=False, expect_gt=""):
     """(problems, notes) of the config file `path`; nothing is read from the data, no model is built, nothing is trained"""
     problems, notes = [], []
@@ -184,6 +218,8 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
         if mc.lane_branch and cached and not cfg.lane_images:
             problems.append("model.lane_branch with a feature_cache needs lane_images")
         problems += T.student_findings(cfg, mc)                 # camera_student: a feature cache, lane_images, the anchor's schedule and student
+        if mc.camera_student and mc.student_frames == "all" and cfg.lane_images and os.path.isdir(_abs(cfg.lane_images, root)):
+            problems += older_cache_findings(_abs(cfg.lane_images, root), cfg) + key_cache_findings(_abs(cfg.lane_images, root), cfg)
         si = _abs(mc.student_init, root) if mc.student_init else ""
         if si and os.path.exists(si) and newest_checkpoint(si) is None:
             problems.append(f"model.student_init: {mc.student_init} holds no checkpoint (ckpt_*.pt)")
@@ -257,10 +293,12 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
 
 
 def smoke_config(path, out_dir):
-    """Write the smoke twin of a config: the same model and loss except the loss warm-up (SMOKE_LOSS), 20 steps; returns its path."""
+    """Write the smoke twin of a config: the same model and loss except the loss warm-up (SMOKE_LOSS), 20 steps, no keep_steps, the warm-up of an lr group cut to the run's; returns its path."""
     d = json.load(open(path))
     base = d["name"]
     d.update(SMOKE, name="smoke_" + base)
+    if d.get("lr_groups"):                                           # a group's own warm-up (t26: 3000) is longer than the run
+        d["lr_groups"] = {k: dict(v, warmup=min(v["warmup"], SMOKE["warmup"])) if "warmup" in v else v for k, v in d["lr_groups"].items()}
     d["_about"] = (f"end-to-end smoke of {base}: the same model, loss and data, {SMOKE['steps']} steps, evaluation and a checkpoint every 10; "
                    f"the loss warm-up is replaced (loss.warmup_hold / warmup_ramp) so that the dt != 0 terms run")
     d["loss"] = dict(d.get("loss", {}), **SMOKE_LOSS)
@@ -324,12 +362,45 @@ def _selftest():
                 (dict(model=dict(stud, student_init="runs/none"), **dual), "model.student_init: runs/none does not exist"),
                 (dict(model=dict(stud, student_init="student_run"), **dual), "holds no checkpoint"),
                 (dict(model=dict(stud, student_trainable=False), **dual), "frozen student"),
-                (dict(model=dict(stud, student_trainable=False, student_init="student_run"), student_anchor=1.0, **dual), "student_anchor > 0")]
+                (dict(model=dict(stud, student_trainable=False, student_init="student_run"), student_anchor=1.0, **dual), "student_anchor > 0"),
+                (dict(model=dict(stud, student_frames="all"), n_cam=1, **dual), "n_cam >= 2"),                                                          # t26 student_frames 'all': the older frames' images
+                (dict(model=dict(stud, student_frames="all"), n_cam=2, **dual), "build-cache-older"),                                                   # (no <lane_images>/sweeps yet)
+                (dict(model=stud, img_jitter=-0.1, **dual), "img_jitter"), (dict(model=stud, img_jitter_from=1.0, **dual), "img_jitter_from"),         # t26 image jitter
+                (dict(model={"pretrained": ""}, img_jitter=0.5), "needs model.camera_student")]
         for kw, text in bad:
             pr, _ = check(write(**kw), tmp)
             assert has(pr, text), (kw, text, pr)
         open(os.path.join(tmp, "student_run", "ckpt_00000001.pt"), "w").close()
-        for kw in (dict(model=stud, **dual), dict(model=dict(stud, student_init="student_run"), student_anchor=1.0, **dual)):                           # a student that trains, with and without a start
+        os.makedirs(os.path.join(tmp, "data", "sweeps"))
+        older = dict(model=dict(stud, student_frames="all"), n_cam=2, train_scenes=["scene-a"], val_scenes=["scene-b"], **dual)
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "no finished build"), pr                                    # the folder is there, no BUILT.json: a half-built cache
+        json.dump({"built": {older_key(2, T.TrainConfig.cam_stride): {"scenes": ["scene-a"]}}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))
+        pr, _ = check(write(**dict(older, cam_stride=T.TrainConfig.cam_stride + 1)), tmp)
+        assert has(pr, "no finished build"), pr                                    # a finished build for another stride does not count
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "lacks 1 of the config's 2 scenes") and has(pr, "scene-b"), pr    # a finished build that does not cover every scene of the config
+        pr, _ = check(write(**dict(older, train_scenes=[], val_scenes=[])), tmp)
+        assert has(pr, "names no scenes"), pr
+        key = older_key(2, T.TrainConfig.cam_stride)
+        sweeps_marker = lambda **kw: json.dump({"built": {key: dict({"scenes": ["scene-b", "scene-a", "scene-c"]}, **kw)}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))  # noqa: E731
+        key_marker = lambda **kw: json.dump({"built": {KEY: dict({"scenes": ["scene-b", "scene-a", "scene-c"]}, **kw)}}, open(os.path.join(tmp, "data", "BUILT.json"), "w"))            # noqa: E731
+        sweeps_marker()
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "no finished key-frame build") and not has(pr, "sweeps"), pr                # the older frames are complete, the key frames have no marker (t26: 10,441 of 29,839 were missing)
+        key_marker(scenes=["scene-a"])
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "key-frame build in") and has(pr, "lacks 1 of the config's 2 scenes"), pr    # a key-frame marker that does not cover every scene
+        key_marker(settings=dict(build_settings(), jpeg_quality=50))
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "key frames in") and has(pr, "were made with"), pr                            # a cache made with other builder constants
+        sweeps_marker(settings=dict(build_settings(), hw=[128, 352]))
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "was made with") and has(pr, "sweeps"), pr
+        sweeps_marker(settings=build_settings())
+        key_marker(settings=build_settings())                                                        # both complete, with the builder's own constants
+        for kw in (dict(model=stud, **dual), dict(model=dict(stud, student_init="student_run"), student_anchor=1.0, **dual),                          # a student that trains, with and without a start
+                   older, dict(model=stud, img_jitter=0.5, img_jitter_from=0.25, **dual)):                                                          # ... with the older frames' cache, with image jitter
             pr, _ = check(write(**kw), tmp)
             assert pr == [], (kw, pr)
         # the same switches done right are no problem; a flag that does nothing is a note, not a refusal
@@ -407,11 +478,16 @@ def _selftest():
         d = json.load(open(s))
         assert d["name"] == "smoke_base2" and d["steps"] == 20 and d["loss"]["fusion_area_only"] and d["loss"]["warmup_hold"] == 0.0
         assert "warm-up is replaced" in d["_about"] and T.read_config(s).steps == 20
+        s2 = smoke_config(write(name="long", steps=36000, save_every=500, keep_steps=[6000, 12000, 36000], lr_groups={"student": {"lr": 3e-5, "warmup": 3000}, "motion_block": {"lr": 1e-4}}),
+                          os.path.join(tmp, "smk"))
+        c2 = T.read_config(s2)                                                                       # the engine refuses a keep_steps entry above `steps` / off the save_every grid at its start
+        assert c2.steps == 20 and not c2.keep_steps and all(0 < k <= c2.steps and k % c2.save_every == 0 for k in c2.keep_steps), c2.keep_steps
+        assert c2.lr_groups == {"student": {"lr": 3e-5, "warmup": 5}, "motion_block": {"lr": 1e-4}}, c2.lr_groups
         assert "--no-card" in start_lines(s, d["name"], smoke=True) and "--id smoke.base2 " in start_lines(s, d["name"], smoke=True)
         assert "<hypothesis of the card>" in start_lines(s, "t14_dc_ctl_s0") and "--id t14.dc_ctl_s0 " in start_lines(s, "t14_dc_ctl_s0")
         pr, _ = check(write(), tmp, require_clean=True)                                              # tmp lies in the outer repo's ignored temp/
         assert isinstance(pr, list)
-    print("startable selftest passed: 25 kinds of bad config (incl. the t22 camera student) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
+    print("startable selftest passed: 30 kinds of bad config (incl. the t22 camera student, its older frames' cache missing / half built / for other scenes, the image jitter) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
           "uncommitted files (rename, space, untracked folder) are listed, the GT identity is told against a tagged version (CRLF-safe), "
           "the smoke twin is a valid config, the start lines make up no card")
 

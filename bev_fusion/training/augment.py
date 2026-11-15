@@ -14,6 +14,8 @@ The grid is symmetric about y = 0 (y -26..26 m), so cell iy of a mirrored map is
 is mirrored as a whole: the same mask for every keyframe, so the carried memory and the ego steps stay consistent.
 
     flip_batch(batch, flip)   in place on a collated batch (CPU, before to_device); flip: bool (B,)
+Photometric jitter of the camera student's image (t26, TrainConfig.img_jitter / img_jitter_from): draw_jitter makes batch["img_jitter"] (one draw per sample, a clip is one sample; from
+(seed, step, micro-batch) through jitter_seed, so a resume repeats it), the cached model applies jitter_images to the student's input in training mode only. Tests: tests/test_student_window.py.
 Run the self-test (nuScenes mini): python training/augment.py
 """
 import math
@@ -89,6 +91,44 @@ def flip_batch(batch, flip):
             m = batch[key]
             batch[key] = torch.where(flip.to(m.device).view(-1, 1, 1, 1), m.flip(-1), m)
     return batch
+
+
+# ---- photometric jitter of the camera student's input (t26, TrainConfig.img_jitter): the lift reads cached tables of the camera geometry, so only the colours change here
+JITTER_RANGE = 0.4          # brightness, contrast and saturation factors: 1 +- 0.4 x strength
+JITTER_GAMMA = 1.25         # gamma between 1 / 1.25 and 1.25 at strength 1 (an exponent 1.25 ** (strength u), u in [-1, 1])
+JITTER_NOISE = 0.02         # sigma of the gaussian noise in the 0 .. 1 range of the image, x strength
+LUMA = (0.299, 0.587, 0.114)
+
+
+def jitter_seed(seed, step, micro):
+    """one integer for (run seed, optimiser step, micro-batch of it): the draw of a step is a function of these three, not of a random stream, so a resume of the pass repeats it"""
+    return (int(seed) * 1_000_003 + int(step)) * 1_009 + int(micro)
+
+
+def draw_jitter(B, strength, seed, key=0):
+    """the photometric draw of B samples (batch["img_jitter"]): u (4, B) in [-1, 1] = brightness, contrast, saturation, gamma, from `seed` alone (the same for every `key`, so the key frames of a clip
+    see one scene), and the seed of the pixel noise, which differs per `key` (the key frame of the clip). On the CPU."""
+    g = torch.Generator().manual_seed(int(seed))
+    return {"u": torch.rand(4, B, generator=g) * 2 - 1, "strength": float(strength), "noise_seed": int(seed) * 64 + int(key)}
+
+
+def jitter_images(img, j, salt=0):
+    """uint8 images (B, 3, H, W) or (B, K, 3, H, W) -> float32 0 .. 255 of the same shape, on the device of `img`: brightness, contrast (about the mean luma of the frame), saturation, gamma and gaussian
+    noise, in this order, with the factors of sample b from j["u"][:, b] for EVERY frame of the sample (one consistent scene) and the noise drawn per pixel from a generator seeded with
+    (j["noise_seed"], salt): the current frame and the older ones take different salts. Deterministic, no state shared with torch's global generator."""
+    s, u = j["strength"], j["u"].to(img.device)
+    lead = (img.shape[0],) + (1,) * (img.dim() - 1)
+    f = lambda a: (1 + JITTER_RANGE * s * u[a]).view(lead)                        # noqa: E731
+    luma = lambda x: (x * x.new_tensor(LUMA).view(3, 1, 1)).sum(-3, keepdim=True)  # noqa: E731
+    x = (img.float() / 255 * f(0)).clamp(0, 1)
+    m = luma(x).mean((-3, -2, -1), keepdim=True)
+    x = ((x - m) * f(1) + m).clamp(0, 1)
+    y = luma(x)
+    x = ((x - y) * f(2) + y).clamp(0, 1)
+    x = x ** (JITTER_GAMMA ** (s * u[3])).view(lead)
+    g = torch.Generator(device=img.device).manual_seed(j["noise_seed"] * 2 + salt)
+    x = x + JITTER_NOISE * s * torch.randn(x.shape, generator=g, device=x.device)
+    return x.clamp(0, 1) * 255
 
 
 def flip_cam(cam_frames, cam_obs, flip):

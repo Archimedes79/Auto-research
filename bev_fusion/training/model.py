@@ -35,7 +35,7 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 radar block and the radar temporal block over the same frames and ego chains as the camera (state["buf"]["rad_fused"], state["rad"]),
                 entering as a residual that starts as the identity (radar features + rad_mix(block output), rad_mix zero-initialised)
   camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, training/student_encoder.py): a small trained image encoder replaces, for the current frame, the DualBEV
-                depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached outputs
+                depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached outputs, or with student_frames "all" (t26) come from the student too
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
                 (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
   fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
@@ -149,14 +149,16 @@ class ModelConfig:
                                        # Know: with False the lane output sends no gradient to the depth head, also not to a trainable camera_student's depth (lift PD does); no config uses it.
     camera_student: str = ""           # t22 stage B: "" = off | a key of STUDENTS (training/student_encoder.py): a small trained image encoder that replaces the cached teacher outputs of
                                        # the CURRENT frame (frame 0) of both feature sources, from batch["lane_img"] (TrainConfig.lane_images); older frames keep their cached teacher
-                                       # outputs, and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the main lift uses), gradient included.
+                                       # outputs (student_frames 'all': they come from the student too), and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the main lift uses), gradient included.
                                        # Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the same on or off).
                                        # Know: a frozen student's EMA copy drifts by about 3e-7 and warm_start / the evaluation apply that copy, not student_init; zero_cam (the
                                        # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of every key frame of a clip stay in memory: measured 16.3 GB at batch 3 x clips of 3 (paging on a 12 GB card), 9.1 GB with the encoder and the lift recomputed in the backward (checkpoint_encode, camera_bevs; +2.6 s per step)
     student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
     student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the checkpoints (loaded from student_init)
-    student_frames: str = "current"    # only "current" exists: the student replaces frame 0 (the only frame with a JPEG), the older frames of a pair / window keep their cached teacher outputs.
-                                       # The key stays because the stored configs and runs of stage B carry it; the variant "all" (t22 stage B2, CUT) was removed, its code is in the tag bf/t22.B2_s0
+    student_frames: str = "current"    # the frames the student replaces: "current" (frame 0 only; the older frames of a pair / window keep their cached teacher outputs, the stored configs of stage B) |
+                                       # "all" (t26, back from the cut stage B2, tag bf/t22.B2_s0: every frame of the window from its own image, <lane_images>/sweeps, lane_branch.py build-cache-older; the
+                                       # newest frame with a graph, the older F - 1 in one batched forward under no_grad, so they enter as constants (values, not gradients: in training mode the BatchNorm
+                                       # statistics behind the lift still couple the frames); the anchor loss and the lane branch stay on frame 0; a one-frame (stream) batch needs no older image)
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
     centreline_1m: bool = False        # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer
@@ -333,8 +335,10 @@ def check_config(cfg):
             errs.append("a frozen student (student_trainable False) needs student_init: a random frozen encoder stands in for nothing")
     elif cfg.student_init or cfg.student_trainable:
         errs.append("student_init / student_trainable do nothing without camera_student")
-    if cfg.student_frames != "current":
-        errs.append(f"student_frames={cfg.student_frames!r}: only 'current' exists ('all', t22 stage B2, was cut: tag bf/t22.B2_s0)")
+    if cfg.student_frames not in ("current", "all"):
+        errs.append(f"student_frames={cfg.student_frames!r}: 'current' (frame 0 from the student) or 'all' (every frame of the window)")
+    elif cfg.student_frames == "all" and not cfg.camera_student:
+        errs.append("student_frames='all' does nothing without camera_student")
     if cfg.motion_block and (cfg.camera_off or cfg.radar_kind == "off"):
         errs.append("motion_block reads two camera frames and the radar Doppler: it needs the camera and a radar")
     if cfg.box_vel_from_field and not cfg.motion_block:
