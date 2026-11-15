@@ -1,0 +1,5 @@
+s = open("temp/t26/dev_gh.py").read()
+s = s.replace("    for group in (marker_checks, crash_checks, lock_checks, cli_checks):", "    for group in ():")
+s = s.replace("for name, (patches, hook, groups) in MUTANTS.items():", "import traceback\nfor name, (patches, hook, groups) in [(k, v) for k, v in MUTANTS.items() if k.startswith('train()')]:")
+s = s.replace("            except Exception as e:                                                  # noqa: BLE001 - a planted bug that crashes a check is caught as well", "            except Exception as e:\n                traceback.print_exc()")
+open("temp/t26/dev_mut.py", "w").write(s)

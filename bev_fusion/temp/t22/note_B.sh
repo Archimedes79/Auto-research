@@ -1,0 +1,9 @@
+#!/bin/bash
+# scratch: the judgement columns of the stage-B rows (ledger.py note)
+cd /mnt/c/Auto-research/autoresearch || exit 1
+export AR_PROJECT=../bev_fusion
+RES="VAL 1000 frames, one seed, vs t21.pair4_s0 (paired scene bootstrap, b-a [95%]): lane divider IoU@1 -0.0046 [-0.0114,+0.0027]; IoU@0.5 -0.0080 [-0.0149,-0.0006]; drivable -0.0001; walkway +0.0019; vehicle IoU@0 dt0 -0.0091 [-0.0140,-0.0042], dt+0.5 -0.0134 (point only); mAP fusion area -0.0127 [-0.0248,-0.0015] (m 0.0117); vehicle AP@2 40-60 m +0.0102 fusion / -0.0070 plain; velocity EPE moving centres 1.0911->1.1431 +0.0520 [+0.0330,+0.0748] (limit +0.05); static-cell EPE 0.2172->0.2999 +0.0827 [+0.0285,+0.1572]. Vs the frozen stand-in all map/box rows up (lane divider IoU@1 +0.0302 [+0.0210,+0.0399], mAP +0.0189); recovered 87% (lane IoU@1), 60% (mAP), 48% (moving EPE), 17% (static EPE). 1500 steps, 6.5 s/step, 9.1 GB, no non-finite loss. Training val total 8.389 vs control 8.284. Image side 0.37 (fp32) / 0.54 (fp16) of the teachers' time. Files: experiments/t22_student_encoder/experiment.md (Stage B result), temp/t22/compare_B_vs_control.log"
+DEC="INCONCLUSIVE by the written rule (by hand: composed from the table rows): no CUT; STAND-IN not met (mAP fusion area, vehicle IoU dt+0.5, moving-centre velocity EPE by 0.002, static-cell EPE below the control by more than m); not BETTER. Rule action: second seed of S and of the control, no adoption. Letter of the rule used (m = max(0.010, half-width)); with the 0.010 floor as the EPE margin the static-cell EPE row alone would be a CUT. Open: P vs P4, R arm, frozen files"
+python3 tools/ledger.py note t22.B_s0 --result "$RES" --decision "$DEC"
+python3 tools/ledger.py note t22.B_s0.eval --result "diagnostic evaluation of t22.B_s0 (VAL 1000 frames, --quant --curves --fusion --velocity); numbers and verdict in the row t22.B_s0" --decision "no verdict (diagnostic, --no-card)"
+python3 tools/ledger.py tail -n 4 2>&1 | cut -c1-260
