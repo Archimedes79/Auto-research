@@ -1,20 +1,26 @@
 """E325 step 2: the data of the wiring head `Wire` (`training/grid/jwire_head.py`): per frame a compact RECORD of what a connector end sees (the kept pieces of the delivered graph and their attributes, the pairs, the keypoint probabilities,
 the GT ends the keypoints match), and the instances / agreement statistics made from it.
 
-    wsl bash tools/env/_py14.sh jwire_data.py val --seed 0 [--run e312_p_s0] [--thr 0.1] [--max N]     # VAL records from the stored dumps (CPU: runs/<run>/ends_val.pkl, B's full dump temp/e276/predfull_e273_p_s<seed>.pkl, the GT ends
-                                                                                                         # temp/jwiring/gt_ends_val.pkl) -> temp/jwire/val_records_s<seed>.pkl and the rule's agreement with the oracle label
-    wsl bash tools/env/_py14.sh jwire_data.py live --seed 0 [--split train|val_clean] [--max N]               # the same records from a LIVE pass of B and the pair run (GPU) + the pilot numbers
+    wsl bash tools/env/_py14.sh jwire_data.py val --seed 0 [--pair-run e312_p_s0] [--thr 0.1] [--max N]  # VAL records from the stored dumps (CPU: runs/<pair run>/ends_val.pkl, B's full dump temp/e276/predfull_e273_p_s<seed>.pkl, the GT ends
+                                                                                                         # temp/jwiring/gt_ends_val.pkl) -> temp/jwire/val_records_v1_s<seed>[_pair_<run>].pkl and the rule's agreement with the oracle label (--run = --pair-run)
+    wsl bash tools/env/_py14.sh jwire_data.py live --seed 0 [--pair-run e312_p_s0] [--split train|val_clean] [--max N]   # the same records from a LIVE pass of B and the pair run (GPU) + the pilot numbers
     wsl bash tools/env/_py14.sh jwire_data.py selftest
 
 A record = dict(row, scene, ends (n, 8) = last point, heading there, first point, heading there of every kept piece, attrs (n, 6), pairs (m, 8) = entry position / heading, exit position / heading, kp_p (m, 2), gts (m, 2, 4) = the GT end of the
 entry / exit keypoint (x, y, tx, ty) or NaN). `instances_of(rec, jitter)` -> the instances of `jwire_head.build_instances`. The pieces are the pieces KEPT by the cover drop of the unjittered pairs (the deployed read-out): a jitter changes
 the keypoints, not the delivered graph. The agreement is counted on the ends with an ORACLE label (a matched GT end that finds a piece in reach): overall and on the ends with two or more places (`real choices`); the rule = place 0.
 VAL only, TEST never; the TRAIN records (a live pass of B and the pair run, GPU) are a separate step of the card.
+The PAIR RUN (the run whose keypoints the records hold) is E312's `e312_p_s<seed>` by default (E325); another one (E350: `e324_s_s<seed>`) gets its own cache names (`cache_path`), every cache file carries
+`meta = dict(pair_run, seed, record_version)` that a load checks (`load_records`: a file without meta is E312's, valid for E312's pair run only), a cache file is never overwritten, and the seed of the pair run is
+checked against the seed asked for (`check_seed`, as `jends_eval.score` does).
 """
 import argparse
+import contextlib
 import os
 import pickle
+import re
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -85,7 +91,25 @@ def agreement(inst):
     return dict(ends=len(inst), oracle=len(o), same=sum(i["label"] == 0 for i in o), multi=len(m), multi_same=sum(i["label"] == 0 for i in m), outside=sum(i["kind"] == "outside" for i in inst), rule_label=sum(i["kind"] == "rule" for i in inst))
 
 
+def default_pair_run(seed):
+    """the pair run of E325's records and heads (E312)"""
+    return f"e312_p_s{seed}"
+
+
+def check_seed(args, seed, run):
+    """the pair run's own seed (the args of its checkpoint) must be the seed asked for, as `jends_eval.score` checks it: B's delivered graph is seed-specific and would be joined to another seed's keypoints"""
+    m = re.search(r"_s(\d+)[/\\]", str(args.get("maps", "")).replace("\\", "/") + "/")
+    assert args.get("seed", seed) == seed and (m is None or int(m.group(1)) == seed), f"--seed {seed} does not match the pair run {run} (seed {args.get('seed')}, maps {args.get('maps')}): its keypoints belong to another seed"
+
+
+def run_args(run):
+    """the args of the checkpoint of a run (`runs/<run>/model.pt`)"""
+    import torch
+    return torch.load(os.path.join(ROOT, "runs", run, "model.pt"), map_location="cpu")["args"]
+
+
 def val_records(seed, run, thr=0.1, nmax=0):
+    check_seed(run_args(run), seed, run)
     import jwiring as JWI
     QE, QR, dump, ends, frames, spec = JWI._load(argparse.Namespace(seed=seed, run=run))
     gt = pickle.load(open(JWI.GT_PATH, "rb"))
@@ -101,19 +125,27 @@ def val_records(seed, run, thr=0.1, nmax=0):
     return out
 
 
+def load_models(seed, pair_run, dev):
+    """-> (B, the pair run) for a live pass: B = `runs/e273_p_s<seed>`, the pair run = `runs/<pair_run>` (the attach model of E324 s included); the seed of the pair run is checked"""
+    import jends_eval as JE
+    import qpredict as QP
+    mb = QP.load_model(os.path.join(ROOT, "runs", f"e273_p_s{seed}"), dev)
+    mp, args = JE.load_model(pair_run, dev)
+    check_seed(args, seed, pair_run)
+    return mb, mp
+
+
 def live_records(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None):
     """the records of the frames of a split from a LIVE pass of B (`runs/e273_p_s<seed>`, exact-map pass, the graph read out with close:1.5@0.5 as the card of record does) and the pair run (`runs/<pair_run>`, default
     e312_p_s<seed>) on the loader of `split` ('train' for the training of the head, 'val_clean' to check that this pass reproduces the records of the stored dumps): GPU, about 10 minutes for the 8414 TRAIN frames"""
     assert split in SPLITS, f"split {split!r}: only {SPLITS} (TEST is never read by a pass of this module)"
     import torch
-    import jends_eval as JE
+    dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    mb, mp = load_models(seed, pair_run or default_pair_run(seed), dev)
     import lane_gt_data as LD
     import qgraph_eval as QE
     import qgraph_readout as QR
     import qpredict as QP
-    dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    mb = QP.load_model(os.path.join(ROOT, "runs", f"e273_p_s{seed}"), dev)
-    mp, _ = JE.load_model(pair_run or f"e312_p_s{seed}", dev)
     LD.QData.DEFAULT_ENDS = True
     ds, dl = LD.loader(split, bs=bs, workers=workers, shuffle=False, map_mode="exact", pixels=False, strict=True, ends=True)
     assert ds.missing == 0, f"{ds.missing} frames of {split} have no stored lane GT"
@@ -141,9 +173,44 @@ def live_records(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=N
     return out
 
 
-def cache_path(kind, seed, nmax=0, thr=0.1):
-    """temp/jwire/<kind>_records_v<version>_s<seed>[_max<N>][_thr<t>].pkl: the name carries everything that changes the content"""
-    return os.path.join(ROOT, "temp", "jwire", f"{kind}_records_v{RECORD_VERSION}_s{seed}{'_max' + str(nmax) if nmax else ''}{'_thr' + str(thr) if thr != 0.1 else ''}.pkl")
+def cache_path(kind, seed, nmax=0, thr=0.1, pair_run=None):
+    """temp/jwire/<kind>_records_v<version>_s<seed>[_max<N>][_thr<t>][_pair_<run>].pkl: the name carries everything that changes the content; E312's own pair run (the default) adds nothing, so E325's names stay"""
+    assert pair_run is None or re.fullmatch(r"[A-Za-z0-9_-]+", pair_run), f"pair run {pair_run!r}: a run folder name"
+    other = pair_run is not None and pair_run != default_pair_run(seed)
+    return os.path.join(ROOT, "temp", "jwire", f"{kind}_records_v{RECORD_VERSION}_s{seed}{'_max' + str(nmax) if nmax else ''}{'_thr' + str(thr) if thr != 0.1 else ''}{'_pair_' + pair_run if other else ''}.pkl")
+
+
+def meta_of(seed, pair_run=None):
+    return dict(pair_run=pair_run or default_pair_run(seed), seed=seed, record_version=RECORD_VERSION)
+
+
+def save_records(path, records, seed, pair_run=None):
+    """writes `dict(meta, records)`; a cache file that exists is never overwritten (move it away to rebuild it)"""
+    assert not os.path.exists(path), f"{path} exists: a cache is never overwritten"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", "wb") as f:
+        pickle.dump(dict(meta=meta_of(seed, pair_run), records=records), f)
+    os.replace(path + ".tmp", path)
+
+
+def load_records(path, seed, pair_run=None):
+    """the records of a cache file, its meta must be the one asked for; a file without meta (E325's caches of 2026-11-14, a plain list) holds E312's records and is valid for E312's pair run only"""
+    obj = pickle.load(open(path, "rb"))
+    want = meta_of(seed, pair_run)
+    if isinstance(obj, list):
+        assert want["pair_run"] == default_pair_run(seed), f"{path} has no meta (E312's records, `{default_pair_run(seed)}`): refused for the pair run {want['pair_run']}"
+        return obj
+    assert obj["meta"] == want, f"{path}: meta {obj['meta']} is not the one asked for {want}"
+    return obj["records"]
+
+
+def cached_records(path, seed, pair_run, make):
+    """the records of the cache file `path` (`load_records`) or, when there is none, `make()` written to it"""
+    if os.path.exists(path):
+        return load_records(path, seed, pair_run)
+    recs = make()
+    save_records(path, recs, seed, pair_run)
+    return recs
 
 
 def pilot_stats(records):
@@ -203,13 +270,144 @@ def calibrate_jitter(records, target_median, seed=0, iters=12):
     return s, med(s)
 
 
+def toy_record(row=1, scene=2):
+    """a record built by hand (the tests of this module and of `jwire_train`): two pieces, one pair, the entry keypoint matches a GT end at the second piece"""
+    up = np.array([0.0, 1.0])
+    ends = np.array([np.r_[[0.0, -1.0], up, [0.0, -20.0], up], np.r_[[0.0, -3.0], up, [0.0, -30.0], up]])
+    return dict(row=row, scene=scene, ends=ends, attrs=np.zeros((2, 6), np.float32), pairs=np.array([np.r_[[0.2, 0.0], up, [5.0, 20.0], up]]), kp_p=np.array([[0.7, 0.6]]), gts=np.array([[[0.0, -3.05, 0.0, 1.0], [np.nan] * 4]]))
+
+
+@contextlib.contextmanager
+def tmp_root():
+    """a test's ROOT: a temp folder instead of the problem folder, so that no test reads or writes the real caches (`cache_path`, `run_args`)"""
+    global ROOT
+    old = ROOT
+    with tempfile.TemporaryDirectory() as d:
+        ROOT = d
+        try:
+            yield d
+        finally:
+            ROOT = old
+
+
+class _Reached(Exception):
+    """a stub that records its arguments and stops the code under test at this point"""
+
+
+def _test_pair_run():
+    """the pair run (E350): cache names, meta, seed checks, the CLI and the live pass reach it; no test touches a real cache"""
+    import io
+    import jends_eval as JE
+    import jwiring as JWI
+    import qpredict as QP
+    import torch
+    # 1. the names: E325's stay bit for bit, another pair run (or the other seed's E312 run) gets its own
+    with tmp_root() as d:
+        name = lambda *a, **k: os.path.basename(cache_path(*a, **k))  # noqa: E731
+        assert [name("val", 0), name("val", 1), name("train", 0), name("train", 1), name("train", 0, 200), name("val_clean", 0, 24), name("val", 0, 0, 0.083)] == [
+            "val_records_v1_s0.pkl", "val_records_v1_s1.pkl", "train_records_v1_s0.pkl", "train_records_v1_s1.pkl", "train_records_v1_s0_max200.pkl", "val_clean_records_v1_s0_max24.pkl", "val_records_v1_s0_thr0.083.pkl"]
+        assert name("val", 0, pair_run="e312_p_s0") == "val_records_v1_s0.pkl" and name("train", 1, pair_run="e312_p_s1") == "train_records_v1_s1.pkl"
+        assert name("val", 0, pair_run="e324_s_s0") == "val_records_v1_s0_pair_e324_s_s0.pkl" and name("train", 1, 40, pair_run="e324_s_s1") == "train_records_v1_s1_max40_pair_e324_s_s1.pkl"
+        assert name("val", 0, pair_run="e312_p_s1") == "val_records_v1_s0_pair_e312_p_s1.pkl"                 # E312's run of the OTHER seed is not the default of this seed
+        assert os.path.dirname(cache_path("val", 0)) == os.path.join(d, "temp", "jwire")
+        for bad in ("../x", "a/b", ""):
+            try:
+                cache_path("val", 0, pair_run=bad)
+                raise AssertionError(f"pair run {bad!r} must be refused")
+            except AssertionError as e:
+                assert "run folder name" in str(e), e
+    # 2. the content: meta is checked on load, a file without meta is E312's, a cache is never overwritten
+    with tmp_root() as d:
+        recs = [toy_record(1, 2)]
+        p = cache_path("val", 0)
+        save_records(p, recs, 0)
+        assert load_records(p, 0)[0]["row"] == 1 and load_records(p, 0, "e312_p_s0")[0]["row"] == 1 and pickle.load(open(p, "rb"))["meta"] == dict(pair_run="e312_p_s0", seed=0, record_version=RECORD_VERSION)
+
+        def refused(f, *a):
+            try:
+                f(*a)
+            except AssertionError:
+                return True
+            return False
+        assert refused(load_records, p, 0, "e324_s_s0") and refused(load_records, p, 1), "a cache of another pair run / seed must be refused"
+        assert refused(save_records, p, recs, 0), "an existing cache must not be overwritten"
+        old = cache_path("val", 1)                                                                            # E325's caches of 2026-11-14: a plain list, no meta
+        pickle.dump(recs, open(old, "wb"))
+        assert load_records(old, 1)[0]["row"] == 1 and refused(load_records, old, 1, "e324_s_s1"), "a file without meta is E312's records"
+        stale = cache_path("val", 0, 5)
+        pickle.dump(dict(meta=dict(meta_of(0), record_version=RECORD_VERSION + 1), records=recs), open(stale, "wb"))
+        assert refused(load_records, stale, 0), "another record version must be refused"
+        n = []
+        assert cached_records(cache_path("train", 0), 0, None, lambda: n.append(1) or recs) is recs and cached_records(cache_path("train", 0), 0, None, lambda: n.append(1) or recs)[0]["row"] == 1 and len(n) == 1
+    # 3. the seed of the pair run: as jends_eval.score checks it
+    assert not refused(check_seed, dict(seed=0, maps="/mnt/c/x/runs/e307_n_s0/model.pt"), 0, "r") and not refused(check_seed, dict(maps="C:\\x\\e307_n_s1\\model.pt"), 1, "r") and not refused(check_seed, {}, 0, "r")
+    assert refused(check_seed, dict(seed=1, maps="/x/e307_n_s1/model.pt"), 0, "r") and refused(check_seed, dict(seed=0, maps="/x/e307_n_s1/model.pt"), 0, "r") and refused(check_seed, dict(seed=1), 0, "r")
+    with tmp_root() as d:                                                                                     # val_records reads the args of runs/<run>/model.pt before it loads anything
+        os.makedirs(os.path.join(d, "runs", "e324_s_s1"))
+        torch.save(dict(args=dict(seed=1, maps="/x/runs/e307_n_s1/model.pt")), os.path.join(d, "runs", "e324_s_s1", "model.pt"))
+        assert refused(val_records, 0, "e324_s_s1"), "the pair run of seed 1 must not be read for seed 0"
+        old_load = JWI._load
+        JWI._load = lambda a: (_ for _ in ()).throw(_Reached(a.seed, a.run))
+        try:
+            val_records(1, "e324_s_s1")
+            raise AssertionError("val_records did not reach jwiring._load")
+        except _Reached as e:
+            assert e.args == (1, "e324_s_s1")
+        finally:
+            JWI._load = old_load
+    # 4. the live pass: the pair run reaches the model loader, its seed is checked
+    seen = []
+    old_je, old_qp, old_lm = JE.load_model, QP.load_model, load_models
+    try:
+        QP.load_model = lambda path, dev: seen.append(("B", os.path.basename(path))) or "B"
+        JE.load_model = lambda run, dev: seen.append(("pair", run)) or ("model", dict(seed=1, maps="/x/e307_n_s1/model.pt"))
+        assert load_models(1, "e324_s_s1", "cpu") == ("B", "model") and seen == [("B", "e273_p_s1"), ("pair", "e324_s_s1")], seen
+        assert refused(load_models, 0, "e324_s_s1", "cpu"), "a pair run of another seed must be refused"
+        got = []
+        globals()["load_models"] = lambda seed, pair_run, dev: got.append((seed, pair_run)) or (_ for _ in ()).throw(_Reached())
+        for kw, want in ((dict(pair_run="e324_s_s0"), "e324_s_s0"), (dict(), "e312_p_s0")):
+            try:
+                live_records(0, "val_clean", 0.1, 4, device="cpu", **kw)
+            except _Reached:
+                pass
+            assert got[-1] == (0, want), got
+        assert refused(live_records, 0, "test"), "TEST is never read"
+    finally:
+        JE.load_model, QP.load_model = old_je, old_qp
+        globals()["load_models"] = old_lm
+    # 5. the CLI: `val --run <pair run>` writes ITS cache name and never touches E325's, `--run` and `--pair-run` agree, `live` takes the pair run
+    with tmp_root() as d:
+        e325 = cache_path("val", 0)
+        os.makedirs(os.path.dirname(e325))
+        open(e325, "wb").write(b"E325 cache")
+        stamp = (open(e325, "rb").read(), os.stat(e325).st_mtime_ns)
+        calls = []
+        old_vr, old_lr = globals()["val_records"], globals()["live_records"]
+        globals()["val_records"] = lambda seed, run, thr=0.1, nmax=0: calls.append(("val", seed, run, thr, nmax)) or [toy_record(1, 2), toy_record(2, 3)]
+        globals()["live_records"] = lambda seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None: calls.append(("live", seed, split, nmax, pair_run)) or [toy_record(1, 2)]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                main(["val", "--seed", "0", "--run", "e324_s_s0"])
+                main(["val", "--seed", "0", "--pair-run", "e324_s_s0"])                                       # the cache exists: loaded, not rebuilt
+                main(["val", "--seed", "1"])
+                main(["live", "--seed", "0", "--split", "val_clean", "--max", "24", "--pair-run", "e324_s_s0"])
+            assert calls == [("val", 0, "e324_s_s0", 0.1, 0), ("val", 1, "e312_p_s1", 0.1, 0), ("live", 0, "val_clean", 24, "e324_s_s0")], calls
+            assert (open(e325, "rb").read(), os.stat(e325).st_mtime_ns) == stamp, "E325's cache was touched"
+            for f, pr, sd in (("val_records_v1_s0_pair_e324_s_s0.pkl", "e324_s_s0", 0), ("val_records_v1_s1.pkl", "e312_p_s1", 1), ("val_clean_records_v1_s0_max24_pair_e324_s_s0.pkl", "e324_s_s0", 0)):
+                assert pickle.load(open(os.path.join(d, "temp", "jwire", f), "rb"))["meta"] == dict(pair_run=pr, seed=sd, record_version=RECORD_VERSION), f
+            try:
+                main(["val", "--seed", "0", "--run", "e324_s_s0", "--pair-run", "e324_s_s1"])
+                raise AssertionError("--run and --pair-run that differ must be refused")
+            except AssertionError as e:
+                assert "name the same thing" in str(e), e
+        finally:
+            globals()["val_records"], globals()["live_records"] = old_vr, old_lr
+
+
 def _selftest():
     import jwire_head as H
     up = np.array([0.0, 1.0])
-    # a record built by hand: two pieces, one pair, the entry keypoint matches a GT end at the second piece
-    ends = np.array([np.r_[[0.0, -1.0], up, [0.0, -20.0], up], np.r_[[0.0, -3.0], up, [0.0, -30.0], up]])
-    rec = dict(row=1, scene=2, ends=ends, attrs=np.zeros((2, 6), np.float32), pairs=np.array([np.r_[[0.2, 0.0], up, [5.0, 20.0], up]]), kp_p=np.array([[0.7, 0.6]]),
-               gts=np.array([[[0.0, -3.05, 0.0, 1.0], [np.nan] * 4]]))
+    rec = toy_record()
     inst = instances_of(rec)
     ent = [i for i in inst if i["side"] == 0][0]
     assert ent["label"] == 1 and ent["kind"] == "oracle" and len(ent["piece"]) == 2
@@ -241,50 +439,55 @@ def _selftest():
     direct = H.build_instances(en_, at_, pa, [(0.7, 0.6)], [(g["ent"][0], g["ext"][0])])
     viarec = instances_of(rec2)
     assert len(direct) == len(viarec) and all(np.allclose(x["feat"], y["feat"], atol=1e-5) and x["label"] == y["label"] for x, y in zip(direct, viarec)), "records and direct instances differ"
+    _test_pair_run()
     print("jwire_data selftest ok")
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("val")
     s.add_argument("--seed", type=int, required=True)
-    s.add_argument("--run", default=None)
+    s.add_argument("--pair-run", default=None, help="the pair run whose stored dump gives the keypoints (default e312_p_s<seed>)")
+    s.add_argument("--run", default=None, help="the older name of --pair-run")
     s.add_argument("--thr", type=float, default=0.1)
     s.add_argument("--max", type=int, default=0)
     t = sub.add_parser("live")
     t.add_argument("--seed", type=int, required=True)
+    t.add_argument("--pair-run", default=None, help="the pair run of the live pass (default e312_p_s<seed>)")
     t.add_argument("--split", default="train")
     t.add_argument("--max", type=int, default=0)
     t.add_argument("--workers", type=int, default=3)
     t.add_argument("--device", default=None)
     t.add_argument("--out", default=None)
     sub.add_parser("selftest")
-    a = ap.parse_args()
-    if a.cmd == "live":
-        recs = live_records(a.seed, a.split, 0.1, a.max, a.workers, device=a.device)
-        path = a.out or cache_path(a.split, a.seed, a.max)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        pickle.dump(recs, open(path, "wb"))
-        print(f"{len(recs)} records -> {os.path.relpath(path, ROOT)}")
-        print(pilot_stats(recs))
-        return
+    a = ap.parse_args(argv)
     if a.cmd == "selftest":
         _selftest()
         return
-    run = a.run or f"e312_p_s{a.seed}"
-    recs = val_records(a.seed, run, a.thr, a.max)
-    path = cache_path("val", a.seed, a.max, a.thr)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    pickle.dump(recs, open(path, "wb"))
+    if a.cmd == "live":
+        pr = a.pair_run
+        path = a.out or cache_path(a.split, a.seed, a.max, 0.1, pr)
+        built = not os.path.exists(path)
+        recs = cached_records(path, a.seed, pr, lambda: live_records(a.seed, a.split, 0.1, a.max, a.workers, device=a.device, pair_run=pr))
+        print(f"{len(recs)} records -> {os.path.relpath(path, ROOT)}" + ("" if built else " (the cache exists: loaded, not rebuilt)"))
+        print(pilot_stats(recs))
+        return
+    assert a.run is None or a.pair_run is None or a.run == a.pair_run, f"--run {a.run} and --pair-run {a.pair_run} name the same thing and differ"
+    pr = a.pair_run or a.run
+    path = cache_path("val", a.seed, a.max, a.thr, pr)
+    built = not os.path.exists(path)
+    recs = cached_records(path, a.seed, pr, lambda: val_records(a.seed, pr or default_pair_run(a.seed), a.thr, a.max))
     tot = {}
     for r in recs:
         for k, v in agreement(instances_of(r)).items():
             tot[k] = tot.get(k, 0) + v
-    print(f"{len(recs)} records -> {os.path.relpath(path, ROOT)}")
+    print(f"{len(recs)} records -> {os.path.relpath(path, ROOT)}" + ("" if built else " (the cache exists: loaded, not rebuilt)"))
     print(tot)
     if tot["oracle"]:
-        print(f"rule agreement with the oracle label: overall {tot['same'] / tot['oracle']:.3f} ({tot['oracle']} ends), real choices {tot['multi_same'] / max(tot['multi'], 1):.3f} ({tot['multi']} ends); label outside the keypoint's places: {tot['outside']}")
+        print(f"rule agreement with the oracle label: overall {tot['same'] / tot['oracle']:.3f} ({tot['oracle']} ends), real choices {tot['multi_same'] / max(tot['multi'], 1):.3f} ({tot['multi']} ends, share of the labelled ends {tot['multi'] / tot['oracle']:.3f}); label outside the keypoint's places: {tot['outside']}")
+        ps = pilot_stats(recs)
+        print(f"keypoint error of the matched ends: mean {ps['err_mean']:.2f} / median {ps['err_median']:.2f} / p90 {ps['err_p90']:.2f} m ({ps['matched_ends']} ends)")
 
 
 if __name__ == "__main__":
