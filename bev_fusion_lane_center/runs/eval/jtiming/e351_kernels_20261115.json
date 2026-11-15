@@ -1,0 +1,249 @@
+{
+ "runs": [
+  "e312_p_s0",
+  "e341_p_s0",
+  "e324_s_s0",
+  "e348_w_s0"
+ ],
+ "gpu_before": {
+  "util_max": 15.0,
+  "mem_mib": 810.0,
+  "temp_c": 49.2,
+  "sm_clock_mhz": 210.0
+ },
+ "segments": {
+  "e312_p_s0": {
+   "pyr:in > pyr:out": {
+    "cudaLaunchKernel": 174,
+    "cudaMemsetAsync": 5,
+    "cudaLaunchKernelExC": 12
+   },
+   "jm:in > jm:out": {
+    "cudaLaunchKernel": 136,
+    "cudaLaunchKernelExC": 2
+   },
+   "b0_start > b1_after_peaks": {
+    "cudaLaunchKernel": 40
+   },
+   "b1_after_peaks > b2_after_softargmax": {
+    "cudaMemcpyAsync": 3,
+    "cudaStreamSynchronize": 1,
+    "cudaLaunchKernel": 50
+   },
+   "b2_after_softargmax > b3_after_kind": {
+    "cudaMemcpyAsync": 1,
+    "cudaStreamSynchronize": 1
+   },
+   "b3_after_kind > b4_after_tokens": {
+    "cudaLaunchKernel": 35,
+    "cudaMemsetAsync": 9
+   },
+   "b4_after_tokens > b5_after_geometry": {
+    "cudaLaunchKernel": 50
+   },
+   "b5_after_geometry > b6_after_evidence": {
+    "cudaLaunchKernel": 56
+   },
+   "b6_after_evidence > b7_after_rank": {
+    "cudaMemcpyAsync": 9,
+    "cudaStreamSynchronize": 9,
+    "cudaLaunchKernel": 13
+   },
+   "b7_after_rank > b8_after_pair_mlp": {
+    "cudaLaunchKernel": 9,
+    "cudaMemsetAsync": 2
+   },
+   "b8_after_pair_mlp > b9_before_return": {
+    "cudaLaunchKernel": 5,
+    "cudaMemsetAsync": 2
+   }
+  },
+  "e341_p_s0": {
+   "pyr:in > pyr:out": {
+    "cudaLaunchKernel": 174,
+    "cudaMemsetAsync": 5,
+    "cudaLaunchKernelExC": 12
+   },
+   "jm:in > jm:out": {
+    "cudaLaunchKernel": 114
+   },
+   "b0_start > b1_after_peaks": {
+    "cudaLaunchKernel": 40
+   },
+   "b1_after_peaks > b2_after_softargmax": {
+    "cudaMemcpyAsync": 3,
+    "cudaStreamSynchronize": 1,
+    "cudaLaunchKernel": 50
+   },
+   "b2_after_softargmax > b3_after_kind": {
+    "cudaMemcpyAsync": 1,
+    "cudaStreamSynchronize": 1
+   },
+   "b3_after_kind > b4_after_tokens": {
+    "cudaLaunchKernel": 35,
+    "cudaMemsetAsync": 9
+   },
+   "b4_after_tokens > b5_after_geometry": {
+    "cudaLaunchKernel": 50
+   },
+   "b5_after_geometry > b6_after_evidence": {
+    "cudaLaunchKernel": 48
+   },
+   "b6_after_evidence > b7_after_rank": {
+    "cudaMemcpyAsync": 9,
+    "cudaStreamSynchronize": 9,
+    "cudaLaunchKernel": 13
+   },
+   "b7_after_rank > b8_after_pair_mlp": {
+    "cudaLaunchKernel": 9,
+    "cudaMemsetAsync": 2
+   },
+   "b8_after_pair_mlp > b9_before_return": {
+    "cudaLaunchKernel": 5,
+    "cudaMemsetAsync": 2
+   }
+  },
+  "e324_s_s0": {
+   "pyr:in > pyr:out": {
+    "cudaLaunchKernel": 174,
+    "cudaMemsetAsync": 5,
+    "cudaLaunchKernelExC": 12
+   },
+   "jm:in > jm:out": {
+    "cudaLaunchKernel": 136,
+    "cudaLaunchKernelExC": 2
+   },
+   "nodes:in > nodes:out": {
+    "cudaLaunchKernel": 120,
+    "cudaMemcpyAsync": 17,
+    "cudaMemsetAsync": 2
+   },
+   "b0_start > b1_after_peaks": {
+    "cudaLaunchKernel": 40
+   },
+   "b1_after_peaks > b2_after_softargmax": {
+    "cudaMemcpyAsync": 3,
+    "cudaStreamSynchronize": 1,
+    "cudaLaunchKernel": 50
+   },
+   "b2_after_softargmax > b3_after_kind": {
+    "cudaMemcpyAsync": 1,
+    "cudaStreamSynchronize": 1
+   },
+   "b3_after_kind > b4_after_tokens": {
+    "cudaLaunchKernel": 35,
+    "cudaMemsetAsync": 9
+   },
+   "b4_after_tokens > b5_after_geometry": {
+    "cudaLaunchKernel": 50
+   },
+   "b5_after_geometry > b6_after_evidence": {
+    "cudaLaunchKernel": 56
+   },
+   "b6_after_evidence > b7_after_rank": {
+    "cudaMemcpyAsync": 9,
+    "cudaStreamSynchronize": 9,
+    "cudaLaunchKernel": 13
+   },
+   "b7_after_rank > b8_after_pair_mlp": {
+    "cudaLaunchKernel": 9,
+    "cudaMemsetAsync": 2
+   },
+   "b8_after_pair_mlp > b9_before_return": {
+    "cudaLaunchKernel": 88,
+    "cudaMemsetAsync": 5,
+    "cudaMemcpyAsync": 1
+   }
+  },
+  "e348_w_s0": {
+   "pyr:in > pyr:out": {
+    "cudaLaunchKernel": 174,
+    "cudaMemsetAsync": 5,
+    "cudaLaunchKernelExC": 12
+   },
+   "jm:in > jm:out": {
+    "cudaLaunchKernel": 114
+   },
+   "nodes:in > nodes:out": {
+    "cudaLaunchKernel": 120,
+    "cudaMemcpyAsync": 17,
+    "cudaMemsetAsync": 2
+   },
+   "b0_start > b1_after_peaks": {
+    "cudaLaunchKernel": 40
+   },
+   "b1_after_peaks > b2_after_softargmax": {
+    "cudaMemcpyAsync": 3,
+    "cudaStreamSynchronize": 1,
+    "cudaLaunchKernel": 50
+   },
+   "b2_after_softargmax > b3_after_kind": {
+    "cudaMemcpyAsync": 1,
+    "cudaStreamSynchronize": 1
+   },
+   "b3_after_kind > b4_after_tokens": {
+    "cudaLaunchKernel": 35,
+    "cudaMemsetAsync": 9
+   },
+   "b4_after_tokens > b5_after_geometry": {
+    "cudaLaunchKernel": 50
+   },
+   "b5_after_geometry > b6_after_evidence": {
+    "cudaLaunchKernel": 48
+   },
+   "b6_after_evidence > b7_after_rank": {
+    "cudaMemcpyAsync": 9,
+    "cudaStreamSynchronize": 9,
+    "cudaLaunchKernel": 13
+   },
+   "b7_after_rank > b8_after_pair_mlp": {
+    "cudaLaunchKernel": 9,
+    "cudaMemsetAsync": 2
+   },
+   "b8_after_pair_mlp > b9_before_return": {
+    "cudaLaunchKernel": 88,
+    "cudaMemsetAsync": 5,
+    "cudaMemcpyAsync": 1
+   }
+  }
+ },
+ "totals": {
+  "e312_p_s0": {
+   "cudaLaunchKernel": 568,
+   "cudaLaunchKernelExC": 14,
+   "cudaMemcpyAsync": 13,
+   "cudaMemcpy": 0,
+   "cudaMemsetAsync": 18,
+   "cudaStreamSynchronize": 11,
+   "cudaDeviceSynchronize": 0
+  },
+  "e341_p_s0": {
+   "cudaLaunchKernel": 538,
+   "cudaLaunchKernelExC": 12,
+   "cudaMemcpyAsync": 13,
+   "cudaMemcpy": 0,
+   "cudaMemsetAsync": 18,
+   "cudaStreamSynchronize": 11,
+   "cudaDeviceSynchronize": 0
+  },
+  "e324_s_s0": {
+   "cudaLaunchKernel": 771,
+   "cudaLaunchKernelExC": 14,
+   "cudaMemcpyAsync": 31,
+   "cudaMemcpy": 0,
+   "cudaMemsetAsync": 23,
+   "cudaStreamSynchronize": 11,
+   "cudaDeviceSynchronize": 0
+  },
+  "e348_w_s0": {
+   "cudaLaunchKernel": 741,
+   "cudaLaunchKernelExC": 12,
+   "cudaMemcpyAsync": 31,
+   "cudaMemcpy": 0,
+   "cudaMemsetAsync": 23,
+   "cudaStreamSynchronize": 11,
+   "cudaDeviceSynchronize": 0
+  }
+ },
+ "frame": "the middle VAL frame, bf16, batch 1"
+}

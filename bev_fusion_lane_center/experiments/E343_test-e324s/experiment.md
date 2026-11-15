@@ -2,6 +2,8 @@
 
 Card of 2026-11-14 19:10, revised 19:17 (first critic pass: REVISE) and 19:30 (second pass: REVISE, small: the launch line and the no-overwrite code, the kill / GPU branch, the reading rule as code, D95 readings, frame-count enforcement, section 2 definitions, crash rule, log-row state, code drift, E2E gap). Written by the lane experiments chat before any TEST run and before any code of this card. Mirko 2026-11-14 ("2. ja", D95): one TEST use (21 scenes) of the finished design E324 s, both seeds, as E321 did for E312; the control is E312, whose stored TEST numbers of E321 stay as they are. The design is fixed on VAL: E307 maps + the pair head `--e2e --scales --maps-w 1.0 --steps 6000 --geom-w 0.5 --attach` (E324 arm s), cards of E324 (VAL, two seeds). D94 made E324 s (with c2, and the stack E338 as a candidate) the system of record on VAL; `PROBLEM.md` (current best) and the champion entries of `models/registry.json` change only after this result, under grants of D94 / D95. This card is a REPORT with one reading rule for the recommendation: nothing is selected, tuned or re-read on TEST, every number is labelled TEST, 833 frames, 21 scenes; the decision (D4) stays Mirko's. `decide.py` is not run for E343.
 
+**The price of E324 s on one line (2026-11-15, for the report to Mirko):** +0.0156 / +0.0146 snapped topo F1 over E312 on VAL for **+7.5 ms per frame** (24.58 against 17.30 ms, paired interval [+6.16, +8.59]; the node head 3.7 ms and the attachment 2.8 ms of it; batch 1, bf16, idle GPU, loaded host: E342 card section 5); the TEST use measures the gain, not the ms.
+
 ## 0. The card (what the tools run)
 ```json card
 {
