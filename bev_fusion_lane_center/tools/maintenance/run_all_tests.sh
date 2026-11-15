@@ -79,4 +79,5 @@ run "E282 zones of the sparse node target, zone-matching loss (toy lane, winner 
 run "E282 zone metrics (hand cases, position membership, additivity, bootstrap, matched threshold, density against the scorer)" test_zone_metrics.py
 run "E282 pilot runner (gate outcomes on fake results, control matched density, targets per arm, run names)" train/test_qnode_pilot.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
+run "lanegraph champion code == original modules (exact, 24 frames x 2 seeds, read-out fuzz, golden digests; CPU, about 2 minutes)" lanegraph/tests/run_lg_tests.py
 exit $fail
