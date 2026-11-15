@@ -333,6 +333,8 @@ def graph(a):
                 torch.cuda.synchronize()
                 ms.append(e0.elapsed_time(e1))
             blocks[key].append(float(np.median(ms)))
+    torch.cuda.synchronize()
+    time.sleep(2.5)                                                                 # the last timed kernels (this process's own work) must age out of nvidia-smi's averaging window, else the "after" sample reads our own tail as a busy GPU (2026-11-15, E351.g1)
     load_after, after = load1(), gpu_state()
     quiet, qline = quiet_verdict(load_before, load_after, before, after)
     res = dict(runs=runs, rounds=a.rounds, iters=a.iters, frames=a.frames, warm=a.warm, precision="bf16 autocast, batch 1, no_grad", cudnn_benchmark=torch.backends.cudnn.benchmark, device=torch.cuda.get_device_name(0),
