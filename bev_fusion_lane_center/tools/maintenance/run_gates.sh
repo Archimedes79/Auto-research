@@ -53,6 +53,7 @@ run "head: wiring head data, records, agreement (E325)"  jwire_data.py selftest
 run "head: wiring head training, ablation (E325)"  jwire_train.py selftest
 run "head: wiring head checks: twin card and live records, planted differences (E350)"  jwire_check.py selftest
 run "head: wiring head verdict: sign classes, kill, shift flag, planted cards (E350)"  jwire_verdict.py selftest
+run "timing: junction system ms per frame, section markers on a toy JEnds (E342 part B, CPU)"  jtiming.py selftest
 run "head: torch Matrix-NMS layer (E292)"                 grid/qmnms.py
 run "head: Matrix-NMS switch, phase 9, mutations (E292)"  grid/test_mnms_layer.py
 run "head: all phases, gradients, E274 switches"         grid/qgraph.py
