@@ -131,7 +131,7 @@ if __name__ == "__main__":
     elif a.cmd == "rate":
         print(json.dumps(dict(run=a.run, **rate(collect(a.run, a.seed), a.thr)), indent=1))
     else:
-        out = dict(run=a.run, control_run=a.control, seed=a.seed, **compare(collect(a.run, a.seed), collect(a.control, a.seed), a.thr))
+        out = dict(run_name=a.run, control_name=a.control, seed=a.seed, **compare(collect(a.run, a.seed), collect(a.control, a.seed), a.thr))     # `compare` already has the keys `run` (its flip-rate record) and `control`
         print(json.dumps(out, indent=1))
         print(f"true pairs delivered at t-1: control {out['control']['true_pairs_t0_delivered']} (p >= {a.thr}), run {out['run']['true_pairs_t0_delivered']} (p >= {a.thr}), run at matched delivery {out['run_matched']['true_pairs_t0_delivered']} (p >= {out['run_matched']['thr']:.4f})")
         json.dump(out, open(os.path.join(ROOT, "runs", a.run, f"flip_{a.control}.json"), "w"), indent=1)
