@@ -1,0 +1,7 @@
+s = open("HANDOVER.md", encoding="utf-8").read()
+a = s.index("**Machine:**"); b = s.index("## Results that decide what comes next")
+new = '''**Machine and chain:** the WSL VM restarted at 20:23 (everything running died; E331 stalled at step 1200, checkpoint kept). **`temp/day14/day14.sh`** (started 21:00 in a background shell of this chat; it replaces the waiting day13) is a SCHEDULER for the nights Fri / Sat / Sun: it picks, in the order `e324s e331 e332 e333 e334`, the first item that has `temp/<exp>/READY` and `temp/<exp>/ACCEPTED` (E324 arm s: `ACCEPTED_s`, written after its critic pass) and no `temp/day14/DONE_<item>`, waits for the window (starts 22:00 - 05:00, Mon - Fri 08:30 - 15:30), runs it (a pair arm = both seeds in the two GPU slots; a stalled run id is resumed by `run.py`), marks it done and picks again; with nothing ready it waits, so an item accepted later is picked up by itself. Tonight (about 7 h of start windows): E324 arm s first if ACCEPTED_s exists at 22:00 (3.2 h), then E331 (resume, about 1 h), E332 a (2.6 h); without it E331 -> E332 a -> E333. Add later items (E292 c2, the E325 head, E324 arm n) with a new chain script after their code is tested; never edit a running script. If this chat ends the chain dies with WSL: tell the lane lead BEFORE, or restart with `wsl bash temp/day14/day14.sh` in a background shell (done items are skipped).
+
+'''
+s = s[:a] + new + s[b:]
+open("HANDOVER.md", "w", encoding="utf-8").write(s); print("ok")
