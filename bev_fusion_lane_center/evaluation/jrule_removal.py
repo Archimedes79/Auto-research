@@ -14,7 +14,8 @@ import os
 import sys
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-READOUTS = {"plain": ("unsnapped (differentiable)", "ends_card_thr0.1.json"), "snap": ("snapped (rule step)", "ends_card_snap_thr0.1.json"), "attach": ("attached (E320, differentiable)", "ends_card_attach_thr0.1.json")}
+READOUTS = {"plain": ("unsnapped (differentiable)", "ends_card_thr0.1.json"), "snap": ("snapped (rule step)", "ends_card_snap_thr0.1.json"), "attach": ("attached (E320, differentiable)", "ends_card_attach_thr0.1.json"),
+            "primary": ("PRIMARY (attached ends + snap-nogeom wiring, E324)", "ends_card_snap_nogeom_attach_thr0.1.json")}                       # E348: the card name is `qends_eval.card_name` of --attach --snap --snap-nogeom (the selftest checks it)
 GUARDS = (("F1@1.0", -0.01), ("junction_F1", -0.03), ("dup_frac", None), ("vert100_dp", None))
 
 
@@ -64,6 +65,35 @@ def selftest():
     assert not check(dict(base, dup_frac=0.19), base, 0.01)[1] and not check(dict(base, vert100_dp=20.5), base, 0.01)[1]
     assert not check(dict(base, **{"F1@1.0": 0.855}), base, 0.01)[1] and check(dict(base, **{"F1@1.0": 0.862}), base, 0.01)[1]
     assert not check(dict(base, junction_F1=0.285), base, 0.01)[1] and check(dict(base, junction_F1=0.30), base, 0.01)[1]
+    # E348: the file names of the read-outs are the ones `qends_eval.card_name` builds for the scorer's options, and `run()` reads them (exit 0 / 1 / 2, --readouts honoured)
+    import tempfile
+    from types import SimpleNamespace
+    import qends_eval as QE
+    for key, opts in (("plain", {}), ("snap", dict(snap=True)), ("attach", dict(attach=True)), ("primary", dict(snap=True, snap_nogeom=True, attach=True))):
+        assert READOUTS[key][1] == QE.card_name(SimpleNamespace(thr=0.1, **opts)), (key, READOUTS[key][1])
+    global ROOT
+    old_root = ROOT
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            ROOT = d
+
+            def put(run_, name, **kw):
+                os.makedirs(os.path.join(d, "runs", run_), exist_ok=True)
+                json.dump({"numbers": {"head": dict(base, **kw)}}, open(os.path.join(d, "runs", run_, name), "w"))
+            pname, sname = READOUTS["primary"][1], READOUTS["snap"][1]
+            for s in (0, 1):
+                for r in ("arm_s", "ctl_s"):
+                    put(f"{r}{s}", sname)
+                    put(f"{r}{s}", pname)
+            assert run("arm_s", "ctl_s", [0, 1], 0.01, ["snap", "primary"]) == 0                       # every card within the band
+            put("arm_s1", pname, dup_frac=0.19)                                                          # a failing guard on PRIMARY, seed 1
+            assert run("arm_s", "ctl_s", [0, 1], 0.01, ["snap", "primary"]) == 1
+            assert run("arm_s", "ctl_s", [0, 1], 0.01, ["snap"]) == 0                                    # --readouts honoured: the snapped cards are fine
+            os.remove(os.path.join(d, "runs", "arm_s0", pname))                                          # a missing card
+            assert run("arm_s", "ctl_s", [0, 1], 0.01, ["snap", "primary"]) == 2
+            assert run("arm_s", "ctl_s", [0, 1], 0.01, ["snap"]) == 0
+    finally:
+        ROOT = old_root
     print("jrule_removal selftest ok")
 
 
@@ -76,6 +106,6 @@ if __name__ == "__main__":
     ap.add_argument("--control", default="e312_p_s", help="run-name prefix of the control (e312_p_s; e320_a_s once E320 is the reference)")
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1])
     ap.add_argument("--max-loss", type=float, default=0.01)
-    ap.add_argument("--readouts", nargs="+", default=["plain", "snap"], choices=sorted(READOUTS), help="plain = unsnapped, snap = snapped; attach = the E320 attached read-out (re-based arms: --readouts attach)")
+    ap.add_argument("--readouts", nargs="+", default=["plain", "snap"], choices=sorted(READOUTS), help="plain = unsnapped, snap = snapped; attach = the E320 attached read-out (re-based arms: --readouts attach); primary = the E324 PRIMARY read-out (attached ends + snap-nogeom wiring, E348)")
     a = ap.parse_args()
     sys.exit(run(a.arm, a.control, a.seeds, a.max_loss, a.readouts))
