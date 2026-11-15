@@ -1,0 +1,140 @@
+"""Trainer of the junction pair head v2 (E287, D82) on the frozen junction maps head of E286; start it through `autoresearch/tools/run.py`.
+
+    wsl bash tools/env/_py14.sh jends_train.py --name e287_p2_s0 --seed 0 --maps runs/e286_j1_s0/model.pt [--no-order] [--no-evidence] [--cross-w 1.0] [--steps 3000] [--smoke]
+
+The maps run (`jmaps_train.py`, JModel = B's pyramid + the junction maps head) is frozen; only `jends.JEnds` trains (keypoints from the entry / exit heat, pair logits with the rank features of the order rule and the
+evidence along the Hermite curve, loss = BCE + dual softmax + the soft crossing penalty). `--e2e` (E305, D82 "bleibe differenzierbar"): the maps head is trained TOGETHER with the pair head, the pair loss reaches the heat (soft-argmax
+of the keypoints, heading, features, evidence samples) and the maps loss keeps the maps meaningful (`--maps-w`); the pyramid of the baseline stays frozen. Output `runs/<name>/model.pt` (the JModel and the JEnds state + args), read by `evaluation/jends_eval.py`.
+"""
+import argparse
+import os
+import sys
+
+import torch
+import torch.nn as nn
+
+ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+for sub in ("training", "training/grid", "training/data", "training/data/prep", "evaluation"):
+    sys.path.insert(0, os.path.join(ROOT, sub))
+import jends as JE  # noqa: E402
+import jprior as JP  # noqa: E402
+import qnodes as QN  # noqa: E402
+import jmaps as JM  # noqa: E402
+import lane_gt_data as LD  # noqa: E402
+import trainer as T  # noqa: E402
+
+
+class JEndModel(nn.Module):
+    def __init__(self, maps_args, order=True, evidence=True, d=64, scales=False, e2e=False, ntok=False, unc=False, attach=False, prior=False):
+        super().__init__()
+        self.e2e = e2e
+        assert not (evidence and "nozone" in maps_args.get("ctx", "dil")), "evidence on a maps head without the zone / core supervision (E332 arm b) would read unsupervised channels: train the pair head with --no-evidence"
+        self.jmodel = JM.JModel(width=48, d=maps_args.get("d", 64), ctx=maps_args.get("ctx", "dil"))
+        self.je = JE.JEnds(d=d, order=order, evidence=evidence, f1=maps_args.get("d", 64), scales=scales, ntok=64 if ntok else 0, unc=unc, attach=attach, paint_ev="nopaint" not in maps_args.get("ctx", "dil"), prior=prior)   # E341: a maps head without the 0.5 m branch gives the evidence without the two paint maxima
+        self.nodes = QN.NodeHead(c2=3 * 48, c1=48, c05=32, d=64) if (ntok or attach) else None           # E308: B's frozen node head: its tokens at the keypoints; E320: its nodes are the candidates of the attached connector ends
+
+    def forward(self, x, gt=None, arms=None):
+        if self.e2e:                                                                                     # the maps head (jmodel.jm) gets the gradient of the pair loss
+            P, out = self.jmodel(x, joint=False)
+        else:
+            with torch.no_grad():
+                P, out = self.jmodel(x, joint=False)
+        tok = nd = None
+        if self.nodes is not None:
+            with torch.no_grad():
+                nd = self.nodes(P["feat2"], P["feat1"], P["feat05"], P["road2"], P["centre1"])
+            tok = nd["tok"]
+        return P, out, self.je(out, P, gt=gt, tok=tok, nodes=nd if self.je.attach is not None else None, arms=arms)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--name", required=True)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--maps", default=None, help="the junction maps run (default runs/e286_j1_s<seed>/model.pt)")
+    ap.add_argument("--no-order", action="store_true")
+    ap.add_argument("--no-evidence", action="store_true")
+    ap.add_argument("--cross-w", type=float, default=1.0)
+    ap.add_argument("--scales", action="store_true", help="E303: two handle scales per pair (the delivered curve), trained against the fitted scales of the true pairs")
+    ap.add_argument("--driven-w", type=float, default=0.0, help="E298: the positive pair terms of the pairs the ego drives count 1 + w times")
+    ap.add_argument("--ntok", action="store_true", help="E308: the pair head also reads the node tokens of B (frozen node head of the E273 baseline) at the keypoints")
+    ap.add_argument("--geom-w", type=float, default=0.0, help="E317: weight of the geometry loss of the delivered connector (curve against the GT connector polyline of the true pairs + the matched keypoint ends against the GT ends); 0 = off")
+    ap.add_argument("--unc", action="store_true", help="E318: a position scale (log sigma) per keypoint: the end term of the geometry loss becomes a Laplace NLL, the scales are features of the pair logit and the output kp_logsig (needs --geom-w > 0)")
+    ap.add_argument("--attach", action="store_true", help="E320: the connector ends are attached to the nodes of B's frozen node head (softmax over the candidates in reach + 'no attachment'; a differentiable replacement of the snap of the read-out); the geometry loss then acts on the FINAL curve and a cross entropy trains the attachment (needs --geom-w > 0)")
+    ap.add_argument("--lane-prior", action="store_true", help="E291: the number of lanes per direction of a road-level map (the arm table of the junction GT: centre, heading, count of entries and exits) enters the keypoint tokens as a gated term (zero at the start)")
+    ap.add_argument("--prior-noise", default="0", choices=("0", "mix"), help="E291: 0 = clean counts (20 %% of the junctions have no map); mix = the rate of wrong counts of each junction from {0, 0.1, 0.3} by a hash of (frame, zone), 15 %% of the arms unknown, 20 %% of the junctions without a map, 20 %% with all counts unknown")
+    ap.add_argument("--e2e", action="store_true", help="E305: train the maps head together with the pair head (the pair loss reaches the heat)")
+    ap.add_argument("--maps-w", type=float, default=1.0, help="--e2e: weight of the junction maps loss next to the pair loss")
+    ap.add_argument("--raster", default="legacy", choices=("legacy", "exact"), help="E306: exact polygon targets for the maps loss of --e2e (the pair head itself reads no raster target)")
+    ap.add_argument("--steps", type=int, default=3000)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--bs", type=int, default=8)
+    ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--smoke", action="store_true")
+    a = ap.parse_args()
+    assert not a.unc or a.geom_w > 0, "--unc needs --geom-w > 0 (the position scale is trained by the end term of the geometry loss)"
+    assert not a.attach or a.geom_w > 0, "--attach needs --geom-w > 0 (the attachment is trained by the geometry loss on the final curve and its cross entropy)"
+    assert a.lane_prior or a.prior_noise == "0", "--prior-noise mix needs --lane-prior"
+    T.seed_all(a.seed)
+    if a.raster == "exact":
+        os.environ["BFLC_RASTER"] = "exact"
+    LD.QData.DEFAULT_JUNCTION = True
+    LD.QData.DEFAULT_PSCALE = a.scales                                                                   # the fitted handle scales cost 0.15 s per frame: only for the scale head
+    LD.QData.DEFAULT_PPTS = a.geom_w > 0                                                                 # E317: the GT connector polylines of the true pairs, only for the geometry loss
+    LD.QData.DEFAULT_PRIOR = (JP.Spec.train("0"),) if a.lane_prior else ()                    # E291: one arm table per batch (none without the flag), corrupted in the data path by a pure function of (token, zone)
+    mp = a.maps or os.path.join(ROOT, "runs", f"e286_j1_s{a.seed}", "model.pt")
+    ck = torch.load(mp, map_location="cpu")
+    sig = float(os.environ.get("BFLC_SIG", "1.5"))                                                      # E291: the heat targets of the joint training must have the width of the maps checkpoint (a launcher without BFLC_SIG would train 1.5 m targets on 1.0 m maps)
+    assert abs(sig - float(ck["args"].get("sigma", 1.5))) < 1e-9, f"BFLC_SIG={sig} but the maps checkpoint {mp} was trained with sigma {ck['args'].get('sigma', 1.5)}: export BFLC_SIG={ck['args'].get('sigma', 1.5)}"
+    model = JEndModel(ck["args"], order=not a.no_order, evidence=not a.no_evidence, scales=a.scales, e2e=a.e2e, ntok=a.ntok, unc=a.unc, attach=a.attach, prior=a.lane_prior)
+    model.jmodel.load_state_dict(ck["state"])
+    if a.ntok or a.attach:
+        base = ck["args"].get("base") or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")
+        bs_ = torch.load(base, map_location="cpu")["state"]
+        model.nodes.load_state_dict({k[6:]: v for k, v in bs_.items() if k.startswith("nodes.")})
+    ds, dl = LD.loader("train", bs=a.bs, workers=a.workers, shuffle=True, map_mode="train", pixels=False)
+    run = T.Run(a.name)
+    steps = 20 if a.smoke else a.steps
+    ps = list(model.je.parameters()) + (list(model.jmodel.jm.parameters()) if a.e2e else [])
+    for p in model.parameters():
+        p.requires_grad_(False)
+    for p in ps:
+        p.requires_grad_(True)
+    run.log(f"jends order={not a.no_order} evidence={not a.no_evidence} e2e={a.e2e} ntok={a.ntok} geom_w={a.geom_w} unc={a.unc} attach={a.attach} prior={a.prior_noise if a.lane_prior else False}: {steps} steps, lr {a.lr}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, maps {mp}, train frames {len(ds)} (missing lane GT: {ds.missing})")
+
+    calls = [0]
+
+    def loss_fn(m, b):
+        dev = next(m.parameters()).device
+        x = b["x"].to(dev, non_blocking=True).float()
+        gt = {k: b[k].to(dev) for k in ("ent", "ext", "ent_m", "ext_m")}
+        arms = {k: v.to(dev) for k, v in b["arms"][0].items()} if a.lane_prior else None                    # E291
+        _, jout, out = m(x, gt=gt, arms=arms)
+        loss, info = JE.jends_loss(out, b, cross_w=a.cross_w, driven_w=a.driven_w, geom_w=a.geom_w)
+        calls[0] += 1
+        if a.lane_prior:                                                                                   # E291: the size of the prior term against the token and its gate (the kill criterion: the term must not be zero on VAL); the gradient of the previous step is still in .grad here (the trainer's zero_grad comes after this call)
+            pi, vm = out["prior"], out["valid"].flatten(1).float()
+            info["prior_ratio"] = float((pi["term"] * vm).sum() / (pi["tok"] * vm).sum().clamp_min(1e-9))
+            info["prior_gate"] = float((pi["gate"] * vm).sum() / vm.sum().clamp_min(1.0))
+            if calls[0] in (2, 3, 4, 21):
+                gn = lambda mod: sum(float(p.grad.float().pow(2).sum()) for p in mod.parameters() if p.grad is not None) ** 0.5  # noqa: E731
+                run.log(f"prior gradient norm after step {calls[0] - 1} (clipped with the rest): feat {gn(m.je.prior.feat):.3e}, gate {gn(m.je.prior.gate):.3e} (the gate's is zero at step 1: its gradient is proportional to f, which starts at zero); term / token {info['prior_ratio']:.3e}, gate {info['prior_gate']:.3f}")
+        if a.geom_w > 0 and calls[0] == 100:                                                              # critic 2026-11-12: a wrong pair alignment of the GT polylines shows as geom_n far below pos_pairs
+            run.log(f"step 100 check of the geometry loss: geom_n {info.get('geom_n', 0.0):.0f} pairs with a GT polyline of pos_pairs {info.get('pos_pairs', 0.0):.0f} positives, geom_end_d {info.get('geom_end_d', float('nan')):.2f} m" + (f", attachment over {info['att_n']:.0f} keypoints with a candidate: att_acc {info['att_acc']:.2f} (nearest-candidate baseline {info['att_acc_nearest']:.2f}), att_ce {info['att_ce']:.2f}, attached end error {info['att_d']:.2f} m against the keypoint's {info['att_kp_d']:.2f} m (train frames, GT-injected keypoints included)" if "att_ce" in info else ""))
+        if a.e2e:
+            lm, im = JM.jmaps_loss(jout, b)
+            loss = loss + a.maps_w * lm
+            info.update({"j_" + k: v for k, v in im.items()})
+        return loss, info
+
+    T.fit(model, loss_fn, run, steps=steps, loader=dl, lr=a.lr, ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="jends", order=not a.no_order, evidence=not a.no_evidence, e2e=a.e2e, ntok=a.ntok, geom_w=a.geom_w, unc=a.unc, attach=a.attach, maps=mp, **({"lane_prior": a.prior_noise} if a.lane_prior else {})))
+    torch.save(dict(state=model.state_dict(), args=dict(vars(a), maps_args=ck["args"])), run.path("model.pt"))
+    if a.e2e:                                                                                          # the maps head as a plain maps run, so `jmaps_eval.py score --run <name>_maps` reads it
+        os.makedirs(os.path.join(ROOT, "runs", a.name + "_maps"), exist_ok=True)
+        torch.save(dict(state=model.jmodel.state_dict(), args=dict(ck["args"], e2e_from=a.name, raster=a.raster)), os.path.join(ROOT, "runs", a.name + "_maps", "model.pt"))
+    run.mark_done()
+    run.log("done", a.name)
+
+
+if __name__ == "__main__":
+    main()
