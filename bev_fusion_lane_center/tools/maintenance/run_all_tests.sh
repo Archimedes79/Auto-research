@@ -42,6 +42,7 @@ run "grid chain parts (soft_lines, hold, assign, targets, head, losses; E271 / E
 run "grid hold: ego warp reproduces the second observation" grid/hold.py
 run "grid assign: soft assignment with a dustbin" grid/assign.py
 run "grid targets (cell targets, heat)" grid/targets.py
+run "E291 lane-count prior: the corruption (pure function, rates, junction cases, s / sc read-outs), the features (known answers, real peaks only, presence radius), the gated head (zero start, gradient)" grid/jprior.py
 run "grid head (2.05 M, reads x[:39])" grid/head.py
 run "grid losses" grid/losses.py
 run "grid chain: one function, gradient reaches every block (G2)" grid/chain.py
