@@ -19,6 +19,8 @@ run "GPU wait gate before the dump / score steps (D100, CPU)" test_gpu_gate.py
 run "E345 pruning probe: cost table = FlopCounterMode part by part, saved cost of a set (random init)" jprune_cost.py selftest
 run "E345 pruning probe: unit table (45 units, 84 points), attention-head edit, hooks, dead-hook assert (random init, CPU)" jprune_probe.py selftest
 run "E345 pruning probe on the stored E312 / E324 s models: dump == jends_eval.dump, calibration, appliers, controls, saved cost vs narrowed copies, table logic (CPU, about 6 minutes)" test_jprune_probe.py
+run "E321 / E343 TEST module (gate, split rows, paired bootstrap, stored-card match, variants)" jtest_eval.py selftest
+run "E343 TEST module on toy data (write helper, dump validation, reading rule, scoring glue, control checks, E321 hashes)" test_jtest_eval.py
 run "evaluate.py parts: route success, failure series, timing (stored inputs, CPU)" test_eval_parts.py
 run "lane task of the evaluation suite (moved from autoresearch, D24)" test_lane_task.py
 run "p18_joint guarded step: non-finite loss, skipped optimiser steps, scale-drop rule" test_p18_joint_guard.py
